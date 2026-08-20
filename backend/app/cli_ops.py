@@ -154,7 +154,7 @@ def cmd_incidents(port: str, args: list[str]) -> None:
     jar, me = ensure_jar(port)
     try:
         if number:
-            data = get_json(port, jar, f"/api/v1/incidents/{quote(number, safe='')}")
+            data = get_json(port, jar, f"/api/v1/incidents/{quote(number, safe='.-_')}")
             sys.stdout.write(format_detail(data))
             return
         rows = get_json(port, jar, "/api/v1/incidents?limit=100")
@@ -194,7 +194,7 @@ def cmd_history(port: str, args: list[str]) -> None:
     jar, me = ensure_jar(port)
     try:
         if number:
-            data = get_json(port, jar, f"/api/v1/incidents/{quote(number, safe='')}")
+            data = get_json(port, jar, f"/api/v1/incidents/{quote(number, safe='.-_')}")
             sys.stdout.write(format_detail(data))
             return
         query = {"days": days}
@@ -216,15 +216,35 @@ def cmd_history(port: str, args: list[str]) -> None:
             jar.unlink(missing_ok=True)
 
 
+def cmd_numbers(port: str) -> None:
+    """One incident number per line for bash TAB."""
+    jar, _me_user = ensure_jar(port)
+    try:
+        rows = get_json(port, jar, "/api/v1/incidents?limit=200")
+        if not isinstance(rows, list):
+            return
+        for item in rows:
+            number = str(item.get("number") or "").strip()
+            if number:
+                print(number)
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError):
+        return
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = list(argv if argv is not None else sys.argv[1:])
     if len(argv) < 2:
-        raise SystemExit("usage: cli_ops <port> <incidents|history|whoami|login|logout> [args]")
+        raise SystemExit("usage: cli_ops <port> <incidents|history|whoami|login|logout|numbers> [args]")
     port, command, *rest = argv
     if command == "incidents":
         cmd_incidents(port, rest)
     elif command == "history":
         cmd_history(port, rest)
+    elif command == "numbers":
+        cmd_numbers(port)
     elif command == "whoami":
         cmd_whoami(port)
     elif command == "logout":

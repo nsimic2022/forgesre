@@ -57,6 +57,43 @@ def test_incident_numbers_use_max_not_count():
     db.close()
 
 
+def test_incident_number_has_local_date_and_short_seq():
+    from datetime import datetime, timezone
+
+    from app.services import format_incident_number, incident_seq
+
+    assert incident_seq("INC-000012") == 12
+    assert incident_seq("INC-0134-16.08.2026-09-13") == 134
+    stamp = datetime(2026, 8, 16, 7, 13, tzinfo=timezone.utc)
+    number = format_incident_number(134, stamp)
+    assert number.startswith("INC-0134-16.08.2026-")
+    from app.settings import settings
+
+    if settings.timezone in {"Europe/Belgrade", "Europe/Berlin", "Europe/Zagreb"}:
+        assert number == "INC-0134-16.08.2026-09-13"
+
+
+def test_new_incident_number_increments_legacy_six_digit():
+    db = _db()
+    from app.models import Incident
+    from app.services import incident_seq
+
+    db.add(
+        Incident(
+            number="INC-000020",
+            title="legacy",
+            severity="WARNING",
+            status="CLOSED",
+            fingerprint="legacy-seq-20",
+        )
+    )
+    db.commit()
+    nxt = next_incident_number(db)
+    assert incident_seq(nxt) == 21
+    assert nxt.startswith("INC-0021-")
+    db.close()
+
+
 def test_demo_gauges_not_applied_to_other_assets():
     db = _db()
     set_demo_cpu(94)

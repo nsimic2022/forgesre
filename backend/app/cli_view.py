@@ -91,7 +91,7 @@ def format_board(rows: list[dict[str, Any]], *, color: bool | None = None, who: 
     lines.append(paint(header, BOLD, enabled))
     if who:
         lines.append(paint(f"session  {who}", DIM, enabled))
-    lines.append("Open one:  incidents INC-000012")
+    lines.append("Open one:  incidents <TAB>   or   incidents INC-0134-16.08.2026-09-13")
     lines.append("")
     grouped: dict[str, list[dict[str, Any]]] = {
         LANE_CRITICAL: [],
@@ -133,7 +133,7 @@ def format_history_rows(rows: list[dict[str, Any]], *, days: int = 90, total: in
             lines.append(f"{_row(item, enabled, width_title=22)}  ack:{ack}  res:{resolved}")
     shown = total if total is not None else len(rows)
     lines.append("")
-    lines.append(f"{shown} match(es). Open one:  history INC-000012   or   incidents INC-000012")
+    lines.append(f"{shown} match(es). Open one:  history <TAB>   or   incidents INC-0134-16.08.2026-09-13")
     return "\n".join(lines) + "\n"
 
 

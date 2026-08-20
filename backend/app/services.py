@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 from sqlalchemy.orm import Session
@@ -31,18 +32,36 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def next_incident_number(db: Session) -> str:
+def incident_seq(number: str) -> int | None:
+    """Running counter from INC-000012 or INC-0134-16.08.2026-09-13."""
+    text = str(number or "")
+    if not text.upper().startswith("INC-"):
+        return None
+    head = text.split("-", 1)[-1].split("-", 1)[0]
+    if not head.isdigit():
+        return None
+    return int(head)
+
+
+def format_incident_number(seq: int, when: datetime | None = None) -> str:
+    """INC-0134-16.08.2026-09-13 in the appliance timezone (wall clock)."""
+    stamp = when or utcnow()
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    try:
+        local = stamp.astimezone(ZoneInfo(settings.timezone))
+    except Exception:
+        local = stamp.astimezone(timezone.utc)
+    return f"INC-{seq:04d}-{local:%d.%m.%Y}-{local:%H-%M}"
+
+
+def next_incident_number(db: Session, when: datetime | None = None) -> str:
     highest = 0
     for (number,) in db.query(Incident.number).all():
-        text = str(number or "")
-        if not text.startswith("INC-"):
-            continue
-        tail = text.split("-", 1)[-1]
-        try:
-            highest = max(highest, int(tail))
-        except ValueError:
-            continue
-    return f"INC-{highest + 1:06d}"
+        seq = incident_seq(str(number or ""))
+        if seq is not None:
+            highest = max(highest, seq)
+    return format_incident_number(highest + 1, when)
 
 
 def match_playrule(db: Session, alertname: str, labels: dict[str, Any]) -> Playrule | None:

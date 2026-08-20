@@ -188,7 +188,7 @@ def test_cli_help_documents_snmp_and_assets():
         text=True,
     )
     assert "Red" in incidents
-    assert "INC-000012" in incidents
+    assert "INC-" in incidents
     login = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "login"], text=True)
     assert "engineer" in login
     assert "SSH" in login

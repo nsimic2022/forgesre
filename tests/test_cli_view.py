@@ -37,7 +37,7 @@ def test_board_groups_and_stays_short_without_color():
     assert "INC-000010" in text
     assert "INC-000012" in text
     assert "eng@dc.local (engineer)" in text
-    assert "incidents INC-000012" in text
+    assert "incidents INC-0134-16.08.2026-09-13" in text or "incidents <TAB>" in text
     assert "\033[" not in text
 
 

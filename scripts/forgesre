@@ -74,6 +74,7 @@ Commands:
   backup             Dump Postgres + config (tar mode 600; --no-secrets omits secrets.env)
   restore            Print restore steps (does not run them)
   update             Backup, render monitoring, refresh images, restart, doctor
+  completion         Print a `source …completion.bash` line for ~/.bashrc
 
 Examples:
   ./forgesre                  # then: journal / incidents / quit
@@ -116,13 +117,25 @@ shell — prompt that stays open so you do not retype ./forgesre.
   ./forgesre shell
   ./f
 
-Then type the full command name, not a one-letter shortcut:
+Then type the full command name, not a one-letter shortcut. TAB completes
+commands, compose services (logs sn<TAB> → snmp-exporter), and incident ids.
 
   journal
+  logs snmp-exporter
+  incidents INC-<TAB>
   history --days 90
   doctor
-  help snmp
   quit
+EOF
+      ;;
+    completion)
+      cat <<'EOF'
+completion — print a source line so TAB works in your login bash (not only inside ./forgesre).
+
+  eval "$(./forgesre completion)"
+  # or add the printed line to ~/.bashrc
+
+Inside ./forgesre (the prompt) TAB already works without this.
 EOF
       ;;
     install)
@@ -326,9 +339,9 @@ incidents — compact colored board from the Core API (SSH/terminal).
 Red = critical / open. Yellow = investigating or warning. Green = done.
 
   ./forgesre incidents
-  ./forgesre incidents INC-000012
+  ./forgesre incidents INC-0134-16.08.2026-09-13
   incidents                 # inside ./forgesre prompt
-  incidents INC-000012
+  incidents INC-<TAB>       # complete ids (seq + date + time)
 
 Then login as an engineer (UI user, not the Linux ssh account):
 
@@ -374,6 +387,7 @@ history — 90-day lookback of incidents (Postgres, not Loki).
   ./forgesre history INC-000012
 
 INC-… prints mail outbox, audit (who Ack/Resolve), and operator notes.
+TAB completes ids (INC-0134-16.08.2026-09-13 and older INC-000012).
 EOF
       ;;
     sd)
@@ -502,15 +516,27 @@ cmd_snmp() {
 cmd_shell() {
   echo "ForgeSRE shell — same commands as ./forgesre, without typing ./forgesre each time."
   echo "Examples: journal    incidents    incidents INC-000012    history    doctor    quit"
-  echo "Leave with: quit   or   exit   or   Ctrl-D"
+  echo "TAB completes names (logs sn<TAB> → snmp-exporter, incidents INC-<TAB>). Leave with: quit  |  exit  |  Ctrl-D"
   echo
+  # TAB in this process only — not the operator's login shell.
+  # shellcheck disable=SC1091
+  source "$ROOT/scripts/forgesre-completion.bash"
+  local _c
+  for _c in ${_forgesre_cmds} quit exit logs journal help; do
+    complete -F _forgesre_complete "$_c" 2>/dev/null || true
+  done
+  complete -F _forgesre_complete -I 2>/dev/null || true
+  complete -F _forgesre_complete -E 2>/dev/null || true
+  bind "set completion-ignore-case on" 2>/dev/null || true
+  bind "set show-all-if-ambiguous on" 2>/dev/null || true
   local line
   local -a args
   while true; do
     if [[ -t 0 && -t 1 ]]; then
-      printf 'forgesre> '
+      IFS= read -e -r -p "forgesre> " line || break
+    else
+      IFS= read -r line || break
     fi
-    IFS= read -r line || break
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%"${line##*[![:space:]]}"}"
     [[ -z "$line" ]] && continue
@@ -695,6 +721,9 @@ case "$cmd" in
   whoami)
     need_env
     run_cli_ops whoami
+    ;;
+  completion)
+    echo "source \"$ROOT/scripts/forgesre-completion.bash\""
     ;;
   sd)
     need_env
