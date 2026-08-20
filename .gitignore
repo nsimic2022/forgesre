@@ -1,0 +1,16 @@
+.env
+secrets/secrets.env
+secrets/*.env
+!secrets/.gitkeep
+data/
+*.log
+.DS_Store
+dist/
+web/dist/
+web/node_modules/
+bin/
+.idea/
+.vscode/
+*.swp
+coverage/
+installation-report.md

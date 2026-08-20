@@ -1,0 +1,49 @@
+# Example Playbook. V1 is guidance + workflow + escalation, not remediation.
+
+apiVersion: forgesre.io/v1
+kind: Playbook
+metadata:
+  name: disk-full-high
+  title: DISK-FULL-HIGH
+  description: High filesystem usage on a monitored asset.
+spec:
+  applies_to:
+    monitoring_profiles: [linux-standard, linux-storage]
+  steps:
+    - id: verify
+      title: Verify disk usage
+      actor: engineer
+      guidance: Confirm the alert against current filesystem metrics. Note mountpoint and growth rate.
+    - id: growth
+      title: Check growth
+      actor: engineer
+      guidance: Determine whether usage is a spike or a trend. Compare last 24h and 7d.
+    - id: source
+      title: Identify source
+      actor: engineer
+      guidance: Use logs and disk breakdown (largest directories, log rotation, backups, application data).
+    - id: owner
+      title: Identify owner
+      actor: analyst
+      guidance: Resolve asset owner, customer, and responsible team from inventory.
+    - id: notify
+      title: Notify team
+      actor: system
+      action: notify
+    - id: ticket
+      title: Create or escalate ticket
+      actor: system
+      action: notify
+      guidance: V1 sends email/webhook. Ticketing integrations come later.
+    - id: wait
+      title: Wait for acknowledgement
+      actor: system
+      action: wait_ack
+    - id: escalate
+      title: Escalate if unacknowledged
+      actor: system
+      action: escalate
+  on_ack:
+    pause_escalation: true
+  on_resolve:
+    require_note: true

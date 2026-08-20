@@ -1,0 +1,26 @@
+# Example Playrule. Playrules are deterministic; AI must not modify them.
+
+apiVersion: forgesre.io/v1
+kind: Playrule
+metadata:
+  name: certificate-expiry
+  description: Warn when a TLS certificate will expire within 30 days.
+  scope:
+    type: global # global | customer | site | group | asset
+spec:
+  enabled: true
+  severity: warning
+  when:
+    all:
+      - field: alert.name
+        op: eq
+        value: CertificateExpiry
+      - field: alert.labels.days_left
+        op: lt
+        value: 30
+  match:
+    asset_roles: [web, load-balancer]
+  responsibility:
+    type: customer # customer | team | owner | oncall
+  playbook: certificate-expiry
+  escalation_policy: default-warning
