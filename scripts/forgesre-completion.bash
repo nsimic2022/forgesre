@@ -88,4 +88,6 @@ _forgesre_complete() {
   esac
 }
 
+# ':' is in default COMP_WORDBREAKS and would split 09:13 during TAB.
+COMP_WORDBREAKS="${COMP_WORDBREAKS//:}"
 complete -F _forgesre_complete forgesre f ./forgesre ./f

@@ -154,7 +154,7 @@ def cmd_incidents(port: str, args: list[str]) -> None:
     jar, me = ensure_jar(port)
     try:
         if number:
-            data = get_json(port, jar, f"/api/v1/incidents/{quote(number, safe='.-_')}")
+            data = get_json(port, jar, f"/api/v1/incidents/{quote(number, safe='.-_:')}")
             sys.stdout.write(format_detail(data))
             return
         rows = get_json(port, jar, "/api/v1/incidents?limit=100")
@@ -194,7 +194,7 @@ def cmd_history(port: str, args: list[str]) -> None:
     jar, me = ensure_jar(port)
     try:
         if number:
-            data = get_json(port, jar, f"/api/v1/incidents/{quote(number, safe='.-_')}")
+            data = get_json(port, jar, f"/api/v1/incidents/{quote(number, safe='.-_:')}")
             sys.stdout.write(format_detail(data))
             return
         query = {"days": days}

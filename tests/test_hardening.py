@@ -64,13 +64,14 @@ def test_incident_number_has_local_date_and_short_seq():
 
     assert incident_seq("INC-000012") == 12
     assert incident_seq("INC-0134-16.08.2026-09-13") == 134
+    assert incident_seq("INC-0134_16.08.2026_09:13") == 134
     stamp = datetime(2026, 8, 16, 7, 13, tzinfo=timezone.utc)
     number = format_incident_number(134, stamp)
-    assert number.startswith("INC-0134-16.08.2026-")
+    assert number.startswith("INC-0134_16.08.2026_")
     from app.settings import settings
 
     if settings.timezone in {"Europe/Belgrade", "Europe/Berlin", "Europe/Zagreb"}:
-        assert number == "INC-0134-16.08.2026-09-13"
+        assert number == "INC-0134_16.08.2026_09:13"
 
 
 def test_new_incident_number_increments_legacy_six_digit():
@@ -90,7 +91,42 @@ def test_new_incident_number_increments_legacy_six_digit():
     db.commit()
     nxt = next_incident_number(db)
     assert incident_seq(nxt) == 21
-    assert nxt.startswith("INC-0021-")
+    assert nxt.startswith("INC-0021_")
+    db.close()
+
+
+def test_colon_incident_id_is_routable_and_kept_by_cli():
+    from urllib.parse import quote
+
+    from app.cli_ops import _incident_number
+    from app.models import Incident
+
+    number = "INC-0134_16.08.2026_09:13"
+    assert _incident_number([number]) == number
+    assert ":" in quote(number, safe=".-_:")
+    db = _db()
+    db.add(
+        Incident(
+            number=number,
+            title="colon id",
+            severity="WARNING",
+            status="OPEN",
+            fingerprint="colon-id-route-test",
+        )
+    )
+    db.commit()
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    page = client.get(f"/incidents/{number}")
+    assert page.status_code == 200
+    assert number in page.text
+    api = client.get(f"/api/v1/incidents/{number}")
+    assert api.status_code == 200
+    assert api.json()["number"] == number
     db.close()
 
 
