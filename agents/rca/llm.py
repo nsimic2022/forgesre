@@ -31,7 +31,7 @@ class NullLLM:
 
 
 class OpenAICompatibleLLM:
-    def __init__(self, url: str, model: str = "local", timeout: float = 45.0) -> None:
+    def __init__(self, url: str, model: str = "local", timeout: float = 180.0) -> None:
         self.url = url.rstrip("/")
         self.model = model
         self.timeout = timeout
@@ -65,7 +65,7 @@ class OpenAICompatibleLLM:
             return None
 
 
-def make_provider(url: str | None, model: str = "local", timeout: float = 45.0) -> LLMProvider:
+def make_provider(url: str | None, model: str = "local", timeout: float = 180.0) -> LLMProvider:
     if not url:
         return NullLLM()
     return OpenAICompatibleLLM(url, model=model, timeout=timeout)

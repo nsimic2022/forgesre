@@ -53,11 +53,12 @@ Host tools:
 ./update.sh
 ./forgesre demo
 ./forgesre demo-rca
+./forgesre fetch-llm
 ```
 
 ## Stack
 
-Python FastAPI core + Jinja2 UI, PostgreSQL, Prometheus, Alertmanager, Loki, Grafana Alloy, Grafana. Optional llama.cpp if you place a GGUF at `$FORGESRE_DATA/models/model.gguf`.
+Python FastAPI core + Jinja2 UI, PostgreSQL, Prometheus, Alertmanager, Loki, Grafana Alloy, Grafana. Optional llama.cpp: `./forgesre fetch-llm` downloads a GGUF into `$FORGESRE_DATA/models/` (not stored in git).
 
 AI never changes infrastructure.
 

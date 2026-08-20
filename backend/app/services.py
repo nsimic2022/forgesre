@@ -477,6 +477,7 @@ def run_investigation(db: Session, incident: Incident, actor: str = "system") ->
     llm = make_provider(
         settings.llm_url if settings.ai_enabled else None,
         settings.llm_model,
+        timeout=180.0,
     )
     engine = get_engine(settings.rca_engine, llm=llm)
     result = engine.investigate(ctx)

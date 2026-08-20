@@ -158,7 +158,7 @@ There is **no edit/disable form** in V0.3. To rotate a password, create a new us
 
 ## 6. Adding servers (inventory)
 
-A row on **Assets** is what ForgeSRE calls a server (or switch, or appliance). You can add one in three ways. Pick one path per host so you do not duplicate IPs.
+A row on **Assets** is what ForgeSRE calls a server (or switch, or appliance). You can add one **manually** or via **Discovery** (Approve). Prometheus does **not** scan the network. After a Linux host is in inventory with `scrape_address=<ip>:9100`, Prometheus **HTTP SD** starts scraping node_exporter. NetBox is optional and not bundled.
 
 ### A. Manual (you already know hostname + IP)
 
@@ -377,7 +377,7 @@ You get:
 - A **ForgeSRE confidence score** (not the LLM’s own number)
 - Disclaimer: `AI has not modified the system.`
 
-RCA works with `ai.enabled: false` (builtin analyst). Turn on a local LLM only if you have a GGUF or an OpenAI-compatible URL — see [`install-config.md`](install-config.md) §12.
+RCA works with `ai.enabled: false` (builtin analyst). To use a local LLM, download the GGUF (not in git) with `./forgesre fetch-llm` — see [`install-config.md`](install-config.md) §12.
 
 Lab: `./forgesre demo-rca` raises filesystem usage on the **demo gauge** (does not fill a real disk).
 

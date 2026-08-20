@@ -20,7 +20,7 @@ def investigate(
     context: dict[str, Any],
     llm_url: str | None = None,
     llm_model: str = "local",
-    timeout: float = 45.0,
+    timeout: float = 180.0,
 ) -> dict[str, Any]:
     """Return summary, likely_cause, evidence, confidence, recommended_action."""
     engine = ForgeRCA(llm=make_provider(llm_url, llm_model, timeout))

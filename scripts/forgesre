@@ -18,6 +18,9 @@ case "$cmd" in
     exit 1
     ;;
   update) exec "$ROOT/scripts/update.sh" "$@" ;;
+  fetch-llm)
+    exec "$ROOT/scripts/fetch-llm.sh" "$@"
+    ;;
   demo)
     PORT="$(awk -F= '/FORGESRE_HTTP_PORT/ {print $2}' .env | tail -1 | tr -d '"' )"
     PORT="${PORT:-8080}"
@@ -60,6 +63,7 @@ Usage: ./forgesre <command>
 
   install   Guided installation
   doctor    Health checks
+  fetch-llm Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp
   demo      Seed demo asset/alert/incident/AI/playbook path plus discovery candidate 10.20.30.41
   demo-rca  Filesystem RCA acceptance path (read-only, demo disk gauge)
   status    Container status
