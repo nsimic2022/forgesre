@@ -12,6 +12,8 @@ echo "Checking status..."
 "$ROOT/scripts/doctor.sh" || echo "Continuing after doctor warnings."
 echo "Creating backup..."
 "$ROOT/scripts/backup.sh"
+echo "Rendering Prometheus / Alertmanager / snmp_exporter config..."
+"$ROOT/scripts/render-monitoring.sh"
 
 if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
 if [[ "${1:-}" == "--offline" ]]; then
@@ -24,3 +26,4 @@ echo "Waiting for health..."
 sleep 5
 "$ROOT/scripts/doctor.sh"
 echo "Update finished."
+echo "SNMP: ./forgesre snmp"

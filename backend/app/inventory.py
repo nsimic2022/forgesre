@@ -43,6 +43,49 @@ def sd_targets(db: Session, core_address: str | None = None) -> list[dict]:
     return targets
 
 
+def is_snmp_asset(asset: Asset) -> bool:
+    """Network devices with an IP are polled by snmp_exporter. Linux node_exporter hosts are not."""
+    if not settings.snmp_enabled:
+        return False
+    ip = (asset.ip or "").strip()
+    if not ip:
+        return False
+    profile = (asset.monitoring_profile or "").lower()
+    kind = (asset.type or "").lower()
+    if "linux" in kind or "linux" in profile:
+        return False
+    if "web" in kind or "appliance" in kind:
+        return False
+    return "network" in kind or "switch" in kind or "router" in kind or "firewall" in kind
+
+
+def sd_snmp_targets(db: Session) -> list[dict]:
+    """Prometheus HTTP SD for snmp_exporter. Target address is the device IP; Prometheus relabels to the exporter."""
+    if not settings.snmp_enabled:
+        return []
+    targets: list[dict] = []
+    seen: set[str] = set()
+    for asset in db.query(Asset).order_by(Asset.asset_id).all():
+        if not is_snmp_asset(asset):
+            continue
+        ip = asset.ip.strip()
+        if ip in seen:
+            continue
+        seen.add(ip)
+        targets.append(
+            {
+                "targets": [ip],
+                "labels": {
+                    "asset": asset.asset_id,
+                    "monitoring_profile": asset.monitoring_profile or "network-switch",
+                    "source": asset.source or "manual",
+                    "snmp_module": settings.snmp_module,
+                },
+            }
+        )
+    return targets
+
+
 def upsert_candidate(db: Session, ip: str, role: str, ports: list[int], source: str = "scan") -> DiscoveryCandidate:
     row = db.query(DiscoveryCandidate).filter_by(ip=ip).first()
     if row is None:
@@ -170,6 +213,17 @@ def create_manual_asset(
         object_type="asset",
         object_id=asset.asset_id,
     )
+    if is_snmp_asset(asset):
+        report(
+            db,
+            "snmp",
+            "target.add",
+            "ok",
+            summary=f"{asset.hostname} queued for snmp_exporter UDP/161",
+            detail=f"ip={asset.ip} module={settings.snmp_module}",
+            object_type="asset",
+            object_id=asset.asset_id,
+        )
     return asset
 
 
@@ -281,18 +335,24 @@ def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset
     slug = _asset_id_from_ip(row.ip)
     asset = db.query(Asset).filter((Asset.asset_id == slug) | (Asset.ip == row.ip)).first()
     if asset is None:
-        profile = "linux-standard" if "Linux" in (row.proposed_role or "") else "network-switch"
+        role = row.proposed_role or ""
+        if "Linux" in role:
+            atype, profile, scrape = "Linux Server", "linux-standard", f"{row.ip}:9100"
+        elif "network" in role.lower():
+            atype, profile, scrape = "Network device", "network-switch", ""
+        else:
+            atype, profile, scrape = "Web/appliance", "web-standard", ""
         asset = Asset(
             asset_id=slug,
             hostname=slug,
             ip=row.ip,
-            type="Linux Server" if "Linux" in (row.proposed_role or "") else "Network device",
+            type=atype,
             environment="Production",
             status="healthy",
             monitoring_profile=profile,
             owner="platform",
             source="discovery",
-            scrape_address=f"{row.ip}:9100" if "Linux" in (row.proposed_role or "") else "",
+            scrape_address=scrape,
         )
         db.add(asset)
         db.flush()
@@ -320,6 +380,17 @@ def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset
         object_type="asset",
         object_id=asset.asset_id,
     )
+    if is_snmp_asset(asset):
+        report(
+            db,
+            "snmp",
+            "target.add",
+            "ok",
+            summary=f"{asset.asset_id} queued for snmp_exporter UDP/161",
+            detail=f"ip={asset.ip} module={settings.snmp_module}",
+            object_type="asset",
+            object_id=asset.asset_id,
+        )
     return asset
 
 

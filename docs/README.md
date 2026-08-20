@@ -13,6 +13,7 @@ What each release actually shipped (read if you want the “why”, not required
 - [V0.2 discovery and inventory](v0.2.md)
 - [V0.3 RCA foundation](v0.3.md)
 - [V0.4 asset contacts, analyst inventory, first-hour demo](v0.4.md)
+- [V0.5 bundled snmp_exporter](v0.5.md)
 
 ## For developers (not used in production)
 

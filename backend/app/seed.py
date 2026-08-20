@@ -32,6 +32,14 @@ CPU_STEPS = [
     {"id": "escalate", "title": "Escalate if not acknowledged"},
 ]
 
+NETWORK_STEPS = [
+    {"id": "verify", "title": "Verify the device answers ping / SSH / console"},
+    {"id": "snmp", "title": "Check SNMP community, ACL, and UDP/161 from the ForgeSRE host"},
+    {"id": "owner", "title": "Identify owner"},
+    {"id": "notify", "title": "Notify responsible engineer"},
+    {"id": "escalate", "title": "Escalate if not acknowledged"},
+]
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -153,6 +161,17 @@ def seed(db: Session) -> None:
         db.add(cpu)
         db.flush()
 
+    net = db.query(Playbook).filter_by(slug="network-unreachable").first()
+    if net is None:
+        net = Playbook(
+            slug="network-unreachable",
+            name="NETWORK-UNREACHABLE",
+            description="SNMP scrape failed. Guidance only — no commands are executed.",
+            steps=NETWORK_STEPS,
+        )
+        db.add(net)
+        db.flush()
+
     policy = db.query(EscalationPolicy).filter_by(slug="default-warning").first()
     if policy is None:
         policy = EscalationPolicy(
@@ -193,6 +212,19 @@ def seed(db: Session) -> None:
                     "value": 80,
                 },
                 playbook_id=disk.id,
+                escalation_policy_id=policy.id,
+            )
+        )
+
+    if db.query(Playrule).filter_by(name="snmp-down").first() is None:
+        db.add(
+            Playrule(
+                name="snmp-down",
+                description="SNMP scrape failed (device down or community/ACL)",
+                enabled=True,
+                severity="warning",
+                condition={"alertname": "SnmpDeviceUnreachable", "metric": "up", "operator": "==", "value": 0},
+                playbook_id=net.id,
                 escalation_policy_id=policy.id,
             )
         )

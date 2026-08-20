@@ -122,6 +122,21 @@ class Settings:
         return bool((self.yaml.get("logging") or {}).get("loki", {}).get("enabled", True))
 
     @property
+    def snmp_enabled(self) -> bool:
+        snmp = (self.yaml.get("monitoring") or {}).get("snmp") or {}
+        return bool(snmp.get("enabled", True))
+
+    @property
+    def snmp_exporter_url(self) -> str:
+        snmp = (self.yaml.get("monitoring") or {}).get("snmp") or {}
+        return str(snmp.get("exporter_url") or "http://127.0.0.1:9116").rstrip("/")
+
+    @property
+    def snmp_module(self) -> str:
+        snmp = (self.yaml.get("monitoring") or {}).get("snmp") or {}
+        return str(snmp.get("module") or "if_mib")
+
+    @property
     def discovery_enabled(self) -> bool:
         return bool((self.yaml.get("discovery") or {}).get("enabled", True))
 

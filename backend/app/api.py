@@ -17,8 +17,10 @@ from app.security import CREATABLE_ROLES, can, hash_password, user_from_session,
 from app.inventory import (
     approve_candidate,
     ignore_candidate,
+    is_snmp_asset,
     run_scan,
     sd_targets,
+    sd_snmp_targets,
     seed_demo_candidate,
     similar_incident_groups,
     sync_netbox,
@@ -319,6 +321,15 @@ def prometheus_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]
     return sd_targets(db)
 
 
+@router.get("/sd/snmp")
+def snmp_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
+    auth = request.headers.get("authorization") or ""
+    token = auth.replace("Bearer ", "").strip()
+    if token != settings.webhook_token:
+        raise HTTPException(status_code=401, detail="invalid sd token")
+    return sd_snmp_targets(db)
+
+
 @router.get("/discovery/candidates")
 def list_candidates(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> list[dict]:
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
@@ -529,6 +540,7 @@ def doctor_payload() -> dict[str, Any]:
         "alertmanager": _http(f"{settings.alertmanager_url}/-/ready", "GET"),
         "loki": _http(f"{settings.loki_url}/loki/api/v1/status/buildinfo", "GET") if settings.loki_enabled else _ok("disabled"),
         "grafana": _http("http://127.0.0.1:3000/api/health", "GET") if settings.grafana_enabled else _ok("disabled"),
+        "snmp": _snmp_check(),
         "llm": _http((settings.llm_url or "").rstrip("/") + "/models", "GET") if settings.llm_url else _ok("disabled"),
         "netbox": _netbox_check(),
         "discovery": _ok("ok") if settings.discovery_enabled else _ok("disabled"),
@@ -539,6 +551,17 @@ def doctor_payload() -> dict[str, Any]:
         "components": components,
         "failed": failed,
     }
+
+
+def _snmp_check() -> dict[str, str]:
+    if not settings.snmp_enabled:
+        return _ok("disabled")
+    result = _http(f"{settings.snmp_exporter_url}/metrics", "GET")
+    if result.get("status") == "ok":
+        return result
+    result["fix"] = "docker compose up -d snmp-exporter && ./forgesre render-monitoring && ./forgesre snmp"
+    result["test"] = f"curl -fsS {settings.snmp_exporter_url}/metrics"
+    return result
 
 
 def _netbox_check() -> dict[str, str]:
@@ -618,6 +641,7 @@ def _asset(item: Asset) -> dict[str, Any]:
         "notes": item.notes,
         "source": item.source,
         "scrape_address": item.scrape_address,
+        "snmp": is_snmp_asset(item),
     }
 
 

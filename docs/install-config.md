@@ -28,6 +28,7 @@ Code: https://github.com/nsimic2022/forgesre (`main`).
 | Grafana | Deep dashboards | host port `3000` |
 | PostgreSQL | ForgeSRE database | `127.0.0.1:5432` |
 | Prometheus | Metrics | `127.0.0.1:9090` |
+| snmp_exporter | SNMP walks for network devices | `127.0.0.1:9116` |
 | Alertmanager | Alert webhook → incidents | `127.0.0.1:9093` |
 | Loki + Alloy | Logs as evidence | `127.0.0.1:3100` / `12345` |
 | llama.cpp (optional) | Local LLM | `127.0.0.1:8088` |
@@ -234,6 +235,10 @@ monitoring:
     url: http://127.0.0.1:9090
   alertmanager:
     url: http://127.0.0.1:9093
+  snmp:
+    enabled: true
+    exporter_url: http://127.0.0.1:9116
+    module: if_mib
 
 logging:
   loki:
@@ -267,10 +272,11 @@ notifications:
 
 Notes:
 
-- **Discovery** is a TCP probe (22/80/443/161/9100), not nmap. New hosts wait on `/discovery` for Approve / Ignore unless `mode: automatic` (still audited).
+- **Discovery** is a TCP probe (22/80/443/161/9100), not nmap. New hosts wait on `/discovery` for Approve / Ignore unless `mode: automatic` (still audited). SNMP polling of network devices is a separate UDP/161 walk by snmp_exporter after Approve.
 - **NetBox** is read-sync only. Put the token in `NETBOX_API_TOKEN`, never in YAML.
 - **RCA** works with `ai.enabled: false` (builtin analyst). Set `ai.enabled: true` only if you have a local OpenAI-compatible endpoint or a GGUF.
 - Changing `cidrs` does not require a reinstall. Restart Core.
+- Changing `SNMP_COMMUNITY` requires `./forgesre render-monitoring` (rewrites generated `snmp.yml`). Do not re-run `./install.sh`.
 
 ---
 
@@ -279,7 +285,7 @@ Notes:
 Written by `./install.sh`. Typical keys:
 
 ```bash
-FORGESRE_VERSION=0.4.0
+FORGESRE_VERSION=0.5.0
 FORGESRE_DATA=./data
 FORGESRE_TIMEZONE=Europe/Belgrade
 FORGESRE_HTTP_PORT=8080
@@ -290,9 +296,12 @@ POSTGRES_PASSWORD=...      # must match secrets
 GRAFANA_ADMIN_PASSWORD=...
 ALERTMANAGER_CONFIG=./data/generated/alertmanager.yml
 PROMETHEUS_CONFIG=./data/generated/prometheus.yml
+SNMP_EXPORTER_CONFIG=./data/generated/snmp.yml
 ```
 
-Change the UI port here **and** regenerate Prometheus/Alertmanager with the same port, then recreate Core and reload Prometheus.
+Change the UI port here **and** regenerate Prometheus/Alertmanager/snmp with the same port (`./forgesre render-monitoring`), then recreate Core and reload Prometheus.
+
+On an existing VM after `git pull`, run `./forgesre render-monitoring && docker compose up -d` so the `forgesre-snmp` job and snmp-exporter container appear. Do not re-run `./install.sh`.
 
 ---
 
@@ -308,6 +317,7 @@ SECRET_KEY=
 SMTP_USERNAME=
 SMTP_PASSWORD=
 NETBOX_API_TOKEN=
+SNMP_COMMUNITY=public     # read-only community snmp_exporter uses on UDP/161
 ```
 
 Directory `secrets/` should be `700`, file `600`. Never commit it.
@@ -316,16 +326,35 @@ Directory `secrets/` should be `700`, file `600`. Never commit it.
 
 ## 11. Day-2 commands
 
+`./forgesre help` is the index. `./forgesre help <command>` has examples.
+
 ```bash
-./doctor.sh              # health
-./forgesre status        # compose ps
-./forgesre logs core     # container logs
-./forgesre demo          # HighCPU + owner notification + similar-incident history
-./forgesre demo-rca      # filesystem RCA demo (does not fill a real disk)
-./forgesre journal       # internal process reports (optional module filter)
-./forgesre fetch-llm     # download GGUF (~9 GB) and start llama.cpp; do not re-run install.sh
-./backup.sh              # Postgres + config tarball under $FORGESRE_DATA/backups
-./update.sh              # backup, refresh, restart, doctor
+./forgesre help              # CLI overview
+./forgesre help snmp         # SNMP exporter + SD
+./forgesre doctor            # health (includes snmp)
+./forgesre status            # compose ps
+./forgesre logs core
+./forgesre logs snmp-exporter
+./forgesre assets            # inventory
+./forgesre snmp              # exporter + SNMP HTTP SD
+./forgesre render-monitoring # rewrite generated prometheus/alertmanager/snmp.yml
+./forgesre demo              # HighCPU + owner notification + similar-incident history
+./forgesre demo-rca          # filesystem RCA demo (does not fill a real disk)
+./forgesre journal           # internal process reports (optional module filter)
+./forgesre journal snmp
+./forgesre fetch-llm         # download GGUF (~9 GB) and start llama.cpp; do not re-run install.sh
+./forgesre backup            # Postgres + config tarball under $FORGESRE_DATA/backups
+./forgesre update            # backup, render-monitoring, refresh, restart, doctor
+```
+
+Existing VM after git pull:
+
+```bash
+git pull origin main
+./forgesre render-monitoring
+docker compose up -d
+./forgesre doctor
+./forgesre snmp
 ```
 
 ---
@@ -366,6 +395,10 @@ Doctor `llm: disabled` means the model/container is off. `llm: ok` means llama.c
 | UI only on the VM | You used `127.0.0.1` from the laptop, or 8080 is blocked |
 | Doctor: NetBox error | Disable NetBox or set URL + `NETBOX_API_TOKEN` |
 | Discovery finds nothing | Empty `cidrs`, or hosts do not open 22/80/443/161/9100 |
+| `./forgesre snmp` empty `[]` | No Network device with an IP yet. Linux hosts are not SNMP targets |
+| Doctor: snmp error | `docker compose up -d snmp-exporter`. Then `./forgesre logs snmp-exporter` |
+| `up{job="forgesre-snmp"}==0` | Community/ACL/UDP 161 from this VM, or device down. Not Prometheus itself |
+| SNMP after git pull missing | `./forgesre render-monitoring && docker compose up -d` — do not re-run install.sh |
 | LLM download fails | Disk, Hugging Face, or proxy. Set `FORGESRE_LLM_URL` or copy a GGUF to `data/models/model.gguf` |
 | Doctor: llm error after fetch | Wait for llama.cpp to load the GGUF, then `./doctor.sh` again |
 | Re-install wiped logins | `./install.sh` regenerates secrets; use `installation-report.md` from the last run |

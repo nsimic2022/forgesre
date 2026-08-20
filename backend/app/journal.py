@@ -28,6 +28,7 @@ MODULES = [
     "notification",
     "demo",
     "netbox",
+    "snmp",
 ]
 
 KEEP_PER_MODULE = 200

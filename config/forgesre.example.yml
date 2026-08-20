@@ -26,6 +26,10 @@ monitoring:
     enabled: true
     mode: bundled
     url: http://127.0.0.1:9093
+  snmp:
+    enabled: true
+    exporter_url: http://127.0.0.1:9116
+    module: if_mib
 
 logging:
   loki:
