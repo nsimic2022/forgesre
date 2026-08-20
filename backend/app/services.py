@@ -713,8 +713,7 @@ def run_demo_rca(db: Session) -> Incident:
     incident = created[0] if created else (
         db.query(Incident).filter(Incident.fingerprint == fingerprint).order_by(Incident.id.desc()).first()
     )
-    if incident and not incident.investigations:
-        run_investigation(db, incident, actor="demo-rca")
     if incident:
+        run_investigation(db, incident, actor="demo-rca")
         ensure_notification(db, incident, "immediate")
     return incident
