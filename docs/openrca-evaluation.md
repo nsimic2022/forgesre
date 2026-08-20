@@ -1,5 +1,7 @@
 # OpenRCA evaluation (not production)
 
+**Operators can skip this page.** It is a developer note. Nothing here is installed, enabled, or required to run ForgeSRE.
+
 ForgeSRE V0.3 does **not** run Microsoft OpenRCA and does **not** ship the OpenRCA dataset.
 
 Production RCA is `ForgeRCA` (`agents/rca/engines.py`). `OpenRCAAdapter` exists so a later evaluation harness can plug in without changing incident/evidence/result shapes.
