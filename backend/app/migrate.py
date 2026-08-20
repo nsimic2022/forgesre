@@ -68,6 +68,30 @@ def migrate(engine: Engine) -> None:
                     "created_at TIMESTAMPTZ, started_at TIMESTAMPTZ, finished_at TIMESTAMPTZ)"
                 )
             )
+        if "incident_notes" not in tables:
+            conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS incident_notes ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "incident_id INTEGER, at DATETIME, actor VARCHAR(255), body TEXT)"
+                    if engine.dialect.name == "sqlite"
+                    else "CREATE TABLE IF NOT EXISTS incident_notes ("
+                    "id SERIAL PRIMARY KEY, "
+                    "incident_id INTEGER REFERENCES incidents(id), "
+                    "at TIMESTAMPTZ, actor VARCHAR(255), body TEXT)"
+                )
+            )
+        if "incidents" in tables:
+            existing = {col["name"] for col in inspector.get_columns("incidents")}
+            extras = {
+                "resolved_by": "ALTER TABLE incidents ADD COLUMN resolved_by VARCHAR(255) DEFAULT ''",
+                "resolved_at": "ALTER TABLE incidents ADD COLUMN resolved_at TIMESTAMPTZ"
+                if engine.dialect.name == "postgresql"
+                else "ALTER TABLE incidents ADD COLUMN resolved_at DATETIME",
+            }
+            for name, sql in extras.items():
+                if name not in existing:
+                    conn.execute(text(sql))
         for sql in statements:
             conn.execute(text(sql))
         if "evidence" in tables:

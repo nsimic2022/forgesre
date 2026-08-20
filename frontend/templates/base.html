@@ -9,13 +9,14 @@
 <body>
   {% if user %}
   <aside class="nav">
-    <div class="brand">ForgeSRE <span>v0.6</span></div>
+    <div class="brand">ForgeSRE <span>v0.7</span></div>
     <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
     <a href="/assets" class="{% if request.url.path.startswith('/assets') %}active{% endif %}">Assets</a>
     {% if can('write_assets') %}
     <a href="/discovery" class="{% if request.url.path.startswith('/discovery') %}active{% endif %}">Discovery</a>
     {% endif %}
     <a href="/incidents" class="{% if request.url.path.startswith('/incidents') %}active{% endif %}">Incidents</a>
+    <a href="/history" class="{% if request.url.path.startswith('/history') %}active{% endif %}">History</a>
     {% if can('read_play') %}
     <a href="/playrules">Playrules</a>
     <a href="/playbooks">Playbooks</a>

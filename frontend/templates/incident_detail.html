@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ incident.number }} · ForgeSRE{% endblock %}
 {% block content %}
-<p><a href="/incidents">← Incidents</a></p>
+<p><a href="/incidents">← Incidents</a> · <a href="/history">History</a></p>
 <h1>{{ incident.number }} <span class="muted">{{ incident.title }}</span></h1>
 <p>
   <span class="pill {{ incident.status|lower }}">{{ incident.status }}</span>
@@ -10,6 +10,8 @@
   Asset: <a href="/assets/{{ incident.asset.asset_id }}">{{ incident.asset.hostname }}</a>
   {% endif %}
   · Started {{ incident.started_at }}
+  {% if incident.ack_by %} · Ack {{ incident.ack_by }} {{ incident.ack_at }}{% endif %}
+  {% if incident.resolved_by %} · {{ incident.status }} by {{ incident.resolved_by }} {{ incident.resolved_at or incident.ended_at }}{% endif %}
 </p>
 
 {% if incident.asset %}
@@ -145,6 +147,70 @@
   </ul>
 </section>
 {% endif %}
+
+<section id="mail">
+  <h2>Email notifications</h2>
+  <p class="muted">Outbox for this incident. <code>generated</code> means SMTP was off. <code>sent</code> means Core handed it to the SMTP host.</p>
+  <table>
+    <thead><tr><th>When</th><th>Step</th><th>To</th><th>Status</th><th>Subject</th></tr></thead>
+    <tbody>
+    {% for note in mail %}
+      <tr>
+        <td>{{ note.created_at }}</td>
+        <td>{{ note.step_key or "—" }}</td>
+        <td>{{ note.target }}</td>
+        <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
+        <td>{{ note.subject }}</td>
+      </tr>
+      <tr>
+        <td colspan="5"><pre class="journal-detail">{{ note.body }}{% if note.error %}
+
+{{ note.error }}{% endif %}</pre></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">No notification rows.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section id="audit">
+  <h2>Who did what</h2>
+  <p class="muted">Audit rows for this <code>INC</code> (login clicks, status, notes). Not an email read-receipt.</p>
+  <table>
+    <thead><tr><th>When</th><th>Actor</th><th>Action</th></tr></thead>
+    <tbody>
+    {% for row in audit_rows %}
+      <tr>
+        <td>{{ row.at }}</td>
+        <td>{{ row.actor }}</td>
+        <td>{{ row.action }}{% if row.data %} {{ row.data }}{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="3" class="muted">No audit rows yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section id="notes">
+  <h2>Operator notes</h2>
+  <p class="muted">What a person actually did (e.g. cleaned WAL). Not the playbook and not RCA.</p>
+  {% for row in operator_notes %}
+    <div class="card">
+      <p class="muted">{{ row.at }} · {{ row.actor }}</p>
+      <p>{{ row.body }}</p>
+    </div>
+  {% else %}
+    <p class="muted">No notes yet.</p>
+  {% endfor %}
+  {% if can('write_incidents') %}
+  <form method="post" action="/incidents/{{ incident.number }}/notes" class="stack">
+    <label>Add note <textarea name="body" rows="3" required placeholder="What you did on the host"></textarea></label>
+    <button type="submit">Save note</button>
+  </form>
+  {% endif %}
+</section>
 
 {% if can('read_evidence') %}
 <section>

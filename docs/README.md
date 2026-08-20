@@ -17,6 +17,7 @@ What each release actually shipped (read if you want the “why”, not required
 - [V0.4 asset contacts, analyst inventory, first-hour demo](v0.4.md)
 - [V0.5 bundled snmp_exporter](v0.5.md)
 - [V0.6 operations hardening](v0.6.md)
+- [V0.7 incident history](v0.7.md)
 
 ## For developers (not used in production)
 

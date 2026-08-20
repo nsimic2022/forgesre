@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}History · ForgeSRE{% endblock %}
+{% block content %}
+<h1>History</h1>
+<p class="muted">
+  Last <strong>{{ days }}</strong> days of incidents in Postgres (default 90).
+  This is not Console/Journal and not Loki. Closed rows stay here.
+  Mail bodies and who clicked Ack/Resolve are on the incident page.
+</p>
+<form method="get" action="/history" class="form-grid">
+  <label>Days <input name="days" type="number" min="1" max="3660" value="{{ days }}"></label>
+  <label>Status
+    <select name="status">
+      <option value="" {% if not status %}selected{% endif %}>any</option>
+      {% for item in ["OPEN", "INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED"] %}
+      <option value="{{ item }}" {% if status == item %}selected{% endif %}>{{ item }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Asset / hostname / IP <input name="asset" value="{{ asset }}" placeholder="db-01"></label>
+  <label>Incident number <input name="number" value="{{ number }}" placeholder="INC-000012"></label>
+  <div class="wide"><button type="submit">Filter</button>
+    <a class="muted" href="/history">Reset</a>
+  </div>
+</form>
+<p class="muted">{{ total }} match{% if total != 1 %}es{% endif %} · page {{ page }} / {{ pages }}</p>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th><th>Title</th><th>Status</th><th>Asset</th>
+      <th>Started</th><th>Ack</th><th>Resolved</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for item in incidents %}
+    <tr>
+      <td><a href="/incidents/{{ item.number }}">{{ item.number }}</a></td>
+      <td>{{ item.title }}</td>
+      <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
+      <td>{% if item.asset %}{{ item.asset.hostname }}{% else %}—{% endif %}</td>
+      <td>{{ item.started_at }}</td>
+      <td>{% if item.ack_by %}{{ item.ack_by }}{% else %}—{% endif %}</td>
+      <td>{% if item.resolved_by %}{{ item.resolved_by }}{% else %}—{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="muted">No incidents in this window.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if pages > 1 %}
+<p>
+  {% if page > 1 %}
+  <a href="/history?days={{ days }}&status={{ status }}&asset={{ asset }}&number={{ number }}&page={{ page - 1 }}">Previous</a>
+  {% endif %}
+  {% if page < pages %}
+  <a href="/history?days={{ days }}&status={{ status }}&asset={{ asset }}&number={{ number }}&page={{ page + 1 }}">Next</a>
+  {% endif %}
+</p>
+{% endif %}
+{% endblock %}

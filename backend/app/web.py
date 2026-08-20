@@ -24,6 +24,15 @@ from app.models import Asset, AuditLog, DiscoveryCandidate, EscalationPolicy, In
 from app.security import can, hash_password, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload
 from app.services import run_demo, run_demo_rca, run_investigation
+from app.history import (
+    add_note,
+    apply_status_fields,
+    audit_for,
+    clamp_days,
+    list_history,
+    notes_for,
+    notifications_for,
+)
 from app.settings import settings
 
 router = APIRouter()
@@ -311,6 +320,49 @@ def incidents_page(request: Request, db: Session = Depends(get_db), user: User =
     return render(request, "incidents.html", user, incidents=rows)
 
 
+@router.get("/history", response_class=HTMLResponse)
+def history_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    days: str = "90",
+    status: str = "",
+    asset: str = "",
+    number: str = "",
+    page: str = "1",
+):
+    days_n = clamp_days(days)
+    try:
+        page_n = max(1, int(page))
+    except (TypeError, ValueError):
+        page_n = 1
+    limit = 200
+    offset = (page_n - 1) * limit
+    rows, total = list_history(
+        db,
+        days=days_n,
+        status=status,
+        asset=asset,
+        number=number,
+        limit=limit,
+        offset=offset,
+    )
+    pages = max(1, (total + limit - 1) // limit)
+    return render(
+        request,
+        "history.html",
+        user,
+        incidents=rows,
+        days=days_n,
+        status=status,
+        asset=asset,
+        number=number,
+        page=page_n,
+        pages=pages,
+        total=total,
+    )
+
+
 @router.get("/incidents/{number}", response_class=HTMLResponse)
 def incident_detail(number: str, request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
     item = db.query(Incident).filter_by(number=number).first()
@@ -329,6 +381,9 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
             similar=similar,
             timeline_json=json.dumps(item.timeline or []),
             engineer=can(user, "read_evidence"),
+            mail=notifications_for(db, item),
+            audit_rows=audit_for(db, item.number),
+            operator_notes=notes_for(db, item),
         )
 
 
@@ -347,11 +402,7 @@ def incident_status(
     if item is None:
         raise HTTPException(status_code=404)
     item.status = status.upper()
-    if item.status == "INVESTIGATING" and not item.ack_at:
-        from app.services import utcnow
-
-        item.ack_at = utcnow()
-        item.ack_by = user.email
+    apply_status_fields(item, item.status, user.email)
     if item.status in {"RESOLVED", "CLOSED"} and item.asset and item.asset.asset_id == "forge-demo-01":
         from app.metrics import reset_demo_gauges
 
@@ -374,6 +425,25 @@ def incident_investigate(
         raise HTTPException(status_code=404)
     run_investigation(db, item, actor=user.email)
     return RedirectResponse(f"/incidents/{number}#ai", status_code=302)
+
+
+@router.post("/incidents/{number}/notes")
+def incident_note_page(
+    number: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    body: str = Form(""),
+):
+    if not can(user, "write_incidents"):
+        raise HTTPException(status_code=403)
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404)
+    try:
+        add_note(db, item, actor=user.email, body=body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse(f"/incidents/{number}#notes", status_code=302)
 
 
 @router.get("/ai/{number}", response_class=HTMLResponse)

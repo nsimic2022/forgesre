@@ -14,6 +14,18 @@ from app.journal import MODULES, entry_as_dict, list_entries, module_counts, rep
 from app.db import get_db
 from app.metrics import reset_demo_gauges, set_demo_cpu, set_demo_disk
 from app.models import Asset, DiscoveryCandidate, EscalationPolicy, Evidence, Incident, Investigation, Playbook, Playrule, User
+from app.history import (
+    add_note,
+    apply_status_fields,
+    audit_as_dict,
+    audit_for,
+    clamp_days,
+    list_history,
+    note_as_dict,
+    notes_for,
+    notification_as_dict,
+    notifications_for,
+)
 from app.security import CREATABLE_ROLES, can, hash_password, user_from_session, verify_password
 from app.inventory import (
     approve_candidate,
@@ -80,6 +92,10 @@ class PlaybookBody(BaseModel):
     slug: str
     description: str = ""
     steps: list[Any] = Field(default_factory=list)
+
+
+class NoteBody(BaseModel):
+    body: str = ""
 
 
 class StatusBody(BaseModel):
@@ -187,12 +203,61 @@ def list_incidents(
     return [_incident(item, include_evidence=can(user, "read_evidence")) for item in rows]
 
 
+@router.get("/history")
+def history_api(
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_incidents")),
+    days: int = 90,
+    status: str = "",
+    asset: str = "",
+    number: str = "",
+    limit: int = 200,
+    offset: int = 0,
+) -> dict:
+    rows, total = list_history(
+        db,
+        days=clamp_days(days),
+        status=status,
+        asset=asset,
+        number=number,
+        limit=limit,
+        offset=offset,
+    )
+    include = can(user, "read_evidence")
+    return {
+        "days": clamp_days(days),
+        "total": total,
+        "incidents": [_incident(item, include_evidence=include) for item in rows],
+    }
+
+
 @router.get("/incidents/{number}")
 def get_incident(number: str, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
         raise HTTPException(status_code=404, detail="incident not found")
-    return _incident(item, include_evidence=can(user, "read_evidence"))
+    data = _incident(item, include_evidence=can(user, "read_evidence"))
+    data["notifications"] = [notification_as_dict(row) for row in notifications_for(db, item)]
+    data["audit"] = [audit_as_dict(row) for row in audit_for(db, item.number)]
+    data["notes"] = [note_as_dict(row) for row in notes_for(db, item)]
+    return data
+
+
+@router.post("/incidents/{number}/notes")
+def add_incident_note(
+    number: str,
+    body: NoteBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_incidents")),
+) -> dict:
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    try:
+        row = add_note(db, item, actor=user.email, body=body.body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return note_as_dict(row)
 
 
 @router.post("/incidents/{number}/status")
@@ -210,6 +275,7 @@ def set_status(
     if status not in allowed:
         raise HTTPException(status_code=400, detail="invalid status")
     item.status = status
+    apply_status_fields(item, status, user.email)
     audit(db, "incident.status", actor=user.email, object_type="incident", object_id=number, data={"status": status})
     db.commit()
     return _incident(item, include_evidence=True)
@@ -710,6 +776,11 @@ def _incident(item: Incident, include_evidence: bool) -> dict[str, Any]:
         "severity": item.severity,
         "status": item.status,
         "started_at": item.started_at.isoformat() if item.started_at else None,
+        "ended_at": item.ended_at.isoformat() if item.ended_at else None,
+        "ack_at": item.ack_at.isoformat() if item.ack_at else None,
+        "ack_by": item.ack_by or "",
+        "resolved_at": item.resolved_at.isoformat() if item.resolved_at else None,
+        "resolved_by": item.resolved_by or "",
         "asset": _asset(item.asset) if item.asset else None,
         "playrule": item.playrule.name if item.playrule else None,
         "playbook": item.playbook.name if item.playbook else None,

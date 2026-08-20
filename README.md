@@ -6,7 +6,7 @@ One Ubuntu VM (a vCenter guest is the usual lab). Docker Compose, host networkin
 
 It is not a Kubernetes platform, not APM, and not auto-remediation. Playbooks are checklists. AI never SSH-es, never runs commands, never writes NetBox.
 
-**Code lives on [`main`](https://github.com/nsimic2022/forgesre).** Current product: V0.6.
+**Code lives on [`main`](https://github.com/nsimic2022/forgesre).** Current product: V0.7.
 
 ---
 
@@ -35,6 +35,7 @@ Find or enter a host
 | **Inventory** | Hostname, IP, type, owner email/phone. Analysts can add and edit. |
 | **Monitoring** | Prometheus HTTP SD for Linux. Bundled snmp_exporter for network devices. Grafana for graphs. |
 | **Incidents** | Alertmanager webhook opens `INC-…`. Fingerprint is alert + asset. |
+| **History** | `/history` — last 90 days in Postgres, plus mail/audit/notes on the incident. |
 | **Playrules / playbooks** | Deterministic mapping: this alert → this checklist. Nothing is executed. |
 | **Escalation** | Generated mail to the **asset owner** (SMTP optional; lab uses an outbox log). |
 | **ForgeRCA** | Read-only investigation. Builtin analyst always; optional local LLM (`./forgesre fetch-llm`, GGUF not in git). |
@@ -94,7 +95,8 @@ Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. L
 | `/` | Dashboard, doctor lights, first-hour walkthrough |
 | `/assets` | Inventory and owner contacts |
 | `/discovery` | Approve / Ignore new devices |
-| `/incidents` | Alertmanager incidents |
+| `/incidents` | Alertmanager incidents (recent 200) |
+| `/history` | 90-day lookback, filters, closed rows |
 | `/ai/INC-…` | Read-only RCA |
 | `/playrules` `/playbooks` `/escalation` | Workflow |
 | `/journal` | Internal console |
@@ -115,6 +117,7 @@ Roles: super admin (install user), system admin, analyst (inventory + playrules)
 ./forgesre snmp
 ./forgesre sd
 ./forgesre incidents
+./forgesre history
 ./forgesre jobs
 ./forgesre logs core
 ./forgesre journal
@@ -142,6 +145,6 @@ Config: `config/forgesre.yml` (behavior), `.env` (ports/paths), `secrets/secrets
 - [Operator handbook (users, servers, playrules, incidents, CLI)](docs/operator-handbook.md)
 - [Docs index](docs/README.md)
 
-**What each release shipped** (optional): [V0.1](docs/v0.1.md) · [V0.2](docs/v0.2.md) · [V0.3](docs/v0.3.md) · [V0.4](docs/v0.4.md) · [V0.5 snmp_exporter](docs/v0.5.md) · [V0.6 hardening](docs/v0.6.md)
+**What each release shipped** (optional): [V0.1](docs/v0.1.md) · [V0.2](docs/v0.2.md) · [V0.3](docs/v0.3.md) · [V0.4](docs/v0.4.md) · [V0.5 snmp_exporter](docs/v0.5.md) · [V0.6 hardening](docs/v0.6.md) · [V0.7 history](docs/v0.7.md)
 
 Longer-term design notes (not a runtime guide): [architecture.md](docs/architecture.md). Security notes: [SECURITY.md](SECURITY.md). License: [Apache-2.0](LICENSE).

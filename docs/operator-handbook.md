@@ -2,7 +2,7 @@
 
 This is the **day-2 guide for the whole system**: users, servers, monitoring, playrules, playbooks, incidents, and RCA.
 
-Install and file-level config stay in [`install-config.md`](install-config.md). Version notes (`v0.1.md` … `v0.6.md`) explain *what shipped*. This document explains *how you operate it*.
+Install and file-level config stay in [`install-config.md`](install-config.md). Version notes (`v0.1.md` … `v0.7.md`) explain *what shipped*. This document explains *how you operate it*.
 
 Code: https://github.com/nsimic2022/forgesre (`main`). Open the UI at `http://<VM-IP>:8080`.
 
@@ -98,7 +98,7 @@ Three operating roles, plus a read-only viewer. The install user is `super_admin
 | **System admin** (`admin`) | Deputy for the box | Users, inventory, discovery, demos, doctor | Cannot create another super_admin |
 | **Analyst** | Watch incidents, keep inventory, write the workflow | Ack/resolve incidents, **add/edit assets**, run AI (analyst view), **create playrules and playbooks** | PromQL/LogQL, Administration |
 | **Engineer** | Deep RCA | Inventory, discovery Approve, full AI page (queries, evidence, history), resolve | Create playrules/playbooks, Administration |
-| **Viewer** | Read-only | Dashboard, assets, incidents, System Health | Playrules, Playbooks, Escalation, Console, Discovery (403), any writes |
+| **Viewer** | Read-only | Dashboard, assets, incidents, History, System Health | Playrules, Playbooks, Escalation, Console, Discovery (403), any writes |
 
 Analyst vs engineer on **AI Investigation**: same facts and likely cause. Engineer additionally sees PromQL, LogQL, evidence hashes, and similar-incident history on that page. Similar-incident history for an asset is on the **asset page** for every role that can read assets.
 
@@ -116,8 +116,9 @@ Login session lasts **12 hours** (httponly cookie).
 | Assets | `/assets` | List inventory. **Add asset** form (analyst+) |
 | Asset detail | `/assets/<id>` | Contacts, scrape address, edit owner after Save, similar-incident history |
 | Discovery | `/discovery` | Scan, Approve / Ignore (analyst+), optional NetBox sync (admin) |
-| Incidents | `/incidents` | All incidents from Alertmanager |
-| Incident | `/incidents/INC-…` | Ack / Resolve / Close, **Who to call**, run RCA, playbook name |
+| Incidents | `/incidents` | Recent 200 Alertmanager incidents (live list) |
+| History | `/history` | Last 90 days in Postgres. Filters: status, asset, `INC` number. Closed rows stay here. |
+| Incident | `/incidents/INC-…` | Ack / Resolve / Close (who/when), **Who to call**, mail outbox, audit, operator notes, run RCA, playbook name |
 | Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
 | AI Investigation | `/ai/INC-…` | Facts, anomalies, hypotheses, evidence IDs |
 | Playrules | `/playrules` | List, toggle, create (**analyst**) |
@@ -422,8 +423,12 @@ On `/incidents/<number>`:
 | Button | Who | Effect |
 |---|---|---|
 | Acknowledge | analyst+ | Status `INVESTIGATING`, records ack user/time |
-| Resolve / Close | analyst+ (`write_incidents`) | Closes the operational loop |
+| Resolve / Close | analyst+ (`write_incidents`) | Closes the operational loop; records who resolved |
 | Run AI investigation | analyst+ (`read_ai`) or engineer (`investigate`) | ForgeRCA; does not change the host |
+
+The same page lists **email notifications** for this `INC` (bodies, `generated` vs `sent`), **who did what** (audit: ack, resolve, notes), and **operator notes** (what a person actually did, e.g. cleaned WAL). Notes are not a ticket thread and not RCA.
+
+**History** (`/history`) is the 90-day lookback of the same Postgres incidents. Use it for closed work and date filters. Escalation is still the policy + recent mail log. Console (`/journal`) is still process reports, not incident history.
 
 Asset health on the dashboard (`healthy` / `warning` / `critical`) follows open incidents on that asset.
 
@@ -523,6 +528,7 @@ On the VM, from the clone directory, `./forgesre` is the operator CLI. `./forges
 ./forgesre snmp                 # exporter HTTP check + SNMP SD JSON
 ./forgesre sd                   # Linux + SNMP HTTP SD
 ./forgesre incidents            # recent INC-… rows
+./forgesre history              # 90-day lookback (filters; INC-… for mail/audit/notes)
 ./forgesre jobs                 # background RCA queue
 ./forgesre render-monitoring    # rewrite generated prometheus/alertmanager/snmp/alerts.yml
 ./forgesre journal              # last process reports
@@ -567,6 +573,9 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 | POST | `/api/v1/discovery/candidates/{id}/approve` | analyst+ |
 | POST | `/api/v1/playrules` | analyst+ |
 | POST | `/api/v1/playbooks` | analyst+ |
+| GET | `/api/v1/history` | viewer+ (`read_incidents`; `days`, `status`, `asset`, `number`) |
+| GET | `/api/v1/incidents/{number}` | viewer+ (includes notifications, audit, notes) |
+| POST | `/api/v1/incidents/{number}/notes` | analyst+ |
 | POST | `/api/v1/incidents/{number}/status` | analyst+ |
 | POST | `/api/v1/incidents/{number}/investigate` | analyst+ |
 | GET | `/api/v1/journal` | analyst+ (`read_play`; module, status, q) |
