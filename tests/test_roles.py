@@ -14,7 +14,7 @@ def test_role_split_analyst_writes_play_engineer_sees_evidence():
     assert can(analyst, "write_incidents")
     assert can(analyst, "read_ai")
     assert not can(analyst, "read_evidence")
-    assert not can(analyst, "write_assets")
+    assert can(analyst, "write_assets")
     assert not can(analyst, "admin")
 
     assert can(engineer, "read_evidence")

@@ -9,7 +9,15 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.db import get_db
-from app.inventory import approve_candidate, create_manual_asset, ignore_candidate, run_scan, sync_netbox
+from app.inventory import (
+    approve_candidate,
+    create_manual_asset,
+    ignore_candidate,
+    run_scan,
+    similar_incident_groups,
+    sync_netbox,
+    update_asset,
+)
 from app.models import Asset, AuditLog, DiscoveryCandidate, EscalationPolicy, Incident, Notification, Playbook, Playrule, User
 from app.security import can, hash_password, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload
@@ -127,6 +135,10 @@ def asset_create(
     type: str = Form("Linux Server"),
     environment: str = Form("Production"),
     owner: str = Form("platform"),
+    contact_name: str = Form(""),
+    owner_email: str = Form(""),
+    owner_phone: str = Form(""),
+    notes: str = Form(""),
 ):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
@@ -138,6 +150,10 @@ def asset_create(
             type=type,
             environment=environment,
             owner=owner,
+            contact_name=contact_name,
+            owner_email=owner_email,
+            owner_phone=owner_phone,
+            notes=notes,
             actor=user.email,
         )
     except ValueError as exc:
@@ -216,7 +232,45 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
     if item is None:
         raise HTTPException(status_code=404)
     related = db.query(Incident).filter_by(asset_id=item.id).order_by(Incident.id.desc()).all()
-    return render(request, "asset_detail.html", user, asset=item, incidents=related)
+    similar = similar_incident_groups(db, item)
+    return render(request, "asset_detail.html", user, asset=item, incidents=related, similar=similar)
+
+
+@router.post("/assets/{asset_id}/update")
+def asset_update(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    ip: str = Form(""),
+    type: str = Form("Linux Server"),
+    environment: str = Form("Production"),
+    owner: str = Form("platform"),
+    contact_name: str = Form(""),
+    owner_email: str = Form(""),
+    owner_phone: str = Form(""),
+    notes: str = Form(""),
+    scrape_address: str = Form(""),
+):
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    item = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if item is None:
+        raise HTTPException(status_code=404)
+    update_asset(
+        db,
+        item,
+        ip=ip,
+        type=type,
+        environment=environment,
+        owner=owner,
+        contact_name=contact_name,
+        owner_email=owner_email,
+        owner_phone=owner_phone,
+        notes=notes,
+        scrape_address=scrape_address,
+        actor=user.email,
+    )
+    return RedirectResponse(f"/assets/{asset_id}", status_code=302)
 
 
 @router.get("/incidents", response_class=HTMLResponse)
@@ -232,6 +286,7 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
         raise HTTPException(status_code=404)
     investigation = item.investigations[-1] if item.investigations else None
     rca = (investigation.result if investigation else None) or {}
+    similar = similar_incident_groups(db, item.asset) if item.asset else []
     return render(
             request,
             "incident_detail.html",
@@ -239,6 +294,7 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
             incident=item,
             investigation=investigation,
             rca=rca,
+            similar=similar,
             timeline_json=json.dumps(item.timeline or []),
             engineer=can(user, "read_evidence"),
         )

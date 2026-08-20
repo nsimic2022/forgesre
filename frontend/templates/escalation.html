@@ -2,6 +2,12 @@
 {% block title %}Escalation · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Escalation</h1>
+<p class="muted">
+  Policy steps still name roles (<code>team</code>, <code>team-lead</code>, <code>engineer</code>).
+  Delivery goes to the <strong>asset owner email</strong> when that field is set (demo: <code>platform@forgesre.local</code> on forge-demo-01).
+  If the asset has no owner email, ForgeSRE falls back to <code>&lt;role&gt;@forgesre.local</code>.
+  SMTP off means the row stays <em>generated</em> — that is the lab outbox.
+</p>
 {% for policy in policies %}
 <section class="card">
   <h2>{{ policy.name }}</h2>

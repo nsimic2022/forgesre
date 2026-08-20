@@ -4,7 +4,7 @@
 <h1>Assets</h1>
 <table>
   <thead>
-    <tr><th>Asset ID</th><th>Hostname</th><th>IP</th><th>Type</th><th>Environment</th><th>Status</th><th>Source</th><th>Profile</th></tr>
+    <tr><th>Asset ID</th><th>Hostname</th><th>IP</th><th>Owner</th><th>Contact</th><th>Type</th><th>Environment</th><th>Status</th><th>Source</th></tr>
   </thead>
   <tbody>
   {% for asset in assets %}
@@ -12,18 +12,27 @@
       <td><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
       <td>{{ asset.hostname }}</td>
       <td>{{ asset.ip }}</td>
+      <td>{{ asset.owner or "—" }}</td>
+      <td>
+        {% if asset.contact_name or asset.owner_email or asset.owner_phone %}
+          {{ asset.contact_name or "—" }}
+          {% if asset.owner_email %}<div class="muted">{{ asset.owner_email }}</div>{% endif %}
+        {% else %}
+          <span class="muted">—</span>
+        {% endif %}
+      </td>
       <td>{{ asset.type }}</td>
       <td>{{ asset.environment }}</td>
       <td><span class="pill {{ asset.status }}">{{ asset.status }}</span></td>
       <td>{{ asset.source }}</td>
-      <td>{{ asset.monitoring_profile }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
 {% if can('write_assets') %}
 <h2>Add asset</h2>
-<form method="post" action="/assets" class="stack">
+<p class="muted">Analysts, engineers, and admins can add hosts. Fill who to call — escalation uses that email instead of a generic team inbox.</p>
+<form method="post" action="/assets" class="form-grid">
   <label>Hostname <input name="hostname" required></label>
   <label>IP <input name="ip" placeholder="10.10.10.21"></label>
   <label>Type
@@ -34,8 +43,12 @@
     </select>
   </label>
   <label>Environment <input name="environment" value="Production"></label>
-  <label>Owner <input name="owner" value="platform"></label>
-  <button type="submit">Save</button>
+  <label>Owner / team <input name="owner" value="platform" placeholder="platform"></label>
+  <label>Contact name <input name="contact_name" placeholder="Who to call"></label>
+  <label>Owner email <input name="owner_email" type="email" placeholder="oncall@dc.local"></label>
+  <label>Owner phone <input name="owner_phone" placeholder="+381-11-000-0000"></label>
+  <label class="wide">Notes <input name="notes" placeholder="Rack, customer, how to reach them"></label>
+  <div class="wide"><button type="submit">Save</button></div>
 </form>
 {% endif %}
 {% endblock %}

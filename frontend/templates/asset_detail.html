@@ -10,11 +10,67 @@
   <dt>Environment</dt><dd>{{ asset.environment }}</dd>
   <dt>Status</dt><dd><span class="pill {{ asset.status }}">{{ asset.status }}</span></dd>
   <dt>Monitoring profile</dt><dd>{{ asset.monitoring_profile }}</dd>
-  <dt>Owner</dt><dd>{{ asset.owner }}</dd>
+  <dt>Owner / team</dt><dd>{{ asset.owner or "—" }}</dd>
+  <dt>Contact</dt><dd>{{ asset.contact_name or "—" }}</dd>
+  <dt>Email</dt><dd>{% if asset.owner_email %}{{ asset.owner_email }}{% else %}<span class="muted">No owner email — escalation falls back to policy role@forgesre.local</span>{% endif %}</dd>
+  <dt>Phone</dt><dd>{{ asset.owner_phone or "—" }}</dd>
+  <dt>Notes</dt><dd>{{ asset.notes or "—" }}</dd>
   <dt>Source</dt><dd>{{ asset.source }}</dd>
   <dt>NetBox ID</dt><dd>{{ asset.netbox_id or "—" }}</dd>
   <dt>Scrape address</dt><dd>{{ asset.scrape_address or "—" }}</dd>
 </dl>
+
+{% if can('write_assets') %}
+<section class="card">
+  <h2>Edit owner and contacts</h2>
+  <p class="muted">You can change who owns this host after Save. New incidents notify the owner email below.</p>
+  <form method="post" action="/assets/{{ asset.asset_id }}/update" class="form-grid">
+    <label>IP <input name="ip" value="{{ asset.ip }}"></label>
+    <label>Type <input name="type" value="{{ asset.type }}"></label>
+    <label>Environment <input name="environment" value="{{ asset.environment }}"></label>
+    <label>Owner / team <input name="owner" value="{{ asset.owner }}"></label>
+    <label>Contact name <input name="contact_name" value="{{ asset.contact_name }}"></label>
+    <label>Owner email <input name="owner_email" type="email" value="{{ asset.owner_email }}"></label>
+    <label>Owner phone <input name="owner_phone" value="{{ asset.owner_phone }}"></label>
+    <label>Scrape address <input name="scrape_address" value="{{ asset.scrape_address }}"></label>
+    <label class="wide">Notes <input name="notes" value="{{ asset.notes }}"></label>
+    <div class="wide"><button type="submit">Update</button></div>
+  </form>
+</section>
+{% endif %}
+
+<h2>Similar incident history</h2>
+<p class="muted">Same asset, grouped by alert. Use this to see whether HighCPU (or anything else) has happened here before.</p>
+{% if similar %}
+<table>
+  <thead>
+    <tr><th>Alert / title</th><th>Times</th><th>Open</th><th>Last</th><th>Last status</th></tr>
+  </thead>
+  <tbody>
+  {% for group in similar %}
+    <tr>
+      <td>{{ group.alertname or group.title }}</td>
+      <td>{{ group.count }}</td>
+      <td>{{ group.open_count }}</td>
+      <td><a href="/incidents/{{ group.last_number }}">{{ group.last_number }}</a></td>
+      <td><span class="pill {{ group.last_status|lower }}">{{ group.last_status }}</span></td>
+    </tr>
+    <tr>
+      <td colspan="5">
+        <ul class="compact">
+          {% for item in group.incidents %}
+          <li><a href="/incidents/{{ item.number }}">{{ item.number }}</a> {{ item.title }} ({{ item.status }}) · {{ item.started_at }}</li>
+          {% endfor %}
+        </ul>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No incidents for this asset yet.</p>
+{% endif %}
+
 <h2>Incidents</h2>
 <ul>
   {% for item in incidents %}

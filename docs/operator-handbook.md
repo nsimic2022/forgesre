@@ -2,7 +2,7 @@
 
 This is the **day-2 guide for the whole system**: users, servers, monitoring, playrules, playbooks, incidents, and RCA.
 
-Install and file-level config stay in [`install-config.md`](install-config.md). Version notes (`v0.1.md`, `v0.2.md`, `v0.3.md`) explain *what shipped*. This document explains *how you operate it*.
+Install and file-level config stay in [`install-config.md`](install-config.md). Version notes (`v0.1.md`, `v0.2.md`, `v0.3.md`, `v0.4.md`) explain *what shipped*. This document explains *how you operate it*.
 
 Code: https://github.com/nsimic2022/forgesre (`main`). Open the UI at `http://<VM-IP>:8080`.
 
@@ -26,7 +26,7 @@ ForgeSRE does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on t
 14. [Worked example: onboard a Linux server](#14-worked-example-onboard-a-linux-server)
 15. [Worked example: new alert + playrule + playbook](#15-worked-example-new-alert--playrule--playbook)
 16. [CLI, API, and files on disk](#16-cli-api-and-files-on-disk)
-17. [What V0.3 does not do yet](#17-what-v03-does-not-do-yet)
+17. [What this version does not do yet](#17-what-this-version-does-not-do-yet)
 
 ---
 
@@ -51,13 +51,13 @@ Seeded on first start:
 | Object | What it is |
 |---|---|
 | User `FORGESRE_ADMIN_EMAIL` | `super_admin` from `secrets/secrets.env` |
-| Asset `forge-demo-01` | Demo host `10.10.10.20` (not a real machine) |
+| Asset `forge-demo-01` | Demo host `10.10.10.20` with owner contacts (`platform@forgesre.local`, phone) and a closed HighCPU history row |
 | Playbooks `CPU-HIGH`, `DISK-FULL` | Guidance steps only |
 | Playrules `high-cpu`, `high-disk` | Match Prometheus alerts `HighCPU` / `FilesystemUsageHigh` |
 | Escalation `Default warning` | 0 / 15 / 30 minutes → generated email |
 | Discovery candidate `10.20.30.41` | Demo row on `/discovery` so you can click Approve |
 
-Lab demos (`./forgesre demo` and `./forgesre demo-rca`) fire **demo gauges on Core**, not real disk/CPU on a customer VM.
+Lab demos (`./forgesre demo` and `./forgesre demo-rca`) fire **demo gauges on Core**, not real disk/CPU on a customer VM. After install the dashboard **First-hour walkthrough** is the intended demo: open `forge-demo-01`, run the demo workflow, then Escalation.
 
 ---
 
@@ -71,7 +71,7 @@ Three places. Do not mix them.
 | **`config/forgesre.yml`** | Discovery CIDRs, NetBox URL, AI/LLM, SMTP on/off, Loki/Grafana | File on the VM |
 | **Repo / generated files** | Prometheus *alert expressions*, scrape jobs, Alertmanager webhook | `monitoring/alerts.yml`, `.env`, `secrets/secrets.env` |
 
-YAML under `config/examples/` is the **future spec** (Playrule/Playbook/Escalation as files). V0.3 does **not** import those files. Live playrules and playbooks are created in the UI (or API) and stored in Postgres.
+YAML under `config/examples/` is the **future spec** (Playrule/Playbook/Escalation as files). V0.4 does **not** import those files. Live playrules and playbooks are created in the UI (or API) and stored in Postgres.
 
 After editing `config/forgesre.yml`, recreate Core:
 
@@ -95,13 +95,13 @@ Three operating roles, plus a read-only viewer. The install user is `super_admin
 |---|---|---|---|
 | **Super admin** | Maintain the appliance | Everything, including users | — (created only by `./install.sh`) |
 | **System admin** (`admin`) | Deputy for the box | Users, inventory, discovery, demos, doctor | Cannot create another super_admin |
-| **Analyst** | Watch incidents and write the workflow | Ack/resolve incidents, run AI (analyst view), **create playrules and playbooks** | PromQL/LogQL, add servers, Administration |
+| **Analyst** | Watch incidents, keep inventory, write the workflow | Ack/resolve incidents, **add/edit assets**, run AI (analyst view), **create playrules and playbooks** | PromQL/LogQL, Administration |
 | **Engineer** | Deep RCA | Inventory, discovery Approve, full AI page (queries, evidence, history), resolve | Create playrules/playbooks, Administration |
 | **Viewer** | Read-only | Dashboard, assets, incidents | Changes |
 
-Analyst vs engineer on **AI Investigation**: same facts and likely cause. Engineer additionally sees PromQL, LogQL, evidence hashes, and similar-incident history on that page.
+Analyst vs engineer on **AI Investigation**: same facts and likely cause. Engineer additionally sees PromQL, LogQL, evidence hashes, and similar-incident history on that page. Similar-incident history for an asset is on the **asset page** for every role that can read assets.
 
-The UI **Create user** form cannot make another `super_admin`. Create an **Analyst** for rules/plays, an **Engineer** for deep RCA.
+The UI **Create user** form cannot make another `super_admin`. Create an **Analyst** for rules/plays **and** adding hosts, an **Engineer** for deep RCA.
 
 Login session lasts **12 hours** (httponly cookie).
 
@@ -111,16 +111,17 @@ Login session lasts **12 hours** (httponly cookie).
 
 | Menu | URL | What you do there |
 |---|---|---|
-| Dashboard | `/` | Counts, doctor lights, pending discovery banner, demo buttons (admin) |
-| Assets | `/assets` | List inventory. **Add asset** form (engineer+) |
-| Asset detail | `/assets/<id>` | Hostname, IP, scrape address, related incidents |
-| Discovery | `/discovery` | Scan, Approve / Ignore, optional NetBox sync |
+| Dashboard | `/` | Counts, doctor lights, pending discovery banner, **first-hour walkthrough**, demo buttons (admin) |
+| Assets | `/assets` | List inventory. **Add asset** form (analyst+) |
+| Asset detail | `/assets/<id>` | Contacts, scrape address, edit owner after Save, similar-incident history |
+| Discovery | `/discovery` | Scan, Approve / Ignore (analyst+), optional NetBox sync (admin) |
 | Incidents | `/incidents` | All incidents from Alertmanager |
-| Incident | `/incidents/INC-…` | Ack / Resolve / Close, run RCA, playbook name |
+| Incident | `/incidents/INC-…` | Ack / Resolve / Close, **Who to call**, run RCA, playbook name |
+| Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
 | AI Investigation | `/ai/INC-…` | Facts, anomalies, hypotheses, evidence IDs |
 | Playrules | `/playrules` | List, toggle, create (**analyst**) |
 | Playbooks | `/playbooks` | List steps, create (**analyst**) |
-| Escalation | `/escalation` | Seeded policy + generated notification log |
+| Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
 | System Health | `/health-ui` | Same checks as `./doctor.sh` |
 | Administration | `/admin` | Create users, audit log (admin) |
 | Grafana | `:3000` | Deep dashboards (separate login) |
@@ -156,7 +157,7 @@ curl -fsS -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/users \
   -d '{"email":"ops@dc.local","name":"Ops Admin","password":"change-me","role":"admin"}'
 ```
 
-There is **no edit/disable form** in V0.3. To rotate a password, create a new user or change the hash in Postgres. Audit rows for `user.create` and `login` show on `/admin`.
+There is **no edit/disable form** in this version. To rotate a password, create a new user or change the hash in Postgres. Audit rows for `user.create` and `login` show on `/admin`.
 
 ---
 
@@ -166,24 +167,27 @@ A row on **Assets** is what ForgeSRE calls a server (or switch, or appliance). Y
 
 ### A. Manual (you already know hostname + IP)
 
-Who: `engineer` or `admin`.
+Who: **analyst**, engineer, or admin (`write_assets`).
 
 1. **Assets** → **Add asset**.
-2. Hostname (required), IP, type (`Linux Server` / `Network device` / `Web/appliance`), environment, owner.
-3. **Save**.
+2. Hostname (required), IP, type (`Linux Server` / `Network device` / `Web/appliance`), environment, owner/team, **contact name, owner email, owner phone**, notes.
+3. **Save**. You land on the asset page. You can **edit owner and contacts** there later without recreating the host.
 
 What Core does:
 
-- `asset_id` is a slug from the hostname (`app-01` → `app-01`).
+- `asset_id` is a slug from the hostname (`app-01` → `app-01`). Hostname/`asset_id` do not change on edit.
 - Linux-like types get `monitoring_profile=linux-standard` and `scrape_address=<ip>:9100` when an IP is set.
 - Network devices get `network-switch` and an **empty** scrape address (no `up == 0` noise).
 - `source=manual`.
+- If owner email is set, new incidents notify that address (see §11).
 
-API equivalent: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type`, `environment`, `owner`, optional `scrape_address`.
+API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type`, `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Update: `POST /api/v1/assets/{asset_id}`.
+
+Similar-incident history on the asset page groups past incidents by alert/title (count, open count, last seen). Seed already puts a closed HighCPU on `forge-demo-01` so this is visible after install.
 
 ### B. Discovery (scan the management network)
 
-Who: `engineer` or `admin` to scan and Approve. Configure CIDRs as admin on disk.
+Who: **analyst**, engineer, or admin to scan and Approve. Configure CIDRs as admin on disk. After Approve, fill contacts on the asset page — discovery does not guess who owns the box.
 
 1. Set CIDRs in `config/forgesre.yml` (max **256 hosts**, loopback skipped):
 
@@ -336,7 +340,9 @@ YAML examples in `config/examples/playbook-*.yml` are documentation for a later 
 
 A background loop every 30 seconds generates (and optionally sends) those steps while the incident stays `OPEN` / `INVESTIGATING`. The table **Generated notifications** is the outbox.
 
-V0.3 has **no UI to add a new escalation policy**. Policies exist from seed (and could be inserted in Postgres). Playrules created in the UI currently get **no** escalation policy unless you set `escalation_policy_id` via API/DB.
+If the incident’s asset has **owner email**, every step is addressed to that email (demo: `platform@forgesre.local`). The body includes contact name and phone. Policy roles (`team` / `team-lead` / `engineer`) stay in the body as the step name. If owner email is empty, ForgeSRE falls back to `<role>@forgesre.local`.
+
+This version has **no UI to add a new escalation policy**. Policies exist from seed (and could be inserted in Postgres). Playrules created in the UI currently get **no** escalation policy unless you set `escalation_policy_id` via API/DB.
 
 Email is off until you enable it in YAML and put SMTP secrets in `secrets/secrets.env`:
 
@@ -350,7 +356,7 @@ notifications:
     tls: true
 ```
 
-V0.3 sends to `<target>@forgesre.local` (e.g. `team@forgesre.local`). Treat that as a lab stub: point those names at a real mailbox on your SMTP server, or leave email disabled and use the generated-notification log.
+Leave SMTP disabled in the lab and use the generated-notification log. When you turn SMTP on, the To address is the asset owner email if set, otherwise `<role>@forgesre.local` (e.g. `team@forgesre.local`). Point those names at a real mailbox on your SMTP server.
 
 ---
 
@@ -361,7 +367,7 @@ On `/incidents/<number>`:
 | Button | Who | Effect |
 |---|---|---|
 | Acknowledge | analyst+ | Status `INVESTIGATING`, records ack user/time |
-| Resolve / Close | engineer+ | Closes the operational loop |
+| Resolve / Close | analyst+ (`write_incidents`) | Closes the operational loop |
 | Run AI investigation | analyst+ (`read_ai`) or engineer (`investigate`) | ForgeRCA; does not change the host |
 
 Asset health on the dashboard (`healthy` / `warning` / `critical`) follows open incidents on that asset.
@@ -392,8 +398,8 @@ Lab: `./forgesre demo-rca` raises filesystem usage on the **demo gauge** (does n
 Goal: host `app-01` at `10.10.10.50` appears under Assets and is scraped on `:9100`.
 
 1. On `app-01`, run node_exporter listening on `0.0.0.0:9100` (or at least on the management NIC). Confirm from the ForgeSRE VM: `curl -fsS http://10.10.10.50:9100/metrics | head`.
-2. Sign in as engineer/admin. **Assets** → hostname `app-01`, IP `10.10.10.50`, type `Linux Server` → **Save**.
-3. Asset page should show scrape address `10.10.10.50:9100`.
+2. Sign in as analyst/engineer/admin. **Assets** → hostname `app-01`, IP `10.10.10.50`, type `Linux Server`, owner email/phone of who to call → **Save**.
+3. Asset page should show scrape address `10.10.10.50:9100` and the contacts. Edit them later if the owner changes.
 4. Wait up to 30s, then check SD JSON (command in §7) contains that target.
 5. On the VM: open Grafana (`:3000`) or Prometheus UI (`http://127.0.0.1:9090` from the host) and query `{asset="app-01"}` or `up{instance="10.10.10.50:9100"}`.
 
@@ -426,7 +432,7 @@ HTTP SD already sets label `asset` from `asset_id`. Reload Prometheus (`POST htt
 
 **C. Playrule:** **Playrules** → name **must be** `NodeFilesystemUsageHigh` (same as `alertname`), metric `filesystem_usage`, playbook the one from B → **Save**.
 
-**D. Verify:** force usage or temporarily lower the threshold, then **Incidents** should show a new `INC-…` linked to `app-01`, with the playbook name and a generated notification on **Escalation**.
+**D. Verify:** force usage or temporarily lower the threshold, then **Incidents** should show a new `INC-…` linked to `app-01`, with the playbook name, **Who to call**, and a generated notification on **Escalation** addressed to the asset owner email if you filled it.
 
 If the incident has no asset, the alert `asset` / `instance` label did not match `asset_id` or hostname.
 
@@ -441,7 +447,7 @@ On the VM, from the clone directory:
 ./forgesre status           # compose ps
 ./forgesre logs core
 ./forgesre config           # print YAML
-./forgesre demo             # HighCPU vertical slice + discovery demo IP
+./forgesre demo             # HighCPU + owner notification + similar history + discovery demo IP
 ./forgesre demo-rca         # filesystem RCA demo gauge
 ./backup.sh                 # Postgres + config under $FORGESRE_DATA/backups
 ./update.sh                 # backup, refresh, restart, doctor
@@ -452,13 +458,14 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 | Method | Path | Who |
 |---|---|---|
 | POST | `/api/v1/users` | admin |
-| POST | `/api/v1/assets` | engineer+ |
+| POST | `/api/v1/assets` | analyst+ |
+| POST | `/api/v1/assets/{id}` | analyst+ (edit contacts/owner) |
 | GET | `/api/v1/assets` | viewer+ |
-| POST | `/api/v1/discovery/scan` | engineer+ |
-| POST | `/api/v1/discovery/candidates/{id}/approve` | engineer+ |
-| POST | `/api/v1/playrules` | admin |
-| POST | `/api/v1/playbooks` | admin |
-| POST | `/api/v1/incidents/{number}/status` | engineer+ |
+| POST | `/api/v1/discovery/scan` | analyst+ |
+| POST | `/api/v1/discovery/candidates/{id}/approve` | analyst+ |
+| POST | `/api/v1/playrules` | analyst+ |
+| POST | `/api/v1/playbooks` | analyst+ |
+| POST | `/api/v1/incidents/{number}/status` | analyst+ |
 | POST | `/api/v1/incidents/{number}/investigate` | analyst+ |
 | GET | `/api/v1/sd/prometheus` | Bearer webhook token |
 | POST | `/api/v1/webhooks/alertmanager` | Bearer webhook token |
@@ -467,17 +474,17 @@ Install/config files: [`install-config.md`](install-config.md) (§6–10). Do no
 
 ---
 
-## 17. What V0.3 does not do yet
+## 17. What this version does not do yet
 
 Say this out loud so lab expectations stay honest:
 
 - No Kubernetes, no APM, no tracing, no auto-remediation.
 - Playbooks are checklists, not executed runbooks.
-- No UI to edit users, delete assets, or create escalation policies.
+- No UI to edit users, delete assets, or create escalation policies. Asset **owner/contacts** can be edited after Save.
 - Example YAML in `config/examples/` is not applied automatically.
 - Bundled alert rules are demo gauges, not a full `node_exporter` ruleset.
 - Discovery is a five-port TCP probe, 256 hosts max.
 - NetBox is read-only and optional.
 - Re-running `./install.sh` regenerates secrets.
 
-When that is enough: install ([`install-config.md`](install-config.md)), add people (§5), add servers (§6–7), then add real alerts only when you are ready for incidents (§15).
+When that is enough: install ([`install-config.md`](install-config.md)), add people (§5), add servers (§6–7), then add real alerts only when you are ready for incidents (§15). First-hour lab path: Dashboard walkthrough → `./forgesre demo`.

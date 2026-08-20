@@ -163,7 +163,14 @@ Smoke test on the VM:
 
 `./doctor.sh` should report **HEALTHY**. LLM may be `disabled` — that is OK without a GGUF.
 
-Then in the UI: login → Assets (`forge-demo-01`) → Incidents → AI Investigation → Discovery (`10.20.30.41`).
+Then in the UI:
+
+1. Login → Dashboard **First-hour walkthrough**.
+2. Assets → `forge-demo-01` (owner contacts + closed HighCPU history).
+3. `./forgesre demo` or **Run demo workflow** → new incident **Who to call** → Escalation (generated mail to `platform@forgesre.local`).
+4. Discovery (`10.20.30.41`) if you want Approve/Ignore.
+
+Nothing in that path is a real customer server.
 
 ---
 
@@ -271,7 +278,7 @@ Notes:
 Written by `./install.sh`. Typical keys:
 
 ```bash
-FORGESRE_VERSION=0.3.0
+FORGESRE_VERSION=0.4.0
 FORGESRE_DATA=./data
 FORGESRE_TIMEZONE=Europe/Belgrade
 FORGESRE_HTTP_PORT=8080
@@ -312,7 +319,7 @@ Directory `secrets/` should be `700`, file `600`. Never commit it.
 ./doctor.sh              # health
 ./forgesre status        # compose ps
 ./forgesre logs core     # container logs
-./forgesre demo          # HighCPU vertical slice
+./forgesre demo          # HighCPU + owner notification + similar-incident history
 ./forgesre demo-rca      # filesystem RCA demo (does not fill a real disk)
 ./forgesre fetch-llm     # download GGUF (~9 GB) and start llama.cpp; do not re-run install.sh
 ./backup.sh              # Postgres + config tarball under $FORGESRE_DATA/backups

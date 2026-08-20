@@ -24,7 +24,7 @@ def test_playrule_match_and_incident(monkeypatch):
     from app.db import Base, engine, SessionLocal
     from app.main import app
     from app.seed import seed
-    from app.services import ingest_alertmanager, match_playrule
+    from app.services import close_open_incidents, ingest_alertmanager, match_playrule
 
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -32,6 +32,7 @@ def test_playrule_match_and_incident(monkeypatch):
     rule = match_playrule(db, "HighCPU", {})
     assert rule is not None
     assert rule.name == "high-cpu"
+    close_open_incidents(db, "HighCPU:forge-demo-01")
 
     payload = {
         "status": "firing",

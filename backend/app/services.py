@@ -13,7 +13,6 @@ from app.metrics import set_demo_cpu, set_demo_disk
 from app.models import (
     Asset,
     Evidence,
-    EscalationPolicy,
     Incident,
     IncidentEvent,
     Investigation,
@@ -22,7 +21,7 @@ from app.models import (
     Playbook,
     Playrule,
 )
-from app.seed import DEMO_ASSET
+from app.seed import DEMO_ASSET, ensure_demo_asset, ensure_demo_similar_history, seed
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
@@ -544,30 +543,22 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
     )
     if existing:
         return existing
-    policy = None
-    if incident.playrule_id:
-        rule = db.get(Playrule, incident.playrule_id)
-        if rule and rule.escalation_policy_id:
-            policy = db.get(EscalationPolicy, rule.escalation_policy_id)
     mapped = {
         "immediate": "team",
         "15m": "team-lead",
         "30m": "engineer",
     }
-    target = target or mapped.get(step_key, "team")
+    policy_role = target or mapped.get(step_key, "team")
+    if incident.asset is None and incident.asset_id:
+        incident.asset = db.get(Asset, incident.asset_id)
+    owner_email = ((incident.asset.owner_email if incident.asset else "") or "").strip()
+    stored_target = owner_email or policy_role
     subject = f"{incident.number} {incident.title}"
-    body = (
-        f"Incident: {incident.number}\n"
-        f"Title: {incident.title}\n"
-        f"Severity: {incident.severity}\n"
-        f"Status: {incident.status}\n"
-        f"Asset: {incident.asset.hostname if incident.asset else 'unknown'}\n"
-        f"Playbook: {incident.playbook.name if incident.playbook else 'n/a'}\n"
-    )
+    body = _notification_body(incident, step_key, policy_role)
     row = Notification(
         incident_id=incident.id,
         channel="email",
-        target=target,
+        target=stored_target,
         subject=subject,
         body=body,
         status="generated",
@@ -575,7 +566,7 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
     )
     if settings.email_enabled and settings.smtp_host:
         try:
-            _send_smtp(target, subject, body)
+            _send_smtp(stored_target, subject, body)
             row.status = "sent"
         except Exception as exc:
             row.status = "failed"
@@ -589,22 +580,48 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
         action="notification.create",
         object_type="incident",
         object_id=incident.number,
-        data={"target": target, "status": row.status},
+        data={"target": stored_target, "policy_role": policy_role, "status": row.status},
     )
     if step_key != "immediate" and incident.status in {"OPEN", "INVESTIGATING"}:
         incident.status = "ESCALATED"
-        append_timeline(incident, "playbook", "PLAYBOOK", f"Escalated to {target}")
+        append_timeline(incident, "playbook", "PLAYBOOK", f"Escalated to {stored_target}")
     db.commit()
     return row
+
+
+def _notification_body(incident: Incident, step_key: str, policy_role: str) -> str:
+    asset = incident.asset
+    lines = [
+        f"Incident: {incident.number}",
+        f"Title: {incident.title}",
+        f"Severity: {incident.severity}",
+        f"Status: {incident.status}",
+        f"Escalation step: {step_key} (policy role: {policy_role})",
+        f"Asset: {asset.hostname if asset else 'unknown'}",
+        f"Playbook: {incident.playbook.name if incident.playbook else 'n/a'}",
+    ]
+    if asset:
+        lines.extend(
+            [
+                f"Owner: {asset.owner or '—'}",
+                f"Contact: {asset.contact_name or '—'}",
+                f"Email: {asset.owner_email or '—'}",
+                f"Phone: {asset.owner_phone or '—'}",
+            ]
+        )
+        if asset.notes:
+            lines.append(f"Notes: {asset.notes}")
+    return "\n".join(lines) + "\n"
 
 
 def _send_smtp(target: str, subject: str, body: str) -> None:
     import smtplib
     from email.message import EmailMessage
 
+    address = target.strip() if "@" in (target or "") else f"{target}@forgesre.local"
     message = EmailMessage()
     message["From"] = settings.smtp_from
-    message["To"] = f"{target}@forgesre.local"
+    message["To"] = address
     message["Subject"] = subject
     message.set_content(body)
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as client:
@@ -634,10 +651,30 @@ def process_escalations(db: Session) -> None:
             ensure_notification(db, incident, "30m")
 
 
+def close_open_incidents(db: Session, fingerprint: str) -> None:
+    open_rows = (
+        db.query(Incident)
+        .filter(Incident.fingerprint == fingerprint, Incident.status.notin_(["CLOSED", "RESOLVED"]))
+        .all()
+    )
+    if not open_rows:
+        return
+    now = utcnow()
+    for row in open_rows:
+        row.status = "CLOSED"
+        row.ended_at = now
+        append_timeline(row, "closed", "CLOSED", "Closed so a new demo incident can open")
+    db.commit()
+
+
 def run_demo(db: Session) -> Incident:
     from app.inventory import seed_demo_candidate
 
+    seed(db)
+    asset = ensure_demo_asset(db)
+    ensure_demo_similar_history(db, asset)
     seed_demo_candidate(db)
+    close_open_incidents(db, f"HighCPU:{DEMO_ASSET}")
     set_demo_cpu(94)
     log.warning("demo: CPU on %s raised to 94%% for HighCPU alert", DEMO_ASSET)
     payload = {
@@ -662,7 +699,7 @@ def run_demo(db: Session) -> Incident:
     }
     created = ingest_alertmanager(db, payload)
     incident = created[0] if created else (
-        db.query(Incident).filter(Incident.fingerprint == f"demo-highcpu-{DEMO_ASSET}").order_by(Incident.id.desc()).first()
+        db.query(Incident).filter(Incident.fingerprint == f"HighCPU:{DEMO_ASSET}").order_by(Incident.id.desc()).first()
     )
     if incident and not incident.investigations:
         run_investigation(db, incident)
@@ -675,7 +712,11 @@ def run_demo_rca(db: Session) -> Incident:
     """Filesystem RCA acceptance path. Does not fill a real disk."""
     from app.inventory import seed_demo_candidate
 
+    seed(db)
+    asset = ensure_demo_asset(db)
+    ensure_demo_similar_history(db, asset)
     seed_demo_candidate(db)
+    close_open_incidents(db, f"FilesystemUsageHigh:{DEMO_ASSET}")
     set_demo_disk(94)
     log.warning("demo-rca: filesystem on %s raised to 94%% for FilesystemUsageHigh", DEMO_ASSET)
     log.error("demo-rca: log growth suspected on %s (synthetic evidence)", DEMO_ASSET)

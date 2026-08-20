@@ -12,6 +12,19 @@
   · Started {{ incident.started_at }}
 </p>
 
+{% if incident.asset %}
+<section class="card">
+  <h2>Who to call</h2>
+  <dl class="kv">
+    <dt>Owner / team</dt><dd>{{ incident.asset.owner or "—" }}</dd>
+    <dt>Contact</dt><dd>{{ incident.asset.contact_name or "—" }}</dd>
+    <dt>Email</dt><dd>{{ incident.asset.owner_email or "—" }}</dd>
+    <dt>Phone</dt><dd>{{ incident.asset.owner_phone or "—" }}</dd>
+  </dl>
+  <p class="muted">Escalation uses the owner email when it is set. <a href="/assets/{{ incident.asset.asset_id }}">Edit contacts on the asset</a>.</p>
+</section>
+{% endif %}
+
 <div class="split">
   <section>
     <h2>What happened?</h2>
@@ -114,6 +127,22 @@
     {% endfor %}
   </ol>
   {% endif %}
+</section>
+{% endif %}
+
+{% if similar %}
+<section>
+  <h2>Similar on this asset</h2>
+  <ul>
+    {% for group in similar %}
+    <li>
+      {{ group.alertname or group.title }} — {{ group.count }} time{% if group.count != 1 %}s{% endif %}
+      ({{ group.open_count }} open), last
+      <a href="/incidents/{{ group.last_number }}">{{ group.last_number }}</a>
+      {{ group.last_status }}
+    </li>
+    {% endfor %}
+  </ul>
 </section>
 {% endif %}
 

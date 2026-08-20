@@ -32,7 +32,11 @@ case "$cmd" in
       -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
     curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/api/v1/demo"
     echo
-    echo "Demo discovery candidate after ./forgesre demo: 10.20.30.41 on /discovery"
+    echo "Open the UI dashboard, then:"
+    echo "  1. Asset forge-demo-01 (owner contacts + similar HighCPU history)"
+    echo "  2. The new incident (Who to call = platform@forgesre.local)"
+    echo "  3. /escalation for the generated owner notification"
+    echo "Demo discovery candidate: 10.20.30.41 on /discovery"
     rm -f "$jar"
     ;;
   demo-rca)
@@ -64,7 +68,7 @@ Usage: ./forgesre <command>
   install   Guided installation
   doctor    Health checks
   fetch-llm Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp
-  demo      Seed demo asset/alert/incident/AI/playbook path plus discovery candidate 10.20.30.41
+  demo      HighCPU path: owner contacts, similar-incident history, notification to asset owner, discovery 10.20.30.41
   demo-rca  Filesystem RCA acceptance path (read-only, demo disk gauge)
   status    Container status
   logs      docker compose logs

@@ -13,7 +13,7 @@ CREATABLE_ROLES = ["analyst", "engineer", "admin", "viewer"]
 ROLE_LABELS = {
     "super_admin": "Super admin (system)",
     "admin": "System admin",
-    "analyst": "Analyst (incidents, playrules, playbooks)",
+    "analyst": "Analyst (incidents, inventory, playrules, playbooks)",
     "engineer": "Engineer (detailed RCA)",
     "viewer": "Viewer",
 }
@@ -29,6 +29,7 @@ PERMISSIONS = {
         "write_incidents",
         "read_play",
         "write_play",
+        "write_assets",
     },
     "engineer": {
         "read_dashboard",

@@ -58,6 +58,14 @@ button, input, select, textarea {
 button { background: var(--accent); color: #1a1208; border: 0; font-weight: 600; cursor: pointer; }
 .stack { display: flex; flex-direction: column; gap: 0.6rem; max-width: 420px; }
 .stack label, form label { display: flex; flex-direction: column; gap: 0.25rem; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; max-width: 720px; }
+.form-grid label, .form-grid .wide { display: flex; flex-direction: column; gap: 0.25rem; }
+.form-grid .wide { grid-column: 1 / -1; }
+.walkthrough { border-color: var(--accent); }
+.walkthrough ol { margin: 0.4rem 0 0.8rem 1.2rem; }
+.compact { margin: 0.2rem 0 0.6rem 1.1rem; }
+.pill.closed, .pill.resolved { background: #1e3d30; color: #8ee0b4; }
+.pill.investigating, .pill.escalated { background: #3d341e; color: #efd48a; }
 .inline { display: inline-block; margin-right: 0.4rem; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; margin-bottom: 1rem; }
 .split { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1.5rem; }

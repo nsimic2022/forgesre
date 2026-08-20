@@ -448,7 +448,8 @@ sessions
 
 assets
   id (asset_id), hostname, site, rack, vendor, model, serial,
-  role, customer, owner, monitoring_profile, playbook, sla,
+  role, customer, owner, contact_name, owner_email, owner_phone, notes,
+  monitoring_profile, playbook, sla,
   escalation_policy, lifecycle (proposed|active|ignored|decommissioned),
   source (manual|discovery|netbox), netbox_id nullable, created_at, updated_at
 
@@ -576,12 +577,14 @@ V1: **local users only** (email + password, Argon2id). Password reset is an admi
 
 Sessions: HTTP-only secure cookies. CLI uses API tokens stored in `~/.config/forgesre` or `FORGESRE_TOKEN`.
 
+**Current product (V0.4):** Analyst can add/edit assets and write playrules/playbooks. Engineer has PromQL/evidence. Admin has users and demos. Super admin is the install user. See [`operator-handbook.md`](operator-handbook.md) §3.
+
 | Role | Can |
 |---|---|
 | Viewer | Read incidents/assets summaries |
-| Analyst | Viewer + ack, comments, see RCA/playbook guidance; **no** admin, **no** playrule edits, **no** user admin |
+| Analyst | Viewer + ack, inventory add/edit, RCA (analyst view), playrules/playbooks; **no** admin, **no** PromQL, **no** user admin |
 | Engineer | Analyst + raw evidence, PromQL/log queries via Core proxy or deep links, asset technical fields |
-| Admin | Engineer + playrules/playbooks/escalation, users (except super admin), integrations, system config |
+| Admin | Engineer + users (except super admin), integrations, system config, demo buttons |
 | Super Admin | Admin + initial bootstrap, recovery, destructive config |
 
 Analysts never get administrative privileges. Engineers are not admins by default.

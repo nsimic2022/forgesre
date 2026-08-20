@@ -260,7 +260,7 @@ EOF
   fi
 
   cat > "$ROOT/.env" <<EOF
-FORGESRE_VERSION=0.3.0
+FORGESRE_VERSION=0.4.0
 FORGESRE_DOMAIN=forgesre.local
 FORGESRE_DATA=${DATA_DIR}
 FORGESRE_TIMEZONE=${TIMEZONE}
@@ -348,7 +348,7 @@ EOF
   cat > "$ROOT/installation-report.md" <<EOF
 # ForgeSRE installation report
 
-- Version: 0.3.0
+- Version: 0.4.0
 - Profile: ${PROFILE}
 - Timezone: ${TIMEZONE}
 - Data: ${DATA_DIR}
@@ -365,7 +365,13 @@ EOF
 - NetBox enabled: ${netbox_enabled}
 
 Keep secrets/secrets.env private (mode 600).
-Demo discovery candidate after login: 10.20.30.41 on /discovery (Approve / Ignore).
+
+First-hour demo (nothing here is a real server):
+1. Sign in at the UI and open Dashboard. The walkthrough box is at the top.
+2. Open Assets → forge-demo-01 (owner contacts + a closed HighCPU history row).
+3. Run ./forgesre demo (or Dashboard → Run demo workflow).
+4. Open the new incident (Who to call), then Escalation (mail to platform@forgesre.local).
+5. Discovery candidate 10.20.30.41 is on /discovery (Approve / Ignore).
 EOF
 }
 
@@ -419,4 +425,5 @@ echo "UI:              http://127.0.0.1:${HTTP_PORT}"
 echo "Admin:           admin@forgesre.local"
 echo "Password:        (see installation-report.md or secrets/secrets.env)"
 echo "Demo workflow:   ./forgesre demo"
+echo "Then open:       Dashboard → forge-demo-01 → Incidents → Escalation"
 echo "Report:          installation-report.md"

@@ -13,7 +13,16 @@ from app.db import get_db
 from app.metrics import set_demo_cpu, set_demo_disk
 from app.models import Asset, DiscoveryCandidate, Evidence, Incident, Investigation, Playbook, Playrule, User
 from app.security import CREATABLE_ROLES, can, hash_password, user_from_session, verify_password
-from app.inventory import approve_candidate, ignore_candidate, run_scan, sd_targets, seed_demo_candidate, sync_netbox
+from app.inventory import (
+    approve_candidate,
+    ignore_candidate,
+    run_scan,
+    sd_targets,
+    seed_demo_candidate,
+    similar_incident_groups,
+    sync_netbox,
+    update_asset,
+)
 from app.seed import seed
 from app.services import ingest_alertmanager, run_demo, run_demo_rca, run_investigation
 from app.settings import settings
@@ -109,7 +118,9 @@ def get_asset(asset_id: str, db: Session = Depends(get_db), user: User = Depends
     item = db.query(Asset).filter_by(asset_id=asset_id).first()
     if item is None:
         raise HTTPException(status_code=404, detail="asset not found")
-    return _asset(item)
+    data = _asset(item)
+    data["similar_incidents"] = similar_incident_groups(db, item)
+    return data
 
 
 @router.get("/incidents")
@@ -310,8 +321,24 @@ class AssetBody(BaseModel):
     type: str = "Linux Server"
     environment: str = "Production"
     owner: str = "platform"
+    contact_name: str = ""
+    owner_email: str = ""
+    owner_phone: str = ""
+    notes: str = ""
     monitoring_profile: str = ""
     scrape_address: str = ""
+
+
+class AssetUpdateBody(BaseModel):
+    ip: str | None = None
+    type: str | None = None
+    environment: str | None = None
+    owner: str | None = None
+    contact_name: str | None = None
+    owner_email: str | None = None
+    owner_phone: str | None = None
+    notes: str | None = None
+    scrape_address: str | None = None
 
 
 @router.post("/assets")
@@ -330,12 +357,43 @@ def create_asset_api(
             type=body.type,
             environment=body.environment,
             owner=body.owner,
+            contact_name=body.contact_name,
+            owner_email=body.owner_email,
+            owner_phone=body.owner_phone,
+            notes=body.notes,
             monitoring_profile=body.monitoring_profile,
             scrape_address=body.scrape_address,
             actor=user.email,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _asset(asset)
+
+
+@router.post("/assets/{asset_id}")
+def update_asset_api(
+    asset_id: str,
+    body: AssetUpdateBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_assets")),
+) -> dict:
+    item = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    asset = update_asset(
+        db,
+        item,
+        ip=body.ip,
+        type=body.type,
+        environment=body.environment,
+        owner=body.owner,
+        contact_name=body.contact_name,
+        owner_email=body.owner_email,
+        owner_phone=body.owner_phone,
+        notes=body.notes,
+        scrape_address=body.scrape_address,
+        actor=user.email,
+    )
     return _asset(asset)
 
 
@@ -506,6 +564,10 @@ def _asset(item: Asset) -> dict[str, Any]:
         "status": item.status,
         "monitoring_profile": item.monitoring_profile,
         "owner": item.owner,
+        "contact_name": item.contact_name,
+        "owner_email": item.owner_email,
+        "owner_phone": item.owner_phone,
+        "notes": item.notes,
         "source": item.source,
         "scrape_address": item.scrape_address,
     }

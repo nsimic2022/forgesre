@@ -2,6 +2,21 @@
 {% block title %}Dashboard · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
+<section class="card walkthrough">
+  <h2>First-hour walkthrough</h2>
+  <p>After install, this is the shortest path to see how ForgeSRE works. Nothing here changes a real server.</p>
+  <ol>
+    <li>Open <a href="/assets/forge-demo-01">forge-demo-01</a>. Owner, email, phone, and a closed HighCPU history row are already filled.</li>
+    <li>Run the demo workflow (admin). A live HighCPU incident opens. Escalation generates mail to <code>platform@forgesre.local</code> (the asset owner), not a generic team inbox.</li>
+    <li>Open the new incident → <a href="/escalation">Escalation</a> (generated notification log) → the asset page again to see similar-incident history (closed demo + this one).</li>
+  </ol>
+  {% if can('admin') %}
+  <form class="inline" method="post" action="/demo"><button type="submit">Run demo workflow</button></form>
+  <form class="inline" method="post" action="/demo-rca"><button type="submit">Run RCA demo</button></form>
+  {% else %}
+  <p class="muted">Ask an admin to click <strong>Run demo workflow</strong>, or from the VM run <code>./forgesre demo</code>.</p>
+  {% endif %}
+</section>
 {% if stats.pending_discovery %}
 <div class="banner">
   <strong>NEW DEVICE DETECTED</strong>
@@ -37,12 +52,7 @@
     </div>
     {% endfor %}
   </div>
-  <p class="muted">Overall: <strong>{{ doctor.overall }}</strong>
-    {% if can('admin') %}
-    · <form class="inline" method="post" action="/demo"><button type="submit">Run demo workflow</button></form>
-    · <form class="inline" method="post" action="/demo-rca"><button type="submit">Run RCA demo</button></form>
-    {% endif %}
-  </p>
+  <p class="muted">Overall: <strong>{{ doctor.overall }}</strong></p>
 </section>
 <section>
   <h2>Recent incidents</h2>

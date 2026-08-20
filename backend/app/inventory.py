@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.audit import audit
-from app.models import Asset, DiscoveryCandidate
+from app.models import Asset, DiscoveryCandidate, Incident
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
@@ -102,6 +102,10 @@ def create_manual_asset(
     type: str = "Linux Server",
     environment: str = "Production",
     owner: str = "platform",
+    contact_name: str = "",
+    owner_email: str = "",
+    owner_phone: str = "",
+    notes: str = "",
     monitoring_profile: str = "",
     scrape_address: str = "",
     actor: str = "system",
@@ -126,6 +130,10 @@ def create_manual_asset(
         status="healthy",
         monitoring_profile=profile,
         owner=owner or "platform",
+        contact_name=(contact_name or "").strip(),
+        owner_email=(owner_email or "").strip(),
+        owner_phone=(owner_phone or "").strip(),
+        notes=(notes or "").strip(),
         source="manual",
         scrape_address=address,
     )
@@ -134,6 +142,100 @@ def create_manual_asset(
     db.commit()
     db.refresh(asset)
     return asset
+
+
+def update_asset(
+    db: Session,
+    asset: Asset,
+    *,
+    ip: str | None = None,
+    type: str | None = None,
+    environment: str | None = None,
+    owner: str | None = None,
+    contact_name: str | None = None,
+    owner_email: str | None = None,
+    owner_phone: str | None = None,
+    notes: str | None = None,
+    scrape_address: str | None = None,
+    actor: str = "system",
+) -> Asset:
+    old_ip = asset.ip or ""
+    if ip is not None:
+        asset.ip = ip.strip()
+    if type is not None and type.strip():
+        asset.type = type.strip()
+    if environment is not None and environment.strip():
+        asset.environment = environment.strip()
+    if owner is not None:
+        asset.owner = owner.strip() or "platform"
+    if contact_name is not None:
+        asset.contact_name = contact_name.strip()
+    if owner_email is not None:
+        asset.owner_email = owner_email.strip()
+    if owner_phone is not None:
+        asset.owner_phone = owner_phone.strip()
+    if notes is not None:
+        asset.notes = notes.strip()
+    if scrape_address is not None:
+        asset.scrape_address = scrape_address.strip()
+    elif old_ip and asset.ip and asset.scrape_address == f"{old_ip}:9100":
+        asset.scrape_address = f"{asset.ip}:9100"
+    audit(
+        db,
+        "asset.update",
+        actor=actor,
+        object_type="asset",
+        object_id=asset.asset_id,
+        data={"owner": asset.owner, "owner_email": asset.owner_email},
+    )
+    db.commit()
+    db.refresh(asset)
+    return asset
+
+
+def similar_incident_groups(db: Session, asset: Asset) -> list[dict]:
+    rows = (
+        db.query(Incident)
+        .filter(Incident.asset_id == asset.id)
+        .order_by(Incident.started_at.desc(), Incident.id.desc())
+        .all()
+    )
+    groups: dict[str, dict] = {}
+    order: list[str] = []
+    for item in rows:
+        payload = item.alert_payload if isinstance(item.alert_payload, dict) else {}
+        labels = payload.get("labels") if isinstance(payload.get("labels"), dict) else {}
+        alertname = str(labels.get("alertname") or "").strip()
+        title = (item.title or "").strip() or alertname or "Incident"
+        key = (alertname or title).strip().lower()
+        if key not in groups:
+            order.append(key)
+            groups[key] = {
+                "key": key,
+                "title": title,
+                "alertname": alertname,
+                "count": 0,
+                "open_count": 0,
+                "last_number": item.number,
+                "last_status": item.status,
+                "last_severity": item.severity,
+                "last_started_at": item.started_at.isoformat() if item.started_at else None,
+                "incidents": [],
+            }
+        group = groups[key]
+        group["count"] += 1
+        if item.status not in {"RESOLVED", "CLOSED"}:
+            group["open_count"] += 1
+        group["incidents"].append(
+            {
+                "number": item.number,
+                "title": item.title,
+                "status": item.status,
+                "severity": item.severity,
+                "started_at": item.started_at.isoformat() if item.started_at else None,
+            }
+        )
+    return [groups[key] for key in order]
 
 
 def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset:

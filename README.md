@@ -8,6 +8,8 @@ V0.2 adds discovery (Approve / Ignore), Prometheus HTTP SD, and optional externa
 
 V0.3 adds a read-only RCA foundation (ForgeRCA): facts vs hypotheses, evidence IDs, optional local LLM, no infrastructure changes.
 
+V0.4 adds owner contacts on assets, lets analysts add inventory, routes escalation to the asset owner, and ships a first-hour dashboard walkthrough.
+
 It does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on top of them.
 
 Operator install and config (Ubuntu / vCenter VM): [`docs/install-config.md`](docs/install-config.md). Day-2 (users, servers, playrules, incidents): [`docs/operator-handbook.md`](docs/operator-handbook.md).
@@ -29,14 +31,14 @@ Non-interactive (CI / first lab):
 ./forgesre demo
 ```
 
-Then open `http://127.0.0.1:8080` and sign in with the credentials from `installation-report.md`.
+Then open `http://127.0.0.1:8080` and sign in with the credentials from `installation-report.md`. The dashboard walkthrough is the first-hour demo: `forge-demo-01` already has owner contacts and a closed HighCPU history row. `./forgesre demo` opens a live incident and generates mail to the asset owner.
 
 ## What you get
 
 | Path | Purpose |
 |---|---|
 | `/` | Dashboard |
-| `/assets` | Inventory (local, discovery, or external NetBox) |
+| `/assets` | Inventory (local, discovery, or external NetBox). Owner contacts. Analysts can add. |
 | `/discovery` | New device candidates (Approve / Ignore) |
 | `/incidents` | Alertmanager-created incidents |
 | `/ai/{id}` | Investigation / RCA (facts, hypotheses, evidence chain) |
@@ -69,4 +71,5 @@ AI never changes infrastructure.
 - V0.1 plan and stack: [`docs/v0.1.md`](docs/v0.1.md)
 - V0.2 discovery and inventory: [`docs/v0.2.md`](docs/v0.2.md)
 - V0.3 RCA foundation: [`docs/v0.3.md`](docs/v0.3.md)
+- V0.4 asset contacts and first-hour demo: [`docs/v0.4.md`](docs/v0.4.md)
 - Longer-term architecture: [`docs/architecture.md`](docs/architecture.md)

@@ -18,6 +18,14 @@ def migrate(engine: Engine) -> None:
             statements.append("ALTER TABLE assets ADD COLUMN netbox_id VARCHAR(64) DEFAULT ''")
         if "scrape_address" not in existing:
             statements.append("ALTER TABLE assets ADD COLUMN scrape_address VARCHAR(128) DEFAULT ''")
+        if "contact_name" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN contact_name VARCHAR(255) DEFAULT ''")
+        if "owner_email" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN owner_email VARCHAR(255) DEFAULT ''")
+        if "owner_phone" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN owner_phone VARCHAR(64) DEFAULT ''")
+        if "notes" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN notes TEXT DEFAULT ''")
     if "evidence" in tables:
         existing = {col["name"] for col in inspector.get_columns("evidence")}
         mapping = {
