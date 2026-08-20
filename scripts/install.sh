@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ForgeSRE V0.1 installer. Host needs Docker, Compose, Bash, Git.
+# ForgeSRE V0.2 installer. Host needs Docker, Compose, Bash, Git.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,6 +15,11 @@ BUNDLED_PROM="yes"
 BUNDLED_GRAFANA="yes"
 ENABLE_LOKI="yes"
 ENABLE_AI="no"
+ENABLE_DISCOVERY="yes"
+DISCOVERY_CIDRS="${FORGESRE_DISCOVERY_CIDRS:-}"
+ENABLE_NETBOX="no"
+NETBOX_URL="${FORGESRE_NETBOX_URL:-}"
+NETBOX_TOKEN="${NETBOX_API_TOKEN:-}"
 
 usage() {
   cat <<'EOF'
@@ -28,6 +33,9 @@ Options:
   --data-dir PATH
   --port N
   --enable-ai yes|no
+  --enable-discovery yes|no
+  --discovery-cidrs CIDR[,CIDR]
+  --netbox-url URL
 EOF
 }
 
@@ -40,6 +48,9 @@ while [[ $# -gt 0 ]]; do
     --data-dir) DATA_DIR="$2"; shift 2 ;;
     --port) HTTP_PORT="$2"; shift 2 ;;
     --enable-ai) ENABLE_AI="$2"; shift 2 ;;
+    --enable-discovery) ENABLE_DISCOVERY="$2"; shift 2 ;;
+    --discovery-cidrs) DISCOVERY_CIDRS="$2"; shift 2 ;;
+    --netbox-url) NETBOX_URL="$2"; ENABLE_NETBOX="yes"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
@@ -165,6 +176,21 @@ wizard() {
     1) ENABLE_AI="yes" ;;
     2) ENABLE_AI="no" ;;
   esac
+  explain "Discovery" "TCP probe of CIDRs. New hosts wait for Approve/Ignore. Not nmap." "no" "Inventory stays manual plus optional NetBox."
+  read -r -p "Enable discovery? [Y/n]: " ans || true
+  [[ "${ans:-Y}" =~ ^[Nn] ]] && ENABLE_DISCOVERY="no"
+  if [[ "$ENABLE_DISCOVERY" == "yes" ]]; then
+    read -r -p "CIDRs to scan, comma-separated [${DISCOVERY_CIDRS:-none}]: " ans || true
+    DISCOVERY_CIDRS="${ans:-$DISCOVERY_CIDRS}"
+  fi
+  explain "NetBox" "Optional external inventory. ForgeSRE never bundles NetBox." "no" "Local inventory only."
+  read -r -p "Connect an external NetBox? [y/N]: " ans || true
+  if [[ "${ans:-N}" =~ ^[Yy] ]]; then
+    ENABLE_NETBOX="yes"
+    read -r -p "NetBox URL [${NETBOX_URL}]: " ans || true
+    NETBOX_URL="${ans:-$NETBOX_URL}"
+    read -r -p "NetBox API token (stored in secrets/secrets.env): " NETBOX_TOKEN || true
+  fi
 }
 
 write_files() {
@@ -189,6 +215,7 @@ ALERTMANAGER_WEBHOOK_TOKEN=${webhook}
 SECRET_KEY=${secret}
 SMTP_USERNAME=
 SMTP_PASSWORD=
+NETBOX_API_TOKEN=${NETBOX_TOKEN}
 EOF
   chmod 600 "$ROOT/secrets/secrets.env"
 
@@ -207,8 +234,28 @@ EOF
     fi
   fi
 
+  local discovery_enabled="true" netbox_enabled="false" cidrs_yaml="[]"
+  [[ "$ENABLE_DISCOVERY" == "yes" ]] || discovery_enabled="false"
+  if [[ -n "${NETBOX_URL}" ]]; then
+    ENABLE_NETBOX="yes"
+  fi
+  [[ "$ENABLE_NETBOX" == "yes" ]] && netbox_enabled="true"
+  if [[ -n "${DISCOVERY_CIDRS}" ]]; then
+    cidrs_yaml="["
+    local first=1 part
+    IFS=',' read -ra _cidrs <<< "$DISCOVERY_CIDRS"
+    for part in "${_cidrs[@]}"; do
+      part="${part#"${part%%[![:space:]]*}"}"
+      part="${part%"${part##*[![:space:]]}"}"
+      [[ -z "$part" ]] && continue
+      if [[ $first -eq 1 ]]; then first=0; else cidrs_yaml+=", "; fi
+      cidrs_yaml+="\"${part}\""
+    done
+    cidrs_yaml+="]"
+  fi
+
   cat > "$ROOT/.env" <<EOF
-FORGESRE_VERSION=0.1.0
+FORGESRE_VERSION=0.2.0
 FORGESRE_DOMAIN=forgesre.local
 FORGESRE_DATA=${DATA_DIR}
 FORGESRE_TIMEZONE=${TIMEZONE}
@@ -233,14 +280,15 @@ system:
   timezone: ${TIMEZONE}
   log_level: info
 inventory:
-  provider: local
+  provider: $([[ $netbox_enabled == true ]] && echo netbox || echo local)
   netbox:
-    enabled: false
+    enabled: ${netbox_enabled}
     mode: external
-    url: ""
+    url: "${NETBOX_URL}"
 discovery:
-  enabled: false
-  mode: manual
+  enabled: ${discovery_enabled}
+  mode: semi-automatic
+  cidrs: ${cidrs_yaml}
 monitoring:
   prometheus:
     enabled: true
@@ -281,14 +329,15 @@ features:
   escalation: true
 EOF
 
-  sed -e "s/__WEBHOOK_TOKEN__/${webhook}/" -e "s/__CORE_PORT__/${HTTP_PORT}/" \
+  sed -e "s/__WEBHOOK_TOKEN__/${webhook}/" -e "s/__CORE_PORT__/${HTTP_PORT}/g" \
     "$ROOT/monitoring/alertmanager.yml.tpl" > "$DATA_DIR/generated/alertmanager.yml"
-  sed "s/127.0.0.1:8080/127.0.0.1:${HTTP_PORT}/" "$ROOT/monitoring/prometheus.yml" > "$DATA_DIR/generated/prometheus.yml"
+  sed -e "s/__WEBHOOK_TOKEN__/${webhook}/" -e "s/__CORE_PORT__/${HTTP_PORT}/g" \
+    "$ROOT/monitoring/prometheus.yml.tpl" > "$DATA_DIR/generated/prometheus.yml"
 
   cat > "$ROOT/installation-report.md" <<EOF
 # ForgeSRE installation report
 
-- Version: 0.1.0
+- Version: 0.2.0
 - Profile: ${PROFILE}
 - Timezone: ${TIMEZONE}
 - Data: ${DATA_DIR}
@@ -300,8 +349,12 @@ EOF
 - AI enabled: ${ai_enabled}
 - LLM mode: ${llm_mode}
 - Loki enabled: ${loki_enabled}
+- Discovery enabled: ${discovery_enabled}
+- Discovery CIDRs: ${cidrs_yaml}
+- NetBox enabled: ${netbox_enabled}
 
 Keep secrets/secrets.env private (mode 600).
+Demo discovery candidate after login: 10.20.30.41 on /discovery (Approve / Ignore).
 EOF
 }
 

@@ -2,6 +2,13 @@
 {% block title %}Dashboard · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
+{% if stats.pending_discovery %}
+<div class="banner">
+  <strong>NEW DEVICE DETECTED</strong>
+  {{ stats.pending_discovery }} discovery candidate{% if stats.pending_discovery != 1 %}s{% endif %} waiting.
+  <a href="/discovery">Review on Discovery</a>
+</div>
+{% endif %}
 <section>
   <h2>Infrastructure</h2>
   <div class="grid">

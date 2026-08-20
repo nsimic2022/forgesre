@@ -47,6 +47,8 @@ def seed(db: Session) -> None:
                 status="healthy",
                 monitoring_profile="linux-standard",
                 owner="platform",
+                source="manual",
+                scrape_address="",
             )
         )
 
@@ -115,4 +117,7 @@ def seed(db: Session) -> None:
                 escalation_policy_id=policy.id,
             )
         )
+    from app.inventory import seed_demo_candidate
+
+    seed_demo_candidate(db)
     db.commit()

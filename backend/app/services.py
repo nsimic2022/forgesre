@@ -421,6 +421,9 @@ def process_escalations(db: Session) -> None:
 
 
 def run_demo(db: Session) -> Incident:
+    from app.inventory import seed_demo_candidate
+
+    seed_demo_candidate(db)
     set_demo_cpu(94)
     log.warning("demo: CPU on %s raised to 94%% for HighCPU alert", DEMO_ASSET)
     payload = {

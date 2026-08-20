@@ -12,7 +12,9 @@ from sqlalchemy.orm import Session
 
 from app.api import router as api_router
 from app.db import Base, SessionLocal, engine
+from app.inventory import run_scan, seed_demo_candidate, sync_netbox
 from app.metrics import metrics_response
+from app.migrate import migrate
 from app.seed import seed
 from app.settings import settings
 from app.web import NotAuthenticated, router as web_router
@@ -37,6 +39,25 @@ def configure_logging() -> None:
     )
 
 
+def _discovery_loop(stop: threading.Event) -> None:
+    first = True
+    while not stop.is_set():
+        delay = 30 if first else 6 * 60 * 60
+        first = False
+        if stop.wait(delay):
+            break
+        db = SessionLocal()
+        try:
+            if settings.discovery_enabled and settings.discovery_mode != "manual":
+                run_scan(db)
+            if settings.netbox_enabled:
+                sync_netbox(db)
+        except Exception:
+            log.exception("discovery loop failed")
+        finally:
+            db.close()
+
+
 def _escalation_loop(stop: threading.Event) -> None:
     from app.services import process_escalations
 
@@ -52,7 +73,7 @@ def _escalation_loop(stop: threading.Event) -> None:
 
 def create_app() -> FastAPI:
     configure_logging()
-    app = FastAPI(title="ForgeSRE", version="0.1.0")
+    app = FastAPI(title="ForgeSRE", version="0.2.0")
     static_dir = settings.frontend_dir / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -73,14 +94,16 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def on_startup() -> None:
         Base.metadata.create_all(bind=engine)
+        migrate(engine)
         db: Session = SessionLocal()
         try:
             seed(db)
+            seed_demo_candidate(db)
         finally:
             db.close()
         log.info("ForgeSRE core started timezone=%s ai=%s", settings.timezone, settings.ai_enabled)
-        thread = threading.Thread(target=_escalation_loop, args=(stop,), daemon=True)
-        thread.start()
+        threading.Thread(target=_escalation_loop, args=(stop,), daemon=True).start()
+        threading.Thread(target=_discovery_loop, args=(stop,), daemon=True).start()
         app.state.escalation_stop = stop
 
     @app.on_event("shutdown")

@@ -14,15 +14,15 @@ scrape_configs:
   - job_name: forgesre-core
     metrics_path: /metrics
     static_configs:
-      - targets: ["127.0.0.1:8080"]
+      - targets: ["127.0.0.1:__CORE_PORT__"]
         labels:
           asset: forge-demo-01
           instance: forge-demo-01
   - job_name: forgesre-inventory
     metrics_path: /metrics
     http_sd_configs:
-      - url: http://127.0.0.1:8080/api/v1/sd/prometheus
+      - url: http://127.0.0.1:__CORE_PORT__/api/v1/sd/prometheus
         refresh_interval: 30s
         authorization:
           type: Bearer
-          credentials: forgesre-dev-webhook-token
+          credentials: __WEBHOOK_TOKEN__

@@ -39,6 +39,19 @@ th, td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(
 .pill.healthy, .pill.ok { background: #1e3d30; color: #8ee0b4; }
 .pill.warning, .pill.warn { background: #3d341e; color: #efd48a; }
 .pill.critical, .pill.crit, .pill.open { background: #3d211e; color: #f0a398; }
+.pill.new { background: #3d341e; color: #efd48a; }
+.pill.approved { background: #1e3d30; color: #8ee0b4; }
+.pill.ignored { background: #2a3348; color: var(--muted); }
+.banner {
+  background: #3d341e;
+  border: 1px solid var(--warn);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 1rem;
+}
+.banner strong { color: var(--warn); }
+.row-actions { display: flex; gap: 0.4rem; align-items: center; }
+button.secondary { background: #2a3348; color: var(--text); }
 button, input, select, textarea {
   font: inherit; background: #12151c; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 0.45rem 0.6rem;
 }

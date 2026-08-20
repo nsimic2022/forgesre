@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.db import get_db
-from app.models import Asset, AuditLog, EscalationPolicy, Incident, Notification, Playbook, Playrule, User
+from app.inventory import approve_candidate, create_manual_asset, ignore_candidate, run_scan, sync_netbox
+from app.models import Asset, AuditLog, DiscoveryCandidate, EscalationPolicy, Incident, Notification, Playbook, Playrule, User
 from app.security import can, hash_password, make_session_token, user_from_session, verify_password
 from app.api import doctor_payload
 from app.services import run_demo, run_investigation
@@ -93,6 +94,7 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
     assets = db.query(Asset).all()
     incidents = db.query(Incident).all()
     doctor = doctor_payload()
+    pending = db.query(DiscoveryCandidate).filter_by(status="new").count()
     stats = {
         "assets_total": len(assets),
         "healthy": sum(a.status == "healthy" for a in assets),
@@ -103,6 +105,7 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
         "inc_critical": sum(i.severity.upper() == "CRITICAL" and i.status not in {"RESOLVED", "CLOSED"} for i in incidents),
         "investigating": sum(i.status == "INVESTIGATING" for i in incidents),
         "resolved": sum(i.status == "RESOLVED" for i in incidents),
+        "pending_discovery": pending,
     }
     recent = db.query(Incident).order_by(Incident.id.desc()).limit(8).all()
     return render(request, "dashboard.html", user, stats=stats, doctor=doctor, recent=recent)
@@ -112,6 +115,98 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
 def assets_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
     rows = db.query(Asset).order_by(Asset.hostname).all()
     return render(request, "assets.html", user, assets=rows)
+
+
+@router.post("/assets")
+def asset_create(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    hostname: str = Form(...),
+    ip: str = Form(""),
+    type: str = Form("Linux Server"),
+    environment: str = Form("Production"),
+    owner: str = Form("platform"),
+):
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    try:
+        asset = create_manual_asset(
+            db,
+            hostname=hostname,
+            ip=ip,
+            type=type,
+            environment=environment,
+            owner=owner,
+            actor=user.email,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse(f"/assets/{asset.asset_id}", status_code=302)
+
+
+@router.get("/discovery", response_class=HTMLResponse)
+def discovery_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
+    rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
+    pending = [row for row in rows if row.status == "new"]
+    return render(
+        request,
+        "discovery.html",
+        user,
+        candidates=rows,
+        pending=pending,
+        discovery_enabled=settings.discovery_enabled,
+        discovery_mode=settings.discovery_mode,
+        discovery_cidrs=settings.discovery_cidrs,
+        netbox_enabled=settings.netbox_enabled,
+        netbox_url=settings.netbox_url,
+    )
+
+
+@router.post("/discovery/scan")
+def discovery_scan_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    run_scan(db)
+    audit(db, "discovery.scan", actor=user.email, commit=True)
+    return RedirectResponse("/discovery", status_code=302)
+
+
+@router.post("/discovery/{candidate_id}/approve")
+def discovery_approve_page(
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    row = db.get(DiscoveryCandidate, candidate_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    asset = approve_candidate(db, row, actor=user.email)
+    return RedirectResponse(f"/assets/{asset.asset_id}", status_code=302)
+
+
+@router.post("/discovery/{candidate_id}/ignore")
+def discovery_ignore_page(
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    row = db.get(DiscoveryCandidate, candidate_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    ignore_candidate(db, row, actor=user.email)
+    return RedirectResponse("/discovery", status_code=302)
+
+
+@router.post("/discovery/netbox-sync")
+def discovery_netbox_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
+    if not can(user, "admin"):
+        raise HTTPException(status_code=403)
+    sync_netbox(db)
+    return RedirectResponse("/discovery", status_code=302)
 
 
 @router.get("/assets/{asset_id}", response_class=HTMLResponse)

@@ -4,7 +4,7 @@ Offline-first, self-hosted SRE console for physical data-center infrastructure.
 
 V0.1 is a working vertical slice: install, login, demo asset, Prometheus metrics, Alertmanager → incident, logs, read-only AI investigation, playrules, playbooks, doctor, backup.
 
-It does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on top of them.
+V0.2 adds discovery (Approve / Ignore), Prometheus HTTP SD, and optional external NetBox. It does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on top of them.
 
 ## Quick start
 
@@ -30,7 +30,8 @@ Then open `http://127.0.0.1:8080` and sign in with the credentials from `install
 | Path | Purpose |
 |---|---|
 | `/` | Dashboard |
-| `/assets` | Inventory (local; NetBox is V0.2) |
+| `/assets` | Inventory (local, discovery, or external NetBox) |
+| `/discovery` | New device candidates (Approve / Ignore) |
 | `/incidents` | Alertmanager-created incidents |
 | `/ai/{id}` | Investigation / RCA |
 | `/playrules` `/playbooks` `/escalation` | Deterministic workflow |
@@ -56,4 +57,5 @@ AI never changes infrastructure.
 ## Docs
 
 - V0.1 plan and stack: [`docs/v0.1.md`](docs/v0.1.md)
+- V0.2 discovery and inventory: [`docs/v0.2.md`](docs/v0.2.md)
 - Longer-term architecture: [`docs/architecture.md`](docs/architecture.md)

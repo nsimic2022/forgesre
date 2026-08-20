@@ -11,6 +11,9 @@
   <dt>Status</dt><dd><span class="pill {{ asset.status }}">{{ asset.status }}</span></dd>
   <dt>Monitoring profile</dt><dd>{{ asset.monitoring_profile }}</dd>
   <dt>Owner</dt><dd>{{ asset.owner }}</dd>
+  <dt>Source</dt><dd>{{ asset.source }}</dd>
+  <dt>NetBox ID</dt><dd>{{ asset.netbox_id or "—" }}</dd>
+  <dt>Scrape address</dt><dd>{{ asset.scrape_address or "—" }}</dd>
 </dl>
 <h2>Incidents</h2>
 <ul>

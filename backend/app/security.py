@@ -29,6 +29,7 @@ PERMISSIONS = {
         "read_evidence",
         "investigate",
         "write_incidents",
+        "write_assets",
     },
     "admin": {
         "read_dashboard",
@@ -41,6 +42,7 @@ PERMISSIONS = {
         "investigate",
         "write_incidents",
         "write_play",
+        "write_assets",
         "admin",
     },
     "super_admin": {
@@ -54,6 +56,7 @@ PERMISSIONS = {
         "investigate",
         "write_incidents",
         "write_play",
+        "write_assets",
         "admin",
         "super_admin",
     },

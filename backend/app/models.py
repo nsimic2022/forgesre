@@ -38,6 +38,9 @@ class Asset(Base):
     status: Mapped[str] = mapped_column(String(32), default="healthy")
     monitoring_profile: Mapped[str] = mapped_column(String(64), default="linux-standard")
     owner: Mapped[str] = mapped_column(String(255), default="platform")
+    source: Mapped[str] = mapped_column(String(32), default="manual")
+    netbox_id: Mapped[str] = mapped_column(String(64), default="")
+    scrape_address: Mapped[str] = mapped_column(String(128), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     incidents: Mapped[list[Incident]] = relationship(back_populates="asset")
@@ -178,3 +181,18 @@ class AuditLog(Base):
     object_id: Mapped[str] = mapped_column(String(64), default="")
     ip: Mapped[str] = mapped_column(String(64), default="")
     data: Mapped[dict] = mapped_column(JSONType, default=dict)
+
+
+class DiscoveryCandidate(Base):
+    __tablename__ = "discovery_candidates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ip: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    proposed_role: Mapped[str] = mapped_column(String(128), default="Unknown device")
+    open_ports: Mapped[list] = mapped_column(JSONType, default=list)
+    status: Mapped[str] = mapped_column(String(32), default="new", index=True)
+    source: Mapped[str] = mapped_column(String(32), default="scan")
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    decided_by: Mapped[str] = mapped_column(String(255), default="")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    asset_id: Mapped[str] = mapped_column(String(64), default="")

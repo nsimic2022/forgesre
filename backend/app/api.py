@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 from app.audit import audit
 from app.db import get_db
 from app.metrics import set_demo_cpu
-from app.models import Asset, Incident, Playbook, Playrule, User
+from app.models import Asset, DiscoveryCandidate, Incident, Playbook, Playrule, User
 from app.security import can, hash_password, user_from_session, verify_password
+from app.inventory import approve_candidate, ignore_candidate, run_scan, sd_targets, seed_demo_candidate, sync_netbox
 from app.seed import seed
 from app.services import ingest_alertmanager, run_demo, run_investigation
 from app.settings import settings
@@ -197,6 +198,94 @@ def create_playbook(
     return _playbook(row)
 
 
+@router.get("/sd/prometheus")
+def prometheus_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
+    auth = request.headers.get("authorization") or ""
+    token = auth.replace("Bearer ", "").strip()
+    if token != settings.webhook_token:
+        raise HTTPException(status_code=401, detail="invalid sd token")
+    return sd_targets(db)
+
+
+@router.get("/discovery/candidates")
+def list_candidates(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> list[dict]:
+    rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
+    return [_candidate(item) for item in rows]
+
+
+@router.post("/discovery/scan")
+def discovery_scan(db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
+    result = run_scan(db)
+    audit(db, "discovery.scan", actor=user.email, commit=True)
+    return result
+
+
+@router.post("/discovery/candidates/{candidate_id}/approve")
+def discovery_approve(
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_assets")),
+) -> dict:
+    row = db.get(DiscoveryCandidate, candidate_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="candidate not found")
+    asset = approve_candidate(db, row, actor=user.email)
+    return {"ok": True, "asset_id": asset.asset_id}
+
+
+@router.post("/discovery/candidates/{candidate_id}/ignore")
+def discovery_ignore(
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_assets")),
+) -> dict:
+    row = db.get(DiscoveryCandidate, candidate_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="candidate not found")
+    ignore_candidate(db, row, actor=user.email)
+    return {"ok": True}
+
+
+@router.post("/discovery/netbox-sync")
+def discovery_netbox_sync(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    return sync_netbox(db)
+
+
+class AssetBody(BaseModel):
+    hostname: str
+    ip: str = ""
+    type: str = "Linux Server"
+    environment: str = "Production"
+    owner: str = "platform"
+    monitoring_profile: str = ""
+    scrape_address: str = ""
+
+
+@router.post("/assets")
+def create_asset_api(
+    body: AssetBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_assets")),
+) -> dict:
+    from app.inventory import create_manual_asset
+
+    try:
+        asset = create_manual_asset(
+            db,
+            hostname=body.hostname,
+            ip=body.ip,
+            type=body.type,
+            environment=body.environment,
+            owner=body.owner,
+            monitoring_profile=body.monitoring_profile,
+            scrape_address=body.scrape_address,
+            actor=user.email,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _asset(asset)
+
+
 @router.post("/webhooks/alertmanager")
 async def alertmanager_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
     auth = request.headers.get("authorization") or ""
@@ -212,6 +301,7 @@ async def alertmanager_webhook(request: Request, db: Session = Depends(get_db)) 
 def demo(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
     seed(db)
     set_demo_cpu(94)
+    seed_demo_candidate(db)
     incident = run_demo(db)
     return {"ok": True, "incident": incident.number if incident else None}
 
@@ -259,6 +349,10 @@ def create_user(body: UserBody, db: Session = Depends(get_db), user: User = Depe
     return {"email": row.email, "role": row.role}
 
 
+def _ok(status: str) -> dict[str, str]:
+    return {"status": status}
+
+
 def doctor_payload() -> dict[str, Any]:
     components = {
         "core": _ok("ok"),
@@ -268,6 +362,8 @@ def doctor_payload() -> dict[str, Any]:
         "loki": _http(f"{settings.loki_url}/loki/api/v1/status/buildinfo", "GET") if settings.loki_enabled else _ok("disabled"),
         "grafana": _http("http://127.0.0.1:3000/api/health", "GET") if settings.grafana_enabled else _ok("disabled"),
         "llm": _http((settings.llm_url or "").rstrip("/") + "/models", "GET") if settings.llm_url else _ok("disabled"),
+        "netbox": _netbox_check(),
+        "discovery": _ok("ok") if settings.discovery_enabled else _ok("disabled"),
     }
     failed = [name for name, item in components.items() if item["status"] not in {"ok", "disabled"}]
     return {
@@ -277,8 +373,32 @@ def doctor_payload() -> dict[str, Any]:
     }
 
 
-def _ok(status: str) -> dict[str, str]:
-    return {"status": status}
+def _netbox_check() -> dict[str, str]:
+    if not settings.netbox_enabled:
+        return _ok("disabled")
+    from app.netbox import netbox_status
+
+    result = netbox_status(settings.netbox_url, settings.netbox_token)
+    if result.get("ok"):
+        return _ok("ok")
+    return {
+        "status": "error",
+        "why": str(result.get("why") or "NetBox unreachable"),
+        "test": f"curl -H 'Authorization: Token …' {settings.netbox_url}/api/status/",
+        "fix": "Set inventory.netbox.url and NETBOX_API_TOKEN, or disable NetBox.",
+    }
+
+
+def _candidate(item: DiscoveryCandidate) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "ip": item.ip,
+        "proposed_role": item.proposed_role,
+        "open_ports": item.open_ports,
+        "status": item.status,
+        "source": item.source,
+        "asset_id": item.asset_id,
+    }
 
 
 def _probe_sql() -> dict[str, str]:
@@ -324,6 +444,8 @@ def _asset(item: Asset) -> dict[str, Any]:
         "status": item.status,
         "monitoring_profile": item.monitoring_profile,
         "owner": item.owner,
+        "source": item.source,
+        "scrape_address": item.scrape_address,
     }
 
 

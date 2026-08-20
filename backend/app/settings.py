@@ -103,5 +103,34 @@ class Settings:
     def loki_enabled(self) -> bool:
         return bool((self.yaml.get("logging") or {}).get("loki", {}).get("enabled", True))
 
+    @property
+    def discovery_enabled(self) -> bool:
+        return bool((self.yaml.get("discovery") or {}).get("enabled", True))
+
+    @property
+    def discovery_mode(self) -> str:
+        return str((self.yaml.get("discovery") or {}).get("mode") or "semi-automatic")
+
+    @property
+    def discovery_cidrs(self) -> list[str]:
+        raw = (self.yaml.get("discovery") or {}).get("cidrs") or []
+        if isinstance(raw, str):
+            return [part.strip() for part in raw.split(",") if part.strip()]
+        return [str(item).strip() for item in raw if str(item).strip()]
+
+    @property
+    def netbox_enabled(self) -> bool:
+        inventory = self.yaml.get("inventory") or {}
+        netbox = inventory.get("netbox") or {}
+        return bool(netbox.get("enabled") or inventory.get("provider") == "netbox")
+
+    @property
+    def netbox_url(self) -> str:
+        return str(((self.yaml.get("inventory") or {}).get("netbox") or {}).get("url") or "").rstrip("/")
+
+    @property
+    def netbox_token(self) -> str:
+        return os.environ.get("NETBOX_API_TOKEN", "")
+
 
 settings = Settings()

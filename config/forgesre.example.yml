@@ -6,15 +6,16 @@ system:
   log_level: info
 
 inventory:
-  provider: local # local | netbox (netbox is V0.2)
+  provider: local # local | netbox (external NetBox only; never bundled)
   netbox:
     enabled: false
     mode: external
     url: ""
 
 discovery:
-  enabled: false # real discovery is V0.2
-  mode: manual
+  enabled: true
+  mode: semi-automatic # manual | semi-automatic | automatic
+  cidrs: []
 
 monitoring:
   prometheus:

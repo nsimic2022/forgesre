@@ -29,6 +29,7 @@ case "$cmd" in
       -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
     curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/api/v1/demo"
     echo
+    echo "Demo discovery candidate after ./forgesre demo: 10.20.30.41 on /discovery"
     rm -f "$jar"
     ;;
   status)
@@ -46,7 +47,7 @@ Usage: ./forgesre <command>
 
   install   Guided installation
   doctor    Health checks
-  demo      Seed demo asset/alert/incident/AI/playbook path
+  demo      Seed demo asset/alert/incident/AI/playbook path plus discovery candidate 10.20.30.41
   status    Container status
   logs      docker compose logs
   config    Show forgesre.yml
