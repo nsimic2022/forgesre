@@ -89,15 +89,19 @@ curl -fsS -X POST http://127.0.0.1:9090/-/reload
 
 ## 3. Roles and who can click what
 
-| Role | Typical job | Can do |
-|---|---|---|
-| `viewer` | Read-only | Dashboard, assets, incidents |
-| `analyst` | Triage | Above + Acknowledge, open AI, read playrules/playbooks |
-| `engineer` | Inventory + incidents | Above + Approve/Ignore discovery, add assets, change incident status, see PromQL/LogQL |
-| `admin` | Operate the product | Above + create users, playrules, playbooks, run demos, NetBox sync |
-| `super_admin` | Install owner | Same as admin. Created only by `./install.sh` from secrets |
+Three operating roles, plus a read-only viewer. The install user is `super_admin`.
 
-The UI **Create user** form cannot make another `super_admin`. Extra operators should be `admin`.
+| Role in UI | Job | Can do | Cannot |
+|---|---|---|---|
+| **Super admin** | Maintain the appliance | Everything, including users | — (created only by `./install.sh`) |
+| **System admin** (`admin`) | Deputy for the box | Users, inventory, discovery, demos, doctor | Cannot create another super_admin |
+| **Analyst** | Watch incidents and write the workflow | Ack/resolve incidents, run AI (analyst view), **create playrules and playbooks** | PromQL/LogQL, add servers, Administration |
+| **Engineer** | Deep RCA | Inventory, discovery Approve, full AI page (queries, evidence, history), resolve | Create playrules/playbooks, Administration |
+| **Viewer** | Read-only | Dashboard, assets, incidents | Changes |
+
+Analyst vs engineer on **AI Investigation**: same facts and likely cause. Engineer additionally sees PromQL, LogQL, evidence hashes, and similar-incident history on that page.
+
+The UI **Create user** form cannot make another `super_admin`. Create an **Analyst** for rules/plays, an **Engineer** for deep RCA.
 
 Login session lasts **12 hours** (httponly cookie).
 
@@ -114,8 +118,8 @@ Login session lasts **12 hours** (httponly cookie).
 | Incidents | `/incidents` | All incidents from Alertmanager |
 | Incident | `/incidents/INC-…` | Ack / Resolve / Close, run RCA, playbook name |
 | AI Investigation | `/ai/INC-…` | Facts, anomalies, hypotheses, evidence IDs |
-| Playrules | `/playrules` | List, toggle, create (admin) |
-| Playbooks | `/playbooks` | List steps, create (admin) |
+| Playrules | `/playrules` | List, toggle, create (**analyst**) |
+| Playbooks | `/playbooks` | List steps, create (**analyst**) |
 | Escalation | `/escalation` | Seeded policy + generated notification log |
 | System Health | `/health-ui` | Same checks as `./doctor.sh` |
 | Administration | `/admin` | Create users, audit log (admin) |
@@ -138,7 +142,7 @@ That account is `super_admin`. Do **not** re-run `./install.sh` on a live box un
 
 1. Sign in as admin / super_admin.
 2. Open **Administration** (`/admin`).
-3. Fill **Create user**: email, name, password, role (`admin` / `engineer` / `analyst` / `viewer`).
+3. Fill **Create user**: email, name, password, role (Analyst / Engineer / System admin / Viewer).
 4. **Create**. The new user signs in at `/login`.
 
 Same action via API (session cookie after UI login, or as the installer does):
@@ -276,7 +280,7 @@ Fingerprint is `alertname:asset`. A second fire of the same pair updates the ope
 
 A **playrule** is a deterministic mapping: *this Prometheus alert → this playbook + severity*. AI cannot edit playrules.
 
-Who: `admin` (permission `write_play`). Engineers can only read.
+Who: **analyst** (permission `write_play`). Engineers can read, not create.
 
 ### Create in the UI
 
@@ -309,7 +313,7 @@ API: `POST /api/v1/playrules` with `name`, `condition` (object), `playbook_id`, 
 
 A **playbook** is a checklist shown on the incident. V0.3 **does not execute commands**. No SSH, no scripts, no auto-remediation.
 
-Who: `admin` to create.
+Who: **analyst** to create.
 
 1. **Playbooks** → **Create playbook**.
 2. Name (display, e.g. `DISK-FULL`), slug (unique id, e.g. `disk-full`).

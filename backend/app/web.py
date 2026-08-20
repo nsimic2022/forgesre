@@ -11,7 +11,7 @@ from app.audit import audit
 from app.db import get_db
 from app.inventory import approve_candidate, create_manual_asset, ignore_candidate, run_scan, sync_netbox
 from app.models import Asset, AuditLog, DiscoveryCandidate, EscalationPolicy, Incident, Notification, Playbook, Playrule, User
-from app.security import can, hash_password, make_session_token, user_from_session, verify_password
+from app.security import can, hash_password, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload
 from app.services import run_demo, run_demo_rca, run_investigation
 from app.settings import settings
@@ -29,6 +29,7 @@ def ctx(request: Request, user: User | None, **extra):
         "request": request,
         "user": user,
         "can": lambda perm: can(user, perm),
+        "role_label": role_label,
         "grafana_url": settings.grafana_public_url,
         "grafana_enabled": settings.grafana_enabled,
         "ai_enabled": settings.ai_enabled,
@@ -407,6 +408,8 @@ def admin_create_user(
 ):
     if not can(user, "admin"):
         raise HTTPException(status_code=403)
+    if role not in {"admin", "engineer", "analyst", "viewer"}:
+        raise HTTPException(status_code=400, detail="invalid role")
     db.add(User(email=email, name=name, password_hash=hash_password(password), role=role))
     audit(db, "user.create", actor=user.email, object_type="user", object_id=email)
     db.commit()

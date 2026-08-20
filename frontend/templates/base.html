@@ -23,7 +23,7 @@
     <a href="{{ grafana_url }}" target="_blank" rel="noreferrer">Open Grafana</a>
     {% endif %}
     <div class="nav-foot">
-      <div class="who">{{ user.name }} · {{ user.role }}</div>
+      <div class="who">{{ user.name }} · {{ role_label(user.role) }}</div>
       <form method="post" action="/logout"><button type="submit">Logout</button></form>
     </div>
   </aside>
