@@ -348,3 +348,5 @@ Without a GGUF, Full AI still runs the builtin analyst on real Prometheus/Loki e
 docker compose logs --tail 80 core
 ./doctor.sh
 ```
+
+Day-2 operations (users, adding servers, playrules, playbooks, incidents): [`operator-handbook.md`](operator-handbook.md).
