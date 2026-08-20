@@ -1,6 +1,6 @@
 from rca.analysis import candidate_causes, detect_anomalies, facts_from, score_confidence
 from rca.collector import collect_evidence_set
-from rca.engines import DISCLAIMER, ForgeRCA, OpenRCAAdapter, get_engine
+from rca.engines import DISCLAIMER, ForgeRCA, get_engine
 from rca.llm import NullLLM, make_provider, validate_recommendation
 from rca.sanitize import sanitize
 from rca.types import RCAContext, normalize_log, normalize_metric
@@ -87,7 +87,7 @@ def test_anomaly_hypothesis_and_scoring():
     assert 0.15 <= score <= 0.95
 
 
-def test_forgerca_cpu_compat_and_openrca_stub():
+def test_forgerca_cpu_compat():
     result = ForgeRCA(llm=NullLLM()).investigate(
         {
             "incident": {"title": "High CPU", "asset": "forge-demo-01"},
@@ -108,13 +108,6 @@ def test_forgerca_cpu_compat_and_openrca_stub():
     assert packed["hypotheses"]
     assert packed["recommended_actions"][0]["executed"] is False
 
-    adapter = OpenRCAAdapter()
-    assert adapter.get_capabilities()["implemented"] is False
-    try:
-        adapter.investigate({})
-        raise AssertionError("OpenRCA should be stubbed")
-    except NotImplementedError:
-        pass
     assert get_engine("forgerca").get_name() == "forgerca"
     assert make_provider(None).get_name() == "none"
     assert validate_recommendation("sudo reboot").startswith("RECOMMENDED ACTION")

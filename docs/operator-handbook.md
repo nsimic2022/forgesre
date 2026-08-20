@@ -377,7 +377,7 @@ You get:
 - A **ForgeSRE confidence score** (not the LLM’s own number)
 - Disclaimer: `AI has not modified the system.`
 
-RCA works with `ai.enabled: false` (builtin analyst). Turn on a local LLM only if you have a GGUF or an OpenAI-compatible URL — see [`install-config.md`](install-config.md) §12. `ai.rca.engine: openrca` is a **stub**, not production.
+RCA works with `ai.enabled: false` (builtin analyst). Turn on a local LLM only if you have a GGUF or an OpenAI-compatible URL — see [`install-config.md`](install-config.md) §12.
 
 Lab: `./forgesre demo-rca` raises filesystem usage on the **demo gauge** (does not fill a real disk).
 
@@ -474,7 +474,6 @@ Say this out loud so lab expectations stay honest:
 - Bundled alert rules are demo gauges, not a full `node_exporter` ruleset.
 - Discovery is a five-port TCP probe, 256 hosts max.
 - NetBox is read-only and optional.
-- OpenRCA engine name is a stub.
 - Re-running `./install.sh` regenerates secrets.
 
 When that is enough: install ([`install-config.md`](install-config.md)), add people (§5), add servers (§6–7), then add real alerts only when you are ready for incidents (§15).

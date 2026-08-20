@@ -69,7 +69,7 @@ class Settings:
 
     @property
     def rca_engine(self) -> str:
-        return str(((self.yaml.get("ai") or {}).get("rca") or {}).get("engine") or "forgerca")
+        return "forgerca"
 
     @property
     def rca_window_minutes(self) -> int:

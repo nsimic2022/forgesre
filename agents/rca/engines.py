@@ -1,4 +1,4 @@
-"""RCA engines. ForgeSRE owns the interface; vendors are adapters."""
+"""RCA engine. ForgeRCA is the production implementation."""
 
 from __future__ import annotations
 
@@ -17,28 +17,6 @@ class RCAEngine(Protocol):
     def get_version(self) -> str: ...
     def get_capabilities(self) -> dict[str, Any]: ...
     def investigate(self, context: RCAContext | dict[str, Any]) -> dict[str, Any]: ...
-
-
-class OpenRCAAdapter:
-    """Evaluation adapter. Not a production engine in V0.3."""
-
-    def get_name(self) -> str:
-        return "openrca"
-
-    def get_version(self) -> str:
-        return "0.0.0-not-implemented"
-
-    def get_capabilities(self) -> dict[str, Any]:
-        return {
-            "implemented": False,
-            "role": "evaluation",
-            "notes": "See docs/openrca-evaluation.md. Not used in production installs.",
-        }
-
-    def investigate(self, context: RCAContext | dict[str, Any]) -> dict[str, Any]:
-        raise NotImplementedError(
-            "OpenRCAAdapter is not implemented in V0.3. Use ForgeRCA for production RCA."
-        )
 
 
 class ForgeRCA:
@@ -144,8 +122,7 @@ class ForgeRCA:
 
 
 def get_engine(name: str = "forgerca", llm: LLMProvider | None = None) -> RCAEngine:
-    if (name or "").lower() == "openrca":
-        return OpenRCAAdapter()
+    del name
     return ForgeRCA(llm=llm)
 
 
