@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Login · ForgeSRE{% endblock %}
+{% block login %}
+<section class="card login-card">
+  <h1>ForgeSRE</h1>
+  <p class="muted">Sign in to the operations console.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/login">
+    <label>Email <input type="email" name="email" value="admin@forgesre.local" required></label>
+    <label>Password <input type="password" name="password" required></label>
+    <button type="submit">Login</button>
+  </form>
+</section>
+{% endblock %}

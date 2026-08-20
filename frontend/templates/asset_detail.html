@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ asset.hostname }} · ForgeSRE{% endblock %}
+{% block content %}
+<p><a href="/assets">← Assets</a></p>
+<h1>{{ asset.hostname }}</h1>
+<dl class="kv">
+  <dt>Asset ID</dt><dd>{{ asset.asset_id }}</dd>
+  <dt>IP</dt><dd>{{ asset.ip }}</dd>
+  <dt>Type</dt><dd>{{ asset.type }}</dd>
+  <dt>Environment</dt><dd>{{ asset.environment }}</dd>
+  <dt>Status</dt><dd><span class="pill {{ asset.status }}">{{ asset.status }}</span></dd>
+  <dt>Monitoring profile</dt><dd>{{ asset.monitoring_profile }}</dd>
+  <dt>Owner</dt><dd>{{ asset.owner }}</dd>
+</dl>
+<h2>Incidents</h2>
+<ul>
+  {% for item in incidents %}
+    <li><a href="/incidents/{{ item.number }}">{{ item.number }}</a> {{ item.title }} ({{ item.status }})</li>
+  {% else %}
+    <li class="muted">No incidents for this asset.</li>
+  {% endfor %}
+</ul>
+{% endblock %}

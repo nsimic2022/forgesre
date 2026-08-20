@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Playrules · ForgeSRE{% endblock %}
+{% block content %}
+<h1>Playrules</h1>
+<p class="muted">Deterministic rules. AI cannot change them.</p>
+<table>
+  <thead><tr><th>Name</th><th>Condition</th><th>Severity</th><th>Playbook</th><th>Enabled</th></tr></thead>
+  <tbody>
+  {% for rule in playrules %}
+    <tr>
+      <td>{{ rule.name }}</td>
+      <td><code>{{ rule.condition }}</code></td>
+      <td>{{ rule.severity }}</td>
+      <td>{{ rule.playbook.name if rule.playbook else "—" }}</td>
+      <td>
+        {{ rule.enabled }}
+        {% if can('write_play') %}
+        <form method="post" action="/playrules/{{ rule.id }}/toggle" class="inline"><button>Toggle</button></form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if can('write_play') %}
+<h2>Create playrule</h2>
+<form method="post" action="/playrules" class="stack">
+  <label>Name <input name="name" placeholder="high-disk" required></label>
+  <label>Metric <input name="metric" value="filesystem_usage"></label>
+  <label>Operator <input name="operator" value=">"></label>
+  <label>Value <input name="value" type="number" value="80"></label>
+  <label>Severity <input name="severity" value="warning"></label>
+  <label>Playbook
+    <select name="playbook_id">
+      <option value="">—</option>
+      {% for book in playbooks %}
+      <option value="{{ book.id }}">{{ book.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Save</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Administration · ForgeSRE{% endblock %}
+{% block content %}
+<h1>Administration</h1>
+<h2>Users</h2>
+<table>
+  <thead><tr><th>Email</th><th>Name</th><th>Role</th></tr></thead>
+  <tbody>
+  {% for u in users %}
+    <tr><td>{{ u.email }}</td><td>{{ u.name }}</td><td>{{ u.role }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<form method="post" action="/admin/users" class="stack">
+  <h3>Create user</h3>
+  <label>Email <input name="email" type="email" required></label>
+  <label>Name <input name="name" required></label>
+  <label>Password <input name="password" type="password" required></label>
+  <label>Role
+    <select name="role">
+      <option>analyst</option>
+      <option>engineer</option>
+      <option>admin</option>
+      <option>viewer</option>
+    </select>
+  </label>
+  <button type="submit">Create</button>
+</form>
+<h2>Audit log</h2>
+<table>
+  <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Object</th></tr></thead>
+  <tbody>
+  {% for row in audits %}
+    <tr>
+      <td>{{ row.at }}</td>
+      <td>{{ row.actor }}</td>
+      <td>{{ row.action }}</td>
+      <td>{{ row.object_type }} {{ row.object_id }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

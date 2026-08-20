@@ -1,0 +1,13 @@
+**/.git
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+data
+secrets/secrets.env
+.env
+.pytest_cache
+docs
+tests
+*.md
+!backend/requirements.txt

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Incidents · ForgeSRE{% endblock %}
+{% block content %}
+<h1>Incidents</h1>
+<table>
+  <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Status</th><th>Asset</th><th>Started</th></tr></thead>
+  <tbody>
+  {% for item in incidents %}
+    <tr>
+      <td><a href="/incidents/{{ item.number }}">{{ item.number }}</a></td>
+      <td>{{ item.title }}</td>
+      <td>{{ item.severity }}</td>
+      <td>{{ item.status }}</td>
+      <td>{% if item.asset %}{{ item.asset.hostname }}{% else %}—{% endif %}</td>
+      <td>{{ item.started_at }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">No incidents.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

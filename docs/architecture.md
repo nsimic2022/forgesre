@@ -1,10 +1,10 @@
 # ForgeSRE Architecture Proposal
 
-**Status:** proposed, pending review before implementation  
+**Status:** amended for V0.1 (see `docs/v0.1.md`)  
 **Date:** 2026-08-20  
-**Scope:** Phase 0 — architecture, threat model, data model. No runtime code in this change.
+**Scope:** Long-term architecture. V0.1 runtime uses Python/FastAPI + Bash, not Go/React/Caddy.
 
-This document is the first deliverable required by the ForgeSRE master specification. It is the contract for later implementation. If a later phase needs a different shape, update this document first.
+This document remains the long-term contract (NetBox, discovery, HA, extra agents). **V0.1 implementation follows `docs/v0.1.md`.** If the two disagree on V0.1 scope or language, `docs/v0.1.md` wins.
 
 ---
 
@@ -40,7 +40,7 @@ V1 monitors physical servers, network devices, storage, disks, filesystems, NICs
 4. **AI is read-only.** Observe, investigate, explain, recommend. Never change infrastructure.
 5. **Degraded > down.** Grafana, Loki, NetBox, and LLM failures must not stop monitoring or incident creation.
 6. **Explainable operations.** Wizard, Doctor, and RCA must answer what / why / how to test / how to fix.
-7. **Boring technology.** Go + PostgreSQL + React. No extra broker, no extra metrics database, no extra CMDB.
+7. **Boring technology.** V0.1: Python/FastAPI + PostgreSQL + Jinja2 + Bash. Long-term ops CLI may still become a binary. No extra broker, no extra metrics database, no extra CMDB.
 
 ---
 
@@ -51,8 +51,8 @@ These are the choices that keep the service count down.
 | ID | Decision | Why |
 |---|---|---|
 | ADR-1 | **One ForgeSRE process** serves HTTP API, embeds the UI, and runs workers | Avoids a separate UI container, a separate worker container, and a message broker |
-| ADR-2 | **Go for Core + CLI** (`forgesre` single binary) | Air-gapped friendly; `forgesre doctor` does not require Python/Node on the host |
-| ADR-3 | **React + TypeScript SPA**, production-embedded in the Go binary | Three personas need a real UI; operators still ship one image |
+| ADR-2 | **Python 3.12 + FastAPI for Core; Bash for install/doctor/backup** (V0.1) | Operator must be able to read and debug the code. Host still only needs Docker/Compose/Bash/Git; Python stays in the image |
+| ADR-3 | **Jinja2 + small vanilla JS**, served by Core | Avoid a Node toolchain; pages stay simple and server-rendered |
 | ADR-4 | **PostgreSQL is the only ForgeSRE datastore** | Users, assets cache, incidents, playrules, jobs, audit. Job queue = `FOR UPDATE SKIP LOCKED` |
 | ADR-5 | **No Redis for ForgeSRE** | Redis exists only if bundled NetBox is enabled, because NetBox requires it |
 | ADR-6 | **Grafana Alloy is the unified collector** | Replaces Promtail, and in V1 also replaces standalone `snmp_exporter` / `blackbox_exporter` |

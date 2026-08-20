@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+cmd="${1:-help}"
+shift || true
+
+if docker compose version >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
+
+case "$cmd" in
+  install) exec "$ROOT/scripts/install.sh" "$@" ;;
+  doctor) exec "$ROOT/scripts/doctor.sh" "$@" ;;
+  backup) exec "$ROOT/scripts/backup.sh" "$@" ;;
+  restore)
+    echo "Unpack a backup tar.gz and restore forgesre.sql with:"
+    echo "  docker compose exec -T postgres psql -U forgesre forgesre < backup.sql"
+    exit 1
+    ;;
+  update) exec "$ROOT/scripts/update.sh" "$@" ;;
+  demo)
+    echo "Generating demo incident workflow..."
+    "${DC[@]}" exec -T core python - <<'PY'
+from app.db import SessionLocal
+from app.seed import seed
+from app.services import run_demo
+db = SessionLocal()
+seed(db)
+inc = run_demo(db)
+print(inc.number if inc else "no-incident")
+PY
+    ;;
+  status)
+    "${DC[@]}" ps
+    ;;
+  logs)
+    "${DC[@]}" logs --tail 100 "$@"
+    ;;
+  config)
+    sed -n '1,120p' config/forgesre.yml
+    ;;
+  help|*)
+    cat <<'EOF'
+Usage: ./forgesre <command>
+
+  install   Guided installation
+  doctor    Health checks
+  demo      Seed demo asset/alert/incident/AI/playbook path
+  status    Container status
+  logs      docker compose logs
+  config    Show forgesre.yml
+  backup    Dump Postgres + config
+  update    Backup, refresh images, restart, doctor
+EOF
+    ;;
+esac

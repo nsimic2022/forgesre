@@ -1,31 +1,59 @@
 # ForgeSRE
 
-Offline-first, self-hosted SRE platform for physical data-center infrastructure.
+Offline-first, self-hosted SRE console for physical data-center infrastructure.
 
-ForgeSRE does not replace Prometheus, Grafana, Loki, or NetBox. It connects discovery, inventory, monitoring, logs, incidents, read-only AI RCA, playrules, playbooks, and escalation into one system that a human can install, understand, and operate.
+V0.1 is a working vertical slice: install, login, demo asset, Prometheus metrics, Alertmanager → incident, logs, read-only AI investigation, playrules, playbooks, doctor, backup.
 
-**This repository is in Phase 0.** The first deliverable is the architecture proposal, not a running stack.
+It does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on top of them.
 
-- Architecture: [`docs/architecture.md`](docs/architecture.md)
-- Central config contract: [`config/forgesre.example.yml`](config/forgesre.example.yml)
-- Example playrule / playbook / escalation: [`config/examples/`](config/examples/)
+## Quick start
 
-## What V1 is for
+On a Linux host with Docker, Docker Compose, Bash, and Git:
 
-Physical servers, network devices, storage, disks, filesystems, NICs, hardware health, availability, and infrastructure logs.
+```bash
+git clone <repo>
+cd forge-sre
+./install.sh
+```
 
-## What V1 is not
+Non-interactive (CI / first lab):
 
-Application performance monitoring, Kubernetes, distributed tracing, microservice observability, or automatic remediation. The AI layer can observe and recommend. It cannot change infrastructure.
+```bash
+./install.sh --non-interactive --profile standard --port 8080
+./forgesre demo
+```
 
-## Design rules
+Then open `http://127.0.0.1:8080` and sign in with the credentials from `installation-report.md`.
 
-- Offline-first and self-hosted
-- Bundled or external for Prometheus, Loki, Grafana, NetBox, and the LLM
-- One operator config file, separate secrets, small `.env`
-- Minimal, Standard, and Full AI deployment profiles
-- Guided install and `forgesre doctor`, not “run compose and guess”
+## What you get
 
-## Next step
+| Path | Purpose |
+|---|---|
+| `/` | Dashboard |
+| `/assets` | Inventory (local; NetBox is V0.2) |
+| `/incidents` | Alertmanager-created incidents |
+| `/ai/{id}` | Investigation / RCA |
+| `/playrules` `/playbooks` `/escalation` | Deterministic workflow |
+| `/health-ui` | Doctor |
+| `/admin` | Users and audit |
 
-Review [`docs/architecture.md`](docs/architecture.md). Implementation starts only after that proposal is accepted.
+Host tools:
+
+```bash
+./install.sh
+./doctor.sh
+./backup.sh
+./update.sh
+./forgesre demo
+```
+
+## Stack
+
+Python FastAPI core + Jinja2 UI, PostgreSQL, Prometheus, Alertmanager, Loki, Grafana Alloy, Grafana. Optional llama.cpp if you place a GGUF at `$FORGESRE_DATA/models/model.gguf`.
+
+AI never changes infrastructure.
+
+## Docs
+
+- V0.1 plan and stack: [`docs/v0.1.md`](docs/v0.1.md)
+- Longer-term architecture: [`docs/architecture.md`](docs/architecture.md)

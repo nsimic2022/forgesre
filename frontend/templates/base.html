@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ForgeSRE{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  {% if user %}
+  <aside class="nav">
+    <div class="brand">ForgeSRE <span>v0.1</span></div>
+    <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
+    <a href="/assets" class="{% if request.url.path.startswith('/assets') %}active{% endif %}">Assets</a>
+    <a href="/incidents" class="{% if request.url.path.startswith('/incidents') %}active{% endif %}">Incidents</a>
+    <a href="/playrules">Playrules</a>
+    <a href="/playbooks">Playbooks</a>
+    <a href="/escalation">Escalation</a>
+    <a href="/health-ui">System Health</a>
+    {% if can('admin') %}<a href="/admin">Administration</a>{% endif %}
+    {% if grafana_enabled %}
+    <a href="{{ grafana_url }}" target="_blank" rel="noreferrer">Open Grafana</a>
+    {% endif %}
+    <div class="nav-foot">
+      <div class="who">{{ user.name }} · {{ user.role }}</div>
+      <form method="post" action="/logout"><button type="submit">Logout</button></form>
+    </div>
+  </aside>
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+  {% else %}
+  <main class="login-wrap">
+    {% block login %}{% endblock %}
+  </main>
+  {% endif %}
+  <script src="/static/app.js"></script>
+</body>
+</html>

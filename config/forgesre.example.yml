@@ -1,98 +1,63 @@
-# ForgeSRE central configuration.
-# Copy to config/forgesre.yml. Never put secrets in this file.
-# Schema version is independent from ForgeSRE_VERSION in .env.
-
 schema_version: 1
 
 system:
-  mode: offline # offline | online
+  mode: online # online | offline
   timezone: Europe/Belgrade
-  log_level: info # debug | info | warn | error
-
-# Reverse proxy is always on. It is the only published HTTPS entrypoint.
-proxy:
-  enabled: true
-  tls:
-    mode: internal-ca # internal-ca | files
-    # cert_file / key_file used only when mode=files
+  log_level: info
 
 inventory:
-  # local = ForgeSRE PostgreSQL is source of truth (Minimal / no NetBox).
-  # netbox = NetBox is source of truth; ForgeSRE stores a read cache.
-  provider: local # local | netbox
+  provider: local # local | netbox (netbox is V0.2)
   netbox:
     enabled: false
-    mode: external # bundled | external
-    url: http://netbox:8080
-    # token is in secrets/secrets.env as NETBOX_API_TOKEN
+    mode: external
+    url: ""
 
 discovery:
-  enabled: true
-  mode: semi-automatic # manual | semi-automatic | automatic
-  scan_interval: 6h
-  cidrs: []
-  # Automatic mode still records an audit event per created asset.
+  enabled: false # real discovery is V0.2
+  mode: manual
 
 monitoring:
   prometheus:
     enabled: true
-    mode: bundled # bundled | external
+    mode: bundled
     url: http://prometheus:9090
-    retention: 15d
   alertmanager:
     enabled: true
     mode: bundled
     url: http://alertmanager:9093
-  # Alloy is the unified collector: logs, SNMP, blackbox probes.
-  alloy:
-    enabled: false
-    mode: bundled
 
 logging:
   loki:
-    enabled: false
-    mode: bundled # bundled | external
+    enabled: true
+    mode: bundled
     url: http://loki:3100
+  alloy:
+    enabled: true
 
 grafana:
-  enabled: false
-  mode: bundled # bundled | external
+  enabled: true
+  mode: bundled
   url: http://grafana:3000
 
 ai:
   enabled: false
-  provider: local # local | disabled
+  provider: local
   llm:
-    mode: bundled # bundled | external | disabled
+    mode: disabled # bundled | external | disabled
     url: http://llm:8080/v1
     model: local
-  # Agents run in-process inside Core. They are not separate services.
-  agents:
-    sre: true
-    data: true
-    analysis: true
-    report: true
-    visual: true
-    code: false # sandbox analysis; off in V1
 
 notifications:
   email:
     enabled: false
-    mode: external # external only in V1; no bundled Postfix
     host: smtp.local
     port: 587
     from: forgesre@example.local
-    # username/password in secrets/secrets.env
+    tls: true
   webhook:
     enabled: false
-
-auth:
-  local:
-    enabled: true
-  # OIDC/LDAP are out of scope for V1.
 
 features:
   playrules: true
   playbooks: true
   escalation: true
-  rca: false

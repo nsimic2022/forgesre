@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}AI Investigation · {{ incident.number }}{% endblock %}
+{% block content %}
+<p><a href="/incidents/{{ incident.number }}">← {{ incident.number }}</a></p>
+<h1>AI Investigation</h1>
+{% if investigation %}
+<pre class="ai-box">
+AI INVESTIGATION
+
+Summary:
+{{ investigation.summary }}
+
+Likely cause:
+{{ investigation.likely_cause }}
+
+Confidence:
+{{ investigation.confidence|int }}%
+
+Evidence:
+{% for line in investigation.evidence %}
+- {{ line }}
+{% endfor %}
+
+Recommended action:
+{{ investigation.recommended_action }}
+
+{{ investigation.disclaimer }}
+Provider: {{ investigation.provider }}
+</pre>
+{% else %}
+<p>No investigation stored. {% if can('investigate') %}
+<form method="post" action="/incidents/{{ incident.number }}/investigate" class="inline"><button>Run now</button></form>
+{% endif %}</p>
+{% endif %}
+{% endblock %}

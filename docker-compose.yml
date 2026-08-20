@@ -1,0 +1,133 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: forgesre
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: forgesre
+    volumes:
+      - ${FORGESRE_DATA:-./data}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forgesre"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  core:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env
+      - secrets/secrets.env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://forgesre:${POSTGRES_PASSWORD}@postgres:5432/forgesre
+      FORGESRE_CONFIG: /config/forgesre.yml
+      FORGESRE_LOG_FILE: /logs/forgesre.log
+      FRONTEND_DIR: /frontend
+      PROMETHEUS_URL: http://prometheus:9090
+      LOKI_URL: http://loki:3100
+      ALERTMANAGER_URL: http://alertmanager:9093
+      GRAFANA_PUBLIC_URL: http://localhost:${GRAFANA_PORT:-3000}
+    volumes:
+      - ./config/forgesre.yml:/config/forgesre.yml:ro
+      - ${FORGESRE_DATA:-./data}/logs:/logs
+    ports:
+      - "${FORGESRE_HTTP_PORT:-8080}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    user: "0"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ${FORGESRE_DATA:-./data}/prometheus:/prometheus
+    depends_on:
+      - core
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    user: "0"
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ${ALERTMANAGER_CONFIG:-./monitoring/alertmanager.yml}:/etc/alertmanager/alertmanager.yml:ro
+      - ${FORGESRE_DATA:-./data}/alertmanager:/alertmanager
+    depends_on:
+      - core
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.4.2
+    user: "0"
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./logging/loki.yml:/etc/loki/loki.yml:ro
+      - ${FORGESRE_DATA:-./data}/loki:/loki
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.7.5
+    user: "0"
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+    volumes:
+      - ./logging/config.alloy:/etc/alloy/config.alloy:ro
+      - ${FORGESRE_DATA:-./data}/logs:/var/log/forgesre:ro
+      - ${FORGESRE_DATA:-./data}/alloy:/var/lib/alloy/data
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    user: "0"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:${GRAFANA_PORT:-3000}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${FORGESRE_DATA:-./data}/grafana:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+      - loki
+    restart: unless-stopped
+
+  llm:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    profiles: ["ai"]
+    command:
+      - -m
+      - /models/model.gguf
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - -c
+      - "2048"
+    volumes:
+      - ${FORGESRE_DATA:-./data}/models:/models:ro
+    restart: unless-stopped
