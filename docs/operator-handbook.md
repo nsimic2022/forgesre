@@ -515,10 +515,36 @@ If the incident has no asset, the alert `asset` / `instance` label did not match
 
 On the VM, from the clone directory, `./forgesre` is the operator CLI. `./forgesre help` lists commands. `./forgesre help <command>` prints explanation and examples.
 
-`./forgesre` with no extra words opens a prompt (`forgesre>`). After that you type the **full** command (`journal`, `history`, `doctor`, `help snmp`) without repeating `./forgesre`. Leave with `quit`. `./f` is the same binary with a shorter filename (`./f journal`). Command names are not one-letter aliases.
+`./forgesre` with no extra words opens a prompt (`forgesre>`). After that you type the **full** command (`journal`, `incidents`, `history`, `doctor`, `help snmp`) without repeating `./forgesre`. Leave with `quit`. `./f` is the same binary with a shorter filename (`./f journal`). Command names are not one-letter aliases.
+
+### SSH from your laptop
+
+ForgeSRE does **not** speak SSH of its own. You SSH into the Ubuntu VM, then use the CLI on localhost.
+
+```bash
+ssh you@forgesre-vm
+cd /path/to/forgesre
+./forgesre login                 # ForgeSRE user, e.g. engineer@dc.local
+./forgesre whoami
+./forgesre                       # prompt
+incidents                        # red / yellow / green board
+incidents INC-000012             # mail, audit, notes for that INC
+history --days 90
+quit
+```
+
+Two different logins:
+
+1. **Linux SSH** — OS account on the VM (`ssh engineer@vm`). Your sysadmin creates this.
+2. **ForgeSRE role** — UI user created under Administration (`engineer` / `analyst` / `viewer`). `./forgesre login` stores `data/cli.session`. Without that cookie, the CLI uses the install admin from `secrets.env` if the file is readable.
+
+Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critical/open, **yellow** in progress / warning, **green** resolved/closed.
 
 ```bash
 ./forgesre                  # interactive prompt
+./forgesre login
+./forgesre incidents
+./forgesre incidents INC-000012
 ./f journal
 ./forgesre help                 # overview
 ./forgesre help snmp            # one command
@@ -531,7 +557,10 @@ On the VM, from the clone directory, `./forgesre` is the operator CLI. `./forges
 ./forgesre assets               # inventory table (alias: inventory)
 ./forgesre snmp                 # exporter HTTP check + SNMP SD JSON
 ./forgesre sd                   # Linux + SNMP HTTP SD
-./forgesre incidents            # recent INC-… rows
+./forgesre incidents            # colored board; INC-… opens one row
+./forgesre login                # ForgeSRE UI user (engineer/analyst)
+./forgesre whoami
+./forgesre logout
 ./forgesre history              # 90-day lookback (filters; INC-… for mail/audit/notes)
 ./forgesre jobs                 # background RCA queue
 ./forgesre render-monitoring    # rewrite generated prometheus/alertmanager/snmp/alerts.yml

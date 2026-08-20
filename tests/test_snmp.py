@@ -149,6 +149,7 @@ def test_cli_help_documents_snmp_and_assets():
     assert "secrets-check" in overview
     assert "incidents" in overview
     assert "history" in overview
+    assert "login" in overview
     assert "HTTP SD" in overview
     snmp = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "snmp"], text=True)
     assert "UDP/161" in snmp
@@ -182,3 +183,12 @@ def test_cli_help_documents_snmp_and_assets():
     )
     assert unknown.returncode != 0
     assert "Unknown command: j" in unknown.stdout
+    incidents = subprocess.check_output(
+        ["bash", str(root / "scripts/forgesre"), "help", "incidents"],
+        text=True,
+    )
+    assert "Red" in incidents
+    assert "INC-000012" in incidents
+    login = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "login"], text=True)
+    assert "engineer" in login
+    assert "SSH" in login

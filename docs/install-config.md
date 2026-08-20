@@ -337,10 +337,13 @@ Install writes random `SECRET_KEY` and `ALERTMANAGER_WEBHOOK_TOKEN`. Core **refu
 
 ## 11. Day-2 commands
 
-`./forgesre help` is the index. `./forgesre help <command>` has examples. `./forgesre` with no args opens a prompt so you type `journal` instead of `./forgesre journal`. `./f` is the same CLI.
+`./forgesre help` is the index. `./forgesre help <command>` has examples. `./forgesre` with no args opens a prompt so you type `journal` instead of `./forgesre journal`. `./f` is the same CLI. SSH to the VM, then `./forgesre login` as the ForgeSRE engineer user; `incidents` is a red/yellow/green board.
 
 ```bash
-./forgesre               # prompt; then journal / history / doctor / quit
+./forgesre               # prompt; then journal / incidents / history / doctor / quit
+./forgesre login
+./forgesre incidents
+./forgesre incidents INC-000012
 ./f journal
 ./forgesre help              # CLI overview
 ./forgesre help snmp         # SNMP exporter + SD
@@ -352,7 +355,7 @@ Install writes random `SECRET_KEY` and `ALERTMANAGER_WEBHOOK_TOKEN`. Core **refu
 ./forgesre assets            # inventory
 ./forgesre snmp              # exporter + SNMP HTTP SD
 ./forgesre sd                # Linux + SNMP HTTP SD JSON
-./forgesre incidents         # recent INC-… rows
+./forgesre incidents         # colored board; INC-… opens one row
 ./forgesre history           # 90-day lookback; INC-… prints mail/audit/notes
 ./forgesre jobs              # background RCA queue
 ./forgesre render-monitoring # rewrite generated prometheus/alertmanager/snmp/alerts.yml

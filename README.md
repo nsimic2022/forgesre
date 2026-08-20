@@ -111,16 +111,18 @@ Roles: super admin (install user), system admin, analyst (inventory + playrules)
 
 `./forgesre help` is the index. `./forgesre help snmp` (or any command) has examples.
 
-Type `./forgesre` with no arguments for a prompt, then `journal`, `history`, `doctor` — you do not retype `./forgesre` each time. `./f` is the same CLI with a shorter name (`./f journal`).
+Type `./forgesre` with no arguments for a prompt, then `journal`, `incidents`, `history` — you do not retype `./forgesre` each time. `./f` is the same CLI with a shorter name (`./f journal`). SSH to the VM first; `./forgesre login` is the ForgeSRE engineer/analyst user (not the Linux account).
 
 ```bash
-./forgesre                 # prompt; then: journal
+./forgesre                 # prompt; then: incidents
+./forgesre login
+./forgesre incidents
+./forgesre incidents INC-000012
 ./f journal
 ./forgesre doctor
 ./forgesre assets
 ./forgesre snmp
 ./forgesre sd
-./forgesre incidents
 ./forgesre history
 ./forgesre jobs
 ./forgesre logs core
