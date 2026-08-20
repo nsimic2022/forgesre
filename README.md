@@ -19,7 +19,6 @@ On a Linux host with Docker, Docker Compose, Bash, and Git:
 ```bash
 git clone https://github.com/nsimic2022/forgesre.git
 cd forgesre
-git checkout cursor/forgesre-architecture-proposal-05f8
 ./install.sh
 ```
 

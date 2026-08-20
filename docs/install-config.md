@@ -2,8 +2,7 @@
 
 Operator guide for a **single Ubuntu Linux host**. A vCenter VM is the intended lab shape. ForgeSRE is an appliance: Docker Compose + **host networking**. It is not a Kubernetes install.
 
-Code: https://github.com/nsimic2022/forgesre  
-Until the PR is merged, checkout `cursor/forgesre-architecture-proposal-05f8`.
+Code: https://github.com/nsimic2022/forgesre (`main`).
 
 1. [What you are installing](#1-what-you-are-installing)
 2. [VM sizing](#2-vm-sizing)
@@ -101,7 +100,6 @@ If `docker info` needs `sudo`, `./install.sh` still works via `sudo docker compo
 ```bash
 git clone https://github.com/nsimic2022/forgesre.git
 cd forgesre
-git checkout cursor/forgesre-architecture-proposal-05f8
 ```
 
 Non-interactive lab:
@@ -340,7 +338,7 @@ Without a GGUF, Full AI still runs the builtin analyst on real Prometheus/Loki e
 | Preflight: port in use | `./install.sh --port 8081` or free 8080 |
 | Grafana 3000 busy | Change `GRAFANA_PORT` in `.env`, recreate Grafana |
 | `docker info` denied | Add user to `docker` group or use sudo |
-| Clone has no `install.sh` | Wrong branch; checkout `cursor/forgesre-architecture-proposal-05f8` |
+| Clone has no `install.sh` | You are not on `main`, or `git pull origin main` is needed |
 | UI only on the VM | You used `127.0.0.1` from the laptop, or 8080 is blocked |
 | Doctor: NetBox error | Disable NetBox or set URL + `NETBOX_API_TOKEN` |
 | Discovery finds nothing | Empty `cidrs`, or hosts do not open 22/80/443/161/9100 |
