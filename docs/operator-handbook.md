@@ -2,7 +2,7 @@
 
 This is the **day-2 guide for the whole system**: users, servers, monitoring, playrules, playbooks, incidents, and RCA.
 
-Install and file-level config stay in [`install-config.md`](install-config.md). Version notes (`v0.1.md`, `v0.2.md`, `v0.3.md`, `v0.4.md`) explain *what shipped*. This document explains *how you operate it*.
+Install and file-level config stay in [`install-config.md`](install-config.md). Version notes (`v0.1.md` … `v0.5.md`) explain *what shipped*. This document explains *how you operate it*.
 
 Code: https://github.com/nsimic2022/forgesre (`main`). Open the UI at `http://<VM-IP>:8080`.
 
@@ -36,7 +36,8 @@ ForgeSRE does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on t
 Discovery / manual form / NetBox
         ↓
    Assets (inventory)
-        ↓  scrape_address → Prometheus HTTP SD
+        ↓  Linux: scrape_address → Prometheus HTTP SD (node_exporter :9100)
+        ↓  Network device + IP → snmp_exporter UDP/161 (job forgesre-snmp)
    Metrics + alert rules
         ↓  Alertmanager webhook
    Incident
@@ -52,8 +53,8 @@ Seeded on first start:
 |---|---|
 | User `FORGESRE_ADMIN_EMAIL` | `super_admin` from `secrets/secrets.env` |
 | Asset `forge-demo-01` | Demo host `10.10.10.20` with owner contacts (`platform@forgesre.local`, phone) and a closed HighCPU history row |
-| Playbooks `CPU-HIGH`, `DISK-FULL` | Guidance steps only |
-| Playrules `high-cpu`, `high-disk` | Match Prometheus alerts `HighCPU` / `FilesystemUsageHigh` |
+| Playbooks `CPU-HIGH`, `DISK-FULL`, `NETWORK-UNREACHABLE` | Guidance steps only |
+| Playrules `high-cpu`, `high-disk`, `snmp-down` | Match `HighCPU` / `FilesystemUsageHigh` / `SnmpDeviceUnreachable` |
 | Escalation `Default warning` | 0 / 15 / 30 minutes → generated email |
 | Discovery candidate `10.20.30.41` | Demo row on `/discovery` so you can click Approve |
 
@@ -164,7 +165,12 @@ There is **no edit/disable form** in this version. To rotate a password, create 
 
 ## 6. Adding servers (inventory)
 
-A row on **Assets** is what ForgeSRE calls a server (or switch, or appliance). You can add one **manually** or via **Discovery** (Approve). Prometheus does **not** scan the network. After a Linux host is in inventory with `scrape_address=<ip>:9100`, Prometheus **HTTP SD** starts scraping node_exporter. NetBox is optional and not bundled.
+A row on **Assets** is what ForgeSRE calls a server (or switch, or appliance). You can add one **manually** or via **Discovery** (Approve). Prometheus does **not** scan the network.
+
+- **Linux:** after the host is in inventory with `scrape_address=<ip>:9100`, Prometheus HTTP SD scrapes **node_exporter**.
+- **Network device:** after the row has type `Network device` (or switch/router/firewall) **and an IP**, bundled **snmp_exporter** walks **UDP/161**. The scrape address stays empty on purpose (no node_exporter `up == 0` noise).
+
+NetBox is optional and not bundled.
 
 ### A. Manual (you already know hostname + IP)
 
@@ -178,7 +184,8 @@ What Core does:
 
 - `asset_id` is a slug from the hostname (`app-01` → `app-01`). Hostname/`asset_id` do not change on edit.
 - Linux-like types get `monitoring_profile=linux-standard` and `scrape_address=<ip>:9100` when an IP is set.
-- Network devices get `network-switch` and an **empty** scrape address (no `up == 0` noise).
+- Network devices get `network-switch`, an **empty** scrape address, and an SNMP SD target (UDP/161 via snmp_exporter).
+- Web/appliance rows are inventory only until you set a scrape address yourself. They are **not** SNMP-scraped.
 - `source=manual`.
 - If owner email is set, new incidents notify that address (see §11).
 
@@ -208,9 +215,9 @@ Probe is **not nmap**. It tries TCP **22, 80, 443, 161, 9100** and guesses a rol
 
 | Open ports | Proposed role | After Approve |
 |---|---|---|
-| 22 or 9100 | Possible Linux server | `scrape_address=<ip>:9100` |
-| 161 | Possible network device | no scrape |
-| 80 or 443 | Possible web/appliance | no scrape |
+| 22 or 9100 | Possible Linux server | `scrape_address=<ip>:9100` (node_exporter) |
+| 161 | Possible network device | SNMP UDP/161 (no node_exporter scrape) |
+| 80 or 443 | Possible web/appliance | inventory only |
 
 `mode: automatic` still writes an audit row (`actor=system-automatic`) then approves. Prefer semi-automatic in production.
 
@@ -237,12 +244,14 @@ If NetBox is enabled but unreachable, **System Health** / `./doctor.sh` shows `n
 
 ## 7. Making a server actually monitored
 
-Inventory ≠ metrics. An approved Linux host is scraped only if:
+Inventory ≠ metrics. Pick the right exporter:
+
+### Linux (node_exporter)
+
+An approved Linux host is scraped only if:
 
 1. Something exposes Prometheus metrics at `scrape_address` (usually **node_exporter** on `:9100`).
 2. Prometheus HTTP SD can see that address.
-
-SD URL (Prometheus calls this; you can test it):
 
 ```bash
 source secrets/secrets.env
@@ -254,9 +263,39 @@ Each asset with a non-empty `scrape_address` becomes a target, labeled with `ass
 
 Core itself stays on a **static** scrape so the demo HighCPU path does not depend on SD.
 
-V0.3 bundled alert rules (`monitoring/alerts.yml`) watch **demo gauges on Core** (`forgesre_demo_cpu_percent`, `forgesre_demo_disk_percent`), not `node_*` metrics. A real server can be scraped and graphed in Grafana, but it will **not** open an incident until you add a Prometheus rule (next sections).
-
 ForgeSRE does not install node_exporter on customer VMs. That is still your image / Ansible / whatever you already use.
+
+V0.3 bundled alert rules (`monitoring/alerts.yml`) watch **demo gauges on Core** (`forgesre_demo_cpu_percent`, `forgesre_demo_disk_percent`), not `node_*` metrics. A real server can be scraped and graphed in Grafana, but it will **not** open an incident until you add a Prometheus rule (see §15).
+
+### Network device (snmp_exporter)
+
+Bundled container `snmp-exporter` listens on `127.0.0.1:9116` (host network). Prometheus job `forgesre-snmp` asks Core for SNMP targets, then tells the exporter to walk each device IP.
+
+```bash
+./forgesre snmp
+source secrets/secrets.env
+curl -fsS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
+  http://127.0.0.1:8080/api/v1/sd/snmp
+```
+
+Empty JSON `[]` is normal until a **Network device** row has an IP. Linux hosts never appear here.
+
+From the ForgeSRE VM the exporter speaks **UDP/161** to the device. Allow that outbound. The device ACL must allow this host. Community is `SNMP_COMMUNITY` in `secrets/secrets.env` (lab default `public`). After you change it:
+
+```bash
+./forgesre render-monitoring
+docker compose up -d snmp-exporter
+```
+
+If the walk fails, Prometheus `up{job="forgesre-snmp"}` is 0. Alert `SnmpDeviceUnreachable` fires after 2 minutes and matches playrule `snmp-down` (playbook `NETWORK-UNREACHABLE`). That is community/ACL/device-down — not “Prometheus is down”.
+
+CLI and doctor:
+
+```bash
+./forgesre doctor          # component snmp
+./forgesre logs snmp-exporter
+./forgesre help snmp
+```
 
 ---
 
@@ -309,6 +348,7 @@ So if Prometheus fires `alertname: HighCPU`, the seeded rule `high-cpu` matches 
 |---|---|---|
 | `high-cpu` | `HighCPU` | `CPU-HIGH` |
 | `high-disk` | `FilesystemUsageHigh` | `DISK-FULL` |
+| `snmp-down` | `SnmpDeviceUnreachable` | `NETWORK-UNREACHABLE` |
 
 API: `POST /api/v1/playrules` with `name`, `condition` (object), `playbook_id`, `severity`.
 
@@ -408,6 +448,19 @@ Optional discovery path: put `10.10.10.0/24` in `discovery.cidrs`, Scan now, App
 
 This still will **not** open `INC-…` until a Prometheus alert fires with a matching playrule (next example).
 
+### Network switch (SNMP)
+
+Goal: `core-sw-01` at `10.30.1.1` is walked by snmp_exporter.
+
+1. On the switch, enable SNMPv2 read-only with a community the ForgeSRE VM may use. ACL: allow the ForgeSRE host on **UDP/161**.
+2. From the ForgeSRE VM: `./forgesre doctor` should show `snmp` ok. If not: `docker compose up -d snmp-exporter`.
+3. **Assets** → hostname `core-sw-01`, IP `10.30.1.1`, type **Network device**, owner email of who to call → **Save**.
+4. Asset page should say it is polled by snmp_exporter. Scrape address stays empty.
+5. `./forgesre snmp` — SD JSON contains `10.30.1.1`.
+6. Wait ~30s. Prometheus query (on the VM): `up{job="forgesre-snmp",asset="core-sw-01"}`. `1` = walk succeeded. `0` after 2m opens `SnmpDeviceUnreachable`.
+
+Change community in `secrets/secrets.env` (`SNMP_COMMUNITY`), then `./forgesre render-monitoring` and `docker compose up -d snmp-exporter`. Do not re-run `./install.sh`.
+
 ---
 
 ## 15. Worked example: new alert + playrule + playbook
@@ -441,19 +494,44 @@ If the incident has no asset, the alert `asset` / `instance` label did not match
 
 ## 16. CLI, API, and files on disk
 
-On the VM, from the clone directory:
+On the VM, from the clone directory, `./forgesre` is the operator CLI. `./forgesre help` lists commands. `./forgesre help <command>` prints explanation and examples.
 
 ```bash
-./doctor.sh                 # HEALTHY / DEGRADED
-./forgesre status           # compose ps
+./forgesre help                 # overview
+./forgesre help snmp            # one command
+./forgesre doctor               # HEALTHY / DEGRADED (includes snmp-exporter)
+./forgesre status               # compose ps
 ./forgesre logs core
-./forgesre config           # print YAML
-./forgesre demo             # HighCPU + owner notification + similar history + discovery demo IP
-./forgesre demo-rca         # filesystem RCA demo gauge
-./forgesre journal          # last process reports (add a module name to filter)
+./forgesre logs snmp-exporter
+./forgesre config               # print YAML
+./forgesre assets               # inventory table (alias: inventory)
+./forgesre snmp                 # exporter HTTP check + SNMP SD JSON
+./forgesre render-monitoring    # rewrite generated prometheus/alertmanager/snmp.yml
+./forgesre journal              # last process reports
+./forgesre journal snmp
 ./forgesre journal inventory
-./backup.sh                 # Postgres + config under $FORGESRE_DATA/backups
-./update.sh                 # backup, refresh, restart, doctor
+./forgesre demo                 # HighCPU + owner notification + similar history
+./forgesre demo-rca             # filesystem RCA demo gauge
+./forgesre fetch-llm            # GGUF download (~9 GB, not in git)
+./forgesre backup
+./forgesre update               # backup + render-monitoring + compose up + doctor
+```
+
+Examples (existing VM after `git pull origin main` — **do not** run `./install.sh`):
+
+```bash
+./forgesre render-monitoring
+docker compose up -d
+./forgesre doctor
+./forgesre snmp
+```
+
+Add a switch, then confirm it is an SNMP target:
+
+```bash
+./forgesre assets
+./forgesre snmp
+# expect 10.x.x.x in the JSON list, not in /api/v1/sd/prometheus
 ```
 
 Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token):
@@ -472,12 +550,15 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 | POST | `/api/v1/incidents/{number}/investigate` | analyst+ |
 | GET | `/api/v1/journal` | viewer+ (module, status, q) |
 | POST | `/api/v1/journal` | admin (install writes one row here) |
-| GET | `/api/v1/sd/prometheus` | Bearer webhook token |
+| GET | `/api/v1/sd/prometheus` | Bearer webhook token (Linux node_exporter) |
+| GET | `/api/v1/sd/snmp` | Bearer webhook token (network devices) |
 | POST | `/api/v1/webhooks/alertmanager` | Bearer webhook token |
 
 Install/config files: [`install-config.md`](install-config.md) (§6–10). Do not commit `.env`, `secrets/secrets.env`, or `data/`.
 
-**Console** (`/journal`) is the internal process journal: seed, inventory, discovery, incidents, RCA, notifications, demo, install. Each action writes a short ok/warn/error report. Rows are split by module and pruned automatically (~200 per module) so search stays small. This is not a dump of Docker logs and not the Administration audit log (who clicked what).
+**Console** (`/journal`) is the internal process journal: seed, inventory, discovery, snmp, incidents, RCA, notifications, demo, install. Each action writes a short ok/warn/error report. Rows are split by module and pruned automatically (~200 per module) so search stays small. This is not a dump of Docker logs and not the Administration audit log (who clicked what). Prometheus HTTP SD is **not** journaled on every scrape (that would flood the table).
+
+Root wrappers `./doctor.sh`, `./backup.sh`, `./update.sh`, `./install.sh` still work; they call the same scripts as `./forgesre`.
 
 ---
 
@@ -489,8 +570,8 @@ Say this out loud so lab expectations stay honest:
 - Playbooks are checklists, not executed runbooks.
 - No UI to edit users, delete assets, or create escalation policies. Asset **owner/contacts** can be edited after Save.
 - Example YAML in `config/examples/` is not applied automatically.
-- Bundled alert rules are demo gauges, not a full `node_exporter` ruleset.
-- Discovery is a five-port TCP probe, 256 hosts max.
+- Bundled alert rules include demo gauges plus SNMP `up` / interface-down. A full `node_exporter` ruleset is still yours to add.
+- Discovery is a five-port TCP probe, 256 hosts max. SNMP polling is UDP/161 via snmp_exporter, not that probe.
 - NetBox is read-only and optional.
 - Re-running `./install.sh` regenerates secrets.
 

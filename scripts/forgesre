@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# ForgeSRE host CLI. Run from the clone directory: ./forgesre <command>
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -8,22 +9,347 @@ shift || true
 
 if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
 
+port_from_env() {
+  local port="8080"
+  if [[ -f .env ]]; then
+    port="$(awk -F= '/FORGESRE_HTTP_PORT/ {print $2}' .env | tail -1 | tr -d '"' || true)"
+  fi
+  echo "${port:-8080}"
+}
+
+need_env() {
+  if [[ ! -f .env || ! -f secrets/secrets.env ]]; then
+    echo "This command needs an installed appliance (.env and secrets/secrets.env)."
+    echo "New VM: ./forgesre install"
+    echo "Existing VM: do not re-run install.sh; git pull && ./forgesre update"
+    exit 1
+  fi
+}
+
+print_overview() {
+  cat <<'EOF'
+ForgeSRE CLI — operate the appliance from the clone directory.
+
+Usage:
+  ./forgesre <command> [args]
+  ./forgesre help [command]
+
+Do not re-run ./install.sh on a live box. That regenerates passwords.
+Existing VM after git pull:
+  ./forgesre render-monitoring
+  ./forgesre update
+  ./forgesre doctor
+
+Commands:
+  help [command]     This overview, or detailed help for one command
+  install            Guided first-time install (new VM only)
+  doctor             Health checks (Core, Prometheus, snmp-exporter, …)
+  status             docker compose ps
+  logs [service]     Container logs (default: last 100 lines)
+  config             Print config/forgesre.yml
+  assets             List inventory (alias: inventory)
+  snmp               snmp_exporter health + SNMP HTTP SD targets
+  render-monitoring  Rewrite Prometheus / Alertmanager / snmp.yml from templates
+  journal [module]   Internal console reports (JSON)
+  demo               HighCPU first-hour path (owner mail, similar history)
+  demo-rca           Filesystem RCA demo gauge (read-only)
+  fetch-llm          Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp
+  backup             Dump Postgres + config
+  restore            Print restore steps (does not run them)
+  update             Backup, render monitoring, refresh images, restart, doctor
+
+Examples:
+  ./forgesre help snmp
+  ./forgesre assets
+  ./forgesre snmp
+  ./forgesre journal snmp
+  ./forgesre logs snmp-exporter
+  ./forgesre render-monitoring && docker compose up -d
+EOF
+}
+
+print_help_command() {
+  local name="${1:-}"
+  case "$name" in
+    help)
+      cat <<'EOF'
+help — show CLI overview or one command.
+
+  ./forgesre
+  ./forgesre help
+  ./forgesre help snmp
+EOF
+      ;;
+    install)
+      cat <<'EOF'
+install — first-time wizard. Writes .env, secrets, config, starts Compose.
+
+  ./forgesre install
+  ./forgesre install --non-interactive --profile standard --port 8080
+
+Do NOT run this on a VM that already has secrets. Use update / render-monitoring.
+EOF
+      ;;
+    doctor)
+      cat <<'EOF'
+doctor — same checks as /health-ui. Overall HEALTHY or DEGRADED.
+
+  ./forgesre doctor
+  ./doctor.sh
+
+snmp: error means the snmp-exporter container is down or :9116 is not listening.
+Fix: docker compose up -d snmp-exporter && ./forgesre snmp
+EOF
+      ;;
+    status)
+      cat <<'EOF'
+status — docker compose ps (host networking; ports are on localhost).
+
+  ./forgesre status
+EOF
+      ;;
+    logs)
+      cat <<'EOF'
+logs — docker compose logs --tail 100.
+
+  ./forgesre logs
+  ./forgesre logs core
+  ./forgesre logs snmp-exporter
+  ./forgesre logs prometheus
+EOF
+      ;;
+    config)
+      cat <<'EOF'
+config — print the first 160 lines of config/forgesre.yml.
+
+  ./forgesre config
+
+After editing YAML, recreate Core:
+  docker compose up -d --force-recreate core
+EOF
+      ;;
+    assets|inventory)
+      cat <<'EOF'
+assets — list inventory from the Core API (login as the install admin).
+
+  ./forgesre assets
+  ./forgesre inventory          # same command
+
+Linux hosts with scrape_address are Prometheus node_exporter targets (:9100).
+Rows with type "Network device" and an IP are snmp_exporter targets (UDP/161).
+
+Add a switch in the UI (Assets → Add asset) or:
+  # after UI login cookie, or use the form
+  See docs/operator-handbook.md §6 and §7.
+EOF
+      ;;
+    snmp)
+      cat <<'EOF'
+snmp — check bundled snmp_exporter and list SNMP HTTP SD targets.
+
+  ./forgesre snmp
+  ./forgesre journal snmp
+  ./forgesre logs snmp-exporter
+
+What you should see:
+  - HTTP 200 from http://127.0.0.1:9116/metrics
+  - JSON list from /api/v1/sd/snmp (Bearer ALERTMANAGER_WEBHOOK_TOKEN)
+  - Empty JSON [] until you add a Network device with an IP
+
+Linux node_exporter hosts are never SNMP-scraped.
+snmp_exporter walks UDP/161 from this host using SNMP_COMMUNITY
+(default public, stored in secrets/secrets.env). Allow UDP/161 outbound
+from the ForgeSRE VM to the device; the device ACL must allow this host.
+
+Change community, then re-render (do not re-install):
+
+  # edit SNMP_COMMUNITY in secrets/secrets.env
+  ./forgesre render-monitoring
+  docker compose up -d snmp-exporter
+EOF
+      ;;
+    render-monitoring)
+      cat <<'EOF'
+render-monitoring — regenerate generated Prometheus / Alertmanager / snmp.yml.
+
+Use this on an existing VM after git pull so the new forgesre-snmp job appears
+without running ./install.sh.
+
+  ./forgesre render-monitoring
+  docker compose up -d
+  ./forgesre doctor
+
+Reads ALERTMANAGER_WEBHOOK_TOKEN and SNMP_COMMUNITY from secrets/secrets.env.
+Writes $FORGESRE_DATA/generated/{prometheus,alertmanager,snmp}.yml
+and sets SNMP_EXPORTER_CONFIG in .env if missing.
+EOF
+      ;;
+    journal)
+      cat <<'EOF'
+journal — internal console reports (JSON). Not Docker logs.
+
+  ./forgesre journal
+  ./forgesre journal inventory
+  ./forgesre journal snmp
+  ./forgesre journal demo
+
+Modules include install, seed, inventory, discovery, snmp, incident, rca,
+notification, demo. UI: /journal
+EOF
+      ;;
+    demo)
+      cat <<'EOF'
+demo — first-hour HighCPU path on forge-demo-01 (demo gauge, not a real host).
+
+  ./forgesre demo
+
+Then: Dashboard → incident → Who to call → Escalation → Console.
+EOF
+      ;;
+    demo-rca)
+      cat <<'EOF'
+demo-rca — filesystem RCA on the demo disk gauge. Read-only. Does not fill a disk.
+
+  ./forgesre demo-rca
+EOF
+      ;;
+    fetch-llm)
+      cat <<'EOF'
+fetch-llm — download Qwen 14B GGUF (~9 GB) into $FORGESRE_DATA/models/ and start llama.cpp.
+
+  ./forgesre fetch-llm
+  ./forgesre doctor          # llm: ok when the server answers
+
+Not stored in git. RCA works without it (builtin analyst).
+EOF
+      ;;
+    backup)
+      cat <<'EOF'
+backup — Postgres dump + config tarball under $FORGESRE_DATA/backups.
+
+  ./forgesre backup
+  ./backup.sh
+EOF
+      ;;
+    restore)
+      cat <<'EOF'
+restore — not automated. Unpack a backup and load SQL:
+
+  docker compose exec -T postgres psql -U forgesre forgesre < forgesre.sql
+EOF
+      ;;
+    update)
+      cat <<'EOF'
+update — doctor (warn ok), backup, render-monitoring, compose pull/up, doctor.
+
+  ./forgesre update
+  ./forgesre update --offline
+
+Use this after git pull origin main. Do not run ./install.sh.
+EOF
+      ;;
+    "")
+      print_overview
+      ;;
+    *)
+      echo "No detailed help for '$name'."
+      echo
+      print_overview
+      return 1
+      ;;
+  esac
+}
+
+cmd_assets() {
+  need_env
+  python3 - "$(port_from_env)" <<'PY'
+import json, os, sys, tempfile, subprocess, pathlib
+
+port = sys.argv[1]
+root = pathlib.Path(".").resolve()
+# load secrets
+env = {}
+for line in (root / "secrets/secrets.env").read_text().splitlines():
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    k, _, v = line.partition("=")
+    env[k] = v
+email = env.get("FORGESRE_ADMIN_EMAIL", "")
+password = env.get("FORGESRE_ADMIN_PASSWORD", "")
+jar = tempfile.NamedTemporaryFile(delete=False)
+jar.close()
+try:
+    subprocess.check_call(
+        [
+            "curl", "-fsS", "-c", jar.name, "-b", jar.name,
+            "-X", "POST", f"http://127.0.0.1:{port}/login",
+            "-d", f"email={email}&password={password}",
+        ],
+        stdout=subprocess.DEVNULL,
+    )
+    raw = subprocess.check_output(
+        ["curl", "-fsS", "-c", jar.name, "-b", jar.name, f"http://127.0.0.1:{port}/api/v1/assets"]
+    )
+finally:
+    os.unlink(jar.name)
+rows = json.loads(raw)
+print(f"{'ASSET':<22} {'IP':<16} {'TYPE':<22} {'SCRAPE / SNMP'}")
+print("-" * 78)
+for item in rows:
+    scrape = item.get("scrape_address") or ""
+    extra = scrape if scrape else ("SNMP UDP/161" if item.get("snmp") else "—")
+    print(f"{item.get('asset_id',''):<22} {item.get('ip',''):<16} {str(item.get('type',''))[:22]:<22} {extra}")
+print()
+print(f"{len(rows)} asset(s). Linux = node_exporter :9100. Network device + IP = snmp_exporter.")
+PY
+}
+
+cmd_snmp() {
+  need_env
+  local port code
+  port="$(port_from_env)"
+  # shellcheck disable=SC1091
+  source secrets/secrets.env
+  echo "=== snmp-exporter ==="
+  code="$(curl -sS -o /tmp/forgesre-snmp-metrics.txt -w "%{http_code}" http://127.0.0.1:9116/metrics || true)"
+  echo "GET http://127.0.0.1:9116/metrics  HTTP ${code:-down}"
+  if [[ "${code:-}" != "200" ]]; then
+    echo "Exporter is not up. Start it: docker compose up -d snmp-exporter"
+    echo "Then: ./forgesre logs snmp-exporter"
+  fi
+  echo
+  echo "=== SNMP HTTP SD (network devices with an IP) ==="
+  curl -sS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
+    "http://127.0.0.1:${port}/api/v1/sd/snmp" || true
+  echo
+  echo
+  echo "Empty list [] is normal until you add type=Network device with an IP."
+  echo "Community: SNMP_COMMUNITY in secrets/secrets.env (not printed here)."
+  echo "Firewall: UDP/161 from this host to the device. Discovery TCP/161 only classifies."
+  echo "Alerts: SnmpDeviceUnreachable (up{job=\"forgesre-snmp\"}==0 for 2m)."
+}
+
 case "$cmd" in
+  help)
+    print_help_command "${1:-}"
+    ;;
   install) exec "$ROOT/scripts/install.sh" "$@" ;;
   doctor) exec "$ROOT/scripts/doctor.sh" "$@" ;;
   backup) exec "$ROOT/scripts/backup.sh" "$@" ;;
   restore)
-    echo "Unpack a backup tar.gz and restore forgesre.sql with:"
-    echo "  docker compose exec -T postgres psql -U forgesre forgesre < backup.sql"
+    print_help_command restore
     exit 1
     ;;
   update) exec "$ROOT/scripts/update.sh" "$@" ;;
   fetch-llm)
     exec "$ROOT/scripts/fetch-llm.sh" "$@"
     ;;
+  render-monitoring)
+    exec "$ROOT/scripts/render-monitoring.sh" "$@"
+    ;;
   demo)
-    PORT="$(awk -F= '/FORGESRE_HTTP_PORT/ {print $2}' .env | tail -1 | tr -d '"' )"
-    PORT="${PORT:-8080}"
+    need_env
+    PORT="$(port_from_env)"
     # shellcheck disable=SC1091
     source secrets/secrets.env
     echo "Generating demo incident workflow..."
@@ -40,8 +366,8 @@ case "$cmd" in
     rm -f "$jar"
     ;;
   demo-rca)
-    PORT="$(awk -F= '/FORGESRE_HTTP_PORT/ {print $2}' .env | tail -1 | tr -d '"' )"
-    PORT="${PORT:-8080}"
+    need_env
+    PORT="$(port_from_env)"
     # shellcheck disable=SC1091
     source secrets/secrets.env
     echo "Generating filesystem RCA demo..."
@@ -59,8 +385,8 @@ case "$cmd" in
     "${DC[@]}" logs --tail 100 "$@"
     ;;
   journal)
-    PORT="$(awk -F= '/FORGESRE_HTTP_PORT/ {print $2}' .env | tail -1 | tr -d '"' )"
-    PORT="${PORT:-8080}"
+    need_env
+    PORT="$(port_from_env)"
     # shellcheck disable=SC1091
     source secrets/secrets.env
     module="${1:-}"
@@ -76,23 +402,18 @@ case "$cmd" in
     rm -f "$jar"
     ;;
   config)
-    sed -n '1,120p' config/forgesre.yml
+    sed -n '1,160p' config/forgesre.yml
     ;;
-  help|*)
-    cat <<'EOF'
-Usage: ./forgesre <command>
-
-  install   Guided installation
-  doctor    Health checks
-  fetch-llm Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp
-  demo      HighCPU path: owner contacts, similar-incident history, notification to asset owner, discovery 10.20.30.41
-  demo-rca  Filesystem RCA acceptance path (read-only, demo disk gauge)
-  journal   Internal process reports (optional module name: inventory, demo, rca, …)
-  status    Container status
-  logs      docker compose logs
-  config    Show forgesre.yml
-  backup    Dump Postgres + config
-  update    Backup, refresh images, restart, doctor
-EOF
+  assets|inventory)
+    cmd_assets
+    ;;
+  snmp)
+    cmd_snmp
+    ;;
+  *)
+    echo "Unknown command: $cmd"
+    echo
+    print_overview
+    exit 1
     ;;
 esac

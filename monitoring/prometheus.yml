@@ -26,3 +26,23 @@ scrape_configs:
         authorization:
           type: Bearer
           credentials: forgesre-dev-webhook-token
+  - job_name: forgesre-snmp
+    scrape_interval: 30s
+    scrape_timeout: 25s
+    metrics_path: /snmp
+    params:
+      module: [if_mib]
+      auth: [public_v2]
+    http_sd_configs:
+      - url: http://127.0.0.1:8080/api/v1/sd/snmp
+        refresh_interval: 30s
+        authorization:
+          type: Bearer
+          credentials: forgesre-dev-webhook-token
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 127.0.0.1:9116

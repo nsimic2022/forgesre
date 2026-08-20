@@ -17,6 +17,7 @@ from app.inventory import (
     similar_incident_groups,
     sync_netbox,
     update_asset,
+    is_snmp_asset,
 )
 from app.journal import MODULES, list_entries, module_counts
 from app.models import Asset, AuditLog, DiscoveryCandidate, EscalationPolicy, Incident, Notification, Playbook, Playrule, User
@@ -245,7 +246,16 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         raise HTTPException(status_code=404)
     related = db.query(Incident).filter_by(asset_id=item.id).order_by(Incident.id.desc()).all()
     similar = similar_incident_groups(db, item)
-    return render(request, "asset_detail.html", user, asset=item, incidents=related, similar=similar)
+    return render(
+        request,
+        "asset_detail.html",
+        user,
+        asset=item,
+        incidents=related,
+        similar=similar,
+        snmp_target=is_snmp_asset(item),
+        snmp_enabled=settings.snmp_enabled,
+    )
 
 
 @router.post("/assets/{asset_id}/update")

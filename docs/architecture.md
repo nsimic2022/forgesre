@@ -55,7 +55,7 @@ These are the choices that keep the service count down.
 | ADR-3 | **Jinja2 + small vanilla JS**, served by Core | Avoid a Node toolchain; pages stay simple and server-rendered |
 | ADR-4 | **PostgreSQL is the only ForgeSRE datastore** | Users, assets cache, incidents, playrules, jobs, audit. Job queue = `FOR UPDATE SKIP LOCKED` |
 | ADR-5 | **No Redis for ForgeSRE** | Redis exists only if bundled NetBox is enabled, because NetBox requires it |
-| ADR-6 | **Grafana Alloy is the unified collector** | Replaces Promtail, and in V1 also replaces standalone `snmp_exporter` / `blackbox_exporter` |
+| ADR-6 | **Grafana Alloy is the unified collector** (longer-term) | Replaces Promtail; SNMP/blackbox unification is later. **V0.5 ships standalone `snmp_exporter`** on `:9116` |
 | ADR-7 | **Caddy is the only published entrypoint** | One URL, TLS, routing to Core / Grafana / NetBox. Users do not manage eight ports |
 | ADR-8 | **AI agents are in-process modules**, not microservices | Five named agents remain as code packages talking to one LLM HTTP API |
 | ADR-9 | **Open WebUI is not in any default profile** | Optional later. It is not the ForgeSRE UI |
@@ -221,8 +221,8 @@ For each component: why it exists, what it does, dependents, whether it can be r
 
 ### 6.7 Grafana Alloy
 
-- **Why:** One collector instead of Promtail + snmp_exporter + blackbox_exporter.
-- **What:** Tail/push logs to Loki; SNMP; ICMP/HTTP probes; optional self-metrics.
+- **Why:** One collector instead of Promtail + snmp_exporter + blackbox_exporter (later).
+- **What:** Tail/push logs to Loki; optional future SNMP/ICMP. **Today (V0.5): SNMP is `prom/snmp-exporter`, not Alloy.**
 - **Depends on:** Loki (logs), Prometheus (scrape or remote-write), secrets for SNMPv3.
 - **What depends on it:** Logging, network-device metrics, availability probes.
 - **Removable?** Yes if logging and SNMP/probes are both disabled (Minimal). Required for Standard.
@@ -322,7 +322,9 @@ For each component: why it exists, what it does, dependents, whether it can be r
 
 ### 6.16 Explicitly out of V1 runtime
 
-Open WebUI, Promtail, Postfix, snmp_exporter as a separate container, blackbox_exporter as a separate container, Redis (unless bundled NetBox), extra agent containers, Code Agent sandbox VM.
+Open WebUI, Promtail, Postfix, blackbox_exporter as a separate container, Redis (unless bundled NetBox), extra agent containers, Code Agent sandbox VM.
+
+**V0.5 exception:** `snmp_exporter` *is* a compose service (`127.0.0.1:9116`). Alloy SNMP remains a later unification.
 
 ---
 
@@ -1007,7 +1009,7 @@ Phase 9 is listed late in the original spec; **doctor and config validation shou
 ## 27. Risks and open points
 
 1. **Bundled NetBox size** — mitigated by making bundled NetBox opt-in and recommending external NetBox.
-2. **Alloy replacing snmp_exporter/blackbox** — if a site needs a feature Alloy does not expose, add the standalone exporter as an optional compose service later, not by default.
+2. **Alloy replacing snmp_exporter/blackbox** — V0.5 ships standalone snmp_exporter because operators need IF-MIB walks now. Alloy SNMP remains a later merge, not a blocker.
 3. **Core availability** — V1 is a single Core replica. PostgreSQL is the durability story. HA is post-V1.
 4. **Prometheus down vs Core down** — if Core is down, HTTP SD goes stale (Prometheus keeps last targets). Document it.
 5. **LLM quality on infra RCA** — V1 ships the pipeline and schema; quality is eval, not a blocker for monitoring.

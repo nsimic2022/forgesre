@@ -63,6 +63,7 @@ services:
       - ${FORGESRE_DATA:-./data}/prometheus:/prometheus
     depends_on:
       - core
+      - snmp-exporter
     restart: unless-stopped
 
   alertmanager:
@@ -78,6 +79,17 @@ services:
       - ${FORGESRE_DATA:-./data}/alertmanager:/alertmanager
     depends_on:
       - core
+    restart: unless-stopped
+
+  snmp-exporter:
+    image: prom/snmp-exporter:v0.26.0
+    user: "0"
+    network_mode: host
+    command:
+      - --config.file=/etc/snmp_exporter/snmp.yml
+      - --web.listen-address=127.0.0.1:9116
+    volumes:
+      - ${SNMP_EXPORTER_CONFIG:-./monitoring/snmp.yml}:/etc/snmp_exporter/snmp.yml:ro
     restart: unless-stopped
 
   loki:

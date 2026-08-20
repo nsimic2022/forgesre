@@ -20,3 +20,23 @@ groups:
         annotations:
           summary: "Filesystem usage high on {{ $labels.asset }}"
           description: "Disk usage is {{ $value }}% on {{ $labels.asset }}."
+
+  - name: forgesre-snmp
+    rules:
+      - alert: SnmpDeviceUnreachable
+        expr: up{job="forgesre-snmp"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SNMP unreachable on {{ $labels.asset }}"
+          description: "snmp_exporter could not scrape {{ $labels.instance }} (community, ACL, or device down)."
+
+      - alert: NetworkInterfaceDown
+        expr: ifOperStatus == 2 and ifAdminStatus == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Interface down on {{ $labels.asset }}"
+          description: "ifOperStatus is down while admin is up on {{ $labels.ifName }} / {{ $labels.instance }}."

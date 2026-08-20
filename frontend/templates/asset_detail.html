@@ -18,6 +18,18 @@
   <dt>Source</dt><dd>{{ asset.source }}</dd>
   <dt>NetBox ID</dt><dd>{{ asset.netbox_id or "—" }}</dd>
   <dt>Scrape address</dt><dd>{{ asset.scrape_address or "—" }}</dd>
+  <dt>SNMP</dt>
+  <dd>
+    {% if snmp_target %}
+      Polled by snmp_exporter on UDP/161 (module if_mib). Prometheus job <code>forgesre-snmp</code>.
+    {% elif snmp_enabled and asset.scrape_address %}
+      No — this host is scraped as node_exporter / HTTP metrics, not SNMP.
+    {% elif snmp_enabled %}
+      No — add type <code>Network device</code> and an IP to enable SNMP.
+    {% else %}
+      Disabled in <code>config/forgesre.yml</code> (<code>monitoring.snmp.enabled</code>).
+    {% endif %}
+  </dd>
 </dl>
 
 {% if can('write_assets') %}

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ForgeSRE V0.2 installer. Host needs Docker, Compose, Bash, Git.
+# ForgeSRE installer. Host needs Docker, Compose, Bash, Git.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -218,6 +218,7 @@ SECRET_KEY=${secret}
 SMTP_USERNAME=
 SMTP_PASSWORD=
 NETBOX_API_TOKEN=${NETBOX_TOKEN}
+SNMP_COMMUNITY=public
 EOF
   chmod 600 "$ROOT/secrets/secrets.env"
 
@@ -260,7 +261,7 @@ EOF
   fi
 
   cat > "$ROOT/.env" <<EOF
-FORGESRE_VERSION=0.4.0
+FORGESRE_VERSION=0.5.0
 FORGESRE_DOMAIN=forgesre.local
 FORGESRE_DATA=${DATA_DIR}
 FORGESRE_TIMEZONE=${TIMEZONE}
@@ -273,6 +274,7 @@ POSTGRES_PASSWORD=${pg_pass}
 GRAFANA_ADMIN_PASSWORD=${gf_pass}
 ALERTMANAGER_CONFIG=${DATA_DIR}/generated/alertmanager.yml
 PROMETHEUS_CONFIG=${DATA_DIR}/generated/prometheus.yml
+SNMP_EXPORTER_CONFIG=${DATA_DIR}/generated/snmp.yml
 EOF
 
   local grafana_enabled="true" loki_enabled="true"
@@ -304,6 +306,10 @@ monitoring:
     enabled: true
     mode: bundled
     url: http://127.0.0.1:9093
+  snmp:
+    enabled: true
+    exporter_url: http://127.0.0.1:9116
+    module: if_mib
 logging:
   loki:
     enabled: ${loki_enabled}
@@ -340,15 +346,12 @@ features:
   escalation: true
 EOF
 
-  sed -e "s/__WEBHOOK_TOKEN__/${webhook}/" -e "s/__CORE_PORT__/${HTTP_PORT}/g" \
-    "$ROOT/monitoring/alertmanager.yml.tpl" > "$DATA_DIR/generated/alertmanager.yml"
-  sed -e "s/__WEBHOOK_TOKEN__/${webhook}/" -e "s/__CORE_PORT__/${HTTP_PORT}/g" \
-    "$ROOT/monitoring/prometheus.yml.tpl" > "$DATA_DIR/generated/prometheus.yml"
+  "$ROOT/scripts/render-monitoring.sh"
 
   cat > "$ROOT/installation-report.md" <<EOF
 # ForgeSRE installation report
 
-- Version: 0.4.0
+- Version: 0.5.0
 - Profile: ${PROFILE}
 - Timezone: ${TIMEZONE}
 - Data: ${DATA_DIR}
@@ -372,7 +375,8 @@ First-hour demo (nothing here is a real server):
 3. Run ./forgesre demo (or Dashboard → Run demo workflow).
 4. Open the new incident (Who to call), then Escalation (mail to platform@forgesre.local).
 5. Discovery candidate 10.20.30.41 is on /discovery (Approve / Ignore).
-6. Console (/journal) lists ok/error reports per module (install, seed, inventory, demo, …).
+6. Console (/journal) lists ok/error reports per module (install, seed, inventory, snmp, demo, …).
+7. Network devices: Assets → type Network device + IP. Then ./forgesre snmp (UDP/161 via bundled snmp_exporter).
 EOF
 }
 
@@ -443,5 +447,7 @@ echo "UI:              http://127.0.0.1:${HTTP_PORT}"
 echo "Admin:           admin@forgesre.local"
 echo "Password:        (see installation-report.md or secrets/secrets.env)"
 echo "Demo workflow:   ./forgesre demo"
+echo "Network SNMP:    ./forgesre snmp"
+echo "CLI help:        ./forgesre help"
 echo "Then open:       Dashboard → forge-demo-01 → Incidents → Escalation → Console"
 echo "Report:          installation-report.md"
