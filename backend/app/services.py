@@ -96,7 +96,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
         annotations = alert.get("annotations") or {}
         alertname = str(labels.get("alertname") or "Alert")
         asset_name = str(labels.get("asset") or labels.get("instance") or DEMO_ASSET)
-        fingerprint = str(alert.get("fingerprint") or f"{alertname}:{asset_name}")
+        fingerprint = f"{alertname}:{asset_name}"
         incident = (
             db.query(Incident)
             .filter(Incident.fingerprint == fingerprint, Incident.status.notin_(["CLOSED"]))

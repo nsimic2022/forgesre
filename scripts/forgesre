@@ -6,7 +6,7 @@ cd "$ROOT"
 cmd="${1:-help}"
 shift || true
 
-if docker compose version >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
+if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
 
 case "$cmd" in
   install) exec "$ROOT/scripts/install.sh" "$@" ;;
@@ -19,16 +19,17 @@ case "$cmd" in
     ;;
   update) exec "$ROOT/scripts/update.sh" "$@" ;;
   demo)
+    PORT="$(awk -F= '/FORGESRE_HTTP_PORT/ {print $2}' .env | tail -1 | tr -d '"' )"
+    PORT="${PORT:-8080}"
+    # shellcheck disable=SC1091
+    source secrets/secrets.env
     echo "Generating demo incident workflow..."
-    "${DC[@]}" exec -T core python - <<'PY'
-from app.db import SessionLocal
-from app.seed import seed
-from app.services import run_demo
-db = SessionLocal()
-seed(db)
-inc = run_demo(db)
-print(inc.number if inc else "no-incident")
-PY
+    jar="$(mktemp)"
+    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \
+      -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
+    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/api/v1/demo"
+    echo
+    rm -f "$jar"
     ;;
   status)
     "${DC[@]}" ps

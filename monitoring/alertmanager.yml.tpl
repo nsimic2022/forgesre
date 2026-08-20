@@ -11,7 +11,7 @@ route:
 receivers:
   - name: forgesre
     webhook_configs:
-      - url: http://core:8000/api/v1/webhooks/alertmanager
+      - url: http://127.0.0.1:__CORE_PORT__/api/v1/webhooks/alertmanager
         send_resolved: true
         http_config:
           authorization:

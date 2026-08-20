@@ -8,13 +8,13 @@ rule_files:
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: ["alertmanager:9093"]
+        - targets: ["127.0.0.1:9093"]
 
 scrape_configs:
   - job_name: forgesre-core
     metrics_path: /metrics
     static_configs:
-      - targets: ["core:8000"]
+      - targets: ["127.0.0.1:8080"]
         labels:
           asset: forge-demo-01
           instance: forge-demo-01

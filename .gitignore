@@ -11,6 +11,7 @@ bin/
 .vscode/
 *.swp
 coverage/
+config/forgesre.yml
 installation-report.md
 __pycache__/
 *.py[cod]

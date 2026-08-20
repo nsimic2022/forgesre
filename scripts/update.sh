@@ -13,7 +13,7 @@ echo "Checking status..."
 echo "Creating backup..."
 "$ROOT/scripts/backup.sh"
 
-if docker compose version >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
+if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
 if [[ "${1:-}" == "--offline" ]]; then
   "${DC[@]}" up -d --build --pull never
 else

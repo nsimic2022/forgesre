@@ -53,12 +53,12 @@ elif [[ "$PROFILE" == "2" || "$PROFILE" == "standard" ]]; then
 fi
 
 dc() {
-  if docker compose version >/dev/null 2>&1; then
+  if docker info >/dev/null 2>&1; then
     docker compose "$@"
-  elif command -v sudo >/dev/null && sudo docker compose version >/dev/null 2>&1; then
+  elif command -v sudo >/dev/null; then
     sudo docker compose "$@"
   else
-    echo "Docker Compose is required." >&2
+    echo "Docker daemon is not accessible." >&2
     exit 1
   fi
 }
@@ -219,6 +219,7 @@ COMPOSE_PROFILES=${compose_profiles}
 POSTGRES_PASSWORD=${pg_pass}
 GRAFANA_ADMIN_PASSWORD=${gf_pass}
 ALERTMANAGER_CONFIG=${DATA_DIR}/generated/alertmanager.yml
+PROMETHEUS_CONFIG=${DATA_DIR}/generated/prometheus.yml
 EOF
 
   local grafana_enabled="true" loki_enabled="true"
@@ -244,28 +245,28 @@ monitoring:
   prometheus:
     enabled: true
     mode: $([[ $BUNDLED_PROM == yes ]] && echo bundled || echo external)
-    url: http://prometheus:9090
+    url: http://127.0.0.1:9090
   alertmanager:
     enabled: true
     mode: bundled
-    url: http://alertmanager:9093
+    url: http://127.0.0.1:9093
 logging:
   loki:
     enabled: ${loki_enabled}
     mode: bundled
-    url: http://loki:3100
+    url: http://127.0.0.1:3100
   alloy:
     enabled: ${loki_enabled}
 grafana:
   enabled: ${grafana_enabled}
   mode: bundled
-  url: http://grafana:3000
+  url: http://127.0.0.1:3000
 ai:
   enabled: ${ai_enabled}
   provider: local
   llm:
     mode: ${llm_mode}
-    url: http://llm:8080/v1
+    url: http://127.0.0.1:8088/v1
     model: local
 notifications:
   email:
@@ -280,7 +281,9 @@ features:
   escalation: true
 EOF
 
-  sed "s/__WEBHOOK_TOKEN__/${webhook}/" "$ROOT/monitoring/alertmanager.yml.tpl" > "$DATA_DIR/generated/alertmanager.yml"
+  sed -e "s/__WEBHOOK_TOKEN__/${webhook}/" -e "s/__CORE_PORT__/${HTTP_PORT}/" \
+    "$ROOT/monitoring/alertmanager.yml.tpl" > "$DATA_DIR/generated/alertmanager.yml"
+  sed "s/127.0.0.1:8080/127.0.0.1:${HTTP_PORT}/" "$ROOT/monitoring/prometheus.yml" > "$DATA_DIR/generated/prometheus.yml"
 
   cat > "$ROOT/installation-report.md" <<EOF
 # ForgeSRE installation report
@@ -307,6 +310,8 @@ start_stack() {
   # shellcheck disable=SC1091
   source "$ROOT/.env"
   set +a
+  export DOCKER_BUILDKIT=0
+  export COMPOSE_DOCKER_CLI_BUILD=0
   local pull_flag=()
   if [[ "$OFFLINE" -eq 1 ]]; then
     pull_flag=(--pull never)

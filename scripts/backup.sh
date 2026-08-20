@@ -19,7 +19,7 @@ DEST="${FORGESRE_DATA}/backups/forgesre-${STAMP}"
 mkdir -p "$DEST"
 
 echo "Backing up PostgreSQL and configuration to $DEST"
-if docker compose version >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
+if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
 "${DC[@]}" exec -T postgres pg_dump -U forgesre forgesre > "$DEST/forgesre.sql"
 cp -a config/forgesre.yml "$DEST/"
 cp -a .env "$DEST/"
