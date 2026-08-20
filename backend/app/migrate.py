@@ -52,6 +52,22 @@ def migrate(engine: Engine) -> None:
             if name not in existing:
                 statements.append(sql)
     with engine.begin() as conn:
+        if "jobs" not in tables:
+            conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS jobs ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "kind VARCHAR(64), status VARCHAR(32), object_type VARCHAR(64), "
+                    "object_id VARCHAR(64), payload JSON, error TEXT, attempts INTEGER, "
+                    "created_at DATETIME, started_at DATETIME, finished_at DATETIME)"
+                    if engine.dialect.name == "sqlite"
+                    else "CREATE TABLE IF NOT EXISTS jobs ("
+                    "id SERIAL PRIMARY KEY, "
+                    "kind VARCHAR(64), status VARCHAR(32), object_type VARCHAR(64), "
+                    "object_id VARCHAR(64), payload JSON, error TEXT, attempts INTEGER DEFAULT 0, "
+                    "created_at TIMESTAMPTZ, started_at TIMESTAMPTZ, finished_at TIMESTAMPTZ)"
+                )
+            )
         for sql in statements:
             conn.execute(text(sql))
         if "evidence" in tables:

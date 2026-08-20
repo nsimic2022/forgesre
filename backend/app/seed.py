@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import Asset, EscalationPolicy, Incident, Playbook, Playrule, User
@@ -27,6 +26,14 @@ DISK_STEPS = [
 CPU_STEPS = [
     {"id": "verify", "title": "Verify CPU usage"},
     {"id": "process", "title": "Identify top CPU processes"},
+    {"id": "owner", "title": "Identify owner"},
+    {"id": "notify", "title": "Notify responsible engineer"},
+    {"id": "escalate", "title": "Escalate if not acknowledged"},
+]
+
+HOST_STEPS = [
+    {"id": "verify", "title": "Verify the host answers ping / SSH from the management network"},
+    {"id": "exporter", "title": "Check node_exporter on TCP/9100 from the ForgeSRE host"},
     {"id": "owner", "title": "Identify owner"},
     {"id": "notify", "title": "Notify responsible engineer"},
     {"id": "escalate", "title": "Escalate if not acknowledged"},
@@ -93,9 +100,10 @@ def ensure_demo_similar_history(db: Session, asset: Asset) -> Incident:
     rule = db.query(Playrule).filter_by(name="high-cpu").first()
     started = utcnow() - timedelta(days=7)
     ended = started + timedelta(hours=2)
-    count = db.query(func.count(Incident.id)).scalar() or 0
+    from app.services import next_incident_number
+
     row = Incident(
-        number=f"INC-{count + 1:06d}",
+        number=next_incident_number(db),
         title="High CPU",
         severity="WARNING",
         status="CLOSED",
@@ -216,6 +224,17 @@ def seed(db: Session) -> None:
             )
         )
 
+    host = db.query(Playbook).filter_by(slug="host-unreachable").first()
+    if host is None:
+        host = Playbook(
+            slug="host-unreachable",
+            name="HOST-UNREACHABLE",
+            description="node_exporter scrape failed. Guidance only — no commands are executed.",
+            steps=HOST_STEPS,
+        )
+        db.add(host)
+        db.flush()
+
     if db.query(Playrule).filter_by(name="snmp-down").first() is None:
         db.add(
             Playrule(
@@ -225,6 +244,42 @@ def seed(db: Session) -> None:
                 severity="warning",
                 condition={"alertname": "SnmpDeviceUnreachable", "metric": "up", "operator": "==", "value": 0},
                 playbook_id=net.id,
+                escalation_policy_id=policy.id,
+            )
+        )
+    if db.query(Playrule).filter_by(name="node-exporter-down").first() is None:
+        db.add(
+            Playrule(
+                name="node-exporter-down",
+                description="node_exporter scrape failed",
+                enabled=True,
+                severity="warning",
+                condition={"alertname": "NodeExporterDown", "metric": "up", "operator": "==", "value": 0},
+                playbook_id=host.id,
+                escalation_policy_id=policy.id,
+            )
+        )
+    if db.query(Playrule).filter_by(name="node-filesystem").first() is None:
+        db.add(
+            Playrule(
+                name="node-filesystem",
+                description="node_exporter filesystem usage above 90%",
+                enabled=True,
+                severity="warning",
+                condition={"alertname": "NodeFilesystemUsageHigh", "metric": "filesystem_usage", "operator": ">", "value": 90},
+                playbook_id=disk.id,
+                escalation_policy_id=policy.id,
+            )
+        )
+    if db.query(Playrule).filter_by(name="node-cpu").first() is None:
+        db.add(
+            Playrule(
+                name="node-cpu",
+                description="node_exporter CPU above 95%",
+                enabled=True,
+                severity="warning",
+                condition={"alertname": "NodeCPUHigh", "metric": "cpu_usage", "operator": ">", "value": 95},
+                playbook_id=cpu.id,
                 escalation_policy_id=policy.id,
             )
         )

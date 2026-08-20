@@ -230,6 +230,24 @@ class DiscoveryCandidate(Base):
     asset_id: Mapped[str] = mapped_column(String(64), default="")
 
 
+class Job(Base):
+    """Background work (RCA). Not a message broker — one table, one worker thread."""
+
+    __tablename__ = "jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    object_type: Mapped[str] = mapped_column(String(64), default="")
+    object_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    payload: Mapped[dict] = mapped_column(JSONType, default=dict)
+    error: Mapped[str] = mapped_column(Text, default="")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class MaintenanceWindow(Base):
     __tablename__ = "maintenance_windows"
 

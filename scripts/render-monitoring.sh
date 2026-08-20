@@ -42,10 +42,11 @@ chmod 600 "$ROOT/secrets/secrets.env" 2>/dev/null || true
 ensure_kv "$ROOT/.env" SNMP_EXPORTER_CONFIG "${DATA_DIR}/generated/snmp.yml"
 ensure_kv "$ROOT/.env" PROMETHEUS_CONFIG "${DATA_DIR}/generated/prometheus.yml"
 ensure_kv "$ROOT/.env" ALERTMANAGER_CONFIG "${DATA_DIR}/generated/alertmanager.yml"
+ensure_kv "$ROOT/.env" PROMETHEUS_ALERTS "${DATA_DIR}/generated/alerts.yml"
 if grep -q '^FORGESRE_VERSION=' "$ROOT/.env"; then
-  sed -i 's/^FORGESRE_VERSION=.*/FORGESRE_VERSION=0.5.0/' "$ROOT/.env"
+  sed -i 's/^FORGESRE_VERSION=.*/FORGESRE_VERSION=0.6.0/' "$ROOT/.env"
 else
-  echo "FORGESRE_VERSION=0.5.0" >> "$ROOT/.env"
+  echo "FORGESRE_VERSION=0.6.0" >> "$ROOT/.env"
 fi
 
 if [[ -z "$WEBHOOK" ]]; then
@@ -79,9 +80,15 @@ render(
     {"__WEBHOOK_TOKEN__": token, "__CORE_PORT__": port},
 )
 render("snmp.yml", {"__SNMP_COMMUNITY__": community})
+
+base = (root / "monitoring" / "alerts.yml").read_text()
+local = root / "monitoring" / "alerts.local.yml"
+extra = local.read_text() if local.exists() else ""
+(out / "alerts.yml").write_text(base + ("\n" + extra if extra.strip() else ""))
 print(f"Wrote {out}/prometheus.yml")
 print(f"Wrote {out}/alertmanager.yml")
 print(f"Wrote {out}/snmp.yml")
+print(f"Wrote {out}/alerts.yml")
 PY
 
 echo "SNMP community is taken from SNMP_COMMUNITY in secrets/secrets.env (not printed)."

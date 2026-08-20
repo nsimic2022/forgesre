@@ -16,4 +16,4 @@ receivers:
         http_config:
           authorization:
             type: Bearer
-            credentials: forgesre-dev-webhook-token
+            credentials: CHANGE-ME-RENDER-MONITORING

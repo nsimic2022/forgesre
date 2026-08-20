@@ -59,7 +59,7 @@ services:
       - --web.listen-address=127.0.0.1:9090
     volumes:
       - ${PROMETHEUS_CONFIG:-./monitoring/prometheus.yml}:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ${PROMETHEUS_ALERTS:-./monitoring/alerts.yml}:/etc/prometheus/alerts.yml:ro
       - ${FORGESRE_DATA:-./data}/prometheus:/prometheus
     depends_on:
       - core

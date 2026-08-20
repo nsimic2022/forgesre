@@ -6,7 +6,7 @@ One Ubuntu VM (a vCenter guest is the usual lab). Docker Compose, host networkin
 
 It is not a Kubernetes platform, not APM, and not auto-remediation. Playbooks are checklists. AI never SSH-es, never runs commands, never writes NetBox.
 
-**Code lives on [`main`](https://github.com/nsimic2022/forgesre).** Current product: V0.5.
+**Code lives on [`main`](https://github.com/nsimic2022/forgesre).** Current product: V0.6.
 
 ---
 
@@ -31,7 +31,7 @@ Find or enter a host
 
 | Piece | Role |
 |---|---|
-| **Discovery** | Light TCP probe (22/80/443/161/9100). Approve or Ignore. Optional read-sync from an existing NetBox. |
+| **Discovery** | Light probe: TCP 22/80/443/9100 plus SNMP GET on UDP/161. Approve or Ignore. Optional read-sync from an existing NetBox. |
 | **Inventory** | Hostname, IP, type, owner email/phone. Analysts can add and edit. |
 | **Monitoring** | Prometheus HTTP SD for Linux. Bundled snmp_exporter for network devices. Grafana for graphs. |
 | **Incidents** | Alertmanager webhook opens `INC-…`. Fingerprint is alert + asset. |
@@ -70,8 +70,10 @@ Sign in at `http://<VM-IP>:8080` with the credentials in `installation-report.md
 
 ```bash
 ./forgesre demo          # live HighCPU + mail to the asset owner
+./forgesre demo-reset    # lower the demo gauges when you are done
 ./forgesre doctor
 ./forgesre help
+./forgesre secrets-check
 ```
 
 **Do not re-run `./install.sh` on a live box** — it regenerates passwords. Updates:
@@ -111,10 +113,14 @@ Roles: super admin (install user), system admin, analyst (inventory + playrules)
 ./forgesre doctor
 ./forgesre assets
 ./forgesre snmp
+./forgesre sd
+./forgesre incidents
+./forgesre jobs
 ./forgesre logs core
 ./forgesre journal
-./forgesre render-monitoring   # after git pull, refresh Prometheus/SNMP config
+./forgesre render-monitoring   # after git pull, refresh Prometheus/SNMP/alerts
 ./forgesre backup
+./forgesre backup --no-secrets
 ./forgesre fetch-llm           # optional ~9 GB GGUF, not stored in git
 ```
 
@@ -136,6 +142,6 @@ Config: `config/forgesre.yml` (behavior), `.env` (ports/paths), `secrets/secrets
 - [Operator handbook (users, servers, playrules, incidents, CLI)](docs/operator-handbook.md)
 - [Docs index](docs/README.md)
 
-**What each release shipped** (optional): [V0.1](docs/v0.1.md) · [V0.2](docs/v0.2.md) · [V0.3](docs/v0.3.md) · [V0.4](docs/v0.4.md) · [V0.5 snmp_exporter](docs/v0.5.md)
+**What each release shipped** (optional): [V0.1](docs/v0.1.md) · [V0.2](docs/v0.2.md) · [V0.3](docs/v0.3.md) · [V0.4](docs/v0.4.md) · [V0.5 snmp_exporter](docs/v0.5.md) · [V0.6 hardening](docs/v0.6.md)
 
 Longer-term design notes (not a runtime guide): [architecture.md](docs/architecture.md). Security notes: [SECURITY.md](SECURITY.md). License: [Apache-2.0](LICENSE).

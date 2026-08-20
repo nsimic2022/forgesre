@@ -29,6 +29,7 @@ MODULES = [
     "demo",
     "netbox",
     "snmp",
+    "jobs",
 ]
 
 KEEP_PER_MODULE = 200

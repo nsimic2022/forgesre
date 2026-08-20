@@ -8,6 +8,10 @@ modules:
     timeout: 5s
     retries: 1
     max_repetitions: 25
+    lookups:
+      - source_indexes: [ifIndex]
+        lookup: 1.3.6.1.2.1.31.1.1.1.1
+        drop_source_indexes: false
     walk:
       - 1.3.6.1.2.1.1.1
       - 1.3.6.1.2.1.1.3

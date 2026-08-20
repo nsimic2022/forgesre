@@ -2,7 +2,7 @@
 
 This is the **day-2 guide for the whole system**: users, servers, monitoring, playrules, playbooks, incidents, and RCA.
 
-Install and file-level config stay in [`install-config.md`](install-config.md). Version notes (`v0.1.md` … `v0.5.md`) explain *what shipped*. This document explains *how you operate it*.
+Install and file-level config stay in [`install-config.md`](install-config.md). Version notes (`v0.1.md` … `v0.6.md`) explain *what shipped*. This document explains *how you operate it*.
 
 Code: https://github.com/nsimic2022/forgesre (`main`). Open the UI at `http://<VM-IP>:8080`.
 
@@ -43,7 +43,7 @@ Discovery / manual form / NetBox
    Incident
         ↓  match playrule by alertname
    Playbook (guidance) + escalation email
-        ↓  Run AI investigation
+        ↓  investigate job (webhook returns first)
    ForgeRCA (facts / hypotheses / evidence)
 ```
 
@@ -53,8 +53,8 @@ Seeded on first start:
 |---|---|
 | User `FORGESRE_ADMIN_EMAIL` | `super_admin` from `secrets/secrets.env` |
 | Asset `forge-demo-01` | Demo host `10.10.10.20` with owner contacts (`platform@forgesre.local`, phone) and a closed HighCPU history row |
-| Playbooks `CPU-HIGH`, `DISK-FULL`, `NETWORK-UNREACHABLE` | Guidance steps only |
-| Playrules `high-cpu`, `high-disk`, `snmp-down` | Match `HighCPU` / `FilesystemUsageHigh` / `SnmpDeviceUnreachable` |
+| Playbooks `CPU-HIGH`, `DISK-FULL`, `HOST-UNREACHABLE`, `NETWORK-UNREACHABLE` | Guidance steps only |
+| Playrules `high-cpu`, `high-disk`, `snmp-down`, `node-exporter-down`, `node-filesystem`, `node-cpu` | Demo gauges, SNMP `up`, and `node_exporter` |
 | Escalation `Default warning` | 0 / 15 / 30 minutes → generated email |
 | Discovery candidate `10.20.30.41` | Demo row on `/discovery` so you can click Approve |
 
@@ -98,7 +98,7 @@ Three operating roles, plus a read-only viewer. The install user is `super_admin
 | **System admin** (`admin`) | Deputy for the box | Users, inventory, discovery, demos, doctor | Cannot create another super_admin |
 | **Analyst** | Watch incidents, keep inventory, write the workflow | Ack/resolve incidents, **add/edit assets**, run AI (analyst view), **create playrules and playbooks** | PromQL/LogQL, Administration |
 | **Engineer** | Deep RCA | Inventory, discovery Approve, full AI page (queries, evidence, history), resolve | Create playrules/playbooks, Administration |
-| **Viewer** | Read-only | Dashboard, assets, incidents | Changes |
+| **Viewer** | Read-only | Dashboard, assets, incidents, System Health | Playrules, Playbooks, Escalation, Console, Discovery (403), any writes |
 
 Analyst vs engineer on **AI Investigation**: same facts and likely cause. Engineer additionally sees PromQL, LogQL, evidence hashes, and similar-incident history on that page. Similar-incident history for an asset is on the **asset page** for every role that can read assets.
 
@@ -112,7 +112,7 @@ Login session lasts **12 hours** (httponly cookie).
 
 | Menu | URL | What you do there |
 |---|---|---|
-| Dashboard | `/` | Counts, doctor lights, pending discovery banner, **first-hour walkthrough**, recent console reports, demo buttons (admin) |
+| Dashboard | `/` | Counts, doctor lights, pending discovery banner (analyst+), **first-hour walkthrough**, recent console reports (analyst+), demo buttons (admin) |
 | Assets | `/assets` | List inventory. **Add asset** form (analyst+) |
 | Asset detail | `/assets/<id>` | Contacts, scrape address, edit owner after Save, similar-incident history |
 | Discovery | `/discovery` | Scan, Approve / Ignore (analyst+), optional NetBox sync (admin) |
@@ -211,12 +211,13 @@ discovery:
 4. Banner **NEW DEVICE DETECTED** on the dashboard until you decide.
 5. **Approve** → creates an asset (`source=discovery`, id like `disc-10-20-30-41`) and sends you to the asset page. **Ignore** leaves it out of inventory.
 
-Probe is **not nmap**. It tries TCP **22, 80, 443, 161, 9100** and guesses a role:
+Probe is **not nmap**. It tries TCP **22, 80, 443, 9100** and an SNMPv2c GET on **UDP/161** (TCP/161 is skipped — that is not SNMP):
 
-| Open ports | Proposed role | After Approve |
+| Open ports / SNMP | Proposed role | After Approve |
 |---|---|---|
-| 22 or 9100 | Possible Linux server | `scrape_address=<ip>:9100` (node_exporter) |
-| 161 | Possible network device | SNMP UDP/161 (no node_exporter scrape) |
+| 9100 | Possible Linux server | `scrape_address=<ip>:9100` (node_exporter) |
+| UDP/161 SNMP GET succeeds (even if SSH is open) | Possible network device | SNMP UDP/161 (no node_exporter scrape) |
+| 22 only | Possible Linux server | inventory only — **no** `:9100` until 9100 is open or you set scrape by hand |
 | 80 or 443 | Possible web/appliance | inventory only |
 
 `mode: automatic` still writes an audit row (`actor=system-automatic`) then approves. Prefer semi-automatic in production.
@@ -265,7 +266,15 @@ Core itself stays on a **static** scrape so the demo HighCPU path does not depen
 
 ForgeSRE does not install node_exporter on customer VMs. That is still your image / Ansible / whatever you already use.
 
-V0.3 bundled alert rules (`monitoring/alerts.yml`) watch **demo gauges on Core** (`forgesre_demo_cpu_percent`, `forgesre_demo_disk_percent`), not `node_*` metrics. A real server can be scraped and graphed in Grafana, but it will **not** open an incident until you add a Prometheus rule (see §15).
+V0.6 bundled alert rules (`monitoring/alerts.yml`) watch:
+
+- **Demo gauges on Core** (`forgesre_demo_cpu_percent`, `forgesre_demo_disk_percent`) — `forge-demo-01` only
+- **node_exporter** (`NodeExporterDown`, `NodeFilesystemUsageHigh`, `NodeCPUHigh`) for HTTP SD targets with `job=linux-standard`
+- **SNMP** (`SnmpDeviceUnreachable`, `NetworkInterfaceDown`)
+
+Site-specific extras go in `monitoring/alerts.local.yml` (copy the `.example`; gitignored), then `./forgesre render-monitoring`.
+
+ForgeRCA for a real Linux host queries `node_*` labeled `asset=<asset_id>`. It does **not** reuse the demo CPU/disk gauges.
 
 ### Network device (snmp_exporter)
 
@@ -309,14 +318,16 @@ Prometheus rule fires
   → playrule matched by labels.alertname
   → playbook attached
   → notification generated
-  → ForgeRCA runs
+  → investigate job enqueued (worker runs ForgeRCA; webhook does not wait)
 ```
 
 Incident is tied to an asset when `labels.asset` or `labels.instance` equals `asset_id` or hostname. Demo alerts use `asset: forge-demo-01`.
 
 Statuses: `OPEN` → `INVESTIGATING` (Acknowledge) → `RESOLVED` / `CLOSED`. Unacked time can move to `ESCALATED`.
 
-Fingerprint is `alertname:asset`. A second fire of the same pair updates the open incident; it does not open a duplicate until the old one is `CLOSED`.
+Fingerprint is `alertname:asset`. A second fire of the same pair updates the open incident; it does not open a duplicate until the old one is `CLOSED`. A **resolved** alert closes the open incident and does not create a new one. Numbers are `max(INC-N)+1`, not `count(*)+1`.
+
+Check the RCA queue with `./forgesre jobs`. If a job is `error`, open Console (`/journal`) module `rca`.
 
 ---
 
@@ -340,7 +351,7 @@ The form stores `condition.alertname` equal to the **name** you typed. Matching 
 
 So if Prometheus fires `alertname: HighCPU`, the seeded rule `high-cpu` matches because its condition includes `"alertname": "HighCPU"`. If you create a UI rule named `HighCPU`, that also matches.
 
-**Creating a playrule does not create a Prometheus alert.** Without a row in `monitoring/alerts.yml` (or another rule file), nothing fires.
+**Creating a playrule does not create a Prometheus alert.** Bundled rules live in `monitoring/alerts.yml`. Extra rules: `monitoring/alerts.local.yml`, then `./forgesre render-monitoring`.
 
 ### Seeded rules
 
@@ -349,6 +360,9 @@ So if Prometheus fires `alertname: HighCPU`, the seeded rule `high-cpu` matches 
 | `high-cpu` | `HighCPU` | `CPU-HIGH` |
 | `high-disk` | `FilesystemUsageHigh` | `DISK-FULL` |
 | `snmp-down` | `SnmpDeviceUnreachable` | `NETWORK-UNREACHABLE` |
+| `node-exporter-down` | `NodeExporterDown` | `HOST-UNREACHABLE` |
+| `node-filesystem` | `NodeFilesystemUsageHigh` | `DISK-FULL` |
+| `node-cpu` | `NodeCPUHigh` | `CPU-HIGH` |
 
 API: `POST /api/v1/playrules` with `name`, `condition` (object), `playbook_id`, `severity`.
 
@@ -383,7 +397,7 @@ A background loop every 30 seconds generates (and optionally sends) those steps 
 
 If the incident’s asset has **owner email**, every step is addressed to that email (demo: `platform@forgesre.local`). The body includes contact name and phone. Policy roles (`team` / `team-lead` / `engineer`) stay in the body as the step name. If owner email is empty, ForgeSRE falls back to `<role>@forgesre.local`.
 
-This version has **no UI to add a new escalation policy**. Policies exist from seed (and could be inserted in Postgres). Playrules created in the UI currently get **no** escalation policy unless you set `escalation_policy_id` via API/DB.
+This version has **no UI to add a new escalation policy**. Policies exist from seed (and could be inserted in Postgres). Playrules created in the UI (or API) attach the seeded **Default warning** policy when none is set. The 30s loop reads that policy’s `after_minutes` / `target` steps.
 
 Email is off until you enable it in YAML and put SMTP secrets in `secrets/secrets.env`:
 
@@ -430,7 +444,11 @@ You get:
 
 RCA works with `ai.enabled: false` (builtin analyst). To use a local LLM, download the GGUF (not in git) with `./forgesre fetch-llm` — see [`install-config.md`](install-config.md) §12.
 
-Lab: `./forgesre demo-rca` raises filesystem usage on the **demo gauge** (does not fill a real disk).
+Alertmanager ingest **enqueues** an investigate job. The webhook does not wait on the LLM. `./forgesre jobs` lists pending / running / done / error. Demo (`./forgesre demo`) still runs RCA inline so the first-hour path is immediate.
+
+Queries are **per asset**. `forge-demo-01` uses Core demo gauges. A real Linux host uses `node_cpu_seconds_total` / `node_filesystem_*` with `asset="<id>"`. A network device uses `up{job="forgesre-snmp",asset="<id>"}`. Demo CPU/disk numbers are never overlaid on another host.
+
+Lab: `./forgesre demo-rca` raises filesystem usage on the **demo gauge** (does not fill a real disk). `./forgesre demo-reset` puts the gauges back.
 
 ---
 
@@ -446,7 +464,7 @@ Goal: host `app-01` at `10.10.10.50` appears under Assets and is scraped on `:91
 
 Optional discovery path: put `10.10.10.0/24` in `discovery.cidrs`, Scan now, Approve the `10.10.10.50` candidate instead of the manual form.
 
-This still will **not** open `INC-…` until a Prometheus alert fires with a matching playrule (next example).
+This still will **not** open `INC-…` until a Prometheus alert fires with a matching playrule. Bundled `NodeExporterDown` / `NodeFilesystemUsageHigh` / `NodeCPUHigh` already match seeded playrules once node_exporter is scraped. Custom thresholds: §15.
 
 ### Network switch (SNMP)
 
@@ -467,26 +485,22 @@ Change community in `secrets/secrets.env` (`SNMP_COMMUNITY`), then `./forgesre r
 
 Goal: when `app-01` filesystem is full, ForgeSRE opens an incident with playbook `DISK-FULL`.
 
-**A. Prometheus rule** (this is the missing piece for real node_exporter). Edit `monitoring/alerts.yml` on the ForgeSRE host, add a group or rule, for example:
+**A. Prometheus rule.** Bundled `NodeFilesystemUsageHigh` already watches `node_exporter` at 90%. For a local threshold or extra alerts, copy `monitoring/alerts.local.yml.example` to `monitoring/alerts.local.yml` (gitignored) and add a group. Then:
 
-```yaml
-      - alert: NodeFilesystemUsageHigh
-        expr: 100 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes * 100) > 80
-        for: 2m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Filesystem usage high on {{ $labels.asset }}"
-          description: "Disk usage is high on {{ $labels.instance }}."
+```bash
+./forgesre render-monitoring
+curl -fsS -X POST http://127.0.0.1:9090/-/reload
 ```
 
-HTTP SD already sets label `asset` from `asset_id`. Reload Prometheus (`POST http://127.0.0.1:9090/-/reload`).
+Do **not** edit only `monitoring/alerts.yml` on a live box if you use generated config — `render-monitoring` copies the repo file plus `alerts.local.yml` into `$FORGESRE_DATA/generated/alerts.yml`.
+
+HTTP SD already sets label `asset` from `asset_id`.
 
 **B. Playbook** (if you do not want the seeded `DISK-FULL`): **Playbooks** → name `DISK-FULL-NODE`, slug `disk-full-node`, steps one per line → **Save**.
 
-**C. Playrule:** **Playrules** → name **must be** `NodeFilesystemUsageHigh` (same as `alertname`), metric `filesystem_usage`, playbook the one from B → **Save**.
+**C. Playrule:** seeded `node-filesystem` already matches `NodeFilesystemUsageHigh`. For a custom alert name, **Playrules** → name **must be** the Prometheus `alertname` → **Save**. New playrules get the default escalation policy.
 
-**D. Verify:** force usage or temporarily lower the threshold, then **Incidents** should show a new `INC-…` linked to `app-01`, with the playbook name, **Who to call**, and a generated notification on **Escalation** addressed to the asset owner email if you filled it.
+**D. Verify:** force usage or temporarily lower the threshold in `alerts.local.yml`, then **Incidents** should show a new `INC-…` linked to `app-01`, with the playbook name, **Who to call**, and a generated notification on **Escalation** addressed to the asset owner email if you filled it. RCA appears a few seconds later (`./forgesre jobs`).
 
 If the incident has no asset, the alert `asset` / `instance` label did not match `asset_id` or hostname.
 
@@ -499,30 +513,37 @@ On the VM, from the clone directory, `./forgesre` is the operator CLI. `./forges
 ```bash
 ./forgesre help                 # overview
 ./forgesre help snmp            # one command
-./forgesre doctor               # HEALTHY / DEGRADED (includes snmp-exporter)
+./forgesre help tls             # optional HTTPS
+./forgesre doctor               # HEALTHY / DEGRADED (Bearer webhook token)
 ./forgesre status               # compose ps
 ./forgesre logs core
 ./forgesre logs snmp-exporter
 ./forgesre config               # print YAML
 ./forgesre assets               # inventory table (alias: inventory)
 ./forgesre snmp                 # exporter HTTP check + SNMP SD JSON
-./forgesre render-monitoring    # rewrite generated prometheus/alertmanager/snmp.yml
+./forgesre sd                   # Linux + SNMP HTTP SD
+./forgesre incidents            # recent INC-… rows
+./forgesre jobs                 # background RCA queue
+./forgesre render-monitoring    # rewrite generated prometheus/alertmanager/snmp/alerts.yml
 ./forgesre journal              # last process reports
 ./forgesre journal snmp
 ./forgesre journal inventory
 ./forgesre demo                 # HighCPU + owner notification + similar history
 ./forgesre demo-rca             # filesystem RCA demo gauge
+./forgesre demo-reset           # lower demo gauges
+./forgesre secrets-check
 ./forgesre fetch-llm            # GGUF download (~9 GB, not in git)
 ./forgesre backup
+./forgesre backup --no-secrets
 ./forgesre update               # backup + render-monitoring + compose up + doctor
+./forgesre version
 ```
 
 Examples (existing VM after `git pull origin main` — **do not** run `./install.sh`):
 
 ```bash
-./forgesre render-monitoring
-docker compose up -d
-./forgesre doctor
+./forgesre update
+./forgesre secrets-check
 ./forgesre snmp
 ```
 
@@ -548,8 +569,10 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 | POST | `/api/v1/playbooks` | analyst+ |
 | POST | `/api/v1/incidents/{number}/status` | analyst+ |
 | POST | `/api/v1/incidents/{number}/investigate` | analyst+ |
-| GET | `/api/v1/journal` | viewer+ (module, status, q) |
+| GET | `/api/v1/journal` | analyst+ (`read_play`; module, status, q) |
 | POST | `/api/v1/journal` | admin (install writes one row here) |
+| GET | `/api/v1/jobs` | analyst+ (`read_play`) |
+| GET | `/api/v1/system/doctor` | login **or** Bearer webhook token |
 | GET | `/api/v1/sd/prometheus` | Bearer webhook token (Linux node_exporter) |
 | GET | `/api/v1/sd/snmp` | Bearer webhook token (network devices) |
 | POST | `/api/v1/webhooks/alertmanager` | Bearer webhook token |
@@ -570,9 +593,11 @@ Say this out loud so lab expectations stay honest:
 - Playbooks are checklists, not executed runbooks.
 - No UI to edit users, delete assets, or create escalation policies. Asset **owner/contacts** can be edited after Save.
 - Example YAML in `config/examples/` is not applied automatically.
-- Bundled alert rules include demo gauges plus SNMP `up` / interface-down. A full `node_exporter` ruleset is still yours to add.
-- Discovery is a five-port TCP probe, 256 hosts max. SNMP polling is UDP/161 via snmp_exporter, not that probe.
+- Bundled alert rules include demo gauges, SNMP `up` / interface-down, and a small `node_exporter` set (down / disk 90% / CPU 95%). Extra rules go in `alerts.local.yml`.
+- Discovery is TCP 22/80/443/9100 plus SNMP GET on UDP/161, 256 hosts max. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.
+- Viewer cannot open Playrules, Playbooks, Escalation, Console, or Discovery (403).
+- Optional TLS is an example Caddyfile, not a default container.
 - NetBox is read-only and optional.
-- Re-running `./install.sh` regenerates secrets.
+- Re-running `./install.sh` regenerates secrets. Core will not start on shipped default `SECRET_KEY` / webhook token (`FORGESRE_DEV=1` is tests/lab only).
 
 When that is enough: install ([`install-config.md`](install-config.md)), add people (§5), add servers (§6–7), then add real alerts only when you are ready for incidents (§15). First-hour lab path: Dashboard walkthrough → `./forgesre demo`.

@@ -53,8 +53,14 @@ Commands:
   journal [module]   Internal console reports (JSON)
   demo               HighCPU first-hour path (owner mail, similar history)
   demo-rca           Filesystem RCA demo gauge (read-only)
+  demo-reset         Lower demo CPU/disk gauges (stops the demo HighCPU fire)
+  jobs               Background RCA job queue
+  incidents          Open/recent incidents
+  sd                 Prometheus HTTP SD (Linux) and SNMP HTTP SD
+  version            Appliance version from .env
+  secrets-check      Refuse-to-start defaults: SECRET_KEY / webhook token
   fetch-llm          Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp
-  backup             Dump Postgres + config
+  backup             Dump Postgres + config (tar mode 600; --no-secrets omits secrets.env)
   restore            Print restore steps (does not run them)
   update             Backup, render monitoring, refresh images, restart, doctor
 
@@ -62,6 +68,11 @@ Examples:
   ./forgesre help snmp
   ./forgesre assets
   ./forgesre snmp
+  ./forgesre jobs
+  ./forgesre incidents
+  ./forgesre sd
+  ./forgesre demo-reset
+  ./forgesre secrets-check
   ./forgesre journal snmp
   ./forgesre logs snmp-exporter
   ./forgesre render-monitoring && docker compose up -d
@@ -180,8 +191,12 @@ without running ./install.sh.
   ./forgesre doctor
 
 Reads ALERTMANAGER_WEBHOOK_TOKEN and SNMP_COMMUNITY from secrets/secrets.env.
-Writes $FORGESRE_DATA/generated/{prometheus,alertmanager,snmp}.yml
-and sets SNMP_EXPORTER_CONFIG in .env if missing.
+Writes $FORGESRE_DATA/generated/{prometheus,alertmanager,snmp,alerts}.yml
+and sets SNMP_EXPORTER_CONFIG / PROMETHEUS_ALERTS in .env if missing.
+
+Optional extra Prometheus rules: copy monitoring/alerts.local.yml.example
+to monitoring/alerts.local.yml (gitignored). It is concatenated after the
+bundled alerts.yml.
 EOF
       ;;
     journal)
@@ -194,7 +209,7 @@ journal — internal console reports (JSON). Not Docker logs.
   ./forgesre journal demo
 
 Modules include install, seed, inventory, discovery, snmp, incident, rca,
-notification, demo. UI: /journal
+jobs, notification, demo. UI: /journal
 EOF
       ;;
     demo)
@@ -213,6 +228,34 @@ demo-rca — filesystem RCA on the demo disk gauge. Read-only. Does not fill a d
   ./forgesre demo-rca
 EOF
       ;;
+    demo-reset)
+      cat <<'EOF'
+demo-reset — set demo CPU/disk gauges back to 12% / 35%.
+
+Use after ./forgesre demo so HighCPU does not stay firing forever.
+
+  ./forgesre demo-reset
+EOF
+      ;;
+    jobs)
+      cat <<'EOF'
+jobs — list background RCA jobs (pending / running / done / error).
+
+Alertmanager webhooks enqueue investigate; a worker thread runs them
+so the webhook does not wait on the LLM.
+
+  ./forgesre jobs
+EOF
+      ;;
+    secrets-check)
+      cat <<'EOF'
+secrets-check — verify SECRET_KEY and ALERTMANAGER_WEBHOOK_TOKEN are not shipped defaults.
+
+Core refuses to start with those defaults unless FORGESRE_DEV=1.
+
+  ./forgesre secrets-check
+EOF
+      ;;
     fetch-llm)
       cat <<'EOF'
 fetch-llm — download Qwen 14B GGUF (~9 GB) into $FORGESRE_DATA/models/ and start llama.cpp.
@@ -228,7 +271,11 @@ EOF
 backup — Postgres dump + config tarball under $FORGESRE_DATA/backups.
 
   ./forgesre backup
-  ./backup.sh
+  ./forgesre backup --no-secrets
+  ./backup.sh --no-secrets
+
+The tar is mode 600. Default includes secrets.env. --no-secrets omits it
+so the archive can sit on a less-trusted disk; keep secrets elsewhere.
 EOF
       ;;
     restore)
@@ -236,6 +283,45 @@ EOF
 restore — not automated. Unpack a backup and load SQL:
 
   docker compose exec -T postgres psql -U forgesre forgesre < forgesre.sql
+EOF
+      ;;
+    incidents)
+      cat <<'EOF'
+incidents — list recent incidents from the Core API.
+
+  ./forgesre incidents
+EOF
+      ;;
+    sd)
+      cat <<'EOF'
+sd — print Prometheus HTTP SD (Linux node_exporter) and SNMP HTTP SD.
+
+  ./forgesre sd
+
+Uses ALERTMANAGER_WEBHOOK_TOKEN. Empty SNMP [] is normal until a Network
+device with an IP exists. Linux hosts with scrape_address appear in the
+first list; they are never SNMP-scraped.
+EOF
+      ;;
+    version)
+      cat <<'EOF'
+version — print FORGESRE_VERSION from .env (0.6.0 after this release).
+
+  ./forgesre version
+EOF
+      ;;
+    tls)
+      cat <<'EOF'
+tls — optional HTTPS in front of Core. Not a Compose service.
+
+Example Caddyfile: tls/Caddyfile.example
+
+Then set FORGESRE_COOKIE_SECURE=1 (or system.cookie_secure: true in YAML)
+and recreate Core so the session cookie is Secure:
+
+  docker compose up -d --force-recreate core
+
+Lab default stays HTTP on the management VLAN.
 EOF
       ;;
     update)
@@ -325,7 +411,7 @@ cmd_snmp() {
   echo
   echo "Empty list [] is normal until you add type=Network device with an IP."
   echo "Community: SNMP_COMMUNITY in secrets/secrets.env (not printed here)."
-  echo "Firewall: UDP/161 from this host to the device. Discovery TCP/161 only classifies."
+  echo "Firewall: UDP/161 from this host to the device. Discovery classifies with an SNMP GET (UDP), not TCP/161."
   echo "Alerts: SnmpDeviceUnreachable (up{job=\"forgesre-snmp\"}==0 for 2m)."
 }
 
@@ -378,6 +464,50 @@ case "$cmd" in
     echo
     rm -f "$jar"
     ;;
+  demo-reset)
+    need_env
+    PORT="$(port_from_env)"
+    # shellcheck disable=SC1091
+    source secrets/secrets.env
+    jar="$(mktemp)"
+    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \
+      -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
+    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/api/v1/demo-reset"
+    echo
+    echo "Demo gauges reset to 12% CPU / 35% disk."
+    rm -f "$jar"
+    ;;
+  jobs)
+    need_env
+    PORT="$(port_from_env)"
+    # shellcheck disable=SC1091
+    source secrets/secrets.env
+    jar="$(mktemp)"
+    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \
+      -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
+    curl -fsS -c "$jar" -b "$jar" "http://127.0.0.1:${PORT}/api/v1/jobs"
+    echo
+    rm -f "$jar"
+    ;;
+  secrets-check)
+    need_env
+    # shellcheck disable=SC1091
+    source secrets/secrets.env
+    fail=0
+    if [[ "${SECRET_KEY:-}" == "forgesre-dev-secret-change-me" || -z "${SECRET_KEY:-}" ]]; then
+      echo "SECRET_KEY is the shipped default — Core will refuse to start without FORGESRE_DEV=1."
+      fail=1
+    else
+      echo "SECRET_KEY: set"
+    fi
+    if [[ "${ALERTMANAGER_WEBHOOK_TOKEN:-}" == "forgesre-dev-webhook-token" || "${ALERTMANAGER_WEBHOOK_TOKEN:-}" == "CHANGE-ME-RENDER-MONITORING" || -z "${ALERTMANAGER_WEBHOOK_TOKEN:-}" ]]; then
+      echo "ALERTMANAGER_WEBHOOK_TOKEN is a shipped placeholder — HTTP SD and doctor will be unsafe/broken."
+      fail=1
+    else
+      echo "ALERTMANAGER_WEBHOOK_TOKEN: set"
+    fi
+    exit "$fail"
+    ;;
   status)
     "${DC[@]}" ps
     ;;
@@ -409,6 +539,72 @@ case "$cmd" in
     ;;
   snmp)
     cmd_snmp
+    ;;
+  incidents)
+    need_env
+    python3 - "$(port_from_env)" <<'PY'
+import json, os, sys, tempfile, subprocess, pathlib
+
+port = sys.argv[1]
+root = pathlib.Path(".").resolve()
+env = {}
+for line in (root / "secrets/secrets.env").read_text().splitlines():
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    k, _, v = line.partition("=")
+    env[k] = v
+email = env.get("FORGESRE_ADMIN_EMAIL", "")
+password = env.get("FORGESRE_ADMIN_PASSWORD", "")
+jar = tempfile.NamedTemporaryFile(delete=False)
+jar.close()
+try:
+    subprocess.check_call(
+        [
+            "curl", "-fsS", "-c", jar.name, "-b", jar.name,
+            "-X", "POST", f"http://127.0.0.1:{port}/login",
+            "-d", f"email={email}&password={password}",
+        ],
+        stdout=subprocess.DEVNULL,
+    )
+    raw = subprocess.check_output(
+        ["curl", "-fsS", "-c", jar.name, "-b", jar.name, f"http://127.0.0.1:{port}/api/v1/incidents?limit=30"]
+    )
+finally:
+    os.unlink(jar.name)
+rows = json.loads(raw)
+print(f"{'NUMBER':<14} {'STATUS':<14} {'SEV':<10} TITLE")
+print("-" * 78)
+for item in rows:
+    title = str(item.get("title") or "")[:40]
+    print(f"{item.get('number',''):<14} {item.get('status',''):<14} {str(item.get('severity',''))[:10]:<10} {title}")
+print()
+print(f"{len(rows)} incident(s). RCA runs in the background (./forgesre jobs).")
+PY
+    ;;
+  sd)
+    need_env
+    PORT="$(port_from_env)"
+    # shellcheck disable=SC1091
+    source secrets/secrets.env
+    echo "=== Linux / node_exporter HTTP SD ==="
+    curl -sS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
+      "http://127.0.0.1:${PORT}/api/v1/sd/prometheus" || true
+    echo
+    echo
+    echo "=== SNMP HTTP SD ==="
+    curl -sS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
+      "http://127.0.0.1:${PORT}/api/v1/sd/snmp" || true
+    echo
+    ;;
+  version)
+    if [[ -f .env ]] && grep -q '^FORGESRE_VERSION=' .env; then
+      awk -F= '/^FORGESRE_VERSION=/ {print $2}' .env | tail -1 | tr -d '"'
+    else
+      echo "0.6.0"
+    fi
+    ;;
+  tls)
+    print_help_command tls
     ;;
   *)
     echo "Unknown command: $cmd"

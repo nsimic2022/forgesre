@@ -166,4 +166,39 @@ class Settings:
         return os.environ.get("NETBOX_API_TOKEN", "")
 
 
+    @property
+    def cookie_secure(self) -> bool:
+        raw = os.environ.get("FORGESRE_COOKIE_SECURE") or (self.yaml.get("system") or {}).get("cookie_secure")
+        if raw is None:
+            return False
+        return str(raw).lower() in {"1", "true", "yes", "on"}
+
+
+def _truthy_dev() -> bool:
+    return os.environ.get("FORGESRE_DEV", "").lower() in {"1", "true", "yes", "on"}
+
+
+UNSAFE_SECRET_KEYS = {"", "forgesre-dev-secret-change-me", "change-me"}
+UNSAFE_WEBHOOK_TOKENS = {"", "forgesre-dev-webhook-token", "CHANGE-ME-RENDER-MONITORING"}
+
+
+def assert_runtime_secrets() -> None:
+    """Refuse to start with shipped defaults unless FORGESRE_DEV=1 (unit tests / explicit lab)."""
+    if _truthy_dev():
+        return
+    key = os.environ.get("SECRET_KEY", "forgesre-dev-secret-change-me")
+    token = os.environ.get("ALERTMANAGER_WEBHOOK_TOKEN", "forgesre-dev-webhook-token")
+    problems = []
+    if key in UNSAFE_SECRET_KEYS:
+        problems.append("SECRET_KEY is the shipped default")
+    if token in UNSAFE_WEBHOOK_TOKENS:
+        problems.append("ALERTMANAGER_WEBHOOK_TOKEN is the shipped default")
+    if problems:
+        raise SystemExit(
+            "ForgeSRE refusing to start: "
+            + "; ".join(problems)
+            + ". Put real values in secrets/secrets.env or set FORGESRE_DEV=1 for a local lab."
+        )
+
+
 settings = Settings()

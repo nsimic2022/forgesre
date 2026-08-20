@@ -62,6 +62,15 @@ def login_required(user: User | None = Depends(get_user)) -> User:
     return user
 
 
+def require_page(*permissions: str):
+    def _inner(user: User = Depends(login_required)) -> User:
+        if permissions and not any(can(user, perm) for perm in permissions):
+            raise HTTPException(status_code=403, detail="forbidden")
+        return user
+
+    return _inner
+
+
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, user: User | None = Depends(get_user)):
     if user:
@@ -86,6 +95,7 @@ def login_submit(
         make_session_token(user.id),
         httponly=True,
         samesite="lax",
+        secure=settings.cookie_secure,
         max_age=60 * 60 * 12,
     )
     return response
@@ -102,22 +112,22 @@ def logout(request: Request, db: Session = Depends(get_db), user: User | None = 
 
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
-    assets = db.query(Asset).all()
-    incidents = db.query(Incident).all()
-    doctor = doctor_payload()
-    pending = db.query(DiscoveryCandidate).filter_by(status="new").count()
+    from sqlalchemy import func
+
+    pending = db.query(func.count(DiscoveryCandidate.id)).filter_by(status="new").scalar() or 0
     stats = {
-        "assets_total": len(assets),
-        "healthy": sum(a.status == "healthy" for a in assets),
-        "warning": sum(a.status == "warning" for a in assets),
-        "critical": sum(a.status == "critical" for a in assets),
-        "offline": sum(a.status == "offline" for a in assets),
-        "open": sum(i.status == "OPEN" for i in incidents),
-        "inc_critical": sum(i.severity.upper() == "CRITICAL" and i.status not in {"RESOLVED", "CLOSED"} for i in incidents),
-        "investigating": sum(i.status == "INVESTIGATING" for i in incidents),
-        "resolved": sum(i.status == "RESOLVED" for i in incidents),
+        "assets_total": db.query(func.count(Asset.id)).scalar() or 0,
+        "healthy": db.query(func.count(Asset.id)).filter_by(status="healthy").scalar() or 0,
+        "warning": db.query(func.count(Asset.id)).filter_by(status="warning").scalar() or 0,
+        "critical": db.query(func.count(Asset.id)).filter_by(status="critical").scalar() or 0,
+        "offline": db.query(func.count(Asset.id)).filter_by(status="offline").scalar() or 0,
+        "open": db.query(func.count(Incident.id)).filter_by(status="OPEN").scalar() or 0,
+        "inc_critical": db.query(func.count(Incident.id)).filter(Incident.severity == "CRITICAL", Incident.status.notin_(["RESOLVED", "CLOSED"])).scalar() or 0,
+        "investigating": db.query(func.count(Incident.id)).filter_by(status="INVESTIGATING").scalar() or 0,
+        "resolved": db.query(func.count(Incident.id)).filter_by(status="RESOLVED").scalar() or 0,
         "pending_discovery": pending,
     }
+    doctor = doctor_payload()
     recent = db.query(Incident).order_by(Incident.id.desc()).limit(8).all()
     journal_error = list_entries(db, status="error", limit=5)
     journal_recent = list_entries(db, limit=8)
@@ -175,7 +185,7 @@ def asset_create(
 
 
 @router.get("/discovery", response_class=HTMLResponse)
-def discovery_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
+def discovery_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("write_assets"))):
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
     pending = [row for row in rows if row.status == "new"]
     return render(
@@ -297,7 +307,7 @@ def asset_update(
 
 @router.get("/incidents", response_class=HTMLResponse)
 def incidents_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
-    rows = db.query(Incident).order_by(Incident.id.desc()).all()
+    rows = db.query(Incident).order_by(Incident.id.desc()).limit(200).all()
     return render(request, "incidents.html", user, incidents=rows)
 
 
@@ -342,6 +352,10 @@ def incident_status(
 
         item.ack_at = utcnow()
         item.ack_by = user.email
+    if item.status in {"RESOLVED", "CLOSED"} and item.asset and item.asset.asset_id == "forge-demo-01":
+        from app.metrics import reset_demo_gauges
+
+        reset_demo_gauges()
     audit(db, "incident.status", actor=user.email, object_type="incident", object_id=number, data={"status": item.status})
     db.commit()
     return RedirectResponse(f"/incidents/{number}", status_code=302)
@@ -363,7 +377,7 @@ def incident_investigate(
 
 
 @router.get("/ai/{number}", response_class=HTMLResponse)
-def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
+def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_ai"))):
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
         raise HTTPException(status_code=404)
@@ -381,7 +395,7 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
 
 
 @router.get("/playrules", response_class=HTMLResponse)
-def playrules_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
+def playrules_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play"))):
     rows = db.query(Playrule).order_by(Playrule.name).all()
     books = db.query(Playbook).order_by(Playbook.name).all()
     return render(request, "playrules.html", user, playrules=rows, playbooks=books)
@@ -400,12 +414,14 @@ def playrule_create(
 ):
     if not can(user, "write_play"):
         raise HTTPException(status_code=403)
+    policy = db.query(EscalationPolicy).filter_by(slug="default-warning").first()
     row = Playrule(
         name=name,
         enabled=True,
         severity=severity,
         condition={"metric": metric, "operator": operator, "value": value, "alertname": name},
         playbook_id=playbook_id or None,
+        escalation_policy_id=policy.id if policy else None,
     )
     db.add(row)
     audit(db, "playrule.create", actor=user.email, object_type="playrule", object_id=name)
@@ -427,7 +443,7 @@ def playrule_toggle(rule_id: int, db: Session = Depends(get_db), user: User = De
 
 
 @router.get("/playbooks", response_class=HTMLResponse)
-def playbooks_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
+def playbooks_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play"))):
     rows = db.query(Playbook).order_by(Playbook.name).all()
     return render(request, "playbooks.html", user, playbooks=rows)
 
@@ -455,7 +471,7 @@ def playbook_create(
 
 
 @router.get("/escalation", response_class=HTMLResponse)
-def escalation_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
+def escalation_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play"))):
     policies = db.query(EscalationPolicy).all()
     notes = db.query(Notification).order_by(Notification.id.desc()).limit(20).all()
     return render(request, "escalation.html", user, policies=policies, notifications=notes)
@@ -465,7 +481,7 @@ def escalation_page(request: Request, db: Session = Depends(get_db), user: User 
 def journal_page(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(login_required),
+    user: User = Depends(require_page("read_play")),
     module: str = "",
     status: str = "",
     q: str = "",

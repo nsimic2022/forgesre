@@ -39,4 +39,33 @@ groups:
           severity: warning
         annotations:
           summary: "Interface down on {{ $labels.asset }}"
-          description: "ifOperStatus is down while admin is up on {{ $labels.ifName }} / {{ $labels.instance }}."
+          description: "ifOperStatus is down while admin is up on {{ $labels.ifName }} (ifIndex {{ $labels.ifIndex }}) / {{ $labels.instance }}."
+
+  - name: forgesre-node
+    rules:
+      - alert: NodeExporterDown
+        expr: up{job="linux-standard"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "node_exporter down on {{ $labels.asset }}"
+          description: "Prometheus cannot scrape {{ $labels.instance }} (:9100)."
+
+      - alert: NodeFilesystemUsageHigh
+        expr: 100 - (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.*|overlay",job="linux-standard"} / node_filesystem_size_bytes * 100) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Filesystem usage high on {{ $labels.asset }}"
+          description: "Disk usage is {{ $value }}% on {{ $labels.instance }} {{ $labels.mountpoint }}."
+
+      - alert: NodeCPUHigh
+        expr: 100 * (1 - avg by (asset) (rate(node_cpu_seconds_total{mode="idle",job="linux-standard"}[5m]))) > 95
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU high on {{ $labels.asset }}"
+          description: "CPU usage is {{ $value }}% on {{ $labels.asset }}."

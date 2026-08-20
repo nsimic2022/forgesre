@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -11,8 +12,8 @@ from sqlalchemy.orm import Session
 from app.audit import audit
 from app.journal import MODULES, entry_as_dict, list_entries, module_counts, report
 from app.db import get_db
-from app.metrics import set_demo_cpu, set_demo_disk
-from app.models import Asset, DiscoveryCandidate, Evidence, Incident, Investigation, Playbook, Playrule, User
+from app.metrics import reset_demo_gauges, set_demo_cpu, set_demo_disk
+from app.models import Asset, DiscoveryCandidate, EscalationPolicy, Evidence, Incident, Investigation, Playbook, Playrule, User
 from app.security import CREATABLE_ROLES, can, hash_password, user_from_session, verify_password
 from app.inventory import (
     approve_candidate,
@@ -114,7 +115,7 @@ def list_journal(
     q: str | None = None,
     limit: int = 200,
     db: Session = Depends(get_db),
-    user: User = Depends(require("read_dashboard")),
+    user: User = Depends(require("read_play")),
 ) -> dict:
     rows = list_entries(db, module=module, status=status, q=q, limit=limit)
     return {
@@ -174,8 +175,15 @@ def get_asset(asset_id: str, db: Session = Depends(get_db), user: User = Depends
 
 
 @router.get("/incidents")
-def list_incidents(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> list[dict]:
-    rows = db.query(Incident).order_by(Incident.id.desc()).all()
+def list_incidents(
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_incidents")),
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict]:
+    limit = max(1, min(limit, 500))
+    offset = max(0, offset)
+    rows = db.query(Incident).order_by(Incident.id.desc()).offset(offset).limit(limit).all()
     return [_incident(item, include_evidence=can(user, "read_evidence")) for item in rows]
 
 
@@ -286,6 +294,10 @@ def create_playrule(
     user: User = Depends(require("write_play")),
 ) -> dict:
     row = Playrule(**body.model_dump())
+    if not row.escalation_policy_id:
+        policy = db.query(EscalationPolicy).filter_by(slug="default-warning").first()
+        if policy:
+            row.escalation_policy_id = policy.id
     db.add(row)
     audit(db, "playrule.create", actor=user.email, object_type="playrule", object_id=body.name)
     db.commit()
@@ -331,7 +343,7 @@ def snmp_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
 
 
 @router.get("/discovery/candidates")
-def list_candidates(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> list[dict]:
+def list_candidates(db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> list[dict]:
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
     return [_candidate(item) for item in rows]
 
@@ -508,8 +520,38 @@ def system_status(db: Session = Depends(get_db), user: User = Depends(require("r
 
 
 @router.get("/system/doctor")
-def doctor() -> dict:
+def doctor(request: Request, user: User | None = Depends(current_user)) -> dict:
+    auth = request.headers.get("authorization") or ""
+    token = auth.replace("Bearer ", "").strip()
+    if user is None and token != settings.webhook_token:
+        raise HTTPException(status_code=401, detail="authentication required")
     return doctor_payload()
+
+
+@router.get("/jobs")
+def list_jobs_api(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> list[dict]:
+    from app.jobs import list_jobs
+
+    return [
+        {
+            "id": row.id,
+            "kind": row.kind,
+            "status": row.status,
+            "object_id": row.object_id,
+            "error": row.error,
+            "attempts": row.attempts,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "finished_at": row.finished_at.isoformat() if row.finished_at else None,
+        }
+        for row in list_jobs(db)
+    ]
+
+
+@router.post("/demo-reset")
+def demo_reset(user: User = Depends(require("admin"))) -> dict:
+    del user
+    reset_demo_gauges()
+    return {"ok": True, "cpu": 12, "disk": 35}
 
 
 @router.post("/users")
@@ -532,7 +574,22 @@ def _ok(status: str) -> dict[str, str]:
     return {"status": status}
 
 
+_DOCTOR_TTL = 8.0
+_doctor_cache: dict[str, Any] = {"at": 0.0, "payload": None}
+
+
 def doctor_payload() -> dict[str, Any]:
+    now = time.monotonic()
+    cached = _doctor_cache.get("payload")
+    if cached is not None and now - float(_doctor_cache.get("at") or 0) < _DOCTOR_TTL:
+        return cached
+    payload = _doctor_payload_fresh()
+    _doctor_cache["at"] = now
+    _doctor_cache["payload"] = payload
+    return payload
+
+
+def _doctor_payload_fresh() -> dict[str, Any]:
     components = {
         "core": _ok("ok"),
         "postgres": _probe_sql(),

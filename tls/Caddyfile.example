@@ -1,0 +1,14 @@
+# Example reverse proxy in front of Core :8080 and Grafana :3000.
+# Do not enable until you have certificates. Lab default stays HTTP on the management VLAN.
+#
+#   caddy run --config tls/Caddyfile.example
+#
+# Then set FORGESRE_COOKIE_SECURE=1 and recreate Core so the session cookie is Secure.
+
+forgesre.example.local {
+	reverse_proxy 127.0.0.1:8080
+}
+
+grafana.forgesre.example.local {
+	reverse_proxy 127.0.0.1:3000
+}

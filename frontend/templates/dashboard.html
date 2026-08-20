@@ -17,14 +17,14 @@
   <p class="muted">Ask an admin to click <strong>Run demo workflow</strong>, or from the VM run <code>./forgesre demo</code>.</p>
   {% endif %}
 </section>
-{% if stats.pending_discovery %}
+{% if stats.pending_discovery and can('write_assets') %}
 <div class="banner">
   <strong>NEW DEVICE DETECTED</strong>
   {{ stats.pending_discovery }} discovery candidate{% if stats.pending_discovery != 1 %}s{% endif %} waiting.
   <a href="/discovery">Review on Discovery</a>
 </div>
 {% endif %}
-{% if journal_error %}
+{% if journal_error and can('read_play') %}
 <div class="banner">
   <strong>CONSOLE</strong>
   {{ journal_error|length }} recent error report{% if journal_error|length != 1 %}s{% endif %}.
@@ -59,8 +59,9 @@
     </div>
     {% endfor %}
   </div>
-  <p class="muted">Overall: <strong>{{ doctor.overall }}</strong> · <a href="/journal">Console</a></p>
+  <p class="muted">Overall: <strong>{{ doctor.overall }}</strong>{% if can('read_play') %} · <a href="/journal">Console</a>{% endif %}</p>
 </section>
+{% if can('read_play') %}
 <section>
   <h2>Recent console reports</h2>
   <table class="console">
@@ -79,6 +80,7 @@
   </table>
   <p class="muted"><a href="/journal">Open full Console</a></p>
 </section>
+{% endif %}
 <section>
   <h2>Recent incidents</h2>
   <table>

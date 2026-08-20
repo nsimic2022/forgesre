@@ -17,7 +17,7 @@ from app.inventory import run_scan, seed_demo_candidate, sync_netbox
 from app.metrics import metrics_response
 from app.migrate import migrate
 from app.seed import seed
-from app.settings import settings
+from app.settings import assert_runtime_secrets, settings
 from app.web import NotAuthenticated, router as web_router
 
 log = logging.getLogger("forgesre")
@@ -60,6 +60,20 @@ def _discovery_loop(stop: threading.Event) -> None:
             db.close()
 
 
+def _jobs_loop(stop: threading.Event) -> None:
+    from app.jobs import run_pending_jobs
+
+    while not stop.wait(2):
+        db = SessionLocal()
+        try:
+            run_pending_jobs(db)
+        except Exception as exc:
+            log.exception("jobs loop failed")
+            report(db, "rca", "jobs", "error", summary="Job worker failed", detail=str(exc))
+        finally:
+            db.close()
+
+
 def _escalation_loop(stop: threading.Event) -> None:
     from app.services import process_escalations
 
@@ -75,8 +89,9 @@ def _escalation_loop(stop: threading.Event) -> None:
 
 
 def create_app() -> FastAPI:
+    assert_runtime_secrets()
     configure_logging()
-    app = FastAPI(title="ForgeSRE", version="0.5.0")
+    app = FastAPI(title="ForgeSRE", version="0.6.0")
     static_dir = settings.frontend_dir / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -126,6 +141,7 @@ def create_app() -> FastAPI:
             db.close()
         log.info("ForgeSRE core started timezone=%s ai=%s", settings.timezone, settings.ai_enabled)
         threading.Thread(target=_escalation_loop, args=(stop,), daemon=True).start()
+        threading.Thread(target=_jobs_loop, args=(stop,), daemon=True).start()
         threading.Thread(target=_discovery_loop, args=(stop,), daemon=True).start()
         app.state.escalation_stop = stop
 

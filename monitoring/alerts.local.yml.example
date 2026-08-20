@@ -1,0 +1,19 @@
+# Optional extra Prometheus rules for this site.
+# Copy to alerts.local.yml (that filename is gitignored) then:
+#
+#   ./forgesre render-monitoring
+#   curl -fsS -X POST http://127.0.0.1:9090/-/reload
+#
+# Contents are concatenated AFTER the bundled monitoring/alerts.yml
+# (demo gauges, SNMP, and node_exporter rules).
+#
+# groups:
+#   - name: local
+#     rules:
+#       - alert: ExampleLocal
+#         expr: up{asset="app-01"} == 0
+#         for: 5m
+#         labels:
+#           severity: warning
+#         annotations:
+#           summary: "Example local rule on {{ $labels.asset }}"

@@ -184,8 +184,15 @@ def candidate_causes(context: RCAContext) -> list[Hypothesis]:
     cpu_alert = any(word in alertname or word in title for word in ("cpu", "load"))
     diskish = disk_alert or (disk is not None and disk > 80 and not cpu_alert)
     cpuish = cpu_alert or (cpu is not None and cpu > 80 and not disk_alert)
+    snmpish = any(word in alertname or word in title for word in ("snmp", "interface", "network", "unreachable"))
 
-    if diskish:
+    if snmpish and not diskish and not cpuish:
+        catalog = [
+            ("community-acl", "SNMP community, ACL, or UDP/161 from the ForgeSRE host may be blocking the walk.", ("community", "acl", "udp", "161", "snmp")),
+            ("device-down", "The network device may be down or isolated from the management network.", ("down", "unreachable", "timeout")),
+            ("interface", "An interface may be admin-up / oper-down.", ("interface", "ifoper", "ifadmin")),
+        ]
+    elif diskish:
         catalog = [
             ("log-growth", "Rapid log growth may be consuming disk space.", ("log", "journal", "syslog", "grow")),
             ("database-growth", "Database growth may be consuming disk space.", ("postgres", "mysql", "database", "wal")),

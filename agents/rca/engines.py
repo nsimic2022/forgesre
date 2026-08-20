@@ -146,6 +146,8 @@ def _summary(ctx: RCAContext, hostname: str) -> str:
                     return f"Disk capacity is under pressure on {hostname}."
             except (TypeError, ValueError):
                 pass
+    if "snmp" in blob or "unreachable" in blob or "interface" in blob:
+        return f"SNMP or network reachability failed on {hostname}."
     if "cpu" in blob:
         return f"CPU usage increased rapidly on {hostname}."
     if "file" in blob or "disk" in blob:
@@ -161,6 +163,9 @@ def _action(ctx: RCAContext, top) -> str:
     if "disk" in blob or "file" in blob:
         suffix = f" Follow playbook {playbook}." if playbook else ""
         return "Engineer should verify disk usage, growth, and the owning team." + suffix
+    if "snmp" in blob or "network" in blob or "unreachable" in blob:
+        suffix = f" Follow playbook {playbook}." if playbook else ""
+        return "Engineer should check SNMP community, ACL, and UDP/161 from the ForgeSRE host." + suffix
     if "cpu" in blob:
         return "Engineer should inspect top CPU processes."
     if playbook:

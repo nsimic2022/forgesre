@@ -1,6 +1,6 @@
 global:
-  scrape_interval: 5s
-  evaluation_interval: 5s
+  scrape_interval: 15s
+  evaluation_interval: 15s
 
 rule_files:
   - /etc/prometheus/alerts.yml
@@ -12,6 +12,7 @@ alerting:
 
 scrape_configs:
   - job_name: forgesre-core
+    scrape_interval: 5s
     metrics_path: /metrics
     static_configs:
       - targets: ["127.0.0.1:__CORE_PORT__"]
@@ -42,6 +43,10 @@ scrape_configs:
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
+      - source_labels: [snmp_module]
+        target_label: __param_module
+      - source_labels: [snmp_auth]
+        target_label: __param_auth
       - source_labels: [__param_target]
         target_label: instance
       - target_label: __address__

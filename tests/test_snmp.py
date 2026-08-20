@@ -130,7 +130,7 @@ def test_asset_page_and_api_mark_snmp_target():
     assert data["snmp"] is True
     demo = client.get("/api/v1/assets/forge-demo-01").json()
     assert demo["snmp"] is False
-    doctor = client.get("/api/v1/system/doctor").json()
+    doctor = client.get("/api/v1/system/doctor", headers={"Authorization": "Bearer forgesre-dev-webhook-token"}).json()
     assert "snmp" in doctor["components"]
     db.close()
 
@@ -144,6 +144,11 @@ def test_cli_help_documents_snmp_and_assets():
     assert "snmp" in overview
     assert "render-monitoring" in overview
     assert "assets" in overview
+    assert "jobs" in overview
+    assert "demo-reset" in overview
+    assert "secrets-check" in overview
+    assert "incidents" in overview
+    assert "HTTP SD" in overview
     snmp = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "snmp"], text=True)
     assert "UDP/161" in snmp
     assert "SNMP_COMMUNITY" in snmp
@@ -151,3 +156,7 @@ def test_cli_help_documents_snmp_and_assets():
     assert "install.sh" in render
     assets = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "assets"], text=True)
     assert "Network device" in assets
+    backup = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "backup"], text=True)
+    assert "--no-secrets" in backup
+    version = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "version"], text=True)
+    assert "0.6" in version

@@ -10,6 +10,8 @@ from rca.types import EvidenceItem, normalize_log, normalize_metric, utc_now
 MetricFetcher = Callable[[str], dict[str, Any]]
 LogFetcher = Callable[[str, datetime, datetime], dict[str, Any]]
 
+DEMO_ASSET = "forge-demo-01"
+
 DEFAULT_QUERIES = {
     "cpu_percent": ("forgesre_demo_cpu_percent", "percent"),
     "disk_percent": ("forgesre_demo_disk_percent", "percent"),
@@ -17,6 +19,49 @@ DEFAULT_QUERIES = {
     "memory_bytes": ("process_resident_memory_bytes", "bytes"),
     "up": ("forgesre_up", ""),
 }
+
+
+def _escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def promql_queries_for(asset: dict[str, Any] | None, alert: dict[str, Any] | None = None) -> dict[str, tuple[str, str]]:
+    """PromQL for this asset. Demo gauges only for forge-demo-01."""
+    asset = asset or {}
+    alert = alert or {}
+    asset_id = str(asset.get("asset_id") or "")
+    kind = str(asset.get("type") or "").lower()
+    profile = str(asset.get("monitoring_profile") or "").lower()
+    alertname = str(alert.get("alertname") or "").lower()
+    if asset_id == DEMO_ASSET:
+        return dict(DEFAULT_QUERIES)
+    if not asset_id:
+        return {"up": ("up", "")}
+    matcher = f'asset="{_escape(asset_id)}"'
+    snmpish = "network" in kind or "switch" in kind or "router" in kind or "snmp" in alertname or "network-switch" in profile
+    if snmpish:
+        return {
+            "up": (f'up{{job="forgesre-snmp",{matcher}}}', ""),
+        }
+    return {
+        "cpu_percent": (
+            f'100 * (1 - avg(rate(node_cpu_seconds_total{{mode="idle",{matcher}}}[5m])))',
+            "percent",
+        ),
+        "disk_percent": (
+            f'100 * max(1 - (node_filesystem_avail_bytes{{fstype!~"tmpfs|fuse.*|overlay",{matcher}}} '
+            f'/ node_filesystem_size_bytes{{fstype!~"tmpfs|fuse.*|overlay",{matcher}}}))',
+            "percent",
+        ),
+        "up": (f'up{{{matcher}}}', ""),
+    }
+
+
+def loki_query_for(asset: dict[str, Any] | None) -> str:
+    asset_id = str((asset or {}).get("asset_id") or "")
+    if not asset_id or asset_id == DEMO_ASSET:
+        return '{job="forgesre"}'
+    return '{asset="%s"}' % _escape(asset_id)
 
 
 def collect_evidence_set(
@@ -40,6 +85,8 @@ def collect_evidence_set(
     items: list[EvidenceItem] = []
     limitations: list[str] = []
     seq = 1
+    queries = promql_queries_for(asset, alert)
+    loki_query = loki_query_for(asset)
 
     def add(kind: str, source: str, content: Any, query: str = "", confidence: float = 1.0, extra: dict[str, Any] | None = None) -> None:
         nonlocal seq
@@ -75,7 +122,7 @@ def collect_evidence_set(
         limitations.append("Metrics unavailable.")
         add("METRIC", "prometheus", {"error": "no fetcher"}, extra={"unavailable": True}, confidence=0.2)
     else:
-        for name, (expr, unit) in DEFAULT_QUERIES.items():
+        for name, (expr, unit) in queries.items():
             result = metric_fetcher(expr)
             if result.get("error"):
                 limitations.append("Metrics unavailable.")
@@ -96,7 +143,6 @@ def collect_evidence_set(
                 extra={"window_minutes": window_minutes, "start": started.isoformat()},
             )
 
-    loki_query = '{job="forgesre"}'
     if log_fetcher is None:
         limitations.append("Logs unavailable.")
         add("LOG", "loki", {"error": "no fetcher"}, query=loki_query, extra={"unavailable": True}, confidence=0.2)

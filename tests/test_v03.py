@@ -139,6 +139,10 @@ def test_audit_and_api_investigation():
     created = ingest_alertmanager(db, payload)
     assert created
     incident = created[0]
+    from app.jobs import run_pending_jobs
+
+    run_pending_jobs(db)
+    db.refresh(incident)
     assert incident.playbook is not None
     assert incident.investigations
     latest = incident.investigations[-1]

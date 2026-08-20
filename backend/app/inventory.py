@@ -80,6 +80,7 @@ def sd_snmp_targets(db: Session) -> list[dict]:
                     "monitoring_profile": asset.monitoring_profile or "network-switch",
                     "source": asset.source or "manual",
                     "snmp_module": settings.snmp_module,
+                    "snmp_auth": "public_v2",
                 },
             }
         )
@@ -336,8 +337,9 @@ def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset
     asset = db.query(Asset).filter((Asset.asset_id == slug) | (Asset.ip == row.ip)).first()
     if asset is None:
         role = row.proposed_role or ""
+        ports = {int(p) for p in (row.open_ports or []) if str(p).isdigit() or isinstance(p, int)}
         if "Linux" in role:
-            atype, profile, scrape = "Linux Server", "linux-standard", f"{row.ip}:9100"
+            atype, profile, scrape = "Linux Server", "linux-standard", (f"{row.ip}:9100" if 9100 in ports else "")
         elif "network" in role.lower():
             atype, profile, scrape = "Network device", "network-switch", ""
         else:

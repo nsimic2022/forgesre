@@ -178,7 +178,7 @@ wizard() {
     1) ENABLE_AI="yes" ;;
     2) ENABLE_AI="no" ;;
   esac
-  explain "Discovery" "TCP probe of CIDRs. New hosts wait for Approve/Ignore. Not nmap." "no" "Inventory stays manual plus optional NetBox."
+  explain "Discovery" "TCP probe of 22/80/443/9100 plus SNMP GET on UDP/161. New hosts wait for Approve/Ignore. Not nmap." "no" "Inventory stays manual plus optional NetBox."
   read -r -p "Enable discovery? [Y/n]: " ans || true
   [[ "${ans:-Y}" =~ ^[Nn] ]] && ENABLE_DISCOVERY="no"
   if [[ "$ENABLE_DISCOVERY" == "yes" ]]; then
@@ -196,10 +196,14 @@ wizard() {
 }
 
 write_files() {
-  mkdir -p "$DATA_DIR"/{prometheus,alertmanager,loki,grafana,logs,alloy,models,backups,generated} secrets config
+  mkdir -p "$DATA_DIR"/{postgres,prometheus,alertmanager,loki,grafana,logs,alloy,models,backups,generated} secrets config
   touch "$DATA_DIR/logs/forgesre.log"
   chmod 700 secrets || true
-  chmod a+rwX "$DATA_DIR" "$DATA_DIR"/* 2>/dev/null || true
+  chmod 750 "$DATA_DIR" 2>/dev/null || true
+  chmod 700 "$DATA_DIR/backups" 2>/dev/null || true
+  chmod 750 "$DATA_DIR/logs" 2>/dev/null || true
+  chmod 770 "$DATA_DIR/postgres" "$DATA_DIR/prometheus" "$DATA_DIR/grafana" "$DATA_DIR/loki" "$DATA_DIR/alloy" 2>/dev/null || true
+  sudo chown 70:70 "$DATA_DIR/postgres" 2>/dev/null || true
   local pg_pass admin_pass gf_pass webhook secret
   pg_pass="$(openssl rand -hex 12)"
   admin_pass="$(openssl rand -hex 8)"
@@ -261,7 +265,7 @@ EOF
   fi
 
   cat > "$ROOT/.env" <<EOF
-FORGESRE_VERSION=0.5.0
+FORGESRE_VERSION=0.6.0
 FORGESRE_DOMAIN=forgesre.local
 FORGESRE_DATA=${DATA_DIR}
 FORGESRE_TIMEZONE=${TIMEZONE}
@@ -274,6 +278,7 @@ POSTGRES_PASSWORD=${pg_pass}
 GRAFANA_ADMIN_PASSWORD=${gf_pass}
 ALERTMANAGER_CONFIG=${DATA_DIR}/generated/alertmanager.yml
 PROMETHEUS_CONFIG=${DATA_DIR}/generated/prometheus.yml
+PROMETHEUS_ALERTS=${DATA_DIR}/generated/alerts.yml
 SNMP_EXPORTER_CONFIG=${DATA_DIR}/generated/snmp.yml
 EOF
 
@@ -287,6 +292,7 @@ system:
   mode: $([[ $OFFLINE -eq 1 ]] && echo offline || echo online)
   timezone: ${TIMEZONE}
   log_level: info
+  cookie_secure: false
 inventory:
   provider: $([[ $netbox_enabled == true ]] && echo netbox || echo local)
   netbox:
@@ -351,7 +357,7 @@ EOF
   cat > "$ROOT/installation-report.md" <<EOF
 # ForgeSRE installation report
 
-- Version: 0.5.0
+- Version: 0.6.0
 - Profile: ${PROFILE}
 - Timezone: ${TIMEZONE}
 - Data: ${DATA_DIR}

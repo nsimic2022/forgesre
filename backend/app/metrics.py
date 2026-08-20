@@ -39,6 +39,11 @@ def set_demo_disk(value: float) -> None:
     demo_disk.set(value)
 
 
+def reset_demo_gauges() -> None:
+    demo_cpu.set(12)
+    demo_disk.set(35)
+
+
 def refresh_runtime_metrics() -> None:
     try:
         usage = shutil.disk_usage("/")

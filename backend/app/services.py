@@ -5,12 +5,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.journal import report
-from app.metrics import set_demo_cpu, set_demo_disk
+from app.metrics import reset_demo_gauges, set_demo_cpu, set_demo_disk
 from app.models import (
     Asset,
     Evidence,
@@ -33,8 +32,17 @@ def utcnow() -> datetime:
 
 
 def next_incident_number(db: Session) -> str:
-    current = db.query(func.count(Incident.id)).scalar() or 0
-    return f"INC-{current + 1:06d}"
+    highest = 0
+    for (number,) in db.query(Incident.number).all():
+        text = str(number or "")
+        if not text.startswith("INC-"):
+            continue
+        tail = text.split("-", 1)[-1]
+        try:
+            highest = max(highest, int(tail))
+        except ValueError:
+            continue
+    return f"INC-{highest + 1:06d}"
 
 
 def match_playrule(db: Session, alertname: str, labels: dict[str, Any]) -> Playrule | None:
@@ -90,11 +98,14 @@ def refresh_asset_status(db: Session, asset: Asset | None) -> None:
 
 
 def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
+    from app.jobs import enqueue
+
     created: list[Incident] = []
-    status = (payload.get("status") or "firing").lower()
+    group_status = (payload.get("status") or "firing").lower()
     for alert in payload.get("alerts") or []:
         labels = alert.get("labels") or {}
         annotations = alert.get("annotations") or {}
+        alert_status = (alert.get("status") or group_status).lower()
         alertname = str(labels.get("alertname") or "Alert")
         asset_name = str(labels.get("asset") or labels.get("instance") or DEMO_ASSET)
         fingerprint = f"{alertname}:{asset_name}"
@@ -107,12 +118,15 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
         asset = (
             db.query(Asset).filter((Asset.asset_id == asset_name) | (Asset.hostname == asset_name)).first()
         )
-        if status == "resolved" and incident:
-            incident.status = "RESOLVED"
-            incident.ended_at = utcnow()
-            append_timeline(incident, "alert", "ALERT", f"{alertname} resolved")
-            db.add(IncidentEvent(incident_id=incident.id, kind="resolved", data=labels))
-            refresh_asset_status(db, asset)
+        if alert_status == "resolved":
+            if incident:
+                incident.status = "RESOLVED"
+                incident.ended_at = utcnow()
+                append_timeline(incident, "alert", "ALERT", f"{alertname} resolved")
+                db.add(IncidentEvent(incident_id=incident.id, kind="resolved", data=labels))
+                refresh_asset_status(db, asset)
+                if asset and asset.asset_id == DEMO_ASSET:
+                    reset_demo_gauges()
             continue
         if incident is None:
             rule = match_playrule(db, alertname, labels)
@@ -162,20 +176,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
             object_type="incident",
             object_id=incident.number,
         )
-        try:
-            run_investigation(db, incident)
-        except Exception as exc:
-            log.exception("investigation failed for %s", incident.number)
-            report(
-                db,
-                "rca",
-                "investigate",
-                "error",
-                summary=f"Investigation failed for {incident.number}",
-                detail=str(exc),
-                object_type="incident",
-                object_id=incident.number,
-            )
+        enqueue(db, "investigate", incident.number, payload={"actor": "system"})
     return created
 
 
@@ -184,8 +185,13 @@ def collect_evidence(db: Session, incident: Incident, alert: dict[str, Any] | No
     labels = alert.get("labels") if isinstance(alert, dict) else {}
     if not labels and isinstance(alert, dict):
         labels = alert
-    metrics = query_prometheus()
-    logs = query_loki()
+    metrics = query_prometheus(incident.asset)
+    from rca.collector import loki_query_for
+
+    asset_dict = {}
+    if incident.asset:
+        asset_dict = {"asset_id": incident.asset.asset_id, "type": incident.asset.type}
+    logs = query_loki(query=loki_query_for(asset_dict))
     history_rows = (
         db.query(Incident)
         .filter(Incident.asset_id == incident.asset_id, Incident.id != incident.id)
@@ -335,14 +341,20 @@ def overlapping_maintenance(db: Session, asset_ref: str, at: datetime) -> list[d
     ]
 
 
-def query_prometheus() -> dict[str, Any]:
-    queries = {
-        "cpu_percent": "forgesre_demo_cpu_percent",
-        "disk_percent": "forgesre_demo_disk_percent",
-        "disk_volume_percent": "forgesre_disk_used_percent",
-        "up": "forgesre_up",
-    }
-    out: dict[str, Any] = {}
+def query_prometheus(asset: Asset | None = None) -> dict[str, Any]:
+    from rca.collector import promql_queries_for
+
+    asset_dict: dict[str, Any] = {}
+    if asset:
+        asset_dict = {
+            "asset_id": asset.asset_id,
+            "type": asset.type,
+            "monitoring_profile": asset.monitoring_profile,
+        }
+    demo = bool(asset and asset.asset_id == DEMO_ASSET)
+    packed = promql_queries_for(asset_dict)
+    queries = {key: expr for key, (expr, _unit) in packed.items()}
+    out: dict[str, Any] = {"queries": dict(queries)}
     try:
         for key, expr in queries.items():
             sample = query_prometheus_expr(expr)
@@ -351,16 +363,16 @@ def query_prometheus() -> dict[str, Any]:
                 break
             if "value" in sample and sample["value"] is not None:
                 out[key] = sample["value"]
-            out.setdefault("queries", {})[key] = expr
     except Exception as exc:
         out["error"] = str(exc)
-    from app.metrics import demo_metric_values
+    if demo:
+        from app.metrics import demo_metric_values
 
-    live = demo_metric_values()
-    out["cpu_percent"] = live["forgesre_demo_cpu_percent"]
-    out["disk_percent"] = live["forgesre_demo_disk_percent"]
-    out.setdefault("queries", {})["cpu_percent"] = "forgesre_demo_cpu_percent"
-    out.setdefault("queries", {})["disk_percent"] = "forgesre_demo_disk_percent"
+        live = demo_metric_values()
+        out["cpu_percent"] = live["forgesre_demo_cpu_percent"]
+        out["disk_percent"] = live["forgesre_demo_disk_percent"]
+        out.setdefault("queries", {})["cpu_percent"] = "forgesre_demo_cpu_percent"
+        out.setdefault("queries", {})["disk_percent"] = "forgesre_demo_disk_percent"
     return out
 
 
@@ -686,11 +698,31 @@ def process_escalations(db: Session) -> None:
         if started.tzinfo is None:
             started = started.replace(tzinfo=timezone.utc)
         elapsed = (now - started).total_seconds() / 60
-        ensure_notification(db, incident, "immediate")
-        if elapsed >= 15:
-            ensure_notification(db, incident, "15m")
-        if elapsed >= 30:
-            ensure_notification(db, incident, "30m")
+        for step in escalation_steps(incident):
+            if elapsed >= float(step["after_minutes"]):
+                ensure_notification(db, incident, step["step_key"], target=step["target"])
+
+
+def escalation_steps(incident: Incident) -> list[dict[str, Any]]:
+    policy = incident.playrule.escalation_policy if incident.playrule else None
+    raw = list(policy.steps) if policy and policy.steps else [
+        {"after_minutes": 0, "target": "team", "channel": "email"},
+        {"after_minutes": 15, "target": "team-lead", "channel": "email"},
+        {"after_minutes": 30, "target": "engineer", "channel": "email"},
+    ]
+    steps: list[dict[str, Any]] = []
+    for index, step in enumerate(raw):
+        after = int(step.get("after_minutes") or 0)
+        key = str(step.get("step_key") or ("immediate" if after == 0 and index == 0 else f"{after}m"))
+        steps.append(
+            {
+                "after_minutes": after,
+                "target": str(step.get("target") or "team"),
+                "channel": str(step.get("channel") or "email"),
+                "step_key": key,
+            }
+        )
+    return steps
 
 
 def close_open_incidents(db: Session, fingerprint: str) -> None:

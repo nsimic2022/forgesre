@@ -24,12 +24,19 @@ else
   FAIL=1
 fi
 
-if ! curl -fsS "http://127.0.0.1:${PORT}/api/v1/system/doctor" >/tmp/forgesre-doctor.json 2>/dev/null; then
+TOKEN=""
+if [[ -f secrets/secrets.env ]]; then
+  # shellcheck disable=SC1091
+  source secrets/secrets.env
+  TOKEN="${ALERTMANAGER_WEBHOOK_TOKEN:-}"
+fi
+
+if ! curl -fsS -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:${PORT}/api/v1/system/doctor" >/tmp/forgesre-doctor.json 2>/dev/null; then
   echo
   echo "Could not fetch /api/v1/system/doctor"
-  echo "Why: Core is down or the port is wrong."
+  echo "Why: Core is down, the port is wrong, or the webhook token is missing."
   echo "Test: curl -v http://127.0.0.1:${PORT}/api/v1/health"
-  echo "Fix: ./install.sh   or   docker compose logs core"
+  echo "Fix: docker compose logs core   and   ./forgesre secrets-check"
   exit 1
 fi
 

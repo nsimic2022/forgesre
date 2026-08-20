@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 os.environ["DATABASE_URL"] = f"sqlite:///{ROOT / 'data' / 'test.db'}"
+os.environ["FORGESRE_DEV"] = "1"
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["FORGESRE_ADMIN_EMAIL"] = "admin@forgesre.local"
 os.environ["FORGESRE_ADMIN_PASSWORD"] = "testpass"

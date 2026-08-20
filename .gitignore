@@ -23,3 +23,4 @@ backend/.venv/
 *.egg-info/
 .coverage
 htmlcov/
+monitoring/alerts.local.yml

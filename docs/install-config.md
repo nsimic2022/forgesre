@@ -126,7 +126,7 @@ Useful flags:
 | `--port N` | Core UI/API port (default `8080`) |
 | `--enable-ai yes\|no` | `yes` downloads the GGUF (same as full-ai). ForgeRCA still works without it |
 | `--enable-discovery yes\|no` | Default yes |
-| `--discovery-cidrs 10.20.30.0/24,10.10.0.0/24` | TCP probe, max 256 hosts, skip loopback |
+| `--discovery-cidrs 10.20.30.0/24,10.10.0.0/24` | TCP 22/80/443/9100 + SNMP GET UDP/161, max 256 hosts, skip loopback |
 | `--netbox-url URL` | External NetBox only; token goes in secrets |
 | `--offline` | Do not pull images (images must already exist) |
 
@@ -217,6 +217,7 @@ system:
   mode: online          # online | offline
   timezone: Europe/Belgrade
   log_level: info
+  cookie_secure: false  # true when Core is behind HTTPS (or FORGESRE_COOKIE_SECURE=1)
 
 inventory:
   provider: local       # local | netbox
@@ -272,11 +273,13 @@ notifications:
 
 Notes:
 
-- **Discovery** is a TCP probe (22/80/443/161/9100), not nmap. New hosts wait on `/discovery` for Approve / Ignore unless `mode: automatic` (still audited). SNMP polling of network devices is a separate UDP/161 walk by snmp_exporter after Approve.
+- **Discovery** probes TCP **22 / 80 / 443 / 9100** and an SNMPv2c GET on **UDP/161**. It does not use TCP/161 (that is not SNMP). New hosts wait on `/discovery` for Approve / Ignore unless `mode: automatic` (still audited). Approve assigns `ip:9100` only if 9100 was open. SNMP polling of network devices after Approve is a separate UDP/161 walk by snmp_exporter.
 - **NetBox** is read-sync only. Put the token in `NETBOX_API_TOKEN`, never in YAML.
-- **RCA** works with `ai.enabled: false` (builtin analyst). Set `ai.enabled: true` only if you have a local OpenAI-compatible endpoint or a GGUF.
+- **RCA** works with `ai.enabled: false` (builtin analyst). Set `ai.enabled: true` only if you have a local OpenAI-compatible endpoint or a GGUF. Demo gauges are used only for `forge-demo-01`.
+- **Secrets:** Core **will not start** if `SECRET_KEY` or `ALERTMANAGER_WEBHOOK_TOKEN` is still a shipped default. Set `FORGESRE_DEV=1` only for unit tests / an explicit throwaway lab.
 - Changing `cidrs` does not require a reinstall. Restart Core.
 - Changing `SNMP_COMMUNITY` requires `./forgesre render-monitoring` (rewrites generated `snmp.yml`). Do not re-run `./install.sh`.
+- Optional HTTPS: `tls/Caddyfile.example`, then `cookie_secure: true` or `FORGESRE_COOKIE_SECURE=1` and recreate Core. Caddy is **not** a default Compose service.
 
 ---
 
@@ -285,7 +288,7 @@ Notes:
 Written by `./install.sh`. Typical keys:
 
 ```bash
-FORGESRE_VERSION=0.5.0
+FORGESRE_VERSION=0.6.0
 FORGESRE_DATA=./data
 FORGESRE_TIMEZONE=Europe/Belgrade
 FORGESRE_HTTP_PORT=8080
@@ -296,12 +299,14 @@ POSTGRES_PASSWORD=...      # must match secrets
 GRAFANA_ADMIN_PASSWORD=...
 ALERTMANAGER_CONFIG=./data/generated/alertmanager.yml
 PROMETHEUS_CONFIG=./data/generated/prometheus.yml
+PROMETHEUS_ALERTS=./data/generated/alerts.yml
 SNMP_EXPORTER_CONFIG=./data/generated/snmp.yml
+# FORGESRE_COOKIE_SECURE=1   # only when Core is served over HTTPS
 ```
 
 Change the UI port here **and** regenerate Prometheus/Alertmanager/snmp with the same port (`./forgesre render-monitoring`), then recreate Core and reload Prometheus.
 
-On an existing VM after `git pull`, run `./forgesre render-monitoring && docker compose up -d` so the `forgesre-snmp` job and snmp-exporter container appear. Do not re-run `./install.sh`.
+On an existing VM after `git pull`, run `./forgesre update` (or `./forgesre render-monitoring && docker compose up -d`) so generated Prometheus/Alertmanager/snmp/alerts and the snmp-exporter container match this checkout. Do not re-run `./install.sh`.
 
 ---
 
@@ -322,6 +327,12 @@ SNMP_COMMUNITY=public     # read-only community snmp_exporter uses on UDP/161
 
 Directory `secrets/` should be `700`, file `600`. Never commit it.
 
+Install writes random `SECRET_KEY` and `ALERTMANAGER_WEBHOOK_TOKEN`. Core **refuses to start** if those are still the values shipped in the repo (`forgesre-dev-secret-change-me`, `forgesre-dev-webhook-token`, `CHANGE-ME-RENDER-MONITORING`) unless `FORGESRE_DEV=1`.
+
+```bash
+./forgesre secrets-check
+```
+
 ---
 
 ## 11. Day-2 commands
@@ -331,29 +342,36 @@ Directory `secrets/` should be `700`, file `600`. Never commit it.
 ```bash
 ./forgesre help              # CLI overview
 ./forgesre help snmp         # SNMP exporter + SD
-./forgesre doctor            # health (includes snmp)
+./forgesre help tls          # optional HTTPS / Secure cookies
+./forgesre doctor            # health (includes snmp; uses Bearer webhook token)
 ./forgesre status            # compose ps
 ./forgesre logs core
 ./forgesre logs snmp-exporter
 ./forgesre assets            # inventory
 ./forgesre snmp              # exporter + SNMP HTTP SD
-./forgesre render-monitoring # rewrite generated prometheus/alertmanager/snmp.yml
+./forgesre sd                # Linux + SNMP HTTP SD JSON
+./forgesre incidents         # recent INC-… rows
+./forgesre jobs              # background RCA queue
+./forgesre render-monitoring # rewrite generated prometheus/alertmanager/snmp/alerts.yml
 ./forgesre demo              # HighCPU + owner notification + similar-incident history
 ./forgesre demo-rca          # filesystem RCA demo (does not fill a real disk)
+./forgesre demo-reset        # lower demo CPU/disk gauges
+./forgesre secrets-check     # shipped-default SECRET_KEY / webhook token
 ./forgesre journal           # internal process reports (optional module filter)
 ./forgesre journal snmp
 ./forgesre fetch-llm         # download GGUF (~9 GB) and start llama.cpp; do not re-run install.sh
-./forgesre backup            # Postgres + config tarball under $FORGESRE_DATA/backups
+./forgesre backup            # Postgres + config tarball (mode 600)
+./forgesre backup --no-secrets
 ./forgesre update            # backup, render-monitoring, refresh, restart, doctor
+./forgesre version
 ```
 
 Existing VM after git pull:
 
 ```bash
 git pull origin main
-./forgesre render-monitoring
-docker compose up -d
-./forgesre doctor
+./forgesre update
+./forgesre secrets-check
 ./forgesre snmp
 ```
 
@@ -394,11 +412,16 @@ Doctor `llm: disabled` means the model/container is off. `llm: ok` means llama.c
 | Clone has no `install.sh` | You are not on `main`, or `git pull origin main` is needed |
 | UI only on the VM | You used `127.0.0.1` from the laptop, or 8080 is blocked |
 | Doctor: NetBox error | Disable NetBox or set URL + `NETBOX_API_TOKEN` |
-| Discovery finds nothing | Empty `cidrs`, or hosts do not open 22/80/443/161/9100 |
+| Discovery finds nothing | Empty `cidrs`, or hosts do not open 22/80/443/9100 and do not answer SNMP GET on UDP/161 |
 | `./forgesre snmp` empty `[]` | No Network device with an IP yet. Linux hosts are not SNMP targets |
 | Doctor: snmp error | `docker compose up -d snmp-exporter`. Then `./forgesre logs snmp-exporter` |
+| Doctor: 401 / cannot fetch doctor | `./forgesre secrets-check`. Doctor uses `ALERTMANAGER_WEBHOOK_TOKEN` |
+| Core will not start (default secrets) | Put real values in `secrets/secrets.env`. Do not set `FORGESRE_DEV=1` on a real DC |
 | `up{job="forgesre-snmp"}==0` | Community/ACL/UDP 161 from this VM, or device down. Not Prometheus itself |
-| SNMP after git pull missing | `./forgesre render-monitoring && docker compose up -d` — do not re-run install.sh |
+| Linux host never scraped | Discovery Approve without TCP/9100 leaves `scrape_address` empty. Set it on the asset, or install node_exporter |
+| SNMP after git pull missing | `./forgesre update` — do not re-run install.sh |
+| Extra Prometheus rules | Copy `monitoring/alerts.local.yml.example` → `monitoring/alerts.local.yml`, then `./forgesre render-monitoring` |
+| HTTPS / Secure cookie | `tls/Caddyfile.example`, then `FORGESRE_COOKIE_SECURE=1` and recreate Core |
 | LLM download fails | Disk, Hugging Face, or proxy. Set `FORGESRE_LLM_URL` or copy a GGUF to `data/models/model.gguf` |
 | Doctor: llm error after fetch | Wait for llama.cpp to load the GGUF, then `./doctor.sh` again |
 | Re-install wiped logins | `./install.sh` regenerates secrets; use `installation-report.md` from the last run |

@@ -48,6 +48,10 @@ def test_playrule_match_and_incident(monkeypatch):
     created = ingest_alertmanager(db, payload)
     assert created
     incident = created[0]
+    from app.jobs import run_pending_jobs
+
+    run_pending_jobs(db)
+    db.refresh(incident)
     assert incident.number.startswith("INC-")
     assert incident.playbook is not None
     assert incident.investigations
