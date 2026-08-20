@@ -90,7 +90,7 @@ class Incident(Base):
     __tablename__ = "incidents"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    number: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    number: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     title: Mapped[str] = mapped_column(String(255))
     severity: Mapped[str] = mapped_column(String(32), default="WARNING")
     status: Mapped[str] = mapped_column(String(32), default="OPEN", index=True)

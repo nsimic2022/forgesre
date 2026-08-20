@@ -326,7 +326,7 @@ Incident is tied to an asset when `labels.asset` or `labels.instance` equals `as
 
 Statuses: `OPEN` → `INVESTIGATING` (Acknowledge) → `RESOLVED` / `CLOSED`. Unacked time can move to `ESCALATED`.
 
-Fingerprint is `alertname:asset`. A second fire of the same pair updates the open incident; it does not open a duplicate until the old one is `CLOSED`. A **resolved** alert closes the open incident and does not create a new one. Numbers are `max(INC-N)+1`, not `count(*)+1`.
+Fingerprint is `alertname:asset`. A second fire of the same pair updates the open incident; it does not open a duplicate until the old one is `CLOSED`. A **resolved** alert closes the open incident and does not create a new one. New numbers look like `INC-0134-16.08.2026-09-13` (short seq + local date/time). Older `INC-000012` rows stay valid. Sequence is still `max(seq)+1`, not `count(*)+1`. TAB in `./forgesre` completes those ids after `incidents` / `history`.
 
 Check the RCA queue with `./forgesre jobs`. If a job is `error`, open Console (`/journal`) module `rca`.
 

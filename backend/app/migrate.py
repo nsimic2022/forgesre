@@ -92,6 +92,9 @@ def migrate(engine: Engine) -> None:
             for name, sql in extras.items():
                 if name not in existing:
                     conn.execute(text(sql))
+            number_col = next((col for col in inspector.get_columns("incidents") if col["name"] == "number"), None)
+            if number_col is not None and engine.dialect.name == "postgresql":
+                conn.execute(text("ALTER TABLE incidents ALTER COLUMN number TYPE VARCHAR(64)"))
         for sql in statements:
             conn.execute(text(sql))
         if "evidence" in tables:
