@@ -28,11 +28,11 @@ Usage: ./install.sh [--offline] [--non-interactive] [options]
 Options:
   --offline              Do not pull images
   --non-interactive      Use flags/defaults, no prompts
-  --profile standard|full-ai
+  --profile standard|full-ai   full-ai downloads ~9 GB GGUF (not stored in git)
   --timezone ZONE
   --data-dir PATH
   --port N
-  --enable-ai yes|no
+  --enable-ai yes|no     Download GGUF and start llama.cpp (yes). RCA works without it.
   --enable-discovery yes|no
   --discovery-cidrs CIDR[,CIDR]
   --netbox-url URL
@@ -99,7 +99,9 @@ preflight() {
   disk_gb="$(df -BG --output=avail . | tail -1 | tr -dc 0-9)"
   if [[ "${cpus}" -ge 2 ]]; then echo "CPU                   ✓  (${cpus} cores)"; else echo "CPU                   ✗  need >= 2 cores"; fail=1; fi
   if [[ "${ram_gb}" -ge 4 ]]; then echo "Memory                ✓  (${ram_gb} GB)"; else echo "Memory                ✗  need >= 4 GB"; fail=1; fi
-  if [[ "${disk_gb}" -ge 10 ]]; then echo "Disk                  ✓  (${disk_gb} GB free)"; else echo "Disk                  ✗  need >= 10 GB"; fail=1; fi
+  local need_disk=10
+  if [[ "$ENABLE_AI" == "yes" ]]; then need_disk=20; fi
+  if [[ "${disk_gb}" -ge "$need_disk" ]]; then echo "Disk                  ✓  (${disk_gb} GB free)"; else echo "Disk                  ✗  need >= ${need_disk} GB"; fail=1; fi
   if command -v ss >/dev/null 2>&1 && ss -lnt 2>/dev/null | awk '{print $4}' | grep -qE ":${HTTP_PORT}$"; then
     echo "Ports                 ✗  Port ${HTTP_PORT} is already in use."
     echo
@@ -166,9 +168,9 @@ wizard() {
   explain "Loki" "Local logs used as incident evidence." "no" "Incidents still work; log evidence degrades."
   read -r -p "Enable Loki? [Y/n]: " ans || true
   [[ "${ans:-Y}" =~ ^[Nn] ]] && ENABLE_LOKI="no"
-  explain "AI / LLM" "Read-only RCA. Optional. Monitoring still works if disabled." "no" "Incidents work; AI RCA is disabled."
+  explain "AI / LLM" "Read-only wording on ForgeRCA. Downloads ~9 GB GGUF to data/models/ (not git)." "no" "Incidents and ForgeRCA still work without a model."
   if [[ "$PROFILE" == "full-ai" ]]; then ENABLE_AI="yes"; fi
-  echo "Enable local LLM?"
+  echo "Enable local LLM (downloads Qwen2.5-14B Instruct Q4_K_M, ~9 GB)?"
   echo "  1) Yes"
   echo "  2) No"
   read -r -p "Select [1-2] default $([[ $ENABLE_AI == yes ]] && echo 1 || echo 2): " ans || true
@@ -219,7 +221,10 @@ NETBOX_API_TOKEN=${NETBOX_TOKEN}
 EOF
   chmod 600 "$ROOT/secrets/secrets.env"
 
-  local compose_profiles="" llm_mode="disabled" ai_enabled="false"
+  local compose_profiles="" llm_mode="disabled" ai_enabled="false" llm_threads="8"
+  llm_threads="$(nproc 2>/dev/null || echo 8)"
+  if [[ "$llm_threads" -gt 2 ]]; then llm_threads=$((llm_threads - 2)); fi
+  [[ "$llm_threads" -lt 2 ]] && llm_threads=2
   if [[ "$ENABLE_AI" == "yes" ]]; then
     ai_enabled="true"
     llm_mode="disabled"
@@ -230,7 +235,7 @@ EOF
     else
       echo "No GGUF at $DATA_DIR/models/model.gguf"
       echo "AI RCA still runs via the builtin analyst on real Prometheus/Loki evidence."
-      echo "To use llama.cpp later, place a CPU GGUF there and re-run with Full AI."
+      echo "On an existing install run: ./forgesre fetch-llm"
     fi
   fi
 
@@ -263,6 +268,7 @@ FORGESRE_HTTP_PORT=${HTTP_PORT}
 GRAFANA_PORT=3000
 FORGESRE_PROFILE=${PROFILE}
 COMPOSE_PROFILES=${compose_profiles}
+FORGESRE_LLM_THREADS=${llm_threads}
 POSTGRES_PASSWORD=${pg_pass}
 GRAFANA_ADMIN_PASSWORD=${gf_pass}
 ALERTMANAGER_CONFIG=${DATA_DIR}/generated/alertmanager.yml
@@ -399,6 +405,11 @@ else
   echo "Non-interactive install profile=${PROFILE}"
 fi
 preflight
+if [[ "$ENABLE_AI" == "yes" ]]; then
+  fetch_args=(--download-only)
+  [[ "$OFFLINE" -eq 1 ]] && fetch_args+=(--offline)
+  FORGESRE_DATA="$DATA_DIR" "$ROOT/scripts/fetch-llm.sh" "${fetch_args[@]}"
+fi
 write_files
 start_stack
 "$ROOT/scripts/doctor.sh" || true

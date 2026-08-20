@@ -119,11 +119,11 @@ Useful flags:
 | Flag | Meaning |
 |---|---|
 | `--non-interactive` | No prompts; use flags/defaults |
-| `--profile standard\|full-ai` | Standard = no bundled LLM. Full AI starts llama.cpp **only** if a GGUF exists |
+| `--profile standard\|full-ai` | Standard = no LLM download. `full-ai` downloads ~9 GB GGUF and starts llama.cpp |
 | `--timezone ZONE` | Default `Europe/Belgrade` |
 | `--data-dir PATH` | Default `./data` |
 | `--port N` | Core UI/API port (default `8080`) |
-| `--enable-ai yes\|no` | RCA still works without an LLM (builtin analyst) |
+| `--enable-ai yes\|no` | `yes` downloads the GGUF (same as full-ai). ForgeRCA still works without it |
 | `--enable-discovery yes\|no` | Default yes |
 | `--discovery-cidrs 10.20.30.0/24,10.10.0.0/24` | TCP probe, max 256 hosts, skip loopback |
 | `--netbox-url URL` | External NetBox only; token goes in secrets |
@@ -314,20 +314,35 @@ Directory `secrets/` should be `700`, file `600`. Never commit it.
 ./forgesre logs core     # container logs
 ./forgesre demo          # HighCPU vertical slice
 ./forgesre demo-rca      # filesystem RCA demo (does not fill a real disk)
+./forgesre fetch-llm     # download GGUF (~9 GB) and start llama.cpp; do not re-run install.sh
 ./backup.sh              # Postgres + config tarball under $FORGESRE_DATA/backups
 ./update.sh              # backup, refresh, restart, doctor
 ```
 
 ---
 
-## 12. Optional local LLM
+## 12. Local LLM (downloaded, not in git)
 
-1. Place a CPU GGUF at `$FORGESRE_DATA/models/model.gguf` (default `./data/models/model.gguf`).
-2. Set in `config/forgesre.yml`: `ai.enabled: true`, `ai.llm.mode: bundled`.
-3. Set `COMPOSE_PROFILES=ai` in `.env`.
-4. `docker compose --profile ai up -d`.
+ForgeSRE does **not** store the GGUF in the repository. Install (or `./forgesre fetch-llm` on an existing box) pulls **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB) into `$FORGESRE_DATA/models/model.gguf`.
 
-Without a GGUF, Full AI still runs the builtin analyst on real Prometheus/Loki evidence. Cloud LLMs are not required.
+New VM:
+
+```bash
+./install.sh --non-interactive --profile full-ai --port 8080
+```
+
+Already installed (**do not** re-run `./install.sh` — that regenerates passwords):
+
+```bash
+./forgesre fetch-llm
+./doctor.sh
+```
+
+Override the URL with `FORGESRE_LLM_URL` if Hugging Face is blocked. For a fully offline box, copy a CPU Instruct GGUF to `data/models/model.gguf` (that name) then run `./forgesre fetch-llm` — it will skip the download if the file is already large enough.
+
+Without a GGUF, ForgeRCA still runs the builtin analyst on Prometheus/Loki evidence. Cloud LLMs are not required.
+
+Doctor `llm: disabled` means the model/container is off. `llm: ok` means llama.cpp answered. RCA never executes playbooks.
 
 ---
 
@@ -342,6 +357,8 @@ Without a GGUF, Full AI still runs the builtin analyst on real Prometheus/Loki e
 | UI only on the VM | You used `127.0.0.1` from the laptop, or 8080 is blocked |
 | Doctor: NetBox error | Disable NetBox or set URL + `NETBOX_API_TOKEN` |
 | Discovery finds nothing | Empty `cidrs`, or hosts do not open 22/80/443/161/9100 |
+| LLM download fails | Disk, Hugging Face, or proxy. Set `FORGESRE_LLM_URL` or copy a GGUF to `data/models/model.gguf` |
+| Doctor: llm error after fetch | Wait for llama.cpp to load the GGUF, then `./doctor.sh` again |
 | Re-install wiped logins | `./install.sh` regenerates secrets; use `installation-report.md` from the last run |
 
 ```bash
