@@ -339,7 +339,7 @@ incidents — compact colored board from the Core API (SSH/terminal).
 Red = critical / open. Yellow = investigating or warning. Green = done.
 
   ./forgesre incidents
-  ./forgesre incidents INC-0134-16.08.2026-09-13
+  ./forgesre incidents INC-0134_16.08.2026_09:13
   incidents                 # inside ./forgesre prompt
   incidents INC-<TAB>       # complete ids (seq + date + time)
 
@@ -387,7 +387,7 @@ history — 90-day lookback of incidents (Postgres, not Loki).
   ./forgesre history INC-000012
 
 INC-… prints mail outbox, audit (who Ack/Resolve), and operator notes.
-TAB completes ids (INC-0134-16.08.2026-09-13 and older INC-000012).
+TAB completes ids (INC-0134_16.08.2026_09:13 and older INC-000012).
 EOF
       ;;
     sd)
@@ -521,6 +521,7 @@ cmd_shell() {
   # TAB in this process only — not the operator's login shell.
   # shellcheck disable=SC1091
   source "$ROOT/scripts/forgesre-completion.bash"
+  COMP_WORDBREAKS="${COMP_WORDBREAKS//:}"
   local _c
   for _c in ${_forgesre_cmds} quit exit logs journal help; do
     complete -F _forgesre_complete "$_c" 2>/dev/null || true

@@ -58,3 +58,14 @@ def test_cli_help_documents_completion_and_tab():
     assert "snmp-exporter" in shell
     printed = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "completion"], text=True)
     assert "forgesre-completion.bash" in printed
+
+
+def test_completion_file_drops_colon_wordbreak():
+    text = COMP.read_text()
+    assert "complete -F _forgesre_complete forgesre f ./forgesre ./f" in text
+    script = f"""
+source '{COMP}'
+printf '%s' "$COMP_WORDBREAKS"
+"""
+    out = subprocess.check_output(["bash", "-c", script], text=True)
+    assert ":" not in out

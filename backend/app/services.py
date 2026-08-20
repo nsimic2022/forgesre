@@ -33,18 +33,19 @@ def utcnow() -> datetime:
 
 
 def incident_seq(number: str) -> int | None:
-    """Running counter from INC-000012 or INC-0134-16.08.2026-09-13."""
+    """Running counter from INC-000012, dash-dated, or INC-0134_16.08.2026_09:13."""
     text = str(number or "")
     if not text.upper().startswith("INC-"):
         return None
-    head = text.split("-", 1)[-1].split("-", 1)[0]
+    rest = text.split("-", 1)[-1]
+    head = rest.split("_", 1)[0] if "_" in rest else rest.split("-", 1)[0]
     if not head.isdigit():
         return None
     return int(head)
 
 
 def format_incident_number(seq: int, when: datetime | None = None) -> str:
-    """INC-0134-16.08.2026-09-13 in the appliance timezone (wall clock)."""
+    """INC-0134_16.08.2026_09:13 in the appliance timezone (wall clock)."""
     stamp = when or utcnow()
     if stamp.tzinfo is None:
         stamp = stamp.replace(tzinfo=timezone.utc)
@@ -52,7 +53,7 @@ def format_incident_number(seq: int, when: datetime | None = None) -> str:
         local = stamp.astimezone(ZoneInfo(settings.timezone))
     except Exception:
         local = stamp.astimezone(timezone.utc)
-    return f"INC-{seq:04d}-{local:%d.%m.%Y}-{local:%H-%M}"
+    return f"INC-{seq:04d}_{local:%d.%m.%Y}_{local:%H:%M}"
 
 
 def next_incident_number(db: Session, when: datetime | None = None) -> str:
