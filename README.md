@@ -15,10 +15,13 @@ It does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on top of 
 On a Linux host with Docker, Docker Compose, Bash, and Git:
 
 ```bash
-git clone <repo>
-cd forge-sre
+git clone https://github.com/nsimic2022/test1.git forgesre
+cd forgesre
+git checkout cursor/forgesre-architecture-proposal-05f8
 ./install.sh
 ```
+
+The GitHub repo is still `nsimic2022/test1`. The last argument (`forgesre`) is only the local folder name.
 
 Non-interactive (CI / first lab):
 
