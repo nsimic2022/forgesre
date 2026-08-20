@@ -1,5 +1,7 @@
 # Docs
 
+The GitHub README is the product summary (what ForgeSRE is, what it is not, install). This folder is the operator manuals and release notes.
+
 ## For operators
 
 How to install and run ForgeSRE:

@@ -1,87 +1,141 @@
 # ForgeSRE
 
-Offline-first, self-hosted SRE console for physical data-center infrastructure.
+Self-hosted SRE console for a **physical data center**.
 
-V0.1 is a working vertical slice: install, login, demo asset, Prometheus metrics, Alertmanager → incident, logs, read-only AI investigation, playrules, playbooks, doctor, backup.
+One Ubuntu VM (a vCenter guest is the usual lab). Docker Compose, host networking, offline-friendly. You keep Prometheus, Grafana, Loki, and optional NetBox — ForgeSRE sits **on top of them** and turns alerts into incidents with an owner, a playbook, and a read-only AI investigation.
 
-V0.2 adds discovery (Approve / Ignore), Prometheus HTTP SD, and optional external NetBox.
+It is not a Kubernetes platform, not APM, and not auto-remediation. Playbooks are checklists. AI never SSH-es, never runs commands, never writes NetBox.
 
-V0.3 adds a read-only RCA foundation (ForgeRCA): facts vs hypotheses, evidence IDs, optional local LLM, no infrastructure changes.
+**Code lives on [`main`](https://github.com/nsimic2022/forgesre).** Current product: V0.5.
 
-V0.4 adds owner contacts on assets, lets analysts add inventory, routes escalation to the asset owner, and ships a first-hour dashboard walkthrough.
+---
 
-V0.5 adds a bundled **snmp_exporter** container. Network devices with an IP are walked on UDP/161; Linux hosts stay on node_exporter `:9100`.
+## What the system does
 
-It does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on top of them.
+When a Linux server or a switch is in inventory and monitoring is wired, the path is:
 
-Operator install and config (Ubuntu / vCenter VM): [`docs/install-config.md`](docs/install-config.md). Day-2 (users, servers, playrules, incidents): [`docs/operator-handbook.md`](docs/operator-handbook.md).
+```
+Find or enter a host
+        ↓
+   Assets (who owns it, how to scrape it)
+        ↓
+   Prometheus  — Linux: node_exporter :9100
+   snmp_exporter — network: UDP/161
+        ↓
+   Alert → incident
+        ↓
+   Playrule picks a playbook + escalation
+        ↓
+   Who to call  +  ForgeRCA (facts / hypotheses / evidence)
+```
+
+| Piece | Role |
+|---|---|
+| **Discovery** | Light TCP probe (22/80/443/161/9100). Approve or Ignore. Optional read-sync from an existing NetBox. |
+| **Inventory** | Hostname, IP, type, owner email/phone. Analysts can add and edit. |
+| **Monitoring** | Prometheus HTTP SD for Linux. Bundled snmp_exporter for network devices. Grafana for graphs. |
+| **Incidents** | Alertmanager webhook opens `INC-…`. Fingerprint is alert + asset. |
+| **Playrules / playbooks** | Deterministic mapping: this alert → this checklist. Nothing is executed. |
+| **Escalation** | Generated mail to the **asset owner** (SMTP optional; lab uses an outbox log). |
+| **ForgeRCA** | Read-only investigation. Builtin analyst always; optional local LLM (`./forgesre fetch-llm`, GGUF not in git). |
+| **Console** | `/journal` — per-module ok/warn/error, not Docker logs. |
+
+Demo asset `forge-demo-01` is seeded so the first hour is visible without a real customer VM.
+
+---
+
+## What it is not
+
+- A replacement for Prometheus, Grafana, Loki, or NetBox
+- An installer for `node_exporter` on your servers
+- Auto-remediation, SSH, or executed runbooks
+- A bundled NetBox or a cloud LLM
+- Kubernetes / tracing / APM
+
+If you need graphs, open Grafana (`:3000`). If you need “what broke, who to call, what to check”, stay in ForgeSRE (`:8080`).
+
+---
 
 ## Quick start
 
-On a Linux host with Docker, Docker Compose, Bash, and Git:
+Host needs Docker, Docker Compose, Bash, and Git.
 
 ```bash
 git clone https://github.com/nsimic2022/forgesre.git
 cd forgesre
-./install.sh
-```
-
-Non-interactive (CI / first lab):
-
-```bash
 ./install.sh --non-interactive --profile standard --port 8080
-./forgesre demo
 ```
 
-Then open `http://127.0.0.1:8080` and sign in with the credentials from `installation-report.md`. The dashboard walkthrough is the first-hour demo: `forge-demo-01` already has owner contacts and a closed HighCPU history row. `./forgesre demo` opens a live incident and generates mail to the asset owner. **Console** (`/journal`) shows whether seed, demo, inventory, and notifications succeeded.
-
-Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. CLI index: `./forgesre help`.
-
-## What you get
-
-| Path | Purpose |
-|---|---|
-| `/` | Dashboard |
-| `/assets` | Inventory (local, discovery, or external NetBox). Owner contacts. Analysts can add. |
-| `/discovery` | New device candidates (Approve / Ignore) |
-| `/incidents` | Alertmanager-created incidents |
-| `/ai/{id}` | Investigation / RCA (facts, hypotheses, evidence chain) |
-| `/playrules` `/playbooks` `/escalation` | Deterministic workflow |
-| `/journal` | Internal console: per-module ok/error reports |
-| `/health-ui` | Doctor |
-| `/admin` | Users and audit |
-
-Host tools:
+Sign in at `http://<VM-IP>:8080` with the credentials in `installation-report.md` (also `secrets/secrets.env`). Dashboard → first-hour walkthrough → `forge-demo-01`. Then:
 
 ```bash
-./forgesre help
-./forgesre help snmp
-./install.sh                  # new VM only
+./forgesre demo          # live HighCPU + mail to the asset owner
 ./forgesre doctor
-./forgesre assets
-./forgesre snmp
-./forgesre render-monitoring  # existing VM after git pull
-./forgesre demo
-./forgesre demo-rca
-./forgesre journal
-./forgesre fetch-llm
-./forgesre backup
+./forgesre help
+```
+
+**Do not re-run `./install.sh` on a live box** — it regenerates passwords. Updates:
+
+```bash
+git pull origin main
 ./forgesre update
 ```
 
+Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. Linux stays on node_exporter `:9100`.
+
+---
+
+## UI
+
+| URL | What you do |
+|---|---|
+| `/` | Dashboard, doctor lights, first-hour walkthrough |
+| `/assets` | Inventory and owner contacts |
+| `/discovery` | Approve / Ignore new devices |
+| `/incidents` | Alertmanager incidents |
+| `/ai/INC-…` | Read-only RCA |
+| `/playrules` `/playbooks` `/escalation` | Workflow |
+| `/journal` | Internal console |
+| `/health-ui` | Same checks as `./forgesre doctor` |
+| `/admin` | Users and audit |
+
+Roles: super admin (install user), system admin, analyst (inventory + playrules), engineer (deep RCA), viewer.
+
+---
+
+## CLI
+
+`./forgesre help` is the index. `./forgesre help snmp` (or any command) has examples.
+
+```bash
+./forgesre doctor
+./forgesre assets
+./forgesre snmp
+./forgesre logs core
+./forgesre journal
+./forgesre render-monitoring   # after git pull, refresh Prometheus/SNMP config
+./forgesre backup
+./forgesre fetch-llm           # optional ~9 GB GGUF, not stored in git
+```
+
+---
+
 ## Stack
 
-Python FastAPI core + Jinja2 UI, PostgreSQL, Prometheus, Alertmanager, **snmp_exporter**, Loki, Grafana Alloy, Grafana. Optional llama.cpp: `./forgesre fetch-llm` downloads a GGUF into `$FORGESRE_DATA/models/` (not stored in git).
+Python 3.12 + FastAPI + Jinja2 (one Core process), PostgreSQL, Prometheus, Alertmanager, snmp_exporter, Loki, Grafana Alloy, Grafana. Optional llama.cpp. All Compose services use **host networking**.
 
-AI never changes infrastructure.
+Config: `config/forgesre.yml` (behavior), `.env` (ports/paths), `secrets/secrets.env` (passwords, SNMP community, tokens). Never commit the last two or `data/`.
+
+---
 
 ## Docs
 
-- Install and config (Ubuntu / vCenter): [`docs/install-config.md`](docs/install-config.md)
-- Operator handbook (users, servers, playrules, incidents): [`docs/operator-handbook.md`](docs/operator-handbook.md)
-- V0.1 plan and stack: [`docs/v0.1.md`](docs/v0.1.md)
-- V0.2 discovery and inventory: [`docs/v0.2.md`](docs/v0.2.md)
-- V0.3 RCA foundation: [`docs/v0.3.md`](docs/v0.3.md)
-- V0.4 asset contacts and first-hour demo: [`docs/v0.4.md`](docs/v0.4.md)
-- V0.5 bundled snmp_exporter: [`docs/v0.5.md`](docs/v0.5.md)
-- Longer-term architecture: [`docs/architecture.md`](docs/architecture.md)
+**Operators (start here)**
+
+- [Install and config (Ubuntu / vCenter)](docs/install-config.md)
+- [Operator handbook (users, servers, playrules, incidents, CLI)](docs/operator-handbook.md)
+- [Docs index](docs/README.md)
+
+**What each release shipped** (optional): [V0.1](docs/v0.1.md) · [V0.2](docs/v0.2.md) · [V0.3](docs/v0.3.md) · [V0.4](docs/v0.4.md) · [V0.5 snmp_exporter](docs/v0.5.md)
+
+Longer-term design notes (not a runtime guide): [architecture.md](docs/architecture.md). Security notes: [SECURITY.md](SECURITY.md). License: [Apache-2.0](LICENSE).
