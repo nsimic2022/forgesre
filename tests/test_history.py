@@ -7,7 +7,7 @@ from app.main import app
 from app.models import Incident, Notification, User
 from app.security import hash_password
 from app.seed import seed
-from app.services import close_open_incidents, ingest_alertmanager, next_incident_number
+from app.services import next_incident_number
 
 
 def _db():
@@ -65,17 +65,18 @@ def test_history_default_window_excludes_old_rows():
 
 def test_viewer_can_open_history():
     db = _db()
-    if db.query(User).filter_by(email="viewer@forgesre.local").first() is None:
+    email = "history-viewer@forgesre.local"
+    if db.query(User).filter_by(email=email).first() is None:
         db.add(
             User(
-                email="viewer@forgesre.local",
-                name="V",
+                email=email,
+                name="History viewer",
                 password_hash=hash_password("testpass"),
                 role="viewer",
             )
         )
         db.commit()
-    client = _client(db, email="viewer@forgesre.local")
+    client = _client(db, email=email)
     page = client.get("/history")
     assert page.status_code == 200
     assert "History" in page.text
@@ -84,27 +85,22 @@ def test_viewer_can_open_history():
 
 def test_ack_resolve_and_operator_note_on_incident():
     db = _db()
-    close_open_incidents(db, "HighCPU:forge-demo-01")
-    created = ingest_alertmanager(
-        db,
-        {
-            "status": "firing",
-            "alerts": [
-                {
-                    "status": "firing",
-                    "labels": {"alertname": "HighCPU", "severity": "warning", "asset": "forge-demo-01"},
-                    "annotations": {"summary": "High CPU"},
-                }
-            ],
-        },
+    incident = Incident(
+        number=next_incident_number(db),
+        title="History note test",
+        severity="WARNING",
+        status="OPEN",
+        fingerprint="history-note-test",
+        summary="Isolated row for history UI tests.",
     )
-    incident = created[0]
+    db.add(incident)
+    db.flush()
     db.add(
         Notification(
             incident_id=incident.id,
             channel="email",
             target="platform@forgesre.local",
-            subject="High CPU",
+            subject="History note test",
             body="Owner mail body",
             status="generated",
             step_key="t0",
@@ -133,7 +129,7 @@ def test_ack_resolve_and_operator_note_on_incident():
     assert empty.status_code == 400
     resolve = client.post(
         f"/incidents/{number}/status",
-        data={"status": "RESOLVED"},
+        data={"status": "CLOSED"},
         follow_redirects=False,
     )
     assert resolve.status_code == 302
