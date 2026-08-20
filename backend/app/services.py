@@ -329,15 +329,27 @@ def query_prometheus() -> dict[str, Any]:
             if sample.get("error"):
                 out["error"] = sample["error"]
                 break
-            if "value" in sample:
+            if "value" in sample and sample["value"] is not None:
                 out[key] = sample["value"]
             out.setdefault("queries", {})[key] = expr
     except Exception as exc:
         out["error"] = str(exc)
+    from app.metrics import demo_metric_values
+
+    live = demo_metric_values()
+    out["cpu_percent"] = live["forgesre_demo_cpu_percent"]
+    out["disk_percent"] = live["forgesre_demo_disk_percent"]
+    out.setdefault("queries", {})["cpu_percent"] = "forgesre_demo_cpu_percent"
+    out.setdefault("queries", {})["disk_percent"] = "forgesre_demo_disk_percent"
     return out
 
 
 def query_prometheus_expr(expr: str) -> dict[str, Any]:
+    from app.metrics import demo_metric_values
+
+    live = demo_metric_values()
+    if expr in live:
+        return {"value": live[expr], "query": expr}
     try:
         with httpx.Client(timeout=5.0) as client:
             response = client.get(f"{settings.prometheus_url}/api/v1/query", params={"query": expr})
@@ -431,8 +443,36 @@ def investigation_context(db: Session, incident: Incident) -> dict[str, Any]:
 
 def run_investigation(db: Session, incident: Incident, actor: str = "system") -> Investigation:
     collect_evidence(db, incident)
+    db.refresh(incident)
     from rca.engines import get_engine
     from rca.llm import make_provider
+    from rca.types import EvidenceItem, RCAContext
+
+    items: list[EvidenceItem] = []
+    for row in incident.evidence:
+        eid = row.evidence_id or ""
+        if eid.startswith("ROLLUP-") or eid.startswith("EV-LEGACY"):
+            continue
+        payload = row.payload or {}
+        item = EvidenceItem(
+            evidence_id=eid or f"EV-DB-{row.id}",
+            type=row.kind,
+            source=row.source or "forgesre",
+            timestamp=row.captured_at.isoformat() if row.captured_at else "",
+            asset_id=row.asset_ref,
+            content=payload.get("content", payload),
+            query=row.query,
+            metadata=payload.get("metadata") or {},
+            confidence=row.confidence or 1.0,
+            hash=row.hash,
+        )
+        items.append(item)
+    ctx_dict = investigation_context(db, incident)
+    if items:
+        ctx = RCAContext.from_legacy(ctx_dict)
+        ctx.evidence = items
+    else:
+        ctx = ctx_dict
 
     llm = make_provider(
         settings.llm_url if settings.ai_enabled else None,
@@ -440,12 +480,12 @@ def run_investigation(db: Session, incident: Incident, actor: str = "system") ->
     )
     engine = get_engine(settings.rca_engine, llm=llm)
     try:
-        result = engine.investigate(investigation_context(db, incident))
+        result = engine.investigate(ctx)
     except NotImplementedError:
         from rca.engines import ForgeRCA
 
         engine = ForgeRCA(llm=llm)
-        result = engine.investigate(investigation_context(db, incident))
+        result = engine.investigate(ctx)
         packed_limit = result.setdefault("result", {})
         packed_limit.setdefault("limitations", []).append(
             "Configured RCA engine is not implemented; used ForgeRCA."

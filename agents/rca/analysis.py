@@ -187,17 +187,15 @@ def candidate_causes(context: RCAContext) -> list[Hypothesis]:
     text = _corpus(context)
     alertname = " ".join(str((alert or {}).get("alertname") or "") for alert in context.alerts).lower()
     title = str(context.incident.get("title") or "").lower()
-    diskish = any(word in alertname or word in title or word in text for word in ("disk", "file", "filesystem"))
-    cpuish = any(word in alertname or word in title or "cpu" in text for word in ("cpu", "load"))
     samples = metric_samples(context.evidence)
     cpu = samples.get("cpu_percent", (None, None))[0]
     disk = samples.get("disk_percent", samples.get("disk_volume_percent", (None, None)))[0]
-    if disk is not None and disk > 80:
-        diskish = True
-    if cpu is not None and cpu > 80:
-        cpuish = True
+    disk_alert = any(word in alertname or word in title for word in ("disk", "file", "filesystem"))
+    cpu_alert = any(word in alertname or word in title for word in ("cpu", "load"))
+    diskish = disk_alert or (disk is not None and disk > 80 and not cpu_alert)
+    cpuish = cpu_alert or (cpu is not None and cpu > 80 and not disk_alert)
 
-    if diskish and not cpuish:
+    if diskish:
         catalog = [
             ("log-growth", "Rapid log growth may be consuming disk space.", ("log", "journal", "syslog", "grow")),
             ("database-growth", "Database growth may be consuming disk space.", ("postgres", "mysql", "database", "wal")),
@@ -234,7 +232,7 @@ def candidate_causes(context: RCAContext) -> list[Hypothesis]:
                 if cpuish and name in {"cpu_percent", "cpu_usage"} and value < 40 and hid == "high-process":
                     contradicting.append(item.evidence_id)
         for anomaly in context.anomalies:
-            if diskish and "disk" in anomaly.metric or cpuish and "cpu" in anomaly.metric:
+            if (diskish and "disk" in anomaly.metric) or (cpuish and "cpu" in anomaly.metric):
                 supporting.extend(anomaly.evidence_ids)
         supporting = list(dict.fromkeys(supporting))
         contradicting = list(dict.fromkeys(eid for eid in contradicting if eid not in supporting))

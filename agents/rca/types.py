@@ -32,12 +32,15 @@ class EvidenceItem:
     hash: str = ""
 
     def fingerprint(self) -> dict[str, Any]:
+        content = self.content
+        if isinstance(content, dict):
+            content = {key: value for key, value in content.items() if key != "timestamp"}
         return {
             "type": self.type,
             "source": self.source,
             "asset_id": self.asset_id,
             "query": self.query,
-            "content": self.content,
+            "content": content,
         }
 
     def ensure_hash(self) -> str:

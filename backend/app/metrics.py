@@ -49,6 +49,21 @@ def refresh_runtime_metrics() -> None:
     up.set(1)
 
 
+def gauge_value(metric: Gauge) -> float:
+    for family in metric.collect():
+        for sample in family.samples:
+            if sample.name == metric._name:
+                return float(sample.value)
+    return 0.0
+
+
+def demo_metric_values() -> dict[str, float]:
+    return {
+        "forgesre_demo_cpu_percent": gauge_value(demo_cpu),
+        "forgesre_demo_disk_percent": gauge_value(demo_disk),
+    }
+
+
 def metrics_response() -> tuple[bytes, str]:
     refresh_runtime_metrics()
     return generate_latest(registry), CONTENT_TYPE_LATEST
