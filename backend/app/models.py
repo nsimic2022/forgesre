@@ -198,6 +198,23 @@ class AuditLog(Base):
     data: Mapped[dict] = mapped_column(JSONType, default=dict)
 
 
+class JournalEntry(Base):
+    """Per-module process report. Not the user audit log; not a raw log dump."""
+
+    __tablename__ = "journal"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    module: Mapped[str] = mapped_column(String(64), index=True)
+    action: Mapped[str] = mapped_column(String(64), default="", index=True)
+    status: Mapped[str] = mapped_column(String(16), default="ok", index=True)
+    summary: Mapped[str] = mapped_column(String(512), default="")
+    detail: Mapped[str] = mapped_column(Text, default="")
+    object_type: Mapped[str] = mapped_column(String(64), default="")
+    object_id: Mapped[str] = mapped_column(String(64), default="")
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class DiscoveryCandidate(Base):
     __tablename__ = "discovery_candidates"
 

@@ -372,6 +372,7 @@ First-hour demo (nothing here is a real server):
 3. Run ./forgesre demo (or Dashboard → Run demo workflow).
 4. Open the new incident (Who to call), then Escalation (mail to platform@forgesre.local).
 5. Discovery candidate 10.20.30.41 is on /discovery (Approve / Ignore).
+6. Console (/journal) lists ok/error reports per module (install, seed, inventory, demo, …).
 EOF
 }
 
@@ -402,6 +403,22 @@ start_stack() {
   exit 1
 }
 
+post_install_journal() {
+  if [[ ! -f "$ROOT/secrets/secrets.env" ]]; then
+    return 0
+  fi
+  # shellcheck disable=SC1091
+  source "$ROOT/secrets/secrets.env"
+  local jar
+  jar="$(mktemp)"
+  curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${HTTP_PORT}/login" \
+    -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null || { rm -f "$jar"; return 0; }
+  curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${HTTP_PORT}/api/v1/journal" \
+    -H "Content-Type: application/json" \
+    -d "{\"module\":\"install\",\"action\":\"install\",\"status\":\"ok\",\"summary\":\"Install finished profile=${PROFILE} port=${HTTP_PORT}\",\"detail\":\"See installation-report.md. Open Dashboard, then Console.\"}" >/dev/null || true
+  rm -f "$jar"
+}
+
 echo "================================="
 echo "        ForgeSRE Installer"
 echo "================================="
@@ -419,11 +436,12 @@ fi
 write_files
 start_stack
 "$ROOT/scripts/doctor.sh" || true
+post_install_journal || true
 echo
 echo "Installation finished."
 echo "UI:              http://127.0.0.1:${HTTP_PORT}"
 echo "Admin:           admin@forgesre.local"
 echo "Password:        (see installation-report.md or secrets/secrets.env)"
 echo "Demo workflow:   ./forgesre demo"
-echo "Then open:       Dashboard → forge-demo-01 → Incidents → Escalation"
+echo "Then open:       Dashboard → forge-demo-01 → Incidents → Escalation → Console"
 echo "Report:          installation-report.md"

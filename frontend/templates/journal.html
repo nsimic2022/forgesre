@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Console · ForgeSRE{% endblock %}
+{% block content %}
+<h1>Console</h1>
+<p class="muted">
+  Internal process journal. Each module writes a short ok / warn / error report when it finishes a job.
+  Old rows are dropped automatically (about 200 per module) so search stays small.
+  Raw Docker/Loki logs are separate — this is the operator view.
+</p>
+<nav class="pills">
+  <a class="pill {% if not filter_module %}ok{% endif %}" href="/journal?status={{ filter_status }}&q={{ filter_q }}">All</a>
+  {% for item in counts %}
+  <a class="pill {% if filter_module == item.module %}ok{% endif %}" href="/journal?module={{ item.module }}&status={{ filter_status }}&q={{ filter_q }}">{{ item.module }} ({{ item.count }})</a>
+  {% endfor %}
+</nav>
+<form method="get" action="/journal" class="row-actions" style="margin: 0.8rem 0;">
+  <input type="hidden" name="module" value="{{ filter_module }}">
+  <select name="status">
+    <option value="">any status</option>
+    <option value="ok" {% if filter_status == "ok" %}selected{% endif %}>ok</option>
+    <option value="warn" {% if filter_status == "warn" %}selected{% endif %}>warn</option>
+    <option value="error" {% if filter_status == "error" %}selected{% endif %}>error</option>
+  </select>
+  <input name="q" value="{{ filter_q }}" placeholder="search summary, detail, id">
+  <button type="submit">Search</button>
+</form>
+<table class="console">
+  <thead>
+    <tr><th>When</th><th>Module</th><th>Action</th><th>Status</th><th>Report</th></tr>
+  </thead>
+  <tbody>
+  {% for row in entries %}
+    <tr>
+      <td class="muted">{{ row.at }}</td>
+      <td><a href="/journal?module={{ row.module }}">{{ row.module }}</a></td>
+      <td>{{ row.action }}</td>
+      <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>
+      <td>
+        <strong>{{ row.summary }}</strong>
+        {% if row.object_id %}<span class="muted"> · {{ row.object_type }} {{ row.object_id }}</span>{% endif %}
+        {% if row.detail %}<pre class="journal-detail">{{ row.detail }}</pre>{% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="muted">No journal rows yet. They appear after Core start, install, adding an asset, or running the demo.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

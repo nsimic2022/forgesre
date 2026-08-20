@@ -58,6 +58,23 @@ case "$cmd" in
   logs)
     "${DC[@]}" logs --tail 100 "$@"
     ;;
+  journal)
+    PORT="$(awk -F= '/FORGESRE_HTTP_PORT/ {print $2}' .env | tail -1 | tr -d '"' )"
+    PORT="${PORT:-8080}"
+    # shellcheck disable=SC1091
+    source secrets/secrets.env
+    module="${1:-}"
+    jar="$(mktemp)"
+    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \
+      -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
+    if [[ -n "$module" ]]; then
+      curl -fsS -c "$jar" -b "$jar" "http://127.0.0.1:${PORT}/api/v1/journal?module=${module}&limit=50"
+    else
+      curl -fsS -c "$jar" -b "$jar" "http://127.0.0.1:${PORT}/api/v1/journal?limit=50"
+    fi
+    echo
+    rm -f "$jar"
+    ;;
   config)
     sed -n '1,120p' config/forgesre.yml
     ;;
@@ -70,6 +87,7 @@ Usage: ./forgesre <command>
   fetch-llm Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp
   demo      HighCPU path: owner contacts, similar-incident history, notification to asset owner, discovery 10.20.30.41
   demo-rca  Filesystem RCA acceptance path (read-only, demo disk gauge)
+  journal   Internal process reports (optional module name: inventory, demo, rca, …)
   status    Container status
   logs      docker compose logs
   config    Show forgesre.yml

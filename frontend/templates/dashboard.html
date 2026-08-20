@@ -8,7 +8,7 @@
   <ol>
     <li>Open <a href="/assets/forge-demo-01">forge-demo-01</a>. Owner, email, phone, and a closed HighCPU history row are already filled.</li>
     <li>Run the demo workflow (admin). A live HighCPU incident opens. Escalation generates mail to <code>platform@forgesre.local</code> (the asset owner), not a generic team inbox.</li>
-    <li>Open the new incident → <a href="/escalation">Escalation</a> (generated notification log) → the asset page again to see similar-incident history (closed demo + this one).</li>
+    <li>Open the new incident → <a href="/escalation">Escalation</a> → the asset page again for similar-incident history → <a href="/journal">Console</a> to see ok/error reports from seed, demo, inventory, and notifications.</li>
   </ol>
   {% if can('admin') %}
   <form class="inline" method="post" action="/demo"><button type="submit">Run demo workflow</button></form>
@@ -22,6 +22,13 @@
   <strong>NEW DEVICE DETECTED</strong>
   {{ stats.pending_discovery }} discovery candidate{% if stats.pending_discovery != 1 %}s{% endif %} waiting.
   <a href="/discovery">Review on Discovery</a>
+</div>
+{% endif %}
+{% if journal_error %}
+<div class="banner">
+  <strong>CONSOLE</strong>
+  {{ journal_error|length }} recent error report{% if journal_error|length != 1 %}s{% endif %}.
+  <a href="/journal?status=error">Open Console</a>
 </div>
 {% endif %}
 <section>
@@ -52,7 +59,25 @@
     </div>
     {% endfor %}
   </div>
-  <p class="muted">Overall: <strong>{{ doctor.overall }}</strong></p>
+  <p class="muted">Overall: <strong>{{ doctor.overall }}</strong> · <a href="/journal">Console</a></p>
+</section>
+<section>
+  <h2>Recent console reports</h2>
+  <table class="console">
+    <thead><tr><th>Module</th><th>Status</th><th>Report</th></tr></thead>
+    <tbody>
+    {% for row in journal_recent %}
+      <tr>
+        <td>{{ row.module }}</td>
+        <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>
+        <td>{{ row.summary }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="3" class="muted">No process reports yet. They appear after Core start.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted"><a href="/journal">Open full Console</a></p>
 </section>
 <section>
   <h2>Recent incidents</h2>

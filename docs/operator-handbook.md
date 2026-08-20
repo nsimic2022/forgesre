@@ -111,7 +111,7 @@ Login session lasts **12 hours** (httponly cookie).
 
 | Menu | URL | What you do there |
 |---|---|---|
-| Dashboard | `/` | Counts, doctor lights, pending discovery banner, **first-hour walkthrough**, demo buttons (admin) |
+| Dashboard | `/` | Counts, doctor lights, pending discovery banner, **first-hour walkthrough**, recent console reports, demo buttons (admin) |
 | Assets | `/assets` | List inventory. **Add asset** form (analyst+) |
 | Asset detail | `/assets/<id>` | Contacts, scrape address, edit owner after Save, similar-incident history |
 | Discovery | `/discovery` | Scan, Approve / Ignore (analyst+), optional NetBox sync (admin) |
@@ -122,6 +122,7 @@ Login session lasts **12 hours** (httponly cookie).
 | Playrules | `/playrules` | List, toggle, create (**analyst**) |
 | Playbooks | `/playbooks` | List steps, create (**analyst**) |
 | Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
+| Console | `/journal` | Internal process reports, split by module (ok / warn / error) |
 | System Health | `/health-ui` | Same checks as `./doctor.sh` |
 | Administration | `/admin` | Create users, audit log (admin) |
 | Grafana | `:3000` | Deep dashboards (separate login) |
@@ -449,6 +450,8 @@ On the VM, from the clone directory:
 ./forgesre config           # print YAML
 ./forgesre demo             # HighCPU + owner notification + similar history + discovery demo IP
 ./forgesre demo-rca         # filesystem RCA demo gauge
+./forgesre journal          # last process reports (add a module name to filter)
+./forgesre journal inventory
 ./backup.sh                 # Postgres + config under $FORGESRE_DATA/backups
 ./update.sh                 # backup, refresh, restart, doctor
 ```
@@ -467,10 +470,14 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 | POST | `/api/v1/playbooks` | analyst+ |
 | POST | `/api/v1/incidents/{number}/status` | analyst+ |
 | POST | `/api/v1/incidents/{number}/investigate` | analyst+ |
+| GET | `/api/v1/journal` | viewer+ (module, status, q) |
+| POST | `/api/v1/journal` | admin (install writes one row here) |
 | GET | `/api/v1/sd/prometheus` | Bearer webhook token |
 | POST | `/api/v1/webhooks/alertmanager` | Bearer webhook token |
 
 Install/config files: [`install-config.md`](install-config.md) (§6–10). Do not commit `.env`, `secrets/secrets.env`, or `data/`.
+
+**Console** (`/journal`) is the internal process journal: seed, inventory, discovery, incidents, RCA, notifications, demo, install. Each action writes a short ok/warn/error report. Rows are split by module and pruned automatically (~200 per module) so search stays small. This is not a dump of Docker logs and not the Administration audit log (who clicked what).
 
 ---
 

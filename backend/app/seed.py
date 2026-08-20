@@ -59,10 +59,11 @@ def ensure_demo_asset(db: Session) -> Asset:
         db.add(asset)
         db.flush()
         return asset
-    asset.owner = DEMO_OWNER
-    asset.contact_name = DEMO_CONTACT_NAME
-    asset.owner_email = DEMO_OWNER_EMAIL
-    asset.owner_phone = DEMO_OWNER_PHONE
+    if not (asset.owner_email or "").strip():
+        asset.owner = DEMO_OWNER
+        asset.contact_name = DEMO_CONTACT_NAME
+        asset.owner_email = DEMO_OWNER_EMAIL
+        asset.owner_phone = DEMO_OWNER_PHONE
     if not (asset.notes or "").strip():
         asset.notes = DEMO_NOTES
     return asset

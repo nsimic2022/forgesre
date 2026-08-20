@@ -9,6 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.audit import audit
+from app.journal import report
 from app.metrics import set_demo_cpu, set_demo_disk
 from app.models import (
     Asset,
@@ -151,10 +152,30 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
     db.commit()
     for incident in created:
         db.refresh(incident)
+        report(
+            db,
+            "incident",
+            "create",
+            "ok",
+            summary=f"{incident.number} {incident.title}",
+            detail=f"asset={incident.asset.hostname if incident.asset else 'unknown'} fingerprint={incident.fingerprint}",
+            object_type="incident",
+            object_id=incident.number,
+        )
         try:
             run_investigation(db, incident)
-        except Exception:
+        except Exception as exc:
             log.exception("investigation failed for %s", incident.number)
+            report(
+                db,
+                "rca",
+                "investigate",
+                "error",
+                summary=f"Investigation failed for {incident.number}",
+                detail=str(exc),
+                object_type="incident",
+                object_id=incident.number,
+            )
     return created
 
 
@@ -532,6 +553,16 @@ def run_investigation(db: Session, incident: Incident, actor: str = "system") ->
     )
     db.commit()
     db.refresh(row)
+    report(
+        db,
+        "rca",
+        "investigate",
+        "ok",
+        summary=f"{incident.number} {row.provider} confidence={int(row.confidence or 0)}%",
+        detail=(row.likely_cause or row.summary or "")[:400],
+        object_type="incident",
+        object_id=incident.number,
+    )
     return row
 
 
@@ -586,6 +617,17 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
         incident.status = "ESCALATED"
         append_timeline(incident, "playbook", "PLAYBOOK", f"Escalated to {stored_target}")
     db.commit()
+    note_status = "error" if row.status == "failed" else "ok"
+    report(
+        db,
+        "notification",
+        step_key or "notify",
+        note_status,
+        summary=f"{incident.number} → {stored_target} ({row.status})",
+        detail=row.error or f"policy_role={policy_role}",
+        object_type="incident",
+        object_id=incident.number,
+    )
     return row
 
 
@@ -705,6 +747,17 @@ def run_demo(db: Session) -> Incident:
         run_investigation(db, incident)
     if incident:
         ensure_notification(db, incident, "immediate")
+        report(
+            db,
+            "demo",
+            "highcpu",
+            "ok",
+            summary=f"Demo HighCPU opened {incident.number}; notify {DEMO_ASSET} owner",
+            object_type="incident",
+            object_id=incident.number,
+        )
+    else:
+        report(db, "demo", "highcpu", "error", summary="Demo HighCPU did not create an incident")
     return incident
 
 
@@ -748,4 +801,15 @@ def run_demo_rca(db: Session) -> Incident:
     if incident:
         run_investigation(db, incident, actor="demo-rca")
         ensure_notification(db, incident, "immediate")
+        report(
+            db,
+            "demo",
+            "rca",
+            "ok",
+            summary=f"Demo filesystem RCA opened {incident.number}",
+            object_type="incident",
+            object_id=incident.number,
+        )
+    else:
+        report(db, "demo", "rca", "error", summary="Demo RCA did not create an incident")
     return incident

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.audit import audit
+from app.journal import report
 from app.models import Asset, DiscoveryCandidate, Incident
 from app.settings import settings
 
@@ -92,6 +93,14 @@ def run_scan(db: Session) -> dict:
             approve_candidate(db, row, actor="system-automatic")
     db.commit()
     log.info("discovery scan cidrs=%s found=%s skipped=%s", cidrs, found, skipped)
+    report(
+        db,
+        "discovery",
+        "scan",
+        "ok",
+        summary=f"Scan finished found={found} skipped={skipped}",
+        detail=f"cidrs={cidrs}",
+    )
     return {"found": found, "skipped": skipped, "cidrs": cidrs}
 
 
@@ -117,6 +126,15 @@ def create_manual_asset(
     slug = re.sub(r"[^a-zA-Z0-9-]", "-", hostname).strip("-").lower() or _asset_id_from_ip(ip or "asset")
     existing = db.query(Asset).filter((Asset.asset_id == slug) | ((Asset.ip == ip) & (Asset.ip != ""))).first()
     if existing:
+        report(
+            db,
+            "inventory",
+            "asset.create",
+            "warn",
+            summary=f"{existing.asset_id} already exists — not duplicated",
+            object_type="asset",
+            object_id=existing.asset_id,
+        )
         return existing
     linux = "linux" in type.lower() or "server" in type.lower()
     profile = monitoring_profile or ("linux-standard" if linux else "network-switch")
@@ -141,6 +159,17 @@ def create_manual_asset(
     audit(db, "asset.create", actor=actor, object_type="asset", object_id=asset.asset_id, data={"ip": ip})
     db.commit()
     db.refresh(asset)
+    contact = asset.owner_email or asset.owner or "no owner email"
+    report(
+        db,
+        "inventory",
+        "asset.create",
+        "ok",
+        summary=f"Saved {asset.hostname} ({contact})",
+        detail=f"ip={asset.ip} scrape={asset.scrape_address} actor={actor}",
+        object_type="asset",
+        object_id=asset.asset_id,
+    )
     return asset
 
 
@@ -190,6 +219,16 @@ def update_asset(
     )
     db.commit()
     db.refresh(asset)
+    report(
+        db,
+        "inventory",
+        "asset.update",
+        "ok",
+        summary=f"Updated {asset.hostname} owner={asset.owner} email={asset.owner_email or '—'}",
+        detail=f"actor={actor} phone={asset.owner_phone}",
+        object_type="asset",
+        object_id=asset.asset_id,
+    )
     return asset
 
 
@@ -271,6 +310,16 @@ def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset
     )
     db.commit()
     db.refresh(asset)
+    report(
+        db,
+        "discovery",
+        "approve",
+        "ok",
+        summary=f"Approved {row.ip} → {asset.asset_id}",
+        detail=f"actor={actor} scrape={asset.scrape_address}",
+        object_type="asset",
+        object_id=asset.asset_id,
+    )
     return asset
 
 
@@ -280,6 +329,15 @@ def ignore_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> None:
     row.decided_at = utcnow()
     audit(db, "discovery.ignore", actor=actor, object_type="candidate", object_id=row.ip)
     db.commit()
+    report(
+        db,
+        "discovery",
+        "ignore",
+        "ok",
+        summary=f"Ignored candidate {row.ip}",
+        object_type="candidate",
+        object_id=row.ip,
+    )
 
 
 def sync_netbox(db: Session) -> dict:
@@ -291,6 +349,7 @@ def sync_netbox(db: Session) -> dict:
         devices = list_devices(settings.netbox_url, settings.netbox_token)
     except Exception as exc:
         log.warning("netbox sync failed: %s", exc)
+        report(db, "netbox", "sync", "error", summary="NetBox sync failed", detail=str(exc))
         return {"synced": 0, "error": str(exc)}
     count = 0
     for device in devices:
@@ -319,6 +378,13 @@ def sync_netbox(db: Session) -> dict:
                 asset.ip = device["ip"]
             count += 1
     db.commit()
+    report(
+        db,
+        "netbox",
+        "sync",
+        "ok",
+        summary=f"NetBox sync wrote {count} asset(s)",
+    )
     return {"synced": count}
 
 

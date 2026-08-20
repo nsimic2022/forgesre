@@ -31,7 +31,7 @@ Non-interactive (CI / first lab):
 ./forgesre demo
 ```
 
-Then open `http://127.0.0.1:8080` and sign in with the credentials from `installation-report.md`. The dashboard walkthrough is the first-hour demo: `forge-demo-01` already has owner contacts and a closed HighCPU history row. `./forgesre demo` opens a live incident and generates mail to the asset owner.
+Then open `http://127.0.0.1:8080` and sign in with the credentials from `installation-report.md`. The dashboard walkthrough is the first-hour demo: `forge-demo-01` already has owner contacts and a closed HighCPU history row. `./forgesre demo` opens a live incident and generates mail to the asset owner. **Console** (`/journal`) shows whether seed, demo, inventory, and notifications succeeded.
 
 ## What you get
 
@@ -43,6 +43,7 @@ Then open `http://127.0.0.1:8080` and sign in with the credentials from `install
 | `/incidents` | Alertmanager-created incidents |
 | `/ai/{id}` | Investigation / RCA (facts, hypotheses, evidence chain) |
 | `/playrules` `/playbooks` `/escalation` | Deterministic workflow |
+| `/journal` | Internal console: per-module ok/error reports |
 | `/health-ui` | Doctor |
 | `/admin` | Users and audit |
 
@@ -55,6 +56,7 @@ Host tools:
 ./update.sh
 ./forgesre demo
 ./forgesre demo-rca
+./forgesre journal
 ./forgesre fetch-llm
 ```
 

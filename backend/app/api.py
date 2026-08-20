@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.audit import audit
+from app.journal import MODULES, entry_as_dict, list_entries, module_counts, report
 from app.db import get_db
 from app.metrics import set_demo_cpu, set_demo_disk
 from app.models import Asset, DiscoveryCandidate, Evidence, Incident, Investigation, Playbook, Playrule, User
@@ -92,6 +93,53 @@ def health() -> dict[str, str]:
 def ready(db: Session = Depends(get_db)) -> dict[str, str]:
     db.query(Asset).first()
     return {"status": "ready"}
+
+
+class JournalBody(BaseModel):
+    module: str
+    action: str = ""
+    status: str = "ok"
+    summary: str = ""
+    detail: str = ""
+    object_type: str = ""
+    object_id: str = ""
+
+
+@router.get("/journal")
+def list_journal(
+    module: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_dashboard")),
+) -> dict:
+    rows = list_entries(db, module=module, status=status, q=q, limit=limit)
+    return {
+        "modules": module_counts(db),
+        "entries": [entry_as_dict(row) for row in rows],
+    }
+
+
+@router.post("/journal")
+def create_journal(
+    body: JournalBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("admin")),
+) -> dict:
+    row = report(
+        db,
+        body.module,
+        body.action,
+        body.status,
+        summary=body.summary,
+        detail=body.detail,
+        object_type=body.object_type,
+        object_id=body.object_id,
+    )
+    if row is None:
+        raise HTTPException(status_code=500, detail="journal write failed")
+    return entry_as_dict(row)
 
 
 @router.post("/auth/login")

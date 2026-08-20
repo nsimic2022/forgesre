@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.api import router as api_router
 from app.db import Base, SessionLocal, engine
+from app.journal import report
 from app.inventory import run_scan, seed_demo_candidate, sync_netbox
 from app.metrics import metrics_response
 from app.migrate import migrate
@@ -52,8 +53,9 @@ def _discovery_loop(stop: threading.Event) -> None:
                 run_scan(db)
             if settings.netbox_enabled:
                 sync_netbox(db)
-        except Exception:
+        except Exception as exc:
             log.exception("discovery loop failed")
+            report(db, "discovery", "loop", "error", summary="Discovery loop failed", detail=str(exc))
         finally:
             db.close()
 
@@ -65,8 +67,9 @@ def _escalation_loop(stop: threading.Event) -> None:
         db = SessionLocal()
         try:
             process_escalations(db)
-        except Exception:
+        except Exception as exc:
             log.exception("escalation loop failed")
+            report(db, "escalation", "loop", "error", summary="Escalation loop failed", detail=str(exc))
         finally:
             db.close()
 
@@ -99,6 +102,26 @@ def create_app() -> FastAPI:
         try:
             seed(db)
             seed_demo_candidate(db)
+            report(
+                db,
+                "core",
+                "startup",
+                "ok",
+                summary=f"Core started timezone={settings.timezone} ai={settings.ai_enabled}",
+            )
+            report(
+                db,
+                "seed",
+                "seed",
+                "ok",
+                summary="Demo asset, playrules, and closed HighCPU history are ready",
+                object_type="asset",
+                object_id="forge-demo-01",
+            )
+        except Exception as exc:
+            log.exception("startup failed")
+            report(db, "core", "startup", "error", summary="Core startup failed", detail=str(exc))
+            raise
         finally:
             db.close()
         log.info("ForgeSRE core started timezone=%s ai=%s", settings.timezone, settings.ai_enabled)

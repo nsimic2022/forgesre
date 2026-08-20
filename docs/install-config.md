@@ -168,7 +168,8 @@ Then in the UI:
 1. Login → Dashboard **First-hour walkthrough**.
 2. Assets → `forge-demo-01` (owner contacts + closed HighCPU history).
 3. `./forgesre demo` or **Run demo workflow** → new incident **Who to call** → Escalation (generated mail to `platform@forgesre.local`).
-4. Discovery (`10.20.30.41`) if you want Approve/Ignore.
+4. **Console** (`/journal`) — seed/demo/inventory reports (ok vs error).
+5. Discovery (`10.20.30.41`) if you want Approve/Ignore.
 
 Nothing in that path is a real customer server.
 
@@ -321,6 +322,7 @@ Directory `secrets/` should be `700`, file `600`. Never commit it.
 ./forgesre logs core     # container logs
 ./forgesre demo          # HighCPU + owner notification + similar-incident history
 ./forgesre demo-rca      # filesystem RCA demo (does not fill a real disk)
+./forgesre journal       # internal process reports (optional module filter)
 ./forgesre fetch-llm     # download GGUF (~9 GB) and start llama.cpp; do not re-run install.sh
 ./backup.sh              # Postgres + config tarball under $FORGESRE_DATA/backups
 ./update.sh              # backup, refresh, restart, doctor

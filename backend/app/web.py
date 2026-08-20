@@ -18,6 +18,7 @@ from app.inventory import (
     sync_netbox,
     update_asset,
 )
+from app.journal import MODULES, list_entries, module_counts
 from app.models import Asset, AuditLog, DiscoveryCandidate, EscalationPolicy, Incident, Notification, Playbook, Playrule, User
 from app.security import can, hash_password, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload
@@ -117,7 +118,18 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
         "pending_discovery": pending,
     }
     recent = db.query(Incident).order_by(Incident.id.desc()).limit(8).all()
-    return render(request, "dashboard.html", user, stats=stats, doctor=doctor, recent=recent)
+    journal_error = list_entries(db, status="error", limit=5)
+    journal_recent = list_entries(db, limit=8)
+    return render(
+        request,
+        "dashboard.html",
+        user,
+        stats=stats,
+        doctor=doctor,
+        recent=recent,
+        journal_error=journal_error,
+        journal_recent=journal_recent,
+    )
 
 
 @router.get("/assets", response_class=HTMLResponse)
@@ -439,6 +451,30 @@ def escalation_page(request: Request, db: Session = Depends(get_db), user: User 
     return render(request, "escalation.html", user, policies=policies, notifications=notes)
 
 
+@router.get("/journal", response_class=HTMLResponse)
+def journal_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    module: str = "",
+    status: str = "",
+    q: str = "",
+):
+    rows = list_entries(db, module=module or None, status=status or None, q=q or None, limit=200)
+    counts = module_counts(db)
+    return render(
+        request,
+        "journal.html",
+        user,
+        entries=rows,
+        counts=counts,
+        modules=MODULES,
+        filter_module=module,
+        filter_status=status,
+        filter_q=q,
+    )
+
+
 @router.get("/health-ui", response_class=HTMLResponse)
 def health_page(request: Request, user: User = Depends(login_required)):
     return render(request, "health.html", user, doctor=doctor_payload())
@@ -469,6 +505,9 @@ def admin_create_user(
     db.add(User(email=email, name=name, password_hash=hash_password(password), role=role))
     audit(db, "user.create", actor=user.email, object_type="user", object_id=email)
     db.commit()
+    from app.journal import report
+
+    report(db, "core", "user.create", "ok", summary=f"Created {role} {email}", object_type="user", object_id=email)
     return RedirectResponse("/admin", status_code=302)
 
 
