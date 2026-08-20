@@ -10,7 +10,7 @@ V0.3 adds a read-only RCA foundation (ForgeRCA): facts vs hypotheses, evidence I
 
 It does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on top of them.
 
-Operator install and config (Ubuntu / vCenter VM): [`docs/install-config.md`](docs/install-config.md).
+Operator install and config (Ubuntu / vCenter VM): [`docs/install-config.md`](docs/install-config.md). Day-2 (users, servers, playrules, incidents): [`docs/operator-handbook.md`](docs/operator-handbook.md).
 
 ## Quick start
 
@@ -64,6 +64,7 @@ AI never changes infrastructure.
 ## Docs
 
 - Install and config (Ubuntu / vCenter): [`docs/install-config.md`](docs/install-config.md)
+- Operator handbook (users, servers, playrules, incidents): [`docs/operator-handbook.md`](docs/operator-handbook.md)
 - V0.1 plan and stack: [`docs/v0.1.md`](docs/v0.1.md)
 - V0.2 discovery and inventory: [`docs/v0.2.md`](docs/v0.2.md)
 - V0.3 RCA foundation: [`docs/v0.3.md`](docs/v0.3.md)
