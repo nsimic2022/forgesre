@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-cmd="${1:-help}"
+cmd="${1:-}"
 shift || true
 
 if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
@@ -31,8 +31,10 @@ print_overview() {
 ForgeSRE CLI — operate the appliance from the clone directory.
 
 Usage:
+  ./forgesre                  Interactive prompt (type journal, history, …)
   ./forgesre <command> [args]
   ./forgesre help [command]
+  ./f <command>               Same CLI, shorter name
 
 Do not re-run ./install.sh on a live box. That regenerates passwords.
 Existing VM after git pull:
@@ -42,6 +44,7 @@ Existing VM after git pull:
 
 Commands:
   help [command]     This overview, or detailed help for one command
+  shell              Same prompt as ./forgesre with no args
   install            Guided first-time install (new VM only)
   doctor             Health checks (Core, Prometheus, snmp-exporter, …)
   status             docker compose ps
@@ -66,6 +69,8 @@ Commands:
   update             Backup, render monitoring, refresh images, restart, doctor
 
 Examples:
+  ./forgesre                  # then: journal
+  ./f journal
   ./forgesre help snmp
   ./forgesre assets
   ./forgesre snmp
@@ -88,9 +93,26 @@ print_help_command() {
       cat <<'EOF'
 help — show CLI overview or one command.
 
-  ./forgesre
   ./forgesre help
   ./forgesre help snmp
+  ./f help
+EOF
+      ;;
+    shell)
+      cat <<'EOF'
+shell — prompt that stays open so you do not retype ./forgesre.
+
+  ./forgesre
+  ./forgesre shell
+  ./f
+
+Then type the full command name, not a one-letter shortcut:
+
+  journal
+  history --days 90
+  doctor
+  help snmp
+  quit
 EOF
       ;;
     install)
@@ -430,9 +452,49 @@ cmd_snmp() {
   echo "Alerts: SnmpDeviceUnreachable (up{job=\"forgesre-snmp\"}==0 for 2m)."
 }
 
+cmd_shell() {
+  echo "ForgeSRE shell — same commands as ./forgesre, without typing ./forgesre each time."
+  echo "Examples: journal    history --days 90    doctor    help snmp"
+  echo "Leave with: quit   or   exit   or   Ctrl-D"
+  echo
+  local line
+  local -a args
+  while true; do
+    if [[ -t 0 && -t 1 ]]; then
+      printf 'forgesre> '
+    fi
+    IFS= read -r line || break
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" ]] && continue
+    read -r -a args <<< "$line"
+    case "${args[0]:-}" in
+      quit|exit)
+        break
+        ;;
+      shell)
+        echo "Already in the ForgeSRE shell."
+        continue
+        ;;
+    esac
+    FORGESRE_NOSHELL=1 "$ROOT/scripts/forgesre" "${args[@]}" || true
+  done
+}
+
+if [[ -z "$cmd" ]]; then
+  if [[ -z "${FORGESRE_NOSHELL:-}" && -t 0 && -t 1 ]]; then
+    cmd_shell
+    exit 0
+  fi
+  cmd="help"
+fi
+
 case "$cmd" in
   help)
     print_help_command "${1:-}"
+    ;;
+  shell)
+    cmd_shell
     ;;
   install) exec "$ROOT/scripts/install.sh" "$@" ;;
   doctor) exec "$ROOT/scripts/doctor.sh" "$@" ;;

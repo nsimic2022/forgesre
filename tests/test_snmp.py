@@ -161,3 +161,24 @@ def test_cli_help_documents_snmp_and_assets():
     assert "--no-secrets" in backup
     version = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "version"], text=True)
     assert "0.7" in version
+    assert "Interactive prompt" in overview
+    assert "./f" in overview
+    shell = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "shell"], text=True)
+    assert "journal" in shell
+    assert "quit" in shell
+    short = subprocess.check_output(["bash", str(root / "f"), "help"], text=True)
+    assert "journal" in short
+    nested = subprocess.check_output(
+        ["bash", str(root / "scripts/forgesre"), "shell"],
+        input="help\nquit\n",
+        text=True,
+    )
+    assert "ForgeSRE shell" in nested
+    assert "Commands:" in nested
+    unknown = subprocess.run(
+        ["bash", str(root / "scripts/forgesre"), "j"],
+        capture_output=True,
+        text=True,
+    )
+    assert unknown.returncode != 0
+    assert "Unknown command: j" in unknown.stdout
