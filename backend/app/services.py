@@ -9,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.audit import audit
-from app.metrics import set_demo_cpu
+from app.metrics import set_demo_cpu, set_demo_disk
 from app.models import (
     Asset,
     Evidence,
@@ -17,6 +17,7 @@ from app.models import (
     Incident,
     IncidentEvent,
     Investigation,
+    MaintenanceWindow,
     Notification,
     Playbook,
     Playrule,
@@ -160,24 +161,24 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
 
 def collect_evidence(db: Session, incident: Incident, alert: dict[str, Any] | None = None) -> None:
     alert = alert or incident.alert_payload or {}
+    labels = alert.get("labels") if isinstance(alert, dict) else {}
+    if not labels and isinstance(alert, dict):
+        labels = alert
     metrics = query_prometheus()
     logs = query_loki()
-    history = (
+    history_rows = (
         db.query(Incident)
         .filter(Incident.asset_id == incident.asset_id, Incident.id != incident.id)
         .order_by(Incident.id.desc())
         .limit(5)
         .all()
     )
+    history = [{"number": item.number, "title": item.title, "status": item.status, "severity": item.severity} for item in history_rows]
     items = [
         ("alert", "Alert", alert),
         ("metrics", "Metrics", metrics),
         ("logs", "Logs", {"lines": logs}),
-        (
-            "history",
-            "Previous incidents",
-            {"incidents": [{"number": item.number, "title": item.title, "status": item.status} for item in history]},
-        ),
+        ("history", "Previous incidents", {"incidents": history}),
     ]
     if incident.asset:
         items.insert(
@@ -194,53 +195,173 @@ def collect_evidence(db: Session, incident: Incident, alert: dict[str, Any] | No
             ),
         )
     for kind, title, payload in items:
+        rollup_id = f"ROLLUP-{kind}"
         existing = (
             db.query(Evidence)
-            .filter(Evidence.incident_id == incident.id, Evidence.kind == kind)
+            .filter(Evidence.incident_id == incident.id, Evidence.evidence_id == rollup_id)
             .first()
         )
+        if existing is None:
+            existing = (
+                db.query(Evidence)
+                .filter(Evidence.incident_id == incident.id, Evidence.kind == kind, Evidence.hash == "")
+                .first()
+            )
         if existing:
             existing.payload = payload
             existing.captured_at = utcnow()
+            existing.evidence_id = rollup_id
         else:
-            db.add(Evidence(incident_id=incident.id, kind=kind, title=title, payload=payload))
+            db.add(Evidence(incident_id=incident.id, kind=kind, title=title, payload=payload, evidence_id=rollup_id))
+    persist_rca_evidence(db, incident, alert, metrics, logs, history)
     append_timeline(incident, "evidence", "EVIDENCE", "Alert, metrics, logs, and history captured")
     db.commit()
+
+
+def persist_rca_evidence(
+    db: Session,
+    incident: Incident,
+    alert: dict[str, Any],
+    metrics: dict[str, Any],
+    logs: list[str],
+    history: list[dict[str, Any]],
+) -> None:
+    from rca.collector import collect_evidence_set
+
+    labels = (alert.get("labels") if isinstance(alert, dict) else None) or alert or {}
+    playrules = []
+    if incident.playrule:
+        playrules.append(
+            {
+                "name": incident.playrule.name,
+                "playbook": incident.playbook.name if incident.playbook else "",
+                "condition": incident.playrule.condition,
+            }
+        )
+    asset = {}
+    if incident.asset:
+        asset = {
+            "asset_id": incident.asset.asset_id,
+            "hostname": incident.asset.hostname,
+            "ip": incident.asset.ip,
+            "type": incident.asset.type,
+            "status": incident.asset.status,
+        }
+    maintenance = overlapping_maintenance(db, asset.get("asset_id") or "", incident.started_at or utcnow())
+
+    def metric_fetcher(expr: str) -> dict[str, Any]:
+        sample = query_prometheus_expr(expr)
+        if "error" in metrics and sample.get("error"):
+            return {"error": metrics["error"]}
+        return sample
+
+    def log_fetcher(query: str, start, end) -> dict[str, Any]:
+        lines = query_loki(limit=settings.rca_max_log_lines, query=query, start=start, end=end)
+        if not lines and logs:
+            return {"lines": logs}
+        if not lines:
+            return {"error": "no log lines"}
+        return {"lines": lines}
+
+    bundle, _limitations = collect_evidence_set(
+        incident={"number": incident.number, "title": incident.title, "severity": incident.severity, "asset": asset.get("hostname")},
+        asset=asset,
+        alert=labels if isinstance(labels, dict) else {},
+        history=history,
+        playrules=playrules,
+        maintenance=maintenance,
+        metric_fetcher=metric_fetcher,
+        log_fetcher=log_fetcher if settings.loki_enabled else None,
+        window_minutes=settings.rca_window_minutes,
+        max_log_lines=settings.rca_max_log_lines,
+    )
+    for item in bundle:
+        if item.hash and db.query(Evidence).filter_by(incident_id=incident.id, hash=item.hash).first():
+            continue
+        db.add(
+            Evidence(
+                incident_id=incident.id,
+                kind=item.type,
+                title=f"{item.type} {item.evidence_id}",
+                payload=item.to_dict(),
+                evidence_id=item.evidence_id,
+                source=item.source,
+                query=item.query,
+                asset_ref=item.asset_id,
+                hash=item.hash,
+                confidence=item.confidence,
+            )
+        )
+
+
+def overlapping_maintenance(db: Session, asset_ref: str, at: datetime) -> list[dict[str, Any]]:
+    if not asset_ref:
+        return []
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=timezone.utc)
+    rows = (
+        db.query(MaintenanceWindow)
+        .filter(MaintenanceWindow.asset_ref == asset_ref, MaintenanceWindow.starts_at <= at, MaintenanceWindow.ends_at >= at)
+        .all()
+    )
+    return [
+        {
+            "asset_ref": row.asset_ref,
+            "summary": row.summary,
+            "starts_at": row.starts_at.isoformat() if row.starts_at else "",
+            "ends_at": row.ends_at.isoformat() if row.ends_at else "",
+        }
+        for row in rows
+    ]
 
 
 def query_prometheus() -> dict[str, Any]:
     queries = {
         "cpu_percent": "forgesre_demo_cpu_percent",
-        "disk_percent": "forgesre_disk_used_percent",
+        "disk_percent": "forgesre_demo_disk_percent",
+        "disk_volume_percent": "forgesre_disk_used_percent",
         "up": "forgesre_up",
     }
     out: dict[str, Any] = {}
     try:
-        with httpx.Client(timeout=5.0) as client:
-            for key, expr in queries.items():
-                response = client.get(f"{settings.prometheus_url}/api/v1/query", params={"query": expr})
-                response.raise_for_status()
-                data = response.json()
-                result = (data.get("data") or {}).get("result") or []
-                if result:
-                    out[key] = float(result[0]["value"][1])
+        for key, expr in queries.items():
+            sample = query_prometheus_expr(expr)
+            if sample.get("error"):
+                out["error"] = sample["error"]
+                break
+            if "value" in sample:
+                out[key] = sample["value"]
+            out.setdefault("queries", {})[key] = expr
     except Exception as exc:
         out["error"] = str(exc)
     return out
 
 
-def query_loki(limit: int = 20) -> list[str]:
-    if not settings.loki_enabled:
-        return []
+def query_prometheus_expr(expr: str) -> dict[str, Any]:
     try:
         with httpx.Client(timeout=5.0) as client:
-            response = client.get(
-                f"{settings.loki_url}/loki/api/v1/query_range",
-                params={
-                    "query": '{job="forgesre"}',
-                    "limit": str(limit),
-                },
-            )
+            response = client.get(f"{settings.prometheus_url}/api/v1/query", params={"query": expr})
+            response.raise_for_status()
+            data = response.json()
+            result = (data.get("data") or {}).get("result") or []
+            if result:
+                return {"value": float(result[0]["value"][1]), "query": expr}
+            return {"value": None, "query": expr}
+    except Exception as exc:
+        return {"error": str(exc), "query": expr}
+
+
+def query_loki(limit: int = 20, query: str = '{job="forgesre"}', start=None, end=None) -> list[str]:
+    if not settings.loki_enabled:
+        return []
+    params: dict[str, Any] = {"query": query, "limit": str(limit)}
+    if start is not None:
+        params["start"] = start.isoformat()
+    if end is not None:
+        params["end"] = end.isoformat()
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            response = client.get(f"{settings.loki_url}/loki/api/v1/query_range", params=params)
             response.raise_for_status()
             data = response.json()
             lines: list[str] = []
@@ -249,22 +370,40 @@ def query_loki(limit: int = 20) -> list[str]:
                     lines.append(line)
             return lines[:limit]
     except Exception:
+        if start is not None:
+            return query_loki(limit=limit, query=query)
         return []
 
 
 def investigation_context(db: Session, incident: Incident) -> dict[str, Any]:
     metrics = {}
     logs: list[str] = []
+    queries: dict[str, str] = {}
     for item in incident.evidence:
         if item.kind == "metrics":
-            metrics = item.payload or {}
+            metrics = dict(item.payload or {})
+            queries.update((item.payload or {}).get("queries") or {})
         if item.kind == "logs":
             logs = (item.payload or {}).get("lines") or []
-    history = [
-        ev.payload
-        for ev in incident.evidence
-        if ev.kind == "history"
-    ]
+        if item.query:
+            queries.setdefault(item.kind, item.query)
+    history = [ev.payload for ev in incident.evidence if ev.kind == "history"]
+    playrules = []
+    if incident.playrule:
+        playrules.append(
+            {
+                "name": incident.playrule.name,
+                "playbook": incident.playbook.name if incident.playbook else "",
+                "condition": incident.playrule.condition,
+            }
+        )
+    asset_id = incident.asset.asset_id if incident.asset else ""
+    maintenance = overlapping_maintenance(db, asset_id, incident.started_at or utcnow())
+    limitations = []
+    if metrics.get("error"):
+        limitations.append("Metrics unavailable.")
+    if not logs and not settings.loki_enabled:
+        limitations.append("Logs unavailable.")
     return {
         "incident": {
             "number": incident.number,
@@ -283,18 +422,35 @@ def investigation_context(db: Session, incident: Incident) -> dict[str, Any]:
         "metrics": metrics,
         "logs": logs,
         "history": history,
+        "playrules": playrules,
+        "maintenance": maintenance,
+        "queries": queries,
+        "limitations": limitations,
     }
 
 
-def run_investigation(db: Session, incident: Incident) -> Investigation:
+def run_investigation(db: Session, incident: Incident, actor: str = "system") -> Investigation:
     collect_evidence(db, incident)
-    from investigation import investigate
+    from rca.engines import get_engine
+    from rca.llm import make_provider
 
-    result = investigate(
-        investigation_context(db, incident),
-        llm_url=settings.llm_url if settings.ai_enabled else None,
-        llm_model=settings.llm_model,
+    llm = make_provider(
+        settings.llm_url if settings.ai_enabled else None,
+        settings.llm_model,
     )
+    engine = get_engine(settings.rca_engine, llm=llm)
+    try:
+        result = engine.investigate(investigation_context(db, incident))
+    except NotImplementedError:
+        from rca.engines import ForgeRCA
+
+        engine = ForgeRCA(llm=llm)
+        result = engine.investigate(investigation_context(db, incident))
+        packed_limit = result.setdefault("result", {})
+        packed_limit.setdefault("limitations", []).append(
+            "Configured RCA engine is not implemented; used ForgeRCA."
+        )
+    packed = result.get("result") or {}
     row = Investigation(
         incident_id=incident.id,
         summary=result.get("summary") or "",
@@ -304,18 +460,45 @@ def run_investigation(db: Session, incident: Incident) -> Investigation:
         recommended_action=result.get("recommended_action") or "",
         provider=result.get("provider") or "builtin-analyst",
         disclaimer=result.get("disclaimer") or "AI has not modified the system.",
+        result=packed,
+        engine=packed.get("engine") or engine.get_name(),
+        engine_version=packed.get("engine_version") or engine.get_version(),
+        model=packed.get("model") or "",
+        requested_by=actor,
     )
     db.add(row)
     incident.status = "INVESTIGATING" if incident.status == "OPEN" else incident.status
     append_timeline(incident, "ai", "AI ANALYSIS", row.summary)
     append_timeline(incident, "rca", "RCA", row.likely_cause)
-    db.add(IncidentEvent(incident_id=incident.id, kind="ai_investigation", data={"provider": row.provider}))
+    db.add(
+        IncidentEvent(
+            incident_id=incident.id,
+            actor=actor,
+            kind="ai_investigation",
+            data={
+                "provider": row.provider,
+                "engine": row.engine,
+                "engine_version": row.engine_version,
+                "model": row.model,
+                "confidence": row.confidence,
+                "evidence_ids": packed.get("supporting_evidence") or [],
+            },
+        )
+    )
     audit(
         db,
         action="ai.investigation",
+        actor=actor,
         object_type="incident",
         object_id=incident.number,
-        data={"provider": row.provider, "confidence": row.confidence},
+        data={
+            "provider": row.provider,
+            "engine": row.engine,
+            "engine_version": row.engine_version,
+            "model": row.model,
+            "confidence": row.confidence,
+            "evidence_ids": packed.get("supporting_evidence") or [],
+        },
     )
     db.commit()
     db.refresh(row)
@@ -452,6 +635,46 @@ def run_demo(db: Session) -> Incident:
     )
     if incident and not incident.investigations:
         run_investigation(db, incident)
+    if incident:
+        ensure_notification(db, incident, "immediate")
+    return incident
+
+
+def run_demo_rca(db: Session) -> Incident:
+    """Filesystem RCA acceptance path. Does not fill a real disk."""
+    from app.inventory import seed_demo_candidate
+
+    seed_demo_candidate(db)
+    set_demo_disk(94)
+    log.warning("demo-rca: filesystem on %s raised to 94%% for FilesystemUsageHigh", DEMO_ASSET)
+    log.error("demo-rca: log growth suspected on %s (synthetic evidence)", DEMO_ASSET)
+    payload = {
+        "status": "firing",
+        "alerts": [
+            {
+                "status": "firing",
+                "labels": {
+                    "alertname": "FilesystemUsageHigh",
+                    "severity": "warning",
+                    "asset": DEMO_ASSET,
+                    "instance": DEMO_ASSET,
+                },
+                "annotations": {
+                    "summary": "Filesystem usage high",
+                    "description": "Filesystem usage reached 94% on forge-demo-01.",
+                },
+                "fingerprint": f"demo-disk-{DEMO_ASSET}",
+                "startsAt": utcnow().isoformat(),
+            }
+        ],
+    }
+    created = ingest_alertmanager(db, payload)
+    fingerprint = f"FilesystemUsageHigh:{DEMO_ASSET}"
+    incident = created[0] if created else (
+        db.query(Incident).filter(Incident.fingerprint == fingerprint).order_by(Incident.id.desc()).first()
+    )
+    if incident and not incident.investigations:
+        run_investigation(db, incident, actor="demo-rca")
     if incident:
         ensure_notification(db, incident, "immediate")
     return incident

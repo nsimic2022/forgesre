@@ -10,7 +10,7 @@ ForgeSRE is designed to be self-hosted on a management network.
 
 ## AI
 
-The investigation agent is **read-only**. It receives data ForgeSRE already collected. It has no SSH, Docker socket, or infrastructure write credentials.
+The investigation / ForgeRCA path is **read-only**. It receives data ForgeSRE already collected (Prometheus, Loki, inventory). Secrets are stripped before any LLM prompt. It has no SSH, Docker socket, or infrastructure write credentials. LLM output is never executed.
 
 Any future remediation feature must be a separate, off-by-default, audited subsystem.
 

@@ -32,6 +32,19 @@ case "$cmd" in
     echo "Demo discovery candidate after ./forgesre demo: 10.20.30.41 on /discovery"
     rm -f "$jar"
     ;;
+  demo-rca)
+    PORT="$(awk -F= '/FORGESRE_HTTP_PORT/ {print $2}' .env | tail -1 | tr -d '"' )"
+    PORT="${PORT:-8080}"
+    # shellcheck disable=SC1091
+    source secrets/secrets.env
+    echo "Generating filesystem RCA demo..."
+    jar="$(mktemp)"
+    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \
+      -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
+    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/api/v1/demo-rca"
+    echo
+    rm -f "$jar"
+    ;;
   status)
     "${DC[@]}" ps
     ;;
@@ -48,6 +61,7 @@ Usage: ./forgesre <command>
   install   Guided installation
   doctor    Health checks
   demo      Seed demo asset/alert/incident/AI/playbook path plus discovery candidate 10.20.30.41
+  demo-rca  Filesystem RCA acceptance path (read-only, demo disk gauge)
   status    Container status
   logs      docker compose logs
   config    Show forgesre.yml

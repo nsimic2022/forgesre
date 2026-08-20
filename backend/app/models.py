@@ -121,6 +121,12 @@ class Evidence(Base):
     title: Mapped[str] = mapped_column(String(255))
     payload: Mapped[dict] = mapped_column(JSONType, default=dict)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    evidence_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    source: Mapped[str] = mapped_column(String(64), default="")
+    query: Mapped[str] = mapped_column(Text, default="")
+    asset_ref: Mapped[str] = mapped_column(String(64), default="")
+    hash: Mapped[str] = mapped_column(String(64), default="", index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
 
     incident: Mapped[Incident] = relationship(back_populates="evidence")
 
@@ -138,6 +144,11 @@ class Investigation(Base):
     provider: Mapped[str] = mapped_column(String(64), default="builtin-analyst")
     disclaimer: Mapped[str] = mapped_column(Text, default="AI has not modified the system.")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    result: Mapped[dict] = mapped_column(JSONType, default=dict)
+    engine: Mapped[str] = mapped_column(String(64), default="forgerca")
+    engine_version: Mapped[str] = mapped_column(String(32), default="0.3.0")
+    model: Mapped[str] = mapped_column(String(128), default="")
+    requested_by: Mapped[str] = mapped_column(String(255), default="")
 
     incident: Mapped[Incident] = relationship(back_populates="investigations")
 
@@ -196,3 +207,14 @@ class DiscoveryCandidate(Base):
     decided_by: Mapped[str] = mapped_column(String(255), default="")
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     asset_id: Mapped[str] = mapped_column(String(64), default="")
+
+
+class MaintenanceWindow(Base):
+    __tablename__ = "maintenance_windows"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    asset_ref: Mapped[str] = mapped_column(String(64), index=True)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

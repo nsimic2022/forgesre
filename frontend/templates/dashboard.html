@@ -40,6 +40,7 @@
   <p class="muted">Overall: <strong>{{ doctor.overall }}</strong>
     {% if can('admin') %}
     · <form class="inline" method="post" action="/demo"><button type="submit">Run demo workflow</button></form>
+    · <form class="inline" method="post" action="/demo-rca"><button type="submit">Run RCA demo</button></form>
     {% endif %}
   </p>
 </section>

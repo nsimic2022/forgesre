@@ -13,7 +13,7 @@ from app.inventory import approve_candidate, create_manual_asset, ignore_candida
 from app.models import Asset, AuditLog, DiscoveryCandidate, EscalationPolicy, Incident, Notification, Playbook, Playrule, User
 from app.security import can, hash_password, make_session_token, user_from_session, verify_password
 from app.api import doctor_payload
-from app.services import run_demo, run_investigation
+from app.services import run_demo, run_demo_rca, run_investigation
 from app.settings import settings
 
 router = APIRouter()
@@ -230,13 +230,16 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
     if item is None:
         raise HTTPException(status_code=404)
     investigation = item.investigations[-1] if item.investigations else None
+    rca = (investigation.result if investigation else None) or {}
     return render(
             request,
             "incident_detail.html",
             user,
             incident=item,
             investigation=investigation,
+            rca=rca,
             timeline_json=json.dumps(item.timeline or []),
+            engineer=can(user, "read_evidence"),
         )
 
 
@@ -276,7 +279,7 @@ def incident_investigate(
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
         raise HTTPException(status_code=404)
-    run_investigation(db, item)
+    run_investigation(db, item, actor=user.email)
     return RedirectResponse(f"/incidents/{number}#ai", status_code=302)
 
 
@@ -286,7 +289,16 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
     if item is None:
         raise HTTPException(status_code=404)
     investigation = item.investigations[-1] if item.investigations else None
-    return render(request, "ai.html", user, incident=item, investigation=investigation)
+    rca = (investigation.result if investigation else None) or {}
+    return render(
+        request,
+        "ai.html",
+        user,
+        incident=item,
+        investigation=investigation,
+        rca=rca,
+        engineer=can(user, "read_evidence"),
+    )
 
 
 @router.get("/playrules", response_class=HTMLResponse)
@@ -408,3 +420,12 @@ def demo_page(db: Session = Depends(get_db), user: User = Depends(login_required
     incident = run_demo(db)
     number = incident.number if incident else ""
     return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=302)
+
+
+@router.post("/demo-rca")
+def demo_rca_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
+    if not can(user, "admin"):
+        raise HTTPException(status_code=403)
+    incident = run_demo_rca(db)
+    number = incident.number if incident else ""
+    return RedirectResponse(f"/ai/{number}" if number else "/incidents", status_code=302)

@@ -255,7 +255,7 @@ EOF
   fi
 
   cat > "$ROOT/.env" <<EOF
-FORGESRE_VERSION=0.2.0
+FORGESRE_VERSION=0.3.0
 FORGESRE_DOMAIN=forgesre.local
 FORGESRE_DATA=${DATA_DIR}
 FORGESRE_TIMEZONE=${TIMEZONE}
@@ -316,6 +316,11 @@ ai:
     mode: ${llm_mode}
     url: http://127.0.0.1:8088/v1
     model: local
+  rca:
+    engine: forgerca
+    window_minutes: 30
+    max_log_lines: 20
+    max_evidence: 40
 notifications:
   email:
     enabled: false
@@ -337,7 +342,7 @@ EOF
   cat > "$ROOT/installation-report.md" <<EOF
 # ForgeSRE installation report
 
-- Version: 0.2.0
+- Version: 0.3.0
 - Profile: ${PROFILE}
 - Timezone: ${TIMEZONE}
 - Data: ${DATA_DIR}

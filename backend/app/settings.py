@@ -68,6 +68,24 @@ class Settings:
         return str((self.yaml.get("ai") or {}).get("llm", {}).get("model") or "local")
 
     @property
+    def rca_engine(self) -> str:
+        return str(((self.yaml.get("ai") or {}).get("rca") or {}).get("engine") or "forgerca")
+
+    @property
+    def rca_window_minutes(self) -> int:
+        try:
+            return int(((self.yaml.get("ai") or {}).get("rca") or {}).get("window_minutes") or 30)
+        except (TypeError, ValueError):
+            return 30
+
+    @property
+    def rca_max_log_lines(self) -> int:
+        try:
+            return int(((self.yaml.get("ai") or {}).get("rca") or {}).get("max_log_lines") or 20)
+        except (TypeError, ValueError):
+            return 20
+
+    @property
     def email_enabled(self) -> bool:
         return bool((self.yaml.get("notifications") or {}).get("email", {}).get("enabled"))
 

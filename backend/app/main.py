@@ -73,7 +73,7 @@ def _escalation_loop(stop: threading.Event) -> None:
 
 def create_app() -> FastAPI:
     configure_logging()
-    app = FastAPI(title="ForgeSRE", version="0.2.0")
+    app = FastAPI(title="ForgeSRE", version="0.3.0")
     static_dir = settings.frontend_dir / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")

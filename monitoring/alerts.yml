@@ -12,7 +12,7 @@ groups:
           description: "CPU usage is {{ $value }}% on {{ $labels.asset }}."
 
       - alert: FilesystemUsageHigh
-        expr: forgesre_disk_used_percent > 80
+        expr: forgesre_demo_disk_percent > 80
         for: 10s
         labels:
           severity: warning

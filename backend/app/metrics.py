@@ -14,6 +14,11 @@ demo_cpu = Gauge(
     "Demo CPU percent for ForgeSRE vertical slice (forge-demo-01)",
     registry=registry,
 )
+demo_disk = Gauge(
+    "forgesre_demo_disk_percent",
+    "Demo filesystem percent for ForgeSRE RCA slice (forge-demo-01)",
+    registry=registry,
+)
 disk_used = Gauge(
     "forgesre_disk_used_percent",
     "Disk used percent for the ForgeSRE data volume",
@@ -22,11 +27,16 @@ disk_used = Gauge(
 up = Gauge("forgesre_up", "ForgeSRE core availability", registry=registry)
 
 demo_cpu.set(12)
+demo_disk.set(35)
 up.set(1)
 
 
 def set_demo_cpu(value: float) -> None:
     demo_cpu.set(value)
+
+
+def set_demo_disk(value: float) -> None:
+    demo_disk.set(value)
 
 
 def refresh_runtime_metrics() -> None:

@@ -14,13 +14,18 @@
 
 <div class="split">
   <section>
-    <h2>Analyst summary</h2>
+    <h2>What happened?</h2>
     <p>{{ incident.summary or "Awaiting evidence." }}</p>
     {% if investigation %}
+    <p><strong>Why is it important?</strong> {{ investigation.summary }}</p>
     <p><strong>Likely cause:</strong> {{ investigation.likely_cause }}</p>
-    <p><strong>Confidence:</strong> {{ investigation.confidence|int }}%</p>
-    <p><strong>Recommended action:</strong> {{ investigation.recommended_action }}</p>
-    <p class="muted">{{ investigation.disclaimer }}</p>
+    <p><strong>Confidence:</strong> {{ investigation.confidence|int }}%
+      <span class="muted">(ForgeSRE score, not a validated model)</span></p>
+    <p><strong>What should I do?</strong> {{ investigation.recommended_action }}</p>
+    {% if incident.playbook %}
+    <p><strong>Who / playbook:</strong> {{ incident.playbook.name }} (guidance only — not executed)</p>
+    {% endif %}
+    <p class="muted">{{ investigation.disclaimer }} · Engine {{ investigation.engine or "forgerca" }} {{ investigation.engine_version or "" }}</p>
     <p><a href="/ai/{{ incident.number }}">Open AI Investigation</a></p>
     {% else %}
     <p class="muted">No AI investigation yet.</p>
@@ -43,18 +48,59 @@
   <section>
     <h2>Visual investigation</h2>
     <ol class="flow" id="flow">
-      {% for node in incident.timeline or [] %}
-      <li>
-        <button type="button" class="node" data-detail="{{ node.detail }}">{{ node.title }}</button>
-        {% if not loop.last %}<div class="arrow">↓</div>{% endif %}
-      </li>
+      {% set nodes = rca.visual if rca.visual else [] %}
+      {% if nodes %}
+        {% for node in nodes %}
+        <li>
+          <button type="button" class="node" data-detail="{{ node.detail }}">{{ node.title }}</button>
+          {% if not loop.last %}<div class="arrow">↓</div>{% endif %}
+        </li>
+        {% endfor %}
       {% else %}
-      <li class="muted">No timeline yet.</li>
-      {% endfor %}
+        {% for node in incident.timeline or [] %}
+        <li>
+          <button type="button" class="node" data-detail="{{ node.detail }}">{{ node.title }}</button>
+          {% if not loop.last %}<div class="arrow">↓</div>{% endif %}
+        </li>
+        {% else %}
+        <li class="muted">No timeline yet.</li>
+        {% endfor %}
+      {% endif %}
     </ol>
     <pre class="detail-box" id="node-detail">Click a node for details.</pre>
   </section>
 </div>
+
+{% if rca %}
+<section>
+  <h2>Facts</h2>
+  <ul>
+    {% for fact in rca.facts or [] %}
+    <li>{{ fact.text }}</li>
+    {% else %}
+    <li class="muted">No facts stored.</li>
+    {% endfor %}
+  </ul>
+  <h2>Anomalies</h2>
+  <ul>
+    {% for item in rca.anomalies or [] %}
+    <li>{{ item.summary }}</li>
+    {% else %}
+    <li class="muted">No deterministic anomaly.</li>
+    {% endfor %}
+  </ul>
+  <h2>Candidate causes</h2>
+  <ol>
+    {% for hyp in rca.hypotheses or [] %}
+    <li>
+      {{ hyp.summary }}
+      · confidence {{ '%.0f'|format((hyp.confidence or 0) * 100) }}%
+      · supporting {{ (hyp.supporting_evidence or [])|join(", ") or "none" }}
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
 
 {% if incident.playrule or incident.playbook %}
 <section>
@@ -76,7 +122,8 @@
   <h2>Engineer evidence</h2>
   {% if grafana_enabled %}<p><a href="{{ grafana_url }}" target="_blank" rel="noreferrer">Open Grafana</a></p>{% endif %}
   {% for ev in incident.evidence %}
-    <h3>{{ ev.title }}</h3>
+    <h3 id="{{ ev.evidence_id or ev.kind }}">{{ ev.title }} <span class="muted">{{ ev.evidence_id }}</span></h3>
+    {% if ev.query %}<p>Query: <code>{{ ev.query }}</code></p>{% endif %}
     <pre>{{ ev.payload }}</pre>
   {% else %}
     <p class="muted">No evidence collected yet.</p>

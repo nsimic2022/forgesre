@@ -10,12 +10,12 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.db import get_db
-from app.metrics import set_demo_cpu
-from app.models import Asset, DiscoveryCandidate, Incident, Playbook, Playrule, User
+from app.metrics import set_demo_cpu, set_demo_disk
+from app.models import Asset, DiscoveryCandidate, Evidence, Incident, Investigation, Playbook, Playrule, User
 from app.security import can, hash_password, user_from_session, verify_password
 from app.inventory import approve_candidate, ignore_candidate, run_scan, sd_targets, seed_demo_candidate, sync_netbox
 from app.seed import seed
-from app.services import ingest_alertmanager, run_demo, run_investigation
+from app.services import ingest_alertmanager, run_demo, run_demo_rca, run_investigation
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
@@ -150,14 +150,67 @@ def set_status(
 def investigate_incident(
     number: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require("investigate")),
+    user: User = Depends(require_user),
+) -> dict:
+    if not (can(user, "investigate") or can(user, "read_ai")):
+        raise HTTPException(status_code=403, detail="forbidden")
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    run_investigation(db, item, actor=user.email)
+    db.refresh(item)
+    return _incident(item, include_evidence=can(user, "read_evidence"))
+
+
+@router.get("/incidents/{number}/investigation")
+def get_incident_investigation(
+    number: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_incidents")),
 ) -> dict:
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
         raise HTTPException(status_code=404, detail="incident not found")
-    run_investigation(db, item)
-    db.refresh(item)
-    return _incident(item, include_evidence=True)
+    latest = item.investigations[-1] if item.investigations else None
+    if latest is None:
+        raise HTTPException(status_code=404, detail="investigation not found")
+    return _investigation(latest, include_queries=can(user, "read_evidence"))
+
+
+@router.get("/investigations/{investigation_id}")
+def get_investigation(
+    investigation_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_incidents")),
+) -> dict:
+    row = db.get(Investigation, investigation_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="investigation not found")
+    return _investigation(row, include_queries=can(user, "read_evidence"))
+
+
+@router.get("/investigations/{investigation_id}/evidence")
+def get_investigation_evidence(
+    investigation_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_incidents")),
+) -> list[dict]:
+    row = db.get(Investigation, investigation_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="investigation not found")
+    include_queries = can(user, "read_evidence")
+    ids = set((row.result or {}).get("supporting_evidence") or [])
+    ids.update((row.result or {}).get("contradicting_evidence") or [])
+    rows = db.query(Evidence).filter(Evidence.incident_id == row.incident_id).all()
+    out = []
+    for item in rows:
+        if item.evidence_id.startswith("ROLLUP-"):
+            continue
+        if ids and item.evidence_id not in ids and item.kind in {"METRIC", "LOG", "ALERT"}:
+            # still return all immutable RCA items; IDs filter is a hint not a hide
+            pass
+        out.append(_evidence_item(item, include_queries=include_queries))
+    return out
 
 
 @router.get("/playrules")
@@ -303,6 +356,15 @@ def demo(db: Session = Depends(get_db), user: User = Depends(require("admin"))) 
     set_demo_cpu(94)
     seed_demo_candidate(db)
     incident = run_demo(db)
+    return {"ok": True, "incident": incident.number if incident else None}
+
+
+@router.post("/demo-rca")
+def demo_rca(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    seed(db)
+    set_demo_disk(94)
+    seed_demo_candidate(db)
+    incident = run_demo_rca(db)
     return {"ok": True, "incident": incident.number if incident else None}
 
 
@@ -465,21 +527,51 @@ def _incident(item: Incident, include_evidence: bool) -> dict[str, Any]:
         "investigation": None,
     }
     if latest:
-        data["investigation"] = {
-            "summary": latest.summary,
-            "likely_cause": latest.likely_cause,
-            "confidence": latest.confidence,
-            "evidence": latest.evidence,
-            "recommended_action": latest.recommended_action,
-            "provider": latest.provider,
-            "disclaimer": latest.disclaimer,
-        }
+        data["investigation"] = _investigation(latest, include_queries=include_evidence)
     if include_evidence:
-        data["evidence"] = [
-            {"kind": ev.kind, "title": ev.title, "payload": ev.payload, "captured_at": ev.captured_at.isoformat()}
-            for ev in item.evidence
-        ]
+        data["evidence"] = [_evidence_item(ev, include_queries=True) for ev in item.evidence]
         data["alert"] = item.alert_payload
+    return data
+
+
+def _investigation(item: Investigation, include_queries: bool) -> dict[str, Any]:
+    result = dict(item.result or {})
+    if not include_queries:
+        result.pop("visual", None)
+    return {
+        "id": item.id,
+        "summary": item.summary,
+        "likely_cause": item.likely_cause,
+        "confidence": item.confidence,
+        "evidence": item.evidence,
+        "recommended_action": item.recommended_action,
+        "provider": item.provider,
+        "disclaimer": item.disclaimer,
+        "engine": item.engine,
+        "engine_version": item.engine_version,
+        "model": item.model,
+        "requested_by": item.requested_by,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+        "result": result,
+    }
+
+
+def _evidence_item(item: Evidence, include_queries: bool) -> dict[str, Any]:
+    data = {
+        "id": item.evidence_id or f"EV-LEGACY-{item.id}",
+        "db_id": item.id,
+        "type": item.kind,
+        "source": item.source,
+        "title": item.title,
+        "timestamp": item.captured_at.isoformat() if item.captured_at else None,
+        "asset_id": item.asset_ref,
+        "content": (item.payload or {}).get("content", item.payload),
+        "confidence": item.confidence,
+        "hash": item.hash,
+    }
+    if include_queries:
+        data["query"] = item.query
+        data["payload"] = item.payload
     return data
 
 
