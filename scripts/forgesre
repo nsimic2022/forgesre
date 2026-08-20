@@ -26,6 +26,10 @@ need_env() {
   fi
 }
 
+run_cli_ops() {
+  PYTHONPATH="$ROOT/backend" python3 -m app.cli_ops "$(port_from_env)" "$@"
+}
+
 print_overview() {
   cat <<'EOF'
 ForgeSRE CLI — operate the appliance from the clone directory.
@@ -58,8 +62,11 @@ Commands:
   demo-rca           Filesystem RCA demo gauge (read-only)
   demo-reset         Lower demo CPU/disk gauges (stops the demo HighCPU fire)
   jobs               Background RCA job queue
-  incidents          Open/recent incidents
+  incidents          Short colored board (red/yellow/green); INC-… for one row
   history            90-day incident history (filters; INC-… for mail/audit/notes)
+  login              Sign in as a ForgeSRE user (engineer / analyst / …)
+  logout             Forget CLI cookie (falls back to install admin)
+  whoami             Print the CLI session user
   sd                 Prometheus HTTP SD (Linux) and SNMP HTTP SD
   version            Appliance version from .env
   secrets-check      Refuse-to-start defaults: SECRET_KEY / webhook token
@@ -69,7 +76,10 @@ Commands:
   update             Backup, render monitoring, refresh images, restart, doctor
 
 Examples:
-  ./forgesre                  # then: journal
+  ./forgesre                  # then: journal / incidents / quit
+  ./forgesre login
+  incidents
+  incidents INC-000012
   ./f journal
   ./forgesre help snmp
   ./forgesre assets
@@ -311,9 +321,46 @@ EOF
       ;;
     incidents)
       cat <<'EOF'
-incidents — list recent incidents from the Core API.
+incidents — compact colored board from the Core API (SSH/terminal).
+
+Red = critical / open. Yellow = investigating or warning. Green = done.
 
   ./forgesre incidents
+  ./forgesre incidents INC-000012
+  incidents                 # inside ./forgesre prompt
+  incidents INC-000012
+
+Then login as an engineer (UI user, not the Linux ssh account):
+
+  ./forgesre login
+EOF
+      ;;
+    login)
+      cat <<'EOF'
+login — store a ForgeSRE UI session for the CLI (engineer, analyst, …).
+
+  ./forgesre login
+  ./forgesre login engineer@dc.local 'password'
+  ./forgesre whoami
+  ./forgesre logout
+
+This is not Linux SSH. SSH gets you onto the VM; login is the ForgeSRE role.
+Cookie: data/cli.session (mode 600). Without login, CLI uses install admin
+from secrets.env when that file is readable.
+EOF
+      ;;
+    logout)
+      cat <<'EOF'
+logout — delete data/cli.session.
+
+  ./forgesre logout
+EOF
+      ;;
+    whoami)
+      cat <<'EOF'
+whoami — print the ForgeSRE user the CLI is calling as.
+
+  ./forgesre whoami
 EOF
       ;;
     history)
@@ -454,7 +501,7 @@ cmd_snmp() {
 
 cmd_shell() {
   echo "ForgeSRE shell — same commands as ./forgesre, without typing ./forgesre each time."
-  echo "Examples: journal    history --days 90    doctor    help snmp"
+  echo "Examples: journal    incidents    incidents INC-000012    history    doctor    quit"
   echo "Leave with: quit   or   exit   or   Ctrl-D"
   echo
   local line
@@ -619,161 +666,35 @@ case "$cmd" in
     ;;
   incidents)
     need_env
-    python3 - "$(port_from_env)" <<'PY'
-import json, os, sys, tempfile, subprocess, pathlib
-
-port = sys.argv[1]
-root = pathlib.Path(".").resolve()
-env = {}
-for line in (root / "secrets/secrets.env").read_text().splitlines():
-    if not line or line.startswith("#") or "=" not in line:
-        continue
-    k, _, v = line.partition("=")
-    env[k] = v
-email = env.get("FORGESRE_ADMIN_EMAIL", "")
-password = env.get("FORGESRE_ADMIN_PASSWORD", "")
-jar = tempfile.NamedTemporaryFile(delete=False)
-jar.close()
-try:
-    subprocess.check_call(
-        [
-            "curl", "-fsS", "-c", jar.name, "-b", jar.name,
-            "-X", "POST", f"http://127.0.0.1:{port}/login",
-            "-d", f"email={email}&password={password}",
-        ],
-        stdout=subprocess.DEVNULL,
-    )
-    raw = subprocess.check_output(
-        ["curl", "-fsS", "-c", jar.name, "-b", jar.name, f"http://127.0.0.1:{port}/api/v1/incidents?limit=30"]
-    )
-finally:
-    os.unlink(jar.name)
-rows = json.loads(raw)
-print(f"{'NUMBER':<14} {'STATUS':<14} {'SEV':<10} TITLE")
-print("-" * 78)
-for item in rows:
-    title = str(item.get("title") or "")[:40]
-    print(f"{item.get('number',''):<14} {item.get('status',''):<14} {str(item.get('severity',''))[:10]:<10} {title}")
-print()
-print(f"{len(rows)} incident(s). RCA runs in the background (./forgesre jobs).")
-PY
+    run_cli_ops incidents "$@"
     ;;
   history)
     need_env
-    python3 - "$(port_from_env)" "$@" <<'PY'
-import json, os, sys, tempfile, subprocess, pathlib
-from urllib.parse import quote, urlencode
-
-port = sys.argv[1]
-args = sys.argv[2:]
-days = "90"
-status = ""
-asset = ""
-number = ""
-i = 0
-while i < len(args):
-    item = args[i]
-    if item == "--days" and i + 1 < len(args):
-        days = args[i + 1]
-        i += 2
-        continue
-    if item == "--status" and i + 1 < len(args):
-        status = args[i + 1]
-        i += 2
-        continue
-    if item == "--asset" and i + 1 < len(args):
-        asset = args[i + 1]
-        i += 2
-        continue
-    number = item
-    i += 1
-
-root = pathlib.Path(".").resolve()
-env = {}
-for line in (root / "secrets/secrets.env").read_text().splitlines():
-    if not line or line.startswith("#") or "=" not in line:
-        continue
-    k, _, v = line.partition("=")
-    env[k] = v
-email = env.get("FORGESRE_ADMIN_EMAIL", "")
-password = env.get("FORGESRE_ADMIN_PASSWORD", "")
-jar = tempfile.NamedTemporaryFile(delete=False)
-jar.close()
-base = f"http://127.0.0.1:{port}"
-try:
-    subprocess.check_call(
-        [
-            "curl", "-fsS", "-c", jar.name, "-b", jar.name,
-            "-X", "POST", f"{base}/login",
-            "-d", f"email={email}&password={password}",
-        ],
-        stdout=subprocess.DEVNULL,
-    )
-    if number:
-        path = f"{base}/api/v1/incidents/{quote(number, safe='')}"
-    else:
-        query = {"days": days}
-        if status:
-            query["status"] = status
-        if asset:
-            query["asset"] = asset
-        path = f"{base}/api/v1/history?{urlencode(query)}"
-    raw = subprocess.check_output(
-        ["curl", "-fsS", "-c", jar.name, "-b", jar.name, path]
-    )
-finally:
-    os.unlink(jar.name)
-
-data = json.loads(raw)
-if number:
-    print(f"{data.get('number','')}  {data.get('status','')}  {data.get('title','')}")
-    asset_row = data.get("asset") or {}
-    if asset_row:
-        print(f"asset     {asset_row.get('hostname') or asset_row.get('asset_id')}")
-    print(f"ack       {data.get('ack_by') or '—'}  {data.get('ack_at') or ''}")
-    print(f"resolved  {data.get('resolved_by') or '—'}  {data.get('resolved_at') or data.get('ended_at') or ''}")
-    print()
-    print("=== mail ===")
-    notes = data.get("notifications") or []
-    if not notes:
-        print("(none)")
-    for row in notes:
-        print(f"{row.get('created_at')}  {row.get('status')}  {row.get('target')}  {row.get('subject')}")
-        body = (row.get("body") or "").strip()
-        if body:
-            print(body)
-            print()
-    print("=== audit ===")
-    audit = data.get("audit") or []
-    if not audit:
-        print("(none)")
-    for row in audit:
-        extra = row.get("data") or {}
-        print(f"{row.get('at')}  {row.get('actor')}  {row.get('action')}  {extra}")
-    print()
-    print("=== notes ===")
-    op = data.get("notes") or []
-    if not op:
-        print("(none)")
-    for row in op:
-        print(f"{row.get('at')}  {row.get('actor')}")
-        print(row.get("body") or "")
-        print()
-else:
-    rows = data.get("incidents") or []
-    print(f"{'NUMBER':<14} {'STATUS':<14} {'ASSET':<16} ACK  RESOLVED  TITLE")
-    print("-" * 90)
-    for item in rows:
-        host = ""
-        if item.get("asset"):
-            host = str(item["asset"].get("hostname") or item["asset"].get("asset_id") or "")[:16]
-        title = str(item.get("title") or "")[:28]
-        ack = (item.get("ack_by") or "—")[:18]
-        resolved = (item.get("resolved_by") or "—")[:18]
-        print(f"{item.get('number',''):<14} {item.get('status',''):<14} {host:<16} {ack}  {resolved}  {title}")
-    print()
-    print(f"{data.get('total', len(rows))} match(es) in last {data.get('days', days)} day(s). Default lookback is 90.")
-PY
+    run_cli_ops history "$@"
+    ;;
+  login)
+    need_env
+    if [[ $# -ge 2 ]]; then
+      run_cli_ops login "$1" "$2"
+    elif [[ -n "${FORGESRE_CLI_EMAIL:-}" && -n "${FORGESRE_CLI_PASSWORD:-}" ]]; then
+      run_cli_ops login "$FORGESRE_CLI_EMAIL" "$FORGESRE_CLI_PASSWORD"
+    else
+      if [[ ! -t 0 ]]; then
+        echo "usage: ./forgesre login EMAIL PASSWORD"
+        exit 1
+      fi
+      read -r -p "ForgeSRE email: " email
+      read -r -s -p "Password: " password
+      echo
+      run_cli_ops login "$email" "$password"
+    fi
+    ;;
+  logout)
+    PYTHONPATH="$ROOT/backend" python3 -m app.cli_ops 0 logout
+    ;;
+  whoami)
+    need_env
+    run_cli_ops whoami
     ;;
   sd)
     need_env
