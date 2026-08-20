@@ -102,6 +102,8 @@ class Incident(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ack_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ack_by: Mapped[str] = mapped_column(String(255), default="")
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[str] = mapped_column(String(255), default="")
     summary: Mapped[str] = mapped_column(Text, default="")
     timeline: Mapped[list] = mapped_column(JSONType, default=list)
     alert_payload: Mapped[dict] = mapped_column(JSONType, default=dict)
@@ -114,6 +116,9 @@ class Incident(Base):
         back_populates="incident", cascade="all, delete-orphan"
     )
     events: Mapped[list[IncidentEvent]] = relationship(back_populates="incident", cascade="all, delete-orphan")
+    operator_notes: Mapped[list["IncidentNote"]] = relationship(
+        back_populates="incident", cascade="all, delete-orphan"
+    )
 
 
 class Evidence(Base):
@@ -168,6 +173,20 @@ class IncidentEvent(Base):
     data: Mapped[dict] = mapped_column(JSONType, default=dict)
 
     incident: Mapped[Incident] = relationship(back_populates="events")
+
+
+class IncidentNote(Base):
+    """Short operator comment on an incident. Not a ticketing thread."""
+
+    __tablename__ = "incident_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    incident_id: Mapped[int] = mapped_column(ForeignKey("incidents.id"), index=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    actor: Mapped[str] = mapped_column(String(255), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+
+    incident: Mapped[Incident] = relationship(back_populates="operator_notes")
 
 
 class Notification(Base):

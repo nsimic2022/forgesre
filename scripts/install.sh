@@ -265,7 +265,7 @@ EOF
   fi
 
   cat > "$ROOT/.env" <<EOF
-FORGESRE_VERSION=0.6.0
+FORGESRE_VERSION=0.7.0
 FORGESRE_DOMAIN=forgesre.local
 FORGESRE_DATA=${DATA_DIR}
 FORGESRE_TIMEZONE=${TIMEZONE}
@@ -357,7 +357,7 @@ EOF
   cat > "$ROOT/installation-report.md" <<EOF
 # ForgeSRE installation report
 
-- Version: 0.6.0
+- Version: 0.7.0
 - Profile: ${PROFILE}
 - Timezone: ${TIMEZONE}
 - Data: ${DATA_DIR}

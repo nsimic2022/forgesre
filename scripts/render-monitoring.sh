@@ -44,9 +44,9 @@ ensure_kv "$ROOT/.env" PROMETHEUS_CONFIG "${DATA_DIR}/generated/prometheus.yml"
 ensure_kv "$ROOT/.env" ALERTMANAGER_CONFIG "${DATA_DIR}/generated/alertmanager.yml"
 ensure_kv "$ROOT/.env" PROMETHEUS_ALERTS "${DATA_DIR}/generated/alerts.yml"
 if grep -q '^FORGESRE_VERSION=' "$ROOT/.env"; then
-  sed -i 's/^FORGESRE_VERSION=.*/FORGESRE_VERSION=0.6.0/' "$ROOT/.env"
+  sed -i 's/^FORGESRE_VERSION=.*/FORGESRE_VERSION=0.7.0/' "$ROOT/.env"
 else
-  echo "FORGESRE_VERSION=0.6.0" >> "$ROOT/.env"
+  echo "FORGESRE_VERSION=0.7.0" >> "$ROOT/.env"
 fi
 
 if [[ -z "$WEBHOOK" ]]; then

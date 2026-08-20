@@ -148,6 +148,7 @@ def test_cli_help_documents_snmp_and_assets():
     assert "demo-reset" in overview
     assert "secrets-check" in overview
     assert "incidents" in overview
+    assert "history" in overview
     assert "HTTP SD" in overview
     snmp = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "snmp"], text=True)
     assert "UDP/161" in snmp
@@ -159,4 +160,4 @@ def test_cli_help_documents_snmp_and_assets():
     backup = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "backup"], text=True)
     assert "--no-secrets" in backup
     version = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "version"], text=True)
-    assert "0.6" in version
+    assert "0.7" in version

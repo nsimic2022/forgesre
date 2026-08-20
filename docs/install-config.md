@@ -288,7 +288,7 @@ Notes:
 Written by `./install.sh`. Typical keys:
 
 ```bash
-FORGESRE_VERSION=0.6.0
+FORGESRE_VERSION=0.7.0
 FORGESRE_DATA=./data
 FORGESRE_TIMEZONE=Europe/Belgrade
 FORGESRE_HTTP_PORT=8080
@@ -351,6 +351,7 @@ Install writes random `SECRET_KEY` and `ALERTMANAGER_WEBHOOK_TOKEN`. Core **refu
 ./forgesre snmp              # exporter + SNMP HTTP SD
 ./forgesre sd                # Linux + SNMP HTTP SD JSON
 ./forgesre incidents         # recent INC-… rows
+./forgesre history           # 90-day lookback; INC-… prints mail/audit/notes
 ./forgesre jobs              # background RCA queue
 ./forgesre render-monitoring # rewrite generated prometheus/alertmanager/snmp/alerts.yml
 ./forgesre demo              # HighCPU + owner notification + similar-incident history
