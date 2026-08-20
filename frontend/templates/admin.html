@@ -7,7 +7,7 @@
   <thead><tr><th>Email</th><th>Name</th><th>Role</th></tr></thead>
   <tbody>
   {% for u in users %}
-    <tr><td>{{ u.email }}</td><td>{{ u.name }}</td><td>{{ u.role }}</td></tr>
+    <tr><td>{{ u.email }}</td><td>{{ u.name }}</td><td>{{ role_label(u.role) }}</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -18,10 +18,10 @@
   <label>Password <input name="password" type="password" required></label>
   <label>Role
     <select name="role">
-      <option>analyst</option>
-      <option>engineer</option>
-      <option>admin</option>
-      <option>viewer</option>
+      <option value="analyst">Analyst — incidents, playrules, playbooks</option>
+      <option value="engineer">Engineer — detailed RCA, inventory</option>
+      <option value="admin">System admin — users and appliance</option>
+      <option value="viewer">Viewer — read only</option>
     </select>
   </label>
   <button type="submit">Create</button>

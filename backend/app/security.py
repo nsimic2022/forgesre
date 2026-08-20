@@ -8,6 +8,15 @@ from app.models import User
 from app.settings import settings
 
 ROLES = ["super_admin", "admin", "engineer", "analyst", "viewer"]
+CREATABLE_ROLES = ["analyst", "engineer", "admin", "viewer"]
+
+ROLE_LABELS = {
+    "super_admin": "Super admin (system)",
+    "admin": "System admin",
+    "analyst": "Analyst (incidents, playrules, playbooks)",
+    "engineer": "Engineer (detailed RCA)",
+    "viewer": "Viewer",
+}
 
 PERMISSIONS = {
     "viewer": {"read_dashboard", "read_assets", "read_incidents"},
@@ -17,7 +26,9 @@ PERMISSIONS = {
         "read_incidents",
         "read_ai",
         "ack_incidents",
+        "write_incidents",
         "read_play",
+        "write_play",
     },
     "engineer": {
         "read_dashboard",
@@ -98,6 +109,10 @@ def user_from_session(db: Session, token: str | None) -> User | None:
     if not user or not user.is_active:
         return None
     return user
+
+
+def role_label(role: str) -> str:
+    return ROLE_LABELS.get(role, role)
 
 
 def can(user: User | None, permission: str) -> bool:

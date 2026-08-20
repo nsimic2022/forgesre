@@ -12,7 +12,7 @@ from app.audit import audit
 from app.db import get_db
 from app.metrics import set_demo_cpu, set_demo_disk
 from app.models import Asset, DiscoveryCandidate, Evidence, Incident, Investigation, Playbook, Playrule, User
-from app.security import can, hash_password, user_from_session, verify_password
+from app.security import CREATABLE_ROLES, can, hash_password, user_from_session, verify_password
 from app.inventory import approve_candidate, ignore_candidate, run_scan, sd_targets, seed_demo_candidate, sync_netbox
 from app.seed import seed
 from app.services import ingest_alertmanager, run_demo, run_demo_rca, run_investigation
@@ -397,7 +397,7 @@ def doctor() -> dict:
 
 @router.post("/users")
 def create_user(body: UserBody, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
-    if body.role not in {"admin", "engineer", "analyst", "viewer"}:
+    if body.role not in CREATABLE_ROLES:
         raise HTTPException(status_code=400, detail="invalid role")
     row = User(
         email=body.email,
