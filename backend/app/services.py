@@ -479,17 +479,7 @@ def run_investigation(db: Session, incident: Incident, actor: str = "system") ->
         settings.llm_model,
     )
     engine = get_engine(settings.rca_engine, llm=llm)
-    try:
-        result = engine.investigate(ctx)
-    except NotImplementedError:
-        from rca.engines import ForgeRCA
-
-        engine = ForgeRCA(llm=llm)
-        result = engine.investigate(ctx)
-        packed_limit = result.setdefault("result", {})
-        packed_limit.setdefault("limitations", []).append(
-            "Configured RCA engine is not implemented; used ForgeRCA."
-        )
+    result = engine.investigate(ctx)
     packed = result.get("result") or {}
     row = Investigation(
         incident_id=incident.id,

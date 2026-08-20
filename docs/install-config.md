@@ -243,7 +243,7 @@ ai:
     url: http://127.0.0.1:8088/v1
     model: local
   rca:
-    engine: forgerca    # openrca is a stub, not production
+    engine: forgerca
     window_minutes: 30
     max_log_lines: 20
     max_evidence: 40

@@ -424,7 +424,7 @@ forge-sre/
 ├── tests/
 │   ├── integration/
 │   └── e2e/
-└── testdata/                   # small fixtures; OpenRCA is not a submodule
+└── testdata/                   # small fixtures
 ```
 
 **Why this and not `backend/` + `frontend/` + `agents/` + `deployment/`:**
@@ -432,7 +432,6 @@ forge-sre/
 - `cmd/` + `internal/` is idiomatic Go and keeps agents from becoming a fake distributed system.
 - `scripts/` stay thin so logic lives in the binary (testable).
 - No `deployment/` split in V1: Compose *is* deployment.
-- OpenRCA datasets are **dev-only**, fetched by a script if needed, never a production dependency.
 
 ---
 
@@ -703,7 +702,7 @@ Code Agent (optional, **off in V1**): would run in a sandbox on **already fetche
 - Tools are an allowlist: `prom_query`, `loki_query`, `get_asset`, `get_incident`, `search_incidents`.
 - Model output is schema-validated JSON. If invalid, store error, do not page from free text.
 - Prompt and retrieved evidence are stored for explainability (`ai_runs`).
-- OpenRCA-style structure (timeline, candidates, evidence, confidence) is the **schema inspiration**. The OpenRCA dataset is for eval in development, not shipped in production images.
+- RCA results use timeline, candidates, evidence, and a ForgeSRE confidence score.
 
 **Persona rendering** (same incident):
 
@@ -970,9 +969,9 @@ seed asset (linux-standard)
   → analyst payload contains required fields
 ```
 
-### RCA eval (dev only)
+### RCA
 
-Optional OpenRCA subset in `testdata/` via download script. Never required to build or start production images.
+`tests/test_v03.py` covers collector, anomalies, scoring, and ForgeRCA output shape. CI does not require a live LLM.
 
 ### What we do not test in V1 CI
 

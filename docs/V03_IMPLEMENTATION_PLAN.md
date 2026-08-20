@@ -37,10 +37,9 @@ V0.1 tests (`investigate()` disclaimer, CPU summary, `builtin-analyst`) must kee
 4. Deterministic **anomaly detection** before any LLM call.
 5. Ranked **candidate causes** with supporting/contradicting evidence and a documented (not scientific) confidence score.
 6. **LLM provider** abstraction + sanitization of secrets before prompt.
-7. **OpenRCAAdapter** stub + evaluation docs. Not a production dependency.
-8. Maintenance windows in RCA context.
-9. Failure isolation: missing Prometheus/Loki/LLM must degrade, not break ingest.
-10. Filesystem demo that exercises the disk playbook path.
+7. Maintenance windows in RCA context.
+8. Failure isolation: missing Prometheus/Loki/LLM must degrade, not break ingest.
+9. Filesystem demo that exercises the disk playbook path.
 
 ---
 
@@ -54,7 +53,6 @@ The spec is the product intent. These cuts keep V0.3 debuggable in Python and av
 | Confidence as 0–1 only | `result.root_cause.confidence` is 0–1; `investigations.confidence` stays 0–100 for the existing UI | Do not break V0.1 screens |
 | Separate Data/RCA/Report/Visual agents | **One in-process ForgeRCA**. Modules are functions, not services | V0.1 ADR: no agent microservices |
 | Ollama SDK + OpenAI SDK | One OpenAI-compatible HTTP client (already covers llama.cpp, Ollama, vLLM) | Fewer libraries |
-| Full OpenRCA / OpenDeRisk | Adapter **NotImplemented** + docs | Evaluation, not production |
 | Code Agent | **Not implemented** | Spec forbids it |
 | Visual Agent graph | HTML flow of RCA nodes | Enough for “why did we conclude this?” |
 | Maintenance calendar UI | Table + collector; no scheduler UI | RCA needs the data, not a CMDB |
@@ -71,8 +69,7 @@ Incident
     → Evidence Set (immutable EV-* items)
     → RCA Context (facts-ready, sanitized copy for LLM)
     → RCAEngine.investigate()
-           ├─ ForgeRCA          (production, V0.3)
-           └─ OpenRCAAdapter    (stub)
+           └─ ForgeRCA          (production, V0.3)
     → RCA Result
     → Investigation row + audit
     → Analyst UI / Engineer queries / Playbook (guidance only)
@@ -111,8 +108,7 @@ No Alembic. Same `migrate()` helper as V0.2. `create_all` for new tables.
 | `agents/investigation.py` | V0.1 wrapper around ForgeRCA |
 | `backend/app/services.py` | Persist evidence + call engine (do not duplicate analysis) |
 | `docs/v0.3.md` | Operator-facing RCA notes + confidence formula |
-| `docs/openrca-evaluation.md` | How to eval OpenRCA later; not a runtime dep |
-| `tests/test_v03.py` | Collector, normalize, anomalies, scoring, sanitize, stub engine |
+| `tests/test_v03.py` | Collector, normalize, anomalies, scoring, sanitize, ForgeRCA |
 
 ---
 
@@ -164,4 +160,4 @@ This is **not** a validated reliability model.
 
 ## 10. Out of scope (later)
 
-Data Agent / Report Agent / Visual Agent as named services, OpenRCA dataset in the image, sandboxed Code Agent, SNMP/traces/NetBox dependency graphs, executing playbooks.
+Data Agent / Report Agent / Visual Agent as named services, sandboxed Code Agent, SNMP/traces/NetBox dependency graphs, executing playbooks.
