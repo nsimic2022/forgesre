@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · ForgeSRE{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+{% if stats.pending_discovery %}
+<div class="banner">
+  <strong>NEW DEVICE DETECTED</strong>
+  {{ stats.pending_discovery }} discovery candidate{% if stats.pending_discovery != 1 %}s{% endif %} waiting.
+  <a href="/discovery">Review on Discovery</a>
+</div>
+{% endif %}
+<section>
+  <h2>Infrastructure</h2>
+  <div class="grid">
+    <div class="stat"><span>Total Assets</span><strong>{{ stats.assets_total }}</strong></div>
+    <div class="stat ok"><span>Healthy</span><strong>{{ stats.healthy }}</strong></div>
+    <div class="stat warn"><span>Warning</span><strong>{{ stats.warning }}</strong></div>
+    <div class="stat crit"><span>Critical</span><strong>{{ stats.critical }}</strong></div>
+    <div class="stat"><span>Offline</span><strong>{{ stats.offline }}</strong></div>
+  </div>
+</section>
+<section>
+  <h2>Incidents</h2>
+  <div class="grid">
+    <div class="stat"><span>Open</span><strong>{{ stats.open }}</strong></div>
+    <div class="stat crit"><span>Critical</span><strong>{{ stats.inc_critical }}</strong></div>
+    <div class="stat warn"><span>Investigating</span><strong>{{ stats.investigating }}</strong></div>
+    <div class="stat ok"><span>Resolved</span><strong>{{ stats.resolved }}</strong></div>
+  </div>
+</section>
+<section>
+  <h2>Monitoring</h2>
+  <div class="grid">
+    {% for name, item in doctor.components.items() %}
+    <div class="stat {% if item.status == 'ok' %}ok{% elif item.status == 'disabled' %}{% else %}crit{% endif %}">
+      <span>{{ name }}</span><strong>{{ item.status }}</strong>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="muted">Overall: <strong>{{ doctor.overall }}</strong>
+    {% if can('admin') %}
+    · <form class="inline" method="post" action="/demo"><button type="submit">Run demo workflow</button></form>
+    · <form class="inline" method="post" action="/demo-rca"><button type="submit">Run RCA demo</button></form>
+    {% endif %}
+  </p>
+</section>
+<section>
+  <h2>Recent incidents</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Status</th><th>Asset</th></tr></thead>
+    <tbody>
+    {% for item in recent %}
+      <tr>
+        <td><a href="/incidents/{{ item.number }}">{{ item.number }}</a></td>
+        <td>{{ item.title }}</td>
+        <td>{{ item.severity }}</td>
+        <td>{{ item.status }}</td>
+        <td>{% if item.asset %}{{ item.asset.hostname }}{% else %}—{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">No incidents yet. Run the demo workflow or wait for an alert.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

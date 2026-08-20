@@ -1,0 +1,22 @@
+groups:
+  - name: forgesre-demo
+    rules:
+      - alert: HighCPU
+        expr: forgesre_demo_cpu_percent > 80
+        for: 10s
+        labels:
+          severity: warning
+          asset: forge-demo-01
+        annotations:
+          summary: "High CPU on {{ $labels.asset }}"
+          description: "CPU usage is {{ $value }}% on {{ $labels.asset }}."
+
+      - alert: FilesystemUsageHigh
+        expr: forgesre_demo_disk_percent > 80
+        for: 10s
+        labels:
+          severity: warning
+          asset: forge-demo-01
+        annotations:
+          summary: "Filesystem usage high on {{ $labels.asset }}"
+          description: "Disk usage is {{ $value }}% on {{ $labels.asset }}."

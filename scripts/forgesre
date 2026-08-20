@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+cmd="${1:-help}"
+shift || true
+
+if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
+
+case "$cmd" in
+  install) exec "$ROOT/scripts/install.sh" "$@" ;;
+  doctor) exec "$ROOT/scripts/doctor.sh" "$@" ;;
+  backup) exec "$ROOT/scripts/backup.sh" "$@" ;;
+  restore)
+    echo "Unpack a backup tar.gz and restore forgesre.sql with:"
+    echo "  docker compose exec -T postgres psql -U forgesre forgesre < backup.sql"
+    exit 1
+    ;;
+  update) exec "$ROOT/scripts/update.sh" "$@" ;;
+  demo)
+    PORT="$(awk -F= '/FORGESRE_HTTP_PORT/ {print $2}' .env | tail -1 | tr -d '"' )"
+    PORT="${PORT:-8080}"
+    # shellcheck disable=SC1091
+    source secrets/secrets.env
+    echo "Generating demo incident workflow..."
+    jar="$(mktemp)"
+    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \
+      -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
+    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/api/v1/demo"
+    echo
+    echo "Demo discovery candidate after ./forgesre demo: 10.20.30.41 on /discovery"
+    rm -f "$jar"
+    ;;
+  demo-rca)
+    PORT="$(awk -F= '/FORGESRE_HTTP_PORT/ {print $2}' .env | tail -1 | tr -d '"' )"
+    PORT="${PORT:-8080}"
+    # shellcheck disable=SC1091
+    source secrets/secrets.env
+    echo "Generating filesystem RCA demo..."
+    jar="$(mktemp)"
+    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \
+      -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
+    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/api/v1/demo-rca"
+    echo
+    rm -f "$jar"
+    ;;
+  status)
+    "${DC[@]}" ps
+    ;;
+  logs)
+    "${DC[@]}" logs --tail 100 "$@"
+    ;;
+  config)
+    sed -n '1,120p' config/forgesre.yml
+    ;;
+  help|*)
+    cat <<'EOF'
+Usage: ./forgesre <command>
+
+  install   Guided installation
+  doctor    Health checks
+  demo      Seed demo asset/alert/incident/AI/playbook path plus discovery candidate 10.20.30.41
+  demo-rca  Filesystem RCA acceptance path (read-only, demo disk gauge)
+  status    Container status
+  logs      docker compose logs
+  config    Show forgesre.yml
+  backup    Dump Postgres + config
+  update    Backup, refresh images, restart, doctor
+EOF
+    ;;
+esac

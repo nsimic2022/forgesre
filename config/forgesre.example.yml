@@ -1,0 +1,69 @@
+schema_version: 1
+
+system:
+  mode: online # online | offline
+  timezone: Europe/Belgrade
+  log_level: info
+
+inventory:
+  provider: local # local | netbox (external NetBox only; never bundled)
+  netbox:
+    enabled: false
+    mode: external
+    url: ""
+
+discovery:
+  enabled: true
+  mode: semi-automatic # manual | semi-automatic | automatic
+  cidrs: []
+
+monitoring:
+  prometheus:
+    enabled: true
+    mode: bundled
+    url: http://127.0.0.1:9090
+  alertmanager:
+    enabled: true
+    mode: bundled
+    url: http://127.0.0.1:9093
+
+logging:
+  loki:
+    enabled: true
+    mode: bundled
+    url: http://127.0.0.1:3100
+  alloy:
+    enabled: true
+
+grafana:
+  enabled: true
+  mode: bundled
+  url: http://127.0.0.1:3000
+
+ai:
+  enabled: false
+  provider: local
+  llm:
+    mode: disabled # bundled | external | disabled
+    url: http://127.0.0.1:8088/v1
+    model: local
+  rca:
+    engine: forgerca # forgerca | openrca (openrca is not implemented)
+    window_minutes: 30
+    max_log_lines: 20
+    max_evidence: 40
+
+notifications:
+  email:
+    enabled: false
+    host: smtp.local
+    port: 587
+    from: forgesre@example.local
+    tls: true
+  webhook:
+    enabled: false
+
+features:
+  playrules: true
+  playbooks: true
+  escalation: true

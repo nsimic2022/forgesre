@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Escalation · ForgeSRE{% endblock %}
+{% block content %}
+<h1>Escalation</h1>
+{% for policy in policies %}
+<section class="card">
+  <h2>{{ policy.name }}</h2>
+  <ol>
+    {% for step in policy.steps %}
+    <li>{{ step.after_minutes }} min → email {{ step.target }}</li>
+    {% endfor %}
+  </ol>
+</section>
+{% endfor %}
+<h2>Generated notifications</h2>
+<table>
+  <thead><tr><th>When</th><th>Target</th><th>Subject</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for note in notifications %}
+    <tr>
+      <td>{{ note.created_at }}</td>
+      <td>{{ note.target }}</td>
+      <td>{{ note.subject }}</td>
+      <td>{{ note.status }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="muted">None yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

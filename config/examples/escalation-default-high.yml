@@ -1,0 +1,20 @@
+apiVersion: forgesre.io/v1
+kind: EscalationPolicy
+metadata:
+  name: default-high
+  description: Default high-severity escalation.
+spec:
+  steps:
+    - after: 0m
+      notify: storage-team
+      channel: email
+    - after: 15m
+      notify: team-lead
+      channel: email
+    - after: 30m
+      notify: oncall-engineer
+      channel: email
+    - after: 60m
+      notify: manager
+      channel: email
+  channels_v1: [email, webhook]

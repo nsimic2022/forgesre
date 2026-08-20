@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Playbooks · ForgeSRE{% endblock %}
+{% block content %}
+<h1>Playbooks</h1>
+<p class="muted">V0.1 playbooks are instructions and workflow. They do not execute commands.</p>
+{% for book in playbooks %}
+<section class="card">
+  <h2>{{ book.name }}</h2>
+  <p>{{ book.description }}</p>
+  <ol>
+    {% for step in book.steps %}
+    <li>{{ step.title }}</li>
+    {% endfor %}
+  </ol>
+</section>
+{% endfor %}
+{% if can('write_play') %}
+<h2>Create playbook</h2>
+<form method="post" action="/playbooks" class="stack">
+  <label>Name <input name="name" placeholder="DISK-FULL" required></label>
+  <label>Slug <input name="slug" placeholder="disk-full" required></label>
+  <label>Steps (one per line) <textarea name="steps" rows="6">Verify disk usage
+Check growth
+Identify owner
+Notify responsible engineer
+Escalate if not acknowledged</textarea></label>
+  <button type="submit">Save</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Discovery · ForgeSRE{% endblock %}
+{% block content %}
+<h1>Discovery</h1>
+<p class="muted">
+  Semi-automatic TCP probe (ports 22, 80, 443, 161, 9100). Not nmap.
+  New hosts wait here until an engineer Approves or Ignores them.
+  Mode: <code>{{ discovery_mode }}</code>
+  · CIDRs: <code>{{ discovery_cidrs or "none" }}</code>
+  · Enabled: <code>{{ discovery_enabled }}</code>
+</p>
+
+{% if pending %}
+<div class="banner">
+  <strong>NEW DEVICE DETECTED</strong>
+  {{ pending|length }} host{% if pending|length != 1 %}s{% endif %} waiting for Approve / Ignore.
+</div>
+{% endif %}
+
+{% if can('write_assets') %}
+<form method="post" action="/discovery/scan" class="inline">
+  <button type="submit">Scan now</button>
+</form>
+{% endif %}
+{% if can('admin') and netbox_enabled %}
+<form method="post" action="/discovery/netbox-sync" class="inline">
+  <button type="submit" class="secondary">Sync NetBox</button>
+</form>
+<p class="muted">External NetBox: <code>{{ netbox_url }}</code> (read-only). ForgeSRE does not bundle NetBox.</p>
+{% endif %}
+
+<table>
+  <thead>
+    <tr>
+      <th>IP</th>
+      <th>Proposed role</th>
+      <th>Open ports</th>
+      <th>Status</th>
+      <th>Source</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in candidates %}
+    <tr>
+      <td>{{ row.ip }}</td>
+      <td>{{ row.proposed_role }}</td>
+      <td>{{ row.open_ports|join(", ") }}</td>
+      <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>
+      <td>{{ row.source }}</td>
+      <td class="row-actions">
+        {% if row.status == 'new' and can('write_assets') %}
+        <form method="post" action="/discovery/{{ row.id }}/approve"><button type="submit">Approve</button></form>
+        <form method="post" action="/discovery/{{ row.id }}/ignore"><button type="submit" class="secondary">Ignore</button></form>
+        {% elif row.asset_id %}
+        <a href="/assets/{{ row.asset_id }}">{{ row.asset_id }}</a>
+        {% else %}
+        —
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">No candidates yet. Run a scan or the demo workflow.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

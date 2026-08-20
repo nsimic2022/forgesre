@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}System Health · ForgeSRE{% endblock %}
+{% block content %}
+<h1>System Health</h1>
+<p>Overall: <strong>{{ doctor.overall }}</strong></p>
+<table>
+  <thead><tr><th>Component</th><th>Status</th><th>Why</th><th>Test</th><th>Fix</th></tr></thead>
+  <tbody>
+  {% for name, item in doctor.components.items() %}
+    <tr>
+      <td>{{ name }}</td>
+      <td>{{ item.status }}</td>
+      <td>{{ item.why or "—" }}</td>
+      <td><code>{{ item.test or "—" }}</code></td>
+      <td>{{ item.fix or "—" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

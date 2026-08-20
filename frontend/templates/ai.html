@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}AI Investigation · {{ incident.number }}{% endblock %}
+{% block content %}
+<p><a href="/incidents/{{ incident.number }}">← {{ incident.number }}</a></p>
+<h1>AI Investigation</h1>
+{% if investigation %}
+<p class="muted">{{ investigation.disclaimer }} · {{ investigation.provider }} · {{ investigation.engine }} {{ investigation.engine_version }}</p>
+
+<section class="card">
+  <h2>Summary</h2>
+  <p>{{ investigation.summary }}</p>
+  <h2>Root cause</h2>
+  <p>{{ investigation.likely_cause }}</p>
+  <p>Confidence: <strong>{{ investigation.confidence|int }}%</strong>
+    <span class="muted">calculated by ForgeSRE from evidence/anomalies/history, not taken from the LLM.</span></p>
+  <h2>Recommended actions</h2>
+  <p>{{ investigation.recommended_action }}</p>
+  <p class="muted">Recommended only. Nothing was executed.</p>
+</section>
+
+<section class="card">
+  <h2>Facts</h2>
+  <ul>
+    {% for fact in rca.facts or [] %}
+    <li>{{ fact.text }}</li>
+    {% else %}
+    {% for line in investigation.evidence %}
+    <li>{{ line }}</li>
+    {% endfor %}
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="card">
+  <h2>Anomalies</h2>
+  <ul>
+    {% for item in rca.anomalies or [] %}
+    <li>{{ item.summary }}</li>
+    {% else %}
+    <li class="muted">No deterministic anomaly recorded.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="card">
+  <h2>Candidate causes</h2>
+  <ol>
+    {% for hyp in rca.hypotheses or [] %}
+    <li id="hyp-{{ hyp.id }}">
+      <strong>{{ hyp.summary }}</strong>
+      <div class="muted">confidence {{ '%.0f'|format((hyp.confidence or 0) * 100) }}% · supporting
+        {% for eid in hyp.supporting_evidence or [] %}
+        <a href="#{{ eid }}">{{ eid }}</a>
+        {% else %}none{% endfor %}
+        {% if hyp.contradicting_evidence %}
+        · contradicting {% for eid in hyp.contradicting_evidence %}<a href="#{{ eid }}">{{ eid }}</a> {% endfor %}
+        {% endif %}
+      </div>
+    </li>
+    {% else %}
+    <li class="muted">No hypotheses.</li>
+    {% endfor %}
+  </ol>
+</section>
+
+<section class="card">
+  <h2>Limitations</h2>
+  <ul>
+    {% for line in rca.limitations or [] %}
+    <li>{{ line }}</li>
+    {% else %}
+    <li>AI has not modified the system.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<ol class="flow">
+  {% for node in rca.visual or [] %}
+  <li><button type="button" class="node" data-detail="{{ node.detail }}">{{ node.title }}</button>
+    {% if not loop.last %}<div class="arrow">↓</div>{% endif %}</li>
+  {% endfor %}
+</ol>
+<pre class="detail-box" id="node-detail">Click a node for the evidence chain.</pre>
+
+{% if engineer %}
+<section>
+  <h2>Engineer evidence chain</h2>
+  {% for ev in incident.evidence %}
+    {% if ev.evidence_id and not ev.evidence_id.startswith('ROLLUP-') %}
+    <article class="card" id="{{ ev.evidence_id }}">
+      <h3>{{ ev.evidence_id }} · {{ ev.kind }} · {{ ev.source }}</h3>
+      {% if ev.query %}<p>Original query: <code>{{ ev.query }}</code></p>{% endif %}
+      <pre>{{ ev.payload }}</pre>
+    </article>
+    {% endif %}
+  {% endfor %}
+</section>
+{% endif %}
+
+{% else %}
+<p>No investigation stored. {% if can('investigate') or can('read_ai') %}
+<form method="post" action="/incidents/{{ incident.number }}/investigate" class="inline"><button>Run now</button></form>
+{% endif %}</p>
+{% endif %}
+{% endblock %}
