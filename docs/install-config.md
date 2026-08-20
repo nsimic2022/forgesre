@@ -337,9 +337,11 @@ Install writes random `SECRET_KEY` and `ALERTMANAGER_WEBHOOK_TOKEN`. Core **refu
 
 ## 11. Day-2 commands
 
-`./forgesre help` is the index. `./forgesre help <command>` has examples.
+`./forgesre help` is the index. `./forgesre help <command>` has examples. `./forgesre` with no args opens a prompt so you type `journal` instead of `./forgesre journal`. `./f` is the same CLI.
 
 ```bash
+./forgesre               # prompt; then journal / history / doctor / quit
+./f journal
 ./forgesre help              # CLI overview
 ./forgesre help snmp         # SNMP exporter + SD
 ./forgesre help tls          # optional HTTPS / Secure cookies

@@ -111,7 +111,11 @@ Roles: super admin (install user), system admin, analyst (inventory + playrules)
 
 `./forgesre help` is the index. `./forgesre help snmp` (or any command) has examples.
 
+Type `./forgesre` with no arguments for a prompt, then `journal`, `history`, `doctor` — you do not retype `./forgesre` each time. `./f` is the same CLI with a shorter name (`./f journal`).
+
 ```bash
+./forgesre                 # prompt; then: journal
+./f journal
 ./forgesre doctor
 ./forgesre assets
 ./forgesre snmp
