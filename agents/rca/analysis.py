@@ -67,16 +67,6 @@ def detect_anomalies(context: RCAContext) -> list[Anomaly]:
                     strength=min(1.0, (value - high) / 40.0),
                 )
             )
-        if low is not None and value < max(0.0, low - 15) and name.endswith("percent"):
-            anomalies.append(
-                Anomaly(
-                    kind="sudden_decrease",
-                    summary=f"{name} dropped to {value:.1f}, below typical {low:.0f}–{high:.0f}.",
-                    metric=name,
-                    evidence_ids=[item.evidence_id],
-                    strength=0.4,
-                )
-            )
     for item in context.evidence:
         content = item.content if isinstance(item.content, dict) else {}
         if item.type == "METRIC" and (content.get("error") or item.metadata.get("unavailable")):
