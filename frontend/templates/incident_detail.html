@@ -49,7 +49,8 @@
     {% else %}
     <p class="muted">No ForgeRCA result yet. Click Run AI investigation to open the full builtin page now. The local LLM, if enabled, rewrites text in the background.</p>
     {% endif %}
-    <form method="post" action="/incidents/{{ incident.number }}/status" class="inline">
+    <div class="incident-actions">
+    <form method="post" action="/incidents/{{ incident.number }}/status">
       {% if can('ack_incidents') %}
       <button name="status" value="INVESTIGATING">Acknowledge</button>
       {% endif %}
@@ -59,10 +60,11 @@
       {% endif %}
     </form>
     {% if can('investigate') or can('read_ai') %}
-    <form method="post" action="/incidents/{{ incident.number }}/investigate" class="inline">
+    <form method="post" action="/incidents/{{ incident.number }}/investigate">
       <button type="submit">Run AI investigation</button>
     </form>
     {% endif %}
+    </div>
   </section>
   <section>
     <h2>Visual investigation</h2>
