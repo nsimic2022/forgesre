@@ -60,7 +60,12 @@ def run_pending_jobs(db: Session, limit: int = 8) -> int:
                 incident = db.query(Incident).filter_by(number=row.object_id).first()
                 if incident is None:
                     raise RuntimeError(f"incident {row.object_id} not found")
-                run_investigation(db, incident, actor=str((row.payload or {}).get("actor") or "system"))
+                run_investigation(
+                    db,
+                    incident,
+                    actor=str((row.payload or {}).get("actor") or "system"),
+                    force=bool((row.payload or {}).get("force")),
+                )
             else:
                 raise RuntimeError(f"unknown job kind {row.kind}")
             row.status = "done"
