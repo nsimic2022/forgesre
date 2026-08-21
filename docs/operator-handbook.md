@@ -116,9 +116,9 @@ Login session lasts **12 hours** (httponly cookie).
 | Assets | `/assets` | List inventory. **Add asset** form (analyst+) |
 | Asset detail | `/assets/<id>` | Contacts, scrape address, edit owner after Save, similar-incident history |
 | Discovery | `/discovery` | Scan, Approve / Ignore (analyst+), optional NetBox sync (admin) |
-| Incidents | `/incidents` | Recent 200 Alertmanager incidents (live list) |
+| Incidents | `/incidents` | Recent 200 Alertmanager incidents. INC id is green (resolved/closed), yellow (in progress), red (critical). **Reported to** is who received the incident report |
 | History | `/history` | Last 90 days in Postgres. Filters: status, asset, `INC` number. Closed rows stay here. |
-| Incident | `/incidents/INC-…` | Ack / Resolve / Close (who/when), **Who to call**, **Send incident report** (address book or new email; outbox when SMTP is off), mail outbox, audit, operator notes, run RCA, playbook name |
+| Incident | `/incidents/INC-…` | **Acknowledge / Resolve / Close** at the top (same yellow/green as below), Who to call, **Send incident report**, **Report outbox**, audit, notes, RCA |
 | Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
 | AI Investigation | `/ai/INC-…` | ForgeRCA (green) then ForgeAI (green/yellow/red). Facts, anomalies, hypotheses |
 | Playrules | `/playrules` | List, toggle, create from Prometheus presets (**analyst**) |
@@ -425,7 +425,7 @@ On `/incidents/<number>`:
 | Acknowledge | analyst+ | Status `INVESTIGATING`, records ack user/time |
 | Resolve / Close | analyst+ (`write_incidents`) | Closes the operational loop; records who resolved |
 | Run AI investigation | analyst+ (`read_ai`) or engineer (`investigate`) | ForgeRCA; does not change the host |
-| **Send incident report** | analyst / engineer / admin | Emails (or stores) the current INC snapshot. Next to Ack/Resolve. Does **not** require SMTP. With email off, the row is `generated` in Email notifications on this page |
+| **Send incident report** | analyst / engineer / admin | Emails (or stores) the current INC snapshot. Own card, above **Report outbox**. Does **not** require SMTP. With email off, the row is `generated` |
 
 The same page lists **email notifications** for this `INC` (bodies, `generated` vs `sent`), **who did what** (audit: ack, resolve, notes), and **operator notes** (what a person actually did, e.g. cleaned WAL). Notes are not a ticket thread and not RCA.
 

@@ -33,10 +33,10 @@
   <p class="muted">Recommended only. Nothing was executed.</p>
 </section>
 {% if can_send %}
-<section class="card" id="mail">
-  <h2>Email this report</h2>
-  <p class="muted">Sends the same snapshot as the incident page. Does not change incident status.</p>
-  <form method="post" action="/incidents/{{ incident.number }}/mail" class="stack">
+<section class="card" id="send-report">
+  <h2>Send incident report</h2>
+  <p class="muted">Sends the same snapshot as the incident page. Does not change incident status. SMTP off stores it as <em>generated</em>.</p>
+  <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail">
     <label>To
       <select name="target">
         <option value="">Select an address</option>
@@ -50,6 +50,27 @@
   </form>
 </section>
 {% endif %}
+
+<section class="card report-outbox" id="mail">
+  <h2>Report outbox</h2>
+  <p class="muted">Mail stored for this incident. <code>generated</code> = SMTP off (lab). <code>sent</code> = handed to SMTP.</p>
+  <table>
+    <thead><tr><th>When</th><th>Step</th><th>To</th><th>Status</th><th>Subject</th></tr></thead>
+    <tbody>
+    {% for note in mail %}
+      <tr>
+        <td>{{ note.created_at }}</td>
+        <td>{{ note.step_key or "—" }}</td>
+        <td>{{ note.target }}</td>
+        <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
+        <td>{{ note.subject }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">No mail yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
 
 <section class="card">
   <h2>Facts</h2>

@@ -83,6 +83,28 @@ def notifications_for(db: Session, incident: Incident) -> list[Notification]:
     )
 
 
+def reported_to_for(db: Session, incidents: list[Incident]) -> dict[int, str]:
+    """Unique incident-report recipients, in send order."""
+    ids = [row.id for row in incidents if getattr(row, "id", None)]
+    if not ids:
+        return {}
+    rows = (
+        db.query(Notification.incident_id, Notification.target)
+        .filter(Notification.incident_id.in_(ids), Notification.step_key == "incident-report")
+        .order_by(Notification.id.asc())
+        .all()
+    )
+    grouped: dict[int, list[str]] = {}
+    for incident_id, target in rows:
+        text = str(target or "").strip()
+        if not text:
+            continue
+        bucket = grouped.setdefault(int(incident_id), [])
+        if text not in bucket:
+            bucket.append(text)
+    return {key: ", ".join(values) for key, values in grouped.items()}
+
+
 def audit_for(db: Session, number: str) -> list[AuditLog]:
     return (
         db.query(AuditLog)

@@ -110,6 +110,10 @@ button { background: var(--accent); color: #1a1208; border: 0; font-weight: 600;
   color: var(--muted);
 }
 .incident-mail input, .incident-mail select { min-width: 12rem; }
+.report-outbox { margin-top: 1.4rem; }
+a.inc-ok { color: var(--ok); font-weight: 700; }
+a.inc-warn { color: var(--warn); font-weight: 700; }
+a.inc-crit { color: var(--crit); font-weight: 700; }
 .tool-row { display: flex; gap: 0.45rem; align-items: center; flex-wrap: wrap; margin: 0.35rem 0 0.8rem; }
 .tool-row .pill { font-weight: 600; letter-spacing: 0.02em; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; margin-bottom: 1rem; }

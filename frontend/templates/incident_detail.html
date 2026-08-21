@@ -7,9 +7,24 @@
   <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
   <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
 </div>
+{% set st = incident.status|upper %}
+{% set acked = st in ["INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED"] %}
+{% set resolved = st in ["RESOLVED", "CLOSED"] %}
+{% set closed = st == "CLOSED" %}
+<div class="incident-actions">
+  <form method="post" action="/incidents/{{ incident.number }}/status">
+    {% if can('ack_incidents') %}
+    <button name="status" value="INVESTIGATING" class="{{ 'done' if acked else 'todo' }}">Acknowledge</button>
+    {% endif %}
+    {% if can('write_incidents') %}
+    <button name="status" value="RESOLVED" class="{{ 'done' if resolved else 'todo' }}">Resolve</button>
+    <button name="status" value="CLOSED" class="{{ 'done' if closed else 'todo' }}">Close</button>
+    {% endif %}
+  </form>
+</div>
 <p>
   <span class="pill {{ incident.status|lower }}">{{ incident.status }}</span>
-  <span class="pill warn">{{ incident.severity }}</span>
+  <span class="pill {{ 'crit' if incident.severity|upper in ['CRITICAL', 'CRIT', 'FATAL'] else 'warn' }}">{{ incident.severity }}</span>
   {% if incident.asset %}
   Asset: <a href="/assets/{{ incident.asset.asset_id }}">{{ incident.asset.hostname }}</a>
   {% endif %}
@@ -28,6 +43,25 @@
     <dt>Phone</dt><dd>{{ incident.asset.owner_phone or "—" }}</dd>
   </dl>
   <p class="muted">Escalation uses the owner email when it is set. <a href="/assets/{{ incident.asset.asset_id }}">Edit contacts on the asset</a>.</p>
+</section>
+{% endif %}
+
+{% if can_send %}
+<section class="card" id="send-report">
+  <h2>Send incident report</h2>
+  <p class="muted">Current snapshot (alert + ForgeRCA if it has run). Does not change status. SMTP off stores the row as <em>generated</em> in Report outbox below — no YAML change needed.</p>
+  <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail">
+    <label>To
+      <select name="target">
+        <option value="">Select an address</option>
+        {% for addr in addresses %}
+        <option value="{{ addr.email }}" {% if addr.email == default_to %}selected{% endif %}>{% if addr.label %}{{ addr.label }} — {% endif %}{{ addr.email }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Or new email <input name="new_email" type="email" placeholder="ops@dc.local"></label>
+    <button type="submit">Send incident report</button>
+  </form>
 </section>
 {% endif %}
 
@@ -50,10 +84,6 @@
     <p class="muted">No ForgeRCA result yet. Click Run AI investigation to open the full builtin page now. The local LLM, if enabled, rewrites text in the background.</p>
     {% endif %}
     <div class="incident-actions">
-    {% set st = incident.status|upper %}
-    {% set acked = st in ["INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED"] %}
-    {% set resolved = st in ["RESOLVED", "CLOSED"] %}
-    {% set closed = st == "CLOSED" %}
     <form method="post" action="/incidents/{{ incident.number }}/status">
       {% if can('ack_incidents') %}
       <button name="status" value="INVESTIGATING" class="{{ 'done' if acked else 'todo' }}">Acknowledge</button>
@@ -71,21 +101,6 @@
     <button type="button" class="off" disabled>Run AI investigation</button>
     {% endif %}
     </div>
-    {% if can_send %}
-    <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail" id="send-report">
-      <label>To
-        <select name="target">
-          <option value="">Select an address</option>
-          {% for addr in addresses %}
-          <option value="{{ addr.email }}" {% if addr.email == default_to %}selected{% endif %}>{% if addr.label %}{{ addr.label }} — {% endif %}{{ addr.email }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>Or new email <input name="new_email" type="email" placeholder="ops@dc.local"></label>
-      <button type="submit">Send incident report</button>
-    </form>
-    <p class="muted">SMTP is off on this appliance unless you turned it on. The report is still saved in <a href="#mail">Email notifications</a> as <em>generated</em>. You do not edit YAML for that.</p>
-    {% endif %}
   </section>
   <section>
     <h2>Visual investigation</h2>
@@ -175,9 +190,9 @@
 </section>
 {% endif %}
 
-<section id="mail">
-  <h2>Email notifications</h2>
-  <p class="muted">Outbox for this incident. <code>generated</code> means SMTP was off (lab). <code>sent</code> means Core handed it to the SMTP host. Escalation rows stay here too.</p>
+<section class="card report-outbox" id="mail">
+  <h2>Report outbox</h2>
+  <p class="muted">Mail stored for this incident. <code>generated</code> = SMTP off (lab). <code>sent</code> = handed to SMTP. Includes incident reports and escalation rows.</p>
   <table>
     <thead><tr><th>When</th><th>Step</th><th>To</th><th>Status</th><th>Subject</th></tr></thead>
     <tbody>

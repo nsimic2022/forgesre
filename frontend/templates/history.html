@@ -28,22 +28,23 @@
   <thead>
     <tr>
       <th>ID</th><th>Title</th><th>Status</th><th>Asset</th>
-      <th>Started</th><th>Ack</th><th>Resolved</th>
+      <th>Started</th><th>Reported to</th><th>Ack</th><th>Resolved</th>
     </tr>
   </thead>
   <tbody>
   {% for item in incidents %}
     <tr>
-      <td><a href="/incidents/{{ item.number }}">{{ item.number }}</a></td>
+      <td><a class="{{ incident_tone(item.status, item.severity) }}" href="/incidents/{{ item.number }}">{{ item.number }}</a></td>
       <td>{{ item.title }}</td>
       <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
       <td>{% if item.asset %}{{ item.asset.hostname }}{% else %}—{% endif %}</td>
       <td>{{ item.started_at }}</td>
+      <td>{% if reported_to.get(item.id) %}{{ reported_to.get(item.id) }}{% else %}<span class="muted">—</span>{% endif %}</td>
       <td>{% if item.ack_by %}{{ item.ack_by }}{% else %}—{% endif %}</td>
       <td>{% if item.resolved_by %}{{ item.resolved_by }}{% else %}—{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="7" class="muted">No incidents in this window.</td></tr>
+    <tr><td colspan="8" class="muted">No incidents in this window.</td></tr>
   {% endfor %}
   </tbody>
 </table>

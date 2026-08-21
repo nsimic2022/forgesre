@@ -243,7 +243,9 @@ def test_send_incident_report_to_address_book_email():
     page = client.get(f"/incidents/{number}")
     assert page.status_code == 200
     assert "Send incident report" in page.text
+    assert "Report outbox" in page.text
     assert "platform@forgesre.local" in page.text
+    assert page.text.find("Acknowledge") < page.text.find('class="pill open"') or page.text.find("Acknowledge") < page.text.find(">OPEN<")
     posted = client.post(
         f"/incidents/{number}/mail",
         data={"target": "ops@dc.local"},
@@ -263,6 +265,12 @@ def test_send_incident_report_to_address_book_email():
     assert number in mail.body
     assert "Disk full" in mail.body
     assert "ForgeRCA has not been run yet." in mail.body
+    listed = client.get("/incidents")
+    assert listed.status_code == 200
+    assert "Reported to" in listed.text
+    assert "ops@dc.local" in listed.text
+    assert f'class="inc-crit" href="/incidents/{number}"' in listed.text
+    assert 'class="inc-ok"' in listed.text
     client.post(f"/incidents/{number}/investigate", follow_redirects=False)
     again = client.post(
         f"/incidents/{number}/mail",

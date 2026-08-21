@@ -89,7 +89,7 @@
     <tbody>
     {% for item in recent %}
       <tr>
-        <td><a href="/incidents/{{ item.number }}">{{ item.number }}</a></td>
+        <td><a class="{{ incident_tone(item.status, item.severity) }}" href="/incidents/{{ item.number }}">{{ item.number }}</a></td>
         <td>{{ item.title }}</td>
         <td>{{ item.severity }}</td>
         <td>{{ item.status }}</td>

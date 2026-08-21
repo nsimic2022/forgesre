@@ -47,6 +47,7 @@ from app.history import (
     list_history,
     notes_for,
     notifications_for,
+    reported_to_for,
 )
 from rca.catalog import PLAYRULE_PRESETS
 from app.settings import settings
@@ -60,6 +61,17 @@ def health_class(status: str) -> str:
     if value in {"disabled", "warn", "warning", "paused", "starting"}:
         return "warn"
     return "crit"
+
+
+def incident_tone(status: str, severity: str = "") -> str:
+    """INC link color: green resolved, yellow in progress, red critical."""
+    st = str(status or "").upper()
+    sev = str(severity or "").upper()
+    if st in {"RESOLVED", "CLOSED"}:
+        return "inc-ok"
+    if sev in {"CRITICAL", "CRIT", "FATAL", "EMERGENCY"}:
+        return "inc-crit"
+    return "inc-warn"
 
 
 def can_send_ops(user: User) -> bool:
@@ -97,6 +109,7 @@ def ctx(request: Request, user: User | None, **extra):
         "grafana_enabled": settings.grafana_enabled,
         "ai_enabled": settings.ai_enabled,
         "health_class": health_class,
+        "incident_tone": incident_tone,
     }
     data.update(extra)
     return data
@@ -409,7 +422,7 @@ def asset_update(
 @router.get("/incidents", response_class=HTMLResponse)
 def incidents_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
     rows = db.query(Incident).order_by(Incident.id.desc()).limit(200).all()
-    return render(request, "incidents.html", user, incidents=rows)
+    return render(request, "incidents.html", user, incidents=rows, reported_to=reported_to_for(db, rows))
 
 
 @router.get("/history", response_class=HTMLResponse)
@@ -452,6 +465,7 @@ def history_page(
         page=page_n,
         pages=pages,
         total=total,
+        reported_to=reported_to_for(db, rows),
     )
 
 
@@ -586,6 +600,7 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
         engineer=can(user, "read_evidence"),
         llm_pending=pending,
         tools=tool_status(investigation, pending, llm_job_error(db, number)),
+        mail=notifications_for(db, item),
         **ops_mail_ctx(db, user, item),
     )
 
