@@ -72,7 +72,8 @@ class ForgeRCA:
             if isinstance(extra, list):
                 ctx.limitations.extend(str(item) for item in extra if item)
         elif self.llm.get_name() != "none":
-            llm_note = "LLM unreachable; used ForgeRCA deterministic analysis on collected evidence."
+            why = str(getattr(self.llm, "last_error", "") or "LLM unreachable").strip()
+            llm_note = f"{why}; used ForgeRCA deterministic analysis on collected evidence."
             ctx.limitations.append(llm_note)
 
         if ctx.maintenance:
