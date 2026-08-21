@@ -7,7 +7,7 @@ The GitHub README is the product summary (what ForgeSRE is, what it is not, inst
 How to install and run ForgeSRE:
 
 - [Install and config (Ubuntu / vCenter)](install-config.md)
-- [Operator handbook (users, servers, playrules, incidents)](operator-handbook.md)
+- [Operator handbook (users, servers, playrules, incidents, email)](operator-handbook.md)
 
 What each release actually shipped (read if you want the “why”, not required to operate):
 

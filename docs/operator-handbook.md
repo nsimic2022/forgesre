@@ -412,14 +412,19 @@ notifications:
     tls: true
 ```
 
-Leave SMTP **disabled** in the lab if you only want the outbox. **Send incident report** still stores a `generated` row. Gmail (and any real mailbox) stays empty until SMTP is on.
+Leave SMTP **disabled** only if you want the on-box outbox and no real mail. For production, enable SMTP against a **real mailbox** (next section). Gmail stays empty while status is `generated`.
 
-### Send a real email (Gmail)
+### Production: send and receive for real
 
-ForgeSRE has **no bundled mail server**. It talks to an external SMTP host.
+ForgeSRE **sends**. It does **not** receive inbound mail into the UI. Replies and incoming ops mail live in a normal mailbox (Gmail, Google Workspace, Exchange, Migadu). That is how send **and** receive work without running an MX on this VM.
 
-1. In Gmail: Security → 2-Step Verification on → **App passwords** → create one for “ForgeSRE”. Copy the 16-character password (not your normal Gmail password).
-2. On the VM edit `config/forgesre.yml`:
+Do **not** put Postfix / Mailu / docker-mailserver on the ForgeSRE appliance. Port 25 is often blocked, you need a public hostname, MX + PTR + SPF + DKIM + DMARC, or Gmail will junk or reject you. That is a mail-ops product, not a Compose profile.
+
+**Send (ForgeSRE → people)** — existing YAML, no code change:
+
+1. Use a real mailbox you already read (example: Gmail).
+2. Gmail: Security → 2-Step Verification → **App passwords** → 16 characters (not your login password).
+3. `config/forgesre.yml`:
 
 ```yaml
 notifications:
@@ -431,43 +436,24 @@ notifications:
     tls: true
 ```
 
-3. In `secrets/secrets.env` (never in YAML, never in git):
+4. `secrets/secrets.env`:
 
 ```bash
 SMTP_USERNAME=you@gmail.com
 SMTP_PASSWORD=xxxx xxxx xxxx xxxx
 ```
 
-4. `./forgesre update` (Core re-reads YAML and secrets). Hard-refresh the UI.
-5. Open the incident → **Send incident report**. Report outbox status should become `sent`. If it is `failed`, open the row body — Gmail rejected the login (wrong app password) or the host blocked outbound 587.
+5. `./forgesre update`. **Send incident report**. Report outbox must show `sent`. `failed` = wrong app password or outbound 587 blocked. `generated` = `enabled` is still false.
 
-Exchange / a local relay: same YAML keys, different `host` / `port`. Then `./forgesre update`.
+Workspace / Exchange / Migadu: same keys, their SMTP host and a mailbox user.
 
-### Optional local SMTP (Mailpit) — see the mail, do not run Postfix
+**Receive (people → you)** — open that same mailbox in Gmail/Outlook. If someone replies to the incident report, it arrives there. ForgeSRE has no IMAP inbox in this version.
 
-ForgeSRE is already the **mail client**. You do not add Thunderbird or another client in a container. You only need an SMTP **listener**.
+From-address must be allowed to send as that user (Gmail: `from:` = the same account).
 
-Do **not** bundle Postfix / Mailu / docker-mailserver on this appliance. That is a real MX (DNS, SPF, DKIM, PTR, port 25, spam). Architecture keeps that out of V1.
+### Lab-only: Mailpit (not production)
 
-For a lab inbox on the VM (messages never leave the box, they do **not** appear in Gmail):
-
-1. In `.env` set `COMPOSE_PROFILES=mail` (or `ai,mail` if the LLM is on).
-2. Point Core at Mailpit — no username:
-
-```yaml
-notifications:
-  email:
-    enabled: true
-    host: 127.0.0.1
-    port: 1025
-    from: forgesre@local
-    tls: false
-```
-
-3. Leave `SMTP_USERNAME` / `SMTP_PASSWORD` empty. `./forgesre update`.
-4. Send an incident report. Outbox should be `sent`. Open **http://\<VM-IP\>:8025** (Mailpit UI). Bind is localhost on the VM; SSH tunnel if you browse from a laptop: `ssh -L 8025:127.0.0.1:8025 user@vm`.
-
-Want the message **in Gmail**? Use the Gmail SMTP section above. Mailpit will not forward there unless you configure something else — do not.
+Skip this if you want real mail. Mailpit is a catcher on the VM (`COMPOSE_PROFILES=mail`, YAML `127.0.0.1:1025`, `tls: false`). Messages never leave the box and never appear in Gmail.
 
 ---
 
@@ -480,7 +466,7 @@ On `/incidents/<number>`:
 | Acknowledge | analyst+ | Status `INVESTIGATING`, records ack user/time |
 | Resolve / Close | analyst+ (`write_incidents`) | Closes the operational loop; records who resolved |
 | Run AI investigation | analyst+ (`read_ai`) or engineer (`investigate`) | ForgeRCA; does not change the host |
-| **Send incident report** | analyst / engineer / admin | Emails (or stores) the current INC snapshot. Own card, above **Report outbox**. Does **not** require SMTP. With email off, the row is `generated` |
+| **Send incident report** | analyst / engineer / admin | Emails the current INC snapshot when SMTP is on (`sent`). If SMTP is off, stores `generated` in **Report outbox**. Replies arrive in the real mailbox, not in ForgeSRE |
 
 The same page lists **email notifications** for this `INC` (bodies, `generated` vs `sent`), **who did what** (audit: ack, resolve, notes), and **operator notes** (what a person actually did, e.g. cleaned WAL). Notes are not a ticket thread and not RCA.
 

@@ -162,8 +162,7 @@ services:
     restart: unless-stopped
 
   mailpit:
-    # Optional lab SMTP catcher. Not a real internet mail server. Not Gmail.
-    # COMPOSE_PROFILES=mail (or ai,mail) then point forgesre.yml at 127.0.0.1:1025 tls: false
+    # Lab-only SMTP catcher. Not production. Not inbound MX. COMPOSE_PROFILES=mail
     image: axllent/mailpit:v1.30.7
     profiles: ["mail"]
     network_mode: host
