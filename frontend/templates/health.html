@@ -3,36 +3,61 @@
 {% block content %}
 <div class="page-head">
   <h1>System Health</h1>
-  <form method="post" action="/health-ui/refresh">
-    <button type="submit">Run doctor</button>
-  </form>
+  <div class="row-actions">
+    {% if grafana_enabled %}
+    <a class="button-link" href="{{ grafana_open }}" target="_blank" rel="noreferrer">Open Grafana</a>
+    {% endif %}
+    <form method="post" action="/health-ui/refresh">
+      <button type="submit">Run doctor</button>
+    </form>
+  </div>
 </div>
 <p>
   Same live checks as <code>./forgesre doctor</code>.
   Overall:
   <span class="pill {{ health_class(doctor.overall) }}">{{ doctor.overall }}</span>
 </p>
-<p class="muted">Green is ok. Yellow is off / disabled. Red is failing. Run doctor to probe again (does not use the short cache).</p>
+<p class="muted">Green = running. Yellow = paused / starting / disabled. Red = down. Open goes to that service’s GUI or metrics. Prometheus/Alertmanager listen on the appliance; use the VM host if the UI rewrote 127.0.0.1.</p>
 
 <div class="grid health-grid">
-  {% for name, item in doctor.components.items() %}
-  <div class="stat {{ health_class(item.status) }}">
-    <span>{{ name }}</span>
-    <strong>{{ item.status }}</strong>
+  {% for item in stack %}
+  {% if item.gui %}
+  <a class="stat {{ item.css }}" href="{{ item.gui }}" target="_blank" rel="noreferrer">
+    <span>{{ item.id }}</span>
+    <strong>{{ item.state }}</strong>
+  </a>
+  {% else %}
+  <div class="stat {{ item.css }}">
+    <span>{{ item.id }}</span>
+    <strong>{{ item.state }}</strong>
   </div>
+  {% endif %}
   {% endfor %}
 </div>
 
 <table class="health-table">
-  <thead><tr><th>Component</th><th>Status</th><th>Why</th><th>Test</th><th>Fix</th></tr></thead>
+  <thead><tr><th>Component</th><th>State</th><th>Why</th><th>Test</th><th>Fix</th><th>Open</th></tr></thead>
   <tbody>
-  {% for name, item in doctor.components.items() %}
-    <tr class="health-{{ health_class(item.status) }}">
-      <td>{{ name }}</td>
-      <td><span class="pill {{ health_class(item.status) }}">{{ item.status }}</span></td>
+  {% for item in stack %}
+    <tr class="health-{{ item.css }}">
+      <td>
+        {% if item.gui %}
+        <a href="{{ item.gui }}" target="_blank" rel="noreferrer">{{ item.id }}</a>
+        {% elif item.metrics %}
+        <a href="{{ item.metrics }}" target="_blank" rel="noreferrer">{{ item.id }}</a>
+        {% else %}
+        {{ item.id }}
+        {% endif %}
+      </td>
+      <td><span class="pill {{ item.css }}">{{ item.state }}</span></td>
       <td>{{ item.why or "—" }}</td>
       <td><code>{{ item.test or "—" }}</code></td>
       <td>{{ item.fix or "—" }}</td>
+      <td class="open-links">
+        {% if item.gui %}<a href="{{ item.gui }}" target="_blank" rel="noreferrer">{{ item.gui_label }}</a>{% endif %}
+        {% if item.metrics %}<a href="{{ item.metrics }}" target="_blank" rel="noreferrer">{{ item.metrics_label }}</a>{% endif %}
+        {% if not item.gui and not item.metrics %}<span class="muted">—</span>{% endif %}
+      </td>
     </tr>
   {% endfor %}
   </tbody>

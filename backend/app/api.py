@@ -671,6 +671,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "prometheus": _http(f"{settings.prometheus_url}/-/ready", "GET"),
         "alertmanager": _http(f"{settings.alertmanager_url}/-/ready", "GET"),
         "loki": _http(f"{settings.loki_url}/loki/api/v1/status/buildinfo", "GET") if settings.loki_enabled else _ok("disabled"),
+        "alloy": _http("http://127.0.0.1:12345/metrics", "GET") if settings.loki_enabled else _ok("disabled"),
         "grafana": _http("http://127.0.0.1:3000/api/health", "GET") if settings.grafana_enabled else _ok("disabled"),
         "snmp": _snmp_check(),
         "llm": _http((settings.llm_url or "").rstrip("/") + "/models", "GET") if settings.llm_url else _ok("disabled"),

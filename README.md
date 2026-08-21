@@ -100,7 +100,8 @@ Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. L
 | `/ai/INC-…` | Read-only RCA |
 | `/playrules` `/playbooks` `/escalation` | Workflow |
 | `/journal` | Internal console |
-| `/health-ui` | Same checks as `./forgesre doctor` |
+| `/health-ui` | Same checks as `./forgesre doctor`; Open Grafana / Prometheus / … |
+| `/ops` | Grafana link, mail outbox, scheduled performance reports |
 | `/admin` | Users and audit |
 
 Roles: super admin (install user), system admin, analyst (inventory + playrules), engineer (deep RCA), viewer.

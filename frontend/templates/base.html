@@ -24,11 +24,9 @@
     <a href="/escalation">Escalation</a>
     <a href="/journal" class="{% if request.url.path.startswith('/journal') %}active{% endif %}">Journal</a>
     {% endif %}
-    <a href="/health-ui">System Health</a>
+    <a href="/health-ui" class="{% if request.url.path.startswith('/health-ui') %}active{% endif %}">System Health</a>
+    <a href="/ops" class="{% if request.url.path.startswith('/ops') %}active{% endif %}">Grafana &amp; reports</a>
     {% if can('admin') %}<a href="/admin">Administration</a>{% endif %}
-    {% if grafana_enabled %}
-    <a href="{{ grafana_url }}" target="_blank" rel="noreferrer">Open Grafana</a>
-    {% endif %}
     <div class="nav-foot">
       <div class="who">{{ user.name }} · {{ role_label(user.role) }}</div>
       <form method="post" action="/logout"><button type="submit">Logout</button></form>

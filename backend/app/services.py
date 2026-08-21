@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -22,6 +22,7 @@ from app.models import (
     Notification,
     Playbook,
     Playrule,
+    ScheduledReport,
 )
 from app.seed import DEMO_ASSET, ensure_demo_asset, ensure_demo_similar_history, seed
 from app.settings import settings
@@ -754,6 +755,128 @@ def _send_smtp(target: str, subject: str, body: str) -> None:
         if settings.smtp_username:
             client.login(settings.smtp_username, settings.smtp_password)
         client.send_message(message)
+
+
+def send_outbound_mail(
+    db: Session,
+    *,
+    target: str,
+    subject: str,
+    body: str,
+    actor: str = "system",
+    step_key: str = "manual",
+    incident: Incident | None = None,
+) -> Notification:
+    """Store an outbox row and send if SMTP is on. Does not change incident status."""
+    row = Notification(
+        incident_id=incident.id if incident else None,
+        channel="email",
+        target=target.strip(),
+        subject=subject.strip() or "(no subject)",
+        body=body,
+        status="generated",
+        step_key=step_key,
+    )
+    if settings.email_enabled and settings.smtp_host:
+        try:
+            _send_smtp(row.target, row.subject, row.body)
+            row.status = "sent"
+        except Exception as exc:
+            row.status = "failed"
+            row.error = str(exc)
+    else:
+        row.status = "generated"
+        row.error = "SMTP disabled; notification generated but not sent"
+    db.add(row)
+    audit(
+        db,
+        action="notification.create",
+        actor=actor,
+        object_type="incident" if incident else "mail",
+        object_id=incident.number if incident else row.target,
+        data={"target": row.target, "step_key": step_key, "status": row.status},
+    )
+    db.commit()
+    db.refresh(row)
+    report(
+        db,
+        "notification",
+        step_key or "mail",
+        "error" if row.status == "failed" else "ok",
+        summary=f"{row.subject} → {row.target} ({row.status})",
+        detail=row.error[:400] if row.error else "",
+        object_type="incident" if incident else "mail",
+        object_id=incident.number if incident else row.target,
+    )
+    return row
+
+
+def build_performance_report(db: Session, asset_ids: list[str]) -> str:
+    wanted = [str(item).strip() for item in (asset_ids or []) if str(item).strip()]
+    q = db.query(Asset)
+    if wanted:
+        q = q.filter(Asset.asset_id.in_(wanted))
+    assets = q.order_by(Asset.hostname).all()
+    lines = [
+        "ForgeSRE performance report",
+        f"Generated at {utcnow().isoformat()}",
+        "Not an incident. Read-only snapshot from Prometheus / demo gauges.",
+        "",
+    ]
+    if not assets:
+        lines.append("No assets selected.")
+        return "\n".join(lines) + "\n"
+    for asset in assets:
+        sample = query_prometheus(asset)
+        lines.append(f"## {asset.hostname} ({asset.asset_id})")
+        lines.append(f"type={asset.type or '—'} status={asset.status or '—'} ip={asset.ip or '—'}")
+        if sample.get("error"):
+            lines.append(f"metrics error: {sample['error']}")
+        else:
+            for key in ("cpu_percent", "disk_percent", "memory_percent", "up"):
+                if key in sample and sample[key] is not None:
+                    lines.append(f"{key}={sample[key]}")
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def run_scheduled_report(db: Session, row: ScheduledReport, actor: str = "system") -> Notification:
+    body = build_performance_report(db, list(row.asset_ids or []))
+    mail = send_outbound_mail(
+        db,
+        target=row.to_email,
+        subject=f"[ForgeSRE] {row.name}",
+        body=body,
+        actor=actor,
+        step_key="report",
+    )
+    now = utcnow()
+    hours = max(1, int(row.interval_hours or 6))
+    row.last_run_at = now
+    row.next_run_at = now + timedelta(hours=hours)
+    db.add(row)
+    db.commit()
+    return mail
+
+
+def process_scheduled_reports(db: Session) -> int:
+    now = utcnow()
+    due = (
+        db.query(ScheduledReport)
+        .filter(ScheduledReport.enabled.is_(True))
+        .order_by(ScheduledReport.id)
+        .all()
+    )
+    ran = 0
+    for row in due:
+        nxt = row.next_run_at
+        if nxt is not None and nxt.tzinfo is None:
+            nxt = nxt.replace(tzinfo=timezone.utc)
+        if nxt is not None and nxt > now:
+            continue
+        run_scheduled_report(db, row, actor="scheduler")
+        ran += 1
+    return ran
 
 
 def process_escalations(db: Session) -> None:

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Grafana & reports · ForgeSRE{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Grafana & reports</h1>
+  {% if grafana_enabled %}
+  <a class="button-link" href="{{ grafana_open }}" target="_blank" rel="noreferrer">Open Grafana</a>
+  {% endif %}
+</div>
+<p class="muted">Grafana stays the graph UI. This page is the appliance outbox and scheduled performance reports. Escalation mail on an incident is unchanged.</p>
+
+<section class="card">
+  <h2>Stack UIs</h2>
+  <p class="open-links">
+    {% for item in stack %}
+      {% if item.gui %}
+      <a href="{{ item.gui }}" target="_blank" rel="noreferrer">{{ item.id }} · {{ item.gui_label }}</a>
+      {% endif %}
+      {% if item.metrics %}
+      <a href="{{ item.metrics }}" target="_blank" rel="noreferrer">{{ item.id }} · {{ item.metrics_label }}</a>
+      {% endif %}
+    {% endfor %}
+  </p>
+</section>
+
+<section class="card" id="mail">
+  <h2>Mail outbox</h2>
+  <p class="muted">Every generated / sent / failed email ForgeSRE stored. SMTP off keeps the row as <em>generated</em> (lab outbox).</p>
+  {% if can_send %}
+  <form method="post" action="/ops/mail" class="stack">
+    <h3>Send email</h3>
+    <label>To <input name="target" type="email" required placeholder="ops@example.local"></label>
+    <label>Subject <input name="subject" required></label>
+    <label>Body <textarea name="body" rows="6" required></textarea></label>
+    <button type="submit">{% if smtp_on %}Send{% else %}Save to outbox{% endif %}</button>
+  </form>
+  {% endif %}
+  <table>
+    <thead><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th><th>Body</th></tr></thead>
+    <tbody>
+    {% for note in mail %}
+      <tr>
+        <td class="muted">{{ note.created_at }}</td>
+        <td>{{ note.target }}</td>
+        <td>{{ note.subject }}</td>
+        <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
+        <td>
+          <details>
+            <summary>View</summary>
+            <pre class="mail-body">{{ note.body or "—" }}</pre>
+          </details>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">No mail yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card" id="reports">
+  <h2>Scheduled reports</h2>
+  <p class="muted">
+    Cron-like, inside Core (no extra broker). Pick assets and an interval. ForgeSRE snapshots CPU/disk/up
+    from Prometheus (or demo gauges) even when there is no incident, then emails the text.
+  </p>
+  {% if can_send %}
+  <form method="post" action="/ops/reports" class="stack">
+    <h3>New report</h3>
+    <label>Name <input name="name" value="storage-6h" required></label>
+    <label>Send to <input name="to_email" type="email" required></label>
+    <label>Every
+      <select name="interval_hours">
+        <option value="1">1 hour</option>
+        <option value="6" selected>6 hours</option>
+        <option value="12">12 hours</option>
+        <option value="24">24 hours</option>
+      </select>
+    </label>
+    <fieldset>
+      <legend>Assets</legend>
+      {% for asset in assets %}
+      <label class="check"><input type="checkbox" name="asset_id" value="{{ asset.asset_id }}"> {{ asset.hostname }} ({{ asset.asset_id }})</label>
+      {% else %}
+      <p class="muted">No assets in inventory.</p>
+      {% endfor %}
+    </fieldset>
+    <button type="submit">Save schedule</button>
+  </form>
+  {% endif %}
+  <table>
+    <thead><tr><th>Name</th><th>To</th><th>Every</th><th>Assets</th><th>Last</th><th>Next</th><th>Enabled</th><th></th></tr></thead>
+    <tbody>
+    {% for row in reports %}
+      <tr>
+        <td>{{ row.name }}</td>
+        <td>{{ row.to_email }}</td>
+        <td>{{ row.interval_hours }}h</td>
+        <td>{{ (row.asset_ids or [])|join(", ") or "all" }}</td>
+        <td class="muted">{{ row.last_run_at or "—" }}</td>
+        <td class="muted">{{ row.next_run_at or "—" }}</td>
+        <td><span class="pill {{ 'ok' if row.enabled else 'ignored' }}">{{ row.enabled }}</span></td>
+        <td>
+          {% if can_send %}
+          <form method="post" action="/ops/reports/{{ row.id }}/run" class="inline"><button type="submit">Run now</button></form>
+          <form method="post" action="/ops/reports/{{ row.id }}/toggle" class="inline"><button type="submit" class="secondary">Toggle</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="muted">No scheduled reports.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

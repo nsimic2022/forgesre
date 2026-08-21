@@ -67,6 +67,9 @@ def _jobs_loop(stop: threading.Event) -> None:
         db = SessionLocal()
         try:
             run_pending_jobs(db)
+            from app.services import process_scheduled_reports
+
+            process_scheduled_reports(db)
         except Exception as exc:
             log.exception("jobs loop failed")
             report(db, "rca", "jobs", "error", summary="Job worker failed", detail=str(exc))

@@ -208,6 +208,8 @@ def test_system_health_page_has_doctor_button_and_status_pills():
     page = client.get("/health-ui")
     assert page.status_code == 200
     assert "Run doctor" in page.text
+    assert "Open Grafana" in page.text
+    assert "<th>Open</th>" in page.text
     assert 'class="pill ok"' in page.text or 'class="pill warn"' in page.text or 'class="pill crit"' in page.text
     assert "postgres" in page.text
     posted = client.post("/health-ui/refresh", follow_redirects=False)

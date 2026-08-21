@@ -106,3 +106,26 @@ def migrate(engine: Engine) -> None:
                 conn.execute(text("UPDATE investigations SET result = '{}'::json WHERE result IS NULL"))
             else:
                 conn.execute(text("UPDATE investigations SET result = '{}' WHERE result IS NULL"))
+        if "scheduled_reports" not in tables:
+            if engine.dialect.name == "sqlite":
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS scheduled_reports ("
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                        "name VARCHAR(255), to_email VARCHAR(255), interval_hours INTEGER DEFAULT 6, "
+                        "asset_ids JSON, enabled BOOLEAN DEFAULT 1, "
+                        "last_run_at DATETIME, next_run_at DATETIME, "
+                        "created_by VARCHAR(255) DEFAULT '', created_at DATETIME)"
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS scheduled_reports ("
+                        "id SERIAL PRIMARY KEY, "
+                        "name VARCHAR(255), to_email VARCHAR(255), interval_hours INTEGER DEFAULT 6, "
+                        "asset_ids JSON, enabled BOOLEAN DEFAULT TRUE, "
+                        "last_run_at TIMESTAMPTZ, next_run_at TIMESTAMPTZ, "
+                        "created_by VARCHAR(255) DEFAULT '', created_at TIMESTAMPTZ)"
+                    )
+                )

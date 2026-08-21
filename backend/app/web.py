@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -20,10 +21,23 @@ from app.inventory import (
     is_snmp_asset,
 )
 from app.journal import MODULES, list_entries, module_counts
-from app.models import Asset, AuditLog, DiscoveryCandidate, EscalationPolicy, Incident, Job, Notification, Playbook, Playrule, User
+from app.models import (
+    Asset,
+    AuditLog,
+    DiscoveryCandidate,
+    EscalationPolicy,
+    Incident,
+    Job,
+    Notification,
+    Playbook,
+    Playrule,
+    ScheduledReport,
+    User,
+)
 from app.security import can, hash_password, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload
 from app.services import run_demo, run_demo_rca, run_investigation
+from app.stack import enrich_components, rewrite_host
 from app.history import (
     add_note,
     apply_status_fields,
@@ -40,11 +54,15 @@ from app.settings import settings
 def health_class(status: str) -> str:
     """Map doctor status to pill/stat CSS: ok green, disabled yellow, error red."""
     value = str(status or "").lower()
-    if value in {"ok", "healthy"}:
+    if value in {"ok", "healthy", "running"}:
         return "ok"
-    if value in {"disabled", "warn", "warning"}:
+    if value in {"disabled", "warn", "warning", "paused", "starting"}:
         return "warn"
     return "crit"
+
+
+def can_send_ops(user: User) -> bool:
+    return can(user, "write_play") or can(user, "write_incidents") or can(user, "admin")
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(settings.frontend_dir / "templates"))
@@ -642,13 +660,124 @@ def journal_page(
 
 @router.get("/health-ui", response_class=HTMLResponse)
 def health_page(request: Request, user: User = Depends(login_required)):
-    return render(request, "health.html", user, doctor=doctor_payload())
+    payload = doctor_payload()
+    host = request.headers.get("host") or "localhost"
+    return render(
+        request,
+        "health.html",
+        user,
+        doctor=payload,
+        stack=enrich_components(payload.get("components") or {}, host),
+        grafana_open=rewrite_host(settings.grafana_public_url, host.split(":")[0]),
+    )
 
 
 @router.post("/health-ui/refresh")
 def health_refresh(user: User = Depends(login_required)):
     doctor_payload(force=True)
     return RedirectResponse("/health-ui", status_code=303)
+
+
+@router.get("/ops", response_class=HTMLResponse)
+def ops_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
+    host = request.headers.get("host") or "localhost"
+    payload = doctor_payload()
+    mail = db.query(Notification).order_by(Notification.id.desc()).limit(80).all()
+    reports = db.query(ScheduledReport).order_by(ScheduledReport.id.desc()).all()
+    assets = db.query(Asset).order_by(Asset.hostname).all()
+    return render(
+        request,
+        "ops.html",
+        user,
+        grafana_open=rewrite_host(settings.grafana_public_url, host.split(":")[0]),
+        stack=enrich_components(payload.get("components") or {}, host),
+        mail=mail,
+        reports=reports,
+        assets=assets,
+        smtp_on=settings.email_enabled and bool(settings.smtp_host),
+        can_send=can_send_ops(user),
+    )
+
+
+@router.post("/ops/mail")
+def ops_send_mail(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    target: str = Form(...),
+    subject: str = Form(""),
+    body: str = Form(""),
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    from app.services import send_outbound_mail
+
+    send_outbound_mail(db, target=target, subject=subject, body=body, actor=user.email, step_key="manual")
+    return RedirectResponse("/ops#mail", status_code=303)
+
+
+@router.post("/ops/reports")
+def ops_create_report(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    name: str = Form(...),
+    to_email: str = Form(...),
+    interval_hours: int = Form(6),
+    asset_id: Annotated[list[str], Form()] = [],
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    from datetime import timedelta
+
+    from app.services import utcnow
+
+    hours = max(1, min(168, int(interval_hours or 6)))
+    ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
+    row = ScheduledReport(
+        name=name.strip() or "performance",
+        to_email=to_email.strip(),
+        interval_hours=hours,
+        asset_ids=ids,
+        enabled=True,
+        created_by=user.email,
+        next_run_at=utcnow() + timedelta(hours=hours),
+    )
+    db.add(row)
+    audit(db, "report.create", actor=user.email, object_type="report", object_id=row.name, data={"to": row.to_email, "hours": hours})
+    db.commit()
+    return RedirectResponse("/ops#reports", status_code=303)
+
+
+@router.post("/ops/reports/{report_id}/run")
+def ops_run_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    from app.services import run_scheduled_report
+
+    row = db.get(ScheduledReport, report_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    run_scheduled_report(db, row, actor=user.email)
+    return RedirectResponse("/ops#reports", status_code=303)
+
+
+@router.post("/ops/reports/{report_id}/toggle")
+def ops_toggle_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    row = db.get(ScheduledReport, report_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    row.enabled = not bool(row.enabled)
+    db.commit()
+    return RedirectResponse("/ops#reports", status_code=303)
 
 
 @router.get("/admin", response_class=HTMLResponse)
