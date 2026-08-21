@@ -66,6 +66,8 @@ notifications:
     port: 587
     from: forgesre@example.local
     tls: true
+    # Lab catcher (optional Compose profile "mail"): host 127.0.0.1 port 1025 tls false
+    # Real Gmail: host smtp.gmail.com port 587 tls true + SMTP_* in secrets/secrets.env
   webhook:
     enabled: false
 

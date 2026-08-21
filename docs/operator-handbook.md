@@ -443,6 +443,32 @@ SMTP_PASSWORD=xxxx xxxx xxxx xxxx
 
 Exchange / a local relay: same YAML keys, different `host` / `port`. Then `./forgesre update`.
 
+### Optional local SMTP (Mailpit) — see the mail, do not run Postfix
+
+ForgeSRE is already the **mail client**. You do not add Thunderbird or another client in a container. You only need an SMTP **listener**.
+
+Do **not** bundle Postfix / Mailu / docker-mailserver on this appliance. That is a real MX (DNS, SPF, DKIM, PTR, port 25, spam). Architecture keeps that out of V1.
+
+For a lab inbox on the VM (messages never leave the box, they do **not** appear in Gmail):
+
+1. In `.env` set `COMPOSE_PROFILES=mail` (or `ai,mail` if the LLM is on).
+2. Point Core at Mailpit — no username:
+
+```yaml
+notifications:
+  email:
+    enabled: true
+    host: 127.0.0.1
+    port: 1025
+    from: forgesre@local
+    tls: false
+```
+
+3. Leave `SMTP_USERNAME` / `SMTP_PASSWORD` empty. `./forgesre update`.
+4. Send an incident report. Outbox should be `sent`. Open **http://\<VM-IP\>:8025** (Mailpit UI). Bind is localhost on the VM; SSH tunnel if you browse from a laptop: `ssh -L 8025:127.0.0.1:8025 user@vm`.
+
+Want the message **in Gmail**? Use the Gmail SMTP section above. Mailpit will not forward there unless you configure something else — do not.
+
 ---
 
 ## 12. Incident workflow
