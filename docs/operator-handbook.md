@@ -1,10 +1,15 @@
-# ForgeSRE operator handbook
+# ForgeSRE operations handbook
 
-This is the **day-2 guide for the whole system**: users, servers, monitoring, playrules, playbooks, incidents, and RCA.
+How to **operate** ForgeSRE after it is installed: users, servers, monitoring, playrules, playbooks, incidents, email, and RCA.
 
-Install and file-level config stay in [`install-config.md`](install-config.md). Version notes (`v0.1.md` … `v0.7.md`) explain *what shipped*. This document explains *how you operate it*.
+Install, host packages, `./forgesre test`, and configuration files: [`install-config.md`](install-config.md).  
+CLI reference (everyday + advanced): [`cli.md`](cli.md).  
+Verification report: [`verify.md`](verify.md).  
+Local LLM (ForgeAI): [`llm.md`](llm.md).
 
-Code: https://github.com/nsimic2022/forgesre (`main`). Open the UI at `http://<VM-IP>:8080`.
+Version notes (`v0.1.md` … `v0.7.md`) explain *what shipped*. This document explains *how you run the product*.
+
+Code: https://github.com/nsimic2022/forgesre (`main`). UI: `http://<VM-IP>:8080`.
 
 ForgeSRE does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on top of them. AI is **read-only**: it never SSH-es, never runs playbooks, never writes NetBox.
 
@@ -25,7 +30,7 @@ ForgeSRE does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on t
 13. [AI investigation (ForgeRCA)](#13-ai-investigation-forgerca)
 14. [Worked example: onboard a Linux server](#14-worked-example-onboard-a-linux-server)
 15. [Worked example: new alert + playrule + playbook](#15-worked-example-new-alert--playrule--playbook)
-16. [CLI, API, and files on disk](#16-cli-api-and-files-on-disk)
+16. [Operator CLI and API](#16-operator-cli-and-api)
 17. [What this version does not do yet](#17-what-this-version-does-not-do-yet)
 
 ---
@@ -547,7 +552,7 @@ You get:
 - A **ForgeSRE confidence score** (not the LLM’s own number)
 - Disclaimer: `AI has not modified the system.`
 
-RCA works with `ai.enabled: false` (builtin analyst). To use a local LLM, download the GGUF (not in git) with `./forgesre fetch-llm` — see [`install-config.md`](install-config.md) §12.
+RCA works with `ai.enabled: false` (builtin analyst). To use a local LLM, download the GGUF (not in git) with `./forgesre fetch-llm`. Implementation (hardware, Compose profile `ai`, offline GGUF, jobs, debug): [`llm.md`](llm.md).
 
 Alertmanager ingest **enqueues** an investigate job. The webhook does not wait on the LLM. `./forgesre jobs` lists pending / running / done / error. Demo (`./forgesre demo`) still runs RCA inline so the first-hour path is immediate.
 
@@ -611,7 +616,7 @@ If the incident has no asset, the alert `asset` / `instance` label did not match
 
 ---
 
-## 16. CLI, API, and files on disk
+## 16. Operator CLI and API
 
 On the VM, from the clone directory, `./forgesre` is the operator CLI. `./forgesre help` lists commands. `./forgesre help <command>` prints explanation and examples.
 
@@ -649,7 +654,8 @@ Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critica
 ./forgesre help                 # overview
 ./forgesre help snmp            # one command
 ./forgesre help tls             # optional HTTPS
-./forgesre doctor               # HEALTHY / DEGRADED (Bearer webhook token)
+./forgesre doctor               # short HEALTHY / DEGRADED
+./forgesre test                 # detailed report → data/reports/
 ./forgesre status               # compose ps
 ./forgesre logs core
 ./forgesre logs snmp-exporter
@@ -722,11 +728,11 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 | GET | `/api/v1/sd/snmp` | Bearer webhook token (network devices) |
 | POST | `/api/v1/webhooks/alertmanager` | Bearer webhook token |
 
-Install/config files: [`install-config.md`](install-config.md) (§6–10). Do not commit `.env`, `secrets/secrets.env`, or `data/`.
+Install/config files: [`install-config.md`](install-config.md). Do not commit `.env`, `secrets/secrets.env`, or `data/`.
 
 **Console** (`/journal`) is the internal process journal: seed, inventory, discovery, snmp, incidents, RCA, notifications, demo, install. Each action writes a short ok/warn/error report. Rows are split by module and pruned automatically (~200 per module) so search stays small. This is not a dump of Docker logs and not the Administration audit log (who clicked what). Prometheus HTTP SD is **not** journaled on every scrape (that would flood the table).
 
-Root wrappers `./doctor.sh`, `./backup.sh`, `./update.sh`, `./install.sh` still work; they call the same scripts as `./forgesre`.
+Root wrappers `./doctor.sh`, `./test.sh`, `./backup.sh`, `./update.sh`, `./install.sh` still work; they call the same scripts as `./forgesre`.
 
 ---
 

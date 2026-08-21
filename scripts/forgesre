@@ -45,12 +45,14 @@ Existing VM after git pull:
   ./forgesre render-monitoring
   ./forgesre update
   ./forgesre doctor
+  ./forgesre test
 
 Commands:
   help [command]     This overview, or detailed help for one command
   shell              Same prompt as ./forgesre with no args
   install            Guided first-time install (new VM only)
-  doctor             Health checks (Core, Prometheus, snmp-exporter, …)
+  doctor             Short health lights (Core, Prometheus, snmp-exporter, …)
+  test               Full appliance report (files, HTTP, login, APIs, email, logs)
   status             docker compose ps
   logs [service]     Container logs (default: last 100 lines)
   config             Print config/forgesre.yml
@@ -158,6 +160,25 @@ doctor — same checks as /health-ui. Overall HEALTHY or DEGRADED.
 
 snmp: error means the snmp-exporter container is down or :9116 is not listening.
 Fix: docker compose up -d snmp-exporter && ./forgesre snmp
+
+For a long written report (files, login, APIs, email config, core logs):
+
+  ./forgesre test
+EOF
+      ;;
+    test)
+      cat <<'EOF'
+test — live appliance verification with a detailed Markdown + JSON report.
+
+  ./forgesre test
+  ./test.sh
+  ./forgesre test --out /tmp/forgesre-test.md
+
+Writes data/reports/forgesre-test-<timestamp>.md and .json.
+PASS / WARN / FAIL / SKIP per check. Exit 1 only when something FAILs.
+
+Does not send mail. Does not run install.sh. doctor is the short light;
+test is the long report of how each piece is probed.
 EOF
       ;;
     status)
@@ -306,12 +327,19 @@ EOF
       ;;
     fetch-llm)
       cat <<'EOF'
-fetch-llm — download Qwen 14B GGUF (~9 GB) into $FORGESRE_DATA/models/ and start llama.cpp.
+fetch-llm — download Qwen2.5-14B-Instruct Q4_K_M (~9 GB) and start llama.cpp.
 
   ./forgesre fetch-llm
-  ./forgesre doctor          # llm: ok when the server answers
+  ./forgesre fetch-llm --download-only
+  ./forgesre fetch-llm --offline
+  ./forgesre doctor          # llm: ok when :8088 answers
+  ./forgesre test
 
-Not stored in git. RCA works without it (builtin analyst).
+Writes $FORGESRE_DATA/models/model.gguf (gitignored), sets COMPOSE_PROFILES=ai,
+enables ai.llm.mode=bundled, starts the llm container, recreates Core.
+
+Do not re-run ./install.sh to add the model. ForgeRCA works without a GGUF.
+Guide: docs/llm.md
 EOF
       ;;
     backup)
@@ -590,6 +618,7 @@ case "$cmd" in
     ;;
   install) exec "$ROOT/scripts/install.sh" "$@" ;;
   doctor) exec "$ROOT/scripts/doctor.sh" "$@" ;;
+  test) exec "$ROOT/scripts/test.sh" "$@" ;;
   backup) exec "$ROOT/scripts/backup.sh" "$@" ;;
   restore)
     print_help_command restore

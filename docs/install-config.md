@@ -1,45 +1,54 @@
-# ForgeSRE install and config
+# ForgeSRE install and configuration
 
-Operator guide for a **single Ubuntu Linux host**. A vCenter VM is the intended lab shape. ForgeSRE is an appliance: Docker Compose + **host networking**. It is not a Kubernetes install.
+Operator manual for a **single Ubuntu host**. A vCenter VM is the usual lab. ForgeSRE is an appliance: Docker Compose and **host networking**. It is not Kubernetes.
 
-Code: https://github.com/nsimic2022/forgesre (`main`).
+Repository: https://github.com/nsimic2022/forgesre (`main`).
 
-1. [What you are installing](#1-what-you-are-installing)
-2. [VM sizing](#2-vm-sizing)
-3. [vCenter VM](#3-vcenter-vm)
-4. [Host packages](#4-host-packages)
-5. [Clone and install](#5-clone-and-install)
-6. [Open the UI](#6-open-the-ui)
-7. [Config files](#7-config-files-what-goes-where)
-8. [`config/forgesre.yml`](#8-configforgesreyml)
-9. [`.env`](#9-env-deployment)
-10. [`secrets/secrets.env`](#10-secretssecretsenv)
-11. [Day-2 commands](#11-day-2-commands)
-12. [Optional local LLM](#12-optional-local-llm)
-13. [Common failures](#13-common-failures)
+| Chapter | What it covers |
+|---|---|
+| [1. What you install](#1-what-you-install) | Containers and ports |
+| [2. Sizing](#2-sizing) | CPU, RAM, disk |
+| [3. vCenter guest](#3-vcenter-guest) | VM settings and open-vm-tools |
+| [4. Host preparation](#4-host-preparation) | apt, Docker, clone |
+| [5. First install](#5-first-install) | `./install.sh` (new VM only) |
+| [6. Open the UI](#6-open-the-ui) | URLs and firewall |
+| [7. Verify the appliance](#7-verify-the-appliance) | `./forgesre test` and `./forgesre doctor` |
+| [8. Configuration files](#8-configuration-files) | `.env`, YAML, secrets |
+| [9. `config/forgesre.yml`](#9-configforgesreyml) | Features |
+| [10. `.env`](#10-env) | Deployment |
+| [11. `secrets/secrets.env`](#11-secretssecretsenv) | Passwords and tokens |
+| [12. Operator CLI](#12-operator-cli) | Everyday `./forgesre` commands |
+| [13. Advanced CLI](#13-advanced-cli) | Logs, rebuild Core, LLM profile, git pull |
+| [14. Updates](#14-updates) | Existing VM after `git pull` |
+| [15. Optional local LLM](#15-optional-local-llm) | GGUF / llama.cpp — full guide: [`llm.md`](llm.md) |
+| [16. Troubleshooting](#16-troubleshooting) | Common failures |
+
+Day-to-day product work (users, inventory, incidents, email): [`operator-handbook.md`](operator-handbook.md).  
+How to read a test report: [`verify.md`](verify.md).  
+CLI index: [`cli.md`](cli.md).
 
 ---
 
-## 1. What you are installing
+## 1. What you install
 
 | Piece | Role | Listens |
 |---|---|---|
 | Core (FastAPI + UI) | Product UI and API | `0.0.0.0:8080` (changeable) |
-| Grafana | Deep dashboards | host port `3000` |
+| Grafana | Graphs | host port `3000` |
 | PostgreSQL | ForgeSRE database | `127.0.0.1:5432` |
 | Prometheus | Metrics | `127.0.0.1:9090` |
-| snmp_exporter | SNMP walks for network devices | `127.0.0.1:9116` |
+| snmp_exporter | SNMP walks | `127.0.0.1:9116` |
 | Alertmanager | Alert webhook → incidents | `127.0.0.1:9093` |
 | Loki + Alloy | Logs as evidence | `127.0.0.1:3100` / `12345` |
 | llama.cpp (optional) | Local LLM | `127.0.0.1:8088` |
 
-From a laptop you open **Core :8080** and **Grafana :3000**. The rest stay on localhost on the VM.
+From a laptop you open **Core :8080** and **Grafana :3000**. Everything else stays on localhost on the VM.
 
 AI is read-only. It never SSH-es, never runs playbooks, never writes NetBox.
 
 ---
 
-## 2. VM sizing
+## 2. Sizing
 
 Installer preflight:
 
@@ -53,7 +62,7 @@ Nested virtualization is **not** required.
 
 ---
 
-## 3. vCenter VM
+## 3. vCenter guest
 
 Create a VM from an Ubuntu Server 22.04 or 24.04 ISO (or a golden template).
 
@@ -64,44 +73,58 @@ Create a VM from an Ubuntu Server 22.04 or 24.04 ISO (or a golden template).
 | Memory | 8 GB recommended |
 | Disk | 40 GB thin is enough for a lab |
 | NIC | VMXNET3 on the **management** network |
-| Firmware | BIOS or EFI both fine |
+| Firmware | BIOS or EFI |
 | Nested HV | Off |
 
-Give the VM a **static IP** (or a DHCP reservation). Note the IP; laptops will use `http://<VM-IP>:8080`, not `127.0.0.1`.
+Give the VM a **static IP** (or a DHCP reservation). Laptops use `http://<VM-IP>:8080`, not `127.0.0.1`.
 
-After first boot, set hostname and timezone, then continue with host packages below.
+On a VMware guest, install tools so the hypervisor can see the VM cleanly:
 
-Do not install Kubernetes, snap MicroK8s, or extra reverse proxies for V0.x. One Linux host, host networking.
+```bash
+sudo apt install -y open-vm-tools
+sudo systemctl enable --now open-vm-tools
+systemctl status vmtoolsd
+```
+
+Do not install Kubernetes, snap MicroK8s, or extra reverse proxies for V0.x.
 
 ---
 
-## 4. Host packages
+## 4. Host preparation
+
+Run as **root**, or prefix every command with `sudo`. This is the path used on the Ubuntu appliance:
 
 ```bash
-sudo apt update
-sudo apt install -y ca-certificates curl git docker.io docker-compose-v2
-sudo systemctl enable --now docker
-sudo usermod -aG docker "$USER"
+apt update
+apt upgrade -y
+apt autoremove -y
+apt install -y ca-certificates curl git docker.io docker-compose-v2
+systemctl enable --now docker
+usermod -aG docker "$USER"
 ```
 
-Log out and back in, then:
+Log out and back in (so the docker group applies), then:
 
 ```bash
 docker info
 docker compose version
-timedatectl   # optional: sudo timedatectl set-timezone Europe/Belgrade
+timedatectl   # optional: timedatectl set-timezone Europe/Belgrade
 ```
 
-If `docker info` needs `sudo`, `./install.sh` still works via `sudo docker compose`.
-
----
-
-## 5. Clone and install
+Clone **main**:
 
 ```bash
 git clone https://github.com/nsimic2022/forgesre.git
 cd forgesre
 ```
+
+If `docker info` still needs `sudo`, `./install.sh` and Compose still work via `sudo docker compose`.
+
+---
+
+## 5. First install
+
+**New VM only.** Do not re-run this on a box that already has `secrets/secrets.env`.
 
 Non-interactive lab:
 
@@ -115,8 +138,6 @@ Guided wizard:
 ./install.sh
 ```
 
-Useful flags:
-
 | Flag | Meaning |
 |---|---|
 | `--non-interactive` | No prompts; use flags/defaults |
@@ -124,26 +145,29 @@ Useful flags:
 | `--timezone ZONE` | Default `Europe/Belgrade` |
 | `--data-dir PATH` | Default `./data` |
 | `--port N` | Core UI/API port (default `8080`) |
-| `--enable-ai yes\|no` | `yes` downloads the GGUF (same as full-ai). ForgeRCA still works without it |
+| `--enable-ai yes\|no` | `yes` downloads the GGUF. ForgeRCA still works without it |
 | `--enable-discovery yes\|no` | Default yes |
-| `--discovery-cidrs 10.20.30.0/24,10.10.0.0/24` | TCP 22/80/443/9100 + SNMP GET UDP/161, max 256 hosts, skip loopback |
+| `--discovery-cidrs 10.20.30.0/24,10.10.0.0/24` | TCP 22/80/443/9100 + SNMP GET UDP/161 |
 | `--netbox-url URL` | External NetBox only; token goes in secrets |
-| `--offline` | Do not pull images (images must already exist) |
+| `--offline` | Do not pull images |
 
-Do **not** re-run `./install.sh` on an existing instance unless you intend to **regenerate passwords and tokens**.
+After install, verify:
+
+```bash
+./forgesre test
+./forgesre doctor
+```
 
 ---
 
 ## 6. Open the UI
 
-On the VM, credentials are in `installation-report.md` and `secrets/secrets.env`.
+Credentials: `installation-report.md` and `secrets/secrets.env`.
 
-From a laptop, use the **VM IP**, not `127.0.0.1`:
+From a laptop use the **VM IP**:
 
 - ForgeSRE: `http://<VM-IP>:8080`
 - Grafana: `http://<VM-IP>:3000` (user `admin`)
-
-Firewall example:
 
 ```bash
 sudo ufw allow OpenSSH
@@ -154,52 +178,61 @@ sudo ufw enable
 
 Also allow those ports on the vCenter / NSX / physical firewall toward the management network only.
 
-Smoke test on the VM:
+First-hour path:
 
 ```bash
-./doctor.sh
 ./forgesre demo
 ./forgesre demo-rca
 ```
 
-`./doctor.sh` should report **HEALTHY**. LLM may be `disabled` — that is OK without a GGUF.
-
-Then in the UI:
-
-1. Login → Dashboard **First-hour walkthrough**.
-2. Assets → `forge-demo-01` (owner contacts + closed HighCPU history).
-3. `./forgesre demo` or **Run demo workflow** → new incident **Who to call** → Escalation (generated mail to `platform@forgesre.local`).
-4. **Console** (`/journal`) — seed/demo/inventory reports (ok vs error).
-5. Discovery (`10.20.30.41`) if you want Approve/Ignore.
-
-Nothing in that path is a real customer server.
+Then in the UI: Dashboard walkthrough → asset `forge-demo-01` → new incident → Who to call. `./forgesre demo-reset` lowers the demo gauges when you are done.
 
 ---
 
-## 7. Config files (what goes where)
+## 7. Verify the appliance
+
+Two commands. They do not replace each other.
+
+| Command | What it is |
+|---|---|
+| `./forgesre doctor` | Short lights (same as System Health). HEALTHY or DEGRADED |
+| `./forgesre test` | Long report: host, files, Compose, HTTP, login, APIs, email config, Core logs |
+
+```bash
+./forgesre test
+./test.sh                 # same
+./forgesre doctor
+```
+
+The test writes Markdown + JSON under `data/reports/forgesre-test-<timestamp>.*` and prints the table. Exit code `1` only when a check **FAIL**s. **SKIP** means the feature is off (LLM, mailbox, SMTP). **WARN** is degraded but usable.
+
+Details: [`verify.md`](verify.md).
+
+---
+
+## 8. Configuration files
 
 Three files. Do not mix them.
 
 | File | Purpose | Git |
 |---|---|---|
-| `.env` | Deployment: ports, data dir, compose, generated Prometheus/Alertmanager paths | ignored |
-| `config/forgesre.yml` | Features: discovery, NetBox URL, AI/RCA, Loki, Grafana | ignored (example is committed) |
+| `.env` | Ports, data dir, compose profiles, generated Prometheus paths | ignored |
+| `config/forgesre.yml` | Discovery, NetBox URL, AI/RCA, Loki, Grafana, SMTP host | ignored (example is committed) |
 | `secrets/secrets.env` | Passwords and tokens | ignored, mode `600` |
 
-Template for YAML: [`config/forgesre.example.yml`](../config/forgesre.example.yml).
-
-Show current YAML:
+Template: [`config/forgesre.example.yml`](../config/forgesre.example.yml).
 
 ```bash
 ./forgesre config
 ```
 
-After editing YAML, restart Core (settings load at process start):
+After editing YAML, recreate Core (settings load at process start):
 
 ```bash
 docker compose up -d --force-recreate core
-# if docker needs root:
-sudo docker compose up -d --force-recreate core
+# after code or Dockerfile changes:
+docker compose build core
+docker compose up -d core
 ```
 
 After editing generated Prometheus/Alertmanager YAML:
@@ -210,7 +243,7 @@ curl -fsS -X POST http://127.0.0.1:9090/-/reload
 
 ---
 
-## 8. `config/forgesre.yml`
+## 9. `config/forgesre.yml`
 
 ```yaml
 system:
@@ -222,13 +255,13 @@ system:
 inventory:
   provider: local       # local | netbox
   netbox:
-    enabled: false      # true only for an existing NetBox
-    mode: external      # never bundled
+    enabled: false
+    mode: external
     url: "https://netbox.example.local"
 
 discovery:
   enabled: true
-  mode: semi-automatic  # manual | semi-automatic | automatic
+  mode: semi-automatic
   cidrs: ["10.20.30.0/24"]
 
 monitoring:
@@ -269,23 +302,19 @@ notifications:
     port: 587
     from: forgesre@example.local
     tls: true
+    # Gmail: smtp.gmail.com  Outlook/M365: smtp.office365.com
 ```
 
-Notes:
-
-- **Discovery** probes TCP **22 / 80 / 443 / 9100** and an SNMPv2c GET on **UDP/161**. It does not use TCP/161 (that is not SNMP). New hosts wait on `/discovery` for Approve / Ignore unless `mode: automatic` (still audited). Approve assigns `ip:9100` only if 9100 was open. SNMP polling of network devices after Approve is a separate UDP/161 walk by snmp_exporter.
-- **NetBox** is read-sync only. Put the token in `NETBOX_API_TOKEN`, never in YAML.
-- **RCA** works with `ai.enabled: false` (builtin analyst). Set `ai.enabled: true` only if you have a local OpenAI-compatible endpoint or a GGUF. Demo gauges are used only for `forge-demo-01`.
-- **Secrets:** Core **will not start** if `SECRET_KEY` or `ALERTMANAGER_WEBHOOK_TOKEN` is still a shipped default. Set `FORGESRE_DEV=1` only for unit tests / an explicit throwaway lab.
-- Changing `cidrs` does not require a reinstall. Restart Core.
-- Changing `SNMP_COMMUNITY` requires `./forgesre render-monitoring` (rewrites generated `snmp.yml`). Do not re-run `./install.sh`.
-- Optional HTTPS: `tls/Caddyfile.example`, then `cookie_secure: true` or `FORGESRE_COOKIE_SECURE=1` and recreate Core. Caddy is **not** a default Compose service.
+- **Discovery** probes TCP **22 / 80 / 443 / 9100** and SNMPv2c GET on **UDP/161**.
+- **RCA** works with `ai.enabled: false`. Set `ai.enabled: true` only with a local OpenAI-compatible endpoint or a GGUF.
+- Changing `cidrs` needs a Core recreate, not a reinstall.
+- Changing `SNMP_COMMUNITY` needs `./forgesre render-monitoring`.
 
 ---
 
-## 9. `.env` (deployment)
+## 10. `.env`
 
-Written by `./install.sh`. Typical keys:
+Written by `./install.sh`.
 
 ```bash
 FORGESRE_VERSION=0.7.0
@@ -295,42 +324,35 @@ FORGESRE_HTTP_PORT=8080
 GRAFANA_PORT=3000
 FORGESRE_PROFILE=standard
 COMPOSE_PROFILES=          # empty | ai | mail | mailbox | ai,mailbox
-POSTGRES_PASSWORD=...      # must match secrets
-GRAFANA_ADMIN_PASSWORD=...
-ALERTMANAGER_CONFIG=./data/generated/alertmanager.yml
-PROMETHEUS_CONFIG=./data/generated/prometheus.yml
-PROMETHEUS_ALERTS=./data/generated/alerts.yml
-SNMP_EXPORTER_CONFIG=./data/generated/snmp.yml
-# FORGESRE_COOKIE_SECURE=1   # only when Core is served over HTTPS
+FORGESRE_LLM_THREADS=8     # llama.cpp CPU threads (fetch-llm sets nproc-2)
 ```
 
-Change the UI port here **and** regenerate Prometheus/Alertmanager/snmp with the same port (`./forgesre render-monitoring`), then recreate Core and reload Prometheus.
+Start the bundled LLM container later with `COMPOSE_PROFILES=ai` (or `./forgesre fetch-llm`) then:
 
-On an existing VM after `git pull`, run `./forgesre update` (or `./forgesre render-monitoring && docker compose up -d`) so generated Prometheus/Alertmanager/snmp/alerts and the snmp-exporter container match this checkout. Do not re-run `./install.sh`.
+```bash
+docker compose --profile ai up -d llm
+curl -fsS http://127.0.0.1:8088/v1/models
+```
+
+Details: [`llm.md`](llm.md).
 
 ---
 
-## 10. `secrets/secrets.env`
+## 11. `secrets/secrets.env`
 
 ```bash
 POSTGRES_PASSWORD=
 FORGESRE_ADMIN_EMAIL=admin@forgesre.local
 FORGESRE_ADMIN_PASSWORD=
 GRAFANA_ADMIN_PASSWORD=
-ALERTMANAGER_WEBHOOK_TOKEN=   # also used for Prometheus HTTP SD
+ALERTMANAGER_WEBHOOK_TOKEN=
 SECRET_KEY=
 SMTP_USERNAME=
 SMTP_PASSWORD=
-# MAILBOX_* only after ./forgesre mailbox — does not replace SMTP_*
-# UI users (email/password) live in Postgres as bcrypt hashes, not in this file.
-# This file only has the install bootstrap admin (FORGESRE_ADMIN_*).
-NETBOX_API_TOKEN=
-SNMP_COMMUNITY=public     # read-only community snmp_exporter uses on UDP/161
+SNMP_COMMUNITY=public
 ```
 
-Directory `secrets/` should be `700`, file `600`. Never commit it.
-
-Install writes random `SECRET_KEY` and `ALERTMANAGER_WEBHOOK_TOKEN`. Core **refuses to start** if those are still the values shipped in the repo (`forgesre-dev-secret-change-me`, `forgesre-dev-webhook-token`, `CHANGE-ME-RENDER-MONITORING`) unless `FORGESRE_DEV=1`.
+Directory `secrets/` mode `700`, file `600`. UI users created in Administration live in Postgres as bcrypt hashes — not in this file.
 
 ```bash
 ./forgesre secrets-check
@@ -338,107 +360,143 @@ Install writes random `SECRET_KEY` and `ALERTMANAGER_WEBHOOK_TOKEN`. Core **refu
 
 ---
 
-## 11. Day-2 commands
+## 12. Operator CLI
 
-`./forgesre help` is the index. `./forgesre help <command>` has examples. `./forgesre` with no args opens a prompt so you type `journal` instead of `./forgesre journal`. TAB completes commands, `logs snmp-exporter`, and incident ids (`INC-0134_16.08.2026_09:13`). `./f` is the same CLI.
+From the clone directory. `./forgesre help` is the index. `./forgesre help <command>` has examples. `./f` is the same CLI. TAB completes names.
 
 ```bash
-./forgesre               # prompt; then journal / incidents / history / doctor / quit
+./forgesre                 # prompt; then journal / incidents / doctor / test / quit
 ./forgesre login
-./forgesre incidents
-./forgesre incidents INC-000012
-./f journal
-./forgesre help              # CLI overview
-./forgesre help snmp         # SNMP exporter + SD
-./forgesre help tls          # optional HTTPS / Secure cookies
-./forgesre mailbox           # optional Roundcube later; Core SMTP (Gmail/Outlook) unchanged
-./forgesre doctor            # health (includes snmp; uses Bearer webhook token)
-./forgesre status            # compose ps
+./forgesre whoami
+./forgesre doctor
+./forgesre test
+./forgesre status
 ./forgesre logs core
-./forgesre logs snmp-exporter
-./forgesre assets            # inventory
-./forgesre snmp              # exporter + SNMP HTTP SD
-./forgesre sd                # Linux + SNMP HTTP SD JSON
-./forgesre incidents         # colored board; INC-… opens one row
-./forgesre history           # 90-day lookback; INC-… prints mail/audit/notes
-./forgesre jobs              # background RCA queue
-./forgesre render-monitoring # rewrite generated prometheus/alertmanager/snmp/alerts.yml
-./forgesre demo              # HighCPU + owner notification + similar-incident history
-./forgesre demo-rca          # filesystem RCA demo (does not fill a real disk)
-./forgesre demo-reset        # lower demo CPU/disk gauges
-./forgesre secrets-check     # shipped-default SECRET_KEY / webhook token
-./forgesre journal           # internal process reports (optional module filter)
-./forgesre journal snmp
-./forgesre fetch-llm         # download GGUF (~9 GB) and start llama.cpp; do not re-run install.sh
-./forgesre backup            # Postgres + config tarball (mode 600)
-./forgesre backup --no-secrets
-./forgesre update            # backup, render-monitoring, refresh, restart, doctor
+./forgesre config
+./forgesre assets
+./forgesre snmp
+./forgesre sd
+./forgesre incidents
+./forgesre history --days 90
+./forgesre jobs
+./forgesre journal
+./forgesre demo
+./forgesre demo-reset
+./forgesre secrets-check
+./forgesre render-monitoring
+./forgesre backup
 ./forgesre version
 ```
 
-Existing VM after git pull:
+Full list and debug recipes: [`cli.md`](cli.md).
+
+---
+
+## 13. Advanced CLI
+
+Use these on an **already installed** VM. Do not run `./install.sh` again.
+
+**Compose status and Core logs** (what you actually use when RCA or LLM looks stuck):
 
 ```bash
+docker compose ps
+docker compose ps core
+docker compose logs --tail=100 core
+docker compose logs --tail=100 core | grep -iE "llm|rca|error|exception"
+docker compose logs --tail=50 core | grep "/ai"
+docker compose logs -f core
+docker compose logs --tail=200 llm
+```
+
+Same via the CLI:
+
+```bash
+./forgesre status
+./forgesre logs core
+./forgesre logs snmp-exporter
+./forgesre logs llm
+```
+
+**Rebuild Core after a git pull that changed Python** (without reinstalling):
+
+```bash
+docker compose build core
+docker compose up -d core
+docker compose ps core
+```
+
+**Inspect the Core container** (working directory, imports):
+
+```bash
+docker compose exec -T core pwd
+docker compose exec -T core ls
+docker compose exec -T core python -c "import sys; print('\n'.join(sys.path))"
+```
+
+**Read live YAML on disk:**
+
+```bash
+./forgesre config
+# or:  less config/forgesre.yml
+```
+
+Do not commit `config/forgesre.yml`, `.env`, or `secrets/`. Commit only `config/forgesre.example.yml` if you are changing the template.
+
+---
+
+## 14. Updates
+
+Existing VM after new commits land on `main`:
+
+```bash
+git checkout main
 git pull origin main
 ./forgesre update
+./forgesre test
 ./forgesre secrets-check
 ./forgesre snmp
 ```
 
+`./forgesre update` = doctor (warn ok) → backup → render-monitoring → compose pull/up → doctor. It does **not** regenerate passwords.
+
 ---
 
-## 12. Local LLM (downloaded, not in git)
+## 15. Optional local LLM
 
-ForgeSRE does **not** store the GGUF in the repository. Install (or `./forgesre fetch-llm` on an existing box) pulls **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB) into `$FORGESRE_DATA/models/model.gguf`.
+ForgeRCA (Python) always runs. The local model only **rewrites prose**. Full implementation guide: [`llm.md`](llm.md) (hardware, `fetch-llm`, offline GGUF, external `/v1` server, jobs, debug CLI).
 
-New VM:
-
-```bash
-./install.sh --non-interactive --profile full-ai --port 8080
-```
-
-Already installed (**do not** re-run `./install.sh` — that regenerates passwords):
+Not stored in git. `./forgesre fetch-llm` pulls Qwen2.5-14B-Instruct Q4_K_M (~9 GB) into `$FORGESRE_DATA/models/model.gguf`, sets `COMPOSE_PROFILES=ai`, and starts llama.cpp on `127.0.0.1:8088`.
 
 ```bash
 ./forgesre fetch-llm
-./doctor.sh
+docker compose --profile ai up -d llm
+curl -fsS http://127.0.0.1:8088/v1/models
+./forgesre doctor          # llm: ok when llama.cpp answers :8088
+./forgesre test
 ```
 
-Override the URL with `FORGESRE_LLM_URL` if Hugging Face is blocked. For a fully offline box, copy a CPU Instruct GGUF to `data/models/model.gguf` (that name) then run `./forgesre fetch-llm` — it will skip the download if the file is already large enough.
-
-Without a GGUF, ForgeRCA still runs the builtin analyst on Prometheus/Loki evidence. Cloud LLMs are not required.
-
-Doctor `llm: disabled` means the model/container is off. `llm: ok` means llama.cpp answered. RCA never executes playbooks.
+Need 16 GB RAM and ~20 GB free disk for the 14B GGUF. Without a model, ForgeRCA still runs. Cloud LLMs are not required. Do not re-run `./install.sh` just to add AI.
 
 ---
 
-## 13. Common failures
+## 16. Troubleshooting
 
 | Symptom | What to do |
 |---|---|
 | Preflight: port in use | `./install.sh --port 8081` or free 8080 |
 | Grafana 3000 busy | Change `GRAFANA_PORT` in `.env`, recreate Grafana |
-| `docker info` denied | Add user to `docker` group or use sudo |
-| Clone has no `install.sh` | You are not on `main`, or `git pull origin main` is needed |
+| `docker info` denied | `usermod -aG docker "$USER"` then re-login, or use sudo |
+| Clone URL fails | Use `https://github.com/nsimic2022/forgesre.git` (slash after `.com`) |
 | UI only on the VM | You used `127.0.0.1` from the laptop, or 8080 is blocked |
-| Doctor: NetBox error | Disable NetBox or set URL + `NETBOX_API_TOKEN` |
-| Discovery finds nothing | Empty `cidrs`, or hosts do not open 22/80/443/9100 and do not answer SNMP GET on UDP/161 |
-| `./forgesre snmp` empty `[]` | No Network device with an IP yet. Linux hosts are not SNMP targets |
-| Doctor: snmp error | `docker compose up -d snmp-exporter`. Then `./forgesre logs snmp-exporter` |
-| Doctor: 401 / cannot fetch doctor | `./forgesre secrets-check`. Doctor uses `ALERTMANAGER_WEBHOOK_TOKEN` |
-| Core will not start (default secrets) | Put real values in `secrets/secrets.env`. Do not set `FORGESRE_DEV=1` on a real DC |
-| `up{job="forgesre-snmp"}==0` | Community/ACL/UDP 161 from this VM, or device down. Not Prometheus itself |
-| Linux host never scraped | Discovery Approve without TCP/9100 leaves `scrape_address` empty. Set it on the asset, or install node_exporter |
-| SNMP after git pull missing | `./forgesre update` — do not re-run install.sh |
-| Extra Prometheus rules | Copy `monitoring/alerts.local.yml.example` → `monitoring/alerts.local.yml`, then `./forgesre render-monitoring` |
-| HTTPS / Secure cookie | `tls/Caddyfile.example`, then `FORGESRE_COOKIE_SECURE=1` and recreate Core |
-| LLM download fails | Disk, Hugging Face, or proxy. Set `FORGESRE_LLM_URL` or copy a GGUF to `data/models/model.gguf` |
-| Doctor: llm error after fetch | Wait for llama.cpp to load the GGUF, then `./doctor.sh` again |
-| Re-install wiped logins | `./install.sh` regenerates secrets; use `installation-report.md` from the last run |
+| Doctor cannot fetch | `./forgesre secrets-check` — doctor uses the webhook token |
+| Core will not start | Shipped default `SECRET_KEY` / token. Put real values in secrets |
+| SNMP empty `[]` | No Network device with an IP yet |
+| Doctor snmp error | `docker compose up -d snmp-exporter && ./forgesre snmp` |
+| LLM download / :8088 down | `docker compose --profile ai up -d llm` then wait for the GGUF to load |
+| Re-install wiped logins | `./install.sh` regenerates secrets; use `update` on a live box |
 
 ```bash
 docker compose logs --tail 80 core
-./doctor.sh
+./forgesre test
+./forgesre doctor
 ```
-
-Day-2 operations (users, adding servers, playrules, playbooks, incidents): [`operator-handbook.md`](operator-handbook.md).
