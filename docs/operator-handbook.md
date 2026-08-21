@@ -438,7 +438,9 @@ Grafana is for graphs. The product incident list is ForgeSRE, not Grafana Alerti
 
 ## 13. AI investigation (ForgeRCA)
 
-Open **AI Investigation** from the incident, or click **Run AI investigation**.
+Open **ForgeRCA investigation** from the incident, or click **Run AI investigation**.
+
+The button runs **builtin ForgeRCA immediately** and opens Summary → Root cause → Recommended actions → Facts → Anomalies → Candidate causes → Limitations. The line on that page says **ForgeRCA (builtin)** — the local LLM did not write that first result. If `ai.enabled` is on, a second job may rewrite the text later (`ForgeRCA + local LLM`). Refresh the page for that; do not mash Run now.
 
 You get:
 

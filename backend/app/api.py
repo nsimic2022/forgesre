@@ -292,13 +292,13 @@ def investigate_incident(
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
         raise HTTPException(status_code=404, detail="incident not found")
-    from app.jobs import enqueue
+    from app.services import queue_llm_rewrite, run_investigation
 
-    force = bool(item.investigations)
-    enqueue(db, "investigate", number, payload={"actor": user.email, "force": force})
+    run_investigation(db, item, actor=user.email, use_llm=False)
+    queue_llm_rewrite(db, item, actor=user.email)
     db.refresh(item)
     data = _incident(item, include_evidence=can(user, "read_evidence"))
-    data["queued"] = True
+    data["queued"] = bool(settings.ai_enabled and settings.llm_url)
     return data
 
 
