@@ -1,7 +1,7 @@
 from rca.analysis import candidate_causes, detect_anomalies, facts_from, score_confidence
 from rca.collector import collect_evidence_set
 from rca.engines import DISCLAIMER, ForgeRCA, get_engine
-from rca.llm import NullLLM, make_provider, validate_recommendation
+from rca.llm import NullLLM, extract_json, make_provider, validate_recommendation
 from rca.sanitize import sanitize
 from rca.types import RCAContext, normalize_log, normalize_metric
 
@@ -111,6 +111,9 @@ def test_forgerca_cpu_compat():
     assert get_engine("forgerca").get_name() == "forgerca"
     assert make_provider(None).get_name() == "none"
     assert validate_recommendation("sudo reboot").startswith("RECOMMENDED ACTION")
+    assert extract_json('{"summary": "ok"}') == {"summary": "ok"}
+    thinking_only = extract_json("")
+    assert thinking_only is None
 
 
 def test_audit_and_api_investigation():
