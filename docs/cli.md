@@ -108,10 +108,13 @@ Full implementation guide (including health inspect and `/v1/chat/completions`):
 
 ```bash
 ./forgesre fetch-llm
+# lab 8 GB RAM: wget Qwen3-4B into data/models/model.gguf, then:
+./forgesre fetch-llm --offline
 docker compose --profile ai up -d llm
 docker compose ps llm
 docker compose ps -q llm | xargs -r docker inspect --format='{{json .State.Health}}'
 curl -sS http://127.0.0.1:8088/v1/models
+curl -sS http://127.0.0.1:8088/health
 docker compose logs --tail=100 llm
 docker compose logs --tail=100 core | grep -iE "llm|openai|model|error|exception"
 docker compose logs -f llm

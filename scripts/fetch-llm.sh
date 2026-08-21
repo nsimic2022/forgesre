@@ -18,13 +18,25 @@ while [[ $# -gt 0 ]]; do
       cat <<'EOF'
 Usage: ./forgesre fetch-llm [--download-only] [--offline]
 
-Downloads Qwen2.5-14B-Instruct Q4_K_M (~9 GB) to $FORGESRE_DATA/models/model.gguf.
-The file is gitignored. Override URL with FORGESRE_LLM_URL.
+Default download: Qwen2.5-14B-Instruct Q4_K_M (~9 GB)
+  → $FORGESRE_DATA/models/model.gguf (gitignored).
+
+Override URL with FORGESRE_LLM_URL. Lab (8 GB RAM), Qwen3-4B Q4_K_M:
+
+  mkdir -p data/models
+  wget -O data/models/model.gguf https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf
+  ./forgesre fetch-llm --offline
+
+  # or:
+  FORGESRE_LLM_URL='https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf' ./forgesre fetch-llm
+
+The file must be named model.gguf under data/models/ (not the clone root).
 
 Without --download-only, also sets COMPOSE_PROFILES=ai, enables bundled LLM in
 config/forgesre.yml, and starts the llama.cpp container.
 
 Do not re-run ./install.sh just to add the model (that regenerates passwords).
+Guide: docs/llm.md
 EOF
       exit 0
       ;;
