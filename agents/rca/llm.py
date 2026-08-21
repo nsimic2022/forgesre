@@ -20,6 +20,8 @@ class LLMProvider(Protocol):
 
 
 class NullLLM:
+    last_error = ""
+
     def get_name(self) -> str:
         return "none"
 
@@ -35,6 +37,7 @@ class OpenAICompatibleLLM:
         self.url = url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        self.last_error = ""
 
     def get_name(self) -> str:
         return "openai-compatible"
@@ -43,30 +46,60 @@ class OpenAICompatibleLLM:
         return self.model
 
     def complete_json(self, system: str, user: str) -> dict[str, Any] | None:
+        self.last_error = ""
         endpoint = self.url
         if not endpoint.endswith("/chat/completions"):
             endpoint = endpoint + "/chat/completions"
-        payload = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            "temperature": 0.1,
-            "max_tokens": 1200,
-            "chat_template_kwargs": {
-                "enable_thinking": False,
-            },
-        }
         try:
             with httpx.Client(timeout=self.timeout) as client:
-                response = client.post(endpoint, json=payload)
-                response.raise_for_status()
-                message = response.json()["choices"][0]["message"]
-                content = message.get("content") or message.get("reasoning_content", "")
-            return extract_json(content)
-        except Exception:
+                model = self._resolve_model(client)
+                last_why = ""
+                # Qwen2.5 (bundled GGUF) wants a plain OpenAI body. Extra
+                # chat_template_kwargs can 400 on llama.cpp, which we used to
+                # swallow as "LLM unreachable".
+                for extra in ({}, {"chat_template_kwargs": {"enable_thinking": False}}):
+                    payload = {
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user},
+                        ],
+                        "temperature": 0.1,
+                        "max_tokens": 1200,
+                    }
+                    payload.update(extra)
+                    response = client.post(endpoint, json=payload)
+                    if response.status_code in {400, 404, 422}:
+                        last_why = f"HTTP {response.status_code}"
+                        continue
+                    response.raise_for_status()
+                    choice = (response.json().get("choices") or [{}])[0]
+                    message = choice.get("message") or {}
+                    content = message.get("content") or message.get("reasoning_content") or choice.get("text") or ""
+                    parsed = extract_json(content)
+                    if parsed:
+                        self.model = model
+                        return parsed
+                    last_why = "LLM returned text that was not JSON"
+                self.last_error = last_why or "LLM unreachable"
+                return None
+        except Exception as exc:
+            self.last_error = str(exc)[:200]
             return None
+
+    def _resolve_model(self, client: httpx.Client) -> str:
+        configured = (self.model or "local").strip() or "local"
+        if configured not in {"local", "default"}:
+            return configured
+        try:
+            response = client.get(self.url.rstrip("/") + "/models")
+            response.raise_for_status()
+            rows = response.json().get("data") or []
+            if rows and rows[0].get("id"):
+                return str(rows[0]["id"])
+        except Exception:
+            pass
+        return configured
 
 
 def make_provider(url: str | None, model: str = "local", timeout: float = 180.0) -> LLMProvider:
@@ -77,6 +110,11 @@ def make_provider(url: str | None, model: str = "local", timeout: float = 180.0)
 
 def extract_json(text: str) -> dict[str, Any] | None:
     text = (text or "").strip()
+    if not text:
+        return None
+    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if fence:
+        text = fence.group(1)
     try:
         data = json.loads(text)
         return data if isinstance(data, dict) else None

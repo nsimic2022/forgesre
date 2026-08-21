@@ -114,6 +114,8 @@ def test_forgerca_cpu_compat():
     assert extract_json('{"summary": "ok"}') == {"summary": "ok"}
     thinking_only = extract_json("")
     assert thinking_only is None
+    fenced = extract_json('prefix\n```json\n{"summary": "fenced"}\n```\n')
+    assert fenced == {"summary": "fenced"}
 
 
 def test_audit_and_api_investigation():
@@ -277,3 +279,40 @@ def test_investigate_button_queues_job_instead_of_blocking():
     run_pending_jobs(db)
     assert _inv_count(db, incident.id) == 2
     db.close()
+
+
+def test_openai_llm_retries_plain_then_thinking_kwargs(monkeypatch):
+    import json
+
+    import httpx
+
+    from rca.llm import OpenAICompatibleLLM
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "model.gguf"}]})
+        body = json.loads(request.content)
+        if not body.get("chat_template_kwargs"):
+            return httpx.Response(400, json={"error": "need template"})
+        payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"summary": "from-llm", "likely_cause": "c", "recommended_action": "a", "limitations": []}'
+                    }
+                }
+            ]
+        }
+        return httpx.Response(200, json=payload)
+
+    real_client = httpx.Client
+
+    def fake_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", fake_client)
+    llm = OpenAICompatibleLLM("http://127.0.0.1:8088/v1")
+    out = llm.complete_json("sys", "user")
+    assert out is not None
+    assert out["summary"] == "from-llm"
