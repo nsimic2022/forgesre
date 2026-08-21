@@ -98,7 +98,8 @@
 {% endif %}
 
 {% else %}
-<p>No investigation stored. {% if can('investigate') or can('read_ai') %}
+<p>No investigation stored yet. If you just ran the RCA demo, a background job is collecting evidence and calling ForgeRCA (the local LLM if it is enabled). Wait a few seconds and refresh this page.</p>
+<p>{% if can('investigate') or can('read_ai') %}
 <form method="post" action="/incidents/{{ incident.number }}/investigate" class="inline"><button>Run now</button></form>
 {% endif %}</p>
 {% endif %}
