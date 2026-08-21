@@ -36,6 +36,7 @@ def test_admin_lists_users_and_selects_one():
     assert page.status_code == 200
     assert "Edit user" in page.text
     assert "Remove user" in page.text
+    assert "user-actions" in page.text
     assert f'action="/admin/users/{row.id}"' in page.text
     assert "ops@dc.local" in page.text
     db.close()

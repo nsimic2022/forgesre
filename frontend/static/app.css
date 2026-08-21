@@ -53,6 +53,8 @@ th, td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(
 }
 .banner strong { color: var(--warn); }
 .row-actions { display: flex; gap: 0.4rem; align-items: center; }
+.user-actions { margin-top: 0.75rem; gap: 0.75rem; flex-wrap: wrap; }
+.user-actions button { width: auto; flex: 0 0 auto; }
 button.secondary { background: #2a3348; color: var(--text); }
 button.danger { background: var(--crit); color: #fff; }
 button, input, select, textarea {

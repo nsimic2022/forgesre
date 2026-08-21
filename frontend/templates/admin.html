@@ -23,7 +23,7 @@
   </table>
   <div>
     {% if selected %}
-    <form method="post" action="/admin/users/{{ selected.id }}" class="stack">
+    <form method="post" action="/admin/users/{{ selected.id }}" class="stack" id="edit-user-form">
       <h3>Edit user</h3>
       {% if not can_edit_selected %}
       <p class="muted">The install super admin can only be edited by that account.</p>
@@ -45,21 +45,23 @@
       {% if selected.role == "super_admin" %}
       <input type="hidden" name="role" value="super_admin">
       {% endif %}
+    </form>
+    <div class="row-actions user-actions">
       {% if can_edit_selected %}
-      <button type="submit">Save</button>
+      <button type="submit" form="edit-user-form">Save</button>
       {% endif %}
-    </form>
-    {% if can_delete_selected %}
-    <form method="post" action="/admin/users/{{ selected.id }}/delete" class="stack" onsubmit="return confirm('Remove {{ selected.email }}? They will not be able to sign in.');">
-      <button type="submit" class="danger">Remove user</button>
-    </form>
-    {% else %}
-      {% if selected.id == user.id %}
-      <p class="muted">You cannot remove the account you are signed in as.</p>
-      {% elif selected.role == "super_admin" %}
-      <p class="muted">The install super admin cannot be removed.</p>
+      {% if can_delete_selected %}
+      <form method="post" action="/admin/users/{{ selected.id }}/delete" class="inline" onsubmit="return confirm('Remove {{ selected.email }}? They will not be able to sign in.');">
+        <button type="submit" class="danger">Remove user</button>
+      </form>
+      {% else %}
+        {% if selected.id == user.id %}
+        <p class="muted">You cannot remove the account you are signed in as.</p>
+        {% elif selected.role == "super_admin" %}
+        <p class="muted">The install super admin cannot be removed.</p>
+        {% endif %}
       {% endif %}
-    {% endif %}
+    </div>
     <p class="muted"><a href="/admin">Create another user</a></p>
     {% else %}
     <form method="post" action="/admin/users" class="stack">
