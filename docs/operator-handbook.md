@@ -412,7 +412,7 @@ notifications:
     tls: true
 ```
 
-Leave SMTP disabled in the lab and use the generated-notification log. When you turn SMTP on, the To address is the asset owner email if set, otherwise `<role>@forgesre.local` (e.g. `team@forgesre.local`). Point those names at a real mailbox on your SMTP server.
+Leave SMTP **disabled** in the lab. **Send incident report** still works: the mail is stored as `generated` on the incident page. You only set `enabled: true` and fill `host` / `from` here, plus `SMTP_USERNAME` / `SMTP_PASSWORD` in `secrets/secrets.env`, when you want the message to leave the VM (Gmail, Exchange, a relay). Then `./forgesre update`.
 
 ---
 
@@ -425,6 +425,7 @@ On `/incidents/<number>`:
 | Acknowledge | analyst+ | Status `INVESTIGATING`, records ack user/time |
 | Resolve / Close | analyst+ (`write_incidents`) | Closes the operational loop; records who resolved |
 | Run AI investigation | analyst+ (`read_ai`) or engineer (`investigate`) | ForgeRCA; does not change the host |
+| **Send incident report** | analyst / engineer / admin | Emails (or stores) the current INC snapshot. Next to Ack/Resolve. Does **not** require SMTP. With email off, the row is `generated` in Email notifications on this page |
 
 The same page lists **email notifications** for this `INC` (bodies, `generated` vs `sent`), **who did what** (audit: ack, resolve, notes), and **operator notes** (what a person actually did, e.g. cleaned WAL). Notes are not a ticket thread and not RCA.
 

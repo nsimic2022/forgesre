@@ -95,6 +95,21 @@ button { background: var(--accent); color: #1a1208; border: 0; font-weight: 600;
   color: var(--muted);
   cursor: not-allowed;
 }
+.incident-mail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+.incident-mail label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.incident-mail input, .incident-mail select { min-width: 12rem; }
 .tool-row { display: flex; gap: 0.45rem; align-items: center; flex-wrap: wrap; margin: 0.35rem 0 0.8rem; }
 .tool-row .pill { font-weight: 600; letter-spacing: 0.02em; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; margin-bottom: 1rem; }
