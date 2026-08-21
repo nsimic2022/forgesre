@@ -44,7 +44,7 @@ def enqueue(db: Session, kind: str, object_id: str, object_type: str = "incident
 
 def run_pending_jobs(db: Session, limit: int = 8) -> int:
     """Claim and run pending jobs. Safe for sqlite tests (single-threaded)."""
-    from app.services import run_investigation
+    from app.services import queue_llm_rewrite, run_investigation
 
     done = 0
     for _ in range(limit):
@@ -56,15 +56,20 @@ def run_pending_jobs(db: Session, limit: int = 8) -> int:
         row.attempts = int(row.attempts or 0) + 1
         db.commit()
         try:
+            use_llm = False
+            incident = None
             if row.kind == "investigate":
                 incident = db.query(Incident).filter_by(number=row.object_id).first()
                 if incident is None:
                     raise RuntimeError(f"incident {row.object_id} not found")
+                payload = row.payload or {}
+                use_llm = payload.get("use_llm", True) is not False
                 run_investigation(
                     db,
                     incident,
-                    actor=str((row.payload or {}).get("actor") or "system"),
-                    force=bool((row.payload or {}).get("force")),
+                    actor=str(payload.get("actor") or "system"),
+                    force=bool(payload.get("force")),
+                    use_llm=use_llm,
                 )
             else:
                 raise RuntimeError(f"unknown job kind {row.kind}")
@@ -73,6 +78,12 @@ def run_pending_jobs(db: Session, limit: int = 8) -> int:
             row.error = ""
             db.commit()
             done += 1
+            if row.kind == "investigate" and incident is not None and not use_llm:
+                queue_llm_rewrite(
+                    db,
+                    incident,
+                    actor=str((row.payload or {}).get("actor") or "system"),
+                )
         except Exception as exc:
             log.exception("job %s %s failed", row.kind, row.object_id)
             row.status = "error"

@@ -20,7 +20,7 @@ from app.inventory import (
     is_snmp_asset,
 )
 from app.journal import MODULES, list_entries, module_counts
-from app.models import Asset, AuditLog, DiscoveryCandidate, EscalationPolicy, Incident, Notification, Playbook, Playrule, User
+from app.models import Asset, AuditLog, DiscoveryCandidate, EscalationPolicy, Incident, Job, Notification, Playbook, Playrule, User
 from app.security import can, hash_password, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload
 from app.services import run_demo, run_demo_rca, run_investigation
@@ -423,11 +423,11 @@ def incident_investigate(
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
         raise HTTPException(status_code=404)
-    from app.jobs import enqueue
+    from app.services import queue_llm_rewrite, run_investigation
 
-    force = bool(item.investigations)
-    enqueue(db, "investigate", number, payload={"actor": user.email, "force": force})
-    return RedirectResponse(f"/ai/{number}", status_code=302)
+    run_investigation(db, item, actor=user.email, use_llm=False)
+    queue_llm_rewrite(db, item, actor=user.email)
+    return RedirectResponse(f"/ai/{number}", status_code=303)
 
 
 @router.post("/incidents/{number}/notes")
@@ -456,6 +456,16 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
         raise HTTPException(status_code=404)
     investigation = item.investigations[-1] if item.investigations else None
     rca = (investigation.result if investigation else None) or {}
+    llm_pending = (
+        db.query(Job)
+        .filter(
+            Job.kind == "investigate",
+            Job.object_id == number,
+            Job.status.in_(["pending", "running"]),
+        )
+        .first()
+        is not None
+    )
     return render(
         request,
         "ai.html",
@@ -464,6 +474,7 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
         investigation=investigation,
         rca=rca,
         engineer=can(user, "read_evidence"),
+        llm_pending=llm_pending,
     )
 
 

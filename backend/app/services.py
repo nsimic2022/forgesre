@@ -17,6 +17,7 @@ from app.models import (
     Incident,
     IncidentEvent,
     Investigation,
+    Job,
     MaintenanceWindow,
     Notification,
     Playbook,
@@ -196,7 +197,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
             object_type="incident",
             object_id=incident.number,
         )
-        enqueue(db, "investigate", incident.number, payload={"actor": "system"})
+        enqueue(db, "investigate", incident.number, payload={"actor": "system", "use_llm": False})
     return created
 
 
@@ -493,8 +494,15 @@ def investigation_context(db: Session, incident: Incident) -> dict[str, Any]:
     }
 
 
-def run_investigation(db: Session, incident: Incident, actor: str = "system", *, force: bool = False) -> Investigation:
-    """Run ForgeRCA. Automatic callers skip when a result already exists; the UI can pass force=True."""
+def run_investigation(
+    db: Session,
+    incident: Incident,
+    actor: str = "system",
+    *,
+    force: bool = False,
+    use_llm: bool = True,
+) -> Investigation:
+    """Run ForgeRCA. Pass use_llm=False for an immediate builtin result in the UI."""
     latest = (
         db.query(Investigation)
         .filter_by(incident_id=incident.id)
@@ -536,7 +544,7 @@ def run_investigation(db: Session, incident: Incident, actor: str = "system", *,
         ctx = ctx_dict
 
     llm = make_provider(
-        settings.llm_url if settings.ai_enabled else None,
+        settings.llm_url if settings.ai_enabled and use_llm else None,
         settings.llm_model,
         timeout=settings.llm_timeout,
     )
@@ -605,6 +613,39 @@ def run_investigation(db: Session, incident: Incident, actor: str = "system", *,
         object_id=incident.number,
     )
     return row
+
+
+def queue_llm_rewrite(db: Session, incident: Incident, actor: str = "system") -> None:
+    """Optional second pass: local LLM rewrites text after builtin RCA is already on screen."""
+    from app.jobs import enqueue
+
+    if not settings.ai_enabled or not settings.llm_url:
+        return
+    latest = (
+        db.query(Investigation)
+        .filter_by(incident_id=incident.id)
+        .order_by(Investigation.id.desc())
+        .first()
+    )
+    if latest is not None and latest.provider == "forgerca-llm":
+        return
+    busy = (
+        db.query(Job)
+        .filter(
+            Job.kind == "investigate",
+            Job.object_id == incident.number,
+            Job.status.in_(["pending", "running"]),
+        )
+        .first()
+    )
+    if busy is not None:
+        return
+    enqueue(
+        db,
+        "investigate",
+        incident.number,
+        payload={"actor": actor, "force": True, "use_llm": True},
+    )
 
 
 def ensure_notification(db: Session, incident: Incident, step_key: str, target: str | None = None) -> Notification:
@@ -806,6 +847,8 @@ def run_demo(db: Session) -> Incident:
         db.query(Incident).filter(Incident.fingerprint == f"HighCPU:{DEMO_ASSET}").order_by(Incident.id.desc()).first()
     )
     if incident:
+        run_investigation(db, incident, actor="demo", use_llm=False)
+        queue_llm_rewrite(db, incident, actor="demo")
         ensure_notification(db, incident, "immediate")
         report(
             db,
@@ -859,8 +902,8 @@ def run_demo_rca(db: Session) -> Incident:
         db.query(Incident).filter(Incident.fingerprint == fingerprint).order_by(Incident.id.desc()).first()
     )
     if incident:
-        # Same as production: ingest already queued investigate. Do not run RCA again
-        # in this request — that blocked the browser on the LLM and doubled rows.
+        run_investigation(db, incident, actor="demo-rca", use_llm=False)
+        queue_llm_rewrite(db, incident, actor="demo-rca")
         ensure_notification(db, incident, "immediate")
         report(
             db,

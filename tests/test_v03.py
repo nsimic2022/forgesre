@@ -219,9 +219,10 @@ def test_automatic_rca_does_not_duplicate_without_force():
     db.close()
 
 
-def test_demo_rca_opens_new_incident_and_queues_one_investigation():
+def test_demo_rca_opens_new_incident_and_runs_builtin_immediately():
     from app.db import Base, SessionLocal, engine
     from app.jobs import run_pending_jobs
+    from app.models import Investigation
     from app.seed import seed
     from app.services import run_demo_rca
 
@@ -230,7 +231,12 @@ def test_demo_rca_opens_new_incident_and_queues_one_investigation():
     seed(db)
     first = run_demo_rca(db)
     assert first is not None
-    assert _inv_count(db, first.id) == 0
+    assert _inv_count(db, first.id) == 1
+    latest = (
+        db.query(Investigation).filter_by(incident_id=first.id).order_by(Investigation.id.desc()).first()
+    )
+    assert latest is not None
+    assert latest.provider == "builtin-analyst"
     run_pending_jobs(db)
     assert _inv_count(db, first.id) == 1
     run_pending_jobs(db)
@@ -238,6 +244,7 @@ def test_demo_rca_opens_new_incident_and_queues_one_investigation():
     second = run_demo_rca(db)
     assert second is not None
     assert second.number != first.number
+    assert _inv_count(db, second.id) == 1
     run_pending_jobs(db)
     assert _inv_count(db, second.id) == 1
     assert _inv_count(db, first.id) == 1
@@ -266,17 +273,23 @@ def test_demo_workflow_redirects_to_open_incident():
     assert "OPEN" in page.text or "INVESTIGATING" in page.text
     rca = client.post("/demo-rca", follow_redirects=False)
     assert rca.status_code == 303
-    assert "/ai/INC-" in (rca.headers.get("location") or "")
+    location = rca.headers.get("location") or ""
+    assert "/ai/INC-" in location
+    page = client.get(location)
+    assert page.status_code == 200
+    assert "ForgeRCA (builtin)" in page.text
+    assert "Facts" in page.text
+    assert "Limitations" in page.text
     db.close()
 
 
-def test_investigate_button_queues_job_instead_of_blocking():
+def test_investigate_button_opens_builtin_rca_immediately():
     from fastapi.testclient import TestClient
 
     from app.db import Base, SessionLocal, engine
     from app.jobs import run_pending_jobs
     from app.main import app
-    from app.models import Incident, Job
+    from app.models import Incident, Investigation, Job
     from app.seed import seed
 
     Base.metadata.create_all(bind=engine)
@@ -295,18 +308,32 @@ def test_investigate_button_queues_job_instead_of_blocking():
     client = TestClient(app)
     client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
     posted = client.post(f"/incidents/{number}/investigate", follow_redirects=False)
-    assert posted.status_code == 302
+    assert posted.status_code == 303
     assert posted.headers["location"].endswith(f"/ai/{number}")
-    assert _inv_count(db, incident.id) == 0
-    job = db.query(Job).filter_by(kind="investigate", object_id=number).first()
-    assert job is not None
-    assert job.status in {"pending", "running", "done"}
-    run_pending_jobs(db)
+    db.expire_all()
     assert _inv_count(db, incident.id) == 1
+    latest = (
+        db.query(Investigation).filter_by(incident_id=incident.id).order_by(Investigation.id.desc()).first()
+    )
+    assert latest is not None
+    assert latest.provider == "builtin-analyst"
+    html = client.get(f"/ai/{number}")
+    assert html.status_code == 200
+    assert "ForgeRCA (builtin)" in html.text
+    assert "Summary" in html.text
+    assert "Root cause" in html.text
+    assert "Recommended actions" in html.text
+    assert "Facts" in html.text
+    assert "Anomalies" in html.text
+    assert "Candidate causes" in html.text
+    assert "Limitations" in html.text
+    assert "Run now" not in html.text
+    assert db.query(Job).filter_by(kind="investigate", object_id=number).first() is None
     again = client.post(f"/incidents/{number}/investigate", follow_redirects=False)
-    assert again.status_code == 302
+    assert again.status_code == 303
     run_pending_jobs(db)
-    assert _inv_count(db, incident.id) == 2
+    db.expire_all()
+    assert _inv_count(db, incident.id) == 1
     db.close()
 
 

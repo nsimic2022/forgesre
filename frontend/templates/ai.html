@@ -1,10 +1,20 @@
 {% extends "base.html" %}
-{% block title %}AI Investigation · {{ incident.number }}{% endblock %}
+{% block title %}ForgeRCA · {{ incident.number }}{% endblock %}
 {% block content %}
 <p><a href="/incidents/{{ incident.number }}">← {{ incident.number }}</a></p>
-<h1>AI Investigation</h1>
+<h1>ForgeRCA investigation</h1>
 {% if investigation %}
-<p class="muted">{{ investigation.disclaimer }} · {{ investigation.provider }} · {{ investigation.engine }} {{ investigation.engine_version }}</p>
+<p class="muted">{{ investigation.disclaimer }} ·
+  {% if investigation.provider == "forgerca-llm" %}
+  ForgeRCA + local LLM
+  {% else %}
+  ForgeRCA (builtin)
+  {% endif %}
+  · {{ investigation.engine }} {{ investigation.engine_version }}
+  · {{ investigation.provider }}</p>
+{% if llm_pending and investigation.provider != "forgerca-llm" %}
+<p class="muted">A local LLM rewrite is queued in the background. Refresh this page later if you want the rewritten text. The builtin result below stays until then.</p>
+{% endif %}
 
 <section class="card">
   <h2>Summary</h2>
@@ -98,8 +108,7 @@
 {% endif %}
 
 {% else %}
-<p>RCA is running in the background (ForgeRCA, then the local LLM if it is enabled). This page does not reload itself.</p>
-<p><a href="/ai/{{ incident.number }}">Refresh this page</a> after a few seconds. Do not click Run now over and over — that only queues another job.</p>
+<p>No ForgeRCA result yet. Click Run now to open the full builtin investigation immediately. The local LLM, if enabled, rewrites text afterwards.</p>
 <p>{% if can('investigate') or can('read_ai') %}
 <form method="post" action="/incidents/{{ incident.number }}/investigate" class="inline"><button>Run now</button></form>
 {% endif %}</p>
