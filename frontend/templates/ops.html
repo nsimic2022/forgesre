@@ -9,13 +9,54 @@
   Outbox is every generated / sent / failed message this appliance stored.
   SMTP off keeps the row as <em>generated</em> (lab). Escalation mail on an incident is unchanged.
   Grafana lives on <a href="/health-ui">System Health</a>.
-  {% if webmail_url %}
-  Read and reply in <a href="{{ webmail_url }}" target="_blank" rel="noopener">Roundcube (webmail)</a>
-  on this host — your mailbox, not Gmail.
-  {% else %}
-  Own mailbox + webmail: <code>./forgesre mailbox</code> (docker-mailserver + Roundcube, not Gmail).
-  {% endif %}
 </p>
+
+<section class="card" id="providers">
+  <h2>Send through</h2>
+  <p class="muted">
+    Core SMTP does not change when you pull this. Use <strong>Gmail</strong> or <strong>Outlook</strong> now.
+    Own domain + Roundcube is a Compose profile that stays <strong>off</strong> until you enable it later.
+  </p>
+  <div class="mail-providers">
+    <div>
+      <h3>Gmail {% if smtp_provider == "gmail" %}<span class="pill ok">in use</span>{% endif %}</h3>
+      <p class="muted">
+        YAML <code>host: smtp.gmail.com</code> port <code>587</code> <code>tls: true</code>.
+        App password in <code>SMTP_USERNAME</code> / <code>SMTP_PASSWORD</code>.
+        Replies stay in Gmail.
+      </p>
+    </div>
+    <div>
+      <h3>Outlook / Microsoft 365 {% if smtp_provider == "outlook" %}<span class="pill ok">in use</span>{% endif %}</h3>
+      <p class="muted">
+        YAML <code>host: smtp.office365.com</code> port <code>587</code> <code>tls: true</code>.
+        Same <code>SMTP_*</code> secrets. Replies stay in Outlook.
+      </p>
+    </div>
+    <div>
+      <h3>Own domain + Roundcube
+        {% if smtp_provider == "mailbox" or webmail_url %}
+        <span class="pill ok">available</span>
+        {% else %}
+        <span class="pill">not enabled</span>
+        {% endif %}
+      </h3>
+      {% if webmail_url %}
+      <p class="muted">
+        <a href="{{ webmail_url }}" target="_blank" rel="noopener">Open Roundcube</a>
+        on this host. Core can keep sending through Gmail/Outlook unless you pass
+        <code>./forgesre mailbox --bind-core</code>.
+      </p>
+      {% else %}
+      <p class="muted">
+        Off by default. After you own a domain:
+        <code>./forgesre mailbox</code>
+        (starts Postfix + Dovecot + Roundcube, does not rewrite Core SMTP).
+      </p>
+      {% endif %}
+    </div>
+  </div>
+</section>
 
 <section class="card" id="send">
   <h2>Send email</h2>

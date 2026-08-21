@@ -392,7 +392,7 @@ Not part of install. `./forgesre mailbox` adds:
 | mailserver (docker-mailserver) | Postfix + Dovecot. Inbound :25, submission 127.0.0.1:587, IMAP :993 |
 | roundcube | Webmail client on :8081 |
 
-Core stays on host networking and submits SMTP to `127.0.0.1:587`. ForgeSRE has no IMAP UI.
+Core stays on host networking. SMTP (Gmail / Outlook) is independent of this profile unless `--bind-core`. ForgeSRE has no IMAP UI.
 
 ---
 

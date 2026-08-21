@@ -186,8 +186,11 @@ fieldset legend { font-size: 0.8rem; color: var(--muted); }
 .mail-body { margin: 0.2rem 0; font-size: 0.82rem; max-height: 8rem; overflow: auto; }
 .ops-forms { align-items: start; }
 .ops-forms .stack { max-width: none; }
+.mail-providers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.mail-providers h3 { margin: 0 0 0.4rem; font-size: 1rem; }
 @media (max-width: 900px) {
   .nav { position: static; width: auto; }
   .content { margin-left: 0; }
   .split { grid-template-columns: 1fr; }
+  .mail-providers { grid-template-columns: 1fr; }
 }

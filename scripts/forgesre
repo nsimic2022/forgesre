@@ -74,7 +74,7 @@ Commands:
   backup             Dump Postgres + config (tar mode 600; --no-secrets omits secrets.env)
   restore            Print restore steps (does not run them)
   update             Backup, render monitoring, refresh images, restart, doctor
-  mailbox            Own Postfix/Dovecot + Roundcube (not Gmail, not Mailpit)
+  mailbox            Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)
   completion         Print a `source …completion.bash` line for ~/.bashrc
 
 Examples:
@@ -435,19 +435,19 @@ EOF
       ;;
     mailbox)
       cat <<'EOF'
-mailbox — start an on-box mail server and Roundcube (the email client).
+mailbox — optional on-box mail server + Roundcube (off by default).
 
   ./forgesre mailbox
   ./forgesre mailbox --reset
+  ./forgesre mailbox --bind-core
 
-Creates forgesre@<MAIL_DOMAIN> (default forgesre.local), points Core SMTP at
-127.0.0.1:587, and serves webmail on :8081. Not Gmail. Not Mailpit.
+Starts docker-mailserver and Roundcube on :8081. Does **not** change Core SMTP
+(Gmail / Outlook / current YAML) unless you pass --bind-core.
 
-ForgeSRE still only sends. You read and reply in Roundcube.
-Internet receive needs a real domain, MX at this host, and TCP/25 open.
-LAN accounts send/receive between themselves without Gmail.
+Use this later, after you own a domain. Internet receive needs MX + TCP/25.
+Gmail and Outlook keep working as the send path without this profile.
 
-Do not enable this profile by default. Lab catcher remains COMPOSE_PROFILES=mail.
+Do not enable this profile at install. Lab catcher remains COMPOSE_PROFILES=mail (Mailpit).
 EOF
       ;;
     "")

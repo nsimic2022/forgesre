@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Enable the self-hosted mailbox (docker-mailserver + Roundcube) and point
-# ForgeSRE SMTP at it. Not a Gmail relay and not a fake catcher (Mailpit).
+# Optional Compose profile "mailbox": docker-mailserver + Roundcube.
+# Does not change Core SMTP (Gmail / Outlook / whatever is already in YAML)
+# unless you pass --bind-core later.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -10,26 +11,30 @@ DMS_IMAGE="ghcr.io/docker-mailserver/docker-mailserver:15.1.0"
 
 usage() {
   cat <<'EOF'
-Usage: ./forgesre mailbox [--reset]
+Usage: ./forgesre mailbox [--reset] [--bind-core]
 
-Starts docker-mailserver (Postfix + Dovecot) and Roundcube on this host.
-Creates forgesre@<domain>, a domain catch-all, and writes SMTP settings so
-Core sends through localhost:587.
+Starts docker-mailserver (Postfix + Dovecot) and Roundcube. Off at install.
+Core keep sending through Gmail / Outlook / current YAML. This only adds the
+optional on-box server + webmail for when you own a domain.
 
-  --reset   Recreate the forgesre mailbox password and rewrite SMTP secrets
+  --reset       Recreate the forgesre@ mailbox password (MAILBOX_PASSWORD)
+  --bind-core   Also point Core SMTP at 127.0.0.1:587 (replaces Gmail/Outlook)
 
 ForgeSRE still only sends. Roundcube on :8081 is the email client (read/reply).
 EOF
 }
 
 RESET=0
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
-fi
-if [[ "${1:-}" == "--reset" ]]; then
-  RESET=1
-fi
+BIND_CORE=0
+for arg in "$@"; do
+  case "${arg}" in
+    -h|--help) usage; exit 0 ;;
+    --reset) RESET=1 ;;
+    --bind-core) BIND_CORE=1 ;;
+    "") ;;
+    *) echo "Unknown argument: ${arg}" >&2; usage; exit 1 ;;
+  esac
+done
 
 log() { echo ">> $*"; }
 fail() { echo "ERROR: $*" >&2; exit 1; }
@@ -60,7 +65,7 @@ MAIL_DOMAIN="${MAIL_DOMAIN:-${FORGESRE_DOMAIN:-forgesre.local}}"
 MAIL_ACCOUNT="forgesre@${MAIL_DOMAIN}"
 MAIL_PASSWORD="${MAIL_PASSWORD:-}"
 if [[ -z "${MAIL_PASSWORD}" && -f "${SECRETS}" ]]; then
-  MAIL_PASSWORD="$(grep -E '^SMTP_PASSWORD=' "${SECRETS}" | tail -n1 | cut -d= -f2- || true)"
+  MAIL_PASSWORD="$(grep -E '^MAILBOX_PASSWORD=' "${SECRETS}" | tail -n1 | cut -d= -f2- || true)"
 fi
 if [[ -z "${MAIL_PASSWORD}" || "${RESET}" == "1" ]]; then
   MAIL_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')"
@@ -203,20 +208,28 @@ fi
 
 umask 077
 touch "${SECRETS}"
-python3 - "${SECRETS}" "${MAIL_ACCOUNT}" "${MAIL_PASSWORD}" <<'PY'
+python3 - "${SECRETS}" "${MAIL_ACCOUNT}" "${MAIL_PASSWORD}" "${MAIL_DOMAIN}" "${BIND_CORE}" <<'PY'
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
-account, password = sys.argv[2], sys.argv[3]
+account, password, domain, bind_core = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
 keys = {
-    "SMTP_HOST": "127.0.0.1",
-    "SMTP_PORT": "587",
-    "SMTP_USERNAME": account,
-    "SMTP_PASSWORD": password,
-    "SMTP_FROM": account,
-    "SMTP_USE_TLS": "true",
+    "MAILBOX_DOMAIN": domain,
+    "MAILBOX_USERNAME": account,
+    "MAILBOX_PASSWORD": password,
 }
+if bind_core == "1":
+    keys.update(
+        {
+            "SMTP_HOST": "127.0.0.1",
+            "SMTP_PORT": "587",
+            "SMTP_USERNAME": account,
+            "SMTP_PASSWORD": password,
+            "SMTP_FROM": account,
+            "SMTP_USE_TLS": "true",
+        }
+    )
 text = path.read_text(encoding="utf-8") if path.exists() else ""
 lines = text.splitlines()
 out = []
@@ -234,7 +247,8 @@ for key, value in keys.items():
 path.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
 PY
 
-python3 - "${YML}" "${MAIL_ACCOUNT}" <<'PY'
+if [[ "${BIND_CORE}" == "1" ]]; then
+  python3 - "${YML}" "${MAIL_ACCOUNT}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -284,25 +298,30 @@ if in_email:
 
 path.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
 PY
-
-if "${DC[@]}" ps -q core >/dev/null 2>&1 && [[ -n "$("${DC[@]}" ps -q core 2>/dev/null || true)" ]]; then
-  log "Restarting core so it picks up SMTP secrets…"
-  "${DC[@]}" up -d --force-recreate core
+  if [[ -n "$("${DC[@]}" ps -q core 2>/dev/null || true)" ]]; then
+    log "Restarting core so it sends through the on-box mailbox…"
+    "${DC[@]}" up -d --force-recreate core
+  fi
+else
+  log "Core SMTP unchanged (Gmail / Outlook / current YAML)."
 fi
 
 echo
-echo "Mailbox is yours (not Gmail, not Mailpit)."
+echo "Optional mailbox profile is up. Core send path was not rewritten."
+if [[ "${BIND_CORE}" == "1" ]]; then
+  echo "  Core SMTP:  127.0.0.1:587  (bind-core)"
+else
+  echo "  Core SMTP:  unchanged — keep using Gmail or Outlook in config/forgesre.yml"
+fi
 echo "  Domain:     ${MAIL_DOMAIN}"
 echo "  Account:    ${MAIL_ACCOUNT}"
 echo "  Password:   ${MAIL_PASSWORD}"
-echo "  Webmail:    http://<this-host>:${ROUNDCUBE_PORT}   (Roundcube — the email client)"
+echo "  Webmail:    http://<this-host>:${ROUNDCUBE_PORT}   (Roundcube)"
 echo "  IMAP:       <this-host>:993"
-echo "  Submission: 127.0.0.1:587  (ForgeSRE sends here)"
-echo "  Inbound MX: port 25 on this host"
+echo "  Inbound MX: port 25 on this host (needs a real domain later)"
 echo
-echo "Roundcube is the email client. ForgeSRE only sends; you read and reply in Roundcube."
+echo "ForgeSRE still only sends. Read and reply in Roundcube or in Gmail/Outlook."
 echo "Internet receive needs a real domain + MX pointing here, and TCP/25 open."
-echo "LAN-only (${MAIL_DOMAIN}) works between mailboxes on this box without Gmail."
 echo "Add more people:"
 echo "  docker compose --profile mailbox exec mailserver setup email add you@${MAIL_DOMAIN} 'password'"
-echo "Password is also in secrets/secrets.env (SMTP_PASSWORD)."
+echo "Mailbox password is in secrets/secrets.env (MAILBOX_PASSWORD), not SMTP_PASSWORD."

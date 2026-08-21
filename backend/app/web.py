@@ -79,12 +79,26 @@ def can_send_ops(user: User) -> bool:
     return can(user, "write_play") or can(user, "write_incidents") or can(user, "admin")
 
 
-def _webmail_url(request: Request) -> str:
-    """Roundcube link when Core is sending through the on-box mailbox."""
+def smtp_provider_id() -> str:
+    """Which documented SMTP path Core is using. Display only — does not send mail."""
+    if not (settings.email_enabled and settings.smtp_host):
+        return "off"
     host = (settings.smtp_host or "").lower()
-    if host not in {"127.0.0.1", "localhost", "::1"}:
-        return ""
-    if int(settings.smtp_port or 0) != 587:
+    if host in {"127.0.0.1", "localhost", "::1"}:
+        return "mailbox" if int(settings.smtp_port or 0) == 587 else "mailpit"
+    if "gmail" in host:
+        return "gmail"
+    if "office365" in host or "outlook" in host or "hotmail" in host:
+        return "outlook"
+    return "other"
+
+
+def _webmail_url(request: Request) -> str:
+    """Roundcube link when the optional mailbox profile is in use or hinted in env."""
+    host = (settings.smtp_host or "").lower()
+    local = host in {"127.0.0.1", "localhost", "::1"} and int(settings.smtp_port or 0) == 587
+    hinted = bool(os.environ.get("MAIL_DOMAIN") or os.environ.get("ROUNDCUBEMAIL_DES_KEY"))
+    if not (local or hinted):
         return ""
     hostname = (request.headers.get("host") or "localhost").split(":")[0] or "localhost"
     port = os.environ.get("ROUNDCUBE_PORT", "8081")
@@ -766,6 +780,7 @@ def ops_page(request: Request, db: Session = Depends(get_db), user: User = Depen
         smtp_on=settings.email_enabled and bool(settings.smtp_host),
         can_send=can_send_ops(user),
         webmail_url=_webmail_url(request),
+        smtp_provider=smtp_provider_id(),
     )
 
 

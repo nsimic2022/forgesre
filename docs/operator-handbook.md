@@ -126,7 +126,7 @@ Login session lasts **12 hours** (httponly cookie).
 | Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
 | Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
 | System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Run doctor** re-probes now. Green = running, yellow = paused / starting / disabled, red = down. **Open** column (and the component name) goes to that service’s GUI or metrics. **Open Grafana** is on this page too. Prometheus/Alertmanager bind the appliance; the UI rewrites `127.0.0.1` to the host you used. |
-| Email & reports | `/ops` | **Add email** (address book) then **Send email**. Mail outbox is sent/generated/failed mail — not an inbox; ForgeSRE does not receive email. Read/reply in Roundcube after `./forgesre mailbox`. Scheduled performance reports pick a saved address (or a new one) and assets + interval. Asset owner emails from **Assets** are already in the list. Grafana is on System Health, not here. Escalation mail on an incident is unchanged. |
+| Email & reports | `/ops` | **Gmail** / **Outlook** send now (YAML + `SMTP_*`). **Own domain + Roundcube** is listed but not enabled until `./forgesre mailbox`. Address book, send, outbox, scheduled reports. Grafana is on System Health. |
 | Administration | `/admin` | Users, audit log. No browser bash — SSH or `./forgesre shell` |
 
 ---
@@ -414,59 +414,16 @@ notifications:
 
 Leave SMTP **disabled** only if you want the on-box outbox and no real mail.
 
-ForgeSRE **sends**. It does **not** receive inbound mail into the UI. Humans read and reply in a real client. Three ways to get there:
+ForgeSRE **sends**. It does **not** receive inbound mail into the UI. Humans read and reply in Gmail, Outlook, or (later) Roundcube.
 
-1. **Own mailbox on this VM** (Postfix + Dovecot + Roundcube) — not Gmail, not a fake catcher.
-2. **External mailbox** you already read (Gmail / Workspace / Exchange / Migadu).
-3. **Lab-only Mailpit** — messages never leave the box. Skip this if you want real mail.
+**Now (Core, unchanged):** Gmail or Outlook / Microsoft 365. Same YAML + `SMTP_*` secrets as before. Incident send, escalation, and `/ops` keep working.
 
-### Own mailbox + Roundcube (not Gmail)
+**Later (Compose profile `mailbox`, off at install):** when you own a domain, `./forgesre mailbox` starts Postfix + Dovecot + Roundcube. That does **not** rewrite Core SMTP unless you pass `--bind-core`.
 
-This is the product path when you want *your* mail server and *your* webmail client on the appliance.
+### Gmail
 
-```bash
-# optional: set MAIL_DOMAIN=ops.example.com in .env first (default forgesre.local)
-./forgesre mailbox
-```
-
-That command:
-
-- Enables Compose profile `mailbox` (does **not** turn it on at install).
-- Starts **docker-mailserver** (Postfix + Dovecot) and **Roundcube**.
-- Creates `forgesre@<domain>` and a domain catch-all into that mailbox.
-- Writes SMTP host `127.0.0.1` port `587` `tls: true` and secrets in `secrets/secrets.env`.
-- Recreates Core so send uses that account.
-
-Then:
-
-| What | Where |
-|---|---|
-| Send (ForgeSRE → people) | `/ops`, incident report, escalation — SMTP to `127.0.0.1:587` |
-| Read / reply (the email client) | Roundcube at `http://<VM-IP>:8081` as `forgesre@<domain>` |
-| Desktop IMAP | `<VM-IP>:993` (same account) |
-| Internet inbound | MX for the domain → this host, **TCP/25** open |
-
-LAN-only (`forgesre.local`) works **between mailboxes on this box** without Gmail. Internet receive is a mail-ops job: you must own the domain, publish MX (+ SPF / DKIM / PTR) or other servers will junk or reject you. Many ISPs and clouds **block inbound port 25**. The mailbox profile does not magically fix that.
-
-Add a person:
-
-```bash
-docker compose --profile mailbox exec mailserver setup email add you@forgesre.local 'password'
-```
-
-ForgeSRE still has no IMAP inbox in the UI. Roundcube is the client.
-
-`--reset` rotates the `forgesre@` password and rewrites SMTP secrets.
-
-Do not combine this with Mailpit (`COMPOSE_PROFILES=mail`). `./forgesre mailbox` drops the `mail` profile if it was set.
-
-### External mailbox (Gmail and similar)
-
-Use this when you already have a mailbox on the internet and do not want to run MX here.
-
-1. Use a real mailbox you already read (example: Gmail).
-2. Gmail: Security → 2-Step Verification → **App passwords** → 16 characters (not your login password).
-3. `config/forgesre.yml`:
+1. Security → 2-Step Verification → **App passwords** → 16 characters (not your login password).
+2. `config/forgesre.yml`:
 
 ```yaml
 notifications:
@@ -478,24 +435,60 @@ notifications:
     tls: true
 ```
 
-4. `secrets/secrets.env`:
+3. `secrets/secrets.env`:
 
 ```bash
 SMTP_USERNAME=you@gmail.com
 SMTP_PASSWORD=xxxx xxxx xxxx xxxx
 ```
 
-5. `./forgesre update`. **Send incident report**. Report outbox must show `sent`. `failed` = wrong app password or outbound 587 blocked. `generated` = `enabled` is still false.
+4. `./forgesre update`. **Send incident report**. Outbox must show `sent`. `failed` = wrong app password or outbound 587 blocked. `generated` = `enabled` is still false.
 
-Workspace / Exchange / Migadu: same keys, their SMTP host and a mailbox user.
+From-address must be the same Gmail account.
 
-**Receive (people → you)** — open that same mailbox in Gmail/Outlook/Roundcube. If someone replies to the incident report, it arrives there. ForgeSRE has no IMAP inbox in this version.
+### Outlook / Microsoft 365
 
-From-address must be allowed to send as that user (Gmail: `from:` = the same account).
+Same keys, different host. Replies stay in Outlook.
+
+```yaml
+notifications:
+  email:
+    enabled: true
+    host: smtp.office365.com
+    port: 587
+    from: you@outlook.com
+    tls: true
+```
+
+```bash
+SMTP_USERNAME=you@outlook.com
+SMTP_PASSWORD=...
+```
+
+Work / school Microsoft 365: same host `smtp.office365.com`, your work address. Consumer Outlook.com / Hotmail: same host (or `smtp-mail.outlook.com` if that is what Microsoft shows for the account). MFA accounts need an app password.
+
+### Own domain + Roundcube (not enabled)
+
+Compose services `mailserver` and `roundcube` sit in `docker-compose.yml` under profile **`mailbox`**. Install does **not** start them. Core, incidents, and Gmail/Outlook SMTP stay as they are.
+
+When you have bought a domain and want the on-box server:
+
+```bash
+# optional: MAIL_DOMAIN=ops.example.com in .env first (default forgesre.local)
+./forgesre mailbox
+```
+
+That starts Postfix + Dovecot + Roundcube (`:8081`) and writes `MAILBOX_*` in secrets. It does **not** change `config/forgesre.yml` or `SMTP_PASSWORD`. Gmail/Outlook keep sending.
+
+`--bind-core` is the later switch if you want Core to submit to `127.0.0.1:587` instead of Gmail/Outlook.
+
+Internet receive still needs MX at this host and **TCP/25**. Many ISPs/clouds block port 25.
+
+Do not combine with Mailpit (`COMPOSE_PROFILES=mail`).
 
 ### Lab-only: Mailpit (not production)
 
-Skip this if you want real mail. Mailpit is a catcher on the VM (`COMPOSE_PROFILES=mail`, YAML `127.0.0.1:1025`, `tls: false`). Messages never leave the box and never appear in Gmail or Roundcube.
+Skip this if you want real mail. Mailpit is a catcher on the VM (`COMPOSE_PROFILES=mail`, YAML `127.0.0.1:1025`, `tls: false`). Messages never leave the box and never appear in Gmail, Outlook, or Roundcube.
 
 ---
 
@@ -661,7 +654,7 @@ Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critica
 ./forgesre backup
 ./forgesre backup --no-secrets
 ./forgesre update               # backup + render-monitoring + compose up + doctor
-./forgesre mailbox              # own Postfix/Dovecot + Roundcube (not Gmail)
+./forgesre mailbox              # optional Roundcube later; does not rewrite Core SMTP
 ./forgesre version
 ```
 

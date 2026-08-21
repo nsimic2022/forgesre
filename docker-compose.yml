@@ -174,8 +174,9 @@ services:
     restart: unless-stopped
 
   mailserver:
-    # Optional on-box mailbox. Not Gmail. Not Mailpit. COMPOSE_PROFILES=mailbox
-    # ./forgesre mailbox  — creates forgesre@MAIL_DOMAIN and points Core at :587
+    # Optional. Off unless COMPOSE_PROFILES includes mailbox.
+    # ./forgesre mailbox starts this + Roundcube. Core SMTP (Gmail/Outlook) stays
+    # unchanged unless you pass --bind-core.
     image: ghcr.io/docker-mailserver/docker-mailserver:15.1.0
     profiles: ["mailbox"]
     hostname: mail.${MAIL_DOMAIN:-forgesre.local}

@@ -321,6 +321,7 @@ ALERTMANAGER_WEBHOOK_TOKEN=   # also used for Prometheus HTTP SD
 SECRET_KEY=
 SMTP_USERNAME=
 SMTP_PASSWORD=
+# MAILBOX_* only after ./forgesre mailbox — does not replace SMTP_*
 NETBOX_API_TOKEN=
 SNMP_COMMUNITY=public     # read-only community snmp_exporter uses on UDP/161
 ```
@@ -348,7 +349,7 @@ Install writes random `SECRET_KEY` and `ALERTMANAGER_WEBHOOK_TOKEN`. Core **refu
 ./forgesre help              # CLI overview
 ./forgesre help snmp         # SNMP exporter + SD
 ./forgesre help tls          # optional HTTPS / Secure cookies
-./forgesre mailbox           # own Postfix/Dovecot + Roundcube (not Gmail)
+./forgesre mailbox           # optional Roundcube later; Core SMTP (Gmail/Outlook) unchanged
 ./forgesre doctor            # health (includes snmp; uses Bearer webhook token)
 ./forgesre status            # compose ps
 ./forgesre logs core

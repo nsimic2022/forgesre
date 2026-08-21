@@ -74,7 +74,7 @@ _forgesre_complete() {
       COMPREPLY=($(compgen -W "--download-only --offline" -- "$cur"))
       ;;
     mailbox)
-      COMPREPLY=($(compgen -W "--reset" -- "$cur"))
+      COMPREPLY=($(compgen -W "--reset --bind-core" -- "$cur"))
       ;;
     install)
       COMPREPLY=($(compgen -W "--non-interactive --profile --port" -- "$cur"))

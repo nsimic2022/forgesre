@@ -66,9 +66,10 @@ notifications:
     port: 587
     from: forgesre@example.local
     tls: true
-    # Own mailbox: ./forgesre mailbox → host 127.0.0.1 port 587 tls true
-    # Lab catcher (optional Compose profile "mail"): host 127.0.0.1 port 1025 tls false
-    # External Gmail: host smtp.gmail.com port 587 tls true + SMTP_* in secrets/secrets.env
+    # Gmail now:        host smtp.gmail.com port 587 tls true + SMTP_* secrets
+    # Outlook / M365:   host smtp.office365.com port 587 tls true + SMTP_* secrets
+    # Own domain later: Compose profile mailbox (./forgesre mailbox) — does not rewrite this block
+    # Lab catcher:      Compose profile mail, host 127.0.0.1 port 1025 tls false
   webhook:
     enabled: false
 
