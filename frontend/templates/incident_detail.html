@@ -43,7 +43,7 @@
     <p class="muted">{{ investigation.disclaimer }} · Engine {{ investigation.engine or "forgerca" }} {{ investigation.engine_version or "" }}</p>
     <p><a href="/ai/{{ incident.number }}">Open AI Investigation</a></p>
     {% else %}
-    <p class="muted">No AI investigation yet.</p>
+    <p class="muted">No AI investigation yet. If you just clicked Run AI investigation, wait a few seconds and refresh — the local LLM runs in the background so the page does not spin.</p>
     {% endif %}
     <form method="post" action="/incidents/{{ incident.number }}/status" class="inline">
       {% if can('ack_incidents') %}

@@ -423,8 +423,11 @@ def incident_investigate(
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
         raise HTTPException(status_code=404)
-    run_investigation(db, item, actor=user.email, force=True)
-    return RedirectResponse(f"/incidents/{number}#ai", status_code=302)
+    from app.jobs import enqueue
+
+    force = bool(item.investigations)
+    enqueue(db, "investigate", number, payload={"actor": user.email, "force": force})
+    return RedirectResponse(f"/ai/{number}", status_code=302)
 
 
 @router.post("/incidents/{number}/notes")

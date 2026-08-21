@@ -237,3 +237,43 @@ def test_demo_rca_opens_new_incident_and_queues_one_investigation():
     assert _inv_count(db, second.id) == 1
     assert _inv_count(db, first.id) == 1
     db.close()
+
+
+def test_investigate_button_queues_job_instead_of_blocking():
+    from fastapi.testclient import TestClient
+
+    from app.db import Base, SessionLocal, engine
+    from app.jobs import run_pending_jobs
+    from app.main import app
+    from app.models import Incident, Job
+    from app.seed import seed
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    incident = Incident(
+        number="INC-0099_21.08.2026_11:00",
+        title="button queue",
+        severity="WARNING",
+        status="OPEN",
+        fingerprint="button-queue-rca",
+    )
+    db.add(incident)
+    db.commit()
+    number = incident.number
+    client = TestClient(app)
+    client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
+    posted = client.post(f"/incidents/{number}/investigate", follow_redirects=False)
+    assert posted.status_code == 302
+    assert posted.headers["location"].endswith(f"/ai/{number}")
+    assert _inv_count(db, incident.id) == 0
+    job = db.query(Job).filter_by(kind="investigate", object_id=number).first()
+    assert job is not None
+    assert job.status in {"pending", "running", "done"}
+    run_pending_jobs(db)
+    assert _inv_count(db, incident.id) == 1
+    again = client.post(f"/incidents/{number}/investigate", follow_redirects=False)
+    assert again.status_code == 302
+    run_pending_jobs(db)
+    assert _inv_count(db, incident.id) == 2
+    db.close()

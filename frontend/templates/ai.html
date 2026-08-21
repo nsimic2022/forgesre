@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 {% block title %}AI Investigation · {{ incident.number }}{% endblock %}
+{% block extra_head %}
+{% if not investigation %}
+<meta http-equiv="refresh" content="5">
+{% endif %}
+{% endblock %}
 {% block content %}
 <p><a href="/incidents/{{ incident.number }}">← {{ incident.number }}</a></p>
 <h1>AI Investigation</h1>
