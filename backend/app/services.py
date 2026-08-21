@@ -778,7 +778,7 @@ def run_demo(db: Session) -> Incident:
     asset = ensure_demo_asset(db)
     ensure_demo_similar_history(db, asset)
     seed_demo_candidate(db)
-    close_open_incidents(db, f"HighCPU:{DEMO_ASSET}")
+    close_open_incidents(db, f"HighCPU:{DEMO_ASSET}", include_resolved=True)
     set_demo_cpu(94)
     log.warning("demo: CPU on %s raised to 94%% for HighCPU alert", DEMO_ASSET)
     payload = {
@@ -805,8 +805,6 @@ def run_demo(db: Session) -> Incident:
     incident = created[0] if created else (
         db.query(Incident).filter(Incident.fingerprint == f"HighCPU:{DEMO_ASSET}").order_by(Incident.id.desc()).first()
     )
-    if incident and not incident.investigations:
-        run_investigation(db, incident)
     if incident:
         ensure_notification(db, incident, "immediate")
         report(

@@ -13,7 +13,7 @@
   {% if can('admin') %}
   <form class="inline" method="post" action="/demo"><button type="submit">Run demo workflow</button></form>
   <form class="inline" method="post" action="/demo-rca"><button type="submit">Run RCA demo</button></form>
-  <p class="muted">RCA demo opens a filesystem incident and queues ForgeRCA (LLM if enabled). If the AI page is empty, wait a few seconds and refresh. It does not fill a real disk.</p>
+  <p class="muted">Demo workflow opens the new HighCPU incident immediately. RCA demo opens the AI page; click Refresh there when the analysis is ready. Neither button waits on the LLM in the browser.</p>
   {% else %}
   <p class="muted">Ask an admin to click <strong>Run demo workflow</strong>, or from the VM run <code>./forgesre demo</code>.</p>
   {% endif %}

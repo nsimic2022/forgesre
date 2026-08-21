@@ -1,10 +1,5 @@
 {% extends "base.html" %}
 {% block title %}AI Investigation · {{ incident.number }}{% endblock %}
-{% block extra_head %}
-{% if not investigation %}
-<meta http-equiv="refresh" content="5">
-{% endif %}
-{% endblock %}
 {% block content %}
 <p><a href="/incidents/{{ incident.number }}">← {{ incident.number }}</a></p>
 <h1>AI Investigation</h1>
@@ -103,7 +98,8 @@
 {% endif %}
 
 {% else %}
-<p>No investigation stored yet. If you just ran the RCA demo, a background job is collecting evidence and calling ForgeRCA (the local LLM if it is enabled). Wait a few seconds and refresh this page.</p>
+<p>RCA is running in the background (ForgeRCA, then the local LLM if it is enabled). This page does not reload itself.</p>
+<p><a href="/ai/{{ incident.number }}">Refresh this page</a> after a few seconds. Do not click Run now over and over — that only queues another job.</p>
 <p>{% if can('investigate') or can('read_ai') %}
 <form method="post" action="/incidents/{{ incident.number }}/investigate" class="inline"><button>Run now</button></form>
 {% endif %}</p>
