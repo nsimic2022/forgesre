@@ -1,3 +1,4 @@
+# Pytest copy of the example config with AI off so tests never call llama.cpp.
 schema_version: 1
 
 system:
@@ -46,10 +47,10 @@ grafana:
   url: http://127.0.0.1:3000
 
 ai:
-  enabled: true
+  enabled: false
   provider: local
   llm:
-    mode: bundled # bundled | external | disabled
+    mode: disabled # bundled | external | disabled
     url: http://127.0.0.1:8088/v1
     model: local
   rca:

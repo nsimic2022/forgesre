@@ -149,9 +149,14 @@ services:
       - --port
       - "8088"
       - -c
-      - "4096"
+      - "8192"
       - -t
       - "${FORGESRE_LLM_THREADS:-8}"
     volumes:
       - ${FORGESRE_DATA:-./data}/models:/models:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8088/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     restart: unless-stopped

@@ -53,13 +53,17 @@ class OpenAICompatibleLLM:
                 {"role": "user", "content": user},
             ],
             "temperature": 0.1,
-            "max_tokens": 700,
+            "max_tokens": 1200,
+            "chat_template_kwargs": {
+                "enable_thinking": False,
+            },
         }
         try:
             with httpx.Client(timeout=self.timeout) as client:
                 response = client.post(endpoint, json=payload)
                 response.raise_for_status()
-                content = response.json()["choices"][0]["message"]["content"]
+                message = response.json()["choices"][0]["message"]
+                content = message.get("content") or message.get("reasoning_content", "")
             return extract_json(content)
         except Exception:
             return None

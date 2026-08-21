@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# Keep unit tests off the bundled LLM even if forgesre.example.yml has ai.enabled.
+os.environ["FORGESRE_CONFIG"] = str(ROOT / "tests" / "forgesre.test.yml")
 os.environ["DATABASE_URL"] = f"sqlite:///{ROOT / 'data' / 'test.db'}"
 os.environ["FORGESRE_DEV"] = "1"
 os.environ["SECRET_KEY"] = "test-secret"
