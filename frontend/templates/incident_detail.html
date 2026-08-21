@@ -21,6 +21,13 @@
     <button name="status" value="CLOSED" class="{{ 'done' if closed else 'todo' }}">Close</button>
     {% endif %}
   </form>
+  {% if can('investigate') or can('read_ai') %}
+  <form method="post" action="/incidents/{{ incident.number }}/investigate">
+    <button type="submit" class="{{ 'done' if investigation else 'todo' }}">Run AI investigation</button>
+  </form>
+  {% else %}
+  <button type="button" class="off" disabled>Run AI investigation</button>
+  {% endif %}
 </div>
 <p>
   <span class="pill {{ incident.status|lower }}">{{ incident.status }}</span>
@@ -49,7 +56,14 @@
 {% if can_send %}
 <section class="card" id="send-report">
   <h2>Send incident report</h2>
-  <p class="muted">Current snapshot (alert + ForgeRCA if it has run). Does not change status. SMTP off stores the row as <em>generated</em> in Report outbox below — no YAML change needed.</p>
+  <p class="muted">
+    Current snapshot (alert + ForgeRCA if it has run). Does not change status.
+    {% if smtp_on %}
+    SMTP is <strong>on</strong> — this leaves the VM to the address you pick.
+    {% else %}
+    SMTP is <strong>off</strong> — the row is stored as <em>generated</em> in Report outbox. Gmail will not receive it until you enable SMTP (see operator handbook §11).
+    {% endif %}
+  </p>
   <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail">
     <label>To
       <select name="target">
@@ -81,26 +95,8 @@
     <p class="muted">{{ investigation.disclaimer }} · Engine {{ investigation.engine or "forgerca" }} {{ investigation.engine_version or "" }}</p>
     <p><a href="/ai/{{ incident.number }}">Open ForgeRCA investigation</a></p>
     {% else %}
-    <p class="muted">No ForgeRCA result yet. Click Run AI investigation to open the full builtin page now. The local LLM, if enabled, rewrites text in the background.</p>
+    <p class="muted">No ForgeRCA result yet. Click Run AI investigation (top of this page) to open the full builtin page now. The local LLM, if enabled, rewrites text in the background.</p>
     {% endif %}
-    <div class="incident-actions">
-    <form method="post" action="/incidents/{{ incident.number }}/status">
-      {% if can('ack_incidents') %}
-      <button name="status" value="INVESTIGATING" class="{{ 'done' if acked else 'todo' }}">Acknowledge</button>
-      {% endif %}
-      {% if can('write_incidents') %}
-      <button name="status" value="RESOLVED" class="{{ 'done' if resolved else 'todo' }}">Resolve</button>
-      <button name="status" value="CLOSED" class="{{ 'done' if closed else 'todo' }}">Close</button>
-      {% endif %}
-    </form>
-    {% if can('investigate') or can('read_ai') %}
-    <form method="post" action="/incidents/{{ incident.number }}/investigate">
-      <button type="submit" class="{{ 'done' if investigation else 'todo' }}">Run AI investigation</button>
-    </form>
-    {% else %}
-    <button type="button" class="off" disabled>Run AI investigation</button>
-    {% endif %}
-    </div>
   </section>
   <section>
     <h2>Visual investigation</h2>

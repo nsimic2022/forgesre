@@ -412,7 +412,36 @@ notifications:
     tls: true
 ```
 
-Leave SMTP **disabled** in the lab. **Send incident report** still works: the mail is stored as `generated` on the incident page. You only set `enabled: true` and fill `host` / `from` here, plus `SMTP_USERNAME` / `SMTP_PASSWORD` in `secrets/secrets.env`, when you want the message to leave the VM (Gmail, Exchange, a relay). Then `./forgesre update`.
+Leave SMTP **disabled** in the lab if you only want the outbox. **Send incident report** still stores a `generated` row. Gmail (and any real mailbox) stays empty until SMTP is on.
+
+### Send a real email (Gmail)
+
+ForgeSRE has **no bundled mail server**. It talks to an external SMTP host.
+
+1. In Gmail: Security → 2-Step Verification on → **App passwords** → create one for “ForgeSRE”. Copy the 16-character password (not your normal Gmail password).
+2. On the VM edit `config/forgesre.yml`:
+
+```yaml
+notifications:
+  email:
+    enabled: true
+    host: smtp.gmail.com
+    port: 587
+    from: you@gmail.com
+    tls: true
+```
+
+3. In `secrets/secrets.env` (never in YAML, never in git):
+
+```bash
+SMTP_USERNAME=you@gmail.com
+SMTP_PASSWORD=xxxx xxxx xxxx xxxx
+```
+
+4. `./forgesre update` (Core re-reads YAML and secrets). Hard-refresh the UI.
+5. Open the incident → **Send incident report**. Report outbox status should become `sent`. If it is `failed`, open the row body — Gmail rejected the login (wrong app password) or the host blocked outbound 587.
+
+Exchange / a local relay: same YAML keys, different `host` / `port`. Then `./forgesre update`.
 
 ---
 
