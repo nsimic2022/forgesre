@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from rca.analysis import candidate_causes, detect_anomalies, facts_from, score_confidence
+from rca.analysis import candidate_causes, detect_anomalies, facts_from, metric_samples, score_confidence
+from rca.catalog import action_for, classify_family, summary_for
 from rca.llm import LLMProvider, NullLLM, prompt_context, validate_recommendation
 from rca.types import RCAContext, utc_now
 
@@ -132,46 +133,17 @@ def _summary(ctx: RCAContext, hostname: str) -> str:
     alertname = ""
     if ctx.alerts:
         alertname = str(ctx.alerts[0].get("alertname") or "")
-    blob = f"{title} {alertname}".lower()
-    for item in ctx.evidence:
-        content = item.content if isinstance(item.content, dict) else {}
-        if item.type == "METRIC" and content.get("name") == "cpu_percent":
-            try:
-                if float(content.get("value")) > 80 or "cpu" in blob:
-                    return f"CPU usage increased rapidly on {hostname}."
-            except (TypeError, ValueError):
-                pass
-        if item.type == "METRIC" and content.get("name") in {"disk_percent", "disk_volume_percent", "filesystem_usage"}:
-            try:
-                if float(content.get("value")) > 80 or "file" in blob or "disk" in blob:
-                    return f"Disk capacity is under pressure on {hostname}."
-            except (TypeError, ValueError):
-                pass
-    if "snmp" in blob or "unreachable" in blob or "interface" in blob:
-        return f"SNMP or network reachability failed on {hostname}."
-    if "cpu" in blob:
-        return f"CPU usage increased rapidly on {hostname}."
-    if "file" in blob or "disk" in blob:
-        return f"Disk capacity is under pressure on {hostname}."
-    return f"Incident on {hostname}: {title or alertname or 'alert'}."
+    family = classify_family(ctx, metric_samples(ctx.evidence))
+    return summary_for(family, hostname, title, alertname)
 
 
 def _action(ctx: RCAContext, top) -> str:
+    del top
     playbook = ""
     if ctx.playrules:
         playbook = str(ctx.playrules[0].get("playbook") or "")
-    blob = f"{top.summary if top else ''} {playbook}".lower()
-    if "disk" in blob or "file" in blob:
-        suffix = f" Follow playbook {playbook}." if playbook else ""
-        return "Engineer should verify disk usage, growth, and the owning team." + suffix
-    if "snmp" in blob or "network" in blob or "unreachable" in blob:
-        suffix = f" Follow playbook {playbook}." if playbook else ""
-        return "Engineer should check SNMP community, ACL, and UDP/161 from the ForgeSRE host." + suffix
-    if "cpu" in blob:
-        return "Engineer should inspect top CPU processes."
-    if playbook:
-        return f"Engineer should inspect evidence and follow playbook {playbook} as guidance only."
-    return "Engineer should inspect evidence, Grafana, and recent changes."
+    family = classify_family(ctx, metric_samples(ctx.evidence))
+    return action_for(family, playbook)
 
 
 def _visual(ctx: RCAContext, top) -> list[dict[str, Any]]:

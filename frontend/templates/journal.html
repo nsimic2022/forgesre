@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Console · ForgeSRE{% endblock %}
+{% block title %}Journal · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Console</h1>
+<h1>Journal</h1>
 <p class="muted">
   Internal process journal. Each module writes a short ok / warn / error report when it finishes a job.
   Old rows are dropped automatically (about 200 per module) so search stays small.
-  Raw Docker/Loki logs are separate — this is the operator view.
+  Raw Docker/Loki logs are separate — this is the operator view, not a bash shell.
 </p>
 <nav class="pills">
   <a class="pill {% if not filter_module %}ok{% endif %}" href="/journal?status={{ filter_status }}&q={{ filter_q }}">All</a>

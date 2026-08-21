@@ -3,10 +3,15 @@
 {% block content %}
 <p><a href="/incidents/{{ incident.number }}">← {{ incident.number }}</a></p>
 <h1>ForgeRCA investigation</h1>
+<div class="tool-row">
+  <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
+  <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
+</div>
+<p class="muted">{{ tools.rca_hint }} · {{ tools.ai_hint }}</p>
 {% if investigation %}
 <p class="muted">{{ investigation.disclaimer }} ·
   {% if investigation.provider == "forgerca-llm" %}
-  ForgeRCA + local LLM
+  ForgeAI wrote the prose
   {% else %}
   ForgeRCA (builtin)
   {% endif %}

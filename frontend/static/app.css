@@ -71,7 +71,8 @@ button { background: var(--accent); color: #1a1208; border: 0; font-weight: 600;
 .pill.error { background: #3d211e; color: #f0a398; }
 .pill.closed, .pill.resolved { background: #1e3d30; color: #8ee0b4; }
 .pill.investigating, .pill.escalated { background: #3d341e; color: #efd48a; }
-.inline { display: inline-block; margin-right: 0.4rem; }
+.tool-row { display: flex; gap: 0.45rem; align-items: center; flex-wrap: wrap; margin: 0.35rem 0 0.8rem; }
+.tool-row .pill { font-weight: 600; letter-spacing: 0.02em; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; margin-bottom: 1rem; }
 .split { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1.5rem; }
 .flow { list-style: none; padding: 0; }

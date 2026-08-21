@@ -2,14 +2,14 @@
 {% block title %}Playrules · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Playrules</h1>
-<p class="muted">Deterministic rules. AI cannot change them.</p>
+<p class="muted">Deterministic rules. AI cannot change them. Matching uses the Alertmanager <code>alertname</code> (and optional metric label). Operator/value is documentation for humans — Prometheus already evaluated the PromQL.</p>
 <table>
   <thead><tr><th>Name</th><th>Condition</th><th>Severity</th><th>Playbook</th><th>Enabled</th></tr></thead>
   <tbody>
   {% for rule in playrules %}
     <tr>
       <td>{{ rule.name }}</td>
-      <td><code>{{ rule.condition }}</code></td>
+      <td><code>{{ (rule.condition or {}).get('alertname') }} · {{ (rule.condition or {}).get('metric') }} {{ (rule.condition or {}).get('operator') }} {{ (rule.condition or {}).get('value') }}</code></td>
       <td>{{ rule.severity }}</td>
       <td>{{ rule.playbook.name if rule.playbook else "—" }}</td>
       <td>
@@ -24,17 +24,59 @@
 </table>
 {% if can('write_play') %}
 <h2>Create playrule</h2>
-<form method="post" action="/playrules" class="stack">
+<form method="post" action="/playrules" class="stack" id="playrule-form">
+  <label>Preset
+    <select id="playrule-preset">
+      <option value="">Custom — type the fields below</option>
+      {% for group in presets %}
+      <optgroup label="{{ group.group }}">
+        {% for item in group.rules %}
+        <option
+          value="{{ item.id }}"
+          data-name="{{ item.name }}"
+          data-alertname="{{ item.alertname }}"
+          data-metric="{{ item.metric }}"
+          data-operator="{{ item.operator }}"
+          data-value="{{ item.value }}"
+          data-severity="{{ item.severity }}"
+          data-playbook="{{ item.playbook }}">{{ item.label }}</option>
+        {% endfor %}
+      </optgroup>
+      {% endfor %}
+    </select>
+  </label>
   <label>Name <input name="name" placeholder="high-disk" required></label>
-  <label>Metric <input name="metric" value="filesystem_usage"></label>
-  <label>Operator <input name="operator" value=">"></label>
+  <label>Alertname <input name="alertname" placeholder="FilesystemUsageHigh"></label>
+  <label>Metric
+    <select name="metric" id="playrule-metric">
+      <option value="cpu_usage">cpu_usage</option>
+      <option value="filesystem_usage" selected>filesystem_usage</option>
+      <option value="memory_usage">memory_usage</option>
+      <option value="load1">load1</option>
+      <option value="up">up</option>
+      <option value="ifOperStatus">ifOperStatus</option>
+    </select>
+  </label>
+  <label>Operator
+    <select name="operator">
+      <option value=">" selected>&gt;</option>
+      <option value=">=">&gt;=</option>
+      <option value="==">==</option>
+      <option value="<">&lt;</option>
+    </select>
+  </label>
   <label>Value <input name="value" type="number" value="80"></label>
-  <label>Severity <input name="severity" value="warning"></label>
+  <label>Severity
+    <select name="severity">
+      <option value="warning" selected>warning</option>
+      <option value="critical">critical</option>
+    </select>
+  </label>
   <label>Playbook
     <select name="playbook_id">
       <option value="">—</option>
       {% for book in playbooks %}
-      <option value="{{ book.id }}">{{ book.name }}</option>
+      <option value="{{ book.id }}" data-slug="{{ book.slug }}">{{ book.name }}</option>
       {% endfor %}
     </select>
   </label>

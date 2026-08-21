@@ -33,6 +33,7 @@ from app.history import (
     notes_for,
     notifications_for,
 )
+from rca.catalog import PLAYRULE_PRESETS
 from app.settings import settings
 
 router = APIRouter()
@@ -55,6 +56,53 @@ def ctx(request: Request, user: User | None, **extra):
     }
     data.update(extra)
     return data
+
+
+def llm_job_error(db: Session, number: str) -> bool:
+    row = (
+        db.query(Job)
+        .filter(Job.kind == "investigate", Job.object_id == number, Job.status == "error")
+        .order_by(Job.id.desc())
+        .first()
+    )
+    return bool(row and (row.payload or {}).get("use_llm") is not False)
+
+
+def llm_job_pending(db: Session, number: str) -> bool:
+    return (
+        db.query(Job)
+        .filter(
+            Job.kind == "investigate",
+            Job.object_id == number,
+            Job.status.in_(["pending", "running"]),
+        )
+        .first()
+        is not None
+    )
+
+
+def tool_status(investigation, pending: bool, llm_error: bool = False) -> dict:
+    """ForgeRCA = builtin (always first). ForgeAI = local LLM rewrite."""
+    rca_class = "ok" if investigation else "ignored"
+    rca_hint = "Python builtin. Always first." if investigation else "Not run yet."
+    provider = getattr(investigation, "provider", "") if investigation else ""
+    enabled = bool(settings.ai_enabled and settings.llm_url)
+    if provider == "forgerca-llm":
+        ai_class, ai_hint = "ok", "Local LLM rewrote the prose. Facts stay from ForgeRCA."
+    elif pending:
+        ai_class, ai_hint = "warn", "ForgeAI rewrite is running. Can take several minutes on CPU."
+    elif llm_error:
+        ai_class, ai_hint = "crit", "ForgeAI rewrite failed. Showing ForgeRCA builtin."
+    elif not enabled:
+        ai_class, ai_hint = "crit", "ForgeAI is off (ai.enabled false or no LLM URL)."
+    else:
+        ai_class, ai_hint = "warn", "ForgeAI is enabled. Latest text is still ForgeRCA."
+    return {
+        "rca_class": rca_class,
+        "rca_hint": rca_hint,
+        "ai_class": ai_class,
+        "ai_hint": ai_hint,
+    }
 
 
 def get_user(request: Request, db: Session = Depends(get_db)) -> User | None:
@@ -371,6 +419,7 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
     investigation = item.investigations[-1] if item.investigations else None
     rca = (investigation.result if investigation else None) or {}
     similar = similar_incident_groups(db, item.asset) if item.asset else []
+    pending = llm_job_pending(db, number)
     return render(
             request,
             "incident_detail.html",
@@ -384,6 +433,8 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
             mail=notifications_for(db, item),
             audit_rows=audit_for(db, item.number),
             operator_notes=notes_for(db, item),
+            llm_pending=pending,
+            tools=tool_status(investigation, pending, llm_job_error(db, number)),
         )
 
 
@@ -456,16 +507,7 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
         raise HTTPException(status_code=404)
     investigation = item.investigations[-1] if item.investigations else None
     rca = (investigation.result if investigation else None) or {}
-    llm_pending = (
-        db.query(Job)
-        .filter(
-            Job.kind == "investigate",
-            Job.object_id == number,
-            Job.status.in_(["pending", "running"]),
-        )
-        .first()
-        is not None
-    )
+    pending = llm_job_pending(db, number)
     return render(
         request,
         "ai.html",
@@ -474,7 +516,8 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
         investigation=investigation,
         rca=rca,
         engineer=can(user, "read_evidence"),
-        llm_pending=llm_pending,
+        llm_pending=pending,
+        tools=tool_status(investigation, pending, llm_job_error(db, number)),
     )
 
 
@@ -482,7 +525,7 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
 def playrules_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play"))):
     rows = db.query(Playrule).order_by(Playrule.name).all()
     books = db.query(Playbook).order_by(Playbook.name).all()
-    return render(request, "playrules.html", user, playrules=rows, playbooks=books)
+    return render(request, "playrules.html", user, playrules=rows, playbooks=books, presets=PLAYRULE_PRESETS)
 
 
 @router.post("/playrules")
@@ -490,6 +533,7 @@ def playrule_create(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     name: str = Form(...),
+    alertname: str = Form(""),
     metric: str = Form("filesystem_usage"),
     operator: str = Form(">"),
     value: float = Form(80),
@@ -503,7 +547,7 @@ def playrule_create(
         name=name,
         enabled=True,
         severity=severity,
-        condition={"metric": metric, "operator": operator, "value": value, "alertname": name},
+        condition={"metric": metric, "operator": operator, "value": value, "alertname": (alertname or name).strip()},
         playbook_id=playbook_id or None,
         escalation_policy_id=policy.id if policy else None,
     )

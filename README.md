@@ -38,8 +38,8 @@ Find or enter a host
 | **History** | `/history` — last 90 days in Postgres, plus mail/audit/notes on the incident. |
 | **Playrules / playbooks** | Deterministic mapping: this alert → this checklist. Nothing is executed. |
 | **Escalation** | Generated mail to the **asset owner** (SMTP optional; lab uses an outbox log). |
-| **ForgeRCA** | Read-only investigation. Builtin analyst always; optional local LLM (`./forgesre fetch-llm`, GGUF not in git). |
-| **Console** | `/journal` — per-module ok/warn/error, not Docker logs. |
+| **ForgeRCA / ForgeAI** | Read-only investigation. ForgeRCA (Python builtin) always first; ForgeAI is the optional local LLM rewrite. |
+| **Journal** | `/journal` — per-module ok/warn/error, not Docker logs and not a bash shell. |
 
 Demo asset `forge-demo-01` is seeded so the first hour is visible without a real customer VM.
 

@@ -44,9 +44,9 @@ def test_console_page_and_api():
     assert login.status_code in {302, 303}
     page = client.get("/journal")
     assert page.status_code == 200
-    assert b"Console" in page.content
+    assert b"Journal" in page.content
     home = client.get("/")
-    assert b"Recent console reports" in home.content
+    assert b"Recent journal reports" in home.content
     data = client.get("/api/v1/journal").json()
     assert "entries" in data
     assert "modules" in data
