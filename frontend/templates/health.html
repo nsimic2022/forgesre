@@ -1,15 +1,35 @@
 {% extends "base.html" %}
 {% block title %}System Health · ForgeSRE{% endblock %}
 {% block content %}
-<h1>System Health</h1>
-<p>Overall: <strong>{{ doctor.overall }}</strong></p>
-<table>
+<div class="page-head">
+  <h1>System Health</h1>
+  <form method="post" action="/health-ui/refresh">
+    <button type="submit">Run doctor</button>
+  </form>
+</div>
+<p>
+  Same live checks as <code>./forgesre doctor</code>.
+  Overall:
+  <span class="pill {{ health_class(doctor.overall) }}">{{ doctor.overall }}</span>
+</p>
+<p class="muted">Green is ok. Yellow is off / disabled. Red is failing. Run doctor to probe again (does not use the short cache).</p>
+
+<div class="grid health-grid">
+  {% for name, item in doctor.components.items() %}
+  <div class="stat {{ health_class(item.status) }}">
+    <span>{{ name }}</span>
+    <strong>{{ item.status }}</strong>
+  </div>
+  {% endfor %}
+</div>
+
+<table class="health-table">
   <thead><tr><th>Component</th><th>Status</th><th>Why</th><th>Test</th><th>Fix</th></tr></thead>
   <tbody>
   {% for name, item in doctor.components.items() %}
-    <tr>
+    <tr class="health-{{ health_class(item.status) }}">
       <td>{{ name }}</td>
-      <td>{{ item.status }}</td>
+      <td><span class="pill {{ health_class(item.status) }}">{{ item.status }}</span></td>
       <td>{{ item.why or "—" }}</td>
       <td><code>{{ item.test or "—" }}</code></td>
       <td>{{ item.fix or "—" }}</td>

@@ -125,7 +125,7 @@ Login session lasts **12 hours** (httponly cookie).
 | Playbooks | `/playbooks` | List steps, create (**analyst**) |
 | Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
 | Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
-| System Health | `/health-ui` | Same checks as `./doctor.sh` |
+| System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Run doctor** in the corner re-probes now. Green ok, yellow disabled, red error |
 | Administration | `/admin` | Users, audit log. No browser bash — SSH or `./forgesre shell` |
 | Grafana | `:3000` | Deep dashboards (separate login) |
 

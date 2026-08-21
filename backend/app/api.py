@@ -649,10 +649,14 @@ _DOCTOR_TTL = 8.0
 _doctor_cache: dict[str, Any] = {"at": 0.0, "payload": None}
 
 
-def doctor_payload() -> dict[str, Any]:
+def doctor_payload(*, force: bool = False) -> dict[str, Any]:
     now = time.monotonic()
     cached = _doctor_cache.get("payload")
-    if cached is not None and now - float(_doctor_cache.get("at") or 0) < _DOCTOR_TTL:
+    if (
+        not force
+        and cached is not None
+        and now - float(_doctor_cache.get("at") or 0) < _DOCTOR_TTL
+    ):
         return cached
     payload = _doctor_payload_fresh()
     _doctor_cache["at"] = now

@@ -55,12 +55,12 @@
   <h2>Monitoring</h2>
   <div class="grid">
     {% for name, item in doctor.components.items() %}
-    <div class="stat {% if item.status == 'ok' %}ok{% elif item.status == 'disabled' %}{% else %}crit{% endif %}">
+    <div class="stat {{ health_class(item.status) }}">
       <span>{{ name }}</span><strong>{{ item.status }}</strong>
     </div>
     {% endfor %}
   </div>
-  <p class="muted">Overall: <strong>{{ doctor.overall }}</strong>{% if can('read_play') %} · <a href="/journal">Journal</a>{% endif %}</p>
+  <p class="muted">Overall: <span class="pill {{ health_class(doctor.overall) }}">{{ doctor.overall }}</span>{% if can('read_play') %} · <a href="/journal">Journal</a>{% endif %} · <a href="/health-ui">System Health</a></p>
 </section>
 {% if can('read_play') %}
 <section>

@@ -36,6 +36,16 @@ from app.history import (
 from rca.catalog import PLAYRULE_PRESETS
 from app.settings import settings
 
+
+def health_class(status: str) -> str:
+    """Map doctor status to pill/stat CSS: ok green, disabled yellow, error red."""
+    value = str(status or "").lower()
+    if value in {"ok", "healthy"}:
+        return "ok"
+    if value in {"disabled", "warn", "warning"}:
+        return "warn"
+    return "crit"
+
 router = APIRouter()
 templates = Jinja2Templates(directory=str(settings.frontend_dir / "templates"))
 
@@ -53,6 +63,7 @@ def ctx(request: Request, user: User | None, **extra):
         "grafana_url": settings.grafana_public_url,
         "grafana_enabled": settings.grafana_enabled,
         "ai_enabled": settings.ai_enabled,
+        "health_class": health_class,
     }
     data.update(extra)
     return data
@@ -632,6 +643,12 @@ def journal_page(
 @router.get("/health-ui", response_class=HTMLResponse)
 def health_page(request: Request, user: User = Depends(login_required)):
     return render(request, "health.html", user, doctor=doctor_payload())
+
+
+@router.post("/health-ui/refresh")
+def health_refresh(user: User = Depends(login_required)):
+    doctor_payload(force=True)
+    return RedirectResponse("/health-ui", status_code=303)
 
 
 @router.get("/admin", response_class=HTMLResponse)
