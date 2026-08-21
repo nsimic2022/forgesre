@@ -4,7 +4,7 @@ import json
 import os
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -36,7 +36,7 @@ from app.models import (
     ScheduledReport,
     User,
 )
-from app.security import can, hash_password, make_session_token, role_label, user_from_session, verify_password
+from app.security import can, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload
 from app.services import run_demo, run_demo_rca, run_investigation
 from app.stack import enrich_components, rewrite_host
@@ -895,12 +895,29 @@ def ops_toggle_report(
 
 
 @router.get("/admin", response_class=HTMLResponse)
-def admin_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
+def admin_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    selected: int | None = Query(None),
+):
     if not can(user, "admin"):
         raise HTTPException(status_code=403)
     users = db.query(User).order_by(User.email).all()
     audits = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(30).all()
-    return render(request, "admin.html", user, users=users, audits=audits)
+    chosen = db.get(User, selected) if selected else None
+    from app.users import delete_blocked, edit_blocked
+
+    return render(
+        request,
+        "admin.html",
+        user,
+        users=users,
+        audits=audits,
+        selected=chosen,
+        can_edit_selected=bool(chosen) and not edit_blocked(user, chosen),
+        can_delete_selected=bool(chosen) and not delete_blocked(user, chosen),
+    )
 
 
 @router.post("/admin/users")
@@ -914,15 +931,66 @@ def admin_create_user(
 ):
     if not can(user, "admin"):
         raise HTTPException(status_code=403)
-    if role not in {"admin", "engineer", "analyst", "viewer"}:
-        raise HTTPException(status_code=400, detail="invalid role")
-    db.add(User(email=email, name=name, password_hash=hash_password(password), role=role))
-    audit(db, "user.create", actor=user.email, object_type="user", object_id=email)
-    db.commit()
     from app.journal import report
+    from app.users import create_user
 
-    report(db, "core", "user.create", "ok", summary=f"Created {role} {email}", object_type="user", object_id=email)
-    return RedirectResponse("/admin", status_code=302)
+    try:
+        row = create_user(db, user, email=email, name=name, password=password, role=role)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    report(db, "core", "user.create", "ok", summary=f"Created {row.role} {row.email}", object_type="user", object_id=row.email)
+    return RedirectResponse(f"/admin?selected={row.id}", status_code=303)
+
+
+@router.post("/admin/users/{user_id}")
+def admin_update_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    email: str = Form(...),
+    name: str = Form(...),
+    password: str = Form(""),
+    role: str = Form("analyst"),
+):
+    if not can(user, "admin"):
+        raise HTTPException(status_code=403)
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=404)
+    from app.journal import report
+    from app.users import update_user
+
+    try:
+        update_user(db, user, target, email=email, name=name, password=password, role=role)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    report(db, "core", "user.update", "ok", summary=f"Updated {target.email}", object_type="user", object_id=target.email)
+    return RedirectResponse(f"/admin?selected={target.id}", status_code=303)
+
+
+@router.post("/admin/users/{user_id}/delete")
+def admin_delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can(user, "admin"):
+        raise HTTPException(status_code=403)
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=404)
+    from app.journal import report
+    from app.users import delete_user
+
+    try:
+        email = delete_user(db, user, target)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    report(db, "core", "user.delete", "ok", summary=f"Removed {email}", object_type="user", object_id=email)
+    return RedirectResponse("/admin", status_code=303)
 
 
 @router.post("/demo")

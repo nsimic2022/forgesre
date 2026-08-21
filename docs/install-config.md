@@ -322,6 +322,8 @@ SECRET_KEY=
 SMTP_USERNAME=
 SMTP_PASSWORD=
 # MAILBOX_* only after ./forgesre mailbox — does not replace SMTP_*
+# UI users (email/password) live in Postgres as bcrypt hashes, not in this file.
+# This file only has the install bootstrap admin (FORGESRE_ADMIN_*).
 NETBOX_API_TOKEN=
 SNMP_COMMUNITY=public     # read-only community snmp_exporter uses on UDP/161
 ```

@@ -3,29 +3,83 @@
 {% block content %}
 <h1>Administration</h1>
 <h2>Users</h2>
-<table>
-  <thead><tr><th>Email</th><th>Name</th><th>Role</th></tr></thead>
-  <tbody>
-  {% for u in users %}
-    <tr><td>{{ u.email }}</td><td>{{ u.name }}</td><td>{{ role_label(u.role) }}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-<form method="post" action="/admin/users" class="stack">
-  <h3>Create user</h3>
-  <label>Email <input name="email" type="email" required></label>
-  <label>Name <input name="name" required></label>
-  <label>Password <input name="password" type="password" required></label>
-  <label>Role
-    <select name="role">
-      <option value="analyst">Analyst — incidents, inventory, playrules, playbooks</option>
-      <option value="engineer">Engineer — detailed RCA, inventory</option>
-      <option value="admin">System admin — users and appliance</option>
-      <option value="viewer">Viewer — read only</option>
-    </select>
-  </label>
-  <button type="submit">Create</button>
-</form>
+<p class="muted">
+  Click a user on the left to edit or remove them.
+  Login passwords are stored as bcrypt hashes in Postgres — never in git, never shown here.
+  The install admin bootstrap copy in <code>secrets/secrets.env</code> is separate (see handbook §5).
+</p>
+<div class="split">
+  <table class="user-table">
+    <thead><tr><th>Email</th><th>Name</th><th>Role</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr class="{% if selected and selected.id == u.id %}selected{% endif %}">
+        <td><a href="/admin?selected={{ u.id }}">{{ u.email }}</a></td>
+        <td>{{ u.name }}</td>
+        <td>{{ role_label(u.role) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div>
+    {% if selected %}
+    <form method="post" action="/admin/users/{{ selected.id }}" class="stack">
+      <h3>Edit user</h3>
+      {% if not can_edit_selected %}
+      <p class="muted">The install super admin can only be edited by that account.</p>
+      {% endif %}
+      <label>Email <input name="email" type="email" required value="{{ selected.email }}" {% if not can_edit_selected %}readonly{% endif %}></label>
+      <label>Name <input name="name" required value="{{ selected.name }}" {% if not can_edit_selected %}readonly{% endif %}></label>
+      <label>New password <input name="password" type="password" placeholder="leave blank to keep" {% if not can_edit_selected %}disabled{% endif %}></label>
+      <label>Role
+        <select name="role" {% if not can_edit_selected or selected.role == 'super_admin' %}disabled{% endif %}>
+          <option value="analyst" {% if selected.role == "analyst" %}selected{% endif %}>Analyst — incidents, inventory, playrules, playbooks</option>
+          <option value="engineer" {% if selected.role == "engineer" %}selected{% endif %}>Engineer — detailed RCA, inventory</option>
+          <option value="admin" {% if selected.role == "admin" %}selected{% endif %}>System admin — users and appliance</option>
+          <option value="viewer" {% if selected.role == "viewer" %}selected{% endif %}>Viewer — read only</option>
+          {% if selected.role == "super_admin" %}
+          <option value="super_admin" selected>Super admin (install — cannot change)</option>
+          {% endif %}
+        </select>
+      </label>
+      {% if selected.role == "super_admin" %}
+      <input type="hidden" name="role" value="super_admin">
+      {% endif %}
+      {% if can_edit_selected %}
+      <button type="submit">Save</button>
+      {% endif %}
+    </form>
+    {% if can_delete_selected %}
+    <form method="post" action="/admin/users/{{ selected.id }}/delete" class="stack" onsubmit="return confirm('Remove {{ selected.email }}? They will not be able to sign in.');">
+      <button type="submit" class="danger">Remove user</button>
+    </form>
+    {% else %}
+      {% if selected.id == user.id %}
+      <p class="muted">You cannot remove the account you are signed in as.</p>
+      {% elif selected.role == "super_admin" %}
+      <p class="muted">The install super admin cannot be removed.</p>
+      {% endif %}
+    {% endif %}
+    <p class="muted"><a href="/admin">Create another user</a></p>
+    {% else %}
+    <form method="post" action="/admin/users" class="stack">
+      <h3>Create user</h3>
+      <label>Email <input name="email" type="email" required></label>
+      <label>Name <input name="name" required></label>
+      <label>Password <input name="password" type="password" required></label>
+      <label>Role
+        <select name="role">
+          <option value="analyst">Analyst — incidents, inventory, playrules, playbooks</option>
+          <option value="engineer">Engineer — detailed RCA, inventory</option>
+          <option value="admin">System admin — users and appliance</option>
+          <option value="viewer">Viewer — read only</option>
+        </select>
+      </label>
+      <button type="submit">Create</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
 <h2>Audit log</h2>
 <table>
   <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Object</th></tr></thead>

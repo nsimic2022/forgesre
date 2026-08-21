@@ -127,7 +127,7 @@ Login session lasts **12 hours** (httponly cookie).
 | Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
 | System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Run doctor** re-probes now. Green = running, yellow = paused / starting / disabled, red = down. **Open** column (and the component name) goes to that service’s GUI or metrics. **Open Grafana** is on this page too. Prometheus/Alertmanager bind the appliance; the UI rewrites `127.0.0.1` to the host you used. |
 | Email & reports | `/ops` | **Gmail** / **Outlook** send now (YAML + `SMTP_*`). **Own domain + Roundcube** is listed but not enabled until `./forgesre mailbox`. Address book, send, outbox, scheduled reports. Grafana is on System Health. |
-| Administration | `/admin` | Users, audit log. No browser bash — SSH or `./forgesre shell` |
+| Administration | `/admin` | Users: click a row to **edit** or **remove**. Audit log. No browser bash — SSH or `./forgesre shell` |
 
 ---
 
@@ -148,6 +148,7 @@ That account is `super_admin`. Do **not** re-run `./install.sh` on a live box un
 2. Open **Administration** (`/admin`).
 3. Fill **Create user**: email, name, password, role (Analyst / Engineer / System admin / Viewer).
 4. **Create**. The new user signs in at `/login`.
+5. To change name, role, or password later: click that user in the table (left). **Save**. Empty password keeps the current one. **Remove user** deletes the account (not yourself, not the install super admin).
 
 Same action via API (session cookie after UI login, or as the installer does):
 
@@ -158,9 +159,29 @@ curl -fsS -b cookies.txt -c cookies.txt -X POST http://127.0.0.1:8080/login \
 curl -fsS -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/users \
   -H 'Content-Type: application/json' \
   -d '{"email":"ops@dc.local","name":"Ops Admin","password":"change-me","role":"admin"}'
+
+curl -fsS -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/users/2 \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Ops","password":"new-pass","role":"analyst"}'
+
+curl -fsS -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/users/2/delete
 ```
 
-There is **no edit/disable form** in this version. To rotate a password, create a new user or change the hash in Postgres. Audit rows for `user.create` and `login` show on `/admin`.
+Audit rows for `user.create`, `user.update`, `user.delete`, and `login` show on `/admin`.
+
+### Where passwords live (protected)
+
+ForgeSRE UI users are **not** Linux/SSH accounts.
+
+| What | Where | Protected? |
+|---|---|---|
+| Every UI user’s login password | PostgreSQL table `users.password_hash` | **Yes** — bcrypt hash. The plaintext is never stored and never shown in Administration. |
+| Install bootstrap admin | `secrets/secrets.env` (`FORGESRE_ADMIN_EMAIL` / `FORGESRE_ADMIN_PASSWORD`) and `installation-report.md` | File on disk, mode `600`. This is a **copy for first login / CLI fallback**, not the live hash. Changing the password in Administration updates Postgres only. |
+| Session cookie | httponly, 12 hours | Signed with `SECRET_KEY` (also in `secrets/secrets.env`). |
+
+`data/` (Postgres volume), `.env`, and `secrets/` are gitignored. Do not commit them. SMTP app passwords and Grafana live in the same `secrets/secrets.env` file — different keys, same protection.
+
+If you rotate the install admin in the UI, also edit `FORGESRE_ADMIN_PASSWORD` in `secrets/secrets.env` if you still use `./forgesre` commands that log in with that file.
 
 ---
 
@@ -678,7 +699,9 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 
 | Method | Path | Who |
 |---|---|---|
-| POST | `/api/v1/users` | admin |
+| POST | `/api/v1/users` | admin (create) |
+| POST | `/api/v1/users/{id}` | admin (edit; omit password to keep it) |
+| POST | `/api/v1/users/{id}/delete` | admin (cannot delete self or super_admin) |
 | POST | `/api/v1/assets` | analyst+ |
 | POST | `/api/v1/assets/{id}` | analyst+ (edit contacts/owner) |
 | GET | `/api/v1/assets` | viewer+ |
@@ -713,7 +736,7 @@ Say this out loud so lab expectations stay honest:
 
 - No Kubernetes, no APM, no tracing, no auto-remediation.
 - Playbooks are checklists, not executed runbooks.
-- No UI to edit users, delete assets, or create escalation policies. Asset **owner/contacts** can be edited after Save.
+- No UI to delete assets or create escalation policies. Asset **owner/contacts** can be edited after Save. Users can be edited and removed on Administration (not the install super admin, not yourself).
 - Example YAML in `config/examples/` is not applied automatically.
 - Bundled alert rules include demo gauges, SNMP `up` / interface-down, and a small `node_exporter` set (down / disk 90% / CPU 95%). Extra rules go in `alerts.local.yml`.
 - Discovery is TCP 22/80/443/9100 plus SNMP GET on UDP/161, 256 hosts max. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.

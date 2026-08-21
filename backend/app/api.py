@@ -26,7 +26,7 @@ from app.history import (
     notification_as_dict,
     notifications_for,
 )
-from app.security import CREATABLE_ROLES, can, hash_password, user_from_session, verify_password
+from app.security import can, user_from_session, verify_password
 from app.inventory import (
     approve_candidate,
     ignore_candidate,
@@ -76,6 +76,13 @@ class UserBody(BaseModel):
     name: str
     password: str
     role: str = "analyst"
+
+
+class UserUpdateBody(BaseModel):
+    email: str | None = None
+    name: str | None = None
+    password: str | None = None
+    role: str | None = None
 
 
 class PlayruleBody(BaseModel):
@@ -627,18 +634,61 @@ def demo_reset(user: User = Depends(require("admin"))) -> dict:
 
 @router.post("/users")
 def create_user(body: UserBody, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
-    if body.role not in CREATABLE_ROLES:
-        raise HTTPException(status_code=400, detail="invalid role")
-    row = User(
-        email=body.email,
-        name=body.name,
-        password_hash=hash_password(body.password),
-        role=body.role,
-    )
-    db.add(row)
-    audit(db, "user.create", actor=user.email, object_type="user", object_id=body.email)
+    from app.users import create_user as add_user
+
+    try:
+        row = add_user(db, user, email=body.email, name=body.name, password=body.password, role=body.role)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()
-    return {"email": row.email, "role": row.role}
+    return {"id": row.id, "email": row.email, "role": row.role}
+
+
+@router.post("/users/{user_id}")
+def update_user_api(
+    user_id: int,
+    body: UserUpdateBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("admin")),
+) -> dict:
+    from app.users import update_user as save_user
+
+    row = db.get(User, user_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    try:
+        save_user(
+            db,
+            user,
+            row,
+            email=body.email,
+            name=body.name,
+            password=body.password or "",
+            role=body.role,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return {"id": row.id, "email": row.email, "role": row.role}
+
+
+@router.post("/users/{user_id}/delete")
+def delete_user_api(
+    user_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("admin")),
+) -> dict:
+    from app.users import delete_user as remove_user
+
+    row = db.get(User, user_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    try:
+        email = remove_user(db, user, row)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return {"ok": True, "email": email}
 
 
 def _ok(status: str) -> dict[str, str]:

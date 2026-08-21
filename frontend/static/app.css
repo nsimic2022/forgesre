@@ -35,6 +35,8 @@ h1, h2, h3 { font-weight: 600; }
 .stat.crit strong { color: var(--crit); }
 table { width: 100%; border-collapse: collapse; background: var(--panel); }
 th, td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+.user-table tr.selected td { background: #242b3d; }
+.user-table td a { color: inherit; }
 .pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; background: #2a3348; font-size: 0.8rem; }
 .pill.healthy, .pill.ok { background: #1e3d30; color: #8ee0b4; }
 .pill.warning, .pill.warn { background: #3d341e; color: #efd48a; }
@@ -52,6 +54,7 @@ th, td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(
 .banner strong { color: var(--warn); }
 .row-actions { display: flex; gap: 0.4rem; align-items: center; }
 button.secondary { background: #2a3348; color: var(--text); }
+button.danger { background: var(--crit); color: #fff; }
 button, input, select, textarea {
   font: inherit; background: #12151c; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 0.45rem 0.6rem;
 }
