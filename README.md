@@ -72,7 +72,8 @@ Sign in at `http://<VM-IP>:8080` with the credentials in `installation-report.md
 ```bash
 ./forgesre demo          # live HighCPU + mail to the asset owner
 ./forgesre demo-reset    # lower the demo gauges when you are done
-./forgesre doctor
+./forgesre doctor        # short health lights
+./forgesre test          # detailed report → data/reports/
 ./forgesre help
 ./forgesre secrets-check
 ```
@@ -121,6 +122,7 @@ Type `./forgesre` with no arguments for a prompt, then `journal`, `incidents`, `
 ./forgesre incidents INC-000012
 ./f journal
 ./forgesre doctor
+./forgesre test
 ./forgesre assets
 ./forgesre snmp
 ./forgesre sd
@@ -151,6 +153,9 @@ Config: `config/forgesre.yml` (behavior), `.env` (ports/paths), `secrets/secrets
 
 - [Install and config (Ubuntu / vCenter)](docs/install-config.md)
 - [Operator handbook (users, servers, playrules, incidents, CLI)](docs/operator-handbook.md)
+- [Verify the appliance](docs/verify.md) (`./forgesre test`)
+- [Operator CLI](docs/cli.md)
+- [Local LLM](docs/llm.md)
 - [Docs index](docs/README.md)
 
 **What each release shipped** (optional): [V0.1](docs/v0.1.md) · [V0.2](docs/v0.2.md) · [V0.3](docs/v0.3.md) · [V0.4](docs/v0.4.md) · [V0.5 snmp_exporter](docs/v0.5.md) · [V0.6 hardening](docs/v0.6.md) · [V0.7 history](docs/v0.7.md)

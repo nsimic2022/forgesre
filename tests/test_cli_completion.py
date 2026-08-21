@@ -33,6 +33,8 @@ def test_tab_completes_all_cli_commands_from_prefix():
     assert "snmp-exporter" not in sn.split()
     mail = _complete(["./forgesre", "ma"], 1)
     assert "mailbox" in mail.split()
+    te = _complete(["./forgesre", "te"], 1)
+    assert "test" in te.split()
 
 
 def test_tab_after_logs_completes_snmp_exporter():
@@ -45,6 +47,8 @@ def test_tab_after_journal_and_help():
     assert "snmp" in journal.split()
     help_txt = _complete(["./forgesre", "help", "his"], 2)
     assert "history" in help_txt.split()
+    help_te = _complete(["./forgesre", "help", "te"], 2)
+    assert "test" in help_te.split()
 
 
 def test_tab_inside_prompt_first_word():
@@ -54,6 +58,7 @@ def test_tab_inside_prompt_first_word():
 
 def test_cli_help_documents_completion_and_tab():
     overview = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help"], text=True)
+    assert "test" in overview
     assert "completion" in overview
     shell = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "shell"], text=True)
     assert "TAB" in shell

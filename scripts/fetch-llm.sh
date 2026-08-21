@@ -173,5 +173,6 @@ if [[ "$APPLY" -eq 1 ]]; then
   start_llm
   echo
   echo "LLM enabled. Doctor should report llm: ok after llama.cpp finishes loading the GGUF."
-  echo "Then: ./doctor.sh"
+  echo "Then: ./forgesre doctor && ./forgesre test"
+  echo "Guide: docs/llm.md"
 fi
