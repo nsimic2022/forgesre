@@ -50,19 +50,25 @@
     <p class="muted">No ForgeRCA result yet. Click Run AI investigation to open the full builtin page now. The local LLM, if enabled, rewrites text in the background.</p>
     {% endif %}
     <div class="incident-actions">
+    {% set st = incident.status|upper %}
+    {% set acked = st in ["INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED"] %}
+    {% set resolved = st in ["RESOLVED", "CLOSED"] %}
+    {% set closed = st == "CLOSED" %}
     <form method="post" action="/incidents/{{ incident.number }}/status">
       {% if can('ack_incidents') %}
-      <button name="status" value="INVESTIGATING">Acknowledge</button>
+      <button name="status" value="INVESTIGATING" class="{{ 'done' if acked else 'todo' }}">Acknowledge</button>
       {% endif %}
       {% if can('write_incidents') %}
-      <button name="status" value="RESOLVED">Resolve</button>
-      <button name="status" value="CLOSED">Close</button>
+      <button name="status" value="RESOLVED" class="{{ 'done' if resolved else 'todo' }}">Resolve</button>
+      <button name="status" value="CLOSED" class="{{ 'done' if closed else 'todo' }}">Close</button>
       {% endif %}
     </form>
     {% if can('investigate') or can('read_ai') %}
     <form method="post" action="/incidents/{{ incident.number }}/investigate">
-      <button type="submit">Run AI investigation</button>
+      <button type="submit" class="{{ 'done' if investigation else 'todo' }}">Run AI investigation</button>
     </form>
+    {% else %}
+    <button type="button" class="off" disabled>Run AI investigation</button>
     {% endif %}
     </div>
   </section>

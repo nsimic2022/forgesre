@@ -181,3 +181,44 @@ def test_cli_help_documents_history():
     assert "90-day" in help_text
     assert "INC-" in help_text
     assert "./forgesre history --days 90" in help_text
+
+
+def test_incident_action_buttons_follow_status_colors():
+    db = _db()
+    incident = Incident(
+        number=next_incident_number(db),
+        title="button colors",
+        severity="WARNING",
+        status="OPEN",
+        fingerprint="button-colors",
+    )
+    db.add(incident)
+    db.commit()
+    number = incident.number
+    client = _client(db)
+    open_page = client.get(f"/incidents/{number}")
+    assert open_page.status_code == 200
+    assert 'value="INVESTIGATING" class="todo"' in open_page.text
+    assert 'value="RESOLVED" class="todo"' in open_page.text
+    assert 'value="CLOSED" class="todo"' in open_page.text
+    assert 'class="todo">Run AI investigation' in open_page.text
+    client.post(f"/incidents/{number}/status", data={"status": "INVESTIGATING"}, follow_redirects=False)
+    acked = client.get(f"/incidents/{number}")
+    assert 'value="INVESTIGATING" class="done"' in acked.text
+    assert 'value="RESOLVED" class="todo"' in acked.text
+    assert 'value="CLOSED" class="todo"' in acked.text
+    client.post(f"/incidents/{number}/status", data={"status": "RESOLVED"}, follow_redirects=False)
+    resolved = client.get(f"/incidents/{number}")
+    assert 'value="INVESTIGATING" class="done"' in resolved.text
+    assert 'value="RESOLVED" class="done"' in resolved.text
+    assert 'value="CLOSED" class="todo"' in resolved.text
+    client.post(f"/incidents/{number}/status", data={"status": "CLOSED"}, follow_redirects=False)
+    closed = client.get(f"/incidents/{number}")
+    assert 'value="INVESTIGATING" class="done"' in closed.text
+    assert 'value="RESOLVED" class="done"' in closed.text
+    assert 'value="CLOSED" class="done"' in closed.text
+    rca = client.post(f"/incidents/{number}/investigate", follow_redirects=False)
+    assert rca.status_code in {302, 303}
+    after_rca = client.get(f"/incidents/{number}")
+    assert 'class="done">Run AI investigation' in after_rca.text
+    db.close()
