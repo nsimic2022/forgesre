@@ -51,7 +51,7 @@ class OpenAICompatibleLLM:
         if not endpoint.endswith("/chat/completions"):
             endpoint = endpoint + "/chat/completions"
         try:
-            with httpx.Client(timeout=self.timeout) as client:
+            with httpx.Client(timeout=httpx.Timeout(self.timeout, connect=10.0)) as client:
                 model = self._resolve_model(client)
                 last_why = ""
                 # Qwen2.5 (bundled GGUF) wants a plain OpenAI body. Extra
@@ -65,7 +65,7 @@ class OpenAICompatibleLLM:
                             {"role": "user", "content": user},
                         ],
                         "temperature": 0.1,
-                        "max_tokens": 1200,
+                        "max_tokens": 512,
                     }
                     payload.update(extra)
                     response = client.post(endpoint, json=payload)

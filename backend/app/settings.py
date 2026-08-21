@@ -68,6 +68,17 @@ class Settings:
         return str((self.yaml.get("ai") or {}).get("llm", {}).get("model") or "local")
 
     @property
+    def llm_timeout(self) -> float:
+        """Seconds to wait for llama.cpp. 14B Q4 on CPU often exceeds 180s."""
+        try:
+            raw = ((self.yaml.get("ai") or {}).get("llm") or {}).get("timeout_seconds")
+            if raw is None:
+                return 600.0
+            return max(30.0, float(raw))
+        except (TypeError, ValueError):
+            return 600.0
+
+    @property
     def rca_engine(self) -> str:
         return "forgerca"
 
