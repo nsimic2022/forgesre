@@ -165,6 +165,8 @@ fieldset legend { font-size: 0.8rem; color: var(--muted); }
 .pill.sent { background: #1e3d30; color: #8ee0b4; }
 .pill.failed { background: #3d211e; color: #f0a398; }
 .mail-body { margin: 0.2rem 0; font-size: 0.82rem; max-height: 8rem; overflow: auto; }
+.ops-forms { align-items: start; }
+.ops-forms .stack { max-width: none; }
 @media (max-width: 900px) {
   .nav { position: static; width: auto; }
   .content { margin-left: 0; }

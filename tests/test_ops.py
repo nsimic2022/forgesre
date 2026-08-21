@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.main import app
-from app.models import Notification, ScheduledReport, User
+from app.models import MailContact, Notification, ScheduledReport, User
 from app.security import hash_password
 from app.seed import seed
 from app.services import process_scheduled_reports
@@ -44,11 +44,34 @@ def test_ops_page_lists_outbox_and_reports():
     _login(client)
     page = client.get("/ops")
     assert page.status_code == 200
-    assert "Grafana &amp; reports" in page.text or "Grafana & reports" in page.text
-    assert "Mail outbox" in page.text
-    assert "Scheduled reports" in page.text
-    assert "Open Grafana" in page.text
-    assert "Send email" in page.text
+    assert "Email &amp; reports" in page.text or "Email & reports" in page.text
+    send_at = page.text.find("Send email")
+    outbox_at = page.text.find("Mail outbox")
+    reports_at = page.text.find("Scheduled reports")
+    assert 0 <= send_at < outbox_at < reports_at
+    assert "Add email" in page.text
+    assert "does not receive email" in page.text
+    assert "Open Grafana" not in page.text
+    assert "Stack UIs" not in page.text
+    assert "platform@forgesre.local" in page.text
+    db.close()
+
+
+def test_ops_add_contact_then_pick_from_list():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    posted = client.post(
+        "/ops/contacts",
+        data={"email": "storage@dc.local", "name": "Storage on-call"},
+        follow_redirects=False,
+    )
+    assert posted.status_code == 303
+    row = db.query(MailContact).filter_by(email="storage@dc.local").one()
+    assert row.name == "Storage on-call"
+    page = client.get("/ops")
+    assert "storage@dc.local" in page.text
+    assert "Storage on-call" in page.text
     db.close()
 
 

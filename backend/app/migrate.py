@@ -129,3 +129,22 @@ def migrate(engine: Engine) -> None:
                         "created_by VARCHAR(255) DEFAULT '', created_at TIMESTAMPTZ)"
                     )
                 )
+        if "mail_contacts" not in tables:
+            if engine.dialect.name == "sqlite":
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS mail_contacts ("
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                        "email VARCHAR(255) UNIQUE, name VARCHAR(255) DEFAULT '', "
+                        "created_by VARCHAR(255) DEFAULT '', created_at DATETIME)"
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS mail_contacts ("
+                        "id SERIAL PRIMARY KEY, "
+                        "email VARCHAR(255) UNIQUE, name VARCHAR(255) DEFAULT '', "
+                        "created_by VARCHAR(255) DEFAULT '', created_at TIMESTAMPTZ)"
+                    )
+                )

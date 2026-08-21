@@ -98,7 +98,7 @@ Three operating roles, plus a read-only viewer. The install user is `super_admin
 | **System admin** (`admin`) | Deputy for the box | Users, inventory, discovery, demos, doctor | Cannot create another super_admin |
 | **Analyst** | Watch incidents, keep inventory, write the workflow | Ack/resolve incidents, **add/edit assets**, run AI (analyst view), **create playrules and playbooks** | PromQL/LogQL, Administration |
 | **Engineer** | Deep RCA | Inventory, discovery Approve, full AI page (queries, evidence, history), resolve | Create playrules/playbooks, Administration |
-| Viewer | Read-only | Dashboard, assets, incidents, History, System Health, Grafana & reports (read) | Playrules, Playbooks, Escalation, Journal, Discovery (403), any writes |
+| Viewer | Read-only | Dashboard, assets, incidents, History, System Health, Email & reports (read) | Playrules, Playbooks, Escalation, Journal, Discovery (403), any writes |
 
 Analyst vs engineer on **AI Investigation**: same facts and likely cause. Engineer additionally sees PromQL, LogQL, evidence hashes, and similar-incident history on that page. Similar-incident history for an asset is on the **asset page** for every role that can read assets.
 
@@ -126,8 +126,8 @@ Login session lasts **12 hours** (httponly cookie).
 | Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
 | Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
 | System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Run doctor** re-probes now. Green = running, yellow = paused / starting / disabled, red = down. **Open** column (and the component name) goes to that service’s GUI or metrics. **Open Grafana** is on this page too. Prometheus/Alertmanager bind the appliance; the UI rewrites `127.0.0.1` to the host you used. |
+| Email & reports | `/ops` | **Add email** (address book) then **Send email**. Mail outbox is sent/generated/failed mail — not an inbox; ForgeSRE does not receive email. Scheduled performance reports pick a saved address (or a new one) and assets + interval. Asset owner emails from **Assets** are already in the list. Grafana is on System Health, not here. Escalation mail on an incident is unchanged. |
 | Administration | `/admin` | Users, audit log. No browser bash — SSH or `./forgesre shell` |
-| Grafana & reports | `/ops` | **Open Grafana** plus stack GUI/metrics links, mail outbox (every generated/sent/failed email), compose a new email, and scheduled performance reports (cron-like inside Core: pick assets + interval, snapshot CPU/disk/up even with no incident). Escalation mail on an incident is unchanged. |
 
 ---
 

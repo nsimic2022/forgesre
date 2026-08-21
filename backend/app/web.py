@@ -28,6 +28,7 @@ from app.models import (
     EscalationPolicy,
     Incident,
     Job,
+    MailContact,
     Notification,
     Playbook,
     Playrule,
@@ -680,38 +681,63 @@ def health_refresh(user: User = Depends(login_required)):
 
 @router.get("/ops", response_class=HTMLResponse)
 def ops_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
-    host = request.headers.get("host") or "localhost"
-    payload = doctor_payload()
+    from app.services import list_mail_addresses
+
     mail = db.query(Notification).order_by(Notification.id.desc()).limit(80).all()
     reports = db.query(ScheduledReport).order_by(ScheduledReport.id.desc()).all()
     assets = db.query(Asset).order_by(Asset.hostname).all()
+    contacts = db.query(MailContact).order_by(MailContact.email).all()
     return render(
         request,
         "ops.html",
         user,
-        grafana_open=rewrite_host(settings.grafana_public_url, host.split(":")[0]),
-        stack=enrich_components(payload.get("components") or {}, host),
         mail=mail,
         reports=reports,
         assets=assets,
+        contacts=contacts,
+        addresses=list_mail_addresses(db),
         smtp_on=settings.email_enabled and bool(settings.smtp_host),
         can_send=can_send_ops(user),
     )
+
+
+@router.post("/ops/contacts")
+def ops_add_contact(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    email: str = Form(...),
+    name: str = Form(""),
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    from app.services import remember_mail_contact
+
+    row = remember_mail_contact(db, email, name=name, actor=user.email)
+    if row is None:
+        raise HTTPException(status_code=400, detail="Need a valid email address")
+    audit(db, "mail.contact", actor=user.email, object_type="mail", object_id=row.email, data={"name": row.name})
+    db.commit()
+    return RedirectResponse("/ops#send", status_code=303)
 
 
 @router.post("/ops/mail")
 def ops_send_mail(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
-    target: str = Form(...),
+    target: str = Form(""),
+    new_email: str = Form(""),
     subject: str = Form(""),
     body: str = Form(""),
 ):
     if not can_send_ops(user):
         raise HTTPException(status_code=403)
-    from app.services import send_outbound_mail
+    from app.services import remember_mail_contact, send_outbound_mail
 
-    send_outbound_mail(db, target=target, subject=subject, body=body, actor=user.email, step_key="manual")
+    chosen = (new_email or "").strip() or (target or "").strip()
+    row = remember_mail_contact(db, chosen, actor=user.email)
+    if row is None:
+        raise HTTPException(status_code=400, detail="Pick a saved address or enter a new email")
+    send_outbound_mail(db, target=row.email, subject=subject, body=body, actor=user.email, step_key="manual")
     return RedirectResponse("/ops#mail", status_code=303)
 
 
@@ -720,7 +746,8 @@ def ops_create_report(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     name: str = Form(...),
-    to_email: str = Form(...),
+    to_email: str = Form(""),
+    new_email: str = Form(""),
     interval_hours: int = Form(6),
     asset_id: Annotated[list[str], Form()] = [],
 ):
@@ -728,13 +755,17 @@ def ops_create_report(
         raise HTTPException(status_code=403)
     from datetime import timedelta
 
-    from app.services import utcnow
+    from app.services import remember_mail_contact, utcnow
 
     hours = max(1, min(168, int(interval_hours or 6)))
     ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
+    chosen = (new_email or "").strip() or (to_email or "").strip()
+    contact = remember_mail_contact(db, chosen, actor=user.email)
+    if contact is None:
+        raise HTTPException(status_code=400, detail="Pick a saved address or enter a new email")
     row = ScheduledReport(
         name=name.strip() or "performance",
-        to_email=to_email.strip(),
+        to_email=contact.email,
         interval_hours=hours,
         asset_ids=ids,
         enabled=True,

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.audit import audit
 from app.journal import report
@@ -19,10 +20,12 @@ from app.models import (
     Investigation,
     Job,
     MaintenanceWindow,
+    MailContact,
     Notification,
     Playbook,
     Playrule,
     ScheduledReport,
+    User,
 )
 from app.seed import DEMO_ASSET, ensure_demo_asset, ensure_demo_similar_history, seed
 from app.settings import settings
@@ -757,6 +760,55 @@ def _send_smtp(target: str, subject: str, body: str) -> None:
         client.send_message(message)
 
 
+def _valid_email(value: str) -> str:
+    text = (value or "").strip()
+    local, _, domain = text.partition("@")
+    if not local or "." not in domain:
+        return ""
+    return text
+
+
+def remember_mail_contact(db: Session, email: str, name: str = "", actor: str = "") -> MailContact | None:
+    address = _valid_email(email)
+    if not address:
+        return None
+    row = db.query(MailContact).filter(func.lower(MailContact.email) == address.lower()).first()
+    if row is None:
+        row = MailContact(email=address, name=(name or "").strip(), created_by=actor)
+        db.add(row)
+        db.flush()
+        return row
+    if name and not (row.name or "").strip():
+        row.name = name.strip()
+    return row
+
+
+def list_mail_addresses(db: Session) -> list[dict[str, str]]:
+    """Saved book first, then asset owners, previous outbox, UI users."""
+    seen: dict[str, dict[str, str]] = {}
+
+    def add(email: str, label: str, source: str) -> None:
+        address = _valid_email(email)
+        if not address:
+            return
+        key = address.lower()
+        if key in seen:
+            if label and not seen[key].get("label"):
+                seen[key]["label"] = label
+            return
+        seen[key] = {"email": address, "label": (label or "").strip(), "source": source}
+
+    for row in db.query(MailContact).order_by(MailContact.email):
+        add(row.email, row.name, "saved")
+    for asset in db.query(Asset).order_by(Asset.hostname):
+        add(asset.owner_email, asset.contact_name or asset.hostname, "asset")
+    for (target,) in db.query(Notification.target).distinct():
+        add(str(target or ""), "", "outbox")
+    for user in db.query(User).order_by(User.email):
+        add(user.email, user.name, "user")
+    return sorted(seen.values(), key=lambda item: item["email"].lower())
+
+
 def send_outbound_mail(
     db: Session,
     *,
@@ -787,6 +839,7 @@ def send_outbound_mail(
     else:
         row.status = "generated"
         row.error = "SMTP disabled; notification generated but not sent"
+    remember_mail_contact(db, row.target, actor=actor)
     db.add(row)
     audit(
         db,

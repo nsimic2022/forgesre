@@ -204,6 +204,18 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class MailContact(Base):
+    """Address-book entry for Email & reports. Not an inbox."""
+
+    __tablename__ = "mail_contacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), default="")
+    created_by: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class ScheduledReport(Base):
     """Periodic performance email. Not tied to an incident."""
 
