@@ -893,6 +893,100 @@ def build_performance_report(db: Session, asset_ids: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def build_incident_report(db: Session, incident: Incident) -> str:
+    """Text report for one INC. Includes ForgeRCA when it has already run."""
+    if incident.asset is None and incident.asset_id:
+        incident.asset = db.get(Asset, incident.asset_id)
+    asset = incident.asset
+    investigation = incident.investigations[-1] if incident.investigations else None
+    rca = (investigation.result if investigation else None) or {}
+    lines = [
+        "ForgeSRE incident report",
+        f"Incident: {incident.number}",
+        f"Title: {incident.title}",
+        f"Severity: {incident.severity}",
+        f"Status: {incident.status}",
+        f"Started: {incident.started_at}",
+    ]
+    if incident.ack_by:
+        lines.append(f"Ack: {incident.ack_by} {incident.ack_at or ''}".rstrip())
+    if incident.resolved_by:
+        lines.append(f"Resolved/closed: {incident.resolved_by} {incident.resolved_at or incident.ended_at or ''}".rstrip())
+    if asset:
+        lines.extend(
+            [
+                f"Asset: {asset.hostname} ({asset.asset_id})",
+                f"Type: {asset.type or '—'}  IP: {asset.ip or '—'}",
+                f"Owner: {asset.owner or '—'}  Contact: {asset.contact_name or '—'}",
+                f"Email: {asset.owner_email or '—'}  Phone: {asset.owner_phone or '—'}",
+            ]
+        )
+    if incident.summary:
+        lines.extend(["", "Alert summary:", incident.summary])
+    if incident.playbook:
+        lines.append(f"Playbook: {incident.playbook.name} (guidance only — not executed)")
+    if investigation:
+        lines.extend(
+            [
+                "",
+                f"## ForgeRCA ({investigation.engine or 'forgerca'} {investigation.engine_version or ''} · {investigation.provider or ''})".strip(),
+                f"Summary: {investigation.summary or '—'}",
+                f"Likely cause: {investigation.likely_cause or '—'}",
+                f"Confidence: {int(investigation.confidence or 0)}% (ForgeSRE score, not a validated model)",
+                f"What should I do: {investigation.recommended_action or '—'}",
+            ]
+        )
+        facts = rca.get("facts") or []
+        if facts:
+            lines.append("Facts:")
+            for fact in facts:
+                text = fact.get("text") if isinstance(fact, dict) else fact
+                lines.append(f"- {text}")
+        anomalies = rca.get("anomalies") or []
+        if anomalies:
+            lines.append("Anomalies:")
+            for item in anomalies:
+                text = item.get("summary") if isinstance(item, dict) else item
+                lines.append(f"- {text}")
+        hyps = rca.get("hypotheses") or []
+        if hyps:
+            lines.append("Candidate causes:")
+            for hyp in hyps:
+                text = hyp.get("summary") if isinstance(hyp, dict) else hyp
+                lines.append(f"- {text}")
+        limits = rca.get("limitations") or []
+        if limits:
+            lines.append("Limitations:")
+            for line in limits:
+                lines.append(f"- {line}")
+    else:
+        lines.extend(["", "ForgeRCA has not been run yet."])
+    notes = list(incident.operator_notes or [])
+    if notes:
+        lines.append("")
+        lines.append("Operator notes:")
+        for note in notes:
+            lines.append(f"- {note.at} {note.actor}: {note.body}")
+    lines.append("")
+    lines.append("This is a snapshot. ForgeSRE does not execute playbooks.")
+    return "\n".join(lines) + "\n"
+
+
+def send_incident_report(db: Session, incident: Incident, target: str, actor: str = "system") -> Notification:
+    contact = remember_mail_contact(db, target, actor=actor)
+    if contact is None:
+        raise ValueError("Need a valid email address")
+    return send_outbound_mail(
+        db,
+        target=contact.email,
+        subject=f"[ForgeSRE] {incident.number} {incident.title}",
+        body=build_incident_report(db, incident),
+        actor=actor,
+        step_key="incident-report",
+        incident=incident,
+    )
+
+
 def run_scheduled_report(db: Session, row: ScheduledReport, actor: str = "system") -> Notification:
     body = build_performance_report(db, list(row.asset_ids or []))
     mail = send_outbound_mail(

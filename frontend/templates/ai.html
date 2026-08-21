@@ -32,6 +32,24 @@
   <p>{{ investigation.recommended_action }}</p>
   <p class="muted">Recommended only. Nothing was executed.</p>
 </section>
+{% if can_send %}
+<section class="card" id="mail">
+  <h2>Email this report</h2>
+  <p class="muted">Sends the same snapshot as the incident page. Does not change incident status.</p>
+  <form method="post" action="/incidents/{{ incident.number }}/mail" class="stack">
+    <label>To
+      <select name="target">
+        <option value="">Select an address</option>
+        {% for addr in addresses %}
+        <option value="{{ addr.email }}" {% if addr.email == default_to %}selected{% endif %}>{% if addr.label %}{{ addr.label }} — {% endif %}{{ addr.email }} ({{ addr.source }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Or new email <input name="new_email" type="email"></label>
+    <button type="submit">{% if smtp_on %}Send report{% else %}Save report to outbox{% endif %}</button>
+  </form>
+</section>
+{% endif %}
 
 <section class="card">
   <h2>Facts</h2>

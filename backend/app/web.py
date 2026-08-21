@@ -65,6 +65,20 @@ def health_class(status: str) -> str:
 def can_send_ops(user: User) -> bool:
     return can(user, "write_play") or can(user, "write_incidents") or can(user, "admin")
 
+
+def ops_mail_ctx(db: Session, user: User, incident: Incident | None = None) -> dict:
+    from app.services import list_mail_addresses
+
+    owner = ""
+    if incident and incident.asset and incident.asset.owner_email:
+        owner = incident.asset.owner_email.strip()
+    return {
+        "addresses": list_mail_addresses(db),
+        "default_to": owner,
+        "can_send": can_send_ops(user),
+        "smtp_on": settings.email_enabled and bool(settings.smtp_host),
+    }
+
 router = APIRouter()
 templates = Jinja2Templates(directory=str(settings.frontend_dir / "templates"))
 
@@ -465,6 +479,7 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
             operator_notes=notes_for(db, item),
             llm_pending=pending,
             tools=tool_status(investigation, pending, llm_job_error(db, number)),
+            **ops_mail_ctx(db, user, item),
         )
 
 
@@ -530,6 +545,29 @@ def incident_note_page(
     return RedirectResponse(f"/incidents/{number}#notes", status_code=302)
 
 
+@router.post("/incidents/{number}/mail")
+def incident_send_report(
+    number: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    target: str = Form(""),
+    new_email: str = Form(""),
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404)
+    from app.services import send_incident_report
+
+    chosen = (new_email or "").strip() or (target or "").strip()
+    try:
+        send_incident_report(db, item, chosen, actor=user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse(f"/incidents/{number}#mail", status_code=303)
+
+
 @router.get("/ai/{number}", response_class=HTMLResponse)
 def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_ai"))):
     item = db.query(Incident).filter_by(number=number).first()
@@ -548,6 +586,7 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
         engineer=can(user, "read_evidence"),
         llm_pending=pending,
         tools=tool_status(investigation, pending, llm_job_error(db, number)),
+        **ops_mail_ctx(db, user, item),
     )
 
 

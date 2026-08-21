@@ -118,7 +118,7 @@ Login session lasts **12 hours** (httponly cookie).
 | Discovery | `/discovery` | Scan, Approve / Ignore (analyst+), optional NetBox sync (admin) |
 | Incidents | `/incidents` | Recent 200 Alertmanager incidents (live list) |
 | History | `/history` | Last 90 days in Postgres. Filters: status, asset, `INC` number. Closed rows stay here. |
-| Incident | `/incidents/INC-…` | Ack / Resolve / Close (who/when), **Who to call**, mail outbox, audit, operator notes, run RCA, playbook name |
+| Incident | `/incidents/INC-…` | Ack / Resolve / Close (who/when), **Who to call**, **Send incident report** (address book or new email; outbox when SMTP is off), mail outbox, audit, operator notes, run RCA, playbook name |
 | Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
 | AI Investigation | `/ai/INC-…` | ForgeRCA (green) then ForgeAI (green/yellow/red). Facts, anomalies, hypotheses |
 | Playrules | `/playrules` | List, toggle, create from Prometheus presets (**analyst**) |

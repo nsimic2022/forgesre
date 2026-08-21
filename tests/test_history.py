@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.main import app
-from app.models import Incident, Notification, User
+from app.models import Asset, Incident, Notification, User
 from app.security import hash_password
 from app.seed import seed
 from app.services import next_incident_number
@@ -221,4 +221,78 @@ def test_incident_action_buttons_follow_status_colors():
     assert rca.status_code in {302, 303}
     after_rca = client.get(f"/incidents/{number}")
     assert 'class="done">Run AI investigation' in after_rca.text
+    db.close()
+
+
+def test_send_incident_report_to_address_book_email():
+    db = _db()
+    asset = db.query(Asset).filter_by(asset_id="forge-demo-01").one()
+    incident = Incident(
+        number=next_incident_number(db),
+        title="Disk full",
+        severity="CRITICAL",
+        status="OPEN",
+        fingerprint="incident-report-mail",
+        asset_id=asset.id,
+        summary="Demo host disk is full.",
+    )
+    db.add(incident)
+    db.commit()
+    number = incident.number
+    client = _client(db)
+    page = client.get(f"/incidents/{number}")
+    assert page.status_code == 200
+    assert "Send incident report" in page.text
+    assert "platform@forgesre.local" in page.text
+    posted = client.post(
+        f"/incidents/{number}/mail",
+        data={"target": "ops@dc.local"},
+        follow_redirects=False,
+    )
+    assert posted.status_code == 303
+    assert posted.headers["location"].endswith("#mail")
+    db.expire_all()
+    mail = (
+        db.query(Notification)
+        .filter_by(incident_id=incident.id, step_key="incident-report")
+        .one()
+    )
+    assert mail.target == "ops@dc.local"
+    assert mail.status == "generated"
+    assert mail.incident_id == incident.id
+    assert number in mail.body
+    assert "Disk full" in mail.body
+    assert "ForgeRCA has not been run yet." in mail.body
+    client.post(f"/incidents/{number}/investigate", follow_redirects=False)
+    again = client.post(
+        f"/incidents/{number}/mail",
+        data={"new_email": "oncall@dc.local"},
+        follow_redirects=False,
+    )
+    assert again.status_code == 303
+    db.expire_all()
+    rca_mail = (
+        db.query(Notification)
+        .filter_by(target="oncall@dc.local", step_key="incident-report")
+        .one()
+    )
+    assert "Likely cause:" in rca_mail.body
+    assert "ForgeRCA" in rca_mail.body
+    db.close()
+
+
+def test_viewer_cannot_send_incident_report():
+    db = _db()
+    email = "report-viewer@forgesre.local"
+    if db.query(User).filter_by(email=email).first() is None:
+        db.add(User(email=email, name="V", password_hash=hash_password("testpass"), role="viewer"))
+        db.commit()
+    incident = db.query(Incident).filter(Incident.number.startswith("INC-")).first()
+    client = _client(db, email=email)
+    posted = client.post(
+        f"/incidents/{incident.number}/mail",
+        data={"target": "nope@example.local"},
+        follow_redirects=False,
+    )
+    assert posted.status_code == 403
     db.close()

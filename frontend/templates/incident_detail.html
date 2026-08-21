@@ -70,6 +70,7 @@
     {% else %}
     <button type="button" class="off" disabled>Run AI investigation</button>
     {% endif %}
+    {% if can_send %}<a href="#mail">Email report</a>{% endif %}
     </div>
   </section>
   <section>
@@ -162,7 +163,23 @@
 
 <section id="mail">
   <h2>Email notifications</h2>
-  <p class="muted">Outbox for this incident. <code>generated</code> means SMTP was off. <code>sent</code> means Core handed it to the SMTP host.</p>
+  <p class="muted">Outbox for this incident. <code>generated</code> means SMTP was off. <code>sent</code> means Core handed it to the SMTP host. Escalation rows stay here too.</p>
+  {% if can_send %}
+  <form method="post" action="/incidents/{{ incident.number }}/mail" class="stack">
+    <h3>Send incident report</h3>
+    <p class="muted">Current snapshot: alert, who to call, ForgeRCA if it has run, operator notes. Does not change status. Add addresses on <a href="/ops">Email &amp; reports</a>.</p>
+    <label>To
+      <select name="target">
+        <option value="">Select an address</option>
+        {% for addr in addresses %}
+        <option value="{{ addr.email }}" {% if addr.email == default_to %}selected{% endif %}>{% if addr.label %}{{ addr.label }} — {% endif %}{{ addr.email }} ({{ addr.source }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Or new email <input name="new_email" type="email" placeholder="only if it is not in the list yet"></label>
+    <button type="submit">{% if smtp_on %}Send report{% else %}Save report to outbox{% endif %}</button>
+  </form>
+  {% endif %}
   <table>
     <thead><tr><th>When</th><th>Step</th><th>To</th><th>Status</th><th>Subject</th></tr></thead>
     <tbody>
