@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from rca.catalog import classify_family, hypotheses_for
 from rca.types import Anomaly, EvidenceItem, Hypothesis, RCAContext
 
 BASELINES = {
@@ -12,6 +13,8 @@ BASELINES = {
     "disk_percent": (30.0, 70.0),
     "filesystem_usage": (30.0, 70.0),
     "disk_volume_percent": (30.0, 70.0),
+    "memory_percent": (30.0, 70.0),
+    "memory_usage": (30.0, 70.0),
 }
 
 THRESHOLDS = {
@@ -20,7 +23,11 @@ THRESHOLDS = {
     "disk_percent": 80.0,
     "filesystem_usage": 80.0,
     "disk_volume_percent": 80.0,
+    "memory_percent": 90.0,
+    "memory_usage": 90.0,
 }
+
+DOWN_WHEN_ZERO = {"up"}
 
 
 def metric_samples(evidence: list[EvidenceItem]) -> dict[str, tuple[float, EvidenceItem]]:
@@ -45,6 +52,17 @@ def detect_anomalies(context: RCAContext) -> list[Anomaly]:
     anomalies: list[Anomaly] = []
     samples = metric_samples(context.evidence)
     for name, (value, item) in samples.items():
+        if name in DOWN_WHEN_ZERO and value == 0:
+            anomalies.append(
+                Anomaly(
+                    kind="reachability_failure",
+                    summary=f"{name} is 0 (target not reachable from Prometheus).",
+                    metric=name,
+                    evidence_ids=[item.evidence_id],
+                    strength=0.7,
+                )
+            )
+            continue
         threshold = THRESHOLDS.get(name)
         if threshold is not None and value > threshold:
             anomalies.append(
@@ -175,39 +193,12 @@ def facts_from(context: RCAContext) -> list[dict[str, Any]]:
 
 def candidate_causes(context: RCAContext) -> list[Hypothesis]:
     text = _corpus(context)
-    alertname = " ".join(str((alert or {}).get("alertname") or "") for alert in context.alerts).lower()
-    title = str(context.incident.get("title") or "").lower()
     samples = metric_samples(context.evidence)
-    cpu = samples.get("cpu_percent", (None, None))[0]
-    disk = samples.get("disk_percent", samples.get("disk_volume_percent", (None, None)))[0]
-    disk_alert = any(word in alertname or word in title for word in ("disk", "file", "filesystem"))
-    cpu_alert = any(word in alertname or word in title for word in ("cpu", "load"))
-    diskish = disk_alert or (disk is not None and disk > 80 and not cpu_alert)
-    cpuish = cpu_alert or (cpu is not None and cpu > 80 and not disk_alert)
-    snmpish = any(word in alertname or word in title for word in ("snmp", "interface", "network", "unreachable"))
-
-    if snmpish and not diskish and not cpuish:
-        catalog = [
-            ("community-acl", "SNMP community, ACL, or UDP/161 from the ForgeSRE host may be blocking the walk.", ("community", "acl", "udp", "161", "snmp")),
-            ("device-down", "The network device may be down or isolated from the management network.", ("down", "unreachable", "timeout")),
-            ("interface", "An interface may be admin-up / oper-down.", ("interface", "ifoper", "ifadmin")),
-        ]
-    elif diskish:
-        catalog = [
-            ("log-growth", "Rapid log growth may be consuming disk space.", ("log", "journal", "syslog", "grow")),
-            ("database-growth", "Database growth may be consuming disk space.", ("postgres", "mysql", "database", "wal")),
-            ("temp-files", "Temporary files may be consuming disk space.", ("tmp", "temp", "cache")),
-            ("backup-files", "Backup files may be consuming disk space.", ("backup", "dump", "snapshot")),
-            ("app-data", "Application data growth may be consuming disk space.", ("data", "upload", "volume")),
-            ("process-activity", "Unexpected process activity may be writing data quickly.", ("write", "i/o", "process")),
-        ]
-    else:
-        catalog = [
-            ("high-process", "High process activity is consuming CPU.", ("cpu", "process", "load")),
-            ("runaway-job", "A runaway job or cron task may be burning CPU.", ("cron", "job", "batch")),
-            ("noisy-neighbor", "Another tenant or container may be competing for CPU.", ("noisy", "neighbor", "cgroup")),
-            ("missing-idle", "CPU stayed elevated rather than returning to baseline.", ("sustained", "elevated")),
-        ]
+    family = classify_family(context, samples)
+    catalog = hypotheses_for(family)
+    disk_metrics = {"disk_percent", "disk_volume_percent", "filesystem_usage"}
+    cpu_metrics = {"cpu_percent", "cpu_usage"}
+    mem_metrics = {"memory_percent", "memory_usage"}
 
     hypotheses: list[Hypothesis] = []
     for hid, summary, keywords in catalog:
@@ -224,12 +215,23 @@ def candidate_causes(context: RCAContext) -> list[Hypothesis]:
                     value = float(content.get("value"))
                 except (TypeError, ValueError):
                     continue
-                if diskish and name in {"disk_percent", "disk_volume_percent", "filesystem_usage"} and value < 50:
+                if family == "linux-disk" and name in disk_metrics and value < 50:
                     contradicting.append(item.evidence_id)
-                if cpuish and name in {"cpu_percent", "cpu_usage"} and value < 40 and hid == "high-process":
+                if family == "linux-cpu" and name in cpu_metrics and value < 40 and hid == "high-process":
+                    contradicting.append(item.evidence_id)
+                if family == "linux-memory" and name in mem_metrics and value < 50:
+                    contradicting.append(item.evidence_id)
+                if family in {"snmp", "linux-host"} and name == "up" and value == 1:
                     contradicting.append(item.evidence_id)
         for anomaly in context.anomalies:
-            if (diskish and "disk" in anomaly.metric) or (cpuish and "cpu" in anomaly.metric):
+            metric = anomaly.metric or ""
+            if family == "linux-disk" and "disk" in metric:
+                supporting.extend(anomaly.evidence_ids)
+            if family == "linux-cpu" and "cpu" in metric:
+                supporting.extend(anomaly.evidence_ids)
+            if family == "linux-memory" and "memory" in metric:
+                supporting.extend(anomaly.evidence_ids)
+            if family in {"snmp", "linux-host", "switch", "router", "firewall"} and metric == "up":
                 supporting.extend(anomaly.evidence_ids)
         supporting = list(dict.fromkeys(supporting))
         contradicting = list(dict.fromkeys(eid for eid in contradicting if eid not in supporting))

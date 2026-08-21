@@ -98,7 +98,7 @@ Three operating roles, plus a read-only viewer. The install user is `super_admin
 | **System admin** (`admin`) | Deputy for the box | Users, inventory, discovery, demos, doctor | Cannot create another super_admin |
 | **Analyst** | Watch incidents, keep inventory, write the workflow | Ack/resolve incidents, **add/edit assets**, run AI (analyst view), **create playrules and playbooks** | PromQL/LogQL, Administration |
 | **Engineer** | Deep RCA | Inventory, discovery Approve, full AI page (queries, evidence, history), resolve | Create playrules/playbooks, Administration |
-| **Viewer** | Read-only | Dashboard, assets, incidents, History, System Health | Playrules, Playbooks, Escalation, Console, Discovery (403), any writes |
+| **Viewer** | Read-only | Dashboard, assets, incidents, History, System Health | Playrules, Playbooks, Escalation, Journal, Discovery (403), any writes |
 
 Analyst vs engineer on **AI Investigation**: same facts and likely cause. Engineer additionally sees PromQL, LogQL, evidence hashes, and similar-incident history on that page. Similar-incident history for an asset is on the **asset page** for every role that can read assets.
 
@@ -112,7 +112,7 @@ Login session lasts **12 hours** (httponly cookie).
 
 | Menu | URL | What you do there |
 |---|---|---|
-| Dashboard | `/` | Counts, doctor lights, pending discovery banner (analyst+), **first-hour walkthrough**, recent console reports (analyst+), demo buttons (admin) |
+| Dashboard | `/` | Counts, doctor lights, pending discovery banner (analyst+), **first-hour walkthrough**, recent journal reports (analyst+), demo buttons (admin) |
 | Assets | `/assets` | List inventory. **Add asset** form (analyst+) |
 | Asset detail | `/assets/<id>` | Contacts, scrape address, edit owner after Save, similar-incident history |
 | Discovery | `/discovery` | Scan, Approve / Ignore (analyst+), optional NetBox sync (admin) |
@@ -120,13 +120,13 @@ Login session lasts **12 hours** (httponly cookie).
 | History | `/history` | Last 90 days in Postgres. Filters: status, asset, `INC` number. Closed rows stay here. |
 | Incident | `/incidents/INC-…` | Ack / Resolve / Close (who/when), **Who to call**, mail outbox, audit, operator notes, run RCA, playbook name |
 | Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
-| AI Investigation | `/ai/INC-…` | Facts, anomalies, hypotheses, evidence IDs |
-| Playrules | `/playrules` | List, toggle, create (**analyst**) |
+| AI Investigation | `/ai/INC-…` | ForgeRCA (green) then ForgeAI (green/yellow/red). Facts, anomalies, hypotheses |
+| Playrules | `/playrules` | List, toggle, create from Prometheus presets (**analyst**) |
 | Playbooks | `/playbooks` | List steps, create (**analyst**) |
 | Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
-| Console | `/journal` | Internal process reports, split by module (ok / warn / error) |
+| Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
 | System Health | `/health-ui` | Same checks as `./doctor.sh` |
-| Administration | `/admin` | Create users, audit log (admin) |
+| Administration | `/admin` | Users, audit log. No browser bash — SSH or `./forgesre shell` |
 | Grafana | `:3000` | Deep dashboards (separate login) |
 
 ---
@@ -440,7 +440,7 @@ Grafana is for graphs. The product incident list is ForgeSRE, not Grafana Alerti
 
 Open **ForgeRCA investigation** from the incident, or click **Run AI investigation**.
 
-The button runs **builtin ForgeRCA immediately** and opens Summary → Root cause → Recommended actions → Facts → Anomalies → Candidate causes → Limitations. The line on that page says **ForgeRCA (builtin)** — the local LLM did not write that first result. If `ai.enabled` is on, a second job may rewrite the text later (`ForgeRCA + local LLM`). Refresh the page for that; do not mash Run now.
+The button runs **builtin ForgeRCA immediately** and opens Summary → Root cause → Recommended actions → Facts → Anomalies → Candidate causes → Limitations. Two pills sit at the top: **ForgeRCA** (green when builtin has a result) and **ForgeAI** (green if the LLM rewrote the prose, yellow while the rewrite runs, red if the LLM is off or unreachable). If `ai.enabled` is on, refresh later for ForgeAI. Do not mash Run now.
 
 You get:
 

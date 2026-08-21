@@ -271,6 +271,18 @@ def seed(db: Session) -> None:
                 escalation_policy_id=policy.id,
             )
         )
+    if db.query(Playrule).filter_by(name="network-if-down").first() is None:
+        db.add(
+            Playrule(
+                name="network-if-down",
+                description="Interface oper-down while admin-up (if_mib)",
+                enabled=True,
+                severity="warning",
+                condition={"alertname": "NetworkInterfaceDown", "metric": "ifOperStatus", "operator": "==", "value": 2},
+                playbook_id=net.id,
+                escalation_policy_id=policy.id,
+            )
+        )
     if db.query(Playrule).filter_by(name="node-cpu").first() is None:
         db.add(
             Playrule(

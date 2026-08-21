@@ -8,7 +8,7 @@
   <ol>
     <li>Open <a href="/assets/forge-demo-01">forge-demo-01</a>. Owner, email, phone, and a closed HighCPU history row are already filled.</li>
     <li>Run the demo workflow (admin). A live HighCPU incident opens. Escalation generates mail to <code>platform@forgesre.local</code> (the asset owner), not a generic team inbox.</li>
-    <li>Open the new incident → <a href="/escalation">Escalation</a> → the asset page again for similar-incident history → <a href="/journal">Console</a> to see ok/error reports from seed, demo, inventory, and notifications.</li>
+    <li>Open the new incident → <a href="/escalation">Escalation</a> → the asset page again for similar-incident history → <a href="/journal">Journal</a> to see ok/error reports from seed, demo, inventory, and notifications.</li>
   </ol>
   {% if can('admin') %}
   <form class="inline" method="post" action="/demo"><button type="submit">Run demo workflow</button></form>
@@ -27,9 +27,9 @@
 {% endif %}
 {% if journal_error and can('read_play') %}
 <div class="banner">
-  <strong>CONSOLE</strong>
+  <strong>JOURNAL</strong>
   {{ journal_error|length }} recent error report{% if journal_error|length != 1 %}s{% endif %}.
-  <a href="/journal?status=error">Open Console</a>
+  <a href="/journal?status=error">Open Journal</a>
 </div>
 {% endif %}
 <section>
@@ -60,11 +60,11 @@
     </div>
     {% endfor %}
   </div>
-  <p class="muted">Overall: <strong>{{ doctor.overall }}</strong>{% if can('read_play') %} · <a href="/journal">Console</a>{% endif %}</p>
+  <p class="muted">Overall: <strong>{{ doctor.overall }}</strong>{% if can('read_play') %} · <a href="/journal">Journal</a>{% endif %}</p>
 </section>
 {% if can('read_play') %}
 <section>
-  <h2>Recent console reports</h2>
+  <h2>Recent journal reports</h2>
   <table class="console">
     <thead><tr><th>Module</th><th>Status</th><th>Report</th></tr></thead>
     <tbody>
@@ -79,7 +79,7 @@
     {% endfor %}
     </tbody>
   </table>
-  <p class="muted"><a href="/journal">Open full Console</a></p>
+  <p class="muted"><a href="/journal">Open full Journal</a></p>
 </section>
 {% endif %}
 <section>

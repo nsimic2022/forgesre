@@ -3,6 +3,10 @@
 {% block content %}
 <p><a href="/incidents">← Incidents</a> · <a href="/history">History</a></p>
 <h1>{{ incident.number }} <span class="muted">{{ incident.title }}</span></h1>
+<div class="tool-row">
+  <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
+  <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
+</div>
 <p>
   <span class="pill {{ incident.status|lower }}">{{ incident.status }}</span>
   <span class="pill warn">{{ incident.severity }}</span>

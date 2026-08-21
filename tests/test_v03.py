@@ -121,6 +121,79 @@ def test_forgerca_cpu_compat():
     assert settings.llm_timeout >= 600
 
 
+def test_forgerca_families_cover_network_storage_windows():
+    from rca.catalog import classify_family, hypotheses_for
+    from rca.types import RCAContext
+
+    firewall = RCAContext.from_legacy(
+        {
+            "incident": {"title": "SNMP unreachable", "asset": "fw-01"},
+            "asset": {"hostname": "fw-01", "type": "firewall"},
+            "alert": {"alertname": "SnmpDeviceUnreachable"},
+            "metrics": {"up": 0},
+            "logs": [],
+            "history": [],
+        }
+    )
+    assert classify_family(firewall) == "firewall"
+    ids = {row[0] for row in hypotheses_for("firewall")}
+    assert "session-table" in ids
+    assert "vpn-down" in ids
+
+    disk = ForgeRCA(llm=NullLLM()).investigate(
+        {
+            "incident": {"title": "Filesystem usage high", "asset": "db-01"},
+            "asset": {"hostname": "db-01", "type": "Linux Server"},
+            "alert": {"alertname": "NodeFilesystemUsageHigh"},
+            "metrics": {"disk_percent": 94, "cpu_percent": 20},
+            "logs": ["ERROR log file growing rapidly"],
+            "history": [],
+        }
+    )
+    hyp_ids = [item["id"] for item in disk["result"]["hypotheses"]]
+    assert "log-growth" in hyp_ids
+    assert "container-overlay" in hyp_ids
+    assert disk["summary"].startswith("Disk capacity")
+
+    windows = ForgeRCA(llm=NullLLM()).investigate(
+        {
+            "incident": {"title": "CPU high", "asset": "win-01"},
+            "asset": {"hostname": "win-01", "type": "Windows Server"},
+            "alert": {"alertname": "WindowsCPUHigh"},
+            "metrics": {"cpu_percent": 96},
+            "logs": [],
+            "history": [],
+        }
+    )
+    assert "Windows host" in windows["summary"]
+    assert any(item["id"] == "win-cpu" for item in windows["result"]["hypotheses"])
+
+
+def test_playrule_page_has_metric_presets():
+    from fastapi.testclient import TestClient
+
+    from app.db import Base, SessionLocal, engine
+    from app.main import app
+    from app.seed import seed
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    client = TestClient(app)
+    client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
+    page = client.get("/playrules")
+    assert page.status_code == 200
+    assert b"playrule-preset" in page.content
+    assert b"HighCPU" in page.content
+    assert b"cpu_usage" in page.content
+    assert b"NetworkInterfaceDown" in page.content
+    admin = client.get("/admin")
+    assert admin.status_code == 200
+    assert b"ForgeRCA" not in admin.content or b"Appliance shell" in admin.content
+    assert b"there is no bash terminal" in admin.content.lower() or b"There is no bash terminal" in admin.content
+    db.close()
+
+
 def test_audit_and_api_investigation():
     from fastapi.testclient import TestClient
 
@@ -320,6 +393,8 @@ def test_investigate_button_opens_builtin_rca_immediately():
     html = client.get(f"/ai/{number}")
     assert html.status_code == 200
     assert "ForgeRCA (builtin)" in html.text
+    assert "ForgeRCA" in html.text
+    assert "ForgeAI" in html.text
     assert "Summary" in html.text
     assert "Root cause" in html.text
     assert "Recommended actions" in html.text

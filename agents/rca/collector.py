@@ -38,12 +38,15 @@ def promql_queries_for(asset: dict[str, Any] | None, alert: dict[str, Any] | Non
     if not asset_id:
         return {"up": ("up", "")}
     matcher = f'asset="{_escape(asset_id)}"'
-    snmpish = "network" in kind or "switch" in kind or "router" in kind or "snmp" in alertname or "network-switch" in profile
+    snmpish = any(
+        token in kind or token in profile or token in alertname
+        for token in ("network", "switch", "router", "firewall", "snmp")
+    ) or "network-switch" in profile
     if snmpish:
         return {
             "up": (f'up{{job="forgesre-snmp",{matcher}}}', ""),
         }
-    return {
+    queries = {
         "cpu_percent": (
             f'100 * (1 - avg(rate(node_cpu_seconds_total{{mode="idle",{matcher}}}[5m])))',
             "percent",
@@ -53,8 +56,14 @@ def promql_queries_for(asset: dict[str, Any] | None, alert: dict[str, Any] | Non
             f'/ node_filesystem_size_bytes{{fstype!~"tmpfs|fuse.*|overlay",{matcher}}}))',
             "percent",
         ),
+        "memory_percent": (
+            f'100 * (1 - (node_memory_MemAvailable_bytes{{{matcher}}} '
+            f'/ node_memory_MemTotal_bytes{{{matcher}}}))',
+            "percent",
+        ),
         "up": (f'up{{{matcher}}}', ""),
     }
+    return queries
 
 
 def loki_query_for(asset: dict[str, Any] | None) -> str:
