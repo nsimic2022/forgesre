@@ -28,3 +28,5 @@ These are design notes. You do **not** install or enable them on the VM.
 
 - [Architecture (longer-term)](architecture.md)
 - [V0.3 implementation plan](V03_IMPLEMENTATION_PLAN.md)
+
+**Session handoff** (next coding agent / contributor, not an operator start page): [continuation.md](continuation.md).
