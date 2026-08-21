@@ -616,7 +616,7 @@ def demo_page(db: Session = Depends(get_db), user: User = Depends(login_required
         raise HTTPException(status_code=403)
     incident = run_demo(db)
     number = incident.number if incident else ""
-    return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=302)
+    return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=303)
 
 
 @router.post("/demo-rca")
@@ -625,4 +625,4 @@ def demo_rca_page(db: Session = Depends(get_db), user: User = Depends(login_requ
         raise HTTPException(status_code=403)
     incident = run_demo_rca(db)
     number = incident.number if incident else ""
-    return RedirectResponse(f"/ai/{number}" if number else "/incidents", status_code=302)
+    return RedirectResponse(f"/ai/{number}" if number else "/incidents", status_code=303)

@@ -241,6 +241,32 @@ def test_demo_rca_opens_new_incident_and_queues_one_investigation():
     db.close()
 
 
+def test_demo_workflow_redirects_to_open_incident():
+    from fastapi.testclient import TestClient
+
+    from app.db import Base, SessionLocal, engine
+    from app.main import app
+    from app.seed import seed
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    client = TestClient(app)
+    client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
+    posted = client.post("/demo", follow_redirects=False)
+    assert posted.status_code == 303
+    location = posted.headers.get("location") or ""
+    assert location.startswith("/incidents/INC-")
+    page = client.get(location)
+    assert page.status_code == 200
+    assert "INC-" in page.text
+    assert "OPEN" in page.text or "INVESTIGATING" in page.text
+    rca = client.post("/demo-rca", follow_redirects=False)
+    assert rca.status_code == 303
+    assert "/ai/INC-" in (rca.headers.get("location") or "")
+    db.close()
+
+
 def test_investigate_button_queues_job_instead_of_blocking():
     from fastapi.testclient import TestClient
 
