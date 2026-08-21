@@ -116,6 +116,9 @@ def test_forgerca_cpu_compat():
     assert thinking_only is None
     fenced = extract_json('prefix\n```json\n{"summary": "fenced"}\n```\n')
     assert fenced == {"summary": "fenced"}
+    from app.settings import settings
+
+    assert settings.llm_timeout >= 600
 
 
 def test_audit_and_api_investigation():
