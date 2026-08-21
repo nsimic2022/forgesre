@@ -201,6 +201,21 @@ def test_viewer_cannot_open_playrules_or_journal():
     db.close()
 
 
+def test_system_health_page_has_doctor_button_and_status_pills():
+    db = _db()
+    client = TestClient(app)
+    client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
+    page = client.get("/health-ui")
+    assert page.status_code == 200
+    assert "Run doctor" in page.text
+    assert 'class="pill ok"' in page.text or 'class="pill warn"' in page.text or 'class="pill crit"' in page.text
+    assert "postgres" in page.text
+    posted = client.post("/health-ui/refresh", follow_redirects=False)
+    assert posted.status_code == 303
+    assert posted.headers["location"] == "/health-ui"
+    db.close()
+
+
 def test_playrule_gets_default_escalation_policy():
     db = _db()
     rule = db.query(Playrule).filter_by(name="high-cpu").one()
