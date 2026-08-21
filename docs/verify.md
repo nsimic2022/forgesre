@@ -36,13 +36,14 @@ The script **does not send email**, **does not run `./install.sh`**, and **does 
 2. Files: `.env`, `secrets/secrets.env` mode, `config/forgesre.yml`, generated Prometheus/Alertmanager/snmp
 3. Secrets: shipped-default `SECRET_KEY` / webhook token (Core refuses those)
 4. Compose: `docker compose ps`, Core running
-5. HTTP: Core `/health`, Prometheus, Alertmanager, snmp_exporter, Loki, Alloy, Grafana, optional llama.cpp `:8088`, optional Roundcube. LLM implementation: [`llm.md`](llm.md).
+5. HTTP: Core `/health`, Prometheus, Alertmanager, snmp_exporter, Loki, Alloy, Grafana, optional llama.cpp `:8088` (`/v1/models` + container health), optional Roundcube. LLM implementation: [`llm.md`](llm.md).
 6. Doctor API (Bearer webhook token)
 7. Login as install admin, then assets / incidents / history / jobs / journal / Administration / Email & reports
 8. Prometheus HTTP SD and SNMP HTTP SD
 9. Email YAML (Gmail / Outlook / local) without sending
 10. `./forgesre version` and `help`
 11. Last 80 Core log lines for `error` / `exception` / `traceback`
+12. When profile `ai` is on: GGUF size, `ai.llm` YAML, llama.cpp health inspect, last LLM log errors
 
 ## doctor vs test vs pytest
 

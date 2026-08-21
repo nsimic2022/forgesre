@@ -620,7 +620,7 @@ If the incident has no asset, the alert `asset` / `instance` label did not match
 
 On the VM, from the clone directory, `./forgesre` is the operator CLI. `./forgesre help` lists commands. `./forgesre help <command>` prints explanation and examples.
 
-`./forgesre` with no extra words opens a prompt (`forgesre>`). After that you type the **full** command (`journal`, `incidents`, `history`, `doctor`, `help snmp`) without repeating `./forgesre`. Leave with `quit`. `./f` is the same binary with a shorter filename (`./f journal`). Command names are not one-letter aliases.
+`./forgesre` with no extra words opens a prompt (`forgesre>`). After that you type the **full** command (`journal`, `incidents`, `history`, `doctor`, `help snmp`) without repeating `./forgesre`. Leave with `quit`, `exit`, or Ctrl-D — `./forgesre help quit`. `./f` is the same binary with a shorter filename (`./f journal`). Command names are not one-letter aliases.
 
 ### SSH from your laptop
 
@@ -652,6 +652,7 @@ Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critica
 ./forgesre incidents INC-000012
 ./f journal
 ./forgesre help                 # overview
+./forgesre help quit            # leave the forgesre> prompt
 ./forgesre help snmp            # one command
 ./forgesre help tls             # optional HTTPS
 ./forgesre doctor               # short HEALTHY / DEGRADED

@@ -8,7 +8,7 @@ cd ~/forgesre
 ./forgesre help
 ```
 
-`./f` is the same binary. `./forgesre` with no arguments opens a prompt (`forgesre>`). TAB completes command names, Compose services (`logs sn<TAB>`), and incident ids.
+`./f` is the same binary. `./forgesre` with no arguments opens a prompt (`forgesre>`). Type `journal`, `incidents`, `doctor` — not `./forgesre` again. Leave with `quit`, `exit`, or Ctrl-D (`./forgesre help quit`). TAB completes command names, Compose services (`logs sn<TAB>`), and incident ids.
 
 Two logins:
 
@@ -21,8 +21,10 @@ Two logins:
 
 ```bash
 ./forgesre help
+./forgesre help quit
 ./forgesre help test
 ./forgesre help snmp
+./forgesre                 # prompt (forgesre>); leave with quit
 ./forgesre doctor          # short lights
 ./forgesre test            # detailed report → data/reports/
 ./forgesre status          # docker compose ps
@@ -52,6 +54,18 @@ Two logins:
 ```
 
 Root wrappers still work: `./install.sh`, `./doctor.sh`, `./test.sh`, `./backup.sh`, `./update.sh`.
+
+### Leave the prompt
+
+```bash
+./forgesre                 # opens forgesre>
+journal
+incidents
+quit                       # or: exit    or Ctrl-D
+./forgesre help quit
+```
+
+`quit` is a prompt command. From host bash you are already out; `./forgesre quit` only prints the same help.
 
 ---
 
@@ -90,15 +104,23 @@ docker compose logs --tail=200 llm
 
 ### LLM container
 
-Full implementation guide: [`llm.md`](llm.md). Short path:
+Full implementation guide (including health inspect and `/v1/chat/completions`): [`llm.md`](llm.md) §8.
 
 ```bash
 ./forgesre fetch-llm
 docker compose --profile ai up -d llm
-curl -fsS http://127.0.0.1:8088/v1/models
+docker compose ps llm
+docker compose ps -q llm | xargs -r docker inspect --format='{{json .State.Health}}'
+curl -sS http://127.0.0.1:8088/v1/models
+docker compose logs --tail=100 llm
+docker compose logs --tail=100 core | grep -iE "llm|openai|model|error|exception"
+docker compose logs -f llm
 ./forgesre logs llm
 ./forgesre doctor
+./forgesre test
 ```
+
+Do not `docker compose down` to “fix” LLM — that stops the whole appliance.
 
 ### Inside the Core container
 

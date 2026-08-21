@@ -50,6 +50,7 @@ Existing VM after git pull:
 Commands:
   help [command]     This overview, or detailed help for one command
   shell              Same prompt as ./forgesre with no args
+  quit / exit        Leave the forgesre> prompt (Ctrl-D also works)
   install            Guided first-time install (new VM only)
   doctor             Short health lights (Core, Prometheus, snmp-exporter, …)
   test               Full appliance report (files, HTTP, login, APIs, email, logs)
@@ -81,6 +82,7 @@ Commands:
 
 Examples:
   ./forgesre                  # then: journal / incidents / quit
+  ./forgesre help quit
   ./forgesre login
   incidents
   incidents INC-000012
@@ -109,6 +111,7 @@ help — show CLI overview or one command.
 
   ./forgesre help
   ./forgesre help snmp
+  ./forgesre help quit
   ./f help
 EOF
       ;;
@@ -129,6 +132,29 @@ commands, compose services (logs sn<TAB> → snmp-exporter), and incident ids.
   history --days 90
   doctor
   quit
+EOF
+      ;;
+    quit|exit)
+      cat <<'EOF'
+quit — leave the interactive prompt (forgesre>). Same as exit and Ctrl-D.
+
+  ./forgesre
+  forgesre> journal
+  forgesre> incidents
+  forgesre> quit
+
+Inside the prompt you type only the command name (journal, doctor, test, …).
+You do not type ./forgesre again. TAB completes names.
+
+  exit      same as quit
+  Ctrl-D    same as quit (end of input)
+
+From the host bash you are already outside the prompt, so ./forgesre quit
+does nothing except print this note. Open the prompt first:
+
+  ./forgesre
+  ./forgesre shell
+  ./f
 EOF
       ;;
     completion)
@@ -801,6 +827,9 @@ case "$cmd" in
     ;;
   tls)
     print_help_command tls
+    ;;
+  quit|exit)
+    print_help_command quit
     ;;
   *)
     echo "Unknown command: $cmd"

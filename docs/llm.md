@@ -273,25 +273,81 @@ curl -fsS http://127.0.0.1:8088/v1/models
 
 ## 8. Advanced CLI (debug)
 
-On an already installed VM:
+Use this on an **already installed** VM when ForgeAI is red, `:8088` is quiet, or a rewrite never finishes. Do **not** run `./install.sh` again. Do **not** run `docker compose down` unless you mean to stop the whole appliance.
+
+### 8.1 Stack and the LLM container
 
 ```bash
+docker ps
 docker compose ps
+docker compose ps core
 docker compose ps llm
 docker compose --profile ai up -d llm
-
-docker compose logs --tail=200 llm
-docker compose logs --tail=100 core
-docker compose logs --tail=100 core | grep -iE "llm|rca|error|exception"
-docker compose logs --tail=50 core | grep "/ai"
-docker compose logs -f core
-
-docker compose exec -T core python -c "import sys; print('\n'.join(sys.path))"
-
-./forgesre config          # confirm ai.enabled / llm.url
 ```
 
-After `git pull` that touched `agents/rca/llm.py` or `docker-compose.yml`:
+Health of the llama.cpp container (name is usually `forgesre-llm-1`; prefer Compose so it still works if the project name differs):
+
+```bash
+docker compose ps -q llm | xargs -r docker inspect --format='{{json .State.Health}}'
+docker compose ps -q llm | xargs -r docker inspect --format='{{json .Config.Healthcheck.Test}}'
+```
+
+Healthy looks like `"Status":"healthy"` and the test should be `curl -f http://127.0.0.1:8088/v1/models`. `starting` for several minutes after `up -d llm` is normal (GGUF load). `unhealthy` after that → logs, then GGUF size.
+
+### 8.2 HTTP on :8088
+
+```bash
+curl -sS http://127.0.0.1:8088/v1/models
+```
+
+A JSON list with a `data[0].id` means llama.cpp is serving. Empty / connection refused → container down or still loading.
+
+`GET /v1/chat/completions` without a body is **not** a real rewrite. Core always **POST**s. Smoke the same path the client uses (short timeout; 14B may still take a while):
+
+```bash
+curl -sS -m 30 http://127.0.0.1:8088/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"local","messages":[{"role":"user","content":"ping"}],"max_tokens":8}'
+```
+
+If `/models` is 200 but this hangs, the model is loaded but CPU is busy — wait, watch `jobs`, do not restart in a loop.
+
+### 8.3 Logs (llama.cpp and Core)
+
+```bash
+docker compose logs --tail=100 llm
+docker compose logs -f llm
+docker compose logs --tail=100 core
+docker compose logs --tail=100 core | grep -iE "llm|openai|model|error|exception"
+docker compose logs --tail=50 core
+docker compose logs --tail=50 core | grep "/ai"
+./forgesre logs llm
+./forgesre logs core
+```
+
+llama.cpp should show the GGUF path `/models/model.gguf` and eventually listening on `127.0.0.1:8088`. Core should show `openai-compatible` / `forgerca-llm` after a successful rewrite, not a traceback.
+
+### 8.4 Config on disk (not secrets passwords)
+
+```bash
+grep -nE 'llm|8088|model|COMPOSE_PROFILES|FORGESRE_LLM' .env config/forgesre.yml 2>/dev/null
+./forgesre config
+ls -lh "${FORGESRE_DATA:-./data}/models/model.gguf"
+```
+
+You want `COMPOSE_PROFILES` containing `ai`, `ai.enabled: true`, `ai.llm.mode: bundled` (or `external` + your URL), and a GGUF larger than 1 GB. Do not paste `secrets/secrets.env` into tickets.
+
+### 8.5 Rebuild Core after Python / compose changes
+
+The `core` image copies `agents/rca/llm.py` at **build** time. Editing the file on the VM with `nano` / `vi` does nothing until:
+
+```bash
+docker compose build core
+docker compose up -d core
+docker compose ps core
+```
+
+Same after `git pull` that touched `agents/rca/` or `docker-compose.yml`:
 
 ```bash
 git checkout main
@@ -303,6 +359,32 @@ docker compose up -d core
 ./forgesre test
 ```
 
+Inspect the client that ships in git (read-only; you do not need to change it to turn LLM on):
+
+```bash
+sed -n '1,220p' agents/rca/llm.py
+sed -n '1,140p' agents/rca/engines.py
+grep -n complete_json agents/rca/*.py backend/app/*.py
+```
+
+`complete_json` is the OpenAI-compatible POST. `enable_thinking` / `chat_template_kwargs` are a **fallback** only — Qwen 2.5 gets a plain body first.
+
+Inside Core (imports / working directory):
+
+```bash
+docker compose exec -T core pwd
+docker compose exec -T core ls
+docker compose exec -T core python -c "import sys; print('\n'.join(sys.path))"
+```
+
+### 8.6 Do not do this on a live box
+
+```bash
+# docker compose down     # stops Core, Postgres, Prometheus, LLM — last resort
+# ./install.sh            # regenerates passwords
+# cp llm.py llm.py.backup # local experiment only; keep the git file as source of truth
+```
+
 ---
 
 ## 9. Troubleshooting
@@ -311,6 +393,8 @@ docker compose up -d core
 |---|---|
 | `llm: disabled` / ForgeAI red | `ai.enabled` is false or `mode: disabled`. Enable YAML, recreate Core. Or run `./forgesre fetch-llm` |
 | `curl :8088` connection refused | Profile not `ai`, or container still loading the GGUF. `docker compose --profile ai up -d llm` and wait; watch `logs llm` |
+| Health `"Status":"unhealthy"` | GGUF missing, curl healthcheck cannot reach `:8088`. `docker inspect` the Test field; `ls -lh data/models/model.gguf` |
+| `/v1/models` ok, chat hangs | CPU 14B is slow or still loading layers. Follow `docker compose logs -f llm`. Do not `compose down` |
 | Doctor `llm: error` after many minutes | GGUF missing/corrupt (file smaller than 1 GB), OOM, or image pull failed. `ls -lh data/models/model.gguf` |
 | Rewrite never finishes | CPU 14B is slow. Check `./forgesre jobs`. Raise `timeout_seconds` (already 600), recreate Core. Lower `FORGESRE_LLM_THREADS` if the VM is thrashing |
 | `LLM returned text that was not JSON` | Model ignored the schema. Builtin ForgeRCA stays. Keep Qwen Instruct; do not swap a base (non-instruct) GGUF |

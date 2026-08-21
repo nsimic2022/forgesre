@@ -51,6 +51,9 @@ def test_llm_guide_and_fetch_llm_help():
     assert "ForgeAI" in text
     assert "model.gguf" in text
     assert "timeout_seconds" in text
+    assert "State.Health" in text
+    assert "/v1/chat/completions" in text
+    assert "docker compose logs -f llm" in text
     help_txt = subprocess.check_output(
         ["bash", str(ROOT / "scripts" / "forgesre"), "help", "fetch-llm"], text=True
     )
@@ -67,6 +70,16 @@ def test_root_test_sh_and_scripts_test_sh_exist():
     assert (ROOT / "test.sh").is_file()
     assert (ROOT / "scripts" / "test.sh").is_file()
     assert (ROOT / "scripts" / "appliance_test.py").is_file()
+
+
+def test_yaml_ai_reads_example_indent():
+    at = _mod()
+    example = (ROOT / "config" / "forgesre.example.yml").read_text(encoding="utf-8")
+    parsed = at._yaml_ai(example)
+    assert parsed["enabled"] == "true"
+    assert parsed["mode"] == "bundled"
+    assert "8088" in parsed["url"]
+    assert parsed["timeout_seconds"] == "600"
 
 
 def test_yaml_email_reads_example_indent():

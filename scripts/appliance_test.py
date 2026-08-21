@@ -27,6 +27,13 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _yaml_scalar(value: str) -> str:
+    text = value.strip().strip('"').strip("'")
+    if " #" in f" {text}":
+        text = text.split(" #", 1)[0].rstrip()
+    return text.strip().strip('"').strip("'")
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
@@ -61,7 +68,39 @@ def _yaml_email(text: str) -> dict[str, str]:
                 key, _, value = stripped.partition(":")
                 key = key.strip()
                 if key in out:
-                    out[key] = value.strip().strip('"').strip("'")
+                    out[key] = _yaml_scalar(value)
+    return out
+
+
+def _yaml_ai(text: str) -> dict[str, str]:
+    """Tiny pull of ai / ai.llm keys. Not a full YAML parser."""
+    out = {"enabled": "", "mode": "", "url": "", "timeout_seconds": ""}
+    in_ai = False
+    in_llm = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("ai:") and not line[:1].isspace():
+            in_ai = True
+            in_llm = False
+            continue
+        if in_ai and line and not line[:1].isspace() and not stripped.startswith("#"):
+            break
+        if not in_ai:
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if stripped.startswith("enabled:") and indent == 2:
+            out["enabled"] = _yaml_scalar(stripped.split(":", 1)[1])
+            continue
+        if stripped == "llm:" and indent == 2:
+            in_llm = True
+            continue
+        if in_llm and indent <= 2 and stripped and stripped != "llm:" and not stripped.startswith("#"):
+            in_llm = False
+        if in_llm and indent == 4 and ":" in stripped and not stripped.startswith("#"):
+            key, _, value = stripped.partition(":")
+            key = key.strip()
+            if key in {"mode", "url", "timeout_seconds"}:
+                out[key] = _yaml_scalar(value)
     return out
 
 
@@ -94,6 +133,7 @@ class Runner:
         yml = root / "config" / "forgesre.yml"
         self.yaml_text = yml.read_text(encoding="utf-8", errors="replace") if yml.is_file() else ""
         self.email = _yaml_email(self.yaml_text)
+        self.ai = _yaml_ai(self.yaml_text)
         self.cookie = ""
 
     def add(self, name: str, status: str, detail: str, how: str = "", fix: str = "") -> None:
@@ -149,6 +189,12 @@ class Runner:
         if code == 0:
             return ["sudo", "docker"]
         return ["docker"]
+
+    def docker_argv(self, *args: str) -> list[str]:
+        base = self.docker()
+        if base and base[0] == "sudo":
+            return ["sudo", "-n", "docker", *args]
+        return ["docker", *args]
 
     def compose(self, *args: str, timeout: int = 30) -> tuple[int, str]:
         base = self.docker()
@@ -310,16 +356,105 @@ def run_all(root: Path) -> Runner:
     llm_url = "http://127.0.0.1:8088/v1/models"
     code, _ = r.http(llm_url)
     profiles = r.env.get("COMPOSE_PROFILES", "")
-    if "ai" in profiles.split(",") or code == 200:
+    profile_ai = "ai" in [p.strip() for p in profiles.split(",") if p.strip()]
+    if profile_ai or code == 200:
         r.add(
             "http.llm",
             "pass" if code == 200 else "warn",
             f"HTTP {code or 'down'} (COMPOSE_PROFILES={profiles or 'empty'})",
-            "curl -fsS http://127.0.0.1:8088/v1/models",
+            "curl -sS http://127.0.0.1:8088/v1/models",
             "docker compose --profile ai up -d llm   or   ./forgesre fetch-llm",
         )
     else:
         r.add("http.llm", "skip", "llama.cpp not in COMPOSE_PROFILES and :8088 is closed — ForgeRCA still runs", "./forgesre fetch-llm")
+
+    ai = r.ai
+    ai_on = ai.get("enabled", "").lower() in {"true", "yes", "1"} and (ai.get("mode") or "") != "disabled"
+    if not ai_on:
+        r.add(
+            "yaml.ai",
+            "skip",
+            f"ai.enabled={ai.get('enabled') or 'missing'} mode={ai.get('mode') or 'missing'} — ForgeRCA only",
+            "./forgesre config",
+            "./forgesre fetch-llm",
+        )
+    else:
+        url = ai.get("url") or ""
+        r.add(
+            "yaml.ai",
+            "pass" if url else "warn",
+            f"enabled mode={ai.get('mode')} url={url} timeout={ai.get('timeout_seconds') or '600'}",
+            "grep -nE 'llm|8088' config/forgesre.yml",
+            "set ai.llm.url then docker compose up -d --force-recreate core",
+        )
+
+    data_dir = Path(r.env.get("FORGESRE_DATA") or "data")
+    if not data_dir.is_absolute():
+        data_dir = root / data_dir
+    gguf = data_dir / "models" / "model.gguf"
+    want_gguf = profile_ai or (ai.get("mode") == "bundled")
+    if gguf.is_file():
+        size = gguf.stat().st_size
+        gb = size / (1024**3)
+        r.add(
+            "files.gguf",
+            "pass" if size > 1_000_000_000 else "fail",
+            f"{gguf} ({gb:.1f} GB)",
+            f"ls -lh {gguf}",
+            "./forgesre fetch-llm",
+        )
+    elif want_gguf:
+        r.add("files.gguf", "fail", f"missing {gguf}", f"ls -lh {gguf}", "./forgesre fetch-llm")
+    else:
+        r.add("files.gguf", "skip", "no GGUF and profile ai is off", "./forgesre fetch-llm")
+
+    if profile_ai or code == 200:
+        cid_rc, cid_out = r.compose("ps", "-q", "llm")
+        cid = cid_out.strip().splitlines()[0] if cid_rc == 0 and cid_out.strip() else ""
+        if not cid:
+            r.add(
+                "compose.llm_health",
+                "warn",
+                "no llm container id",
+                "docker compose ps llm",
+                "docker compose --profile ai up -d llm",
+            )
+        else:
+            ic, iout = r.run_cmd(
+                r.docker_argv("inspect", "--format", "{{json .State.Health}}", cid)
+            )
+            health_status = "none"
+            if ic == 0 and iout and iout not in {"<no value>", "null"}:
+                try:
+                    health = json.loads(iout)
+                    if isinstance(health, dict):
+                        health_status = str(health.get("Status") or "none")
+                except json.JSONDecodeError:
+                    health_status = "unparsed"
+            mark = "pass" if health_status == "healthy" else ("warn" if health_status in {"starting", "none"} else "fail")
+            r.add(
+                "compose.llm_health",
+                mark,
+                f"Status={health_status} {iout[:160]}",
+                "docker compose ps -q llm | xargs -r docker inspect --format='{{json .State.Health}}'",
+                "docker compose logs --tail=100 llm",
+            )
+        log_rc, log_out = r.compose("logs", "--tail", "80", "llm", timeout=25)
+        if log_rc == 0:
+            lowered = log_out.lower()
+            hits = sum(lowered.count(word) for word in ("error", "failed", "fatal"))
+            r.add(
+                "logs.llm_errors",
+                "warn" if hits else "pass",
+                f"last 80 lines: {hits} error/failed/fatal hits",
+                "docker compose logs --tail=100 llm",
+                "docker compose logs -f llm",
+            )
+        else:
+            r.add("logs.llm_errors", "skip", "could not read llm logs", "docker compose logs llm")
+    else:
+        r.add("compose.llm_health", "skip", "profile ai off and :8088 closed")
+        r.add("logs.llm_errors", "skip", "profile ai off")
 
     rc_port = r.env.get("ROUNDCUBE_PORT") or "8081"
     if "mailbox" in profiles.split(","):
