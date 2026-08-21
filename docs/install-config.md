@@ -481,7 +481,7 @@ curl -fsS http://127.0.0.1:8088/v1/models
 ./forgesre test
 ```
 
-Need 16 GB RAM and ~20 GB free disk for the 14B GGUF. Without a model, ForgeRCA still runs. Cloud LLMs are not required. Do not re-run `./install.sh` just to add AI.
+Need 16 GB RAM for the default 14B GGUF, or ~8 GB if you wget Qwen3-4B into `data/models/model.gguf` (see [`llm.md`](llm.md) §3.C). Without a model, ForgeRCA still runs. Cloud LLMs are not required. Do not re-run `./install.sh` just to add AI.
 
 ---
 

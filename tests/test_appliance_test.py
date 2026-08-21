@@ -54,15 +54,20 @@ def test_llm_guide_and_fetch_llm_help():
     assert "State.Health" in text
     assert "/v1/chat/completions" in text
     assert "docker compose logs -f llm" in text
+    assert "Qwen3-4B-Q4_K_M.gguf" in text
+    assert "wget -O data/models/model.gguf" in text
+    assert "/health" in text
     help_txt = subprocess.check_output(
         ["bash", str(ROOT / "scripts" / "forgesre"), "help", "fetch-llm"], text=True
     )
     assert "--download-only" in help_txt
     assert "docs/llm.md" in help_txt
+    assert "Qwen3-4B" in help_txt
     script_help = subprocess.check_output(
         ["bash", str(ROOT / "scripts" / "fetch-llm.sh"), "--help"], text=True
     )
     assert "Qwen2.5-14B-Instruct" in script_help
+    assert "Qwen3-4B" in script_help
     assert "Do not re-run ./install.sh" in script_help
 
 

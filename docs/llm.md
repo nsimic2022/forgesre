@@ -33,14 +33,15 @@ If the rewrite fails or times out, the incident keeps the ForgeRCA result and re
 
 Bundled default is **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB on disk). llama.cpp runs on **CPU** (no GPU required, nested virtualization not required).
 
-| Resource | Practical floor for 14B Q4 + the rest of the appliance |
-|---|---|
-| Disk | 20 GB free (GGUF + images). Installer preflight uses 20 GB when AI is on |
-| RAM | 16 GB is comfortable. 8 GB often works but the rewrite is slow and may OOM |
-| vCPU | 4 better than 2. Threads default to `nproc - 2` (min 2) |
-| Time | First llama.cpp load after `up -d llm` is several minutes. One rewrite can take **1–10 minutes** on CPU |
+| Resource | 14B Q4 (default `fetch-llm`) | 4B Q4 (lab wget, see §3.C) |
+|---|---|---|
+| Disk for GGUF | ~9 GB | ~2.5 GB |
+| RAM with the rest of the stack | 16 GB comfortable | 8 GB is enough |
+| One rewrite on CPU | 1–10 minutes | usually under a minute after load |
 
-A 4 GB lab VM should **not** run the 14B GGUF. Leave `ai.enabled: false` and use ForgeRCA only.
+vCPU: 4 is better than 2. Threads default to `nproc - 2` (min 2). First llama.cpp load after `up -d llm` is minutes (GGUF mmap).
+
+A **4 GB** lab VM should not run either GGUF. Leave `ai.enabled: false` and use ForgeRCA only.
 
 Context window in Compose is **8192** tokens (`-c 8192`). Core waits **`ai.llm.timeout_seconds`** (default **600**) for one completion.
 
@@ -88,21 +89,50 @@ New VM only:
 
 Same effect as `--enable-ai yes`: installer downloads the GGUF, then starts Compose with profile `ai` when `data/models/model.gguf` exists.
 
-### C. Offline / your own GGUF
+### C. Offline / your own GGUF (wget)
 
-Place a **single-file Instruct GGUF** at:
+Compose always loads **one** file:
 
 ```text
 $FORGESRE_DATA/models/model.gguf
 ```
 
-Then:
+Default `$FORGESRE_DATA` is `./data`. Check what is already there:
 
 ```bash
+ls -lah ./data/models/
+```
+
+The filename on disk **must** be `model.gguf` (the container argument is `-m /models/model.gguf`). A `wget -O model.gguf` in the clone root does **not** count — write into `data/models/`.
+
+**Lab / 8 GB RAM** — Qwen3-4B Q4_K_M (~2.5 GB), then enable the profile (does not regenerate secrets):
+
+```bash
+mkdir -p data/models
+wget -O data/models/model.gguf \
+  https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf
+ls -lah data/models/model.gguf
 ./forgesre fetch-llm --offline
 ```
 
-`--offline` refuses to hit the network; the file must already be there and larger than 1 GB.
+`--offline` skips Hugging Face; the file must already exist and be larger than 1 GB. It still sets `COMPOSE_PROFILES=ai`, `ai.enabled` / `ai.llm.mode: bundled` in **`config/forgesre.yml`** (not the example template), starts `llm`, and recreates Core.
+
+Same download through `fetch-llm` (curl with resume) instead of wget:
+
+```bash
+FORGESRE_LLM_URL='https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf' \
+  ./forgesre fetch-llm
+```
+
+If the GGUF is already in place and YAML is already enabled:
+
+```bash
+docker compose --profile ai up -d llm
+docker compose ps
+docker compose logs -f llm
+```
+
+Do **not** edit `config/forgesre.example.yml` on a live box — Core reads `config/forgesre.yml`. Do not re-run `./install.sh` to add a model. Do not paste `secrets/secrets.env` into tickets.
 
 Download only (no Compose / YAML changes):
 
@@ -110,13 +140,13 @@ Download only (no Compose / YAML changes):
 ./forgesre fetch-llm --download-only
 ```
 
-Override the Hugging Face URL (or point curl at an internal mirror):
+Override any URL (internal mirror):
 
 ```bash
 FORGESRE_LLM_URL='https://example.internal/models/qwen.gguf' ./forgesre fetch-llm
 ```
 
-The Compose service always mounts that directory **read-only** as `/models` and passes `-m /models/model.gguf`. Rename the file to `model.gguf`.
+Prefer an **Instruct** GGUF so the model returns JSON. If ForgeAI stays on builtin ForgeRCA with “not JSON”, swap the file and recreate `llm`.
 
 ### D. External OpenAI-compatible server (same host)
 
@@ -254,6 +284,7 @@ Do not mash **Run AI investigation** while a job is `running`.
 
 ```bash
 curl -fsS http://127.0.0.1:8088/v1/models
+curl -fsS http://127.0.0.1:8088/health
 ./forgesre doctor
 ./forgesre test
 ./forgesre logs llm
@@ -298,6 +329,7 @@ Healthy looks like `"Status":"healthy"` and the test should be `curl -f http://1
 
 ```bash
 curl -sS http://127.0.0.1:8088/v1/models
+curl -sS http://127.0.0.1:8088/health
 ```
 
 A JSON list with a `data[0].id` means llama.cpp is serving. Empty / connection refused → container down or still loading.

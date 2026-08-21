@@ -353,7 +353,7 @@ EOF
       ;;
     fetch-llm)
       cat <<'EOF'
-fetch-llm — download Qwen2.5-14B-Instruct Q4_K_M (~9 GB) and start llama.cpp.
+fetch-llm — download a GGUF into $FORGESRE_DATA/models/model.gguf and start llama.cpp.
 
   ./forgesre fetch-llm
   ./forgesre fetch-llm --download-only
@@ -361,8 +361,12 @@ fetch-llm — download Qwen2.5-14B-Instruct Q4_K_M (~9 GB) and start llama.cpp.
   ./forgesre doctor          # llm: ok when :8088 answers
   ./forgesre test
 
-Writes $FORGESRE_DATA/models/model.gguf (gitignored), sets COMPOSE_PROFILES=ai,
-enables ai.llm.mode=bundled, starts the llm container, recreates Core.
+Default file is Qwen2.5-14B-Instruct Q4_K_M (~9 GB). Override:
+
+  FORGESRE_LLM_URL='https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf' ./forgesre fetch-llm
+
+Or wget into data/models/model.gguf, then --offline. Do not leave the file
+in the clone root. Sets COMPOSE_PROFILES=ai and ai.llm.mode=bundled.
 
 Do not re-run ./install.sh to add the model. ForgeRCA works without a GGUF.
 Guide: docs/llm.md
