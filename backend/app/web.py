@@ -423,7 +423,7 @@ def incident_investigate(
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
         raise HTTPException(status_code=404)
-    run_investigation(db, item, actor=user.email)
+    run_investigation(db, item, actor=user.email, force=True)
     return RedirectResponse(f"/incidents/{number}#ai", status_code=302)
 
 

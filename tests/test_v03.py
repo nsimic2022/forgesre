@@ -167,3 +167,73 @@ def test_audit_and_api_investigation():
     assert page.status_code == 200
     assert b"Facts" in page.content
     db.close()
+
+
+def _inv_count(db, incident_id: int) -> int:
+    from app.models import Investigation
+
+    return db.query(Investigation).filter_by(incident_id=incident_id).count()
+
+
+def test_automatic_rca_does_not_duplicate_without_force():
+    from fastapi.testclient import TestClient
+
+    from app.db import Base, SessionLocal, engine
+    from app.jobs import run_pending_jobs
+    from app.main import app
+    from app.seed import seed
+    from app.services import ingest_alertmanager, run_investigation
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    payload = {
+        "status": "firing",
+        "alerts": [
+            {
+                "status": "firing",
+                "labels": {"alertname": "FilesystemUsageHigh", "severity": "warning", "asset": "idem-fs-01"},
+                "annotations": {"summary": "Filesystem usage high", "description": "94%"},
+                "fingerprint": "test-disk-once",
+            }
+        ],
+    }
+    incident = ingest_alertmanager(db, payload)[0]
+    run_pending_jobs(db)
+    assert _inv_count(db, incident.id) == 1
+    run_investigation(db, incident)
+    run_pending_jobs(db)
+    assert _inv_count(db, incident.id) == 1
+    run_investigation(db, incident, force=True)
+    assert _inv_count(db, incident.id) == 2
+    client = TestClient(app)
+    client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
+    page = client.get(f"/ai/{incident.number}")
+    assert page.status_code == 200
+    assert b"Facts" in page.content
+    db.close()
+
+
+def test_demo_rca_opens_new_incident_and_queues_one_investigation():
+    from app.db import Base, SessionLocal, engine
+    from app.jobs import run_pending_jobs
+    from app.seed import seed
+    from app.services import run_demo_rca
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    first = run_demo_rca(db)
+    assert first is not None
+    assert _inv_count(db, first.id) == 0
+    run_pending_jobs(db)
+    assert _inv_count(db, first.id) == 1
+    run_pending_jobs(db)
+    assert _inv_count(db, first.id) == 1
+    second = run_demo_rca(db)
+    assert second is not None
+    assert second.number != first.number
+    run_pending_jobs(db)
+    assert _inv_count(db, second.id) == 1
+    assert _inv_count(db, first.id) == 1
+    db.close()

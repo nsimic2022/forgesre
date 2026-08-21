@@ -493,7 +493,16 @@ def investigation_context(db: Session, incident: Incident) -> dict[str, Any]:
     }
 
 
-def run_investigation(db: Session, incident: Incident, actor: str = "system") -> Investigation:
+def run_investigation(db: Session, incident: Incident, actor: str = "system", *, force: bool = False) -> Investigation:
+    """Run ForgeRCA. Automatic callers skip when a result already exists; the UI can pass force=True."""
+    latest = (
+        db.query(Investigation)
+        .filter_by(incident_id=incident.id)
+        .order_by(Investigation.id.desc())
+        .first()
+    )
+    if latest is not None and not force:
+        return latest
     collect_evidence(db, incident)
     db.refresh(incident)
     from rca.engines import get_engine
@@ -745,10 +754,11 @@ def escalation_steps(incident: Incident) -> list[dict[str, Any]]:
     return steps
 
 
-def close_open_incidents(db: Session, fingerprint: str) -> None:
+def close_open_incidents(db: Session, fingerprint: str, *, include_resolved: bool = False) -> None:
+    blocked = {"CLOSED"} if include_resolved else {"CLOSED", "RESOLVED"}
     open_rows = (
         db.query(Incident)
-        .filter(Incident.fingerprint == fingerprint, Incident.status.notin_(["CLOSED", "RESOLVED"]))
+        .filter(Incident.fingerprint == fingerprint, Incident.status.notin_(blocked))
         .all()
     )
     if not open_rows:
@@ -821,7 +831,7 @@ def run_demo_rca(db: Session) -> Incident:
     asset = ensure_demo_asset(db)
     ensure_demo_similar_history(db, asset)
     seed_demo_candidate(db)
-    close_open_incidents(db, f"FilesystemUsageHigh:{DEMO_ASSET}")
+    close_open_incidents(db, f"FilesystemUsageHigh:{DEMO_ASSET}", include_resolved=True)
     set_demo_disk(94)
     log.warning("demo-rca: filesystem on %s raised to 94%% for FilesystemUsageHigh", DEMO_ASSET)
     log.error("demo-rca: log growth suspected on %s (synthetic evidence)", DEMO_ASSET)
@@ -851,7 +861,8 @@ def run_demo_rca(db: Session) -> Incident:
         db.query(Incident).filter(Incident.fingerprint == fingerprint).order_by(Incident.id.desc()).first()
     )
     if incident:
-        run_investigation(db, incident, actor="demo-rca")
+        # Same as production: ingest already queued investigate. Do not run RCA again
+        # in this request — that blocked the browser on the LLM and doubled rows.
         ensure_notification(db, incident, "immediate")
         report(
             db,
