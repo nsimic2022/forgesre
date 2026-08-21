@@ -362,10 +362,11 @@ Directory `secrets/` mode `700`, file `600`. UI users created in Administration 
 
 ## 12. Operator CLI
 
-From the clone directory. `./forgesre help` is the index. `./forgesre help <command>` has examples. `./f` is the same CLI. TAB completes names.
+From the clone directory. `./forgesre help` is the index. `./forgesre help <command>` has examples (`./forgesre help quit` for leaving the prompt). `./f` is the same CLI. TAB completes names.
 
 ```bash
 ./forgesre                 # prompt; then journal / incidents / doctor / test / quit
+./forgesre help quit
 ./forgesre login
 ./forgesre whoami
 ./forgesre doctor
@@ -406,7 +407,12 @@ docker compose logs --tail=100 core | grep -iE "llm|rca|error|exception"
 docker compose logs --tail=50 core | grep "/ai"
 docker compose logs -f core
 docker compose logs --tail=200 llm
+docker compose logs -f llm
+docker compose ps -q llm | xargs -r docker inspect --format='{{json .State.Health}}'
+curl -sS http://127.0.0.1:8088/v1/models
 ```
+
+LLM debug (health, `:8088`, Core grep): [`llm.md`](llm.md) §8.
 
 Same via the CLI:
 

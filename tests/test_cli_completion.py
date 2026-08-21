@@ -49,6 +49,13 @@ def test_tab_after_journal_and_help():
     assert "history" in help_txt.split()
     help_te = _complete(["./forgesre", "help", "te"], 2)
     assert "test" in help_te.split()
+    help_q = _complete(["./forgesre", "help", "qu"], 2)
+    assert "quit" in help_q.split()
+
+
+def test_tab_inside_prompt_completes_quit():
+    out = _complete(["qu"], 0)
+    assert "quit" in out.split()
 
 
 def test_tab_inside_prompt_first_word():
@@ -59,10 +66,18 @@ def test_tab_inside_prompt_first_word():
 def test_cli_help_documents_completion_and_tab():
     overview = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help"], text=True)
     assert "test" in overview
+    assert "quit" in overview
     assert "completion" in overview
     shell = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "shell"], text=True)
     assert "TAB" in shell
     assert "snmp-exporter" in shell
+    assert "quit" in shell
+    quit_help = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "quit"], text=True)
+    assert "Ctrl-D" in quit_help
+    assert "exit" in quit_help
+    assert "forgesre>" in quit_help
+    exit_help = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "exit"], text=True)
+    assert "quit" in exit_help
     printed = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "completion"], text=True)
     assert "forgesre-completion.bash" in printed
 
