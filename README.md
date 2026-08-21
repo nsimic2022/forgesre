@@ -37,7 +37,7 @@ Find or enter a host
 | **Incidents** | Alertmanager webhook opens `INC-…`. Fingerprint is alert + asset. |
 | **History** | `/history` — last 90 days in Postgres, plus mail/audit/notes on the incident. |
 | **Playrules / playbooks** | Deterministic mapping: this alert → this checklist. Nothing is executed. |
-| **Escalation** | Generated mail to the **asset owner** (SMTP optional; lab uses an outbox log or optional Mailpit profile). |
+| **Escalation** | Generated mail to the **asset owner** (SMTP optional; own mailbox via `./forgesre mailbox`, or an external SMTP, or lab Mailpit). |
 | **ForgeRCA / ForgeAI** | Read-only investigation. ForgeRCA (Python builtin) always first; ForgeAI is the optional local LLM rewrite. |
 | **Journal** | `/journal` — per-module ok/warn/error, not Docker logs and not a bash shell. |
 
@@ -132,13 +132,14 @@ Type `./forgesre` with no arguments for a prompt, then `journal`, `incidents`, `
 ./forgesre backup
 ./forgesre backup --no-secrets
 ./forgesre fetch-llm           # optional ~9 GB GGUF, not stored in git
+./forgesre mailbox             # own Postfix/Dovecot + Roundcube (not Gmail)
 ```
 
 ---
 
 ## Stack
 
-Python 3.12 + FastAPI + Jinja2 (one Core process), PostgreSQL, Prometheus, Alertmanager, snmp_exporter, Loki, Grafana Alloy, Grafana. Optional llama.cpp. All Compose services use **host networking**.
+Python 3.12 + FastAPI + Jinja2 (one Core process), PostgreSQL, Prometheus, Alertmanager, snmp_exporter, Loki, Grafana Alloy, Grafana. Optional llama.cpp. Optional on-box mailbox (docker-mailserver + Roundcube) via `./forgesre mailbox`. Default Compose services use **host networking**; the mailbox profile uses a bridge network and publishes 25 / 993 / Roundcube.
 
 Config: `config/forgesre.yml` (behavior), `.env` (ports/paths), `secrets/secrets.env` (passwords, SNMP community, tokens). Never commit the last two or `data/`.
 

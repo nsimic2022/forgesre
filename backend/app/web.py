@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -76,6 +77,18 @@ def incident_tone(status: str, severity: str = "") -> str:
 
 def can_send_ops(user: User) -> bool:
     return can(user, "write_play") or can(user, "write_incidents") or can(user, "admin")
+
+
+def _webmail_url(request: Request) -> str:
+    """Roundcube link when Core is sending through the on-box mailbox."""
+    host = (settings.smtp_host or "").lower()
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        return ""
+    if int(settings.smtp_port or 0) != 587:
+        return ""
+    hostname = (request.headers.get("host") or "localhost").split(":")[0] or "localhost"
+    port = os.environ.get("ROUNDCUBE_PORT", "8081")
+    return f"http://{hostname}:{port}/"
 
 
 def ops_mail_ctx(db: Session, user: User, incident: Incident | None = None) -> dict:
@@ -752,6 +765,7 @@ def ops_page(request: Request, db: Session = Depends(get_db), user: User = Depen
         addresses=list_mail_addresses(db),
         smtp_on=settings.email_enabled and bool(settings.smtp_host),
         can_send=can_send_ops(user),
+        webmail_url=_webmail_url(request),
     )
 
 

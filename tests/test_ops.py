@@ -51,6 +51,7 @@ def test_ops_page_lists_outbox_and_reports():
     assert 0 <= send_at < outbox_at < reports_at
     assert "Add email" in page.text
     assert "does not receive email" in page.text
+    assert "./forgesre mailbox" in page.text
     assert "Open Grafana" not in page.text
     assert "Stack UIs" not in page.text
     assert "platform@forgesre.local" in page.text

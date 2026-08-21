@@ -742,6 +742,17 @@ def _notification_body(incident: Incident, step_key: str, policy_role: str) -> s
     return "\n".join(lines) + "\n"
 
 
+def smtp_ssl_context(host: str):
+    """STARTTLS context. Local docker-mailserver uses a self-signed cert."""
+    import ssl
+
+    ctx = ssl.create_default_context()
+    if (host or "").lower() in {"127.0.0.1", "localhost", "::1"}:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 def _send_smtp(target: str, subject: str, body: str) -> None:
     import smtplib
     from email.message import EmailMessage
@@ -754,7 +765,7 @@ def _send_smtp(target: str, subject: str, body: str) -> None:
     message.set_content(body)
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as client:
         if settings.smtp_tls:
-            client.starttls()
+            client.starttls(context=smtp_ssl_context(settings.smtp_host))
         if settings.smtp_username:
             client.login(settings.smtp_username, settings.smtp_password)
         client.send_message(message)

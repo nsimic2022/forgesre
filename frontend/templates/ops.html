@@ -9,6 +9,12 @@
   Outbox is every generated / sent / failed message this appliance stored.
   SMTP off keeps the row as <em>generated</em> (lab). Escalation mail on an incident is unchanged.
   Grafana lives on <a href="/health-ui">System Health</a>.
+  {% if webmail_url %}
+  Read and reply in <a href="{{ webmail_url }}" target="_blank" rel="noopener">Roundcube (webmail)</a>
+  on this host — your mailbox, not Gmail.
+  {% else %}
+  Own mailbox + webmail: <code>./forgesre mailbox</code> (docker-mailserver + Roundcube, not Gmail).
+  {% endif %}
 </p>
 
 <section class="card" id="send">

@@ -85,7 +85,18 @@ download_model() {
 enable_config() {
   if [[ -f "$ROOT/.env" ]]; then
     if grep -q '^COMPOSE_PROFILES=' "$ROOT/.env"; then
-      sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=ai/' "$ROOT/.env"
+      current="$(grep -E '^COMPOSE_PROFILES=' "$ROOT/.env" | tail -n1 | cut -d= -f2-)"
+      next=""
+      IFS=',' read -ra parts <<< "${current}"
+      for part in "${parts[@]}"; do
+        part="${part#"${part%%[![:space:]]*}"}"
+        part="${part%"${part##*[![:space:]]}"}"
+        [[ -z "${part}" || "${part}" == "ai" ]] && continue
+        if [[ -n "${next}" ]]; then next+=","; fi
+        next+="${part}"
+      done
+      if [[ -n "${next}" ]]; then next="ai,${next}"; else next="ai"; fi
+      sed -i "s|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=${next}|" "$ROOT/.env"
     else
       echo 'COMPOSE_PROFILES=ai' >> "$ROOT/.env"
     fi

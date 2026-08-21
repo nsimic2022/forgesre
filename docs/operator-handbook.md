@@ -126,7 +126,7 @@ Login session lasts **12 hours** (httponly cookie).
 | Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
 | Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
 | System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Run doctor** re-probes now. Green = running, yellow = paused / starting / disabled, red = down. **Open** column (and the component name) goes to that service’s GUI or metrics. **Open Grafana** is on this page too. Prometheus/Alertmanager bind the appliance; the UI rewrites `127.0.0.1` to the host you used. |
-| Email & reports | `/ops` | **Add email** (address book) then **Send email**. Mail outbox is sent/generated/failed mail — not an inbox; ForgeSRE does not receive email. Scheduled performance reports pick a saved address (or a new one) and assets + interval. Asset owner emails from **Assets** are already in the list. Grafana is on System Health, not here. Escalation mail on an incident is unchanged. |
+| Email & reports | `/ops` | **Add email** (address book) then **Send email**. Mail outbox is sent/generated/failed mail — not an inbox; ForgeSRE does not receive email. Read/reply in Roundcube after `./forgesre mailbox`. Scheduled performance reports pick a saved address (or a new one) and assets + interval. Asset owner emails from **Assets** are already in the list. Grafana is on System Health, not here. Escalation mail on an incident is unchanged. |
 | Administration | `/admin` | Users, audit log. No browser bash — SSH or `./forgesre shell` |
 
 ---
@@ -412,15 +412,57 @@ notifications:
     tls: true
 ```
 
-Leave SMTP **disabled** only if you want the on-box outbox and no real mail. For production, enable SMTP against a **real mailbox** (next section). Gmail stays empty while status is `generated`.
+Leave SMTP **disabled** only if you want the on-box outbox and no real mail.
 
-### Production: send and receive for real
+ForgeSRE **sends**. It does **not** receive inbound mail into the UI. Humans read and reply in a real client. Three ways to get there:
 
-ForgeSRE **sends**. It does **not** receive inbound mail into the UI. Replies and incoming ops mail live in a normal mailbox (Gmail, Google Workspace, Exchange, Migadu). That is how send **and** receive work without running an MX on this VM.
+1. **Own mailbox on this VM** (Postfix + Dovecot + Roundcube) — not Gmail, not a fake catcher.
+2. **External mailbox** you already read (Gmail / Workspace / Exchange / Migadu).
+3. **Lab-only Mailpit** — messages never leave the box. Skip this if you want real mail.
 
-Do **not** put Postfix / Mailu / docker-mailserver on the ForgeSRE appliance. Port 25 is often blocked, you need a public hostname, MX + PTR + SPF + DKIM + DMARC, or Gmail will junk or reject you. That is a mail-ops product, not a Compose profile.
+### Own mailbox + Roundcube (not Gmail)
 
-**Send (ForgeSRE → people)** — existing YAML, no code change:
+This is the product path when you want *your* mail server and *your* webmail client on the appliance.
+
+```bash
+# optional: set MAIL_DOMAIN=ops.example.com in .env first (default forgesre.local)
+./forgesre mailbox
+```
+
+That command:
+
+- Enables Compose profile `mailbox` (does **not** turn it on at install).
+- Starts **docker-mailserver** (Postfix + Dovecot) and **Roundcube**.
+- Creates `forgesre@<domain>` and a domain catch-all into that mailbox.
+- Writes SMTP host `127.0.0.1` port `587` `tls: true` and secrets in `secrets/secrets.env`.
+- Recreates Core so send uses that account.
+
+Then:
+
+| What | Where |
+|---|---|
+| Send (ForgeSRE → people) | `/ops`, incident report, escalation — SMTP to `127.0.0.1:587` |
+| Read / reply (the email client) | Roundcube at `http://<VM-IP>:8081` as `forgesre@<domain>` |
+| Desktop IMAP | `<VM-IP>:993` (same account) |
+| Internet inbound | MX for the domain → this host, **TCP/25** open |
+
+LAN-only (`forgesre.local`) works **between mailboxes on this box** without Gmail. Internet receive is a mail-ops job: you must own the domain, publish MX (+ SPF / DKIM / PTR) or other servers will junk or reject you. Many ISPs and clouds **block inbound port 25**. The mailbox profile does not magically fix that.
+
+Add a person:
+
+```bash
+docker compose --profile mailbox exec mailserver setup email add you@forgesre.local 'password'
+```
+
+ForgeSRE still has no IMAP inbox in the UI. Roundcube is the client.
+
+`--reset` rotates the `forgesre@` password and rewrites SMTP secrets.
+
+Do not combine this with Mailpit (`COMPOSE_PROFILES=mail`). `./forgesre mailbox` drops the `mail` profile if it was set.
+
+### External mailbox (Gmail and similar)
+
+Use this when you already have a mailbox on the internet and do not want to run MX here.
 
 1. Use a real mailbox you already read (example: Gmail).
 2. Gmail: Security → 2-Step Verification → **App passwords** → 16 characters (not your login password).
@@ -447,13 +489,13 @@ SMTP_PASSWORD=xxxx xxxx xxxx xxxx
 
 Workspace / Exchange / Migadu: same keys, their SMTP host and a mailbox user.
 
-**Receive (people → you)** — open that same mailbox in Gmail/Outlook. If someone replies to the incident report, it arrives there. ForgeSRE has no IMAP inbox in this version.
+**Receive (people → you)** — open that same mailbox in Gmail/Outlook/Roundcube. If someone replies to the incident report, it arrives there. ForgeSRE has no IMAP inbox in this version.
 
 From-address must be allowed to send as that user (Gmail: `from:` = the same account).
 
 ### Lab-only: Mailpit (not production)
 
-Skip this if you want real mail. Mailpit is a catcher on the VM (`COMPOSE_PROFILES=mail`, YAML `127.0.0.1:1025`, `tls: false`). Messages never leave the box and never appear in Gmail.
+Skip this if you want real mail. Mailpit is a catcher on the VM (`COMPOSE_PROFILES=mail`, YAML `127.0.0.1:1025`, `tls: false`). Messages never leave the box and never appear in Gmail or Roundcube.
 
 ---
 
@@ -619,6 +661,7 @@ Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critica
 ./forgesre backup
 ./forgesre backup --no-secrets
 ./forgesre update               # backup + render-monitoring + compose up + doctor
+./forgesre mailbox              # own Postfix/Dovecot + Roundcube (not Gmail)
 ./forgesre version
 ```
 

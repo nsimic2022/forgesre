@@ -172,3 +172,70 @@ services:
       - --listen
       - 127.0.0.1:8025
     restart: unless-stopped
+
+  mailserver:
+    # Optional on-box mailbox. Not Gmail. Not Mailpit. COMPOSE_PROFILES=mailbox
+    # ./forgesre mailbox  — creates forgesre@MAIL_DOMAIN and points Core at :587
+    image: ghcr.io/docker-mailserver/docker-mailserver:15.1.0
+    profiles: ["mailbox"]
+    hostname: mail.${MAIL_DOMAIN:-forgesre.local}
+    stop_grace_period: 1m
+    ports:
+      - "25:25"
+      - "127.0.0.1:587:587"
+      - "993:993"
+    volumes:
+      - ${FORGESRE_DATA:-./data}/dms/mail-data:/var/mail
+      - ${FORGESRE_DATA:-./data}/dms/mail-state:/var/mail-state
+      - ${FORGESRE_DATA:-./data}/dms/mail-logs:/var/log/mail
+      - ${FORGESRE_DATA:-./data}/dms/config:/tmp/docker-mailserver
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      TZ: ${FORGESRE_TIMEZONE:-Europe/Belgrade}
+      OVERRIDE_HOSTNAME: mail.${MAIL_DOMAIN:-forgesre.local}
+      POSTMASTER_ADDRESS: forgesre@${MAIL_DOMAIN:-forgesre.local}
+      SSL_TYPE: self-signed
+      PERMIT_DOCKER: none
+      ENABLE_FAIL2BAN: "0"
+      ENABLE_CLAMAV: "0"
+      ENABLE_RSPAMD: "0"
+      ENABLE_OPENDKIM: "1"
+      ENABLE_OPENDMARC: "1"
+      ENABLE_UPDATE_CHECK: "0"
+    networks:
+      - mailbox
+    healthcheck:
+      test: ["CMD-SHELL", "ss --listening --tcp | grep -qE ':25|:587' || exit 1"]
+      timeout: 10s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+  roundcube:
+    # Webmail client for the mailbox profile. ForgeSRE has no IMAP inbox.
+    image: roundcube/roundcubemail:1.6.11-apache
+    profiles: ["mailbox"]
+    ports:
+      - "${ROUNDCUBE_PORT:-8081}:80"
+    environment:
+      ROUNDCUBEMAIL_DEFAULT_HOST: ssl://mailserver
+      ROUNDCUBEMAIL_DEFAULT_PORT: "993"
+      ROUNDCUBEMAIL_SMTP_SERVER: tls://mailserver
+      ROUNDCUBEMAIL_SMTP_PORT: "587"
+      ROUNDCUBEMAIL_SMTP_USER: "%u"
+      ROUNDCUBEMAIL_SMTP_PASS: "%p"
+      ROUNDCUBEMAIL_DES_KEY: ${ROUNDCUBEMAIL_DES_KEY:-roundcube-des-key-change}
+      ROUNDCUBEMAIL_DB_TYPE: sqlite
+      ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE: 25M
+    volumes:
+      - ${FORGESRE_DATA:-./data}/roundcube/db:/var/roundcube/db
+      - ./config/roundcube/custom.inc.php:/var/roundcube/config/custom.inc.php:ro
+    depends_on:
+      - mailserver
+    networks:
+      - mailbox
+    restart: unless-stopped
+
+networks:
+  mailbox:
+    name: forgesre-mailbox

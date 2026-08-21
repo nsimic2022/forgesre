@@ -74,6 +74,7 @@ Commands:
   backup             Dump Postgres + config (tar mode 600; --no-secrets omits secrets.env)
   restore            Print restore steps (does not run them)
   update             Backup, render monitoring, refresh images, restart, doctor
+  mailbox            Own Postfix/Dovecot + Roundcube (not Gmail, not Mailpit)
   completion         Print a `source …completion.bash` line for ~/.bashrc
 
 Examples:
@@ -432,6 +433,23 @@ update — doctor (warn ok), backup, render-monitoring, compose pull/up, doctor.
 Use this after git pull origin main. Do not run ./install.sh.
 EOF
       ;;
+    mailbox)
+      cat <<'EOF'
+mailbox — start an on-box mail server and Roundcube (the email client).
+
+  ./forgesre mailbox
+  ./forgesre mailbox --reset
+
+Creates forgesre@<MAIL_DOMAIN> (default forgesre.local), points Core SMTP at
+127.0.0.1:587, and serves webmail on :8081. Not Gmail. Not Mailpit.
+
+ForgeSRE still only sends. You read and reply in Roundcube.
+Internet receive needs a real domain, MX at this host, and TCP/25 open.
+LAN accounts send/receive between themselves without Gmail.
+
+Do not enable this profile by default. Lab catcher remains COMPOSE_PROFILES=mail.
+EOF
+      ;;
     "")
       print_overview
       ;;
@@ -578,6 +596,10 @@ case "$cmd" in
     exit 1
     ;;
   update) exec "$ROOT/scripts/update.sh" "$@" ;;
+  mailbox)
+    need_env
+    exec "$ROOT/scripts/mailbox.sh" "$@"
+    ;;
   fetch-llm)
     exec "$ROOT/scripts/fetch-llm.sh" "$@"
     ;;

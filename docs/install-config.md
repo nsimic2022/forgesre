@@ -294,7 +294,7 @@ FORGESRE_TIMEZONE=Europe/Belgrade
 FORGESRE_HTTP_PORT=8080
 GRAFANA_PORT=3000
 FORGESRE_PROFILE=standard
-COMPOSE_PROFILES=          # empty | ai | mail | ai,mail
+COMPOSE_PROFILES=          # empty | ai | mail | mailbox | ai,mailbox
 POSTGRES_PASSWORD=...      # must match secrets
 GRAFANA_ADMIN_PASSWORD=...
 ALERTMANAGER_CONFIG=./data/generated/alertmanager.yml
@@ -348,6 +348,7 @@ Install writes random `SECRET_KEY` and `ALERTMANAGER_WEBHOOK_TOKEN`. Core **refu
 ./forgesre help              # CLI overview
 ./forgesre help snmp         # SNMP exporter + SD
 ./forgesre help tls          # optional HTTPS / Secure cookies
+./forgesre mailbox           # own Postfix/Dovecot + Roundcube (not Gmail)
 ./forgesre doctor            # health (includes snmp; uses Bearer webhook token)
 ./forgesre status            # compose ps
 ./forgesre logs core

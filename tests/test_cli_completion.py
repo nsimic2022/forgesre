@@ -31,6 +31,8 @@ def test_tab_completes_all_cli_commands_from_prefix():
     sn = _complete(["./forgesre", "sn"], 1)
     assert "snmp" in sn.split()
     assert "snmp-exporter" not in sn.split()
+    mail = _complete(["./forgesre", "ma"], 1)
+    assert "mailbox" in mail.split()
 
 
 def test_tab_after_logs_completes_snmp_exporter():

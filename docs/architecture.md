@@ -59,7 +59,7 @@ These are the choices that keep the service count down.
 | ADR-7 | **Caddy is the only published entrypoint** | One URL, TLS, routing to Core / Grafana / NetBox. Users do not manage eight ports |
 | ADR-8 | **AI agents are in-process modules**, not microservices | Five named agents remain as code packages talking to one LLM HTTP API |
 | ADR-9 | **Open WebUI is not in any default profile** | Optional later. It is not the ForgeSRE UI |
-| ADR-10 | **No bundled Postfix in V1** | External SMTP only. A mail relay is a separate operational burden |
+| ADR-10 | **No bundled Postfix by default** | External SMTP covers the common case. Optional Compose profile `mailbox` (docker-mailserver + Roundcube) is opt-in via `./forgesre mailbox`, not install. Internet receive still needs MX + port 25 |
 | ADR-11 | **Compose profiles, one `docker-compose.yml`** | Not a pile of compose files. Wizard sets `COMPOSE_PROFILES` |
 | ADR-12 | **Local inventory is a first-class SoT** | Minimal must work without NetBox. When NetBox is on, NetBox is SoT and ForgeSRE caches |
 | ADR-13 | **Bundled LLM = OpenAI-compatible llama.cpp server** | Same client code for bundled and “existing local LLM” |
@@ -81,7 +81,7 @@ These are the choices that keep the service count down.
 | Separate UI container | Rejected | Embedded SPA is enough |
 | Agent fleet (N containers) | Rejected | In-process agents + one LLM |
 | Open WebUI in default install | Rejected for V1 | Extra UI, extra auth, extra failure domain |
-| Bundled Postfix | Rejected for V1 | External SMTP covers the requirement |
+| Bundled Postfix | Optional profile `mailbox`, off by default | Internet MX is still the operator’s problem (port 25, SPF/DKIM) |
 | Redis for ForgeSRE jobs | Rejected | PostgreSQL queue is enough |
 | Kafka / NATS | Rejected | No throughput justification |
 | Kubernetes in V1 | Rejected | Out of product scope; Compose is the deployment |
@@ -322,15 +322,17 @@ For each component: why it exists, what it does, dependents, whether it can be r
 
 ### 6.16 Explicitly out of V1 runtime
 
-Open WebUI, Promtail, Postfix, blackbox_exporter as a separate container, Redis (unless bundled NetBox), extra agent containers, Code Agent sandbox VM.
+Open WebUI, Promtail, blackbox_exporter as a separate container, Redis (unless bundled NetBox), extra agent containers, Code Agent sandbox VM. Postfix is **not** in the default stack.
 
 **V0.5 exception:** `snmp_exporter` *is* a compose service (`127.0.0.1:9116`). Alloy SNMP remains a later unification.
+
+**V0.7 exception:** optional Compose profile `mailbox` (docker-mailserver + Roundcube) via `./forgesre mailbox`. Off at install.
 
 ---
 
 ## 7. Container list by profile
 
-One compose file. Profiles stack: `minimal`, `standard`, `ai`, plus optional `netbox`.
+One compose file. Profiles stack: `minimal`, `standard`, `ai`, plus optional `netbox`, `mail` (Mailpit lab catcher), `mailbox` (on-box mail + Roundcube).
 
 ### Minimal — `COMPOSE_PROFILES=minimal`
 
@@ -380,6 +382,17 @@ Adds:
 **Host sizing:** 8+ vCPU, 32 GB RAM typical for a small local model; GPU optional.
 
 External mode for Prometheus/Loki/Grafana/NetBox/LLM **omits** that container and points `url:` at the existing service. ForgeSRE must not assume bundled topology.
+
+### Mailbox — optional `mailbox` (off by default)
+
+Not part of install. `./forgesre mailbox` adds:
+
+| Container | Role |
+|---|---|
+| mailserver (docker-mailserver) | Postfix + Dovecot. Inbound :25, submission 127.0.0.1:587, IMAP :993 |
+| roundcube | Webmail client on :8081 |
+
+Core stays on host networking and submits SMTP to `127.0.0.1:587`. ForgeSRE has no IMAP UI.
 
 ---
 
@@ -1024,7 +1037,7 @@ The proposal implements the requested first deliverable: diagrams, component lis
 
 Intentional simplifications vs a naive reading of the spec:
 
-- No Open WebUI, no Postfix, no agent microservices, no Promtail, no Redis for ForgeSRE, no separate UI container.
+- No Open WebUI, no Postfix in the default stack (optional `mailbox` profile is opt-in), no agent microservices, no Promtail, no Redis for ForgeSRE, no separate UI container.
 - Alloy consolidates collectors.
 - Local inventory so Minimal does not require NetBox.
 - Doctor/backup logic lives in the Go CLI, with `scripts/*.sh` as wrappers.
