@@ -82,6 +82,65 @@ def is_demo_incident(incident: Incident | None) -> bool:
     return is_demo_asset_id(fingerprint)
 
 
+HOST_DOWN_ALERTNAMES = (
+    "NodeExporterDown",
+    "WindowsExporterDown",
+    "SnmpDeviceUnreachable",
+)
+
+HOST_DOWN_STATUSES_HIDDEN = ("RESOLVED", "CLOSED")
+
+
+def incident_alertname(incident: Incident | None) -> str:
+    """Alertname from labels, else the fingerprint prefix (Alertname:asset)."""
+    if incident is None:
+        return ""
+    payload = incident.alert_payload if isinstance(getattr(incident, "alert_payload", None), dict) else {}
+    labels = payload.get("labels") if isinstance(payload, dict) else None
+    if isinstance(labels, dict):
+        name = str(labels.get("alertname") or "").strip()
+        if name:
+            return name
+    fingerprint = str(getattr(incident, "fingerprint", "") or "")
+    if ":" in fingerprint:
+        return fingerprint.split(":", 1)[0]
+    return fingerprint
+
+
+def is_host_down_incident(incident: Incident | None) -> bool:
+    """Linux node_exporter down, Windows exporter down, or SNMP device unreachable."""
+    return incident_alertname(incident) in HOST_DOWN_ALERTNAMES
+
+
+def list_host_down_incidents(db: Session, limit: int = 12) -> list[Incident]:
+    """Open host/SNMP-down incidents for the dashboard banner (newest first)."""
+    cap = max(1, min(int(limit or 12), 20))
+    rows = (
+        db.query(Incident)
+        .filter(Incident.status.notin_(HOST_DOWN_STATUSES_HIDDEN))
+        .order_by(Incident.id.desc())
+        .limit(80)
+        .all()
+    )
+    return [row for row in rows if is_host_down_incident(row)][:cap]
+
+
+def host_down_public(incident: Incident) -> dict[str, Any]:
+    asset = getattr(incident, "asset", None)
+    hostname = ""
+    if asset is not None:
+        hostname = str(getattr(asset, "hostname", "") or getattr(asset, "asset_id", "") or "")
+    return {
+        "number": incident.number,
+        "title": incident.title or "",
+        "status": incident.status,
+        "severity": incident.severity,
+        "alertname": incident_alertname(incident),
+        "hostname": hostname,
+        "demo": is_demo_incident(incident),
+    }
+
+
 def is_demo_mail(note: Notification | None) -> bool:
     """Escalation/outbox rows: DEMO prefix on the subject, or the linked incident."""
     if note is None:

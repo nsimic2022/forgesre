@@ -51,6 +51,7 @@ from app.services import (
     is_demo_incident,
     is_demo_journal,
     is_demo_mail,
+    list_host_down_incidents,
     run_demo,
     run_demo_host,
     run_demo_network,
@@ -302,6 +303,7 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
     recent = db.query(Incident).order_by(Incident.id.desc()).limit(8).all()
     journal_error = error_banner_entries(db, getattr(user, "journal_error_ack_id", 0), limit=5)
     journal_recent = list_entries(db, limit=8)
+    down_incidents = list_host_down_incidents(db)
     return render(
         request,
         "dashboard.html",
@@ -311,6 +313,7 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
         recent=recent,
         journal_error=journal_error,
         journal_recent=journal_recent,
+        down_incidents=down_incidents,
     )
 
 
@@ -505,6 +508,7 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         snmp_enabled=settings.snmp_enabled,
         can_remove=can(user, "write_assets") and not delete_blocked(item),
         remove_blocked=delete_blocked(item) if can(user, "write_assets") else "",
+        reachability_snapshot=reachability_snapshot,
     )
 
 

@@ -8,7 +8,15 @@
 <h1>{{ asset.hostname }}</h1>
 <dl class="kv">
   <dt>Asset ID</dt><dd>{{ asset.asset_id }}</dd>
-  <dt>IP</dt><dd>{{ asset.ip }}</dd>
+  <dt>IP</dt>
+  <dd>
+    {{ asset.ip or "—" }}
+    {% set r = reachability_snapshot(asset) %}
+    <span class="reach-badges" data-asset-reach="{{ asset.asset_id }}">
+      <span class="reach-dot ping {{ r.ping }}" title="Ping: {{ r.ping_detail }}">Ping</span>
+      <span class="reach-dot exporter {{ r.exporter }}" title="{{ r.exporter_label }}: {{ r.exporter_detail }}">{{ r.exporter_label }}</span>
+    </span>
+  </dd>
   <dt>Type</dt><dd>{{ asset.type }}</dd>
   <dt>Environment</dt><dd>{{ asset.environment }}</dd>
   <dt>Status</dt><dd><span class="pill {{ asset.status }}">{{ asset.status }}</span></dd>

@@ -208,21 +208,23 @@ table tbody tr:hover td { background: var(--row-hover); }
 }
 .asset-form-actions { margin: 0.75rem 0 1rem; flex-wrap: wrap; }
 .reach-legend { margin: 0 0 0.75rem; }
-.reach-badges { display: inline-flex; gap: 0.25rem; margin-left: 0.4rem; vertical-align: middle; }
+.reach-badges { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; margin-left: 0.4rem; vertical-align: middle; }
+.asset-table .reach-badges { margin-left: 0; }
 .reach-dot {
   display: inline-block;
-  min-width: 2.3rem;
+  min-width: 2.6rem;
   text-align: center;
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 0.08rem 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.14rem 0.5rem;
   border-radius: 999px;
+  border: 1px solid var(--warn);
   background: var(--pill-warn-bg);
   color: var(--pill-warn);
 }
-.reach-dot.green { background: var(--pill-ok-bg); color: var(--pill-ok); }
-.reach-dot.yellow { background: var(--pill-warn-bg); color: var(--pill-warn); }
-.reach-dot.red { background: var(--pill-crit-bg); color: var(--pill-crit); }
+.reach-dot.green { background: var(--pill-ok-bg); color: var(--pill-ok); border-color: var(--ok); }
+.reach-dot.yellow { background: var(--pill-warn-bg); color: var(--pill-warn); border-color: var(--warn); }
+.reach-dot.red { background: var(--pill-crit-bg); color: var(--pill-crit); border-color: var(--crit); }
 .pill { display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px; background: var(--pill); font-size: 0.8rem; }
 .pill.healthy, .pill.ok { background: var(--pill-ok-bg); color: var(--pill-ok); }
 .pill.warning, .pill.warn { background: var(--pill-warn-bg); color: var(--pill-warn); }
@@ -240,6 +242,13 @@ table tbody tr:hover td { background: var(--row-hover); }
 .banner strong { color: var(--warn); }
 .banner-ack { margin-left: 0.65rem; }
 .banner-ack button { padding: 0.28rem 0.75rem; }
+.banner.banner-crit {
+  background: var(--pill-crit-bg);
+  border-color: var(--crit);
+}
+.banner.banner-crit strong { color: var(--crit); }
+.banner-list { margin: 0.45rem 0 0; padding-left: 1.2rem; }
+.banner-list li { margin: 0.2rem 0; }
 .row-actions { display: flex; gap: 0.4rem; align-items: center; }
 .user-actions { margin-top: 0.75rem; gap: 0.75rem; flex-wrap: wrap; }
 .user-actions button { width: auto; flex: 0 0 auto; }

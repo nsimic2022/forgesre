@@ -6,12 +6,13 @@
 <div class="banner">{{ notice }}</div>
 {% endif %}
 <p class="muted reach-legend">
-  After IP:
-  <span class="reach-dot green">Ping</span> ICMP ok ·
+  <strong>Ping / comms</strong> pills (green / yellow / red):
+  <span class="reach-dot green">Ping</span> online ·
   <span class="reach-dot yellow">Ping</span> not probed yet / skipped ·
   <span class="reach-dot red">Ping</span> no reply.
-  Same colors for <strong>:9100</strong> (node_exporter), <strong>:9182</strong> (windows_exporter), and <strong>SNMP</strong> (UDP/161).
-  The table loads immediately with last-known colors; probes refresh in the background.
+  Same colors for communication:
+  <strong>:9100</strong> (node_exporter), <strong>:9182</strong> (windows_exporter), and <strong>SNMP</strong> (UDP/161).
+  Last-known colors on first paint; <code>GET /api/v1/assets/reachability</code> refreshes in the background. Viewers can see status.
 </p>
 <div class="table-scroll">
 <table class="asset-table" data-asset-reachability>
@@ -20,6 +21,7 @@
       <th>Asset ID</th>
       <th>Hostname</th>
       <th>IP</th>
+      <th>Ping / comms</th>
       <th>Owner</th>
       <th>Contact</th>
       <th>Type</th>
@@ -34,8 +36,8 @@
     <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}">
       <td><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
       <td>{{ asset.hostname }}</td>
+      <td>{{ asset.ip or "—" }}</td>
       <td>
-        {{ asset.ip or "—" }}
         {% set r = reachability_snapshot(asset) %}
         <span class="reach-badges" data-asset-reach="{{ asset.asset_id }}">
           <span class="reach-dot ping {{ r.ping }}" title="Ping: {{ r.ping_detail }}">Ping</span>
