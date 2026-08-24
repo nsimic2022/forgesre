@@ -7,9 +7,10 @@
   <script>
     (function () {
       var key = "forgesre-theme";
-      var allowed = { light: 1, dark: 1, "high-contrast": 1 };
+      var allowed = { light: 1, dark: 1, system: 1 };
       var theme = "light";
       try { theme = localStorage.getItem(key) || "light"; } catch (e) {}
+      if (theme === "high-contrast") theme = "dark";
       if (!allowed[theme]) theme = "light";
       document.documentElement.setAttribute("data-theme", theme);
     })();
@@ -22,7 +23,7 @@
   <button type="button" class="theme-toggle" data-theme-toggle aria-label="Theme">
     <span class="theme-label theme-label-light">Light</span>
     <span class="theme-label theme-label-dark">Dark</span>
-    <span class="theme-label theme-label-contrast">Contrast</span>
+    <span class="theme-label theme-label-system">System</span>
   </button>
   {%- endmacro %}
   {% if user %}

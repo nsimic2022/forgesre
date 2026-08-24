@@ -1,14 +1,18 @@
-const THEMES = ["light", "dark", "high-contrast"];
-const THEME_LABELS = { light: "Light", dark: "Dark", "high-contrast": "Contrast" };
+const THEMES = ["light", "dark", "system"];
+const THEME_LABELS = { light: "Light", dark: "Dark", system: "System" };
 const THEME_KEY = "forgesre-theme";
 
-function currentTheme() {
-  const theme = document.documentElement.getAttribute("data-theme");
+function normalizeTheme(theme) {
+  if (theme === "high-contrast") return "dark";
   return THEMES.includes(theme) ? theme : "light";
 }
 
+function currentTheme() {
+  return normalizeTheme(document.documentElement.getAttribute("data-theme"));
+}
+
 function applyTheme(theme) {
-  const next = THEMES.includes(theme) ? theme : "light";
+  const next = normalizeTheme(theme);
   document.documentElement.setAttribute("data-theme", next);
   try {
     localStorage.setItem(THEME_KEY, next);

@@ -76,7 +76,7 @@ Explicit `Linux Server` / `Windows Server` still default `:9100` / `:9182` witho
 
 These already work on `main`. Do not “fix” them unless N asks.
 
-- Theme is **manual**. Default is **light**. It does not follow the OS. Persist with `forgesre-theme`.
+- Theme toggle cycles **light → dark → system**. Default is **light**. The left nav is a **constant dark shell**; only the main pane changes. **System** follows OS `prefers-color-scheme` for the content area. Persist with `forgesre-theme`. Stored `high-contrast` is treated as **dark**. `/static/app.css` is not cache-busted — hard-refresh after CSS changes.
 - Dashboard demos are **one** top-right button + a closeable panel. Do not put two always-visible demo forms back in the monitoring column.
 - Demo rows stay visible; they are **labeled DEMO**, not hidden. `./forgesre ping` skips `forge-demo-*` unless `--demo` or the id is passed.
 - Incident ids look like `INC-0134_16.08.2026_09:13`. Older `INC-000012` rows stay valid.
@@ -110,7 +110,7 @@ Do not start these unless N asks:
 - Do **not** change the default `./forgesre fetch-llm` URL from Qwen2.5-14B-Instruct Q4_K_M to 4B unless N asks.
 - Do **not** enable Compose profile `mailbox` by default.
 - Do **not** put a GGUF (or any model weights) in git.
-- Do **not** add React, Tailwind, Bootstrap, or a new icon pack. Do **not** follow the OS theme.
+- Do **not** add React, Tailwind, Bootstrap, PatternFly npm, or a new icon pack. OS theme is **system** mode for the content pane only; the sidebar stays a constant dark shell.
 - Do **not** fake a live Windows scrape or SNMP walk in the demo panel.
 
 ---

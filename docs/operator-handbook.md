@@ -118,6 +118,8 @@ Login session lasts **12 hours** (httponly cookie).
 
 ## 4. Screen map
 
+Left nav is a constant dark shell (does not follow the theme). The control at the bottom cycles **Light / Dark / System**; System follows the OS for the main pane only. After a CSS change, hard-refresh so `/static/app.css` is not served from cache.
+
 | Menu | URL | What you do there |
 |---|---|---|
 | Dashboard | `/` | Counts, doctor lights, pending discovery banner (analyst+), **Run demo** (admin, top right — Linux / Windows / network lab scenarios), recent journal reports (analyst+) |
