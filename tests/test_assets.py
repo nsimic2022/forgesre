@@ -232,6 +232,7 @@ def test_assets_list_shows_edit_clone_remove():
     assert b"Add asset" in page.content
     assert b">Edit<" in page.content
     assert b">Clone<" in page.content
+    assert b">Verify<" in page.content
     assert b">Remove<" in page.content
     assert b'name="scrape_address"' in page.content
     assert b"?edit=" in page.content
@@ -242,6 +243,8 @@ def test_assets_list_shows_edit_clone_remove():
     assert listed.status_code == 200
     assert b"Edit asset" in listed.content
     assert b'name="hostname"' in listed.content
+    assert b">Verify<" in listed.content
+    assert b"/assets/forge-demo-01/verify" in listed.content
     clone_page = client.get("/assets?clone=forge-demo-01")
     assert clone_page.status_code == 200
     assert b"Clone asset" in clone_page.content
@@ -270,11 +273,15 @@ def test_viewer_cannot_see_asset_write_actions():
     page = client.get("/assets")
     assert b"Add asset" not in page.content
     assert b">Remove<" not in page.content
+    assert b">Remove<" not in page.content
+    assert b">Verify<" not in page.content
     assert b"Ping / comms" in page.content
     assert b"reach-dot ping" in page.content
     assert b">Ping<" in page.content
     blocked = client.post("/assets/forge-demo-01/delete", follow_redirects=False)
     assert blocked.status_code == 403
+    verify_blocked = client.get("/assets/forge-demo-01/verify", follow_redirects=False)
+    assert verify_blocked.status_code == 403
     db.close()
 
 

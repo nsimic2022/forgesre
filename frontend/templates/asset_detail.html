@@ -54,6 +54,7 @@
   <div class="row-actions asset-form-actions">
     <a class="button" href="/assets?edit={{ asset.asset_id }}">Edit</a>
     <a class="button" href="/assets?clone={{ asset.asset_id }}">Clone</a>
+    <a class="button" href="/assets/{{ asset.asset_id }}/verify">Verify</a>
     <form method="post" action="/assets/{{ asset.asset_id }}/detect" class="inline">
       <button type="submit" class="secondary">Detect OS / scrape port</button>
     </form>

@@ -2,7 +2,9 @@
 
 `./forgesre doctor` is the short health light (same as **System Health** in the UI).
 
-`./forgesre test` is the **long verification**. It probes host, files, Compose, HTTP endpoints, login, product APIs, email YAML, optional LLM/mailbox, and recent Core log errors. It writes a Markdown table plus JSON so you can keep a record of what works and how it was tested.
+`./forgesre test` is the **long verification of the appliance**. It probes host, files, Compose, HTTP endpoints, login, product APIs, email YAML, optional LLM/mailbox, and recent Core log errors. It writes a Markdown table plus JSON so you can keep a record of what works and how it was tested.
+
+Live **inventory** communication is a different command: **`./forgesre verify`** (Assets → Verify). That is ICMP / exporter or SNMP → Prometheus `up`, not this appliance report. See [`cli.md`](cli.md) § Verify.
 
 ```bash
 ./forgesre test

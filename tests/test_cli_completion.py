@@ -39,6 +39,8 @@ def test_tab_completes_all_cli_commands_from_prefix():
     assert "ping" in pi.split()
     pr = _complete(["./forgesre", "pr"], 1)
     assert "probe" in pr.split()
+    ve = _complete(["./forgesre", "ve"], 1)
+    assert "verify" in ve.split()
 
 
 def test_tab_after_logs_completes_snmp_exporter():
@@ -74,12 +76,20 @@ def test_cli_help_documents_completion_and_tab():
     assert "test" in overview
     assert "ping" in overview
     assert "probe" in overview
+    assert "verify" in overview
     ping_help = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "ping"], text=True)
     assert "9182" in ping_help
     assert "9100" in ping_help
     assert "ICMP" in ping_help
     probe_help = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "probe"], text=True)
     assert "ping" in probe_help
+    verify_help = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "verify"], text=True)
+    assert "not ./forgesre test" in verify_help.lower()
+    assert "9100" in verify_help
+    assert "9182" in verify_help
+    assert "SKIP" in verify_help
+    help_ve = _complete(["./forgesre", "help", "ve"], 2)
+    assert "verify" in help_ve.split()
     assert "quit" in overview
     assert "completion" in overview
     shell = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "shell"], text=True)

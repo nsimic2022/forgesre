@@ -253,11 +253,12 @@ Who: **analyst**, engineer, or admin (`write_assets`).
 2. Hostname (required), IP, type (**Auto (detect exporter)** is the default — or `Linux Server` / `Windows Server` / `Network device` / `Web/appliance`), environment, owner/team, **contact name, owner email, owner phone**, optional **scrape address** (`ip:9100` or `ip:9182`), notes. No extra ticketing / Zabbix / IMAP fields — those are not used.
 3. **Save**. You land on the asset page (a banner explains what detect found).
 
-**Edit / Clone / Remove** are on the list (and the asset page). Same permission as Add (`write_assets`: analyst, engineer, admin). Viewers only read.
+**Edit / Clone / Verify / Remove** are on the list (and the asset page). Same permission as Add (`write_assets`: analyst, engineer, admin). Viewers only read.
 
 - **Edit** opens the same Add form filled in (`/assets?edit=<id>`). Hostname, type (including Auto), IP, scrape address, owner/contact, notes, environment. `asset_id` stays (Prometheus `asset=` label and history). HTTP SD is live from this table — the next Prometheus scrape drops or rewrites the target. Core’s static demo job is not this list.
 - **Clone** copies into the same form with a **new** hostname/id. Tweak before Save. Duplicate hostname or IP is rejected. NetBox id is not copied. If the source is `forge-demo-*`, the suggested name is `copy-…` (a real asset that **can** be scraped). Keep a `forge-demo-*` name only if you want another lab-only row.
 - **Remove** asks for confirm. The row leaves inventory and HTTP/SNMP SD. **Incidents stay** in History with the asset link cleared (not cascade-deleted). Discovery candidates for that IP go back to **new**. Seeded `forge-demo-*` hosts cannot be removed (Dashboard demos use them).
+- **Verify** runs the live path for that row (same as `./forgesre verify <id>`): ping, exporter port or SNMP, Prometheus `up`, metric family (`node_` / `windows_` / SNMP), last RCA vs PromQL. ForgeAI is listed only if enabled. Missing exporter = SKIP/FAIL with a reason, not a fake green host. Demo `forge-demo-*` is labeled lab. **Verify all** is on the Assets list. This is not `./forgesre test`.
 
 What Core does:
 
@@ -282,7 +283,7 @@ The Assets table shows **Ping** and **:9100 / :9182 / SNMP** color dots after th
 
 On the asset page, **Detect OS / scrape port** re-runs the same probe and fills type + scrape. You can override afterwards.
 
-API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type` (`Auto (detect exporter)` to probe), `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Detect-only: `GET /api/v1/detect-exporter?ip=`. List ping/exporter colors: `GET /api/v1/assets/reachability` (async; the HTML list is last-known). Update: `POST /api/v1/assets/{asset_id}` (hostname, type, IP, scrape, contacts). Clone: `POST /api/v1/assets/{id}/clone`. Delete: `POST /api/v1/assets/{id}/delete`.
+API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type` (`Auto (detect exporter)` to probe), `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Detect-only: `GET /api/v1/detect-exporter?ip=`. List ping/exporter colors: `GET /api/v1/assets/reachability` (async; the HTML list is last-known). Verify live path: `GET /api/v1/assets/{id}/verify` and `GET /api/v1/verify` (`write_assets`). Update: `POST /api/v1/assets/{asset_id}` (hostname, type, IP, scrape, contacts). Clone: `POST /api/v1/assets/{id}/clone`. Delete: `POST /api/v1/assets/{id}/delete`.
 
 Similar-incident history on the asset page groups past incidents by alert/title (count, open count, last seen). Seed already puts a closed HighCPU on `forge-demo-01` so this is visible after install.
 
@@ -379,6 +380,8 @@ ICMP ping from the appliance only proves L3. ForgeSRE "seeing" the host needs th
 ```bash
 ./forgesre ping                # all real assets
 ./forgesre ping win-01         # one row
+./forgesre verify              # live path through Prometheus (not ./forgesre test)
+./forgesre verify win-01
 ```
 
 | ICMP | METRICS | What it means |
@@ -783,10 +786,13 @@ Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critica
 ./forgesre help quit            # leave the forgesre> prompt
 ./forgesre help snmp            # one command
 ./forgesre help ping            # ICMP vs /metrics
+./forgesre help verify          # live path vs ./forgesre test
 ./forgesre help tls             # optional HTTPS
 ./forgesre doctor               # short HEALTHY / DEGRADED
 ./forgesre ping                 # ICMP + exporter /metrics (alias: probe)
 ./forgesre ping win-01
+./forgesre verify               # inventory → ICMP/exporter/SNMP → Prometheus
+./forgesre verify win-01
 ./forgesre test                 # detailed report → data/reports/
 ./forgesre status               # compose ps
 ./forgesre logs core

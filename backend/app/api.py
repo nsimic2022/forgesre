@@ -43,9 +43,11 @@ from app.inventory import (
     sync_netbox,
     update_asset,
 )
-from app.asset_probe import refresh_reachability, reachability_snapshot
+from app.asset_probe import apply_probe_to_asset, refresh_reachability, reachability_snapshot
+from app.asset_verify import select_assets as verify_select_assets
+from app.asset_verify import verify_target
 from app.exporter_detect import detect_exporter, is_auto_asset_type
-from app.seed import seed
+from app.seed import is_demo_asset_id, seed
 from app.services import (
     host_down_public,
     ingest_alertmanager,
@@ -218,6 +220,148 @@ def assets_reachability(
     payload = refresh_reachability(rows)
     db.commit()
     return payload
+
+
+
+def _latest_rca(db: Session, asset: Asset) -> dict[str, Any] | None:
+    incident = (
+        db.query(Incident)
+        .filter(Incident.asset_id == asset.id)
+        .order_by(Incident.id.desc())
+        .first()
+    )
+    if incident is None:
+        return None
+    latest = incident.investigations[-1] if incident.investigations else None
+    if latest is None:
+        return None
+    result = latest.result if isinstance(latest.result, dict) else {}
+    facts = result.get("facts") if isinstance(result, dict) else None
+    if not facts:
+        facts = [{"text": line} for line in (latest.evidence or []) if line]
+    return {
+        "incident": incident.number,
+        "summary": latest.summary or "",
+        "likely_cause": latest.likely_cause or "",
+        "provider": latest.provider or "",
+        "facts": facts or [],
+    }
+
+
+def _sd_membership(db: Session) -> tuple[set[str], set[str]]:
+    http_ids = {(row.get("labels") or {}).get("asset") for row in sd_targets(db)}
+    snmp_ids = {(row.get("labels") or {}).get("asset") for row in sd_snmp_targets(db)}
+    http_ids.discard(None)
+    snmp_ids.discard(None)
+    return {str(item) for item in http_ids}, {str(item) for item in snmp_ids}
+
+
+def _live_metric_values(asset: Asset) -> dict[str, Any]:
+    from app.services import query_prometheus
+
+    live = query_prometheus(asset)
+    return {
+        key: value
+        for key, value in live.items()
+        if key not in {"queries", "error"} and not isinstance(value, (dict, list))
+    }
+
+
+def run_asset_verify(db: Session, asset: Asset, *, timeout: float = 2.0) -> dict[str, Any]:
+    from app.services import query_prometheus_expr
+
+    item = _asset(asset)
+    http_ids, snmp_ids = _sd_membership(db)
+    report = verify_target(
+        item,
+        timeout=timeout,
+        in_http_sd=asset.asset_id in http_ids,
+        in_snmp_sd=asset.asset_id in snmp_ids,
+        query_fn=query_prometheus_expr,
+        rca=_latest_rca(db, asset),
+        live_metrics=_live_metric_values(asset),
+        ai_enabled=bool(settings.ai_enabled and settings.llm_url),
+    )
+    if report.probe is not None:
+        apply_probe_to_asset(asset, report.probe)
+        db.commit()
+    return report.as_dict()
+
+
+@router.get("/verify")
+def verify_assets_api(
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_assets")),
+    selector: str = "",
+    include_demo: bool = False,
+    timeout: float = 2.0,
+) -> dict[str, Any]:
+    """Live communication verify (not appliance ./forgesre test). write_assets same as Add/Edit."""
+    del user
+    timeout = min(8.0, max(0.4, float(timeout or 2.0)))
+    rows = [_asset(item) for item in db.query(Asset).order_by(Asset.hostname).all()]
+    chosen, skipped_demo = verify_select_assets(
+        rows,
+        selector,
+        include_demo=include_demo,
+        is_demo=lambda row: is_demo_asset_id(row.get("asset_id") or row.get("hostname")),
+    )
+    results: list[dict[str, Any]] = []
+    models = {item.asset_id: item for item in db.query(Asset).all()}
+    for row in chosen:
+        asset = models.get(str(row.get("asset_id") or ""))
+        if asset is None:
+            continue
+        results.append(run_asset_verify(db, asset, timeout=timeout))
+    return {"results": results, "skipped_demo": skipped_demo, "selector": selector}
+
+
+@router.get("/verify-support")
+def verify_support_api(
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_assets")),
+) -> dict[str, Any]:
+    """Inventory + SD + last RCA + live PromQL values. CLI overlays host ICMP/exporter probes."""
+    del user
+    http_ids, snmp_ids = _sd_membership(db)
+    payload: dict[str, Any] = {}
+    for asset in db.query(Asset).order_by(Asset.hostname).all():
+        payload[asset.asset_id] = {
+            "asset": _asset(asset),
+            "in_http_sd": asset.asset_id in http_ids,
+            "in_snmp_sd": asset.asset_id in snmp_ids,
+            "rca": _latest_rca(db, asset),
+            "live_metrics": _live_metric_values(asset),
+        }
+    return {
+        "assets": payload,
+        "ai_enabled": bool(settings.ai_enabled and settings.llm_url),
+        "prometheus_url": settings.prometheus_url,
+    }
+
+
+@router.get("/assets/{asset_id}/verify")
+def verify_one_asset_api(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_assets")),
+    timeout: float = 2.0,
+) -> dict[str, Any]:
+    item = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    timeout = min(8.0, max(0.4, float(timeout or 2.0)))
+    return run_asset_verify(db, item, timeout=timeout)
+
+
+@router.post("/assets/{asset_id}/verify")
+def verify_one_asset_post(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_assets")),
+    timeout: float = 2.0,
+) -> dict[str, Any]:
+    return verify_one_asset_api(asset_id, db, user, timeout)
 
 
 @router.get("/assets/{asset_id}")

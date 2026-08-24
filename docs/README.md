@@ -8,7 +8,7 @@ How to install and run ForgeSRE:
 
 - [Install and config (Ubuntu / vCenter)](install-config.md)
 - [Operator handbook (users, servers, playrules, incidents, email)](operator-handbook.md)
-- [Verify the appliance](verify.md) (`./forgesre doctor` vs `./forgesre test`)
+- [Verify the appliance](verify.md) (`./forgesre doctor` vs `./forgesre test`; inventory live path is `./forgesre verify`)
 - [Operator CLI (everyday + advanced)](cli.md)
 - [Local LLM (ForgeAI / llama.cpp)](llm.md)
 

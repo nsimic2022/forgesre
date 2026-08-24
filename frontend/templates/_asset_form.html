@@ -43,6 +43,7 @@
 <div class="wide row-actions asset-form-actions">
   <button type="submit" form="asset-form">{% if form_mode == 'clone' %}Save copy{% else %}Save{% endif %}</button>
   {% if form_mode == "edit" %}
+  <a class="button" href="/assets/{{ selected.asset_id }}/verify">Verify</a>
   <form method="post" action="/assets/{{ selected.asset_id }}/detect" class="inline">
     <button type="submit" class="secondary">Detect OS / scrape port</button>
   </form>

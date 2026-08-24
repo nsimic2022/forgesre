@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Verify {{ report.hostname or report.asset_id }} · ForgeSRE{% endblock %}
+{% block content %}
+<p><a href="/assets">← Assets</a> · <a href="/assets/{{ report.asset_id }}">{{ report.hostname or report.asset_id }}</a></p>
+<h1>Verify {{ report.hostname or report.asset_id }}</h1>
+<p class="muted">Live communication from this appliance: inventory → ICMP / exporter or SNMP → Prometheus <code>up</code> → last RCA vs PromQL. This is <strong>not</strong> <code>./forgesre test</code> (appliance health). Missing exporter or no Prom target is SKIP/FAIL with a reason — never a fake green host.</p>
+{% if report.lab %}
+<div class="banner">DEMO lab host (<code>forge-demo-*</code>). Not proof of a real scrape. Seeded dashboard demos stay labeled lab.</div>
+{% endif %}
+<p>
+  <span class="verify-mark {{ report.overall|lower }}">{{ report.overall }}</span>
+  {{ report.overall_reason }}
+</p>
+
+<h2>Inventory</h2>
+<dl class="kv">
+  <dt>Asset ID</dt><dd>{{ report.asset_id }}</dd>
+  <dt>Hostname</dt><dd>{{ report.hostname or "—" }}</dd>
+  <dt>IP</dt><dd>{{ report.ip or "—" }}</dd>
+  <dt>Type</dt><dd>{{ report.type or "—" }}</dd>
+  <dt>Profile</dt><dd>{{ report.monitoring_profile or "—" }}</dd>
+  <dt>Scrape</dt><dd>{{ report.scrape_address or "—" }}</dd>
+  <dt>Environment</dt><dd>{{ report.environment or "—" }}</dd>
+  <dt>Status</dt><dd>{{ report.status or "—" }}</dd>
+  <dt>Owner</dt><dd>{{ report.owner or "—" }}</dd>
+  <dt>Contact</dt><dd>{{ report.contact_name or "—" }}</dd>
+  <dt>Email</dt><dd>{{ report.owner_email or "—" }}</dd>
+  <dt>Phone</dt><dd>{{ report.owner_phone or "—" }}</dd>
+  <dt>Source</dt><dd>{{ report.source or "—" }}</dd>
+  <dt>Notes</dt><dd>{{ report.notes or "—" }}</dd>
+</dl>
+
+<h2>Class</h2>
+<p><code>{{ report.class }}</code> — {{ report.class_reason }}</p>
+<p class="muted">Universal classes: Linux <code>:9100</code> <code>node_</code>, Windows <code>:9182</code> <code>windows_</code>, Network SNMP, Unknown SKIP.</p>
+
+<h2>Live probes</h2>
+<table class="verify-table">
+  <thead>
+    <tr><th>Check</th><th>Result</th><th>Detail</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Ping (ICMP)</td><td><span class="verify-mark {{ report.icmp.mark|lower }}">{{ report.icmp.mark }}</span></td><td>{{ report.icmp.detail }}</td></tr>
+    <tr><td>Port / exporter / SNMP</td><td><span class="verify-mark {{ report.port.mark|lower }}">{{ report.port.mark }}</span></td><td>{{ report.port.detail }}</td></tr>
+    <tr><td>Metric family</td><td><span class="verify-mark {{ report.family.mark|lower }}">{{ report.family.mark }}</span></td><td>{{ report.family.detail }}</td></tr>
+    <tr><td>Prometheus <code>up</code></td><td><span class="verify-mark {{ report.prom.mark|lower }}">{{ report.prom.mark }}</span></td><td>{{ report.prom.detail }}</td></tr>
+    <tr><td>Last RCA vs PromQL</td><td><span class="verify-mark {{ report.rca.mark|lower }}">{{ report.rca.mark }}</span></td><td>{{ report.rca.detail }}</td></tr>
+    <tr><td>LLM (ForgeAI)</td><td><span class="verify-mark {{ report.llm.mark|lower }}">{{ report.llm.mark }}</span></td><td>{{ report.llm.detail }}</td></tr>
+  </tbody>
+</table>
+{% if report.hint %}
+<p class="muted">{{ report.hint }}</p>
+{% endif %}
+<p class="muted">CLI: <code>./forgesre verify {{ report.asset_id }}</code></p>
+{% endblock %}

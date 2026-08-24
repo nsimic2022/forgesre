@@ -20,6 +20,12 @@ from app.asset_probe import (
     probe_target,
     select_assets,
 )
+from app.asset_verify import (
+    format_verify_report,
+    urllib_prom_query,
+    verify_exit,
+    verify_target,
+)
 from app.cli_view import color_enabled, format_board, format_detail, format_history_rows
 from app.seed import is_demo_asset_id
 
@@ -309,10 +315,111 @@ def cmd_ping(port: str, args: list[str]) -> None:
     raise SystemExit(overall_exit(results))
 
 
+
+def cmd_verify(port: str, args: list[str]) -> None:
+    selector = ""
+    timeout = DEFAULT_TIMEOUT
+    include_demo = False
+    i = 0
+    while i < len(args):
+        item = args[i]
+        if item in {"--timeout", "-t"} and i + 1 < len(args):
+            try:
+                timeout = float(args[i + 1])
+            except ValueError:
+                raise SystemExit(
+                    "usage: ./forgesre verify [--timeout seconds] [--demo] [asset-id-or-name]"
+                )
+            if timeout <= 0:
+                raise SystemExit("--timeout must be > 0")
+            i += 2
+            continue
+        if item in {"--demo", "--include-demo"}:
+            include_demo = True
+            i += 1
+            continue
+        if item in {"-h", "--help"}:
+            raise SystemExit(
+                "usage: ./forgesre verify [--timeout seconds] [--demo] [asset-id-or-name]"
+            )
+        if item.startswith("-"):
+            raise SystemExit(f"unknown flag: {item}")
+        selector = item
+        i += 1
+
+    jar, _me = ensure_jar(port)
+    try:
+        rows = get_json(port, jar, "/api/v1/assets")
+        try:
+            support = get_json(port, jar, "/api/v1/verify-support")
+        except (subprocess.CalledProcessError, json.JSONDecodeError, OSError):
+            support = {"assets": {}, "ai_enabled": False, "prometheus_url": "http://127.0.0.1:9090"}
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as exc:
+        raise SystemExit(f"could not list assets: {exc}") from exc
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+    if not isinstance(rows, list):
+        rows = []
+    chosen, skipped_demo = select_assets(
+        rows,
+        selector,
+        include_demo=include_demo,
+        is_demo=_is_demo_row,
+    )
+    if selector and not chosen:
+        raise SystemExit(f"no asset matching {selector!r}. Try an asset id, hostname, or IP.")
+    if not chosen:
+        print("No assets to verify.")
+        if skipped_demo:
+            print(f"skipped {skipped_demo} demo lab asset(s). Include labeled DEMO with: ./forgesre verify --demo")
+        print("Add a host under Assets, then rerun ./forgesre verify")
+        raise SystemExit(0)
+
+    contexts = support.get("assets") if isinstance(support, dict) else {}
+    if not isinstance(contexts, dict):
+        contexts = {}
+    prom_url = str((support or {}).get("prometheus_url") or "http://127.0.0.1:9090")
+    ai_enabled = bool((support or {}).get("ai_enabled"))
+
+    def query_fn(expr: str) -> Any:
+        return urllib_prom_query(expr, prom_url)
+
+    results = []
+    for item in chosen:
+        ctx = contexts.get(str(item.get("asset_id") or "")) or {}
+        merged = dict(item)
+        extra_asset = ctx.get("asset") if isinstance(ctx, dict) else None
+        if isinstance(extra_asset, dict):
+            merged.update(extra_asset)
+        results.append(
+            verify_target(
+                merged,
+                timeout=timeout,
+                in_http_sd=bool(ctx.get("in_http_sd")),
+                in_snmp_sd=bool(ctx.get("in_snmp_sd")),
+                query_fn=query_fn,
+                rca=ctx.get("rca") if isinstance(ctx, dict) else None,
+                live_metrics=ctx.get("live_metrics") if isinstance(ctx, dict) else None,
+                ai_enabled=ai_enabled,
+            )
+        )
+    sys.stdout.write(
+        format_verify_report(
+            results,
+            skipped_demo=skipped_demo,
+            color=color_enabled(),
+            detail=bool(selector),
+        )
+    )
+    raise SystemExit(verify_exit(results))
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = list(argv if argv is not None else sys.argv[1:])
     if len(argv) < 2:
-        raise SystemExit("usage: cli_ops <port> <incidents|history|whoami|login|logout|numbers|ping|probe> [args]")
+        raise SystemExit("usage: cli_ops <port> <incidents|history|whoami|login|logout|numbers|ping|probe|verify> [args]")
     port, command, *rest = argv
     if command == "incidents":
         cmd_incidents(port, rest)
@@ -322,6 +429,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_numbers(port)
     elif command in {"ping", "probe"}:
         cmd_ping(port, rest)
+    elif command == "verify":
+        cmd_verify(port, rest)
     elif command == "whoami":
         cmd_whoami(port)
     elif command == "logout":
