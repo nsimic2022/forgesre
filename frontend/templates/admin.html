@@ -150,7 +150,7 @@
 <p class="muted">
   Import only <strong>stores</strong> a tar.gz under <code>data/backups/backup_…/</code>.
   Restore overwrites the live database (users, incidents, playbooks). It does <strong>not</strong> run unless you tick the box and type <code>RESTORE</code>.
-  Preferred after a crash or when migrating: SSH, stop Core, <code>./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes</code>, then <code>./forgesre update</code>.
+  Preferred after a crash or when migrating: SSH, stop Core, <code>./forgesre restore</code> (pick a number) or <code>./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes</code>, then <code>./forgesre update</code>.
 </p>
 <form method="post" action="/admin/backups/import" enctype="multipart/form-data" class="row-actions backup-actions">
   <input type="file" name="archive" accept=".tar.gz,application/gzip" required>
@@ -158,10 +158,10 @@
 </form>
 {% if backups %}
 <form method="post" action="/admin/backups/restore" class="stack backup-restore" onsubmit="return confirm('This overwrites the live database. Continue only if you typed RESTORE and you can recover from another copy.');">
-  <label>Archive
+  <label>Backup folder (newest first)
     <select name="name" required>
       {% for b in backups %}
-      <option value="{{ b.name }}">{{ b.name }}</option>
+      <option value="{{ b.name }}">{{ b.label }}</option>
       {% endfor %}
     </select>
   </label>

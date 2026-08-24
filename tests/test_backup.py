@@ -15,6 +15,7 @@ from app.backup import (
     list_archives,
     restore_archive,
     resolve_archive,
+    resolve_cli_archive,
     save_upload,
 )
 from app.db import Base, SessionLocal, engine
@@ -167,6 +168,16 @@ def test_admin_backup_buttons_before_appliance_shell(tmp_path, monkeypatch):
     assert text.index("Platform backup") < text.index("Appliance shell")
     assert text.index(">Backup<") < text.index("Appliance shell")
     assert "web PTY" in text.lower() or "no terminal in this browser" in text.lower()
+    created = client.post("/admin/backups", data={}, follow_redirects=False)
+    assert created.status_code == 303
+    name = created.headers["location"].split("backup=", 1)[1]
+    page = client.get("/admin")
+    text = page.text
+    assert 'select name="name"' in text
+    assert "Backup folder (newest first)" in text
+    assert name in text
+    assert "UTC" in text
+    assert "SECRET_KEY" not in text
     db.close()
 
 
@@ -256,6 +267,8 @@ def test_cli_help_restore_requires_yes():
     assert "--yes" in restore
     assert "docker compose stop core" in restore
     assert "backup_" in restore
+    assert "Pick a number" in restore or "restore 1" in restore
+    assert "./forgesre import" in restore
     backup = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "backup"], text=True)
     assert "--include-models" in backup
     assert "data/backups" in backup
@@ -456,3 +469,136 @@ def test_save_upload_stores_tar_in_run_folder(tmp_path):
     assert (stored.parent / "MANIFEST.txt").is_file()
     assert resolve_archive("backup_20200101T000000Z", lay) == stored
     db.close()
+
+
+def _touch_run(lay: BackupLayout, stamp: str, payload: bytes = b"x" * 40) -> None:
+    folder = lay.backup_dir / f"backup_{stamp}"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / INNER_ARCHIVE).write_bytes(payload)
+
+
+def test_list_archives_newest_first_with_timestamp_labels(tmp_path):
+    lay = _layout(tmp_path)
+    _touch_run(lay, "20200101T000000Z")
+    _touch_run(lay, "20260824T180000Z")
+    listed = list_archives(lay)
+    assert [row["name"] for row in listed] == [
+        "backup_20260824T180000Z",
+        "backup_20200101T000000Z",
+    ]
+    assert listed[0]["label"].startswith("2026-08-24 18:00:00 UTC")
+    assert "backup_20260824T180000Z" in listed[0]["label"]
+    assert "SECRET" not in listed[0]["label"]
+    assert "secrets.env" not in listed[0]["label"]
+    assert resolve_cli_archive("1", rows=listed, layout=lay) == lay.backup_dir / "backup_20260824T180000Z" / INNER_ARCHIVE
+    try:
+        resolve_cli_archive("9", rows=listed, layout=lay)
+        raise AssertionError("out of range should fail")
+    except ValueError:
+        pass
+
+
+def test_cli_restore_without_path_lists_numbered_picker(tmp_path, monkeypatch, capsys):
+    from app import backup as backup_mod
+
+    lay = _layout(tmp_path)
+    _touch_run(lay, "20260824T120000Z")
+    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(lay.backup_dir))
+    rc = backup_mod.main(["restore"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "1." in captured.out
+    assert "backup_20260824T120000Z" in captured.out
+    assert "2026-08-24 12:00:00 UTC" in captured.out
+    assert "Pick a number" in captured.out
+    assert "SECRET_KEY" not in captured.out
+    assert "Traceback" not in captured.err
+
+
+def test_cli_import_alias_lists_same_picker(tmp_path, monkeypatch, capsys):
+    from app import backup as backup_mod
+
+    lay = _layout(tmp_path)
+    _touch_run(lay, "20260824T120000Z")
+    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(lay.backup_dir))
+    rc = backup_mod.main(["import"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "1." in captured.out
+    assert "backup_20260824T120000Z" in captured.out
+
+
+def test_cli_restore_number_prints_plan_without_yes(tmp_path, monkeypatch, capsys):
+    from app import backup as backup_mod
+
+    db = _db()
+    lay = _layout(tmp_path)
+    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(lay.backup_dir))
+    monkeypatch.setenv("FORGESRE_RESTORE_STOP_CORE", "0")
+    create_backup(layout=lay)
+    rc = backup_mod.main(["restore", "1"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Would overwrite" in captured.out
+    assert "--yes" in captured.out
+    db.close()
+
+
+def test_cli_restore_path_still_prints_plan(tmp_path, monkeypatch, capsys):
+    from app import backup as backup_mod
+
+    db = _db()
+    lay = _layout(tmp_path)
+    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(lay.backup_dir))
+    result = create_backup(layout=lay)
+    rc = backup_mod.main(["restore", str(result.path.parent)])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Would overwrite" in captured.out
+    db.close()
+
+
+def test_restore_picker_runs_without_sqlalchemy(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    folder = tmp_path / "backups" / "backup_20260824T120000Z"
+    folder.mkdir(parents=True)
+    (folder / INNER_ARCHIVE).write_bytes(b"x" * 40)
+    blocker = r"""
+import builtins
+import sys
+
+real = builtins.__import__
+
+
+def blocked(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "sqlalchemy" or name.startswith("sqlalchemy."):
+        raise ModuleNotFoundError(name)
+    return real(name, globals, locals, fromlist, level)
+
+
+builtins.__import__ = blocked
+sys.path.insert(0, "backend")
+from app import backup
+
+raise SystemExit(backup.main(["restore"]))
+"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "backend")
+    env["FORGESRE_BACKUP_DIR"] = str(tmp_path / "backups")
+    result = subprocess.run(
+        [sys.executable, "-c", blocker],
+        cwd=str(Path(__file__).resolve().parents[1]),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "1." in result.stdout
+    assert "backup_20260824T120000Z" in result.stdout
+    assert "Traceback" not in result.stderr
+    assert "ModuleNotFoundError" not in result.stderr
+    assert "sqlalchemy" not in result.stderr
+

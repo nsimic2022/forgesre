@@ -41,6 +41,8 @@ def test_tab_completes_all_cli_commands_from_prefix():
     assert "probe" in pr.split()
     ve = _complete(["./forgesre", "ve"], 1)
     assert "verify" in ve.split()
+    im = _complete(["./forgesre", "im"], 1)
+    assert "import" in im.split()
 
 
 def test_tab_after_logs_completes_snmp_exporter():
