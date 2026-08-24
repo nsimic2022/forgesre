@@ -147,7 +147,7 @@ Guided wizard:
 | `--port N` | Core UI/API port (default `8080`) |
 | `--enable-ai yes\|no` | `yes` downloads the GGUF. ForgeRCA still works without it |
 | `--enable-discovery yes\|no` | Default yes |
-| `--discovery-cidrs 10.20.30.0/24,10.10.0.0/24` | TCP 22/80/443/9100/9182 + SNMP GET UDP/161 |
+| `--discovery-cidrs 10.20.30.0/24,10.10.0.0/24` | TCP 22/80/443/9100/9182 + SNMP GET UDP/161 + HTTP /metrics on :9182/:9100 when a host is alive |
 | `--netbox-url URL` | External NetBox only; token goes in secrets |
 | `--offline` | Do not pull images |
 
@@ -305,7 +305,7 @@ notifications:
     # Gmail: smtp.gmail.com  Outlook/M365: smtp.office365.com
 ```
 
-- **Discovery** probes TCP **22 / 80 / 443 / 9100 / 9182** and SNMPv2c GET on **UDP/161**.
+- **Discovery** probes TCP **22 / 80 / 443 / 9100 / 9182** and SNMPv2c GET on **UDP/161**. Alive hosts also get HTTP GET `/metrics` on **:9182** and **:9100** so the default type/port is Windows vs Linux from exporter text, not “always Linux :9100”.
 - **RCA** works with `ai.enabled: false`. Set `ai.enabled: true` only with a local OpenAI-compatible endpoint or a GGUF.
 - Changing `cidrs` needs a Core recreate, not a reinstall.
 - Changing `SNMP_COMMUNITY` needs `./forgesre render-monitoring`.

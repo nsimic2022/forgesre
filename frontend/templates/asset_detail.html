@@ -2,6 +2,9 @@
 {% block title %}{{ asset.hostname }} · ForgeSRE{% endblock %}
 {% block content %}
 <p><a href="/assets">← Assets</a></p>
+{% if request.query_params.get('notice') %}
+<div class="banner">{{ request.query_params.get('notice') }}</div>
+{% endif %}
 <h1>{{ asset.hostname }}</h1>
 <dl class="kv">
   <dt>Asset ID</dt><dd>{{ asset.asset_id }}</dd>
@@ -39,10 +42,25 @@
 {% if can('write_assets') %}
 <section class="card">
   <h2>Edit owner and contacts</h2>
-  <p class="muted">You can change who owns this host after Save. New incidents notify the owner email below. Linux scrape is <code>ip:9100</code> (node_exporter). Windows scrape is <code>ip:9182</code> (windows_exporter).</p>
+  <p class="muted">You can change who owns this host after Save. New incidents notify the owner email below. Default scrape: Linux <code>ip:9100</code> (node_exporter), Windows <code>ip:9182</code> (windows_exporter). Detect probes both from this appliance; ICMP ping is not used for OS.</p>
+  <form method="post" action="/assets/{{ asset.asset_id }}/detect" class="inline">
+    <button type="submit" class="secondary">Detect OS / scrape port</button>
+  </form>
   <form method="post" action="/assets/{{ asset.asset_id }}/update" class="form-grid">
     <label>IP <input name="ip" value="{{ asset.ip }}"></label>
-    <label>Type <input name="type" value="{{ asset.type }}"></label>
+    <label>Type
+      <select name="type">
+        {% set current_type = asset.type or '' %}
+        <option value="Auto (detect exporter)" {% if current_type.startswith('Auto') %}selected{% endif %}>Auto (detect exporter)</option>
+        <option value="Linux Server" {% if current_type == 'Linux Server' %}selected{% endif %}>Linux Server</option>
+        <option value="Windows Server" {% if current_type == 'Windows Server' %}selected{% endif %}>Windows Server</option>
+        <option value="Network device" {% if current_type == 'Network device' %}selected{% endif %}>Network device</option>
+        <option value="Web/appliance" {% if current_type == 'Web/appliance' %}selected{% endif %}>Web/appliance</option>
+        {% if current_type and current_type not in ['Linux Server', 'Windows Server', 'Network device', 'Web/appliance'] and not current_type.startswith('Auto') %}
+        <option value="{{ current_type }}" selected>{{ current_type }}</option>
+        {% endif %}
+      </select>
+    </label>
     <label>Environment <input name="environment" value="{{ asset.environment }}"></label>
     <label>Owner / team <input name="owner" value="{{ asset.owner }}"></label>
     <label>Contact name <input name="contact_name" value="{{ asset.contact_name }}"></label>

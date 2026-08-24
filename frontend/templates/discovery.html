@@ -3,7 +3,12 @@
 {% block content %}
 <h1>Discovery</h1>
 <p class="muted">
-  Semi-automatic TCP probe (ports 22, 80, 443, 161, 9100, 9182). Not nmap.
+  Semi-automatic TCP probe (ports 22, 80, 443, 161, 9100, 9182) plus HTTP GET
+  <code>/metrics</code> on <code>:9182</code> and <code>:9100</code> when a host is alive.
+  <code>windows_</code> metrics → Windows Server <code>:9182</code>.
+  <code>node_</code> metrics → Linux Server <code>:9100</code>.
+  TCP open without exporter text is <strong>not</strong> an OS pick (ICMP ping is not a scrape).
+  Not nmap.
   New hosts wait here until an engineer Approves or Ignores them.
   Mode: <code>{{ discovery_mode }}</code>
   · CIDRs: <code>{{ discovery_cidrs or "none" }}</code>

@@ -15,6 +15,8 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from app.exporter_detect import detect_exporter
+
 LINUX_EXPORTER_PORT = 9100
 WINDOWS_EXPORTER_PORT = 9182
 DEFAULT_TIMEOUT = 2.0
@@ -298,6 +300,22 @@ def hint_for(result: AssetProbe) -> str:
     )
 
 
+def _metrics_from_detect(port: int, family_ok: bool, status: int | None, error: str) -> CheckResult:
+    label = exporter_label(port)
+    if family_ok:
+        return CheckResult("metrics", True, f"{label} :{port}/metrics prometheus text", 0)
+    if status == 200:
+        return CheckResult(
+            "metrics",
+            False,
+            f"{label} :{port}/metrics HTTP 200 (not node_/windows_ metrics)",
+            0,
+        )
+    if status:
+        return CheckResult("metrics", False, f"{label} :{port}/metrics HTTP {status}", 0)
+    return CheckResult("metrics", False, f"{label} :{port}/metrics {error or 'unreachable'}", 0)
+
+
 def probe_target(
     item: dict[str, Any],
     *,
@@ -310,21 +328,37 @@ def probe_target(
     icmp = probe_icmp(host, timeout, runner=ping_runner)
     extra: list[CheckResult] = []
     probe_both = str(item.get("_probe_both") or "") == "1"
+    detect_message = ""
     if kind == "network" and not scrape and not probe_both:
         metrics = CheckResult("metrics", None, "SNMP UDP/161 — ./forgesre snmp", 0)
     elif probe_both and host:
-        linux_m = probe_metrics(host, LINUX_EXPORTER_PORT, timeout, fetcher=metrics_fetcher)
-        win_m = probe_metrics(host, WINDOWS_EXPORTER_PORT, timeout, fetcher=metrics_fetcher)
-        if linux_m.ok:
-            metrics, extra = linux_m, [win_m]
-        elif win_m.ok:
+        detected = detect_exporter(
+            host,
+            hint_type=str(item.get("type") or ""),
+            hint_profile=str(item.get("monitoring_profile") or ""),
+            timeout=timeout,
+            fetcher=metrics_fetcher,
+        )
+        linux_m = _metrics_from_detect(
+            LINUX_EXPORTER_PORT, detected.linux, detected.linux_status, detected.linux_error
+        )
+        win_m = _metrics_from_detect(
+            WINDOWS_EXPORTER_PORT, detected.windows, detected.windows_status, detected.windows_error
+        )
+        if detected.kind == "windows":
             metrics, extra = win_m, [linux_m]
             kind = "windows"
             port = WINDOWS_EXPORTER_PORT
-            scrape = f"{host}:{WINDOWS_EXPORTER_PORT}"
+            scrape = detected.scrape_address or f"{host}:{WINDOWS_EXPORTER_PORT}"
+        elif detected.kind == "linux":
+            metrics, extra = linux_m, [win_m]
+            kind = "linux"
+            port = LINUX_EXPORTER_PORT
+            scrape = detected.scrape_address or f"{host}:{LINUX_EXPORTER_PORT}"
         else:
             metrics, extra = linux_m, [win_m]
             port = port or LINUX_EXPORTER_PORT
+            detect_message = detected.message
     elif not host or port is None:
         metrics = CheckResult("metrics", None, "no scrape port (set scrape_address or type)", 0)
     else:
@@ -353,6 +387,8 @@ def probe_target(
             f":{WINDOWS_EXPORTER_PORT}/metrics worked. Set type to Windows Server and "
             f"scrape_address={host}:{WINDOWS_EXPORTER_PORT}."
         )
+    if detect_message and result.metrics.ok is not True:
+        result.hint = f"{result.asset_id}: {detect_message}"
     return result
 
 

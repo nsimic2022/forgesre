@@ -174,6 +174,20 @@ def test_ad_hoc_ip_probes_both_exporter_ports():
     assert result.kind == "windows"
 
 
+def test_ad_hoc_prefers_windows_family_over_bare_9100():
+    item = ad_hoc_item("10.10.10.62")
+    fetcher = _metrics_map(
+        {
+            "http://10.10.10.62:9100/metrics": (200, "go_goroutines 1\n"),
+            "http://10.10.10.62:9182/metrics": (200, "# TYPE windows_cpu_time_total counter\n"),
+        }
+    )
+    result = probe_target(item, ping_runner=_ping_ok, metrics_fetcher=fetcher)
+    assert result.kind == "windows"
+    assert result.port == WINDOWS_EXPORTER_PORT
+    assert result.metrics.ok is True
+
+
 def test_select_skips_demo_unless_named():
     rows = [
         {"asset_id": "forge-demo-win-01", "ip": "10.10.10.21", "type": "Windows Server"},

@@ -90,7 +90,7 @@ ICMP ping from the appliance only proves **L3** (the host answers ping). ForgeSR
 | FAIL | FAIL | Wrong IP, host down, or ICMP and the exporter port both blocked. |
 | PASS | SKIP | Network device — HTTP metrics do not apply. Use `./forgesre snmp` (UDP/161). |
 
-Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `scrape_address` wins. Seeded `forge-demo-*` rows are skipped unless you pass `--demo` or the id.
+Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `scrape_address` wins. An ad-hoc IP (no inventory type) probes **both** ports and classifies `windows_` vs `node_` the same way Assets/Discovery detect does (both → prefer Windows `:9182` unless a saved type exists). Seeded `forge-demo-*` rows are skipped unless you pass `--demo` or the id.
 
 ---
 

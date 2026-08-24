@@ -89,3 +89,26 @@ if (preset) {
     }
   });
 }
+
+(function bindExporterDetect() {
+  const ip = document.querySelector("[data-detect-ip]");
+  const type = document.querySelector("[data-detect-type]");
+  const out = document.querySelector("[data-detect-out]");
+  if (!ip) return;
+  const run = () => {
+    const value = (ip.value || "").trim();
+    if (!value) return;
+    fetch("/api/v1/detect-exporter?ip=" + encodeURIComponent(value), { headers: { Accept: "application/json" } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!data) return;
+        if (out) out.textContent = data.message || "";
+        if (type && String(type.value || "").toLowerCase().startsWith("auto") && data.asset_type) {
+          type.value = data.asset_type;
+        }
+      })
+      .catch(() => {});
+  };
+  ip.addEventListener("blur", run);
+  ip.addEventListener("change", run);
+})();
