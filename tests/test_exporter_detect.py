@@ -243,6 +243,7 @@ def test_api_detect_and_auto_form(monkeypatch):
 
     monkeypatch.setattr("app.inventory.detect_exporter", fake_detect)
     monkeypatch.setattr("app.exporter_detect.detect_exporter", fake_detect)
+    monkeypatch.setattr("app.api.detect_exporter", fake_detect)
 
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
