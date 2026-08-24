@@ -33,6 +33,41 @@ from app.settings import settings
 
 log = logging.getLogger("forgesre")
 
+DEMO_MAIL_MARK = "[DEMO]"
+DEMO_BODY_LINE = "DEMO incident on forge-demo-01. Lab only — not a production fire."
+
+
+def is_demo_incident(incident: Incident | None) -> bool:
+    """True when the row belongs to the seeded lab host. No extra DB column."""
+    if incident is None:
+        return False
+    asset = getattr(incident, "asset", None)
+    if asset is not None and getattr(asset, "asset_id", "") == DEMO_ASSET:
+        return True
+    payload = incident.alert_payload if isinstance(getattr(incident, "alert_payload", None), dict) else {}
+    labels = payload.get("labels") if isinstance(payload, dict) else None
+    if isinstance(labels, dict) and str(labels.get("asset") or "") == DEMO_ASSET:
+        return True
+    fingerprint = str(getattr(incident, "fingerprint", "") or "")
+    return DEMO_ASSET in fingerprint
+
+
+def is_demo_mail(note: Notification | None) -> bool:
+    """Escalation/outbox rows: DEMO prefix on the subject, or the linked incident."""
+    if note is None:
+        return False
+    subject = str(getattr(note, "subject", "") or "")
+    if subject.upper().startswith(DEMO_MAIL_MARK):
+        return True
+    return is_demo_incident(getattr(note, "incident", None))
+
+
+def demo_mail_subject(incident: Incident | None, subject: str) -> str:
+    text = (subject or "").strip()
+    if is_demo_incident(incident) and not text.upper().startswith(DEMO_MAIL_MARK):
+        return f"{DEMO_MAIL_MARK} {text}"
+    return text
+
 
 def incident_seq(number: str) -> int | None:
     """Running counter from INC-000012, dash-dated, or INC-0134_16.08.2026_09:13."""
@@ -677,7 +712,7 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
         incident.asset = db.get(Asset, incident.asset_id)
     owner_email = ((incident.asset.owner_email if incident.asset else "") or "").strip()
     stored_target = owner_email or policy_role
-    subject = f"{incident.number} {incident.title}"
+    subject = demo_mail_subject(incident, f"{incident.number} {incident.title}")
     body = _notification_body(incident, step_key, policy_role)
     row = Notification(
         incident_id=incident.id,
@@ -726,7 +761,11 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
 
 def _notification_body(incident: Incident, step_key: str, policy_role: str) -> str:
     asset = incident.asset
-    lines = [
+    lines = []
+    if is_demo_incident(incident):
+        lines.append(DEMO_BODY_LINE)
+    lines.extend(
+        [
         f"Incident: {incident.number}",
         f"Title: {incident.title}",
         f"Severity: {incident.severity}",
@@ -734,7 +773,8 @@ def _notification_body(incident: Incident, step_key: str, policy_role: str) -> s
         f"Escalation step: {step_key} (policy role: {policy_role})",
         f"Asset: {asset.hostname if asset else 'unknown'}",
         f"Playbook: {incident.playbook.name if incident.playbook else 'n/a'}",
-    ]
+        ]
+    )
     if asset:
         lines.extend(
             [
@@ -918,14 +958,18 @@ def build_incident_report(db: Session, incident: Incident) -> str:
     asset = incident.asset
     investigation = incident.investigations[-1] if incident.investigations else None
     rca = (investigation.result if investigation else None) or {}
-    lines = [
-        "ForgeSRE incident report",
+    lines = ["ForgeSRE incident report"]
+    if is_demo_incident(incident):
+        lines.append(DEMO_BODY_LINE)
+    lines.extend(
+        [
         f"Incident: {incident.number}",
         f"Title: {incident.title}",
         f"Severity: {incident.severity}",
         f"Status: {incident.status}",
         f"Started: {incident.started_at}",
-    ]
+        ]
+    )
     if incident.ack_by:
         lines.append(f"Ack: {incident.ack_by} {incident.ack_at or ''}".rstrip())
     if incident.resolved_by:
@@ -997,7 +1041,7 @@ def send_incident_report(db: Session, incident: Incident, target: str, actor: st
     return send_outbound_mail(
         db,
         target=contact.email,
-        subject=f"[ForgeSRE] {incident.number} {incident.title}",
+        subject=demo_mail_subject(incident, f"[ForgeSRE] {incident.number} {incident.title}"),
         body=build_incident_report(db, incident),
         actor=actor,
         step_key="incident-report",
@@ -1204,4 +1248,57 @@ def run_demo_rca(db: Session) -> Incident:
         )
     else:
         report(db, "demo", "rca", "error", summary="Demo RCA did not create an incident")
+    return incident
+
+
+def run_demo_host(db: Session) -> Incident:
+    """NodeExporterDown on forge-demo-01. Does not stop a real scrape."""
+    from app.inventory import seed_demo_candidate
+
+    seed(db)
+    asset = ensure_demo_asset(db)
+    ensure_demo_similar_history(db, asset)
+    seed_demo_candidate(db)
+    close_open_incidents(db, f"NodeExporterDown:{DEMO_ASSET}", include_resolved=True)
+    log.warning("demo-host: NodeExporterDown opened on %s (synthetic; scrape is unchanged)", DEMO_ASSET)
+    payload = {
+        "status": "firing",
+        "alerts": [
+            {
+                "status": "firing",
+                "labels": {
+                    "alertname": "NodeExporterDown",
+                    "severity": "warning",
+                    "asset": DEMO_ASSET,
+                    "instance": DEMO_ASSET,
+                },
+                "annotations": {
+                    "summary": "Host unreachable (demo)",
+                    "description": "node_exporter scrape treated as down on forge-demo-01. Lab only — the real scrape is unchanged.",
+                },
+                "fingerprint": f"demo-host-{DEMO_ASSET}",
+                "startsAt": utcnow().isoformat(),
+            }
+        ],
+    }
+    created = ingest_alertmanager(db, payload)
+    fingerprint = f"NodeExporterDown:{DEMO_ASSET}"
+    incident = created[0] if created else (
+        db.query(Incident).filter(Incident.fingerprint == fingerprint).order_by(Incident.id.desc()).first()
+    )
+    if incident:
+        run_investigation(db, incident, actor="demo-host", use_llm=False)
+        queue_llm_rewrite(db, incident, actor="demo-host")
+        ensure_notification(db, incident, "immediate")
+        report(
+            db,
+            "demo",
+            "host",
+            "ok",
+            summary=f"Demo host-unreachable opened {incident.number}",
+            object_type="incident",
+            object_id=incident.number,
+        )
+    else:
+        report(db, "demo", "host", "error", summary="Demo host-unreachable did not create an incident")
     return incident

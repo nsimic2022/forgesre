@@ -35,7 +35,10 @@
   <tbody>
   {% for item in incidents %}
     <tr>
-      <td><a class="{{ incident_tone(item.status, item.severity) }}" href="/incidents/{{ item.number }}">{{ item.number }}</a></td>
+      <td>
+        <a class="{{ incident_tone(item.status, item.severity) }}" href="/incidents/{{ item.number }}">{{ item.number }}</a>
+        {% if is_demo_incident(item) %}<span class="pill demo">DEMO</span>{% endif %}
+      </td>
       <td>{{ item.title }}</td>
       <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
       <td>{% if item.asset %}{{ item.asset.hostname }}{% else %}—{% endif %}</td>

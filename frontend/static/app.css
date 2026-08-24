@@ -313,6 +313,67 @@ fieldset legend { font-size: 0.8rem; color: var(--muted); }
 .pill.generated { background: var(--pill); color: var(--pill-generated); }
 .pill.sent { background: var(--pill-ok-bg); color: var(--pill-ok); }
 .pill.failed { background: var(--pill-crit-bg); color: var(--pill-crit); }
+.pill.demo {
+  background: var(--pill-warn-bg);
+  color: var(--pill-warn);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+}
+dialog.demo-panel {
+  max-width: 48rem;
+  width: min(48rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 3rem);
+  overflow: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--text);
+}
+dialog.demo-panel::backdrop {
+  background: rgba(10, 14, 22, 0.55);
+}
+.demo-panel-inner { padding: 1.05rem 1.2rem 1.3rem; }
+.demo-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+}
+.demo-panel-head h2 { margin: 0; }
+button.demo-close {
+  background: var(--secondary);
+  color: var(--text);
+  padding: 0.2rem 0.55rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  min-width: 2rem;
+}
+.demo-scenarios {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.85rem 0 1rem;
+}
+.demo-scenario {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  background: var(--nav-hover);
+}
+.demo-scenario h3 { margin: 0 0 0.3rem; }
+.demo-scenario p { margin: 0.2rem 0; }
+.demo-scenario form { margin: 0.55rem 0 0; }
+.demo-reset {
+  border-top: 1px solid var(--line);
+  padding-top: 0.85rem;
+  margin-top: 0.25rem;
+}
+html[data-theme="high-contrast"] dialog.demo-panel {
+  border-width: 2px;
+}
 .mail-body { margin: 0.2rem 0; font-size: 0.82rem; max-height: 8rem; overflow: auto; }
 .ops-forms { align-items: start; }
 .ops-forms .stack { max-width: none; }

@@ -599,7 +599,7 @@ Sessions: HTTP-only secure cookies. CLI uses API tokens stored in `~/.config/for
 | Viewer | Read incidents/assets summaries |
 | Analyst | Viewer + ack, inventory add/edit, RCA (analyst view), playrules/playbooks; **no** admin, **no** PromQL, **no** user admin |
 | Engineer | Analyst + raw evidence, PromQL/log queries via Core proxy or deep links, asset technical fields |
-| Admin | Engineer + users (except super admin), integrations, system config, demo buttons |
+| Admin | Engineer + users (except super admin), integrations, system config, Run demo panel |
 | Super Admin | Admin + initial bootstrap, recovery, destructive config |
 
 Analysts never get administrative privileges. Engineers are not admins by default.

@@ -28,6 +28,33 @@ document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
 });
 applyTheme(currentTheme());
 
+(function bindDemoPanel() {
+  const dialog = document.getElementById("demo-panel");
+  if (!dialog || typeof dialog.showModal !== "function") return;
+  document.querySelectorAll("[data-demo-open]").forEach((button) => {
+    button.addEventListener("click", () => dialog.showModal());
+  });
+  document.querySelectorAll("[data-demo-close]").forEach((button) => {
+    button.addEventListener("click", () => dialog.close());
+  });
+  dialog.addEventListener("click", (event) => {
+    const rect = dialog.getBoundingClientRect();
+    const inside =
+      event.clientX >= rect.left &&
+      event.clientX <= rect.right &&
+      event.clientY >= rect.top &&
+      event.clientY <= rect.bottom;
+    if (!inside) dialog.close();
+  });
+  try {
+    if (new URLSearchParams(window.location.search).get("demo") === "1") {
+      dialog.showModal();
+    }
+  } catch (err) {
+    /* ignore */
+  }
+})();
+
 document.querySelectorAll(".node").forEach((button) => {
   button.addEventListener("click", () => {
     const box = document.getElementById("node-detail");

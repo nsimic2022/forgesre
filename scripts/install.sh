@@ -376,9 +376,9 @@ EOF
 Keep secrets/secrets.env private (mode 600).
 
 First-hour demo (nothing here is a real server):
-1. Sign in at the UI and open Dashboard. The walkthrough box is at the top.
+1. Sign in at the UI and open Dashboard. Run demo is top right (admin).
 2. Open Assets → forge-demo-01 (owner contacts + a closed HighCPU history row).
-3. Run ./forgesre demo (or Dashboard → Run demo workflow).
+3. Run ./forgesre demo (or Dashboard → Run demo → Linux HighCPU). Incidents are labeled DEMO.
 4. Open the new incident (Who to call), then Escalation (mail to platform@forgesre.local).
 5. Discovery candidate 10.20.30.41 is on /discovery (Approve / Ignore).
 6. Console (/journal) lists ok/error reports per module (install, seed, inventory, snmp, demo, …).

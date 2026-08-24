@@ -71,6 +71,13 @@ def asset_name(item: dict[str, Any]) -> str:
     return str(asset.get("hostname") or asset.get("asset_id") or "—")
 
 
+def item_is_demo(item: dict[str, Any]) -> bool:
+    if item.get("demo"):
+        return True
+    asset = item.get("asset") or {}
+    return str(asset.get("asset_id") or "") == "forge-demo-01"
+
+
 def _row(item: dict[str, Any], enabled: bool, width_title: int = 36) -> str:
     lane = lane_for(item)
     dot = paint("●", LANE_COLOR[lane], enabled)
@@ -78,7 +85,9 @@ def _row(item: dict[str, Any], enabled: bool, width_title: int = 36) -> str:
     status = str(item.get("status") or "")
     sev = str(item.get("severity") or "")[:8]
     host = asset_name(item)[:16]
-    title = str(item.get("title") or "")[:width_title]
+    raw_title = str(item.get("title") or "")
+    title = f"DEMO {raw_title}" if item_is_demo(item) else raw_title
+    title = title[:width_title]
     status_c = paint(f"{status:<14}", LANE_COLOR[lane], enabled)
     sev_c = paint(f"{sev:<8}", LANE_COLOR[lane], enabled)
     return f"{dot} {number:<12} {status_c} {sev_c} {host:<16} {title}"
@@ -141,9 +150,10 @@ def format_detail(data: dict[str, Any], *, color: bool | None = None) -> str:
     enabled = color_enabled() if color is None else color
     lane = lane_for(data)
     status = str(data.get("status") or "")
+    demo = "  DEMO" if item_is_demo(data) else ""
     lines = [
         paint(
-            f"{data.get('number', '')}  {status}  {data.get('severity', '')}  {data.get('title', '')}",
+            f"{data.get('number', '')}{demo}  {status}  {data.get('severity', '')}  {data.get('title', '')}",
             LANE_COLOR[lane] + BOLD,
             enabled,
         )

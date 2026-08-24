@@ -26,7 +26,7 @@
     <tr>
       <td>{{ note.created_at }}</td>
       <td>{{ note.target }}</td>
-      <td>{{ note.subject }}</td>
+      <td>{% if is_demo_mail(note) %}<span class="pill demo">DEMO</span> {% endif %}{{ note.subject }}</td>
         <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
     </tr>
   {% else %}

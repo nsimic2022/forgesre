@@ -166,7 +166,9 @@ def test_notification_uses_asset_owner_email_and_demo_history():
     assert login.status_code in {302, 303}
     home = client.get("/")
     assert home.status_code == 200
-    assert b"First-hour walkthrough" in home.content
+    assert b'id="demo-open"' in home.content
+    assert b'id="demo-panel"' in home.content
+    assert b"First-hour walkthrough" not in home.content
     asset_page = client.get(f"/assets/{DEMO_ASSET}")
     assert b"Similar incident" in asset_page.content
     assert b"High CPU" in asset_page.content or b"HighCPU" in asset_page.content
@@ -192,6 +194,7 @@ def test_run_demo_keeps_similar_history_and_notifies_owner():
     )
     assert note is not None
     assert note.target == DEMO_OWNER_EMAIL
+    assert note.subject.startswith("[DEMO]")
     db.close()
 
 

@@ -2,7 +2,7 @@
 {% block title %}{{ incident.number }} · ForgeSRE{% endblock %}
 {% block content %}
 <p><a href="/incidents">← Incidents</a> · <a href="/history">History</a></p>
-<h1>{{ incident.number }} <span class="muted">{{ incident.title }}</span></h1>
+<h1>{{ incident.number }} {% if is_demo_incident(incident) %}<span class="pill demo">DEMO</span>{% endif %} <span class="muted">{{ incident.title }}</span></h1>
 <div class="tool-row">
   <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
   <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
@@ -198,7 +198,7 @@
         <td>{{ note.step_key or "—" }}</td>
         <td>{{ note.target }}</td>
         <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
-        <td>{{ note.subject }}</td>
+        <td>{% if is_demo_mail(note) %}<span class="pill demo">DEMO</span> {% endif %}{{ note.subject }}</td>
       </tr>
       <tr>
         <td colspan="5"><pre class="journal-detail">{{ note.body }}{% if note.error %}

@@ -41,7 +41,7 @@ from app.inventory import (
     update_asset,
 )
 from app.seed import seed
-from app.services import ingest_alertmanager, run_demo, run_demo_rca
+from app.services import ingest_alertmanager, is_demo_incident, run_demo, run_demo_host, run_demo_rca
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
@@ -576,6 +576,14 @@ def demo_rca(db: Session = Depends(get_db), user: User = Depends(require("admin"
     return {"ok": True, "incident": incident.number if incident else None}
 
 
+@router.post("/demo-host")
+def demo_host(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    seed(db)
+    seed_demo_candidate(db)
+    incident = run_demo_host(db)
+    return {"ok": True, "incident": incident.number if incident else None}
+
+
 @router.get("/system/status")
 def system_status(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict:
     asset_counts = dict(db.query(Asset.status, func.count(Asset.id)).group_by(Asset.status).all())
@@ -853,6 +861,7 @@ def _incident(item: Incident, include_evidence: bool) -> dict[str, Any]:
         "playbook": item.playbook.name if item.playbook else None,
         "timeline": item.timeline or [],
         "summary": item.summary,
+        "demo": is_demo_incident(item),
         "investigation": None,
     }
     if latest:

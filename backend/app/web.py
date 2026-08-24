@@ -38,7 +38,8 @@ from app.models import (
 )
 from app.security import can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload
-from app.services import run_demo, run_demo_rca, run_investigation
+from app.metrics import reset_demo_gauges
+from app.services import is_demo_incident, is_demo_mail, run_demo, run_demo_host, run_demo_rca, run_investigation
 from app.stack import enrich_components, rewrite_host
 from app.history import (
     add_note,
@@ -138,6 +139,8 @@ def ctx(request: Request, user: User | None, **extra):
         "ai_enabled": settings.ai_enabled,
         "health_class": health_class,
         "incident_tone": incident_tone,
+        "is_demo_incident": is_demo_incident,
+        "is_demo_mail": is_demo_mail,
     }
     data.update(extra)
     return data
@@ -1010,3 +1013,20 @@ def demo_rca_page(db: Session = Depends(get_db), user: User = Depends(login_requ
     incident = run_demo_rca(db)
     number = incident.number if incident else ""
     return RedirectResponse(f"/ai/{number}" if number else "/incidents", status_code=303)
+
+
+@router.post("/demo-host")
+def demo_host_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
+    if not can(user, "admin"):
+        raise HTTPException(status_code=403)
+    incident = run_demo_host(db)
+    number = incident.number if incident else ""
+    return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=303)
+
+
+@router.post("/demo-reset")
+def demo_reset_page(user: User = Depends(login_required)):
+    if not can(user, "admin"):
+        raise HTTPException(status_code=403)
+    reset_demo_gauges()
+    return RedirectResponse("/?demo=1", status_code=303)

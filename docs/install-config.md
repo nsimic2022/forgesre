@@ -185,7 +185,7 @@ First-hour path:
 ./forgesre demo-rca
 ```
 
-Then in the UI: Dashboard walkthrough → asset `forge-demo-01` → new incident → Who to call. `./forgesre demo-reset` lowers the demo gauges when you are done.
+Then in the UI: Dashboard **Run demo** (top right) → pick Linux HighCPU → incident on `forge-demo-01` (DEMO pill) → Who to call. `./forgesre demo-reset` (or Reset demo gauges in the same panel) lowers the demo gauges when you are done.
 
 ---
 
