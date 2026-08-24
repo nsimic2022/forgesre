@@ -2,14 +2,28 @@
 {% block title %}Assets · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Assets</h1>
+{% if notice %}
+<div class="banner">{{ notice }}</div>
+{% endif %}
 <div class="table-scroll">
-<table>
+<table class="asset-table">
   <thead>
-    <tr><th>Asset ID</th><th>Hostname</th><th>IP</th><th>Owner</th><th>Contact</th><th>Type</th><th>Environment</th><th>Status</th><th>Source</th></tr>
+    <tr>
+      <th>Asset ID</th>
+      <th>Hostname</th>
+      <th>IP</th>
+      <th>Owner</th>
+      <th>Contact</th>
+      <th>Type</th>
+      <th>Environment</th>
+      <th>Status</th>
+      <th>Source</th>
+      {% if can('write_assets') %}<th>Actions</th>{% endif %}
+    </tr>
   </thead>
   <tbody>
     {% for asset in assets %}
-    <tr>
+    <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}">
       <td><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
       <td>{{ asset.hostname }}</td>
       <td>{{ asset.ip }}</td>
@@ -26,34 +40,25 @@
       <td>{{ asset.environment }}</td>
       <td><span class="pill {{ asset.status }}">{{ asset.status }}</span></td>
       <td>{{ asset.source }}</td>
+      {% if can('write_assets') %}
+      <td class="row-actions">
+        <a class="button" href="/assets?edit={{ asset.asset_id }}">Edit</a>
+        <a class="button" href="/assets?clone={{ asset.asset_id }}">Clone</a>
+        {% if not delete_blocked(asset) %}
+        <form method="post" action="/assets/{{ asset.asset_id }}/delete" onsubmit="return confirm('Remove {{ asset.hostname }}? Prometheus will stop scraping it. Incidents stay in History without this host. Core is unchanged.');">
+          <button type="submit" class="danger">Remove</button>
+        </form>
+        {% else %}
+        <span class="muted" title="{{ delete_blocked(asset) }}">Lab</span>
+        {% endif %}
+      </td>
+      {% endif %}
     </tr>
     {% endfor %}
   </tbody>
 </table>
 </div>
 {% if can('write_assets') %}
-<h2>Add asset</h2>
-<p class="muted">Analysts, engineers, and admins can add hosts. Fill who to call — escalation uses that email instead of a generic team inbox. Default type is <strong>Auto (detect exporter)</strong>: ForgeSRE GETs <code>http://&lt;ip&gt;:9182/metrics</code> and <code>:9100/metrics</code> from this appliance. <code>windows_exporter</code> / <code>windows_</code> → Windows Server <code>:9182</code>. <code>node_exporter</code> / <code>node_</code> → Linux Server <code>:9100</code>. Both: keep a saved type if set, else prefer Windows <code>:9182</code>. Neither: type stays unset — ICMP ping is not a scrape. You can override the type.</p>
-<form method="post" action="/assets" class="form-grid">
-  <label>Hostname <input name="hostname" required></label>
-  <label>IP <input name="ip" placeholder="10.10.10.21" data-detect-ip></label>
-  <label>Type
-    <select name="type" data-detect-type>
-      <option selected>Auto (detect exporter)</option>
-      <option>Linux Server</option>
-      <option>Windows Server</option>
-      <option>Network device</option>
-      <option>Web/appliance</option>
-    </select>
-  </label>
-  <label>Environment <input name="environment" value="Production"></label>
-  <label>Owner / team <input name="owner" value="platform" placeholder="platform"></label>
-  <label>Contact name <input name="contact_name" placeholder="Who to call"></label>
-  <label>Owner email <input name="owner_email" type="email" placeholder="oncall@dc.local"></label>
-  <label>Owner phone <input name="owner_phone" placeholder="+381-11-000-0000"></label>
-  <label class="wide">Notes <input name="notes" placeholder="Rack, customer, how to reach them"></label>
-  <p class="muted wide" data-detect-out></p>
-  <div class="wide"><button type="submit">Save</button></div>
-</form>
+{% include "_asset_form.html" %}
 {% endif %}
 {% endblock %}

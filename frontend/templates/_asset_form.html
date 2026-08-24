@@ -1,0 +1,61 @@
+{% if form_mode == "edit" %}
+<h2>Edit asset</h2>
+<p class="muted">Same fields as Add. Hostname can change; <code>asset_id</code> ({{ selected.asset_id }}) stays so Prometheus labels and history keep matching. Saving rewrites HTTP SD from inventory — Prometheus picks it up on the next scrape. Core’s static demo job is not this list.</p>
+{% elif form_mode == "clone" %}
+<h2>Clone asset</h2>
+<p class="muted">
+  Copy of <strong>{{ clone_source }}</strong> with a new id. Tweak hostname/IP before Save.
+  {% if form.lab_source %}
+  Lab hosts (<code>forge-demo-*</code>) are not scraped. The suggested name is a <strong>real</strong> inventory row. Keep a <code>forge-demo-*</code> hostname only if you want another lab-only copy.
+  {% endif %}
+  Duplicate IP or hostname is rejected. NetBox id is not copied.
+</p>
+{% else %}
+<h2>Add asset</h2>
+<p class="muted">Analysts, engineers, and admins can add hosts. Fill who to call — escalation uses that email instead of a generic team inbox. Default type is <strong>Auto (detect exporter)</strong>: ForgeSRE GETs <code>http://&lt;ip&gt;:9182/metrics</code> and <code>:9100/metrics</code> from this appliance. <code>windows_exporter</code> / <code>windows_</code> → Windows Server <code>:9182</code>. <code>node_exporter</code> / <code>node_</code> → Linux Server <code>:9100</code>. Both: keep a saved type if set, else prefer Windows <code>:9182</code>. Neither: type stays unset — ICMP ping is not a scrape. You can override the type. Optional scrape address is the Prometheus target (<code>ip:9100</code> / <code>ip:9182</code>); leave blank to default from type.</p>
+{% endif %}
+<form method="post" action="{% if form_mode == 'edit' %}/assets/{{ selected.asset_id }}/update{% else %}/assets{% endif %}" class="form-grid" id="asset-form">
+  <label>Hostname <input name="hostname" required value="{{ form.hostname }}"></label>
+  <label>IP <input name="ip" placeholder="10.10.10.21" value="{{ form.ip }}" data-detect-ip></label>
+  <label>Type
+    <select name="type" data-detect-type>
+      {% set current_type = form.type or '' %}
+      {% for opt in type_choices %}
+      <option value="{{ opt }}" {% if current_type == opt or (opt.startswith('Auto') and current_type.startswith('Auto')) %}selected{% endif %}>{{ opt }}</option>
+      {% endfor %}
+      {% if current_type and current_type not in type_choices and not current_type.startswith('Auto') %}
+      <option value="{{ current_type }}" selected>{{ current_type }}</option>
+      {% endif %}
+    </select>
+  </label>
+  <label>Environment <input name="environment" value="{{ form.environment or 'Production' }}"></label>
+  <label>Owner / team <input name="owner" value="{{ form.owner or 'platform' }}" placeholder="platform"></label>
+  <label>Contact name <input name="contact_name" value="{{ form.contact_name }}" placeholder="Who to call"></label>
+  <label>Owner email <input name="owner_email" type="email" value="{{ form.owner_email }}" placeholder="oncall@dc.local"></label>
+  <label>Owner phone <input name="owner_phone" value="{{ form.owner_phone }}" placeholder="+381-11-000-0000"></label>
+  <label>Scrape address <input name="scrape_address" value="{{ form.scrape_address }}" placeholder="10.10.10.21:9100 or :9182"></label>
+  <label class="wide">Notes <input name="notes" value="{{ form.notes }}" placeholder="Rack, customer, how to reach them"></label>
+  {% if form_mode == "clone" %}
+  <input type="hidden" name="clone_of" value="{{ clone_source }}">
+  {% endif %}
+  <p class="muted wide" data-detect-out></p>
+</form>
+<div class="wide row-actions asset-form-actions">
+  <button type="submit" form="asset-form">{% if form_mode == 'clone' %}Save copy{% else %}Save{% endif %}</button>
+  {% if form_mode == "edit" %}
+  <form method="post" action="/assets/{{ selected.asset_id }}/detect" class="inline">
+    <button type="submit" class="secondary">Detect OS / scrape port</button>
+  </form>
+  {% if not delete_blocked(selected) %}
+  <form method="post" action="/assets/{{ selected.asset_id }}/delete" class="inline" onsubmit="return confirm('Remove {{ selected.hostname }}? Prometheus will stop scraping it. Incidents stay in History without this host. Core is unchanged.');">
+    <button type="submit" class="danger">Remove</button>
+  </form>
+  {% endif %}
+  <a href="/assets">Add another</a>
+  {% elif form_mode == "clone" %}
+  <a href="/assets">Cancel</a>
+  {% endif %}
+</div>
+{% if form_mode == "edit" and delete_blocked(selected) %}
+<p class="muted">{{ delete_blocked(selected) }}</p>
+{% endif %}

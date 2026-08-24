@@ -14,8 +14,13 @@ from app.audit import audit
 from app.db import get_db
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.inventory import (
+    ASSET_TYPE_CHOICES,
     approve_candidate,
+    asset_form_values,
+    clone_prefill,
     create_manual_asset,
+    delete_asset,
+    delete_blocked,
     ignore_candidate,
     run_scan,
     similar_incident_groups,
@@ -321,9 +326,43 @@ def dashboard_journal_ack(
 
 
 @router.get("/assets", response_class=HTMLResponse)
-def assets_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
+def assets_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    edit: str = "",
+    clone: str = "",
+):
     rows = db.query(Asset).order_by(Asset.hostname).all()
-    return render(request, "assets.html", user, assets=rows)
+    form_mode = "add"
+    selected = None
+    form = asset_form_values()
+    clone_source = ""
+    notice = request.query_params.get("notice") or ""
+    if edit.strip():
+        selected = db.query(Asset).filter_by(asset_id=edit.strip()).first()
+        if selected is not None:
+            form_mode = "edit"
+            form = asset_form_values(selected)
+    elif clone.strip():
+        selected = db.query(Asset).filter_by(asset_id=clone.strip()).first()
+        if selected is not None:
+            form_mode = "clone"
+            form = clone_prefill(db, selected)
+            clone_source = selected.asset_id
+    return render(
+        request,
+        "assets.html",
+        user,
+        assets=rows,
+        form_mode=form_mode,
+        form=form,
+        selected=selected,
+        clone_source=clone_source,
+        type_choices=ASSET_TYPE_CHOICES,
+        delete_blocked=delete_blocked,
+        notice=notice,
+    )
 
 
 @router.post("/assets")
@@ -339,9 +378,12 @@ def asset_create(
     owner_email: str = Form(""),
     owner_phone: str = Form(""),
     notes: str = Form(""),
+    scrape_address: str = Form(""),
+    clone_of: str = Form(""),
 ):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
+    cloned_from = (clone_of or "").strip()
     try:
         asset = create_manual_asset(
             db,
@@ -354,9 +396,17 @@ def asset_create(
             owner_email=owner_email,
             owner_phone=owner_phone,
             notes=notes,
+            scrape_address=scrape_address,
             actor=user.email,
+            require_new=bool(cloned_from),
+            cloned_from=cloned_from,
         )
     except ValueError as exc:
+        if cloned_from:
+            return RedirectResponse(
+                f"/assets?clone={quote(cloned_from)}&notice={quote(str(exc))}",
+                status_code=302,
+            )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     notice = getattr(asset, "_detect_message", "") or ""
     suffix = f"?notice={quote(notice)}" if notice else ""
@@ -444,6 +494,8 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         similar=similar,
         snmp_target=is_snmp_asset(item),
         snmp_enabled=settings.snmp_enabled,
+        can_remove=can(user, "write_assets") and not delete_blocked(item),
+        remove_blocked=delete_blocked(item) if can(user, "write_assets") else "",
     )
 
 
@@ -452,6 +504,7 @@ def asset_update(
     asset_id: str,
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
+    hostname: str = Form(""),
     ip: str = Form(""),
     type: str = Form("Linux Server"),
     environment: str = Form("Production"),
@@ -470,6 +523,7 @@ def asset_update(
     update_asset(
         db,
         item,
+        hostname=hostname,
         ip=ip,
         type=type,
         environment=environment,
@@ -500,6 +554,28 @@ def asset_detect(
     update_asset(db, item, detect=True, actor=user.email)
     notice = getattr(item, "_detect_message", "") or "No exporter detected."
     return RedirectResponse(f"/assets/{asset_id}?notice={quote(notice)}", status_code=302)
+
+
+@router.post("/assets/{asset_id}/delete")
+def asset_delete(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    item = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if item is None:
+        raise HTTPException(status_code=404)
+    try:
+        result = delete_asset(db, item, actor=user.email)
+    except ValueError as exc:
+        return RedirectResponse(f"/assets/{asset_id}?notice={quote(str(exc))}", status_code=302)
+    unlinked = result.get("unlinked_incidents") or 0
+    notice = f"Removed {result['deleted']}."
+    if unlinked:
+        notice += f" {unlinked} incident(s) stay in History without this host."
+    return RedirectResponse(f"/assets?notice={quote(notice)}", status_code=302)
 
 
 @router.get("/incidents", response_class=HTMLResponse)
