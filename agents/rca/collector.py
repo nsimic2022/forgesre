@@ -46,6 +46,20 @@ def promql_queries_for(asset: dict[str, Any] | None, alert: dict[str, Any] | Non
         return {
             "up": (f'up{{job="forgesre-snmp",{matcher}}}', ""),
         }
+    windowsish = "windows" in kind or "win32" in kind or "windows" in profile
+    if windowsish:
+        return {
+            "cpu_percent": (
+                f'100 - (avg(rate(windows_cpu_time_total{{mode="idle",{matcher}}}[5m])) * 100)',
+                "percent",
+            ),
+            "disk_percent": (
+                f'100 * max(1 - (windows_logical_disk_free_bytes{{volume!~"_Total",{matcher}}} '
+                f'/ windows_logical_disk_size_bytes{{volume!~"_Total",{matcher}}}))',
+                "percent",
+            ),
+            "up": (f'up{{{matcher}}}', ""),
+        }
     queries = {
         "cpu_percent": (
             f'100 * (1 - avg(rate(node_cpu_seconds_total{{mode="idle",{matcher}}}[5m])))',

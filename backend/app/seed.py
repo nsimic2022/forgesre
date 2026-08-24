@@ -19,7 +19,8 @@ DEMO_OWNER_PHONE = "+381-11-000-0000"
 DEMO_NOTES = "Seeded demo host. Not a real machine. Used by ./forgesre demo."
 DEMO_WIN_NOTES = (
     "Seeded demo Windows lab host. Not a real machine. "
-    "ForgeSRE does not scrape windows_exporter. Used by Dashboard → Run demo."
+    "Lab incidents only — this row is not scraped. Real Windows assets use windows_exporter :9182. "
+    "Used by Dashboard → Run demo."
 )
 DEMO_SW_NOTES = (
     "Seeded demo network lab device. Not a real switch. "
@@ -51,6 +52,14 @@ CPU_STEPS = [
 HOST_STEPS = [
     {"id": "verify", "title": "Verify the host answers ping / SSH from the management network"},
     {"id": "exporter", "title": "Check node_exporter on TCP/9100 from the ForgeSRE host"},
+    {"id": "owner", "title": "Identify owner"},
+    {"id": "notify", "title": "Notify responsible engineer"},
+    {"id": "escalate", "title": "Escalate if not acknowledged"},
+]
+
+WINDOWS_STEPS = [
+    {"id": "verify", "title": "Verify the host answers ping / RDP from the management network"},
+    {"id": "exporter", "title": "Check windows_exporter on TCP/9182 from the ForgeSRE host (curl http://<ip>:9182/metrics)"},
     {"id": "owner", "title": "Identify owner"},
     {"id": "notify", "title": "Notify responsible engineer"},
     {"id": "escalate", "title": "Escalate if not acknowledged"},
@@ -383,11 +392,51 @@ def seed(db: Session) -> None:
         db.add(
             Playrule(
                 name="windows-cpu",
-                description="Windows CPU lab alert (no windows_exporter scrape)",
+                description="windows_exporter CPU above 90% (also matches the lab WindowsCPUHigh demo)",
                 enabled=True,
                 severity="warning",
                 condition={"alertname": "WindowsCPUHigh", "metric": "cpu_usage", "operator": ">", "value": 90},
                 playbook_id=cpu.id,
+                escalation_policy_id=policy.id,
+            )
+        )
+    else:
+        existing_win = db.query(Playrule).filter_by(name="windows-cpu").first()
+        if existing_win and "no windows_exporter" in (existing_win.description or ""):
+            existing_win.description = "windows_exporter CPU above 90% (also matches the lab WindowsCPUHigh demo)"
+
+    win_host = db.query(Playbook).filter_by(slug="windows-unreachable").first()
+    if win_host is None:
+        win_host = Playbook(
+            slug="windows-unreachable",
+            name="WINDOWS-UNREACHABLE",
+            description="windows_exporter scrape failed. Guidance only — no commands are executed.",
+            steps=WINDOWS_STEPS,
+        )
+        db.add(win_host)
+        db.flush()
+
+    if db.query(Playrule).filter_by(name="windows-exporter-down").first() is None:
+        db.add(
+            Playrule(
+                name="windows-exporter-down",
+                description="windows_exporter scrape failed",
+                enabled=True,
+                severity="warning",
+                condition={"alertname": "WindowsExporterDown", "metric": "up", "operator": "==", "value": 0},
+                playbook_id=win_host.id,
+                escalation_policy_id=policy.id,
+            )
+        )
+    if db.query(Playrule).filter_by(name="windows-filesystem").first() is None:
+        db.add(
+            Playrule(
+                name="windows-filesystem",
+                description="windows_exporter volume usage above 90%",
+                enabled=True,
+                severity="warning",
+                condition={"alertname": "WindowsFilesystemUsageHigh", "metric": "filesystem_usage", "operator": ">", "value": 90},
+                playbook_id=disk.id,
                 escalation_policy_id=policy.id,
             )
         )

@@ -1178,9 +1178,9 @@ def run_demo_host(db: Session) -> Incident:
 
 
 def run_demo_windows(db: Session) -> Incident:
-    """WindowsCPUHigh on forge-demo-win-01. Does not scrape windows_exporter."""
+    """WindowsCPUHigh on forge-demo-win-01. Lab-only — that asset is not scraped."""
     _prepare_demo_lab(db)
-    log.warning("DEMO: WindowsCPUHigh opened on %s (lab incident; no windows_exporter scrape)", DEMO_WIN_ASSET)
+    log.warning("DEMO: WindowsCPUHigh opened on %s (lab incident; demo host is not scraped)", DEMO_WIN_ASSET)
     return _run_lab_incident(
         db,
         asset_id=DEMO_WIN_ASSET,
@@ -1188,7 +1188,7 @@ def run_demo_windows(db: Session) -> Incident:
         summary="Windows CPU high (lab)",
         description=(
             "Lab scenario on forge-demo-win-01. DEMO tagged. "
-            "ForgeSRE does not scrape windows_exporter; this is not a live Windows metric."
+            "This demo host is not scraped. Real Windows assets use windows_exporter :9182."
         ),
         action="windows",
         actor="demo-windows",

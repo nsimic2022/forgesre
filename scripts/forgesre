@@ -451,13 +451,15 @@ EOF
       ;;
     sd)
       cat <<'EOF'
-sd — print Prometheus HTTP SD (Linux node_exporter) and SNMP HTTP SD.
+sd — print Prometheus HTTP SD (Linux node_exporter :9100 and Windows
+windows_exporter :9182) and SNMP HTTP SD.
 
   ./forgesre sd
 
 Uses ALERTMANAGER_WEBHOOK_TOKEN. Empty SNMP [] is normal until a Network
-device with an IP exists. Linux hosts with scrape_address appear in the
-first list; they are never SNMP-scraped.
+device with an IP exists. Linux/Windows hosts with scrape_address appear in the
+first list; they are never SNMP-scraped. Seeded forge-demo-* hosts are lab-only
+and do not appear in HTTP SD.
 EOF
       ;;
     version)
@@ -560,7 +562,7 @@ for item in rows:
     extra = scrape if scrape else ("SNMP UDP/161" if item.get("snmp") else "—")
     print(f"{item.get('asset_id',''):<22} {item.get('ip',''):<16} {str(item.get('type',''))[:22]:<22} {extra}")
 print()
-print(f"{len(rows)} asset(s). Linux = node_exporter :9100. Network device + IP = snmp_exporter.")
+print(f"{len(rows)} asset(s). Linux = node_exporter :9100. Windows = windows_exporter :9182. Network device + IP = snmp_exporter.")
 PY
 }
 
@@ -812,7 +814,7 @@ case "$cmd" in
     PORT="$(port_from_env)"
     # shellcheck disable=SC1091
     source secrets/secrets.env
-    echo "=== Linux / node_exporter HTTP SD ==="
+    echo "=== Linux node_exporter / Windows windows_exporter HTTP SD ==="
     curl -sS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
       "http://127.0.0.1:${PORT}/api/v1/sd/prometheus" || true
     echo

@@ -8,9 +8,10 @@ import socket
 from typing import Any
 
 LINUX_PORTS = {22, 9100}
+WINDOWS_PORTS = {9182}
 WEB_PORTS = {80, 443}
 SNMP_PORTS = {161}
-DEFAULT_PORTS = (22, 80, 443, 161, 9100)
+DEFAULT_PORTS = (22, 80, 443, 161, 9100, 9182)
 MAX_HOSTS_PER_CIDR = 256
 MAX_HOSTS_TOTAL = 1024
 
@@ -62,10 +63,12 @@ def probe_host(ip: str, ports: tuple[int, ...] = DEFAULT_PORTS, timeout: float =
 
 
 def classify(open_ports: list[int], snmp_ok: bool = False) -> str:
-    """9100 → Linux. SNMP UDP/161 → network (even if SSH is open). SSH-only → Linux without scrape."""
+    """9100 → Linux. 9182 → Windows. SNMP UDP/161 → network (even if SSH is open). SSH-only → Linux without scrape."""
     ports = set(open_ports)
     if 9100 in ports:
         return "Possible Linux server"
+    if 9182 in ports:
+        return "Possible Windows server"
     if snmp_ok or 161 in ports:
         return "Possible network device"
     if 22 in ports:

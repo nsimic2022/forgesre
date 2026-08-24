@@ -28,7 +28,7 @@ ForgeSRE does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on t
 11. [Escalation and email](#11-escalation-and-email)
 12. [Incident workflow](#12-incident-workflow)
 13. [AI investigation (ForgeRCA)](#13-ai-investigation-forgerca)
-14. [Worked example: onboard a Linux server](#14-worked-example-onboard-a-linux-server)
+14. [Worked example: onboard a Linux or Windows server](#14-worked-example-onboard-a-linux-server)
 15. [Worked example: new alert + playrule + playbook](#15-worked-example-new-alert--playrule--playbook)
 16. [Operator CLI and API](#16-operator-cli-and-api)
 17. [What this version does not do yet](#17-what-this-version-does-not-do-yet)
@@ -42,6 +42,7 @@ Discovery / manual form / NetBox
         ↓
    Assets (inventory)
         ↓  Linux: scrape_address → Prometheus HTTP SD (node_exporter :9100)
+        ↓  Windows: scrape_address → Prometheus HTTP SD (windows_exporter :9182)
         ↓  Network device + IP → snmp_exporter UDP/161 (job forgesre-snmp)
    Metrics + alert rules
         ↓  Alertmanager webhook
@@ -58,10 +59,10 @@ Seeded on first start:
 |---|---|
 | User `FORGESRE_ADMIN_EMAIL` | `super_admin` from `secrets/secrets.env` |
 | Asset `forge-demo-01` | Demo Linux host `10.10.10.20` with owner contacts (`platform@forgesre.local`, phone) and a closed HighCPU history row |
-| Asset `forge-demo-win-01` | Seeded Windows lab host `10.10.10.21` (no windows_exporter scrape) |
+| Asset `forge-demo-win-01` | Seeded Windows lab host `10.10.10.21` (not scraped; real Windows uses windows_exporter :9182) |
 | Asset `forge-demo-sw-01` | Seeded network lab switch `10.10.10.22` (not a live SNMP walk) |
-| Playbooks `CPU-HIGH`, `DISK-FULL`, `HOST-UNREACHABLE`, `NETWORK-UNREACHABLE` | Guidance steps only |
-| Playrules `high-cpu`, `high-disk`, `snmp-down`, `node-exporter-down`, `node-filesystem`, `node-cpu` | Demo gauges, SNMP `up`, and `node_exporter` |
+| Playbooks `CPU-HIGH`, `DISK-FULL`, `HOST-UNREACHABLE`, `NETWORK-UNREACHABLE`, `WINDOWS-UNREACHABLE` | Guidance steps only |
+| Playrules `high-cpu`, `high-disk`, `snmp-down`, `node-exporter-down`, `node-filesystem`, `node-cpu`, `windows-cpu`, `windows-exporter-down`, `windows-filesystem` | Demo gauges, SNMP `up`, `node_exporter`, and `windows_exporter` |
 | Escalation `Default warning` | 0 / 15 / 30 minutes → generated email |
 | Discovery candidate `10.20.30.41` | Demo row on `/discovery` so you can click Approve |
 
@@ -197,7 +198,8 @@ If you rotate the install admin in the UI, also edit `FORGESRE_ADMIN_PASSWORD` i
 A row on **Assets** is what ForgeSRE calls a server (or switch, or appliance). You can add one **manually** or via **Discovery** (Approve). Prometheus does **not** scan the network.
 
 - **Linux:** after the host is in inventory with `scrape_address=<ip>:9100`, Prometheus HTTP SD scrapes **node_exporter**.
-- **Network device:** after the row has type `Network device` (or switch/router/firewall) **and an IP**, bundled **snmp_exporter** walks **UDP/161**. The scrape address stays empty on purpose (no node_exporter `up == 0` noise).
+- **Windows:** after the host is in inventory with type `Windows Server` and `scrape_address=<ip>:9182`, the same HTTP SD scrapes **windows_exporter**. Prometheus `node_exporter` is a Linux exporter; it does not run on Windows (WSL/Cygwin is the rare exception).
+- **Network device:** after the row has type `Network device` (or switch/router/firewall) **and an IP**, bundled **snmp_exporter** walks **UDP/161**. The scrape address stays empty on purpose (no exporter `up == 0` noise).
 
 NetBox is optional and not bundled.
 
@@ -206,13 +208,14 @@ NetBox is optional and not bundled.
 Who: **analyst**, engineer, or admin (`write_assets`).
 
 1. **Assets** → **Add asset**.
-2. Hostname (required), IP, type (`Linux Server` / `Network device` / `Web/appliance`), environment, owner/team, **contact name, owner email, owner phone**, notes.
+2. Hostname (required), IP, type (`Linux Server` / `Windows Server` / `Network device` / `Web/appliance`), environment, owner/team, **contact name, owner email, owner phone**, notes.
 3. **Save**. You land on the asset page. You can **edit owner and contacts** there later without recreating the host.
 
 What Core does:
 
 - `asset_id` is a slug from the hostname (`app-01` → `app-01`). Hostname/`asset_id` do not change on edit.
 - Linux-like types get `monitoring_profile=linux-standard` and `scrape_address=<ip>:9100` when an IP is set.
+- Windows Server gets `monitoring_profile=windows-standard` and `scrape_address=<ip>:9182` when an IP is set.
 - Network devices get `network-switch`, an **empty** scrape address, and an SNMP SD target (UDP/161 via snmp_exporter).
 - Web/appliance rows are inventory only until you set a scrape address yourself. They are **not** SNMP-scraped.
 - `source=manual`.
@@ -240,12 +243,13 @@ discovery:
 4. Banner **NEW DEVICE DETECTED** on the dashboard until you decide.
 5. **Approve** → creates an asset (`source=discovery`, id like `disc-10-20-30-41`) and sends you to the asset page. **Ignore** leaves it out of inventory.
 
-Probe is **not nmap**. It tries TCP **22, 80, 443, 9100** and an SNMPv2c GET on **UDP/161** (TCP/161 is skipped — that is not SNMP):
+Probe is **not nmap**. It tries TCP **22, 80, 443, 9100, 9182** and an SNMPv2c GET on **UDP/161** (TCP/161 is skipped — that is not SNMP):
 
 | Open ports / SNMP | Proposed role | After Approve |
 |---|---|---|
 | 9100 | Possible Linux server | `scrape_address=<ip>:9100` (node_exporter) |
-| UDP/161 SNMP GET succeeds (even if SSH is open) | Possible network device | SNMP UDP/161 (no node_exporter scrape) |
+| 9182 | Possible Windows server | `scrape_address=<ip>:9182` (windows_exporter) |
+| UDP/161 SNMP GET succeeds (even if SSH is open) | Possible network device | SNMP UDP/161 (no HTTP exporter scrape) |
 | 22 only | Possible Linux server | inventory only — **no** `:9100` until 9100 is open or you set scrape by hand |
 | 80 or 443 | Possible web/appliance | inventory only |
 
@@ -289,21 +293,51 @@ curl -fsS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
   http://127.0.0.1:8080/api/v1/sd/prometheus
 ```
 
-Each asset with a non-empty `scrape_address` becomes a target, labeled with `asset=<asset_id>` and `job=<monitoring_profile>`.
+Each asset with a non-empty `scrape_address` becomes a target, labeled with `asset=<asset_id>` and `job=<monitoring_profile>`. Seeded `forge-demo-*` hosts are lab-only and are **not** in this list.
 
 Core itself stays on a **static** scrape so the demo HighCPU path does not depend on SD.
 
 ForgeSRE does not install node_exporter on customer VMs. That is still your image / Ansible / whatever you already use.
 
-V0.6 bundled alert rules (`monitoring/alerts.yml`) watch:
+### Windows (windows_exporter)
+
+Prometheus **node_exporter is Linux**. A Windows host is scraped only if:
+
+1. **windows_exporter** (or equivalent) exposes `/metrics` at `scrape_address` (typical **`:9182`**).
+2. The asset type is `Windows Server` (profile `windows-standard`) so HTTP SD labels `job=windows-standard`.
+3. Windows Firewall / NSX allows **TCP 9182** from the ForgeSRE VM.
+
+If you added the host as `Linux Server`, it will be scraped on `:9100` looking for node_exporter — that will not see windows_exporter. Edit type to **Windows Server** and scrape address to `<ip>:9182`.
+
+`node_exporter` on Windows (WSL / Cygwin) is rare. If you really run it, add the host as `Linux Server` or set scrape to `<ip>:9100` by hand.
+
+Dashboard **Run demo → Windows CPU** still uses lab asset `forge-demo-win-01`. That row is **not** scraped. Do not confuse it with a real Windows box.
+
+Ping vs scrape (run these **on the ForgeSRE VM**, not from a laptop):
+
+```bash
+# ICMP only — proves the host answers ping, not that Prometheus can scrape.
+ping -c 3 <ip>
+
+# Linux node_exporter (typical). Expect Prometheus text (`# HELP` / `node_`).
+curl -sS -m 5 http://<ip>:9100/metrics | head
+
+# Windows windows_exporter (typical). Expect `# HELP` / `windows_`.
+curl -sS -m 5 http://<ip>:9182/metrics | head
+```
+
+If ping works and both curls fail, the exporter is down or firewalled. If `:9182` returns metrics and Assets still looks empty, check type/scrape (`./forgesre sd`) and wait ~30s for HTTP SD refresh.
+
+V0.6+ bundled alert rules (`monitoring/alerts.yml`) watch:
 
 - **Demo gauges on Core** (`forgesre_demo_cpu_percent`, `forgesre_demo_disk_percent`) — `forge-demo-01` only
 - **node_exporter** (`NodeExporterDown`, `NodeFilesystemUsageHigh`, `NodeCPUHigh`) for HTTP SD targets with `job=linux-standard`
+- **windows_exporter** (`WindowsExporterDown`, `WindowsFilesystemUsageHigh`, `WindowsCPUHigh`) for HTTP SD targets with `job=windows-standard`
 - **SNMP** (`SnmpDeviceUnreachable`, `NetworkInterfaceDown`)
 
 Site-specific extras go in `monitoring/alerts.local.yml` (copy the `.example`; gitignored), then `./forgesre render-monitoring`.
 
-ForgeRCA for a real Linux host queries `node_*` labeled `asset=<asset_id>`. It does **not** reuse the demo CPU/disk gauges.
+ForgeRCA for a real Linux host queries `node_*` labeled `asset=<asset_id>`. A real Windows host queries `windows_*`. It does **not** reuse the demo CPU/disk gauges.
 
 ### Network device (snmp_exporter)
 
@@ -316,7 +350,7 @@ curl -fsS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
   http://127.0.0.1:8080/api/v1/sd/snmp
 ```
 
-Empty JSON `[]` is normal until a **Network device** row has an IP. Linux hosts never appear here.
+Empty JSON `[]` is normal until a **Network device** row has an IP. Linux and Windows HTTP exporter hosts never appear here.
 
 From the ForgeSRE VM the exporter speaks **UDP/161** to the device. Allow that outbound. The device ACL must allow this host. Community is `SNMP_COMMUNITY` in `secrets/secrets.env` (lab default `public`). After you change it:
 
@@ -560,7 +594,7 @@ RCA works with `ai.enabled: false` (builtin analyst). To use a local LLM, downlo
 
 Alertmanager ingest **enqueues** an investigate job. The webhook does not wait on the LLM. `./forgesre jobs` lists pending / running / done / error. Demo (`./forgesre demo`) still runs RCA inline so the first-hour path is immediate.
 
-Queries are **per asset**. `forge-demo-01` uses Core demo gauges. A real Linux host uses `node_cpu_seconds_total` / `node_filesystem_*` with `asset="<id>"`. A network device uses `up{job="forgesre-snmp",asset="<id>"}`. Demo CPU/disk numbers are never overlaid on another host.
+Queries are **per asset**. `forge-demo-01` uses Core demo gauges. A real Linux host uses `node_cpu_seconds_total` / `node_filesystem_*` with `asset="<id>"`. A real Windows host uses `windows_cpu_time_total` / `windows_logical_disk_*`. A network device uses `up{job="forgesre-snmp",asset="<id>"}`. Demo CPU/disk numbers are never overlaid on another host.
 
 Lab: `./forgesre demo-rca` raises filesystem usage on the **demo gauge** (does not fill a real disk). `./forgesre demo-reset` puts the gauges back.
 
@@ -579,6 +613,31 @@ Goal: host `app-01` at `10.10.10.50` appears under Assets and is scraped on `:91
 Optional discovery path: put `10.10.10.0/24` in `discovery.cidrs`, Scan now, Approve the `10.10.10.50` candidate instead of the manual form.
 
 This still will **not** open `INC-…` until a Prometheus alert fires with a matching playrule. Bundled `NodeExporterDown` / `NodeFilesystemUsageHigh` / `NodeCPUHigh` already match seeded playrules once node_exporter is scraped. Custom thresholds: §15.
+
+### Windows server (windows_exporter)
+
+Goal: host `win-01` at `10.10.10.60` appears under Assets and is scraped on `:9182`.
+
+1. On `win-01`, install [windows_exporter](https://github.com/prometheus-community/windows_exporter) listening on `0.0.0.0:9182` (default). Allow **TCP 9182** from the ForgeSRE VM in Windows Firewall.
+2. From the **ForgeSRE VM** (the box that runs Prometheus), not from a laptop:
+
+```bash
+ping -c 3 10.10.10.60
+curl -sS -m 5 http://10.10.10.60:9182/metrics | head
+# optional, only if you really run node_exporter on that Windows box:
+curl -sS -m 5 http://10.10.10.60:9100/metrics | head
+```
+
+Ping proves ICMP only. A working scrape is the `curl` that prints `# HELP` / `windows_` lines.
+
+3. Sign in as analyst/engineer/admin. **Assets** → hostname `win-01`, IP `10.10.10.60`, type **Windows Server**, owner email/phone → **Save**.
+4. Asset page should show scrape address `10.10.10.60:9182` and profile `windows-standard`.
+5. Wait up to 30s. `./forgesre sd` (or the curl in §7) should list that target with `job=windows-standard`.
+6. Prometheus (on the VM): `up{instance="10.10.10.60:9182"}` or `{asset="win-01"}`.
+
+Do not use Dashboard **Run demo → Windows CPU** as proof of live scrape. That opens a DEMO incident on `forge-demo-win-01` without talking to windows_exporter.
+
+Bundled `WindowsExporterDown` / `WindowsFilesystemUsageHigh` / `WindowsCPUHigh` match seeded playrules `windows-exporter-down` / `windows-filesystem` / `windows-cpu`.
 
 ### Network switch (SNMP)
 
@@ -667,7 +726,7 @@ Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critica
 ./forgesre config               # print YAML
 ./forgesre assets               # inventory table (alias: inventory)
 ./forgesre snmp                 # exporter HTTP check + SNMP SD JSON
-./forgesre sd                   # Linux + SNMP HTTP SD
+./forgesre sd                   # Linux + Windows HTTP SD, then SNMP HTTP SD
 ./forgesre incidents            # colored board; INC-… opens one row
 ./forgesre login                # ForgeSRE UI user (engineer/analyst)
 ./forgesre whoami
@@ -729,7 +788,7 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 | POST | `/api/v1/journal` | admin (install writes one row here) |
 | GET | `/api/v1/jobs` | analyst+ (`read_play`) |
 | GET | `/api/v1/system/doctor` | login **or** Bearer webhook token |
-| GET | `/api/v1/sd/prometheus` | Bearer webhook token (Linux node_exporter) |
+| GET | `/api/v1/sd/prometheus` | Bearer webhook token (Linux node_exporter :9100 and Windows windows_exporter :9182) |
 | GET | `/api/v1/sd/snmp` | Bearer webhook token (network devices) |
 | POST | `/api/v1/webhooks/alertmanager` | Bearer webhook token |
 
@@ -749,8 +808,8 @@ Say this out loud so lab expectations stay honest:
 - Playbooks are checklists, not executed runbooks.
 - No UI to delete assets or create escalation policies. Asset **owner/contacts** can be edited after Save. Users can be edited and removed on Administration (not the install super admin, not yourself).
 - Example YAML in `config/examples/` is not applied automatically.
-- Bundled alert rules include demo gauges, SNMP `up` / interface-down, and a small `node_exporter` set (down / disk 90% / CPU 95%). Extra rules go in `alerts.local.yml`.
-- Discovery is TCP 22/80/443/9100 plus SNMP GET on UDP/161, 256 hosts max. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.
+- Bundled alert rules include demo gauges, SNMP `up` / interface-down, a small `node_exporter` set (down / disk 90% / CPU 95%), and a small `windows_exporter` set (down / volume 90% / CPU 90%). Extra rules go in `alerts.local.yml`.
+- Discovery is TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, 256 hosts max. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.
 - Viewer cannot open Playrules, Playbooks, Escalation, Console, or Discovery (403).
 - Optional TLS is an example Caddyfile, not a default container.
 - NetBox is read-only and optional.

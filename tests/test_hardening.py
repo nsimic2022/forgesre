@@ -158,6 +158,10 @@ def test_promql_demo_gauges_only_for_demo_asset():
     assert demo["cpu_percent"][0] == "forgesre_demo_cpu_percent"
     real = promql_queries_for({"asset_id": "app-real-01", "type": "Linux Server"})
     assert "forgesre_demo_cpu_percent" not in str(real)
+    assert "node_cpu_seconds_total" in str(real)
+    win = promql_queries_for({"asset_id": "win-real-01", "type": "Windows Server"})
+    assert "windows_cpu_time_total" in str(win)
+    assert "forgesre_demo_cpu_percent" not in str(win)
     unknown = promql_queries_for({})
     assert "forgesre_demo_cpu_percent" not in str(unknown)
 

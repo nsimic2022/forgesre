@@ -5,7 +5,7 @@
 #   curl -fsS -X POST http://127.0.0.1:9090/-/reload
 #
 # Contents are concatenated AFTER the bundled monitoring/alerts.yml
-# (demo gauges, SNMP, and node_exporter rules).
+# (demo gauges, SNMP, node_exporter, and windows_exporter rules).
 #
 # groups:
 #   - name: local

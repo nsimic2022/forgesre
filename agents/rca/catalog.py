@@ -65,6 +65,7 @@ HYPOTHESES: dict[str, list[HypothesisRow]] = {
     ],
     "windows": [
         ("win-cpu", "A Windows process or service may be consuming CPU.", ("cpu", "processor", "w3wp", "sqlservr")),
+        ("win-exporter", "windows_exporter on TCP/9182 may be down or firewalled from ForgeSRE.", ("9182", "windows_exporter", "scrape")),
         ("win-service", "A Windows service may have crashed or failed to start.", ("service", "scm", "event id")),
         ("win-disk", "An NTFS volume may be full.", ("disk", "ntfs", "c:", "volume")),
         ("win-update", "Windows Update or a reboot-pending patch may be disrupting the host.", ("update", "reboot", "wuauserv")),
@@ -131,7 +132,7 @@ ACTIONS = {
     "linux-disk": "Engineer should verify disk usage, growth, and the owning team.",
     "linux-memory": "Engineer should inspect memory, OOM logs, and swap on the host.",
     "linux-host": "Engineer should check ping/SSH and node_exporter TCP/9100 from the ForgeSRE host.",
-    "windows": "Engineer should inspect Task Manager/services and the System event log. ForgeSRE does not scrape Windows exporters in this release.",
+    "windows": "Engineer should check windows_exporter TCP/9182 from the ForgeSRE host, then Task Manager/services and the System event log.",
     "storage": "Engineer should verify volume/LUN capacity, snapshots, and paths. Nothing was executed.",
     "switch": "Engineer should check interface oper status, errors, and uplinks (SNMP if_mib).",
     "router": "Engineer should check routing adjacencies, management ACL, and SNMP from the ForgeSRE host.",
@@ -166,11 +167,17 @@ PLAYRULE_PRESETS: list[dict[str, Any]] = [
         ],
     },
     {
-        "group": "Storage / Windows (alertname match if Prometheus sends them)",
+        "group": "Windows (windows_exporter)",
+        "rules": [
+            {"id": "win-cpu", "label": "WindowsCPUHigh — cpu_usage > 90", "name": "windows-cpu", "alertname": "WindowsCPUHigh", "metric": "cpu_usage", "operator": ">", "value": 90, "severity": "warning", "playbook": "cpu-high"},
+            {"id": "win-disk", "label": "WindowsFilesystemUsageHigh — filesystem_usage > 90", "name": "windows-filesystem", "alertname": "WindowsFilesystemUsageHigh", "metric": "filesystem_usage", "operator": ">", "value": 90, "severity": "warning", "playbook": "disk-full"},
+            {"id": "win-exporter-down", "label": "WindowsExporterDown — up == 0", "name": "windows-exporter-down", "alertname": "WindowsExporterDown", "metric": "up", "operator": "==", "value": 0, "severity": "warning", "playbook": "windows-unreachable"},
+        ],
+    },
+    {
+        "group": "Storage (alertname match if Prometheus sends them)",
         "rules": [
             {"id": "storage-lun", "label": "StorageVolumeUsageHigh — filesystem_usage > 90", "name": "storage-volume", "alertname": "StorageVolumeUsageHigh", "metric": "filesystem_usage", "operator": ">", "value": 90, "severity": "warning", "playbook": "disk-full"},
-            {"id": "win-cpu", "label": "WindowsCPUHigh — cpu_usage > 90", "name": "windows-cpu", "alertname": "WindowsCPUHigh", "metric": "cpu_usage", "operator": ">", "value": 90, "severity": "warning", "playbook": "cpu-high"},
-            {"id": "win-disk", "label": "WindowsDiskUsageHigh — filesystem_usage > 90", "name": "windows-disk", "alertname": "WindowsDiskUsageHigh", "metric": "filesystem_usage", "operator": ">", "value": 90, "severity": "warning", "playbook": "disk-full"},
         ],
     },
 ]

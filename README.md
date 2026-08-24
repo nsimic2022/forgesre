@@ -12,7 +12,7 @@ It is not a Kubernetes platform, not APM, and not auto-remediation. Playbooks ar
 
 ## What the system does
 
-When a Linux server or a switch is in inventory and monitoring is wired, the path is:
+When a Linux server, a Windows server, or a switch is in inventory and monitoring is wired, the path is:
 
 ```
 Find or enter a host
@@ -20,6 +20,7 @@ Find or enter a host
    Assets (who owns it, how to scrape it)
         ↓
    Prometheus  — Linux: node_exporter :9100
+               — Windows: windows_exporter :9182
    snmp_exporter — network: UDP/161
         ↓
    Alert → incident
@@ -31,9 +32,9 @@ Find or enter a host
 
 | Piece | Role |
 |---|---|
-| **Discovery** | Light probe: TCP 22/80/443/9100 plus SNMP GET on UDP/161. Approve or Ignore. Optional read-sync from an existing NetBox. |
+| **Discovery** | Light probe: TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161. Approve or Ignore. Optional read-sync from an existing NetBox. |
 | **Inventory** | Hostname, IP, type, owner email/phone. Analysts can add and edit. |
-| **Monitoring** | Prometheus HTTP SD for Linux. Bundled snmp_exporter for network devices. Grafana for graphs. |
+| **Monitoring** | Prometheus HTTP SD for Linux (`node_exporter` :9100) and Windows (`windows_exporter` :9182). Bundled snmp_exporter for network devices. Grafana for graphs. |
 | **Incidents** | Alertmanager webhook opens `INC-…`. Fingerprint is alert + asset. |
 | **History** | `/history` — last 90 days in Postgres, plus mail/audit/notes on the incident. |
 | **Playrules / playbooks** | Deterministic mapping: this alert → this checklist. Nothing is executed. |
@@ -48,7 +49,7 @@ Demo asset `forge-demo-01` is seeded so the first hour is visible without a real
 ## What it is not
 
 - A replacement for Prometheus, Grafana, Loki, or NetBox
-- An installer for `node_exporter` on your servers
+- An installer for `node_exporter` or `windows_exporter` on your servers
 - Auto-remediation, SSH, or executed runbooks
 - A bundled NetBox or a cloud LLM
 - Kubernetes / tracing / APM
@@ -85,7 +86,7 @@ git pull origin main
 ./forgesre update
 ```
 
-Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. Linux stays on node_exporter `:9100`.
+Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. Linux stays on node_exporter `:9100`. Windows uses windows_exporter `:9182` (not node_exporter).
 
 ---
 

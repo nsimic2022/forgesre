@@ -12,25 +12,78 @@ from app.settings import settings
 
 log = logging.getLogger("forgesre")
 DEMO_CANDIDATE_IP = "10.20.30.41"
+LINUX_EXPORTER_PORT = 9100
+WINDOWS_EXPORTER_PORT = 9182
+
+
+def asset_kind(type: str = "", profile: str = "") -> str:
+    """linux | windows | network | web | other. Windows is checked before 'server' (Windows Server)."""
+    blob = f"{type} {profile}".lower()
+    if "windows" in blob or "win32" in blob:
+        return "windows"
+    if "linux" in blob:
+        return "linux"
+    if "network" in blob or "switch" in blob or "router" in blob or "firewall" in blob:
+        return "network"
+    if "web" in blob or "appliance" in blob:
+        return "web"
+    if "server" in blob:
+        return "linux"
+    return "other"
+
+
+def default_scrape_address(type: str, ip: str, profile: str = "") -> str:
+    ip = (ip or "").strip()
+    if not ip:
+        return ""
+    kind = asset_kind(type, profile)
+    if kind == "windows":
+        return f"{ip}:{WINDOWS_EXPORTER_PORT}"
+    if kind == "linux":
+        return f"{ip}:{LINUX_EXPORTER_PORT}"
+    return ""
+
+
+def default_monitoring_profile(type: str, profile: str = "") -> str:
+    if (profile or "").strip():
+        return profile.strip()
+    kind = asset_kind(type)
+    if kind == "windows":
+        return "windows-standard"
+    if kind == "linux":
+        return "linux-standard"
+    if kind == "web":
+        return "web-standard"
+    return "network-switch"
 
 
 def sd_targets(db: Session, core_address: str | None = None) -> list[dict]:
-    """Inventory scrape targets only. Core stays on Prometheus static_configs so a Core outage does not lose the demo scrape."""
+    """Inventory scrape targets only. Core stays on Prometheus static_configs so a Core outage does not lose the demo scrape.
+
+    Linux node_exporter (:9100, job=linux-standard) and Windows windows_exporter
+    (:9182, job=windows-standard) share this HTTP SD. Seeded forge-demo-* hosts
+    are lab-only and never appear here, even if scrape_address is set.
+    """
+    from app.seed import is_demo_asset_id
+
     del core_address
     targets: list[dict] = []
     seen: set[str] = set()
     for asset in db.query(Asset).order_by(Asset.asset_id).all():
+        if is_demo_asset_id(getattr(asset, "asset_id", "") or getattr(asset, "hostname", "")):
+            continue
         address = (asset.scrape_address or "").strip()
         if not address or address in seen:
             continue
         seen.add(address)
+        profile = asset.monitoring_profile or default_monitoring_profile(asset.type or "")
         targets.append(
             {
                 "targets": [address],
                 "labels": {
                     "asset": asset.asset_id,
-                    "job": asset.monitoring_profile or "linux-standard",
-                    "monitoring_profile": asset.monitoring_profile or "linux-standard",
+                    "job": profile,
+                    "monitoring_profile": profile,
                     "source": asset.source or "manual",
                 },
             }
@@ -39,7 +92,7 @@ def sd_targets(db: Session, core_address: str | None = None) -> list[dict]:
 
 
 def is_snmp_asset(asset: Asset) -> bool:
-    """Network devices with an IP are polled by snmp_exporter. Linux node_exporter hosts are not."""
+    """Network devices with an IP are polled by snmp_exporter. Linux/Windows HTTP exporters are not."""
     from app.seed import is_demo_asset_id
 
     if not settings.snmp_enabled:
@@ -49,13 +102,10 @@ def is_snmp_asset(asset: Asset) -> bool:
     ip = (asset.ip or "").strip()
     if not ip:
         return False
-    profile = (asset.monitoring_profile or "").lower()
-    kind = (asset.type or "").lower()
-    if "linux" in kind or "linux" in profile:
+    kind = asset_kind(asset.type or "", asset.monitoring_profile or "")
+    if kind in {"linux", "windows", "web"}:
         return False
-    if "web" in kind or "appliance" in kind:
-        return False
-    return "network" in kind or "switch" in kind or "router" in kind or "firewall" in kind
+    return kind == "network"
 
 
 def sd_snmp_targets(db: Session) -> list[dict]:
@@ -179,9 +229,8 @@ def create_manual_asset(
             object_id=existing.asset_id,
         )
         return existing
-    linux = "linux" in type.lower() or "server" in type.lower()
-    profile = monitoring_profile or ("linux-standard" if linux else "network-switch")
-    address = (scrape_address or "").strip() or (f"{ip}:9100" if linux and ip else "")
+    profile = default_monitoring_profile(type, monitoring_profile)
+    address = (scrape_address or "").strip() or default_scrape_address(type, ip, profile)
     asset = Asset(
         asset_id=slug,
         hostname=hostname,
@@ -261,8 +310,14 @@ def update_asset(
         asset.notes = notes.strip()
     if scrape_address is not None:
         asset.scrape_address = scrape_address.strip()
-    elif old_ip and asset.ip and asset.scrape_address == f"{old_ip}:9100":
-        asset.scrape_address = f"{asset.ip}:9100"
+    elif old_ip and asset.ip:
+        if asset.scrape_address == f"{old_ip}:{LINUX_EXPORTER_PORT}":
+            asset.scrape_address = f"{asset.ip}:{LINUX_EXPORTER_PORT}"
+        elif asset.scrape_address == f"{old_ip}:{WINDOWS_EXPORTER_PORT}":
+            asset.scrape_address = f"{asset.ip}:{WINDOWS_EXPORTER_PORT}"
+    kind = asset_kind(asset.type or "", asset.monitoring_profile or "")
+    if kind == "windows" and (asset.monitoring_profile or "") in {"", "linux-standard"}:
+        asset.monitoring_profile = "windows-standard"
     audit(
         db,
         "asset.update",
@@ -337,8 +392,18 @@ def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset
     if asset is None:
         role = row.proposed_role or ""
         ports = {int(p) for p in (row.open_ports or []) if str(p).isdigit() or isinstance(p, int)}
-        if "Linux" in role:
-            atype, profile, scrape = "Linux Server", "linux-standard", (f"{row.ip}:9100" if 9100 in ports else "")
+        if "Windows" in role:
+            atype, profile, scrape = (
+                "Windows Server",
+                "windows-standard",
+                (f"{row.ip}:{WINDOWS_EXPORTER_PORT}" if WINDOWS_EXPORTER_PORT in ports else ""),
+            )
+        elif "Linux" in role:
+            atype, profile, scrape = (
+                "Linux Server",
+                "linux-standard",
+                (f"{row.ip}:{LINUX_EXPORTER_PORT}" if LINUX_EXPORTER_PORT in ports else ""),
+            )
         elif "network" in role.lower():
             atype, profile, scrape = "Network device", "network-switch", ""
         else:
