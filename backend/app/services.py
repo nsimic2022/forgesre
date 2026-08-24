@@ -39,6 +39,7 @@ from app.seed import (
     is_demo_asset_id,
     seed,
 )
+from app.mailhtml import compose_email_message, incident_report_html, notification_html
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
@@ -755,6 +756,7 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
     stored_target = owner_email or policy_role
     subject = demo_mail_subject(incident, f"{incident.number} {incident.title}")
     body = _notification_body(incident, step_key, policy_role)
+    html_body = notification_html(incident, step_key, policy_role)
     row = Notification(
         incident_id=incident.id,
         channel="email",
@@ -766,7 +768,7 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
     )
     if settings.email_enabled and settings.smtp_host:
         try:
-            _send_smtp(stored_target, subject, body)
+            _send_smtp(stored_target, subject, body, html=html_body)
             row.status = "sent"
         except Exception as exc:
             row.status = "failed"
@@ -842,16 +844,17 @@ def smtp_ssl_context(host: str):
     return ctx
 
 
-def _send_smtp(target: str, subject: str, body: str) -> None:
+def _send_smtp(target: str, subject: str, body: str, html: str | None = None) -> None:
     import smtplib
-    from email.message import EmailMessage
 
     address = target.strip() if "@" in (target or "") else f"{target}@forgesre.local"
-    message = EmailMessage()
-    message["From"] = settings.smtp_from
-    message["To"] = address
-    message["Subject"] = subject
-    message.set_content(body)
+    message = compose_email_message(
+        sender=settings.smtp_from,
+        to=address,
+        subject=subject,
+        body=body,
+        html_body=html,
+    )
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as client:
         if settings.smtp_tls:
             client.starttls(context=smtp_ssl_context(settings.smtp_host))
@@ -918,8 +921,13 @@ def send_outbound_mail(
     actor: str = "system",
     step_key: str = "manual",
     incident: Incident | None = None,
+    html: str | None = None,
 ) -> Notification:
-    """Store an outbox row and send if SMTP is on. Does not change incident status."""
+    """Store an outbox row and send if SMTP is on. Does not change incident status.
+
+    ``html`` is the optional text/html alternative (incident report). Freeform Ops
+    compose leaves it unset so the message stays text/plain.
+    """
     subject = demo_mail_subject(incident, subject.strip() or "(no subject)")
     body = body or ""
     if incident is not None and is_demo_incident(incident):
@@ -937,7 +945,7 @@ def send_outbound_mail(
     )
     if settings.email_enabled and settings.smtp_host:
         try:
-            _send_smtp(row.target, row.subject, row.body)
+            _send_smtp(row.target, row.subject, row.body, html=html)
             row.status = "sent"
         except Exception as exc:
             row.status = "failed"
@@ -1086,14 +1094,16 @@ def send_incident_report(db: Session, incident: Incident, target: str, actor: st
     contact = remember_mail_contact(db, target, actor=actor)
     if contact is None:
         raise ValueError("Need a valid email address")
+    body = build_incident_report(db, incident)
     return send_outbound_mail(
         db,
         target=contact.email,
         subject=demo_mail_subject(incident, f"[ForgeSRE] {incident.number} {incident.title}"),
-        body=build_incident_report(db, incident),
+        body=body,
         actor=actor,
         step_key="incident-report",
         incident=incident,
+        html=incident_report_html(incident),
     )
 
 

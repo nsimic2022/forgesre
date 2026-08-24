@@ -67,7 +67,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Demo rows stay visible; they are **labeled DEMO**, not hidden.
 - Incident ids look like `INC-0134_16.08.2026_09:13`. Older `INC-000012` rows stay valid.
 - RCA is Python under `agents/rca/`. The LLM only rewrites prose. Builtin ForgeRCA always runs first.
-- Core is an SMTP **client** only. The UI has no IMAP inbox.
+- Core is an SMTP **client** only. The UI has no IMAP inbox. Incident reports and escalation mail are HTML + plain text (multipart); `/ops` compose stays plain.
 - pytest is a laptop/dev dependency. The Core image must not install it.
 - After UI / CSS changes, operators need a **hard refresh** in the browser.
 
