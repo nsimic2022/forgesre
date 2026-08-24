@@ -76,8 +76,8 @@ Commands:
   version            Appliance version from .env
   secrets-check      Refuse-to-start defaults: SECRET_KEY / webhook token
   fetch-llm          Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp
-  backup             Dump Postgres + config (tar mode 600; --no-secrets omits secrets.env)
-  restore            Print restore steps (does not run them)
+  backup             Platform tar.gz under data/backups (mode 600; --no-secrets / --include-models)
+  restore            Print plan; apply only with --yes after stopping Core
   update             Backup, render monitoring, refresh images, restart, doctor
   mailbox            Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)
   completion         Print a `source …completion.bash` line for ~/.bashrc
@@ -410,21 +410,43 @@ EOF
       ;;
     backup)
       cat <<'EOF'
-backup — Postgres dump + config tarball under $FORGESRE_DATA/backups.
+backup — platform tar.gz under $FORGESRE_DATA/backups (default ./data/backups).
 
   ./forgesre backup
   ./forgesre backup --no-secrets
+  ./forgesre backup --include-models
   ./backup.sh --no-secrets
 
-The tar is mode 600. Default includes secrets.env. --no-secrets omits it
-so the archive can sit on a less-trusted disk; keep secrets elsewhere.
+Includes: Postgres/SQLite dump (users, incidents, playbooks, playrules, journal),
+config/forgesre.yml, .env, secrets.env (unless --no-secrets), compressed logs,
+monitoring/alerts.local.yml, data/generated/, config/examples/.
+
+Not included: Docker images, Prometheus/Loki/Grafana volumes, nested backups.
+LLM GGUF files are skipped unless --include-models (they are often multi-GB).
+
+The tar is mode 600. Administration can create/download the same archives
+(admin session only). Never commit data/backups/. Use --no-secrets when the
+file will leave the VM.
 EOF
       ;;
     restore)
       cat <<'EOF'
-restore — not automated. Unpack a backup and load SQL:
+restore — apply a platform backup. Refuses without --yes.
 
-  docker compose exec -T postgres psql -U forgesre forgesre < forgesre.sql
+  ./forgesre restore
+  ./forgesre restore data/backups/forgesre-20260824T120000Z.tar.gz
+  ./forgesre restore data/backups/forgesre-20260824T120000Z.tar.gz --yes
+
+Without --yes this only prints the plan and exits 1. It will overwrite
+the database, .env, secrets, and config. Stop Core first:
+
+  docker compose stop core
+  ./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes
+  ./forgesre update
+
+Administration Import stores an upload under data/backups/. The Restore
+button requires typing RESTORE. A browser restore cannot stop Core;
+prefer this CLI path after a crash or when migrating VMs.
 EOF
       ;;
     incidents)
@@ -690,8 +712,12 @@ case "$cmd" in
   test) exec "$ROOT/scripts/test.sh" "$@" ;;
   backup) exec "$ROOT/scripts/backup.sh" "$@" ;;
   restore)
-    print_help_command restore
-    exit 1
+    if [[ $# -eq 0 ]]; then
+      print_help_command restore
+      exit 1
+    fi
+    need_env
+    exec "$ROOT/scripts/restore.sh" "$@"
     ;;
   update) exec "$ROOT/scripts/update.sh" "$@" ;;
   mailbox)

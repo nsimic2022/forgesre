@@ -100,10 +100,82 @@
   </tbody>
 </table>
 </div>
+<h2>Platform backup</h2>
+{% if request.query_params.get('backup') %}
+<p class="banner"><strong>Backup written</strong> {{ request.query_params.get('backup') }} under <code>data/backups/</code> (mode 600, gitignored).</p>
+{% endif %}
+{% if request.query_params.get('imported') %}
+<p class="banner"><strong>Archive stored</strong> {{ request.query_params.get('imported') }}. Restore still needs the confirmation below — it will not run by itself.</p>
+{% endif %}
+{% if request.query_params.get('restored') %}
+<p class="banner"><strong>Database restored</strong> from {{ request.query_params.get('restored') }}.
+  Config / <code>.env</code> / secrets on disk are not rewritten from this browser (Core mounts them read-only).
+  Finish on the VM: <code>docker compose stop core</code> → <code>./forgesre restore data/backups/{{ request.query_params.get('restored') }} --yes</code> → <code>./forgesre update</code>.</p>
+{% endif %}
+<p>
+  Full-system archive for crash recovery or VM migration. Files land in <code>data/backups/</code> (gitignored, directory mode 700, tar mode 600).
+  Includes <code>config/forgesre.yml</code>, <code>.env</code>, <code>secrets/secrets.env</code>, a logical Postgres dump (users, incidents, playbooks, playrules, journal), compressed logs, <code>monitoring/alerts.local.yml</code>, and <code>data/generated/</code>.
+</p>
+<p class="muted">
+  Not in the backup: container images, Prometheus/Loki/Grafana volumes, nested backups, optional mailbox mail.
+  LLM GGUF weights are skipped unless you tick the checkbox (they are often multi-GB).
+  Download requires this admin session — there is no unauthenticated URL.
+</p>
+<form method="post" action="/admin/backups" class="row-actions backup-actions">
+  <label class="inline-check"><input type="checkbox" name="include_models" value="1"> Include LLM GGUF (multi-GB)</label>
+  <button type="submit">Backup</button>
+</form>
+{% if backups %}
+<div class="table-scroll">
+<table>
+  <thead><tr><th>Archive</th><th>Size</th><th></th></tr></thead>
+  <tbody>
+  {% for b in backups %}
+    <tr>
+      <td><code>{{ b.name }}</code></td>
+      <td>{{ format_size(b.size) }}</td>
+      <td><a href="/admin/backups/{{ b.name }}">Download</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">No archives yet. Create one, or import a <code>forgesre-YYYYMMDDTHHMMSSZ.tar.gz</code>.</p>
+{% endif %}
+<h3>Import / restore</h3>
+<p class="muted">
+  Import only <strong>stores</strong> a tar.gz under <code>data/backups/</code>.
+  Restore overwrites the live database (users, incidents, playbooks). It does <strong>not</strong> run unless you tick the box and type <code>RESTORE</code>.
+  Preferred after a crash or when migrating: SSH, stop Core, <code>./forgesre restore ARCHIVE --yes</code>, then <code>./forgesre update</code>.
+</p>
+<form method="post" action="/admin/backups/import" enctype="multipart/form-data" class="row-actions backup-actions">
+  <input type="file" name="archive" accept=".tar.gz,application/gzip" required>
+  <button type="submit">Import</button>
+</form>
+{% if backups %}
+<form method="post" action="/admin/backups/restore" class="stack backup-restore" onsubmit="return confirm('This overwrites the live database. Continue only if you typed RESTORE and you can recover from another copy.');">
+  <label>Archive
+    <select name="name" required>
+      {% for b in backups %}
+      <option value="{{ b.name }}">{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="inline-check"><input type="checkbox" name="acknowledged" value="1" required> I understand this overwrites users, incidents, and playbooks on this live box</label>
+  <label>Type RESTORE <input name="confirm" required placeholder="RESTORE" autocomplete="off"></label>
+  <button type="submit" class="danger">Restore</button>
+</form>
+{% endif %}
 <h2>Appliance shell</h2>
 <p class="muted">
-  There is no bash terminal in this browser. A web shell would be another admin backdoor
-  (stolen session = root on the VM). Use SSH to the appliance, or <code>./forgesre shell</code> on the box.
-  Process reports stay in <a href="/journal">Journal</a>.
+  There is no terminal in this browser — not bash, and not a wrapped <code>./forgesre</code> prompt.
+  A web PTY (even restricted to the ForgeSRE CLI) is still a host command channel:
+  XSS or a stolen admin cookie becomes whatever that CLI can do, and restricted shells are escaped.
+  ForgeSRE does not ship that. Use SSH to the appliance, then <code>./forgesre</code> or <code>./forgesre shell</code> on the box.
+  Process reports stay in <a href="/journal">Journal</a>. See the operator handbook (Administration → Appliance shell).
 </p>
+<pre class="cli-hint">ssh you@forgesre-vm
+cd ~/forgesre
+./forgesre shell</pre>
 {% endblock %}

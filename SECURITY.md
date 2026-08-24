@@ -8,7 +8,8 @@ ForgeSRE is designed to be self-hosted on a management network.
 - Keep `secrets/` mode `0700` and `secrets.env` mode `0600`.
 - Do not put passwords in `config/forgesre.yml`.
 - Core **refuses to start** if `SECRET_KEY` or `ALERTMANAGER_WEBHOOK_TOKEN` is still a shipped default (`forgesre-dev-secret-change-me`, `forgesre-dev-webhook-token`, `CHANGE-ME-RENDER-MONITORING`) unless `FORGESRE_DEV=1` (unit tests / explicit throwaway lab). Check with `./forgesre secrets-check`.
-- Backups are tar mode `600`. Use `./forgesre backup --no-secrets` when the archive will leave the VM.
+- Backups are tar mode `600` under `data/backups/` (gitignored). Use `./forgesre backup --no-secrets` when the archive will leave the VM. Administration download requires an admin session (`Cache-Control: no-store`). Never commit backups.
+- There is **no browser PTY**. A web terminal wrapped around `./forgesre` would still be a host command channel (XSS / stolen admin cookie). Use SSH + `./forgesre shell` on the box. See `docs/operator-handbook.md` (Administration → Appliance shell).
 - Session cookie `Secure` only when `system.cookie_secure` or `FORGESRE_COOKIE_SECURE=1` (HTTPS). Lab default is HTTP on the management VLAN.
 - `/api/v1/system/doctor` requires a login session or `Authorization: Bearer` with the webhook token. Prometheus HTTP SD uses the same token.
 

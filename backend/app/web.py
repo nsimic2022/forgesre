@@ -5,8 +5,8 @@ import os
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -962,8 +962,10 @@ def admin_page(
     users = db.query(User).order_by(User.email).all()
     audits = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(30).all()
     chosen = db.get(User, selected) if selected else None
+    from app.backup import format_size, list_archives, layout_from_env
     from app.users import delete_blocked, edit_blocked
 
+    lay = layout_from_env()
     return render(
         request,
         "admin.html",
@@ -973,6 +975,9 @@ def admin_page(
         selected=chosen,
         can_edit_selected=bool(chosen) and not edit_blocked(user, chosen),
         can_delete_selected=bool(chosen) and not delete_blocked(user, chosen),
+        backups=list_archives(lay),
+        backup_files_writable=lay.files_writable,
+        format_size=format_size,
     )
 
 
@@ -1047,6 +1052,118 @@ def admin_delete_user(
     db.commit()
     report(db, "core", "user.delete", "ok", summary=f"Removed {email}", object_type="user", object_id=email)
     return RedirectResponse("/admin", status_code=303)
+
+
+def _require_admin(user: User) -> None:
+    if not can(user, "admin"):
+        raise HTTPException(status_code=403)
+
+
+@router.post("/admin/backups")
+def admin_create_backup(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    include_models: str = Form(""),
+    include_secrets: str = Form("1"),
+):
+    _require_admin(user)
+    from app.backup import create_backup
+    from app.journal import report
+
+    result = create_backup(include_secrets=include_secrets != "0", include_models=bool(include_models))
+    audit(db, "backup.create", actor=user.email, object_type="backup", object_id=result.name, ip=request.client.host if request.client else "")
+    report(db, "backup", "create", "ok", summary=f"Wrote {result.name}", object_type="backup", object_id=result.name)
+    db.commit()
+    return RedirectResponse(f"/admin?backup={quote(result.name)}", status_code=303)
+
+
+@router.get("/admin/backups/{name}")
+def admin_download_backup(
+    name: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    _require_admin(user)
+    from app.backup import resolve_archive
+
+    try:
+        path = resolve_archive(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="backup not found") from exc
+    audit(db, "backup.download", actor=user.email, object_type="backup", object_id=path.name, ip=request.client.host if request.client else "", commit=True)
+    return FileResponse(
+        path,
+        filename=path.name,
+        media_type="application/gzip",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.post("/admin/backups/import")
+async def admin_import_backup(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    archive: UploadFile = File(...),
+):
+    _require_admin(user)
+    from app.backup import save_upload
+    from app.journal import report
+
+    data = await archive.read()
+    try:
+        path = save_upload(data, archive.filename or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "backup.import", actor=user.email, object_type="backup", object_id=path.name, ip=request.client.host if request.client else "")
+    report(db, "backup", "import", "ok", summary=f"Imported {path.name}", object_type="backup", object_id=path.name)
+    db.commit()
+    return RedirectResponse(f"/admin?imported={quote(path.name)}", status_code=303)
+
+
+@router.post("/admin/backups/restore")
+def admin_restore_backup(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    name: str = Form(...),
+    confirm: str = Form(""),
+    acknowledged: str = Form(""),
+):
+    _require_admin(user)
+    from app.backup import CONFIRM_WORD, restore_archive, resolve_archive
+    from app.journal import report
+
+    if acknowledged != "1" or confirm.strip() != CONFIRM_WORD:
+        raise HTTPException(
+            status_code=400,
+            detail="Restore refused. Tick the warning and type RESTORE.",
+        )
+    try:
+        path = resolve_archive(name)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    try:
+        outcome = restore_archive(path, confirm=CONFIRM_WORD, stop_core=False)
+    except PermissionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "backup.restore", actor=user.email, object_type="backup", object_id=path.name, ip=request.client.host if request.client else "")
+    report(
+        db,
+        "backup",
+        "restore",
+        "ok",
+        summary=f"Restored {path.name}",
+        detail="\n".join(outcome.get("notes") or []),
+        object_type="backup",
+        object_id=path.name,
+    )
+    db.commit()
+    return RedirectResponse(f"/admin?restored={quote(path.name)}", status_code=303)
 
 
 @router.post("/demo")

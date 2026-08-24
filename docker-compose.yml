@@ -33,9 +33,23 @@ services:
       LOKI_URL: http://127.0.0.1:3100
       ALERTMANAGER_URL: http://127.0.0.1:9093
       GRAFANA_PUBLIC_URL: http://localhost:${GRAFANA_PORT:-3000}
+      FORGESRE_BACKUP_DIR: /backups
+      FORGESRE_DOTENV: /host-dotenv
+      FORGESRE_SECRETS_FILE: /host-secrets.env
+      FORGESRE_MONITORING_DIR: /host-monitoring
+      FORGESRE_GENERATED_DIR: /host-generated
+      FORGESRE_MODELS_DIR: /host-models
+      FORGESRE_LOGS_DIR: /logs
+      FORGESRE_FILES_WRITABLE: "0"
     volumes:
       - ./config/forgesre.yml:/config/forgesre.yml:ro
       - ${FORGESRE_DATA:-./data}/logs:/logs
+      - ${FORGESRE_DATA:-./data}/backups:/backups
+      - ./.env:/host-dotenv:ro
+      - ./secrets/secrets.env:/host-secrets.env:ro
+      - ./monitoring:/host-monitoring:ro
+      - ${FORGESRE_DATA:-./data}/generated:/host-generated:ro
+      - ${FORGESRE_DATA:-./data}/models:/host-models:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port ${FORGESRE_HTTP_PORT:-8080}
     depends_on:
       postgres:
