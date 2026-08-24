@@ -27,7 +27,7 @@
       <td>{{ note.created_at }}</td>
       <td>{{ note.target }}</td>
       <td>{{ note.subject }}</td>
-      <td>{{ note.status }}</td>
+        <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
     </tr>
   {% else %}
     <tr><td colspan="4" class="muted">None yet.</td></tr>

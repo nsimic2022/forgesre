@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -94,26 +95,11 @@ def _escalation_loop(stop: threading.Event) -> None:
 def create_app() -> FastAPI:
     assert_runtime_secrets()
     configure_logging()
-    app = FastAPI(title="ForgeSRE", version="0.7.0")
-    static_dir = settings.frontend_dir / "static"
-    if static_dir.exists():
-        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-    app.include_router(api_router)
-    app.include_router(web_router)
-
-    @app.exception_handler(NotAuthenticated)
-    async def _login_redirect(request, exc):  # noqa: ARG001
-        return RedirectResponse("/login", status_code=302)
-
-    @app.get("/metrics")
-    def metrics() -> Response:
-        body, content_type = metrics_response()
-        return Response(content=body, media_type=content_type)
-
     stop = threading.Event()
 
-    @app.on_event("startup")
-    def on_startup() -> None:
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        stop.clear()
         Base.metadata.create_all(bind=engine)
         migrate(engine)
         db: Session = SessionLocal()
@@ -147,10 +133,24 @@ def create_app() -> FastAPI:
         threading.Thread(target=_jobs_loop, args=(stop,), daemon=True).start()
         threading.Thread(target=_discovery_loop, args=(stop,), daemon=True).start()
         app.state.escalation_stop = stop
-
-    @app.on_event("shutdown")
-    def on_shutdown() -> None:
+        yield
         stop.set()
+
+    app = FastAPI(title="ForgeSRE", version="0.7.0", lifespan=lifespan)
+    static_dir = settings.frontend_dir / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    app.include_router(api_router)
+    app.include_router(web_router)
+
+    @app.exception_handler(NotAuthenticated)
+    async def _login_redirect(request, exc):  # noqa: ARG001
+        return RedirectResponse("/login", status_code=302)
+
+    @app.get("/metrics")
+    def metrics() -> Response:
+        body, content_type = metrics_response()
+        return Response(content=body, media_type=content_type)
 
     return app
 

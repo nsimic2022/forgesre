@@ -19,17 +19,17 @@
     <a href="/incidents" class="{% if request.url.path.startswith('/incidents') %}active{% endif %}">Incidents</a>
     <a href="/history" class="{% if request.url.path.startswith('/history') %}active{% endif %}">History</a>
     {% if can('read_play') %}
-    <a href="/playrules">Playrules</a>
-    <a href="/playbooks">Playbooks</a>
-    <a href="/escalation">Escalation</a>
+    <a href="/playrules" class="{% if request.url.path.startswith('/playrules') %}active{% endif %}">Playrules</a>
+    <a href="/playbooks" class="{% if request.url.path.startswith('/playbooks') %}active{% endif %}">Playbooks</a>
+    <a href="/escalation" class="{% if request.url.path.startswith('/escalation') %}active{% endif %}">Escalation</a>
     <a href="/journal" class="{% if request.url.path.startswith('/journal') %}active{% endif %}">Journal</a>
     {% endif %}
     <a href="/health-ui" class="{% if request.url.path.startswith('/health-ui') %}active{% endif %}">System Health</a>
     <a href="/ops" class="{% if request.url.path.startswith('/ops') %}active{% endif %}">Email &amp; reports</a>
-    {% if can('admin') %}<a href="/admin">Administration</a>{% endif %}
+    {% if can('admin') %}<a href="/admin" class="{% if request.url.path.startswith('/admin') %}active{% endif %}">Administration</a>{% endif %}
     <div class="nav-foot">
       <div class="who">{{ user.name }} · {{ role_label(user.role) }}</div>
-      <form method="post" action="/logout"><button type="submit">Logout</button></form>
+      <form method="post" action="/logout"><button type="submit" class="secondary">Logout</button></form>
     </div>
   </aside>
   <main class="content">

@@ -24,6 +24,7 @@
   </div>
 </form>
 <p class="muted">{{ total }} match{% if total != 1 %}es{% endif %} · page {{ page }} / {{ pages }}</p>
+<div class="table-scroll">
 <table>
   <thead>
     <tr>
@@ -48,6 +49,7 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% if pages > 1 %}
 <p>
   {% if page > 1 %}

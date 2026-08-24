@@ -7,7 +7,7 @@
   New hosts wait here until an engineer Approves or Ignores them.
   Mode: <code>{{ discovery_mode }}</code>
   · CIDRs: <code>{{ discovery_cidrs or "none" }}</code>
-  · Enabled: <code>{{ discovery_enabled }}</code>
+  · Enabled: <code>{{ "On" if discovery_enabled else "Off" }}</code>
 </p>
 
 {% if pending %}

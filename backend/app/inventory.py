@@ -2,21 +2,16 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.journal import report
-from app.models import Asset, DiscoveryCandidate, Incident
+from app.models import Asset, DiscoveryCandidate, Incident, utcnow
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
 DEMO_CANDIDATE_IP = "10.20.30.41"
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def sd_targets(db: Session, core_address: str | None = None) -> list[dict]:

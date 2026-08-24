@@ -26,15 +26,12 @@ from app.models import (
     Playrule,
     ScheduledReport,
     User,
+    utcnow,
 )
 from app.seed import DEMO_ASSET, ensure_demo_asset, ensure_demo_similar_history, seed
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def incident_seq(number: str) -> int | None:
@@ -185,7 +182,8 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
                 data={"alertname": alertname},
             )
             created.append(incident)
-        collect_evidence(db, incident, alert)
+        if incident.id and not db.query(Evidence.id).filter_by(incident_id=incident.id).first():
+            collect_evidence(db, incident, alert)
         refresh_asset_status(db, asset)
         ensure_notification(db, incident, step_key="immediate")
     db.commit()
@@ -300,19 +298,27 @@ def persist_rca_evidence(
         }
     maintenance = overlapping_maintenance(db, asset.get("asset_id") or "", incident.started_at or utcnow())
 
+    query_map = (metrics or {}).get("queries") or {}
+    values_by_expr: dict[str, Any] = {}
+    for key, expr in query_map.items():
+        if key in {"queries", "error"}:
+            continue
+        if key in metrics:
+            values_by_expr[str(expr)] = {"value": metrics[key], "query": expr}
+    prom_error = metrics.get("error") if isinstance(metrics, dict) else None
+
     def metric_fetcher(expr: str) -> dict[str, Any]:
-        sample = query_prometheus_expr(expr)
-        if "error" in metrics and sample.get("error"):
-            return {"error": metrics["error"]}
-        return sample
+        if expr in values_by_expr:
+            return values_by_expr[expr]
+        if prom_error:
+            return {"error": prom_error, "query": expr}
+        return {"value": None, "query": expr}
 
     def log_fetcher(query: str, start, end) -> dict[str, Any]:
-        lines = query_loki(limit=settings.rca_max_log_lines, query=query, start=start, end=end)
-        if not lines and logs:
+        del query, start, end
+        if logs:
             return {"lines": logs}
-        if not lines:
-            return {"error": "no log lines"}
-        return {"lines": lines}
+        return {"error": "no log lines"}
 
     bundle, _limitations = collect_evidence_set(
         incident={"number": incident.number, "title": incident.title, "severity": incident.severity, "asset": asset.get("hostname")},
@@ -515,7 +521,8 @@ def run_investigation(
     )
     if latest is not None and not force:
         return latest
-    collect_evidence(db, incident)
+    if force or not db.query(Evidence.id).filter_by(incident_id=incident.id).first():
+        collect_evidence(db, incident)
     db.refresh(incident)
     from rca.engines import get_engine
     from rca.llm import make_provider

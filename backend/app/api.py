@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.audit import audit
@@ -577,21 +578,27 @@ def demo_rca(db: Session = Depends(get_db), user: User = Depends(require("admin"
 
 @router.get("/system/status")
 def system_status(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict:
-    assets = db.query(Asset).all()
-    incidents = db.query(Incident).all()
+    asset_counts = dict(db.query(Asset.status, func.count(Asset.id)).group_by(Asset.status).all())
+    incident_counts = dict(db.query(Incident.status, func.count(Incident.id)).group_by(Incident.status).all())
+    critical_open = (
+        db.query(func.count(Incident.id))
+        .filter(func.upper(Incident.severity) == "CRITICAL", Incident.status != "CLOSED")
+        .scalar()
+        or 0
+    )
     return {
         "assets": {
-            "total": len(assets),
-            "healthy": sum(item.status == "healthy" for item in assets),
-            "warning": sum(item.status == "warning" for item in assets),
-            "critical": sum(item.status == "critical" for item in assets),
-            "offline": sum(item.status == "offline" for item in assets),
+            "total": int(sum(asset_counts.values())),
+            "healthy": int(asset_counts.get("healthy") or 0),
+            "warning": int(asset_counts.get("warning") or 0),
+            "critical": int(asset_counts.get("critical") or 0),
+            "offline": int(asset_counts.get("offline") or 0),
         },
         "incidents": {
-            "open": sum(item.status == "OPEN" for item in incidents),
-            "critical": sum(item.severity.upper() == "CRITICAL" for item in incidents if item.status != "CLOSED"),
-            "investigating": sum(item.status == "INVESTIGATING" for item in incidents),
-            "resolved": sum(item.status == "RESOLVED" for item in incidents),
+            "open": int(incident_counts.get("OPEN") or 0),
+            "critical": int(critical_open),
+            "investigating": int(incident_counts.get("INVESTIGATING") or 0),
+            "resolved": int(incident_counts.get("RESOLVED") or 0),
         },
         "monitoring": doctor_payload()["components"],
     }

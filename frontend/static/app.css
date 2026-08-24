@@ -11,39 +11,57 @@
   --font: "Segoe UI", system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.45;
+}
 a { color: var(--accent); }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .nav {
   position: fixed; inset: 0 auto 0 0; width: 220px; background: var(--panel);
-  border-right: 1px solid var(--line); padding: 1.2rem 1rem; display: flex; flex-direction: column; gap: 0.35rem;
+  border-right: 1px solid var(--line); padding: 1.25rem 1rem; display: flex; flex-direction: column; gap: 0.35rem;
 }
 .brand { font-weight: 700; letter-spacing: 0.04em; margin-bottom: 1rem; }
 .brand span { color: var(--muted); font-weight: 500; font-size: 0.8rem; }
-.nav a { color: var(--text); text-decoration: none; padding: 0.4rem 0.5rem; border-radius: 6px; }
+.nav a { color: var(--text); text-decoration: none; padding: 0.45rem 0.55rem; border-radius: 8px; }
 .nav a.active, .nav a:hover { background: #242b3d; }
 .nav-foot { margin-top: auto; }
 .who { color: var(--muted); font-size: 0.8rem; margin-bottom: 0.5rem; }
-.content { margin-left: 220px; padding: 1.5rem 2rem 3rem; }
-h1, h2, h3 { font-weight: 600; }
+.content { margin-left: 220px; padding: 1.6rem 2.1rem 3.2rem; overflow-x: auto; }
+h1, h2, h3 { font-weight: 600; letter-spacing: 0.01em; }
+h1 { margin: 0 0 0.75rem; font-size: 1.55rem; }
+h2 { margin: 1.15rem 0 0.55rem; font-size: 1.12rem; }
+h3 { margin: 0.9rem 0 0.4rem; font-size: 1rem; }
 .muted { color: var(--muted); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; }
-.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 0.95rem 1rem; }
 .stat span { display: block; color: var(--muted); font-size: 0.8rem; }
 .stat strong { font-size: 1.4rem; }
 .stat.ok strong { color: var(--ok); }
 .stat.warn strong { color: var(--warn); }
 .stat.crit strong { color: var(--crit); }
+.table-scroll { overflow-x: auto; max-width: 100%; }
 table { width: 100%; border-collapse: collapse; background: var(--panel); }
-th, td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+th, td { text-align: left; padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+table tbody tr:hover td { background: #22293a; }
 .user-table tr.selected td { background: #242b3d; }
+.user-table tr.selected:hover td { background: #2a3348; }
 .user-table td a { color: inherit; }
-.pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; background: #2a3348; font-size: 0.8rem; }
+.pill { display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px; background: #2a3348; font-size: 0.8rem; }
 .pill.healthy, .pill.ok { background: #1e3d30; color: #8ee0b4; }
 .pill.warning, .pill.warn { background: #3d341e; color: #efd48a; }
 .pill.critical, .pill.crit, .pill.open { background: #3d211e; color: #f0a398; }
 .pill.new { background: #3d341e; color: #efd48a; }
 .pill.approved { background: #1e3d30; color: #8ee0b4; }
-.pill.ignored { background: #2a3348; color: var(--muted); }
+.pill.ignored, .pill.offline { background: #2a3348; color: var(--muted); }
 .banner {
   background: #3d341e;
   border: 1px solid var(--warn);
@@ -55,12 +73,14 @@ th, td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(
 .row-actions { display: flex; gap: 0.4rem; align-items: center; }
 .user-actions { margin-top: 0.75rem; gap: 0.75rem; flex-wrap: wrap; }
 .user-actions button { width: auto; flex: 0 0 auto; }
+button, input, select, textarea {
+  font: inherit; background: #12151c; color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 0.5rem 0.75rem;
+}
+button {
+  background: var(--accent); color: #1a1208; border: 0; font-weight: 600; cursor: pointer; padding: 0.5rem 0.9rem;
+}
 button.secondary { background: #2a3348; color: var(--text); }
 button.danger { background: var(--crit); color: #fff; }
-button, input, select, textarea {
-  font: inherit; background: #12151c; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 0.45rem 0.6rem;
-}
-button { background: var(--accent); color: #1a1208; border: 0; font-weight: 600; cursor: pointer; }
 .stack { display: flex; flex-direction: column; gap: 0.6rem; max-width: 420px; }
 .stack label, form label { display: flex; flex-direction: column; gap: 0.25rem; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; max-width: 720px; }
@@ -121,7 +141,7 @@ a.inc-warn { color: var(--warn); font-weight: 700; }
 a.inc-crit { color: var(--crit); font-weight: 700; }
 .tool-row { display: flex; gap: 0.45rem; align-items: center; flex-wrap: wrap; margin: 0.35rem 0 0.8rem; }
 .tool-row .pill { font-weight: 600; letter-spacing: 0.02em; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; margin-bottom: 1rem; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1.05rem 1.2rem; margin-bottom: 1.1rem; }
 .split { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1.5rem; }
 .flow { list-style: none; padding: 0; }
 .flow .node { width: 100%; text-align: left; background: #242b3d; color: var(--text); margin: 0.2rem 0; }
@@ -149,8 +169,8 @@ a.stat { text-decoration: none; color: inherit; }
 .button-link {
   display: inline-flex;
   align-items: center;
-  padding: 0.45rem 0.7rem;
-  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  border-radius: 9px;
   background: var(--accent);
   color: #1a1208 !important;
   font-weight: 600;
@@ -179,7 +199,7 @@ label.check {
 }
 fieldset {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 9px;
   padding: 0.6rem 0.7rem;
   margin: 0;
   max-width: 420px;

@@ -173,7 +173,7 @@
         <td>{{ (row.asset_ids or [])|join(", ") or "all" }}</td>
         <td class="muted">{{ row.last_run_at or "—" }}</td>
         <td class="muted">{{ row.next_run_at or "—" }}</td>
-        <td><span class="pill {{ 'ok' if row.enabled else 'ignored' }}">{{ row.enabled }}</span></td>
+        <td><span class="pill {{ 'ok' if row.enabled else 'ignored' }}">{{ "On" if row.enabled else "Off" }}</span></td>
         <td>
           {% if can_send %}
           <form method="post" action="/ops/reports/{{ row.id }}/run" class="inline"><button type="submit">Run now</button></form>

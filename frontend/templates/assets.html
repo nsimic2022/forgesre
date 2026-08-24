@@ -2,12 +2,13 @@
 {% block title %}Assets · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Assets</h1>
+<div class="table-scroll">
 <table>
   <thead>
     <tr><th>Asset ID</th><th>Hostname</th><th>IP</th><th>Owner</th><th>Contact</th><th>Type</th><th>Environment</th><th>Status</th><th>Source</th></tr>
   </thead>
   <tbody>
-  {% for asset in assets %}
+    {% for asset in assets %}
     <tr>
       <td><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
       <td>{{ asset.hostname }}</td>
@@ -26,9 +27,10 @@
       <td><span class="pill {{ asset.status }}">{{ asset.status }}</span></td>
       <td>{{ asset.source }}</td>
     </tr>
-  {% endfor %}
+    {% endfor %}
   </tbody>
 </table>
+</div>
 {% if can('write_assets') %}
 <h2>Add asset</h2>
 <p class="muted">Analysts, engineers, and admins can add hosts. Fill who to call — escalation uses that email instead of a generic team inbox.</p>

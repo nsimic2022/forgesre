@@ -28,9 +28,11 @@ Developer unit tests (no live Docker stack):
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -r backend/requirements.txt
+pip install -r requirements-dev.txt
 PYTHONPATH=backend:agents pytest tests
 ```
+
+`requirements-dev.txt` adds pytest. The Core Docker image installs `backend/requirements.txt` only and must not include pytest.
 
 On an installed VM, `./forgesre test` is the live appliance report (`data/reports/`). It is not a substitute for pytest, and pytest does not replace `./forgesre test`.
 

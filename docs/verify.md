@@ -51,7 +51,7 @@ The script **does not send email**, **does not run `./install.sh`**, and **does 
 |---|---|
 | `./forgesre doctor` | Every morning / after `update`. Fast. |
 | `./forgesre test` | After install, after `git pull`, before you trust mail/RCA. Writes a file. |
-| `pytest tests` | Developer laptop. Unit tests, no live Docker stack required. See [`CONTRIBUTING.md`](../CONTRIBUTING.md). |
+| `pytest tests` | Developer laptop. `pip install -r requirements-dev.txt` then `PYTHONPATH=backend:agents pytest tests`. Core image does not install pytest. See [`CONTRIBUTING.md`](../CONTRIBUTING.md). |
 
 ## After an update
 
