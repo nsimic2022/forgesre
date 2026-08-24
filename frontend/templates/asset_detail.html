@@ -23,7 +23,11 @@
     {% if snmp_target %}
       Polled by snmp_exporter on UDP/161 (module if_mib). Prometheus job <code>forgesre-snmp</code>.
     {% elif snmp_enabled and asset.scrape_address %}
+      {% if 'windows' in (asset.type or '')|lower or 'windows' in (asset.monitoring_profile or '')|lower %}
+      HTTP scrape of windows_exporter (typically :9182 /metrics), not SNMP.
+      {% else %}
       No — this host is scraped as node_exporter / HTTP metrics, not SNMP.
+      {% endif %}
     {% elif snmp_enabled %}
       No — add type <code>Network device</code> and an IP to enable SNMP.
     {% else %}
@@ -35,7 +39,7 @@
 {% if can('write_assets') %}
 <section class="card">
   <h2>Edit owner and contacts</h2>
-  <p class="muted">You can change who owns this host after Save. New incidents notify the owner email below.</p>
+  <p class="muted">You can change who owns this host after Save. New incidents notify the owner email below. Linux scrape is <code>ip:9100</code> (node_exporter). Windows scrape is <code>ip:9182</code> (windows_exporter).</p>
   <form method="post" action="/assets/{{ asset.asset_id }}/update" class="form-grid">
     <label>IP <input name="ip" value="{{ asset.ip }}"></label>
     <label>Type <input name="type" value="{{ asset.type }}"></label>
@@ -44,7 +48,7 @@
     <label>Contact name <input name="contact_name" value="{{ asset.contact_name }}"></label>
     <label>Owner email <input name="owner_email" type="email" value="{{ asset.owner_email }}"></label>
     <label>Owner phone <input name="owner_phone" value="{{ asset.owner_phone }}"></label>
-    <label>Scrape address <input name="scrape_address" value="{{ asset.scrape_address }}"></label>
+    <label>Scrape address <input name="scrape_address" value="{{ asset.scrape_address }}" placeholder="{% if 'windows' in (asset.type or '')|lower or 'windows' in (asset.monitoring_profile or '')|lower %}10.10.10.21:9182{% else %}10.10.10.50:9100{% endif %}"></label>
     <label class="wide">Notes <input name="notes" value="{{ asset.notes }}"></label>
     <div class="wide"><button type="submit">Update</button></div>
   </form>

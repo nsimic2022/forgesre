@@ -85,6 +85,7 @@ def test_dashboard_has_one_run_demo_control_not_two_forms():
     assert infra > 0
     assert panel_at < infra
     assert "windows_exporter is scraping" not in html.lower()
+    assert "forge-demo-win-01 is not scraped" in html.lower() or "lab only" in html.lower()
     assert "real SNMP scrape" not in html
     assert "Not a live SNMP walk" in html
 

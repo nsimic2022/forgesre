@@ -69,3 +69,32 @@ groups:
         annotations:
           summary: "CPU high on {{ $labels.asset }}"
           description: "CPU usage is {{ $value }}% on {{ $labels.asset }}."
+
+  - name: forgesre-windows
+    rules:
+      - alert: WindowsExporterDown
+        expr: up{job="windows-standard"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "windows_exporter down on {{ $labels.asset }}"
+          description: "Prometheus cannot scrape {{ $labels.instance }} (:9182)."
+
+      - alert: WindowsFilesystemUsageHigh
+        expr: 100 - (windows_logical_disk_free_bytes{volume!~"_Total",job="windows-standard"} / windows_logical_disk_size_bytes * 100) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Volume usage high on {{ $labels.asset }}"
+          description: "Disk usage is {{ $value }}% on {{ $labels.instance }} volume {{ $labels.volume }}."
+
+      - alert: WindowsCPUHigh
+        expr: 100 - (avg by (asset) (rate(windows_cpu_time_total{mode="idle",job="windows-standard"}[5m])) * 100) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Windows CPU high on {{ $labels.asset }}"
+          description: "CPU usage is {{ $value }}% on {{ $labels.asset }}."

@@ -31,28 +31,31 @@ git pull origin main
 
 ## 2. Why this session existed
 
-N sent screenshots of the **incident report email** (Send incident report). It was a monospaced key:value dump with markdown `##` headers and ForgeRCA as raw bullets. N asked (Serbian) whether it could look more professional. Yes: multipart HTML + plain text for incident reports and escalation. Do **not** rewrite `/ops` Compose freeform mail.
+HTML incident mail already shipped. N then tried to add a **Windows** host with **node_exporter** and ForgeSRE did not see it. They asked whether ping from this server’s bash would prove reachability.
+
+The previous product only scraped Linux `node_exporter` `:9100`. Add Asset had no Windows type. `Windows Server` would have been mis-classified as Linux (`"server" in type`). Demo `forge-demo-win-01` is lab-only and is still **not** scraped.
 
 ---
 
 ## 3. What shipped on main
 
-Branch: `cursor/html-incident-mail-05f8`.
+Branch: `cursor/win-exporter-visibility-05f8`.
 
-### 3.1 Multipart HTML mail
+### 3.1 Real Windows scrape (windows_exporter :9182)
 
-Incident report (`Send incident report`) and escalation notifications are `multipart/alternative`: existing plain text stays `text/plain` (and in the outbox row); Gmail/Outlook get `text/html`.
+- Add Asset type **Windows Server** → `monitoring_profile=windows-standard`, `scrape_address=<ip>:9182`.
+- Same Prometheus HTTP SD (`/api/v1/sd/prometheus`) as Linux. Label `job=windows-standard`.
+- Bundled alerts: `WindowsExporterDown`, `WindowsFilesystemUsageHigh`, `WindowsCPUHigh` (`job="windows-standard"`).
+- Seeded playrules `windows-exporter-down` / `windows-filesystem` / `windows-cpu` and playbook `WINDOWS-UNREACHABLE`.
+- Discovery probes TCP **9182** → Possible Windows server.
+- ForgeRCA uses `windows_*` PromQL for Windows assets.
+- Seeded `forge-demo-*` assets stay out of HTTP SD. Dashboard Windows demo remains a lab incident.
 
-- Inline CSS on elements, table layout, 600px, light background.
-- Severity color bar: CRITICAL/P1 red, WARNING/P2 amber, INFO blue, INVESTIGATING teal.
-- DEMO banner when `is_demo_incident` (seeded `forge-demo-*`).
-- ForgeRCA as sections (Summary, Likely cause, Confidence, Recommendation, Facts, Anomalies, Candidate causes) from structured investigation fields — not a regex dump of the plaintext.
-- User/incident/RCA strings go through `html.escape`.
-- `/ops` Compose and scheduled performance reports stay plain text.
+Linux `node_exporter` `:9100` is unchanged. Prometheus `node_exporter` is Linux; Windows uses **windows_exporter**. If someone really runs node_exporter on Windows (WSL), add as Linux Server or set scrape `:9100` by hand.
 
-Code: `backend/app/email_html.py`, `email_service.py`, `incident_report_mail.py`, `notifications.py`. SMTP still stdlib `EmailMessage`.
+Ping proves ICMP only. From the ForgeSRE VM: `ping -c 3 <ip>`, then `curl -sS -m 5 http://<ip>:9100/metrics | head` and `curl -sS -m 5 http://<ip>:9182/metrics | head`.
 
-On the VM: `git pull origin main && ./forgesre update`. Recreate Core if the backend image does not pick up the new Python modules.
+On the VM: `git pull origin main && ./forgesre update`. Then `./forgesre render-monitoring` is already part of update, so Prometheus picks up the new alert rules.
 
 ---
 
@@ -68,6 +71,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Core is an SMTP **client** only. The UI has no IMAP inbox. Incident reports and escalation mail are HTML + plain text (multipart); `/ops` compose stays plain.
 - pytest is a laptop/dev dependency. The Core image must not install it.
 - After UI / CSS changes, operators need a **hard refresh** in the browser.
+- Real Windows scrape is **windows_exporter :9182**, not the lab demo host.
 
 ---
 
@@ -105,3 +109,4 @@ These are documentation choices, not holes to fill on sight:
 - Job claim could later use `FOR UPDATE SKIP LOCKED` on Postgres. Do not pretend it already does. SQLite tests would need a fallback.
 - `incident_detail.html` / `ai.html` RCA markup is similar but not identical. Extract a partial only if both pages should look the same.
 - Scheduled performance reports on `/ops` are still plain text. HTML them only if N asks.
+- Existing Windows hosts added as `Linux Server` keep `:9100` until the operator edits type/scrape. No automatic rewrite of custom scrape addresses.

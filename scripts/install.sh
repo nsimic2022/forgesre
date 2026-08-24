@@ -178,7 +178,7 @@ wizard() {
     1) ENABLE_AI="yes" ;;
     2) ENABLE_AI="no" ;;
   esac
-  explain "Discovery" "TCP probe of 22/80/443/9100 plus SNMP GET on UDP/161. New hosts wait for Approve/Ignore. Not nmap." "no" "Inventory stays manual plus optional NetBox."
+  explain "Discovery" "TCP probe of 22/80/443/9100/9182 plus SNMP GET on UDP/161. New hosts wait for Approve/Ignore. Not nmap." "no" "Inventory stays manual plus optional NetBox."
   read -r -p "Enable discovery? [Y/n]: " ans || true
   [[ "${ans:-Y}" =~ ^[Nn] ]] && ENABLE_DISCOVERY="no"
   if [[ "$ENABLE_DISCOVERY" == "yes" ]]; then
