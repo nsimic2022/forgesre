@@ -57,13 +57,15 @@ Seeded on first start:
 | Object | What it is |
 |---|---|
 | User `FORGESRE_ADMIN_EMAIL` | `super_admin` from `secrets/secrets.env` |
-| Asset `forge-demo-01` | Demo host `10.10.10.20` with owner contacts (`platform@forgesre.local`, phone) and a closed HighCPU history row |
+| Asset `forge-demo-01` | Demo Linux host `10.10.10.20` with owner contacts (`platform@forgesre.local`, phone) and a closed HighCPU history row |
+| Asset `forge-demo-win-01` | Seeded Windows lab host `10.10.10.21` (no windows_exporter scrape) |
+| Asset `forge-demo-sw-01` | Seeded network lab switch `10.10.10.22` (not a live SNMP walk) |
 | Playbooks `CPU-HIGH`, `DISK-FULL`, `HOST-UNREACHABLE`, `NETWORK-UNREACHABLE` | Guidance steps only |
 | Playrules `high-cpu`, `high-disk`, `snmp-down`, `node-exporter-down`, `node-filesystem`, `node-cpu` | Demo gauges, SNMP `up`, and `node_exporter` |
 | Escalation `Default warning` | 0 / 15 / 30 minutes → generated email |
 | Discovery candidate `10.20.30.41` | Demo row on `/discovery` so you can click Approve |
 
-Lab demos (`./forgesre demo`, `./forgesre demo-rca`) fire **demo gauges on Core**, not real disk/CPU on a customer VM. After install, Dashboard **Run demo** (top right, admin) opens a closeable panel with HighCPU, disk/ForgeRCA, and host-unreachable scenarios. Rows they create are labeled **DEMO**.
+Lab demos (`./forgesre demo`, `./forgesre demo-rca`) fire **demo gauges on Core**, not real disk/CPU on a customer VM. After install, Dashboard **Run demo** (top right, admin) opens a closeable panel with Linux, Windows, and network lab scenarios. Rows they create are labeled **DEMO**.
 
 ---
 
@@ -117,7 +119,7 @@ Login session lasts **12 hours** (httponly cookie).
 
 | Menu | URL | What you do there |
 |---|---|---|
-| Dashboard | `/` | Counts, doctor lights, pending discovery banner (analyst+), **Run demo** (admin, top right — panel with HighCPU / disk RCA / host-down), recent journal reports (analyst+) |
+| Dashboard | `/` | Counts, doctor lights, pending discovery banner (analyst+), **Run demo** (admin, top right — Linux / Windows / network lab scenarios), recent journal reports (analyst+) |
 | Assets | `/assets` | List inventory. **Add asset** form (analyst+) |
 | Asset detail | `/assets/<id>` | Contacts, scrape address, edit owner after Save, similar-incident history |
 | Discovery | `/discovery` | Scan, Approve / Ignore (analyst+), optional NetBox sync (admin) |

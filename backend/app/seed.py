@@ -8,12 +8,29 @@ from app.models import Asset, EscalationPolicy, Incident, Playbook, Playrule, Us
 from app.security import hash_password
 from app.settings import settings
 
+DEMO_ASSET_PREFIX = "forge-demo-"
 DEMO_ASSET = "forge-demo-01"
+DEMO_WIN_ASSET = "forge-demo-win-01"
+DEMO_SW_ASSET = "forge-demo-sw-01"
 DEMO_OWNER = "platform"
 DEMO_CONTACT_NAME = "Platform on-call"
 DEMO_OWNER_EMAIL = "platform@forgesre.local"
 DEMO_OWNER_PHONE = "+381-11-000-0000"
 DEMO_NOTES = "Seeded demo host. Not a real machine. Used by ./forgesre demo."
+DEMO_WIN_NOTES = (
+    "Seeded demo Windows lab host. Not a real machine. "
+    "ForgeSRE does not scrape windows_exporter. Used by Dashboard → Run demo."
+)
+DEMO_SW_NOTES = (
+    "Seeded demo network lab device. Not a real switch. "
+    "Lab incidents only — not a live SNMP walk. Used by Dashboard → Run demo."
+)
+
+
+def is_demo_asset_id(value: str | None) -> bool:
+    """True for seeded lab inventory (forge-demo-01, forge-demo-win-01, forge-demo-sw-01, …)."""
+    return str(value or "").strip().lower().startswith(DEMO_ASSET_PREFIX)
+
 
 DISK_STEPS = [
     {"id": "verify", "title": "Verify disk usage"},
@@ -78,6 +95,77 @@ def ensure_demo_asset(db: Session) -> Asset:
     if not (asset.notes or "").strip():
         asset.notes = DEMO_NOTES
     return asset
+
+
+def _ensure_lab_asset(
+    db: Session,
+    *,
+    asset_id: str,
+    hostname: str,
+    ip: str,
+    type: str,
+    monitoring_profile: str,
+    notes: str,
+) -> Asset:
+    asset = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if asset is None:
+        asset = Asset(
+            asset_id=asset_id,
+            hostname=hostname,
+            ip=ip,
+            type=type,
+            environment="Production",
+            status="healthy",
+            monitoring_profile=monitoring_profile,
+            owner=DEMO_OWNER,
+            contact_name=DEMO_CONTACT_NAME,
+            owner_email=DEMO_OWNER_EMAIL,
+            owner_phone=DEMO_OWNER_PHONE,
+            notes=notes,
+            source="manual",
+            scrape_address="",
+        )
+        db.add(asset)
+        db.flush()
+        return asset
+    asset.hostname = hostname
+    asset.type = type
+    asset.monitoring_profile = monitoring_profile
+    asset.scrape_address = ""
+    if not (asset.ip or "").strip():
+        asset.ip = ip
+    if not (asset.owner_email or "").strip():
+        asset.owner = DEMO_OWNER
+        asset.contact_name = DEMO_CONTACT_NAME
+        asset.owner_email = DEMO_OWNER_EMAIL
+        asset.owner_phone = DEMO_OWNER_PHONE
+    if not (asset.notes or "").strip():
+        asset.notes = notes
+    return asset
+
+
+def ensure_demo_windows_asset(db: Session) -> Asset:
+    return _ensure_lab_asset(
+        db,
+        asset_id=DEMO_WIN_ASSET,
+        hostname=DEMO_WIN_ASSET,
+        ip="10.10.10.21",
+        type="Windows Server",
+        monitoring_profile="windows-lab",
+        notes=DEMO_WIN_NOTES,
+    )
+
+
+def ensure_demo_switch_asset(db: Session) -> Asset:
+    return _ensure_lab_asset(
+        db,
+        asset_id=DEMO_SW_ASSET,
+        hostname=DEMO_SW_ASSET,
+        ip="10.10.10.22",
+        type="Network Switch",
+        monitoring_profile="network-lab",
+        notes=DEMO_SW_NOTES,
+    )
 
 
 def ensure_demo_similar_history(db: Session, asset: Asset) -> Incident:
@@ -291,9 +379,23 @@ def seed(db: Session) -> None:
                 escalation_policy_id=policy.id,
             )
         )
+    if db.query(Playrule).filter_by(name="windows-cpu").first() is None:
+        db.add(
+            Playrule(
+                name="windows-cpu",
+                description="Windows CPU lab alert (no windows_exporter scrape)",
+                enabled=True,
+                severity="warning",
+                condition={"alertname": "WindowsCPUHigh", "metric": "cpu_usage", "operator": ">", "value": 90},
+                playbook_id=cpu.id,
+                escalation_policy_id=policy.id,
+            )
+        )
 
     asset = ensure_demo_asset(db)
     ensure_demo_similar_history(db, asset)
+    ensure_demo_windows_asset(db)
+    ensure_demo_switch_asset(db)
 
     from app.inventory import seed_demo_candidate
 

@@ -31,31 +31,30 @@ git pull origin main
 
 ## 2. Why this session existed
 
-N asked for a **clean dashboard**: one **Run demo** control (top right), a closeable panel with honest scenarios, and a visible **DEMO** pill on every row those demos produce. Do not add Jira, TheHive, IMAP, React, or a second always-on demo button in the main column.
+N asked for **at least five Run demo scenarios** covering Linux, Windows, and network, with **DEMO** visible on incidents, history, escalation, email, and journal/logs. Keep the existing three Linux cards. Do not claim windows_exporter scraping or a live SNMP walk. No Zabbix, no ticketing.
 
 ---
 
 ## 3. What shipped on main
 
-Branch: `cursor/demo-launcher-05f8`.
+Branch: `cursor/demo-scenarios-05f8`.
 
-### 3.1 Dashboard launcher
+### 3.1 Six Run demo scenarios
 
-Infrastructure starts immediately. The old First-hour walkthrough card and the two always-visible **Run demo workflow** / **Run RCA demo** buttons are gone. Admins get **one** `Run demo` button in `.page-head` (same row as the title). It opens a native `<dialog>` (`#demo-panel`): close with ×, overlay click, or Escape.
+Same one top-right **Run demo** button and closeable panel. Cards:
 
-Three scenario cards (not two identical forms):
+1. **Linux HighCPU** — `forge-demo-01` (existing).
+2. **Linux disk / ForgeRCA** — `forge-demo-01` (existing).
+3. **Linux host unreachable** — `forge-demo-01` (existing).
+4. **Windows CPU (lab)** — `WindowsCPUHigh` on seeded `forge-demo-win-01`. Copy says lab / DEMO; does **not** claim windows_exporter is scraping.
+5. **Network SNMP unreachable (lab)** — `SnmpDeviceUnreachable` on seeded `forge-demo-sw-01`. Copy says lab / DEMO; does **not** claim a live SNMP walk. The switch is excluded from snmp HTTP SD.
+6. **Linux NodeCPUHigh** — extra Linux alertname on `forge-demo-01`.
 
-1. **Linux HighCPU** — existing `./forgesre demo` (demo CPU gauge + incident + owner mail).
-2. **Linux disk / ForgeRCA** — existing `./forgesre demo-rca` (demo disk gauge + builtin RCA).
-3. **Linux host unreachable** — tiny extension of the same ingest path (`NodeExporterDown` / `HOST-UNREACHABLE` on `forge-demo-01`). Does **not** stop a real scrape.
-
-**Reset demo gauges** lives in that same panel (`POST /demo-reset` → `/?demo=1`). CLI `./forgesre demo`, `demo-rca`, and `demo-reset` are unchanged.
-
-**Skipped (honest):** Windows (no windows_exporter, no Windows demo asset). SNMP/network (no demo switch; a fake `SnmpDeviceUnreachable` would look like a live walk). Do not add those without a real scrape path.
+**Reset demo gauges** stays in that panel. CLI `./forgesre demo`, `demo-rca`, and `demo-reset` are unchanged.
 
 ### 3.2 DEMO marking
 
-No new incident column. Source of truth is asset `forge-demo-01` / fingerprint containing that id (`is_demo_incident()`). UI: `.pill.demo` **DEMO** next to the INC number on dashboard recent incidents, Incidents, History, incident detail, ForgeRCA page. Escalation / Report outbox / Email outbox: pill plus `[DEMO]` subject prefix. CLI board/detail: `DEMO` in the title/header when `demo` is true or `asset_id` is `forge-demo-01`. API `_incident` includes `"demo": true|false`.
+`is_demo_asset_id()` is true for any `forge-demo-*` id. `is_demo_incident()` / CLI `item_is_demo()` / mail `[DEMO]` + body line / journal summaries all use that helper. UI pills on incidents, history, detail, ForgeRCA, escalation, email outbox, dashboard journal, and `/journal`. Seeded hosts: `forge-demo-01`, `forge-demo-win-01`, `forge-demo-sw-01`.
 
 ---
 

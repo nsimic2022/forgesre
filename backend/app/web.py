@@ -39,7 +39,18 @@ from app.models import (
 from app.security import can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload
 from app.metrics import reset_demo_gauges
-from app.services import is_demo_incident, is_demo_mail, run_demo, run_demo_host, run_demo_rca, run_investigation
+from app.services import (
+    is_demo_incident,
+    is_demo_journal,
+    is_demo_mail,
+    run_demo,
+    run_demo_host,
+    run_demo_network,
+    run_demo_nodecpu,
+    run_demo_rca,
+    run_demo_windows,
+    run_investigation,
+)
 from app.stack import enrich_components, rewrite_host
 from app.history import (
     add_note,
@@ -141,6 +152,7 @@ def ctx(request: Request, user: User | None, **extra):
         "incident_tone": incident_tone,
         "is_demo_incident": is_demo_incident,
         "is_demo_mail": is_demo_mail,
+        "is_demo_journal": is_demo_journal,
     }
     data.update(extra)
     return data
@@ -1020,6 +1032,33 @@ def demo_host_page(db: Session = Depends(get_db), user: User = Depends(login_req
     if not can(user, "admin"):
         raise HTTPException(status_code=403)
     incident = run_demo_host(db)
+    number = incident.number if incident else ""
+    return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=303)
+
+
+@router.post("/demo-windows")
+def demo_windows_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
+    if not can(user, "admin"):
+        raise HTTPException(status_code=403)
+    incident = run_demo_windows(db)
+    number = incident.number if incident else ""
+    return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=303)
+
+
+@router.post("/demo-network")
+def demo_network_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
+    if not can(user, "admin"):
+        raise HTTPException(status_code=403)
+    incident = run_demo_network(db)
+    number = incident.number if incident else ""
+    return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=303)
+
+
+@router.post("/demo-nodecpu")
+def demo_nodecpu_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
+    if not can(user, "admin"):
+        raise HTTPException(status_code=403)
+    incident = run_demo_nodecpu(db)
     number = incident.number if incident else ""
     return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=303)
 
