@@ -27,7 +27,7 @@ git pull origin main
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
 
-Earlier the same day shipped webhook-evidence-once, pytest-out-of-Core, and ops-console polish. Those remain on `main`. This file now describes the UI theme + nav role-label session.
+Earlier the same day shipped webhook-evidence-once, pytest-out-of-Core, ops-console polish, and the first UI theme + nav role-label pass. Those remain on `main`. This file now also records the follow-up: compact theme control, and nav-foot no longer stacks a role-echo name.
 
 ---
 
@@ -39,19 +39,19 @@ N asked for a **manual theme switcher** (default light; do not follow the OS) an
 
 ## 3. What shipped on main
 
-Branch: `cursor/ui-themes-05f8`.
+Branch: `cursor/theme-btn-role-05f8` (follow-up to `cursor/ui-themes-05f8`).
 
 ### 3.1 Manual themes (CSS + tiny JS)
 
 Three themes on `:root` / `html[data-theme]`: **light** (default), **dark** (previous ops palette), **high-contrast**. No `prefers-color-scheme`. Choice is stored in `localStorage` key `forgesre-theme`.
 
-A compact cycle **button** (`data-theme-toggle`, labels Light / Dark / Contrast) lives in `frontend/templates/base.html`: **nav-foot** next to Logout on authenticated pages, and on the login layout so the theme applies before sign-in. An inline `<head>` script applies the stored theme before paint. `frontend/static/app.js` cycles and persists. No Python/API/DB, no new frameworks.
+A compact **text control** (`button.theme-toggle`, labels Light / Dark / Contrast) lives in `frontend/templates/base.html`: **nav-foot** next to Logout on authenticated pages, and on the login layout so the theme applies before sign-in. It is muted and smaller than Logout (`button.secondary`). An inline `<head>` script applies the stored theme before paint. `frontend/static/app.js` cycles and persists. No Python/API/DB, no new frameworks.
 
 After CSS changes, operators need a **hard refresh** (`/static/app.css` has no cache-busting query).
 
 ### 3.2 Role shown once
 
-`role_label()` in `backend/app/security.py` returns one human phrase: Super admin, System admin, Analyst, Engineer, Viewer. Nav-foot prints `user.name` and `role_label(user.role)` separately (`who-name` / `who-role`). It does not print snake_case `super_admin` next to the pretty label.
+`role_label()` in `backend/app/security.py` returns one human phrase: Super admin, System admin, Analyst, Engineer, Viewer. Nav-foot prints `role_label(user.role)` once in `.who-role`. `distinct_who_name()` omits `.who-name` when the stored name is the same phrase as the role (the install seed name is "Super Admin", which used to stack on "Super admin"). A distinct personal name still appears above the role.
 
 Tests: `tests/test_roles.py`.
 
@@ -61,7 +61,7 @@ Tests: `tests/test_roles.py`.
 
 These already work on `main`. Do not “fix” them unless N asks.
 
-- Theme is **manual**. Default is **light**. It does not follow the OS. Persist with `forgesre-theme`.
+- Theme is **manual**. Default is **light**. It does not follow the OS. Persist with `forgesre-theme`. The cycle control is a compact muted text button (`theme-toggle`), not a second Logout-sized action.
 - Incident ids look like `INC-0134_16.08.2026_09:13` (sequence + local date/time). Older `INC-000012` rows stay valid. TAB completes those ids after `incidents` / `history`.
 - RCA is Python under `agents/rca/`. The LLM only rewrites prose. Builtin ForgeRCA always runs first. Alertmanager ingest enqueues investigate; demo still runs builtin RCA immediately. Prometheus/Loki evidence is collected once per open incident.
 - Secrets are gitignored (`secrets/`, `.env`, `config/forgesre.yml`, `data/`). Background jobs live in **Postgres** (`jobs` table, pending/running/done). Claim is not `SKIP LOCKED`.

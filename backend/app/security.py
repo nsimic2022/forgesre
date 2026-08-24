@@ -120,6 +120,15 @@ def role_label(role: str) -> str:
     return pretty.title() if pretty else "Unknown"
 
 
+def distinct_who_name(name: str | None, role: str | None) -> str:
+    """Return a display name only when it is not the same phrase as the role."""
+    label = role_label(role or "")
+    text = (name or "").strip()
+    if not text or text.casefold() == label.casefold():
+        return ""
+    return text
+
+
 def can(user: User | None, permission: str) -> bool:
     if user is None:
         return False

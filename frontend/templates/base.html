@@ -19,7 +19,7 @@
 </head>
 <body>
   {% macro theme_toggle() -%}
-  <button type="button" class="secondary theme-toggle" data-theme-toggle aria-label="Theme">
+  <button type="button" class="theme-toggle" data-theme-toggle aria-label="Theme">
     <span class="theme-label theme-label-light">Light</span>
     <span class="theme-label theme-label-dark">Dark</span>
     <span class="theme-label theme-label-contrast">Contrast</span>
@@ -46,7 +46,8 @@
     {% if can('admin') %}<a href="/admin" class="{% if request.url.path.startswith('/admin') %}active{% endif %}">Administration</a>{% endif %}
     <div class="nav-foot">
       <div class="who">
-        <span class="who-name">{{ user.name }}</span>
+        {% set display_name = distinct_who_name(user.name, user.role) %}
+        {% if display_name %}<span class="who-name">{{ display_name }}</span>{% endif %}
         <span class="who-role">{{ role_label(user.role) }}</span>
       </div>
       <div class="nav-foot-actions">

@@ -113,11 +113,27 @@ a { color: var(--accent); }
 .nav-foot { margin-top: auto; }
 .who { color: var(--muted); font-size: 0.8rem; margin-bottom: 0.5rem; }
 .who-name, .who-role { display: block; }
-.who-role { margin-top: 0.15rem; }
+.who-name + .who-role { margin-top: 0.15rem; }
 .nav-foot-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
 .nav-foot-actions form { margin: 0; }
 .nav-foot-actions button { width: auto; }
-.theme-toggle { min-width: 6.2rem; font-size: 0.8rem; padding: 0.35rem 0.55rem; }
+button.theme-toggle {
+  background: none;
+  color: var(--muted);
+  border: 0;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 0.1rem 0.15rem;
+  min-width: 0;
+  line-height: 1.2;
+  box-shadow: none;
+}
+button.theme-toggle:hover {
+  color: var(--text);
+  background: none;
+  text-decoration: underline;
+}
 .theme-toggle .theme-label { display: none; }
 html[data-theme="light"] .theme-toggle .theme-label-light,
 html:not([data-theme]) .theme-toggle .theme-label-light { display: inline; }
