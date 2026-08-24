@@ -11,7 +11,17 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from app.cli_view import format_board, format_detail, format_history_rows
+from app.asset_probe import (
+    DEFAULT_TIMEOUT,
+    ad_hoc_item,
+    format_report,
+    looks_like_host,
+    overall_exit,
+    probe_target,
+    select_assets,
+)
+from app.cli_view import color_enabled, format_board, format_detail, format_history_rows
+from app.seed import is_demo_asset_id
 
 ROOT = Path(__file__).resolve().parents[2]
 SESSION_PATH = ROOT / "data" / "cli.session"
@@ -234,10 +244,75 @@ def cmd_numbers(port: str) -> None:
             jar.unlink(missing_ok=True)
 
 
+def _is_demo_row(item: dict[str, Any]) -> bool:
+    return is_demo_asset_id(item.get("asset_id") or item.get("hostname"))
+
+
+def cmd_ping(port: str, args: list[str]) -> None:
+    selector = ""
+    timeout = DEFAULT_TIMEOUT
+    include_demo = False
+    i = 0
+    while i < len(args):
+        item = args[i]
+        if item in {"--timeout", "-t"} and i + 1 < len(args):
+            try:
+                timeout = float(args[i + 1])
+            except ValueError:
+                raise SystemExit("usage: ./forgesre ping [--timeout seconds] [--demo] [asset-id-or-ip]")
+            if timeout <= 0:
+                raise SystemExit("--timeout must be > 0")
+            i += 2
+            continue
+        if item in {"--demo", "--include-demo"}:
+            include_demo = True
+            i += 1
+            continue
+        if item in {"-h", "--help"}:
+            raise SystemExit("usage: ./forgesre ping [--timeout seconds] [--demo] [asset-id-or-ip]")
+        if item.startswith("-"):
+            raise SystemExit(f"unknown flag: {item}")
+        selector = item
+        i += 1
+
+    jar, _me = ensure_jar(port)
+    try:
+        rows = get_json(port, jar, "/api/v1/assets")
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as exc:
+        raise SystemExit(f"could not list assets: {exc}") from exc
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+    if not isinstance(rows, list):
+        rows = []
+    chosen, skipped_demo = select_assets(
+        rows,
+        selector,
+        include_demo=include_demo,
+        is_demo=_is_demo_row,
+    )
+    if selector and not chosen and looks_like_host(selector):
+        chosen = [ad_hoc_item(selector)]
+        skipped_demo = 0
+    if selector and not chosen:
+        raise SystemExit(f"no asset matching {selector!r}. Try an asset id, hostname, or IP.")
+    if not chosen:
+        print("No assets with an IP to probe.")
+        if skipped_demo:
+            print(f"skipped {skipped_demo} demo lab asset(s). Include with: ./forgesre ping --demo")
+        print("Add a host under Assets, then rerun ./forgesre ping")
+        raise SystemExit(0)
+
+    results = [probe_target(item, timeout=timeout) for item in chosen]
+    sys.stdout.write(format_report(results, timeout=timeout, skipped_demo=skipped_demo, color=color_enabled()))
+    raise SystemExit(overall_exit(results))
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = list(argv if argv is not None else sys.argv[1:])
     if len(argv) < 2:
-        raise SystemExit("usage: cli_ops <port> <incidents|history|whoami|login|logout|numbers> [args]")
+        raise SystemExit("usage: cli_ops <port> <incidents|history|whoami|login|logout|numbers|ping|probe> [args]")
     port, command, *rest = argv
     if command == "incidents":
         cmd_incidents(port, rest)
@@ -245,6 +320,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_history(port, rest)
     elif command == "numbers":
         cmd_numbers(port)
+    elif command in {"ping", "probe"}:
+        cmd_ping(port, rest)
     elif command == "whoami":
         cmd_whoami(port)
     elif command == "logout":

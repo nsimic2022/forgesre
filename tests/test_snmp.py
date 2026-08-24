@@ -150,6 +150,11 @@ def test_cli_help_documents_snmp_and_assets():
     assert "incidents" in overview
     assert "history" in overview
     assert "login" in overview
+    assert "ping" in overview
+    assert "probe" in overview
+    ping = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "ping"], text=True)
+    assert "9182" in ping
+    assert "not a Prometheus scrape" in ping or "not a scrape" in ping.lower() or "L3" in ping
     assert "HTTP SD" in overview
     snmp = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "snmp"], text=True)
     assert "UDP/161" in snmp

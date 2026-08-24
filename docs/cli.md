@@ -26,6 +26,8 @@ Two logins:
 ./forgesre help snmp
 ./forgesre                 # prompt (forgesre>); leave with quit
 ./forgesre doctor          # short lights
+./forgesre ping            # ICMP + exporter /metrics (alias: probe)
+./forgesre ping win-01
 ./forgesre test            # detailed report → data/reports/
 ./forgesre status          # docker compose ps
 ./forgesre logs core
@@ -66,6 +68,29 @@ quit                       # or: exit    or Ctrl-D
 ```
 
 `quit` is a prompt command. From host bash you are already out; `./forgesre quit` only prints the same help.
+
+---
+
+## Ping vs scrape
+
+ICMP ping from the appliance only proves **L3** (the host answers ping). ForgeSRE **sees** a host when Prometheus scrapes exporter `/metrics`. `./forgesre ping` (alias `./forgesre probe`) checks both from this VM, using inventory already in ForgeSRE — no extra flags for the common case.
+
+```bash
+./forgesre ping
+./forgesre ping win-01
+./forgesre ping 10.10.10.60
+./forgesre probe              # same command
+./forgesre help ping
+```
+
+| ICMP | METRICS | Meaning |
+|---|---|---|
+| PASS | PASS | Host is up and the exporter answers. Prometheus can scrape it (wait ~30s, then `./forgesre sd`). |
+| PASS | FAIL | Host is on the network; ForgeSRE still cannot see it. Windows: `windows_exporter` not running, firewall **TCP 9182**, or scrape port is Linux **:9100**. Linux: `node_exporter` / **TCP 9100**. |
+| FAIL | FAIL | Wrong IP, host down, or ICMP and the exporter port both blocked. |
+| PASS | SKIP | Network device — HTTP metrics do not apply. Use `./forgesre snmp` (UDP/161). |
+
+Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `scrape_address` wins. Seeded `forge-demo-*` rows are skipped unless you pass `--demo` or the id.
 
 ---
 
