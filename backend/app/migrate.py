@@ -10,6 +10,10 @@ def migrate(engine: Engine) -> None:
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
     statements: list[str] = []
+    if "users" in tables:
+        existing = {col["name"] for col in inspector.get_columns("users")}
+        if "journal_error_ack_id" not in existing:
+            statements.append("ALTER TABLE users ADD COLUMN journal_error_ack_id INTEGER DEFAULT 0")
     if "assets" in tables:
         existing = {col["name"] for col in inspector.get_columns("assets")}
         if "source" not in existing:

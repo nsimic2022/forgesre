@@ -24,6 +24,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(32), default="viewer")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    journal_error_ack_id: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class Asset(Base):

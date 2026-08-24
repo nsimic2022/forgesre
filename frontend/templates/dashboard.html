@@ -76,10 +76,14 @@
 </div>
 {% endif %}
 {% if journal_error and can('read_play') %}
-<div class="banner">
+<div class="banner" id="journal-error-banner">
   <strong>JOURNAL</strong>
   {{ journal_error|length }} recent error report{% if journal_error|length != 1 %}s{% endif %}.
   <a href="/journal?status=error">Open Journal</a>
+  <form method="post" action="/dashboard/journal-ack" class="inline banner-ack">
+    <input type="hidden" name="until_id" value="{{ journal_error[0].id }}">
+    <button type="submit" class="secondary">Dismiss</button>
+  </form>
 </div>
 {% endif %}
 <section>

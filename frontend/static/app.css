@@ -175,6 +175,8 @@ table tbody tr:hover td { background: var(--row-hover); }
   margin-bottom: 1rem;
 }
 .banner strong { color: var(--warn); }
+.banner-ack { margin-left: 0.65rem; }
+.banner-ack button { padding: 0.28rem 0.75rem; }
 .row-actions { display: flex; gap: 0.4rem; align-items: center; }
 .user-actions { margin-top: 0.75rem; gap: 0.75rem; flex-wrap: wrap; }
 .user-actions button { width: auto; flex: 0 0 auto; }
