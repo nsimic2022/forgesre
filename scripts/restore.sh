@@ -4,11 +4,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 if [[ $# -eq 0 ]]; then
-  echo "usage: ./forgesre restore ARCHIVE.tar.gz [--yes]"
+  echo "usage: ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ [--yes]"
   echo "Without --yes this only prints the plan and exits 1."
   echo "Stop Core first, then restore, then update:"
   echo "  docker compose stop core"
-  echo "  ./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes"
+  echo "  ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes"
   echo "  ./forgesre update"
   exit 1
 fi

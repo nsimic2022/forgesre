@@ -1224,7 +1224,7 @@ def admin_download_backup(
     user: User = Depends(login_required),
 ):
     _require_admin(user)
-    from app.backup import resolve_archive
+    from app.backup import download_name, resolve_archive
 
     try:
         path = resolve_archive(name)
@@ -1232,10 +1232,11 @@ def admin_download_backup(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="backup not found") from exc
-    audit(db, "backup.download", actor=user.email, object_type="backup", object_id=path.name, ip=request.client.host if request.client else "", commit=True)
+    ident = name if name else download_name(path)
+    audit(db, "backup.download", actor=user.email, object_type="backup", object_id=ident, ip=request.client.host if request.client else "", commit=True)
     return FileResponse(
         path,
-        filename=path.name,
+        filename=download_name(path),
         media_type="application/gzip",
         headers={"Cache-Control": "no-store"},
     )
@@ -1249,7 +1250,7 @@ async def admin_import_backup(
     archive: UploadFile = File(...),
 ):
     _require_admin(user)
-    from app.backup import save_upload
+    from app.backup import backup_ident, save_upload
     from app.journal import report
 
     data = await archive.read()
@@ -1257,10 +1258,11 @@ async def admin_import_backup(
         path = save_upload(data, archive.filename or "")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    audit(db, "backup.import", actor=user.email, object_type="backup", object_id=path.name, ip=request.client.host if request.client else "")
-    report(db, "backup", "import", "ok", summary=f"Imported {path.name}", object_type="backup", object_id=path.name)
+    ident = backup_ident(path)
+    audit(db, "backup.import", actor=user.email, object_type="backup", object_id=ident, ip=request.client.host if request.client else "")
+    report(db, "backup", "import", "ok", summary=f"Imported {ident}", object_type="backup", object_id=ident)
     db.commit()
-    return RedirectResponse(f"/admin?imported={quote(path.name)}", status_code=303)
+    return RedirectResponse(f"/admin?imported={quote(ident)}", status_code=303)
 
 
 @router.post("/admin/backups/restore")
@@ -1273,7 +1275,7 @@ def admin_restore_backup(
     acknowledged: str = Form(""),
 ):
     _require_admin(user)
-    from app.backup import CONFIRM_WORD, restore_archive, resolve_archive
+    from app.backup import CONFIRM_WORD, backup_ident, restore_archive, resolve_archive
     from app.journal import report
 
     if acknowledged != "1" or confirm.strip() != CONFIRM_WORD:
@@ -1289,19 +1291,20 @@ def admin_restore_backup(
         outcome = restore_archive(path, confirm=CONFIRM_WORD, stop_core=False)
     except PermissionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    audit(db, "backup.restore", actor=user.email, object_type="backup", object_id=path.name, ip=request.client.host if request.client else "")
+    ident = backup_ident(path)
+    audit(db, "backup.restore", actor=user.email, object_type="backup", object_id=ident, ip=request.client.host if request.client else "")
     report(
         db,
         "backup",
         "restore",
         "ok",
-        summary=f"Restored {path.name}",
+        summary=f"Restored {ident}",
         detail="\n".join(outcome.get("notes") or []),
         object_type="backup",
-        object_id=path.name,
+        object_id=ident,
     )
     db.commit()
-    return RedirectResponse(f"/admin?restored={quote(path.name)}", status_code=303)
+    return RedirectResponse(f"/admin?restored={quote(ident)}", status_code=303)
 
 
 @router.post("/demo")

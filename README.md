@@ -136,7 +136,7 @@ Type `./forgesre` with no arguments for a prompt, then `journal`, `incidents`, `
 ./forgesre backup
 ./forgesre backup --no-secrets
 ./forgesre backup --include-models
-./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes
+./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes
 ./forgesre fetch-llm           # optional ~9 GB GGUF, not stored in git
 ./forgesre mailbox             # optional Roundcube later; Core SMTP unchanged
 ```

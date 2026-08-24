@@ -181,7 +181,7 @@ Audit rows for `user.create`, `user.update`, `user.delete`, `backup.create` / `b
 
 ### Platform backup and restore
 
-Archives are `data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz` (`$FORGESRE_DATA/backups/`). The directory is gitignored, mode `700`; each tar is mode `600`. Administration (admin / super_admin only) has **Backup** and **Import** *before* Appliance shell. `./forgesre backup` writes the same archive: GUI/Core uses SQLAlchemy; the host CLI dumps Postgres with `docker compose exec postgres` (do not pip-install sqlalchemy on the VM).
+Archives are `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (`$FORGESRE_DATA/backups/`; one folder per run, plus `MANIFEST.txt`). The directory is gitignored, mode `700`; each tar is mode `600`. Administration (admin / super_admin only) has **Backup** and **Import** *before* Appliance shell. `./forgesre backup` writes the same archive; `./forgesre update` also backups first as a safety net. GUI/Core uses SQLAlchemy; the host CLI dumps Postgres with `docker compose exec postgres` (do not pip-install sqlalchemy on the VM). Host `./forgesre verify` likewise must not import sqlalchemy.
 
 **In the archive:** `config/forgesre.yml`, `.env`, `secrets/secrets.env` (omit with `./forgesre backup --no-secrets`), a logical database dump (users, incidents, assets, playbooks, playrules, journal, audit, jobs), compressed `data/logs/`, `monitoring/alerts.local.yml` if present, `data/generated/`, `config/examples/`.
 
@@ -195,7 +195,7 @@ Restore does **not** run silently. CLI without `--yes` prints the plan and exits
 ssh you@forgesre-vm
 cd ~/forgesre
 docker compose stop core
-./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes
+./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes
 ./forgesre update
 ```
 
@@ -819,8 +819,8 @@ Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critica
 ./forgesre backup
 ./forgesre backup --no-secrets
 ./forgesre backup --include-models
-./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz
-./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes
+./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ
+./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes
 ./forgesre update               # backup + render-monitoring + compose up + doctor
 ./forgesre mailbox              # optional Roundcube later; does not rewrite Core SMTP
 ./forgesre version

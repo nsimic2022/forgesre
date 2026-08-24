@@ -27,7 +27,7 @@ from app.asset_verify import (
     verify_target,
 )
 from app.cli_view import color_enabled, format_board, format_detail, format_history_rows
-from app.seed import is_demo_asset_id
+from app.demo_ids import is_demo_asset_id
 
 ROOT = Path(__file__).resolve().parents[2]
 SESSION_PATH = ROOT / "data" / "cli.session"

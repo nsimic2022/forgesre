@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from app.asset_verify import (
     classify_verify,
     compose_verify,
@@ -265,3 +267,89 @@ def test_cli_ops_unknown_command_does_not_alias_verify():
         raise AssertionError("expected SystemExit")
     except SystemExit as exc:
         assert "unknown" in str(exc).lower()
+
+
+def test_demo_ids_helper_has_no_orm():
+    from app.demo_ids import DEMO_ASSET_PREFIX, is_demo_asset_id
+
+    assert DEMO_ASSET_PREFIX == "forge-demo-"
+    assert is_demo_asset_id("forge-demo-01")
+    assert is_demo_asset_id("FORGE-DEMO-win-01")
+    assert not is_demo_asset_id("app-01")
+    assert not is_demo_asset_id("")
+    assert not is_demo_asset_id(None)
+
+
+def _assert_no_sqlalchemy_or_seed_import(rel: str) -> None:
+    import ast
+
+    source = (Path(__file__).resolve().parents[1] / "backend" / "app" / rel).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                assert not alias.name.startswith("sqlalchemy"), f"{rel} imports {alias.name}"
+                assert alias.name != "app.seed", rel
+        if isinstance(node, ast.ImportFrom):
+            mod = node.module or ""
+            assert not mod.startswith("sqlalchemy"), f"{rel} imports {mod}"
+            assert mod != "app.seed", f"{rel} imports app.seed"
+            if mod == "app":
+                for alias in node.names:
+                    assert alias.name != "seed", f"{rel} imports seed from app"
+
+
+def test_host_verify_modules_do_not_import_seed_or_sqlalchemy():
+    _assert_no_sqlalchemy_or_seed_import("demo_ids.py")
+    _assert_no_sqlalchemy_or_seed_import("asset_verify.py")
+    _assert_no_sqlalchemy_or_seed_import("cli_ops.py")
+    _assert_no_sqlalchemy_or_seed_import("cli_view.py")
+    _assert_no_sqlalchemy_or_seed_import("asset_probe.py")
+    _assert_no_sqlalchemy_or_seed_import("exporter_detect.py")
+
+
+def test_importing_asset_verify_and_cli_ops_does_not_import_sqlalchemy():
+    import os
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[1]
+    blocker = r"""
+import builtins
+import sys
+
+real = builtins.__import__
+
+
+def blocked(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "sqlalchemy" or name.startswith("sqlalchemy."):
+        raise ModuleNotFoundError(name)
+    if name == "app.seed" or (name == "app" and fromlist and "seed" in fromlist):
+        raise ModuleNotFoundError("app.seed")
+    return real(name, globals, locals, fromlist, level)
+
+
+builtins.__import__ = blocked
+sys.path.insert(0, "backend")
+from app import asset_verify
+from app import cli_ops
+from app.demo_ids import is_demo_asset_id
+
+assert is_demo_asset_id("forge-demo-01")
+assert hasattr(asset_verify, "verify_target")
+assert hasattr(cli_ops, "cmd_verify")
+print("ok")
+"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root / "backend")
+    result = subprocess.run(
+        [sys.executable, "-c", blocker],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ok" in result.stdout
+    assert "sqlalchemy" not in result.stderr.lower()
+    assert "Traceback" not in result.stderr

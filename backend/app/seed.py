@@ -4,11 +4,11 @@ from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
+from app.demo_ids import DEMO_ASSET_PREFIX, is_demo_asset_id
 from app.models import Asset, EscalationPolicy, Incident, Playbook, Playrule, User, utcnow
 from app.security import hash_password
 from app.settings import settings
 
-DEMO_ASSET_PREFIX = "forge-demo-"
 DEMO_ASSET = "forge-demo-01"
 DEMO_WIN_ASSET = "forge-demo-win-01"
 DEMO_SW_ASSET = "forge-demo-sw-01"
@@ -26,11 +26,6 @@ DEMO_SW_NOTES = (
     "Seeded demo network lab device. Not a real switch. "
     "Lab incidents only — not a live SNMP walk. Used by Dashboard → Run demo."
 )
-
-
-def is_demo_asset_id(value: str | None) -> bool:
-    """True for seeded lab inventory (forge-demo-01, forge-demo-win-01, forge-demo-sw-01, …)."""
-    return str(value or "").strip().lower().startswith(DEMO_ASSET_PREFIX)
 
 
 DISK_STEPS = [

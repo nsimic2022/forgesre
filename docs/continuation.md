@@ -17,7 +17,10 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 24 August 2026 (evening).** Operator N asked for **`./forgesre verify`** plus the same action in the **Assets GUI**. That is live communication for inventory, **not** a rewrite of `./forgesre test` (appliance health after `update`).
+**Monday 24 August 2026 (late evening).** Operator N hit two bugs on the Ubuntu VM:
+
+1. `./forgesre verify` crashed with `ModuleNotFoundError: sqlalchemy` (same class as the old host `backup` crash: `asset_verify` → `seed` → ORM).
+2. He wanted each backup run in its **own folder** so `data/backups/` does not look like a pile of files he cannot tell how to import. He is OK keeping backup-on-update as a safety net. CLI `./forgesre backup` and GUI Backup/Import stay.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -41,7 +44,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **205 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~30s each. Python 3.12, pytest 9.x. (Includes dashboard HOST DOWN tests already on main.)
+Both runs: **211 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~31s each. Python 3.12, pytest 9.x.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`.
 
@@ -49,30 +52,25 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-### `./forgesre verify` (not `./forgesre test`)
+### Host `./forgesre verify` without sqlalchemy
 
-Live path: inventory asset → ICMP / exporter or SNMP → Prometheus `up` → optional last RCA facts vs PromQL. LLM is **listed** only if ForgeAI is enabled; verify does **not** call the LLM.
+`is_demo_asset_id` moved to `backend/app/demo_ids.py` (stdlib only). `seed.py` re-exports it for Core. Host CLI modules (`asset_verify`, `cli_ops`, `cli_view`) import the helper, not `app.seed`. Do **not** pip-install sqlalchemy on Ubuntu.
 
-- `./forgesre verify` — all real assets (seeded `forge-demo-*` skipped unless `--demo`, then labeled DEMO).
-- `./forgesre verify <name-or-id>` — one machine: inventory dump + live probes (sections, PASS/FAIL/SKIP).
-- Classes are universal, not SKUs: Linux `:9100` `node_`, Windows `:9182` `windows_`, Network SNMP (existing snmp_exporter path), Unknown → SKIP with a reason.
-- Missing exporter / no Prom target = SKIP or FAIL with an honest reason. Never a fake green host.
-- Demo `forge-demo-*` is lab, not proof of a real scrape.
-- Reuses `asset_probe` / `exporter_detect` / reachability / inventory. Does not duplicate backup, theme, or HTML mail.
+- `./forgesre verify` / `ping` / `incidents` on the host.
+- GUI Verify still runs inside Core (sqlalchemy is fine there).
+- Test: importing `asset_verify` and `cli_ops` with sqlalchemy blocked.
 
-Code: `backend/app/asset_verify.py`, CLI `scripts/forgesre` + `cli_ops.py`. API: `GET /api/v1/assets/{id}/verify`, `GET /api/v1/verify`, `GET /api/v1/verify-support`.
+### Backup layout: one folder per run, one tar to import
 
-### Assets GUI Verify
+```
+data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz
+data/backups/backup_YYYYMMDDTHHMMSSZ/MANIFEST.txt
+```
 
-Same permission as Add/Edit (`write_assets`: analyst / engineer / admin). Viewers are read-only.
+Dirs mode `700`, archives mode `600`. gitignore unchanged (`data/`). Restore/import accept the folder or the tar inside it. Legacy `data/backups/forgesre-*.tar.gz` at the root still lists and restores. Staging temp is not left next to the tar.
 
-- Row button **Verify** on the Assets list; also on the asset page and the Edit form.
-- **Verify all** on the list (`/assets/verify`).
-- Result page: ping, port, Prom `up`, metric family, last RCA mismatch, LLM skip/pass.
-
-### Already on main (do not redo)
-
-Assets CRUD, reachability **Ping / comms** column, `exporter_detect`, HTML incident/escalation mail, Windows `:9182`, `./forgesre ping`, host backup without sqlalchemy, snmp-exporter as a default compose service. Dashboard **HOST DOWN** banner lists open `NodeExporterDown` / `WindowsExporterDown` / `SnmpDeviceUnreachable`. See §5.
+- `./forgesre backup` still exists (CLI + GUI).
+- `./forgesre update` still runs backup after doctor as a safety net (DEGRADED doctor may continue; backup is not blocked on snmp).
 
 ---
 
@@ -86,15 +84,15 @@ git pull origin main
 ./forgesre update
 ```
 
-Then hard-refresh the browser.
+Then:
 
 ```bash
 ./forgesre verify
-./forgesre verify <hostname-or-id>
-./forgesre help verify
+./forgesre backup
+ls -la data/backups/
 ```
 
-Assets: **Verify** on the row (and Verify all). Edit / Clone / Remove stay. Demo rows stay labeled DEMO / lab.
+Hard-refresh Administration if you use GUI Backup/Import.
 
 ---
 
@@ -110,10 +108,11 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Core is an SMTP **client** only. The UI has no IMAP inbox.
 - pytest is a laptop/dev dependency. The Core image must not install it.
 - Real Windows scrape is **windows_exporter :9182**, not the lab demo host.
-- Host CLI must not require sqlalchemy/PyYAML.
+- Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
 - `snmp-exporter` is a **default** compose service.
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it.
-- Backup on the host dumps Postgres via `docker compose exec postgres`. Do not `pip install sqlalchemy` on the Ubuntu host.
+- Backup on the host dumps Postgres via `docker compose exec postgres`.
+- One restore unit = one `.tar.gz` inside `backup_<stamp>/`. Do not explode the archive into loose files at `data/backups/` root.
 
 ---
 
@@ -137,7 +136,7 @@ Do not start these unless N asks:
 - IMAP inbox in the UI.
 - React, Tailwind, Bootstrap, PatternFly npm.
 - Fake a live Windows scrape or SNMP walk in the demo panel.
-- Rewrite Add/Edit/Clone/Remove, backup, theme, or HTML mail for verify.
+- Explode backup tars into many small files at `data/backups/` root.
 
 ---
 
@@ -146,3 +145,4 @@ Do not start these unless N asks:
 - Many remote `origin/cursor/*-05f8` branches still exist and are **already merged to `main`**.
 - Core slim image may not include `ping`; GUI ICMP then shows that honestly. `./forgesre verify` probes ICMP from the **host** (same as `./forgesre ping`).
 - Scheduled `/ops` reports are still plain text.
+- Old backups already on the VM as `data/backups/forgesre-*.tar.gz` are still valid; new runs write folders.

@@ -77,7 +77,7 @@ Commands:
   version            Appliance version from .env
   secrets-check      Refuse-to-start defaults: SECRET_KEY / webhook token
   fetch-llm          Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp
-  backup             Platform tar.gz under data/backups (mode 600; --no-secrets / --include-models)
+  backup             One folder per run under data/backups (tar.gz + MANIFEST; --no-secrets / --include-models)
   restore            Print plan; apply only with --yes after stopping Core
   update             Backup, render monitoring, refresh images, restart, doctor
   mailbox            Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)
@@ -254,6 +254,9 @@ verify — live communication for inventory (not ./forgesre test).
   ./forgesre verify win-01
   ./forgesre verify --timeout 3
   ./forgesre verify --demo
+
+Runs on the host CLI (same as ping): Ubuntu Python must not import sqlalchemy.
+Do not pip install sqlalchemy on the VM. GUI Verify still runs inside Core.
 
 test = appliance health after update (files, compose, login, APIs).
 verify = this host → ICMP / exporter or SNMP → Prometheus sees it →
@@ -444,12 +447,17 @@ EOF
       ;;
     backup)
       cat <<'EOF'
-backup — platform tar.gz under $FORGESRE_DATA/backups (default ./data/backups).
+backup — one folder per run under $FORGESRE_DATA/backups (default ./data/backups).
 
   ./forgesre backup
   ./forgesre backup --no-secrets
   ./forgesre backup --include-models
   ./backup.sh --no-secrets
+
+Writes data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz (mode 600)
+plus MANIFEST.txt. The backups root has folders, not loose files.
+One restore unit = the tar.gz (db dump, yml, .env, secrets, generated,
+logs, examples, installation-report inside). Do not unpack it here.
 
 Includes: Postgres/SQLite dump (users, incidents, playbooks, playrules, journal),
 config/forgesre.yml, .env, secrets.env (unless --no-secrets), compressed logs,
@@ -457,14 +465,15 @@ monitoring/alerts.local.yml, data/generated/, config/examples/.
 
 Host CLI dumps Postgres with docker compose exec postgres (no sqlalchemy on
 the host). Administration Backup uses Core, which has sqlalchemy. Same
-archive format (db.json inside forgesre-*.tar.gz).
+archive format (db.json inside forgesre.tar.gz). ./forgesre backup still
+exists; ./forgesre update also runs backup as a safety net.
 
 Not included: Docker images, Prometheus/Loki/Grafana volumes, nested backups.
 LLM GGUF files are skipped unless --include-models (they are often multi-GB).
 
-The tar is mode 600. Administration can create/download the same archives
-(admin session only). Never commit data/backups/. Use --no-secrets when the
-file will leave the VM.
+The tar is mode 600; the run folder is mode 700. Administration can
+create/download the same archives (admin session only). Never commit
+data/backups/. Use --no-secrets when the file will leave the VM.
 EOF
       ;;
     restore)
@@ -472,17 +481,23 @@ EOF
 restore — apply a platform backup. Refuses without --yes.
 
   ./forgesre restore
-  ./forgesre restore data/backups/forgesre-20260824T120000Z.tar.gz
+  ./forgesre restore data/backups/backup_20260824T120000Z
+  ./forgesre restore data/backups/backup_20260824T120000Z/forgesre.tar.gz --yes
   ./forgesre restore data/backups/forgesre-20260824T120000Z.tar.gz --yes
 
 Without --yes this only prints the plan and exits 1. It will overwrite
 the database, .env, secrets, and config. Stop Core first:
 
   docker compose stop core
-  ./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes
+  ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes
   ./forgesre update
 
-Administration Import stores an upload under data/backups/. The Restore
+Each run is a folder data/backups/backup_YYYYMMDDTHHMMSSZ/ with one
+forgesre.tar.gz (the import unit) and a short MANIFEST.txt. Restore
+accepts the folder or the tar inside it. Legacy forgesre-*.tar.gz at
+the backups root still works.
+
+Administration Import stores an upload under data/backups/backup_…/. The Restore
 button requires typing RESTORE. A browser restore cannot stop Core;
 prefer this CLI path after a crash or when migrating VMs.
 EOF

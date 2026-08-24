@@ -49,7 +49,7 @@ Two logins:
 ./forgesre backup
 ./forgesre backup --no-secrets
 ./forgesre backup --include-models
-./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes
+./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes
 ./forgesre mailbox         # optional; does not rewrite Gmail/Outlook SMTP
 ./forgesre fetch-llm
 ./forgesre update
@@ -100,7 +100,7 @@ Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `
 
 ## Verify (live communication)
 
-`./forgesre test` is appliance health (files, Compose, login, APIs) after `update`. **`./forgesre verify` is a different command**: live communication for inventory already in ForgeSRE.
+`./forgesre test` is appliance health (files, Compose, login, APIs) after `update`. **`./forgesre verify` is a different command**: live communication for inventory already in ForgeSRE. It runs on the **host** CLI (Ubuntu Python has no sqlalchemy — do not pip-install it). GUI Verify still runs inside Core.
 
 ```bash
 ./forgesre verify
@@ -133,7 +133,7 @@ git pull origin main
 
 `./forgesre update` = doctor (warn ok) → backup → render-monitoring → `docker compose up -d` (includes **snmp-exporter** on `127.0.0.1:9116`) → doctor.
 
-Backup on the host does **not** use sqlalchemy (that package is only in the Core image). The CLI dumps Postgres with `docker compose exec postgres`. Administration Backup still runs inside Core. Same `data/backups/forgesre-*.tar.gz` format. If backup fails, update prints a clear error and **continues** so the stack still comes up. Do not `pip install sqlalchemy` on the host. Do not `./install.sh`.
+Backup on the host does **not** use sqlalchemy (that package is only in the Core image). The CLI dumps Postgres with `docker compose exec postgres`. Administration Backup still runs inside Core. Each run is `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (plus `MANIFEST.txt`); import that one tar, do not unpack it. `./forgesre backup` still exists; `./forgesre update` also runs backup as a safety net. If backup fails, update prints a clear error and **continues** so the stack still comes up. Do not `pip install sqlalchemy` on the host. Do not `./install.sh`.
 
 ### Rebuild Core after Python changes
 

@@ -1,10 +1,13 @@
 """Platform backup and restore. Same archive for ./forgesre backup|restore and /admin.
 
-Archives live under data/backups/ (gitignored, mode 700/600). They include
-config, .env, secrets (unless omitted), a logical DB dump (users, incidents,
-playbooks, playrules, journal, …), compressed logs, generated monitoring files,
-and alerts.local.yml. They do not include Docker images, Prometheus/Loki/Grafana
-TSDB volumes, or multi-GB GGUF weights unless the operator opts in.
+Each run is one folder under data/backups/ (gitignored, dir mode 700):
+
+  data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz
+  data/backups/backup_YYYYMMDDTHHMMSSZ/MANIFEST.txt
+
+The restore unit is the tar.gz (db dump, yml, .env, secrets, generated, logs,
+examples, installation-report inside). Do not explode it into loose files at
+the backups root. Legacy data/backups/forgesre-*.tar.gz files are still read.
 
 Host CLI must not import sqlalchemy at module load (host Python has no Core
 venv). GUI/Core dumps via SQLAlchemy; host dumps via docker compose exec
@@ -26,6 +29,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 ARCHIVE_RE = re.compile(r"^forgesre-\d{8}T\d{6}Z\.tar\.gz$")
+FOLDER_RE = re.compile(r"^backup_\d{8}T\d{6}Z$")
+INNER_ARCHIVE = "forgesre.tar.gz"
 TABLE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 CONFIRM_WORD = "RESTORE"
 MODEL_SMALL_MAX = 80 * 1024 * 1024
@@ -149,39 +154,103 @@ def ensure_backup_dir(layout: BackupLayout | None = None) -> Path:
     return lay.backup_dir
 
 
+def is_run_folder_name(name: str) -> bool:
+    return bool(FOLDER_RE.match(Path(name).name))
+
+
 def is_archive_name(name: str) -> bool:
-    return bool(ARCHIVE_RE.match(Path(name).name))
+    raw = Path(name).name
+    return raw == INNER_ARCHIVE or bool(ARCHIVE_RE.match(raw))
+
+
+def backup_ident(path: Path) -> str:
+    """GUI/CLI name for a restore unit: run folder, or legacy tar at backups root."""
+    path = Path(path)
+    if is_run_folder_name(path.name) and path.is_dir():
+        return path.name
+    if is_run_folder_name(path.parent.name):
+        return path.parent.name
+    return path.name
+
+
+def download_name(path: Path) -> str:
+    """Content-Disposition name so two downloads do not collide as forgesre.tar.gz."""
+    ident = backup_ident(path)
+    if is_run_folder_name(ident):
+        return f"forgesre-{ident[len('backup_'):]}.tar.gz"
+    return Path(path).name
+
+
+def tar_in_run_dir(folder: Path) -> Path:
+    inner = folder / INNER_ARCHIVE
+    if inner.is_file():
+        return inner
+    legacy = sorted(
+        p for p in folder.glob("forgesre-*.tar.gz") if p.is_file() and ARCHIVE_RE.match(p.name)
+    )
+    if legacy:
+        return legacy[-1]
+    raise FileNotFoundError(f"no {INNER_ARCHIVE} in {folder.name}")
+
+
+def archive_file(path: Path) -> Path:
+    """Accept a run folder or a tar.gz. Returns the tar path."""
+    path = Path(path)
+    if path.is_dir():
+        return tar_in_run_dir(path)
+    if path.is_file():
+        return path
+    raise FileNotFoundError(path.name)
 
 
 def resolve_archive(name: str, layout: BackupLayout | None = None) -> Path:
     lay = layout or layout_from_env()
     base = ensure_backup_dir(lay).resolve()
-    raw = Path(name).name
-    if not is_archive_name(raw):
+    raw = str(name).strip().replace("\\", "/").strip("/")
+    if not raw or ".." in Path(raw).parts:
         raise ValueError("not a ForgeSRE backup archive name")
     path = (base / raw).resolve()
     if base not in path.parents and path != base:
         raise ValueError("backup path escapes data/backups")
-    if not path.is_file():
-        raise FileNotFoundError(raw)
-    return path
+    if path.is_dir():
+        if path == base or not is_run_folder_name(path.name):
+            raise ValueError("not a ForgeSRE backup folder name")
+        return tar_in_run_dir(path)
+    if path.is_file():
+        if path.name == INNER_ARCHIVE or ARCHIVE_RE.match(path.name):
+            return path
+        raise ValueError("not a ForgeSRE backup archive name")
+    raise FileNotFoundError(Path(raw).name)
 
 
 def list_archives(layout: BackupLayout | None = None) -> list[dict[str, Any]]:
     lay = layout or layout_from_env()
     folder = ensure_backup_dir(lay)
     rows: list[dict[str, Any]] = []
-    for path in sorted(folder.glob("forgesre-*.tar.gz"), key=lambda item: item.name, reverse=True):
-        if not path.is_file() or not is_archive_name(path.name):
-            continue
-        stat = path.stat()
-        rows.append(
-            {
-                "name": path.name,
-                "size": stat.st_size,
-                "mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
-            }
-        )
+    for child in folder.iterdir():
+        if child.is_dir() and is_run_folder_name(child.name):
+            try:
+                tar = tar_in_run_dir(child)
+            except FileNotFoundError:
+                continue
+            stat = tar.stat()
+            rows.append(
+                {
+                    "name": child.name,
+                    "size": stat.st_size,
+                    "mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+                }
+            )
+        elif child.is_file() and ARCHIVE_RE.match(child.name):
+            stat = child.stat()
+            rows.append(
+                {
+                    "name": child.name,
+                    "size": stat.st_size,
+                    "mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+                }
+            )
+    rows.sort(key=lambda row: row["mtime"], reverse=True)
     return rows
 
 
@@ -470,6 +539,58 @@ def models_dir_is_small(models_dir: Path) -> bool:
     return True
 
 
+def _write_run_manifest(
+    run_dir: Path,
+    stamp: str,
+    included: list[str],
+    excluded: list[str],
+    notes: list[str],
+) -> None:
+    lines = [
+        f"ForgeSRE backup {stamp}",
+        f"Archive: {INNER_ARCHIVE}",
+        f"Created: {datetime.now(timezone.utc).isoformat()}",
+        "",
+        "One restore unit = this folder. Import the .tar.gz (do not unpack it here).",
+        "",
+        "Included:",
+    ]
+    for item in included:
+        lines.append(f"  + {item}")
+    lines.append("")
+    lines.append("Not included:")
+    for item in excluded:
+        lines.append(f"  - {item}")
+    if notes:
+        lines.append("")
+        lines.append("Notes:")
+        for item in notes:
+            lines.append(f"  note: {item}")
+    lines.extend(
+        [
+            "",
+            "Restore:",
+            "  docker compose stop core",
+            f"  ./forgesre restore data/backups/backup_{stamp} --yes",
+            "  ./forgesre update",
+            "",
+        ]
+    )
+    dest = run_dir / "MANIFEST.txt"
+    dest.write_text("\n".join(lines), encoding="utf-8")
+    try:
+        os.chmod(dest, 0o600)
+    except OSError:
+        pass
+
+
+def _run_dir_for_stamp(backup_dir: Path, stamp: str) -> Path:
+    run_dir = backup_dir / f"backup_{stamp}"
+    if not run_dir.exists():
+        return run_dir
+    return backup_dir / f"backup_{stamp_utc()}"
+
+
 def create_backup(
     *,
     include_secrets: bool = True,
@@ -479,11 +600,18 @@ def create_backup(
     lay = layout or layout_from_env()
     ensure_backup_dir(lay)
     stamp = stamp_utc()
+    run_dir = _run_dir_for_stamp(lay.backup_dir, stamp)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(run_dir, 0o700)
+    except OSError:
+        pass
+    stamp = run_dir.name[len("backup_") :]
     included: list[str] = []
     excluded: list[str] = list(EXCLUDED_ALWAYS)
     notes: list[str] = []
 
-    with tempfile.TemporaryDirectory(prefix="forgesre-bak-", dir=str(lay.backup_dir)) as tmp:
+    with tempfile.TemporaryDirectory(prefix="forgesre-bak-") as tmp:
         staging = Path(tmp) / f"forgesre-{stamp}"
         staging.mkdir()
 
@@ -585,17 +713,18 @@ def create_backup(
         (staging / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         (staging / "README-RESTORE.txt").write_text(_restore_readme(stamp, include_secrets, db_ok), encoding="utf-8")
 
-        dest = lay.backup_dir / f"forgesre-{stamp}.tar.gz"
+        dest = run_dir / INNER_ARCHIVE
         with tarfile.open(dest, "w:gz") as tar:
             tar.add(staging, arcname=f"forgesre-{stamp}")
         try:
             os.chmod(dest, 0o600)
         except OSError:
             pass
+        _write_run_manifest(run_dir, stamp, included, excluded, notes)
 
     return BackupResult(
         path=dest,
-        name=dest.name,
+        name=run_dir.name,
         included=included,
         excluded=excluded,
         notes=notes,
@@ -622,7 +751,7 @@ Restore (does not run itself — you confirm):
   ssh you@forgesre-vm
   cd ~/forgesre
   docker compose stop core
-  ./forgesre restore data/backups/forgesre-{stamp}.tar.gz --yes
+  ./forgesre restore data/backups/backup_{stamp} --yes
   ./forgesre update
 
 ./forgesre restore without --yes only prints the plan and exits 1.
@@ -730,6 +859,7 @@ def restore_archive(
     """Apply a backup. Refuses unless yes=True or confirm==RESTORE."""
     if not yes and confirm.strip() != CONFIRM_WORD:
         raise PermissionError("restore refused without --yes or typed RESTORE")
+    archive = archive_file(Path(archive))
     lay = layout or layout_from_env()
     plan = inspect_archive(archive, lay)
     notes: list[str] = []
@@ -792,9 +922,17 @@ def save_upload(data: bytes, filename: str, layout: BackupLayout | None = None) 
     lay = layout or layout_from_env()
     ensure_backup_dir(lay)
     name = Path(filename or "").name
-    if not is_archive_name(name):
-        name = f"forgesre-{stamp_utc()}.tar.gz"
-    dest = lay.backup_dir / name
+    stamp = stamp_utc()
+    if ARCHIVE_RE.match(name):
+        stamp = name[len("forgesre-") : -len(".tar.gz")]
+    run_dir = _run_dir_for_stamp(lay.backup_dir, stamp)
+    stamp = run_dir.name[len("backup_") :]
+    run_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(run_dir, 0o700)
+    except OSError:
+        pass
+    dest = run_dir / INNER_ARCHIVE
     dest.write_bytes(data)
     try:
         os.chmod(dest, 0o600)
@@ -806,7 +944,30 @@ def save_upload(data: bytes, filename: str, layout: BackupLayout | None = None) 
             tar.getmember(f"{root}/manifest.json")
     except Exception:
         dest.unlink(missing_ok=True)
+        try:
+            run_dir.rmdir()
+        except OSError:
+            pass
         raise ValueError("not a ForgeSRE backup tar.gz (missing manifest.json)") from None
+    try:
+        manifest = read_manifest(dest)
+        _write_run_manifest(
+            run_dir,
+            stamp,
+            list(manifest.get("included") or []),
+            list(manifest.get("excluded") or []),
+            list(manifest.get("notes") or []),
+        )
+    except Exception:  # noqa: BLE001 — listing is optional
+        listing = run_dir / "MANIFEST.txt"
+        listing.write_text(
+            f"Imported {name}\nArchive: {INNER_ARCHIVE}\n",
+            encoding="utf-8",
+        )
+        try:
+            os.chmod(listing, 0o600)
+        except OSError:
+            pass
     return dest
 
 
@@ -879,12 +1040,18 @@ def _main(argv: list[str] | None = None) -> int:
                 del args[idx : idx + 2]
         archive_arg = next((a for a in args if not a.startswith("-")), "")
         if not archive_arg:
-            print("usage: ./forgesre restore ARCHIVE.tar.gz [--yes]")
+            print("usage: ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ [--yes]")
             return 1
         path = Path(archive_arg)
-        if not path.is_file():
+        if path.exists():
             try:
-                path = resolve_archive(path.name)
+                path = archive_file(path)
+            except FileNotFoundError as exc:
+                print(exc)
+                return 1
+        else:
+            try:
+                path = resolve_archive(archive_arg)
             except (ValueError, FileNotFoundError) as exc:
                 print(exc)
                 return 1

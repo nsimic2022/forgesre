@@ -113,8 +113,11 @@
   Finish on the VM: <code>docker compose stop core</code> → <code>./forgesre restore data/backups/{{ request.query_params.get('restored') }} --yes</code> → <code>./forgesre update</code>.</p>
 {% endif %}
 <p>
-  Full-system archive for crash recovery or VM migration. Files land in <code>data/backups/</code> (gitignored, directory mode 700, tar mode 600).
-  Includes <code>config/forgesre.yml</code>, <code>.env</code>, <code>secrets/secrets.env</code>, a logical Postgres dump (users, incidents, playbooks, playrules, journal), compressed logs, <code>monitoring/alerts.local.yml</code>, and <code>data/generated/</code>.
+  Full-system archive for crash recovery or VM migration. Each run is a folder
+  <code>data/backups/backup_YYYYMMDDTHHMMSSZ/</code> (gitignored, directory mode 700)
+  with one <code>forgesre.tar.gz</code> (mode 600) plus a short <code>MANIFEST.txt</code>.
+  Import that tar — do not unpack it into loose files. Includes
+  <code>config/forgesre.yml</code>, <code>.env</code>, <code>secrets/secrets.env</code>, a logical Postgres dump (users, incidents, playbooks, playrules, journal), compressed logs, <code>monitoring/alerts.local.yml</code>, and <code>data/generated/</code>.
 </p>
 <p class="muted">
   Not in the backup: container images, Prometheus/Loki/Grafana volumes, nested backups, optional mailbox mail.
@@ -141,13 +144,13 @@
 </table>
 </div>
 {% else %}
-<p class="muted">No archives yet. Create one, or import a <code>forgesre-YYYYMMDDTHHMMSSZ.tar.gz</code>.</p>
+<p class="muted">No archives yet. Create one, or import a <code>forgesre.tar.gz</code> (or legacy <code>forgesre-YYYYMMDDTHHMMSSZ.tar.gz</code>).</p>
 {% endif %}
 <h3>Import / restore</h3>
 <p class="muted">
-  Import only <strong>stores</strong> a tar.gz under <code>data/backups/</code>.
+  Import only <strong>stores</strong> a tar.gz under <code>data/backups/backup_…/</code>.
   Restore overwrites the live database (users, incidents, playbooks). It does <strong>not</strong> run unless you tick the box and type <code>RESTORE</code>.
-  Preferred after a crash or when migrating: SSH, stop Core, <code>./forgesre restore ARCHIVE --yes</code>, then <code>./forgesre update</code>.
+  Preferred after a crash or when migrating: SSH, stop Core, <code>./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes</code>, then <code>./forgesre update</code>.
 </p>
 <form method="post" action="/admin/backups/import" enctype="multipart/form-data" class="row-actions backup-actions">
   <input type="file" name="archive" accept=".tar.gz,application/gzip" required>
