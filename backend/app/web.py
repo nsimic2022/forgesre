@@ -36,7 +36,7 @@ from app.models import (
     ScheduledReport,
     User,
 )
-from app.security import can, make_session_token, role_label, user_from_session, verify_password
+from app.security import can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload
 from app.services import run_demo, run_demo_rca, run_investigation
 from app.stack import enrich_components, rewrite_host
@@ -132,6 +132,7 @@ def ctx(request: Request, user: User | None, **extra):
         "user": user,
         "can": lambda perm: can(user, perm),
         "role_label": role_label,
+        "distinct_who_name": distinct_who_name,
         "grafana_url": settings.grafana_public_url,
         "grafana_enabled": settings.grafana_enabled,
         "ai_enabled": settings.ai_enabled,
