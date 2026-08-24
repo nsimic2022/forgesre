@@ -126,6 +126,28 @@ def prune_module(db: Session, module: str, keep: int = KEEP_PER_MODULE) -> int:
         return 0
 
 
+def error_banner_entries(db: Session, ack_id: int | None, limit: int = 5) -> list[JournalEntry]:
+    """Recent error reports newer than the operator's last dismissed journal id."""
+    rows = list_entries(db, status="error", limit=limit)
+    threshold = int(ack_id or 0)
+    return [row for row in rows if int(row.id or 0) > threshold]
+
+
+def next_error_ack_id(until_id: int | None, current_ack: int | None, shown_ids: list[int]) -> int:
+    """Advance the per-user watermark to the newest shown error, never past it."""
+    shown_max = max((int(item) for item in shown_ids if item is not None), default=0)
+    previous = int(current_ack or 0)
+    if until_id is None:
+        target = shown_max
+    else:
+        try:
+            requested = int(until_id)
+        except (TypeError, ValueError):
+            requested = shown_max
+        target = min(max(requested, 0), shown_max)
+    return max(previous, target)
+
+
 def list_entries(
     db: Session,
     module: str | None = None,

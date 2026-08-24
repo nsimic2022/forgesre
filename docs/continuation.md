@@ -54,7 +54,7 @@ Same one top-right **Run demo** button and closeable panel. Cards:
 
 ### 3.2 DEMO marking
 
-`is_demo_asset_id()` is true for any `forge-demo-*` id. `is_demo_incident()` / CLI `item_is_demo()` / mail `[DEMO]` + body line / journal summaries all use that helper. UI pills on incidents, history, detail, ForgeRCA, escalation, email outbox, dashboard journal, and `/journal`. Seeded hosts: `forge-demo-01`, `forge-demo-win-01`, `forge-demo-sw-01`.
+`is_demo_asset_id()` is true for any `forge-demo-*` id. `is_demo_incident()` / CLI `item_is_demo()` / mail `[DEMO]` + body line / journal summaries all use that helper. UI pills on incidents, history, detail, ForgeRCA, escalation, email outbox, dashboard journal, and `/journal`. Seeded hosts: `forge-demo-01`, `forge-demo-win-01`, `forge-demo-sw-01`. Dashboard yellow journal error banner has **Dismiss**; per-user `users.journal_error_ack_id` hides it until a newer error.
 
 ---
 

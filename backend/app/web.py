@@ -21,7 +21,7 @@ from app.inventory import (
     update_asset,
     is_snmp_asset,
 )
-from app.journal import MODULES, list_entries, module_counts
+from app.journal import MODULES, error_banner_entries, list_entries, module_counts, next_error_ack_id
 from app.models import (
     Asset,
     AuditLog,
@@ -286,7 +286,7 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
     }
     doctor = doctor_payload()
     recent = db.query(Incident).order_by(Incident.id.desc()).limit(8).all()
-    journal_error = list_entries(db, status="error", limit=5)
+    journal_error = error_banner_entries(db, getattr(user, "journal_error_ack_id", 0), limit=5)
     journal_recent = list_entries(db, limit=8)
     return render(
         request,
@@ -298,6 +298,24 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
         journal_error=journal_error,
         journal_recent=journal_recent,
     )
+
+
+@router.post("/dashboard/journal-ack")
+def dashboard_journal_ack(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    until_id: str = Form(""),
+):
+    if not can(user, "read_play"):
+        raise HTTPException(status_code=403, detail="forbidden")
+    shown = list_entries(db, status="error", limit=5)
+    raw = (until_id or "").strip()
+    requested = int(raw) if raw.isdigit() else None
+    new_ack = next_error_ack_id(requested, user.journal_error_ack_id, [row.id for row in shown])
+    if new_ack > int(user.journal_error_ack_id or 0):
+        user.journal_error_ack_id = new_ack
+        db.commit()
+    return RedirectResponse("/", status_code=302)
 
 
 @router.get("/assets", response_class=HTMLResponse)
