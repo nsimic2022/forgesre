@@ -37,7 +37,7 @@ def test_create_windows_asset_scrapes_windows_exporter_9182():
     win = create_manual_asset(
         db,
         hostname="win-prod-01",
-        ip="10.10.10.60",
+        ip="10.88.10.60",
         type="Windows Server",
         owner="payments",
         owner_email="payments@dc.local",
@@ -45,23 +45,23 @@ def test_create_windows_asset_scrapes_windows_exporter_9182():
     )
     linux = create_manual_asset(
         db,
-        hostname="app-prod-01",
-        ip="10.10.10.50",
+        hostname="lnx-prod-01",
+        ip="10.88.10.50",
         type="Linux Server",
         actor="tester",
     )
     assert win.monitoring_profile == "windows-standard"
-    assert win.scrape_address == "10.10.10.60:9182"
+    assert win.scrape_address == "10.88.10.60:9182"
     assert linux.monitoring_profile == "linux-standard"
-    assert linux.scrape_address == "10.10.10.50:9100"
+    assert linux.scrape_address == "10.88.10.50:9100"
     assert is_snmp_asset(win) is False
 
     targets = sd_targets(db)
     win_row = next(item for item in targets if item["labels"]["asset"] == "win-prod-01")
-    linux_row = next(item for item in targets if item["labels"]["asset"] == "app-prod-01")
-    assert win_row["targets"] == ["10.10.10.60:9182"]
+    linux_row = next(item for item in targets if item["labels"]["asset"] == "lnx-prod-01")
+    assert win_row["targets"] == ["10.88.10.60:9182"]
     assert win_row["labels"]["job"] == "windows-standard"
-    assert linux_row["targets"] == ["10.10.10.50:9100"]
+    assert linux_row["targets"] == ["10.88.10.50:9100"]
     assert linux_row["labels"]["job"] == "linux-standard"
     assert not any(item["labels"]["asset"] == DEMO_WIN_ASSET for item in targets)
     snmp_labels = [(item.get("labels") or {}).get("asset") for item in sd_snmp_targets(db)]
@@ -137,7 +137,7 @@ def test_assets_ui_offers_windows_server_and_http_sd():
         "/assets",
         data={
             "hostname": "win-ui-01",
-            "ip": "10.10.10.61",
+            "ip": "10.88.10.61",
             "type": "Windows Server",
             "environment": "Production",
             "owner": "payments",
@@ -148,7 +148,7 @@ def test_assets_ui_offers_windows_server_and_http_sd():
     assert created.status_code in {302, 303}
     detail = client.get("/assets/win-ui-01")
     assert detail.status_code == 200
-    assert b"10.10.10.61:9182" in detail.content
+    assert b"10.88.10.61:9182" in detail.content
     assert b"windows_exporter" in detail.content
     sd = client.get(
         "/api/v1/sd/prometheus",
@@ -157,7 +157,7 @@ def test_assets_ui_offers_windows_server_and_http_sd():
     assert sd.status_code == 200
     body = sd.json()
     match = next(item for item in body if item["labels"]["asset"] == "win-ui-01")
-    assert match["targets"] == ["10.10.10.61:9182"]
+    assert match["targets"] == ["10.88.10.61:9182"]
     assert match["labels"]["job"] == "windows-standard"
     assert not any(item["labels"]["asset"] == DEMO_WIN_ASSET for item in body)
     db.close()
