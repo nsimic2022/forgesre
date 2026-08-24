@@ -466,7 +466,7 @@ git pull origin main
 ./forgesre snmp
 ```
 
-`./forgesre update` = doctor (warn ok) → backup → render-monitoring → compose pull/up → doctor. It does **not** regenerate passwords.
+`./forgesre update` = doctor (warn ok) → backup → render-monitoring → compose pull/up (including **snmp-exporter** on `127.0.0.1:9116`) → doctor. It does **not** regenerate passwords. Host backup dumps Postgres via `docker compose exec postgres` (no sqlalchemy on the host). A backup failure is a clear error; update still starts the stack.
 
 Platform backup files: `data/backups/forgesre-*.tar.gz`. Restore is not silent — `./forgesre restore ARCHIVE` prints the plan; add `--yes` after `docker compose stop core`, then `./forgesre update`. Administration can create/import the same archives (admin session only). Details: [`operator-handbook.md`](operator-handbook.md) (Platform backup).
 

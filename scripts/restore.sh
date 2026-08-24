@@ -31,5 +31,7 @@ if [[ -z "${DATABASE_URL:-}" && -n "${POSTGRES_PASSWORD:-}" ]]; then
   export DATABASE_URL="postgresql+psycopg2://forgesre:${POSTGRES_PASSWORD}@127.0.0.1:5432/forgesre"
 fi
 
+# Host Python has no sqlalchemy. Restore applies db.json via docker compose
+# exec postgres when sqlalchemy is missing. GUI restore still uses Core.
 export PYTHONPATH="${ROOT}/backend${PYTHONPATH:+:${PYTHONPATH}}"
 exec python3 -m app.backup restore "$@"

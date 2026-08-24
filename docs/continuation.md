@@ -33,30 +33,40 @@ Hard-refresh the browser after UI/CSS changes.
 
 ## 2. Why this session existed
 
-Assets had **Add asset** but no **Edit / Clone / Remove**. Those are mandatory. N also asked to review Add fields (only keep what inventory, Discovery, Prometheus scrape, and contacts actually use).
+On the live appliance N ran `update` from `forgesre>`. Doctor was **DEGRADED** because `snmp-exporter` was not listening on `127.0.0.1:9116` (`Connection refused`). Then backup crashed:
+
+```text
+File: /root/forgesre/backend/app/backup.py line 24
+from sqlalchemy import DateTime as SADateTime
+ModuleNotFoundError: No module named 'sqlalchemy'
+```
+
+`./forgesre backup` runs on **host** Python (restricted CLI). sqlalchemy lives in the Core image. `update` aborted at backup (`set -e`), so compose never started snmp-exporter.
+
+Do **not** tell N to `pip install sqlalchemy` on the host.
 
 ---
 
 ## 3. What shipped on main
 
-### 3.1 Asset Edit / Clone / Remove (this session)
+### 3.1 Host backup without sqlalchemy (this session)
 
-Branch: `cursor/assets-edit-clone-remove-05f8`.
+Branch: `cursor/fix-backup-snmp-update-05f8`.
 
-- List page Actions: **Edit**, **Clone**, **Remove** (same `write_assets` as Add: analyst / engineer / admin). Viewers do not see them.
-- **Edit** reuses the Add form (`/assets?edit=<id>`). Hostname, type including Auto, IP, scrape address, owner/contact, notes, environment. `asset_id` is stable. HTTP SD is live from Postgres; Prometheus picks changes on the next scrape. Core static demo scrape is untouched.
-- **Clone** prefills the same form with a new hostname/id. User tweaks before Save. Duplicate hostname/IP rejected. Cloning `forge-demo-*` suggests `copy-…` (real asset, can be scraped) unless they keep a `forge-demo-*` name.
-- **Remove** confirms. Deletes the inventory row (drops HTTP/SNMP SD). **Keeps incidents** (clears `incidents.asset_id`). Discovery candidates for that IP return to `new`. **Blocks** seeded `forge-demo-*` (demos / similar history).
-- Add form gained optional **scrape address** (exporter port). No invented ticketing / Zabbix / IMAP fields.
-
-API: `POST /api/v1/assets/{id}`, `/clone`, `/delete`.
+- `backend/app/backup.py` no longer imports sqlalchemy at module load. `python3 -m app.backup help` works on the host.
+- **GUI / Core** still dumps and restores with SQLAlchemy (`db.json` in the tar).
+- **Host CLI** dumps/restores Postgres with `docker compose exec -T postgres psql` (JSON agg / `json_populate_recordset`). Same archive format.
+- `./forgesre update`: backup failure is a clear error (no traceback). Update **continues** with render-monitoring and compose up so snmp-exporter still starts.
+- `docker compose up -d` always includes `snmp-exporter` (not a profile). `update` also runs `up -d snmp-exporter`. Listen address stays `127.0.0.1:9116` (host network). Doctor still **errors** on connection refused — start the service, do not silence the check.
 
 ### 3.2 Already on main (do not redo)
 
+- Asset Edit / Clone / Remove on the list page.
 - Windows Server + windows_exporter `:9182` vs Linux node_exporter `:9100`.
-- Auto-detect OS/port in Assets/Discovery (`exporter_detect.py`, default Auto).
+- Auto-detect OS/port in Assets/Discovery.
 - `./forgesre ping` / `probe`.
-- Administration user edit/remove (click user). Do not fight a sibling Administration backup/import change.
+- Administration user edit/remove and platform backup UI.
+- Network device SNMP SD (`./forgesre snmp`).
 
 ---
 
@@ -69,13 +79,15 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Demo rows stay visible; they are **labeled DEMO**, not hidden. `./forgesre ping` skips `forge-demo-*` unless `--demo` or the id is passed.
 - Incident ids look like `INC-0134_16.08.2026_09:13`. Older `INC-000012` rows stay valid.
 - RCA is Python under `agents/rca/`. The LLM only rewrites prose. Builtin ForgeRCA always runs first.
-- Core is an SMTP **client** only. The UI has no IMAP inbox. Incident reports and escalation mail are HTML + plain text (multipart); `/ops` compose stays plain.
+- Core is an SMTP **client** only. The UI has no IMAP inbox. Incident reports and escalation mail are HTML + plain text (multipart); `/ops` compose stays plain text.
 - pytest is a laptop/dev dependency. The Core image must not install it.
 - After UI / CSS changes, operators need a **hard refresh** in the browser.
 - Real Windows scrape is **windows_exporter :9182**, not the lab demo host.
 - ICMP ping ≠ Prometheus scrape. Do not add a ping-only “host up” incident.
 - Auto-detect is a helper + defaults, not a new fingerprinting subsystem. Network is only the existing SNMP UDP/161 path (`snmp_ok` / live GET). Do not guess Network from missing :9100/:9182.
 - Assets Ping / :9100 / :9182 / SNMP dots are last-known + async (`GET /api/v1/assets/reachability`). Do not probe inside the HTML list handler.
+- Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the appliance as a product fix.
+- `snmp-exporter` is a **default** compose service. Do not move it behind a profile. Do not require Zabbix.
 
 ---
 
@@ -83,8 +95,8 @@ These already work on `main`. Do not “fix” them unless N asks.
 
 1. `git pull origin main` (or fetch and check out `main`). Code lives there.
 2. Read **this file**, then [`docs/llm.md`](llm.md) and [`docs/cli.md`](cli.md).
-3. On the VM N uses: `git pull origin main && ./forgesre update`, then `./forgesre ping` and `./forgesre test`. Hard-refresh Assets. Never `./install.sh` on that box.
-4. Developer checks: `pip install -r requirements-dev.txt` if needed, then `PYTHONPATH=backend:agents pytest tests` **twice**, then merge to `main`. New work uses branch pattern `cursor/<name>-05f8`.
+3. On the VM N uses: `git pull origin main && ./forgesre update`, then `./forgesre snmp` and `./forgesre test`. Never `./install.sh` on that box.
+4. Developer checks: `pip install -r requirements-dev.txt` if needed, then `PYTHONPATH=backend:agents python3 -m pytest tests` **twice**, then merge to `main`. New work uses branch pattern `cursor/<name>-05f8`.
 5. Replies to N are in **Serbian**. OSS docs and code stay in **English**.
 6. `ManagePullRequest` `create_pr` / `update_pr` often 403. `git merge --no-ff` plus `git push origin main` still lands the change.
 
@@ -114,3 +126,4 @@ These are documentation choices, not holes to fill on sight:
 - `incident_detail.html` / `ai.html` RCA markup is similar but not identical. Extract a partial only if both pages should look the same.
 - Scheduled performance reports on `/ops` are still plain text. HTML them only if N asks.
 - Existing Windows hosts added as `Linux Server` keep `:9100` until Detect or a type/scrape edit. No automatic rewrite of custom scrape addresses on every save.
+- snmp-exporter image healthcheck uses busybox `wget`. If a future image is distroless, drop the healthcheck; doctor still curls `:9116`.

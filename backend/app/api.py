@@ -877,7 +877,7 @@ def _snmp_check() -> dict[str, str]:
     result = _http(f"{settings.snmp_exporter_url}/metrics", "GET")
     if result.get("status") == "ok":
         return result
-    result["fix"] = "docker compose up -d snmp-exporter && ./forgesre render-monitoring && ./forgesre snmp"
+    result["fix"] = "docker compose up -d snmp-exporter"
     result["test"] = f"curl -fsS {settings.snmp_exporter_url}/metrics"
     return result
 

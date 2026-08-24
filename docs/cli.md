@@ -107,7 +107,12 @@ git checkout main
 git pull origin main
 ./forgesre update
 ./forgesre test
+./forgesre snmp
 ```
+
+`./forgesre update` = doctor (warn ok) → backup → render-monitoring → `docker compose up -d` (includes **snmp-exporter** on `127.0.0.1:9116`) → doctor.
+
+Backup on the host does **not** use sqlalchemy (that package is only in the Core image). The CLI dumps Postgres with `docker compose exec postgres`. Administration Backup still runs inside Core. Same `data/backups/forgesre-*.tar.gz` format. If backup fails, update prints a clear error and **continues** so the stack still comes up. Do not `pip install sqlalchemy` on the host. Do not `./install.sh`.
 
 ### Rebuild Core after Python changes
 

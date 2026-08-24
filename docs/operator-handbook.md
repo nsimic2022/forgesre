@@ -181,7 +181,7 @@ Audit rows for `user.create`, `user.update`, `user.delete`, `backup.create` / `b
 
 ### Platform backup and restore
 
-Archives are `data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz` (`$FORGESRE_DATA/backups/`). The directory is gitignored, mode `700`; each tar is mode `600`. Administration (admin / super_admin only) has **Backup** and **Import** *before* Appliance shell. `./forgesre backup` is the same code.
+Archives are `data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz` (`$FORGESRE_DATA/backups/`). The directory is gitignored, mode `700`; each tar is mode `600`. Administration (admin / super_admin only) has **Backup** and **Import** *before* Appliance shell. `./forgesre backup` writes the same archive: GUI/Core uses SQLAlchemy; the host CLI dumps Postgres with `docker compose exec postgres` (do not pip-install sqlalchemy on the VM).
 
 **In the archive:** `config/forgesre.yml`, `.env`, `secrets/secrets.env` (omit with `./forgesre backup --no-secrets`), a logical database dump (users, incidents, assets, playbooks, playrules, journal, audit, jobs), compressed `data/logs/`, `monitoring/alerts.local.yml` if present, `data/generated/`, `config/examples/`.
 

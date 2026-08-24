@@ -421,6 +421,10 @@ Includes: Postgres/SQLite dump (users, incidents, playbooks, playrules, journal)
 config/forgesre.yml, .env, secrets.env (unless --no-secrets), compressed logs,
 monitoring/alerts.local.yml, data/generated/, config/examples/.
 
+Host CLI dumps Postgres with docker compose exec postgres (no sqlalchemy on
+the host). Administration Backup uses Core, which has sqlalchemy. Same
+archive format (db.json inside forgesre-*.tar.gz).
+
 Not included: Docker images, Prometheus/Loki/Grafana volumes, nested backups.
 LLM GGUF files are skipped unless --include-models (they are often multi-GB).
 
@@ -548,7 +552,11 @@ update — doctor (warn ok), backup, render-monitoring, compose pull/up, doctor.
   ./forgesre update
   ./forgesre update --offline
 
-Use this after git pull origin main. Do not run ./install.sh.
+Starts default Compose services including snmp-exporter (127.0.0.1:9116).
+Backup runs on the host without sqlalchemy (Postgres dump via docker compose).
+If backup fails, update prints a clear error and continues so the stack
+(including snmp-exporter) still comes up. Do not pip install sqlalchemy
+on the host. Do not run ./install.sh. Use this after git pull origin main.
 EOF
       ;;
     mailbox)
