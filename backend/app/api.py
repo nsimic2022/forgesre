@@ -46,7 +46,18 @@ from app.inventory import (
 from app.asset_probe import refresh_reachability, reachability_snapshot
 from app.exporter_detect import detect_exporter, is_auto_asset_type
 from app.seed import seed
-from app.services import ingest_alertmanager, is_demo_incident, run_demo, run_demo_host, run_demo_network, run_demo_nodecpu, run_demo_rca, run_demo_windows
+from app.services import (
+    host_down_public,
+    ingest_alertmanager,
+    is_demo_incident,
+    list_host_down_incidents,
+    run_demo,
+    run_demo_host,
+    run_demo_network,
+    run_demo_nodecpu,
+    run_demo_rca,
+    run_demo_windows,
+)
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
@@ -230,6 +241,16 @@ def list_incidents(
     offset = max(0, offset)
     rows = db.query(Incident).order_by(Incident.id.desc()).offset(offset).limit(limit).all()
     return [_incident(item, include_evidence=can(user, "read_evidence")) for item in rows]
+
+
+@router.get("/incidents/down")
+def list_down_incidents(
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_incidents")),
+) -> list[dict[str, Any]]:
+    """Open NodeExporterDown / WindowsExporterDown / SnmpDeviceUnreachable rows for the dashboard banner."""
+    del user
+    return [host_down_public(row) for row in list_host_down_incidents(db)]
 
 
 @router.get("/history")

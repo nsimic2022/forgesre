@@ -99,7 +99,7 @@ ICMP **plus** exporter HTTP `/metrics` from this VM. Alias: `probe`.
 
 ### Assets table: ping / exporter colors
 
-Green / yellow / red dots after the IP: Ping, `:9100`, `:9182`, SNMP.
+Green / yellow / red pills in the **Ping / comms** column (already on main; made easier to see). Dashboard: one HOST DOWN banner lists open `NodeExporterDown` / `WindowsExporterDown` / `SnmpDeviceUnreachable` incidents (link + DEMO).
 
 - Last-known colors on first HTML paint; yellow until the first probe.
 - Background `GET /api/v1/assets/reachability` refreshes them. Do **not** probe inside the HTML list handler.

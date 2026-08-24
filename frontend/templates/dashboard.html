@@ -86,6 +86,24 @@
   </form>
 </div>
 {% endif %}
+<div class="banner banner-crit" id="host-down-banner" data-host-down-banner {% if not down_incidents %}hidden{% endif %}>
+  <strong>HOST DOWN</strong>
+  <span data-host-down-count>
+    {% if down_incidents %}
+    {{ down_incidents|length }} open incident{% if down_incidents|length != 1 %}s{% endif %}
+    for unreachable host / SNMP down.
+    {% endif %}
+  </span>
+  <ul class="banner-list" data-host-down-list>
+    {% for item in down_incidents %}
+    <li>
+      <a href="/incidents/{{ item.number }}">{{ item.number }}</a>
+      {% if is_demo_incident(item) %}<span class="pill demo">DEMO</span>{% endif %}
+      {{ item.title }}{% if item.asset %} · {{ item.asset.hostname }}{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
 <section>
   <h2>Infrastructure</h2>
   <div class="grid">
