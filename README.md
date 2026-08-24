@@ -104,7 +104,7 @@ Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. L
 | `/journal` | Internal console |
 | `/health-ui` | Same checks as `./forgesre doctor`; Open Grafana / Prometheus / … |
 | `/ops` | Email & reports: address book, send, outbox, scheduled reports |
-| `/admin` | Users: click a row to edit or remove; audit |
+| `/admin` | Users: click a row to edit or remove; platform backup / import; audit |
 
 Roles: super admin (install user), system admin, analyst (inventory + playrules), engineer (deep RCA), viewer.
 
@@ -135,6 +135,8 @@ Type `./forgesre` with no arguments for a prompt, then `journal`, `incidents`, `
 ./forgesre render-monitoring   # after git pull, refresh Prometheus/SNMP/alerts
 ./forgesre backup
 ./forgesre backup --no-secrets
+./forgesre backup --include-models
+./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes
 ./forgesre fetch-llm           # optional ~9 GB GGUF, not stored in git
 ./forgesre mailbox             # optional Roundcube later; Core SMTP unchanged
 ```

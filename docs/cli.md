@@ -46,6 +46,8 @@ Two logins:
 ./forgesre render-monitoring
 ./forgesre backup
 ./forgesre backup --no-secrets
+./forgesre backup --include-models
+./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes
 ./forgesre mailbox         # optional; does not rewrite Gmail/Outlook SMTP
 ./forgesre fetch-llm
 ./forgesre update
@@ -55,7 +57,7 @@ Two logins:
 ./forgesre logout
 ```
 
-Root wrappers still work: `./install.sh`, `./doctor.sh`, `./test.sh`, `./backup.sh`, `./update.sh`.
+Root wrappers still work: `./install.sh`, `./doctor.sh`, `./test.sh`, `./backup.sh`, `./restore.sh`, `./update.sh`.
 
 ### Leave the prompt
 

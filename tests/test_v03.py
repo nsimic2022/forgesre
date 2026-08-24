@@ -190,7 +190,10 @@ def test_playrule_page_has_metric_presets():
     admin = client.get("/admin")
     assert admin.status_code == 200
     assert b"ForgeRCA" not in admin.content or b"Appliance shell" in admin.content
-    assert b"there is no bash terminal" in admin.content.lower() or b"There is no bash terminal" in admin.content
+    lower = admin.content.lower()
+    assert b"appliance shell" in lower
+    assert b"there is no terminal in this browser" in lower or b"there is no bash terminal" in lower
+    assert b">backup<" in lower
     db.close()
 
 

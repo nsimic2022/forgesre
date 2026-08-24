@@ -137,7 +137,7 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 | Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
 | System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Run doctor** re-probes now. Green = running, yellow = paused / starting / disabled, red = down. **Open** column (and the component name) goes to that service’s GUI or metrics. **Open Grafana** is on this page too. Prometheus/Alertmanager bind the appliance; the UI rewrites `127.0.0.1` to the host you used. |
 | Email & reports | `/ops` | **Gmail** / **Outlook** send now (YAML + `SMTP_*`). **Own domain + Roundcube** is listed but not enabled until `./forgesre mailbox`. Address book, send, outbox, scheduled reports. Grafana is on System Health. |
-| Administration | `/admin` | Users: click a row to **edit** or **remove**. Audit log. No browser bash — SSH or `./forgesre shell` |
+| Administration | `/admin` | Users: click a row to **edit** or **remove**. **Backup / Import / Restore** (before Appliance shell). Audit log. No browser PTY — SSH or `./forgesre shell` |
 
 ---
 
@@ -177,7 +177,47 @@ curl -fsS -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/users/2 \
 curl -fsS -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/users/2/delete
 ```
 
-Audit rows for `user.create`, `user.update`, `user.delete`, and `login` show on `/admin`.
+Audit rows for `user.create`, `user.update`, `user.delete`, `backup.create` / `backup.download` / `backup.import` / `backup.restore`, and `login` show on `/admin`.
+
+### Platform backup and restore
+
+Archives are `data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz` (`$FORGESRE_DATA/backups/`). The directory is gitignored, mode `700`; each tar is mode `600`. Administration (admin / super_admin only) has **Backup** and **Import** *before* Appliance shell. `./forgesre backup` is the same code.
+
+**In the archive:** `config/forgesre.yml`, `.env`, `secrets/secrets.env` (omit with `./forgesre backup --no-secrets`), a logical database dump (users, incidents, assets, playbooks, playrules, journal, audit, jobs), compressed `data/logs/`, `monitoring/alerts.local.yml` if present, `data/generated/`, `config/examples/`.
+
+**Not in the archive:** Docker images, Prometheus/Loki/Grafana volume data, nested backups, optional mailbox mail. LLM GGUF files under `data/models/` are skipped unless you tick **Include LLM GGUF** or pass `--include-models` (they are often multi-GB). Small non-GGUF files in that folder are included.
+
+Download is session-authenticated. There is no unauthenticated URL. Do not commit `data/backups/`.
+
+Restore does **not** run silently. CLI without `--yes` prints the plan and exits 1. The UI Restore button requires a checkbox and typing `RESTORE`. Preferred path after a crash or when migrating VMs:
+
+```bash
+ssh you@forgesre-vm
+cd ~/forgesre
+docker compose stop core
+./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes
+./forgesre update
+```
+
+A browser restore can reload Postgres while Core is still running; it cannot rewrite `.env` / secrets / YAML because those mounts are read-only. Finish file restore from SSH as above. Then `git pull origin main && ./forgesre update` if you are also taking new code.
+
+### Appliance shell (no web PTY)
+
+Administration does **not** open a terminal in the browser. A full web PTY (xterm.js + host PTY), even if wrapped to `./forgesre` only, is still a large attack surface: XSS or a stolen admin cookie becomes a host command channel, and “restricted shells” are routinely escaped. ForgeSRE will not ship that, and will not expose root bash in the UI.
+
+The existing Appliance shell control stays an explanation plus SSH:
+
+```bash
+ssh you@forgesre-vm
+cd ~/forgesre
+./forgesre          # or: ./forgesre shell
+```
+
+`./forgesre` with no args is already a restricted prompt (`forgesre>`). Use it on the box, not through the browser. Journal (`/journal`) is the process console, not a shell.
+
+Residual risk of SSH + `./forgesre`: whoever has a Linux account on the VM can run the CLI (and the install admin fallback in `secrets.env` if that file is readable). Treat OS accounts as you would any appliance login. Do not put the UI on the public internet.
+
+---
 
 ### Where passwords live (protected)
 
@@ -765,6 +805,9 @@ Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critica
 ./forgesre fetch-llm            # GGUF download (~9 GB, not in git)
 ./forgesre backup
 ./forgesre backup --no-secrets
+./forgesre backup --include-models
+./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz
+./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes
 ./forgesre update               # backup + render-monitoring + compose up + doctor
 ./forgesre mailbox              # optional Roundcube later; does not rewrite Core SMTP
 ./forgesre version

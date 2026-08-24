@@ -901,7 +901,7 @@ Not allowed as the only message: `connection refused`.
 - AI config (in yaml + db)
 - **Not** full Prometheus/Loki TSDB by default (size). Flag `--include-metrics` / `--include-logs` for sites that want it.
 
-`forgesre restore` stops Core, restores DB + config, doctor, start.
+`forgesre restore ARCHIVE` prints the plan and exits 1. `forgesre restore ARCHIVE --yes` stops Core when Docker is available, restores the DB + files, and tells you to run `./forgesre update`. It will not apply without `--yes`.
 
 `forgesre update`:
 

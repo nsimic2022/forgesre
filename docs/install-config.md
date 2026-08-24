@@ -386,6 +386,9 @@ From the clone directory. `./forgesre help` is the index. `./forgesre help <comm
 ./forgesre secrets-check
 ./forgesre render-monitoring
 ./forgesre backup
+./forgesre backup --no-secrets
+./forgesre backup --include-models
+./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes
 ./forgesre version
 ```
 
@@ -464,6 +467,8 @@ git pull origin main
 ```
 
 `./forgesre update` = doctor (warn ok) → backup → render-monitoring → compose pull/up → doctor. It does **not** regenerate passwords.
+
+Platform backup files: `data/backups/forgesre-*.tar.gz`. Restore is not silent — `./forgesre restore ARCHIVE` prints the plan; add `--yes` after `docker compose stop core`, then `./forgesre update`. Administration can create/import the same archives (admin session only). Details: [`operator-handbook.md`](operator-handbook.md) (Platform backup).
 
 ---
 
