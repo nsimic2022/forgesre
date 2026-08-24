@@ -223,6 +223,79 @@ def resolve_archive(name: str, layout: BackupLayout | None = None) -> Path:
     raise FileNotFoundError(Path(raw).name)
 
 
+def resolve_cli_archive(
+    archive_arg: str,
+    *,
+    rows: list[dict[str, Any]] | None = None,
+    layout: BackupLayout | None = None,
+) -> Path:
+    """Accept a 1-based picker index, a run folder, or a tar.gz path."""
+    raw = str(archive_arg).strip()
+    if not raw:
+        raise ValueError("no backup selected")
+    if raw.isdigit():
+        listed = rows if rows is not None else list_archives(layout)
+        idx = int(raw)
+        if idx < 1 or idx > len(listed):
+            raise ValueError(f"no backup numbered {raw}")
+        return resolve_archive(listed[idx - 1]["name"], layout)
+    path = Path(raw)
+    if path.exists():
+        return archive_file(path)
+    return resolve_archive(raw, layout)
+
+
+def stamp_from_backup_name(name: str) -> str:
+    """UTC stamp embedded in backup_… / forgesre-….tar.gz names. Empty if unknown."""
+    raw = Path(name).name
+    if is_run_folder_name(raw):
+        return raw[len("backup_") :]
+    if ARCHIVE_RE.match(raw):
+        return raw[len("forgesre-") : -len(".tar.gz")]
+    return ""
+
+
+def pretty_backup_stamp(stamp: str) -> str:
+    try:
+        dt = datetime.strptime(stamp, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+    except ValueError:
+        return ""
+
+
+def backup_label(name: str, size: int) -> str:
+    """Dropdown/CLI line: timestamp + folder name + size. Never archive contents."""
+    pretty = pretty_backup_stamp(stamp_from_backup_name(name))
+    sized = format_size(size)
+    if pretty:
+        return f"{pretty} — {name} ({sized})"
+    return f"{name} ({sized})"
+
+
+def _archive_row(name: str, size: int, mtime: datetime) -> dict[str, Any]:
+    stamp = stamp_from_backup_name(name)
+    return {
+        "name": name,
+        "size": size,
+        "mtime": mtime.isoformat(),
+        "stamp": stamp,
+        "label": backup_label(name, size),
+    }
+
+
+def _row_when(row: dict[str, Any]) -> datetime:
+    stamp = str(row.get("stamp") or "")
+    if stamp:
+        try:
+            return datetime.strptime(stamp, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    try:
+        return datetime.fromisoformat(str(row["mtime"]))
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+
 def list_archives(layout: BackupLayout | None = None) -> list[dict[str, Any]]:
     lay = layout or layout_from_env()
     folder = ensure_backup_dir(lay)
@@ -235,23 +308,43 @@ def list_archives(layout: BackupLayout | None = None) -> list[dict[str, Any]]:
                 continue
             stat = tar.stat()
             rows.append(
-                {
-                    "name": child.name,
-                    "size": stat.st_size,
-                    "mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
-                }
+                _archive_row(
+                    child.name,
+                    stat.st_size,
+                    datetime.fromtimestamp(stat.st_mtime, timezone.utc),
+                )
             )
         elif child.is_file() and ARCHIVE_RE.match(child.name):
             stat = child.stat()
             rows.append(
-                {
-                    "name": child.name,
-                    "size": stat.st_size,
-                    "mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
-                }
+                _archive_row(
+                    child.name,
+                    stat.st_size,
+                    datetime.fromtimestamp(stat.st_mtime, timezone.utc),
+                )
             )
-    rows.sort(key=lambda row: row["mtime"], reverse=True)
+    rows.sort(key=_row_when, reverse=True)
     return rows
+
+
+def print_backup_picker(rows: list[dict[str, Any]]) -> None:
+    if not rows:
+        print("No backups under data/backups/. Run ./forgesre backup first.")
+        return
+    print("Backups (newest first). Restore unit is forgesre.tar.gz inside each folder.")
+    for index, row in enumerate(rows, 1):
+        print(f"  {index}. {row['label']}")
+
+
+def read_picker_choice() -> str:
+    import sys
+
+    if not sys.stdin.isatty():
+        return ""
+    try:
+        return input("Pick a number: ").strip()
+    except EOFError:
+        return ""
 
 
 def _jsonable(value: Any) -> Any:
@@ -1003,12 +1096,16 @@ def _main(argv: list[str] | None = None) -> int:
     cmd = args.pop(0) if args else "help"
     if cmd in {"-h", "--help", "help"}:
         sys.stdout.write(
-            "backup|restore|list  (see ./forgesre help backup and ./forgesre help restore)\n"
+            "backup|restore|import|list  (see ./forgesre help backup and ./forgesre help restore)\n"
         )
         return 0
     if cmd == "list":
-        for row in list_archives():
-            print(f"{row['name']}  {format_size(row['size'])}")
+        rows = list_archives()
+        if not rows:
+            print("No backups under data/backups/.")
+            return 0
+        for index, row in enumerate(rows, 1):
+            print(f"{index}. {row['label']}")
         return 0
     if cmd == "backup":
         include_secrets = "--no-secrets" not in args
@@ -1029,7 +1126,7 @@ def _main(argv: list[str] | None = None) -> int:
             )
             return 1
         return 0
-    if cmd == "restore":
+    if cmd in {"restore", "import"}:
         yes = "--yes" in args
         args = [a for a in args if a not in {"--yes", "--include-models", "--no-secrets"}]
         confirm = ""
@@ -1039,26 +1136,30 @@ def _main(argv: list[str] | None = None) -> int:
                 confirm = args[idx + 1]
                 del args[idx : idx + 2]
         archive_arg = next((a for a in args if not a.startswith("-")), "")
+        rows = list_archives()
         if not archive_arg:
-            print("usage: ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ [--yes]")
+            print_backup_picker(rows)
+            if not rows:
+                return 1
+            archive_arg = read_picker_choice()
+            if not archive_arg:
+                print("Pick a number, then: ./forgesre restore N [--yes]")
+                print("Or pass a folder: ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ [--yes]")
+                print("Still needs --yes (or type RESTORE in Administration).")
+                return 1
+        try:
+            path = resolve_cli_archive(archive_arg, rows=rows)
+        except (ValueError, FileNotFoundError) as exc:
+            print(exc)
             return 1
-        path = Path(archive_arg)
-        if path.exists():
-            try:
-                path = archive_file(path)
-            except FileNotFoundError as exc:
-                print(exc)
-                return 1
-        else:
-            try:
-                path = resolve_archive(archive_arg)
-            except (ValueError, FileNotFoundError) as exc:
-                print(exc)
-                return 1
         plan = inspect_archive(path)
         print_restore_plan(plan)
         if not yes and confirm != CONFIRM_WORD:
+            ident = backup_ident(path)
             print("Refusing. Re-run with --yes after you have stopped Core (or accept a live DB restore).")
+            print("  docker compose stop core")
+            print(f"  ./forgesre restore {ident} --yes")
+            print("  ./forgesre update")
             return 1
         outcome = restore_archive(path, yes=True, stop_core=True)
         for item in outcome["notes"]:

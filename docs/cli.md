@@ -49,6 +49,7 @@ Two logins:
 ./forgesre backup
 ./forgesre backup --no-secrets
 ./forgesre backup --include-models
+./forgesre restore                 # numbered backup_* picker (newest first); still needs --yes
 ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes
 ./forgesre mailbox         # optional; does not rewrite Gmail/Outlook SMTP
 ./forgesre fetch-llm

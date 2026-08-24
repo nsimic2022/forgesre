@@ -78,7 +78,8 @@ Commands:
   secrets-check      Refuse-to-start defaults: SECRET_KEY / webhook token
   fetch-llm          Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp
   backup             One folder per run under data/backups (tar.gz + MANIFEST; --no-secrets / --include-models)
-  restore            Print plan; apply only with --yes after stopping Core
+  restore            List backup folders (newest first); apply only with --yes after stopping Core
+  import             Alias for restore (numbered picker when no path is given)
   update             Backup, render monitoring, refresh images, restart, doctor
   mailbox            Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)
   completion         Print a `source …completion.bash` line for ~/.bashrc
@@ -476,20 +477,27 @@ create/download the same archives (admin session only). Never commit
 data/backups/. Use --no-secrets when the file will leave the VM.
 EOF
       ;;
-    restore)
+    restore|import)
       cat <<'EOF'
 restore — apply a platform backup. Refuses without --yes.
 
   ./forgesre restore
+  ./forgesre import
+  ./forgesre restore 1
+  ./forgesre restore 1 --yes
   ./forgesre restore data/backups/backup_20260824T120000Z
   ./forgesre restore data/backups/backup_20260824T120000Z/forgesre.tar.gz --yes
   ./forgesre restore data/backups/forgesre-20260824T120000Z.tar.gz --yes
+
+With no path, lists backup_* folders (newest first) and asks for a number.
+Then still needs --yes. Same inside the forgesre> prompt: restore
 
 Without --yes this only prints the plan and exits 1. It will overwrite
 the database, .env, secrets, and config. Stop Core first:
 
   docker compose stop core
-  ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes
+  ./forgesre restore
+  ./forgesre restore 1 --yes
   ./forgesre update
 
 Each run is a folder data/backups/backup_YYYYMMDDTHHMMSSZ/ with one
@@ -498,8 +506,9 @@ accepts the folder or the tar inside it. Legacy forgesre-*.tar.gz at
 the backups root still works.
 
 Administration Import stores an upload under data/backups/backup_…/. The Restore
-button requires typing RESTORE. A browser restore cannot stop Core;
-prefer this CLI path after a crash or when migrating VMs.
+dropdown (newest first, timestamp + folder name) requires typing RESTORE.
+A browser restore cannot stop Core; prefer this CLI path after a crash
+or when migrating VMs.
 EOF
       ;;
     incidents)
@@ -769,11 +778,7 @@ case "$cmd" in
   doctor) exec "$ROOT/scripts/doctor.sh" "$@" ;;
   test) exec "$ROOT/scripts/test.sh" "$@" ;;
   backup) exec "$ROOT/scripts/backup.sh" "$@" ;;
-  restore)
-    if [[ $# -eq 0 ]]; then
-      print_help_command restore
-      exit 1
-    fi
+  restore|import)
     need_env
     exec "$ROOT/scripts/restore.sh" "$@"
     ;;
