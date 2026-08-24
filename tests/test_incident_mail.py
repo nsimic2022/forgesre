@@ -211,11 +211,12 @@ def test_send_incident_report_smtp_payload_is_multipart(monkeypatch):
     _enable_smtp(monkeypatch)
     sent = _capture_smtp(monkeypatch)
     incident = _demo_incident(db)
-    row = send_incident_report(db, incident, "ops@dc.local", actor="admin@forgesre.local")
+    row = send_incident_report(db, incident, "ops-html@dc.local", actor="admin@forgesre.local")
+    status, body = row.status, row.body
     db.close()
-    assert row.status == "sent"
-    assert "Disk full" in row.body
-    assert "<html" not in (row.body or "").lower()
+    assert status == "sent"
+    assert "Disk full" in body
+    assert "<html" not in (body or "").lower()
     assert sent, "SMTP send_message was not called"
     raw, has_plain, has_html = _payload_types(sent[0])
     assert has_plain
@@ -234,7 +235,7 @@ def test_send_incident_report_non_demo_html_has_no_banner(monkeypatch):
     _enable_smtp(monkeypatch)
     sent = _capture_smtp(monkeypatch)
     incident = _prod_incident(db, severity="CRITICAL")
-    send_incident_report(db, incident, "ops@dc.local", actor="admin@forgesre.local")
+    send_incident_report(db, incident, "ops-html-prod@dc.local", actor="admin@forgesre.local")
     db.close()
     html = sent[0].get_body(preferencelist=("html",)).get_content()
     assert "[DEMO] lab only" not in html
@@ -248,10 +249,11 @@ def test_escalation_smtp_payload_is_multipart_with_demo_banner(monkeypatch):
     sent = _capture_smtp(monkeypatch)
     incident = _demo_incident(db, severity="WARNING", title="High CPU")
     note = ensure_notification(db, incident, "immediate")
+    status, body = note.status, note.body
     db.close()
-    assert note.status == "sent"
-    assert "High CPU" in note.body
-    assert "Escalation step:" in note.body
+    assert status == "sent"
+    assert "High CPU" in body
+    assert "Escalation step:" in body
     assert sent, "SMTP send_message was not called"
     raw, has_plain, has_html = _payload_types(sent[0])
     assert has_plain
@@ -269,14 +271,15 @@ def test_ops_compose_stays_plain_text(monkeypatch):
     sent = _capture_smtp(monkeypatch)
     row = send_outbound_mail(
         db,
-        target="ops@example.local",
+        target="ops-html-compose@example.local",
         subject="lab ping",
         body="hello from ForgeSRE",
         step_key="manual",
     )
+    status, body = row.status, row.body
     db.close()
-    assert row.status == "sent"
-    assert row.body == "hello from ForgeSRE"
+    assert status == "sent"
+    assert body == "hello from ForgeSRE"
     raw, has_plain, has_html = _payload_types(sent[0])
     assert has_plain
     assert not has_html
