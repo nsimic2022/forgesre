@@ -252,3 +252,143 @@ def test_cli_help_restore_requires_yes():
     overview = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help"], text=True)
     assert "restore" in overview
     assert "--include-models" in overview
+    assert "docker compose exec postgres" in backup
+    update = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "update"], text=True)
+    assert "snmp-exporter" in update
+    assert "sqlalchemy" in update.lower()
+
+
+def test_backup_py_has_no_module_level_sqlalchemy_import():
+    import ast
+
+    source = (Path(__file__).resolve().parents[1] / "backend" / "app" / "backup.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                assert not alias.name.startswith("sqlalchemy"), alias.name
+        if isinstance(node, ast.ImportFrom):
+            assert not (node.module or "").startswith("sqlalchemy")
+
+
+def test_backup_help_runs_without_sqlalchemy():
+    import os
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[1]
+    blocker = r"""
+import builtins
+import sys
+
+real = builtins.__import__
+
+
+def blocked(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "sqlalchemy" or name.startswith("sqlalchemy."):
+        raise ModuleNotFoundError(name)
+    return real(name, globals, locals, fromlist, level)
+
+
+builtins.__import__ = blocked
+sys.path.insert(0, "backend")
+from app import backup
+
+assert backup.FORMAT_VERSION == 1
+raise SystemExit(backup.main(["help"]))
+"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root / "backend")
+    result = subprocess.run(
+        [sys.executable, "-c", blocker],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "backup" in result.stdout.lower()
+    assert "Traceback" not in result.stderr
+    assert "ModuleNotFoundError" not in result.stderr
+
+
+def test_postgres_dump_and_restore_use_compose_psql(monkeypatch):
+    from app.backup import dump_database, restore_database
+
+    sqls: list[str] = []
+
+    def fake_psql(sql: str, *, root=None) -> str:
+        sqls.append(sql)
+        if "pg_tables" in sql:
+            return "users\nplaybooks\n"
+        if "jsonb_agg" in sql and "users" in sql:
+            return '[{"id":1,"email":"ops@dc.local"}]'
+        if "jsonb_agg" in sql:
+            return "[]"
+        return ""
+
+    monkeypatch.setenv("FORGESRE_BACKUP_PG", "1")
+    monkeypatch.setattr("app.backup._psql", fake_psql)
+    payload = dump_database()
+    assert payload["users"] == [{"id": 1, "email": "ops@dc.local"}]
+    assert payload["playbooks"] == []
+    restore_database({"users": [{"id": 1, "email": "ops@dc.local"}], "playbooks": []})
+    joined = "\n".join(sqls)
+    assert "json_populate_recordset" in joined
+    assert "TRUNCATE" in joined
+    assert "docker compose" not in joined  # mocked; no live docker
+
+
+def test_backup_cli_dump_failure_is_clear_error(monkeypatch, capsys):
+    from app import backup as backup_mod
+
+    def fake_create(**_kwargs):
+        return backup_mod.BackupResult(
+            path=Path("/tmp/forgesre-x.tar.gz"),
+            name="forgesre-x.tar.gz",
+            notes=["database dump failed: connection refused"],
+            db=False,
+        )
+
+    monkeypatch.setattr(backup_mod, "create_backup", fake_create)
+    rc = backup_mod.main(["backup"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "ERROR: database dump failed" in captured.err
+    assert "Traceback" not in captured.err
+    assert "ModuleNotFoundError" not in captured.err
+
+
+def test_backup_cli_missing_sqlalchemy_has_no_traceback(monkeypatch, capsys):
+    from app import backup as backup_mod
+
+    def boom(**_kwargs):
+        raise ModuleNotFoundError("sqlalchemy")
+
+    monkeypatch.setattr(backup_mod, "create_backup", boom)
+    rc = backup_mod.main(["backup"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Backup failed:" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_update_script_starts_snmp_and_survives_backup_failure():
+    root = Path(__file__).resolve().parents[1]
+    text = (root / "scripts" / "update.sh").read_text(encoding="utf-8")
+    assert "snmp-exporter" in text
+    assert "Backup failed" in text
+    assert "Continuing with render-monitoring" in text
+
+
+def test_compose_snmp_exporter_is_default_service():
+    import yaml
+
+    root = Path(__file__).resolve().parents[1]
+    data = yaml.safe_load((root / "docker-compose.yml").read_text(encoding="utf-8"))
+    svc = data["services"]["snmp-exporter"]
+    assert "profiles" not in svc
+    assert svc["network_mode"] == "host"
+    assert any("9116" in str(part) for part in svc["command"])

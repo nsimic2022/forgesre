@@ -96,6 +96,7 @@ services:
     restart: unless-stopped
 
   snmp-exporter:
+    # Default stack service (not a profile). Host network publishes 127.0.0.1:9116.
     image: prom/snmp-exporter:v0.26.0
     user: "0"
     network_mode: host
@@ -104,6 +105,12 @@ services:
       - --web.listen-address=127.0.0.1:9116
     volumes:
       - ${SNMP_EXPORTER_CONFIG:-./monitoring/snmp.yml}:/etc/snmp_exporter/snmp.yml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9116/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
   loki:

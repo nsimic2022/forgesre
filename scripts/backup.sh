@@ -21,5 +21,8 @@ if [[ -z "${DATABASE_URL:-}" && -n "${POSTGRES_PASSWORD:-}" ]]; then
   export DATABASE_URL="postgresql+psycopg2://forgesre:${POSTGRES_PASSWORD}@127.0.0.1:5432/forgesre"
 fi
 
+# Host Python has no sqlalchemy (that lives in the Core image). backup.py dumps
+# Postgres via `docker compose exec postgres psql` on this path. Do not pip
+# install sqlalchemy on the host.
 export PYTHONPATH="${ROOT}/backend${PYTHONPATH:+:${PYTHONPATH}}"
 exec python3 -m app.backup backup "$@"

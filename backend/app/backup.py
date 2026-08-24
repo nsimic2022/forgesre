@@ -1,10 +1,14 @@
-"""Platform backup and restore. Same code for ./forgesre backup|restore and /admin.
+"""Platform backup and restore. Same archive for ./forgesre backup|restore and /admin.
 
 Archives live under data/backups/ (gitignored, mode 700/600). They include
 config, .env, secrets (unless omitted), a logical DB dump (users, incidents,
 playbooks, playrules, journal, …), compressed logs, generated monitoring files,
 and alerts.local.yml. They do not include Docker images, Prometheus/Loki/Grafana
 TSDB volumes, or multi-GB GGUF weights unless the operator opts in.
+
+Host CLI must not import sqlalchemy at module load (host Python has no Core
+venv). GUI/Core dumps via SQLAlchemy; host dumps via docker compose exec
+postgres. Both write db.json in the same tar.gz format.
 """
 
 from __future__ import annotations
@@ -21,10 +25,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from sqlalchemy import DateTime as SADateTime
-from sqlalchemy import text
-
 ARCHIVE_RE = re.compile(r"^forgesre-\d{8}T\d{6}Z\.tar\.gz$")
+TABLE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 CONFIRM_WORD = "RESTORE"
 MODEL_SMALL_MAX = 80 * 1024 * 1024
 LOG_FILE_MAX = 500 * 1024 * 1024
@@ -65,6 +67,7 @@ class BackupResult:
     excluded: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     secrets: bool = True
+    db: bool = False
 
 
 @dataclass
@@ -101,9 +104,10 @@ def _data_dir(root: Path) -> Path:
 
 
 def layout_from_env() -> BackupLayout:
-    """Resolve host or Core-container paths. Extra env vars are set in compose."""
-    from app.settings import settings
+    """Resolve host or Core-container paths. Extra env vars are set in compose.
 
+    Stdlib-only: the host CLI must not import sqlalchemy or PyYAML.
+    """
     root = _repo_root()
     data = _data_dir(root)
     backup = Path(os.environ.get("FORGESRE_BACKUP_DIR") or (data / "backups"))
@@ -118,7 +122,7 @@ def layout_from_env() -> BackupLayout:
     return BackupLayout(
         root=root,
         backup_dir=backup,
-        config_yml=Path(os.environ.get("FORGESRE_CONFIG") or settings.config_path),
+        config_yml=Path(os.environ.get("FORGESRE_CONFIG") or (root / "config" / "forgesre.yml")),
         dotenv=Path(os.environ.get("FORGESRE_DOTENV") or (root / ".env")),
         secrets=Path(os.environ.get("FORGESRE_SECRETS_FILE") or (root / "secrets" / "secrets.env")),
         monitoring_dir=Path(os.environ.get("FORGESRE_MONITORING_DIR") or (root / "monitoring")),
@@ -189,7 +193,105 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-def dump_database() -> dict[str, list[dict[str, Any]]]:
+def _sqlalchemy_ready() -> bool:
+    """True inside Core / pytest. False on the host CLI (no sqlalchemy)."""
+    if os.environ.get("FORGESRE_BACKUP_PG", "").strip().lower() in {"1", "true", "yes"}:
+        return False
+    try:
+        import sqlalchemy  # noqa: F401
+        from app.db import Base, engine  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def _compose_argv(root: Path | None = None) -> list[str]:
+    cwd = str(root or _repo_root())
+    for prefix in (["docker", "compose"], ["sudo", "docker", "compose"]):
+        try:
+            result = subprocess.run(
+                [*prefix, "version"],
+                cwd=cwd,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode == 0:
+            return prefix
+    raise RuntimeError(
+        "docker compose is not available. Start Docker, or run backup from Administration (Core)."
+    )
+
+
+def _psql(sql: str, *, root: Path | None = None) -> str:
+    """Run SQL in the bundled Postgres container. Host CLI path — no sqlalchemy."""
+    cwd = str(root or _repo_root())
+    cmd = [
+        *_compose_argv(root),
+        "exec",
+        "-T",
+        "postgres",
+        "psql",
+        "-U",
+        "forgesre",
+        "-d",
+        "forgesre",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-At",
+        "-q",
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            input=sql,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"psql via docker compose failed: {exc}") from exc
+    if result.returncode != 0:
+        extra = (result.stderr or result.stdout or str(result.returncode)).strip()
+        raise RuntimeError(
+            "Postgres dump/restore failed via docker compose exec postgres. "
+            f"{extra}. Start it: docker compose up -d postgres"
+        )
+    return result.stdout or ""
+
+
+def _quote_ident(name: str) -> str:
+    if not TABLE_NAME_RE.match(name):
+        raise ValueError(f"refusing table name {name!r}")
+    return '"' + name.replace('"', "") + '"'
+
+
+def _dollar_quote(payload: str) -> str:
+    tag = "fsre"
+    n = 0
+    while f"${tag}$" in payload:
+        n += 1
+        tag = f"fsre{n}"
+    return f"${tag}${payload}${tag}$"
+
+
+def _public_tables() -> list[str]:
+    raw = _psql("SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' ORDER BY tablename;")
+    names = []
+    for line in raw.splitlines():
+        name = line.strip()
+        if name and TABLE_NAME_RE.match(name):
+            names.append(name)
+    return names
+
+
+def _dump_database_sqlalchemy() -> dict[str, list[dict[str, Any]]]:
     from app.db import Base, engine
 
     payload: dict[str, list[dict[str, Any]]] = {}
@@ -200,7 +302,39 @@ def dump_database() -> dict[str, list[dict[str, Any]]]:
     return payload
 
 
+def _dump_database_postgres() -> dict[str, list[dict[str, Any]]]:
+    """Logical dump via psql json — same db.json shape as the SQLAlchemy path."""
+    payload: dict[str, list[dict[str, Any]]] = {}
+    tables = _public_tables()
+    if not tables:
+        raise RuntimeError(
+            "Postgres has no public tables (container down or empty). "
+            "Start it: docker compose up -d postgres"
+        )
+    for name in tables:
+        ident = _quote_ident(name)
+        raw = _psql(f"SELECT COALESCE(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM {ident} AS t;")
+        blob = raw.strip() or "[]"
+        try:
+            rows = json.loads(blob)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Postgres JSON dump for {name} was not valid JSON") from exc
+        if not isinstance(rows, list):
+            raise RuntimeError(f"Postgres JSON dump for {name} was not a list")
+        payload[name] = rows
+    return payload
+
+
+def dump_database() -> dict[str, list[dict[str, Any]]]:
+    """GUI/Core uses SQLAlchemy. Host CLI uses docker compose exec postgres (no pip on the host)."""
+    if _sqlalchemy_ready():
+        return _dump_database_sqlalchemy()
+    return _dump_database_postgres()
+
+
 def _coerce_row(table: Any, row: dict[str, Any]) -> dict[str, Any]:
+    from sqlalchemy import DateTime as SADateTime
+
     out: dict[str, Any] = {}
     for col in table.columns:
         if col.name not in row:
@@ -216,7 +350,8 @@ def _coerce_row(table: Any, row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def restore_database(payload: dict[str, list[dict[str, Any]]]) -> None:
+def _restore_database_sqlalchemy(payload: dict[str, list[dict[str, Any]]]) -> None:
+    from sqlalchemy import text
     from app.db import Base, engine
 
     dialect = engine.dialect.name
@@ -248,6 +383,48 @@ def restore_database(payload: dict[str, list[dict[str, Any]]]) -> None:
                     pass
         if dialect == "sqlite":
             conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+
+
+def _restore_database_postgres(payload: dict[str, list[dict[str, Any]]]) -> None:
+    tables = _public_tables()
+    if not tables:
+        raise RuntimeError(
+            "Postgres has no public tables to restore into. Start it: docker compose up -d postgres"
+        )
+    quoted = ", ".join(_quote_ident(name) for name in tables)
+    parts = [
+        "SET session_replication_role = replica;",
+        f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE;",
+    ]
+    for name in tables:
+        rows = payload.get(name) or []
+        if not rows:
+            continue
+        ident = _quote_ident(name)
+        blob = json.dumps(rows, ensure_ascii=False)
+        parts.append(
+            f"INSERT INTO {ident} SELECT * FROM json_populate_recordset(NULL::{ident}, {_dollar_quote(blob)});"
+        )
+        parts.append(
+            "DO $seq$\n"
+            "BEGIN\n"
+            f"  IF pg_get_serial_sequence('{name}', 'id') IS NOT NULL THEN\n"
+            f"    PERFORM setval(pg_get_serial_sequence('{name}', 'id'), "
+            f"COALESCE((SELECT MAX(id) FROM {ident}), 1));\n"
+            "  END IF;\n"
+            "EXCEPTION WHEN undefined_column OR undefined_object THEN\n"
+            "  NULL;\n"
+            "END $seq$;"
+        )
+    parts.append("SET session_replication_role = DEFAULT;")
+    _psql("\n".join(parts))
+
+
+def restore_database(payload: dict[str, list[dict[str, Any]]]) -> None:
+    if _sqlalchemy_ready():
+        _restore_database_sqlalchemy(payload)
+        return
+    _restore_database_postgres(payload)
 
 
 def _copy_file(src: Path, dest: Path) -> bool:
@@ -423,6 +600,7 @@ def create_backup(
         excluded=excluded,
         notes=notes,
         secrets=include_secrets,
+        db=db_ok,
     )
 
 
@@ -645,6 +823,21 @@ def format_size(num: int) -> str:
 def main(argv: list[str] | None = None) -> int:
     import sys
 
+    try:
+        return _main(argv)
+    except BrokenPipeError:
+        return 0
+    except KeyboardInterrupt:
+        print("Backup cancelled.", file=sys.stderr)
+        return 130
+    except Exception as exc:  # noqa: BLE001 — host CLI must not print a traceback
+        print(f"Backup failed: {exc}", file=sys.stderr)
+        return 1
+
+
+def _main(argv: list[str] | None = None) -> int:
+    import sys
+
     args = list(sys.argv[1:] if argv is None else argv)
     cmd = args.pop(0) if args else "help"
     if cmd in {"-h", "--help", "help"}:
@@ -667,6 +860,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {item}")
         for item in result.notes:
             print(f"  note: {item}")
+        if not result.db:
+            print(
+                "ERROR: database dump failed. Archive has files only. "
+                "Start Postgres: docker compose up -d postgres",
+                file=sys.stderr,
+            )
+            return 1
         return 0
     if cmd == "restore":
         yes = "--yes" in args
