@@ -181,6 +181,9 @@ After `./forgesre login` or a UI login cookie:
 | POST | `/api/v1/users/{id}/delete` | admin |
 | GET | `/api/v1/assets` | viewer+ |
 | POST | `/api/v1/assets` | analyst+ |
+| POST | `/api/v1/assets/{id}` | analyst+ (edit) |
+| POST | `/api/v1/assets/{id}/clone` | analyst+ |
+| POST | `/api/v1/assets/{id}/delete` | analyst+ |
 | GET | `/api/v1/history` | viewer+ |
 | GET | `/api/v1/system/doctor` | login or Bearer webhook token |
 | GET | `/api/v1/sd/prometheus` | Bearer webhook token |

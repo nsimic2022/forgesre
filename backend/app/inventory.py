@@ -6,9 +6,9 @@ import re
 from sqlalchemy.orm import Session
 
 from app.audit import audit
-from app.exporter_detect import detect_exporter, is_auto_asset_type
+from app.exporter_detect import AUTO_ASSET_TYPE, detect_exporter, is_auto_asset_type
 from app.journal import report
-from app.models import Asset, DiscoveryCandidate, Incident, utcnow
+from app.models import Asset, DiscoveryCandidate, Incident, ScheduledReport, utcnow
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
@@ -219,14 +219,20 @@ def create_manual_asset(
     scrape_address: str = "",
     actor: str = "system",
     metrics_fetcher=None,
+    require_new: bool = False,
+    cloned_from: str = "",
 ) -> Asset:
     hostname = (hostname or "").strip()
     ip = (ip or "").strip()
     if not hostname:
         raise ValueError("hostname is required")
-    slug = re.sub(r"[^a-zA-Z0-9-]", "-", hostname).strip("-").lower() or _asset_id_from_ip(ip or "asset")
+    slug = asset_id_slug(hostname, ip)
     existing = db.query(Asset).filter((Asset.asset_id == slug) | ((Asset.ip == ip) & (Asset.ip != ""))).first()
     if existing:
+        if require_new:
+            raise ValueError(
+                f"{existing.asset_id} already uses this hostname or IP — change hostname or IP before Save"
+            )
         report(
             db,
             "inventory",
@@ -272,7 +278,14 @@ def create_manual_asset(
         scrape_address=address,
     )
     db.add(asset)
-    audit(db, "asset.create", actor=actor, object_type="asset", object_id=asset.asset_id, data={"ip": ip})
+    audit(
+        db,
+        "asset.create",
+        actor=actor,
+        object_type="asset",
+        object_id=asset.asset_id,
+        data={"ip": ip, "cloned_from": cloned_from} if cloned_from else {"ip": ip},
+    )
     db.commit()
     db.refresh(asset)
     if detect_message:
@@ -284,7 +297,10 @@ def create_manual_asset(
         "asset.create",
         "ok",
         summary=f"Saved {asset.hostname} ({contact})",
-        detail=f"ip={asset.ip} scrape={asset.scrape_address} actor={actor} detect={detect_message or '—'}",
+        detail=(
+            f"ip={asset.ip} scrape={asset.scrape_address} actor={actor} "
+            f"detect={detect_message or '—'} cloned_from={cloned_from or '—'}"
+        ),
         object_type="asset",
         object_id=asset.asset_id,
     )
@@ -315,6 +331,7 @@ def update_asset(
     owner_phone: str | None = None,
     notes: str | None = None,
     scrape_address: str | None = None,
+    hostname: str | None = None,
     actor: str = "system",
     detect: bool = False,
     metrics_fetcher=None,
@@ -323,6 +340,10 @@ def update_asset(
     old_type = asset.type or ""
     old_profile = asset.monitoring_profile or ""
     old_scrape = asset.scrape_address or ""
+    if hostname is not None:
+        hostname = hostname.strip()
+        if hostname:
+            asset.hostname = hostname
     if ip is not None:
         asset.ip = ip.strip()
     if type is not None and type.strip():
@@ -602,3 +623,179 @@ def sync_netbox(db: Session) -> dict:
 def _asset_id_from_ip(ip: str) -> str:
     safe = re.sub(r"[^a-zA-Z0-9-]", "-", ip)
     return f"disc-{safe}"
+
+
+def asset_id_slug(hostname: str, ip: str = "") -> str:
+    slug = re.sub(r"[^a-zA-Z0-9-]", "-", hostname or "").strip("-").lower()
+    return slug or _asset_id_from_ip(ip or "asset")
+
+
+ASSET_TYPE_CHOICES = [
+    AUTO_ASSET_TYPE,
+    "Linux Server",
+    "Windows Server",
+    "Network device",
+    "Web/appliance",
+]
+
+
+def suggest_clone_hostname(db: Session, asset: Asset) -> str:
+    """New hostname for Clone. Lab forge-demo-* ids are stripped so the copy is a real asset."""
+    from app.seed import DEMO_ASSET_PREFIX, is_demo_asset_id
+
+    raw = (asset.hostname or asset.asset_id or "asset").strip()
+    if is_demo_asset_id(raw) or is_demo_asset_id(asset.asset_id):
+        rest = raw
+        if rest.lower().startswith(DEMO_ASSET_PREFIX):
+            rest = rest[len(DEMO_ASSET_PREFIX) :]
+        base = f"copy-{rest}".strip("-") or "copy-host"
+    else:
+        base = f"{raw}-copy"
+    candidate = base
+    n = 2
+    while True:
+        slug = asset_id_slug(candidate, asset.ip or "")
+        clash = db.query(Asset).filter((Asset.asset_id == slug) | (Asset.hostname == candidate)).first()
+        if clash is None:
+            return candidate
+        candidate = f"{base}-{n}"
+        n += 1
+
+
+def clone_prefill(db: Session, asset: Asset) -> dict:
+    """Form values for Clone. User can tweak before Save. Does not copy NetBox id or demo identity."""
+    from app.seed import is_demo_asset_id
+
+    notes = (asset.notes or "").strip()
+    lab = is_demo_asset_id(asset.asset_id) or is_demo_asset_id(asset.hostname)
+    if lab:
+        lowered = notes.lower()
+        if "not a real" in lowered or "seeded demo" in lowered or "lab incidents only" in lowered:
+            notes = ""
+    scrape = (asset.scrape_address or "").strip()
+    if not scrape:
+        scrape = default_scrape_address(asset.type or "", asset.ip or "", asset.monitoring_profile or "")
+    return {
+        "hostname": suggest_clone_hostname(db, asset),
+        "ip": asset.ip or "",
+        "type": asset.type or AUTO_ASSET_TYPE,
+        "environment": asset.environment or "Production",
+        "owner": asset.owner or "platform",
+        "contact_name": asset.contact_name or "",
+        "owner_email": asset.owner_email or "",
+        "owner_phone": asset.owner_phone or "",
+        "notes": notes,
+        "scrape_address": scrape,
+        "cloned_from": asset.asset_id,
+        "lab_source": lab,
+    }
+
+
+def asset_form_values(asset: Asset | None = None) -> dict:
+    if asset is None:
+        return {
+            "hostname": "",
+            "ip": "",
+            "type": AUTO_ASSET_TYPE,
+            "environment": "Production",
+            "owner": "platform",
+            "contact_name": "",
+            "owner_email": "",
+            "owner_phone": "",
+            "notes": "",
+            "scrape_address": "",
+            "cloned_from": "",
+            "lab_source": False,
+        }
+    return {
+        "hostname": asset.hostname or "",
+        "ip": asset.ip or "",
+        "type": asset.type or AUTO_ASSET_TYPE,
+        "environment": asset.environment or "Production",
+        "owner": asset.owner or "platform",
+        "contact_name": asset.contact_name or "",
+        "owner_email": asset.owner_email or "",
+        "owner_phone": asset.owner_phone or "",
+        "notes": asset.notes or "",
+        "scrape_address": asset.scrape_address or "",
+        "cloned_from": "",
+        "lab_source": False,
+    }
+
+
+def delete_blocked(asset: Asset) -> str:
+    from app.seed import is_demo_asset_id
+
+    if is_demo_asset_id(getattr(asset, "asset_id", "") or "") or is_demo_asset_id(getattr(asset, "hostname", "") or ""):
+        return (
+            "Seeded lab hosts (forge-demo-*) cannot be removed. "
+            "Dashboard → Run demo and similar-incident history use them. "
+            "Clone to a real hostname if you need a copy."
+        )
+    return ""
+
+
+def delete_asset(db: Session, asset: Asset, actor: str = "system") -> dict:
+    """Remove inventory + HTTP/SNMP SD targets. Incidents stay; the asset FK is cleared.
+
+    Prometheus HTTP SD is live from this table — the next scrape drops the host.
+    Core's static demo job is untouched. Seeded forge-demo-* rows are blocked.
+    """
+    reason = delete_blocked(asset)
+    if reason:
+        raise ValueError(reason)
+    asset_id = asset.asset_id
+    hostname = asset.hostname
+    pk = asset.id
+    scrape = asset.scrape_address or ""
+    ip = asset.ip or ""
+    snmp = is_snmp_asset(asset)
+    unlinked = 0
+    for item in db.query(Incident).filter_by(asset_id=pk).all():
+        item.asset_id = None
+        unlinked += 1
+    for row in db.query(DiscoveryCandidate).filter(
+        (DiscoveryCandidate.asset_id == asset_id) | ((DiscoveryCandidate.ip == ip) & (DiscoveryCandidate.ip != ""))
+    ).all():
+        row.asset_id = ""
+        if row.status == "approved":
+            row.status = "new"
+            row.decided_by = ""
+            row.decided_at = None
+    for sched in db.query(ScheduledReport).all():
+        ids = [str(x) for x in (sched.asset_ids or [])]
+        if asset_id in ids:
+            sched.asset_ids = [x for x in ids if x != asset_id]
+    db.flush()
+    db.delete(asset)
+    audit(
+        db,
+        "asset.delete",
+        actor=actor,
+        object_type="asset",
+        object_id=asset_id,
+        data={"unlinked_incidents": unlinked, "scrape": scrape},
+    )
+    db.commit()
+    report(
+        db,
+        "inventory",
+        "asset.delete",
+        "ok",
+        summary=f"Removed {hostname} ({asset_id})",
+        detail=f"actor={actor} unlinked_incidents={unlinked} scrape={scrape or '—'}",
+        object_type="asset",
+        object_id=asset_id,
+    )
+    if snmp:
+        report(
+            db,
+            "snmp",
+            "target.remove",
+            "ok",
+            summary=f"{hostname} dropped from snmp_exporter",
+            detail=f"ip={ip}",
+            object_type="asset",
+            object_id=asset_id,
+        )
+    return {"deleted": asset_id, "unlinked_incidents": unlinked}

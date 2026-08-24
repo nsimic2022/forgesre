@@ -157,9 +157,30 @@ h3 { margin: 0.9rem 0 0.4rem; font-size: 1rem; }
 table { width: 100%; border-collapse: collapse; background: var(--panel); }
 th, td { text-align: left; padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
 table tbody tr:hover td { background: var(--row-hover); }
-.user-table tr.selected td { background: var(--selected); }
-.user-table tr.selected:hover td { background: var(--selected-hover); }
+.user-table tr.selected td,
+.asset-table tr.selected td { background: var(--selected); }
+.user-table tr.selected:hover td,
+.asset-table tr.selected:hover td { background: var(--selected-hover); }
 .user-table td a { color: inherit; }
+.asset-table .row-actions { flex-wrap: wrap; }
+.asset-table .row-actions form { margin: 0; }
+.asset-table .row-actions button,
+.asset-table .row-actions a.button,
+.asset-form-actions a.button {
+  padding: 0.28rem 0.55rem;
+  font-size: 0.82rem;
+  width: auto;
+  text-decoration: none;
+  display: inline-block;
+}
+.asset-table .row-actions a.button,
+.asset-form-actions a.button {
+  background: var(--secondary);
+  color: var(--text);
+  font-weight: 600;
+  border-radius: 9px;
+}
+.asset-form-actions { margin: 0.75rem 0 1rem; flex-wrap: wrap; }
 .pill { display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px; background: var(--pill); font-size: 0.8rem; }
 .pill.healthy, .pill.ok { background: var(--pill-ok-bg); color: var(--pill-ok); }
 .pill.warning, .pill.warn { background: var(--pill-warn-bg); color: var(--pill-warn); }
