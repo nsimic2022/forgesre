@@ -1265,6 +1265,30 @@ async def admin_import_backup(
     return RedirectResponse(f"/admin?imported={quote(ident)}", status_code=303)
 
 
+@router.post("/admin/backups/remove")
+def admin_remove_backup(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    name: str = Form(...),
+):
+    _require_admin(user)
+    from app.backup import delete_backup
+    from app.journal import report
+
+    try:
+        deleted = delete_backup(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="backup not found") from exc
+    ident = deleted.name
+    audit(db, "backup.remove", actor=user.email, object_type="backup", object_id=ident, ip=request.client.host if request.client else "")
+    report(db, "backup", "remove", "ok", summary=f"Removed {ident}", object_type="backup", object_id=ident)
+    db.commit()
+    return RedirectResponse(f"/admin?removed={quote(ident)}", status_code=303)
+
+
 @router.post("/admin/backups/restore")
 def admin_restore_backup(
     request: Request,

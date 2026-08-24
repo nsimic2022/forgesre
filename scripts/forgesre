@@ -79,7 +79,8 @@ Commands:
   fetch-llm          Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp
   backup             One folder per run under data/backups (tar.gz + MANIFEST; --no-secrets / --include-models)
   restore            List backup folders (newest first); apply only with --yes after stopping Core
-  import             Alias for restore (numbered picker when no path is given)
+  import             Alias for restore (numbered picker; also: import backup)
+  remove             Delete one backup folder (tar + MANIFEST); confirm with --yes or typed yes
   update             Backup, render monitoring, refresh images, restart, doctor
   mailbox            Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)
   completion         Print a `source …completion.bash` line for ~/.bashrc
@@ -483,6 +484,7 @@ restore — apply a platform backup. Refuses without --yes.
 
   ./forgesre restore
   ./forgesre import
+  ./forgesre import backup
   ./forgesre restore 1
   ./forgesre restore 1 --yes
   ./forgesre restore data/backups/backup_20260824T120000Z
@@ -490,7 +492,8 @@ restore — apply a platform backup. Refuses without --yes.
   ./forgesre restore data/backups/forgesre-20260824T120000Z.tar.gz --yes
 
 With no path, lists backup_* folders (newest first) and asks for a number.
-Then still needs --yes. Same inside the forgesre> prompt: restore
+`import` and `import backup` are the same picker. Then still needs --yes.
+Same inside the forgesre> prompt: restore   /   import backup
 
 Without --yes this only prints the plan and exits 1. It will overwrite
 the database, .env, secrets, and config. Stop Core first:
@@ -509,6 +512,23 @@ Administration Import stores an upload under data/backups/backup_…/. The Resto
 dropdown (newest first, timestamp + folder name) requires typing RESTORE.
 A browser restore cannot stop Core; prefer this CLI path after a crash
 or when migrating VMs.
+EOF
+      ;;
+    remove)
+      cat <<'EOF'
+remove — delete one backup run folder (tar.gz + MANIFEST). Refuses without --yes.
+
+  ./forgesre remove backup
+  ./forgesre remove backup 1
+  ./forgesre remove backup 1 --yes
+  ./forgesre remove 1 --yes
+
+With no number, lists backup_* folders (newest first) and asks for a number.
+Then confirm: type yes, or pass --yes. Deletes that folder only — never
+data/ and never the whole data/backups/ directory. Legacy
+data/backups/forgesre-*.tar.gz at the root can be removed the same way.
+
+Does not restore. To apply an archive: ./forgesre restore 1 --yes
 EOF
       ;;
     incidents)
@@ -781,6 +801,10 @@ case "$cmd" in
   restore|import)
     need_env
     exec "$ROOT/scripts/restore.sh" "$@"
+    ;;
+  remove)
+    need_env
+    exec "$ROOT/scripts/remove.sh" "$@"
     ;;
   update) exec "$ROOT/scripts/update.sh" "$@" ;;
   mailbox)

@@ -112,6 +112,9 @@
   Config / <code>.env</code> / secrets on disk are not rewritten from this browser (Core mounts them read-only).
   Finish on the VM: <code>docker compose stop core</code> → <code>./forgesre restore data/backups/{{ request.query_params.get('restored') }} --yes</code> → <code>./forgesre update</code>.</p>
 {% endif %}
+{% if request.query_params.get('removed') %}
+<p class="banner"><strong>Backup removed</strong> {{ request.query_params.get('removed') }}. Other folders under <code>data/backups/</code> are unchanged.</p>
+{% endif %}
 <p>
   Full-system archive for crash recovery or VM migration. Each run is a folder
   <code>data/backups/backup_YYYYMMDDTHHMMSSZ/</code> (gitignored, directory mode 700)
@@ -137,7 +140,13 @@
     <tr>
       <td><code>{{ b.name }}</code></td>
       <td>{{ format_size(b.size) }}</td>
-      <td><a href="/admin/backups/{{ b.name }}">Download</a></td>
+      <td class="row-actions">
+        <a href="/admin/backups/{{ b.name }}">Download</a>
+        <form method="post" action="/admin/backups/remove" class="inline" onsubmit="return confirm('Remove {{ b.name }}? This deletes only that backup folder (tar + MANIFEST). data/backups/ stays.');">
+          <input type="hidden" name="name" value="{{ b.name }}">
+          <button type="submit" class="danger">Remove</button>
+        </form>
+      </td>
     </tr>
   {% endfor %}
   </tbody>

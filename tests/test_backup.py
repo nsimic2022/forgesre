@@ -11,6 +11,7 @@ from app.backup import (
     INNER_ARCHIVE,
     archive_file,
     create_backup,
+    delete_backup,
     inspect_archive,
     list_archives,
     restore_archive,
@@ -178,6 +179,12 @@ def test_admin_backup_buttons_before_appliance_shell(tmp_path, monkeypatch):
     assert name in text
     assert "UTC" in text
     assert "SECRET_KEY" not in text
+    assert ">Download</a>" in text
+    assert ">Remove<" in text
+    assert text.index(">Download</a>") < text.index(">Remove<")
+    assert "/admin/backups/remove" in text
+    assert "onsubmit=" in text
+    assert "confirm(" in text
     db.close()
 
 
@@ -269,6 +276,7 @@ def test_cli_help_restore_requires_yes():
     assert "backup_" in restore
     assert "Pick a number" in restore or "restore 1" in restore
     assert "./forgesre import" in restore
+    assert "import backup" in restore
     backup = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "backup"], text=True)
     assert "--include-models" in backup
     assert "data/backups" in backup
@@ -276,11 +284,16 @@ def test_cli_help_restore_requires_yes():
     assert "forgesre.tar.gz" in backup
     overview = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help"], text=True)
     assert "restore" in overview
+    assert "remove" in overview
     assert "--include-models" in overview
     assert "docker compose exec postgres" in backup
     update = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "update"], text=True)
     assert "snmp-exporter" in update
     assert "sqlalchemy" in update.lower()
+    remove = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "remove"], text=True)
+    assert "remove backup" in remove
+    assert "--yes" in remove
+    assert "data/backups" in remove or "backup_" in remove
 
 
 def test_backup_py_has_no_module_level_sqlalchemy_import():
@@ -584,6 +597,238 @@ sys.path.insert(0, "backend")
 from app import backup
 
 raise SystemExit(backup.main(["restore"]))
+"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "backend")
+    env["FORGESRE_BACKUP_DIR"] = str(tmp_path / "backups")
+    result = subprocess.run(
+        [sys.executable, "-c", blocker],
+        cwd=str(Path(__file__).resolve().parents[1]),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "1." in result.stdout
+    assert "backup_20260824T120000Z" in result.stdout
+    assert "Traceback" not in result.stderr
+    assert "ModuleNotFoundError" not in result.stderr
+    assert "sqlalchemy" not in result.stderr
+
+
+def test_delete_backup_removes_run_folder_only(tmp_path):
+    lay = _layout(tmp_path)
+    _touch_run(lay, "20260824T120000Z")
+    _touch_run(lay, "20260824T130000Z")
+    keep = lay.backup_dir / "backup_20260824T130000Z"
+    gone = delete_backup("backup_20260824T120000Z", lay)
+    assert gone.name == "backup_20260824T120000Z"
+    assert not (lay.backup_dir / "backup_20260824T120000Z").exists()
+    assert keep.is_dir()
+    assert (keep / INNER_ARCHIVE).is_file()
+    assert lay.backup_dir.is_dir()
+    names = [row["name"] for row in list_archives(lay)]
+    assert names == ["backup_20260824T130000Z"]
+
+
+def test_delete_backup_legacy_tar_unlinks_file_only(tmp_path):
+    lay = _layout(tmp_path)
+    lay.backup_dir.mkdir()
+    legacy = lay.backup_dir / "forgesre-20260824T120000Z.tar.gz"
+    leftover = lay.backup_dir / "backup_20260824T130000Z"
+    leftover.mkdir()
+    (leftover / INNER_ARCHIVE).write_bytes(b"x" * 40)
+    legacy.write_bytes(b"y" * 40)
+    deleted = delete_backup(legacy.name, lay)
+    assert deleted.name == legacy.name
+    assert not legacy.exists()
+    assert leftover.is_dir()
+    assert lay.backup_dir.is_dir()
+
+
+def test_delete_backup_cannot_escape_dir(tmp_path):
+    lay = _layout(tmp_path)
+    _touch_run(lay, "20260824T120000Z")
+    secret = tmp_path / "secrets.env"
+    secret.write_text("SECRET_KEY=hidden\n", encoding="utf-8")
+    outside = tmp_path / "not-backups"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("stay\n", encoding="utf-8")
+    try:
+        delete_backup("../secrets.env", lay)
+        raise AssertionError("should reject")
+    except ValueError:
+        pass
+    try:
+        delete_backup("..", lay)
+        raise AssertionError("should reject")
+    except ValueError:
+        pass
+    try:
+        delete_backup(".", lay)
+        raise AssertionError("should reject")
+    except ValueError:
+        pass
+    try:
+        delete_backup(str(lay.backup_dir), lay)
+        raise AssertionError("should reject backups root")
+    except (ValueError, FileNotFoundError):
+        pass
+    assert secret.read_text(encoding="utf-8") == "SECRET_KEY=hidden\n"
+    assert (outside / "keep.txt").is_file()
+    assert (lay.backup_dir / "backup_20260824T120000Z").is_dir()
+    assert lay.backup_dir.is_dir()
+
+
+def test_admin_remove_backup_is_admin_only(tmp_path, monkeypatch):
+    db = _db()
+    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(tmp_path / "backups"))
+    monkeypatch.setenv("FORGESRE_RESTORE_STOP_CORE", "0")
+    client = TestClient(app)
+    anon = client.post("/admin/backups/remove", data={"name": "backup_x"}, follow_redirects=False)
+    assert anon.status_code in {302, 401, 403, 404, 422}
+    _login(client)
+    first = client.post("/admin/backups", data={}, follow_redirects=False)
+    name = first.headers["location"].split("backup=", 1)[1]
+    other_dir = tmp_path / "backups" / "backup_20200101T000000Z"
+    other_dir.mkdir()
+    (other_dir / INNER_ARCHIVE).write_bytes(b"x" * 40)
+    page = client.get("/admin")
+    text = page.text
+    assert ">Download</a>" in text
+    assert ">Remove<" in text
+    assert 'action="/admin/backups/remove"' in text
+    assert "onsubmit=" in text
+    assert "confirm(" in text
+    assert text.index(">Download</a>") < text.index(">Remove<")
+    traversal = client.post(
+        "/admin/backups/remove",
+        data={"name": "../secrets.env"},
+        follow_redirects=False,
+    )
+    assert traversal.status_code == 404
+    db.add(
+        User(
+            email="ana-remove@dc.local",
+            name="Ana Remove",
+            password_hash=hash_password("ana-pass"),
+            role="analyst",
+        )
+    )
+    db.commit()
+    analyst = TestClient(app)
+    analyst.post("/login", data={"email": "ana-remove@dc.local", "password": "ana-pass"}, follow_redirects=False)
+    denied = analyst.post("/admin/backups/remove", data={"name": name}, follow_redirects=False)
+    assert denied.status_code == 403
+    removed = client.post("/admin/backups/remove", data={"name": name}, follow_redirects=False)
+    assert removed.status_code == 303
+    assert f"removed={name}" in removed.headers["location"]
+    listed = [row["name"] for row in list_archives()]
+    assert name not in listed
+    assert "backup_20200101T000000Z" in listed
+    db.close()
+
+
+def test_cli_remove_without_path_lists_numbered_picker(tmp_path, monkeypatch, capsys):
+    from app import backup as backup_mod
+
+    lay = _layout(tmp_path)
+    _touch_run(lay, "20260824T120000Z")
+    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(lay.backup_dir))
+    rc = backup_mod.main(["remove"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "1." in captured.out
+    assert "backup_20260824T120000Z" in captured.out
+    assert "remove backup" in captured.out
+    assert (lay.backup_dir / "backup_20260824T120000Z").is_dir()
+    assert "Traceback" not in captured.err
+
+
+def test_cli_remove_backup_token_lists_same_picker(tmp_path, monkeypatch, capsys):
+    from app import backup as backup_mod
+
+    lay = _layout(tmp_path)
+    _touch_run(lay, "20260824T120000Z")
+    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(lay.backup_dir))
+    rc = backup_mod.main(["remove", "backup"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "1." in captured.out
+    assert "backup_20260824T120000Z" in captured.out
+    assert (lay.backup_dir / "backup_20260824T120000Z").is_dir()
+
+
+def test_cli_import_backup_token_lists_same_picker(tmp_path, monkeypatch, capsys):
+    from app import backup as backup_mod
+
+    lay = _layout(tmp_path)
+    _touch_run(lay, "20260824T120000Z")
+    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(lay.backup_dir))
+    rc = backup_mod.main(["import", "backup"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "1." in captured.out
+    assert "backup_20260824T120000Z" in captured.out
+    assert "Pick a number" in captured.out
+
+
+def test_cli_remove_number_without_yes_refuses(tmp_path, monkeypatch, capsys):
+    from app import backup as backup_mod
+
+    lay = _layout(tmp_path)
+    _touch_run(lay, "20260824T120000Z")
+    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(lay.backup_dir))
+    rc = backup_mod.main(["remove", "backup", "1"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Would remove" in captured.out
+    assert "--yes" in captured.out
+    assert (lay.backup_dir / "backup_20260824T120000Z").is_dir()
+
+
+def test_cli_remove_yes_deletes_one_folder(tmp_path, monkeypatch, capsys):
+    from app import backup as backup_mod
+
+    lay = _layout(tmp_path)
+    _touch_run(lay, "20260824T120000Z")
+    _touch_run(lay, "20260824T130000Z")
+    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(lay.backup_dir))
+    rc = backup_mod.main(["remove", "backup", "2", "--yes"])
+    captured = capsys.readouterr()
+    assert rc == 0, captured.out + captured.err
+    assert "Removed backup_20260824T120000Z" in captured.out
+    assert not (lay.backup_dir / "backup_20260824T120000Z").exists()
+    assert (lay.backup_dir / "backup_20260824T130000Z").is_dir()
+    assert lay.backup_dir.is_dir()
+
+
+def test_remove_picker_runs_without_sqlalchemy(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    folder = tmp_path / "backups" / "backup_20260824T120000Z"
+    folder.mkdir(parents=True)
+    (folder / INNER_ARCHIVE).write_bytes(b"x" * 40)
+    blocker = r"""
+import builtins
+import sys
+
+real = builtins.__import__
+
+
+def blocked(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "sqlalchemy" or name.startswith("sqlalchemy."):
+        raise ModuleNotFoundError(name)
+    return real(name, globals, locals, fromlist, level)
+
+
+builtins.__import__ = blocked
+sys.path.insert(0, "backend")
+from app import backup
+
+raise SystemExit(backup.main(["remove", "backup"]))
 """
     env = os.environ.copy()
     env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "backend")

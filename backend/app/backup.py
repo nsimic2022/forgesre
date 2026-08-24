@@ -223,6 +223,28 @@ def resolve_archive(name: str, layout: BackupLayout | None = None) -> Path:
     raise FileNotFoundError(Path(raw).name)
 
 
+def delete_backup(name: str, layout: BackupLayout | None = None) -> Path:
+    """Delete one run folder (tar + MANIFEST) or one legacy root tar.
+
+    Never deletes data/, data/backups/, or anything outside backup_dir.
+    """
+    lay = layout or layout_from_env()
+    base = ensure_backup_dir(lay).resolve()
+    tar = resolve_archive(name, lay).resolve()
+    if tar == base or base not in tar.parents:
+        raise ValueError("refusing to delete the backups directory")
+    parent = tar.parent
+    if parent == base:
+        if not ARCHIVE_RE.match(tar.name) or not tar.is_file():
+            raise ValueError("refusing to delete this backup file")
+        tar.unlink()
+        return tar
+    if parent.parent != base or not is_run_folder_name(parent.name) or parent == base:
+        raise ValueError("refusing to delete outside a single backup run folder")
+    shutil.rmtree(parent)
+    return parent
+
+
 def resolve_cli_archive(
     archive_arg: str,
     *,
@@ -345,6 +367,24 @@ def read_picker_choice() -> str:
         return input("Pick a number: ").strip()
     except EOFError:
         return ""
+
+
+def read_yes_confirm(prompt: str = "Type yes to delete this backup folder only: ") -> bool:
+    import sys
+
+    if not sys.stdin.isatty():
+        return False
+    try:
+        return input(prompt).strip().lower() == "yes"
+    except EOFError:
+        return False
+
+
+def _pop_backup_noun(args: list[str]) -> list[str]:
+    """Allow `import backup` / `remove backup` as two tokens before the picker index."""
+    if args and args[0] == "backup":
+        return args[1:]
+    return args
 
 
 def _jsonable(value: Any) -> Any:
@@ -1096,7 +1136,8 @@ def _main(argv: list[str] | None = None) -> int:
     cmd = args.pop(0) if args else "help"
     if cmd in {"-h", "--help", "help"}:
         sys.stdout.write(
-            "backup|restore|import|list  (see ./forgesre help backup and ./forgesre help restore)\n"
+            "backup|restore|import|remove|list  "
+            "(see ./forgesre help backup, restore, remove)\n"
         )
         return 0
     if cmd == "list":
@@ -1129,6 +1170,7 @@ def _main(argv: list[str] | None = None) -> int:
     if cmd in {"restore", "import"}:
         yes = "--yes" in args
         args = [a for a in args if a not in {"--yes", "--include-models", "--no-secrets"}]
+        args = _pop_backup_noun(args)
         confirm = ""
         if "--confirm" in args:
             idx = args.index("--confirm")
@@ -1144,6 +1186,7 @@ def _main(argv: list[str] | None = None) -> int:
             archive_arg = read_picker_choice()
             if not archive_arg:
                 print("Pick a number, then: ./forgesre restore N [--yes]")
+                print("Or: ./forgesre import backup   then pick a number")
                 print("Or pass a folder: ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ [--yes]")
                 print("Still needs --yes (or type RESTORE in Administration).")
                 return 1
@@ -1165,6 +1208,39 @@ def _main(argv: list[str] | None = None) -> int:
         for item in outcome["notes"]:
             print(item)
         print("Next: ./forgesre update")
+        return 0
+    if cmd == "remove":
+        yes = "--yes" in args
+        args = [a for a in args if a not in {"--yes", "--include-models", "--no-secrets"}]
+        args = _pop_backup_noun(args)
+        target_arg = next((a for a in args if not a.startswith("-")), "")
+        rows = list_archives()
+        if not target_arg:
+            print_backup_picker(rows)
+            if not rows:
+                return 1
+            print("Remove deletes that one folder (tar + MANIFEST) only — not data/ or data/backups/.")
+            target_arg = read_picker_choice()
+            if not target_arg:
+                print("Pick a number, then: ./forgesre remove backup N [--yes]")
+                print("Confirm with --yes (or type yes when asked).")
+                return 1
+        try:
+            path = resolve_cli_archive(target_arg, rows=rows)
+        except (ValueError, FileNotFoundError) as exc:
+            print(exc)
+            return 1
+        ident = backup_ident(path)
+        print(f"Would remove {ident} (that run folder or legacy tar only).")
+        if not yes:
+            if read_yes_confirm():
+                yes = True
+            else:
+                print("Refusing. Re-run with --yes after you pick the folder:")
+                print(f"  ./forgesre remove backup {ident} --yes")
+                return 1
+        deleted = delete_backup(ident)
+        print(f"Removed {deleted.name}")
         return 0
     print(f"unknown backup subcommand: {cmd}")
     return 1
