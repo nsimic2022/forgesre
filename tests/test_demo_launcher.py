@@ -5,7 +5,7 @@ from app.db import Base, SessionLocal, engine
 from app.inventory import is_snmp_asset, sd_snmp_targets
 from app.journal import list_entries
 from app.main import app
-from app.models import Asset, Notification
+from app.models import Asset, Job, Notification
 from app.seed import DEMO_ASSET, DEMO_SW_ASSET, DEMO_WIN_ASSET, seed
 from app.services import (
     close_open_incidents,
@@ -44,6 +44,12 @@ def _close_demo_fires(db):
     close_open_incidents(db, f"NodeCPUHigh:{DEMO_ASSET}", include_resolved=True)
     close_open_incidents(db, f"WindowsCPUHigh:{DEMO_WIN_ASSET}", include_resolved=True)
     close_open_incidents(db, f"SnmpDeviceUnreachable:{DEMO_SW_ASSET}", include_resolved=True)
+    (
+        db.query(Job)
+        .filter(Job.status.in_(["pending", "running"]))
+        .update({"status": "done"}, synchronize_session=False)
+    )
+    db.commit()
 
 
 def test_dashboard_has_one_run_demo_control_not_two_forms():
@@ -80,7 +86,7 @@ def test_dashboard_has_one_run_demo_control_not_two_forms():
     assert panel_at < infra
     assert "windows_exporter is scraping" not in html.lower()
     assert "real SNMP scrape" not in html
-    assert "not a live SNMP walk" in html
+    assert "Not a live SNMP walk" in html
 
 
 def test_run_demo_panel_has_at_least_five_scenarios():
