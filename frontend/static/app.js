@@ -1,3 +1,33 @@
+const THEMES = ["light", "dark", "high-contrast"];
+const THEME_LABELS = { light: "Light", dark: "Dark", "high-contrast": "Contrast" };
+const THEME_KEY = "forgesre-theme";
+
+function currentTheme() {
+  const theme = document.documentElement.getAttribute("data-theme");
+  return THEMES.includes(theme) ? theme : "light";
+}
+
+function applyTheme(theme) {
+  const next = THEMES.includes(theme) ? theme : "light";
+  document.documentElement.setAttribute("data-theme", next);
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch (err) {
+    /* private mode */
+  }
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    button.setAttribute("aria-label", "Theme: " + THEME_LABELS[next]);
+  });
+}
+
+document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const index = THEMES.indexOf(currentTheme());
+    applyTheme(THEMES[(index + 1) % THEMES.length]);
+  });
+});
+applyTheme(currentTheme());
+
 document.querySelectorAll(".node").forEach((button) => {
   button.addEventListener("click", () => {
     const box = document.getElementById("node-detail");
