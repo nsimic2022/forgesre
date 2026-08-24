@@ -54,6 +54,8 @@ Commands:
   install            Guided first-time install (new VM only)
   doctor             Short health lights (Core, Prometheus, snmp-exporter, …)
   test               Full appliance report (files, HTTP, login, APIs, email, logs)
+  ping [asset]       ICMP + exporter /metrics for inventory (alias: probe)
+  probe [asset]      Same as ping
   status             docker compose ps
   logs [service]     Container logs (default: last 100 lines)
   config             Print config/forgesre.yml
@@ -88,6 +90,8 @@ Examples:
   incidents INC-000012
   ./f journal
   ./forgesre help snmp
+  ./forgesre ping
+  ./forgesre ping win-01
   ./forgesre assets
   ./forgesre snmp
   ./forgesre jobs
@@ -207,6 +211,35 @@ Does not send mail. Does not run install.sh. doctor is the short light;
 test is the long report of how each piece is probed.
 EOF
       ;;
+    ping|probe)
+      cat <<'EOF'
+ping — ICMP + exporter /metrics from this VM (alias: probe).
+
+  ./forgesre ping
+  ./forgesre ping win-01
+  ./forgesre ping 10.10.10.60
+  ./forgesre ping --timeout 3
+  ./forgesre ping --demo
+  ./forgesre probe              # same command
+
+No extra flags for the common case: probes assets already in ForgeSRE
+(inventory / Prometheus scrape_address), skipping seeded forge-demo-* rows.
+
+Each row reports:
+  ICMP    PASS/FAIL  — host answers ping (L3 only)
+  METRICS PASS/FAIL  — HTTP GET /metrics
+                       Linux   :9100  (node_exporter)
+                       Windows :9182  (windows_exporter)
+                       or the asset's configured scrape_address
+
+Ping is not a Prometheus scrape. ICMP PASS + METRICS FAIL means the VM is
+on the network but ForgeSRE cannot see it: exporter down, firewall on the
+exporter port, or wrong port (Windows is 9182, not Linux 9100).
+
+Network devices skip HTTP and point at ./forgesre snmp (UDP/161).
+Exit 1 if any METRICS/ICMP check FAILs.
+EOF
+      ;;
     status)
       cat <<'EOF'
 status — docker compose ps (host networking; ports are on localhost).
@@ -242,7 +275,8 @@ assets — list inventory from the Core API (login as the install admin).
   ./forgesre inventory          # same command
 
 Linux hosts with scrape_address are Prometheus node_exporter targets (:9100).
-Rows with type "Network device" and an IP are snmp_exporter targets (UDP/161).
+Windows Server rows use windows_exporter (:9182). Network device + IP is
+snmp_exporter (UDP/161). ICMP ping is not a scrape — ./forgesre ping.
 
 Add a switch in the UI (Assets → Add asset) or:
   # after UI login cookie, or use the form
@@ -563,6 +597,7 @@ for item in rows:
     print(f"{item.get('asset_id',''):<22} {item.get('ip',''):<16} {str(item.get('type',''))[:22]:<22} {extra}")
 print()
 print(f"{len(rows)} asset(s). Linux = node_exporter :9100. Windows = windows_exporter :9182. Network device + IP = snmp_exporter.")
+print("Reachability: ./forgesre ping   (ICMP + /metrics; ping alone is not a scrape)")
 PY
 }
 
@@ -773,6 +808,10 @@ case "$cmd" in
     ;;
   snmp)
     cmd_snmp
+    ;;
+  ping|probe)
+    need_env
+    run_cli_ops ping "$@"
     ;;
   incidents)
     need_env

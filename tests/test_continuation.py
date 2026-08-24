@@ -10,6 +10,7 @@ def test_continuation_handoff_exists_and_points_at_test_and_llm():
     assert path.is_file()
     text = path.read_text(encoding="utf-8")
     assert "./forgesre test" in text
+    assert "./forgesre ping" in text
     assert "docs/llm.md" in text
     index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
     assert "continuation.md" in index

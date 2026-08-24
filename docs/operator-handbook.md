@@ -198,7 +198,7 @@ If you rotate the install admin in the UI, also edit `FORGESRE_ADMIN_PASSWORD` i
 A row on **Assets** is what ForgeSRE calls a server (or switch, or appliance). You can add one **manually** or via **Discovery** (Approve). Prometheus does **not** scan the network.
 
 - **Linux:** after the host is in inventory with `scrape_address=<ip>:9100`, Prometheus HTTP SD scrapes **node_exporter**.
-- **Windows:** after the host is in inventory with type `Windows Server` and `scrape_address=<ip>:9182`, the same HTTP SD scrapes **windows_exporter**. Prometheus `node_exporter` is a Linux exporter; it does not run on Windows (WSL/Cygwin is the rare exception).
+- **Windows:** after the host is in inventory with type `Windows Server` and `scrape_address=<ip>:9182`, the same HTTP SD scrapes **windows_exporter**. ICMP ping is not a scrape.
 - **Network device:** after the row has type `Network device` (or switch/router/firewall) **and an IP**, bundled **snmp_exporter** walks **UDP/161**. The scrape address stays empty on purpose (no exporter `up == 0` noise).
 
 NetBox is optional and not bundled.
@@ -299,6 +299,8 @@ Core itself stays on a **static** scrape so the demo HighCPU path does not depen
 
 ForgeSRE does not install node_exporter on customer VMs. That is still your image / Ansible / whatever you already use.
 
+Confirm from the ForgeSRE VM with `./forgesre ping` (ICMP + `:9100/metrics`). Ping alone is not a scrape.
+
 ### Windows (windows_exporter)
 
 Prometheus **node_exporter is Linux**. A Windows host is scraped only if:
@@ -307,26 +309,24 @@ Prometheus **node_exporter is Linux**. A Windows host is scraped only if:
 2. The asset type is `Windows Server` (profile `windows-standard`) so HTTP SD labels `job=windows-standard`.
 3. Windows Firewall / NSX allows **TCP 9182** from the ForgeSRE VM.
 
+ICMP ping from the appliance only proves L3. ForgeSRE "seeing" the host needs the `:9182` scrape.
+
+```bash
+./forgesre ping                # all real assets
+./forgesre ping win-01         # one row
+```
+
+| ICMP | METRICS | What it means |
+|---|---|---|
+| PASS | FAIL | Host is up; exporter is down, **TCP 9182** is firewalled, or scrape is still **:9100**. |
+| FAIL | FAIL | Wrong IP or the host is down. |
+| PASS | PASS | windows_exporter answers. Wait ~30s, then `./forgesre sd`. |
+
 If you added the host as `Linux Server`, it will be scraped on `:9100` looking for node_exporter — that will not see windows_exporter. Edit type to **Windows Server** and scrape address to `<ip>:9182`.
 
 `node_exporter` on Windows (WSL / Cygwin) is rare. If you really run it, add the host as `Linux Server` or set scrape to `<ip>:9100` by hand.
 
 Dashboard **Run demo → Windows CPU** still uses lab asset `forge-demo-win-01`. That row is **not** scraped. Do not confuse it with a real Windows box.
-
-Ping vs scrape (run these **on the ForgeSRE VM**, not from a laptop):
-
-```bash
-# ICMP only — proves the host answers ping, not that Prometheus can scrape.
-ping -c 3 <ip>
-
-# Linux node_exporter (typical). Expect Prometheus text (`# HELP` / `node_`).
-curl -sS -m 5 http://<ip>:9100/metrics | head
-
-# Windows windows_exporter (typical). Expect `# HELP` / `windows_`.
-curl -sS -m 5 http://<ip>:9182/metrics | head
-```
-
-If ping works and both curls fail, the exporter is down or firewalled. If `:9182` returns metrics and Assets still looks empty, check type/scrape (`./forgesre sd`) and wait ~30s for HTTP SD refresh.
 
 V0.6+ bundled alert rules (`monitoring/alerts.yml`) watch:
 
@@ -604,7 +604,7 @@ Lab: `./forgesre demo-rca` raises filesystem usage on the **demo gauge** (does n
 
 Goal: host `app-01` at `10.10.10.50` appears under Assets and is scraped on `:9100`.
 
-1. On `app-01`, run node_exporter listening on `0.0.0.0:9100` (or at least on the management NIC). Confirm from the ForgeSRE VM: `curl -fsS http://10.10.10.50:9100/metrics | head`.
+1. On `app-01`, run node_exporter listening on `0.0.0.0:9100` (or at least on the management NIC). From the ForgeSRE VM: `./forgesre ping app-01` (or `curl -fsS http://10.10.10.50:9100/metrics | head`). ICMP ping alone is not a scrape.
 2. Sign in as analyst/engineer/admin. **Assets** → hostname `app-01`, IP `10.10.10.50`, type `Linux Server`, owner email/phone of who to call → **Save**.
 3. Asset page should show scrape address `10.10.10.50:9100` and the contacts. Edit them later if the owner changes.
 4. Wait up to 30s, then check SD JSON (command in §7) contains that target.
@@ -622,13 +622,13 @@ Goal: host `win-01` at `10.10.10.60` appears under Assets and is scraped on `:91
 2. From the **ForgeSRE VM** (the box that runs Prometheus), not from a laptop:
 
 ```bash
+./forgesre ping win-01
+# equivalent manual checks:
 ping -c 3 10.10.10.60
 curl -sS -m 5 http://10.10.10.60:9182/metrics | head
-# optional, only if you really run node_exporter on that Windows box:
-curl -sS -m 5 http://10.10.10.60:9100/metrics | head
 ```
 
-Ping proves ICMP only. A working scrape is the `curl` that prints `# HELP` / `windows_` lines.
+ICMP PASS is L3 only. METRICS PASS (or curl printing `# HELP` / `windows_`) is the scrape. ICMP PASS / METRICS FAIL → exporter not running, firewall **TCP 9182**, or the row is still type Linux Server (`:9100`).
 
 3. Sign in as analyst/engineer/admin. **Assets** → hostname `win-01`, IP `10.10.10.60`, type **Windows Server**, owner email/phone → **Save**.
 4. Asset page should show scrape address `10.10.10.60:9182` and profile `windows-standard`.
@@ -717,8 +717,11 @@ Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critica
 ./forgesre help                 # overview
 ./forgesre help quit            # leave the forgesre> prompt
 ./forgesre help snmp            # one command
+./forgesre help ping            # ICMP vs /metrics
 ./forgesre help tls             # optional HTTPS
 ./forgesre doctor               # short HEALTHY / DEGRADED
+./forgesre ping                 # ICMP + exporter /metrics (alias: probe)
+./forgesre ping win-01
 ./forgesre test                 # detailed report → data/reports/
 ./forgesre status               # compose ps
 ./forgesre logs core

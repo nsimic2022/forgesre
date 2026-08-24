@@ -35,6 +35,10 @@ def test_tab_completes_all_cli_commands_from_prefix():
     assert "mailbox" in mail.split()
     te = _complete(["./forgesre", "te"], 1)
     assert "test" in te.split()
+    pi = _complete(["./forgesre", "pi"], 1)
+    assert "ping" in pi.split()
+    pr = _complete(["./forgesre", "pr"], 1)
+    assert "probe" in pr.split()
 
 
 def test_tab_after_logs_completes_snmp_exporter():
@@ -49,6 +53,8 @@ def test_tab_after_journal_and_help():
     assert "history" in help_txt.split()
     help_te = _complete(["./forgesre", "help", "te"], 2)
     assert "test" in help_te.split()
+    help_pi = _complete(["./forgesre", "help", "pi"], 2)
+    assert "ping" in help_pi.split()
     help_q = _complete(["./forgesre", "help", "qu"], 2)
     assert "quit" in help_q.split()
 
@@ -66,6 +72,14 @@ def test_tab_inside_prompt_first_word():
 def test_cli_help_documents_completion_and_tab():
     overview = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help"], text=True)
     assert "test" in overview
+    assert "ping" in overview
+    assert "probe" in overview
+    ping_help = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "ping"], text=True)
+    assert "9182" in ping_help
+    assert "9100" in ping_help
+    assert "ICMP" in ping_help
+    probe_help = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "probe"], text=True)
+    assert "ping" in probe_help
     assert "quit" in overview
     assert "completion" in overview
     shell = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "shell"], text=True)

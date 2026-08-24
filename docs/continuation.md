@@ -23,6 +23,7 @@ On the Ubuntu VM N uses, resume with:
 ```bash
 git pull origin main
 ./forgesre update
+./forgesre ping
 ```
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
@@ -31,31 +32,44 @@ git pull origin main
 
 ## 2. Why this session existed
 
-HTML incident mail already shipped. N then tried to add a **Windows** host with **node_exporter** and ForgeSRE did not see it. They asked whether ping from this server’s bash would prove reachability.
+HTML incident mail already shipped. N then tried to add a **Windows** host with an exporter and ForgeSRE did not see it. They already have **ICMP ping** from the Linux appliance to that machine and asked whether ping / VM availability should be built into the ForgeSRE CLI.
 
-The previous product only scraped Linux `node_exporter` `:9100`. Add Asset had no Windows type. `Windows Server` would have been mis-classified as Linux (`"server" in type`). Demo `forge-demo-win-01` is lab-only and is still **not** scraped.
+ICMP ping only proves L3. ForgeSRE "seeing" the host needs Prometheus to scrape **windows_exporter `:9182/metrics`** (not Linux node_exporter `:9100`).
 
 ---
 
 ## 3. What shipped on main
 
-Branch: `cursor/win-exporter-visibility-05f8`.
+Two branches, same day:
 
-### 3.1 Real Windows scrape (windows_exporter :9182)
+### 3.1 Real Windows scrape (already on main)
+
+Branch: `cursor/win-exporter-visibility-05f8`.
 
 - Add Asset type **Windows Server** → `monitoring_profile=windows-standard`, `scrape_address=<ip>:9182`.
 - Same Prometheus HTTP SD (`/api/v1/sd/prometheus`) as Linux. Label `job=windows-standard`.
-- Bundled alerts: `WindowsExporterDown`, `WindowsFilesystemUsageHigh`, `WindowsCPUHigh` (`job="windows-standard"`).
-- Seeded playrules `windows-exporter-down` / `windows-filesystem` / `windows-cpu` and playbook `WINDOWS-UNREACHABLE`.
-- Discovery probes TCP **9182** → Possible Windows server.
-- ForgeRCA uses `windows_*` PromQL for Windows assets.
-- Seeded `forge-demo-*` assets stay out of HTTP SD. Dashboard Windows demo remains a lab incident.
+- Bundled alerts: `WindowsExporterDown`, `WindowsFilesystemUsageHigh`, `WindowsCPUHigh`.
+- Discovery probes TCP **9182**. Seeded `forge-demo-*` stay out of HTTP SD.
 
-Linux `node_exporter` `:9100` is unchanged. Prometheus `node_exporter` is Linux; Windows uses **windows_exporter**. If someone really runs node_exporter on Windows (WSL), add as Linux Server or set scrape `:9100` by hand.
+Linux `node_exporter` `:9100` is unchanged. Do not revert this wiring.
 
-Ping proves ICMP only. From the ForgeSRE VM: `ping -c 3 <ip>`, then `curl -sS -m 5 http://<ip>:9100/metrics | head` and `curl -sS -m 5 http://<ip>:9182/metrics | head`.
+### 3.2 `./forgesre ping` / `./forgesre probe`
 
-On the VM: `git pull origin main && ./forgesre update`. Then `./forgesre render-monitoring` is already part of update, so Prometheus picks up the new alert rules.
+Branch: `cursor/cli-asset-ping-05f8`.
+
+Host CLI command. Default: every non-demo inventory row that has an IP or `scrape_address`. Optional selector: asset id, hostname, or IP.
+
+Each row prints:
+
+- **ICMP** PASS/FAIL (one `ping -c 1` from the appliance)
+- **METRICS** PASS/FAIL — HTTP GET `/metrics` on the configured scrape port, or Linux `:9100` / Windows `:9182` from asset type
+- timeout (default 2s), overall PASS/FAIL, exit 1 on FAIL
+
+ICMP PASS + METRICS FAIL means the VM is up but ForgeSRE cannot scrape it (exporter down, firewall on 9182/9100, or wrong port). Network devices SKIP HTTP and point at `./forgesre snmp`.
+
+Code: `backend/app/asset_probe.py`, `cli_ops.py` (`ping`/`probe`). Help: `./forgesre help ping`. Docs: [`cli.md`](cli.md), operator handbook §7 / §14.
+
+On the VM: `git pull origin main && ./forgesre update`, then `./forgesre ping`. Recreate Core if the backend image does not pick up the new Python modules.
 
 ---
 
@@ -65,13 +79,14 @@ These already work on `main`. Do not “fix” them unless N asks.
 
 - Theme is **manual**. Default is **light**. It does not follow the OS. Persist with `forgesre-theme`.
 - Dashboard demos are **one** top-right button + a closeable panel. Do not put two always-visible demo forms back in the monitoring column.
-- Demo rows stay visible; they are **labeled DEMO**, not hidden.
+- Demo rows stay visible; they are **labeled DEMO**, not hidden. `./forgesre ping` skips `forge-demo-*` unless `--demo` or the id is passed.
 - Incident ids look like `INC-0134_16.08.2026_09:13`. Older `INC-000012` rows stay valid.
 - RCA is Python under `agents/rca/`. The LLM only rewrites prose. Builtin ForgeRCA always runs first.
 - Core is an SMTP **client** only. The UI has no IMAP inbox. Incident reports and escalation mail are HTML + plain text (multipart); `/ops` compose stays plain.
 - pytest is a laptop/dev dependency. The Core image must not install it.
 - After UI / CSS changes, operators need a **hard refresh** in the browser.
 - Real Windows scrape is **windows_exporter :9182**, not the lab demo host.
+- ICMP ping ≠ Prometheus scrape. Do not add a ping-only “host up” incident.
 
 ---
 
@@ -79,7 +94,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 
 1. `git pull origin main` (or fetch and check out `main`). Code lives there.
 2. Read **this file**, then [`docs/llm.md`](llm.md) and [`docs/cli.md`](cli.md).
-3. On the VM N uses: `git pull origin main && ./forgesre update`, then `./forgesre test`. Never `./install.sh` on that box.
+3. On the VM N uses: `git pull origin main && ./forgesre update`, then `./forgesre ping` and `./forgesre test`. Never `./install.sh` on that box.
 4. Developer checks: `pip install -r requirements-dev.txt` if needed, then `PYTHONPATH=backend:agents pytest tests` **twice**, then merge to `main`. New work uses branch pattern `cursor/<name>-05f8`.
 5. Replies to N are in **Serbian**. OSS docs and code stay in **English**.
 6. `ManagePullRequest` `update_pr` often fails with “PR URL must belong to the current repository”. `git merge` plus `git push origin main` still lands the change. Prefer that over fighting the PR updater.
@@ -109,4 +124,4 @@ These are documentation choices, not holes to fill on sight:
 - Job claim could later use `FOR UPDATE SKIP LOCKED` on Postgres. Do not pretend it already does. SQLite tests would need a fallback.
 - `incident_detail.html` / `ai.html` RCA markup is similar but not identical. Extract a partial only if both pages should look the same.
 - Scheduled performance reports on `/ops` are still plain text. HTML them only if N asks.
-- Existing Windows hosts added as `Linux Server` keep `:9100` until the operator edits type/scrape. No automatic rewrite of custom scrape addresses.
+- Existing Windows hosts added as `Linux Server` keep `:9100` until the operator edits type/scrape. No automatic rewrite of custom scrape addresses. `./forgesre ping` reports that mismatch.
