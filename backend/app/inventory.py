@@ -40,7 +40,11 @@ def sd_targets(db: Session, core_address: str | None = None) -> list[dict]:
 
 def is_snmp_asset(asset: Asset) -> bool:
     """Network devices with an IP are polled by snmp_exporter. Linux node_exporter hosts are not."""
+    from app.seed import is_demo_asset_id
+
     if not settings.snmp_enabled:
+        return False
+    if is_demo_asset_id(getattr(asset, "asset_id", "") or getattr(asset, "hostname", "")):
         return False
     ip = (asset.ip or "").strip()
     if not ip:

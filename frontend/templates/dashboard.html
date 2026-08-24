@@ -14,7 +14,10 @@
       <h2 id="demo-panel-title">Run demo</h2>
       <button type="button" class="secondary demo-close" data-demo-close aria-label="Close">×</button>
     </div>
-    <p>Lab only. Every scenario opens a <span class="pill demo">DEMO</span> incident on <a href="/assets/forge-demo-01">forge-demo-01</a> — not a customer host.</p>
+    <p>Lab only. Every scenario opens a <span class="pill demo">DEMO</span> incident on a seeded lab asset
+      (<a href="/assets/forge-demo-01">forge-demo-01</a>,
+      <a href="/assets/forge-demo-win-01">forge-demo-win-01</a>,
+      <a href="/assets/forge-demo-sw-01">forge-demo-sw-01</a>) — not a customer host.</p>
     <ol class="compact">
       <li>Incident opens (Who to call uses the demo owner).</li>
       <li>Escalation mail is labeled DEMO and goes to <code>platform@forgesre.local</code>.</li>
@@ -36,8 +39,26 @@
       <article class="demo-scenario" id="demo-host">
         <h3>Linux host unreachable</h3>
         <p>Opens a NodeExporterDown incident and HOST-UNREACHABLE playbook on the demo host. Does not stop a real scrape.</p>
-        <p class="muted">What you’ll see next: incident with Who to call. No Windows exporter and no SNMP walk — this is a lab incident only.</p>
+        <p class="muted">What you’ll see next: incident with Who to call. Lab incident only — the real node_exporter scrape is unchanged.</p>
         <form method="post" action="/demo-host"><button type="submit">Run</button></form>
+      </article>
+      <article class="demo-scenario" id="demo-windows">
+        <h3>Windows CPU (lab)</h3>
+        <p>Opens WindowsCPUHigh on seeded <a href="/assets/forge-demo-win-01">forge-demo-win-01</a>. Lab scenario, DEMO tagged.</p>
+        <p class="muted">What you’ll see next: incident + owner mail. ForgeSRE does not scrape windows_exporter; this is not a live Windows metric.</p>
+        <form method="post" action="/demo-windows"><button type="submit">Run</button></form>
+      </article>
+      <article class="demo-scenario" id="demo-network">
+        <h3>Network SNMP unreachable (lab)</h3>
+        <p>Opens SnmpDeviceUnreachable on seeded <a href="/assets/forge-demo-sw-01">forge-demo-sw-01</a>. Lab scenario, DEMO tagged.</p>
+        <p class="muted">What you’ll see next: incident + NETWORK-UNREACHABLE playbook. Not a live SNMP walk — snmp_exporter is not polling this switch.</p>
+        <form method="post" action="/demo-network"><button type="submit">Run</button></form>
+      </article>
+      <article class="demo-scenario" id="demo-nodecpu">
+        <h3>Linux NodeCPUHigh</h3>
+        <p>Opens NodeCPUHigh on <a href="/assets/forge-demo-01">forge-demo-01</a>. Same demo host, different Linux alertname.</p>
+        <p class="muted">What you’ll see next: incident with Who to call. Lab only — does not change a real host.</p>
+        <form method="post" action="/demo-nodecpu"><button type="submit">Run</button></form>
       </article>
     </div>
     <div class="demo-reset">
@@ -101,7 +122,7 @@
       <tr>
         <td>{{ row.module }}</td>
         <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>
-        <td>{{ row.summary }}</td>
+        <td>{{ row.summary }}{% if is_demo_journal(row) %} <span class="pill demo">DEMO</span>{% endif %}</td>
       </tr>
     {% else %}
       <tr><td colspan="3" class="muted">No process reports yet. They appear after Core start.</td></tr>

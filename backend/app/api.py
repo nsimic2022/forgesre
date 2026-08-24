@@ -41,7 +41,7 @@ from app.inventory import (
     update_asset,
 )
 from app.seed import seed
-from app.services import ingest_alertmanager, is_demo_incident, run_demo, run_demo_host, run_demo_rca
+from app.services import ingest_alertmanager, is_demo_incident, run_demo, run_demo_host, run_demo_network, run_demo_nodecpu, run_demo_rca, run_demo_windows
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
@@ -581,6 +581,30 @@ def demo_host(db: Session = Depends(get_db), user: User = Depends(require("admin
     seed(db)
     seed_demo_candidate(db)
     incident = run_demo_host(db)
+    return {"ok": True, "incident": incident.number if incident else None}
+
+
+@router.post("/demo-windows")
+def demo_windows(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    seed(db)
+    seed_demo_candidate(db)
+    incident = run_demo_windows(db)
+    return {"ok": True, "incident": incident.number if incident else None}
+
+
+@router.post("/demo-network")
+def demo_network(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    seed(db)
+    seed_demo_candidate(db)
+    incident = run_demo_network(db)
+    return {"ok": True, "incident": incident.number if incident else None}
+
+
+@router.post("/demo-nodecpu")
+def demo_nodecpu(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    seed(db)
+    seed_demo_candidate(db)
+    incident = run_demo_nodecpu(db)
     return {"ok": True, "incident": incident.number if incident else None}
 
 

@@ -118,7 +118,7 @@ def create_app() -> FastAPI:
                 "seed",
                 "seed",
                 "ok",
-                summary="Demo asset, playrules, and closed HighCPU history are ready",
+                summary="DEMO assets (Linux, Windows, network), playrules, and closed HighCPU history are ready",
                 object_type="asset",
                 object_id="forge-demo-01",
             )

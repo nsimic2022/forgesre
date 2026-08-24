@@ -10,6 +10,8 @@ import os
 import sys
 from typing import Any
 
+from app.seed import is_demo_asset_id
+
 RESET = "\033[0m"
 RED = "\033[31m"
 YELLOW = "\033[33m"
@@ -75,7 +77,7 @@ def item_is_demo(item: dict[str, Any]) -> bool:
     if item.get("demo"):
         return True
     asset = item.get("asset") or {}
-    return str(asset.get("asset_id") or "") == "forge-demo-01"
+    return is_demo_asset_id(asset.get("asset_id") or asset.get("hostname"))
 
 
 def _row(item: dict[str, Any], enabled: bool, width_title: int = 36) -> str:

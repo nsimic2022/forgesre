@@ -28,7 +28,17 @@ from app.models import (
     User,
     utcnow,
 )
-from app.seed import DEMO_ASSET, ensure_demo_asset, ensure_demo_similar_history, seed
+from app.seed import (
+    DEMO_ASSET,
+    DEMO_SW_ASSET,
+    DEMO_WIN_ASSET,
+    ensure_demo_asset,
+    ensure_demo_similar_history,
+    ensure_demo_switch_asset,
+    ensure_demo_windows_asset,
+    is_demo_asset_id,
+    seed,
+)
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
@@ -37,19 +47,36 @@ DEMO_MAIL_MARK = "[DEMO]"
 DEMO_BODY_LINE = "DEMO incident on forge-demo-01. Lab only — not a production fire."
 
 
+def demo_body_line(incident: Incident | None = None) -> str:
+    host = DEMO_ASSET
+    if incident is not None:
+        asset = getattr(incident, "asset", None)
+        if asset is not None:
+            host = str(getattr(asset, "hostname", "") or getattr(asset, "asset_id", "") or host)
+        else:
+            fingerprint = str(getattr(incident, "fingerprint", "") or "")
+            if ":" in fingerprint and is_demo_asset_id(fingerprint.split(":", 1)[-1]):
+                host = fingerprint.split(":", 1)[-1]
+    return f"DEMO incident on {host}. Lab only — not a production fire."
+
+
 def is_demo_incident(incident: Incident | None) -> bool:
-    """True when the row belongs to the seeded lab host. No extra DB column."""
+    """True when the row belongs to a seeded forge-demo-* lab asset. No extra DB column."""
     if incident is None:
         return False
     asset = getattr(incident, "asset", None)
-    if asset is not None and getattr(asset, "asset_id", "") == DEMO_ASSET:
+    if asset is not None and is_demo_asset_id(getattr(asset, "asset_id", "") or getattr(asset, "hostname", "")):
         return True
     payload = incident.alert_payload if isinstance(getattr(incident, "alert_payload", None), dict) else {}
     labels = payload.get("labels") if isinstance(payload, dict) else None
-    if isinstance(labels, dict) and str(labels.get("asset") or "") == DEMO_ASSET:
+    if isinstance(labels, dict) and (
+        is_demo_asset_id(str(labels.get("asset") or "")) or is_demo_asset_id(str(labels.get("instance") or ""))
+    ):
         return True
     fingerprint = str(getattr(incident, "fingerprint", "") or "")
-    return DEMO_ASSET in fingerprint
+    if ":" in fingerprint:
+        return is_demo_asset_id(fingerprint.split(":", 1)[-1])
+    return is_demo_asset_id(fingerprint)
 
 
 def is_demo_mail(note: Notification | None) -> bool:
@@ -60,6 +87,19 @@ def is_demo_mail(note: Notification | None) -> bool:
     if subject.upper().startswith(DEMO_MAIL_MARK):
         return True
     return is_demo_incident(getattr(note, "incident", None))
+
+
+def is_demo_journal(row: Any) -> bool:
+    """Console rows for demo module, DEMO-prefixed summaries, or forge-demo-* object ids."""
+    if row is None:
+        return False
+    if str(getattr(row, "module", "") or "") == "demo":
+        return True
+    summary = str(getattr(row, "summary", "") or "")
+    head = summary.lstrip().upper()
+    if head.startswith("DEMO") or head.startswith(DEMO_MAIL_MARK):
+        return True
+    return is_demo_asset_id(getattr(row, "object_id", None))
 
 
 def demo_mail_subject(incident: Incident | None, subject: str) -> str:
@@ -224,12 +264,13 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
     db.commit()
     for incident in created:
         db.refresh(incident)
+        mark = "DEMO " if is_demo_incident(incident) else ""
         report(
             db,
             "incident",
             "create",
             "ok",
-            summary=f"{incident.number} {incident.title}",
+            summary=f"{mark}{incident.number} {incident.title}",
             detail=f"asset={incident.asset.hostname if incident.asset else 'unknown'} fingerprint={incident.fingerprint}",
             object_type="incident",
             object_id=incident.number,
@@ -746,12 +787,13 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
         append_timeline(incident, "playbook", "PLAYBOOK", f"Escalated to {stored_target}")
     db.commit()
     note_status = "error" if row.status == "failed" else "ok"
+    mark = "DEMO " if is_demo_incident(incident) else ""
     report(
         db,
         "notification",
         step_key or "notify",
         note_status,
-        summary=f"{incident.number} → {stored_target} ({row.status})",
+        summary=f"{mark}{incident.number} → {stored_target} ({row.status})",
         detail=row.error or f"policy_role={policy_role}",
         object_type="incident",
         object_id=incident.number,
@@ -763,7 +805,7 @@ def _notification_body(incident: Incident, step_key: str, policy_role: str) -> s
     asset = incident.asset
     lines = []
     if is_demo_incident(incident):
-        lines.append(DEMO_BODY_LINE)
+        lines.append(demo_body_line(incident))
     lines.extend(
         [
         f"Incident: {incident.number}",
@@ -878,11 +920,17 @@ def send_outbound_mail(
     incident: Incident | None = None,
 ) -> Notification:
     """Store an outbox row and send if SMTP is on. Does not change incident status."""
+    subject = demo_mail_subject(incident, subject.strip() or "(no subject)")
+    body = body or ""
+    if incident is not None and is_demo_incident(incident):
+        line = demo_body_line(incident)
+        if line not in body:
+            body = f"{line}\n\n{body}" if body else f"{line}\n"
     row = Notification(
         incident_id=incident.id if incident else None,
         channel="email",
         target=target.strip(),
-        subject=subject.strip() or "(no subject)",
+        subject=subject,
         body=body,
         status="generated",
         step_key=step_key,
@@ -960,7 +1008,7 @@ def build_incident_report(db: Session, incident: Incident) -> str:
     rca = (investigation.result if investigation else None) or {}
     lines = ["ForgeSRE incident report"]
     if is_demo_incident(incident):
-        lines.append(DEMO_BODY_LINE)
+        lines.append(demo_body_line(incident))
     lines.extend(
         [
         f"Incident: {incident.number}",
@@ -1144,161 +1192,164 @@ def close_open_incidents(db: Session, fingerprint: str, *, include_resolved: boo
     db.commit()
 
 
-def run_demo(db: Session) -> Incident:
+def _prepare_demo_lab(db: Session) -> None:
     from app.inventory import seed_demo_candidate
 
     seed(db)
-    asset = ensure_demo_asset(db)
-    ensure_demo_similar_history(db, asset)
+    linux = ensure_demo_asset(db)
+    ensure_demo_similar_history(db, linux)
+    ensure_demo_windows_asset(db)
+    ensure_demo_switch_asset(db)
     seed_demo_candidate(db)
-    close_open_incidents(db, f"HighCPU:{DEMO_ASSET}", include_resolved=True)
-    set_demo_cpu(94)
-    log.warning("demo: CPU on %s raised to 94%% for HighCPU alert", DEMO_ASSET)
+
+
+def _run_lab_incident(
+    db: Session,
+    *,
+    asset_id: str,
+    alertname: str,
+    summary: str,
+    description: str,
+    action: str,
+    actor: str,
+) -> Incident:
+    close_open_incidents(db, f"{alertname}:{asset_id}", include_resolved=True)
     payload = {
         "status": "firing",
         "alerts": [
             {
                 "status": "firing",
                 "labels": {
-                    "alertname": "HighCPU",
+                    "alertname": alertname,
                     "severity": "warning",
-                    "asset": DEMO_ASSET,
-                    "instance": DEMO_ASSET,
+                    "asset": asset_id,
+                    "instance": asset_id,
                 },
                 "annotations": {
-                    "summary": "High CPU",
-                    "description": "CPU usage reached 94% on forge-demo-01.",
+                    "summary": summary,
+                    "description": description,
                 },
-                "fingerprint": f"demo-highcpu-{DEMO_ASSET}",
+                "fingerprint": f"demo-{action}-{asset_id}",
                 "startsAt": utcnow().isoformat(),
             }
         ],
     }
     created = ingest_alertmanager(db, payload)
+    fingerprint = f"{alertname}:{asset_id}"
     incident = created[0] if created else (
-        db.query(Incident).filter(Incident.fingerprint == f"HighCPU:{DEMO_ASSET}").order_by(Incident.id.desc()).first()
+        db.query(Incident).filter(Incident.fingerprint == fingerprint).order_by(Incident.id.desc()).first()
     )
     if incident:
-        run_investigation(db, incident, actor="demo", use_llm=False)
-        queue_llm_rewrite(db, incident, actor="demo")
+        run_investigation(db, incident, actor=actor, use_llm=False)
+        queue_llm_rewrite(db, incident, actor=actor)
         ensure_notification(db, incident, "immediate")
         report(
             db,
             "demo",
-            "highcpu",
+            action,
             "ok",
-            summary=f"Demo HighCPU opened {incident.number}; notify {DEMO_ASSET} owner",
+            summary=f"DEMO {alertname} opened {incident.number} on {asset_id}",
             object_type="incident",
             object_id=incident.number,
         )
     else:
-        report(db, "demo", "highcpu", "error", summary="Demo HighCPU did not create an incident")
+        report(db, "demo", action, "error", summary=f"DEMO {alertname} did not create an incident")
     return incident
+
+
+def run_demo(db: Session) -> Incident:
+    _prepare_demo_lab(db)
+    set_demo_cpu(94)
+    log.warning("DEMO: CPU on %s raised to 94%% for HighCPU alert (lab gauge)", DEMO_ASSET)
+    return _run_lab_incident(
+        db,
+        asset_id=DEMO_ASSET,
+        alertname="HighCPU",
+        summary="High CPU",
+        description="CPU usage reached 94% on forge-demo-01. Lab DEMO gauge — not a customer host.",
+        action="highcpu",
+        actor="demo",
+    )
 
 
 def run_demo_rca(db: Session) -> Incident:
     """Filesystem RCA acceptance path. Does not fill a real disk."""
-    from app.inventory import seed_demo_candidate
-
-    seed(db)
-    asset = ensure_demo_asset(db)
-    ensure_demo_similar_history(db, asset)
-    seed_demo_candidate(db)
-    close_open_incidents(db, f"FilesystemUsageHigh:{DEMO_ASSET}", include_resolved=True)
+    _prepare_demo_lab(db)
     set_demo_disk(94)
-    log.warning("demo-rca: filesystem on %s raised to 94%% for FilesystemUsageHigh", DEMO_ASSET)
-    log.error("demo-rca: log growth suspected on %s (synthetic evidence)", DEMO_ASSET)
-    payload = {
-        "status": "firing",
-        "alerts": [
-            {
-                "status": "firing",
-                "labels": {
-                    "alertname": "FilesystemUsageHigh",
-                    "severity": "warning",
-                    "asset": DEMO_ASSET,
-                    "instance": DEMO_ASSET,
-                },
-                "annotations": {
-                    "summary": "Filesystem usage high",
-                    "description": "Filesystem usage reached 94% on forge-demo-01.",
-                },
-                "fingerprint": f"demo-disk-{DEMO_ASSET}",
-                "startsAt": utcnow().isoformat(),
-            }
-        ],
-    }
-    created = ingest_alertmanager(db, payload)
-    fingerprint = f"FilesystemUsageHigh:{DEMO_ASSET}"
-    incident = created[0] if created else (
-        db.query(Incident).filter(Incident.fingerprint == fingerprint).order_by(Incident.id.desc()).first()
+    log.warning("DEMO: filesystem on %s raised to 94%% for FilesystemUsageHigh (lab gauge)", DEMO_ASSET)
+    log.error("DEMO: log growth suspected on %s (synthetic evidence)", DEMO_ASSET)
+    return _run_lab_incident(
+        db,
+        asset_id=DEMO_ASSET,
+        alertname="FilesystemUsageHigh",
+        summary="Filesystem usage high",
+        description="Filesystem usage reached 94% on forge-demo-01. Lab DEMO gauge — does not fill a real disk.",
+        action="rca",
+        actor="demo-rca",
     )
-    if incident:
-        run_investigation(db, incident, actor="demo-rca", use_llm=False)
-        queue_llm_rewrite(db, incident, actor="demo-rca")
-        ensure_notification(db, incident, "immediate")
-        report(
-            db,
-            "demo",
-            "rca",
-            "ok",
-            summary=f"Demo filesystem RCA opened {incident.number}",
-            object_type="incident",
-            object_id=incident.number,
-        )
-    else:
-        report(db, "demo", "rca", "error", summary="Demo RCA did not create an incident")
-    return incident
 
 
 def run_demo_host(db: Session) -> Incident:
     """NodeExporterDown on forge-demo-01. Does not stop a real scrape."""
-    from app.inventory import seed_demo_candidate
-
-    seed(db)
-    asset = ensure_demo_asset(db)
-    ensure_demo_similar_history(db, asset)
-    seed_demo_candidate(db)
-    close_open_incidents(db, f"NodeExporterDown:{DEMO_ASSET}", include_resolved=True)
-    log.warning("demo-host: NodeExporterDown opened on %s (synthetic; scrape is unchanged)", DEMO_ASSET)
-    payload = {
-        "status": "firing",
-        "alerts": [
-            {
-                "status": "firing",
-                "labels": {
-                    "alertname": "NodeExporterDown",
-                    "severity": "warning",
-                    "asset": DEMO_ASSET,
-                    "instance": DEMO_ASSET,
-                },
-                "annotations": {
-                    "summary": "Host unreachable (demo)",
-                    "description": "node_exporter scrape treated as down on forge-demo-01. Lab only — the real scrape is unchanged.",
-                },
-                "fingerprint": f"demo-host-{DEMO_ASSET}",
-                "startsAt": utcnow().isoformat(),
-            }
-        ],
-    }
-    created = ingest_alertmanager(db, payload)
-    fingerprint = f"NodeExporterDown:{DEMO_ASSET}"
-    incident = created[0] if created else (
-        db.query(Incident).filter(Incident.fingerprint == fingerprint).order_by(Incident.id.desc()).first()
+    _prepare_demo_lab(db)
+    log.warning("DEMO: NodeExporterDown opened on %s (lab incident; scrape is unchanged)", DEMO_ASSET)
+    return _run_lab_incident(
+        db,
+        asset_id=DEMO_ASSET,
+        alertname="NodeExporterDown",
+        summary="Host unreachable (demo)",
+        description="node_exporter scrape treated as down on forge-demo-01. Lab only — the real scrape is unchanged.",
+        action="host",
+        actor="demo-host",
     )
-    if incident:
-        run_investigation(db, incident, actor="demo-host", use_llm=False)
-        queue_llm_rewrite(db, incident, actor="demo-host")
-        ensure_notification(db, incident, "immediate")
-        report(
-            db,
-            "demo",
-            "host",
-            "ok",
-            summary=f"Demo host-unreachable opened {incident.number}",
-            object_type="incident",
-            object_id=incident.number,
-        )
-    else:
-        report(db, "demo", "host", "error", summary="Demo host-unreachable did not create an incident")
-    return incident
+
+
+def run_demo_windows(db: Session) -> Incident:
+    """WindowsCPUHigh on forge-demo-win-01. Does not scrape windows_exporter."""
+    _prepare_demo_lab(db)
+    log.warning("DEMO: WindowsCPUHigh opened on %s (lab incident; no windows_exporter scrape)", DEMO_WIN_ASSET)
+    return _run_lab_incident(
+        db,
+        asset_id=DEMO_WIN_ASSET,
+        alertname="WindowsCPUHigh",
+        summary="Windows CPU high (lab)",
+        description=(
+            "Lab scenario on forge-demo-win-01. DEMO tagged. "
+            "ForgeSRE does not scrape windows_exporter; this is not a live Windows metric."
+        ),
+        action="windows",
+        actor="demo-windows",
+    )
+
+
+def run_demo_network(db: Session) -> Incident:
+    """SnmpDeviceUnreachable on forge-demo-sw-01. Does not walk a real device."""
+    _prepare_demo_lab(db)
+    log.warning("DEMO: SnmpDeviceUnreachable opened on %s (lab incident; not a live SNMP walk)", DEMO_SW_ASSET)
+    return _run_lab_incident(
+        db,
+        asset_id=DEMO_SW_ASSET,
+        alertname="SnmpDeviceUnreachable",
+        summary="Network device unreachable (lab)",
+        description=(
+            "Lab scenario on forge-demo-sw-01. DEMO tagged. "
+            "Not a live SNMP walk — snmp_exporter is not polling this seeded switch."
+        ),
+        action="network",
+        actor="demo-network",
+    )
+
+
+def run_demo_nodecpu(db: Session) -> Incident:
+    """NodeCPUHigh on forge-demo-01. Second Linux alertname, same demo host."""
+    _prepare_demo_lab(db)
+    log.warning("DEMO: NodeCPUHigh opened on %s (lab incident; node_exporter scrape unchanged)", DEMO_ASSET)
+    return _run_lab_incident(
+        db,
+        asset_id=DEMO_ASSET,
+        alertname="NodeCPUHigh",
+        summary="Linux NodeCPUHigh (lab)",
+        description="Lab scenario: NodeCPUHigh on forge-demo-01. DEMO tagged. Does not change a real host.",
+        action="nodecpu",
+        actor="demo-nodecpu",
+    )
