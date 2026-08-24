@@ -27,33 +27,35 @@ git pull origin main
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
 
-Earlier the same day shipped webhook-evidence-once, pytest-out-of-Core, ops-console polish, and the first UI theme + nav role-label pass. Those remain on `main`. This file now also records the follow-up: compact theme control, and nav-foot no longer stacks a role-echo name.
-
 ---
 
 ## 2. Why this session existed
 
-N asked for a **manual theme switcher** (default light; do not follow the OS) and a fix so the bottom-left nav prints each role **once**. Do not add Jira, TheHive, IMAP, or any ticketing system.
+N asked for a **clean dashboard**: one **Run demo** control (top right), a closeable panel with honest scenarios, and a visible **DEMO** pill on every row those demos produce. Do not add Jira, TheHive, IMAP, React, or a second always-on demo button in the main column.
 
 ---
 
 ## 3. What shipped on main
 
-Branch: `cursor/theme-btn-role-05f8` (follow-up to `cursor/ui-themes-05f8`).
+Branch: `cursor/demo-launcher-05f8`.
 
-### 3.1 Manual themes (CSS + tiny JS)
+### 3.1 Dashboard launcher
 
-Three themes on `:root` / `html[data-theme]`: **light** (default), **dark** (previous ops palette), **high-contrast**. No `prefers-color-scheme`. Choice is stored in `localStorage` key `forgesre-theme`.
+Infrastructure starts immediately. The old First-hour walkthrough card and the two always-visible **Run demo workflow** / **Run RCA demo** buttons are gone. Admins get **one** `Run demo` button in `.page-head` (same row as the title). It opens a native `<dialog>` (`#demo-panel`): close with ×, overlay click, or Escape.
 
-A compact **text control** (`button.theme-toggle`, labels Light / Dark / Contrast) lives in `frontend/templates/base.html`: **nav-foot** next to Logout on authenticated pages, and on the login layout so the theme applies before sign-in. It is muted and smaller than Logout (`button.secondary`). An inline `<head>` script applies the stored theme before paint. `frontend/static/app.js` cycles and persists. No Python/API/DB, no new frameworks.
+Three scenario cards (not two identical forms):
 
-After CSS changes, operators need a **hard refresh** (`/static/app.css` has no cache-busting query).
+1. **Linux HighCPU** — existing `./forgesre demo` (demo CPU gauge + incident + owner mail).
+2. **Linux disk / ForgeRCA** — existing `./forgesre demo-rca` (demo disk gauge + builtin RCA).
+3. **Linux host unreachable** — tiny extension of the same ingest path (`NodeExporterDown` / `HOST-UNREACHABLE` on `forge-demo-01`). Does **not** stop a real scrape.
 
-### 3.2 Role shown once
+**Reset demo gauges** lives in that same panel (`POST /demo-reset` → `/?demo=1`). CLI `./forgesre demo`, `demo-rca`, and `demo-reset` are unchanged.
 
-`role_label()` in `backend/app/security.py` returns one human phrase: Super admin, System admin, Analyst, Engineer, Viewer. Nav-foot prints `role_label(user.role)` once in `.who-role`. `distinct_who_name()` omits `.who-name` when the stored name is the same phrase as the role (the install seed name is "Super Admin", which used to stack on "Super admin"). A distinct personal name still appears above the role.
+**Skipped (honest):** Windows (no windows_exporter, no Windows demo asset). SNMP/network (no demo switch; a fake `SnmpDeviceUnreachable` would look like a live walk). Do not add those without a real scrape path.
 
-Tests: `tests/test_roles.py`.
+### 3.2 DEMO marking
+
+No new incident column. Source of truth is asset `forge-demo-01` / fingerprint containing that id (`is_demo_incident()`). UI: `.pill.demo` **DEMO** next to the INC number on dashboard recent incidents, Incidents, History, incident detail, ForgeRCA page. Escalation / Report outbox / Email outbox: pill plus `[DEMO]` subject prefix. CLI board/detail: `DEMO` in the title/header when `demo` is true or `asset_id` is `forge-demo-01`. API `_incident` includes `"demo": true|false`.
 
 ---
 
@@ -61,13 +63,12 @@ Tests: `tests/test_roles.py`.
 
 These already work on `main`. Do not “fix” them unless N asks.
 
-- Theme is **manual**. Default is **light**. It does not follow the OS. Persist with `forgesre-theme`. The cycle control is a compact muted text button (`theme-toggle`), not a second Logout-sized action.
-- Incident ids look like `INC-0134_16.08.2026_09:13` (sequence + local date/time). Older `INC-000012` rows stay valid. TAB completes those ids after `incidents` / `history`.
-- RCA is Python under `agents/rca/`. The LLM only rewrites prose. Builtin ForgeRCA always runs first. Alertmanager ingest enqueues investigate; demo still runs builtin RCA immediately. Prometheus/Loki evidence is collected once per open incident.
-- Secrets are gitignored (`secrets/`, `.env`, `config/forgesre.yml`, `data/`). Background jobs live in **Postgres** (`jobs` table, pending/running/done). Claim is not `SKIP LOCKED`.
-- Core is an SMTP **client** only. The UI has no IMAP inbox. Humans read replies in Gmail, Outlook, or (later) Roundcube.
-- Gmail and Outlook / Microsoft 365 are the supported send path now. Compose profile `mailbox` stays **off** until `./forgesre mailbox`. That command must **not** rewrite Core SMTP unless `--bind-core`.
-- UI users are bcrypt hashes in Postgres. Administration is click-to-edit. You cannot delete yourself or the install `super_admin`.
+- Theme is **manual**. Default is **light**. It does not follow the OS. Persist with `forgesre-theme`.
+- Dashboard demos are **one** top-right button + a closeable panel. Do not put two always-visible demo forms back in the monitoring column.
+- Demo rows stay visible; they are **labeled DEMO**, not hidden.
+- Incident ids look like `INC-0134_16.08.2026_09:13`. Older `INC-000012` rows stay valid.
+- RCA is Python under `agents/rca/`. The LLM only rewrites prose. Builtin ForgeRCA always runs first.
+- Core is an SMTP **client** only. The UI has no IMAP inbox.
 - pytest is a laptop/dev dependency. The Core image must not install it.
 - After UI / CSS changes, operators need a **hard refresh** in the browser.
 
@@ -94,6 +95,7 @@ Do not start these unless N asks:
 - Do **not** enable Compose profile `mailbox` by default.
 - Do **not** put a GGUF (or any model weights) in git.
 - Do **not** add React, Tailwind, Bootstrap, or a new icon pack. Do **not** follow the OS theme.
+- Do **not** fake a live Windows scrape or SNMP walk in the demo panel.
 
 ---
 

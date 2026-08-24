@@ -63,7 +63,7 @@ Seeded on first start:
 | Escalation `Default warning` | 0 / 15 / 30 minutes → generated email |
 | Discovery candidate `10.20.30.41` | Demo row on `/discovery` so you can click Approve |
 
-Lab demos (`./forgesre demo` and `./forgesre demo-rca`) fire **demo gauges on Core**, not real disk/CPU on a customer VM. After install the dashboard **First-hour walkthrough** is the intended demo: open `forge-demo-01`, run the demo workflow, then Escalation.
+Lab demos (`./forgesre demo`, `./forgesre demo-rca`) fire **demo gauges on Core**, not real disk/CPU on a customer VM. After install, Dashboard **Run demo** (top right, admin) opens a closeable panel with HighCPU, disk/ForgeRCA, and host-unreachable scenarios. Rows they create are labeled **DEMO**.
 
 ---
 
@@ -117,7 +117,7 @@ Login session lasts **12 hours** (httponly cookie).
 
 | Menu | URL | What you do there |
 |---|---|---|
-| Dashboard | `/` | Counts, doctor lights, pending discovery banner (analyst+), **first-hour walkthrough**, recent journal reports (analyst+), demo buttons (admin) |
+| Dashboard | `/` | Counts, doctor lights, pending discovery banner (analyst+), **Run demo** (admin, top right — panel with HighCPU / disk RCA / host-down), recent journal reports (analyst+) |
 | Assets | `/assets` | List inventory. **Add asset** form (analyst+) |
 | Asset detail | `/assets/<id>` | Contacts, scrape address, edit owner after Save, similar-incident history |
 | Discovery | `/discovery` | Scan, Approve / Ignore (analyst+), optional NetBox sync (admin) |
@@ -752,4 +752,4 @@ Say this out loud so lab expectations stay honest:
 - NetBox is read-only and optional.
 - Re-running `./install.sh` regenerates secrets. Core will not start on shipped default `SECRET_KEY` / webhook token (`FORGESRE_DEV=1` is tests/lab only).
 
-When that is enough: install ([`install-config.md`](install-config.md)), add people (§5), add servers (§6–7), then add real alerts only when you are ready for incidents (§15). First-hour lab path: Dashboard walkthrough → `./forgesre demo`.
+When that is enough: install ([`install-config.md`](install-config.md)), add people (§5), add servers (§6–7), then add real alerts only when you are ready for incidents (§15). First-hour lab path: Dashboard **Run demo** → HighCPU on `forge-demo-01` (DEMO pill) → Who to call / Escalation. CLI: `./forgesre demo`.

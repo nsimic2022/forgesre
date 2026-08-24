@@ -1,23 +1,52 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
-<section class="card walkthrough">
-  <h2>First-hour walkthrough</h2>
-  <p>After install, this is the shortest path to see how ForgeSRE works. Nothing here changes a real server.</p>
-  <ol>
-    <li>Open <a href="/assets/forge-demo-01">forge-demo-01</a>. Owner, email, phone, and a closed HighCPU history row are already filled.</li>
-    <li>Run the demo workflow (admin). A live HighCPU incident opens. Escalation generates mail to <code>platform@forgesre.local</code> (the asset owner), not a generic team inbox.</li>
-    <li>Open the new incident → <a href="/escalation">Escalation</a> → the asset page again for similar-incident history → <a href="/journal">Journal</a> to see ok/error reports from seed, demo, inventory, and notifications.</li>
-  </ol>
+<div class="page-head">
+  <h1>Dashboard</h1>
   {% if can('admin') %}
-  <form class="inline" method="post" action="/demo"><button type="submit">Run demo workflow</button></form>
-  <form class="inline" method="post" action="/demo-rca"><button type="submit">Run RCA demo</button></form>
-  <p class="muted">Demo workflow opens the new HighCPU incident immediately. RCA demo opens the AI page; click Refresh there when the analysis is ready. Neither button waits on the LLM in the browser.</p>
-  {% else %}
-  <p class="muted">Ask an admin to click <strong>Run demo workflow</strong>, or from the VM run <code>./forgesre demo</code>.</p>
+  <button type="button" id="demo-open" data-demo-open>Run demo</button>
   {% endif %}
-</section>
+</div>
+{% if can('admin') %}
+<dialog id="demo-panel" class="demo-panel" aria-labelledby="demo-panel-title">
+  <div class="demo-panel-inner">
+    <div class="demo-panel-head">
+      <h2 id="demo-panel-title">Run demo</h2>
+      <button type="button" class="secondary demo-close" data-demo-close aria-label="Close">×</button>
+    </div>
+    <p>Lab only. Every scenario opens a <span class="pill demo">DEMO</span> incident on <a href="/assets/forge-demo-01">forge-demo-01</a> — not a customer host.</p>
+    <ol class="compact">
+      <li>Incident opens (Who to call uses the demo owner).</li>
+      <li>Escalation mail is labeled DEMO and goes to <code>platform@forgesre.local</code>.</li>
+      <li>Open ForgeRCA on the incident, then Resolve / Close when finished.</li>
+    </ol>
+    <div class="demo-scenarios">
+      <article class="demo-scenario" id="demo-highcpu">
+        <h3>Linux HighCPU</h3>
+        <p>Raises the demo CPU gauge to 94% and opens a HighCPU incident with owner mail.</p>
+        <p class="muted">What you’ll see next: incident page → Who to call → Escalation outbox. Same as <code>./forgesre demo</code>.</p>
+        <form method="post" action="/demo"><button type="submit">Run</button></form>
+      </article>
+      <article class="demo-scenario" id="demo-disk">
+        <h3>Linux disk / ForgeRCA</h3>
+        <p>Raises the demo disk gauge to 94% and opens FilesystemUsageHigh with builtin RCA.</p>
+        <p class="muted">What you’ll see next: ForgeRCA page (facts / likely cause). Click Refresh if the LLM rewrite is still queued. Same as <code>./forgesre demo-rca</code>.</p>
+        <form method="post" action="/demo-rca"><button type="submit">Run</button></form>
+      </article>
+      <article class="demo-scenario" id="demo-host">
+        <h3>Linux host unreachable</h3>
+        <p>Opens a NodeExporterDown incident and HOST-UNREACHABLE playbook on the demo host. Does not stop a real scrape.</p>
+        <p class="muted">What you’ll see next: incident with Who to call. No Windows exporter and no SNMP walk — this is a lab incident only.</p>
+        <form method="post" action="/demo-host"><button type="submit">Run</button></form>
+      </article>
+    </div>
+    <div class="demo-reset">
+      <p class="muted">Reset demo CPU/disk gauges to 12% / 35% when you are done (same as <code>./forgesre demo-reset</code>). Open incidents stay until you Resolve / Close them.</p>
+      <form method="post" action="/demo-reset"><button type="submit" class="secondary">Reset demo gauges</button></form>
+    </div>
+  </div>
+</dialog>
+{% endif %}
 {% if stats.pending_discovery and can('write_assets') %}
 <div class="banner">
   <strong>NEW DEVICE DETECTED</strong>
@@ -89,14 +118,17 @@
     <tbody>
     {% for item in recent %}
       <tr>
-        <td><a class="{{ incident_tone(item.status, item.severity) }}" href="/incidents/{{ item.number }}">{{ item.number }}</a></td>
+        <td>
+          <a class="{{ incident_tone(item.status, item.severity) }}" href="/incidents/{{ item.number }}">{{ item.number }}</a>
+          {% if is_demo_incident(item) %}<span class="pill demo">DEMO</span>{% endif %}
+        </td>
         <td>{{ item.title }}</td>
         <td>{{ item.severity }}</td>
         <td>{{ item.status }}</td>
         <td>{% if item.asset %}{{ item.asset.hostname }}{% else %}—{% endif %}</td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">No incidents yet. Run the demo workflow or wait for an alert.</td></tr>
+      <tr><td colspan="5" class="muted">No incidents yet. Use Run demo (top right) or wait for an alert.</td></tr>
     {% endfor %}
     </tbody>
   </table>

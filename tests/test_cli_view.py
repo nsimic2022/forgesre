@@ -75,3 +75,12 @@ def test_detail_and_history_rows():
     assert "History last 90" in hist
     assert "INC-000003" in hist
     assert "ana@dc.local" in hist
+
+
+def test_board_marks_demo_incidents():
+    text = format_board(
+        [_item(title="High CPU", demo=True, asset={"hostname": "forge-demo-01", "asset_id": "forge-demo-01"})],
+        color=False,
+    )
+    assert "DEMO High CPU" in text
+    assert "INC-000001" in text
