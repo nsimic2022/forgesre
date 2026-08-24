@@ -74,7 +74,8 @@ These already work on `main`. Do not “fix” them unless N asks.
 - After UI / CSS changes, operators need a **hard refresh** in the browser.
 - Real Windows scrape is **windows_exporter :9182**, not the lab demo host.
 - ICMP ping ≠ Prometheus scrape. Do not add a ping-only “host up” incident.
-- Auto-detect is a helper + defaults, not a new fingerprinting subsystem or DB schema.
+- Auto-detect is a helper + defaults, not a new fingerprinting subsystem. Network is only the existing SNMP UDP/161 path (`snmp_ok` / live GET). Do not guess Network from missing :9100/:9182.
+- Assets Ping / :9100 / :9182 / SNMP dots are last-known + async (`GET /api/v1/assets/reachability`). Do not probe inside the HTML list handler.
 
 ---
 

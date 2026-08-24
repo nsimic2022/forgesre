@@ -1,7 +1,8 @@
-"""Host reachability probe for the operator CLI.
+"""Host reachability probe for the operator CLI and Assets list badges.
 
 ICMP ping only proves L3. ForgeSRE "sees" a host when Prometheus can scrape
-exporter /metrics (Linux node_exporter :9100, Windows windows_exporter :9182).
+exporter /metrics (Linux node_exporter :9100, Windows windows_exporter :9182)
+or snmp_exporter walks UDP/161 for network devices.
 """
 
 from __future__ import annotations
@@ -12,7 +13,9 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from app.exporter_detect import detect_exporter
@@ -20,10 +23,13 @@ from app.exporter_detect import detect_exporter
 LINUX_EXPORTER_PORT = 9100
 WINDOWS_EXPORTER_PORT = 9182
 DEFAULT_TIMEOUT = 2.0
+LIST_PROBE_TIMEOUT = 0.8
+LIST_PROBE_FRESH_SECONDS = 20
 METRICS_PATH = "/metrics"
 
 PingRunner = Callable[[str, float], tuple[int, str, str]]
 MetricsFetcher = Callable[[str, float], tuple[int | None, str, str]]
+SnmpProber = Callable[..., bool]
 
 
 def asset_kind(type: str = "", profile: str = "") -> str:
@@ -262,6 +268,169 @@ def resolve_probe(item: dict[str, Any]) -> tuple[str, int | None, str]:
     return host, port, scrape
 
 
+def probe_snmp(
+    host: str,
+    timeout: float = DEFAULT_TIMEOUT,
+    prober: SnmpProber | None = None,
+) -> CheckResult:
+    host = (host or "").strip()
+    if not host:
+        return CheckResult("metrics", None, "no IP", 0)
+    started = time.monotonic()
+    if prober is not None:
+        ok = bool(prober(host, timeout))
+    else:
+        from discovery import probe_snmp_udp
+
+        ok = bool(probe_snmp_udp(host, timeout=timeout))
+    elapsed = int((time.monotonic() - started) * 1000)
+    if ok:
+        return CheckResult("metrics", True, f"SNMP UDP/161 sysDescr ({elapsed}ms)", elapsed)
+    return CheckResult("metrics", False, f"SNMP UDP/161 no reply ({elapsed}ms)", elapsed)
+
+
+def check_color(ok: bool | None) -> str:
+    if ok is True:
+        return "green"
+    if ok is False:
+        return "red"
+    return "yellow"
+
+
+def exporter_badge_label(item: dict[str, Any] | Any, port: int | None = None) -> str:
+    if not isinstance(item, dict):
+        kind = asset_kind(getattr(item, "type", "") or "", getattr(item, "monitoring_profile", "") or "")
+        scrape = str(getattr(item, "scrape_address", "") or "")
+        if port is None:
+            _host, port = parse_host_port(scrape)
+            if port is None:
+                port = default_exporter_port(
+                    str(getattr(item, "type", "") or ""),
+                    str(getattr(item, "monitoring_profile", "") or ""),
+                )
+    else:
+        kind = asset_kind(str(item.get("type") or ""), str(item.get("monitoring_profile") or ""))
+        scrape = str(item.get("scrape_address") or "")
+        if port is None:
+            _host, port = parse_host_port(scrape)
+            if port is None:
+                port = default_exporter_port(str(item.get("type") or ""), str(item.get("monitoring_profile") or ""))
+    if kind == "network":
+        return "SNMP"
+    if port == WINDOWS_EXPORTER_PORT:
+        return ":9182"
+    if port == LINUX_EXPORTER_PORT:
+        return ":9100"
+    if port:
+        return f":{port}"
+    return "exp."
+
+
+def _checked_age_seconds(checked: datetime | None, now: datetime) -> float:
+    if checked is None:
+        return 10**9
+    if checked.tzinfo is None:
+        checked = checked.replace(tzinfo=timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    return (now - checked).total_seconds()
+
+
+def apply_probe_to_asset(asset: Any, probe: AssetProbe) -> None:
+    from app.models import utcnow
+
+    asset.ping_status = check_color(probe.icmp.ok)
+    asset.ping_detail = (probe.icmp.detail or "")[:255]
+    asset.exporter_status = check_color(probe.metrics.ok)
+    asset.exporter_detail = (probe.metrics.detail or "")[:255]
+    asset.probe_checked_at = utcnow()
+
+
+def reachability_snapshot(asset: Any, probe: AssetProbe | None = None) -> dict[str, Any]:
+    if probe is not None:
+        ping = check_color(probe.icmp.ok)
+        exporter = check_color(probe.metrics.ok)
+        ping_detail = probe.icmp.detail or ""
+        exporter_detail = probe.metrics.detail or ""
+        label = exporter_badge_label(asset, probe.port)
+        checked = getattr(asset, "probe_checked_at", None)
+    else:
+        ping = getattr(asset, "ping_status", None) or "yellow"
+        exporter = getattr(asset, "exporter_status", None) or "yellow"
+        ping_detail = getattr(asset, "ping_detail", None) or "not probed yet"
+        exporter_detail = getattr(asset, "exporter_detail", None) or "not probed yet"
+        label = exporter_badge_label(asset)
+        checked = getattr(asset, "probe_checked_at", None)
+    return {
+        "asset_id": getattr(asset, "asset_id", ""),
+        "ip": getattr(asset, "ip", "") or "",
+        "ping": ping,
+        "ping_detail": ping_detail,
+        "exporter": exporter,
+        "exporter_detail": exporter_detail,
+        "exporter_label": label,
+        "checked_at": checked.isoformat() if checked else None,
+    }
+
+
+def asset_as_probe_item(asset: Any) -> dict[str, Any]:
+    return {
+        "asset_id": getattr(asset, "asset_id", "") or "",
+        "hostname": getattr(asset, "hostname", "") or "",
+        "ip": getattr(asset, "ip", "") or "",
+        "type": getattr(asset, "type", "") or "",
+        "monitoring_profile": getattr(asset, "monitoring_profile", "") or "",
+        "scrape_address": getattr(asset, "scrape_address", "") or "",
+    }
+
+
+def refresh_reachability(
+    assets: list[Any],
+    *,
+    timeout: float = LIST_PROBE_TIMEOUT,
+    max_workers: int = 8,
+    force: bool = False,
+    ping_runner: PingRunner | None = None,
+    metrics_fetcher: MetricsFetcher | None = None,
+    snmp_prober: SnmpProber | None = None,
+    probe_fn: Callable[..., AssetProbe] | None = None,
+) -> list[dict[str, Any]]:
+    """Probe stale rows off the request thread pool; persist last-known colors.
+
+    The Assets HTML page must not wait on this. Call it from the JSON endpoint
+    after the table has already rendered last-known (yellow if never probed).
+    """
+    now = datetime.now(timezone.utc)
+    stale: list[Any] = []
+    for asset in assets:
+        checked = getattr(asset, "probe_checked_at", None)
+        if force or _checked_age_seconds(checked, now) >= LIST_PROBE_FRESH_SECONDS:
+            stale.append(asset)
+    run = probe_fn or probe_target
+    if stale:
+        jobs = [(asset, asset_as_probe_item(asset)) for asset in stale]
+        workers = max(1, min(max_workers, len(jobs)))
+
+        def _one(job: tuple[Any, dict[str, Any]]) -> tuple[Any, AssetProbe]:
+            asset, item = job
+            return asset, run(
+                item,
+                timeout=timeout,
+                ping_runner=ping_runner,
+                metrics_fetcher=metrics_fetcher,
+                snmp_prober=snmp_prober,
+            )
+
+        if workers == 1:
+            pairs = [_one(job) for job in jobs]
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                pairs = list(pool.map(_one, jobs))
+        for asset, probe in pairs:
+            apply_probe_to_asset(asset, probe)
+    return [reachability_snapshot(asset) for asset in assets]
+
+
 def hint_for(result: AssetProbe) -> str:
     if result.metrics.ok is True:
         if result.icmp.ok is False:
@@ -281,6 +450,12 @@ def hint_for(result: AssetProbe) -> str:
         return ""
     kind = result.kind
     port = result.port
+    if kind == "network":
+        return (
+            f"{result.asset_id}: ICMP {'ok' if result.icmp.ok else 'failed'}, "
+            "SNMP UDP/161 failed. snmp_exporter walks this IP after the row is "
+            "type Network device. Check community/ACL (`./forgesre snmp`)."
+        )
     if kind == "windows" or port == WINDOWS_EXPORTER_PORT:
         return (
             f"{result.asset_id}: ICMP {'ok' if result.icmp.ok else 'failed'}, "
@@ -322,6 +497,7 @@ def probe_target(
     timeout: float = DEFAULT_TIMEOUT,
     ping_runner: PingRunner | None = None,
     metrics_fetcher: MetricsFetcher | None = None,
+    snmp_prober: SnmpProber | None = None,
 ) -> AssetProbe:
     kind = asset_kind(str(item.get("type") or ""), str(item.get("monitoring_profile") or ""))
     host, port, scrape = resolve_probe(item)
@@ -330,7 +506,7 @@ def probe_target(
     probe_both = str(item.get("_probe_both") or "") == "1"
     detect_message = ""
     if kind == "network" and not scrape and not probe_both:
-        metrics = CheckResult("metrics", None, "SNMP UDP/161 — ./forgesre snmp", 0)
+        metrics = probe_snmp(host, timeout, prober=snmp_prober)
     elif probe_both and host:
         detected = detect_exporter(
             host,
@@ -465,7 +641,7 @@ def format_report(
     lines = [
         paint("ForgeSRE asset probe", BOLD, color),
         f"timeout {timeout}s per check. ICMP ping is L3 only — ForgeSRE sees a host when /metrics scrapes.",
-        "Linux node_exporter :9100/metrics. Windows windows_exporter :9182/metrics.",
+        "Linux node_exporter :9100/metrics. Windows windows_exporter :9182/metrics. Network: SNMP UDP/161.",
         "",
         f"{'ASSET':<22} {'IP':<16} {'ICMP':<6} {'METRICS'}",
         "-" * 78,

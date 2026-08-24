@@ -235,6 +235,8 @@ def test_assets_list_shows_edit_clone_remove():
     assert b">Remove<" in page.content
     assert b'name="scrape_address"' in page.content
     assert b"?edit=" in page.content
+    assert b"reach-dot" in page.content
+    assert b">Ping<" in page.content
     listed = client.get("/assets?edit=forge-demo-01")
     assert listed.status_code == 200
     assert b"Edit asset" in listed.content
@@ -424,3 +426,43 @@ def test_remove_asset_unlinks_incidents_and_drops_sd():
     api_denied = client.post("/api/v1/assets/forge-demo-01/delete")
     assert api_denied.status_code == 400
     db.close()
+
+
+def test_reachability_api_refreshes_without_blocking_list(monkeypatch):
+    from app.asset_probe import AssetProbe, CheckResult
+
+    def fake_probe(item, timeout=0.8, **kwargs):
+        ok = str(item.get("asset_id") or "") == "forge-demo-01"
+        return AssetProbe(
+            asset_id=item["asset_id"],
+            hostname=item.get("hostname") or "",
+            ip=item.get("ip") or "",
+            kind="linux",
+            type=item.get("type") or "",
+            scrape=item.get("scrape_address") or "",
+            port=9100,
+            icmp=CheckResult("icmp", ok, "reachable" if ok else "no reply"),
+            metrics=CheckResult("metrics", ok, "node_exporter :9100/metrics" if ok else "fail"),
+        )
+
+    monkeypatch.setattr("app.asset_probe.probe_target", fake_probe)
+    db = _db()
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    listed = client.get("/assets")
+    assert listed.status_code == 200
+    assert b"reach-dot ping yellow" in listed.content
+    rows = client.get("/api/v1/assets/reachability").json()
+    demo = next(item for item in rows if item["asset_id"] == "forge-demo-01")
+    assert demo["ping"] == "green"
+    assert demo["exporter"] == "green"
+    assert demo["exporter_label"] in {":9100", "exp."}
+    cached = client.get("/api/v1/assets/reachability", params={"refresh": "false"}).json()
+    demo_cached = next(item for item in cached if item["asset_id"] == "forge-demo-01")
+    assert demo_cached["ping"] == "green"
+    db.close()
+

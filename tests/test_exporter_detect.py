@@ -86,11 +86,43 @@ def test_detect_both_prefers_saved_type_then_windows():
 
 
 def test_detect_neither_does_not_assume_linux():
-    result = detect_exporter("10.44.1.80", fetcher=_fetch_map({}))
+    result = detect_exporter("10.44.1.80", fetcher=_fetch_map({}), snmp_ok=False)
     assert result.kind == ""
     assert result.scrape_address == ""
     assert "ICMP" in result.message
     assert "not a scrape" in result.message.lower() or "ICMP ping is not a scrape" in result.message
+
+
+def test_detect_snmp_marks_network_not_http_guess():
+    result = detect_exporter("10.44.1.90", fetcher=_fetch_map({}), snmp_ok=True)
+    assert result.kind == "network"
+    assert result.asset_type == "Network device"
+    assert result.scrape_address == ""
+    assert result.profile == "network-switch"
+    assert result.tie_break == "snmp-udp"
+    assert result.snmp is True
+
+
+def test_detect_does_not_snmp_override_saved_linux():
+    result = detect_exporter(
+        "10.44.1.91",
+        hint_type="Linux Server",
+        fetcher=_fetch_map({}),
+        snmp_ok=True,
+    )
+    assert result.kind == ""
+
+
+def test_windows_http_wins_over_snmp():
+    fetcher = _fetch_map(
+        {
+            "http://10.44.1.92:9182/metrics": (200, "windows_cpu_time_total 1\n"),
+            "http://10.44.1.92:9100/metrics": (None, ""),
+        }
+    )
+    result = detect_exporter("10.44.1.92", fetcher=fetcher, snmp_ok=True)
+    assert result.kind == "windows"
+    assert result.scrape_address == "10.44.1.92:9182"
 
 
 def test_auto_create_uses_windows_exporter():
@@ -128,6 +160,23 @@ def test_auto_create_neither_leaves_type_unset():
     assert asset.type == "Unknown"
     assert asset.scrape_address == ""
     assert "linux-standard" not in (asset.monitoring_profile or "")
+    db.close()
+
+
+def test_auto_create_network_from_snmp_not_http():
+    db = _db()
+    asset = create_manual_asset(
+        db,
+        hostname="auto-sw-01",
+        ip="10.44.2.91",
+        type=AUTO_ASSET_TYPE,
+        actor="tester",
+        metrics_fetcher=_fetch_map({}),
+        snmp_ok=True,
+    )
+    assert asset.type == "Network device"
+    assert asset.scrape_address == ""
+    assert asset.monitoring_profile == "network-switch"
     db.close()
 
 
@@ -174,6 +223,8 @@ def test_classify_exporter_kind_and_tcp_fallback():
     assert classify([9100, 9182], exporter_kind="windows") == "Possible Windows server"
     assert classify([9100], exporter_kind="none") == "Possible Linux server (TCP 9100, no node_exporter /metrics)"
     assert "pick OS" in classify([9100, 9182], exporter_kind="none")
+    assert classify([22], snmp_ok=True, exporter_kind="network") == "Possible network device"
+    assert classify([161], exporter_kind="network") == "Possible network device"
 
 
 def test_probe_host_uses_http_family_not_tcp_9100():
@@ -204,6 +255,24 @@ def test_probe_host_uses_http_family_not_tcp_9100():
     assert 9182 in result["open_ports"]
 
 
+def test_probe_host_snmp_only_is_network_not_http_guess():
+    import discovery as discovery_mod
+
+    orig_tcp = discovery_mod._open_tcp
+    orig_snmp = discovery_mod.probe_snmp_udp
+    discovery_mod._open_tcp = lambda ip, port, timeout: False
+    discovery_mod.probe_snmp_udp = lambda ip, timeout=0.4: True
+    try:
+        result = probe_host("10.44.3.70", metrics_fetcher=_fetch_map({}))
+    finally:
+        discovery_mod._open_tcp = orig_tcp
+        discovery_mod.probe_snmp_udp = orig_snmp
+    assert result["proposed_role"] == "Possible network device"
+    assert result["exporter_kind"] == "network"
+    assert result["snmp_ok"] is True
+    assert 161 in result["open_ports"]
+
+
 def test_approve_tcp_only_9100_does_not_scrape():
     db = _db()
     row = upsert_candidate(
@@ -228,8 +297,8 @@ def test_api_detect_and_auto_form(monkeypatch):
     from app.models import User
     from app.security import hash_password
 
-    def fake_detect(ip, hint_type="", hint_profile="", timeout=1.0, fetcher=None):
-        del hint_type, hint_profile, timeout, fetcher
+    def fake_detect(ip, hint_type="", hint_profile="", timeout=1.0, fetcher=None, **kwargs):
+        del hint_type, hint_profile, timeout, fetcher, kwargs
         return ExporterDetect(
             kind="windows",
             asset_type="Windows Server",

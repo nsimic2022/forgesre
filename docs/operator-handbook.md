@@ -266,16 +266,23 @@ What Core does:
   - `windows_exporter` / `windows_` metrics → `Windows Server`, `monitoring_profile=windows-standard`, `scrape_address=<ip>:9182`.
   - `node_exporter` / `node_` metrics (`node_uname` / `node_cpu`) → `Linux Server`, `linux-standard`, `<ip>:9100`.
   - **Both:** keep a saved Linux/Windows type if the row already has one; otherwise prefer Windows `:9182` (mis-classifying Windows as Linux was the scrape miss). Override the type if the host is actually Linux.
-  - **Neither:** type `Unknown`, empty scrape. ICMP ping is **not** a scrape — pick Linux/Windows yourself or install the exporter.
+  - **Neither HTTP family:** not guessed as Network. If SNMP UDP/161 already answered (Discovery GET, or the same probe on Add Asset Auto), type `Network device`, empty scrape, `network-switch`. ICMP miss is **not** a scrape and **not** a network fingerprint.
+  - Saved Linux/Windows is not rewritten to Network by SNMP.
 - Explicit **Linux Server** still defaults to `:9100` without a live probe. Explicit **Windows Server** still defaults to `:9182`.
 - Network devices get `network-switch`, an **empty** scrape address, and an SNMP SD target (UDP/161 via snmp_exporter).
+
+The Assets table shows **Ping** and **:9100 / :9182 / SNMP** color dots after the IP. They are last-known (or yellow until the first probe). The list page is not blocked; a background `GET /api/v1/assets/reachability` refreshes them (`./forgesre ping` / `asset_probe`).
+
+- **green** — last probe succeeded (ICMP reply, or exporter `/metrics` / SNMP GET).
+- **yellow** — not probed yet, skipped, or unknown.
+- **red** — last probe failed (no ICMP reply, exporter down, or SNMP no reply).
 - Web/appliance rows are inventory only until you set a scrape address yourself. They are **not** SNMP-scraped.
 - `source=manual`.
 - If owner email is set, new incidents notify that address (see §11).
 
 On the asset page, **Detect OS / scrape port** re-runs the same probe and fills type + scrape. You can override afterwards.
 
-API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type` (`Auto (detect exporter)` to probe), `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Detect-only: `GET /api/v1/detect-exporter?ip=`. Update: `POST /api/v1/assets/{asset_id}` (hostname, type, IP, scrape, contacts). Clone: `POST /api/v1/assets/{id}/clone`. Delete: `POST /api/v1/assets/{id}/delete`.
+API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type` (`Auto (detect exporter)` to probe), `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Detect-only: `GET /api/v1/detect-exporter?ip=`. List ping/exporter colors: `GET /api/v1/assets/reachability` (async; the HTML list is last-known). Update: `POST /api/v1/assets/{asset_id}` (hostname, type, IP, scrape, contacts). Clone: `POST /api/v1/assets/{id}/clone`. Delete: `POST /api/v1/assets/{id}/delete`.
 
 Similar-incident history on the asset page groups past incidents by alert/title (count, open count, last seen). Seed already puts a closed HighCPU on `forge-demo-01` so this is visible after install.
 

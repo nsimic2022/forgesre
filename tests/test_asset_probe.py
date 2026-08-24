@@ -146,18 +146,40 @@ def test_linux_metrics_pass():
     assert overall_exit([result]) == 0
 
 
-def test_network_device_skips_http():
+def test_network_device_probes_snmp():
     item = {
         "asset_id": "sw-01",
         "ip": "10.30.1.1",
         "type": "Network device",
         "scrape_address": "",
     }
-    result = probe_target(item, ping_runner=_ping_ok, metrics_fetcher=_metrics_map({}))
+    result = probe_target(
+        item,
+        ping_runner=_ping_ok,
+        metrics_fetcher=_metrics_map({}),
+        snmp_prober=lambda host, timeout=0.4: True,
+    )
     assert result.icmp.ok is True
-    assert result.metrics.ok is None
+    assert result.metrics.ok is True
     assert "SNMP" in result.metrics.detail
-    assert result.overall == "WARN"
+    assert result.overall == "PASS"
+
+
+def test_network_device_snmp_fail_is_red():
+    item = {
+        "asset_id": "sw-02",
+        "ip": "10.30.1.2",
+        "type": "Network device",
+        "scrape_address": "",
+    }
+    result = probe_target(
+        item,
+        ping_runner=_ping_ok,
+        metrics_fetcher=_metrics_map({}),
+        snmp_prober=lambda host, timeout=0.4: False,
+    )
+    assert result.metrics.ok is False
+    assert result.overall == "FAIL"
 
 
 def test_ad_hoc_ip_probes_both_exporter_ports():
@@ -207,3 +229,64 @@ def test_seeded_demo_windows_still_has_empty_scrape():
     win = db.query(Asset).filter_by(asset_id="forge-demo-win-01").one()
     assert win.scrape_address == ""
     db.close()
+
+
+def test_reachability_snapshot_defaults_yellow_and_labels():
+    from types import SimpleNamespace
+
+    from app.asset_probe import reachability_snapshot, refresh_reachability
+
+    linux = SimpleNamespace(
+        asset_id="lnx-01",
+        ip="10.1.1.10",
+        type="Linux Server",
+        monitoring_profile="linux-standard",
+        scrape_address="10.1.1.10:9100",
+        ping_status=None,
+        ping_detail=None,
+        exporter_status=None,
+        exporter_detail=None,
+        probe_checked_at=None,
+    )
+    snap = reachability_snapshot(linux)
+    assert snap["ping"] == "yellow"
+    assert snap["exporter"] == "yellow"
+    assert snap["exporter_label"] == ":9100"
+    switch = SimpleNamespace(
+        asset_id="sw-01",
+        ip="10.1.1.1",
+        type="Network device",
+        monitoring_profile="network-switch",
+        scrape_address="",
+        ping_status="green",
+        ping_detail="reachable",
+        exporter_status="red",
+        exporter_detail="SNMP no reply",
+        probe_checked_at=None,
+    )
+    sw = reachability_snapshot(switch)
+    assert sw["exporter_label"] == "SNMP"
+    assert sw["ping"] == "green"
+    assert sw["exporter"] == "red"
+
+    def fake_probe(item, timeout=0.8, **kwargs):
+        from app.asset_probe import AssetProbe, CheckResult
+
+        return AssetProbe(
+            asset_id=item["asset_id"],
+            hostname=item.get("hostname") or "",
+            ip=item.get("ip") or "",
+            kind="linux",
+            type=item.get("type") or "",
+            scrape=item.get("scrape_address") or "",
+            port=9100,
+            icmp=CheckResult("icmp", True, "reachable"),
+            metrics=CheckResult("metrics", False, "node_exporter :9100/metrics timeout"),
+        )
+
+    out = refresh_reachability([linux], force=True, probe_fn=fake_probe)
+    assert out[0]["ping"] == "green"
+    assert out[0]["exporter"] == "red"
+    assert linux.ping_status == "green"
+    assert linux.exporter_status == "red"
+

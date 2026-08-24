@@ -30,6 +30,20 @@ def migrate(engine: Engine) -> None:
             statements.append("ALTER TABLE assets ADD COLUMN owner_phone VARCHAR(64) DEFAULT ''")
         if "notes" not in existing:
             statements.append("ALTER TABLE assets ADD COLUMN notes TEXT DEFAULT ''")
+        if "ping_status" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN ping_status VARCHAR(16) DEFAULT 'yellow'")
+        if "ping_detail" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN ping_detail VARCHAR(255) DEFAULT ''")
+        if "exporter_status" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN exporter_status VARCHAR(16) DEFAULT 'yellow'")
+        if "exporter_detail" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN exporter_detail VARCHAR(255) DEFAULT ''")
+        if "probe_checked_at" not in existing:
+            statements.append(
+                "ALTER TABLE assets ADD COLUMN probe_checked_at TIMESTAMPTZ"
+                if engine.dialect.name == "postgresql"
+                else "ALTER TABLE assets ADD COLUMN probe_checked_at DATETIME"
+            )
     if "evidence" in tables:
         existing = {col["name"] for col in inspector.get_columns("evidence")}
         mapping = {

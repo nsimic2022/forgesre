@@ -7,6 +7,7 @@
   <code>/metrics</code> on <code>:9182</code> and <code>:9100</code> when a host is alive.
   <code>windows_</code> metrics → Windows Server <code>:9182</code>.
   <code>node_</code> metrics → Linux Server <code>:9100</code>.
+  SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics.
   TCP open without exporter text is <strong>not</strong> an OS pick (ICMP ping is not a scrape).
   Not nmap.
   New hosts wait here until an engineer Approves or Ignores them.

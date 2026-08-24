@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.db import get_db
+from app.asset_probe import reachability_snapshot
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.inventory import (
     ASSET_TYPE_CHOICES,
@@ -96,6 +97,12 @@ def incident_tone(status: str, severity: str = "") -> str:
 
 def can_send_ops(user: User) -> bool:
     return can(user, "write_play") or can(user, "write_incidents") or can(user, "admin")
+
+
+def _snmp_answer(ip: str) -> bool:
+    from discovery import probe_snmp_udp
+
+    return bool(probe_snmp_udp(ip))
 
 
 def smtp_provider_id() -> str:
@@ -362,6 +369,7 @@ def assets_page(
         type_choices=ASSET_TYPE_CHOICES,
         delete_blocked=delete_blocked,
         notice=notice,
+        reachability_snapshot=reachability_snapshot,
     )
 
 
@@ -400,6 +408,7 @@ def asset_create(
             actor=user.email,
             require_new=bool(cloned_from),
             cloned_from=cloned_from,
+            snmp_prober=_snmp_answer,
         )
     except ValueError as exc:
         if cloned_from:
@@ -534,6 +543,7 @@ def asset_update(
         notes=notes,
         scrape_address=scrape_address,
         actor=user.email,
+        snmp_prober=_snmp_answer,
     )
     notice = getattr(item, "_detect_message", "") or ""
     suffix = f"?notice={quote(notice)}" if notice else ""
@@ -551,7 +561,7 @@ def asset_detect(
     item = db.query(Asset).filter_by(asset_id=asset_id).first()
     if item is None:
         raise HTTPException(status_code=404)
-    update_asset(db, item, detect=True, actor=user.email)
+    update_asset(db, item, detect=True, actor=user.email, snmp_prober=_snmp_answer)
     notice = getattr(item, "_detect_message", "") or "No exporter detected."
     return RedirectResponse(f"/assets/{asset_id}?notice={quote(notice)}", status_code=302)
 

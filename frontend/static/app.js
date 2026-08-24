@@ -102,12 +102,16 @@ if (preset) {
   const run = () => {
     const value = (ip.value || "").trim();
     if (!value) return;
-    fetch("/api/v1/detect-exporter?ip=" + encodeURIComponent(value), { headers: { Accept: "application/json" } })
+    const current = String((type && type.value) || "");
+    const hint = current && !current.toLowerCase().startsWith("auto")
+      ? "&hint_type=" + encodeURIComponent(current)
+      : "";
+    fetch("/api/v1/detect-exporter?ip=" + encodeURIComponent(value) + hint, { headers: { Accept: "application/json" } })
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (!data) return;
         if (out) out.textContent = data.message || "";
-        if (type && String(type.value || "").toLowerCase().startsWith("auto") && data.asset_type) {
+        if (type && current.toLowerCase().startsWith("auto") && data.asset_type) {
           type.value = data.asset_type;
         }
       })
@@ -115,4 +119,31 @@ if (preset) {
   };
   ip.addEventListener("blur", run);
   ip.addEventListener("change", run);
+})();
+
+(function bindAssetReachability() {
+  const table = document.querySelector("[data-asset-reachability]");
+  if (!table) return;
+  const paint = (row) => {
+    const box = table.querySelector('[data-asset-reach="' + row.asset_id + '"]');
+    if (!box) return;
+    const ping = box.querySelector(".ping");
+    if (ping) {
+      ping.className = "reach-dot ping " + (row.ping || "yellow");
+      ping.title = "Ping: " + (row.ping_detail || "");
+    }
+    const exporter = box.querySelector(".exporter");
+    if (exporter) {
+      exporter.className = "reach-dot exporter " + (row.exporter || "yellow");
+      exporter.textContent = row.exporter_label || "exp.";
+      exporter.title = (row.exporter_label || "exporter") + ": " + (row.exporter_detail || "");
+    }
+  };
+  fetch("/api/v1/assets/reachability", { headers: { Accept: "application/json" } })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((rows) => {
+      if (!Array.isArray(rows)) return;
+      rows.forEach(paint);
+    })
+    .catch(() => {});
 })();

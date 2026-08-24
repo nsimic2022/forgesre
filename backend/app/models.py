@@ -46,6 +46,11 @@ class Asset(Base):
     source: Mapped[str] = mapped_column(String(32), default="manual")
     netbox_id: Mapped[str] = mapped_column(String(64), default="")
     scrape_address: Mapped[str] = mapped_column(String(128), default="")
+    ping_status: Mapped[str] = mapped_column(String(16), default="yellow")
+    ping_detail: Mapped[str] = mapped_column(String(255), default="")
+    exporter_status: Mapped[str] = mapped_column(String(16), default="yellow")
+    exporter_detail: Mapped[str] = mapped_column(String(255), default="")
+    probe_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     incidents: Mapped[list[Incident]] = relationship(back_populates="asset")
