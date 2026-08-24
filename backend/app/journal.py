@@ -7,12 +7,11 @@ split by module, pruned automatically so search stays small.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import JournalEntry
+from app.models import JournalEntry, utcnow
 
 log = logging.getLogger("forgesre")
 
@@ -35,10 +34,6 @@ MODULES = [
 KEEP_PER_MODULE = 200
 PRUNE_AFTER = 250
 DETAIL_MAX = 4000
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def report(

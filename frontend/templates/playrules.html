@@ -13,7 +13,7 @@
       <td>{{ rule.severity }}</td>
       <td>{{ rule.playbook.name if rule.playbook else "—" }}</td>
       <td>
-        {{ rule.enabled }}
+        {{ "On" if rule.enabled else "Off" }}
         {% if can('write_play') %}
         <form method="post" action="/playrules/{{ rule.id }}/toggle" class="inline"><button>Toggle</button></form>
         {% endif %}

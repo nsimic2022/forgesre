@@ -8,7 +8,7 @@ from app.inventory import approve_candidate, is_snmp_asset, sd_snmp_targets, ups
 from app.jobs import run_pending_jobs
 from app.main import app
 from app.metrics import demo_metric_values, set_demo_cpu
-from app.models import Asset, Playrule, User
+from app.models import Asset, Evidence, Job, Playrule, User
 from app.security import hash_password
 from app.seed import seed
 from app.services import close_open_incidents, ingest_alertmanager, next_incident_number, query_prometheus
@@ -178,9 +178,122 @@ def test_webhook_enqueues_investigation_job():
     created = ingest_alertmanager(db, payload)
     assert created
     incident = created[0]
+    jobs = db.query(Job).filter_by(kind="investigate", object_id=incident.number).all()
+    assert len(jobs) == 1
+    assert jobs[0].status == "pending"
+    assert (jobs[0].payload or {}).get("use_llm") is False
+    db.refresh(incident)
+    assert not incident.investigations
+    assert db.query(Evidence).filter_by(incident_id=incident.id).count() > 0
     run_pending_jobs(db)
     db.refresh(incident)
     assert incident.investigations
+    db.close()
+
+
+def test_webhook_evidence_collected_once(monkeypatch):
+    db = _db()
+    close_open_incidents(db, "HighCPU:forge-demo-01")
+    from app import services as svc
+
+    counts = {"prom": 0, "expr": 0, "loki": 0}
+    real_prom = svc.query_prometheus
+    real_expr = svc.query_prometheus_expr
+    real_loki = svc.query_loki
+
+    def wrap_prom(*args, **kwargs):
+        counts["prom"] += 1
+        return real_prom(*args, **kwargs)
+
+    def wrap_expr(*args, **kwargs):
+        counts["expr"] += 1
+        return real_expr(*args, **kwargs)
+
+    def wrap_loki(*args, **kwargs):
+        counts["loki"] += 1
+        return real_loki(*args, **kwargs)
+
+    monkeypatch.setattr(svc, "query_prometheus", wrap_prom)
+    monkeypatch.setattr(svc, "query_prometheus_expr", wrap_expr)
+    monkeypatch.setattr(svc, "query_loki", wrap_loki)
+
+    payload = {
+        "status": "firing",
+        "alerts": [
+            {
+                "status": "firing",
+                "labels": {"alertname": "HighCPU", "severity": "warning", "asset": "forge-demo-01"},
+                "annotations": {"summary": "High CPU"},
+            }
+        ],
+    }
+    created = ingest_alertmanager(db, payload)
+    assert created
+    incident = created[0]
+    after_ingest = dict(counts)
+    assert after_ingest["prom"] == 1
+    evidence_n = db.query(Evidence).filter_by(incident_id=incident.id).count()
+    assert evidence_n > 0
+
+    ingest_alertmanager(db, payload)
+    assert counts == after_ingest
+    assert db.query(Evidence).filter_by(incident_id=incident.id).count() == evidence_n
+
+    run_pending_jobs(db)
+    assert counts == after_ingest
+    assert db.query(Evidence).filter_by(incident_id=incident.id).count() == evidence_n
+    db.refresh(incident)
+    assert incident.investigations
+    db.close()
+
+
+def test_core_image_requirements_omit_pytest():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    runtime = (root / "backend" / "requirements.txt").read_text()
+    dev = (root / "requirements-dev.txt").read_text()
+    dockerfile = (root / "backend" / "Dockerfile").read_text()
+    assert "pytest" not in runtime
+    assert "pytest" in dev
+    assert "requirements.txt" in dockerfile
+    assert "requirements-dev" not in dockerfile
+
+
+def test_ops_console_on_off_nav_and_ai_anchor():
+    db = _db()
+    client = TestClient(app)
+    client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
+    playrules = client.get("/playrules")
+    assert playrules.status_code == 200
+    assert "On" in playrules.text
+    assert "class=\"active\"" in playrules.text
+    assert ">True<" not in playrules.text and ">False<" not in playrules.text
+    assert 'class="secondary"' in client.get("/").text
+    admin = client.get("/admin")
+    assert admin.status_code == 200
+    assert "class=\"active\"" in admin.text
+    discovery = client.get("/discovery")
+    assert discovery.status_code == 200
+    assert "Enabled:" in discovery.text
+    assert ">True<" not in discovery.text and ">False<" not in discovery.text
+    close_open_incidents(db, "HighCPU:forge-demo-01")
+    created = ingest_alertmanager(
+        db,
+        {
+            "status": "firing",
+            "alerts": [
+                {
+                    "status": "firing",
+                    "labels": {"alertname": "HighCPU", "severity": "warning", "asset": "forge-demo-01"},
+                    "annotations": {"summary": "High CPU"},
+                }
+            ],
+        },
+    )
+    page = client.get(f"/incidents/{created[0].number}")
+    assert page.status_code == 200
+    assert 'id="ai"' in page.text
     db.close()
 
 

@@ -3,18 +3,13 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.journal import report
-from app.models import Incident, Job
+from app.models import Incident, Job, utcnow
 
 log = logging.getLogger("forgesre")
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def enqueue(db: Session, kind: str, object_id: str, object_type: str = "incident", payload: dict | None = None) -> Job | None:

@@ -53,7 +53,7 @@ These are the choices that keep the service count down.
 | ADR-1 | **One ForgeSRE process** serves HTTP API, embeds the UI, and runs workers | Avoids a separate UI container, a separate worker container, and a message broker |
 | ADR-2 | **Python 3.12 + FastAPI for Core; Bash for install/doctor/backup** (V0.1) | Operator must be able to read and debug the code. Host still only needs Docker/Compose/Bash/Git; Python stays in the image |
 | ADR-3 | **Jinja2 + small vanilla JS**, served by Core | Avoid a Node toolchain; pages stay simple and server-rendered |
-| ADR-4 | **PostgreSQL is the only ForgeSRE datastore** | Users, assets cache, incidents, playrules, jobs, audit. Job queue = `FOR UPDATE SKIP LOCKED` |
+| ADR-4 | **PostgreSQL is the only ForgeSRE datastore** | Users, assets cache, incidents, playrules, jobs, audit. Job queue is a Postgres `jobs` table; claim is pending-then-running (`.filter_by(status="pending").first()`), not `FOR UPDATE SKIP LOCKED` |
 | ADR-5 | **No Redis for ForgeSRE** | Redis exists only if bundled NetBox is enabled, because NetBox requires it |
 | ADR-6 | **Grafana Alloy is the unified collector** (longer-term) | Replaces Promtail; SNMP/blackbox unification is later. **V0.5 ships standalone `snmp_exporter`** on `:9116` |
 | ADR-7 | **Caddy is the only published entrypoint** | One URL, TLS, routing to Core / Grafana / NetBox. Users do not manage eight ports |

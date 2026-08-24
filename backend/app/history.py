@@ -5,23 +5,19 @@ Reads existing Postgres tables. Does not replace Incidents / Escalation / Journa
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import exists, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.audit import audit
-from app.models import Asset, AuditLog, Incident, IncidentNote, Notification
+from app.models import Asset, AuditLog, Incident, IncidentNote, Notification, utcnow
 
 DEFAULT_DAYS = 90
 MAX_DAYS = 3660
 LIST_LIMIT = 200
 NOTE_MAX = 4000
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def clamp_days(raw: Any, default: int = DEFAULT_DAYS) -> int:

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
-from app.models import Asset, EscalationPolicy, Incident, Playbook, Playrule, User
+from app.models import Asset, EscalationPolicy, Incident, Playbook, Playrule, User, utcnow
 from app.security import hash_password
 from app.settings import settings
 
@@ -46,10 +46,6 @@ NETWORK_STEPS = [
     {"id": "notify", "title": "Notify responsible engineer"},
     {"id": "escalate", "title": "Escalate if not acknowledged"},
 ]
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def ensure_demo_asset(db: Session) -> Asset:

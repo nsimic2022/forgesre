@@ -1,0 +1,3 @@
+# Laptop / CI unit tests. The Core Docker image installs backend/requirements.txt only.
+-r backend/requirements.txt
+pytest>=8.3.3
