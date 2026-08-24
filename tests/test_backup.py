@@ -709,15 +709,15 @@ def test_admin_remove_backup_is_admin_only(tmp_path, monkeypatch):
     assert traversal.status_code == 404
     db.add(
         User(
-            email="ana@dc.local",
-            name="Ana",
+            email="ana-remove@dc.local",
+            name="Ana Remove",
             password_hash=hash_password("ana-pass"),
             role="analyst",
         )
     )
     db.commit()
     analyst = TestClient(app)
-    analyst.post("/login", data={"email": "ana@dc.local", "password": "ana-pass"}, follow_redirects=False)
+    analyst.post("/login", data={"email": "ana-remove@dc.local", "password": "ana-pass"}, follow_redirects=False)
     denied = analyst.post("/admin/backups/remove", data={"name": name}, follow_redirects=False)
     assert denied.status_code == 403
     removed = client.post("/admin/backups/remove", data={"name": name}, follow_redirects=False)
