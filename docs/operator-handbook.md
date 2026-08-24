@@ -123,8 +123,8 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 | Menu | URL | What you do there |
 |---|---|---|
 | Dashboard | `/` | Counts, doctor lights, pending discovery banner (analyst+), **Run demo** (admin, top right — Linux / Windows / network lab scenarios), recent journal reports (analyst+) |
-| Assets | `/assets` | List inventory. **Add asset** form (analyst+) |
-| Asset detail | `/assets/<id>` | Contacts, scrape address, edit owner after Save, similar-incident history |
+| Assets | `/assets` | List inventory. **Add / Edit / Clone / Remove** (analyst+). Click Edit to reuse the Add form. |
+| Asset detail | `/assets/<id>` | Contacts, scrape, similar-incident history. Edit / Clone / Remove / Detect (analyst+) |
 | Discovery | `/discovery` | Scan, Approve / Ignore (analyst+), optional NetBox sync (admin) |
 | Incidents | `/incidents` | Recent 200 Alertmanager incidents. INC id is green (resolved/closed), yellow (in progress), red (critical). **Reported to** is who received the incident report |
 | History | `/history` | Last 90 days in Postgres. Filters: status, asset, `INC` number. Closed rows stay here. |
@@ -210,12 +210,18 @@ NetBox is optional and not bundled.
 Who: **analyst**, engineer, or admin (`write_assets`).
 
 1. **Assets** → **Add asset**.
-2. Hostname (required), IP, type (**Auto (detect exporter)** is the default — or `Linux Server` / `Windows Server` / `Network device` / `Web/appliance`), environment, owner/team, **contact name, owner email, owner phone**, notes.
-3. **Save**. You land on the asset page (a banner explains what detect found). You can **edit owner and contacts** there later without recreating the host.
+2. Hostname (required), IP, type (**Auto (detect exporter)** is the default — or `Linux Server` / `Windows Server` / `Network device` / `Web/appliance`), environment, owner/team, **contact name, owner email, owner phone**, optional **scrape address** (`ip:9100` or `ip:9182`), notes. No extra ticketing / Zabbix / IMAP fields — those are not used.
+3. **Save**. You land on the asset page (a banner explains what detect found).
+
+**Edit / Clone / Remove** are on the list (and the asset page). Same permission as Add (`write_assets`: analyst, engineer, admin). Viewers only read.
+
+- **Edit** opens the same Add form filled in (`/assets?edit=<id>`). Hostname, type (including Auto), IP, scrape address, owner/contact, notes, environment. `asset_id` stays (Prometheus `asset=` label and history). HTTP SD is live from this table — the next Prometheus scrape drops or rewrites the target. Core’s static demo job is not this list.
+- **Clone** copies into the same form with a **new** hostname/id. Tweak before Save. Duplicate hostname or IP is rejected. NetBox id is not copied. If the source is `forge-demo-*`, the suggested name is `copy-…` (a real asset that **can** be scraped). Keep a `forge-demo-*` name only if you want another lab-only row.
+- **Remove** asks for confirm. The row leaves inventory and HTTP/SNMP SD. **Incidents stay** in History with the asset link cleared (not cascade-deleted). Discovery candidates for that IP go back to **new**. Seeded `forge-demo-*` hosts cannot be removed (Dashboard demos use them).
 
 What Core does:
 
-- `asset_id` is a slug from the hostname (`app-01` → `app-01`). Hostname/`asset_id` do not change on edit.
+- `asset_id` is a slug from the hostname at **create** (`app-01` → `app-01`). Edit can rename the hostname; `asset_id` does not change.
 - **Auto (default):** Core GETs `http://<ip>:9182/metrics` and `http://<ip>:9100/metrics` (short timeout) from this appliance.
   - `windows_exporter` / `windows_` metrics → `Windows Server`, `monitoring_profile=windows-standard`, `scrape_address=<ip>:9182`.
   - `node_exporter` / `node_` metrics (`node_uname` / `node_cpu`) → `Linux Server`, `linux-standard`, `<ip>:9100`.
@@ -229,7 +235,7 @@ What Core does:
 
 On the asset page, **Detect OS / scrape port** re-runs the same probe and fills type + scrape. You can override afterwards.
 
-API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type` (`Auto (detect exporter)` to probe), `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Detect-only: `GET /api/v1/detect-exporter?ip=`. Update: `POST /api/v1/assets/{asset_id}`.
+API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type` (`Auto (detect exporter)` to probe), `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Detect-only: `GET /api/v1/detect-exporter?ip=`. Update: `POST /api/v1/assets/{asset_id}` (hostname, type, IP, scrape, contacts). Clone: `POST /api/v1/assets/{id}/clone`. Delete: `POST /api/v1/assets/{id}/delete`.
 
 Similar-incident history on the asset page groups past incidents by alert/title (count, open count, last seen). Seed already puts a closed HighCPU on `forge-demo-01` so this is visible after install.
 
@@ -788,7 +794,9 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 | POST | `/api/v1/users/{id}` | admin (edit; omit password to keep it) |
 | POST | `/api/v1/users/{id}/delete` | admin (cannot delete self or super_admin) |
 | POST | `/api/v1/assets` | analyst+ |
-| POST | `/api/v1/assets/{id}` | analyst+ (edit contacts/owner) |
+| POST | `/api/v1/assets/{id}` | analyst+ (edit hostname/type/IP/scrape/contacts) |
+| POST | `/api/v1/assets/{id}/clone` | analyst+ |
+| POST | `/api/v1/assets/{id}/delete` | analyst+ (not `forge-demo-*`; incidents stay, FK cleared) |
 | GET | `/api/v1/detect-exporter` | analyst+ (`?ip=` — :9182 then :9100 /metrics) |
 | GET | `/api/v1/assets` | viewer+ |
 | POST | `/api/v1/discovery/scan` | analyst+ |
@@ -822,7 +830,7 @@ Say this out loud so lab expectations stay honest:
 
 - No Kubernetes, no APM, no tracing, no auto-remediation.
 - Playbooks are checklists, not executed runbooks.
-- No UI to delete assets or create escalation policies. Asset **owner/contacts** can be edited after Save. Users can be edited and removed on Administration (not the install super admin, not yourself).
+- No UI to create escalation policies. Assets can be added, edited, cloned, and removed (analyst+). Seeded `forge-demo-*` rows cannot be removed. Users can be edited and removed on Administration (not the install super admin, not yourself).
 - Example YAML in `config/examples/` is not applied automatically.
 - Bundled alert rules include demo gauges, SNMP `up` / interface-down, a small `node_exporter` set (down / disk 90% / CPU 95%), and a small `windows_exporter` set (down / volume 90% / CPU 90%). Extra rules go in `alerts.local.yml`.
 - Discovery is TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, 256 hosts max. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.

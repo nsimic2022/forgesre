@@ -207,3 +207,220 @@ def test_role_labels_mention_analyst_inventory():
     analyst = SimpleNamespace(role="analyst")
     assert can(analyst, "write_assets")
     assert role_label("analyst") == "Analyst"
+
+
+
+def test_assets_list_shows_edit_clone_remove():
+    db = _db()
+    db.add(
+        User(
+            email="ana-inv@forgesre.local",
+            name="Ana",
+            password_hash=hash_password("testpass"),
+            role="analyst",
+        )
+    )
+    db.commit()
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "ana-inv@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    page = client.get("/assets")
+    assert page.status_code == 200
+    assert b"Add asset" in page.content
+    assert b">Edit<" in page.content
+    assert b">Clone<" in page.content
+    assert b">Remove<" in page.content
+    assert b'name="scrape_address"' in page.content
+    assert b"?edit=" in page.content
+    listed = client.get("/assets?edit=forge-demo-01")
+    assert listed.status_code == 200
+    assert b"Edit asset" in listed.content
+    assert b'name="hostname"' in listed.content
+    clone_page = client.get("/assets?clone=forge-demo-01")
+    assert clone_page.status_code == 200
+    assert b"Clone asset" in clone_page.content
+    assert b"copy-01" in clone_page.content
+    assert b"forge-demo-" in clone_page.content
+    db.close()
+
+
+def test_viewer_cannot_see_asset_write_actions():
+    db = _db()
+    db.add(
+        User(
+            email="view-inv@forgesre.local",
+            name="View",
+            password_hash=hash_password("testpass"),
+            role="viewer",
+        )
+    )
+    db.commit()
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "view-inv@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    page = client.get("/assets")
+    assert b"Add asset" not in page.content
+    assert b">Remove<" not in page.content
+    blocked = client.post("/assets/forge-demo-01/delete", follow_redirects=False)
+    assert blocked.status_code == 403
+    db.close()
+
+
+def test_edit_hostname_and_scrape_rewrites_http_sd():
+    from app.inventory import create_manual_asset, sd_targets
+    from app.seed import DEMO_ASSET
+
+    db = _db()
+    host = create_manual_asset(
+        db,
+        hostname="sd-edit-01",
+        ip="10.55.8.10",
+        type="Linux Server",
+        actor="tester",
+    )
+    assert host.scrape_address == "10.55.8.10:9100"
+    assert any("10.55.8.10:9100" in item["targets"][0] for item in sd_targets(db))
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    edited = client.post(
+        "/assets/sd-edit-01/update",
+        data={
+            "hostname": "sd-edit-renamed",
+            "ip": "10.55.8.11",
+            "type": "Windows Server",
+            "environment": "Production",
+            "owner": "platform",
+            "contact_name": "",
+            "owner_email": "",
+            "owner_phone": "",
+            "notes": "",
+            "scrape_address": "10.55.8.11:9182",
+        },
+        follow_redirects=False,
+    )
+    assert edited.status_code in {302, 303}
+    db.expire_all()
+    row = db.query(Asset).filter_by(asset_id="sd-edit-01").one()
+    assert row.hostname == "sd-edit-renamed"
+    assert row.asset_id == "sd-edit-01"
+    assert row.type == "Windows Server"
+    assert row.scrape_address == "10.55.8.11:9182"
+    targets = sd_targets(db)
+    assert any(item["labels"]["asset"] == "sd-edit-01" and item["targets"] == ["10.55.8.11:9182"] for item in targets)
+    assert not any("10.55.8.10:9100" in item["targets"][0] for item in targets)
+    assert not any(item["labels"]["asset"] == DEMO_ASSET for item in targets)
+    db.close()
+
+
+def test_clone_demo_becomes_real_scrape_target():
+    from app.inventory import sd_targets
+    from app.seed import DEMO_ASSET, is_demo_asset_id
+
+    db = _db()
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    cloned = client.post(
+        "/api/v1/assets/forge-demo-01/clone",
+        json={"hostname": "copy-lab-01", "ip": "10.55.8.40", "type": "Linux Server"},
+    )
+    assert cloned.status_code == 200, cloned.text
+    body = cloned.json()
+    assert body["asset_id"] == "copy-lab-01"
+    assert body["hostname"] == "copy-lab-01"
+    assert not is_demo_asset_id(body["asset_id"])
+    assert body["asset_id"] != DEMO_ASSET
+    assert body["scrape_address"]
+    targets = sd_targets(db)
+    assert any(item["labels"]["asset"] == "copy-lab-01" for item in targets)
+    assert not any(item["labels"]["asset"] == DEMO_ASSET for item in targets)
+    db.close()
+
+
+def test_clone_keeping_demo_name_stays_out_of_http_sd():
+    from app.inventory import create_manual_asset, sd_targets, suggest_clone_hostname
+    from app.seed import is_demo_asset_id
+
+    db = _db()
+    source = db.query(Asset).filter_by(asset_id="forge-demo-01").one()
+    suggested = suggest_clone_hostname(db, source)
+    assert suggested.startswith("copy-")
+    assert not is_demo_asset_id(suggested)
+    lying = create_manual_asset(
+        db,
+        hostname="forge-demo-clone-x",
+        ip="10.55.8.41",
+        type="Linux Server",
+        scrape_address="10.55.8.41:9100",
+        actor="tester",
+        require_new=True,
+        cloned_from="forge-demo-01",
+    )
+    assert is_demo_asset_id(lying.asset_id)
+    assert not any(item["labels"]["asset"] == lying.asset_id for item in sd_targets(db))
+    db.close()
+
+
+def test_remove_asset_unlinks_incidents_and_drops_sd():
+    from app.inventory import create_manual_asset, sd_targets
+    from app.models import Incident
+    from app.services import ingest_alertmanager
+
+    db = _db()
+    host = create_manual_asset(
+        db,
+        hostname="gone-host-01",
+        ip="10.55.8.50",
+        type="Linux Server",
+        actor="tester",
+    )
+    created = ingest_alertmanager(
+        db,
+        {
+            "status": "firing",
+            "alerts": [
+                {
+                    "status": "firing",
+                    "labels": {"alertname": "HighCPU", "severity": "warning", "asset": host.asset_id},
+                    "annotations": {"summary": "High CPU", "description": "CPU 94%"},
+                    "fingerprint": "test-delete-asset",
+                }
+            ],
+        },
+    )
+    assert created
+    incident_number = created[0].number
+    assert any(item["labels"]["asset"] == "gone-host-01" for item in sd_targets(db))
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    removed = client.post("/assets/gone-host-01/delete", follow_redirects=False)
+    assert removed.status_code in {302, 303}
+    db.expire_all()
+    assert db.query(Asset).filter_by(asset_id="gone-host-01").first() is None
+    assert not any(item["labels"]["asset"] == "gone-host-01" for item in sd_targets(db))
+    inc = db.query(Incident).filter_by(number=incident_number).one()
+    assert inc.asset_id is None
+    assert inc.title
+    demo = client.post("/assets/forge-demo-01/delete", follow_redirects=False)
+    assert demo.status_code in {302, 303, 400}
+    assert db.query(Asset).filter_by(asset_id="forge-demo-01").one()
+    api_denied = client.post("/api/v1/assets/forge-demo-01/delete")
+    assert api_denied.status_code == 400
+    db.close()

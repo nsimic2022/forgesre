@@ -30,6 +30,9 @@ from app.history import (
 from app.security import can, user_from_session, verify_password
 from app.inventory import (
     approve_candidate,
+    clone_prefill,
+    create_manual_asset,
+    delete_asset,
     ignore_candidate,
     is_snmp_asset,
     run_scan,
@@ -481,6 +484,20 @@ class AssetBody(BaseModel):
 
 
 class AssetUpdateBody(BaseModel):
+    hostname: str | None = None
+    ip: str | None = None
+    type: str | None = None
+    environment: str | None = None
+    owner: str | None = None
+    contact_name: str | None = None
+    owner_email: str | None = None
+    owner_phone: str | None = None
+    notes: str | None = None
+    scrape_address: str | None = None
+
+
+class AssetCloneBody(BaseModel):
+    hostname: str | None = None
     ip: str | None = None
     type: str | None = None
     environment: str | None = None
@@ -534,6 +551,7 @@ def update_asset_api(
     asset = update_asset(
         db,
         item,
+        hostname=body.hostname,
         ip=body.ip,
         type=body.type,
         environment=body.environment,
@@ -546,6 +564,54 @@ def update_asset_api(
         actor=user.email,
     )
     return _asset(asset)
+
+
+@router.post("/assets/{asset_id}/clone")
+def clone_asset_api(
+    asset_id: str,
+    body: AssetCloneBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_assets")),
+) -> dict:
+    item = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    defaults = clone_prefill(db, item)
+    try:
+        asset = create_manual_asset(
+            db,
+            hostname=(body.hostname or "").strip() or defaults["hostname"],
+            ip=body.ip if body.ip is not None else "",
+            type=(body.type or "").strip() or defaults["type"],
+            environment=(body.environment or "").strip() or defaults["environment"],
+            owner=body.owner if body.owner is not None else defaults["owner"],
+            contact_name=body.contact_name if body.contact_name is not None else defaults["contact_name"],
+            owner_email=body.owner_email if body.owner_email is not None else defaults["owner_email"],
+            owner_phone=body.owner_phone if body.owner_phone is not None else defaults["owner_phone"],
+            notes=body.notes if body.notes is not None else defaults["notes"],
+            scrape_address=body.scrape_address if body.scrape_address is not None else defaults["scrape_address"],
+            actor=user.email,
+            require_new=True,
+            cloned_from=item.asset_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _asset(asset)
+
+
+@router.post("/assets/{asset_id}/delete")
+def delete_asset_api(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_assets")),
+) -> dict:
+    item = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    try:
+        return delete_asset(db, item, actor=user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/detect-exporter")
