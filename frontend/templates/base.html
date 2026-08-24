@@ -1,13 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}ForgeSRE{% endblock %}</title>
+  <script>
+    (function () {
+      var key = "forgesre-theme";
+      var allowed = { light: 1, dark: 1, "high-contrast": 1 };
+      var theme = "light";
+      try { theme = localStorage.getItem(key) || "light"; } catch (e) {}
+      if (!allowed[theme]) theme = "light";
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
   <link rel="stylesheet" href="/static/app.css">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
+  {% macro theme_toggle() -%}
+  <button type="button" class="secondary theme-toggle" data-theme-toggle aria-label="Theme">
+    <span class="theme-label theme-label-light">Light</span>
+    <span class="theme-label theme-label-dark">Dark</span>
+    <span class="theme-label theme-label-contrast">Contrast</span>
+  </button>
+  {%- endmacro %}
   {% if user %}
   <aside class="nav">
     <div class="brand">ForgeSRE <span>v0.7</span></div>
@@ -28,8 +45,14 @@
     <a href="/ops" class="{% if request.url.path.startswith('/ops') %}active{% endif %}">Email &amp; reports</a>
     {% if can('admin') %}<a href="/admin" class="{% if request.url.path.startswith('/admin') %}active{% endif %}">Administration</a>{% endif %}
     <div class="nav-foot">
-      <div class="who">{{ user.name }} · {{ role_label(user.role) }}</div>
-      <form method="post" action="/logout"><button type="submit" class="secondary">Logout</button></form>
+      <div class="who">
+        <span class="who-name">{{ user.name }}</span>
+        <span class="who-role">{{ role_label(user.role) }}</span>
+      </div>
+      <div class="nav-foot-actions">
+        {{ theme_toggle() }}
+        <form method="post" action="/logout"><button type="submit" class="secondary">Logout</button></form>
+      </div>
     </div>
   </aside>
   <main class="content">
@@ -37,7 +60,10 @@
   </main>
   {% else %}
   <main class="login-wrap">
-    {% block login %}{% endblock %}
+    <div class="login-stack">
+      {% block login %}{% endblock %}
+      <div class="login-theme">{{ theme_toggle() }}</div>
+    </div>
   </main>
   {% endif %}
   <script src="/static/app.js"></script>

@@ -200,4 +200,4 @@ def test_role_labels_mention_analyst_inventory():
 
     analyst = SimpleNamespace(role="analyst")
     assert can(analyst, "write_assets")
-    assert "inventory" in role_label("analyst").lower()
+    assert role_label("analyst") == "Analyst"

@@ -11,10 +11,11 @@ ROLES = ["super_admin", "admin", "engineer", "analyst", "viewer"]
 CREATABLE_ROLES = ["analyst", "engineer", "admin", "viewer"]
 
 ROLE_LABELS = {
-    "super_admin": "Super admin (system)",
+    "super_admin": "Super admin",
     "admin": "System admin",
-    "analyst": "Analyst (incidents, inventory, playrules, playbooks)",
-    "engineer": "Engineer (detailed RCA)",
+    "system_admin": "System admin",
+    "analyst": "Analyst",
+    "engineer": "Engineer",
     "viewer": "Viewer",
 }
 
@@ -113,7 +114,10 @@ def user_from_session(db: Session, token: str | None) -> User | None:
 
 
 def role_label(role: str) -> str:
-    return ROLE_LABELS.get(role, role)
+    if role in ROLE_LABELS:
+        return ROLE_LABELS[role]
+    pretty = (role or "").replace("_", " ").strip()
+    return pretty.title() if pretty else "Unknown"
 
 
 def can(user: User | None, permission: str) -> bool:
