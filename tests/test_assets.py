@@ -90,6 +90,7 @@ def test_analyst_can_create_and_edit_asset_contacts():
     assert b"payments@dc.local" in page.content
     form = client.get("/assets")
     assert b"Windows Server" in form.content
+    assert b"Auto (detect exporter)" in form.content
     assert b"+381-11-555-0101" in page.content
     assert b"Milan" in page.content
 

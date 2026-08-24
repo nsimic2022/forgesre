@@ -40,6 +40,7 @@ from app.inventory import (
     sync_netbox,
     update_asset,
 )
+from app.exporter_detect import detect_exporter
 from app.seed import seed
 from app.services import ingest_alertmanager, is_demo_incident, run_demo, run_demo_host, run_demo_network, run_demo_nodecpu, run_demo_rca, run_demo_windows
 from app.settings import settings
@@ -545,6 +546,16 @@ def update_asset_api(
         actor=user.email,
     )
     return _asset(asset)
+
+
+@router.get("/detect-exporter")
+def detect_exporter_api(
+    ip: str = "",
+    hint_type: str = "",
+    user: User = Depends(require("write_assets")),
+) -> dict[str, Any]:
+    del user
+    return detect_exporter(ip, hint_type=hint_type).as_dict()
 
 
 @router.post("/webhooks/alertmanager")

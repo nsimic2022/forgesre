@@ -208,20 +208,26 @@ NetBox is optional and not bundled.
 Who: **analyst**, engineer, or admin (`write_assets`).
 
 1. **Assets** → **Add asset**.
-2. Hostname (required), IP, type (`Linux Server` / `Windows Server` / `Network device` / `Web/appliance`), environment, owner/team, **contact name, owner email, owner phone**, notes.
-3. **Save**. You land on the asset page. You can **edit owner and contacts** there later without recreating the host.
+2. Hostname (required), IP, type (**Auto (detect exporter)** is the default — or `Linux Server` / `Windows Server` / `Network device` / `Web/appliance`), environment, owner/team, **contact name, owner email, owner phone**, notes.
+3. **Save**. You land on the asset page (a banner explains what detect found). You can **edit owner and contacts** there later without recreating the host.
 
 What Core does:
 
 - `asset_id` is a slug from the hostname (`app-01` → `app-01`). Hostname/`asset_id` do not change on edit.
-- Linux-like types get `monitoring_profile=linux-standard` and `scrape_address=<ip>:9100` when an IP is set.
-- Windows Server gets `monitoring_profile=windows-standard` and `scrape_address=<ip>:9182` when an IP is set.
+- **Auto (default):** Core GETs `http://<ip>:9182/metrics` and `http://<ip>:9100/metrics` (short timeout) from this appliance.
+  - `windows_exporter` / `windows_` metrics → `Windows Server`, `monitoring_profile=windows-standard`, `scrape_address=<ip>:9182`.
+  - `node_exporter` / `node_` metrics (`node_uname` / `node_cpu`) → `Linux Server`, `linux-standard`, `<ip>:9100`.
+  - **Both:** keep a saved Linux/Windows type if the row already has one; otherwise prefer Windows `:9182` (mis-classifying Windows as Linux was the scrape miss). Override the type if the host is actually Linux.
+  - **Neither:** type `Unknown`, empty scrape. ICMP ping is **not** a scrape — pick Linux/Windows yourself or install the exporter.
+- Explicit **Linux Server** still defaults to `:9100` without a live probe. Explicit **Windows Server** still defaults to `:9182`.
 - Network devices get `network-switch`, an **empty** scrape address, and an SNMP SD target (UDP/161 via snmp_exporter).
 - Web/appliance rows are inventory only until you set a scrape address yourself. They are **not** SNMP-scraped.
 - `source=manual`.
 - If owner email is set, new incidents notify that address (see §11).
 
-API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type`, `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Update: `POST /api/v1/assets/{asset_id}`.
+On the asset page, **Detect OS / scrape port** re-runs the same probe and fills type + scrape. You can override afterwards.
+
+API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type` (`Auto (detect exporter)` to probe), `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Detect-only: `GET /api/v1/detect-exporter?ip=`. Update: `POST /api/v1/assets/{asset_id}`.
 
 Similar-incident history on the asset page groups past incidents by alert/title (count, open count, last seen). Seed already puts a closed HighCPU on `forge-demo-01` so this is visible after install.
 
@@ -243,15 +249,19 @@ discovery:
 4. Banner **NEW DEVICE DETECTED** on the dashboard until you decide.
 5. **Approve** → creates an asset (`source=discovery`, id like `disc-10-20-30-41`) and sends you to the asset page. **Ignore** leaves it out of inventory.
 
-Probe is **not nmap**. It tries TCP **22, 80, 443, 9100, 9182** and an SNMPv2c GET on **UDP/161** (TCP/161 is skipped — that is not SNMP):
+Probe is **not nmap**. It tries TCP **22, 80, 443, 9100, 9182** and an SNMPv2c GET on **UDP/161** (TCP/161 is skipped — that is not SNMP). When a host is alive, Core also GETs `/metrics` on **:9182** and **:9100** (same detect as Add Asset):
 
-| Open ports / SNMP | Proposed role | After Approve |
+| Probe | Proposed role | After Approve |
 |---|---|---|
-| 9100 | Possible Linux server | `scrape_address=<ip>:9100` (node_exporter) |
-| 9182 | Possible Windows server | `scrape_address=<ip>:9182` (windows_exporter) |
+| `:9182/metrics` has `windows_` | Possible Windows server | `scrape_address=<ip>:9182` (windows_exporter) |
+| `:9100/metrics` has `node_` | Possible Linux server | `scrape_address=<ip>:9100` (node_exporter) |
+| Both exporters | Prefer saved type; else Windows `:9182` | matching scrape |
+| TCP 9100/9182 open, no exporter text | Caveat in the role (`no … /metrics`) | inventory; **no** scrape until /metrics works |
 | UDP/161 SNMP GET succeeds (even if SSH is open) | Possible network device | SNMP UDP/161 (no HTTP exporter scrape) |
-| 22 only | Possible Linux server | inventory only — **no** `:9100` until 9100 is open or you set scrape by hand |
+| 22 only | Possible Linux server | inventory only — **no** `:9100` until node_exporter answers |
 | 80 or 443 | Possible web/appliance | inventory only |
+
+TCP open on 9100 or 9182 is **not** an OS pick. ICMP ping is not used for OS.
 
 `mode: automatic` still writes an audit row (`actor=system-automatic`) then approves. Prefer semi-automatic in production.
 
@@ -322,7 +332,7 @@ ICMP ping from the appliance only proves L3. ForgeSRE "seeing" the host needs th
 | FAIL | FAIL | Wrong IP or the host is down. |
 | PASS | PASS | windows_exporter answers. Wait ~30s, then `./forgesre sd`. |
 
-If you added the host as `Linux Server`, it will be scraped on `:9100` looking for node_exporter — that will not see windows_exporter. Edit type to **Windows Server** and scrape address to `<ip>:9182`.
+If you added the host as `Linux Server`, it will be scraped on `:9100` looking for node_exporter — that will not see windows_exporter. Open the asset → **Detect OS / scrape port** (or set type to **Windows Server** and scrape address to `<ip>:9182`). Detect does not rewrite custom scrape addresses unless you click it or save type **Auto**.
 
 `node_exporter` on Windows (WSL / Cygwin) is rare. If you really run it, add the host as `Linux Server` or set scrape to `<ip>:9100` by hand.
 
@@ -605,7 +615,7 @@ Lab: `./forgesre demo-rca` raises filesystem usage on the **demo gauge** (does n
 Goal: host `app-01` at `10.10.10.50` appears under Assets and is scraped on `:9100`.
 
 1. On `app-01`, run node_exporter listening on `0.0.0.0:9100` (or at least on the management NIC). From the ForgeSRE VM: `./forgesre ping app-01` (or `curl -fsS http://10.10.10.50:9100/metrics | head`). ICMP ping alone is not a scrape.
-2. Sign in as analyst/engineer/admin. **Assets** → hostname `app-01`, IP `10.10.10.50`, type `Linux Server`, owner email/phone of who to call → **Save**.
+2. Sign in as analyst/engineer/admin. **Assets** → hostname `app-01`, IP `10.10.10.50`, leave type **Auto (detect exporter)** (or pick `Linux Server`), owner email/phone of who to call → **Save**.
 3. Asset page should show scrape address `10.10.10.50:9100` and the contacts. Edit them later if the owner changes.
 4. Wait up to 30s, then check SD JSON (command in §7) contains that target.
 5. On the VM: open Grafana (`:3000`) or Prometheus UI (`http://127.0.0.1:9090` from the host) and query `{asset="app-01"}` or `up{instance="10.10.10.50:9100"}`.
@@ -630,7 +640,7 @@ curl -sS -m 5 http://10.10.10.60:9182/metrics | head
 
 ICMP PASS is L3 only. METRICS PASS (or curl printing `# HELP` / `windows_`) is the scrape. ICMP PASS / METRICS FAIL → exporter not running, firewall **TCP 9182**, or the row is still type Linux Server (`:9100`).
 
-3. Sign in as analyst/engineer/admin. **Assets** → hostname `win-01`, IP `10.10.10.60`, type **Windows Server**, owner email/phone → **Save**.
+3. Sign in as analyst/engineer/admin. **Assets** → hostname `win-01`, IP `10.10.10.60`, leave type **Auto (detect exporter)** (or pick **Windows Server**), owner email/phone → **Save**. Detect should set Windows Server and `:9182`. If the host was already saved as Linux, open it and click **Detect OS / scrape port**.
 4. Asset page should show scrape address `10.10.10.60:9182` and profile `windows-standard`.
 5. Wait up to 30s. `./forgesre sd` (or the curl in §7) should list that target with `job=windows-standard`.
 6. Prometheus (on the VM): `up{instance="10.10.10.60:9182"}` or `{asset="win-01"}`.
@@ -777,6 +787,7 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 | POST | `/api/v1/users/{id}/delete` | admin (cannot delete self or super_admin) |
 | POST | `/api/v1/assets` | analyst+ |
 | POST | `/api/v1/assets/{id}` | analyst+ (edit contacts/owner) |
+| GET | `/api/v1/detect-exporter` | analyst+ (`?ip=` — :9182 then :9100 /metrics) |
 | GET | `/api/v1/assets` | viewer+ |
 | POST | `/api/v1/discovery/scan` | analyst+ |
 | POST | `/api/v1/discovery/candidates/{id}/approve` | analyst+ |

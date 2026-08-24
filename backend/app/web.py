@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.db import get_db
+from app.exporter_detect import AUTO_ASSET_TYPE
 from app.inventory import (
     approve_candidate,
     create_manual_asset,
@@ -330,7 +332,7 @@ def asset_create(
     user: User = Depends(login_required),
     hostname: str = Form(...),
     ip: str = Form(""),
-    type: str = Form("Linux Server"),
+    type: str = Form(AUTO_ASSET_TYPE),
     environment: str = Form("Production"),
     owner: str = Form("platform"),
     contact_name: str = Form(""),
@@ -356,7 +358,9 @@ def asset_create(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return RedirectResponse(f"/assets/{asset.asset_id}", status_code=302)
+    notice = getattr(asset, "_detect_message", "") or ""
+    suffix = f"?notice={quote(notice)}" if notice else ""
+    return RedirectResponse(f"/assets/{asset.asset_id}{suffix}", status_code=302)
 
 
 @router.get("/discovery", response_class=HTMLResponse)
@@ -477,7 +481,25 @@ def asset_update(
         scrape_address=scrape_address,
         actor=user.email,
     )
-    return RedirectResponse(f"/assets/{asset_id}", status_code=302)
+    notice = getattr(item, "_detect_message", "") or ""
+    suffix = f"?notice={quote(notice)}" if notice else ""
+    return RedirectResponse(f"/assets/{asset_id}{suffix}", status_code=302)
+
+
+@router.post("/assets/{asset_id}/detect")
+def asset_detect(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    item = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if item is None:
+        raise HTTPException(status_code=404)
+    update_asset(db, item, detect=True, actor=user.email)
+    notice = getattr(item, "_detect_message", "") or "No exporter detected."
+    return RedirectResponse(f"/assets/{asset_id}?notice={quote(notice)}", status_code=302)
 
 
 @router.get("/incidents", response_class=HTMLResponse)

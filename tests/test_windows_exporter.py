@@ -133,6 +133,7 @@ def test_assets_ui_offers_windows_server_and_http_sd():
     assert page.status_code == 200
     assert b"Windows Server" in page.content
     assert b"windows_exporter" in page.content
+    assert b"Auto (detect exporter)" in page.content
     created = client.post(
         "/assets",
         data={

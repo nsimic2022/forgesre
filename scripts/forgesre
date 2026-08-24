@@ -235,6 +235,8 @@ Each row reports:
 Ping is not a Prometheus scrape. ICMP PASS + METRICS FAIL means the VM is
 on the network but ForgeSRE cannot see it: exporter down, firewall on the
 exporter port, or wrong port (Windows is 9182, not Linux 9100).
+An IP with no inventory type probes both :9182 and :9100 and classifies
+windows_ vs node_ metrics (same detect as Assets / Discovery).
 
 Network devices skip HTTP and point at ./forgesre snmp (UDP/161).
 Exit 1 if any METRICS/ICMP check FAILs.

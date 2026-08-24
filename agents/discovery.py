@@ -43,7 +43,12 @@ def hosts_from_cidrs(cidrs: list[str], limit: int = MAX_HOSTS_PER_CIDR, total_li
     return hosts
 
 
-def probe_host(ip: str, ports: tuple[int, ...] = DEFAULT_PORTS, timeout: float = 0.2) -> dict[str, Any]:
+def probe_host(
+    ip: str,
+    ports: tuple[int, ...] = DEFAULT_PORTS,
+    timeout: float = 0.2,
+    metrics_fetcher=None,
+) -> dict[str, Any]:
     open_ports: list[int] = []
     for port in ports:
         if port == 161:
@@ -53,18 +58,61 @@ def probe_host(ip: str, ports: tuple[int, ...] = DEFAULT_PORTS, timeout: float =
     snmp_ok = probe_snmp_udp(ip, timeout=max(timeout, 0.4))
     if snmp_ok:
         open_ports.append(161)
+    alive = bool(open_ports) or snmp_ok
+    exporter_kind = ""
+    detect_message = ""
+    tcp_ports = [p for p in open_ports if p != 161]
+    if alive and tcp_ports:
+        try:
+            from app.exporter_detect import detect_exporter
+        except ImportError:
+            detect_exporter = None  # type: ignore[assignment]
+        if detect_exporter is not None:
+            detected = detect_exporter(ip, timeout=max(timeout, 0.8), fetcher=metrics_fetcher)
+            exporter_kind = detected.kind or "none"
+            detect_message = detected.message
+            if detected.kind == "windows" and 9182 not in open_ports:
+                open_ports.append(9182)
+            if detected.kind == "linux" and 9100 not in open_ports:
+                open_ports.append(9100)
     return {
         "ip": ip,
         "open_ports": open_ports,
         "snmp_ok": snmp_ok,
-        "proposed_role": classify(open_ports, snmp_ok=snmp_ok),
-        "alive": bool(open_ports) or snmp_ok,
+        "proposed_role": classify(open_ports, snmp_ok=snmp_ok, exporter_kind=exporter_kind),
+        "alive": alive,
+        "exporter_kind": "" if exporter_kind == "none" else exporter_kind,
+        "detect_message": detect_message,
     }
 
 
-def classify(open_ports: list[int], snmp_ok: bool = False) -> str:
-    """9100 → Linux. 9182 → Windows. SNMP UDP/161 → network (even if SSH is open). SSH-only → Linux without scrape."""
+def classify(open_ports: list[int], snmp_ok: bool = False, exporter_kind: str = "") -> str:
+    """HTTP exporter family wins. TCP 9100/9182 without /metrics is not an OS pick.
+
+    TCP-only (no exporter_kind): 9100 → Linux, 9182 → Windows. SNMP UDP/161 → network
+    (even if SSH is open). SSH-only → Linux without scrape.
+    """
+    if exporter_kind == "windows":
+        return "Possible Windows server"
+    if exporter_kind == "linux":
+        return "Possible Linux server"
     ports = set(open_ports)
+    if exporter_kind == "none":
+        if snmp_ok or 161 in ports:
+            return "Possible network device"
+        if 9100 in ports and 9182 in ports:
+            return "TCP 9100 and 9182 open (no node_exporter or windows_exporter /metrics — pick OS)"
+        if 9182 in ports:
+            return "Possible Windows server (TCP 9182, no windows_exporter /metrics)"
+        if 9100 in ports:
+            return "Possible Linux server (TCP 9100, no node_exporter /metrics)"
+        if 22 in ports:
+            return "Possible Linux server"
+        if ports & WEB_PORTS:
+            return "Possible web/appliance"
+        if ports:
+            return "Unknown device with open ports"
+        return "No open ports"
     if 9100 in ports:
         return "Possible Linux server"
     if 9182 in ports:

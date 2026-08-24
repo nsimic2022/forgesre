@@ -6,6 +6,7 @@ import re
 from sqlalchemy.orm import Session
 
 from app.audit import audit
+from app.exporter_detect import detect_exporter, is_auto_asset_type
 from app.journal import report
 from app.models import Asset, DiscoveryCandidate, Incident, utcnow
 from app.settings import settings
@@ -17,8 +18,12 @@ WINDOWS_EXPORTER_PORT = 9182
 
 
 def asset_kind(type: str = "", profile: str = "") -> str:
-    """linux | windows | network | web | other. Windows is checked before 'server' (Windows Server)."""
+    """linux | windows | network | web | unknown | other. Windows is checked before 'server' (Windows Server)."""
     blob = f"{type} {profile}".lower()
+    if is_auto_asset_type(type):
+        return "unknown"
+    if "unknown" in blob:
+        return "unknown"
     if "windows" in blob or "win32" in blob:
         return "windows"
     if "linux" in blob:
@@ -54,6 +59,8 @@ def default_monitoring_profile(type: str, profile: str = "") -> str:
         return "linux-standard"
     if kind == "web":
         return "web-standard"
+    if kind == "unknown":
+        return ""
     return "network-switch"
 
 
@@ -211,6 +218,7 @@ def create_manual_asset(
     monitoring_profile: str = "",
     scrape_address: str = "",
     actor: str = "system",
+    metrics_fetcher=None,
 ) -> Asset:
     hostname = (hostname or "").strip()
     ip = (ip or "").strip()
@@ -229,6 +237,22 @@ def create_manual_asset(
             object_id=existing.asset_id,
         )
         return existing
+    detect_message = ""
+    if is_auto_asset_type(type):
+        detected = detect_exporter(ip, hint_type=type, fetcher=metrics_fetcher)
+        detect_message = detected.message
+        if detected.kind == "windows":
+            type = detected.asset_type
+            monitoring_profile = monitoring_profile or detected.profile
+            scrape_address = (scrape_address or "").strip() or detected.scrape_address
+        elif detected.kind == "linux":
+            type = detected.asset_type
+            monitoring_profile = monitoring_profile or detected.profile
+            scrape_address = (scrape_address or "").strip() or detected.scrape_address
+        else:
+            type = "Unknown"
+            monitoring_profile = (monitoring_profile or "").strip()
+            scrape_address = (scrape_address or "").strip()
     profile = default_monitoring_profile(type, monitoring_profile)
     address = (scrape_address or "").strip() or default_scrape_address(type, ip, profile)
     asset = Asset(
@@ -251,6 +275,8 @@ def create_manual_asset(
     audit(db, "asset.create", actor=actor, object_type="asset", object_id=asset.asset_id, data={"ip": ip})
     db.commit()
     db.refresh(asset)
+    if detect_message:
+        setattr(asset, "_detect_message", detect_message)
     contact = asset.owner_email or asset.owner or "no owner email"
     report(
         db,
@@ -258,7 +284,7 @@ def create_manual_asset(
         "asset.create",
         "ok",
         summary=f"Saved {asset.hostname} ({contact})",
-        detail=f"ip={asset.ip} scrape={asset.scrape_address} actor={actor}",
+        detail=f"ip={asset.ip} scrape={asset.scrape_address} actor={actor} detect={detect_message or '—'}",
         object_type="asset",
         object_id=asset.asset_id,
     )
@@ -290,8 +316,13 @@ def update_asset(
     notes: str | None = None,
     scrape_address: str | None = None,
     actor: str = "system",
+    detect: bool = False,
+    metrics_fetcher=None,
 ) -> Asset:
     old_ip = asset.ip or ""
+    old_type = asset.type or ""
+    old_profile = asset.monitoring_profile or ""
+    old_scrape = asset.scrape_address or ""
     if ip is not None:
         asset.ip = ip.strip()
     if type is not None and type.strip():
@@ -308,6 +339,29 @@ def update_asset(
         asset.owner_phone = owner_phone.strip()
     if notes is not None:
         asset.notes = notes.strip()
+    detect_message = ""
+    auto = is_auto_asset_type(asset.type or "")
+    if detect or auto:
+        detected = detect_exporter(
+            asset.ip,
+            hint_type=old_type if not auto else "",
+            hint_profile=old_profile,
+            fetcher=metrics_fetcher,
+        )
+        detect_message = detected.message
+        setattr(asset, "_detect_message", detect_message)
+        if detected.kind:
+            asset.type = detected.asset_type
+            if detected.profile and (auto or (asset.monitoring_profile or "") in {"", "linux-standard", "windows-standard"}):
+                asset.monitoring_profile = detected.profile
+            if scrape_address is None or not (scrape_address or "").strip():
+                asset.scrape_address = detected.scrape_address
+                scrape_address = detected.scrape_address
+        elif auto:
+            asset.type = "Unknown"
+            if scrape_address is None:
+                asset.scrape_address = ""
+                scrape_address = ""
     if scrape_address is not None:
         asset.scrape_address = scrape_address.strip()
     elif old_ip and asset.ip:
@@ -315,9 +369,23 @@ def update_asset(
             asset.scrape_address = f"{asset.ip}:{LINUX_EXPORTER_PORT}"
         elif asset.scrape_address == f"{old_ip}:{WINDOWS_EXPORTER_PORT}":
             asset.scrape_address = f"{asset.ip}:{WINDOWS_EXPORTER_PORT}"
-    kind = asset_kind(asset.type or "", asset.monitoring_profile or "")
-    if kind == "windows" and (asset.monitoring_profile or "") in {"", "linux-standard"}:
+    new_kind = asset_kind(asset.type or "", asset.monitoring_profile or "")
+    old_kind = asset_kind(old_type, old_profile)
+    if scrape_address is None and not detect and not auto and asset.ip:
+        old_default = default_scrape_address(old_type, asset.ip, old_profile) or default_scrape_address(
+            old_type, old_ip, old_profile
+        )
+        if old_kind != new_kind and (old_scrape == old_default or old_scrape == default_scrape_address(old_type, old_ip, old_profile)):
+            remapped = default_scrape_address(asset.type or "", asset.ip, asset.monitoring_profile or "")
+            if remapped:
+                asset.scrape_address = remapped
+    if new_kind == "windows" and (asset.monitoring_profile or "") in {"", "linux-standard"}:
         asset.monitoring_profile = "windows-standard"
+    elif new_kind == "linux" and (asset.monitoring_profile or "") in {"", "windows-standard"}:
+        asset.monitoring_profile = "linux-standard"
+    elif new_kind == "unknown":
+        if (asset.monitoring_profile or "") in {"linux-standard", "windows-standard", "network-switch"}:
+            asset.monitoring_profile = ""
     audit(
         db,
         "asset.update",
@@ -328,13 +396,15 @@ def update_asset(
     )
     db.commit()
     db.refresh(asset)
+    if detect_message:
+        setattr(asset, "_detect_message", detect_message)
     report(
         db,
         "inventory",
         "asset.update",
         "ok",
         summary=f"Updated {asset.hostname} owner={asset.owner} email={asset.owner_email or '—'}",
-        detail=f"actor={actor} phone={asset.owner_phone}",
+        detail=f"actor={actor} phone={asset.owner_phone} detect={detect_message or '—'}",
         object_type="asset",
         object_id=asset.asset_id,
     )
@@ -393,19 +463,23 @@ def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset
         role = row.proposed_role or ""
         ports = {int(p) for p in (row.open_ports or []) if str(p).isdigit() or isinstance(p, int)}
         if "Windows" in role:
+            confirmed = "no windows_exporter" not in role and "pick OS" not in role
             atype, profile, scrape = (
                 "Windows Server",
                 "windows-standard",
-                (f"{row.ip}:{WINDOWS_EXPORTER_PORT}" if WINDOWS_EXPORTER_PORT in ports else ""),
+                (f"{row.ip}:{WINDOWS_EXPORTER_PORT}" if confirmed else ""),
             )
         elif "Linux" in role:
+            confirmed = "no node_exporter" not in role and "pick OS" not in role
             atype, profile, scrape = (
                 "Linux Server",
                 "linux-standard",
-                (f"{row.ip}:{LINUX_EXPORTER_PORT}" if LINUX_EXPORTER_PORT in ports else ""),
+                (f"{row.ip}:{LINUX_EXPORTER_PORT}" if confirmed and LINUX_EXPORTER_PORT in ports else ""),
             )
         elif "network" in role.lower():
             atype, profile, scrape = "Network device", "network-switch", ""
+        elif "pick OS" in role:
+            atype, profile, scrape = "Unknown", "", ""
         else:
             atype, profile, scrape = "Web/appliance", "web-standard", ""
         asset = Asset(

@@ -32,8 +32,8 @@ Find or enter a host
 
 | Piece | Role |
 |---|---|
-| **Discovery** | Light probe: TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161. Approve or Ignore. Optional read-sync from an existing NetBox. |
-| **Inventory** | Hostname, IP, type, owner email/phone. Analysts can add and edit. |
+| **Discovery** | Light probe: TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, then HTTP `/metrics` on :9182/:9100 to default Windows vs Linux. Approve or Ignore. Optional read-sync from an existing NetBox. |
+| **Inventory** | Hostname, IP, type (default **Auto (detect exporter)**), owner email/phone. Analysts can add and edit. |
 | **Monitoring** | Prometheus HTTP SD for Linux (`node_exporter` :9100) and Windows (`windows_exporter` :9182). Bundled snmp_exporter for network devices. Grafana for graphs. |
 | **Incidents** | Alertmanager webhook opens `INC-…`. Fingerprint is alert + asset. |
 | **History** | `/history` — last 90 days in Postgres, plus mail/audit/notes on the incident. |

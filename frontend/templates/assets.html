@@ -33,12 +33,13 @@
 </div>
 {% if can('write_assets') %}
 <h2>Add asset</h2>
-<p class="muted">Analysts, engineers, and admins can add hosts. Fill who to call — escalation uses that email instead of a generic team inbox. Linux is scraped as <code>node_exporter</code> on <code>:9100</code>. Windows is scraped as <code>windows_exporter</code> on <code>:9182</code> (Prometheus <code>node_exporter</code> is Linux; do not expect it on Windows unless you really run it in WSL).</p>
+<p class="muted">Analysts, engineers, and admins can add hosts. Fill who to call — escalation uses that email instead of a generic team inbox. Default type is <strong>Auto (detect exporter)</strong>: ForgeSRE GETs <code>http://&lt;ip&gt;:9182/metrics</code> and <code>:9100/metrics</code> from this appliance. <code>windows_exporter</code> / <code>windows_</code> → Windows Server <code>:9182</code>. <code>node_exporter</code> / <code>node_</code> → Linux Server <code>:9100</code>. Both: keep a saved type if set, else prefer Windows <code>:9182</code>. Neither: type stays unset — ICMP ping is not a scrape. You can override the type.</p>
 <form method="post" action="/assets" class="form-grid">
   <label>Hostname <input name="hostname" required></label>
-  <label>IP <input name="ip" placeholder="10.10.10.21"></label>
+  <label>IP <input name="ip" placeholder="10.10.10.21" data-detect-ip></label>
   <label>Type
-    <select name="type">
+    <select name="type" data-detect-type>
+      <option selected>Auto (detect exporter)</option>
       <option>Linux Server</option>
       <option>Windows Server</option>
       <option>Network device</option>
@@ -51,6 +52,7 @@
   <label>Owner email <input name="owner_email" type="email" placeholder="oncall@dc.local"></label>
   <label>Owner phone <input name="owner_phone" placeholder="+381-11-000-0000"></label>
   <label class="wide">Notes <input name="notes" placeholder="Rack, customer, how to reach them"></label>
+  <p class="muted wide" data-detect-out></p>
   <div class="wide"><button type="submit">Save</button></div>
 </form>
 {% endif %}
