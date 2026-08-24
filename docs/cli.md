@@ -28,6 +28,8 @@ Two logins:
 ./forgesre doctor          # short lights
 ./forgesre ping            # ICMP + exporter /metrics (alias: probe)
 ./forgesre ping win-01
+./forgesre verify          # live path: ICMP/exporter/SNMP → Prometheus (not test)
+./forgesre verify win-01
 ./forgesre test            # detailed report → data/reports/
 ./forgesre status          # docker compose ps
 ./forgesre logs core
@@ -93,6 +95,25 @@ ICMP ping from the appliance only proves **L3** (the host answers ping). ForgeSR
 | PASS | SKIP | Network device — HTTP metrics do not apply. Use `./forgesre snmp` (UDP/161). |
 
 Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `scrape_address` wins. An ad-hoc IP (no inventory type) probes **both** ports and classifies `windows_` vs `node_` the same way Assets/Discovery detect does (both → prefer Windows `:9182` unless a saved type exists). Seeded `forge-demo-*` rows are skipped unless you pass `--demo` or the id.
+
+---
+
+## Verify (live communication)
+
+`./forgesre test` is appliance health (files, Compose, login, APIs) after `update`. **`./forgesre verify` is a different command**: live communication for inventory already in ForgeSRE.
+
+```bash
+./forgesre verify
+./forgesre verify win-01
+./forgesre verify --demo
+./forgesre help verify
+```
+
+Path: inventory row → ICMP / exporter (`:9100` `node_` or `:9182` `windows_`) or SNMP UDP/161 → Prometheus `up` → optional last RCA facts vs PromQL. ForgeAI/LLM is listed only when enabled; verify does **not** call the LLM.
+
+Classes are universal, not SKUs: Linux, Windows, Network SNMP, Unknown. Unknown or a missing exporter / no Prom target is **SKIP or FAIL with an honest reason** — never a fake green host. Seeded `forge-demo-*` rows are **lab** (label DEMO) and are not proof of a real scrape.
+
+One name or id dumps what ForgeSRE already knows (inventory) plus the live checks. Same action: Assets → **Verify** (analyst / engineer / admin). Viewers are read-only.
 
 ---
 
@@ -188,6 +209,8 @@ After `./forgesre login` or a UI login cookie:
 | POST | `/api/v1/users/{id}/delete` | admin |
 | GET | `/api/v1/assets` | viewer+ |
 | POST | `/api/v1/assets` | analyst+ |
+| GET | `/api/v1/assets/{id}/verify` | analyst+ (live path; same as `./forgesre verify <id>`) |
+| GET | `/api/v1/verify` | analyst+ (all real assets; `?include_demo=1` labels DEMO) |
 | POST | `/api/v1/assets/{id}` | analyst+ (edit) |
 | POST | `/api/v1/assets/{id}/clone` | analyst+ |
 | POST | `/api/v1/assets/{id}/delete` | analyst+ |

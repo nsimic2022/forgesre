@@ -121,6 +121,7 @@ class CheckResult:
     ok: bool | None
     detail: str
     elapsed_ms: int = 0
+    preview: str = ""
 
     @property
     def mark(self) -> str:
@@ -241,7 +242,13 @@ def probe_metrics(
     label = exporter_label(port)
     if status == 200:
         kind = "prometheus text" if looks_like_prometheus(preview) else "HTTP 200"
-        return CheckResult("metrics", True, f"{label} :{port}/metrics {kind} ({elapsed}ms)", elapsed)
+        return CheckResult(
+            "metrics",
+            True,
+            f"{label} :{port}/metrics {kind} ({elapsed}ms)",
+            elapsed,
+            preview=preview or "",
+        )
     if status:
         return CheckResult("metrics", False, f"{label} :{port}/metrics HTTP {status} ({elapsed}ms)", elapsed)
     err = error or "unreachable"

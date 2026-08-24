@@ -12,6 +12,9 @@
   <span class="reach-dot red">Ping</span> no reply.
   Same colors for <strong>:9100</strong> (node_exporter), <strong>:9182</strong> (windows_exporter), and <strong>SNMP</strong> (UDP/161).
   The table loads immediately with last-known colors; probes refresh in the background.
+  {% if can('write_assets') %}
+  <a href="/assets/verify">Verify all</a> runs live ICMP / exporter or SNMP / Prometheus <code>up</code> (not <code>./forgesre test</code>).
+  {% endif %}
 </p>
 <div class="table-scroll">
 <table class="asset-table" data-asset-reachability>
@@ -59,6 +62,7 @@
       <td class="row-actions">
         <a class="button" href="/assets?edit={{ asset.asset_id }}">Edit</a>
         <a class="button" href="/assets?clone={{ asset.asset_id }}">Clone</a>
+        <a class="button" href="/assets/{{ asset.asset_id }}/verify">Verify</a>
         {% if not delete_blocked(asset) %}
         <form method="post" action="/assets/{{ asset.asset_id }}/delete" onsubmit="return confirm('Remove {{ asset.hostname }}? Prometheus will stop scraping it. Incidents stay in History without this host. Core is unchanged.');">
           <button type="submit" class="danger">Remove</button>

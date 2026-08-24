@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Verify assets · ForgeSRE{% endblock %}
+{% block content %}
+<p><a href="/assets">← Assets</a></p>
+<h1>Verify assets</h1>
+<p class="muted">Live communication for inventory — not <code>./forgesre test</code>. Classes: Linux <code>:9100</code> <code>node_</code>, Windows <code>:9182</code> <code>windows_</code>, Network SNMP, Unknown SKIP. Demo <code>forge-demo-*</code> rows are lab-only.</p>
+{% if skipped_demo %}
+<p class="muted">Skipped {{ skipped_demo }} demo lab asset(s). <a href="/assets/verify?demo=1">Include labeled DEMO</a>.</p>
+{% elif include_demo %}
+<p class="banner">Including DEMO lab hosts. They are labeled lab and are not proof of a real scrape.</p>
+{% endif %}
+<div class="table-scroll">
+<table class="verify-table">
+  <thead>
+    <tr>
+      <th>Asset</th>
+      <th>Class</th>
+      <th>Ping</th>
+      <th>Port</th>
+      <th>Prom up</th>
+      <th>Family</th>
+      <th>RCA</th>
+      <th>LLM</th>
+      <th>Overall</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in reports %}
+    <tr>
+      <td>
+        <a href="/assets/{{ row.asset_id }}/verify">{{ row.asset_id }}</a>
+        {% if row.lab %}<span class="pill warn">DEMO</span>{% endif %}
+        <div class="muted">{{ row.ip or "—" }}</div>
+      </td>
+      <td>{{ row.class }}</td>
+      <td><span class="verify-mark {{ row.icmp.mark|lower }}">{{ row.icmp.mark }}</span></td>
+      <td><span class="verify-mark {{ row.port.mark|lower }}">{{ row.port.mark }}</span></td>
+      <td><span class="verify-mark {{ row.prom.mark|lower }}">{{ row.prom.mark }}</span></td>
+      <td><span class="verify-mark {{ row.family.mark|lower }}">{{ row.family.mark }}</span></td>
+      <td><span class="verify-mark {{ row.rca.mark|lower }}">{{ row.rca.mark }}</span></td>
+      <td><span class="verify-mark {{ row.llm.mark|lower }}">{{ row.llm.mark }}</span></td>
+      <td>
+        <span class="verify-mark {{ row.overall|lower }}">{{ row.overall }}</span>
+        <div class="muted">{{ row.overall_reason }}</div>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="muted">No assets to verify. Add a host, or include DEMO lab rows.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="muted">CLI: <code>./forgesre verify</code> · one host: <code>./forgesre verify &lt;name&gt;</code></p>
+{% endblock %}

@@ -223,6 +223,22 @@ table tbody tr:hover td { background: var(--row-hover); }
 .reach-dot.green { background: var(--pill-ok-bg); color: var(--pill-ok); }
 .reach-dot.yellow { background: var(--pill-warn-bg); color: var(--pill-warn); }
 .reach-dot.red { background: var(--pill-crit-bg); color: var(--pill-crit); }
+.verify-mark {
+  display: inline-block;
+  min-width: 3.2rem;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.08rem 0.45rem;
+  border-radius: 999px;
+  background: var(--pill-warn-bg);
+  color: var(--pill-warn);
+}
+.verify-mark.pass { background: var(--pill-ok-bg); color: var(--pill-ok); }
+.verify-mark.fail { background: var(--pill-crit-bg); color: var(--pill-crit); }
+.verify-mark.skip, .verify-mark.warn { background: var(--pill-warn-bg); color: var(--pill-warn); }
+.verify-table td .muted { font-size: 0.8rem; }
 .pill { display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px; background: var(--pill); font-size: 0.8rem; }
 .pill.healthy, .pill.ok { background: var(--pill-ok-bg); color: var(--pill-ok); }
 .pill.warning, .pill.warn { background: var(--pill-warn-bg); color: var(--pill-warn); }

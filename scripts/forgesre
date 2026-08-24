@@ -56,6 +56,7 @@ Commands:
   test               Full appliance report (files, HTTP, login, APIs, email, logs)
   ping [asset]       ICMP + exporter /metrics for inventory (alias: probe)
   probe [asset]      Same as ping
+  verify [asset]     Live communication: ICMP/exporter/SNMP → Prometheus up → RCA
   status             docker compose ps
   logs [service]     Container logs (default: last 100 lines)
   config             Print config/forgesre.yml
@@ -92,6 +93,8 @@ Examples:
   ./forgesre help snmp
   ./forgesre ping
   ./forgesre ping win-01
+  ./forgesre verify
+  ./forgesre verify win-01
   ./forgesre assets
   ./forgesre snmp
   ./forgesre jobs
@@ -240,6 +243,37 @@ windows_ vs node_ metrics (same detect as Assets / Discovery).
 
 Network devices skip HTTP and point at ./forgesre snmp (UDP/161).
 Exit 1 if any METRICS/ICMP check FAILs.
+EOF
+      ;;
+
+    verify)
+      cat <<'EOF'
+verify — live communication for inventory (not ./forgesre test).
+
+  ./forgesre verify
+  ./forgesre verify win-01
+  ./forgesre verify --timeout 3
+  ./forgesre verify --demo
+
+test = appliance health after update (files, compose, login, APIs).
+verify = this host → ICMP / exporter or SNMP → Prometheus sees it →
+optional last RCA facts vs PromQL. LLM is listed only if ForgeAI is on;
+verify does not call the LLM.
+
+Universal classes (not SKUs):
+  Linux    :9100  node_exporter / node_
+  Windows  :9182  windows_exporter / windows_
+  Network  SNMP UDP/161 (snmp_exporter, same path as ./forgesre snmp)
+  Unknown  SKIP with a reason (no fake green host)
+
+Missing exporter or no Prometheus target is SKIP or FAIL with an honest
+reason. Seeded forge-demo-* rows are lab-only (label DEMO); they are not
+proof of a real scrape. Default run skips them; --demo includes them labeled.
+
+One name or id prints inventory ForgeSRE already knows plus live probes
+(ICMP, port, metric family, Prom up, last RCA mismatch, LLM).
+
+Exit 1 if any row FAILs. SKIP-only is exit 0.
 EOF
       ;;
     status)
@@ -630,6 +664,7 @@ for item in rows:
 print()
 print(f"{len(rows)} asset(s). Linux = node_exporter :9100. Windows = windows_exporter :9182. Network device + IP = snmp_exporter.")
 print("Reachability: ./forgesre ping   (ICMP + /metrics; ping alone is not a scrape)")
+print("Live path:    ./forgesre verify (ICMP/exporter/SNMP → Prometheus; not ./forgesre test)")
 PY
 }
 
@@ -848,6 +883,10 @@ case "$cmd" in
   ping|probe)
     need_env
     run_cli_ops ping "$@"
+    ;;
+  verify)
+    need_env
+    run_cli_ops verify "$@"
     ;;
   incidents)
     need_env

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.audit import audit
 from app.db import get_db
 from app.asset_probe import reachability_snapshot
+from app.seed import is_demo_asset_id
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.inventory import (
     ASSET_TYPE_CHOICES,
@@ -45,7 +46,7 @@ from app.models import (
     User,
 )
 from app.security import can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
-from app.api import doctor_payload
+from app.api import doctor_payload, run_asset_verify
 from app.metrics import reset_demo_gauges
 from app.services import (
     is_demo_incident,
@@ -373,6 +374,32 @@ def assets_page(
     )
 
 
+
+@router.get("/assets/verify", response_class=HTMLResponse)
+def assets_verify_all(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("write_assets")),
+    demo: str = "",
+):
+    include_demo = demo.strip().lower() in {"1", "true", "yes", "demo"}
+    reports: list[dict] = []
+    skipped_demo = 0
+    for asset in db.query(Asset).order_by(Asset.hostname).all():
+        if is_demo_asset_id(asset.asset_id) and not include_demo:
+            skipped_demo += 1
+            continue
+        reports.append(run_asset_verify(db, asset))
+    return render(
+        request,
+        "assets_verify.html",
+        user,
+        reports=reports,
+        skipped_demo=skipped_demo,
+        include_demo=include_demo,
+    )
+
+
 @router.post("/assets")
 def asset_create(
     db: Session = Depends(get_db),
@@ -505,6 +532,27 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         snmp_enabled=settings.snmp_enabled,
         can_remove=can(user, "write_assets") and not delete_blocked(item),
         remove_blocked=delete_blocked(item) if can(user, "write_assets") else "",
+    )
+
+
+
+@router.get("/assets/{asset_id}/verify", response_class=HTMLResponse)
+def asset_verify_page(
+    asset_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("write_assets")),
+):
+    item = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if item is None:
+        raise HTTPException(status_code=404)
+    report = run_asset_verify(db, item)
+    return render(
+        request,
+        "asset_verify.html",
+        user,
+        asset=item,
+        report=report,
     )
 
 
