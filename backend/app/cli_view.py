@@ -10,7 +10,7 @@ import os
 import sys
 from typing import Any
 
-from app.seed import is_demo_asset_id
+from app.demo_ids import is_demo_asset_id
 
 RESET = "\033[0m"
 RED = "\033[31m"

@@ -29,8 +29,8 @@ from app.asset_probe import (
     probe_target,
     select_assets,
 )
+from app.demo_ids import is_demo_asset_id
 from app.exporter_detect import classify_exporter_metrics, is_auto_asset_type
-from app.seed import is_demo_asset_id
 
 PromQuery = Callable[[str], dict[str, Any]]
 RCALookup = Callable[[str], dict[str, Any] | None]

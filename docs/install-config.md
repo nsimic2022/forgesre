@@ -388,7 +388,7 @@ From the clone directory. `./forgesre help` is the index. `./forgesre help <comm
 ./forgesre backup
 ./forgesre backup --no-secrets
 ./forgesre backup --include-models
-./forgesre restore data/backups/forgesre-YYYYMMDDTHHMMSSZ.tar.gz --yes
+./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes
 ./forgesre version
 ```
 
@@ -468,7 +468,7 @@ git pull origin main
 
 `./forgesre update` = doctor (warn ok) → backup → render-monitoring → compose pull/up (including **snmp-exporter** on `127.0.0.1:9116`) → doctor. It does **not** regenerate passwords. Host backup dumps Postgres via `docker compose exec postgres` (no sqlalchemy on the host). A backup failure is a clear error; update still starts the stack.
 
-Platform backup files: `data/backups/forgesre-*.tar.gz`. Restore is not silent — `./forgesre restore ARCHIVE` prints the plan; add `--yes` after `docker compose stop core`, then `./forgesre update`. Administration can create/import the same archives (admin session only). Details: [`operator-handbook.md`](operator-handbook.md) (Platform backup).
+Platform backup files: `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (one folder per run). Restore is not silent — `./forgesre restore FOLDER` prints the plan; add `--yes` after `docker compose stop core`, then `./forgesre update`. Administration can create/import the same archives (admin session only). Details: [`operator-handbook.md`](operator-handbook.md) (Platform backup).
 
 ---
 

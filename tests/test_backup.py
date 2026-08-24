@@ -1,14 +1,21 @@
 from pathlib import Path
+import shutil
 
 from fastapi.testclient import TestClient
 
 from app.backup import (
+    ARCHIVE_RE,
     BackupLayout,
     CONFIRM_WORD,
+    FOLDER_RE,
+    INNER_ARCHIVE,
+    archive_file,
     create_backup,
     inspect_archive,
+    list_archives,
     restore_archive,
     resolve_archive,
+    save_upload,
 )
 from app.db import Base, SessionLocal, engine
 from app.main import app
@@ -60,7 +67,9 @@ def test_backup_archive_includes_db_and_skips_gguf(tmp_path):
     (lay.monitoring_dir / "alerts.local.yml").write_text("groups: []\n", encoding="utf-8")
     result = create_backup(layout=lay)
     assert result.path.is_file()
-    assert result.path.name.startswith("forgesre-")
+    assert result.path.name == INNER_ARCHIVE
+    assert FOLDER_RE.match(result.path.parent.name)
+    assert result.name == result.path.parent.name
     assert result.path.suffixes[-2:] == [".tar", ".gz"]
     mode = result.path.stat().st_mode & 0o777
     assert mode == 0o600 or mode == 0o400  # umask may clear write bits
@@ -246,9 +255,12 @@ def test_cli_help_restore_requires_yes():
     restore = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "restore"], text=True)
     assert "--yes" in restore
     assert "docker compose stop core" in restore
+    assert "backup_" in restore
     backup = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "backup"], text=True)
     assert "--include-models" in backup
     assert "data/backups" in backup
+    assert "backup_" in backup
+    assert "forgesre.tar.gz" in backup
     overview = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help"], text=True)
     assert "restore" in overview
     assert "--include-models" in overview
@@ -392,3 +404,55 @@ def test_compose_snmp_exporter_is_default_service():
     assert "profiles" not in svc
     assert svc["network_mode"] == "host"
     assert any("9116" in str(part) for part in svc["command"])
+
+
+def test_backup_writes_run_folder_not_loose_files(tmp_path):
+    db = _db()
+    lay = _layout(tmp_path)
+    lay.dotenv.write_text("FORGESRE_HTTP_PORT=8080\n", encoding="utf-8")
+    result = create_backup(layout=lay)
+    assert result.path.name == INNER_ARCHIVE
+    assert FOLDER_RE.match(result.path.parent.name)
+    manifest = result.path.parent / "MANIFEST.txt"
+    assert manifest.is_file()
+    text = manifest.read_text(encoding="utf-8")
+    assert INNER_ARCHIVE in text
+    assert "logical database dump" in text or "Included:" in text
+    loose = [p.name for p in lay.backup_dir.iterdir() if p.is_file()]
+    assert loose == []
+    dirs = [p for p in lay.backup_dir.iterdir() if p.is_dir()]
+    assert len(dirs) == 1
+    listed = list_archives(lay)
+    assert listed[0]["name"] == result.name
+    assert resolve_archive(result.name, lay) == result.path
+    assert archive_file(result.path.parent) == result.path
+    assert archive_file(result.path) == result.path
+    restore_archive(result.path.parent, yes=True, stop_core=False, layout=lay)
+    db.close()
+
+
+def test_legacy_root_tar_still_lists_and_resolves(tmp_path):
+    db = _db()
+    lay = _layout(tmp_path)
+    result = create_backup(layout=lay)
+    stamp = result.path.parent.name[len("backup_") :]
+    assert ARCHIVE_RE.match(f"forgesre-{stamp}.tar.gz")
+    legacy = lay.backup_dir / f"forgesre-{stamp}.tar.gz"
+    shutil.move(str(result.path), str(legacy))
+    names = [row["name"] for row in list_archives(lay)]
+    assert legacy.name in names
+    assert resolve_archive(legacy.name, lay) == legacy.resolve()
+    db.close()
+
+
+def test_save_upload_stores_tar_in_run_folder(tmp_path):
+    db = _db()
+    lay = _layout(tmp_path)
+    result = create_backup(layout=lay)
+    blob = result.path.read_bytes()
+    stored = save_upload(blob, "forgesre-20200101T000000Z.tar.gz", layout=lay)
+    assert stored.name == INNER_ARCHIVE
+    assert stored.parent.name == "backup_20200101T000000Z"
+    assert (stored.parent / "MANIFEST.txt").is_file()
+    assert resolve_archive("backup_20200101T000000Z", lay) == stored
+    db.close()
