@@ -201,11 +201,12 @@ def test_audit_and_api_investigation():
     from app.main import app
     from app.models import AuditLog, Incident
     from app.seed import seed
-    from app.services import ingest_alertmanager
+    from app.services import close_open_incidents, ingest_alertmanager
 
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     seed(db)
+    close_open_incidents(db, "FilesystemUsageHigh:forge-demo-01", include_resolved=True)
     payload = {
         "status": "firing",
         "alerts": [

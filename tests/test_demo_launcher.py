@@ -5,7 +5,7 @@ from app.db import Base, SessionLocal, engine
 from app.main import app
 from app.models import Notification
 from app.seed import DEMO_ASSET, seed
-from app.services import is_demo_incident, run_demo, run_demo_host, run_demo_rca
+from app.services import close_open_incidents, is_demo_incident, run_demo, run_demo_host, run_demo_rca
 
 
 def _db():
@@ -23,6 +23,12 @@ def _client():
         follow_redirects=False,
     )
     return client
+
+
+def _close_demo_fires(db):
+    close_open_incidents(db, f"HighCPU:{DEMO_ASSET}", include_resolved=True)
+    close_open_incidents(db, f"FilesystemUsageHigh:{DEMO_ASSET}", include_resolved=True)
+    close_open_incidents(db, f"NodeExporterDown:{DEMO_ASSET}", include_resolved=True)
 
 
 def test_dashboard_has_one_run_demo_control_not_two_forms():
@@ -66,6 +72,8 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
     assert note is not None
     assert note.subject.startswith("[DEMO]")
     assert "DEMO incident on forge-demo-01" in (note.body or "")
+    number = incident.number
+    _close_demo_fires(db)
     db.close()
 
     client = _client()
@@ -73,9 +81,9 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
     assert listing.status_code == 200
     assert 'class="pill demo"' in listing.text
     assert "DEMO" in listing.text
-    assert incident.number in listing.text
+    assert number in listing.text
 
-    detail = client.get(f"/incidents/{incident.number}")
+    detail = client.get(f"/incidents/{number}")
     assert detail.status_code == 200
     assert 'class="pill demo"' in detail.text
     assert "[DEMO]" in detail.text
@@ -91,7 +99,7 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
     dash = client.get("/")
     assert 'class="pill demo"' in dash.text
 
-    api = client.get(f"/api/v1/incidents/{incident.number}")
+    api = client.get(f"/api/v1/incidents/{number}")
     assert api.status_code == 200
     body = api.json()
     assert body["demo"] is True
@@ -108,11 +116,15 @@ def test_demo_host_and_rca_are_demo_tagged():
     assert is_demo_incident(host) is True
     assert "FilesystemUsageHigh" in (disk.fingerprint or "")
     assert "NodeExporterDown" in (host.fingerprint or "")
+    _close_demo_fires(db)
     db.close()
     client = _client()
     rca = client.post("/demo-host", follow_redirects=False)
     assert rca.status_code == 303
     assert "/incidents/INC-" in (rca.headers.get("location") or "")
+    db = SessionLocal()
+    _close_demo_fires(db)
+    db.close()
 
 
 def test_cli_board_prints_demo_on_demo_asset():
