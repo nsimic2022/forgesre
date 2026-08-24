@@ -31,30 +31,28 @@ git pull origin main
 
 ## 2. Why this session existed
 
-N asked for **at least five Run demo scenarios** covering Linux, Windows, and network, with **DEMO** visible on incidents, history, escalation, email, and journal/logs. Keep the existing three Linux cards. Do not claim windows_exporter scraping or a live SNMP walk. No Zabbix, no ticketing.
+N sent screenshots of the **incident report email** (Send incident report). It was a monospaced key:value dump with markdown `##` headers and ForgeRCA as raw bullets. N asked (Serbian) whether it could look more professional. Yes: multipart HTML + plain text for incident reports and escalation. Do **not** rewrite `/ops` Compose freeform mail.
 
 ---
 
 ## 3. What shipped on main
 
-Branch: `cursor/demo-scenarios-05f8`.
+Branch: `cursor/html-incident-mail-05f8`.
 
-### 3.1 Six Run demo scenarios
+### 3.1 Multipart HTML mail
 
-Same one top-right **Run demo** button and closeable panel. Cards:
+Incident report (`Send incident report`) and escalation notifications are `multipart/alternative`: existing plain text stays `text/plain` (and in the outbox row); Gmail/Outlook get `text/html`.
 
-1. **Linux HighCPU** — `forge-demo-01` (existing).
-2. **Linux disk / ForgeRCA** — `forge-demo-01` (existing).
-3. **Linux host unreachable** — `forge-demo-01` (existing).
-4. **Windows CPU (lab)** — `WindowsCPUHigh` on seeded `forge-demo-win-01`. Copy says lab / DEMO; does **not** claim windows_exporter is scraping.
-5. **Network SNMP unreachable (lab)** — `SnmpDeviceUnreachable` on seeded `forge-demo-sw-01`. Copy says lab / DEMO; does **not** claim a live SNMP walk. The switch is excluded from snmp HTTP SD.
-6. **Linux NodeCPUHigh** — extra Linux alertname on `forge-demo-01`.
+- Inline CSS on elements, table layout, 600px, light background.
+- Severity color bar: CRITICAL/P1 red, WARNING/P2 amber, INFO blue, INVESTIGATING teal.
+- DEMO banner when `is_demo_incident` (seeded `forge-demo-*`).
+- ForgeRCA as sections (Summary, Likely cause, Confidence, Recommendation, Facts, Anomalies, Candidate causes) from structured investigation fields — not a regex dump of the plaintext.
+- User/incident/RCA strings go through `html.escape`.
+- `/ops` Compose and scheduled performance reports stay plain text.
 
-**Reset demo gauges** stays in that panel. CLI `./forgesre demo`, `demo-rca`, and `demo-reset` are unchanged.
+Code: `backend/app/email_html.py`, `email_service.py`, `incident_report_mail.py`, `notifications.py`. SMTP still stdlib `EmailMessage`.
 
-### 3.2 DEMO marking
-
-`is_demo_asset_id()` is true for any `forge-demo-*` id. `is_demo_incident()` / CLI `item_is_demo()` / mail `[DEMO]` + body line / journal summaries all use that helper. UI pills on incidents, history, detail, ForgeRCA, escalation, email outbox, dashboard journal, and `/journal`. Seeded hosts: `forge-demo-01`, `forge-demo-win-01`, `forge-demo-sw-01`. Dashboard yellow journal error banner has **Dismiss**; per-user `users.journal_error_ack_id` hides it until a newer error.
+On the VM: `git pull origin main && ./forgesre update`. Recreate Core if the backend image does not pick up the new Python modules.
 
 ---
 
@@ -106,3 +104,4 @@ These are documentation choices, not holes to fill on sight:
 - The GitHub README `fetch-llm` line does not inline the 8 GB wget. The lab wget lives in [`docs/llm.md`](llm.md) §3.C.
 - Job claim could later use `FOR UPDATE SKIP LOCKED` on Postgres. Do not pretend it already does. SQLite tests would need a fallback.
 - `incident_detail.html` / `ai.html` RCA markup is similar but not identical. Extract a partial only if both pages should look the same.
+- Scheduled performance reports on `/ops` are still plain text. HTML them only if N asks.

@@ -424,7 +424,9 @@ YAML examples in `config/examples/playbook-*.yml` are documentation for a later 
 
 A background loop every 30 seconds generates (and optionally sends) those steps while the incident stays `OPEN` / `INVESTIGATING`. The table **Generated notifications** is the outbox.
 
-If the incident’s asset has **owner email**, every step is addressed to that email (demo: `platform@forgesre.local`). The body includes contact name and phone. Policy roles (`team` / `team-lead` / `engineer`) stay in the body as the step name. If owner email is empty, ForgeSRE falls back to `<role>@forgesre.local`. Incident reports and escalation mail are sent as HTML plus a matching plain-text part.
+If the incident’s asset has **owner email**, every step is addressed to that email (demo: `platform@forgesre.local`). The body includes contact name and phone. Policy roles (`team` / `team-lead` / `engineer`) stay in the body as the step name. If owner email is empty, ForgeSRE falls back to `<role>@forgesre.local`.
+
+Incident reports and escalation mail are **multipart** (`text/plain` + `text/html`). Gmail and Outlook show the HTML (severity color bar, DEMO banner when the asset is `forge-demo-*`, ForgeRCA sections). The Report outbox on the incident page still stores the plain-text body. **Send email** on `/ops` (Compose) stays as the operator typed it — ForgeSRE does not rewrite that text into HTML tables.
 
 This version has **no UI to add a new escalation policy**. Policies exist from seed (and could be inserted in Postgres). Playrules created in the UI (or API) attach the seeded **Default warning** policy when none is set. The 30s loop reads that policy’s `after_minutes` / `target` steps.
 
@@ -529,7 +531,7 @@ On `/incidents/<number>`:
 | Acknowledge | analyst+ | Status `INVESTIGATING`, records ack user/time |
 | Resolve / Close | analyst+ (`write_incidents`) | Closes the operational loop; records who resolved |
 | Run AI investigation | analyst+ (`read_ai`) or engineer (`investigate`) | ForgeRCA; does not change the host |
-| **Send incident report** | analyst / engineer / admin | Emails the current INC snapshot when SMTP is on (`sent`). If SMTP is off, stores `generated` in **Report outbox**. Replies arrive in the real mailbox, not in ForgeSRE |
+| **Send incident report** | analyst / engineer / admin | Emails the current INC snapshot when SMTP is on (`sent`) as HTML + plain text. If SMTP is off, stores `generated` in **Report outbox** (plain body). Replies arrive in the real mailbox, not in ForgeSRE |
 
 The same page lists **email notifications** for this `INC` (bodies, `generated` vs `sent`), **who did what** (audit: ack, resolve, notes), and **operator notes** (what a person actually did, e.g. cleaned WAL). Notes are not a ticket thread and not RCA.
 
