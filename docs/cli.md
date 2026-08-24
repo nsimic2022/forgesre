@@ -51,6 +51,8 @@ Two logins:
 ./forgesre backup --include-models
 ./forgesre restore                 # numbered backup_* picker (newest first); still needs --yes
 ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes
+./forgesre import backup           # same picker as restore
+./forgesre remove backup           # numbered picker; delete that folder only with --yes
 ./forgesre mailbox         # optional; does not rewrite Gmail/Outlook SMTP
 ./forgesre fetch-llm
 ./forgesre update

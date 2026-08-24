@@ -71,7 +71,7 @@ Dirs mode `700`, archives mode `600`. gitignore unchanged (`data/`). Restore/imp
 
 - `./forgesre backup` still exists (CLI + GUI).
 - `./forgesre update` still runs backup after doctor as a safety net (DEGRADED doctor may continue; backup is not blocked on snmp).
-- Administration Restore already had a folder dropdown: it now lists `backup_*` dirs newest first with timestamp + name (not tar contents). `./forgesre restore` / `import` with no path prints a numbered picker; still needs `--yes`.
+- Administration Restore already had a folder dropdown: it now lists `backup_*` dirs newest first with timestamp + name (not tar contents). `./forgesre restore` / `import` with no path prints a numbered picker; still needs `--yes`. Administration archive list has **Download** and **Remove**; `./forgesre remove backup` deletes one run folder (confirm `--yes`).
 
 ---
 
