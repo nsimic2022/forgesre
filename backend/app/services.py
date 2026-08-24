@@ -39,7 +39,9 @@ from app.seed import (
     is_demo_asset_id,
     seed,
 )
-from app.mailhtml import compose_email_message, incident_report_html, notification_html
+from app.email_service import send_smtp, smtp_ssl_context
+from app.incident_report_mail import build_incident_report, build_incident_report_html
+from app.notifications import build_escalation_body, build_escalation_html
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
@@ -755,8 +757,8 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
     owner_email = ((incident.asset.owner_email if incident.asset else "") or "").strip()
     stored_target = owner_email or policy_role
     subject = demo_mail_subject(incident, f"{incident.number} {incident.title}")
-    body = _notification_body(incident, step_key, policy_role)
-    html_body = notification_html(incident, step_key, policy_role)
+    body = build_escalation_body(incident, step_key, policy_role)
+    html_body = build_escalation_html(incident, step_key, policy_role)
     row = Notification(
         incident_id=incident.id,
         channel="email",
@@ -803,64 +805,8 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
     return row
 
 
-def _notification_body(incident: Incident, step_key: str, policy_role: str) -> str:
-    asset = incident.asset
-    lines = []
-    if is_demo_incident(incident):
-        lines.append(demo_body_line(incident))
-    lines.extend(
-        [
-        f"Incident: {incident.number}",
-        f"Title: {incident.title}",
-        f"Severity: {incident.severity}",
-        f"Status: {incident.status}",
-        f"Escalation step: {step_key} (policy role: {policy_role})",
-        f"Asset: {asset.hostname if asset else 'unknown'}",
-        f"Playbook: {incident.playbook.name if incident.playbook else 'n/a'}",
-        ]
-    )
-    if asset:
-        lines.extend(
-            [
-                f"Owner: {asset.owner or '—'}",
-                f"Contact: {asset.contact_name or '—'}",
-                f"Email: {asset.owner_email or '—'}",
-                f"Phone: {asset.owner_phone or '—'}",
-            ]
-        )
-        if asset.notes:
-            lines.append(f"Notes: {asset.notes}")
-    return "\n".join(lines) + "\n"
-
-
-def smtp_ssl_context(host: str):
-    """STARTTLS context. Local docker-mailserver uses a self-signed cert."""
-    import ssl
-
-    ctx = ssl.create_default_context()
-    if (host or "").lower() in {"127.0.0.1", "localhost", "::1"}:
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-    return ctx
-
-
 def _send_smtp(target: str, subject: str, body: str, html: str | None = None) -> None:
-    import smtplib
-
-    address = target.strip() if "@" in (target or "") else f"{target}@forgesre.local"
-    message = compose_email_message(
-        sender=settings.smtp_from,
-        to=address,
-        subject=subject,
-        body=body,
-        html_body=html,
-    )
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as client:
-        if settings.smtp_tls:
-            client.starttls(context=smtp_ssl_context(settings.smtp_host))
-        if settings.smtp_username:
-            client.login(settings.smtp_username, settings.smtp_password)
-        client.send_message(message)
+    send_smtp(target, subject, body, html=html)
 
 
 def _valid_email(value: str) -> str:
@@ -1007,89 +953,6 @@ def build_performance_report(db: Session, asset_ids: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_incident_report(db: Session, incident: Incident) -> str:
-    """Text report for one INC. Includes ForgeRCA when it has already run."""
-    if incident.asset is None and incident.asset_id:
-        incident.asset = db.get(Asset, incident.asset_id)
-    asset = incident.asset
-    investigation = incident.investigations[-1] if incident.investigations else None
-    rca = (investigation.result if investigation else None) or {}
-    lines = ["ForgeSRE incident report"]
-    if is_demo_incident(incident):
-        lines.append(demo_body_line(incident))
-    lines.extend(
-        [
-        f"Incident: {incident.number}",
-        f"Title: {incident.title}",
-        f"Severity: {incident.severity}",
-        f"Status: {incident.status}",
-        f"Started: {incident.started_at}",
-        ]
-    )
-    if incident.ack_by:
-        lines.append(f"Ack: {incident.ack_by} {incident.ack_at or ''}".rstrip())
-    if incident.resolved_by:
-        lines.append(f"Resolved/closed: {incident.resolved_by} {incident.resolved_at or incident.ended_at or ''}".rstrip())
-    if asset:
-        lines.extend(
-            [
-                f"Asset: {asset.hostname} ({asset.asset_id})",
-                f"Type: {asset.type or '—'}  IP: {asset.ip or '—'}",
-                f"Owner: {asset.owner or '—'}  Contact: {asset.contact_name or '—'}",
-                f"Email: {asset.owner_email or '—'}  Phone: {asset.owner_phone or '—'}",
-            ]
-        )
-    if incident.summary:
-        lines.extend(["", "Alert summary:", incident.summary])
-    if incident.playbook:
-        lines.append(f"Playbook: {incident.playbook.name} (guidance only — not executed)")
-    if investigation:
-        lines.extend(
-            [
-                "",
-                f"## ForgeRCA ({investigation.engine or 'forgerca'} {investigation.engine_version or ''} · {investigation.provider or ''})".strip(),
-                f"Summary: {investigation.summary or '—'}",
-                f"Likely cause: {investigation.likely_cause or '—'}",
-                f"Confidence: {int(investigation.confidence or 0)}% (ForgeSRE score, not a validated model)",
-                f"What should I do: {investigation.recommended_action or '—'}",
-            ]
-        )
-        facts = rca.get("facts") or []
-        if facts:
-            lines.append("Facts:")
-            for fact in facts:
-                text = fact.get("text") if isinstance(fact, dict) else fact
-                lines.append(f"- {text}")
-        anomalies = rca.get("anomalies") or []
-        if anomalies:
-            lines.append("Anomalies:")
-            for item in anomalies:
-                text = item.get("summary") if isinstance(item, dict) else item
-                lines.append(f"- {text}")
-        hyps = rca.get("hypotheses") or []
-        if hyps:
-            lines.append("Candidate causes:")
-            for hyp in hyps:
-                text = hyp.get("summary") if isinstance(hyp, dict) else hyp
-                lines.append(f"- {text}")
-        limits = rca.get("limitations") or []
-        if limits:
-            lines.append("Limitations:")
-            for line in limits:
-                lines.append(f"- {line}")
-    else:
-        lines.extend(["", "ForgeRCA has not been run yet."])
-    notes = list(incident.operator_notes or [])
-    if notes:
-        lines.append("")
-        lines.append("Operator notes:")
-        for note in notes:
-            lines.append(f"- {note.at} {note.actor}: {note.body}")
-    lines.append("")
-    lines.append("This is a snapshot. ForgeSRE does not execute playbooks.")
-    return "\n".join(lines) + "\n"
-
-
 def send_incident_report(db: Session, incident: Incident, target: str, actor: str = "system") -> Notification:
     contact = remember_mail_contact(db, target, actor=actor)
     if contact is None:
@@ -1103,7 +966,7 @@ def send_incident_report(db: Session, incident: Incident, target: str, actor: st
         actor=actor,
         step_key="incident-report",
         incident=incident,
-        html=incident_report_html(incident),
+        html=build_incident_report_html(db, incident),
     )
 
 
