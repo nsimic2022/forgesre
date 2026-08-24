@@ -5,8 +5,16 @@
 {% if notice %}
 <div class="banner">{{ notice }}</div>
 {% endif %}
+<p class="muted reach-legend">
+  After IP:
+  <span class="reach-dot green">Ping</span> ICMP ok ·
+  <span class="reach-dot yellow">Ping</span> not probed yet / skipped ·
+  <span class="reach-dot red">Ping</span> no reply.
+  Same colors for <strong>:9100</strong> (node_exporter), <strong>:9182</strong> (windows_exporter), and <strong>SNMP</strong> (UDP/161).
+  The table loads immediately with last-known colors; probes refresh in the background.
+</p>
 <div class="table-scroll">
-<table class="asset-table">
+<table class="asset-table" data-asset-reachability>
   <thead>
     <tr>
       <th>Asset ID</th>
@@ -26,7 +34,14 @@
     <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}">
       <td><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
       <td>{{ asset.hostname }}</td>
-      <td>{{ asset.ip }}</td>
+      <td>
+        {{ asset.ip or "—" }}
+        {% set r = reachability_snapshot(asset) %}
+        <span class="reach-badges" data-asset-reach="{{ asset.asset_id }}">
+          <span class="reach-dot ping {{ r.ping }}" title="Ping: {{ r.ping_detail }}">Ping</span>
+          <span class="reach-dot exporter {{ r.exporter }}" title="{{ r.exporter_label }}: {{ r.exporter_detail }}">{{ r.exporter_label }}</span>
+        </span>
+      </td>
       <td>{{ asset.owner or "—" }}</td>
       <td>
         {% if asset.contact_name or asset.owner_email or asset.owner_phone %}

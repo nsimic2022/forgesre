@@ -219,6 +219,8 @@ def create_manual_asset(
     scrape_address: str = "",
     actor: str = "system",
     metrics_fetcher=None,
+    snmp_ok: bool | None = None,
+    snmp_prober=None,
     require_new: bool = False,
     cloned_from: str = "",
 ) -> Asset:
@@ -245,7 +247,13 @@ def create_manual_asset(
         return existing
     detect_message = ""
     if is_auto_asset_type(type):
-        detected = detect_exporter(ip, hint_type=type, fetcher=metrics_fetcher)
+        detected = detect_exporter(
+            ip,
+            hint_type=type,
+            fetcher=metrics_fetcher,
+            snmp_ok=snmp_ok,
+            snmp_prober=snmp_prober,
+        )
         detect_message = detected.message
         if detected.kind == "windows":
             type = detected.asset_type
@@ -255,6 +263,10 @@ def create_manual_asset(
             type = detected.asset_type
             monitoring_profile = monitoring_profile or detected.profile
             scrape_address = (scrape_address or "").strip() or detected.scrape_address
+        elif detected.kind == "network":
+            type = detected.asset_type
+            monitoring_profile = monitoring_profile or detected.profile
+            scrape_address = (scrape_address or "").strip()
         else:
             type = "Unknown"
             monitoring_profile = (monitoring_profile or "").strip()
@@ -335,6 +347,8 @@ def update_asset(
     actor: str = "system",
     detect: bool = False,
     metrics_fetcher=None,
+    snmp_ok: bool | None = None,
+    snmp_prober=None,
 ) -> Asset:
     old_ip = asset.ip or ""
     old_type = asset.type or ""
@@ -368,6 +382,8 @@ def update_asset(
             hint_type=old_type if not auto else "",
             hint_profile=old_profile,
             fetcher=metrics_fetcher,
+            snmp_ok=snmp_ok,
+            snmp_prober=snmp_prober,
         )
         detect_message = detected.message
         setattr(asset, "_detect_message", detect_message)
@@ -398,12 +414,14 @@ def update_asset(
         )
         if old_kind != new_kind and (old_scrape == old_default or old_scrape == default_scrape_address(old_type, old_ip, old_profile)):
             remapped = default_scrape_address(asset.type or "", asset.ip, asset.monitoring_profile or "")
-            if remapped:
+            if remapped or new_kind == "network":
                 asset.scrape_address = remapped
     if new_kind == "windows" and (asset.monitoring_profile or "") in {"", "linux-standard"}:
         asset.monitoring_profile = "windows-standard"
     elif new_kind == "linux" and (asset.monitoring_profile or "") in {"", "windows-standard"}:
         asset.monitoring_profile = "linux-standard"
+    elif new_kind == "network" and (asset.monitoring_profile or "") in {"", "linux-standard", "windows-standard"}:
+        asset.monitoring_profile = "network-switch"
     elif new_kind == "unknown":
         if (asset.monitoring_profile or "") in {"linux-standard", "windows-standard", "network-switch"}:
             asset.monitoring_profile = ""

@@ -43,7 +43,8 @@ from app.inventory import (
     sync_netbox,
     update_asset,
 )
-from app.exporter_detect import detect_exporter
+from app.asset_probe import refresh_reachability, reachability_snapshot
+from app.exporter_detect import detect_exporter, is_auto_asset_type
 from app.seed import seed
 from app.services import ingest_alertmanager, is_demo_incident, run_demo, run_demo_host, run_demo_network, run_demo_nodecpu, run_demo_rca, run_demo_windows
 from app.settings import settings
@@ -190,6 +191,22 @@ def me(user: User = Depends(require_user)) -> dict[str, Any]:
 @router.get("/assets")
 def list_assets(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> list[dict]:
     return [_asset(item) for item in db.query(Asset).order_by(Asset.hostname).all()]
+
+
+@router.get("/assets/reachability")
+def assets_reachability(
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_assets")),
+    refresh: bool = True,
+) -> list[dict[str, Any]]:
+    """Last-known ping/exporter colors. Optional live probe (does not block the HTML list)."""
+    del user
+    rows = db.query(Asset).order_by(Asset.hostname).all()
+    if not refresh:
+        return [reachability_snapshot(item) for item in rows]
+    payload = refresh_reachability(rows)
+    db.commit()
+    return payload
 
 
 @router.get("/assets/{asset_id}")
@@ -532,6 +549,7 @@ def create_asset_api(
             monitoring_profile=body.monitoring_profile,
             scrape_address=body.scrape_address,
             actor=user.email,
+            snmp_prober=_snmp_answer if is_auto_asset_type(body.type) else None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -562,6 +580,7 @@ def update_asset_api(
         notes=body.notes,
         scrape_address=body.scrape_address,
         actor=user.email,
+        snmp_prober=_snmp_answer,
     )
     return _asset(asset)
 
@@ -621,7 +640,7 @@ def detect_exporter_api(
     user: User = Depends(require("write_assets")),
 ) -> dict[str, Any]:
     del user
-    return detect_exporter(ip, hint_type=hint_type).as_dict()
+    return detect_exporter(ip, hint_type=hint_type, snmp_prober=_snmp_answer).as_dict()
 
 
 @router.post("/webhooks/alertmanager")
@@ -924,7 +943,14 @@ def _http(url: str, method: str) -> dict[str, str]:
         }
 
 
+def _snmp_answer(ip: str) -> bool:
+    from discovery import probe_snmp_udp
+
+    return bool(probe_snmp_udp(ip))
+
+
 def _asset(item: Asset) -> dict[str, Any]:
+    reach = reachability_snapshot(item)
     return {
         "asset_id": item.asset_id,
         "hostname": item.hostname,
@@ -941,6 +967,12 @@ def _asset(item: Asset) -> dict[str, Any]:
         "source": item.source,
         "scrape_address": item.scrape_address,
         "snmp": is_snmp_asset(item),
+        "ping": reach["ping"],
+        "ping_detail": reach["ping_detail"],
+        "exporter": reach["exporter"],
+        "exporter_detail": reach["exporter_detail"],
+        "exporter_label": reach["exporter_label"],
+        "probe_checked_at": reach["checked_at"],
     }
 
 

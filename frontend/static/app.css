@@ -207,6 +207,22 @@ table tbody tr:hover td { background: var(--row-hover); }
   border-radius: 9px;
 }
 .asset-form-actions { margin: 0.75rem 0 1rem; flex-wrap: wrap; }
+.reach-legend { margin: 0 0 0.75rem; }
+.reach-badges { display: inline-flex; gap: 0.25rem; margin-left: 0.4rem; vertical-align: middle; }
+.reach-dot {
+  display: inline-block;
+  min-width: 2.3rem;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  background: var(--pill-warn-bg);
+  color: var(--pill-warn);
+}
+.reach-dot.green { background: var(--pill-ok-bg); color: var(--pill-ok); }
+.reach-dot.yellow { background: var(--pill-warn-bg); color: var(--pill-warn); }
+.reach-dot.red { background: var(--pill-crit-bg); color: var(--pill-crit); }
 .pill { display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px; background: var(--pill); font-size: 0.8rem; }
 .pill.healthy, .pill.ok { background: var(--pill-ok-bg); color: var(--pill-ok); }
 .pill.warning, .pill.warn { background: var(--pill-warn-bg); color: var(--pill-warn); }

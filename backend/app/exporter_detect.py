@@ -1,7 +1,8 @@
-"""Cheap Linux vs Windows exporter detect from the ForgeSRE host.
+"""Cheap Linux / Windows / network detect from the ForgeSRE host.
 
 GET ``http://<ip>:9182/metrics`` and ``http://<ip>:9100/metrics`` with a short
-timeout. ICMP ping is a reachability hint only — it does not pick an OS.
+timeout. ICMP ping is a reachability hint only — it does not pick an OS or
+mark a device as Network.
 
 Classification:
 
@@ -13,7 +14,11 @@ Classification:
   prefer family signals (``windows_`` vs ``node_uname`` / ``node_cpu``). If both
   families are strong and no type is saved, prefer Windows Server ``:9182``
   (mis-classifying Windows as Linux was the original scrape miss).
-- Neither: leave type and scrape unset. Do not silently assume Linux.
+- Neither HTTP family: **do not guess Network**. Mark Network only when
+  discovery already used SNMP (UDP/161 GET / ``snmp_ok``) or a live SNMP
+  prober (the same path snmp_exporter uses after Approve) answered. Missing
+  :9100/:9182 is not a fingerprint.
+- Saved Linux/Windows is not rewritten to Network by SNMP.
 """
 
 from __future__ import annotations
@@ -31,6 +36,7 @@ METRICS_PATH = "/metrics"
 AUTO_ASSET_TYPE = "Auto (detect exporter)"
 
 MetricsFetcher = Callable[[str, float], tuple[int | None, str, str]]
+SnmpProber = Callable[[str], bool]
 
 
 def is_auto_asset_type(type: str = "") -> bool:
@@ -50,6 +56,8 @@ def hint_kind(type: str = "", profile: str = "") -> str:
         return "windows"
     if "linux" in blob:
         return "linux"
+    if "network" in blob or "switch" in blob or "router" in blob or "firewall" in blob:
+        return "network"
     return ""
 
 
@@ -102,6 +110,7 @@ class ExporterDetect:
     port: int | None = None
     linux: bool = False
     windows: bool = False
+    snmp: bool = False
     linux_status: int | None = None
     windows_status: int | None = None
     linux_error: str = ""
@@ -127,15 +136,23 @@ def _picked(ip: str, kind: str, message: str, tie_break: str, **ports: Any) -> E
         asset_type = "Windows Server"
         profile = "windows-standard"
         role = "Possible Windows server"
+        scrape = f"{ip}:{port}" if ip else ""
+    elif kind == "network":
+        port = None
+        asset_type = "Network device"
+        profile = "network-switch"
+        role = "Possible network device"
+        scrape = ""
     else:
         port = LINUX_EXPORTER_PORT
         asset_type = "Linux Server"
         profile = "linux-standard"
         role = "Possible Linux server"
+        scrape = f"{ip}:{port}" if ip else ""
     result = ExporterDetect(
         kind=kind,
         asset_type=asset_type,
-        scrape_address=f"{ip}:{port}" if ip else "",
+        scrape_address=scrape,
         profile=profile,
         port=port,
         message=message,
@@ -147,18 +164,32 @@ def _picked(ip: str, kind: str, message: str, tie_break: str, **ports: Any) -> E
     return result
 
 
+def _resolve_snmp(ip: str, snmp_ok: bool | None, snmp_prober: SnmpProber | None) -> bool:
+    if snmp_ok is not None:
+        return bool(snmp_ok)
+    if snmp_prober is None:
+        return False
+    try:
+        return bool(snmp_prober(ip))
+    except Exception:
+        return False
+
+
 def detect_exporter(
     ip: str,
     hint_type: str = "",
     hint_profile: str = "",
     timeout: float = DETECT_TIMEOUT,
     fetcher: MetricsFetcher | None = None,
+    snmp_ok: bool | None = None,
+    snmp_prober: SnmpProber | None = None,
 ) -> ExporterDetect:
     ip = (ip or "").strip()
     if not ip:
         return _empty(
             "",
-            "No IP — cannot detect exporter. ICMP ping is not a scrape. Pick Linux Server (:9100) or Windows Server (:9182).",
+            "No IP — cannot detect exporter. ICMP ping is not a scrape. "
+            "Pick Linux Server (:9100), Windows Server (:9182), or Network device (SNMP).",
         )
     get = fetcher or fetch_metrics
     win_url = f"http://{ip}:{WINDOWS_EXPORTER_PORT}{METRICS_PATH}"
@@ -222,18 +253,42 @@ def detect_exporter(
             "linux-metrics",
             **extra,
         )
-    result = ExporterDetect(
+    saved = hint_kind(hint_type, hint_profile)
+    snmp = False
+    if saved not in {"linux", "windows"}:
+        snmp = _resolve_snmp(ip, snmp_ok, snmp_prober)
+    extra["snmp"] = snmp
+    if snmp:
+        return _picked(
+            ip,
+            "network",
+            (
+                "SNMP UDP/161 answered (same path as snmp_exporter after Approve). "
+                "Type Network device, empty scrape. Not guessed from missing :9100/:9182."
+            ),
+            "snmp-udp",
+            **extra,
+        )
+    if saved == "network":
+        return _picked(
+            ip,
+            "network",
+            "Kept Network device (saved type). Polled by snmp_exporter UDP/161, not HTTP /metrics.",
+            "saved-type",
+            **extra,
+        )
+    return ExporterDetect(
         linux=False,
         windows=False,
+        snmp=False,
         linux_status=lnx_status,
         windows_status=win_status,
         linux_error=lnx_err,
         windows_error=win_err,
         tie_break="none",
         message=(
-            "No windows_exporter :9182/metrics and no node_exporter :9100/metrics. "
-            "ICMP ping is not a scrape — pick Linux Server or Windows Server yourself, "
-            "or install the exporter."
+            "No windows_exporter :9182/metrics, no node_exporter :9100/metrics, "
+            "and no SNMP UDP/161 answer. ICMP ping is not a scrape — pick "
+            "Linux Server, Windows Server, or Network device yourself, or install the exporter."
         ),
     )
-    return result

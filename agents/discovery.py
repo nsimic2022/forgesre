@@ -68,13 +68,24 @@ def probe_host(
         except ImportError:
             detect_exporter = None  # type: ignore[assignment]
         if detect_exporter is not None:
-            detected = detect_exporter(ip, timeout=max(timeout, 0.8), fetcher=metrics_fetcher)
+            detected = detect_exporter(
+                ip,
+                timeout=max(timeout, 0.8),
+                fetcher=metrics_fetcher,
+                snmp_ok=snmp_ok,
+            )
             exporter_kind = detected.kind or "none"
             detect_message = detected.message
             if detected.kind == "windows" and 9182 not in open_ports:
                 open_ports.append(9182)
             if detected.kind == "linux" and 9100 not in open_ports:
                 open_ports.append(9100)
+    elif snmp_ok:
+        exporter_kind = "network"
+        detect_message = (
+            "SNMP UDP/161 answered. Network device (snmp_exporter path). "
+            "Not guessed from HTTP /metrics."
+        )
     return {
         "ip": ip,
         "open_ports": open_ports,
@@ -96,6 +107,8 @@ def classify(open_ports: list[int], snmp_ok: bool = False, exporter_kind: str = 
         return "Possible Windows server"
     if exporter_kind == "linux":
         return "Possible Linux server"
+    if exporter_kind == "network":
+        return "Possible network device"
     ports = set(open_ports)
     if exporter_kind == "none":
         if snmp_ok or 161 in ports:
