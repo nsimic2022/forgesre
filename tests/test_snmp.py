@@ -162,6 +162,8 @@ def test_cli_help_documents_snmp_and_assets():
     doctor = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "doctor"], text=True)
     assert "paused" in doctor
     assert "snmp-exporter" in doctor
+    assert "Core API" in doctor
+    assert "Core (container)" in doctor
     render = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "render-monitoring"], text=True)
     assert "install.sh" in render
     assets = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "assets"], text=True)

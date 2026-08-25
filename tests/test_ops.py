@@ -36,6 +36,7 @@ def test_system_health_has_open_column_and_grafana():
     assert "alloy" in page.text
     assert "grafana" in page.text
     assert "discovery" in page.text
+    assert "Core (container)" in page.text
     assert "GUI" in page.text
     assert "Metrics" in page.text
     db.close()

@@ -61,7 +61,7 @@ from app.services import (
     run_demo_windows,
 )
 from app.settings import settings
-from app.stack import doctor_soft_status, ensure_snmp_exporter, snmp_target_count
+from app.stack import component_label, doctor_soft_status, ensure_snmp_exporter, snmp_target_count
 
 log = logging.getLogger("forgesre")
 router = APIRouter(prefix="/api/v1")
@@ -1039,6 +1039,8 @@ def doctor_payload(*, force: bool = False) -> dict[str, Any]:
 
 def _doctor_payload_fresh() -> dict[str, Any]:
     components = {
+        # Machine key "core" = compose service. Display: Core (container).
+        # Always-ok stack row — not the curl of /api/v1/health (that is Core API).
         "core": _ok("ok"),
         "postgres": _probe_sql(),
         "prometheus": _http(f"{settings.prometheus_url}/-/ready", "GET"),
@@ -1051,6 +1053,8 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "netbox": _netbox_check(),
         "discovery": _ok("ok") if settings.discovery_enabled else _ok("disabled"),
     }
+    for name, item in components.items():
+        item["label"] = component_label(name)
     failed = [name for name, item in components.items() if not doctor_soft_status(item["status"])]
     return {
         "overall": "HEALTHY" if not failed else "DEGRADED",

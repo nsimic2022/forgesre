@@ -13,14 +13,14 @@ fi
 echo "ForgeSRE Health"
 echo
 
-ok() { printf "  %-16s ✓\n" "$1"; }
-bad() { printf "  %-16s ✗  %s\n" "$1" "$2"; }
+ok() { printf "  %-20s ✓\n" "$1"; }
+bad() { printf "  %-20s ✗  %s\n" "$1" "$2"; }
 
 FAIL=0
 if curl -fsS "http://127.0.0.1:${PORT}/api/v1/health" >/dev/null 2>&1; then
-  ok "Core"
+  ok "Core API"
 else
-  bad "Core" "UI/API not reachable on port ${PORT}"
+  bad "Core API" "UI/API not reachable on port ${PORT}"
   FAIL=1
 fi
 
@@ -58,6 +58,7 @@ data = json.loads(Path("/tmp/forgesre-doctor.json").read_text())
 ok_status = {"ok", "disabled", "paused", "warn", "warning"}
 for name, item in data.get("components", {}).items():
     status = item.get("status")
+    label = item.get("label") or name
     mark = "✓" if status in ok_status else "✗"
     extra = ""
     if status not in ok_status:
@@ -66,7 +67,7 @@ for name, item in data.get("components", {}).items():
             extra += f"\n    Test: {item['test']}"
         if item.get("fix"):
             extra += f"\n    Fix:  {item['fix']}"
-    print(f"  {name:<16} {mark}{extra}")
+    print(f"  {label:<20} {mark}{extra}")
 print()
 print(f"Overall:\n  {data.get('overall')}")
 raise SystemExit(0 if data.get("overall") == "HEALTHY" else 1)

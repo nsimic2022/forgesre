@@ -329,6 +329,7 @@ def test_system_health_page_has_doctor_button_and_status_pills():
     assert "<th>Open</th>" in page.text
     assert 'class="pill ok"' in page.text or 'class="pill warn"' in page.text or 'class="pill crit"' in page.text
     assert "postgres" in page.text
+    assert "Core (container)" in page.text
     posted = client.post("/health-ui/refresh", follow_redirects=False)
     assert posted.status_code == 303
     assert posted.headers["location"] == "/health-ui"

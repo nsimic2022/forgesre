@@ -52,7 +52,7 @@ Commands:
   shell              Same prompt as ./forgesre with no args
   quit / exit        Leave the forgesre> prompt (Ctrl-D also works)
   install            Guided first-time install (new VM only)
-  doctor             Short health lights (Core, Prometheus, snmp-exporter, …)
+  doctor             Short health lights (Core API, Core (container), Prometheus, …)
   test               Full appliance report (files, HTTP, login, APIs, email, logs)
   ping [asset]       ICMP + exporter /metrics for inventory (alias: probe)
   probe [asset]      Same as ping
@@ -192,6 +192,9 @@ doctor — same checks as /health-ui. Overall HEALTHY or DEGRADED.
 
   ./forgesre doctor
   ./doctor.sh
+
+Core API is curl /api/v1/health. Core (container) is the compose service stack
+row (always-ok dummy, not a second probe). Machine JSON key stays "core".
 
 snmp: paused (yellow) when there are no Network device + IP targets — that is not DOWN.
 When inventory has SNMP targets, doctor starts snmp-exporter via compose if :9116 is dark.

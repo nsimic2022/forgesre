@@ -58,6 +58,7 @@ def test_dashboard_has_one_run_demo_control_not_two_forms():
     home = client.get("/")
     assert home.status_code == 200
     html = home.text
+    assert "Core (container)" in html
     assert html.count('id="demo-open"') == 1
     assert html.count("data-demo-open") == 1
     assert html.count("Run demo") >= 1
