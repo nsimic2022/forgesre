@@ -35,6 +35,23 @@
   <label>Owner phone <input name="owner_phone" value="{{ form.owner_phone }}" placeholder="+381-11-000-0000"></label>
   <label>Scrape address <input name="scrape_address" value="{{ form.scrape_address }}" placeholder="10.10.10.21:9100 or :9182"></label>
   <label class="wide">Notes <input name="notes" value="{{ form.notes }}" placeholder="Rack, customer, how to reach them"></label>
+  <input type="hidden" name="alarms_present" value="1">
+  <fieldset class="wide alarm-families" data-alarm-families>
+    <legend>Bundled alarms for this asset</legend>
+    <p class="muted" data-family-line>Auto-detect still picks Linux / Windows / Network. This checklist is cpu / mem / disk / up only — not every exporter series. Disable or raise the % so this client is not noisy. Prometheus rules stay global; ForgeSRE honors these when opening an incident if the webhook includes a value.</p>
+    {% set alarms = form.alarms or {} %}
+    {% set up_a = alarms.get('up') or {} %}
+    {% set cpu_a = alarms.get('cpu_percent') or {} %}
+    {% set mem_a = alarms.get('memory_percent') or {} %}
+    {% set disk_a = alarms.get('disk_percent') or {} %}
+    <label class="alarm-row"><input type="checkbox" name="alarm_up_enabled" value="1" data-alarm-up {% if up_a.get('enabled', True) %}checked{% endif %}> Collecting (up)</label>
+    <label class="alarm-row"><input type="checkbox" name="alarm_cpu_enabled" value="1" data-alarm-cpu {% if cpu_a.get('enabled', True) %}checked{% endif %}> CPU
+      <input type="number" name="alarm_cpu_threshold" min="1" max="100" step="1" value="{{ cpu_a.get('threshold') or 90 }}" data-alarm-cpu-th> %</label>
+    <label class="alarm-row"><input type="checkbox" name="alarm_memory_enabled" value="1" data-alarm-memory {% if mem_a.get('enabled', True) %}checked{% endif %}> Memory
+      <input type="number" name="alarm_memory_threshold" min="1" max="100" step="1" value="{{ mem_a.get('threshold') or 90 }}" data-alarm-memory-th> %</label>
+    <label class="alarm-row"><input type="checkbox" name="alarm_disk_enabled" value="1" data-alarm-disk {% if disk_a.get('enabled', True) %}checked{% endif %}> Disk
+      <input type="number" name="alarm_disk_threshold" min="1" max="100" step="1" value="{{ disk_a.get('threshold') or 90 }}" data-alarm-disk-th> %</label>
+  </fieldset>
   {% if form_mode == "clone" %}
   <input type="hidden" name="clone_of" value="{{ clone_source }}">
   {% endif %}

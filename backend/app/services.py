@@ -288,6 +288,21 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
                     reset_demo_gauges()
             continue
         if incident is None:
+            from app.asset_alarms import bundled_alert_skip_reason
+
+            skip = bundled_alert_skip_reason(asset, alertname, alert)
+            if skip:
+                report(
+                    db,
+                    "incident",
+                    "suppress",
+                    "ok",
+                    summary=f"Skipped {alertname} on {asset_name}",
+                    detail=skip,
+                    object_type="asset",
+                    object_id=str(getattr(asset, "asset_id", "") or asset_name),
+                )
+                continue
             rule = match_playrule(db, alertname, labels)
             incident = Incident(
                 number=next_incident_number(db),
@@ -432,6 +447,8 @@ def persist_rca_evidence(
             "hostname": incident.asset.hostname,
             "ip": incident.asset.ip,
             "type": incident.asset.type,
+            "monitoring_profile": incident.asset.monitoring_profile,
+            "scrape_address": incident.asset.scrape_address,
             "status": incident.asset.status,
         }
     maintenance = overlapping_maintenance(db, asset.get("asset_id") or "", incident.started_at or utcnow())
@@ -517,8 +534,11 @@ def query_prometheus(asset: Asset | None = None) -> dict[str, Any]:
     if asset:
         asset_dict = {
             "asset_id": asset.asset_id,
+            "hostname": asset.hostname,
+            "ip": asset.ip,
             "type": asset.type,
             "monitoring_profile": asset.monitoring_profile,
+            "scrape_address": asset.scrape_address,
         }
     demo = bool(asset and asset.asset_id == DEMO_ASSET)
     packed = promql_queries_for(asset_dict)

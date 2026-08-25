@@ -56,6 +56,8 @@ def test_detect_windows_only():
     assert result.scrape_address == "10.44.1.60:9182"
     assert result.profile == "windows-standard"
     assert "9182" in result.message
+    assert result.families["cpu"] is True
+    assert result.families["up"] is True
 
 
 def test_detect_linux_only():

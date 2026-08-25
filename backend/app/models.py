@@ -46,6 +46,7 @@ class Asset(Base):
     source: Mapped[str] = mapped_column(String(32), default="manual")
     netbox_id: Mapped[str] = mapped_column(String(64), default="")
     scrape_address: Mapped[str] = mapped_column(String(128), default="")
+    alarms: Mapped[dict] = mapped_column(JSONType, default=dict)
     ping_status: Mapped[str] = mapped_column(String(16), default="yellow")
     ping_detail: Mapped[str] = mapped_column(String(255), default="")
     exporter_status: Mapped[str] = mapped_column(String(16), default="yellow")

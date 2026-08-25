@@ -15,6 +15,7 @@ from app.db import get_db
 from app.asset_probe import reachability_snapshot
 from app.seed import is_demo_asset_id
 from app.exporter_detect import AUTO_ASSET_TYPE
+from app.asset_alarms import alarms_from_form
 from app.inventory import (
     ASSET_TYPE_CHOICES,
     approve_candidate,
@@ -419,10 +420,28 @@ def asset_create(
     notes: str = Form(""),
     scrape_address: str = Form(""),
     clone_of: str = Form(""),
+    alarms_present: str = Form(""),
+    alarm_up_enabled: str = Form(""),
+    alarm_cpu_enabled: str = Form(""),
+    alarm_cpu_threshold: str = Form(""),
+    alarm_memory_enabled: str = Form(""),
+    alarm_memory_threshold: str = Form(""),
+    alarm_disk_enabled: str = Form(""),
+    alarm_disk_threshold: str = Form(""),
 ):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
     cloned_from = (clone_of or "").strip()
+    posted_alarms = alarms_from_form(
+        present=alarms_present,
+        up_enabled=alarm_up_enabled,
+        cpu_enabled=alarm_cpu_enabled,
+        cpu_threshold=alarm_cpu_threshold,
+        memory_enabled=alarm_memory_enabled,
+        memory_threshold=alarm_memory_threshold,
+        disk_enabled=alarm_disk_enabled,
+        disk_threshold=alarm_disk_threshold,
+    )
     try:
         asset = create_manual_asset(
             db,
@@ -440,6 +459,7 @@ def asset_create(
             require_new=bool(cloned_from),
             cloned_from=cloned_from,
             snmp_prober=_snmp_answer,
+            alarms=posted_alarms,
         )
     except ValueError as exc:
         if cloned_from:
@@ -577,12 +597,30 @@ def asset_update(
     owner_phone: str = Form(""),
     notes: str = Form(""),
     scrape_address: str = Form(""),
+    alarms_present: str = Form(""),
+    alarm_up_enabled: str = Form(""),
+    alarm_cpu_enabled: str = Form(""),
+    alarm_cpu_threshold: str = Form(""),
+    alarm_memory_enabled: str = Form(""),
+    alarm_memory_threshold: str = Form(""),
+    alarm_disk_enabled: str = Form(""),
+    alarm_disk_threshold: str = Form(""),
 ):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
     item = db.query(Asset).filter_by(asset_id=asset_id).first()
     if item is None:
         raise HTTPException(status_code=404)
+    posted_alarms = alarms_from_form(
+        present=alarms_present,
+        up_enabled=alarm_up_enabled,
+        cpu_enabled=alarm_cpu_enabled,
+        cpu_threshold=alarm_cpu_threshold,
+        memory_enabled=alarm_memory_enabled,
+        memory_threshold=alarm_memory_threshold,
+        disk_enabled=alarm_disk_enabled,
+        disk_threshold=alarm_disk_threshold,
+    )
     update_asset(
         db,
         item,
@@ -598,6 +636,7 @@ def asset_update(
         scrape_address=scrape_address,
         actor=user.email,
         snmp_prober=_snmp_answer,
+        alarms=posted_alarms,
     )
     notice = getattr(item, "_detect_message", "") or ""
     suffix = f"?notice={quote(notice)}" if notice else ""

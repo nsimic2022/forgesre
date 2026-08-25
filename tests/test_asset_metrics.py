@@ -225,13 +225,126 @@ def test_network_tile_is_up_only():
 def test_unknown_class_is_yellow_not_collecting():
     panel = asset_metric_panel(
         {"asset_id": "mystery-01", "type": "Auto (detect exporter)"},
-        query_fn=_query({"node_cpu": 5.0, 'up{': 1.0}),
+        query_fn=_query({"node_cpu": 5.0}),
         range_fn=_no_spark,
     )
     assert panel["class"] == "unknown"
     assert panel["collecting"] is False
     assert panel["tiles"][0]["tone"] == "warn"
     assert panel["tiles"][0]["display"] == "not collecting"
+
+
+def test_windows_tiles_match_asset_label_or_instance_scrape():
+    from rca.collector import promql_selectors_for
+
+    asset = {
+        "asset_id": "blachole",
+        "hostname": "blACHOLE",
+        "ip": "38.242.217.52",
+        "type": "Windows Server",
+        "monitoring_profile": "windows-standard",
+        "scrape_address": "38.242.217.52:9182",
+    }
+    selectors = promql_selectors_for(asset)
+    assert selectors[0] == 'asset="blachole"'
+    assert 'instance="38.242.217.52:9182"' in selectors
+    packed = promql_queries_for(asset)
+    assert 'asset="blachole"' in packed["up"][0]
+    assert "38.242.217.52:9182" in packed["up"][0]
+    assert "windows_cpu_time_total" in packed["cpu_percent"][0]
+    assert "node_cpu_seconds_total" not in packed["cpu_percent"][0]
+
+    def instance_only(expr: str) -> dict:
+        if "node_" in expr:
+            return {"value": None, "query": expr}
+        if 'instance="38.242.217.52:9182"' not in expr:
+            return {"value": None, "query": expr}
+        if "windows_cpu_time_total" in expr:
+            return {"value": 18.0, "query": expr}
+        if "windows_os_physical_memory" in expr:
+            return {"value": 41.0, "query": expr}
+        if "windows_logical_disk" in expr:
+            return {"value": 55.0, "query": expr}
+        if expr.startswith("up{") or "up{" in expr:
+            return {"value": 1.0, "query": expr}
+        return {"value": None, "query": expr}
+
+    panel = asset_metric_panel(asset, query_fn=instance_only, range_fn=_no_spark)
+    assert panel["class"] == "windows"
+    assert panel["collecting"] is True
+    by_key = {tile["key"]: tile for tile in panel["tiles"]}
+    assert by_key["up"]["display"] == "up"
+    assert by_key["cpu_percent"]["value"] == 18.0
+    assert by_key["cpu_percent"]["tone"] == "ok"
+    assert by_key["memory_percent"]["display"] != "0%"
+    mem_missing = asset_metric_panel(
+        asset,
+        query_fn=lambda expr: {"value": 1.0, "query": expr} if expr.startswith("up{") else {"value": None, "query": expr},
+        range_fn=_no_spark,
+    )
+    mem = next(tile for tile in mem_missing["tiles"] if tile["key"] == "memory_percent")
+    assert mem["value"] is None
+    assert mem["display"] == "not collecting"
+    assert mem["bar_pct"] is None
+
+
+def test_windows_verify_style_asset_label_makes_collecting_green():
+    asset = {
+        "asset_id": "blachole",
+        "hostname": "blACHOLE",
+        "ip": "38.242.217.52",
+        "type": "Windows Server",
+        "scrape_address": "38.242.217.52:9182",
+    }
+
+    def verify_style(expr: str) -> dict:
+        if 'asset="blachole"' in expr and expr.startswith("up{"):
+            return {"value": 1.0, "query": expr}
+        if 'asset="blachole"' in expr and "windows_" in expr:
+            return {"value": 22.0, "query": expr}
+        return {"value": None, "query": expr}
+
+    panel = asset_metric_panel(asset, query_fn=verify_style, range_fn=_no_spark)
+    assert panel["collecting"] is True
+    assert "up=1" in panel["collecting_line"]
+
+
+def test_scrape_9182_on_auto_type_is_windows_class():
+    panel = asset_metric_panel(
+        {
+            "asset_id": "blachole",
+            "type": "Auto (detect exporter)",
+            "scrape_address": "38.242.217.52:9182",
+        },
+        query_fn=_query({"windows_cpu_time_total": 10.0, "windows_os_physical": 10.0, "windows_logical_disk": 10.0, 'up{': 1.0}),
+        range_fn=_no_spark,
+    )
+    assert panel["class"] == "windows"
+    assert panel["collecting"] is True
+
+
+def test_custom_disk_threshold_colors_tile():
+    asset = {
+        "asset_id": "win-lab-70",
+        "type": "Windows Server",
+        "alarms": {"disk_percent": {"enabled": True, "threshold": 70}},
+    }
+    panel = asset_metric_panel(
+        asset,
+        query_fn=_query({"windows_logical_disk": 80.0, "windows_cpu_time_total": 10.0, "windows_os_physical": 10.0, 'up{': 1.0}),
+        range_fn=_no_spark,
+    )
+    disk = next(tile for tile in panel["tiles"] if tile["key"] == "disk_percent")
+    assert disk["threshold"] == 70
+    assert disk["tone"] == "crit"
+    quiet = asset_metric_panel(
+        {**asset, "alarms": {"disk_percent": {"enabled": False, "threshold": 70}}},
+        query_fn=_query({"windows_logical_disk": 80.0, "windows_cpu_time_total": 10.0, "windows_os_physical": 10.0, 'up{': 1.0}),
+        range_fn=_no_spark,
+    )
+    quiet_disk = next(tile for tile in quiet["tiles"] if tile["key"] == "disk_percent")
+    assert quiet_disk["tone"] == "ok"
+    assert quiet_disk["alarm_enabled"] is False
 
 
 def test_sparkline_stays_small_when_range_exists():

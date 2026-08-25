@@ -679,6 +679,7 @@ class AssetBody(BaseModel):
     notes: str = ""
     monitoring_profile: str = ""
     scrape_address: str = ""
+    alarms: dict | None = None
 
 
 class AssetUpdateBody(BaseModel):
@@ -692,6 +693,7 @@ class AssetUpdateBody(BaseModel):
     owner_phone: str | None = None
     notes: str | None = None
     scrape_address: str | None = None
+    alarms: dict | None = None
 
 
 class AssetCloneBody(BaseModel):
@@ -705,6 +707,7 @@ class AssetCloneBody(BaseModel):
     owner_phone: str | None = None
     notes: str | None = None
     scrape_address: str | None = None
+    alarms: dict | None = None
 
 
 @router.post("/assets")
@@ -731,6 +734,7 @@ def create_asset_api(
             scrape_address=body.scrape_address,
             actor=user.email,
             snmp_prober=_snmp_answer if is_auto_asset_type(body.type) else None,
+            alarms=body.alarms,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -762,6 +766,7 @@ def update_asset_api(
         scrape_address=body.scrape_address,
         actor=user.email,
         snmp_prober=_snmp_answer,
+        alarms=body.alarms,
     )
     return _asset(asset)
 
@@ -793,6 +798,7 @@ def clone_asset_api(
             actor=user.email,
             require_new=True,
             cloned_from=item.asset_id,
+            alarms=body.alarms if body.alarms is not None else getattr(item, "alarms", None),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1147,6 +1153,7 @@ def _asset(item: Asset) -> dict[str, Any]:
         "notes": item.notes,
         "source": item.source,
         "scrape_address": item.scrape_address,
+        "alarms": getattr(item, "alarms", None) or {},
         "snmp": is_snmp_asset(item),
         "ping": reach["ping"],
         "ping_detail": reach["ping_detail"],
