@@ -287,9 +287,22 @@ def test_metrics_api_and_detail_html(monkeypatch):
     assert "asset-detail-split" in text
     assert "Machine metrics" in text
     assert "Edit, clone, or remove" in text
+    assert "asset-detail-actions" in text
+    main_at = text.find("asset-detail-main")
+    actions_at = text.find("asset-detail-actions")
+    metrics_at = text.find("asset-detail-metrics")
+    assert 0 <= main_at < actions_at < metrics_at
     assert "CPU" in text
     assert "22%" in text
     assert "Prometheus sees this target (up=1)." in text
+
+
+def test_asset_detail_css_equal_columns():
+    from pathlib import Path
+
+    css = Path("frontend/static/app.css").read_text()
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)" in css
+    assert "minmax(0, 1.35fr)" not in css
 
 
 def test_demo_detail_page_has_demo_label_when_prom_down():
