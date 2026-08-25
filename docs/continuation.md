@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Tuesday 25 August 2026.** Operator N: asset `blachole` listed **healthy**, `./forgesre verify blachole` PASS (ICMP, :9182 windows_exporter, Prometheus `up=1`), but opening the asset showed **Machine metrics** all yellow **not collecting**. Also approved per-asset alarm enable/disable + threshold % on Add/Edit (HDD 70% vs 92%).
+**Tuesday 25 August 2026.** Operator N: Add/Edit Alarms was a full-width block under hostname/IP; metric tiles stacked and clipped the threshold; Playrules/Playbooks Save had no Cancel.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -28,7 +28,7 @@ git pull origin main
 
 Also: `./forgesre ping`, `./forgesre verify`, `./forgesre test` (appliance health, not inventory). See [docs/llm.md](llm.md).
 
-Hard-refresh the browser after UI/CSS changes (`/static/app.css` is not cache-busted). Open **Assets → blachole**. Collecting should be green when verify PROM is PASS.
+Hard-refresh the browser after UI/CSS changes (`/static/app.css` is not cache-busted).
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
 
@@ -43,7 +43,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **255 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~35s each. Python 3.12, pytest 9.x.
+Both runs: **257 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~36s each. Python 3.12, pytest 9.x.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`.
 
@@ -51,9 +51,7 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-**Bug:** Tiles now match Prometheus the same way verify/RCA does: `up{asset="<id>"}` first (so `blachole` not `blACHOLE`), then hostname, then `instance=<scrape>` (`38.242.217.52:9182`). Scrape `:9182` classifies Windows (`windows_`, not `node_`). Missing series stay yellow — never a fake 0%. Collecting is green when that `up` sample is 1.
-
-**Feature:** Add/Edit keeps Auto-detect, plus a bundled cpu/mem/disk/up checklist (enable + threshold %). Persisted on `assets.alarms` JSON. Detail tiles use that threshold. Incident ingest skips bundled alerts when disabled or webhook value is below the asset threshold. Prometheus rules are **not** rewritten — Prom may still fire until `alerts.local.yml` changes.
+Add/Edit is hostname | IP | **Alarms** (checklist stays, Auto-detect stays); Machine metrics are one line (name · value · bar · color · threshold) with Edit; Playrules/Playbooks Save has Cancel; Playrules notes bundled default warning vs per-asset `assets.alarms` (same webhook, not a second engine).
 
 ---
 
@@ -67,7 +65,7 @@ git pull origin main
 ./forgesre update
 ```
 
-Hard-refresh, then **Assets** → open **blachole**. Left column unchanged. Right panel **Machine metrics**: Collecting green if verify PROM is PASS. Add/Edit has the alarm checklist (not a third column on the list).
+Hard-refresh, then **Assets** → Add/Edit is hostname | IP | Alarms. Open a host: Machine metrics one line each. Playrules shows bundled default warning vs `assets.alarms`.
 
 ---
 

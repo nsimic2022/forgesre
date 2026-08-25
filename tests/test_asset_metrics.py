@@ -407,6 +407,10 @@ def test_metrics_api_and_detail_html(monkeypatch):
     assert 0 <= main_at < actions_at < metrics_at
     assert "CPU" in text
     assert "22%" in text
+    assert "metric-tile-head" not in text
+    assert "metric-value" in text
+    assert "metric-threshold" in text
+    assert 'href="/assets?edit=app-lab-metrics#asset-form"' in text
     assert "Prometheus sees this target (up=1)." in text
 
 

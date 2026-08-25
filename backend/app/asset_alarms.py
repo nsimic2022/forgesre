@@ -142,6 +142,22 @@ def tile_enabled(alarms: dict[str, dict[str, Any]] | None, key: str) -> bool:
     return bool(spec.get("enabled"))
 
 
+def saved_alarm_hostnames(assets: Any) -> list[str]:
+    """Hostnames that already have a non-empty assets.alarms JSON."""
+    names: list[str] = []
+    for asset in assets or []:
+        raw = asset.get("alarms") if isinstance(asset, dict) else getattr(asset, "alarms", None)
+        if not isinstance(raw, dict) or not raw:
+            continue
+        if isinstance(asset, dict):
+            label = str(asset.get("hostname") or asset.get("asset_id") or "")
+        else:
+            label = str(getattr(asset, "hostname", "") or getattr(asset, "asset_id", "") or "")
+        if label:
+            names.append(label)
+    return names
+
+
 def alert_sample_value(alert: dict[str, Any] | None) -> float | None:
     """Best-effort numeric sample from an Alertmanager webhook. Missing → None."""
     if not isinstance(alert, dict):
