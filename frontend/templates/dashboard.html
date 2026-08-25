@@ -128,7 +128,7 @@
   <div class="grid">
     {% for name, item in doctor.components.items() %}
     <div class="stat {{ health_class(item.status) }}">
-      <span>{{ name }}</span><strong>{{ item.status }}</strong>
+      <span>{{ item.label or name }}</span><strong>{{ item.status }}</strong>
     </div>
     {% endfor %}
   </div>

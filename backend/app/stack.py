@@ -17,6 +17,17 @@ SOFT_STATUSES = frozenset({"ok", "disabled", "paused", "warn", "warning"})
 _SNMP_ENSURE_AT = 0.0
 _SNMP_ENSURE_COOLDOWN = 45.0
 
+# Machine keys stay compose service ids (dashboard Open links, failed[], JSON).
+# "core" is the stack row (dummy always-ok), not the /api/v1/health curl.
+COMPONENT_LABELS = {
+    "core": "Core (container)",
+}
+
+
+def component_label(cid: str) -> str:
+    """Human name for doctor CLI and Health UI. Unknown keys print as-is."""
+    return COMPONENT_LABELS.get(str(cid or ""), str(cid or ""))
+
 
 def request_hostname(host_header: str) -> str:
     return (host_header or "localhost").split(":")[0] or "localhost"
@@ -206,6 +217,7 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
         rows.append(
             {
                 "id": cid,
+                "label": spec.get("label") or item.get("label") or component_label(cid),
                 "status": item.get("status") or "disabled",
                 "state": state,
                 "css": css,
@@ -226,6 +238,7 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
         rows.append(
             {
                 "id": cid,
+                "label": packed.get("label") or component_label(cid),
                 "status": packed.get("status") or "error",
                 "state": state,
                 "css": css,

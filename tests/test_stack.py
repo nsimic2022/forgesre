@@ -2,6 +2,7 @@ from pathlib import Path
 
 from app.api import doctor_payload
 from app.stack import (
+    component_label,
     doctor_soft_status,
     enrich_components,
     ensure_snmp_exporter,
@@ -97,6 +98,25 @@ def test_doctor_script_treats_paused_as_ok_and_starts_compose():
     assert "up -d snmp-exporter" in text
 
 
+def test_component_label_core_is_container_not_api():
+    assert component_label("core") == "Core (container)"
+    assert component_label("postgres") == "postgres"
+    payload = doctor_payload(force=True)
+    core = payload["components"]["core"]
+    assert "core" in payload["components"]
+    assert core["status"] == "ok"
+    assert core["label"] == "Core (container)"
+
+
+def test_doctor_script_prints_core_api_for_health_curl():
+    text = (ROOT / "scripts" / "doctor.sh").read_text(encoding="utf-8")
+    assert 'ok "Core API"' in text
+    assert 'bad "Core API"' in text
+    assert 'ok "Core"' not in text
+    assert 'item.get("label")' in text
+    assert "/api/v1/health" in text
+
+
 def test_enrich_components_keeps_stack_order_and_open_links():
     rows = enrich_components(
         {
@@ -111,6 +131,11 @@ def test_enrich_components_keeps_stack_order_and_open_links():
     assert "grafana" in ids
     assert "alloy" in ids
     assert "discovery" in ids
+    core = next(row for row in rows if row["id"] == "core")
+    assert core["id"] == "core"
+    assert core["label"] == "Core (container)"
+    assert core["gui"] == "/"
+    assert core["metrics"] == "/metrics"
     prom = next(row for row in rows if row["id"] == "prometheus")
     assert prom["state"] == "down"
     assert prom["gui"].startswith("http://lab.local:")

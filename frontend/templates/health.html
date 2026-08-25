@@ -23,12 +23,12 @@
   {% for item in stack %}
   {% if item.gui %}
   <a class="stat {{ item.css }}" href="{{ item.gui }}" target="_blank" rel="noreferrer">
-    <span>{{ item.id }}</span>
+    <span>{{ item.label or item.id }}</span>
     <strong>{{ item.state }}</strong>
   </a>
   {% else %}
   <div class="stat {{ item.css }}">
-    <span>{{ item.id }}</span>
+    <span>{{ item.label or item.id }}</span>
     <strong>{{ item.state }}</strong>
   </div>
   {% endif %}
@@ -42,11 +42,11 @@
     <tr class="health-{{ item.css }}">
       <td>
         {% if item.gui %}
-        <a href="{{ item.gui }}" target="_blank" rel="noreferrer">{{ item.id }}</a>
+        <a href="{{ item.gui }}" target="_blank" rel="noreferrer">{{ item.label or item.id }}</a>
         {% elif item.metrics %}
-        <a href="{{ item.metrics }}" target="_blank" rel="noreferrer">{{ item.id }}</a>
+        <a href="{{ item.metrics }}" target="_blank" rel="noreferrer">{{ item.label or item.id }}</a>
         {% else %}
-        {{ item.id }}
+        {{ item.label or item.id }}
         {% endif %}
       </td>
       <td><span class="pill {{ item.css }}">{{ item.state }}</span></td>
