@@ -869,7 +869,7 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
             row.error = str(exc)
     else:
         row.status = "generated"
-        row.error = "SMTP disabled; notification generated but not sent"
+        row.error = "generated but not sent (email not configured)"
     db.add(row)
     audit(
         db,
@@ -990,7 +990,7 @@ def send_outbound_mail(
             row.error = str(exc)
     else:
         row.status = "generated"
-        row.error = "SMTP disabled; notification generated but not sent"
+        row.error = "generated but not sent (email not configured)"
     remember_mail_contact(db, row.target, actor=actor)
     db.add(row)
     audit(

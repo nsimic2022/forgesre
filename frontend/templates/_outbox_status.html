@@ -1,0 +1,3 @@
+{% set st = outbox_status_view(note) %}
+<span class="pill {{ st.css }}">{{ st.label }}</span>
+{% if st.hint %}<div class="muted outbox-hint">{{ st.hint }}</div>{% endif %}

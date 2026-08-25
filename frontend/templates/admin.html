@@ -133,7 +133,7 @@
 </form>
 {% if backups %}
 <div class="table-scroll">
-<table>
+<table class="backup-list">
   <thead><tr><th>Archive</th><th>Size</th><th></th></tr></thead>
   <tbody>
   {% for b in backups %}
@@ -174,7 +174,10 @@
       {% endfor %}
     </select>
   </label>
-  <label class="inline-check"><input type="checkbox" name="acknowledged" value="1" required> I understand this overwrites users, incidents, and playbooks on this live box</label>
+  <label class="inline-check">
+    <input type="checkbox" name="acknowledged" value="1" required>
+    <span>I understand this overwrites users, incidents, and playbooks on this live box</span>
+  </label>
   <label>Type RESTORE <input name="confirm" required placeholder="RESTORE" autocomplete="off"></label>
   <button type="submit" class="danger">Restore</button>
 </form>

@@ -261,7 +261,11 @@ def test_send_incident_report_to_address_book_email():
     )
     assert mail.target == "ops@dc.local"
     assert mail.status == "generated"
+    assert "not sent (email not configured)" in (mail.error or "")
     assert mail.incident_id == incident.id
+    outbox = client.get(f"/incidents/{number}")
+    assert "not sent (email not configured)" in outbox.text
+    assert 'class="pill generated">generated</span>' in outbox.text
     assert number in mail.body
     assert "Disk full" in mail.body
     assert "ForgeRCA has not been run yet." in mail.body

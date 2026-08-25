@@ -1,5 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Email & reports · ForgeSRE{% endblock %}
+{% block extra_head %}
+<style>
+  /* This page only: Add email stays the small column; Compose is at least half. */
+  .split.ops-forms {
+    grid-template-columns: minmax(12rem, 0.4fr) minmax(20rem, 1.2fr);
+    align-items: start;
+  }
+  .split.ops-forms > form.stack { max-width: none; width: 100%; }
+  @media (max-width: 900px) {
+    .split.ops-forms { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1>Email &amp; reports</h1>
@@ -7,7 +20,8 @@
 <p class="muted">
   This page only <strong>sends</strong> mail. There is no inbox — ForgeSRE does not receive email.
   Outbox is every generated / sent / failed message this appliance stored.
-  SMTP off keeps the row as <em>generated</em> (lab). Escalation mail on an incident is unchanged.
+  When email is not configured, a <em>generated</em> row was <strong>not sent (email not configured)</strong>.
+  Real <em>sent</em> / <em>failed</em> rows stay as they are. Escalation mail on an incident is unchanged.
   Grafana lives on <a href="/health-ui">System Health</a>.
 </p>
 
@@ -108,7 +122,7 @@
         <td class="muted">{{ note.created_at }}</td>
         <td>{{ note.target }}</td>
         <td>{% if is_demo_mail(note) %}<span class="pill demo">DEMO</span> {% endif %}{{ note.subject }}</td>
-        <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
+        <td>{% include "_outbox_status.html" %}</td>
         <td>
           <details>
             <summary>View</summary>

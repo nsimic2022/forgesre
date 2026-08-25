@@ -182,9 +182,17 @@ def test_admin_backup_buttons_before_appliance_shell(tmp_path, monkeypatch):
     assert ">Download</a>" in text
     assert ">Remove<" in text
     assert text.index(">Download</a>") < text.index(">Remove<")
+    assert 'class="backup-list"' in text
     assert "/admin/backups/remove" in text
     assert "onsubmit=" in text
     assert "confirm(" in text
+    restore = text.split('action="/admin/backups/restore"', 1)[1]
+    assert restore.find('type="checkbox"') < restore.find("I understand this overwrites")
+    assert restore.find('name="acknowledged"') < restore.find("<span>I understand this overwrites")
+    css = Path(__file__).resolve().parents[1].joinpath("frontend", "static", "app.css").read_text(encoding="utf-8")
+    assert ".backup-list td.row-actions { gap: 1rem;" in css
+    assert "form label.inline-check" in css
+    assert "flex-direction: row" in css.split("form label.inline-check", 1)[1].split("label.inline-check input", 1)[0]
     db.close()
 
 

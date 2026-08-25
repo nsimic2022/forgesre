@@ -6,7 +6,7 @@
   Policy steps still name roles (<code>team</code>, <code>team-lead</code>, <code>engineer</code>).
   Delivery goes to the <strong>asset owner email</strong> when that field is set (demo: <code>platform@forgesre.local</code> on forge-demo-01).
   If the asset has no owner email, ForgeSRE falls back to <code>&lt;role&gt;@forgesre.local</code>.
-  SMTP off means the row stays <em>generated</em> — that is the lab outbox.
+  When email is not configured, the row stays <em>generated</em> — not sent (email not configured).
 </p>
 {% for policy in policies %}
 <section class="card">
@@ -27,7 +27,7 @@
       <td>{{ note.created_at }}</td>
       <td>{{ note.target }}</td>
       <td>{% if is_demo_mail(note) %}<span class="pill demo">DEMO</span> {% endif %}{{ note.subject }}</td>
-        <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
+        <td>{% include "_outbox_status.html" %}</td>
     </tr>
   {% else %}
     <tr><td colspan="4" class="muted">None yet.</td></tr>

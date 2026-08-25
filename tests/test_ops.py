@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -7,7 +9,11 @@ from app.main import app
 from app.models import MailContact, Notification, ScheduledReport, User
 from app.security import hash_password
 from app.seed import seed
-from app.services import process_scheduled_reports
+from app.services import process_scheduled_reports, send_outbound_mail
+from app.settings import settings
+from app.web import outbox_status_view
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _db():
@@ -58,6 +64,9 @@ def test_ops_page_lists_outbox_and_reports():
     assert "Open Grafana" not in page.text
     assert "Stack UIs" not in page.text
     assert "platform@forgesre.local" in page.text
+    assert "not sent (email not configured)" in page.text
+    assert "minmax(12rem, 0.4fr) minmax(20rem, 1.2fr)" in page.text
+    assert "split ops-forms" in page.text
     db.close()
 
 
@@ -94,6 +103,13 @@ def test_ops_send_mail_lands_in_generated_outbox():
     assert row.subject == "lab ping"
     assert "hello from ForgeSRE" in row.body
     assert row.incident_id is None
+    assert "not sent (email not configured)" in (row.error or "")
+    page = client.get("/ops")
+    assert page.status_code == 200
+    chunk = page.text.split("ops@example.local", 1)[1].split("</tr>", 1)[0]
+    assert 'class="pill generated">generated</span>' in chunk
+    assert 'class="muted outbox-hint">not sent (email not configured)</div>' in chunk
+    assert 'class="pill sent"' not in chunk
     db.close()
 
 
@@ -186,4 +202,123 @@ def test_viewer_can_read_ops_but_cannot_send():
         follow_redirects=False,
     )
     assert posted.status_code == 403
+    db.close()
+
+
+def test_outbox_status_view_keeps_sent_failed_and_explains_generated():
+    sent = outbox_status_view(SimpleNamespace(status="sent"))
+    failed = outbox_status_view(SimpleNamespace(status="failed"))
+    generated = outbox_status_view(SimpleNamespace(status="generated"))
+    assert sent == {"css": "sent", "label": "sent", "hint": ""}
+    assert failed == {"css": "failed", "label": "failed", "hint": ""}
+    assert generated["css"] == "generated"
+    assert generated["label"] == "generated"
+    assert generated["hint"] == "not sent (email not configured)"
+    assert generated["css"] != "sent"
+
+
+def test_ops_compose_grid_is_on_that_template_only():
+    ops = (ROOT / "frontend" / "templates" / "ops.html").read_text(encoding="utf-8")
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    assert "minmax(12rem, 0.4fr) minmax(20rem, 1.2fr)" in ops
+    assert ".split { display: grid; grid-template-columns: 1.2fr 0.8fr;" in css
+    assert "minmax(12rem, 0.4fr)" not in css
+
+
+def _enable_smtp(monkeypatch, host="smtp.gmail.com"):
+    monkeypatch.setitem(settings.yaml["notifications"]["email"], "enabled", True)
+    monkeypatch.setitem(settings.yaml["notifications"]["email"], "host", host)
+
+
+def _capture_smtp(monkeypatch, fail=False):
+    sent = []
+
+    class DummySMTP:
+        def __init__(self, host, port, timeout=10):
+            self.host = host
+            self.port = port
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def starttls(self, context=None):
+            return None
+
+        def login(self, user, password):
+            return None
+
+        def send_message(self, message):
+            if fail:
+                raise OSError("connection refused")
+            sent.append(message)
+
+    monkeypatch.setattr("smtplib.SMTP", DummySMTP)
+    return sent
+
+
+def test_ops_outbox_shows_sent_when_smtp_works(monkeypatch):
+    db = _db()
+    _enable_smtp(monkeypatch)
+    captured = _capture_smtp(monkeypatch)
+    row = send_outbound_mail(
+        db,
+        target="sent@example.local",
+        subject="live ping",
+        body="goes out",
+        step_key="manual",
+    )
+    assert row.status == "sent"
+    assert captured
+    client = TestClient(app)
+    _login(client)
+    page = client.get("/ops")
+    chunk = page.text.split("sent@example.local", 1)[1].split("</tr>", 1)[0]
+    assert 'class="pill sent">sent</span>' in chunk
+    assert "outbox-hint" not in chunk
+    db.close()
+
+
+def test_ops_outbox_shows_failed_when_smtp_raises(monkeypatch):
+    db = _db()
+    _enable_smtp(monkeypatch)
+    _capture_smtp(monkeypatch, fail=True)
+    row = send_outbound_mail(
+        db,
+        target="fail@example.local",
+        subject="broken ping",
+        body="did not leave",
+        step_key="manual",
+    )
+    assert row.status == "failed"
+    client = TestClient(app)
+    _login(client)
+    page = client.get("/ops")
+    chunk = page.text.split("fail@example.local", 1)[1].split("</tr>", 1)[0]
+    assert 'class="pill failed">failed</span>' in chunk
+    assert "outbox-hint" not in chunk
+    db.close()
+
+
+def test_ops_outbox_not_sent_when_smtp_host_missing(monkeypatch):
+    db = _db()
+    _enable_smtp(monkeypatch, host="")
+    row = send_outbound_mail(
+        db,
+        target="nosmtp@example.local",
+        subject="lab only",
+        body="stays here",
+        step_key="manual",
+    )
+    assert row.status == "generated"
+    assert "not sent (email not configured)" in (row.error or "")
+    client = TestClient(app)
+    _login(client)
+    page = client.get("/ops")
+    chunk = page.text.split("nosmtp@example.local", 1)[1].split("</tr>", 1)[0]
+    assert 'class="pill generated">generated</span>' in chunk
+    assert 'class="muted outbox-hint">not sent (email not configured)</div>' in chunk
+    assert 'class="pill sent"' not in chunk
     db.close()

@@ -98,6 +98,20 @@ def incident_tone(status: str, severity: str = "") -> str:
     return "inc-warn"
 
 
+def outbox_status_view(note) -> dict[str, str]:
+    """Outbox pill + optional hint. generated is not silent when email is off."""
+    status = str(getattr(note, "status", "") or "generated").strip().lower()
+    if status == "sent":
+        return {"css": "sent", "label": "sent", "hint": ""}
+    if status == "failed":
+        return {"css": "failed", "label": "failed", "hint": ""}
+    return {
+        "css": "generated",
+        "label": "generated",
+        "hint": "not sent (email not configured)",
+    }
+
+
 def can_send_ops(user: User) -> bool:
     return can(user, "write_play") or can(user, "write_incidents") or can(user, "admin")
 
@@ -170,6 +184,7 @@ def ctx(request: Request, user: User | None, **extra):
         "is_demo_incident": is_demo_incident,
         "is_demo_mail": is_demo_mail,
         "is_demo_journal": is_demo_journal,
+        "outbox_status_view": outbox_status_view,
     }
     data.update(extra)
     return data
