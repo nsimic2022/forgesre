@@ -20,6 +20,19 @@ BUNDLED_ALERT_TILE = {
     "SnmpDeviceUnreachable": "up",
 }
 
+BUNDLED_ALERT_CLASS = {
+    "HighCPU": "demo",
+    "FilesystemUsageHigh": "demo",
+    "NodeCPUHigh": "linux",
+    "NodeFilesystemUsageHigh": "linux",
+    "NodeMemoryHigh": "linux",
+    "NodeExporterDown": "linux",
+    "WindowsCPUHigh": "windows",
+    "WindowsFilesystemUsageHigh": "windows",
+    "WindowsExporterDown": "windows",
+    "SnmpDeviceUnreachable": "network",
+}
+
 _PERCENT = re.compile(r"(\d+(?:\.\d+)?)\s*%")
 _IS_NUMBER = re.compile(r"\bis\s+(-?\d+(?:\.\d+)?)", re.IGNORECASE)
 
@@ -178,6 +191,9 @@ def bundled_alert_skip_reason(
     from app.asset_metrics import metric_class_for
 
     klass = metric_class_for(asset)
+    expected = BUNDLED_ALERT_CLASS.get(str(alertname or "").strip())
+    if expected and klass != expected:
+        return ""
     raw = asset.get("alarms") if isinstance(asset, dict) else getattr(asset, "alarms", None)
     alarms = normalize_alarms(raw, klass)
     spec = alarms.get(tile) or {}

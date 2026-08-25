@@ -274,9 +274,11 @@ def create_manual_asset(
             scrape_address = (scrape_address or "").strip()
     profile = default_monitoring_profile(type, monitoring_profile)
     address = (scrape_address or "").strip() or default_scrape_address(type, ip, profile)
-    from app.asset_alarms import normalize_alarms
+    stored_alarms: dict = {}
+    if alarms is not None:
+        from app.asset_alarms import normalize_alarms
 
-    stored_alarms = normalize_alarms(alarms, asset_kind(type, profile))
+        stored_alarms = normalize_alarms(alarms, asset_kind(type, profile))
     asset = Asset(
         asset_id=slug,
         hostname=hostname,
