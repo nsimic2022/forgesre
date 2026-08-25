@@ -13,7 +13,7 @@ from typing import Any, Callable
 from app.demo_ids import is_demo_asset_id
 from app.inventory import asset_kind
 from rca.catalog import PLAYRULE_PRESETS
-from rca.collector import DEMO_ASSET, promql_queries_for
+from rca.collector import DEMO_ASSET, promql_queries_for, promql_selectors_for
 
 QueryFn = Callable[[str], dict[str, Any]]
 RangeFn = Callable[[str], dict[str, Any]]
@@ -122,15 +122,22 @@ def metric_class_for(asset: Any) -> str:
         asset_id = str(asset.get("asset_id") or "")
         kind = str(asset.get("type") or "")
         profile = str(asset.get("monitoring_profile") or "")
+        scrape = str(asset.get("scrape_address") or "")
     else:
         asset_id = str(getattr(asset, "asset_id", "") or "")
         kind = str(getattr(asset, "type", "") or "")
         profile = str(getattr(asset, "monitoring_profile", "") or "")
+        scrape = str(getattr(asset, "scrape_address", "") or "")
     if asset_id == DEMO_ASSET:
         return "demo"
     klass = asset_kind(kind, profile)
     if klass in {"linux", "windows", "network"}:
         return klass
+    scrape = scrape.strip().lower()
+    if scrape.endswith(":9182"):
+        return "windows"
+    if scrape.endswith(":9100"):
+        return "linux"
     return "unknown"
 
 
@@ -138,23 +145,45 @@ def _asset_dict(asset: Any) -> dict[str, Any]:
     if isinstance(asset, dict):
         return {
             "asset_id": str(asset.get("asset_id") or ""),
+            "hostname": str(asset.get("hostname") or ""),
+            "ip": str(asset.get("ip") or ""),
             "type": str(asset.get("type") or ""),
             "monitoring_profile": str(asset.get("monitoring_profile") or ""),
+            "scrape_address": str(asset.get("scrape_address") or ""),
+            "alarms": asset.get("alarms"),
         }
     return {
         "asset_id": str(getattr(asset, "asset_id", "") or ""),
+        "hostname": str(getattr(asset, "hostname", "") or ""),
+        "ip": str(getattr(asset, "ip", "") or ""),
         "type": str(getattr(asset, "type", "") or ""),
         "monitoring_profile": str(getattr(asset, "monitoring_profile", "") or ""),
+        "scrape_address": str(getattr(asset, "scrape_address", "") or ""),
+        "alarms": getattr(asset, "alarms", None),
     }
 
 
-def _tone_for(kind: str, value: float | None, threshold: float | None) -> str:
+def _finite(raw: Any) -> float | None:
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if value != value or value in {float("inf"), float("-inf")}:
+        return None
+    return value
+
+
+def _tone_for(kind: str, value: float | None, threshold: float | None, *, enabled: bool = True) -> str:
     if value is None:
         return "warn"
     if kind == "up":
         if value >= 1:
             return "ok"
-        return "crit"
+        return "ok" if not enabled else "crit"
+    if not enabled:
+        return "ok"
     if threshold is None:
         return "ok"
     if value >= threshold:
@@ -213,10 +242,11 @@ def _tile(
     threshold: float | None,
     spark: str = "",
     query: str = "",
+    enabled: bool = True,
 ) -> dict[str, Any]:
     meta = _TILE_META[key]
     kind = str(meta["kind"])
-    tone = _tone_for(kind, value, threshold)
+    tone = _tone_for(kind, value, threshold, enabled=enabled)
     bar = _bar_pct(kind, value, tone)
     return {
         "key": key,
@@ -226,10 +256,37 @@ def _tile(
         "display": _display(kind, value),
         "tone": tone,
         "threshold": threshold,
+        "alarm_enabled": enabled,
         "bar_pct": bar,
         "spark": spark,
         "query": query,
     }
+
+
+def _query_up(
+    selectors: list[str],
+    fetch: QueryFn,
+    *,
+    snmp: bool = False,
+) -> tuple[str, float | None, str, str]:
+    """Same first matcher as verify (asset=<id>); then hostname; then instance scrape."""
+    last_expr = ""
+    if not selectors:
+        expr = 'up{job="forgesre-snmp"}' if snmp else "up"
+        result = fetch(expr)
+        if result.get("error"):
+            return "", None, str(result.get("error") or "prometheus unreachable"), expr
+        return "", _finite(result.get("value")), "", expr
+    for selector in selectors:
+        expr = f'up{{job="forgesre-snmp",{selector}}}' if snmp else f"up{{{selector}}}"
+        last_expr = expr
+        result = fetch(expr)
+        if result.get("error"):
+            return selector, None, str(result.get("error") or "prometheus unreachable"), expr
+        value = _finite(result.get("value"))
+        if value is not None:
+            return selector, value, "", expr
+    return selectors[0], None, "", last_expr
 
 
 def asset_metric_panel(
@@ -239,13 +296,15 @@ def asset_metric_panel(
     range_fn: RangeFn | None = None,
 ) -> dict[str, Any]:
     """JSON for GET /api/v1/assets/{id}/metrics and the detail-page first paint."""
+    from app.asset_alarms import normalize_alarms, tile_enabled, tile_threshold
+
     info = _asset_dict(asset)
     asset_id = info["asset_id"]
     klass = metric_class_for(asset)
     demo = is_demo_asset_id(asset_id)
-    thresholds = bundled_thresholds().get("demo" if klass == "demo" else klass, {})
+    bundled = bundled_thresholds().get("demo" if klass == "demo" else klass, {})
+    alarms = normalize_alarms(info.get("alarms"), "demo" if klass == "demo" else klass)
     keys = _CLASS_TILES.get(klass, _CLASS_TILES["unknown"])
-    packed = promql_queries_for(info) if klass != "unknown" else {}
     fetch = query_fn or _default_query
     spark_fetch = range_fn
     samples: dict[str, float | None] = {}
@@ -253,29 +312,33 @@ def asset_metric_panel(
     sparks: dict[str, str] = {}
     prom_error = ""
     prom_down = False
+    selectors = promql_selectors_for(info)
+    snmp = klass == "network"
 
-    if klass == "unknown":
-        tiles = [
-            _tile("up", None, threshold=None, query=""),
-        ]
-        return {
-            "asset_id": asset_id,
-            "class": klass,
-            "demo": demo,
-            "demo_label": "DEMO" if demo else "",
-            "collecting": False,
-            "collecting_line": "Prometheus is not collecting this target.",
-            "error": "",
-            "tiles": tiles,
-        }
+    winning, up_value, up_error, up_expr = _query_up(selectors, fetch, snmp=snmp)
+    queries["up"] = up_expr
+    if up_error:
+        prom_down = True
+        prom_error = up_error
+        samples["up"] = None
+    else:
+        samples["up"] = up_value
+
+    packed: dict[str, tuple[str, str]] = {}
+    if klass != "unknown":
+        packed = promql_queries_for(
+            info,
+            selector=winning or None,
+            include_fallbacks=not winning,
+        )
+        packed["up"] = (up_expr, "")
 
     for key in keys:
+        if key == "up":
+            continue
         expr = packed.get(key, ("", ""))[0] if key in packed else ""
         queries[key] = expr
-        if not expr:
-            samples[key] = None
-            continue
-        if prom_down:
+        if not expr or prom_down:
             samples[key] = None
             continue
         result = fetch(expr)
@@ -284,14 +347,7 @@ def asset_metric_panel(
             prom_error = str(result.get("error") or "prometheus unreachable")
             samples[key] = None
             continue
-        raw = result.get("value")
-        if raw is None:
-            samples[key] = None
-            continue
-        try:
-            samples[key] = float(raw)
-        except (TypeError, ValueError):
-            samples[key] = None
+        samples[key] = _finite(result.get("value"))
 
     if klass == "demo":
         from app.metrics import demo_metric_values
@@ -301,7 +357,6 @@ def asset_metric_panel(
         samples["disk_percent"] = float(live["forgesre_demo_disk_percent"])
         queries["cpu_percent"] = "forgesre_demo_cpu_percent"
         queries["disk_percent"] = "forgesre_demo_disk_percent"
-        # Demo Core has no memory gauge — leave missing (yellow), do not fake 0%.
 
     if spark_fetch is None and not prom_down:
         spark_fetch = _default_range
@@ -313,17 +368,18 @@ def asset_metric_panel(
             ranged = spark_fetch(expr)
             if ranged.get("error"):
                 break
-            sparks[key] = _spark_points([float(v) for v in (ranged.get("values") or []) if v is not None])
+            sparks[key] = _spark_points(
+                [v for v in (_finite(raw) for raw in (ranged.get("values") or [])) if v is not None]
+            )
 
-    up_value = samples.get("up")
     collecting: bool | None
     if prom_down:
         collecting = None
         collecting_line = "Prometheus is unreachable — not collecting."
-    elif up_value is None:
+    elif samples.get("up") is None:
         collecting = False
         collecting_line = "Prometheus is not collecting this target."
-    elif up_value >= 1:
+    elif (samples.get("up") or 0) >= 1:
         collecting = True
         collecting_line = "Prometheus sees this target (up=1)."
     else:
@@ -334,9 +390,10 @@ def asset_metric_panel(
         _tile(
             key,
             samples.get(key),
-            threshold=thresholds.get(key) if key != "up" else None,
+            threshold=tile_threshold(alarms, key, bundled.get(key)) if key != "up" else None,
             spark=sparks.get(key) or "",
             query=queries.get(key) or "",
+            enabled=tile_enabled(alarms, key),
         )
         for key in keys
     ]
@@ -348,6 +405,7 @@ def asset_metric_panel(
         "collecting": collecting,
         "collecting_line": collecting_line,
         "error": prom_error,
+        "alarms": alarms,
         "tiles": tiles,
     }
 

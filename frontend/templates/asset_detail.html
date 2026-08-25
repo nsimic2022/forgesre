@@ -130,6 +130,11 @@
         <span class="metric-bar-fill {{ tile.tone }}" style="width: {{ tile.bar_pct }}%"></span>
         {% endif %}
       </div>
+      {% if tile.threshold is not none %}
+      <p class="muted metric-tile-note">alarm {{ tile.threshold|int }}%{% if tile.alarm_enabled is false %} · off{% endif %}</p>
+      {% elif tile.alarm_enabled is false %}
+      <p class="muted metric-tile-note">alarm off</p>
+      {% endif %}
       {% if tile.spark %}
       <svg class="metric-spark" viewBox="0 0 80 22" width="80" height="22" aria-hidden="true">
         <polyline fill="none" stroke="currentColor" stroke-width="1.5" points="{{ tile.spark }}"/>

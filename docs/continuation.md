@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Tuesday 25 August 2026.** Operator N wanted a glanceable metric panel on **asset detail** (open one machine): keep the existing left column (inventory, ping/comms, verify, edit) and add a right-hand panel of bundled class metrics/alarms so he does not need Grafana for a quick look. Grafana deep-link stays later.
+**Tuesday 25 August 2026.** Operator N: asset `blachole` listed **healthy**, `./forgesre verify blachole` PASS (ICMP, :9182 windows_exporter, Prometheus `up=1`), but opening the asset showed **Machine metrics** all yellow **not collecting**. Also approved per-asset alarm enable/disable + threshold % on Add/Edit (HDD 70% vs 92%).
 
 On the Ubuntu VM N uses, resume with:
 
@@ -26,7 +26,9 @@ git pull origin main
 ./forgesre update
 ```
 
-Hard-refresh the browser after UI/CSS changes (`/static/app.css` is not cache-busted).
+Also: `./forgesre ping`, `./forgesre verify`, `./forgesre test` (appliance health, not inventory). See [docs/llm.md](llm.md).
+
+Hard-refresh the browser after UI/CSS changes (`/static/app.css` is not cache-busted). Open **Assets → blachole**. Collecting should be green when verify PROM is PASS.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
 
@@ -41,7 +43,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **243 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~34s each. Python 3.12, pytest 9.x.
+Both runs: **255 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~35s each. Python 3.12, pytest 9.x.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`.
 
@@ -49,7 +51,9 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-Asset detail right panel: class tiles (Linux `node_` CPU/mem/disk + scrape, Windows `windows_` same idea, SNMP `up` only) from Prometheus; missing series yellow (never fake 0%); thresholds from `alerts.yml` / playrules; DEMO labeled; Grafana unchanged.
+**Bug:** Tiles now match Prometheus the same way verify/RCA does: `up{asset="<id>"}` first (so `blachole` not `blACHOLE`), then hostname, then `instance=<scrape>` (`38.242.217.52:9182`). Scrape `:9182` classifies Windows (`windows_`, not `node_`). Missing series stay yellow — never a fake 0%. Collecting is green when that `up` sample is 1.
+
+**Feature:** Add/Edit keeps Auto-detect, plus a bundled cpu/mem/disk/up checklist (enable + threshold %). Persisted on `assets.alarms` JSON. Detail tiles use that threshold. Incident ingest skips bundled alerts when disabled or webhook value is below the asset threshold. Prometheus rules are **not** rewritten — Prom may still fire until `alerts.local.yml` changes.
 
 ---
 
@@ -63,7 +67,7 @@ git pull origin main
 ./forgesre update
 ```
 
-Hard-refresh, then **Assets** → open one host. Left column is unchanged. Right panel is **Machine metrics**.
+Hard-refresh, then **Assets** → open **blachole**. Left column unchanged. Right panel **Machine metrics**: Collecting green if verify PROM is PASS. Add/Edit has the alarm checklist (not a third column on the list).
 
 ---
 
@@ -110,6 +114,7 @@ Do not start these unless N asks:
 - Fake a live Windows scrape or SNMP walk in the demo panel.
 - Explode backup tars into many small files at `data/backups/` root.
 - Grafana deep-link on the asset page (N said later).
+- Rewriting all of Prometheus `alerts.yml` per asset.
 
 ---
 
@@ -120,3 +125,4 @@ Do not start these unless N asks:
 - Scheduled `/ops` reports are still plain text.
 - Old backups already on the VM as `data/backups/forgesre-*.tar.gz` are still valid; new runs write folders.
 - Grafana deep-link from an asset is still later.
+- Prometheus global rules may still fire for a host whose ForgeSRE alarm is disabled or raised; ForgeSRE will not open the incident when the webhook carries the value.

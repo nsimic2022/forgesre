@@ -26,7 +26,7 @@ from __future__ import annotations
 import socket
 import urllib.error
 import urllib.request
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
 LINUX_EXPORTER_PORT = 9100
@@ -59,6 +59,38 @@ def hint_kind(type: str = "", profile: str = "") -> str:
     if "network" in blob or "switch" in blob or "router" in blob or "firewall" in blob:
         return "network"
     return ""
+
+
+FAMILY_CPU = ("windows_cpu_time_total", "node_cpu_seconds_total")
+FAMILY_MEMORY = (
+    "windows_os_physical_memory",
+    "windows_cs_physical_memory",
+    "node_memory_MemAvailable",
+    "node_memory_MemTotal",
+)
+FAMILY_DISK = ("windows_logical_disk", "node_filesystem_avail", "node_filesystem_size")
+
+
+def bundled_families_from_metrics(text: str, *, exporter_up: bool = False) -> dict[str, bool]:
+    """cpu/mem/disk/up only — not the raw series list."""
+    blob = text or ""
+    cpu = any(token in blob for token in FAMILY_CPU)
+    memory = any(token in blob for token in FAMILY_MEMORY)
+    disk = any(token in blob for token in FAMILY_DISK)
+    return {
+        "up": bool(exporter_up or cpu or memory or disk),
+        "cpu": cpu,
+        "memory": memory,
+        "disk": disk,
+    }
+
+
+def merge_families(*groups: dict[str, bool]) -> dict[str, bool]:
+    out = {"up": False, "cpu": False, "memory": False, "disk": False}
+    for group in groups:
+        for key in out:
+            out[key] = bool(out[key] or (group or {}).get(key))
+    return out
 
 
 def classify_exporter_metrics(text: str) -> str:
@@ -118,15 +150,19 @@ class ExporterDetect:
     message: str = ""
     tie_break: str = ""
     role: str = ""
+    families: dict[str, bool] = field(
+        default_factory=lambda: {"up": False, "cpu": False, "memory": False, "disk": False}
+    )
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
-def _empty(ip: str, message: str) -> ExporterDetect:
+def _empty(ip: str, message: str, families: dict[str, bool] | None = None) -> ExporterDetect:
     return ExporterDetect(
         message=message,
         role="",
+        families=families or {"up": False, "cpu": False, "memory": False, "disk": False},
     )
 
 
@@ -149,6 +185,12 @@ def _picked(ip: str, kind: str, message: str, tie_break: str, **ports: Any) -> E
         profile = "linux-standard"
         role = "Possible Linux server"
         scrape = f"{ip}:{port}" if ip else ""
+    families = ports.pop("families", None) or {
+        "up": bool(kind in {"linux", "windows", "network"}),
+        "cpu": False,
+        "memory": False,
+        "disk": False,
+    }
     result = ExporterDetect(
         kind=kind,
         asset_type=asset_type,
@@ -158,6 +200,7 @@ def _picked(ip: str, kind: str, message: str, tie_break: str, **ports: Any) -> E
         message=message,
         tie_break=tie_break,
         role=role,
+        families=families,
     )
     for key, value in ports.items():
         setattr(result, key, value)
@@ -207,6 +250,10 @@ def detect_exporter(
         "windows_status": win_status,
         "linux_error": lnx_err,
         "windows_error": win_err,
+        "families": merge_families(
+            bundled_families_from_metrics(win_body, exporter_up=bool(windows)),
+            bundled_families_from_metrics(lnx_body, exporter_up=bool(linux)),
+        ),
     }
     if windows and linux:
         saved = hint_kind(hint_type, hint_profile)
@@ -259,6 +306,10 @@ def detect_exporter(
         snmp = _resolve_snmp(ip, snmp_ok, snmp_prober)
     extra["snmp"] = snmp
     if snmp:
+        extra["families"] = merge_families(
+            extra.get("families") or {},
+            {"up": True, "cpu": False, "memory": False, "disk": False},
+        )
         return _picked(
             ip,
             "network",
@@ -286,6 +337,7 @@ def detect_exporter(
         linux_error=lnx_err,
         windows_error=win_err,
         tie_break="none",
+        families=extra.get("families") or {"up": False, "cpu": False, "memory": False, "disk": False},
         message=(
             "No windows_exporter :9182/metrics, no node_exporter :9100/metrics, "
             "and no SNMP UDP/161 answer. ICMP ping is not a scrape — pick "

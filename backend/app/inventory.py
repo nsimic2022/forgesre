@@ -223,6 +223,7 @@ def create_manual_asset(
     snmp_prober=None,
     require_new: bool = False,
     cloned_from: str = "",
+    alarms: dict | None = None,
 ) -> Asset:
     hostname = (hostname or "").strip()
     ip = (ip or "").strip()
@@ -273,6 +274,11 @@ def create_manual_asset(
             scrape_address = (scrape_address or "").strip()
     profile = default_monitoring_profile(type, monitoring_profile)
     address = (scrape_address or "").strip() or default_scrape_address(type, ip, profile)
+    stored_alarms: dict = {}
+    if alarms is not None:
+        from app.asset_alarms import normalize_alarms
+
+        stored_alarms = normalize_alarms(alarms, asset_kind(type, profile))
     asset = Asset(
         asset_id=slug,
         hostname=hostname,
@@ -288,6 +294,7 @@ def create_manual_asset(
         notes=(notes or "").strip(),
         source="manual",
         scrape_address=address,
+        alarms=stored_alarms,
     )
     db.add(asset)
     audit(
@@ -349,6 +356,7 @@ def update_asset(
     metrics_fetcher=None,
     snmp_ok: bool | None = None,
     snmp_prober=None,
+    alarms: dict | None = None,
 ) -> Asset:
     old_ip = asset.ip or ""
     old_type = asset.type or ""
@@ -425,6 +433,10 @@ def update_asset(
     elif new_kind == "unknown":
         if (asset.monitoring_profile or "") in {"linux-standard", "windows-standard", "network-switch"}:
             asset.monitoring_profile = ""
+    if alarms is not None:
+        from app.asset_alarms import normalize_alarms
+
+        asset.alarms = normalize_alarms(alarms, new_kind)
     audit(
         db,
         "asset.update",
@@ -706,7 +718,17 @@ def clone_prefill(db: Session, asset: Asset) -> dict:
         "scrape_address": scrape,
         "cloned_from": asset.asset_id,
         "lab_source": lab,
+        "alarms": _form_alarms(asset),
     }
+
+
+def _form_alarms(asset: Asset | None = None) -> dict:
+    from app.asset_alarms import default_alarms, normalize_alarms
+    from app.asset_metrics import metric_class_for
+
+    if asset is None:
+        return default_alarms("linux")
+    return normalize_alarms(getattr(asset, "alarms", None), metric_class_for(asset))
 
 
 def asset_form_values(asset: Asset | None = None) -> dict:
@@ -724,6 +746,7 @@ def asset_form_values(asset: Asset | None = None) -> dict:
             "scrape_address": "",
             "cloned_from": "",
             "lab_source": False,
+            "alarms": _form_alarms(),
         }
     return {
         "hostname": asset.hostname or "",
@@ -738,6 +761,7 @@ def asset_form_values(asset: Asset | None = None) -> dict:
         "scrape_address": asset.scrape_address or "",
         "cloned_from": "",
         "lab_source": False,
+        "alarms": _form_alarms(asset),
     }
 
 

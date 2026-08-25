@@ -110,9 +110,31 @@ if (preset) {
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (!data) return;
-        if (out) out.textContent = data.message || "";
+        if (out) {
+          const fam = data.families || {};
+          const bits = [];
+          if (fam.cpu) bits.push("CPU");
+          if (fam.memory) bits.push("Memory");
+          if (fam.disk) bits.push("Disk");
+          if (fam.up) bits.push("up");
+          const familyLine = bits.length
+            ? " Bundled families on /metrics: " + bits.join(", ") + "."
+            : " No bundled cpu/mem/disk series on /metrics yet.";
+          out.textContent = (data.message || "") + familyLine;
+        }
         if (type && current.toLowerCase().startsWith("auto") && data.asset_type) {
           type.value = data.asset_type;
+        }
+        const fam = data.families || {};
+        const mark = (sel, on) => {
+          const box = document.querySelector(sel);
+          if (box) box.checked = !!on;
+        };
+        if (Object.keys(fam).length) {
+          mark("[data-alarm-up]", fam.up !== false);
+          mark("[data-alarm-cpu]", !!fam.cpu);
+          mark("[data-alarm-memory]", !!fam.memory);
+          mark("[data-alarm-disk]", !!fam.disk);
         }
       })
       .catch(() => {});

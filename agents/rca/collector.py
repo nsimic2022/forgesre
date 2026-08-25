@@ -21,68 +21,157 @@ DEFAULT_QUERIES = {
 }
 
 
+LINUX_EXPORTER_PORT = 9100
+WINDOWS_EXPORTER_PORT = 9182
+
+
 def _escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def promql_queries_for(asset: dict[str, Any] | None, alert: dict[str, Any] | None = None) -> dict[str, tuple[str, str]]:
-    """PromQL for this asset. Demo gauges only for forge-demo-01."""
-    asset = asset or {}
-    alert = alert or {}
-    asset_id = str(asset.get("asset_id") or "")
+def _kind_flags(asset: dict[str, Any], alert: dict[str, Any] | None = None) -> tuple[bool, bool]:
     kind = str(asset.get("type") or "").lower()
     profile = str(asset.get("monitoring_profile") or "").lower()
-    alertname = str(alert.get("alertname") or "").lower()
-    if asset_id == DEMO_ASSET:
-        return dict(DEFAULT_QUERIES)
-    if not asset_id:
-        return {"up": ("up", "")}
-    matcher = f'asset="{_escape(asset_id)}"'
+    alertname = str((alert or {}).get("alertname") or "").lower()
+    scrape = str(asset.get("scrape_address") or "").lower()
     snmpish = any(
         token in kind or token in profile or token in alertname
         for token in ("network", "switch", "router", "firewall", "snmp")
     ) or "network-switch" in profile
+    windowsish = "windows" in kind or "win32" in kind or "windows" in profile or scrape.endswith(":9182")
+    return snmpish, windowsish
+
+
+def promql_selectors_for(asset: dict[str, Any] | None, alert: dict[str, Any] | None = None) -> list[str]:
+    """Label matchers. First is verify's asset=<id>, then hostname, then instance scrape."""
+    asset = asset or {}
+    asset_id = str(asset.get("asset_id") or "").strip()
+    hostname = str(asset.get("hostname") or "").strip()
+    scrape = str(asset.get("scrape_address") or "").strip()
+    ip = str(asset.get("ip") or "").strip()
+    snmpish, windowsish = _kind_flags(asset, alert)
+    seen: list[str] = []
+
+    def add(selector: str) -> None:
+        if selector and selector not in seen:
+            seen.append(selector)
+
+    if asset_id:
+        add(f'asset="{_escape(asset_id)}"')
+    if hostname and hostname != asset_id:
+        add(f'asset="{_escape(hostname)}"')
+    if scrape:
+        add(f'instance="{_escape(scrape)}"')
+    if snmpish:
+        if ip:
+            add(f'instance="{_escape(ip)}"')
+        return seen
+    port = WINDOWS_EXPORTER_PORT if windowsish else LINUX_EXPORTER_PORT
+    if ip:
+        derived = f"{ip}:{port}"
+        if derived != scrape:
+            add(f'instance="{_escape(derived)}"')
+    return seen
+
+
+def _fill(template: str, selector: str) -> str:
+    return template.replace("__SEL__", selector)
+
+
+def _or_fill(template: str, selectors: list[str]) -> str:
+    if not selectors:
+        return _fill(template, "")
+    filled = [_fill(template, selector) for selector in selectors]
+    if len(filled) == 1:
+        return filled[0]
+    return " or ".join(f"({part})" for part in filled)
+
+
+def promql_queries_for(
+    asset: dict[str, Any] | None,
+    alert: dict[str, Any] | None = None,
+    *,
+    selector: str | None = None,
+    include_fallbacks: bool = True,
+) -> dict[str, tuple[str, str]]:
+    """PromQL for this asset. Demo gauges only for forge-demo-01.
+
+    Default matcher is verify's ``asset="<id>"``. When scrape/hostname/IP are on
+    the asset dict, also OR ``instance="<ip>:<port>"`` so tiles find series labeled
+    only by the scrape address (windows_exporter ``IP:9182``).
+    """
+    asset = asset or {}
+    alert = alert or {}
+    asset_id = str(asset.get("asset_id") or "")
+    if asset_id == DEMO_ASSET:
+        return dict(DEFAULT_QUERIES)
+    if not asset_id:
+        return {"up": ("up", "")}
+    selectors = promql_selectors_for(asset, alert)
+    if selector:
+        selectors = [selector]
+    elif not include_fallbacks:
+        selectors = selectors[:1]
+    if not selectors:
+        selectors = [f'asset="{_escape(asset_id)}"']
+    snmpish, windowsish = _kind_flags(asset, alert)
     if snmpish:
         return {
-            "up": (f'up{{job="forgesre-snmp",{matcher}}}', ""),
+            "up": (_or_fill('up{job="forgesre-snmp",__SEL__}', selectors), ""),
         }
-    windowsish = "windows" in kind or "win32" in kind or "windows" in profile
     if windowsish:
         return {
             "cpu_percent": (
-                f'100 - (avg(rate(windows_cpu_time_total{{mode="idle",{matcher}}}[5m])) * 100)',
+                _or_fill(
+                    '100 - (avg(rate(windows_cpu_time_total{mode="idle",__SEL__}[5m])) * 100)',
+                    selectors,
+                ),
                 "percent",
             ),
             "disk_percent": (
-                f'100 * max(1 - (windows_logical_disk_free_bytes{{volume!~"_Total",{matcher}}} '
-                f'/ windows_logical_disk_size_bytes{{volume!~"_Total",{matcher}}}))',
+                _or_fill(
+                    '100 * max(1 - (windows_logical_disk_free_bytes{volume!~"_Total",__SEL__} '
+                    '/ windows_logical_disk_size_bytes{volume!~"_Total",__SEL__}))',
+                    selectors,
+                ),
                 "percent",
             ),
             "memory_percent": (
-                f'100 * (1 - (windows_os_physical_memory_free_bytes{{{matcher}}} '
-                f'/ windows_cs_physical_memory_bytes{{{matcher}}}))',
+                _or_fill(
+                    "100 * (1 - (windows_os_physical_memory_free_bytes{__SEL__} "
+                    "/ windows_cs_physical_memory_bytes{__SEL__}))",
+                    selectors,
+                ),
                 "percent",
             ),
-            "up": (f'up{{{matcher}}}', ""),
+            "up": (_or_fill("up{__SEL__}", selectors), ""),
         }
-    queries = {
+    return {
         "cpu_percent": (
-            f'100 * (1 - avg(rate(node_cpu_seconds_total{{mode="idle",{matcher}}}[5m])))',
+            _or_fill(
+                '100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle",__SEL__}[5m])))',
+                selectors,
+            ),
             "percent",
         ),
         "disk_percent": (
-            f'100 * max(1 - (node_filesystem_avail_bytes{{fstype!~"tmpfs|fuse.*|overlay",{matcher}}} '
-            f'/ node_filesystem_size_bytes{{fstype!~"tmpfs|fuse.*|overlay",{matcher}}}))',
+            _or_fill(
+                '100 * max(1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.*|overlay",__SEL__} '
+                '/ node_filesystem_size_bytes{fstype!~"tmpfs|fuse.*|overlay",__SEL__}))',
+                selectors,
+            ),
             "percent",
         ),
         "memory_percent": (
-            f'100 * (1 - (node_memory_MemAvailable_bytes{{{matcher}}} '
-            f'/ node_memory_MemTotal_bytes{{{matcher}}}))',
+            _or_fill(
+                "100 * (1 - (node_memory_MemAvailable_bytes{__SEL__} "
+                "/ node_memory_MemTotal_bytes{__SEL__}))",
+                selectors,
+            ),
             "percent",
         ),
-        "up": (f'up{{{matcher}}}', ""),
+        "up": (_or_fill("up{__SEL__}", selectors), ""),
     }
-    return queries
 
 
 def loki_query_for(asset: dict[str, Any] | None) -> str:

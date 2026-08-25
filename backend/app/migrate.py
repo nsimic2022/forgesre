@@ -44,6 +44,8 @@ def migrate(engine: Engine) -> None:
                 if engine.dialect.name == "postgresql"
                 else "ALTER TABLE assets ADD COLUMN probe_checked_at DATETIME"
             )
+        if "alarms" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN alarms JSON")
     if "evidence" in tables:
         existing = {col["name"] for col in inspector.get_columns("evidence")}
         mapping = {
