@@ -8,6 +8,16 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# Same docker rights for the Postgres dump as compose pull/up. Probe the daemon
+# (`docker info`), not `docker compose version` (that works without docker.sock).
+if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
+if [[ "${DC[0]}" == "sudo" ]]; then
+  sudo -v || true
+  export FORGESRE_COMPOSE="sudo -n docker compose"
+else
+  export FORGESRE_COMPOSE="docker compose"
+fi
+
 echo "Checking status..."
 "$ROOT/scripts/doctor.sh" || echo "Continuing after doctor warnings."
 echo "Creating backup..."
@@ -20,7 +30,6 @@ fi
 echo "Rendering Prometheus / Alertmanager / snmp_exporter config..."
 "$ROOT/scripts/render-monitoring.sh"
 
-if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
 # snmp-exporter is a default service (not a Compose profile). :9116 connection
 # refused means the container is not listening — start it with the stack.
 if [[ "${1:-}" == "--offline" ]]; then

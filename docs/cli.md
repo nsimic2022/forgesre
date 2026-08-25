@@ -136,7 +136,7 @@ git pull origin main
 
 `./forgesre update` = doctor (warn ok) → backup → render-monitoring → `docker compose up -d` (includes **snmp-exporter** on `127.0.0.1:9116`) → doctor.
 
-Backup on the host does **not** use sqlalchemy (that package is only in the Core image). The CLI dumps Postgres with `docker compose exec postgres`. Administration Backup still runs inside Core. Each run is `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (plus `MANIFEST.txt`); import that one tar, do not unpack it. `./forgesre backup` still exists; `./forgesre update` also runs backup as a safety net. If backup fails, update prints a clear error and **continues** so the stack still comes up. Do not `pip install sqlalchemy` on the host. Do not `./install.sh`.
+Backup on the host does **not** use sqlalchemy (that package is only in the Core image). The CLI dumps Postgres with `docker compose exec postgres` using the **same docker rights as update** (`docker info`, otherwise `sudo docker compose`). Administration Backup still runs inside Core. Each run is `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (plus `MANIFEST.txt`); import that one tar, do not unpack it. `./forgesre backup` still exists; `./forgesre update` also runs backup as a safety net. If backup fails, update prints a clear error and **continues** so the stack still comes up. A `docker.sock` permission error is not “postgres is down”. Do not `pip install sqlalchemy` on the host. Do not `./install.sh`.
 
 ### Rebuild Core after Python changes
 

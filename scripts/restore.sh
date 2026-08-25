@@ -22,6 +22,14 @@ if [[ -z "${DATABASE_URL:-}" && -n "${POSTGRES_PASSWORD:-}" ]]; then
 fi
 
 # Host Python has no sqlalchemy. Restore applies db.json via docker compose
-# exec postgres when sqlalchemy is missing. GUI restore still uses Core.
+# exec postgres when sqlalchemy is missing. Same docker rights as update.
+if [[ -z "${FORGESRE_COMPOSE:-}" ]]; then
+  if docker info >/dev/null 2>&1; then
+    export FORGESRE_COMPOSE="docker compose"
+  else
+    sudo -v >/dev/null 2>&1 || true
+    export FORGESRE_COMPOSE="sudo -n docker compose"
+  fi
+fi
 export PYTHONPATH="${ROOT}/backend${PYTHONPATH:+:${PYTHONPATH}}"
 exec python3 -m app.backup restore "$@"

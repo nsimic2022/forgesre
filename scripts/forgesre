@@ -466,8 +466,9 @@ Includes: Postgres/SQLite dump (users, incidents, playbooks, playrules, journal)
 config/forgesre.yml, .env, secrets.env (unless --no-secrets), compressed logs,
 monitoring/alerts.local.yml, data/generated/, config/examples/.
 
-Host CLI dumps Postgres with docker compose exec postgres (no sqlalchemy on
-the host). Administration Backup uses Core, which has sqlalchemy. Same
+Host CLI dumps Postgres with docker compose exec postgres using the same
+docker rights as ./forgesre update (docker info, else sudo). No sqlalchemy
+on the host. Administration Backup uses Core, which has sqlalchemy. Same
 archive format (db.json inside forgesre.tar.gz). ./forgesre backup still
 exists; ./forgesre update also runs backup as a safety net.
 
@@ -632,7 +633,8 @@ update — doctor (warn ok), backup, render-monitoring, compose pull/up, doctor.
   ./forgesre update --offline
 
 Starts default Compose services including snmp-exporter (127.0.0.1:9116).
-Backup runs on the host without sqlalchemy (Postgres dump via docker compose).
+Backup runs on the host without sqlalchemy. The Postgres dump uses the same
+docker compose rights as this command (docker info, else sudo docker compose).
 If backup fails, update prints a clear error and continues so the stack
 (including snmp-exporter) still comes up. Do not pip install sqlalchemy
 on the host. Do not run ./install.sh. Use this after git pull origin main.
