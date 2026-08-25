@@ -195,6 +195,8 @@ def bundled_alert_skip_reason(
     if expected and klass != expected:
         return ""
     raw = asset.get("alarms") if isinstance(asset, dict) else getattr(asset, "alarms", None)
+    if not isinstance(raw, dict) or not raw:
+        return ""
     alarms = normalize_alarms(raw, klass)
     spec = alarms.get(tile) or {}
     if spec.get("enabled") is False:
