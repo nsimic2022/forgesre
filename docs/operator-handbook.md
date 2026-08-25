@@ -283,7 +283,9 @@ The Assets table shows **Ping** and **:9100 / :9182 / SNMP** color dots after th
 
 On the asset page, **Detect OS / scrape port** re-runs the same probe and fills type + scrape. You can override afterwards.
 
-API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type` (`Auto (detect exporter)` to probe), `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Detect-only: `GET /api/v1/detect-exporter?ip=`. List ping/exporter colors: `GET /api/v1/assets/reachability` (async; the HTML list is last-known). Verify live path: `GET /api/v1/assets/{id}/verify` and `GET /api/v1/verify` (`write_assets`). Update: `POST /api/v1/assets/{asset_id}` (hostname, type, IP, scrape, contacts). Clone: `POST /api/v1/assets/{id}/clone`. Delete: `POST /api/v1/assets/{id}/delete`.
+The same page has a **right-hand Machine metrics** panel (two columns; stacks on a narrow window). Glance at bundled class metrics from Prometheus: Linux `node_` CPU/mem/disk, Windows `windows_` the same idea, network SNMP `up` only. Missing series stay **yellow** (`not collecting`) — never a fake 0%. Colors follow bundled alerts/playrules (Linux CPU **95%**, Windows CPU **90%**, demo gauges **80%**). `forge-demo-*` rows are labeled **DEMO**. Grafana is unchanged.
+
+API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type` (`Auto (detect exporter)` to probe), `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Detect-only: `GET /api/v1/detect-exporter?ip=`. List ping/exporter colors: `GET /api/v1/assets/reachability` (async; the HTML list is last-known). Verify live path: `GET /api/v1/assets/{id}/verify` and `GET /api/v1/verify` (`write_assets`). Glance tiles: `GET /api/v1/assets/{id}/metrics` (`read_assets`). Update: `POST /api/v1/assets/{asset_id}` (hostname, type, IP, scrape, contacts). Clone: `POST /api/v1/assets/{id}/clone`. Delete: `POST /api/v1/assets/{id}/delete`.
 
 Similar-incident history on the asset page groups past incidents by alert/title (count, open count, last seen). Seed already puts a closed HighCPU on `forge-demo-01` so this is visible after install.
 
@@ -855,6 +857,7 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 | POST | `/api/v1/assets/{id}/delete` | analyst+ (not `forge-demo-*`; incidents stay, FK cleared) |
 | GET | `/api/v1/detect-exporter` | analyst+ (`?ip=` — :9182 then :9100 /metrics) |
 | GET | `/api/v1/assets` | viewer+ |
+| GET | `/api/v1/assets/{id}/metrics` | viewer+ (class tiles from Prometheus) |
 | POST | `/api/v1/discovery/scan` | analyst+ |
 | POST | `/api/v1/discovery/candidates/{id}/approve` | analyst+ |
 | POST | `/api/v1/playrules` | analyst+ |

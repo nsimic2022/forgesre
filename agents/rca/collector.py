@@ -58,6 +58,11 @@ def promql_queries_for(asset: dict[str, Any] | None, alert: dict[str, Any] | Non
                 f'/ windows_logical_disk_size_bytes{{volume!~"_Total",{matcher}}}))',
                 "percent",
             ),
+            "memory_percent": (
+                f'100 * (1 - (windows_os_physical_memory_free_bytes{{{matcher}}} '
+                f'/ windows_cs_physical_memory_bytes{{{matcher}}}))',
+                "percent",
+            ),
             "up": (f'up{{{matcher}}}', ""),
         }
     queries = {

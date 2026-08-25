@@ -545,14 +545,14 @@ def query_prometheus(asset: Asset | None = None) -> dict[str, Any]:
     return out
 
 
-def query_prometheus_expr(expr: str) -> dict[str, Any]:
+def query_prometheus_expr(expr: str, timeout: float = 5.0) -> dict[str, Any]:
     from app.metrics import demo_metric_values
 
     live = demo_metric_values()
     if expr in live:
         return {"value": live[expr], "query": expr}
     try:
-        with httpx.Client(timeout=5.0) as client:
+        with httpx.Client(timeout=timeout) as client:
             response = client.get(f"{settings.prometheus_url}/api/v1/query", params={"query": expr})
             response.raise_for_status()
             data = response.json()
@@ -560,6 +560,39 @@ def query_prometheus_expr(expr: str) -> dict[str, Any]:
             if result:
                 return {"value": float(result[0]["value"][1]), "query": expr}
             return {"value": None, "query": expr}
+    except Exception as exc:
+        return {"error": str(exc), "query": expr}
+
+
+def query_prometheus_range(expr: str, hours: float = 1.0, step: str = "5m", timeout: float = 2.0) -> dict[str, Any]:
+    """Last-hour samples for a tiny SVG sparkline. Empty/error → no sparkline (never fake zeros)."""
+    import time
+
+    from app.metrics import demo_metric_values
+
+    live = demo_metric_values()
+    if expr in live:
+        return {"values": [live[expr]], "query": expr}
+    end = time.time()
+    start = end - max(0.1, float(hours)) * 3600
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.get(
+                f"{settings.prometheus_url}/api/v1/query_range",
+                params={"query": expr, "start": start, "end": end, "step": step},
+            )
+            response.raise_for_status()
+            data = response.json()
+            result = (data.get("data") or {}).get("result") or []
+            if not result:
+                return {"values": [], "query": expr}
+            points = []
+            for pair in result[0].get("values") or []:
+                try:
+                    points.append(float(pair[1]))
+                except (TypeError, ValueError, IndexError):
+                    continue
+            return {"values": points, "query": expr}
     except Exception as exc:
         return {"error": str(exc), "query": expr}
 

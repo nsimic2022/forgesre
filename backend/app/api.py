@@ -340,6 +340,22 @@ def verify_support_api(
     }
 
 
+@router.get("/assets/{asset_id}/metrics")
+def asset_metrics_api(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_assets")),
+) -> dict[str, Any]:
+    """Class-based glance tiles (CPU/mem/disk/up) from Prometheus. Viewers can read."""
+    del user
+    item = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    from app.asset_metrics import safe_asset_metric_panel
+
+    return safe_asset_metric_panel(item)
+
+
 @router.get("/assets/{asset_id}/verify")
 def verify_one_asset_api(
     asset_id: str,

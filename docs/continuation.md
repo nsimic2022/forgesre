@@ -1,4 +1,4 @@
-# Session handoff — 24 August 2026
+# Session handoff — 25 August 2026
 
 This file is a **session handoff for the next coding agent or contributor**. It is not an operator manual. Operators start at [install and config](install-config.md) and the [operator handbook](operator-handbook.md).
 
@@ -17,10 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 24 August 2026 (late evening).** Operator N hit two bugs on the Ubuntu VM:
-
-1. `./forgesre verify` crashed with `ModuleNotFoundError: sqlalchemy` (same class as the old host `backup` crash: `asset_verify` → `seed` → ORM).
-2. He wanted each backup run in its **own folder** so `data/backups/` does not look like a pile of files he cannot tell how to import. He is OK keeping backup-on-update as a safety net. CLI `./forgesre backup` and GUI Backup/Import stay.
+**Tuesday 25 August 2026.** Operator N wanted a glanceable metric panel on **asset detail** (open one machine): keep the existing left column (inventory, ping/comms, verify, edit) and add a right-hand panel of bundled class metrics/alarms so he does not need Grafana for a quick look. Grafana deep-link stays later.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -44,7 +41,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **227 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~33s each. Python 3.12, pytest 9.x.
+Both runs: **243 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~34s each. Python 3.12, pytest 9.x.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`.
 
@@ -52,26 +49,7 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-### Host `./forgesre verify` without sqlalchemy
-
-`is_demo_asset_id` moved to `backend/app/demo_ids.py` (stdlib only). `seed.py` re-exports it for Core. Host CLI modules (`asset_verify`, `cli_ops`, `cli_view`) import the helper, not `app.seed`. Do **not** pip-install sqlalchemy on Ubuntu.
-
-- `./forgesre verify` / `ping` / `incidents` on the host.
-- GUI Verify still runs inside Core (sqlalchemy is fine there).
-- Test: importing `asset_verify` and `cli_ops` with sqlalchemy blocked.
-
-### Backup layout: one folder per run, one tar to import
-
-```
-data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz
-data/backups/backup_YYYYMMDDTHHMMSSZ/MANIFEST.txt
-```
-
-Dirs mode `700`, archives mode `600`. gitignore unchanged (`data/`). Restore/import accept the folder or the tar inside it. Legacy `data/backups/forgesre-*.tar.gz` at the root still lists and restores. Staging temp is not left next to the tar.
-
-- `./forgesre backup` still exists (CLI + GUI).
-- `./forgesre update` still runs backup after doctor as a safety net (DEGRADED doctor may continue; backup is not blocked on snmp).
-- Administration Restore already had a folder dropdown: it now lists `backup_*` dirs newest first with timestamp + name (not tar contents). `./forgesre restore` / `import` with no path prints a numbered picker; still needs `--yes`. Administration archive list has **Download** and **Remove**; `./forgesre remove backup` deletes one run folder (confirm `--yes`).
+Asset detail right panel: class tiles (Linux `node_` CPU/mem/disk + scrape, Windows `windows_` same idea, SNMP `up` only) from Prometheus; missing series yellow (never fake 0%); thresholds from `alerts.yml` / playrules; DEMO labeled; Grafana unchanged.
 
 ---
 
@@ -85,15 +63,7 @@ git pull origin main
 ./forgesre update
 ```
 
-Then:
-
-```bash
-./forgesre verify
-./forgesre backup
-ls -la data/backups/
-```
-
-Hard-refresh Administration if you use GUI Backup/Import.
+Hard-refresh, then **Assets** → open one host. Left column is unchanged. Right panel is **Machine metrics**.
 
 ---
 
@@ -114,6 +84,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it.
 - Backup on the host dumps Postgres via `docker compose exec postgres`.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`. Do not explode the archive into loose files at `data/backups/` root.
+- Host `./forgesre verify` does not import sqlalchemy (`demo_ids.py`).
 
 ---
 
@@ -138,6 +109,7 @@ Do not start these unless N asks:
 - React, Tailwind, Bootstrap, PatternFly npm.
 - Fake a live Windows scrape or SNMP walk in the demo panel.
 - Explode backup tars into many small files at `data/backups/` root.
+- Grafana deep-link on the asset page (N said later).
 
 ---
 
@@ -147,3 +119,4 @@ Do not start these unless N asks:
 - Core slim image may not include `ping`; GUI ICMP then shows that honestly. `./forgesre verify` probes ICMP from the **host** (same as `./forgesre ping`).
 - Scheduled `/ops` reports are still plain text.
 - Old backups already on the VM as `data/backups/forgesre-*.tar.gz` are still valid; new runs write folders.
+- Grafana deep-link from an asset is still later.

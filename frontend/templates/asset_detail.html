@@ -5,7 +5,9 @@
 {% if request.query_params.get('notice') %}
 <div class="banner">{{ request.query_params.get('notice') }}</div>
 {% endif %}
-<h1>{{ asset.hostname }}</h1>
+<div class="asset-detail-split">
+<div class="asset-detail-main">
+<h1>{{ asset.hostname }}{% if metrics.demo %} <span class="pill demo">DEMO</span>{% endif %}</h1>
 <dl class="kv">
   <dt>Asset ID</dt><dd>{{ asset.asset_id }}</dd>
   <dt>IP</dt>
@@ -109,4 +111,33 @@
     <li class="muted">No incidents for this asset.</li>
   {% endfor %}
 </ul>
+</div>
+
+<aside class="asset-detail-metrics card" data-asset-metrics="{{ asset.asset_id }}">
+  <h2>Machine metrics</h2>
+  {% if metrics.demo %}<span class="pill demo">DEMO</span>{% endif %}
+  <p class="muted">{{ metrics.collecting_line }}</p>
+  <p class="muted">Bundled {{ metrics.class }} class — not every exporter series.</p>
+  <div class="metric-tiles">
+    {% for tile in metrics.tiles %}
+    <div class="metric-tile" data-metric="{{ tile.key }}">
+      <div class="metric-tile-head">
+        <span>{{ tile.name }}</span>
+        <span class="pill {{ tile.tone }}">{{ tile.display }}</span>
+      </div>
+      <div class="metric-bar{% if tile.bar_pct is none %} empty{% endif %}" role="meter"{% if tile.bar_pct is not none %} aria-valuenow="{{ tile.bar_pct }}" aria-valuemin="0" aria-valuemax="100"{% endif %}>
+        {% if tile.bar_pct is not none %}
+        <span class="metric-bar-fill {{ tile.tone }}" style="width: {{ tile.bar_pct }}%"></span>
+        {% endif %}
+      </div>
+      {% if tile.spark %}
+      <svg class="metric-spark" viewBox="0 0 80 22" width="80" height="22" aria-hidden="true">
+        <polyline fill="none" stroke="currentColor" stroke-width="1.5" points="{{ tile.spark }}"/>
+      </svg>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</aside>
+</div>
 {% endblock %}
