@@ -529,7 +529,7 @@ def run_all(root: Path) -> Runner:
         elif "office365" in low or "outlook" in low:
             kind = "outlook"
         elif low in {"127.0.0.1", "localhost"}:
-            kind = "local-mailbox" if r.email.get("port") == "587" else "mailpit"
+            kind = "local-mailbox" if r.email.get("port") == "587" else "local"
         has_user = bool(r.secrets.get("SMTP_USERNAME"))
         r.add(
             "email.yaml",

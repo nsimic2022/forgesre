@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Tuesday 25 August 2026.** Operator N: Add/Edit Alarms was a full-width block under hostname/IP; metric tiles stacked and clipped the threshold; Playrules/Playbooks Save had no Cancel.
+**Tuesday 25 August 2026.** Operator N: drop Mailpit; unbox Alarms on Add/Edit (same font as hostname/IP, still 3 columns); Escalation looked abandoned vs Playrules/Playbooks Cancel.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -51,7 +51,7 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-Add/Edit is hostname | IP | **Alarms** (checklist stays, Auto-detect stays); Machine metrics are one line (name · value · bar · color · threshold) with Edit; Playrules/Playbooks Save has Cancel; Playrules notes bundled default warning vs per-asset `assets.alarms` (same webhook, not a second engine).
+Mailpit compose profile `mail` is gone (mailbox stays). Add/Edit Alarms is unboxed in column 3 (hostname | IP | Alarms), same font as hostname/IP. Escalation has Create + Save/Cancel like Playbooks; playrule form can pick a policy (still defaults to Default warning).
 
 ---
 
@@ -65,7 +65,7 @@ git pull origin main
 ./forgesre update
 ```
 
-Hard-refresh, then **Assets** → Add/Edit is hostname | IP | Alarms. Open a host: Machine metrics one line each. Playrules shows bundled default warning vs `assets.alarms`.
+Hard-refresh (`/static/app.css?v=alarms-esc-1`), then **Assets** → Add/Edit is hostname | IP | Alarms (no extra card). **Escalation** has Create with Cancel next to Save.
 
 ---
 

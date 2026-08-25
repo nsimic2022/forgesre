@@ -129,15 +129,15 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 | Incidents | `/incidents` | Recent 200 Alertmanager incidents. INC id is green (resolved/closed), yellow (in progress), red (critical). **Reported to** is who received the incident report |
 | History | `/history` | Last 90 days in Postgres. Filters: status, asset, `INC` number. Closed rows stay here. |
 | Incident | `/incidents/INC-…` | **Acknowledge / Resolve / Close** at the top (same yellow/green as below), Who to call, **Send incident report**, **Report outbox**, audit, notes, RCA |
-| Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
+| Escalation | `/escalation` | Seeded **Default warning**, create policy (Save + Cancel), generated notification log |
 | AI Investigation | `/ai/INC-…` | ForgeRCA (green) then ForgeAI (green/yellow/red). Facts, anomalies, hypotheses |
 | Playrules | `/playrules` | List, toggle, create from Prometheus presets (**analyst**) |
 | Playbooks | `/playbooks` | List steps, create (**analyst**) |
-| Escalation | `/escalation` | Seeded policy + generated notification log (owner email when set) |
+| Escalation | `/escalation` | Seeded **Default warning**, create policy (Save + Cancel), generated notification log |
 | Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
 | System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Run doctor** re-probes now. Green = running, yellow = paused / starting / disabled, red = down. **Open** column (and the component name) goes to that service’s GUI or metrics. **Open Grafana** is on this page too. Prometheus/Alertmanager bind the appliance; the UI rewrites `127.0.0.1` to the host you used. |
 | Email & reports | `/ops` | **Gmail** / **Outlook** send now (YAML + `SMTP_*`). **Own domain + Roundcube** is listed but not enabled until `./forgesre mailbox`. Address book, send, outbox, scheduled reports. Grafana is on System Health. |
-| Administration | `/admin` | Users: click a row to **edit** or **remove**. **Backup / Import / Restore** (before Appliance shell). Audit log. No browser PTY — SSH or `./forgesre shell` |
+| Administration | `/admin` | Users: click a row to **edit** or **remove**. **Backup**, then **Import / restore** (left) beside a **ForgeSRE CLI** command list (right). Audit log. No browser PTY — SSH or `./forgesre` / `./forgesre shell` |
 
 ---
 
@@ -181,7 +181,7 @@ Audit rows for `user.create`, `user.update`, `user.delete`, `backup.create` / `b
 
 ### Platform backup and restore
 
-Archives are `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (`$FORGESRE_DATA/backups/`; one folder per run, plus `MANIFEST.txt`). The directory is gitignored, mode `700`; each tar is mode `600`. Administration (admin / super_admin only) has **Backup** and **Import** *before* Appliance shell. `./forgesre backup` writes the same archive; `./forgesre update` also backups first as a safety net. GUI/Core uses SQLAlchemy; the host CLI dumps Postgres with `docker compose exec postgres` (do not pip-install sqlalchemy on the VM). Host `./forgesre verify` likewise must not import sqlalchemy.
+Archives are `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (`$FORGESRE_DATA/backups/`; one folder per run, plus `MANIFEST.txt`). The directory is gitignored, mode `700`; each tar is mode `600`. Administration (admin / super_admin only) has **Backup** and **Import / restore** on the left, with a **ForgeSRE CLI** cheatsheet on the right. `./forgesre backup` writes the same archive; `./forgesre update` also backups first as a safety net. GUI/Core uses SQLAlchemy; the host CLI dumps Postgres with `docker compose exec postgres` (do not pip-install sqlalchemy on the VM). Host `./forgesre verify` likewise must not import sqlalchemy.
 
 **In the archive:** `config/forgesre.yml`, `.env`, `secrets/secrets.env` (omit with `./forgesre backup --no-secrets`), a logical database dump (users, incidents, assets, playbooks, playrules, journal, audit, jobs), compressed `data/logs/`, `monitoring/alerts.local.yml` if present, `data/generated/`, `config/examples/`.
 
@@ -201,16 +201,17 @@ docker compose stop core
 
 A browser restore can reload Postgres while Core is still running; it cannot rewrite `.env` / secrets / YAML because those mounts are read-only. Finish file restore from SSH as above. Then `git pull origin main && ./forgesre update` if you are also taking new code.
 
-### Appliance shell (no web PTY)
+### ForgeSRE CLI (no web PTY)
 
 Administration does **not** open a terminal in the browser. A full web PTY (xterm.js + host PTY), even if wrapped to `./forgesre` only, is still a large attack surface: XSS or a stolen admin cookie becomes a host command channel, and “restricted shells” are routinely escaped. ForgeSRE will not ship that, and will not expose root bash in the UI.
 
-The existing Appliance shell control stays an explanation plus SSH:
+The Administration page keeps **Import / restore** on the left and a scannable `./forgesre` command list on the right (`./forgesre help` is the source of truth). One line in the UI: no browser terminal — SSH, then `./forgesre` or `./forgesre shell`.
 
 ```bash
 ssh you@forgesre-vm
 cd ~/forgesre
 ./forgesre          # or: ./forgesre shell
+./forgesre help
 ```
 
 `./forgesre` with no args is already a restricted prompt (`forgesre>`). Use it on the box, not through the browser. Journal (`/journal`) is the process console, not a shell.
@@ -536,7 +537,7 @@ If the incident’s asset has **owner email**, every step is addressed to that e
 
 Incident reports and escalation mail are **multipart** (`text/plain` + `text/html`). Gmail and Outlook show the HTML (severity color bar, DEMO banner when the asset is `forge-demo-*`, ForgeRCA sections). The Report outbox on the incident page still stores the plain-text body. **Send email** on `/ops` (Compose) stays as the operator typed it — ForgeSRE does not rewrite that text into HTML tables.
 
-This version has **no UI to add a new escalation policy**. Policies exist from seed (and could be inserted in Postgres). Playrules created in the UI (or API) attach the seeded **Default warning** policy when none is set. The 30s loop reads that policy’s `after_minutes` / `target` steps.
+Analysts can **create** another policy (name, slug, steps as `minutes role` lines) with **Save** and **Cancel**, same pattern as Playbooks. New playrules still attach **Default warning** unless the playrule form picks a different policy. The 30s loop reads that policy’s `after_minutes` / `target` steps. This is not a ticket system.
 
 Email is off until you enable it in YAML and put SMTP secrets in `secrets/secrets.env`:
 
@@ -622,11 +623,7 @@ That starts Postfix + Dovecot + Roundcube (`:8081`) and writes `MAILBOX_*` in se
 
 Internet receive still needs MX at this host and **TCP/25**. Many ISPs/clouds block port 25.
 
-Do not combine with Mailpit (`COMPOSE_PROFILES=mail`).
-
-### Lab-only: Mailpit (not production)
-
-Skip this if you want real mail. Mailpit is a catcher on the VM (`COMPOSE_PROFILES=mail`, YAML `127.0.0.1:1025`, `tls: false`). Messages never leave the box and never appear in Gmail, Outlook, or Roundcube.
+There is no lab SMTP catcher container. Leave YAML email **disabled** for an on-box outbox (`generated`), or send through Gmail / Outlook / host Postfix.
 
 ---
 
@@ -893,7 +890,7 @@ Say this out loud so lab expectations stay honest:
 
 - No Kubernetes, no APM, no tracing, no auto-remediation.
 - Playbooks are checklists, not executed runbooks.
-- No UI to create escalation policies. Assets can be added, edited, cloned, and removed (analyst+). Seeded `forge-demo-*` rows cannot be removed. Users can be edited and removed on Administration (not the install super admin, not yourself).
+- Assets can be added, edited, cloned, and removed (analyst+). Seeded `forge-demo-*` rows cannot be removed. Users can be edited and removed on Administration (not the install super admin, not yourself). Escalation policies can be created in the UI; there is no ticketing object.
 - Example YAML in `config/examples/` is not applied automatically.
 - Bundled alert rules include demo gauges, SNMP `up` / interface-down, a small `node_exporter` set (down / disk 90% / CPU 95%), and a small `windows_exporter` set (down / volume 90% / CPU 90%). Extra rules go in `alerts.local.yml`.
 - Discovery is TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, 256 hosts max. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.

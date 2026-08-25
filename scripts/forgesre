@@ -652,7 +652,7 @@ Starts docker-mailserver and Roundcube on :8081. Does **not** change Core SMTP
 Use this later, after you own a domain. Internet receive needs MX + TCP/25.
 Gmail and Outlook keep working as the send path without this profile.
 
-Do not enable this profile at install. Lab catcher remains COMPOSE_PROFILES=mail (Mailpit).
+Do not enable this profile at install. Core SMTP stays Gmail, Outlook, or host postfix.
 EOF
       ;;
     "")

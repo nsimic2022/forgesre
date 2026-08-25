@@ -81,6 +81,13 @@
       {% endfor %}
     </select>
   </label>
+  <label>Escalation
+    <select name="escalation_policy_id">
+      {% for policy in policies %}
+      <option value="{{ policy.id }}" {% if policy.slug == 'default-warning' %}selected{% endif %}>{{ policy.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
   <div class="row-actions">
     <button type="submit">Save</button>
     <a href="/playrules">Cancel</a>

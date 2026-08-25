@@ -40,6 +40,8 @@ def test_compose_mailbox_profile_is_opt_in():
     assert "profiles:" not in core_block
     assert "127.0.0.1:587:587" in text
     assert "network_mode: host" not in text[mail_idx:]
+    assert "mailpit" not in text.lower()
+    assert "profiles: [\"mail\"]" not in text
 
 
 def test_forgesre_help_documents_mailbox():
@@ -50,7 +52,8 @@ def test_forgesre_help_documents_mailbox():
     assert "Gmail" in detail
     assert "Outlook" in detail
     assert "--bind-core" in detail
-    assert "Mailpit" in detail
+    assert "Mailpit" not in detail
+    assert "mailpit" not in (ROOT / "docker-compose.yml").read_text().lower()
     script = (ROOT / "scripts/mailbox.sh").read_text()
     assert "docker-mailserver" in script
     assert "BIND_CORE" in script
