@@ -55,6 +55,7 @@ from app.services import (
     is_demo_journal,
     is_demo_mail,
     list_host_down_incidents,
+    parse_policy_steps,
     run_demo,
     run_demo_host,
     run_demo_network,
@@ -115,7 +116,7 @@ def smtp_provider_id() -> str:
         return "off"
     host = (settings.smtp_host or "").lower()
     if host in {"127.0.0.1", "localhost", "::1"}:
-        return "mailbox" if int(settings.smtp_port or 0) == 587 else "mailpit"
+        return "mailbox" if int(settings.smtp_port or 0) == 587 else "other"
     if "gmail" in host:
         return "gmail"
     if "office365" in host or "outlook" in host or "hotmail" in host:
@@ -872,6 +873,7 @@ def playrules_page(request: Request, db: Session = Depends(get_db), user: User =
     rows = db.query(Playrule).order_by(Playrule.name).all()
     books = db.query(Playbook).order_by(Playbook.name).all()
     hosts = saved_alarm_hostnames(db.query(Asset).order_by(Asset.hostname).all())
+    policies = db.query(EscalationPolicy).order_by(EscalationPolicy.name).all()
     return render(
         request,
         "playrules.html",
@@ -880,6 +882,7 @@ def playrules_page(request: Request, db: Session = Depends(get_db), user: User =
         playbooks=books,
         presets=PLAYRULE_PRESETS,
         asset_alarm_hosts=hosts,
+        policies=policies,
     )
 
 
@@ -894,10 +897,15 @@ def playrule_create(
     value: float = Form(80),
     severity: str = Form("warning"),
     playbook_id: int | None = Form(None),
+    escalation_policy_id: int | None = Form(None),
 ):
     if not can(user, "write_play"):
         raise HTTPException(status_code=403)
-    policy = db.query(EscalationPolicy).filter_by(slug="default-warning").first()
+    policy = None
+    if escalation_policy_id:
+        policy = db.get(EscalationPolicy, escalation_policy_id)
+    if policy is None:
+        policy = db.query(EscalationPolicy).filter_by(slug="default-warning").first()
     row = Playrule(
         name=name,
         enabled=True,
@@ -955,9 +963,31 @@ def playbook_create(
 
 @router.get("/escalation", response_class=HTMLResponse)
 def escalation_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play"))):
-    policies = db.query(EscalationPolicy).all()
+    policies = db.query(EscalationPolicy).order_by(EscalationPolicy.name).all()
     notes = db.query(Notification).order_by(Notification.id.desc()).limit(20).all()
     return render(request, "escalation.html", user, policies=policies, notifications=notes)
+
+
+@router.post("/escalation")
+def escalation_create(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    name: str = Form(...),
+    slug: str = Form(...),
+    steps: str = Form(""),
+):
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    clean_slug = (slug or "").strip().lower().replace(" ", "-")
+    if not clean_slug:
+        raise HTTPException(status_code=400, detail="slug required")
+    if db.query(EscalationPolicy).filter_by(slug=clean_slug).first():
+        raise HTTPException(status_code=400, detail="slug already exists")
+    row = EscalationPolicy(name=name.strip(), slug=clean_slug, steps=parse_policy_steps(steps))
+    db.add(row)
+    audit(db, "escalation.create", actor=user.email, object_type="escalation_policy", object_id=clean_slug)
+    db.commit()
+    return RedirectResponse("/escalation", status_code=302)
 
 
 @router.get("/journal", response_class=HTMLResponse)

@@ -18,8 +18,8 @@
   <label>Hostname <input name="hostname" required value="{{ form.hostname }}"></label>
   <label>IP <input name="ip" placeholder="10.10.10.21" value="{{ form.ip }}" data-detect-ip></label>
   <input type="hidden" name="alarms_present" value="1">
-  <fieldset class="alarm-families" data-alarm-families>
-    <legend>Alarms</legend>
+  <div class="alarm-families" data-alarm-families>
+    <span class="alarm-heading">Alarms</span>
     <p class="muted" data-family-line>Auto-detect still picks Linux / Windows / Network. cpu / mem / disk / up only — not every exporter series.</p>
     {% set alarms = form.alarms or {} %}
     {% set up_a = alarms.get('up') or {} %}
@@ -33,7 +33,7 @@
       <input type="number" name="alarm_memory_threshold" min="1" max="100" step="1" value="{{ mem_a.get('threshold') or 90 }}" data-alarm-memory-th> %</label>
     <label class="alarm-row"><input type="checkbox" name="alarm_disk_enabled" value="1" data-alarm-disk {% if disk_a.get('enabled', True) %}checked{% endif %}> Disk
       <input type="number" name="alarm_disk_threshold" min="1" max="100" step="1" value="{{ disk_a.get('threshold') or 90 }}" data-alarm-disk-th> %</label>
-  </fieldset>
+  </div>
   <label>Type
     <select name="type" data-detect-type>
       {% set current_type = form.type or '' %}

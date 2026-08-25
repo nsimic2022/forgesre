@@ -1159,6 +1159,35 @@ def process_escalations(db: Session) -> None:
                 ensure_notification(db, incident, step["step_key"], target=step["target"])
 
 
+def parse_policy_steps(text: str) -> list[dict[str, Any]]:
+    """Parse 'minutes role' lines into EscalationPolicy.steps."""
+    skip = {"min", "mins", "minute", "minutes", "email", "→", "->"}
+    rows: list[dict[str, Any]] = []
+    for raw in (text or "").splitlines():
+        line = raw.replace("→", " ").replace("->", " ").strip()
+        if not line:
+            continue
+        tokens = [part for part in line.replace(",", " ").split() if part.lower() not in skip]
+        if not tokens:
+            continue
+        first = tokens[0].rstrip("mM")
+        try:
+            after = int(first)
+        except ValueError:
+            continue
+        target = tokens[1] if len(tokens) > 1 else "team"
+        channel = "email"
+        extra = tokens[2].lower() if len(tokens) > 2 else ""
+        if extra in {"email", "webhook"}:
+            channel = extra
+        rows.append({"after_minutes": after, "target": target, "channel": channel})
+    return rows or [
+        {"after_minutes": 0, "target": "team", "channel": "email"},
+        {"after_minutes": 15, "target": "team-lead", "channel": "email"},
+        {"after_minutes": 30, "target": "engineer", "channel": "email"},
+    ]
+
+
 def escalation_steps(incident: Incident) -> list[dict[str, Any]]:
     policy = incident.playrule.escalation_policy if incident.playrule else None
     raw = list(policy.steps) if policy and policy.steps else [

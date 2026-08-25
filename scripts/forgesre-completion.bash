@@ -7,7 +7,7 @@
 
 _forgesre_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 _forgesre_cmds="help shell quit exit install doctor test ping probe verify status logs config assets inventory snmp render-monitoring journal demo demo-rca demo-reset jobs incidents history login logout whoami sd version secrets-check fetch-llm backup restore import remove update mailbox tls completion"
-_forgesre_services="core postgres prometheus alertmanager snmp-exporter loki alloy grafana llm mailserver roundcube mailpit"
+_forgesre_services="core postgres prometheus alertmanager snmp-exporter loki alloy grafana llm mailserver roundcube"
 _forgesre_journal="install core seed inventory discovery incident rca escalation notification demo netbox snmp jobs backup"
 _forgesre_status="OPEN INVESTIGATING ESCALATED RESOLVED CLOSED"
 

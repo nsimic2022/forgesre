@@ -304,9 +304,15 @@ button.danger { background: var(--crit); color: var(--btn-danger-text); }
   grid-column: 3;
   grid-row: 1 / span 5;
   margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
   max-width: none;
   min-width: 0;
-  align-self: stretch;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 .form-grid label.alarm-row {
   flex-direction: row;
@@ -619,11 +625,11 @@ form.ops-compose {
 .metric-bar-fill.ok { background: var(--ok); }
 .metric-bar-fill.warn { background: var(--warn); }
 .metric-bar-fill.crit { background: var(--crit); }
-.alarm-families { border: 1px solid var(--line); padding: 0.55rem 0.7rem; margin: 0; }
-.alarm-families legend { font-weight: 600; }
-.alarm-families .muted { font-size: 0.78rem; margin: 0 0 0.35rem; }
+.alarm-families { margin: 0; padding: 0; border: 0; background: none; }
+.alarm-heading { display: block; }
+.alarm-families .muted { margin: 0 0 0.35rem; }
 .alarm-row { display: flex; align-items: center; gap: 0.45rem; margin: 0.2rem 0; }
-.alarm-row input[type="number"] { width: 4.5rem; padding: 0.28rem 0.4rem; }
+.alarm-row input[type="number"] { width: 4.5rem; }
 @media (max-width: 900px) {
   .nav { position: static; width: auto; }
   .content { margin-left: 0; }
@@ -641,11 +647,7 @@ form.ops-compose {
   .ops-report-cols { flex-direction: column; }
   .asset-detail-split { grid-template-columns: 1fr; }
   .form-grid.asset-form-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(11rem, 1fr);
     max-width: 720px;
-  }
-  .form-grid.asset-form-grid .alarm-families {
-    grid-column: 1 / -1;
-    grid-row: auto;
   }
 }

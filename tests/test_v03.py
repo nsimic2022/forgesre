@@ -194,6 +194,11 @@ def test_playrule_page_has_metric_presets():
     books = client.get("/playbooks")
     assert books.status_code == 200
     assert b'href="/playbooks">Cancel</a>' in books.content
+    esc = client.get("/escalation")
+    assert esc.status_code == 200
+    assert b'href="/escalation">Cancel</a>' in esc.content
+    assert b"Create escalation policy" in esc.content
+    assert b"Default warning" in esc.content
     admin = client.get("/admin")
     assert admin.status_code == 200
     assert b"ForgeRCA" not in admin.content or b"Appliance shell" in admin.content

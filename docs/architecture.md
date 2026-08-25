@@ -332,7 +332,7 @@ Open WebUI, Promtail, blackbox_exporter as a separate container, Redis (unless b
 
 ## 7. Container list by profile
 
-One compose file. Profiles stack: `minimal`, `standard`, `ai`, plus optional `netbox`, `mail` (Mailpit lab catcher), `mailbox` (on-box mail + Roundcube).
+One compose file. Profiles stack: `minimal`, `standard`, `ai`, plus optional `netbox`, `mailbox` (on-box mail + Roundcube).
 
 ### Minimal — `COMPOSE_PROFILES=minimal`
 

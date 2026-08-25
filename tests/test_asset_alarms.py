@@ -66,7 +66,9 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     client = _login("analyst-alarms@forgesre.local")
     page = client.get("/assets")
     assert page.status_code == 200
-    assert "<legend>Alarms</legend>" in page.text
+    assert "<legend>Alarms</legend>" not in page.text
+    assert '<fieldset class="alarm-families"' not in page.text
+    assert '<span class="alarm-heading">Alarms</span>' in page.text
     assert "Bundled alarms for this asset" not in page.text
     assert "asset-form-grid" in page.text
     assert 'name="alarm_disk_threshold"' in page.text
@@ -108,7 +110,8 @@ def test_edit_form_cancel_returns_to_asset():
     page = client.get("/assets?edit=win-cancel-01")
     assert page.status_code == 200
     assert 'href="/assets/win-cancel-01">Cancel</a>' in page.text
-    assert "<legend>Alarms</legend>" in page.text
+    assert "<legend>Alarms</legend>" not in page.text
+    assert '<span class="alarm-heading">Alarms</span>' in page.text
 
 
 def test_skip_reason_disabled_and_below_threshold():

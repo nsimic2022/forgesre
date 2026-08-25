@@ -323,7 +323,7 @@ FORGESRE_TIMEZONE=Europe/Belgrade
 FORGESRE_HTTP_PORT=8080
 GRAFANA_PORT=3000
 FORGESRE_PROFILE=standard
-COMPOSE_PROFILES=          # empty | ai | mail | mailbox | ai,mailbox
+COMPOSE_PROFILES=          # empty | ai | mailbox | ai,mailbox
 FORGESRE_LLM_THREADS=8     # llama.cpp CPU threads (fetch-llm sets nproc-2)
 ```
 

@@ -3,7 +3,9 @@
 {% block content %}
 <h1>Escalation</h1>
 <p class="muted">
-  Policy steps still name roles (<code>team</code>, <code>team-lead</code>, <code>engineer</code>).
+  This page is the email ladder and the generated outbox — same 30s loop as before, not a ticket system.
+  Seeded <strong>Default warning</strong> (0 / 15 / 30 min) is what new playrules attach unless you pick another policy on <a href="/playrules">Playrules</a>.
+  Steps still name roles (<code>team</code>, <code>team-lead</code>, <code>engineer</code>).
   Delivery goes to the <strong>asset owner email</strong> when that field is set (demo: <code>platform@forgesre.local</code> on forge-demo-01).
   If the asset has no owner email, ForgeSRE falls back to <code>&lt;role&gt;@forgesre.local</code>.
   SMTP off means the row stays <em>generated</em> — that is the lab outbox.
@@ -11,13 +13,32 @@
 {% for policy in policies %}
 <section class="card">
   <h2>{{ policy.name }}</h2>
+  <p class="muted"><code>{{ policy.slug }}</code></p>
   <ol>
     {% for step in policy.steps %}
     <li>{{ step.after_minutes }} min → email {{ step.target }}</li>
     {% endfor %}
   </ol>
 </section>
+{% else %}
+<p class="muted">No policies yet. Create one below, or keep using the seeded Default warning after seed.</p>
 {% endfor %}
+{% if can('write_play') %}
+<h2>Create escalation policy</h2>
+<form method="post" action="/escalation" class="stack" id="escalation-form">
+  <label>Name <input name="name" placeholder="Default warning" required></label>
+  <label>Slug <input name="slug" placeholder="default-warning" required></label>
+  <label>Steps (one per line: minutes then role)
+    <textarea name="steps" rows="6">0 team
+15 team-lead
+30 engineer</textarea>
+  </label>
+  <div class="row-actions">
+    <button type="submit">Save</button>
+    <a href="/escalation">Cancel</a>
+  </div>
+</form>
+{% endif %}
 <h2>Generated notifications</h2>
 <table>
   <thead><tr><th>When</th><th>Target</th><th>Subject</th><th>Status</th></tr></thead>
