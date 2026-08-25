@@ -41,7 +41,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **pytest count filled after the double run**. Python 3.12, pytest 9.x.
+Both runs: **243 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~34s each. Python 3.12, pytest 9.x.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`.
 
