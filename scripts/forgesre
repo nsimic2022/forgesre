@@ -193,8 +193,9 @@ doctor — same checks as /health-ui. Overall HEALTHY or DEGRADED.
   ./forgesre doctor
   ./doctor.sh
 
-snmp: error means the snmp-exporter container is down or :9116 is not listening.
-Fix: docker compose up -d snmp-exporter && ./forgesre snmp
+snmp: paused (yellow) when there are no Network device + IP targets — that is not DOWN.
+When inventory has SNMP targets, doctor starts snmp-exporter via compose if :9116 is dark.
+Fix if it is truly down: docker compose up -d snmp-exporter && ./forgesre snmp
 
 For a long written report (files, login, APIs, email config, core logs):
 
@@ -720,9 +721,18 @@ cmd_snmp() {
   source secrets/secrets.env
   echo "=== snmp-exporter ==="
   code="$(curl -sS -o /tmp/forgesre-snmp-metrics.txt -w "%{http_code}" http://127.0.0.1:9116/metrics || true)"
+  if [[ "${code:-}" != "200" ]] && curl -fsS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
+      "http://127.0.0.1:${port}/api/v1/sd/snmp" 2>/dev/null | grep -q '"targets"'; then
+    echo "Targets exist and :9116 is dark — starting snmp-exporter (compose, not Zabbix)..."
+    if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
+    "${DC[@]}" up -d snmp-exporter || true
+    sleep 2
+    code="$(curl -sS -o /tmp/forgesre-snmp-metrics.txt -w "%{http_code}" http://127.0.0.1:9116/metrics || true)"
+  fi
   echo "GET http://127.0.0.1:9116/metrics  HTTP ${code:-down}"
   if [[ "${code:-}" != "200" ]]; then
-    echo "Exporter is not up. Start it: docker compose up -d snmp-exporter"
+    echo "Exporter is not up. Empty SD [] is paused, not a failure."
+    echo "If you have a Network device + IP: docker compose up -d snmp-exporter"
     echo "Then: ./forgesre logs snmp-exporter"
   fi
   echo

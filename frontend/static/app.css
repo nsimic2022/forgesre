@@ -477,8 +477,56 @@ button.demo-close {
   margin-top: 0.25rem;
 }
 .mail-body { margin: 0.2rem 0; font-size: 0.82rem; max-height: 8rem; overflow: auto; }
-.ops-forms { align-items: start; }
-.ops-forms .stack { max-width: none; }
+/* Email & reports: do not use .split (1.2fr / 0.8fr puts Add email first and wider). */
+.ops-mail-cols {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 1.5rem;
+  width: 100%;
+}
+form.ops-add-email {
+  flex: 0 1 38%;
+  width: 38%;
+  max-width: 38%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+form.ops-compose {
+  flex: 1 1 62%;
+  width: 62%;
+  min-width: 58%;
+  max-width: none;
+  box-sizing: border-box;
+}
+.ops-mail-cols .stack,
+form.ops-add-email,
+form.ops-compose {
+  max-width: none;
+}
+.ops-mail-cols input,
+.ops-mail-cols select,
+.ops-mail-cols textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.ops-report-cols {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.5rem;
+  width: 100%;
+  margin-bottom: 1rem;
+}
+.ops-report-cols > form {
+  flex: 1 1 18rem;
+  min-width: 16rem;
+  max-width: none;
+}
+.ops-report-cols fieldset { max-width: none; }
 .mail-providers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .mail-providers h3 { margin: 0 0 0.4rem; font-size: 1rem; }
 .asset-detail-split {
@@ -535,5 +583,14 @@ button.demo-close {
   .mail-providers { grid-template-columns: 1fr; }
   .demo-scenarios { grid-template-columns: 1fr; }
   .split { grid-template-columns: 1fr; }
+  .ops-mail-cols { flex-direction: column; }
+  form.ops-add-email,
+  form.ops-compose {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .ops-report-cols { flex-direction: column; }
   .asset-detail-split { grid-template-columns: 1fr; }
 }

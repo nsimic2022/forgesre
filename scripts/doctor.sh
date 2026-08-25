@@ -31,6 +31,17 @@ if [[ -f secrets/secrets.env ]]; then
   TOKEN="${ALERTMANAGER_WEBHOOK_TOKEN:-}"
 fi
 
+# Bundled snmp-exporter is a default compose service (not Zabbix). Start it
+# only when Core already has SNMP/network SD targets; otherwise doctor reports
+# paused, not DOWN.
+if curl -fsS -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:${PORT}/api/v1/sd/snmp" 2>/dev/null | grep -q '"targets"'; then
+  if ! curl -fsS -m 2 "http://127.0.0.1:9116/metrics" >/dev/null 2>&1; then
+    if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
+    "${DC[@]}" up -d snmp-exporter >/dev/null 2>&1 || true
+    sleep 2
+  fi
+fi
+
 if ! curl -fsS -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:${PORT}/api/v1/system/doctor" >/tmp/forgesre-doctor.json 2>/dev/null; then
   echo
   echo "Could not fetch /api/v1/system/doctor"
@@ -44,11 +55,12 @@ python3 - <<'PY'
 import json
 from pathlib import Path
 data = json.loads(Path("/tmp/forgesre-doctor.json").read_text())
+ok_status = {"ok", "disabled", "paused", "warn", "warning"}
 for name, item in data.get("components", {}).items():
     status = item.get("status")
-    mark = "✓" if status in {"ok", "disabled"} else "✗"
+    mark = "✓" if status in ok_status else "✗"
     extra = ""
-    if status not in {"ok", "disabled"}:
+    if status not in ok_status:
         extra = f"  {item.get('why','')}"
         if item.get("test"):
             extra += f"\n    Test: {item['test']}"

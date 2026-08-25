@@ -716,7 +716,7 @@ Bundled `WindowsExporterDown` / `WindowsFilesystemUsageHigh` / `WindowsCPUHigh` 
 Goal: `core-sw-01` at `10.30.1.1` is walked by snmp_exporter.
 
 1. On the switch, enable SNMPv2 read-only with a community the ForgeSRE VM may use. ACL: allow the ForgeSRE host on **UDP/161**.
-2. From the ForgeSRE VM: `./forgesre doctor` should show `snmp` ok. If not: `docker compose up -d snmp-exporter`.
+2. From the ForgeSRE VM: `./forgesre doctor` should show `snmp` **running** once this switch (or any Network device + IP) is in inventory. With **no** SNMP targets, doctor shows **paused** (yellow) — that is not DOWN. If it is down with real network assets: `docker compose up -d snmp-exporter` (bundled compose; not Zabbix).
 3. **Assets** → hostname `core-sw-01`, IP `10.30.1.1`, type **Network device**, owner email of who to call → **Save**.
 4. Asset page should say it is polled by snmp_exporter. Scrape address stays empty.
 5. `./forgesre snmp` — SD JSON contains `10.30.1.1`.
