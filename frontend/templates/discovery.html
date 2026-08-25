@@ -3,28 +3,21 @@
 {% block content %}
 <h1>Discovery</h1>
 <p class="muted">
-  Semi-automatic TCP probe (ports 22, 80, 443, 161, 9100, 9182) plus HTTP GET
-  <code>/metrics</code> on <code>:9182</code> and <code>:9100</code> when a host is alive.
-  <code>windows_</code> metrics → Windows Server <code>:9182</code>.
-  <code>node_</code> metrics → Linux Server <code>:9100</code>.
-  SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics.
-  TCP open without exporter text is <strong>not</strong> an OS pick (ICMP ping is not a scrape).
-  Not nmap.
-  New hosts wait here until an engineer Approves or Ignores them.
+  Scan now is the same probe as <code>agents/discovery.py</code> — not nmap, not ICMP ping
+  (ping lives on Assets). It expands configured CIDRs, then for each host:
+  TCP <code>22</code>, <code>80</code>, <code>443</code>, <code>9100</code>, <code>9182</code>;
+  SNMPv2c GET on UDP/161; if the host is TCP-alive, HTTP GET <code>/metrics</code> on
+  <code>:9100</code> and <code>:9182</code> (same detect as Add Asset).
+  Found hosts stay here until an engineer <strong>Approve</strong>s or <strong>Ignore</strong>s them.
+  They are not added to inventory automatically — including <code>mode: automatic</code>
+  and seeded <code>forge-demo-*</code> lab hosts.
   Mode: <code>{{ discovery_mode }}</code>
   · CIDRs: <code>{{ discovery_cidrs or "none" }}</code>
   · Enabled: <code>{{ "On" if discovery_enabled else "Off" }}</code>
 </p>
 
-{% if pending %}
-<div class="banner">
-  <strong>NEW DEVICE DETECTED</strong>
-  {{ pending|length }} host{% if pending|length != 1 %}s{% endif %} waiting for Approve / Ignore.
-</div>
-{% endif %}
-
 {% if can('write_assets') %}
-<form method="post" action="/discovery/scan" class="inline">
+<form method="post" action="/discovery/scan" class="inline" data-discovery-scan>
   <button type="submit">Scan now</button>
 </form>
 {% endif %}
@@ -35,6 +28,88 @@
 <p class="muted">External NetBox: <code>{{ netbox_url }}</code> (read-only). ForgeSRE does not bundle NetBox.</p>
 {% endif %}
 
+<section class="scan-panel" data-scan-panel data-scan-status="{{ scan.status }}">
+  <h2>Last scan</h2>
+  <p class="muted" data-scan-summary>
+    {% if scan.status == "idle" %}
+      No Scan now in this Core process yet. Click Scan now — pills update while it runs.
+    {% elif scan.status == "running" %}
+      Scanning {{ scan.probed }}/{{ scan.total }}{% if scan.current_ip %} · {{ scan.current_ip }}{% endif %}
+      · found {{ scan.found }} · skipped {{ scan.skipped }}
+    {% else %}
+      {{ scan.status }} · probed {{ scan.probed }}/{{ scan.total }}
+      · found {{ scan.found }} (waiting for Approve)
+      · skipped {{ scan.skipped }}{% if scan.lab_skipped %} (lab {{ scan.lab_skipped }}){% endif %}
+      {% if scan.cidrs %} · CIDRs <code>{{ scan.cidrs|join(", ") }}</code>{% endif %}
+    {% endif %}
+  </p>
+  <p class="muted reach-legend">
+    Step colors: <span class="reach-dot green">pass</span> at least one host answered ·
+    <span class="reach-dot yellow">skip</span> not run / none / unknown ·
+    <span class="reach-dot red">fail</span> scanner error (quiet subnet is yellow, not red).
+    This row is not ICMP ping.
+  </p>
+  <div class="scan-steps" data-scan-steps>
+    {% for item in scan.steps %}
+    <button type="button" class="reach-dot scan-step {{ item.color }}" data-scan-step="{{ item.id }}" title="{{ item.detail }}">{{ item.label }}</button>
+    {% endfor %}
+  </div>
+  <p class="muted scan-step-detail" data-scan-detail>Click a step for the last detail.</p>
+</section>
+
+{% if pending %}
+<div class="banner">
+  <strong>NEW DEVICE DETECTED</strong>
+  {{ pending|length }} host{% if pending|length != 1 %}s{% endif %} waiting for Approve / Ignore on this page.
+  Seeded lab candidate <code>10.20.30.41</code> is not a live scan hit — Approve is still required.
+</div>
+
+<h2>Waiting for Approve</h2>
+<p class="muted">Approve creates an asset and sends you to the asset page. Ignore / reject leaves it out of inventory.</p>
+<table class="discovery-pending">
+  <thead>
+    <tr>
+      <th>IP</th>
+      <th>Proposed role</th>
+      <th>Scan steps</th>
+      <th>Source</th>
+      <th>Approve</th>
+    </tr>
+  </thead>
+  <tbody data-pending-body>
+  {% for row in pending %}
+    {% set host = scan.hosts_by_ip.get(row.ip) if scan.hosts_by_ip is defined else none %}
+    <tr>
+      <td>{{ row.ip }}</td>
+      <td>{{ row.proposed_role }}</td>
+      <td>
+        {% if host and host.steps %}
+        <span class="reach-badges">
+          {% for item in host.steps %}
+          <span class="reach-dot {{ item.color }}" title="{{ item.detail }}">{{ item.label }}</span>
+          {% endfor %}
+        </span>
+        {% elif row.source == "demo" %}
+        <span class="pill demo">DEMO seed</span>
+        <span class="muted">not from Scan now</span>
+        {% else %}
+        <span class="muted">—</span>
+        {% endif %}
+      </td>
+      <td>{{ row.source }}</td>
+      <td class="row-actions">
+        {% if can('write_assets') %}
+        <form method="post" action="/discovery/{{ row.id }}/approve"><button type="submit">Approve</button></form>
+        <form method="post" action="/discovery/{{ row.id }}/ignore"><button type="submit" class="secondary" title="Reject / ignore — do not add to inventory">Ignore</button></form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>All candidates</h2>
 <table>
   <thead>
     <tr>

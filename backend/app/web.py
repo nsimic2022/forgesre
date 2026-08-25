@@ -26,6 +26,8 @@ from app.inventory import (
     delete_blocked,
     ignore_candidate,
     run_scan,
+    scan_snapshot,
+    start_scan_background,
     similar_incident_groups,
     sync_netbox,
     update_asset,
@@ -477,12 +479,14 @@ def asset_create(
 def discovery_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("write_assets"))):
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
     pending = [row for row in rows if row.status == "new"]
+    scan = scan_snapshot()
     return render(
         request,
         "discovery.html",
         user,
         candidates=rows,
         pending=pending,
+        scan=scan,
         discovery_enabled=settings.discovery_enabled,
         discovery_mode=settings.discovery_mode,
         discovery_cidrs=settings.discovery_cidrs,
@@ -492,9 +496,12 @@ def discovery_page(request: Request, db: Session = Depends(get_db), user: User =
 
 
 @router.post("/discovery/scan")
-def discovery_scan_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
+def discovery_scan_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
+    wants_json = "application/json" in (request.headers.get("accept") or "")
+    if wants_json:
+        return start_scan_background(actor=user.email)
     run_scan(db)
     audit(db, "discovery.scan", actor=user.email, commit=True)
     return RedirectResponse("/discovery", status_code=302)

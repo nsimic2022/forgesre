@@ -305,9 +305,9 @@ discovery:
 ```
 
 2. Recreate Core (settings load at process start).
-3. Open **Discovery**. Click **Scan now**, or wait: first scan ~30s after Core start, then every **6 hours** (unless `mode: manual`).
-4. Banner **NEW DEVICE DETECTED** on the dashboard until you decide.
-5. **Approve** → creates an asset (`source=discovery`, id like `disc-10-20-30-41`) and sends you to the asset page. **Ignore** leaves it out of inventory.
+3. Open **Discovery**. Click **Scan now**, or wait: first scan ~30s after Core start, then every **6 hours** (unless `mode: manual`). The page shows a **Last scan** row of step pills (CIDR, TCP 22, TCP 80/443, :9100, :9182, SNMP UDP/161, HTTP /metrics). Green = at least one host passed that step, yellow = skipped/none, red = scanner error. This is the live TCP/SNMP/`/metrics` probe — **not ICMP ping** (ping is on Assets).
+4. Banner **NEW DEVICE DETECTED**. Found hosts stay on **Waiting for Approve** until you decide. They are **not** auto-added to inventory.
+5. **Approve** (on the Discovery page) → creates an asset (`source=discovery`, id like `disc-10-20-30-41`) and sends you to the asset page. **Ignore** rejects the host (out of inventory).
 
 Probe is **not nmap**. It tries TCP **22, 80, 443, 9100, 9182** and an SNMPv2c GET on **UDP/161** (TCP/161 is skipped — that is not SNMP). When a host is alive, Core also GETs `/metrics` on **:9182** and **:9100** (same detect as Add Asset):
 
@@ -321,11 +321,11 @@ Probe is **not nmap**. It tries TCP **22, 80, 443, 9100, 9182** and an SNMPv2c G
 | 22 only | Possible Linux server | inventory only — **no** `:9100` until node_exporter answers |
 | 80 or 443 | Possible web/appliance | inventory only |
 
-TCP open on 9100 or 9182 is **not** an OS pick. ICMP ping is not used for OS.
+TCP open on 9100 or 9182 is **not** an OS pick. ICMP ping is not used for OS and is **not** a Scan now step.
 
-`mode: automatic` still writes an audit row (`actor=system-automatic`) then approves. Prefer semi-automatic in production.
+`mode: automatic` used to approve with `actor=system-automatic`. Scan now **no longer writes inventory** in any mode — found hosts wait for Approve on Discovery. Seeded `forge-demo-*` lab hosts in a CIDR are skipped (not auto-approved). Prefer `semi-automatic` in the YAML so the background loop still runs.
 
-Demo candidate `10.20.30.41` is seeded so you can click Approve without a live subnet. `./forgesre demo` puts it back if missing.
+Demo candidate `10.20.30.41` is seeded so you can click Approve without a live subnet. It is labeled DEMO seed — not a Scan now hit. `./forgesre demo` puts it back if missing.
 
 ### C. External NetBox (read-sync)
 

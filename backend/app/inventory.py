@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import copy
 import logging
 import re
+import threading
 
 from sqlalchemy.orm import Session
 
 from app.audit import audit
+from app.demo_ids import is_demo_asset_id
 from app.exporter_detect import AUTO_ASSET_TYPE, detect_exporter, is_auto_asset_type
 from app.journal import report
 from app.models import Asset, DiscoveryCandidate, Incident, ScheduledReport, utcnow
@@ -164,7 +167,9 @@ def seed_demo_candidate(db: Session) -> DiscoveryCandidate:
         [22, 9100],
         source="demo",
     )
-    if existing_asset:
+    # Lab forge-demo-* rows are not discovery approvals. Keep the seeded
+    # 10.20.30.41 candidate on Discovery until an engineer Approves it.
+    if existing_asset and not is_demo_asset_id(existing_asset.asset_id):
         row.status = "approved"
         row.asset_id = existing_asset.asset_id
     db.commit()
@@ -172,36 +177,273 @@ def seed_demo_candidate(db: Session) -> DiscoveryCandidate:
     return row
 
 
-def run_scan(db: Session) -> dict:
-    from discovery import hosts_from_cidrs, probe_host
+_SCAN_LOCK = threading.Lock()
+_SCAN_RUN = threading.Lock()
+_SCAN: dict = {}
 
-    cidrs = settings.discovery_cidrs
+
+def _blank_scan(*, status: str = "idle", detail: str = "No Scan now yet") -> dict:
+    from discovery import empty_scan_steps
+
+    return {
+        "status": status,
+        "started_at": None,
+        "finished_at": None,
+        "cidrs": [],
+        "total": 0,
+        "probed": 0,
+        "found": 0,
+        "skipped": 0,
+        "lab_skipped": 0,
+        "current_ip": "",
+        "error": "",
+        "auto_approve": False,
+        "steps": empty_scan_steps(detail),
+        "hosts": [],
+    }
+
+
+def _scan_copy() -> dict:
+    with _SCAN_LOCK:
+        return copy.deepcopy(_SCAN) if _SCAN else _blank_scan()
+
+
+def _set_scan(data: dict) -> dict:
+    with _SCAN_LOCK:
+        _SCAN.clear()
+        _SCAN.update(copy.deepcopy(data))
+        return copy.deepcopy(_SCAN)
+
+
+def _patch_scan(**fields) -> dict:
+    with _SCAN_LOCK:
+        if not _SCAN:
+            _SCAN.update(_blank_scan())
+        _SCAN.update(fields)
+        return copy.deepcopy(_SCAN)
+
+
+def scan_snapshot() -> dict:
+    """Live or last Scan now. Idle until the first scan in this Core process."""
+    snap = _scan_copy()
+    by_ip = {str(item.get("ip") or ""): item for item in snap.get("hosts") or [] if item.get("ip")}
+    snap["hosts_by_ip"] = by_ip
+    return snap
+
+
+def reset_scan_snapshot() -> dict:
+    """Test helper."""
+    return _set_scan(_blank_scan())
+
+
+def _merge_scan_steps(steps: list[dict], host_steps: list[dict]) -> None:
+    """Scan-level: green if any host passed; red only if a step errors; else yellow."""
+    by_id = {item["id"]: item for item in steps}
+    for host_step in host_steps:
+        row = by_id.get(host_step.get("id"))
+        if row is None:
+            continue
+        color = host_step.get("color") or "yellow"
+        detail = host_step.get("detail") or ""
+        hits = int(row.get("hits") or 0)
+        misses = int(row.get("misses") or 0)
+        skips = int(row.get("skips") or 0)
+        if color == "green":
+            hits += 1
+            row["color"] = "green"
+            row["detail"] = detail
+        elif color == "red":
+            misses += 1
+            if row["color"] != "green":
+                row["detail"] = detail or row.get("detail") or "no host answered"
+                row["color"] = "yellow"
+        else:
+            skips += 1
+            if row["color"] == "yellow" and detail:
+                row["detail"] = detail
+        row["hits"] = hits
+        row["misses"] = misses
+        row["skips"] = skips
+
+
+def _record_host(hosts: list[dict], item: dict, *, limit: int = 80) -> None:
+    if len(hosts) >= limit:
+        return
+    hosts.append(item)
+
+
+def start_scan_background(actor: str = "") -> dict:
+    """Kick Scan now without blocking the Discovery page. No-op if already running."""
+    from app.db import SessionLocal
+
+    if not _SCAN_RUN.acquire(blocking=False):
+        return scan_snapshot()
+    snap = _scan_copy()
+    if snap.get("status") != "running":
+        _set_scan(_blank_scan(status="running", detail="starting"))
+
+    def _run() -> None:
+        db = SessionLocal()
+        try:
+            run_scan(db, _hold_run_lock=True)
+            if actor:
+                audit(db, "discovery.scan", actor=actor, commit=True)
+        except Exception as exc:
+            log.exception("background discovery scan failed")
+            _patch_scan(status="error", error=str(exc), finished_at=utcnow().isoformat())
+        finally:
+            db.close()
+            _SCAN_RUN.release()
+
+    threading.Thread(target=_run, daemon=True, name="discovery-scan").start()
+    return scan_snapshot()
+
+
+def run_scan(db: Session, _hold_run_lock: bool = False) -> dict:
+    """CIDR TCP/SNMP/HTTP-metrics probe. Candidates stay new until Approve.
+
+    Does not ICMP ping. Does not auto-add to inventory (including mode=automatic
+    and forge-demo-* lab hosts).
+    """
+    from discovery import empty_scan_steps, hosts_from_cidrs, probe_host, step
+
+    held = _hold_run_lock or _SCAN_RUN.acquire(blocking=False)
+    if not held:
+        snap = scan_snapshot()
+        snap.update({"found": snap.get("found") or 0, "skipped": snap.get("skipped") or 0, "cidrs": snap.get("cidrs") or []})
+        return snap
+    started = utcnow()
+    cidrs = list(settings.discovery_cidrs)
+    hosts = hosts_from_cidrs(cidrs)
+    steps = empty_scan_steps("running")
+    if not cidrs:
+        steps[0] = step("cidr", "CIDR", "yellow", "no CIDRs in config — Scan now has nothing to probe")
+    elif not hosts:
+        steps[0] = step("cidr", "CIDR", "red", f"CIDRs {cidrs} produced no hosts (loopback skipped, or invalid)")
+    else:
+        steps[0] = step("cidr", "CIDR", "green", f"{len(hosts)} host(s) from {cidrs}")
+    state_hosts: list[dict] = []
+    state = {
+        "status": "running",
+        "started_at": started.isoformat(),
+        "finished_at": None,
+        "cidrs": cidrs,
+        "total": len(hosts),
+        "probed": 0,
+        "found": 0,
+        "skipped": 0,
+        "lab_skipped": 0,
+        "current_ip": "",
+        "error": "",
+        "auto_approve": False,
+        "steps": steps,
+        "hosts": state_hosts,
+    }
+    _set_scan(state)
     found = 0
     skipped = 0
-    known_ips = {item.ip for item in db.query(Asset).all() if item.ip}
-    for ip in hosts_from_cidrs(cidrs):
-        if ip in known_ips:
-            skipped += 1
-            continue
-        result = probe_host(ip)
-        if not result["alive"]:
-            continue
-        upsert_candidate(db, ip, result["proposed_role"], result["open_ports"])
-        found += 1
-    if settings.discovery_mode == "automatic":
-        for row in db.query(DiscoveryCandidate).filter_by(status="new").all():
-            approve_candidate(db, row, actor="system-automatic")
-    db.commit()
-    log.info("discovery scan cidrs=%s found=%s skipped=%s", cidrs, found, skipped)
-    report(
-        db,
-        "discovery",
-        "scan",
-        "ok",
-        summary=f"Scan finished found={found} skipped={skipped}",
-        detail=f"cidrs={cidrs}",
-    )
-    return {"found": found, "skipped": skipped, "cidrs": cidrs}
+    lab_skipped = 0
+    probed = 0
+    known = {item.ip: item for item in db.query(Asset).all() if item.ip}
+    try:
+        for ip in hosts:
+            probed += 1
+            _patch_scan(current_ip=ip, probed=probed)
+            asset = known.get(ip)
+            if asset is not None:
+                skipped += 1
+                lab = is_demo_asset_id(getattr(asset, "asset_id", "") or "")
+                if lab:
+                    lab_skipped += 1
+                reason = "demo-lab (not auto-approved)" if lab else "already in inventory"
+                skip_steps = empty_scan_steps(reason)[1:]
+                _record_host(
+                    state_hosts,
+                    {
+                        "ip": ip,
+                        "alive": True,
+                        "outcome": "lab" if lab else "inventory",
+                        "proposed_role": reason,
+                        "open_ports": [],
+                        "steps": skip_steps,
+                    },
+                )
+                _patch_scan(
+                    probed=probed,
+                    skipped=skipped,
+                    lab_skipped=lab_skipped,
+                    hosts=list(state_hosts),
+                    steps=list(steps),
+                )
+                continue
+            result = probe_host(ip)
+            host_steps = list(result.get("steps") or [])
+            _merge_scan_steps(steps, host_steps)
+            if not result["alive"]:
+                _patch_scan(probed=probed, steps=list(steps), current_ip=ip)
+                continue
+            upsert_candidate(db, ip, result["proposed_role"], result["open_ports"])
+            found += 1
+            _record_host(
+                state_hosts,
+                {
+                    "ip": ip,
+                    "alive": True,
+                    "outcome": "found",
+                    "proposed_role": result["proposed_role"],
+                    "open_ports": list(result.get("open_ports") or []),
+                    "exporter_kind": result.get("exporter_kind") or "",
+                    "detect_message": result.get("detect_message") or "",
+                    "steps": host_steps,
+                },
+            )
+            _patch_scan(
+                probed=probed,
+                found=found,
+                skipped=skipped,
+                steps=list(steps),
+                hosts=list(state_hosts),
+                current_ip=ip,
+            )
+        db.commit()
+        mode = settings.discovery_mode
+        extra = ""
+        if mode == "automatic":
+            extra = " mode=automatic ignored — found hosts wait for Approve (not auto-added to inventory)."
+        if not hosts:
+            for row in steps[1:]:
+                if row.get("color") == "yellow" and (row.get("detail") or "") in {"running", "not scanned yet"}:
+                    row["detail"] = "skipped — no hosts to probe"
+        finished = utcnow()
+        duration_ms = int((finished - started).total_seconds() * 1000)
+        _patch_scan(
+            status="done",
+            finished_at=finished.isoformat(),
+            probed=len(hosts),
+            found=found,
+            skipped=skipped,
+            lab_skipped=lab_skipped,
+            current_ip="",
+            steps=list(steps),
+            hosts=list(state_hosts),
+        )
+        log.info("discovery scan cidrs=%s found=%s skipped=%s", cidrs, found, skipped)
+        report(
+            db,
+            "discovery",
+            "scan",
+            "ok" if cidrs else "warn",
+            summary=f"Scan finished found={found} skipped={skipped} (waiting for Approve)",
+            detail=f"cidrs={cidrs} lab_skipped={lab_skipped}{extra}",
+            duration_ms=duration_ms,
+        )
+        return {"found": found, "skipped": skipped, "cidrs": cidrs, "lab_skipped": lab_skipped}
+    except Exception as exc:
+        _patch_scan(status="error", error=str(exc), finished_at=utcnow().isoformat())
+        raise
+    finally:
+        if not _hold_run_lock:
+            _SCAN_RUN.release()
 
 
 def create_manual_asset(

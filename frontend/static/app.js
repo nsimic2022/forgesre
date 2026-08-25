@@ -220,3 +220,103 @@ if (preset) {
   load();
   setInterval(load, 20000);
 })();
+
+(function bindDiscoveryScan() {
+  const form = document.querySelector("[data-discovery-scan]");
+  const panel = document.querySelector("[data-scan-panel]");
+  if (!form || !panel) return;
+  const stepsBox = panel.querySelector("[data-scan-steps]");
+  const summary = panel.querySelector("[data-scan-summary]");
+  const detail = panel.querySelector("[data-scan-detail]");
+  const paint = (scan) => {
+    if (!scan) return;
+    panel.setAttribute("data-scan-status", scan.status || "idle");
+    const cidrs = Array.isArray(scan.cidrs) ? scan.cidrs.join(", ") : "";
+    if (summary) {
+      if (scan.status === "idle") {
+        summary.textContent = "No Scan now in this Core process yet. Click Scan now — pills update while it runs.";
+      } else if (scan.status === "running") {
+        summary.textContent =
+          "Scanning " + (scan.probed || 0) + "/" + (scan.total || 0) +
+          (scan.current_ip ? " · " + scan.current_ip : "") +
+          " · found " + (scan.found || 0) +
+          " · skipped " + (scan.skipped || 0);
+      } else {
+        summary.textContent =
+          (scan.status || "") +
+          " · probed " + (scan.probed || 0) + "/" + (scan.total || 0) +
+          " · found " + (scan.found || 0) + " (waiting for Approve)" +
+          " · skipped " + (scan.skipped || 0) +
+          (scan.lab_skipped ? " (lab " + scan.lab_skipped + ")" : "") +
+          (cidrs ? " · CIDRs " + cidrs : "");
+      }
+    }
+    if (stepsBox && Array.isArray(scan.steps)) {
+      stepsBox.replaceChildren();
+      scan.steps.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "reach-dot scan-step " + (item.color || "yellow");
+        btn.setAttribute("data-scan-step", item.id || "");
+        btn.title = item.detail || "";
+        btn.textContent = item.label || item.id || "";
+        btn.addEventListener("click", () => {
+          if (detail) detail.textContent = (item.label || "") + ": " + (item.detail || "");
+        });
+        stepsBox.appendChild(btn);
+      });
+    }
+  };
+  if (stepsBox) {
+    stepsBox.querySelectorAll("[data-scan-step]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (detail) detail.textContent = (btn.textContent || "") + ": " + (btn.title || "");
+      });
+    });
+  }
+  let timer = 0;
+  let sawRunning = panel.getAttribute("data-scan-status") === "running";
+  const poll = () => {
+    fetch("/api/v1/discovery/scan", { headers: { Accept: "application/json" } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((scan) => {
+        if (!scan) return;
+        paint(scan);
+        if (scan.status === "running") {
+          sawRunning = true;
+          return;
+        }
+        if (timer) window.clearInterval(timer);
+        timer = 0;
+        if (sawRunning && (scan.status === "done" || scan.status === "error")) {
+          window.location.reload();
+        }
+      })
+      .catch(() => {});
+  };
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    sawRunning = true;
+    const button = form.querySelector("button");
+    if (button) button.disabled = true;
+    fetch("/api/v1/discovery/scan?background=true", {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((scan) => {
+        paint(scan);
+        if (timer) window.clearInterval(timer);
+        timer = window.setInterval(poll, 400);
+        poll();
+      })
+      .catch(() => {
+        if (button) button.disabled = false;
+        form.submit();
+      });
+  });
+  if (panel.getAttribute("data-scan-status") === "running") {
+    timer = window.setInterval(poll, 400);
+    poll();
+  }
+})();

@@ -36,6 +36,8 @@ from app.inventory import (
     ignore_candidate,
     is_snmp_asset,
     run_scan,
+    scan_snapshot,
+    start_scan_background,
     sd_targets,
     sd_snmp_targets,
     seed_demo_candidate,
@@ -629,8 +631,19 @@ def list_candidates(db: Session = Depends(get_db), user: User = Depends(require(
     return [_candidate(item) for item in rows]
 
 
+@router.get("/discovery/scan")
+def discovery_scan_status(user: User = Depends(require("write_assets"))) -> dict:
+    return scan_snapshot()
+
+
 @router.post("/discovery/scan")
-def discovery_scan(db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
+def discovery_scan(
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_assets")),
+    background: bool = False,
+) -> dict:
+    if background:
+        return start_scan_background(actor=user.email)
     result = run_scan(db)
     audit(db, "discovery.scan", actor=user.email, commit=True)
     return result

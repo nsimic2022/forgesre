@@ -15,6 +15,32 @@ DEFAULT_PORTS = (22, 80, 443, 161, 9100, 9182)
 MAX_HOSTS_PER_CIDR = 256
 MAX_HOSTS_TOTAL = 1024
 
+# Honest Scan now pills — same probes as probe_host, not ICMP ping.
+HOST_STEP_SPECS = (
+    ("ssh", "TCP 22"),
+    ("web", "TCP 80/443"),
+    ("node", ":9100"),
+    ("windows", ":9182"),
+    ("snmp", "SNMP UDP/161"),
+    ("metrics", "HTTP /metrics"),
+)
+SCAN_STEP_SPECS = (("cidr", "CIDR"),) + HOST_STEP_SPECS
+
+
+def step(id: str, label: str, color: str, detail: str = "") -> dict[str, str]:
+    """color: green pass, yellow skip/unknown, red fail."""
+    if color not in {"green", "yellow", "red"}:
+        color = "yellow"
+    return {"id": id, "label": label, "color": color, "detail": detail or ""}
+
+
+def empty_host_steps(detail: str = "not probed") -> list[dict[str, str]]:
+    return [step(item_id, label, "yellow", detail) for item_id, label in HOST_STEP_SPECS]
+
+
+def empty_scan_steps(detail: str = "not scanned yet") -> list[dict[str, str]]:
+    return [step(item_id, label, "yellow", detail) for item_id, label in SCAN_STEP_SPECS]
+
 
 def hosts_from_cidrs(cidrs: list[str], limit: int = MAX_HOSTS_PER_CIDR, total_limit: int = MAX_HOSTS_TOTAL) -> list[str]:
     """Enumerate hosts. `limit` is per CIDR (default 256). Truncation is logged by the caller via returned length."""
@@ -50,10 +76,13 @@ def probe_host(
     metrics_fetcher=None,
 ) -> dict[str, Any]:
     open_ports: list[int] = []
+    tcp_hits: dict[int, bool] = {}
     for port in ports:
         if port == 161:
             continue
-        if _open_tcp(ip, port, timeout):
+        ok = _open_tcp(ip, port, timeout)
+        tcp_hits[port] = ok
+        if ok:
             open_ports.append(port)
     snmp_ok = probe_snmp_udp(ip, timeout=max(timeout, 0.4))
     if snmp_ok:
@@ -62,6 +91,8 @@ def probe_host(
     exporter_kind = ""
     detect_message = ""
     tcp_ports = [p for p in open_ports if p != 161]
+    metrics_color = "yellow"
+    metrics_detail = "skipped — host not TCP-alive (ICMP ping is not this scanner)"
     if alive and tcp_ports:
         try:
             from app.exporter_detect import detect_exporter
@@ -76,16 +107,51 @@ def probe_host(
             )
             exporter_kind = detected.kind or "none"
             detect_message = detected.message
+            metrics_detail = detect_message or "HTTP GET /metrics on :9100 and :9182"
+            if detected.kind in {"linux", "windows"}:
+                metrics_color = "green"
+            elif detected.kind == "network":
+                metrics_color = "yellow"
+            else:
+                metrics_color = "red"
             if detected.kind == "windows" and 9182 not in open_ports:
                 open_ports.append(9182)
+                tcp_hits[9182] = True
             if detected.kind == "linux" and 9100 not in open_ports:
                 open_ports.append(9100)
+                tcp_hits[9100] = True
+        else:
+            metrics_detail = "exporter detect unavailable"
     elif snmp_ok:
         exporter_kind = "network"
         detect_message = (
             "SNMP UDP/161 answered. Network device (snmp_exporter path). "
             "Not guessed from HTTP /metrics."
         )
+        metrics_detail = "skipped — SNMP-only host (no TCP, so no HTTP /metrics)"
+    ssh_ok = bool(tcp_hits.get(22))
+    web_ok = bool(tcp_hits.get(80) or tcp_hits.get(443))
+    node_ok = bool(tcp_hits.get(9100))
+    win_ok = bool(tcp_hits.get(9182))
+    web_bits = [str(port) for port in (80, 443) if tcp_hits.get(port)]
+    steps = [
+        step("ssh", "TCP 22", "green" if ssh_ok else "red", "SSH open" if ssh_ok else "no TCP 22"),
+        step(
+            "web",
+            "TCP 80/443",
+            "green" if web_ok else "red",
+            f"TCP {', '.join(web_bits)} open" if web_bits else "no TCP 80 or 443",
+        ),
+        step("node", ":9100", "green" if node_ok else "red", "TCP node_exporter" if node_ok else "no TCP 9100"),
+        step("windows", ":9182", "green" if win_ok else "red", "TCP windows_exporter" if win_ok else "no TCP 9182"),
+        step(
+            "snmp",
+            "SNMP UDP/161",
+            "green" if snmp_ok else "red",
+            "SNMPv2c GET sysDescr answered" if snmp_ok else "no SNMP UDP/161 reply",
+        ),
+        step("metrics", "HTTP /metrics", metrics_color, metrics_detail),
+    ]
     return {
         "ip": ip,
         "open_ports": open_ports,
@@ -94,6 +160,7 @@ def probe_host(
         "alive": alive,
         "exporter_kind": "" if exporter_kind == "none" else exporter_kind,
         "detect_message": detect_message,
+        "steps": steps,
     }
 
 

@@ -641,7 +641,7 @@ UI: NEW DEVICE DETECTED / Approve / Ignore
 
 Manual mode: no scanner; assets entered in UI or imported.
 
-Automatic mode: approve is skipped; still **audited**. Wizard must warn.
+Automatic mode: **does not** auto-add to inventory. Candidates still wait for Approve (audited). Wizard must warn.
 
 Prometheus configuration (scrape_configs) stays **stable**. Targets change only through HTTP SD. Adding a server, removing a server, changing IP/VLAN/hostname does not require editing Prometheus YAML.
 

@@ -225,6 +225,17 @@ table tbody tr:hover td { background: var(--row-hover); }
 .reach-dot.green { background: var(--pill-ok-bg); color: var(--pill-ok); border-color: var(--ok); }
 .reach-dot.yellow { background: var(--pill-warn-bg); color: var(--pill-warn); border-color: var(--warn); }
 .reach-dot.red { background: var(--pill-crit-bg); color: var(--pill-crit); border-color: var(--crit); }
+.scan-panel { margin: 1rem 0 1.4rem; }
+.scan-panel h2 { margin-top: 1.2rem; }
+.scan-steps { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.4rem 0 0.5rem; }
+button.scan-step {
+  min-width: 4.2rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+button.scan-step:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scan-step-detail { min-height: 1.2em; }
+.discovery-pending td.row-actions button { min-width: 6.5rem; }
 .verify-mark {
   display: inline-block;
   min-width: 3.2rem;
