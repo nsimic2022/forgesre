@@ -250,7 +250,7 @@ def test_metrics_api_and_detail_html(monkeypatch):
     create_manual_asset(
         db,
         hostname="app-lab-metrics",
-        ip="10.10.10.77",
+        ip="10.44.77.91",
         type="Linux Server",
         actor="tester",
     )
