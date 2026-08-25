@@ -137,7 +137,7 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 | Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
 | System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Run doctor** re-probes now. Green = running, yellow = paused / starting / disabled, red = down. **Open** column (and the component name) goes to that service’s GUI or metrics. **Open Grafana** is on this page too. Prometheus/Alertmanager bind the appliance; the UI rewrites `127.0.0.1` to the host you used. |
 | Email & reports | `/ops` | **Gmail** / **Outlook** send now (YAML + `SMTP_*`). **Own domain + Roundcube** is listed but not enabled until `./forgesre mailbox`. Address book, send, outbox, scheduled reports. Grafana is on System Health. |
-| Administration | `/admin` | Users: click a row to **edit** or **remove**. **Backup / Import / Restore** (before Appliance shell). Audit log. No browser PTY — SSH or `./forgesre shell` |
+| Administration | `/admin` | Users: click a row to **edit** or **remove**. **Backup**, then **Import / restore** (left) beside a **ForgeSRE CLI** command list (right). Audit log. No browser PTY — SSH or `./forgesre` / `./forgesre shell` |
 
 ---
 
@@ -181,7 +181,7 @@ Audit rows for `user.create`, `user.update`, `user.delete`, `backup.create` / `b
 
 ### Platform backup and restore
 
-Archives are `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (`$FORGESRE_DATA/backups/`; one folder per run, plus `MANIFEST.txt`). The directory is gitignored, mode `700`; each tar is mode `600`. Administration (admin / super_admin only) has **Backup** and **Import** *before* Appliance shell. `./forgesre backup` writes the same archive; `./forgesre update` also backups first as a safety net. GUI/Core uses SQLAlchemy; the host CLI dumps Postgres with `docker compose exec postgres` (do not pip-install sqlalchemy on the VM). Host `./forgesre verify` likewise must not import sqlalchemy.
+Archives are `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (`$FORGESRE_DATA/backups/`; one folder per run, plus `MANIFEST.txt`). The directory is gitignored, mode `700`; each tar is mode `600`. Administration (admin / super_admin only) has **Backup** and **Import / restore** on the left, with a **ForgeSRE CLI** cheatsheet on the right. `./forgesre backup` writes the same archive; `./forgesre update` also backups first as a safety net. GUI/Core uses SQLAlchemy; the host CLI dumps Postgres with `docker compose exec postgres` (do not pip-install sqlalchemy on the VM). Host `./forgesre verify` likewise must not import sqlalchemy.
 
 **In the archive:** `config/forgesre.yml`, `.env`, `secrets/secrets.env` (omit with `./forgesre backup --no-secrets`), a logical database dump (users, incidents, assets, playbooks, playrules, journal, audit, jobs), compressed `data/logs/`, `monitoring/alerts.local.yml` if present, `data/generated/`, `config/examples/`.
 
@@ -201,16 +201,17 @@ docker compose stop core
 
 A browser restore can reload Postgres while Core is still running; it cannot rewrite `.env` / secrets / YAML because those mounts are read-only. Finish file restore from SSH as above. Then `git pull origin main && ./forgesre update` if you are also taking new code.
 
-### Appliance shell (no web PTY)
+### ForgeSRE CLI (no web PTY)
 
 Administration does **not** open a terminal in the browser. A full web PTY (xterm.js + host PTY), even if wrapped to `./forgesre` only, is still a large attack surface: XSS or a stolen admin cookie becomes a host command channel, and “restricted shells” are routinely escaped. ForgeSRE will not ship that, and will not expose root bash in the UI.
 
-The existing Appliance shell control stays an explanation plus SSH:
+The Administration page keeps **Import / restore** on the left and a scannable `./forgesre` command list on the right (`./forgesre help` is the source of truth). One line in the UI: no browser terminal — SSH, then `./forgesre` or `./forgesre shell`.
 
 ```bash
 ssh you@forgesre-vm
 cd ~/forgesre
 ./forgesre          # or: ./forgesre shell
+./forgesre help
 ```
 
 `./forgesre` with no args is already a restricted prompt (`forgesre>`). Use it on the box, not through the browser. Journal (`/journal`) is the process console, not a shell.

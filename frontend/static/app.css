@@ -271,6 +271,41 @@ table tbody tr:hover td { background: var(--row-hover); }
 label.inline-check { flex-direction: row; align-items: center; gap: 0.5rem; max-width: none; }
 .backup-actions { flex-wrap: wrap; margin: 0.6rem 0 1rem; }
 .backup-restore { max-width: 520px; margin-top: 0.8rem; }
+/* Admin only: Import/restore left, ./forgesre cheatsheet right. Do not use .split. */
+.admin-backup-cli {
+  display: grid;
+  grid-template-columns: minmax(24rem, 1fr) minmax(22rem, 1fr);
+  gap: 1.5rem 2rem;
+  align-items: start;
+  margin-top: 0.35rem;
+}
+.admin-backup-cli .admin-restore-pane,
+.admin-backup-cli .admin-cli-pane { min-width: 0; }
+.admin-backup-cli .admin-cli-pane p.muted { margin: 0 0 0.55rem; }
+.admin-backup-cli .stack.backup-restore,
+.admin-backup-cli .backup-restore {
+  max-width: none;
+  width: 100%;
+}
+.admin-backup-cli .backup-restore input[name="confirm"],
+.admin-backup-cli .backup-restore select {
+  width: 100%;
+  min-width: 12rem;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+.cli-cheatsheet { width: 100%; margin: 0.2rem 0 0; }
+.cli-cheatsheet td { vertical-align: top; }
+.cli-cheatsheet td:first-child {
+  white-space: nowrap;
+  width: 1%;
+  padding-right: 0.9rem;
+}
+.cli-cheatsheet td:last-child { color: var(--muted); }
+.cli-cheatsheet code { font-size: 0.86rem; }
+@media (max-width: 1100px) {
+  .admin-backup-cli { grid-template-columns: 1fr; }
+}
 td.row-actions { flex-wrap: wrap; }
 td.row-actions form { margin: 0; }
 td.row-actions button { width: auto; padding: 0.35rem 0.7rem; }
@@ -630,6 +665,7 @@ form.ops-compose {
   .mail-providers { grid-template-columns: 1fr; }
   .demo-scenarios { grid-template-columns: 1fr; }
   .split { grid-template-columns: 1fr; }
+  .admin-backup-cli { grid-template-columns: 1fr; }
   .ops-mail-cols { flex-direction: column; }
   form.ops-add-email,
   form.ops-compose {
