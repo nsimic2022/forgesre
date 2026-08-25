@@ -115,7 +115,7 @@ def smtp_provider_id() -> str:
         return "off"
     host = (settings.smtp_host or "").lower()
     if host in {"127.0.0.1", "localhost", "::1"}:
-        return "mailbox" if int(settings.smtp_port or 0) == 587 else "mailpit"
+        return "mailbox" if int(settings.smtp_port or 0) == 587 else "other"
     if "gmail" in host:
         return "gmail"
     if "office365" in host or "outlook" in host or "hotmail" in host:
@@ -1068,28 +1068,76 @@ def ops_send_mail(
     return RedirectResponse("/ops#mail", status_code=303)
 
 
+def _ops_send_report_now(
+    db: Session,
+    user: User,
+    *,
+    to_email: str,
+    new_email: str,
+    asset_id: list[str],
+    name: str = "send-now",
+):
+    from app.services import send_performance_report
+
+    ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
+    chosen = (new_email or "").strip() or (to_email or "").strip()
+    try:
+        send_performance_report(
+            db,
+            asset_ids=ids,
+            to_email=chosen,
+            actor=user.email,
+            name=(name or "").strip() or "send-now",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse("/ops#mail", status_code=303)
+
+
 @router.post("/ops/reports")
 def ops_create_report(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
-    name: str = Form(...),
+    name: str = Form(""),
     to_email: str = Form(""),
     new_email: str = Form(""),
-    interval_hours: int = Form(6),
+    interval_hours: str = Form("6"),
+    custom_at: str = Form(""),
     asset_id: Annotated[list[str], Form()] = [],
 ):
     if not can_send_ops(user):
         raise HTTPException(status_code=403)
     from datetime import timedelta
 
-    from app.services import remember_mail_contact, utcnow
+    from app.services import next_custom_report_at, remember_mail_contact, utcnow
 
-    hours = max(1, min(168, int(interval_hours or 6)))
+    when = (interval_hours or "6").strip().lower()
+    if when in {"now", "0"}:
+        return _ops_send_report_now(
+            db,
+            user,
+            to_email=to_email,
+            new_email=new_email,
+            asset_id=asset_id,
+            name=name,
+        )
     ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
     chosen = (new_email or "").strip() or (to_email or "").strip()
     contact = remember_mail_contact(db, chosen, actor=user.email)
     if contact is None:
         raise HTTPException(status_code=400, detail="Pick a saved address or enter a new email")
+    if when == "custom":
+        hours = 24
+        try:
+            nxt = next_custom_report_at(custom_at)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    else:
+        try:
+            hours = max(1, min(168, int(when or 6)))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="Pick now, 1h, 6h, 24h, or custom") from exc
+        nxt = utcnow() + timedelta(hours=hours)
     row = ScheduledReport(
         name=name.strip() or "performance",
         to_email=contact.email,
@@ -1097,7 +1145,7 @@ def ops_create_report(
         asset_ids=ids,
         enabled=True,
         created_by=user.email,
-        next_run_at=utcnow() + timedelta(hours=hours),
+        next_run_at=nxt,
     )
     db.add(row)
     audit(db, "report.create", actor=user.email, object_type="report", object_id=row.name, data={"to": row.to_email, "hours": hours})
@@ -1115,21 +1163,7 @@ def ops_send_report_now(
 ):
     if not can_send_ops(user):
         raise HTTPException(status_code=403)
-    from app.services import send_performance_report
-
-    ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
-    chosen = (new_email or "").strip() or (to_email or "").strip()
-    try:
-        send_performance_report(
-            db,
-            asset_ids=ids,
-            to_email=chosen,
-            actor=user.email,
-            name="send-now",
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return RedirectResponse("/ops#mail", status_code=303)
+    return _ops_send_report_now(db, user, to_email=to_email, new_email=new_email, asset_id=asset_id)
 
 
 @router.post("/ops/reports/{report_id}/run")

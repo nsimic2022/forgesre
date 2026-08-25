@@ -1065,6 +1065,25 @@ def build_performance_report(db: Session, asset_ids: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def next_custom_report_at(raw: str, *, now: datetime | None = None) -> datetime:
+    """First run for a once-daily custom schedule. Naive values are UTC."""
+    text = (raw or "").strip()
+    if not text:
+        raise ValueError("Pick a date and time for custom")
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("Custom time must be YYYY-MM-DDTHH:MM") from exc
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    clock = now or utcnow()
+    while dt <= clock:
+        dt += timedelta(hours=24)
+    return dt
+
+
 def send_performance_report(
     db: Session,
     *,

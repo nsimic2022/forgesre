@@ -170,6 +170,34 @@ if (preset) {
     .catch(() => {});
 })();
 
+(function bindReportWhen() {
+  const form = document.querySelector("[data-report-form]");
+  if (!form) return;
+  const when = form.querySelector("[data-report-when]");
+  const custom = form.querySelector("[data-report-custom]");
+  const customAt = form.querySelector("[data-report-custom-at]");
+  const nameBox = form.querySelector("[data-report-name]");
+  const nameInput = nameBox ? nameBox.querySelector("input") : null;
+  const submit = form.querySelector("[data-report-submit]");
+  const paint = () => {
+    const value = String((when && when.value) || "");
+    const isNow = value === "now";
+    const isCustom = value === "custom";
+    if (custom) custom.hidden = !isCustom;
+    if (customAt) customAt.required = isCustom;
+    if (nameBox) nameBox.hidden = isNow;
+    if (nameInput) nameInput.required = !isNow;
+    form.action = isNow ? "/ops/reports/send-now" : "/ops/reports";
+    if (submit) {
+      submit.textContent = isNow
+        ? submit.getAttribute("data-label-now") || "Send now"
+        : submit.getAttribute("data-label-schedule") || "Save schedule";
+    }
+  };
+  if (when) when.addEventListener("change", paint);
+  paint();
+})();
+
 (function bindHostDownBanner() {
   const box = document.querySelector("[data-host-down-banner]");
   if (!box) return;

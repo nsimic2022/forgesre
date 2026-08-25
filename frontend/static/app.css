@@ -546,6 +546,9 @@ form.ops-compose {
   max-width: none;
 }
 .ops-report-cols fieldset { max-width: none; }
+form.ops-new-report { max-width: none; margin-bottom: 1rem; }
+form.ops-new-report fieldset { max-width: none; }
+.ops-report-custom { margin: 0.15rem 0 0.35rem; }
 .mail-providers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .mail-providers h3 { margin: 0 0 0.4rem; font-size: 1rem; }
 .asset-detail-split {

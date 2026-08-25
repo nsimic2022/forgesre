@@ -61,7 +61,14 @@ def test_ops_page_lists_outbox_and_reports():
     assert "Open Grafana" not in page.text
     assert "Stack UIs" not in page.text
     assert "platform@forgesre.local" in page.text
-    assert "Send now" in page.text
+    assert 'value="now">now</option>' in page.text
+    assert 'value="1">1h</option>' in page.text
+    assert 'value="6" selected>6h</option>' in page.text
+    assert 'value="24">24h</option>' in page.text
+    assert 'value="custom">custom</option>' in page.text
+    assert "<h3>Send now</h3>" not in page.text
+    assert "ops-report-now" not in page.text
+    assert page.text.count("<h3>New report</h3>") == 1
     assert "ops-compose" in page.text
     assert "ops-add-email" in page.text
     assert "max-width: 38%" in page.text
@@ -80,6 +87,10 @@ def test_ops_compose_column_is_forced_wider_than_add_email():
     assert "max-width: 38%" in css
     assert "min-width: 58%" in css
     assert ".split { display: grid; grid-template-columns: 1.2fr 0.8fr;" in css
+    assert "ops-report-now" not in ops
+    assert "data-report-when" in ops
+    assert 'value="now">now</option>' in ops
+    assert 'value="custom">custom</option>' in ops
 
 
 def test_ops_add_contact_then_pick_from_list():
@@ -237,7 +248,7 @@ def test_ops_send_now_creates_outbox_without_waiting_or_schedule():
     assert "Not an incident" in mail.body
     assert "SMTP disabled" in (mail.error or "") or "not sent" in (mail.error or "").lower()
     page = client.get("/ops")
-    assert "Send now" in page.text
+    assert 'value="now">now</option>' in page.text
     assert "now@example.local" in page.text
     db.close()
 
@@ -257,3 +268,83 @@ def test_ops_send_now_rejects_viewer():
     assert posted.status_code == 403
     assert db.query(Notification).filter_by(target="nope-now@example.local", step_key="report").first() is None
     db.close()
+
+
+def test_ops_when_now_sends_immediately_without_schedule():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    before = db.query(ScheduledReport).count()
+    posted = client.post(
+        "/ops/reports",
+        data={"interval_hours": "now", "new_email": "when-now@example.local", "asset_id": "forge-demo-01"},
+        follow_redirects=False,
+    )
+    assert posted.status_code == 303
+    assert posted.headers["location"] == "/ops#mail"
+    assert db.query(ScheduledReport).count() == before
+    mail = (
+        db.query(Notification)
+        .filter_by(target="when-now@example.local", step_key="report")
+        .order_by(Notification.id.desc())
+        .first()
+    )
+    assert mail is not None
+    assert mail.status == "generated"
+    assert mail.subject == "[ForgeSRE] send-now"
+    db.close()
+
+
+def test_ops_custom_schedule_once_daily_from_picked_time():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    future = datetime.now(timezone.utc) + timedelta(days=1, hours=2)
+    custom_at = future.strftime("%Y-%m-%dT%H:%M")
+    posted = client.post(
+        "/ops/reports",
+        data={
+            "name": "daily-custom",
+            "new_email": "custom@example.local",
+            "interval_hours": "custom",
+            "custom_at": custom_at,
+            "asset_id": "forge-demo-01",
+        },
+        follow_redirects=False,
+    )
+    assert posted.status_code == 303
+    assert posted.headers["location"] == "/ops#reports"
+    row = db.query(ScheduledReport).filter_by(name="daily-custom").one()
+    assert row.to_email == "custom@example.local"
+    assert row.interval_hours == 24
+    assert row.asset_ids == ["forge-demo-01"]
+    assert row.next_run_at is not None
+    nxt = row.next_run_at
+    if nxt.tzinfo is None:
+        nxt = nxt.replace(tzinfo=timezone.utc)
+    assert nxt > datetime.now(timezone.utc)
+    db.close()
+
+
+def test_ops_custom_without_datetime_is_rejected():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    posted = client.post(
+        "/ops/reports",
+        data={"name": "no-time", "new_email": "notime@example.local", "interval_hours": "custom"},
+        follow_redirects=False,
+    )
+    assert posted.status_code == 400
+    assert db.query(ScheduledReport).filter_by(name="no-time").first() is None
+    db.close()
+
+
+def test_next_custom_report_at_rolls_past_time_forward():
+    from app.services import next_custom_report_at
+
+    now = datetime(2026, 8, 25, 15, 0, tzinfo=timezone.utc)
+    nxt = next_custom_report_at("2026-08-25T09:00", now=now)
+    assert nxt == datetime(2026, 8, 26, 9, 0, tzinfo=timezone.utc)
+    future = next_custom_report_at("2026-08-26T09:00", now=now)
+    assert future == datetime(2026, 8, 26, 9, 0, tzinfo=timezone.utc)

@@ -160,17 +160,18 @@
 <section class="card" id="reports">
   <h2>Scheduled reports</h2>
   <p class="muted">
-    Cron-like, inside Core. Pick assets and an interval, or use <strong>Send now</strong>
-    for a one-shot mail (does not wait 6 hours). ForgeSRE snapshots CPU/disk/up
-    from Prometheus (or demo gauges) even when there is no incident, then emails the text.
+    One New report form. The When dropdown is cron-like:
+    <strong>now</strong> (send immediately, no schedule),
+    <strong>1h / 6h / 24h</strong>, or
+    <strong>custom</strong> (once daily; pick date and time).
+    ForgeSRE snapshots CPU/disk/up from Prometheus (or demo gauges) even when there is no incident, then emails the text.
     Choose the recipient from the address book, or type a destination email.
     SMTP off stores the row as <em>generated</em> (not sent).
   </p>
   {% if can_send %}
-  <div class="ops-report-cols">
-  <form method="post" action="/ops/reports" class="stack">
+  <form method="post" action="/ops/reports" class="stack ops-new-report" data-report-form>
     <h3>New report</h3>
-    <label>Name <input name="name" value="storage-6h" required></label>
+    <label data-report-name>Name <input name="name" value="storage-6h" required></label>
     <label>Send to
       <select name="to_email">
         <option value="">Select an address</option>
@@ -180,14 +181,21 @@
       </select>
     </label>
     <label>Or new email <input name="new_email" type="email" placeholder="only if it is not in the list yet"></label>
-    <label>Every
-      <select name="interval_hours">
-        <option value="1">1 hour</option>
-        <option value="6" selected>6 hours</option>
-        <option value="12">12 hours</option>
-        <option value="24">24 hours</option>
+    <label>When
+      <select name="interval_hours" data-report-when>
+        <option value="now">now</option>
+        <option value="1">1h</option>
+        <option value="6" selected>6h</option>
+        <option value="12">12h</option>
+        <option value="24">24h</option>
+        <option value="custom">custom</option>
       </select>
     </label>
+    <div class="ops-report-custom" data-report-custom hidden>
+      <label>First send (UTC, then every 24h)
+        <input type="datetime-local" name="custom_at" data-report-custom-at>
+      </label>
+    </div>
     <fieldset>
       <legend>Assets</legend>
       {% for asset in assets %}
@@ -196,31 +204,11 @@
       <p class="muted">No assets in inventory.</p>
       {% endfor %}
     </fieldset>
-    <button type="submit">Save schedule</button>
+    <button type="submit"
+      data-report-submit
+      data-label-schedule="Save schedule"
+      data-label-now="{% if smtp_on %}Send now{% else %}Save to outbox{% endif %}">Save schedule</button>
   </form>
-  <form method="post" action="/ops/reports/send-now" class="stack ops-report-now">
-    <h3>Send now</h3>
-    <p class="muted">One snapshot, immediately. Does not create a 6-hour schedule.</p>
-    <label>Send to
-      <select name="to_email">
-        <option value="">Select an address</option>
-        {% for item in addresses %}
-        <option value="{{ item.email }}">{% if item.label %}{{ item.label }} — {% endif %}{{ item.email }} ({{ item.source }})</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>Or destination email <input name="new_email" type="email" placeholder="ops@example.local"></label>
-    <fieldset>
-      <legend>Assets</legend>
-      {% for asset in assets %}
-      <label class="check"><input type="checkbox" name="asset_id" value="{{ asset.asset_id }}"> {{ asset.hostname }} ({{ asset.asset_id }})</label>
-      {% else %}
-      <p class="muted">No assets in inventory.</p>
-      {% endfor %}
-    </fieldset>
-    <button type="submit">{% if smtp_on %}Send now{% else %}Save to outbox{% endif %}</button>
-  </form>
-  </div>
   {% endif %}
   <table>
     <thead><tr><th>Name</th><th>To</th><th>Every</th><th>Assets</th><th>Last</th><th>Next</th><th>Enabled</th><th></th></tr></thead>
