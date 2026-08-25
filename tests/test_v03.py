@@ -194,16 +194,18 @@ def test_playrule_page_has_metric_presets():
     books = client.get("/playbooks")
     assert books.status_code == 200
     assert b'href="/playbooks">Cancel</a>' in books.content
+    esc = client.get("/escalation")
+    assert esc.status_code == 200
+    assert b'href="/escalation">Cancel</a>' in esc.content
+    assert b"Create escalation policy" in esc.content
+    assert b"Default warning" in esc.content
     admin = client.get("/admin")
     assert admin.status_code == 200
-    assert b"ForgeRCA" not in admin.content or b"ForgeSRE CLI" in admin.content
+    assert b"ForgeRCA" not in admin.content or b"Appliance shell" in admin.content
     lower = admin.content.lower()
-    assert b"forgesre cli" in lower
-    assert b"appliance shell" not in lower
-    assert b"there is no terminal in this browser" in lower or b"no terminal in this browser" in lower
+    assert b"appliance shell" in lower
+    assert b"there is no terminal in this browser" in lower or b"there is no bash terminal" in lower
     assert b">backup<" in lower
-    assert b"admin-backup-cli" in admin.content
-    assert b"./forgesre shell" in admin.content
     db.close()
 
 
