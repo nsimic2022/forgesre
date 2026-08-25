@@ -213,6 +213,7 @@ After `./forgesre login` or a UI login cookie:
 | GET | `/api/v1/assets` | viewer+ |
 | POST | `/api/v1/assets` | analyst+ |
 | GET | `/api/v1/assets/{id}/verify` | analyst+ (live path; same as `./forgesre verify <id>`) |
+| GET | `/api/v1/assets/{id}/metrics` | viewer+ (class tiles: CPU/mem/disk/up from Prometheus) |
 | GET | `/api/v1/verify` | analyst+ (all real assets; `?include_demo=1` labels DEMO) |
 | POST | `/api/v1/assets/{id}` | analyst+ (edit) |
 | POST | `/api/v1/assets/{id}/clone` | analyst+ |

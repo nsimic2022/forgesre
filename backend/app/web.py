@@ -47,6 +47,7 @@ from app.models import (
 )
 from app.security import can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload, run_asset_verify
+from app.asset_metrics import safe_asset_metric_panel
 from app.metrics import reset_demo_gauges
 from app.services import (
     is_demo_incident,
@@ -536,6 +537,7 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         can_remove=can(user, "write_assets") and not delete_blocked(item),
         remove_blocked=delete_blocked(item) if can(user, "write_assets") else "",
         reachability_snapshot=reachability_snapshot,
+        metrics=safe_asset_metric_panel(item),
     )
 
 
