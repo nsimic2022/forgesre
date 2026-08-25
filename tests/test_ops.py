@@ -28,10 +28,13 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 
 
 def _outbox_row(page_text: str, needle: str) -> str:
-    section = page_text.split("Mail outbox", 1)[1]
-    idx = section.find(needle)
+    section = page_text.split('id="mail"', 1)[-1].split('id="reports"', 1)[0]
+    for row in section.split("<tr>"):
+        if needle in row:
+            return row
+    idx = page_text.find(needle)
     assert idx != -1, needle
-    return section[idx:].split("</tr>", 1)[0]
+    return page_text[idx : idx + 800]
 
 
 def test_system_health_has_open_column_and_grafana():
@@ -279,9 +282,11 @@ def test_ops_outbox_shows_sent_when_smtp_works(monkeypatch):
     )
     assert row.status == "sent"
     assert captured
+    status = row.status
     client = TestClient(app)
     _login(client)
     page = client.get("/ops")
+    assert status == "sent"
     chunk = _outbox_row(page.text, "live ping")
     assert 'class="pill sent">sent</span>' in chunk
     assert "outbox-hint" not in chunk
@@ -299,7 +304,8 @@ def test_ops_outbox_shows_failed_when_smtp_raises(monkeypatch):
         body="did not leave",
         step_key="manual",
     )
-    assert row.status == "failed"
+    status = row.status
+    assert status == "failed"
     client = TestClient(app)
     _login(client)
     page = client.get("/ops")
