@@ -1105,6 +1105,33 @@ def ops_create_report(
     return RedirectResponse("/ops#reports", status_code=303)
 
 
+@router.post("/ops/reports/send-now")
+def ops_send_report_now(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    to_email: str = Form(""),
+    new_email: str = Form(""),
+    asset_id: Annotated[list[str], Form()] = [],
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    from app.services import send_performance_report
+
+    ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
+    chosen = (new_email or "").strip() or (to_email or "").strip()
+    try:
+        send_performance_report(
+            db,
+            asset_ids=ids,
+            to_email=chosen,
+            actor=user.email,
+            name="send-now",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse("/ops#mail", status_code=303)
+
+
 @router.post("/ops/reports/{report_id}/run")
 def ops_run_report(
     report_id: int,

@@ -61,6 +61,7 @@ from app.services import (
     run_demo_windows,
 )
 from app.settings import settings
+from app.stack import doctor_soft_status, ensure_snmp_exporter, snmp_target_count
 
 log = logging.getLogger("forgesre")
 router = APIRouter(prefix="/api/v1")
@@ -1050,7 +1051,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "netbox": _netbox_check(),
         "discovery": _ok("ok") if settings.discovery_enabled else _ok("disabled"),
     }
-    failed = [name for name, item in components.items() if item["status"] not in {"ok", "disabled"}]
+    failed = [name for name, item in components.items() if not doctor_soft_status(item["status"])]
     return {
         "overall": "HEALTHY" if not failed else "DEGRADED",
         "components": components,
@@ -1059,13 +1060,28 @@ def _doctor_payload_fresh() -> dict[str, Any]:
 
 
 def _snmp_check() -> dict[str, str]:
+    """snmp-exporter: running when :9116 answers; paused (not DOWN) with no targets."""
     if not settings.snmp_enabled:
         return _ok("disabled")
-    result = _http(f"{settings.snmp_exporter_url}/metrics", "GET")
+    url = f"{settings.snmp_exporter_url}/metrics"
+    result = _http(url, "GET")
     if result.get("status") == "ok":
         return result
+    targets = snmp_target_count()
+    if targets <= 0:
+        return {
+            "status": "paused",
+            "why": "No SNMP/network targets; snmp-exporter is paused (not down).",
+            "test": f"curl -fsS {url}",
+            "fix": "Add a Network device with an IP, then docker compose up -d snmp-exporter",
+        }
+    if ensure_snmp_exporter():
+        time.sleep(1.5)
+        result = _http(url, "GET")
+        if result.get("status") == "ok":
+            return result
     result["fix"] = "docker compose up -d snmp-exporter"
-    result["test"] = f"curl -fsS {settings.snmp_exporter_url}/metrics"
+    result["test"] = f"curl -fsS {url}"
     return result
 
 

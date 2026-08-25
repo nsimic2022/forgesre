@@ -1065,6 +1065,29 @@ def build_performance_report(db: Session, asset_ids: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def send_performance_report(
+    db: Session,
+    *,
+    asset_ids: list[str],
+    to_email: str,
+    actor: str = "system",
+    name: str = "performance",
+) -> Notification:
+    """Build the scheduled-report snapshot and send (or store generated) now."""
+    contact = remember_mail_contact(db, to_email, actor=actor)
+    if contact is None:
+        raise ValueError("Need a valid email address")
+    body = build_performance_report(db, list(asset_ids or []))
+    return send_outbound_mail(
+        db,
+        target=contact.email,
+        subject=f"[ForgeSRE] {name}",
+        body=body,
+        actor=actor,
+        step_key="report",
+    )
+
+
 def send_incident_report(db: Session, incident: Incident, target: str, actor: str = "system") -> Notification:
     contact = remember_mail_contact(db, target, actor=actor)
     if contact is None:
@@ -1083,14 +1106,12 @@ def send_incident_report(db: Session, incident: Incident, target: str, actor: st
 
 
 def run_scheduled_report(db: Session, row: ScheduledReport, actor: str = "system") -> Notification:
-    body = build_performance_report(db, list(row.asset_ids or []))
-    mail = send_outbound_mail(
+    mail = send_performance_report(
         db,
-        target=row.to_email,
-        subject=f"[ForgeSRE] {row.name}",
-        body=body,
+        asset_ids=list(row.asset_ids or []),
+        to_email=row.to_email,
         actor=actor,
-        step_key="report",
+        name=row.name or "performance",
     )
     now = utcnow()
     hours = max(1, int(row.interval_hours or 6))

@@ -1,5 +1,39 @@
 {% extends "base.html" %}
 {% block title %}Email & reports · ForgeSRE{% endblock %}
+{% block extra_head %}
+<style>
+  /* Force Compose wider than Add email. Nested .split/.stack ignored this before. */
+  .ops-mail-cols {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: flex-start;
+    gap: 1.5rem;
+    width: 100%;
+  }
+  form.ops-add-email {
+    flex: 0 1 38% !important;
+    width: 38% !important;
+    max-width: 38% !important;
+    min-width: 0 !important;
+  }
+  form.ops-compose {
+    flex: 1 1 62% !important;
+    width: 62% !important;
+    min-width: 58% !important;
+    max-width: none !important;
+  }
+  @media (max-width: 900px) {
+    .ops-mail-cols { flex-direction: column !important; }
+    form.ops-add-email, form.ops-compose {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      flex: 1 1 auto !important;
+    }
+  }
+</style>
+{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1>Email &amp; reports</h1>
@@ -61,15 +95,15 @@
 <section class="card" id="send">
   <h2>Send email</h2>
   {% if can_send %}
-  <div class="split ops-forms">
-    <form method="post" action="/ops/contacts" class="stack">
+  <div class="ops-mail-cols">
+    <form method="post" action="/ops/contacts" class="stack ops-add-email">
       <h3>Add email</h3>
       <p class="muted">Saves an address to this page’s book. Asset owner emails from <a href="/assets">Assets</a> already appear in the list.</p>
       <label>Name <input name="name" placeholder="Storage on-call"></label>
       <label>Email <input name="email" type="email" required placeholder="ops@example.local"></label>
       <button type="submit">Save address</button>
     </form>
-    <form method="post" action="/ops/mail" class="stack">
+    <form method="post" action="/ops/mail" class="stack ops-compose">
       <h3>Compose</h3>
       <label>To
         <select name="target">
@@ -126,11 +160,14 @@
 <section class="card" id="reports">
   <h2>Scheduled reports</h2>
   <p class="muted">
-    Cron-like, inside Core. Pick assets and an interval. ForgeSRE snapshots CPU/disk/up
+    Cron-like, inside Core. Pick assets and an interval, or use <strong>Send now</strong>
+    for a one-shot mail (does not wait 6 hours). ForgeSRE snapshots CPU/disk/up
     from Prometheus (or demo gauges) even when there is no incident, then emails the text.
-    Choose the recipient from the address book (or add one above).
+    Choose the recipient from the address book, or type a destination email.
+    SMTP off stores the row as <em>generated</em> (not sent).
   </p>
   {% if can_send %}
+  <div class="ops-report-cols">
   <form method="post" action="/ops/reports" class="stack">
     <h3>New report</h3>
     <label>Name <input name="name" value="storage-6h" required></label>
@@ -161,6 +198,29 @@
     </fieldset>
     <button type="submit">Save schedule</button>
   </form>
+  <form method="post" action="/ops/reports/send-now" class="stack ops-report-now">
+    <h3>Send now</h3>
+    <p class="muted">One snapshot, immediately. Does not create a 6-hour schedule.</p>
+    <label>Send to
+      <select name="to_email">
+        <option value="">Select an address</option>
+        {% for item in addresses %}
+        <option value="{{ item.email }}">{% if item.label %}{{ item.label }} — {% endif %}{{ item.email }} ({{ item.source }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Or destination email <input name="new_email" type="email" placeholder="ops@example.local"></label>
+    <fieldset>
+      <legend>Assets</legend>
+      {% for asset in assets %}
+      <label class="check"><input type="checkbox" name="asset_id" value="{{ asset.asset_id }}"> {{ asset.hostname }} ({{ asset.asset_id }})</label>
+      {% else %}
+      <p class="muted">No assets in inventory.</p>
+      {% endfor %}
+    </fieldset>
+    <button type="submit">{% if smtp_on %}Send now{% else %}Save to outbox{% endif %}</button>
+  </form>
+  </div>
   {% endif %}
   <table>
     <thead><tr><th>Name</th><th>To</th><th>Every</th><th>Assets</th><th>Last</th><th>Next</th><th>Enabled</th><th></th></tr></thead>

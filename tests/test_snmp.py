@@ -159,6 +159,9 @@ def test_cli_help_documents_snmp_and_assets():
     snmp = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "snmp"], text=True)
     assert "UDP/161" in snmp
     assert "SNMP_COMMUNITY" in snmp
+    doctor = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "doctor"], text=True)
+    assert "paused" in doctor
+    assert "snmp-exporter" in doctor
     render = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "render-monitoring"], text=True)
     assert "install.sh" in render
     assets = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "assets"], text=True)

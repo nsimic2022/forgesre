@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -8,6 +9,8 @@ from app.models import MailContact, Notification, ScheduledReport, User
 from app.security import hash_password
 from app.seed import seed
 from app.services import process_scheduled_reports
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _db():
@@ -58,7 +61,25 @@ def test_ops_page_lists_outbox_and_reports():
     assert "Open Grafana" not in page.text
     assert "Stack UIs" not in page.text
     assert "platform@forgesre.local" in page.text
+    assert "Send now" in page.text
+    assert "ops-compose" in page.text
+    assert "ops-add-email" in page.text
+    assert "max-width: 38%" in page.text
+    assert "min-width: 58%" in page.text
     db.close()
+
+
+def test_ops_compose_column_is_forced_wider_than_add_email():
+    ops = (ROOT / "frontend" / "templates" / "ops.html").read_text(encoding="utf-8")
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    assert "split ops-forms" not in ops
+    assert "ops-add-email" in ops
+    assert "ops-compose" in ops
+    assert "max-width: 38%" in ops
+    assert "min-width: 58%" in ops
+    assert "max-width: 38%" in css
+    assert "min-width: 58%" in css
+    assert ".split { display: grid; grid-template-columns: 1.2fr 0.8fr;" in css
 
 
 def test_ops_add_contact_then_pick_from_list():
@@ -186,4 +207,53 @@ def test_viewer_can_read_ops_but_cannot_send():
         follow_redirects=False,
     )
     assert posted.status_code == 403
+    db.close()
+
+
+def test_ops_send_now_creates_outbox_without_waiting_or_schedule():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    before = db.query(ScheduledReport).count()
+    posted = client.post(
+        "/ops/reports/send-now",
+        data={"new_email": "now@example.local", "asset_id": "forge-demo-01"},
+        follow_redirects=False,
+    )
+    assert posted.status_code == 303
+    assert posted.headers["location"] == "/ops#mail"
+    assert db.query(ScheduledReport).count() == before
+    mail = (
+        db.query(Notification)
+        .filter_by(target="now@example.local", step_key="report")
+        .order_by(Notification.id.desc())
+        .first()
+    )
+    assert mail is not None
+    assert mail.status == "generated"
+    assert mail.incident_id is None
+    assert mail.subject == "[ForgeSRE] send-now"
+    assert "forge-demo-01" in mail.body
+    assert "Not an incident" in mail.body
+    assert "SMTP disabled" in (mail.error or "") or "not sent" in (mail.error or "").lower()
+    page = client.get("/ops")
+    assert "Send now" in page.text
+    assert "now@example.local" in page.text
+    db.close()
+
+
+def test_ops_send_now_rejects_viewer():
+    db = _db()
+    if db.query(User).filter_by(email="viewer@forgesre.local").first() is None:
+        db.add(User(email="viewer@forgesre.local", name="V", password_hash=hash_password("testpass"), role="viewer"))
+        db.commit()
+    client = TestClient(app)
+    _login(client, "viewer@forgesre.local")
+    posted = client.post(
+        "/ops/reports/send-now",
+        data={"new_email": "nope-now@example.local", "asset_id": "forge-demo-01"},
+        follow_redirects=False,
+    )
+    assert posted.status_code == 403
+    assert db.query(Notification).filter_by(target="nope-now@example.local", step_key="report").first() is None
     db.close()
