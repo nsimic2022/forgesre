@@ -114,31 +114,37 @@
 </div>
 
 <aside class="asset-detail-metrics card" data-asset-metrics="{{ asset.asset_id }}">
-  <h2>Machine metrics</h2>
+  <div class="metric-panel-head">
+    <h2>Machine metrics</h2>
+    {% if can('write_assets') %}
+    <a class="metric-edit" href="/assets?edit={{ asset.asset_id }}#asset-form">Edit</a>
+    {% endif %}
+  </div>
   {% if metrics.demo %}<span class="pill demo">DEMO</span>{% endif %}
   <p class="muted">{{ metrics.collecting_line }}</p>
   <p class="muted">Bundled {{ metrics.class }} class — not every exporter series.</p>
   <div class="metric-tiles">
     {% for tile in metrics.tiles %}
     <div class="metric-tile" data-metric="{{ tile.key }}">
-      <div class="metric-tile-head">
-        <span>{{ tile.name }}</span>
-        <span class="pill {{ tile.tone }}">{{ tile.display }}</span>
-      </div>
+      <span class="metric-name">{{ tile.name }}</span>
+      <span class="metric-value {{ tile.tone }}">{{ tile.display }}</span>
       <div class="metric-bar{% if tile.bar_pct is none %} empty{% endif %}" role="meter"{% if tile.bar_pct is not none %} aria-valuenow="{{ tile.bar_pct }}" aria-valuemin="0" aria-valuemax="100"{% endif %}>
         {% if tile.bar_pct is not none %}
         <span class="metric-bar-fill {{ tile.tone }}" style="width: {{ tile.bar_pct }}%"></span>
         {% endif %}
       </div>
-      {% if tile.threshold is not none %}
-      <p class="muted metric-tile-note">alarm {{ tile.threshold|int }}%{% if tile.alarm_enabled is false %} · off{% endif %}</p>
-      {% elif tile.alarm_enabled is false %}
-      <p class="muted metric-tile-note">alarm off</p>
-      {% endif %}
-      {% if tile.spark %}
-      <svg class="metric-spark" viewBox="0 0 80 22" width="80" height="22" aria-hidden="true">
-        <polyline fill="none" stroke="currentColor" stroke-width="1.5" points="{{ tile.spark }}"/>
-      </svg>
+      <span class="metric-swatch {{ tile.tone }}" title="{{ tile.tone }}"></span>
+      <span class="metric-threshold">
+        {% if tile.threshold is not none %}
+        {{ tile.threshold|int }}%{% if tile.alarm_enabled is false %} · off{% endif %}
+        {% elif tile.alarm_enabled is false %}
+        off
+        {% else %}
+        —
+        {% endif %}
+      </span>
+      {% if can('write_assets') %}
+      <a class="metric-edit" href="/assets?edit={{ asset.asset_id }}#asset-form">Edit</a>
       {% endif %}
     </div>
     {% endfor %}

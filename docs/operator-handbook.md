@@ -283,9 +283,9 @@ The Assets table shows **Ping** and **:9100 / :9182 / SNMP** color dots after th
 
 On the asset page, **Detect OS / scrape port** re-runs the same probe and fills type + scrape. You can override afterwards.
 
-The same page has a **right-hand Machine metrics** panel (two columns; stacks on a narrow window). Glance at bundled class metrics from Prometheus: Linux `node_` CPU/mem/disk, Windows `windows_` the same idea, network SNMP `up` only. Tiles match the same way verify does (`up{asset="<id>"}` first, then hostname, then `instance=<scrape>` such as `IP:9182`). Missing series stay **yellow** (`not collecting`) — never a fake 0%. When verify PROM is PASS, Collecting is green. Colors follow this asset’s Add/Edit checklist (else bundled alerts/playrules: Linux CPU **95%**, Windows CPU **90%**, demo gauges **80%**). `forge-demo-*` rows are labeled **DEMO**. Grafana is unchanged.
+The same page has a **right-hand Machine metrics** panel (two columns; stacks on a narrow window). Each metric is **one line** (name · value · bar · color · threshold) so a high % does not clip the threshold. Glance at bundled class metrics from Prometheus: Linux `node_` CPU/mem/disk, Windows `windows_` the same idea, network SNMP `up` only. Tiles match the same way verify does (`up{asset="<id>"}` first, then hostname, then `instance=<scrape>` such as `IP:9182`). Missing series stay **yellow** (`not collecting`) — never a fake 0%. When verify PROM is PASS, Collecting is green. Colors follow this asset’s Add/Edit checklist (else bundled alerts/playrules: Linux CPU **95%**, Windows CPU **90%**, demo gauges **80%**). A small **Edit** on the tile row opens that host’s Alarms. `forge-demo-*` rows are labeled **DEMO**. Grafana is unchanged.
 
-On **Add asset / Edit** (not a third column on the Assets list), keep type **Auto (detect exporter)**. Detect also shows which bundled families the exporter actually exposes (cpu / mem / disk / up). Enable or disable that alarm for this host and set a **threshold %** (HDD 70% vs 92%) so a client is not noisy. Stored on the asset (`alarms` JSON). Tiles use that threshold for red/green. Prometheus alert rules stay global — ForgeSRE skips opening an incident for a bundled alert when the alarm is disabled or the webhook value is below the asset threshold. Until you change `monitoring/alerts.yml` / `alerts.local.yml`, Prometheus may still fire; the incident list stays quiet.
+On **Add asset / Edit** (not a third column on the Assets **list**), the form is **hostname | IP | Alarms**. Keep type **Auto (detect exporter)**. The Alarms checklist (cpu / mem / disk / up, enable + threshold %) sits in the third column beside hostname/IP, not a full-width block below. Detect also shows which bundled families the exporter actually exposes. Stored on the asset (`alarms` JSON). **Save** and **Cancel** are at the bottom (Cancel returns to the asset page or the list). Tiles use that threshold for red/green. Prometheus alert rules stay global — ForgeSRE skips opening an incident for a bundled alert when the alarm is disabled or the webhook value is below the asset threshold. Until you change `monitoring/alerts.yml` / `alerts.local.yml`, Prometheus may still fire; the incident list stays quiet.
 
 API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type` (`Auto (detect exporter)` to probe), `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Detect-only: `GET /api/v1/detect-exporter?ip=`. List ping/exporter colors: `GET /api/v1/assets/reachability` (async; the HTML list is last-known). Verify live path: `GET /api/v1/assets/{id}/verify` and `GET /api/v1/verify` (`write_assets`). Glance tiles: `GET /api/v1/assets/{id}/metrics` (`read_assets`). Update: `POST /api/v1/assets/{asset_id}` (hostname, type, IP, scrape, contacts). Clone: `POST /api/v1/assets/{id}/clone`. Delete: `POST /api/v1/assets/{id}/delete`.
 
@@ -305,9 +305,9 @@ discovery:
 ```
 
 2. Recreate Core (settings load at process start).
-3. Open **Discovery**. Click **Scan now**, or wait: first scan ~30s after Core start, then every **6 hours** (unless `mode: manual`).
-4. Banner **NEW DEVICE DETECTED** on the dashboard until you decide.
-5. **Approve** → creates an asset (`source=discovery`, id like `disc-10-20-30-41`) and sends you to the asset page. **Ignore** leaves it out of inventory.
+3. Open **Discovery**. Click **Scan now**, or wait: first scan ~30s after Core start, then every **6 hours** (unless `mode: manual`). The page shows a **Last scan** row of step pills (CIDR, TCP 22, TCP 80/443, :9100, :9182, SNMP UDP/161, HTTP /metrics). Green = at least one host passed that step, yellow = skipped/none, red = scanner error. This is the live TCP/SNMP/`/metrics` probe — **not ICMP ping** (ping is on Assets).
+4. Banner **NEW DEVICE DETECTED**. Found hosts stay on **Waiting for Approve** until you decide. They are **not** auto-added to inventory.
+5. **Approve** (on the Discovery page) → creates an asset (`source=discovery`, id like `disc-10-20-30-41`) and sends you to the asset page. **Ignore** rejects the host (out of inventory).
 
 Probe is **not nmap**. It tries TCP **22, 80, 443, 9100, 9182** and an SNMPv2c GET on **UDP/161** (TCP/161 is skipped — that is not SNMP). When a host is alive, Core also GETs `/metrics` on **:9182** and **:9100** (same detect as Add Asset):
 
@@ -321,11 +321,11 @@ Probe is **not nmap**. It tries TCP **22, 80, 443, 9100, 9182** and an SNMPv2c G
 | 22 only | Possible Linux server | inventory only — **no** `:9100` until node_exporter answers |
 | 80 or 443 | Possible web/appliance | inventory only |
 
-TCP open on 9100 or 9182 is **not** an OS pick. ICMP ping is not used for OS.
+TCP open on 9100 or 9182 is **not** an OS pick. ICMP ping is not used for OS and is **not** a Scan now step.
 
-`mode: automatic` still writes an audit row (`actor=system-automatic`) then approves. Prefer semi-automatic in production.
+`mode: automatic` used to approve with `actor=system-automatic`. Scan now **no longer writes inventory** in any mode — found hosts wait for Approve on Discovery. Seeded `forge-demo-*` lab hosts in a CIDR are skipped (not auto-approved). Prefer `semi-automatic` in the YAML so the background loop still runs.
 
-Demo candidate `10.20.30.41` is seeded so you can click Approve without a live subnet. `./forgesre demo` puts it back if missing.
+Demo candidate `10.20.30.41` is seeded so you can click Approve without a live subnet. It is labeled DEMO seed — not a Scan now hit. `./forgesre demo` puts it back if missing.
 
 ### C. External NetBox (read-sync)
 
@@ -477,7 +477,9 @@ Who: **analyst** (permission `write_play`). Engineers can read, not create.
 1. Optionally create the playbook first (`/playbooks`).
 2. **Playrules** → **Create playrule**.
 3. Name (unique), metric, operator, value, severity, playbook.
-4. **Save**. Use **Toggle** to disable without deleting.
+4. **Save**. **Cancel** next to Save returns to this page without creating. Use **Toggle** to disable without deleting.
+
+Bundled playrules are the **default warning** (seeded rules + `monitoring/alerts.yml`). A host can differ via **Alarms** on Add/Edit (`assets.alarms`). That is still the same Alertmanager webhook — not a second alerting engine.
 
 The form stores `condition.alertname` equal to the **name** you typed. Matching on ingest is:
 
@@ -512,7 +514,7 @@ Who: **analyst** to create.
 1. **Playbooks** → **Create playbook**.
 2. Name (display, e.g. `DISK-FULL`), slug (unique id, e.g. `disk-full`).
 3. Steps: **one title per line**.
-4. **Save**.
+4. **Save**. **Cancel** next to Save returns to this page without creating.
 
 Attach it by selecting it on the playrule form. When an alert matches, the incident page shows *Who / playbook*.
 
