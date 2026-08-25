@@ -221,7 +221,6 @@ def test_admin_backup_buttons_before_cli_cheatsheet(tmp_path, monkeypatch):
     assert "demo" in shown
     assert "help" in shown
     assert "quit" in shown
-    assert "placeholder=\"RESTORE\"" in text or 'placeholder="RESTORE"' in text
     created = client.post("/admin/backups", data={}, follow_redirects=False)
     assert created.status_code == 303
     name = created.headers["location"].split("backup=", 1)[1]
@@ -229,6 +228,7 @@ def test_admin_backup_buttons_before_cli_cheatsheet(tmp_path, monkeypatch):
     text = page.text
     assert 'select name="name"' in text
     assert "Backup folder (newest first)" in text
+    assert 'placeholder="RESTORE"' in text
     assert name in text
     assert "UTC" in text
     assert "SECRET_KEY" not in text
