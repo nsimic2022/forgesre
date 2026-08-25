@@ -27,6 +27,13 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
     client.post("/login", data={"email": email, "password": password}, follow_redirects=False)
 
 
+def _outbox_row(page_text: str, needle: str) -> str:
+    section = page_text.split("Mail outbox", 1)[1]
+    idx = section.find(needle)
+    assert idx != -1, needle
+    return section[idx:].split("</tr>", 1)[0]
+
+
 def test_system_health_has_open_column_and_grafana():
     db = _db()
     client = TestClient(app)
@@ -106,7 +113,7 @@ def test_ops_send_mail_lands_in_generated_outbox():
     assert "not sent (email not configured)" in (row.error or "")
     page = client.get("/ops")
     assert page.status_code == 200
-    chunk = page.text.split("ops@example.local", 1)[1].split("</tr>", 1)[0]
+    chunk = _outbox_row(page.text, "lab ping")
     assert 'class="pill generated">generated</span>' in chunk
     assert 'class="muted outbox-hint">not sent (email not configured)</div>' in chunk
     assert 'class="pill sent"' not in chunk
@@ -275,7 +282,7 @@ def test_ops_outbox_shows_sent_when_smtp_works(monkeypatch):
     client = TestClient(app)
     _login(client)
     page = client.get("/ops")
-    chunk = page.text.split("sent@example.local", 1)[1].split("</tr>", 1)[0]
+    chunk = _outbox_row(page.text, "live ping")
     assert 'class="pill sent">sent</span>' in chunk
     assert "outbox-hint" not in chunk
     db.close()
@@ -296,7 +303,7 @@ def test_ops_outbox_shows_failed_when_smtp_raises(monkeypatch):
     client = TestClient(app)
     _login(client)
     page = client.get("/ops")
-    chunk = page.text.split("fail@example.local", 1)[1].split("</tr>", 1)[0]
+    chunk = _outbox_row(page.text, "broken ping")
     assert 'class="pill failed">failed</span>' in chunk
     assert "outbox-hint" not in chunk
     db.close()
@@ -317,7 +324,7 @@ def test_ops_outbox_not_sent_when_smtp_host_missing(monkeypatch):
     client = TestClient(app)
     _login(client)
     page = client.get("/ops")
-    chunk = page.text.split("nosmtp@example.local", 1)[1].split("</tr>", 1)[0]
+    chunk = _outbox_row(page.text, "lab only")
     assert 'class="pill generated">generated</span>' in chunk
     assert 'class="muted outbox-hint">not sent (email not configured)</div>' in chunk
     assert 'class="pill sent"' not in chunk
