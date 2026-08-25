@@ -153,7 +153,25 @@ def test_restore_with_yes_round_trips_user_and_files(tmp_path):
     db.close()
 
 
-def test_admin_backup_buttons_before_appliance_shell(tmp_path, monkeypatch):
+def _forgesre_overview_names() -> set[str]:
+    text = Path(__file__).resolve().parents[1].joinpath("scripts/forgesre").read_text(encoding="utf-8")
+    start = text.index("Commands:\n")
+    end = text.index("\nExamples:\n")
+    names: set[str] = set()
+    for line in text[start:end].splitlines()[1:]:
+        raw = line.strip()
+        if not raw:
+            continue
+        left = raw.split("  ", 1)[0]
+        token = left.split()[0]
+        names.add(token)
+        if " / " in left:
+            for part in left.split(" / "):
+                names.add(part.split()[0])
+    return names
+
+
+def test_admin_backup_buttons_before_cli_cheatsheet(tmp_path, monkeypatch):
     db = _db()
     monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(tmp_path / "backups"))
     monkeypatch.setenv("FORGESRE_RESTORE_STOP_CORE", "0")
@@ -165,10 +183,44 @@ def test_admin_backup_buttons_before_appliance_shell(tmp_path, monkeypatch):
     assert "Platform backup" in text
     assert ">Backup<" in text
     assert ">Import<" in text
-    assert "Appliance shell" in text
-    assert text.index("Platform backup") < text.index("Appliance shell")
-    assert text.index(">Backup<") < text.index("Appliance shell")
-    assert "web PTY" in text.lower() or "no terminal in this browser" in text.lower()
+    assert "ForgeSRE CLI" in text
+    assert "Appliance shell" not in text
+    assert "admin-backup-cli" in text
+    assert "admin-restore-pane" in text
+    assert "admin-cli-pane" in text
+    assert text.index("admin-restore-pane") < text.index("admin-cli-pane")
+    assert text.index("Import / restore") < text.index("ForgeSRE CLI")
+    assert text.index("Platform backup") < text.index("ForgeSRE CLI")
+    assert text.index(">Backup<") < text.index("ForgeSRE CLI")
+    assert "no terminal in this browser" in text.lower()
+    assert "./forgesre" in text
+    assert "./forgesre shell" in text
+    assert "xterm" not in text.lower()
+    assert "mailpit" not in text.lower()
+    overview = _forgesre_overview_names()
+    start = text.index("cli-cheatsheet")
+    chunk = text[start : text.index("</table>", start)]
+    shown = []
+    for part in chunk.split("<code>")[1:]:
+        shown.append(part.split("</code>", 1)[0])
+    assert shown
+    for label in shown:
+        assert label.split()[0] in overview, label
+    assert "update" in shown
+    assert "test" in shown
+    assert "verify" in shown
+    assert "ping" in shown
+    assert "backup" in shown
+    assert "restore" in shown
+    assert "import" in shown
+    assert "remove backup" in shown
+    assert "doctor" in shown
+    assert "snmp" in shown
+    assert "mailbox" in shown
+    assert "fetch-llm" in shown
+    assert "demo" in shown
+    assert "help" in shown
+    assert "quit" in shown
     created = client.post("/admin/backups", data={}, follow_redirects=False)
     assert created.status_code == 303
     name = created.headers["location"].split("backup=", 1)[1]
@@ -176,6 +228,7 @@ def test_admin_backup_buttons_before_appliance_shell(tmp_path, monkeypatch):
     text = page.text
     assert 'select name="name"' in text
     assert "Backup folder (newest first)" in text
+    assert 'placeholder="RESTORE"' in text
     assert name in text
     assert "UTC" in text
     assert "SECRET_KEY" not in text

@@ -155,6 +155,8 @@
 {% else %}
 <p class="muted">No archives yet. Create one, or import a <code>forgesre.tar.gz</code> (or legacy <code>forgesre-YYYYMMDDTHHMMSSZ.tar.gz</code>).</p>
 {% endif %}
+<div class="admin-backup-cli">
+<div class="admin-restore-pane">
 <h3>Import / restore</h3>
 <p class="muted">
   Import only <strong>stores</strong> a tar.gz under <code>data/backups/backup_…/</code>.
@@ -179,15 +181,30 @@
   <button type="submit" class="danger">Restore</button>
 </form>
 {% endif %}
-<h2>Appliance shell</h2>
-<p class="muted">
-  There is no terminal in this browser — not bash, and not a wrapped <code>./forgesre</code> prompt.
-  A web PTY (even restricted to the ForgeSRE CLI) is still a host command channel:
-  XSS or a stolen admin cookie becomes whatever that CLI can do, and restricted shells are escaped.
-  ForgeSRE does not ship that. Use SSH to the appliance, then <code>./forgesre</code> or <code>./forgesre shell</code> on the box.
-  Process reports stay in <a href="/journal">Journal</a>. See the operator handbook (Administration → Appliance shell).
-</p>
-<pre class="cli-hint">ssh you@forgesre-vm
-cd ~/forgesre
-./forgesre shell</pre>
+</div>
+<div class="admin-cli-pane">
+<h3>ForgeSRE CLI</h3>
+<p class="muted">There is no terminal in this browser. Use SSH, then <code>./forgesre</code> or <code>./forgesre shell</code>.</p>
+<table class="cli-cheatsheet">
+  <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>update</code></td><td>Backup, render monitoring, refresh images, restart, doctor</td></tr>
+    <tr><td><code>test</code></td><td>Full appliance report (files, HTTP, login, APIs, email, logs)</td></tr>
+    <tr><td><code>verify</code></td><td>Live communication: ICMP/exporter/SNMP → Prometheus up → RCA</td></tr>
+    <tr><td><code>ping</code></td><td>ICMP + exporter /metrics for inventory (alias: probe)</td></tr>
+    <tr><td><code>backup</code></td><td>One folder per run under data/backups (tar.gz + MANIFEST)</td></tr>
+    <tr><td><code>restore</code></td><td>List backup folders (newest first); apply only with --yes after stopping Core</td></tr>
+    <tr><td><code>import</code></td><td>Alias for restore (numbered picker; also: import backup)</td></tr>
+    <tr><td><code>remove backup</code></td><td>Delete one backup folder (tar + MANIFEST); confirm with --yes</td></tr>
+    <tr><td><code>doctor</code></td><td>Short health lights (Core, Prometheus, snmp-exporter, …)</td></tr>
+    <tr><td><code>snmp</code></td><td>snmp_exporter health + SNMP HTTP SD targets</td></tr>
+    <tr><td><code>mailbox</code></td><td>Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)</td></tr>
+    <tr><td><code>fetch-llm</code></td><td>Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp</td></tr>
+    <tr><td><code>demo</code></td><td>HighCPU first-hour path (owner mail, similar history)</td></tr>
+    <tr><td><code>help</code></td><td>This overview, or detailed help for one command</td></tr>
+    <tr><td><code>quit</code></td><td>Leave the forgesre&gt; prompt (Ctrl-D also works)</td></tr>
+  </tbody>
+</table>
+</div>
+</div>
 {% endblock %}
