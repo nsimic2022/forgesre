@@ -15,7 +15,7 @@ from app.db import get_db
 from app.asset_probe import reachability_snapshot
 from app.seed import is_demo_asset_id
 from app.exporter_detect import AUTO_ASSET_TYPE
-from app.asset_alarms import alarms_from_form
+from app.asset_alarms import alarms_from_form, saved_alarm_hostnames
 from app.inventory import (
     ASSET_TYPE_CHOICES,
     approve_candidate,
@@ -878,7 +878,16 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
 def playrules_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play"))):
     rows = db.query(Playrule).order_by(Playrule.name).all()
     books = db.query(Playbook).order_by(Playbook.name).all()
-    return render(request, "playrules.html", user, playrules=rows, playbooks=books, presets=PLAYRULE_PRESETS)
+    hosts = saved_alarm_hostnames(db.query(Asset).order_by(Asset.hostname).all())
+    return render(
+        request,
+        "playrules.html",
+        user,
+        playrules=rows,
+        playbooks=books,
+        presets=PLAYRULE_PRESETS,
+        asset_alarm_hosts=hosts,
+    )
 
 
 @router.post("/playrules")

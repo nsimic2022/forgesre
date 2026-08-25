@@ -187,6 +187,13 @@ def test_playrule_page_has_metric_presets():
     assert b"HighCPU" in page.content
     assert b"cpu_usage" in page.content
     assert b"NetworkInterfaceDown" in page.content
+    assert b"default warning" in page.content.lower()
+    assert b"assets.alarms" in page.content
+    assert b"not a second alerting engine" in page.content
+    assert b'href="/playrules">Cancel</a>' in page.content
+    books = client.get("/playbooks")
+    assert books.status_code == 200
+    assert b'href="/playbooks">Cancel</a>' in books.content
     admin = client.get("/admin")
     assert admin.status_code == 200
     assert b"ForgeRCA" not in admin.content or b"Appliance shell" in admin.content

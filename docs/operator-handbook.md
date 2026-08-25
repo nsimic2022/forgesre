@@ -283,9 +283,9 @@ The Assets table shows **Ping** and **:9100 / :9182 / SNMP** color dots after th
 
 On the asset page, **Detect OS / scrape port** re-runs the same probe and fills type + scrape. You can override afterwards.
 
-The same page has a **right-hand Machine metrics** panel (two columns; stacks on a narrow window). Glance at bundled class metrics from Prometheus: Linux `node_` CPU/mem/disk, Windows `windows_` the same idea, network SNMP `up` only. Tiles match the same way verify does (`up{asset="<id>"}` first, then hostname, then `instance=<scrape>` such as `IP:9182`). Missing series stay **yellow** (`not collecting`) — never a fake 0%. When verify PROM is PASS, Collecting is green. Colors follow this asset’s Add/Edit checklist (else bundled alerts/playrules: Linux CPU **95%**, Windows CPU **90%**, demo gauges **80%**). `forge-demo-*` rows are labeled **DEMO**. Grafana is unchanged.
+The same page has a **right-hand Machine metrics** panel (two columns; stacks on a narrow window). Each metric is **one line** (name · value · bar · color · threshold) so a high % does not clip the threshold. Glance at bundled class metrics from Prometheus: Linux `node_` CPU/mem/disk, Windows `windows_` the same idea, network SNMP `up` only. Tiles match the same way verify does (`up{asset="<id>"}` first, then hostname, then `instance=<scrape>` such as `IP:9182`). Missing series stay **yellow** (`not collecting`) — never a fake 0%. When verify PROM is PASS, Collecting is green. Colors follow this asset’s Add/Edit checklist (else bundled alerts/playrules: Linux CPU **95%**, Windows CPU **90%**, demo gauges **80%**). A small **Edit** on the tile row opens that host’s Alarms. `forge-demo-*` rows are labeled **DEMO**. Grafana is unchanged.
 
-On **Add asset / Edit** (not a third column on the Assets list), keep type **Auto (detect exporter)**. Detect also shows which bundled families the exporter actually exposes (cpu / mem / disk / up). Enable or disable that alarm for this host and set a **threshold %** (HDD 70% vs 92%) so a client is not noisy. Stored on the asset (`alarms` JSON). Tiles use that threshold for red/green. Prometheus alert rules stay global — ForgeSRE skips opening an incident for a bundled alert when the alarm is disabled or the webhook value is below the asset threshold. Until you change `monitoring/alerts.yml` / `alerts.local.yml`, Prometheus may still fire; the incident list stays quiet.
+On **Add asset / Edit** (not a third column on the Assets **list**), the form is **hostname | IP | Alarms**. Keep type **Auto (detect exporter)**. The Alarms checklist (cpu / mem / disk / up, enable + threshold %) sits in the third column beside hostname/IP, not a full-width block below. Detect also shows which bundled families the exporter actually exposes. Stored on the asset (`alarms` JSON). **Save** and **Cancel** are at the bottom (Cancel returns to the asset page or the list). Tiles use that threshold for red/green. Prometheus alert rules stay global — ForgeSRE skips opening an incident for a bundled alert when the alarm is disabled or the webhook value is below the asset threshold. Until you change `monitoring/alerts.yml` / `alerts.local.yml`, Prometheus may still fire; the incident list stays quiet.
 
 API: `POST /api/v1/assets` with JSON `hostname`, `ip`, `type` (`Auto (detect exporter)` to probe), `environment`, `owner`, `contact_name`, `owner_email`, `owner_phone`, `notes`, optional `scrape_address`. Detect-only: `GET /api/v1/detect-exporter?ip=`. List ping/exporter colors: `GET /api/v1/assets/reachability` (async; the HTML list is last-known). Verify live path: `GET /api/v1/assets/{id}/verify` and `GET /api/v1/verify` (`write_assets`). Glance tiles: `GET /api/v1/assets/{id}/metrics` (`read_assets`). Update: `POST /api/v1/assets/{asset_id}` (hostname, type, IP, scrape, contacts). Clone: `POST /api/v1/assets/{id}/clone`. Delete: `POST /api/v1/assets/{id}/delete`.
 
@@ -477,7 +477,9 @@ Who: **analyst** (permission `write_play`). Engineers can read, not create.
 1. Optionally create the playbook first (`/playbooks`).
 2. **Playrules** → **Create playrule**.
 3. Name (unique), metric, operator, value, severity, playbook.
-4. **Save**. Use **Toggle** to disable without deleting.
+4. **Save**. **Cancel** next to Save returns to this page without creating. Use **Toggle** to disable without deleting.
+
+Bundled playrules are the **default warning** (seeded rules + `monitoring/alerts.yml`). A host can differ via **Alarms** on Add/Edit (`assets.alarms`). That is still the same Alertmanager webhook — not a second alerting engine.
 
 The form stores `condition.alertname` equal to the **name** you typed. Matching on ingest is:
 
@@ -512,7 +514,7 @@ Who: **analyst** to create.
 1. **Playbooks** → **Create playbook**.
 2. Name (display, e.g. `DISK-FULL`), slug (unique id, e.g. `disk-full`).
 3. Steps: **one title per line**.
-4. **Save**.
+4. **Save**. **Cancel** next to Save returns to this page without creating.
 
 Attach it by selecting it on the playrule form. When an alert matches, the incident page shows *Who / playbook*.
 

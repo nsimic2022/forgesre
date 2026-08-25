@@ -1,12 +1,14 @@
 """Per-asset alarm checklist + ForgeSRE-side incident filter."""
 
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from app.asset_alarms import alert_sample_value, bundled_alert_skip_reason, normalize_alarms
 from app.db import Base, SessionLocal, engine
 from app.inventory import create_manual_asset
 from app.main import app
-from app.models import Incident, User
+from app.models import Asset, Incident, User
 from app.security import hash_password
 from app.seed import seed
 from app.services import ingest_alertmanager
@@ -64,11 +66,49 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     client = _login("analyst-alarms@forgesre.local")
     page = client.get("/assets")
     assert page.status_code == 200
-    assert "Bundled alarms for this asset" in page.text
+    assert "<legend>Alarms</legend>" in page.text
+    assert "Bundled alarms for this asset" not in page.text
+    assert "asset-form-grid" in page.text
     assert 'name="alarm_disk_threshold"' in page.text
     assert "Auto (detect exporter)" in page.text
+    host_at = page.text.find('name="hostname"')
+    ip_at = page.text.find('name="ip"')
+    alarm_at = page.text.find("alarm-families")
+    type_at = page.text.find('name="type"')
+    assert 0 < host_at < ip_at < alarm_at < type_at
     table = page.text.split("<table")[1].split("</table>")[0]
     assert "alarm_disk_threshold" not in table
+    assert ">Cancel</a>" in page.text
+    assert 'href="/assets">Cancel' in page.text
+    css = Path("frontend/static/app.css").read_text()
+    assert "asset-form-grid" in css
+    assert "minmax(0, 1fr) minmax(0, 1fr) minmax(13rem, 1.05fr)" in css
+
+
+def test_edit_form_cancel_returns_to_asset():
+    client = _login("analyst-alarms-cancel@forgesre.local")
+    created = client.post(
+        "/assets",
+        data={
+            "hostname": "win-cancel-01",
+            "ip": "10.66.21.90",
+            "type": "Windows Server",
+            "alarms_present": "1",
+            "alarm_up_enabled": "1",
+            "alarm_cpu_enabled": "1",
+            "alarm_cpu_threshold": "90",
+            "alarm_memory_enabled": "1",
+            "alarm_memory_threshold": "90",
+            "alarm_disk_enabled": "1",
+            "alarm_disk_threshold": "90",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code in {302, 303}
+    page = client.get("/assets?edit=win-cancel-01")
+    assert page.status_code == 200
+    assert 'href="/assets/win-cancel-01">Cancel</a>' in page.text
+    assert "<legend>Alarms</legend>" in page.text
 
 
 def test_skip_reason_disabled_and_below_threshold():
@@ -209,3 +249,27 @@ def test_normalize_alarms_defaults_windows_cpu_90():
     assert values["cpu_percent"]["enabled"] is True
     assert values["cpu_percent"]["threshold"] == 90
     assert values["disk_percent"]["threshold"] == 90
+
+
+def test_playrules_mentions_saved_asset_alarms():
+    from app.asset_alarms import saved_alarm_hostnames
+
+    db = _db()
+    host = create_manual_asset(
+        db,
+        hostname="win-play-alarms",
+        ip="10.66.21.91",
+        type="Windows Server",
+        actor="tester",
+        alarms={"disk_percent": {"enabled": True, "threshold": 70}},
+    )
+    names = saved_alarm_hostnames(db.query(Asset).order_by(Asset.hostname).all())
+    assert host.hostname in names
+    db.close()
+    client = _login("analyst-play-alarms@forgesre.local")
+    page = client.get("/playrules")
+    assert page.status_code == 200
+    assert "win-play-alarms" in page.text
+    assert "assets.alarms" in page.text
+    assert "default warning" in page.text.lower()
+    assert "not a second alerting engine" in page.text
