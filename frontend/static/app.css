@@ -483,9 +483,23 @@ button.demo-close {
 .mail-providers h3 { margin: 0 0 0.4rem; font-size: 1rem; }
 .asset-detail-split {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(16rem, 0.65fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
+}
+.asset-detail-main,
+.asset-detail-metrics {
+  min-width: 0;
+  max-width: 100%;
+}
+.asset-detail-main .kv {
+  grid-template-columns: minmax(6.5rem, 9rem) minmax(0, 1fr);
+}
+.asset-detail-actions {
+  max-width: 100%;
+}
+.asset-detail-actions .row-actions {
+  flex-wrap: wrap;
 }
 .asset-detail-metrics h2 { margin-top: 0; }
 .asset-detail-metrics .pill.demo { margin: 0 0 0.55rem; }
