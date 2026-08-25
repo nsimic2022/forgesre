@@ -340,9 +340,11 @@ def test_cli_help_restore_requires_yes():
     assert "remove" in overview
     assert "--include-models" in overview
     assert "docker compose exec postgres" in backup
+    assert "docker info" in backup
     update = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "update"], text=True)
     assert "snmp-exporter" in update
     assert "sqlalchemy" in update.lower()
+    assert "docker info" in update
     remove = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "remove"], text=True)
     assert "remove backup" in remove
     assert "--yes" in remove
@@ -432,6 +434,132 @@ def test_postgres_dump_and_restore_use_compose_psql(monkeypatch):
     assert "docker compose" not in joined  # mocked; no live docker
 
 
+def test_compose_argv_probes_docker_info_not_compose_version(monkeypatch):
+    from app import backup as backup_mod
+
+    seen: list[list[str]] = []
+
+    def fake_ok(cmd, cwd):
+        seen.append(list(cmd))
+        return list(cmd) == ["docker", "info"]
+
+    monkeypatch.delenv("FORGESRE_COMPOSE", raising=False)
+    monkeypatch.setattr(backup_mod, "_compose_probe_ok", fake_ok)
+    assert backup_mod._compose_argv() == ["docker", "compose"]
+    assert seen[0] == ["docker", "info"]
+    assert all("version" not in c for c in seen)
+
+
+def test_compose_argv_falls_back_to_sudo_n_when_docker_info_denied(monkeypatch):
+    from app import backup as backup_mod
+
+    seen: list[list[str]] = []
+
+    def fake_ok(cmd, cwd):
+        seen.append(list(cmd))
+        return list(cmd) == ["sudo", "-n", "docker", "info"]
+
+    monkeypatch.delenv("FORGESRE_COMPOSE", raising=False)
+    monkeypatch.setattr(backup_mod, "_compose_probe_ok", fake_ok)
+    assert backup_mod._compose_argv() == ["sudo", "-n", "docker", "compose"]
+    assert ["docker", "info"] in seen
+    assert ["sudo", "-n", "docker", "info"] in seen
+
+
+def test_compose_argv_honors_env_and_inserts_sudo_n(monkeypatch):
+    from app import backup as backup_mod
+
+    monkeypatch.setenv("FORGESRE_COMPOSE", "sudo docker compose")
+    assert backup_mod._compose_argv() == ["sudo", "-n", "docker", "compose"]
+    monkeypatch.setenv("FORGESRE_COMPOSE", "docker compose")
+    assert backup_mod._compose_argv() == ["docker", "compose"]
+
+
+def test_compose_argv_both_fail_mentions_sock_not_start_postgres(monkeypatch):
+    from app import backup as backup_mod
+
+    monkeypatch.delenv("FORGESRE_COMPOSE", raising=False)
+    monkeypatch.setattr(backup_mod, "_compose_probe_ok", lambda cmd, cwd: False)
+    try:
+        backup_mod._compose_argv()
+        raise AssertionError("should fail")
+    except RuntimeError as exc:
+        msg = str(exc).lower()
+        assert "docker.sock" in msg
+        assert "start postgres" not in msg
+        assert "do not chmod 666" in msg
+
+
+def test_psql_sock_denied_does_not_tell_you_to_start_postgres(monkeypatch):
+    import subprocess
+    from app import backup as backup_mod
+
+    monkeypatch.setenv("FORGESRE_COMPOSE", "docker compose")
+
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(
+            cmd,
+            1,
+            stdout="",
+            stderr=(
+                "permission denied while trying to connect to the docker API "
+                "at unix:///var/run/docker.sock"
+            ),
+        )
+
+    monkeypatch.setattr(backup_mod.subprocess, "run", fake_run)
+    try:
+        backup_mod._psql("SELECT 1;")
+        raise AssertionError("should fail")
+    except RuntimeError as exc:
+        msg = str(exc).lower()
+        assert "docker.sock" in msg
+        assert "start it: docker compose up -d postgres" not in msg
+        assert "sudo" in msg
+        assert "do not chmod 666" in msg
+
+
+def test_backup_cli_sock_denied_does_not_say_start_postgres(monkeypatch, capsys):
+    from app import backup as backup_mod
+
+    def fake_create(**_kwargs):
+        return backup_mod.BackupResult(
+            path=Path("/tmp/forgesre-x.tar.gz"),
+            name="forgesre-x.tar.gz",
+            notes=[
+                "database dump failed: permission denied while trying to connect "
+                "to the docker API at unix:///var/run/docker.sock"
+            ],
+            db=False,
+        )
+
+    monkeypatch.setattr(backup_mod, "create_backup", fake_create)
+    rc = backup_mod.main(["backup"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "ERROR: database dump failed" in captured.err
+    assert "docker.sock" in captured.err
+    assert "Start Postgres" not in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_update_and_backup_scripts_share_docker_info_probe():
+    root = Path(__file__).resolve().parents[1]
+    backup = (root / "scripts" / "backup.sh").read_text(encoding="utf-8")
+    restore = (root / "scripts" / "restore.sh").read_text(encoding="utf-8")
+    update = (root / "scripts" / "update.sh").read_text(encoding="utf-8")
+    py = (root / "backend" / "app" / "backup.py").read_text(encoding="utf-8")
+    assert "docker info" in backup
+    assert "FORGESRE_COMPOSE" in backup
+    assert "docker info" in restore
+    assert "FORGESRE_COMPOSE" in update
+    assert update.index("FORGESRE_COMPOSE") < update.index("backup.sh")
+    assert "docker info" in update
+    assert '["docker", "info"]' in py
+    assert '[*prefix, "version"]' not in py
+    assert "sqlalchemy" not in backup.lower() or "no sqlalchemy" in backup.lower()
+
+
 def test_backup_cli_dump_failure_is_clear_error(monkeypatch, capsys):
     from app import backup as backup_mod
 
@@ -472,6 +600,8 @@ def test_update_script_starts_snmp_and_survives_backup_failure():
     assert "snmp-exporter" in text
     assert "Backup failed" in text
     assert "Continuing with render-monitoring" in text
+    assert "FORGESRE_COMPOSE" in text
+    assert "docker info" in text
 
 
 def test_compose_snmp_exporter_is_default_service():

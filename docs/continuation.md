@@ -84,7 +84,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
 - `snmp-exporter` is a **default** compose service.
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it.
-- Backup on the host dumps Postgres via `docker compose exec postgres`.
+- Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update` (`docker info`, else `sudo docker compose`). A docker.sock permission error is not “start postgres”.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`. Do not explode the archive into loose files at `data/backups/` root.
 - Host `./forgesre verify` does not import sqlalchemy (`demo_ids.py`).
 

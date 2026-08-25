@@ -11,7 +11,8 @@ the backups root. Legacy data/backups/forgesre-*.tar.gz files are still read.
 
 Host CLI must not import sqlalchemy at module load (host Python has no Core
 venv). GUI/Core dumps via SQLAlchemy; host dumps via docker compose exec
-postgres. Both write db.json in the same tar.gz format.
+postgres using the same docker rights as ./forgesre update (docker info,
+else sudo -n docker compose). Both write db.json in the same tar.gz format.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tarfile
@@ -408,24 +410,79 @@ def _sqlalchemy_ready() -> bool:
         return False
 
 
+def _sudo_noninteractive(argv: list[str]) -> list[str]:
+    """Insert sudo -n so a password prompt cannot steal SQL on stdin."""
+    if argv and argv[0] == "sudo" and "-n" not in argv[:4]:
+        return ["sudo", "-n", *argv[1:]]
+    return argv
+
+
+def _is_docker_sock_error(text: str) -> bool:
+    """True when compose failed because this uid cannot use docker.sock."""
+    lower = (text or "").lower()
+    if "docker.sock" in lower:
+        return True
+    if "permission denied" in lower and "docker api" in lower:
+        return True
+    if "cannot talk to the docker daemon" in lower:
+        return True
+    return False
+
+
+def _compose_probe_ok(cmd: list[str], cwd: str) -> bool:
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
 def _compose_argv(root: Path | None = None) -> list[str]:
+    """Same docker compose prefix as scripts/forgesre and update.sh.
+
+    Probe the daemon with ``docker info``, not ``docker compose version``.
+    Version succeeds without unix:///var/run/docker.sock; exec then fails as
+    unprivileged while update's pull/up already used sudo.
+    """
+    raw = os.environ.get("FORGESRE_COMPOSE", "").strip()
+    if raw:
+        return _sudo_noninteractive(shlex.split(raw))
     cwd = str(root or _repo_root())
-    for prefix in (["docker", "compose"], ["sudo", "docker", "compose"]):
-        try:
-            result = subprocess.run(
-                [*prefix, "version"],
-                cwd=cwd,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            continue
-        if result.returncode == 0:
-            return prefix
+    if _compose_probe_ok(["docker", "info"], cwd):
+        return ["docker", "compose"]
+    if _compose_probe_ok(["sudo", "-n", "docker", "info"], cwd):
+        return ["sudo", "-n", "docker", "compose"]
     raise RuntimeError(
-        "docker compose is not available. Start Docker, or run backup from Administration (Core)."
+        "Cannot talk to the Docker daemon at unix:///var/run/docker.sock "
+        "(docker info failed; sudo -n docker info failed). "
+        "Host backup dumps Postgres with the same docker compose rights as "
+        "./forgesre update. Run from a login that can docker "
+        "(usermod -aG docker then re-login, or sudo). "
+        "Do not chmod 666 /var/run/docker.sock."
+    )
+
+
+def _dump_compose_error(extra: str) -> str:
+    extra = (extra or "").strip()
+    if _is_docker_sock_error(extra):
+        return (
+            "Postgres dump/restore failed: permission denied on "
+            "unix:///var/run/docker.sock. The dump uses the same docker compose "
+            "invocation as ./forgesre update (docker info, else sudo docker compose). "
+            "Run from a login that can docker (re-login after usermod -aG docker, "
+            "or sudo). ./forgesre update uses sudo docker compose when docker info "
+            "fails. Do not chmod 666 /var/run/docker.sock."
+        )
+    return (
+        "Postgres dump/restore failed via docker compose exec postgres. "
+        f"{extra}. Start it: docker compose up -d postgres"
     )
 
 
@@ -458,13 +515,10 @@ def _psql(sql: str, *, root: Path | None = None) -> str:
             timeout=180,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise RuntimeError(f"psql via docker compose failed: {exc}") from exc
+        raise RuntimeError(_dump_compose_error(str(exc))) from exc
     if result.returncode != 0:
         extra = (result.stderr or result.stdout or str(result.returncode)).strip()
-        raise RuntimeError(
-            "Postgres dump/restore failed via docker compose exec postgres. "
-            f"{extra}. Start it: docker compose up -d postgres"
-        )
+        raise RuntimeError(_dump_compose_error(extra))
     return result.stdout or ""
 
 
@@ -528,7 +582,7 @@ def _dump_database_postgres() -> dict[str, list[dict[str, Any]]]:
 
 
 def dump_database() -> dict[str, list[dict[str, Any]]]:
-    """GUI/Core uses SQLAlchemy. Host CLI uses docker compose exec postgres (no pip on the host)."""
+    """GUI/Core uses SQLAlchemy. Host CLI uses docker compose exec postgres (same rights as update)."""
     if _sqlalchemy_ready():
         return _dump_database_sqlalchemy()
     return _dump_database_postgres()
@@ -965,7 +1019,7 @@ def _stop_core() -> str:
     root = _repo_root()
     try:
         result = subprocess.run(
-            ["docker", "compose", "stop", "core"],
+            [*_compose_argv(root), "stop", "core"],
             cwd=str(root),
             check=False,
             capture_output=True,
@@ -1160,11 +1214,21 @@ def _main(argv: list[str] | None = None) -> int:
         for item in result.notes:
             print(f"  note: {item}")
         if not result.db:
-            print(
-                "ERROR: database dump failed. Archive has files only. "
-                "Start Postgres: docker compose up -d postgres",
-                file=sys.stderr,
-            )
+            notes = " ".join(result.notes)
+            if _is_docker_sock_error(notes):
+                print(
+                    "ERROR: database dump failed. Archive has files only. "
+                    "docker.sock permission denied — run from a login that can "
+                    "docker (same rights as ./forgesre update). Update uses sudo "
+                    "docker compose when docker info fails. Do not chmod 666 docker.sock.",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    "ERROR: database dump failed. Archive has files only. "
+                    "Start Postgres: docker compose up -d postgres",
+                    file=sys.stderr,
+                )
             return 1
         return 0
     if cmd in {"restore", "import"}:
