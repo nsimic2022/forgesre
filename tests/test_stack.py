@@ -105,7 +105,7 @@ def test_component_label_core_is_container_not_api():
     core = payload["components"]["core"]
     assert "core" in payload["components"]
     assert core["status"] == "ok"
-    assert core["label"] == "Core (container")
+    assert core["label"] == "Core (container)"
 
 
 def test_doctor_script_prints_core_api_for_health_curl():
