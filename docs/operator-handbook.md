@@ -244,7 +244,7 @@ A row on **Assets** is what ForgeSRE calls a server (or switch, or appliance). Y
 - **Windows:** after the host is in inventory with type `Windows Server` and `scrape_address=<ip>:9182`, the same HTTP SD scrapes **windows_exporter**. ICMP ping is not a scrape.
 - **Network device:** after the row has type `Network device` (or switch/router/firewall) **and an IP**, bundled **snmp_exporter** walks **UDP/161**. The scrape address stays empty on purpose (no exporter `up == 0` noise).
 
-NetBox is optional and not bundled.
+NetBox is **bundled and on by default** (`http://<VM-IP>:8001`). Core still uses local inventory as the monitoring source of truth; NetBox is a read-sync.
 
 ### A. Manual (you already know hostname + IP)
 
@@ -328,22 +328,13 @@ TCP open on 9100 or 9182 is **not** an OS pick. ICMP ping is not used for OS and
 
 Demo candidate `10.20.30.41` is seeded so you can click Approve without a live subnet. It is labeled DEMO seed — not a Scan now hit. After Approve it becomes `disc-10-20-30-41`, still lab: **not** in Prometheus HTTP SD, and `./forgesre verify` labels DEMO / SKIP (not a production FAIL). `./forgesre demo` puts the candidate back if missing.
 
-### C. External NetBox (read-sync)
+### C. Bundled NetBox (read-sync)
 
-ForgeSRE does **not** bundle NetBox. Point at an existing one:
+`docker compose up -d` / `./forgesre update` starts NetBox with **no compose profile**. UI: `http://<VM-IP>:8001`. First login: user `admin`, email `admin@forgesre.local`, password `NETBOX_SUPERUSER_PASSWORD` in `secrets/secrets.env` (not an operator personal email). First boot runs Django migrations and can take several minutes — **System Health** / `./forgesre doctor` stays **yellow** until `http://127.0.0.1:8001/login/` answers. That is not a fake green.
 
-```yaml
-inventory:
-  provider: netbox
-  netbox:
-    enabled: true
-    mode: external
-    url: "https://netbox.example.local"
-```
+Core finds it via compose env `NETBOX_URL=http://127.0.0.1:8001` unless `config/forgesre.yml` `inventory.netbox.url` is set (`./install.sh --netbox-url` for an external instance). Token: `NETBOX_API_TOKEN`. On **Discovery**, **Sync NetBox** (admin), or wait for the 6-hour loop. Devices become local assets (`source=netbox`). Core **never writes** back to NetBox. Local inventory stays the monitoring source of truth.
 
-Put the token in `secrets/secrets.env` as `NETBOX_API_TOKEN`, never in YAML. Recreate Core. On **Discovery**, **Sync NetBox** (admin), or wait for the 6-hour loop. Devices become local assets (`source=netbox`). Core **never writes** back to NetBox.
-
-If NetBox is enabled but unreachable, **System Health** / `./doctor.sh` shows `netbox: error`.
+To disable the Core sync (container can keep running): `inventory.netbox.mode: disabled`. To use only an existing DC NetBox: `mode: external` and the URL/token.
 
 ---
 
@@ -901,7 +892,7 @@ Say this out loud so lab expectations stay honest:
 - Discovery is TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, 256 hosts max. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.
 - Viewer cannot open Playrules, Playbooks, Escalation, Console, or Discovery (403).
 - Optional TLS is an example Caddyfile, not a default container.
-- NetBox is read-only and optional.
+- NetBox is read-only. Bundled UI is on by default; Core never writes back.
 - Re-running `./install.sh` regenerates secrets. Core will not start on shipped default `SECRET_KEY` / webhook token (`FORGESRE_DEV=1` is tests/lab only).
 
 When that is enough: install ([`install-config.md`](install-config.md)), add people (§5), add servers (§6–7), then add real alerts only when you are ready for incidents (§15). First-hour lab path: Dashboard **Run demo** → HighCPU on `forge-demo-01` (DEMO pill) → Who to call / Escalation. CLI: `./forgesre demo`.

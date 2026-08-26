@@ -17,9 +17,10 @@ ENABLE_LOKI="yes"
 ENABLE_AI="no"
 ENABLE_DISCOVERY="yes"
 DISCOVERY_CIDRS="${FORGESRE_DISCOVERY_CIDRS:-}"
-ENABLE_NETBOX="no"
-NETBOX_URL="${FORGESRE_NETBOX_URL:-}"
+ENABLE_NETBOX="yes"
+NETBOX_URL="${FORGESRE_NETBOX_URL:-http://127.0.0.1:8001}"
 NETBOX_TOKEN="${NETBOX_API_TOKEN:-}"
+NETBOX_MODE="bundled"
 
 usage() {
   cat <<'EOF'
@@ -35,7 +36,7 @@ Options:
   --enable-ai yes|no     Download GGUF and start llama.cpp (yes). RCA works without it.
   --enable-discovery yes|no
   --discovery-cidrs CIDR[,CIDR]
-  --netbox-url URL
+  --netbox-url URL      External NetBox; bundled still starts unless you stop it
 EOF
 }
 
@@ -50,7 +51,7 @@ while [[ $# -gt 0 ]]; do
     --enable-ai) ENABLE_AI="$2"; shift 2 ;;
     --enable-discovery) ENABLE_DISCOVERY="$2"; shift 2 ;;
     --discovery-cidrs) DISCOVERY_CIDRS="$2"; shift 2 ;;
-    --netbox-url) NETBOX_URL="$2"; ENABLE_NETBOX="yes"; shift 2 ;;
+    --netbox-url) NETBOX_URL="$2"; ENABLE_NETBOX="yes"; NETBOX_MODE="external"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
@@ -185,18 +186,24 @@ wizard() {
     read -r -p "CIDRs to scan, comma-separated [${DISCOVERY_CIDRS:-none}]: " ans || true
     DISCOVERY_CIDRS="${ans:-$DISCOVERY_CIDRS}"
   fi
-  explain "NetBox" "Optional external inventory. ForgeSRE never bundles NetBox." "no" "Local inventory only."
-  read -r -p "Connect an external NetBox? [y/N]: " ans || true
+  explain "NetBox" "Bundled DCIM/IPAM container (default on). Core read-syncs devices; it never writes NetBox. First boot runs migrations and can take several minutes." "yes" "Point --netbox-url at an existing instance; local inventory still works."
+  echo "Bundled NetBox UI will be http://<VM-IP>:8001 (user admin). Compose starts it with no profile."
+  read -r -p "Connect an *external* NetBox instead of the bundled one? [y/N]: " ans || true
   if [[ "${ans:-N}" =~ ^[Yy] ]]; then
     ENABLE_NETBOX="yes"
-    read -r -p "NetBox URL [${NETBOX_URL}]: " ans || true
+    NETBOX_MODE="external"
+    read -r -p "External NetBox URL [${NETBOX_URL}]: " ans || true
     NETBOX_URL="${ans:-$NETBOX_URL}"
     read -r -p "NetBox API token (stored in secrets/secrets.env): " NETBOX_TOKEN || true
+  else
+    ENABLE_NETBOX="yes"
+    NETBOX_MODE="bundled"
+    NETBOX_URL="http://127.0.0.1:8001"
   fi
 }
 
 write_files() {
-  mkdir -p "$DATA_DIR"/{postgres,prometheus,alertmanager,loki,grafana,logs,alloy,models,backups,generated} secrets config
+  mkdir -p "$DATA_DIR"/{postgres,prometheus,alertmanager,loki,grafana,logs,alloy,models,backups,generated,netbox/media,netbox/reports,netbox/scripts,netbox/redis} secrets config
   touch "$DATA_DIR/logs/forgesre.log"
   chmod 700 secrets || true
   chmod 750 "$DATA_DIR" 2>/dev/null || true
@@ -204,12 +211,21 @@ write_files() {
   chmod 750 "$DATA_DIR/logs" 2>/dev/null || true
   chmod 770 "$DATA_DIR/postgres" "$DATA_DIR/prometheus" "$DATA_DIR/grafana" "$DATA_DIR/loki" "$DATA_DIR/alloy" 2>/dev/null || true
   sudo chown 70:70 "$DATA_DIR/postgres" 2>/dev/null || true
-  local pg_pass admin_pass gf_pass webhook secret
+  local pg_pass admin_pass gf_pass webhook secret nb_db nb_redis nb_secret nb_admin nb_token
   pg_pass="$(openssl rand -hex 12)"
   admin_pass="$(openssl rand -hex 8)"
   gf_pass="$(openssl rand -hex 8)"
   webhook="$(openssl rand -hex 16)"
   secret="$(openssl rand -hex 24)"
+  nb_db="$(openssl rand -hex 16)"
+  nb_redis="$(openssl rand -hex 16)"
+  nb_secret="$(openssl rand -hex 32)"
+  nb_admin="$(openssl rand -hex 8)"
+  if [[ -n "${NETBOX_TOKEN}" ]]; then
+    nb_token="${NETBOX_TOKEN}"
+  else
+    nb_token="$(openssl rand -hex 20)"
+  fi
 
   umask 077
   cat > "$ROOT/secrets/secrets.env" <<EOF
@@ -221,7 +237,13 @@ ALERTMANAGER_WEBHOOK_TOKEN=${webhook}
 SECRET_KEY=${secret}
 SMTP_USERNAME=
 SMTP_PASSWORD=
-NETBOX_API_TOKEN=${NETBOX_TOKEN}
+NETBOX_API_TOKEN=${nb_token}
+NETBOX_DB_PASSWORD=${nb_db}
+NETBOX_REDIS_PASSWORD=${nb_redis}
+NETBOX_SECRET_KEY=${nb_secret}
+NETBOX_SUPERUSER_NAME=admin
+NETBOX_SUPERUSER_EMAIL=admin@forgesre.local
+NETBOX_SUPERUSER_PASSWORD=${nb_admin}
 SNMP_COMMUNITY=public
 EOF
   chmod 600 "$ROOT/secrets/secrets.env"
@@ -244,12 +266,16 @@ EOF
     fi
   fi
 
-  local discovery_enabled="true" netbox_enabled="false" cidrs_yaml="[]"
+  local discovery_enabled="true" netbox_enabled="true" cidrs_yaml="[]"
   [[ "$ENABLE_DISCOVERY" == "yes" ]] || discovery_enabled="false"
-  if [[ -n "${NETBOX_URL}" ]]; then
+  if [[ "${NETBOX_MODE}" == "external" && -n "${NETBOX_URL}" ]]; then
     ENABLE_NETBOX="yes"
   fi
   [[ "$ENABLE_NETBOX" == "yes" ]] && netbox_enabled="true"
+  if [[ "${NETBOX_MODE}" != "external" ]]; then
+    NETBOX_MODE="bundled"
+    NETBOX_URL="${NETBOX_URL:-http://127.0.0.1:8001}"
+  fi
   if [[ -n "${DISCOVERY_CIDRS}" ]]; then
     cidrs_yaml="["
     local first=1 part
@@ -276,6 +302,15 @@ COMPOSE_PROFILES=${compose_profiles}
 FORGESRE_LLM_THREADS=${llm_threads}
 POSTGRES_PASSWORD=${pg_pass}
 GRAFANA_ADMIN_PASSWORD=${gf_pass}
+NETBOX_PORT=8001
+NETBOX_URL=${NETBOX_URL}
+NETBOX_DB_PASSWORD=${nb_db}
+NETBOX_REDIS_PASSWORD=${nb_redis}
+NETBOX_SECRET_KEY=${nb_secret}
+NETBOX_API_TOKEN=${nb_token}
+NETBOX_SUPERUSER_NAME=admin
+NETBOX_SUPERUSER_EMAIL=admin@forgesre.local
+NETBOX_SUPERUSER_PASSWORD=${nb_admin}
 ALERTMANAGER_CONFIG=${DATA_DIR}/generated/alertmanager.yml
 PROMETHEUS_CONFIG=${DATA_DIR}/generated/prometheus.yml
 PROMETHEUS_ALERTS=${DATA_DIR}/generated/alerts.yml
@@ -294,10 +329,10 @@ system:
   log_level: info
   cookie_secure: false
 inventory:
-  provider: $([[ $netbox_enabled == true ]] && echo netbox || echo local)
+  provider: local
   netbox:
     enabled: ${netbox_enabled}
-    mode: external
+    mode: ${NETBOX_MODE}
     url: "${NETBOX_URL}"
 discovery:
   enabled: ${discovery_enabled}
@@ -363,15 +398,18 @@ EOF
 - Data: ${DATA_DIR}
 - UI: http://127.0.0.1:${HTTP_PORT}
 - Grafana: http://127.0.0.1:3000 (user admin)
+- NetBox: http://127.0.0.1:8001 (user admin / email admin@forgesre.local)
 - Admin email: admin@forgesre.local
 - Admin password: ${admin_pass}
 - Grafana password: ${gf_pass}
+- NetBox password: ${nb_admin}
 - AI enabled: ${ai_enabled}
 - LLM mode: ${llm_mode}
 - Loki enabled: ${loki_enabled}
 - Discovery enabled: ${discovery_enabled}
 - Discovery CIDRs: ${cidrs_yaml}
-- NetBox enabled: ${netbox_enabled}
+- NetBox enabled: ${netbox_enabled} (mode ${NETBOX_MODE}, url ${NETBOX_URL})
+- NetBox first boot: migrations can take several minutes; doctor stays yellow until http://127.0.0.1:8001/login/ answers
 
 Keep secrets/secrets.env private (mode 600).
 
@@ -450,6 +488,8 @@ post_install_journal || true
 echo
 echo "Installation finished."
 echo "UI:              http://127.0.0.1:${HTTP_PORT}"
+echo "Grafana:         http://127.0.0.1:3000"
+echo "NetBox:          http://127.0.0.1:8001  (admin / see installation-report.md)"
 echo "Admin:           admin@forgesre.local"
 echo "Password:        (see installation-report.md or secrets/secrets.env)"
 echo "Demo workflow:   ./forgesre demo"

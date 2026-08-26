@@ -657,11 +657,14 @@ update — doctor (warn ok), backup, render-monitoring, compose pull/up, doctor.
   ./forgesre update
   ./forgesre update --offline
 
-Starts default Compose services including snmp-exporter (127.0.0.1:9116).
+Starts default Compose services including snmp-exporter (127.0.0.1:9116)
+and bundled NetBox (http://127.0.0.1:8001). First NetBox boot runs
+migrations and can take several minutes; doctor stays yellow until
+/login/ answers — that is not a fake green.
 Backup runs on the host without sqlalchemy. The Postgres dump uses the same
 docker compose rights as this command (docker info, else sudo docker compose).
 If backup fails, update prints a clear error and continues so the stack
-(including snmp-exporter) still comes up. Do not pip install sqlalchemy
+(including snmp-exporter and NetBox) still comes up. Do not pip install sqlalchemy
 on the host. Do not run ./install.sh. Use this after git pull origin main.
 EOF
       ;;

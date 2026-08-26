@@ -132,7 +132,7 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
     loki = rewrite_host((settings.loki_url or "http://127.0.0.1:3100").rstrip("/"), hostname)
     snmp = rewrite_host((settings.snmp_exporter_url or "http://127.0.0.1:9116").rstrip("/"), hostname)
     llm = rewrite_host((settings.llm_url or "http://127.0.0.1:8088/v1").rstrip("/"), hostname)
-    netbox = (settings.netbox_url or "").rstrip("/")
+    netbox = rewrite_host((settings.netbox_url or "http://127.0.0.1:8001").rstrip("/"), hostname)
     catalog = [
         {
             "id": "core",

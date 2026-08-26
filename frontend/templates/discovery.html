@@ -32,7 +32,7 @@
 <form method="post" action="/discovery/netbox-sync" class="inline">
   <button type="submit" class="secondary">Sync NetBox</button>
 </form>
-<p class="muted">External NetBox: <code>{{ netbox_url }}</code> (read-only). ForgeSRE does not bundle NetBox.</p>
+<p class="muted">NetBox: <code>{{ netbox_url }}</code> (read-only sync). Bundled UI is <code>http://&lt;VM-IP&gt;:8001</code>. ForgeSRE never writes back. <code>--netbox-url</code> still points Core at an external instance.</p>
 {% endif %}
 
 <table>

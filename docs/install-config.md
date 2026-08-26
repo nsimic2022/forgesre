@@ -41,8 +41,9 @@ CLI index: [`cli.md`](cli.md).
 | Alertmanager | Alert webhook → incidents | `127.0.0.1:9093` |
 | Loki + Alloy | Logs as evidence | `127.0.0.1:3100` / `12345` |
 | llama.cpp (optional) | Local LLM | `127.0.0.1:8088` |
+| NetBox (default on) | DCIM/IPAM; Core read-sync | host port `8001` |
 
-From a laptop you open **Core :8080** and **Grafana :3000**. Everything else stays on localhost on the VM.
+From a laptop you open **Core :8080**, **Grafana :3000**, and **NetBox :8001**. Everything else stays on localhost on the VM.
 
 AI is read-only. It never SSH-es, never runs playbooks, never writes NetBox.
 
@@ -53,7 +54,7 @@ AI is read-only. It never SSH-es, never runs playbooks, never writes NetBox.
 Installer preflight:
 
 - 2 CPU (4 is more comfortable)
-- 4 GB RAM (8 GB recommended)
+- 4 GB RAM (8 GB recommended; bundled NetBox adds ~1–2 GB)
 - 10 GB free disk (40 GB recommended)
 - Ubuntu Server 22.04 or 24.04 LTS
 - Outbound internet on first install (GitHub + container registries)
@@ -148,7 +149,7 @@ Guided wizard:
 | `--enable-ai yes\|no` | `yes` downloads the GGUF. ForgeRCA still works without it |
 | `--enable-discovery yes\|no` | Default yes |
 | `--discovery-cidrs 10.20.30.0/24,10.10.0.0/24` | TCP 22/80/443/9100/9182 + SNMP GET UDP/161 + HTTP /metrics on :9182/:9100 when a host is alive |
-| `--netbox-url URL` | External NetBox only; token goes in secrets |
+| `--netbox-url URL` | Point Core at an **external** NetBox; bundled still starts unless you stop it |
 | `--offline` | Do not pull images |
 
 After install, verify:
@@ -168,11 +169,13 @@ From a laptop use the **VM IP**:
 
 - ForgeSRE: `http://<VM-IP>:8080`
 - Grafana: `http://<VM-IP>:3000` (user `admin`)
+- NetBox: `http://<VM-IP>:8001` (user `admin`, email `admin@forgesre.local`; password in `secrets/secrets.env`)
 
 ```bash
 sudo ufw allow OpenSSH
 sudo ufw allow 8080/tcp
 sudo ufw allow 3000/tcp
+sudo ufw allow 8001/tcp
 sudo ufw enable
 ```
 
@@ -255,9 +258,9 @@ system:
 inventory:
   provider: local       # local | netbox
   netbox:
-    enabled: false
-    mode: external
-    url: "https://netbox.example.local"
+    enabled: true
+    mode: bundled          # bundled | external | disabled
+    url: "http://127.0.0.1:8001"
 
 discovery:
   enabled: true
@@ -324,6 +327,9 @@ FORGESRE_HTTP_PORT=8080
 GRAFANA_PORT=3000
 FORGESRE_PROFILE=standard
 COMPOSE_PROFILES=          # empty | ai | mailbox | ai,mailbox
+# NetBox is default-on (not a profile). UI :8001
+NETBOX_PORT=8001
+NETBOX_URL=http://127.0.0.1:8001
 FORGESRE_LLM_THREADS=8     # llama.cpp CPU threads (fetch-llm sets nproc-2)
 ```
 
@@ -350,6 +356,13 @@ SECRET_KEY=
 SMTP_USERNAME=
 SMTP_PASSWORD=
 SNMP_COMMUNITY=public
+NETBOX_API_TOKEN=
+NETBOX_SUPERUSER_NAME=admin
+NETBOX_SUPERUSER_EMAIL=admin@forgesre.local
+NETBOX_SUPERUSER_PASSWORD=
+NETBOX_DB_PASSWORD=
+NETBOX_REDIS_PASSWORD=
+NETBOX_SECRET_KEY=
 ```
 
 Directory `secrets/` mode `700`, file `600`. UI users created in Administration live in Postgres as bcrypt hashes — not in this file.
@@ -466,7 +479,7 @@ git pull origin main
 ./forgesre snmp
 ```
 
-`./forgesre update` = doctor (warn ok) → backup → render-monitoring → compose pull/up (including **snmp-exporter** on `127.0.0.1:9116`) → doctor. It does **not** regenerate passwords. Host backup dumps Postgres via `docker compose exec postgres` (no sqlalchemy on the host). A backup failure is a clear error; update still starts the stack.
+`./forgesre update` = doctor (warn ok) → backup → render-monitoring → NetBox secrets → compose pull/up (including **snmp-exporter** on `127.0.0.1:9116` and **NetBox** on `:8001`) → wait for NetBox `/login/` (migrations can take several minutes; doctor stays yellow until then) → doctor. It does **not** regenerate passwords. Host backup dumps Postgres via `docker compose exec postgres` (no sqlalchemy on the host). A backup failure is a clear error; update still starts the stack.
 
 Platform backup files: `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (one folder per run). Restore is not silent — `./forgesre restore FOLDER` prints the plan; add `--yes` after `docker compose stop core`, then `./forgesre update`. Administration can create/import the same archives (admin session only). Details: [`operator-handbook.md`](operator-handbook.md) (Platform backup).
 

@@ -47,6 +47,7 @@ EXCLUDED_ALWAYS = [
     "Postgres data dir (data/postgres) — logical dump is used instead",
     "Nested archives under data/backups/",
     "Optional mailbox mailboxes (data/dms) unless you copy them separately",
+    "NetBox database (same Postgres instance, database netbox) and data/netbox media",
 ]
 
 
