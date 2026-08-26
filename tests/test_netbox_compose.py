@@ -45,9 +45,9 @@ def test_netbox_status_marks_connect_as_starting():
 
 
 def test_doctor_netbox_warn_when_starting(monkeypatch):
-    monkeypatch.setattr("app.api.settings.netbox_enabled", True)
-    monkeypatch.setattr("app.api.settings.netbox_url", "http://127.0.0.1:8001")
-    monkeypatch.setattr("app.api.settings.netbox_token", "token")
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", "token")
 
     def _status(url, token, timeout=5.0):
         return {"ok": False, "starting": True, "why": "NetBox is not answering yet (first boot runs database migrations)"}
@@ -67,9 +67,9 @@ def test_doctor_netbox_warn_when_starting(monkeypatch):
 
 
 def test_doctor_netbox_ok_when_api_answers(monkeypatch):
-    monkeypatch.setattr("app.api.settings.netbox_enabled", True)
-    monkeypatch.setattr("app.api.settings.netbox_url", "http://127.0.0.1:8001")
-    monkeypatch.setattr("app.api.settings.netbox_token", "token")
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", "token")
     monkeypatch.setattr("app.netbox.netbox_status", lambda *a, **k: {"ok": True})
     monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
     payload = doctor_payload(force=True)
