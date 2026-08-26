@@ -290,3 +290,121 @@ def test_reachability_snapshot_defaults_yellow_and_labels():
     assert linux.ping_status == "green"
     assert linux.exporter_status == "red"
 
+
+def test_ping_badge_three_colors():
+    from app.asset_probe import ping_badge_color, ping_badge_from_stored
+
+    assert ping_badge_color(True, False) == "green"
+    assert ping_badge_color(True, True) == "green"
+    assert ping_badge_color(False, True) == "yellow"
+    assert ping_badge_color(False, False) == "red"
+    assert ping_badge_color(None, False) == "yellow"
+    assert ping_badge_from_stored("red", "green") == "yellow"
+    assert ping_badge_from_stored("red", "red") == "red"
+    assert ping_badge_from_stored("green", "red") == "green"
+    assert ping_badge_from_stored(None, None) == "yellow"
+
+
+def test_icmp_fail_metrics_ok_is_yellow_ping_not_dead():
+    from types import SimpleNamespace
+
+    from app.asset_probe import apply_probe_to_asset, ping_detail_from_probe, reachability_snapshot
+
+    item = {
+        "asset_id": "DESKTOP-CG81N3J",
+        "hostname": "DESKTOP-CG81N3J",
+        "ip": "10.89.11.60",
+        "type": "Windows Server",
+        "scrape_address": "10.89.11.60:9182",
+    }
+    fetcher = _metrics_map(
+        {"http://10.89.11.60:9182/metrics": (200, "# HELP windows_cpu_time_total\nwindows_cpu_time_total 1\n")}
+    )
+    result = probe_target(item, ping_runner=_ping_fail, metrics_fetcher=fetcher)
+    assert result.icmp.ok is False
+    assert result.metrics.ok is True
+    assert result.overall == "PASS"
+    assert result.ping_color == "yellow"
+    assert result.icmp.mark == "FAIL"
+    detail = ping_detail_from_probe(result)
+    assert "exporter reachable" in detail.lower() or "unused/blocked" in detail.lower()
+    asset = SimpleNamespace(
+        asset_id=item["asset_id"],
+        ip=item["ip"],
+        type=item["type"],
+        monitoring_profile="windows-standard",
+        scrape_address=item["scrape_address"],
+        ping_status=None,
+        ping_detail=None,
+        exporter_status=None,
+        exporter_detail=None,
+        probe_checked_at=None,
+    )
+    apply_probe_to_asset(asset, result)
+    assert asset.ping_status == "yellow"
+    assert asset.exporter_status == "green"
+    snap = reachability_snapshot(asset)
+    assert snap["ping"] == "yellow"
+    assert snap["exporter"] == "green"
+    live = reachability_snapshot(asset, result)
+    assert live["ping"] == "yellow"
+    assert live["exporter"] == "green"
+    text = format_report([result], color=False)
+    assert "FAIL" in text
+    assert "PASS" in text
+
+
+def test_icmp_fail_metrics_fail_is_red_ping():
+    item = {
+        "asset_id": "ghost-01",
+        "ip": "10.10.10.99",
+        "type": "Linux Server",
+        "scrape_address": "10.10.10.99:9100",
+    }
+    result = probe_target(item, ping_runner=_ping_fail, metrics_fetcher=_metrics_map({}))
+    assert result.icmp.ok is False
+    assert result.metrics.ok is False
+    assert result.ping_color == "red"
+
+
+def test_icmp_fail_extra_9182_ok_is_yellow_ping():
+    item = {
+        "asset_id": "win-01",
+        "hostname": "win-01",
+        "ip": "10.10.10.60",
+        "type": "Windows Server",
+        "scrape_address": "10.10.10.60:9100",
+    }
+    fetcher = _metrics_map(
+        {
+            "http://10.10.10.60:9100/metrics": (None, ""),
+            "http://10.10.10.60:9182/metrics": (200, "# HELP windows_cpu_time_total\n"),
+        }
+    )
+    result = probe_target(item, ping_runner=_ping_fail, metrics_fetcher=fetcher)
+    assert result.metrics.ok is False
+    assert result.extra and result.extra[0].ok is True
+    assert result.ping_color == "yellow"
+
+
+def test_stored_icmp_red_exporter_green_snapshot_is_yellow():
+    from types import SimpleNamespace
+
+    from app.asset_probe import reachability_snapshot
+
+    win = SimpleNamespace(
+        asset_id="DESKTOP-CG81N3J",
+        ip="10.89.11.60",
+        type="Windows Server",
+        monitoring_profile="windows-standard",
+        scrape_address="10.89.11.60:9182",
+        ping_status="red",
+        ping_detail="no reply",
+        exporter_status="green",
+        exporter_detail="windows_exporter :9182/metrics",
+        probe_checked_at=None,
+    )
+    snap = reachability_snapshot(win)
+    assert snap["ping"] == "yellow"
+    assert snap["exporter"] == "green"
+

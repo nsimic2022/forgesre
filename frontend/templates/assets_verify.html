@@ -37,7 +37,7 @@
         <div class="muted">{{ row.ip or "—" }}</div>
       </td>
       <td>{{ row.class }}</td>
-      <td><span class="verify-mark {{ row.icmp.mark|lower }}">{{ row.icmp.mark }}</span></td>
+      <td><span class="verify-mark {{ row.ping_color }}">{{ row.icmp.mark }}</span></td>
       <td><span class="verify-mark {{ row.port.mark|lower }}">{{ row.port.mark }}</span></td>
       <td><span class="verify-mark {{ row.prom.mark|lower }}">{{ row.prom.mark }}</span></td>
       <td><span class="verify-mark {{ row.target.mark|lower }}">{{ row.target.mark }}</span></td>

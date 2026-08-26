@@ -158,6 +158,10 @@ class AssetProbe:
             return "FAIL"
         return "SKIP"
 
+    @property
+    def ping_color(self) -> str:
+        return ping_badge_color(self.icmp.ok, scrape_answers(self.metrics.ok, self.extra))
+
 
 def _run_ping(host: str, timeout: float) -> tuple[int, str, str]:
     wait = max(1, int(round(timeout)))
@@ -304,6 +308,46 @@ def check_color(ok: bool | None) -> str:
     return "yellow"
 
 
+def scrape_answers(metrics_ok: bool | None, extra: list[CheckResult] | None = None) -> bool:
+    """True when /metrics or SNMP (or a fallback exporter port) answered."""
+    if metrics_ok is True:
+        return True
+    return any(item.ok is True for item in (extra or []))
+
+
+def ping_badge_color(icmp_ok: bool | None, scrape_ok: bool) -> str:
+    """Ping pill: green ICMP; yellow ICMP-fail but scrape works; red both down.
+
+    Typical Windows: ICMP unused/blocked, windows_exporter :9182 still scrapes.
+    Do not require opening ICMP or SSH/22.
+    """
+    if icmp_ok is True:
+        return "green"
+    if icmp_ok is False:
+        return "yellow" if scrape_ok else "red"
+    return "yellow"
+
+
+def ping_badge_from_stored(ping: str | None, exporter: str | None) -> str:
+    """Last-known ping, remapping old ICMP-only red when exporter is already green."""
+    ping = (ping or "yellow").strip() or "yellow"
+    exporter = (exporter or "yellow").strip() or "yellow"
+    if ping == "green":
+        return "green"
+    if ping == "red" and exporter == "green":
+        return "yellow"
+    return ping
+
+
+def ping_detail_from_probe(probe: AssetProbe) -> str:
+    detail = (probe.icmp.detail or "").strip()
+    if probe.icmp.ok is False and scrape_answers(probe.metrics.ok, probe.extra):
+        note = "ICMP unused/blocked, exporter reachable"
+        if note.lower() not in detail.lower():
+            detail = f"{detail}; {note}" if detail else note
+    return detail[:255]
+
+
 def exporter_badge_label(item: dict[str, Any] | Any, port: int | None = None) -> str:
     if not isinstance(item, dict):
         kind = asset_kind(getattr(item, "type", "") or "", getattr(item, "monitoring_profile", "") or "")
@@ -346,8 +390,8 @@ def _checked_age_seconds(checked: datetime | None, now: datetime) -> float:
 def apply_probe_to_asset(asset: Any, probe: AssetProbe) -> None:
     from app.models import utcnow
 
-    asset.ping_status = check_color(probe.icmp.ok)
-    asset.ping_detail = (probe.icmp.detail or "")[:255]
+    asset.ping_status = probe.ping_color
+    asset.ping_detail = ping_detail_from_probe(probe)
     asset.exporter_status = check_color(probe.metrics.ok)
     asset.exporter_detail = (probe.metrics.detail or "")[:255]
     asset.probe_checked_at = utcnow()
@@ -355,15 +399,15 @@ def apply_probe_to_asset(asset: Any, probe: AssetProbe) -> None:
 
 def reachability_snapshot(asset: Any, probe: AssetProbe | None = None) -> dict[str, Any]:
     if probe is not None:
-        ping = check_color(probe.icmp.ok)
+        ping = probe.ping_color
         exporter = check_color(probe.metrics.ok)
-        ping_detail = probe.icmp.detail or ""
+        ping_detail = ping_detail_from_probe(probe)
         exporter_detail = probe.metrics.detail or ""
         label = exporter_badge_label(asset, probe.port)
         checked = getattr(asset, "probe_checked_at", None)
     else:
-        ping = getattr(asset, "ping_status", None) or "yellow"
         exporter = getattr(asset, "exporter_status", None) or "yellow"
+        ping = ping_badge_from_stored(getattr(asset, "ping_status", None), exporter)
         ping_detail = getattr(asset, "ping_detail", None) or "not probed yet"
         exporter_detail = getattr(asset, "exporter_detail", None) or "not probed yet"
         label = exporter_badge_label(asset)
@@ -658,7 +702,8 @@ def format_report(
     for row in results:
         counts[row.overall] = counts.get(row.overall, 0) + 1
         mark_color = {"PASS": GREEN, "FAIL": RED, "WARN": YELLOW, "SKIP": DIM}.get(row.overall, "")
-        icmp = paint(f"{row.icmp.mark:<6}", GREEN if row.icmp.ok else (RED if row.icmp.ok is False else DIM), color)
+        ping_paint = {"green": GREEN, "yellow": YELLOW, "red": RED}.get(row.ping_color, DIM)
+        icmp = paint(f"{row.icmp.mark:<6}", ping_paint, color)
         metrics_color = GREEN if row.metrics.ok else (RED if row.metrics.ok is False else DIM)
         metrics = paint(row.metrics.mark, metrics_color, color)
         lines.append(
