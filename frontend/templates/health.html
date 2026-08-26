@@ -17,7 +17,7 @@
   Overall:
   <span class="pill {{ health_class(doctor.overall) }}">{{ doctor.overall }}</span>
 </p>
-<p class="muted">Green = running. Yellow = paused / starting / disabled. Red = down. Open goes to that service’s GUI or metrics. Prometheus/Alertmanager listen on the appliance; use the VM host if the UI rewrote 127.0.0.1.</p>
+<p class="muted">Green = running. Yellow = paused / starting / disabled. Red = down. Open goes to that service’s GUI or metrics. Prometheus Open is Targets (scrape jobs), Alerts, Graph — not Prometheus process <code>/metrics</code>. Prometheus/Alertmanager listen on the appliance; use the VM host if the UI rewrote 127.0.0.1.</p>
 
 <div class="grid health-grid">
   {% for item in stack %}
@@ -56,7 +56,8 @@
       <td class="open-links">
         {% if item.gui %}<a href="{{ item.gui }}" target="_blank" rel="noreferrer">{{ item.gui_label }}</a>{% endif %}
         {% if item.metrics %}<a href="{{ item.metrics }}" target="_blank" rel="noreferrer">{{ item.metrics_label }}</a>{% endif %}
-        {% if not item.gui and not item.metrics %}<span class="muted">—</span>{% endif %}
+        {% if item.extra %}<a href="{{ item.extra }}" target="_blank" rel="noreferrer">{{ item.extra_label }}</a>{% endif %}
+        {% if not item.gui and not item.metrics and not item.extra %}<span class="muted">—</span>{% endif %}
       </td>
     </tr>
   {% endfor %}

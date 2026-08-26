@@ -144,10 +144,12 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
         {"id": "postgres", "gui": "", "metrics": ""},
         {
             "id": "prometheus",
-            "gui": prometheus + "/graph",
-            "gui_label": "GUI",
-            "metrics": prometheus + "/metrics",
-            "metrics_label": "Metrics",
+            "gui": prometheus + "/targets",
+            "gui_label": "Targets",
+            "metrics": prometheus + "/alerts",
+            "metrics_label": "Alerts",
+            "extra": prometheus + "/graph",
+            "extra_label": "Graph",
         },
         {
             "id": "alertmanager",
@@ -228,6 +230,8 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
                 "gui_label": spec.get("gui_label") or "Open",
                 "metrics": metrics,
                 "metrics_label": spec.get("metrics_label") or "Metrics",
+                "extra": spec.get("extra") or "",
+                "extra_label": spec.get("extra_label") or "Open",
             }
         )
     for cid, item in components.items():
@@ -249,6 +253,8 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
                 "gui_label": "Open",
                 "metrics": "",
                 "metrics_label": "Metrics",
+                "extra": "",
+                "extra_label": "Open",
             }
         )
     return rows

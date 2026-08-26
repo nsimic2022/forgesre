@@ -39,6 +39,13 @@ def test_system_health_has_open_column_and_grafana():
     assert "Core (container)" in page.text
     assert "GUI" in page.text
     assert "Metrics" in page.text
+    assert ">Targets<" in page.text
+    assert ">Alerts<" in page.text
+    assert ">Graph<" in page.text
+    assert "/targets" in page.text
+    assert 'href="http://testserver:9/targets"' in page.text
+    assert 'href="http://testserver:9/alerts"' in page.text
+    assert 'href="http://testserver:9/graph"' in page.text
     db.close()
 
 
