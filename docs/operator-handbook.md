@@ -61,8 +61,8 @@ Seeded on first start:
 | Asset `forge-demo-01` | Demo Linux host `10.10.10.20` with owner contacts (`platform@forgesre.local`, phone) and a closed HighCPU history row |
 | Asset `forge-demo-win-01` | Seeded Windows lab host `10.10.10.21` (not scraped; real Windows uses windows_exporter :9182) |
 | Asset `forge-demo-sw-01` | Seeded network lab switch `10.10.10.22` (not a live SNMP walk) |
-| Playbooks `CPU-HIGH`, `DISK-FULL`, `HOST-UNREACHABLE`, `NETWORK-UNREACHABLE`, `WINDOWS-UNREACHABLE` | Guidance steps only |
-| Playrules `high-cpu`, `high-disk`, `snmp-down`, `node-exporter-down`, `node-filesystem`, `node-cpu`, `windows-cpu`, `windows-exporter-down`, `windows-filesystem` | Demo gauges, SNMP `up`, `node_exporter`, and `windows_exporter` |
+| Playbooks `CPU-HIGH`, `DISK-FULL`, `MEMORY-HIGH`, `HOST-UNREACHABLE`, `NETWORK-UNREACHABLE`, `WINDOWS-UNREACHABLE` | Guidance steps only |
+| Playrules `high-cpu`, `high-disk`, `snmp-down`, `node-exporter-down`, `node-filesystem`, `node-cpu`, `node-memory`, `windows-cpu`, `windows-exporter-down`, `windows-filesystem`, `windows-memory` | Demo gauges, SNMP `up`, `node_exporter`, and `windows_exporter` |
 | Escalation `Default warning` | 0 / 15 / 30 minutes → generated email |
 | Discovery candidate `10.20.30.41` | Demo row on `/discovery` so you can click Approve |
 
@@ -284,7 +284,7 @@ The Assets table shows **Ping** and **:9100 / :9182 / SNMP** color dots after th
 
 On the asset page, **Detect OS / scrape port** re-runs the same probe and fills type + scrape. You can override afterwards.
 
-The same page has a **right-hand Machine metrics** panel (two columns; stacks on a narrow window). Each metric is **one line** (name · value · bar · color · threshold) so a high % does not clip the threshold. Glance at bundled class metrics from Prometheus: Linux `node_` CPU/mem/disk, Windows `windows_` the same idea, network SNMP `up` only. Tiles match the same way verify does (`up{asset="<id>"}` first, then hostname, then `instance=<scrape>` such as `IP:9182`). Missing series stay **yellow** (`not collecting`) — never a fake 0%. When verify PROM is PASS, Collecting is green. Colors follow this asset’s Add/Edit checklist (else bundled alerts/playrules: Linux CPU **95%**, Windows CPU **90%**, demo gauges **80%**). A small **Edit** on the tile row opens that host’s Alarms. `forge-demo-*` rows and discovery seed `10.20.30.41` are labeled **DEMO**. Grafana is unchanged.
+The same page has a **right-hand Machine metrics** panel (two columns; stacks on a narrow window). Each metric is **one line** (name · value · bar · color · threshold) so a high % does not clip the threshold. Glance at bundled class metrics from Prometheus: Linux `node_` CPU/mem/disk, Windows `windows_` the same idea, network SNMP `up` only. Tiles match the same way verify does (`up{asset="<id>"}` first, then hostname, then `instance=<scrape>` such as `IP:9182`). Missing series stay **yellow** (`not collecting`) — never a fake 0%. When verify PROM is PASS, Collecting is green. Colors follow this asset’s Add/Edit checklist (else bundled alerts/playrules: Linux CPU **95%**, Linux/Windows memory and disk **90%**, Windows CPU **90%**, demo gauges **80%**). A small **Edit** on the tile row opens that host’s Alarms. `forge-demo-*` rows and discovery seed `10.20.30.41` are labeled **DEMO**. Grafana is unchanged.
 
 On **Add asset / Edit** (not a third column on the Assets **list**), the form is **hostname | IP | Alarms**. Keep type **Auto (detect exporter)**. The Alarms checklist (cpu / mem / disk / up, enable + threshold %) sits in the third column beside hostname/IP, not a full-width block below. Detect also shows which bundled families the exporter actually exposes. Stored on the asset (`alarms` JSON). **Save** and **Cancel** are at the bottom (Cancel returns to the asset page or the list). Tiles use that threshold for red/green. Prometheus alert rules stay global — ForgeSRE skips opening an incident for a bundled alert when the alarm is disabled or the webhook value is below the asset threshold. Until you change `monitoring/alerts.yml` / `alerts.local.yml`, Prometheus may still fire; the incident list stays quiet.
 
@@ -404,8 +404,8 @@ Dashboard **Run demo → Windows CPU** still uses lab asset `forge-demo-win-01`.
 V0.6+ bundled alert rules (`monitoring/alerts.yml`) watch:
 
 - **Demo gauges on Core** (`forgesre_demo_cpu_percent`, `forgesre_demo_disk_percent`) — `forge-demo-01` only
-- **node_exporter** (`NodeExporterDown`, `NodeFilesystemUsageHigh`, `NodeCPUHigh`) for HTTP SD targets with `job=linux-standard`
-- **windows_exporter** (`WindowsExporterDown`, `WindowsFilesystemUsageHigh`, `WindowsCPUHigh`) for HTTP SD targets with `job=windows-standard`
+- **node_exporter** (`NodeExporterDown`, `NodeFilesystemUsageHigh`, `NodeCPUHigh`, `NodeMemoryHigh`) for HTTP SD targets with `job=linux-standard`
+- **windows_exporter** (`WindowsExporterDown`, `WindowsFilesystemUsageHigh`, `WindowsCPUHigh`, `WindowsMemoryHigh`) for HTTP SD targets with `job=windows-standard`
 - **SNMP** (`SnmpDeviceUnreachable`, `NetworkInterfaceDown`)
 
 Site-specific extras go in `monitoring/alerts.local.yml` (copy the `.example`; gitignored), then `./forgesre render-monitoring`.
@@ -501,6 +501,11 @@ So if Prometheus fires `alertname: HighCPU`, the seeded rule `high-cpu` matches 
 | `node-exporter-down` | `NodeExporterDown` | `HOST-UNREACHABLE` |
 | `node-filesystem` | `NodeFilesystemUsageHigh` | `DISK-FULL` |
 | `node-cpu` | `NodeCPUHigh` | `CPU-HIGH` |
+| `node-memory` | `NodeMemoryHigh` | `MEMORY-HIGH` |
+| `windows-cpu` | `WindowsCPUHigh` | `CPU-HIGH` |
+| `windows-filesystem` | `WindowsFilesystemUsageHigh` | `DISK-FULL` |
+| `windows-memory` | `WindowsMemoryHigh` | `MEMORY-HIGH` |
+| `windows-exporter-down` | `WindowsExporterDown` | `WINDOWS-UNREACHABLE` |
 
 API: `POST /api/v1/playrules` with `name`, `condition` (object), `playbook_id`, `severity`.
 
@@ -683,7 +688,7 @@ Goal: host `app-01` at `10.10.10.50` appears under Assets and is scraped on `:91
 
 Optional discovery path: put `10.10.10.0/24` in `discovery.cidrs`, Scan now, Approve the `10.10.10.50` candidate instead of the manual form.
 
-This still will **not** open `INC-…` until a Prometheus alert fires with a matching playrule. Bundled `NodeExporterDown` / `NodeFilesystemUsageHigh` / `NodeCPUHigh` already match seeded playrules once node_exporter is scraped. Custom thresholds: §15.
+This still will **not** open `INC-…` until a Prometheus alert fires with a matching playrule. Bundled `NodeExporterDown` / `NodeFilesystemUsageHigh` / `NodeCPUHigh` / `NodeMemoryHigh` already match seeded playrules once node_exporter is scraped. Custom thresholds: §15.
 
 ### Windows server (windows_exporter)
 
@@ -708,7 +713,7 @@ ICMP PASS is L3 only. METRICS PASS (or curl printing `# HELP` / `windows_`) is t
 
 Do not use Dashboard **Run demo → Windows CPU** as proof of live scrape. That opens a DEMO incident on `forge-demo-win-01` without talking to windows_exporter.
 
-Bundled `WindowsExporterDown` / `WindowsFilesystemUsageHigh` / `WindowsCPUHigh` match seeded playrules `windows-exporter-down` / `windows-filesystem` / `windows-cpu`.
+Bundled `WindowsExporterDown` / `WindowsFilesystemUsageHigh` / `WindowsCPUHigh` / `WindowsMemoryHigh` match seeded playrules `windows-exporter-down` / `windows-filesystem` / `windows-cpu` / `windows-memory`.
 
 ### Network switch (SNMP)
 

@@ -70,6 +70,15 @@ groups:
           summary: "CPU high on {{ $labels.asset }}"
           description: "CPU usage is {{ $value }}% on {{ $labels.asset }}."
 
+      - alert: NodeMemoryHigh
+        expr: 100 * (1 - (node_memory_MemAvailable_bytes{job="linux-standard"} / node_memory_MemTotal_bytes{job="linux-standard"})) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memory high on {{ $labels.asset }}"
+          description: "Memory usage is {{ $value }}% on {{ $labels.asset }}."
+
   - name: forgesre-windows
     rules:
       - alert: WindowsExporterDown
@@ -98,3 +107,12 @@ groups:
         annotations:
           summary: "Windows CPU high on {{ $labels.asset }}"
           description: "CPU usage is {{ $value }}% on {{ $labels.asset }}."
+
+      - alert: WindowsMemoryHigh
+        expr: 100 * (1 - (windows_os_physical_memory_free_bytes{job="windows-standard"} / windows_cs_physical_memory_bytes{job="windows-standard"})) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Windows memory high on {{ $labels.asset }}"
+          description: "Memory usage is {{ $value }}% on {{ $labels.asset }}."

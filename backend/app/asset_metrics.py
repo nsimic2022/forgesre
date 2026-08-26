@@ -28,6 +28,7 @@ _ALERT_CLASS = {
     "NodeExporterDown": "linux",
     "WindowsCPUHigh": "windows",
     "WindowsFilesystemUsageHigh": "windows",
+    "WindowsMemoryHigh": "windows",
     "WindowsExporterDown": "windows",
     "SnmpDeviceUnreachable": "network",
 }
@@ -40,6 +41,7 @@ _ALERT_TILE = {
     "NodeMemoryHigh": "memory_percent",
     "WindowsCPUHigh": "cpu_percent",
     "WindowsFilesystemUsageHigh": "disk_percent",
+    "WindowsMemoryHigh": "memory_percent",
 }
 
 _PLAYRULE_METRIC = {

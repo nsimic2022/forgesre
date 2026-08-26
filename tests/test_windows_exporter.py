@@ -12,7 +12,7 @@ from app.inventory import (
     upsert_candidate,
 )
 from app.main import app
-from app.models import Asset, Playrule, User
+from app.models import Asset, Playbook, Playrule, User
 from app.security import hash_password
 from app.seed import DEMO_WIN_ASSET, seed
 from discovery import DEFAULT_PORTS, classify
@@ -98,8 +98,14 @@ def test_windows_playrules_and_alerts_are_seeded():
     assert "windows-cpu" in names
     assert "windows-exporter-down" in names
     assert "windows-filesystem" in names
+    assert "windows-memory" in names
     down = db.query(Playrule).filter_by(name="windows-exporter-down").one()
     assert down.condition.get("alertname") == "WindowsExporterDown"
+    memory = db.query(Playrule).filter_by(name="windows-memory").one()
+    assert memory.condition.get("alertname") == "WindowsMemoryHigh"
+    assert memory.condition.get("value") == 90
+    book = db.query(Playbook).filter_by(id=memory.playbook_id).one()
+    assert book.slug == "memory-high"
     db.close()
 
 
