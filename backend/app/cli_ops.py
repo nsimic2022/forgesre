@@ -257,30 +257,46 @@ def _is_demo_row(item: dict[str, Any]) -> bool:
     return is_lab_inventory_row(item)
 
 
+def asset_ref_tokens(rows: list[Any]) -> list[str]:
+    """TAB tokens: asset numbers, ids, then hostnames that differ from id."""
+    numbered: list[tuple[int, str]] = []
+    ids: list[str] = []
+    hosts: list[str] = []
+    seen: set[str] = set()
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        raw = item.get("number")
+        try:
+            numbered.append((int(raw), str(raw)))
+        except (TypeError, ValueError):
+            pass
+        aid = str(item.get("asset_id") or "").strip()
+        if aid and aid not in seen:
+            ids.append(aid)
+            seen.add(aid)
+        host = str(item.get("hostname") or "").strip()
+        if host and host not in seen:
+            hosts.append(host)
+            seen.add(host)
+    out: list[str] = []
+    for _n, text in sorted(numbered, key=lambda pair: pair[0]):
+        if text not in out:
+            out.append(text)
+    out.extend(ids)
+    out.extend(hosts)
+    return out
+
+
 def cmd_asset_refs(port: str) -> None:
-    """Asset numbers then ids, one per line, for bash TAB."""
+    """Asset numbers, ids, then hostnames, one per line, for bash TAB."""
     jar, _me_user = ensure_jar(port)
     try:
         rows = get_json(port, jar, "/api/v1/assets")
         if not isinstance(rows, list):
             return
-        numbered: list[tuple[int, str]] = []
-        ids: list[str] = []
-        for item in rows:
-            if not isinstance(item, dict):
-                continue
-            raw = item.get("number")
-            try:
-                numbered.append((int(raw), str(raw)))
-            except (TypeError, ValueError):
-                pass
-            aid = str(item.get("asset_id") or "").strip()
-            if aid:
-                ids.append(aid)
-        for _n, text in sorted(numbered, key=lambda pair: pair[0]):
-            print(text)
-        for aid in ids:
-            print(aid)
+        for token in asset_ref_tokens(rows):
+            print(token)
     except (subprocess.CalledProcessError, json.JSONDecodeError, OSError):
         return
     finally:
@@ -292,7 +308,7 @@ def cmd_assets(port: str, args: list[str]) -> None:
     selector = ""
     for item in args:
         if item in {"-h", "--help"}:
-            raise SystemExit("usage: ./forgesre assets [number-or-id-or-ip]")
+            raise SystemExit("usage: ./forgesre assets [number-or-id-or-hostname-or-ip]")
         if item.startswith("-"):
             raise SystemExit(f"unknown flag: {item}")
         selector = item
@@ -309,7 +325,7 @@ def cmd_assets(port: str, args: list[str]) -> None:
     if selector:
         rows = [row for row in rows if isinstance(row, dict) and asset_selector_hit(row, selector)]
         if not rows:
-            raise SystemExit(f"no asset matching {selector!r}. Try an asset number, id, hostname, or IP.")
+            raise SystemExit(f"no asset matching {selector!r}. Try an asset number (#), id, hostname, or IP.")
     print(f"{'#':<5} {'ASSET':<22} {'IP':<16} {'TYPE':<22} {'SCRAPE / SNMP'}")
     print("-" * 84)
     for item in rows:
@@ -335,7 +351,7 @@ def cmd_ping(port: str, args: list[str]) -> None:
             try:
                 timeout = float(args[i + 1])
             except ValueError:
-                raise SystemExit("usage: ./forgesre ping [--timeout seconds] [--demo] [number-or-id-or-ip]")
+                raise SystemExit("usage: ./forgesre ping [--timeout seconds] [--demo] [number-or-id-or-hostname-or-ip]")
             if timeout <= 0:
                 raise SystemExit("--timeout must be > 0")
             i += 2
@@ -345,7 +361,7 @@ def cmd_ping(port: str, args: list[str]) -> None:
             i += 1
             continue
         if item in {"-h", "--help"}:
-            raise SystemExit("usage: ./forgesre ping [--timeout seconds] [--demo] [number-or-id-or-ip]")
+            raise SystemExit("usage: ./forgesre ping [--timeout seconds] [--demo] [number-or-id-or-hostname-or-ip]")
         if item.startswith("-"):
             raise SystemExit(f"unknown flag: {item}")
         selector = item
@@ -372,7 +388,7 @@ def cmd_ping(port: str, args: list[str]) -> None:
         chosen = [ad_hoc_item(selector)]
         skipped_demo = 0
     if selector and not chosen:
-        raise SystemExit(f"no asset matching {selector!r}. Try an asset number, id, hostname, or IP.")
+            raise SystemExit(f"no asset matching {selector!r}. Try an asset number (#), id, hostname, or IP.")
     if not chosen:
         print("No assets with an IP to probe.")
         if skipped_demo:
@@ -398,7 +414,7 @@ def cmd_verify(port: str, args: list[str]) -> None:
                 timeout = float(args[i + 1])
             except ValueError:
                 raise SystemExit(
-                    "usage: ./forgesre verify [--timeout seconds] [--demo] [number-or-id-or-name]"
+                    "usage: ./forgesre verify [--timeout seconds] [--demo] [number-or-id-or-hostname-or-ip]"
                 )
             if timeout <= 0:
                 raise SystemExit("--timeout must be > 0")
@@ -410,7 +426,7 @@ def cmd_verify(port: str, args: list[str]) -> None:
             continue
         if item in {"-h", "--help"}:
             raise SystemExit(
-                "usage: ./forgesre verify [--timeout seconds] [--demo] [number-or-id-or-name]"
+                "usage: ./forgesre verify [--timeout seconds] [--demo] [number-or-id-or-hostname-or-ip]"
             )
         if item.startswith("-"):
             raise SystemExit(f"unknown flag: {item}")
@@ -439,7 +455,7 @@ def cmd_verify(port: str, args: list[str]) -> None:
         is_demo=_is_demo_row,
     )
     if selector and not chosen:
-        raise SystemExit(f"no asset matching {selector!r}. Try an asset number, id, hostname, or IP.")
+            raise SystemExit(f"no asset matching {selector!r}. Try an asset number (#), id, hostname, or IP.")
     if not chosen:
         print("No assets to verify.")
         if skipped_demo:

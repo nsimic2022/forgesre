@@ -246,6 +246,9 @@ def test_assets_list_shows_edit_clone_remove():
     assert listed.status_code == 200
     assert b"Edit asset" in listed.content
     assert b'name="hostname"' in listed.content
+    assert b'name="asset_id"' in listed.content
+    assert b"readonly" in listed.content
+    assert b"cannot change" in listed.content
     assert b">Verify<" in listed.content
     assert b">Remove<" in listed.content
     assert b"/assets/forge-demo-01/verify" in listed.content
@@ -310,7 +313,7 @@ def test_asset_table_actions_cell_is_table_cell_not_flex_td():
     assert ".asset-table td.asset-actions" in css
     assert "display: table-cell" in css
     assert "td.row-actions" in css
-    assert "app.css?v=asset-type-1" in base
+    assert "app.css?v=asset-id-first-1" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():
@@ -697,5 +700,111 @@ def test_asset_numbers_are_stable_searchable_and_not_reused():
     assert all(row.number for row in restored)
     assert len({row.number for row in restored}) == len(restored)
     assert restored[0].number == 1
+    db.close()
+
+
+def test_create_typed_asset_id_independent_of_hostname():
+    from app.inventory import create_manual_asset, validate_asset_id
+
+    assert validate_asset_id("WIN10-GP") == "win10-gp"
+    try:
+        validate_asset_id("win10_gp")
+        raise AssertionError("underscore should be rejected")
+    except ValueError as exc:
+        assert "hyphen" in str(exc).lower() or "lowercase" in str(exc).lower()
+    try:
+        validate_asset_id("-win10")
+        raise AssertionError("leading hyphen should be rejected")
+    except ValueError:
+        pass
+
+    db = _db()
+    host = create_manual_asset(
+        db,
+        hostname="DESKTOP-CG81N3J",
+        asset_id="win10-gp",
+        ip="10.66.10.12",
+        type="Windows Server",
+        actor="tester",
+    )
+    assert host.asset_id == "win10-gp"
+    assert host.hostname == "DESKTOP-CG81N3J"
+    try:
+        create_manual_asset(
+            db,
+            hostname="OTHER-PC",
+            asset_id="win10-gp",
+            ip="10.66.10.13",
+            type="Windows Server",
+            actor="tester",
+            require_new=True,
+        )
+        raise AssertionError("duplicate asset_id should be rejected")
+    except ValueError as exc:
+        assert "win10-gp" in str(exc)
+    db.close()
+
+
+def test_html_add_posts_asset_id_edit_keeps_it():
+    db = _db()
+    db.add(
+        User(
+            email="id-first@forgesre.local",
+            name="Ida",
+            password_hash=hash_password("testpass"),
+            role="analyst",
+        )
+    )
+    db.commit()
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "id-first@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    add = client.get("/assets")
+    assert add.status_code == 200
+    id_at = add.text.find('name="asset_id"')
+    host_at = add.text.find('name="hostname"')
+    ip_at = add.text.find('name="ip"')
+    assert 0 < id_at < host_at < ip_at
+    created = client.post(
+        "/assets",
+        data={
+            "asset_id": "WIN10-GP",
+            "hostname": "DESKTOP-CG81N3J",
+            "ip": "10.66.10.14",
+            "type": "Windows Server",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code in {302, 303}
+    assert created.headers.get("location", "").endswith("/assets/win10-gp")
+    page = client.get("/assets/win10-gp")
+    assert page.status_code == 200
+    assert b"DESKTOP-CG81N3J" in page.content
+    assert b"win10-gp" in page.content
+    edited = client.post(
+        "/assets/win10-gp/update",
+        data={
+            "asset_id": "should-not-apply",
+            "hostname": "DESKTOP-CG81N3J",
+            "ip": "10.66.10.15",
+            "type": "Windows Server",
+        },
+        follow_redirects=False,
+    )
+    assert edited.status_code in {302, 303}
+    body = client.get("/api/v1/assets/win10-gp")
+    assert body.status_code == 200
+    data = body.json()
+    assert data["asset_id"] == "win10-gp"
+    assert data["hostname"] == "DESKTOP-CG81N3J"
+    assert data["ip"] == "10.66.10.15"
+    missing = client.get("/api/v1/assets/should-not-apply")
+    assert missing.status_code == 404
+    edit_form = client.get("/assets?edit=win10-gp")
+    assert "Set at add; cannot change" in edit_form.text
+    assert "readonly" in edit_form.text
     db.close()
 

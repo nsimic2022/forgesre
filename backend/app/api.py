@@ -697,6 +697,7 @@ def discovery_netbox_sync(db: Session = Depends(get_db), user: User = Depends(re
 
 class AssetBody(BaseModel):
     hostname: str
+    asset_id: str = ""
     ip: str = ""
     type: str = "Linux Server"
     environment: str = "Production"
@@ -726,6 +727,7 @@ class AssetUpdateBody(BaseModel):
 
 class AssetCloneBody(BaseModel):
     hostname: str | None = None
+    asset_id: str | None = None
     ip: str | None = None
     type: str | None = None
     environment: str | None = None
@@ -750,6 +752,7 @@ def create_asset_api(
         asset = create_manual_asset(
             db,
             hostname=body.hostname,
+            asset_id=body.asset_id,
             ip=body.ip,
             type=body.type,
             environment=body.environment,
@@ -811,9 +814,18 @@ def clone_asset_api(
         raise HTTPException(status_code=404, detail="asset not found")
     defaults = clone_prefill(db, item)
     try:
+        posted_host = (body.hostname or "").strip()
+        posted_id = (body.asset_id or "").strip() if body.asset_id is not None else ""
+        if posted_id:
+            new_id = posted_id
+        elif posted_host:
+            new_id = ""
+        else:
+            new_id = defaults.get("asset_id") or ""
         asset = create_manual_asset(
             db,
-            hostname=(body.hostname or "").strip() or defaults["hostname"],
+            hostname=posted_host or defaults["hostname"],
+            asset_id=new_id,
             ip=body.ip if body.ip is not None else "",
             type=(body.type or "").strip() or defaults["type"],
             environment=(body.environment or "").strip() or defaults["environment"],

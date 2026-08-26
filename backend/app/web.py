@@ -416,6 +416,7 @@ def asset_create(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     hostname: str = Form(...),
+    asset_id: str = Form(""),
     ip: str = Form(""),
     type: str = Form(AUTO_ASSET_TYPE),
     environment: str = Form("Production"),
@@ -452,6 +453,7 @@ def asset_create(
         asset = create_manual_asset(
             db,
             hostname=hostname,
+            asset_id=asset_id,
             ip=ip,
             type=type,
             environment=environment,

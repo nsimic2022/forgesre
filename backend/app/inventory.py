@@ -243,17 +243,25 @@ def create_manual_asset(
     require_new: bool = False,
     cloned_from: str = "",
     alarms: dict | None = None,
+    asset_id: str = "",
 ) -> Asset:
     hostname = (hostname or "").strip()
     ip = (ip or "").strip()
     if not hostname:
         raise ValueError("hostname is required")
-    slug = asset_id_slug(hostname, ip)
+    requested = (asset_id or "").strip()
+    if requested:
+        slug = validate_asset_id(requested)
+    else:
+        slug = validate_asset_id(asset_id_slug(hostname, ip))
     existing = db.query(Asset).filter((Asset.asset_id == slug) | ((Asset.ip == ip) & (Asset.ip != ""))).first()
+    if existing is None and require_new:
+        existing = db.query(Asset).filter(Asset.hostname == hostname).first()
     if existing:
         if require_new:
             raise ValueError(
-                f"{existing.asset_id} already uses this hostname or IP — change hostname or IP before Save"
+                f"{existing.asset_id} already uses this asset id, hostname, or IP — "
+                "change Asset ID, hostname, or IP before Save"
             )
         report(
             db,
@@ -680,6 +688,26 @@ def _asset_id_from_ip(ip: str) -> str:
     return f"disc-{safe}"
 
 
+ASSET_ID_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+
+
+def normalize_asset_id(value: str) -> str:
+    return (value or "").strip().lower()
+
+
+def validate_asset_id(value: str) -> str:
+    """Short unique inventory id: lowercase letters, digits, hyphens (e.g. win10-gp)."""
+    slug = normalize_asset_id(value)
+    if not slug:
+        raise ValueError("asset_id is required")
+    if not ASSET_ID_RE.fullmatch(slug):
+        raise ValueError(
+            "asset_id must be lowercase letters, digits, and hyphens "
+            "(e.g. win10-gp), 1–63 characters, not starting or ending with a hyphen"
+        )
+    return slug
+
+
 def asset_id_slug(hostname: str, ip: str = "") -> str:
     slug = re.sub(r"[^a-zA-Z0-9-]", "-", hostname or "").strip("-").lower()
     return slug or _asset_id_from_ip(ip or "asset")
@@ -709,12 +737,37 @@ def suggest_clone_hostname(db: Session, asset: Asset) -> str:
     candidate = base
     n = 2
     while True:
-        slug = asset_id_slug(candidate, asset.ip or "")
-        clash = db.query(Asset).filter((Asset.asset_id == slug) | (Asset.hostname == candidate)).first()
+        clash = db.query(Asset).filter(Asset.hostname == candidate).first()
         if clash is None:
             return candidate
         candidate = f"{base}-{n}"
         n += 1
+
+
+def suggest_clone_asset_id(db: Session, asset: Asset) -> str:
+    """New short asset_id for Clone. Independent of hostname."""
+    from app.seed import DEMO_ASSET_PREFIX, is_demo_asset_id
+
+    raw = (asset.asset_id or "asset").strip()
+    if is_demo_asset_id(raw):
+        rest = raw
+        if rest.lower().startswith(DEMO_ASSET_PREFIX):
+            rest = rest[len(DEMO_ASSET_PREFIX) :]
+        base = f"copy-{rest}".strip("-") or "copy-asset"
+    else:
+        base = f"{raw}-copy"
+    try:
+        candidate = validate_asset_id(base)
+    except ValueError:
+        candidate = "copy-asset"
+    n = 2
+    while db.query(Asset).filter_by(asset_id=candidate).first() is not None:
+        try:
+            candidate = validate_asset_id(f"{base}-{n}")
+        except ValueError:
+            candidate = f"copy-asset-{n}"
+        n += 1
+    return candidate
 
 
 def clone_prefill(db: Session, asset: Asset) -> dict:
@@ -731,6 +784,7 @@ def clone_prefill(db: Session, asset: Asset) -> dict:
     if not scrape:
         scrape = default_scrape_address(asset.type or "", asset.ip or "", asset.monitoring_profile or "")
     return {
+        "asset_id": suggest_clone_asset_id(db, asset),
         "hostname": suggest_clone_hostname(db, asset),
         "ip": asset.ip or "",
         "type": asset.type or AUTO_ASSET_TYPE,
@@ -759,6 +813,7 @@ def _form_alarms(asset: Asset | None = None) -> dict:
 def asset_form_values(asset: Asset | None = None) -> dict:
     if asset is None:
         return {
+            "asset_id": "",
             "hostname": "",
             "ip": "",
             "type": AUTO_ASSET_TYPE,
@@ -774,6 +829,7 @@ def asset_form_values(asset: Asset | None = None) -> dict:
             "alarms": _form_alarms(),
         }
     return {
+        "asset_id": asset.asset_id or "",
         "hostname": asset.hostname or "",
         "ip": asset.ip or "",
         "type": asset.type or AUTO_ASSET_TYPE,
