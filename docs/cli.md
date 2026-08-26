@@ -28,7 +28,7 @@ Two logins:
 ./forgesre doctor          # short lights
 ./forgesre ping            # ICMP + exporter /metrics (alias: probe)
 ./forgesre ping win-01
-./forgesre verify          # live path: ICMP/exporter/SNMP → Prometheus (not test)
+./forgesre verify          # live chain: exporter → prometheus → alertmanager → core (not test)
 ./forgesre verify win-01
 ./forgesre test            # detailed report → data/reports/
 ./forgesre status          # docker compose ps
@@ -112,7 +112,7 @@ Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `
 ./forgesre help verify
 ```
 
-Path: inventory row → ICMP / exporter (`:9100` `node_` or `:9182` `windows_`) or SNMP UDP/161 → Prometheus `up` → optional last RCA facts vs PromQL. ForgeAI/LLM is listed only when enabled; verify does **not** call the LLM.
+Path: inventory row → ICMP / exporter (`:9100` `node_` or `:9182` `windows_`) or SNMP UDP/161 → Prometheus `up` + scrape target health + family series → Alertmanager reachable → last Core incident/webhook (SKIP if none). ForgeAI/LLM is listed only when enabled; verify does **not** call the LLM. Chain: `exporter → prometheus → alertmanager → core`.
 
 Classes are universal, not SKUs: Linux, Windows, Network SNMP, Unknown. Unknown or a missing exporter / no Prom target is **SKIP or FAIL with an honest reason** — never a fake green host. Seeded `forge-demo-*` rows are **lab** (label DEMO) and are not proof of a real scrape.
 

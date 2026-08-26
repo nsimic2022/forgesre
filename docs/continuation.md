@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Tuesday 25 August 2026.** Operator N: drop Mailpit; unbox Alarms on Add/Edit (same font as hostname/IP, still 3 columns); Escalation looked abandoned vs Playrules/Playbooks Cancel.
+**Wednesday 26 August 2026.** Verify chain hops (Prom target, series, Alertmanager, Core incident SKIP if none).
 
 On the Ubuntu VM N uses, resume with:
 
@@ -51,7 +51,7 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-Mailpit compose profile `mail` is gone (mailbox stays). Add/Edit Alarms is unboxed in column 3 (hostname | IP | Alarms), same font as hostname/IP. Escalation has Create + Save/Cancel like Playbooks; playrule form can pick a policy (still defaults to Default warning).
+`./forgesre verify` chain hops: Prom target (health=up), series present (`node_`/`windows_`/SNMP), Alertmanager reachable, Core last incident (SKIP if none). Same extra rows in GUI Verify. Header: `exporter → prometheus → alertmanager → core`.
 
 ---
 
@@ -65,7 +65,7 @@ git pull origin main
 ./forgesre update
 ```
 
-Hard-refresh (`/static/app.css?v=alarms-esc-1`), then **Assets** → Add/Edit is hostname | IP | Alarms (no extra card). **Escalation** has Create with Cancel next to Save.
+Hard-refresh the browser after UI/CSS changes (`/static/app.css` is not cache-busted). Then `./forgesre verify blachole` (or Assets → Verify).
 
 ---
 
