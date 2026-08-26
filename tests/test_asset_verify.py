@@ -282,14 +282,30 @@ def test_cli_ops_unknown_command_does_not_alias_verify():
 
 
 def test_demo_ids_helper_has_no_orm():
-    from app.demo_ids import DEMO_ASSET_PREFIX, is_demo_asset_id
+    from app.demo_ids import (
+        DEMO_ASSET_PREFIX,
+        DEMO_CANDIDATE_ASSET_ID,
+        DEMO_CANDIDATE_IP,
+        is_demo_asset_id,
+        is_lab_inventory,
+        is_lab_inventory_row,
+    )
 
     assert DEMO_ASSET_PREFIX == "forge-demo-"
+    assert DEMO_CANDIDATE_IP == "10.20.30.41"
+    assert DEMO_CANDIDATE_ASSET_ID == "disc-10-20-30-41"
     assert is_demo_asset_id("forge-demo-01")
     assert is_demo_asset_id("FORGE-DEMO-win-01")
     assert not is_demo_asset_id("app-01")
+    assert not is_demo_asset_id("disc-10-20-30-41")
     assert not is_demo_asset_id("")
     assert not is_demo_asset_id(None)
+    assert is_lab_inventory(asset_id="disc-10-20-30-41")
+    assert is_lab_inventory(ip="10.20.30.41")
+    assert is_lab_inventory(scrape_address="10.20.30.41:9100")
+    assert is_lab_inventory_row({"asset_id": "disc-10-20-30-41", "ip": "10.20.30.41"})
+    assert not is_lab_inventory(asset_id="disc-10-20-30-99", ip="10.20.30.99")
+    assert not is_lab_inventory(asset_id="app-01", ip="10.10.10.50")
 
 
 def _assert_no_sqlalchemy_or_seed_import(rel: str) -> None:
@@ -576,3 +592,99 @@ def test_cli_help_verify_mentions_chain():
     verify_help = subprocess.check_output(["bash", str(root / "scripts/forgesre"), "help", "verify"], text=True)
     assert "exporter → prometheus → alertmanager → core" in verify_help
     assert "not ./forgesre test" in verify_help.lower()
+    assert "10.20.30.41" in verify_help
+
+
+def test_discovery_seed_is_lab_skip_not_production_fail():
+    item = {
+        "asset_id": "disc-10-20-30-41",
+        "hostname": "disc-10-20-30-41",
+        "ip": "10.20.30.41",
+        "type": "Linux Server",
+        "scrape_address": "10.20.30.41:9100",
+        "source": "discovery",
+        "notes": "DEMO discovery seed (10.20.30.41). Not a real machine.",
+    }
+    report = verify_target(
+        item,
+        ping_runner=lambda host, timeout: (1, "", "no reply"),
+        metrics_fetcher=_metrics_map({}),
+        in_http_sd=True,
+        query_fn=lambda expr: {"value": 0.0, "query": expr},
+        targets=[
+            {
+                "health": "down",
+                "labels": {
+                    "job": "linux-standard",
+                    "instance": "10.20.30.41:9100",
+                    "asset": "disc-10-20-30-41",
+                },
+            }
+        ],
+        am_health={"ok": True, "detail": "Alertmanager reachable (/-/ready)"},
+        incident={
+            "number": "INC-0029",
+            "status": "ESCALATED",
+            "title": "node_exporter down on disc-10-20-30-41",
+        },
+        rca={
+            "incident": "INC-0029",
+            "facts": [{"text": "up is 0."}],
+            "provider": "builtin-analyst",
+        },
+        live_metrics={"up": 0.0},
+        ai_enabled=True,
+    )
+    assert report.lab is True
+    assert report.overall == "SKIP"
+    assert "DEMO" in report.overall_reason or "lab" in report.overall_reason.lower()
+    assert report.prom.ok is None
+    assert report.target.ok is None
+    assert report.series.ok is None
+    assert report.rca.ok is True
+    assert "matches down" in report.rca.detail.lower()
+    assert "unreachable" in report.rca.detail.lower()
+    assert report.llm.ok is None
+    assert "does not call the LLM" in report.llm.detail
+    assert verify_exit([report]) == 0
+    text = format_verify_report([report], color=False, detail=True)
+    assert "DEMO" in text
+    assert "10.20.30.41" in text
+    assert "not a real VM" in text.lower() or "not a production" in text.lower()
+
+
+def test_rca_pass_when_up_zero_matches_exporter_down():
+    item = {
+        "asset_id": "app-01",
+        "hostname": "app-01",
+        "ip": "10.10.10.50",
+        "type": "Linux Server",
+        "scrape_address": "10.10.10.50:9100",
+    }
+    fetcher = _metrics_map({})
+    report = verify_target(
+        item,
+        ping_runner=lambda host, timeout: (1, "", "no reply"),
+        metrics_fetcher=fetcher,
+        in_http_sd=True,
+        query_fn=lambda expr: {"value": 0.0, "query": expr},
+        targets=[
+            {
+                "health": "down",
+                "labels": {"job": "linux-standard", "instance": "10.10.10.50:9100", "asset": "app-01"},
+            }
+        ],
+        rca={
+            "incident": "INC-0008",
+            "facts": [{"text": "up is 0."}],
+            "provider": "builtin-analyst",
+        },
+        live_metrics={"up": 0.0},
+        ai_enabled=True,
+    )
+    assert report.lab is False
+    assert report.overall == "FAIL"
+    assert report.rca.ok is True
+    assert "RCA matches down" in report.rca.detail
+    assert report.llm.ok is None
+    assert "ForgeAI is enabled, but verify does not call the LLM" in report.llm.detail

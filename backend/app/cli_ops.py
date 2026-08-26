@@ -29,7 +29,7 @@ from app.asset_verify import (
     verify_target,
 )
 from app.cli_view import color_enabled, format_board, format_detail, format_history_rows
-from app.demo_ids import is_demo_asset_id
+from app.demo_ids import is_lab_inventory_row
 
 ROOT = Path(__file__).resolve().parents[2]
 SESSION_PATH = ROOT / "data" / "cli.session"
@@ -253,7 +253,7 @@ def cmd_numbers(port: str) -> None:
 
 
 def _is_demo_row(item: dict[str, Any]) -> bool:
-    return is_demo_asset_id(item.get("asset_id") or item.get("hostname"))
+    return is_lab_inventory_row(item)
 
 
 def cmd_ping(port: str, args: list[str]) -> None:

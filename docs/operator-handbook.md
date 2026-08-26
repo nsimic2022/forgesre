@@ -259,7 +259,7 @@ Who: **analyst**, engineer, or admin (`write_assets`).
 - **Edit** opens the same Add form filled in (`/assets?edit=<id>`). Hostname, type (including Auto), IP, scrape address, owner/contact, notes, environment. `asset_id` stays (Prometheus `asset=` label and history). HTTP SD is live from this table — the next Prometheus scrape drops or rewrites the target. Core’s static demo job is not this list.
 - **Clone** copies into the same form with a **new** hostname/id. Tweak before Save. Duplicate hostname or IP is rejected. NetBox id is not copied. If the source is `forge-demo-*`, the suggested name is `copy-…` (a real asset that **can** be scraped). Keep a `forge-demo-*` name only if you want another lab-only row.
 - **Remove** asks for confirm. The row leaves inventory and HTTP/SNMP SD. **Incidents stay** in History with the asset link cleared (not cascade-deleted). Discovery candidates for that IP go back to **new**. Seeded `forge-demo-*` hosts cannot be removed (Dashboard demos use them).
-- **Verify** runs the live path for that row (same as `./forgesre verify <id>`): ping, exporter port or SNMP, Prometheus `up`, scrape target health, family series (`node_` / `windows_` / SNMP), Alertmanager reachable, last Core incident (SKIP if none), last RCA vs PromQL. ForgeAI is listed only if enabled. Missing exporter = SKIP/FAIL with a reason, not a fake green host. Demo `forge-demo-*` is labeled lab. **Verify all** is on the Assets list. This is not `./forgesre test`.
+- **Verify** runs the live path for that row (same as `./forgesre verify <id>`): ping, exporter port or SNMP, Prometheus `up`, scrape target health, family series (`node_` / `windows_` / SNMP), Alertmanager reachable, last Core incident (SKIP if none), last RCA vs PromQL. ForgeAI is listed only if enabled; verify does not call the LLM. Missing exporter = SKIP/FAIL with a reason, not a fake green host. Demo `forge-demo-*` and discovery seed `10.20.30.41` (`disc-10-20-30-41`) are labeled lab and are not scraped. **Verify all** is on the Assets list. This is not `./forgesre test`.
 
 What Core does:
 
@@ -284,7 +284,7 @@ The Assets table shows **Ping** and **:9100 / :9182 / SNMP** color dots after th
 
 On the asset page, **Detect OS / scrape port** re-runs the same probe and fills type + scrape. You can override afterwards.
 
-The same page has a **right-hand Machine metrics** panel (two columns; stacks on a narrow window). Each metric is **one line** (name · value · bar · color · threshold) so a high % does not clip the threshold. Glance at bundled class metrics from Prometheus: Linux `node_` CPU/mem/disk, Windows `windows_` the same idea, network SNMP `up` only. Tiles match the same way verify does (`up{asset="<id>"}` first, then hostname, then `instance=<scrape>` such as `IP:9182`). Missing series stay **yellow** (`not collecting`) — never a fake 0%. When verify PROM is PASS, Collecting is green. Colors follow this asset’s Add/Edit checklist (else bundled alerts/playrules: Linux CPU **95%**, Windows CPU **90%**, demo gauges **80%**). A small **Edit** on the tile row opens that host’s Alarms. `forge-demo-*` rows are labeled **DEMO**. Grafana is unchanged.
+The same page has a **right-hand Machine metrics** panel (two columns; stacks on a narrow window). Each metric is **one line** (name · value · bar · color · threshold) so a high % does not clip the threshold. Glance at bundled class metrics from Prometheus: Linux `node_` CPU/mem/disk, Windows `windows_` the same idea, network SNMP `up` only. Tiles match the same way verify does (`up{asset="<id>"}` first, then hostname, then `instance=<scrape>` such as `IP:9182`). Missing series stay **yellow** (`not collecting`) — never a fake 0%. When verify PROM is PASS, Collecting is green. Colors follow this asset’s Add/Edit checklist (else bundled alerts/playrules: Linux CPU **95%**, Windows CPU **90%**, demo gauges **80%**). A small **Edit** on the tile row opens that host’s Alarms. `forge-demo-*` rows and discovery seed `10.20.30.41` are labeled **DEMO**. Grafana is unchanged.
 
 On **Add asset / Edit** (not a third column on the Assets **list**), the form is **hostname | IP | Alarms**. Keep type **Auto (detect exporter)**. The Alarms checklist (cpu / mem / disk / up, enable + threshold %) sits in the third column beside hostname/IP, not a full-width block below. Detect also shows which bundled families the exporter actually exposes. Stored on the asset (`alarms` JSON). **Save** and **Cancel** are at the bottom (Cancel returns to the asset page or the list). Tiles use that threshold for red/green. Prometheus alert rules stay global — ForgeSRE skips opening an incident for a bundled alert when the alarm is disabled or the webhook value is below the asset threshold. Until you change `monitoring/alerts.yml` / `alerts.local.yml`, Prometheus may still fire; the incident list stays quiet.
 
@@ -326,7 +326,7 @@ TCP open on 9100 or 9182 is **not** an OS pick. ICMP ping is not used for OS and
 
 `mode: automatic` used to approve with `actor=system-automatic`. Scan now **no longer writes inventory** in any mode — found hosts wait for Approve on Discovery. Seeded `forge-demo-*` lab hosts in a CIDR are skipped (not auto-approved). Prefer `semi-automatic` in the YAML so the background loop still runs.
 
-Demo candidate `10.20.30.41` is seeded so you can click Approve without a live subnet. It is labeled DEMO seed — not a Scan now hit. `./forgesre demo` puts it back if missing.
+Demo candidate `10.20.30.41` is seeded so you can click Approve without a live subnet. It is labeled DEMO seed — not a Scan now hit. After Approve it becomes `disc-10-20-30-41`, still lab: **not** in Prometheus HTTP SD, and `./forgesre verify` labels DEMO / SKIP (not a production FAIL). `./forgesre demo` puts the candidate back if missing.
 
 ### C. External NetBox (read-sync)
 
@@ -364,7 +364,7 @@ curl -fsS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
   http://127.0.0.1:8080/api/v1/sd/prometheus
 ```
 
-Each asset with a non-empty `scrape_address` becomes a target, labeled with `asset=<asset_id>` and `job=<monitoring_profile>`. Seeded `forge-demo-*` hosts are lab-only and are **not** in this list.
+Each asset with a non-empty `scrape_address` becomes a target, labeled with `asset=<asset_id>` and `job=<monitoring_profile>`. Seeded `forge-demo-*` hosts and the discovery Approve seed `10.20.30.41` are lab-only and are **not** in this list.
 
 Core itself stays on a **static** scrape so the demo HighCPU path does not depend on SD.
 

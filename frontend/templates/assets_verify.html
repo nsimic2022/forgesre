@@ -3,7 +3,7 @@
 {% block content %}
 <p><a href="/assets">← Assets</a></p>
 <h1>Verify assets</h1>
-<p class="muted">Live communication for inventory — not <code>./forgesre test</code>. Chain: <code>exporter → prometheus → alertmanager → core</code>. Classes: Linux <code>:9100</code> <code>node_</code>, Windows <code>:9182</code> <code>windows_</code>, Network SNMP, Unknown SKIP. Demo <code>forge-demo-*</code> rows are lab-only.</p>
+<p class="muted">Live communication for inventory — not <code>./forgesre test</code>. Chain: <code>exporter → prometheus → alertmanager → core</code>. Classes: Linux <code>:9100</code> <code>node_</code>, Windows <code>:9182</code> <code>windows_</code>, Network SNMP, Unknown SKIP. Demo <code>forge-demo-*</code> rows and discovery seed <code>10.20.30.41</code> are lab-only.</p>
 {% if skipped_demo %}
 <p class="muted">Skipped {{ skipped_demo }} demo lab asset(s). <a href="/assets/verify?demo=1">Include labeled DEMO</a>.</p>
 {% elif include_demo %}

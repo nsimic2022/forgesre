@@ -232,7 +232,8 @@ ping — ICMP + exporter /metrics from this VM (alias: probe).
   ./forgesre probe              # same command
 
 No extra flags for the common case: probes assets already in ForgeSRE
-(inventory / Prometheus scrape_address), skipping seeded forge-demo-* rows.
+(inventory / Prometheus scrape_address), skipping seeded forge-demo-* rows
+and discovery seed 10.20.30.41.
 
 Each row reports:
   ICMP    PASS/FAIL  — host answers ping (L3 only)
@@ -283,8 +284,11 @@ Universal classes (not SKUs):
   Unknown  SKIP with a reason (no fake green host)
 
 Missing exporter or no Prometheus target is SKIP or FAIL with an honest
-reason. Seeded forge-demo-* rows are lab-only (label DEMO); they are not
-proof of a real scrape. Default run skips them; --demo includes them labeled.
+reason. Seeded forge-demo-* rows and discovery seed 10.20.30.41
+(disc-10-20-30-41) are lab-only (label DEMO); they are not proof of a
+real scrape and are not in Prometheus HTTP SD. Default run skips them;
+--demo includes them labeled. Verify does not call the LLM, even when
+ForgeAI is enabled.
 
 One name or id prints inventory ForgeSRE already knows plus live probes
 (ICMP, port, metric family, Prom up, Prom target, series, Alertmanager,
@@ -611,8 +615,8 @@ windows_exporter :9182) and SNMP HTTP SD.
 
 Uses ALERTMANAGER_WEBHOOK_TOKEN. Empty SNMP [] is normal until a Network
 device with an IP exists. Linux/Windows hosts with scrape_address appear in the
-first list; they are never SNMP-scraped. Seeded forge-demo-* hosts are lab-only
-and do not appear in HTTP SD.
+first list; they are never SNMP-scraped. Seeded forge-demo-* hosts and
+discovery seed 10.20.30.41 are lab-only and do not appear in HTTP SD.
 EOF
       ;;
     version)

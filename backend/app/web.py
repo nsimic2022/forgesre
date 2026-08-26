@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.audit import audit
 from app.db import get_db
 from app.asset_probe import reachability_snapshot
-from app.seed import is_demo_asset_id
+from app.demo_ids import is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.asset_alarms import alarms_from_form, saved_alarm_hostnames
 from app.inventory import (
@@ -392,7 +392,7 @@ def assets_verify_all(
     reports: list[dict] = []
     skipped_demo = 0
     for asset in db.query(Asset).order_by(Asset.hostname).all():
-        if is_demo_asset_id(asset.asset_id) and not include_demo:
+        if is_lab_inventory_row(asset) and not include_demo:
             skipped_demo += 1
             continue
         reports.append(run_asset_verify(db, asset))

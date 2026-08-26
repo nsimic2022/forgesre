@@ -5,7 +5,7 @@
 <h1>Verify {{ report.hostname or report.asset_id }}</h1>
 <p class="muted">Live communication from this appliance: <code>exporter → prometheus → alertmanager → core</code>. Inventory → ICMP / exporter or SNMP → Prometheus <code>up</code> + scrape target health + family series → Alertmanager reachable → last Core incident/webhook (SKIP if none). This is <strong>not</strong> <code>./forgesre test</code> (appliance health). Missing exporter or no Prom target is SKIP/FAIL with a reason — never a fake green host.</p>
 {% if report.lab %}
-<div class="banner">DEMO lab host (<code>forge-demo-*</code>). Not proof of a real scrape. Seeded dashboard demos stay labeled lab.</div>
+<div class="banner">DEMO lab host (<code>forge-demo-*</code> or discovery seed <code>10.20.30.41</code>). Not a real VM and not proof of a scrape.</div>
 {% endif %}
 <p>
   <span class="verify-mark {{ report.overall|lower }}">{{ report.overall }}</span>

@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
-from app.demo_ids import is_demo_asset_id
+from app.demo_ids import is_lab_inventory_row
 from app.inventory import asset_kind
 from rca.catalog import PLAYRULE_PRESETS
 from rca.collector import DEMO_ASSET, promql_queries_for, promql_selectors_for
@@ -301,7 +301,7 @@ def asset_metric_panel(
     info = _asset_dict(asset)
     asset_id = info["asset_id"]
     klass = metric_class_for(asset)
-    demo = is_demo_asset_id(asset_id)
+    demo = is_lab_inventory_row(asset)
     bundled = bundled_thresholds().get("demo" if klass == "demo" else klass, {})
     alarms = normalize_alarms(info.get("alarms"), "demo" if klass == "demo" else klass)
     keys = _CLASS_TILES.get(klass, _CLASS_TILES["unknown"])
@@ -415,7 +415,7 @@ def safe_asset_metric_panel(asset: Any, **kwargs: Any) -> dict[str, Any]:
         return asset_metric_panel(asset, **kwargs)
     except Exception as exc:
         info = _asset_dict(asset)
-        demo = is_demo_asset_id(info["asset_id"])
+        demo = is_lab_inventory_row(asset)
         return {
             "asset_id": info["asset_id"],
             "class": "unknown",

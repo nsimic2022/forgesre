@@ -48,6 +48,7 @@ def test_approve_ignore_and_http_sd():
     page = client.get("/discovery")
     assert page.status_code == 200
     assert b"Discovery" in page.content
+    assert b"DEMO" in page.content
     if row.status == "new":
         assert b"NEW DEVICE DETECTED" in page.content
         assert DEMO_CANDIDATE_IP.encode() in page.content
@@ -64,8 +65,9 @@ def test_approve_ignore_and_http_sd():
     assert asset.ip == DEMO_CANDIDATE_IP
     assert asset.source == "discovery"
     assert asset.scrape_address == f"{DEMO_CANDIDATE_IP}:9100"
+    assert "DEMO" in (asset.notes or "")
     targets = sd_targets(db)
-    assert any(DEMO_CANDIDATE_IP in item["targets"][0] for item in targets)
+    assert not any(DEMO_CANDIDATE_IP in item["targets"][0] for item in targets)
     assert all("127.0.0.1" not in item["targets"][0] for item in targets)
 
     other = db.query(DiscoveryCandidate).filter_by(ip="10.20.30.99").first()
@@ -82,5 +84,5 @@ def test_approve_ignore_and_http_sd():
     sd = client.get("/api/v1/sd/prometheus", headers={"Authorization": "Bearer forgesre-dev-webhook-token"})
     assert sd.status_code == 200
     body = sd.json()
-    assert any(DEMO_CANDIDATE_IP in target["targets"][0] for target in body)
+    assert not any(DEMO_CANDIDATE_IP in target["targets"][0] for target in body)
     db.close()

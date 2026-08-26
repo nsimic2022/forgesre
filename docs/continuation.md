@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Wednesday 26 August 2026.** Verify chain hops (Prom target, series, Alertmanager, Core incident SKIP if none).
+**Wednesday 26 August 2026.** Discovery seed `10.20.30.41` / `disc-10-20-30-41` is DEMO lab on verify (not a production scrape FAIL).
 
 On the Ubuntu VM N uses, resume with:
 
@@ -43,7 +43,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **285 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~37s each. Python 3.12, pytest 9.x.
+Both runs: **287 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~37s each. Python 3.12, pytest 9.x.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`.
 
@@ -51,7 +51,7 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-`./forgesre verify` chain hops: Prom target (health=up), series present (`node_`/`windows_`/SNMP), Alertmanager reachable, Core last incident (SKIP if none). Same extra rows in GUI Verify. Header: `exporter → prometheus → alertmanager → core`.
+`disc-10-20-30-41` (`10.20.30.41`) is the seeded Discovery Approve demo, not a real VM. After Approve it stays lab: not in Prometheus HTTP SD, `./forgesre verify` labels DEMO / SKIP (same class as `forge-demo-*`). RCA PASS when Prom `up=0` still matches an exporter-down incident. Verify does not call the LLM even when ForgeAI is on.
 
 ---
 

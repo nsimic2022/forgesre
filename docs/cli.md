@@ -97,7 +97,7 @@ ICMP ping from the appliance only proves **L3** (the host answers ping). ForgeSR
 | FAIL | FAIL | Wrong IP, host down, or ICMP and the exporter port both blocked. |
 | PASS | SKIP | Network device — HTTP metrics do not apply. Use `./forgesre snmp` (UDP/161). |
 
-Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `scrape_address` wins. An ad-hoc IP (no inventory type) probes **both** ports and classifies `windows_` vs `node_` the same way Assets/Discovery detect does (both → prefer Windows `:9182` unless a saved type exists). Seeded `forge-demo-*` rows are skipped unless you pass `--demo` or the id.
+Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `scrape_address` wins. An ad-hoc IP (no inventory type) probes **both** ports and classifies `windows_` vs `node_` the same way Assets/Discovery detect does (both → prefer Windows `:9182` unless a saved type exists). Seeded `forge-demo-*` rows and discovery seed `10.20.30.41` are skipped unless you pass `--demo` or the id.
 
 ---
 
@@ -114,7 +114,7 @@ Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `
 
 Path: inventory row → ICMP / exporter (`:9100` `node_` or `:9182` `windows_`) or SNMP UDP/161 → Prometheus `up` + scrape target health + family series → Alertmanager reachable → last Core incident/webhook (SKIP if none). ForgeAI/LLM is listed only when enabled; verify does **not** call the LLM. Chain: `exporter → prometheus → alertmanager → core`.
 
-Classes are universal, not SKUs: Linux, Windows, Network SNMP, Unknown. Unknown or a missing exporter / no Prom target is **SKIP or FAIL with an honest reason** — never a fake green host. Seeded `forge-demo-*` rows are **lab** (label DEMO) and are not proof of a real scrape.
+Classes are universal, not SKUs: Linux, Windows, Network SNMP, Unknown. Unknown or a missing exporter / no Prom target is **SKIP or FAIL with an honest reason** — never a fake green host. Seeded `forge-demo-*` rows and the discovery Approve seed `10.20.30.41` (`disc-10-20-30-41`) are **lab** (label DEMO), are not in HTTP SD, and are not proof of a real scrape. Verify does **not** call the LLM even when ForgeAI is enabled.
 
 One name or id dumps what ForgeSRE already knows (inventory) plus the live checks. Same action: Assets → **Verify** (analyst / engineer / admin). Viewers are read-only.
 
