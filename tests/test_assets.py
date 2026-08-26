@@ -477,3 +477,72 @@ def test_reachability_api_refreshes_without_blocking_list(monkeypatch):
     assert demo_cached["ping"] == "green"
     db.close()
 
+
+def test_assets_legend_explains_yellow_ping_when_scrape_works():
+    db = _db()
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    page = client.get("/assets")
+    assert page.status_code == 200
+    body = page.content
+    assert b"ICMP failed but exporter/SNMP" in body or b"ICMP unused/blocked" in body
+    assert b"ICMP and port 22 are not required" in body
+    db.close()
+
+
+def test_reachability_windows_icmp_blocked_exporter_up_is_yellow(monkeypatch):
+    from app.asset_probe import AssetProbe, CheckResult
+    from app.inventory import create_manual_asset
+
+    def fake_probe(item, timeout=0.8, **kwargs):
+        win = "windows" in str(item.get("type") or "").lower()
+        return AssetProbe(
+            asset_id=item["asset_id"],
+            hostname=item.get("hostname") or "",
+            ip=item.get("ip") or "",
+            kind="windows" if win else "linux",
+            type=item.get("type") or "",
+            scrape=item.get("scrape_address") or "",
+            port=9182 if win else 9100,
+            icmp=CheckResult("icmp", False if win else True, "no reply" if win else "reachable"),
+            metrics=CheckResult(
+                "metrics",
+                True,
+                "windows_exporter :9182/metrics" if win else "node_exporter :9100/metrics",
+            ),
+        )
+
+    monkeypatch.setattr("app.asset_probe.probe_target", fake_probe)
+    db = _db()
+    host = create_manual_asset(
+        db,
+        hostname="DESKTOP-CG81N3J",
+        ip="10.89.11.60",
+        type="Windows Server",
+        actor="tester",
+    )
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    rows = client.get("/api/v1/assets/reachability").json()
+    win = next(item for item in rows if item["asset_id"] == host.asset_id)
+    assert win["ping"] == "yellow"
+    assert win["exporter"] == "green"
+    assert "9182" in (win.get("exporter_label") or "")
+    db.expire_all()
+    stored = db.query(Asset).filter_by(asset_id=host.asset_id).one()
+    assert stored.ping_status == "yellow"
+    listed = client.get("/assets")
+    assert listed.status_code == 200
+    detail = client.get(f"/assets/{host.asset_id}")
+    assert detail.status_code == 200
+    assert b"reach-dot ping yellow" in listed.content or b"reach-dot ping yellow" in detail.content
+    db.close()
+

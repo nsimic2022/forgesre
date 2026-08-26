@@ -167,6 +167,58 @@ def test_windows_family_mismatch_is_fail():
     assert verify_exit([report]) == 1
 
 
+def _ping_fail(host, timeout):
+    del host, timeout
+    return 1, "", "1 packets transmitted, 0 received"
+
+
+def test_windows_icmp_fail_exporter_ok_ping_yellow_overall_pass():
+    item = {
+        "asset_id": "DESKTOP-CG81N3J",
+        "hostname": "DESKTOP-CG81N3J",
+        "ip": "10.89.11.60",
+        "type": "Windows Server",
+        "scrape_address": "10.89.11.60:9182",
+        "monitoring_profile": "windows-standard",
+    }
+    fetcher = _metrics_map(
+        {
+            "http://10.89.11.60:9182/metrics": (
+                200,
+                "# HELP windows_cpu_time_total\nwindows_cpu_time_total 1\n",
+            )
+        }
+    )
+    report = verify_target(
+        item,
+        ping_runner=_ping_fail,
+        metrics_fetcher=fetcher,
+        in_http_sd=True,
+        query_fn=lambda expr: {"value": 1.0, "query": expr},
+        targets=[
+            {
+                "health": "up",
+                "labels": {
+                    "job": "windows-standard",
+                    "instance": "10.89.11.60:9182",
+                    "asset": "DESKTOP-CG81N3J",
+                },
+            }
+        ],
+        am_health={"ok": True, "detail": "Alertmanager reachable (/-/ready)"},
+    )
+    assert report.icmp.ok is False
+    assert report.icmp.mark == "FAIL"
+    assert report.port.ok is True
+    assert report.family.ok is True
+    assert report.overall == "PASS"
+    assert report.ping_color == "yellow"
+    packed = report.as_dict()
+    assert packed["ping_color"] == "yellow"
+    assert packed["icmp"]["mark"] == "FAIL"
+    assert packed["overall"] == "PASS"
+
+
 def test_network_snmp_pass_when_prom_up():
     item = {
         "asset_id": "sw-01",

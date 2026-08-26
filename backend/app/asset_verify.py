@@ -613,6 +613,7 @@ class VerifyReport:
     hint: str = ""
     extra: list[CheckResult] = field(default_factory=list)
     probe: AssetProbe | None = None
+    ping_color: str = "yellow"
 
     def as_dict(self) -> dict[str, Any]:
         def pack(check: CheckResult) -> dict[str, Any]:
@@ -652,6 +653,7 @@ class VerifyReport:
             "overall": self.overall,
             "overall_reason": self.overall_reason,
             "hint": self.hint,
+            "ping_color": self.ping_color,
             "extra": [pack(item) for item in self.extra],
         }
 
@@ -796,6 +798,7 @@ def compose_verify(
         hint=hint,
         extra=list(probe.extra or []),
         probe=probe,
+        ping_color=probe.ping_color,
     )
 
 
@@ -906,10 +909,17 @@ def verify_exit(results: list[VerifyReport]) -> int:
     return 0
 
 
-def _mark(check: CheckResult, color: bool) -> str:
-    from app.cli_view import DIM, GREEN, RED, paint
+def _mark(check: CheckResult, color: bool, *, badge: str | None = None) -> str:
+    from app.cli_view import DIM, GREEN, RED, YELLOW, paint
 
-    code = GREEN if check.ok is True else (RED if check.ok is False else DIM)
+    if badge == "green":
+        code = GREEN
+    elif badge == "yellow":
+        code = YELLOW
+    elif badge == "red":
+        code = RED
+    else:
+        code = GREEN if check.ok is True else (RED if check.ok is False else DIM)
     return paint(f"{check.mark:<6}", code, color)
 
 
@@ -944,7 +954,7 @@ def format_verify_one(report: VerifyReport, *, color: bool = False) -> str:
         "",
         paint("=== Live probes ===", BOLD, color),
         CHAIN_HEADER,
-        f"ICMP     {_mark(report.icmp, color)} {report.icmp.detail}",
+        f"ICMP     {_mark(report.icmp, color, badge=report.ping_color)} {report.icmp.detail}",
         f"PORT     {_mark(report.port, color)} {report.port.detail}",
         f"FAMILY   {_mark(report.family, color)} {report.family.detail}",
         f"PROM     {_mark(report.prom, color)} {report.prom.detail}",
@@ -991,7 +1001,7 @@ def format_verify_many(
         name = ("DEMO " + row.asset_id) if row.lab else row.asset_id
         lines.append(
             f"{name[:22]:<22} {row.vclass:<10} "
-            f"{_mark(row.icmp, color)} {_mark(row.port, color)} {_mark(row.family, color)} "
+            f"{_mark(row.icmp, color, badge=row.ping_color)} {_mark(row.port, color)} {_mark(row.family, color)} "
             f"{_mark(row.prom, color)} {_mark(row.target, color)} {_mark(row.series, color)} "
             f"{_mark(row.am, color)} {_mark(row.core, color)} {_mark(row.llm, color)}  {row.overall_reason}"
         )

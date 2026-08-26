@@ -7,10 +7,11 @@
 {% endif %}
 <p class="muted reach-legend">
   <strong>Ping / comms</strong> pills (green / yellow / red):
-  <span class="reach-dot green">Ping</span> online ·
-  <span class="reach-dot yellow">Ping</span> not probed yet / skipped ·
-  <span class="reach-dot red">Ping</span> no reply.
-  Same colors for communication:
+  <span class="reach-dot green">Ping</span> ICMP ok ·
+  <span class="reach-dot yellow">Ping</span> not probed, or ICMP failed but exporter/SNMP (<code>/metrics</code>) answers (typical Windows: ping unused/blocked) ·
+  <span class="reach-dot red">Ping</span> ICMP failed <em>and</em> exporter/SNMP failed or timed out — likely down or wrong IP.
+  ICMP and port 22 are not required.
+  Same colors for communication (independent of ping):
   <strong>:9100</strong> (node_exporter), <strong>:9182</strong> (windows_exporter), and <strong>SNMP</strong> (UDP/161).
   Last-known colors on first paint; <code>GET /api/v1/assets/reachability</code> refreshes in the background. Viewers can see status.
   {% if can('write_assets') %}
