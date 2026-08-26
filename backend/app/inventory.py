@@ -6,15 +6,19 @@ import re
 from sqlalchemy.orm import Session
 
 from app.audit import audit
+from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE, detect_exporter, is_auto_asset_type
 from app.journal import report
 from app.models import Asset, DiscoveryCandidate, Incident, ScheduledReport, utcnow
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
-DEMO_CANDIDATE_IP = "10.20.30.41"
 LINUX_EXPORTER_PORT = 9100
 WINDOWS_EXPORTER_PORT = 9182
+DEMO_CANDIDATE_NOTES = (
+    "DEMO discovery seed (10.20.30.41). Not a real machine. "
+    "Lab only — not scraped. Used so /discovery has an Approve click."
+)
 
 
 def asset_kind(type: str = "", profile: str = "") -> str:
@@ -69,15 +73,14 @@ def sd_targets(db: Session, core_address: str | None = None) -> list[dict]:
 
     Linux node_exporter (:9100, job=linux-standard) and Windows windows_exporter
     (:9182, job=windows-standard) share this HTTP SD. Seeded forge-demo-* hosts
-    are lab-only and never appear here, even if scrape_address is set.
+    and the discovery Approve seed 10.20.30.41 are lab-only and never appear
+    here, even if scrape_address is set.
     """
-    from app.seed import is_demo_asset_id
-
     del core_address
     targets: list[dict] = []
     seen: set[str] = set()
     for asset in db.query(Asset).order_by(Asset.asset_id).all():
-        if is_demo_asset_id(getattr(asset, "asset_id", "") or getattr(asset, "hostname", "")):
+        if is_lab_inventory_row(asset):
             continue
         address = (asset.scrape_address or "").strip()
         if not address or address in seen:
@@ -100,11 +103,9 @@ def sd_targets(db: Session, core_address: str | None = None) -> list[dict]:
 
 def is_snmp_asset(asset: Asset) -> bool:
     """Network devices with an IP are polled by snmp_exporter. Linux/Windows HTTP exporters are not."""
-    from app.seed import is_demo_asset_id
-
     if not settings.snmp_enabled:
         return False
-    if is_demo_asset_id(getattr(asset, "asset_id", "") or getattr(asset, "hostname", "")):
+    if is_lab_inventory_row(asset):
         return False
     ip = (asset.ip or "").strip()
     if not ip:
@@ -167,6 +168,8 @@ def seed_demo_candidate(db: Session) -> DiscoveryCandidate:
     if existing_asset:
         row.status = "approved"
         row.asset_id = existing_asset.asset_id
+        if not (existing_asset.notes or "").strip():
+            existing_asset.notes = DEMO_CANDIDATE_NOTES
     db.commit()
     db.refresh(row)
     return row
@@ -533,6 +536,11 @@ def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset
             atype, profile, scrape = "Unknown", "", ""
         else:
             atype, profile, scrape = "Web/appliance", "web-standard", ""
+        notes = (
+            DEMO_CANDIDATE_NOTES
+            if is_lab_inventory(asset_id=slug, hostname=slug, ip=row.ip, scrape_address=scrape)
+            else ""
+        )
         asset = Asset(
             asset_id=slug,
             hostname=slug,
@@ -544,6 +552,7 @@ def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset
             owner="platform",
             source="discovery",
             scrape_address=scrape,
+            notes=notes,
         )
         db.add(asset)
         db.flush()

@@ -47,7 +47,8 @@ from app.asset_probe import apply_probe_to_asset, refresh_reachability, reachabi
 from app.asset_verify import select_assets as verify_select_assets
 from app.asset_verify import urllib_am_health, urllib_prom_targets, verify_target
 from app.exporter_detect import detect_exporter, is_auto_asset_type
-from app.seed import is_demo_asset_id, seed
+from app.demo_ids import is_lab_inventory_row
+from app.seed import seed
 from app.services import (
     host_down_public,
     ingest_alertmanager,
@@ -327,7 +328,7 @@ def verify_assets_api(
         rows,
         selector,
         include_demo=include_demo,
-        is_demo=lambda row: is_demo_asset_id(row.get("asset_id") or row.get("hostname")),
+        is_demo=lambda row: is_lab_inventory_row(row),
     )
     results: list[dict[str, Any]] = []
     models = {item.asset_id: item for item in db.query(Asset).all()}

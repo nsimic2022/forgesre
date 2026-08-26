@@ -49,7 +49,7 @@
   <tbody>
   {% for row in candidates %}
     <tr>
-      <td>{{ row.ip }}</td>
+      <td>{{ row.ip }}{% if row.source == 'demo' %} <span class="pill demo">DEMO</span>{% endif %}</td>
       <td>{{ row.proposed_role }}</td>
       <td>{{ row.open_ports|join(", ") }}</td>
       <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>

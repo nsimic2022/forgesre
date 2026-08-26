@@ -11,7 +11,8 @@ never calls the LLM itself.
 
 Universal classes (not SKUs): Linux ``:9100`` ``node_``, Windows ``:9182``
 ``windows_``, Network SNMP (existing snmp_exporter path), Unknown → SKIP.
-Seeded ``forge-demo-*`` rows are lab-only and are never proof of a real scrape.
+Seeded ``forge-demo-*`` rows and the discovery Approve seed ``10.20.30.41``
+(``disc-10-20-30-41``) are lab-only and are never proof of a real scrape.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ from app.asset_probe import (
     probe_target,
     select_assets,
 )
-from app.demo_ids import is_demo_asset_id
+from app.demo_ids import is_lab_inventory_row
 from app.exporter_detect import classify_exporter_metrics, is_auto_asset_type
 
 PromQuery = Callable[[str], dict[str, Any]]
@@ -65,9 +66,7 @@ CLASS_REASON = {
 
 
 def is_lab_asset(item: dict[str, Any] | Any) -> bool:
-    if isinstance(item, dict):
-        return is_demo_asset_id(item.get("asset_id") or item.get("hostname"))
-    return is_demo_asset_id(getattr(item, "asset_id", "") or getattr(item, "hostname", ""))
+    return is_lab_inventory_row(item)
 
 
 def classify_verify(item: dict[str, Any]) -> tuple[str, str]:
@@ -156,7 +155,7 @@ def prometheus_check(
         return _check(
             "prom",
             None,
-            "DEMO lab host (forge-demo-*) is not in HTTP/SNMP SD — not proof of a real scrape",
+            "DEMO lab host is not in HTTP/SNMP SD — not proof of a real scrape",
         )
     if vclass == CLASS_UNKNOWN:
         return _check("prom", None, "no exporter class — Prometheus has nothing to scrape")
@@ -491,7 +490,18 @@ def rca_check(
             f"last RCA {number} mismatches live PromQL: " + "; ".join(mismatches),
         )
     if stored:
-        return _check("rca", True, f"last RCA {number} facts still match live PromQL")
+        detail = f"last RCA {number} facts still match live PromQL"
+        raw_up = live.get("up")
+        try:
+            up_now = float(raw_up) if raw_up is not None else None
+        except (TypeError, ValueError):
+            up_now = None
+        if up_now is not None and up_now < UP_MISMATCH:
+            detail = (
+                f"RCA matches down, exporter still unreachable "
+                f"(last RCA {number} facts still match live PromQL)"
+            )
+        return _check("rca", True, detail)
     summary = (rca.get("summary") or rca.get("likely_cause") or "recorded").strip()
     return _check("rca", True, f"last RCA {number}: {summary[:160]}")
 
@@ -505,11 +515,15 @@ def llm_check(*, ai_enabled: bool, rca: dict[str, Any] | None) -> CheckResult:
         )
     provider = str((rca or {}).get("provider") or "")
     if provider == "forgerca-llm":
-        return _check("llm", True, "ForgeAI enabled; last RCA prose was rewritten (read-only)")
+        return _check(
+            "llm",
+            True,
+            "ForgeAI enabled; last RCA prose was rewritten — verify itself does not call the LLM",
+        )
     return _check(
         "llm",
         None,
-        "ForgeAI enabled; last RCA is ForgeRCA builtin only — verify does not invoke the LLM",
+        "ForgeAI is enabled, but verify does not call the LLM",
     )
 
 
@@ -540,7 +554,7 @@ def overall_status(
     if lab:
         return (
             "SKIP",
-            "DEMO lab host (forge-demo-*) — labeled lab, not proof of a real scrape",
+            "DEMO lab host — labeled lab, not proof of a real scrape",
         )
     hops = [metrics, family, prom]
     if target is not None:
@@ -742,6 +756,12 @@ def compose_verify(
         series=series,
         am=am,
     )
+    hint = probe.hint
+    if lab:
+        hint = (
+            "DEMO lab (forge-demo-* or discovery seed 10.20.30.41) — not a real VM. "
+            "ICMP/exporter timeout is expected. Not a production scrape FAIL."
+        )
     return VerifyReport(
         asset_id=str(item.get("asset_id") or probe.asset_id),
         hostname=str(item.get("hostname") or probe.hostname or ""),
@@ -773,7 +793,7 @@ def compose_verify(
         llm=llm,
         overall=overall,
         overall_reason=reason,
-        hint=probe.hint,
+        hint=hint,
         extra=list(probe.extra or []),
         probe=probe,
     )
