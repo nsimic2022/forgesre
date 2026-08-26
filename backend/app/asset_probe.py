@@ -642,6 +642,23 @@ def ad_hoc_item(selector: str) -> dict[str, Any]:
     return item
 
 
+def asset_selector_hit(row: dict[str, Any], selector: str) -> bool:
+    """Match inventory number, id, hostname, IP, or scrape host."""
+    sel = (selector or "").strip().lower()
+    if not sel:
+        return False
+    number = row.get("number")
+    if sel.isdigit() and number is not None and str(number) == sel:
+        return True
+    identity = {
+        str(row.get("asset_id") or "").lower(),
+        str(row.get("hostname") or "").lower(),
+        str(row.get("ip") or "").lower(),
+    }
+    scrape = str(row.get("scrape_address") or "").lower()
+    return sel in identity or scrape == sel or scrape.startswith(sel + ":")
+
+
 def select_assets(
     rows: list[dict[str, Any]],
     selector: str = "",
@@ -658,16 +675,7 @@ def select_assets(
             continue
         demo = demo_fn(row)
         if selector:
-            identity = {
-                str(row.get("asset_id") or "").lower(),
-                str(row.get("hostname") or "").lower(),
-                str(row.get("ip") or "").lower(),
-            }
-            scrape = str(row.get("scrape_address") or "").lower()
-            hit = selector.lower() in identity or scrape == selector.lower() or scrape.startswith(
-                selector.lower() + ":"
-            )
-            if not hit:
+            if not asset_selector_hit(row, selector):
                 continue
             chosen.append(row)
             continue

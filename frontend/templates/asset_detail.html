@@ -9,6 +9,7 @@
 <div class="asset-detail-main">
 <h1>{{ asset.hostname }}{% if metrics.demo %} <span class="pill demo">DEMO</span>{% endif %}</h1>
 <dl class="kv">
+  <dt>Asset number</dt><dd>#{{ asset.number or "—" }}</dd>
   <dt>Asset ID</dt><dd>{{ asset.asset_id }}</dd>
   <dt>IP</dt>
   <dd>

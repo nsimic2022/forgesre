@@ -8,7 +8,7 @@ cd ~/forgesre
 ./forgesre help
 ```
 
-`./f` is the same binary. `./forgesre` with no arguments opens a prompt (`forgesre>`). Type `journal`, `incidents`, `doctor` — not `./forgesre` again. Leave with `quit`, `exit`, or Ctrl-D (`./forgesre help quit`). TAB completes command names, Compose services (`logs sn<TAB>`), and incident ids.
+`./f` is the same binary. `./forgesre` with no arguments opens a prompt (`forgesre>`). Type `journal`, `incidents`, `doctor` — not `./forgesre` again. Leave with `quit`, `exit`, or Ctrl-D (`./forgesre help quit`). TAB completes command names, Compose services (`logs sn<TAB>`), incident ids, and asset numbers/ids (`verify 1<TAB>`).
 
 Two logins:
 
@@ -29,6 +29,7 @@ Two logins:
 ./forgesre ping            # ICMP + exporter /metrics (alias: probe)
 ./forgesre ping win-01
 ./forgesre verify          # live chain: exporter → prometheus → alertmanager → core (not test)
+./forgesre verify 12       # same, by stable asset number (also id/hostname)
 ./forgesre verify win-01
 ./forgesre test            # detailed report → data/reports/
 ./forgesre status          # docker compose ps
@@ -107,6 +108,7 @@ Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `
 
 ```bash
 ./forgesre verify
+./forgesre verify 12
 ./forgesre verify win-01
 ./forgesre verify --demo
 ./forgesre help verify

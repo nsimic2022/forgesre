@@ -45,7 +45,16 @@ def test_tab_completes_all_cli_commands_from_prefix():
     assert "import" in im.split()
 
 
-def test_tab_after_logs_completes_snmp_exporter():
+def test_tab_after_verify_and_assets_completes_asset_hook():
+    text = COMP.read_text()
+    assert "_forgesre_asset_refs" in text
+    assert "asset-refs" in text
+    ping = _complete(["./forgesre", "ping", "--"], 2)
+    assert "--timeout" in ping.split()
+    assert "--demo" in ping.split()
+    verify = _complete(["./forgesre", "verify", "--"], 2)
+    assert "--timeout" in verify.split()
+
     out = _complete(["./forgesre", "logs", "sn"], 2)
     assert "snmp-exporter" in out.split()
 

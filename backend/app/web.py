@@ -20,6 +20,7 @@ from app.inventory import (
     ASSET_TYPE_CHOICES,
     approve_candidate,
     asset_form_values,
+    assets_matching,
     clone_prefill,
     create_manual_asset,
     delete_asset,
@@ -346,8 +347,9 @@ def assets_page(
     user: User = Depends(login_required),
     edit: str = "",
     clone: str = "",
+    q: str = "",
 ):
-    rows = db.query(Asset).order_by(Asset.hostname).all()
+    rows = assets_matching(db.query(Asset).order_by(Asset.number, Asset.hostname).all(), q)
     form_mode = "add"
     selected = None
     form = asset_form_values()
@@ -376,6 +378,7 @@ def assets_page(
         type_choices=ASSET_TYPE_CHOICES,
         delete_blocked=delete_blocked,
         notice=notice,
+        q=q,
         reachability_snapshot=reachability_snapshot,
     )
 

@@ -774,15 +774,28 @@ def asset_form_values(asset: Asset | None = None) -> dict:
     }
 
 
-def delete_blocked(asset: Asset) -> str:
-    from app.seed import is_demo_asset_id
+def asset_search_blob(asset: Asset) -> str:
+    return " ".join(
+        [
+            str(asset.number or ""),
+            asset.asset_id or "",
+            asset.hostname or "",
+            asset.ip or "",
+        ]
+    ).lower()
 
-    if is_demo_asset_id(getattr(asset, "asset_id", "") or "") or is_demo_asset_id(getattr(asset, "hostname", "") or ""):
-        return (
-            "Seeded lab hosts (forge-demo-*) cannot be removed. "
-            "Dashboard → Run demo and similar-incident history use them. "
-            "Clone to a real hostname if you need a copy."
-        )
+
+def assets_matching(rows: list[Asset], q: str = "") -> list[Asset]:
+    """Filter inventory by asset number, id, hostname, or IP (substring)."""
+    needle = (q or "").strip().lower()
+    if not needle:
+        return list(rows)
+    return [row for row in rows if needle in asset_search_blob(row)]
+
+
+def delete_blocked(asset: Asset) -> str:
+    """Lab forge-demo-* rows can be removed like any other asset."""
+    del asset
     return ""
 
 
@@ -790,7 +803,8 @@ def delete_asset(db: Session, asset: Asset, actor: str = "system") -> dict:
     """Remove inventory + HTTP/SNMP SD targets. Incidents stay; the asset FK is cleared.
 
     Prometheus HTTP SD is live from this table — the next scrape drops the host.
-    Core's static demo job is untouched. Seeded forge-demo-* rows are blocked.
+    Core's static demo job is untouched. forge-demo-* rows can be removed; seed
+    will not recreate an id that the operator already deleted.
     """
     reason = delete_blocked(asset)
     if reason:
@@ -798,6 +812,7 @@ def delete_asset(db: Session, asset: Asset, actor: str = "system") -> dict:
     asset_id = asset.asset_id
     hostname = asset.hostname
     pk = asset.id
+    number = asset.number
     scrape = asset.scrape_address or ""
     ip = asset.ip or ""
     snmp = is_snmp_asset(asset)
@@ -825,7 +840,7 @@ def delete_asset(db: Session, asset: Asset, actor: str = "system") -> dict:
         actor=actor,
         object_type="asset",
         object_id=asset_id,
-        data={"unlinked_incidents": unlinked, "scrape": scrape},
+        data={"unlinked_incidents": unlinked, "scrape": scrape, "number": number},
     )
     db.commit()
     report(

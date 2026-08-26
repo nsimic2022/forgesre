@@ -5,7 +5,7 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 
 from app.demo_ids import DEMO_ASSET_PREFIX, is_demo_asset_id
-from app.models import Asset, EscalationPolicy, Incident, Playbook, Playrule, User, utcnow
+from app.models import AuditLog, Asset, EscalationPolicy, Incident, Playbook, Playrule, User, utcnow
 from app.security import hash_password
 from app.settings import settings
 
@@ -69,9 +69,21 @@ NETWORK_STEPS = [
 ]
 
 
-def ensure_demo_asset(db: Session) -> Asset:
+def _demo_deleted_by_operator(db: Session, asset_id: str) -> bool:
+    """True after GUI/CLI Remove. Seed must not put forge-demo-* back on Core start."""
+    return (
+        db.query(AuditLog.id)
+        .filter(AuditLog.action == "asset.delete", AuditLog.object_id == asset_id)
+        .first()
+        is not None
+    )
+
+
+def ensure_demo_asset(db: Session) -> Asset | None:
     asset = db.query(Asset).filter_by(asset_id=DEMO_ASSET).first()
     if asset is None:
+        if _demo_deleted_by_operator(db, DEMO_ASSET):
+            return None
         asset = Asset(
             asset_id=DEMO_ASSET,
             hostname=DEMO_ASSET,
@@ -110,9 +122,11 @@ def _ensure_lab_asset(
     type: str,
     monitoring_profile: str,
     notes: str,
-) -> Asset:
+) -> Asset | None:
     asset = db.query(Asset).filter_by(asset_id=asset_id).first()
     if asset is None:
+        if _demo_deleted_by_operator(db, asset_id):
+            return None
         asset = Asset(
             asset_id=asset_id,
             hostname=hostname,
@@ -148,7 +162,7 @@ def _ensure_lab_asset(
     return asset
 
 
-def ensure_demo_windows_asset(db: Session) -> Asset:
+def ensure_demo_windows_asset(db: Session) -> Asset | None:
     return _ensure_lab_asset(
         db,
         asset_id=DEMO_WIN_ASSET,
@@ -160,7 +174,7 @@ def ensure_demo_windows_asset(db: Session) -> Asset:
     )
 
 
-def ensure_demo_switch_asset(db: Session) -> Asset:
+def ensure_demo_switch_asset(db: Session) -> Asset | None:
     return _ensure_lab_asset(
         db,
         asset_id=DEMO_SW_ASSET,
@@ -437,7 +451,8 @@ def seed(db: Session) -> None:
         )
 
     asset = ensure_demo_asset(db)
-    ensure_demo_similar_history(db, asset)
+    if asset is not None:
+        ensure_demo_similar_history(db, asset)
     ensure_demo_windows_asset(db)
     ensure_demo_switch_asset(db)
 

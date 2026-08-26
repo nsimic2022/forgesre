@@ -3,7 +3,27 @@
 from __future__ import annotations
 
 from sqlalchemy import inspect, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
+
+
+def _backfill_asset_numbers(conn: Connection) -> None:
+    """Assign stable # in created order. Do not renumber rows that already have one."""
+    tables = set(inspect(conn).get_table_names())
+    if "assets" not in tables:
+        return
+    columns = {col["name"] for col in inspect(conn).get_columns("assets")}
+    if "number" not in columns:
+        return
+    rows = conn.execute(
+        text("SELECT id FROM assets WHERE number IS NULL OR number = 0 ORDER BY created_at, id")
+    ).fetchall()
+    if rows:
+        current = conn.execute(text("SELECT MAX(number) FROM assets")).scalar()
+        n = int(current or 0)
+        for (pk,) in rows:
+            n += 1
+            conn.execute(text("UPDATE assets SET number = :n WHERE id = :id"), {"n": n, "id": pk})
+    conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_assets_number ON assets (number)"))
 
 
 def migrate(engine: Engine) -> None:
@@ -46,6 +66,8 @@ def migrate(engine: Engine) -> None:
             )
         if "alarms" not in existing:
             statements.append("ALTER TABLE assets ADD COLUMN alarms JSON")
+        if "number" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN number INTEGER")
     if "evidence" in tables:
         existing = {col["name"] for col in inspector.get_columns("evidence")}
         mapping = {
@@ -117,6 +139,7 @@ def migrate(engine: Engine) -> None:
                 conn.execute(text("ALTER TABLE incidents ALTER COLUMN number TYPE VARCHAR(64)"))
         for sql in statements:
             conn.execute(text(sql))
+        _backfill_asset_numbers(conn)
         if "evidence" in tables:
             conn.execute(
                 text("UPDATE evidence SET evidence_id = 'EV-LEGACY-' || id WHERE evidence_id IS NULL OR evidence_id = ''")
