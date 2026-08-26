@@ -139,7 +139,12 @@ def test_enrich_components_keeps_stack_order_and_open_links():
     prom = next(row for row in rows if row["id"] == "prometheus")
     assert prom["state"] == "down"
     assert prom["gui"].startswith("http://lab.local:")
-    assert "/graph" in prom["gui"]
-    assert prom["metrics"].endswith("/metrics")
+    assert prom["gui"].endswith("/targets")
+    assert prom["gui_label"] == "Targets"
+    assert prom["metrics"].endswith("/alerts")
+    assert prom["metrics_label"] == "Alerts"
+    assert prom["extra"].endswith("/graph")
+    assert prom["extra_label"] == "Graph"
+    assert not prom["metrics"].endswith("/metrics")
     grafana = next(row for row in rows if row["id"] == "grafana")
     assert grafana["gui"]

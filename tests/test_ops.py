@@ -39,6 +39,13 @@ def test_system_health_has_open_column_and_grafana():
     assert "Core (container)" in page.text
     assert "GUI" in page.text
     assert "Metrics" in page.text
+    assert ">Targets<" in page.text
+    assert ">Alerts<" in page.text
+    assert ">Graph<" in page.text
+    assert "/targets" in page.text
+    assert "/alerts" in page.text
+    assert ":9090/graph" in page.text
+    assert ":9090/metrics" not in page.text
     db.close()
 
 
