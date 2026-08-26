@@ -166,11 +166,24 @@ class Settings:
     def netbox_enabled(self) -> bool:
         inventory = self.yaml.get("inventory") or {}
         netbox = inventory.get("netbox") or {}
-        return bool(netbox.get("enabled") or inventory.get("provider") == "netbox")
+        mode = str(netbox.get("mode") or "").strip().lower()
+        if mode == "disabled":
+            return False
+        yaml_url = str(netbox.get("url") or "").strip()
+        if netbox.get("enabled") is False and yaml_url:
+            return False
+        if netbox.get("enabled") or inventory.get("provider") == "netbox":
+            return True
+        if os.environ.get("FORGESRE_DEV", "").lower() in {"1", "true", "yes", "on"}:
+            return bool(netbox.get("enabled") or inventory.get("provider") == "netbox")
+        return True
 
     @property
     def netbox_url(self) -> str:
-        return str(((self.yaml.get("inventory") or {}).get("netbox") or {}).get("url") or "").rstrip("/")
+        yaml_url = str(((self.yaml.get("inventory") or {}).get("netbox") or {}).get("url") or "").strip().rstrip("/")
+        if yaml_url:
+            return yaml_url
+        return str(os.environ.get("NETBOX_URL") or "http://127.0.0.1:8001").rstrip("/")
 
     @property
     def netbox_token(self) -> str:

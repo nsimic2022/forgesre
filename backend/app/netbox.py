@@ -1,4 +1,8 @@
-"""Optional external NetBox client. Read-only by default. Never used by AI."""
+"""NetBox client. Read-only by default. Never used by AI.
+
+Bundled instance is http://127.0.0.1:8001 unless inventory.netbox.url points
+at an external NetBox (--netbox-url).
+"""
 
 from __future__ import annotations
 
@@ -9,15 +13,44 @@ import httpx
 
 
 def netbox_status(url: str, token: str, timeout: float = 5.0) -> dict[str, Any]:
-    if not url or not token:
-        return {"ok": False, "why": "NetBox URL or token missing"}
+    if not url:
+        return {"ok": False, "why": "NetBox URL missing"}
+    base = url.rstrip("/") + "/"
     try:
-        with httpx.Client(timeout=timeout, headers=_headers(token)) as client:
-            response = client.get(urljoin(url.rstrip("/") + "/", "api/status/"))
-            if response.status_code >= 400:
-                response = client.get(urljoin(url.rstrip("/") + "/", "api/dcim/devices/?limit=1"))
-            response.raise_for_status()
-        return {"ok": True}
+        headers = _headers(token) if token else {"Accept": "text/html,application/json"}
+        with httpx.Client(timeout=timeout, headers=headers, follow_redirects=True) as client:
+            api_code = 0
+            if token:
+                response = client.get(urljoin(base, "api/status/"))
+                api_code = int(response.status_code)
+                if response.status_code >= 400:
+                    response = client.get(urljoin(base, "api/dcim/devices/?limit=1"))
+                    api_code = int(response.status_code)
+                if response.status_code < 400:
+                    return {"ok": True}
+            login = client.get(urljoin(base, "login/"))
+            if login.status_code < 400:
+                if not token:
+                    return {
+                        "ok": False,
+                        "degraded": True,
+                        "why": "NetBox UI answers but NETBOX_API_TOKEN is empty",
+                    }
+                return {
+                    "ok": False,
+                    "degraded": True,
+                    "why": f"NetBox UI up; API returned HTTP {api_code}",
+                }
+            return {"ok": False, "why": f"NetBox HTTP {login.status_code}"}
+    except (httpx.ConnectError, httpx.TimeoutException, OSError) as exc:
+        return {
+            "ok": False,
+            "starting": True,
+            "why": (
+                "NetBox is not answering yet (first boot runs database migrations; "
+                f"wait a few minutes): {exc}"
+            ),
+        }
     except Exception as exc:
         return {"ok": False, "why": str(exc)}
 

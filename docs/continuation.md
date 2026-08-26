@@ -17,7 +17,9 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Wednesday 26 August 2026.** N asked for Add/Edit **Asset ID first** (typed short id, not derived from hostname) and `./forgesre verify` by **# / id / hostname / IP**.
+**Wednesday 26 August 2026.** Bundled NetBox is a **default** compose service (no profile): UI `:8001`, Redis on `127.0.0.1:6379`, database `netbox` on the existing Postgres (does not wipe `forgesre`). `--netbox-url` still overrides Core. First boot migrations can take several minutes; doctor stays yellow until `/login/` answers.
+
+Add/Edit **Asset ID first** (typed short id, not derived from hostname) and `./forgesre verify` by **# / id / hostname / IP** already landed on `main`. Do not fight that form.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -42,7 +44,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **310 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x.
+Both runs: **319 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -50,9 +52,9 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-Add/Edit form order matches the Assets table (skip `#`): **Asset ID**, **Hostname**, **IP**, then the rest. Alarms stays the third column (not rebuilt). Operator types a short unique `asset_id` (`win10-gp`) and a separate hostname (`DESKTOP-CG81N3J`). Edit keeps id immutable. `./forgesre verify` / `ping` accept asset number `#`, id, hostname, and IP. TAB completes numbers, ids, and hostnames.
+Bundled NetBox default-on (`netbox`, `netbox-redis`, `netbox-db-init`). Core `NETBOX_URL=http://127.0.0.1:8001`. Doctor probes `/login/` and `/api/status/` — yellow while migrating, not fake green.
 
-Do **not** rebuild Alarms or Memory alerts.
+Add/Edit form order (already on `main`): **Asset ID**, **Hostname**, **IP**. Do **not** rebuild Alarms or Memory alerts.
 
 ---
 
@@ -83,6 +85,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Prometheus Health Open is **Targets** (`:9090/targets?search=`), not Prometheus process `/metrics`. Core `/metrics` stays.
 - Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
 - `snmp-exporter` is a **default** compose service.
+- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override.
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it.
 - Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update` (`docker info`, else `sudo docker compose`). A docker.sock permission error is not “start postgres”.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`. Do not explode the archive into loose files at `data/backups/` root.

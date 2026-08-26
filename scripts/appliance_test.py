@@ -353,6 +353,20 @@ def run_all(root: Path) -> Runner:
         ok = 200 <= status_code < 400
         r.add(name, "pass" if ok else "fail", f"HTTP {status_code or 'down'} {body[:80].replace(chr(10), ' ')}", how, fix)
 
+    nb_port = r.env.get("NETBOX_PORT") or "8001"
+    nb_url = f"http://127.0.0.1:{nb_port}/login/"
+    nb_code, nb_body = r.http(nb_url, timeout=5)
+    if 200 <= nb_code < 400:
+        r.add("http.netbox", "pass", f"HTTP {nb_code} :{nb_port}/login/", f"curl -fsS {nb_url}", "docker compose logs netbox")
+    else:
+        r.add(
+            "http.netbox",
+            "warn",
+            f"HTTP {nb_code or 'down'} — first boot runs migrations; doctor stays yellow until /login/ answers",
+            f"curl -fsS {nb_url}",
+            "docker compose logs --tail=80 netbox   # wait; do not fake green",
+        )
+
     llm_url = "http://127.0.0.1:8088/v1/models"
     code, _ = r.http(llm_url)
     profiles = r.env.get("COMPOSE_PROFILES", "")

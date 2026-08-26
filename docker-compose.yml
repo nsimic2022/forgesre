@@ -33,6 +33,7 @@ services:
       LOKI_URL: http://127.0.0.1:3100
       ALERTMANAGER_URL: http://127.0.0.1:9093
       GRAFANA_PUBLIC_URL: http://localhost:${GRAFANA_PORT:-3000}
+      NETBOX_URL: ${NETBOX_URL:-http://127.0.0.1:8001}
       FORGESRE_BACKUP_DIR: /backups
       FORGESRE_DOTENV: /host-dotenv
       FORGESRE_SECRETS_FILE: /host-secrets.env
@@ -156,6 +157,102 @@ services:
     depends_on:
       - prometheus
       - loki
+    restart: unless-stopped
+
+  netbox-redis:
+    # Default stack (not a profile). NetBox needs Redis; ForgeSRE Core does not.
+    image: redis:7-alpine
+    network_mode: host
+    env_file:
+      - secrets/secrets.env
+    environment:
+      NETBOX_REDIS_PASSWORD: ${NETBOX_REDIS_PASSWORD}
+      REDISCLI_AUTH: ${NETBOX_REDIS_PASSWORD}
+    command:
+      - sh
+      - -c
+      - redis-server --bind 127.0.0.1 --port 6379 --save 60 1 --loglevel warning --requirepass "$$NETBOX_REDIS_PASSWORD"
+    volumes:
+      - ${FORGESRE_DATA:-./data}/netbox/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  netbox-db-init:
+    # CREATE DATABASE netbox on the existing Postgres. Does not touch database forgesre.
+    image: postgres:16-alpine
+    network_mode: host
+    env_file:
+      - secrets/secrets.env
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      NETBOX_DB_PASSWORD: ${NETBOX_DB_PASSWORD}
+    volumes:
+      - ./scripts/netbox-db-init.sh:/netbox-db-init.sh:ro
+    entrypoint: ["/bin/sh", "/netbox-db-init.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  netbox:
+    # Default stack (not a profile). Host network; Granian on :8001 (Core owns :8080).
+    # First boot runs Django migrations — doctor stays yellow until /login/ answers.
+    image: docker.io/netboxcommunity/netbox:v4.4-3.2.0
+    network_mode: host
+    user: "netbox:root"
+    env_file:
+      - secrets/secrets.env
+    environment:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: ${NETBOX_DB_PASSWORD}
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_DATABASE: "0"
+      REDIS_PASSWORD: ${NETBOX_REDIS_PASSWORD}
+      REDIS_CACHE_HOST: 127.0.0.1
+      REDIS_CACHE_PORT: "6379"
+      REDIS_CACHE_DATABASE: "1"
+      REDIS_CACHE_PASSWORD: ${NETBOX_REDIS_PASSWORD}
+      REDIS_SSL: "false"
+      REDIS_CACHE_SSL: "false"
+      SECRET_KEY: ${NETBOX_SECRET_KEY}
+      ALLOWED_HOSTS: "* localhost 127.0.0.1 ::1"
+      CORS_ORIGIN_ALLOW_ALL: "true"
+      SKIP_SUPERUSER: "false"
+      SUPERUSER_NAME: ${NETBOX_SUPERUSER_NAME:-admin}
+      SUPERUSER_EMAIL: ${NETBOX_SUPERUSER_EMAIL:-admin@forgesre.local}
+      SUPERUSER_PASSWORD: ${NETBOX_SUPERUSER_PASSWORD}
+      SUPERUSER_API_TOKEN: ${NETBOX_API_TOKEN}
+      NETBOX_HTTP_PORT: ${NETBOX_PORT:-8001}
+      GRANIAN_WORKERS: "2"
+      MAX_DB_WAIT_TIME: "180"
+      DB_WAIT_TIMEOUT: "3"
+      RELEASE_CHECK_URL: ""
+    volumes:
+      - ./scripts/netbox-launch.sh:/opt/netbox/launch-netbox.sh:ro
+      - ${FORGESRE_DATA:-./data}/netbox/media:/opt/netbox/netbox/media
+      - ${FORGESRE_DATA:-./data}/netbox/reports:/opt/netbox/netbox/reports
+      - ${FORGESRE_DATA:-./data}/netbox/scripts:/opt/netbox/netbox/scripts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      netbox-db-init:
+        condition: service_completed_successfully
+      netbox-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${NETBOX_PORT:-8001}/login/ >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+      start_period: 240s
     restart: unless-stopped
 
   llm:

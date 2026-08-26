@@ -2,7 +2,7 @@
 
 Self-hosted SRE console for a **physical data center**.
 
-One Ubuntu VM (a vCenter guest is the usual lab). Docker Compose, host networking, offline-friendly. You keep Prometheus, Grafana, Loki, and optional NetBox — ForgeSRE sits **on top of them** and turns alerts into incidents with an owner, a playbook, and a read-only AI investigation.
+One Ubuntu VM (a vCenter guest is the usual lab). Docker Compose, host networking, offline-friendly. You keep Prometheus, Grafana, Loki, and NetBox — ForgeSRE sits **on top of them** and turns alerts into incidents with an owner, a playbook, and a read-only AI investigation.
 
 It is not a Kubernetes platform, not APM, and not auto-remediation. Playbooks are checklists. AI never SSH-es, never runs commands, never writes NetBox.
 
@@ -32,7 +32,7 @@ Find or enter a host
 
 | Piece | Role |
 |---|---|
-| **Discovery** | Light probe: TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, then HTTP `/metrics` on :9182/:9100 to default Windows vs Linux. Approve or Ignore. Optional read-sync from an existing NetBox. |
+| **Discovery** | Light probe: TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, then HTTP `/metrics` on :9182/:9100 to default Windows vs Linux. Approve or Ignore. Optional read-sync from bundled NetBox (`:8001`) or `--netbox-url`. |
 | **Inventory** | Hostname, IP, type (default **Auto (detect exporter)**), owner email/phone. Analysts can add and edit. |
 | **Monitoring** | Prometheus HTTP SD for Linux (`node_exporter` :9100) and Windows (`windows_exporter` :9182). Bundled snmp_exporter for network devices. Grafana for graphs. |
 | **Incidents** | Alertmanager webhook opens `INC-…`. Fingerprint is alert + asset. |
@@ -51,7 +51,7 @@ Demo asset `forge-demo-01` is seeded so the first hour is visible without a real
 - A replacement for Prometheus, Grafana, Loki, or NetBox
 - An installer for `node_exporter` or `windows_exporter` on your servers
 - Auto-remediation, SSH, or executed runbooks
-- A bundled NetBox or a cloud LLM
+- A cloud LLM (local llama.cpp is optional)
 - Kubernetes / tracing / APM
 
 If you need graphs, open Grafana (`:3000`). If you need “what broke, who to call, what to check”, stay in ForgeSRE (`:8080`).

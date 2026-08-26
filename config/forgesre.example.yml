@@ -7,11 +7,11 @@ system:
   cookie_secure: false # true when Core is served over HTTPS (or set FORGESRE_COOKIE_SECURE=1)
 
 inventory:
-  provider: local # local | netbox (external NetBox only; never bundled)
+  provider: local # local inventory is SoT; NetBox is read-sync
   netbox:
-    enabled: false
-    mode: external
-    url: ""
+    enabled: true
+    mode: bundled # bundled | external | disabled
+    url: "http://127.0.0.1:8001" # override with --netbox-url / an external instance
 
 discovery:
   enabled: true

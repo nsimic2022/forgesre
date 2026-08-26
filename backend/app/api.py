@@ -1133,14 +1133,24 @@ def _netbox_check() -> dict[str, str]:
         return _ok("disabled")
     from app.netbox import netbox_status
 
-    result = netbox_status(settings.netbox_url, settings.netbox_token)
+    url = (settings.netbox_url or "http://127.0.0.1:8001").rstrip("/")
+    result = netbox_status(url, settings.netbox_token)
+    test = f"curl -fsS {url}/login/"
     if result.get("ok"):
         return _ok("ok")
+    why = str(result.get("why") or "NetBox unreachable")
+    if result.get("starting") or result.get("degraded"):
+        return {
+            "status": "warn",
+            "why": why,
+            "test": test,
+            "fix": "Wait for first-boot migrations (can take several minutes). Then: docker compose logs netbox. External override: inventory.netbox.url + NETBOX_API_TOKEN.",
+        }
     return {
         "status": "error",
-        "why": str(result.get("why") or "NetBox unreachable"),
-        "test": f"curl -H 'Authorization: Token …' {settings.netbox_url}/api/status/",
-        "fix": "Set inventory.netbox.url and NETBOX_API_TOKEN, or disable NetBox.",
+        "why": why,
+        "test": test,
+        "fix": "docker compose logs netbox && docker compose up -d netbox netbox-redis netbox-db-init",
     }
 
 
