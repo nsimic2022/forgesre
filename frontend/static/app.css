@@ -181,14 +181,31 @@ h3 { margin: 0.9rem 0 0.4rem; font-size: 1rem; }
 .stat.crit strong { color: var(--crit); }
 .table-scroll { overflow-x: auto; max-width: 100%; }
 table { width: 100%; border-collapse: collapse; background: var(--panel); }
-th, td { text-align: left; padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+th, td {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.92rem;
+  vertical-align: middle;
+}
 table tbody tr:hover td { background: var(--row-hover); }
 .user-table tr.selected td,
 .asset-table tr.selected td { background: var(--selected); }
 .user-table tr.selected:hover td,
 .asset-table tr.selected:hover td { background: var(--selected-hover); }
 .user-table td a { color: inherit; }
-.asset-table .row-actions { flex-wrap: wrap; }
+.asset-table td.asset-type { white-space: nowrap; }
+.asset-table td.asset-actions {
+  display: table-cell;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.asset-table td.asset-actions .row-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.35rem;
+}
 .asset-table .row-actions form { margin: 0; }
 .asset-table .row-actions button,
 .asset-table .row-actions a.button,
@@ -266,6 +283,12 @@ table tbody tr:hover td { background: var(--row-hover); }
 .banner-list { margin: 0.45rem 0 0; padding-left: 1.2rem; }
 .banner-list li { margin: 0.2rem 0; }
 .row-actions { display: flex; gap: 0.4rem; align-items: center; }
+/* display:flex on a <td> shrinks the cell to content height, so
+   border-bottom steps up vs taller cells in the same row. */
+td.row-actions {
+  display: table-cell;
+  vertical-align: middle;
+}
 .user-actions { margin-top: 0.75rem; gap: 0.75rem; flex-wrap: wrap; }
 .user-actions button { width: auto; flex: 0 0 auto; }
 label.inline-check { flex-direction: row; align-items: center; gap: 0.5rem; max-width: none; }
@@ -306,7 +329,6 @@ label.inline-check { flex-direction: row; align-items: center; gap: 0.5rem; max-
 @media (max-width: 1100px) {
   .admin-backup-cli { grid-template-columns: 1fr; }
 }
-td.row-actions { flex-wrap: wrap; }
 td.row-actions form { margin: 0; }
 td.row-actions button { width: auto; padding: 0.35rem 0.7rem; }
 pre.cli-hint {

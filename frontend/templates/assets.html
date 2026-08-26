@@ -64,12 +64,13 @@
           <span class="muted">—</span>
         {% endif %}
       </td>
-      <td>{{ asset.type }}</td>
+      <td class="asset-type" title="{{ asset.type }}">{{ asset_type_abbrev(asset.type) }}</td>
       <td>{{ asset.environment }}</td>
       <td><span class="pill {{ asset.status }}">{{ asset.status }}</span></td>
       <td>{{ asset.source }}</td>
       {% if can('write_assets') %}
-      <td class="row-actions">
+      <td class="asset-actions">
+        <div class="row-actions">
         <a class="button" href="/assets?edit={{ asset.asset_id }}">Edit</a>
         <a class="button" href="/assets?clone={{ asset.asset_id }}">Clone</a>
         <a class="button" href="/assets/{{ asset.asset_id }}/verify">Verify</a>
@@ -78,6 +79,7 @@
           <button type="submit" class="danger">Remove</button>
         </form>
         {% endif %}
+        </div>
       </td>
       {% endif %}
     </tr>

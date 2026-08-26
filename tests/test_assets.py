@@ -1,9 +1,10 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
-from app.inventory import similar_incident_groups
+from app.inventory import asset_type_abbrev, similar_incident_groups
 from app.main import app
 from app.models import Asset, Notification, User
 from app.security import hash_password
@@ -255,6 +256,61 @@ def test_assets_list_shows_edit_clone_remove():
     assert b"copy-01" in clone_page.content
     assert b"forge-demo-" in clone_page.content
     db.close()
+
+
+def test_asset_type_abbrev_map():
+    assert asset_type_abbrev("Linux Server") == "lnx"
+    assert asset_type_abbrev("Windows Server") == "win"
+    assert asset_type_abbrev("Web/appliance") == "web"
+    assert asset_type_abbrev("Network device") == "net"
+    assert asset_type_abbrev("Network Switch") == "net"
+    assert asset_type_abbrev("Auto (detect exporter)") == "Auto (detect exporter)"
+    assert asset_type_abbrev("") == "—"
+    assert asset_type_abbrev("Custom Box") == "Custom Box"
+
+
+def test_assets_table_abbreviates_type_form_keeps_full_names():
+    db = _db()
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    page = client.get("/assets")
+    assert page.status_code == 200
+    table, rest = page.text.split("</table>", 1)
+    assert 'title="Linux Server">lnx</td>' in table
+    assert 'title="Windows Server">win</td>' in table
+    assert 'title="Network Switch">net</td>' in table
+    assert ">Linux Server<" not in table
+    assert ">Windows Server<" not in table
+    assert ">Network Switch<" not in table
+    assert 'value="Linux Server"' in rest
+    assert 'value="Windows Server"' in rest
+    assert 'value="Network device"' in rest
+    assert 'value="Web/appliance"' in rest
+    assert ">Linux Server</option>" in rest
+    assert ">Windows Server</option>" in rest
+    assert ">Network device</option>" in rest
+    assert ">Web/appliance</option>" in rest
+    db.close()
+
+
+def test_asset_table_actions_cell_is_table_cell_not_flex_td():
+    html = Path("frontend/templates/assets.html").read_text(encoding="utf-8")
+    css = Path("frontend/static/app.css").read_text(encoding="utf-8")
+    base = Path("frontend/templates/base.html").read_text(encoding="utf-8")
+    table = html.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
+    assert 'td class="row-actions"' not in table
+    assert 'class="asset-actions"' in table
+    assert 'class="row-actions"' in table
+    assert "asset_type_abbrev" in table
+    assert "vertical-align: middle" in css
+    assert ".asset-table td.asset-actions" in css
+    assert "display: table-cell" in css
+    assert "td.row-actions" in css
+    assert "app.css?v=asset-type-1" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():

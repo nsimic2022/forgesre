@@ -20,6 +20,7 @@ from app.inventory import (
     ASSET_TYPE_CHOICES,
     approve_candidate,
     asset_form_values,
+    asset_type_abbrev,
     assets_matching,
     clone_prefill,
     create_manual_asset,
@@ -173,6 +174,7 @@ def ctx(request: Request, user: User | None, **extra):
         "is_demo_incident": is_demo_incident,
         "is_demo_mail": is_demo_mail,
         "is_demo_journal": is_demo_journal,
+        "asset_type_abbrev": asset_type_abbrev,
     }
     data.update(extra)
     return data

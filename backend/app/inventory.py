@@ -41,6 +41,22 @@ def asset_kind(type: str = "", profile: str = "") -> str:
     return "other"
 
 
+_ASSET_TYPE_ABBREV = {
+    "linux": "lnx",
+    "windows": "win",
+    "network": "net",
+    "web": "web",
+}
+
+
+def asset_type_abbrev(type: str = "") -> str:
+    """Short Type label for the Assets table. Add/Edit dropdowns keep full names."""
+    label = (type or "").strip()
+    if not label:
+        return "—"
+    return _ASSET_TYPE_ABBREV.get(asset_kind(label), label)
+
+
 def default_scrape_address(type: str, ip: str, profile: str = "") -> str:
     ip = (ip or "").strip()
     if not ip:
