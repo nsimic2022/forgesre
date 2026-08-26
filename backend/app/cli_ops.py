@@ -14,6 +14,7 @@ from urllib.parse import quote, urlencode
 from app.asset_probe import (
     DEFAULT_TIMEOUT,
     ad_hoc_item,
+    asset_selector_hit,
     format_report,
     looks_like_host,
     overall_exit,
@@ -256,6 +257,73 @@ def _is_demo_row(item: dict[str, Any]) -> bool:
     return is_lab_inventory_row(item)
 
 
+def cmd_asset_refs(port: str) -> None:
+    """Asset numbers then ids, one per line, for bash TAB."""
+    jar, _me_user = ensure_jar(port)
+    try:
+        rows = get_json(port, jar, "/api/v1/assets")
+        if not isinstance(rows, list):
+            return
+        numbered: list[tuple[int, str]] = []
+        ids: list[str] = []
+        for item in rows:
+            if not isinstance(item, dict):
+                continue
+            raw = item.get("number")
+            try:
+                numbered.append((int(raw), str(raw)))
+            except (TypeError, ValueError):
+                pass
+            aid = str(item.get("asset_id") or "").strip()
+            if aid:
+                ids.append(aid)
+        for _n, text in sorted(numbered, key=lambda pair: pair[0]):
+            print(text)
+        for aid in ids:
+            print(aid)
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError):
+        return
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
+def cmd_assets(port: str, args: list[str]) -> None:
+    selector = ""
+    for item in args:
+        if item in {"-h", "--help"}:
+            raise SystemExit("usage: ./forgesre assets [number-or-id-or-ip]")
+        if item.startswith("-"):
+            raise SystemExit(f"unknown flag: {item}")
+        selector = item
+    jar, _me = ensure_jar(port)
+    try:
+        rows = get_json(port, jar, "/api/v1/assets")
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as exc:
+        raise SystemExit(f"could not list assets: {exc}") from exc
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+    if not isinstance(rows, list):
+        rows = []
+    if selector:
+        rows = [row for row in rows if isinstance(row, dict) and asset_selector_hit(row, selector)]
+        if not rows:
+            raise SystemExit(f"no asset matching {selector!r}. Try an asset number, id, hostname, or IP.")
+    print(f"{'#':<5} {'ASSET':<22} {'IP':<16} {'TYPE':<22} {'SCRAPE / SNMP'}")
+    print("-" * 84)
+    for item in rows:
+        scrape = item.get("scrape_address") or ""
+        extra = scrape if scrape else ("SNMP UDP/161" if item.get("snmp") else "—")
+        number = item.get("number")
+        num = str(number) if number is not None else "—"
+        print(f"{num:<5} {item.get('asset_id', ''):<22} {item.get('ip', ''):<16} {str(item.get('type', ''))[:22]:<22} {extra}")
+    print()
+    print(f"{len(rows)} asset(s). # is the stable asset number (gaps stay after Remove). Linux = node_exporter :9100. Windows = windows_exporter :9182. Network device + IP = snmp_exporter.")
+    print("Reachability: ./forgesre ping   (ICMP + /metrics; ping alone is not a scrape)")
+    print("Live path:    ./forgesre verify (exporter → prometheus → alertmanager → core; not ./forgesre test)")
+
+
 def cmd_ping(port: str, args: list[str]) -> None:
     selector = ""
     timeout = DEFAULT_TIMEOUT
@@ -267,7 +335,7 @@ def cmd_ping(port: str, args: list[str]) -> None:
             try:
                 timeout = float(args[i + 1])
             except ValueError:
-                raise SystemExit("usage: ./forgesre ping [--timeout seconds] [--demo] [asset-id-or-ip]")
+                raise SystemExit("usage: ./forgesre ping [--timeout seconds] [--demo] [number-or-id-or-ip]")
             if timeout <= 0:
                 raise SystemExit("--timeout must be > 0")
             i += 2
@@ -277,7 +345,7 @@ def cmd_ping(port: str, args: list[str]) -> None:
             i += 1
             continue
         if item in {"-h", "--help"}:
-            raise SystemExit("usage: ./forgesre ping [--timeout seconds] [--demo] [asset-id-or-ip]")
+            raise SystemExit("usage: ./forgesre ping [--timeout seconds] [--demo] [number-or-id-or-ip]")
         if item.startswith("-"):
             raise SystemExit(f"unknown flag: {item}")
         selector = item
@@ -304,7 +372,7 @@ def cmd_ping(port: str, args: list[str]) -> None:
         chosen = [ad_hoc_item(selector)]
         skipped_demo = 0
     if selector and not chosen:
-        raise SystemExit(f"no asset matching {selector!r}. Try an asset id, hostname, or IP.")
+        raise SystemExit(f"no asset matching {selector!r}. Try an asset number, id, hostname, or IP.")
     if not chosen:
         print("No assets with an IP to probe.")
         if skipped_demo:
@@ -330,7 +398,7 @@ def cmd_verify(port: str, args: list[str]) -> None:
                 timeout = float(args[i + 1])
             except ValueError:
                 raise SystemExit(
-                    "usage: ./forgesre verify [--timeout seconds] [--demo] [asset-id-or-name]"
+                    "usage: ./forgesre verify [--timeout seconds] [--demo] [number-or-id-or-name]"
                 )
             if timeout <= 0:
                 raise SystemExit("--timeout must be > 0")
@@ -342,7 +410,7 @@ def cmd_verify(port: str, args: list[str]) -> None:
             continue
         if item in {"-h", "--help"}:
             raise SystemExit(
-                "usage: ./forgesre verify [--timeout seconds] [--demo] [asset-id-or-name]"
+                "usage: ./forgesre verify [--timeout seconds] [--demo] [number-or-id-or-name]"
             )
         if item.startswith("-"):
             raise SystemExit(f"unknown flag: {item}")
@@ -371,7 +439,7 @@ def cmd_verify(port: str, args: list[str]) -> None:
         is_demo=_is_demo_row,
     )
     if selector and not chosen:
-        raise SystemExit(f"no asset matching {selector!r}. Try an asset id, hostname, or IP.")
+        raise SystemExit(f"no asset matching {selector!r}. Try an asset number, id, hostname, or IP.")
     if not chosen:
         print("No assets to verify.")
         if skipped_demo:
@@ -431,7 +499,7 @@ def cmd_verify(port: str, args: list[str]) -> None:
 def main(argv: list[str] | None = None) -> None:
     argv = list(argv if argv is not None else sys.argv[1:])
     if len(argv) < 2:
-        raise SystemExit("usage: cli_ops <port> <incidents|history|whoami|login|logout|numbers|ping|probe|verify> [args]")
+        raise SystemExit("usage: cli_ops <port> <incidents|history|whoami|login|logout|numbers|assets|asset-refs|ping|probe|verify> [args]")
     port, command, *rest = argv
     if command == "incidents":
         cmd_incidents(port, rest)
@@ -439,6 +507,10 @@ def main(argv: list[str] | None = None) -> None:
         cmd_history(port, rest)
     elif command == "numbers":
         cmd_numbers(port)
+    elif command in {"assets", "inventory"}:
+        cmd_assets(port, rest)
+    elif command in {"asset-refs", "asset_refs"}:
+        cmd_asset_refs(port)
     elif command in {"ping", "probe"}:
         cmd_ping(port, rest)
     elif command == "verify":

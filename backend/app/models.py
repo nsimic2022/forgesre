@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, event, func
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from app.db import Base
 
@@ -31,6 +31,7 @@ class Asset(Base):
     __tablename__ = "assets"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    number: Mapped[int | None] = mapped_column(Integer, unique=True, index=True, nullable=True)
     asset_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     hostname: Mapped[str] = mapped_column(String(255), index=True)
     ip: Mapped[str] = mapped_column(String(64), default="")
@@ -55,6 +56,47 @@ class Asset(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     incidents: Mapped[list[Incident]] = relationship(back_populates="asset")
+
+
+class AssetNumberSeq(Base):
+    """High-water mark for Asset.number. Never decreases after delete."""
+
+    __tablename__ = "asset_number_seq"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    last: Mapped[int] = mapped_column(Integer, default=0)
+
+
+@event.listens_for(Session, "before_flush")
+def _assign_asset_numbers(session: Session, flush_context, instances) -> None:
+    """Stable inventory #. Auto-increment; never reuse after delete (gaps are OK)."""
+    del flush_context, instances
+    pending = [obj for obj in session.new if isinstance(obj, Asset) and not getattr(obj, "number", None)]
+    if not pending:
+        return
+    seq = session.get(AssetNumberSeq, 1)
+    if seq is None:
+        for obj in session.new:
+            if isinstance(obj, AssetNumberSeq) and obj.id == 1:
+                seq = obj
+                break
+    if seq is None:
+        live = session.query(func.max(Asset.number)).scalar()
+        seq = AssetNumberSeq(id=1, last=int(live or 0))
+        session.add(seq)
+    taken = {
+        int(obj.number)
+        for obj in list(session.new) + list(session.dirty)
+        if isinstance(obj, Asset) and getattr(obj, "number", None)
+    }
+    n = int(seq.last or 0)
+    for asset in pending:
+        n += 1
+        while n in taken:
+            n += 1
+        asset.number = n
+        taken.add(n)
+    seq.last = n
 
 
 class Playbook(Base):

@@ -1232,7 +1232,8 @@ def _prepare_demo_lab(db: Session) -> None:
 
     seed(db)
     linux = ensure_demo_asset(db)
-    ensure_demo_similar_history(db, linux)
+    if linux is not None:
+        ensure_demo_similar_history(db, linux)
     ensure_demo_windows_asset(db)
     ensure_demo_switch_asset(db)
     seed_demo_candidate(db)

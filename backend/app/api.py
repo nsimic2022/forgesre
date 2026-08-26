@@ -205,7 +205,7 @@ def me(user: User = Depends(require_user)) -> dict[str, Any]:
 
 @router.get("/assets")
 def list_assets(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> list[dict]:
-    return [_asset(item) for item in db.query(Asset).order_by(Asset.hostname).all()]
+    return [_asset(item) for item in db.query(Asset).order_by(Asset.number, Asset.hostname).all()]
 
 
 @router.get("/assets/reachability")
@@ -1186,6 +1186,7 @@ def _snmp_answer(ip: str) -> bool:
 def _asset(item: Asset) -> dict[str, Any]:
     reach = reachability_snapshot(item)
     return {
+        "number": item.number,
         "asset_id": item.asset_id,
         "hostname": item.hostname,
         "ip": item.ip,

@@ -222,6 +222,13 @@ def test_select_skips_demo_unless_named():
     named, skipped_named = select_assets(rows, "forge-demo-win-01", is_demo=is_demo)
     assert [row["asset_id"] for row in named] == ["forge-demo-win-01"]
     assert skipped_named == 0
+    numbered = [
+        {"asset_id": "forge-demo-win-01", "ip": "10.10.10.21", "number": 2, "type": "Windows Server"},
+        {"asset_id": "win-01", "ip": "10.10.10.60", "number": 12, "type": "Windows Server"},
+    ]
+    by_num, skipped_num = select_assets(numbered, "12", is_demo=is_demo)
+    assert [row["asset_id"] for row in by_num] == ["win-01"]
+    assert skipped_num == 0
 
 
 def test_seeded_demo_windows_still_has_empty_scrape():

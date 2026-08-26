@@ -18,10 +18,16 @@
   <a href="/assets/verify">Verify all</a> runs the live chain exporter → prometheus → alertmanager → core (not <code>./forgesre test</code>).
   {% endif %}
 </p>
+<form method="get" action="/assets" class="row-actions" style="margin: 0.8rem 0;">
+  <input name="q" value="{{ q }}" placeholder="search #, id, hostname, IP">
+  <button type="submit">Search</button>
+  {% if q %}<a class="muted" href="/assets">Reset</a>{% endif %}
+</form>
 <div class="table-scroll">
 <table class="asset-table" data-asset-reachability>
   <thead>
     <tr>
+      <th title="Asset number">#</th>
       <th>Asset ID</th>
       <th>Hostname</th>
       <th>IP</th>
@@ -38,6 +44,7 @@
   <tbody>
     {% for asset in assets %}
     <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}">
+      <td>{{ asset.number or "—" }}</td>
       <td><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
       <td>{{ asset.hostname }}</td>
       <td>{{ asset.ip or "—" }}</td>
@@ -70,8 +77,6 @@
         <form method="post" action="/assets/{{ asset.asset_id }}/delete" onsubmit="return confirm('Remove {{ asset.hostname }}? Prometheus will stop scraping it. Incidents stay in History without this host. Core is unchanged.');">
           <button type="submit" class="danger">Remove</button>
         </form>
-        {% else %}
-        <span class="muted" title="{{ delete_blocked(asset) }}">Lab</span>
         {% endif %}
       </td>
       {% endif %}

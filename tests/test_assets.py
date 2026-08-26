@@ -234,6 +234,8 @@ def test_assets_list_shows_edit_clone_remove():
     assert b">Clone<" in page.content
     assert b">Verify<" in page.content
     assert b">Remove<" in page.content
+    assert b">#</" in page.content or b"Asset number" in page.content or b">#</th>" in page.content
+    assert b'placeholder="search #, id, hostname, IP"' in page.content
     assert b'name="scrape_address"' in page.content
     assert b"?edit=" in page.content
     assert b"reach-dot" in page.content
@@ -244,7 +246,9 @@ def test_assets_list_shows_edit_clone_remove():
     assert b"Edit asset" in listed.content
     assert b'name="hostname"' in listed.content
     assert b">Verify<" in listed.content
+    assert b">Remove<" in listed.content
     assert b"/assets/forge-demo-01/verify" in listed.content
+    assert b">Lab<" not in listed.content
     clone_page = client.get("/assets?clone=forge-demo-01")
     assert clone_page.status_code == 200
     assert b"Clone asset" in clone_page.content
@@ -431,11 +435,41 @@ def test_remove_asset_unlinks_incidents_and_drops_sd():
     inc = db.query(Incident).filter_by(number=incident_number).one()
     assert inc.asset_id is None
     assert inc.title
+    db.close()
+
+
+def test_remove_demo_asset_and_seed_does_not_restore():
+    from app.inventory import sd_targets
+    from app.seed import seed
+
+    db = _db()
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    page = client.get("/assets")
+    assert b'action="/assets/forge-demo-01/delete"' in page.content
+    assert b">Remove<" in page.content
     demo = client.post("/assets/forge-demo-01/delete", follow_redirects=False)
-    assert demo.status_code in {302, 303, 400}
+    assert demo.status_code in {302, 303}
+    db.expire_all()
+    assert db.query(Asset).filter_by(asset_id="forge-demo-01").first() is None
+    assert not any(item["labels"]["asset"] == "forge-demo-01" for item in sd_targets(db))
+    api_gone = client.post("/api/v1/assets/forge-demo-01/delete")
+    assert api_gone.status_code == 404
+    seed(db)
+    db.expire_all()
+    assert db.query(Asset).filter_by(asset_id="forge-demo-01").first() is None
+    assert db.query(Asset).filter_by(asset_id="forge-demo-win-01").one()
+    from app.models import AuditLog
+
+    db.query(AuditLog).filter_by(action="asset.delete", object_id="forge-demo-01").delete()
+    db.commit()
+    seed(db)
+    db.expire_all()
     assert db.query(Asset).filter_by(asset_id="forge-demo-01").one()
-    api_denied = client.post("/api/v1/assets/forge-demo-01/delete")
-    assert api_denied.status_code == 400
     db.close()
 
 
@@ -544,5 +578,68 @@ def test_reachability_windows_icmp_blocked_exporter_up_is_yellow(monkeypatch):
     detail = client.get(f"/assets/{host.asset_id}")
     assert detail.status_code == 200
     assert b"reach-dot ping yellow" in listed.content or b"reach-dot ping yellow" in detail.content
+    db.close()
+
+
+def test_asset_numbers_are_stable_searchable_and_not_reused():
+    from sqlalchemy import text
+
+    from app.inventory import create_manual_asset, delete_asset
+    from app.migrate import migrate
+
+    db = _db()
+    rows = db.query(Asset).order_by(Asset.created_at, Asset.id).all()
+    assert all(row.number for row in rows)
+    assert len({row.number for row in rows}) == len(rows)
+    demo = db.query(Asset).filter_by(asset_id="forge-demo-01").one()
+    assert demo.number
+    current_max = max(int(row.number) for row in rows)
+    host = create_manual_asset(
+        db,
+        hostname="unique-num-host",
+        ip="10.200.200.200",
+        type="Linux Server",
+        actor="tester",
+    )
+    assert host.number == current_max + 1
+    client = TestClient(app)
+    client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    listed = client.get("/assets")
+    assert listed.status_code == 200
+    assert b">#</th>" in listed.content
+    assert str(host.number).encode() in listed.content
+    found = client.get(f"/assets?q={host.number}")
+    assert found.status_code == 200
+    assert b"unique-num-host" in found.content
+    api = client.get("/api/v1/assets").json()
+    match = next(item for item in api if item["asset_id"] == "unique-num-host")
+    assert match["number"] == host.number
+    detail = client.get("/assets/unique-num-host")
+    assert b"Asset number" in detail.content
+    assert f"#{host.number}".encode() in detail.content
+
+    taken = host.number
+    delete_asset(db, host, actor="tester")
+    nxt = create_manual_asset(
+        db,
+        hostname="after-gap-host",
+        ip="10.200.200.201",
+        type="Linux Server",
+        actor="tester",
+    )
+    assert nxt.number == taken + 1
+
+    db.execute(text("UPDATE assets SET number = NULL"))
+    db.commit()
+    migrate(engine)
+    db.expire_all()
+    restored = db.query(Asset).order_by(Asset.created_at, Asset.id).all()
+    assert all(row.number for row in restored)
+    assert len({row.number for row in restored}) == len(restored)
+    assert restored[0].number == 1
     db.close()
 

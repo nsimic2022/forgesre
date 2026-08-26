@@ -35,6 +35,25 @@ _forgesre_incident_ids() {
   PYTHONPATH="${_forgesre_root}/backend" python3 -m app.cli_ops "$port" numbers 2>/dev/null | tee "$cache" || true
 }
 
+_forgesre_asset_refs() {
+  local port="8080" cache now age
+  cache="${_forgesre_root}/data/.cli-complete-assets"
+  mkdir -p "${_forgesre_root}/data" 2>/dev/null || true
+  now="$(date +%s)"
+  if [[ -f "$cache" ]]; then
+    age=$((now - $(stat -c %Y "$cache" 2>/dev/null || echo 0)))
+    if [[ "$age" -ge 0 && "$age" -lt 30 ]]; then
+      cat "$cache"
+      return
+    fi
+  fi
+  if [[ -f "${_forgesre_root}/.env" ]]; then
+    port="$(awk -F= '/FORGESRE_HTTP_PORT/ {print $2}' "${_forgesre_root}/.env" | tail -1 | tr -d '"')"
+    port="${port:-8080}"
+  fi
+  PYTHONPATH="${_forgesre_root}/backend" python3 -m app.cli_ops "$port" asset-refs 2>/dev/null | tee "$cache" || true
+}
+
 _forgesre_complete() {
   local cur="${COMP_WORDS[COMP_CWORD]-}"
   local first="${COMP_WORDS[0]-}"
@@ -95,7 +114,10 @@ _forgesre_complete() {
       COMPREPLY=($(compgen -W "$(_forgesre_incident_ids)" -- "$cur"))
       ;;
     ping|probe|verify)
-      COMPREPLY=($(compgen -W "--timeout --demo" -- "$cur"))
+      COMPREPLY=($(compgen -W "--timeout --demo $(_forgesre_asset_refs)" -- "$cur"))
+      ;;
+    assets|inventory)
+      COMPREPLY=($(compgen -W "$(_forgesre_asset_refs)" -- "$cur"))
       ;;
     *)
       COMPREPLY=()

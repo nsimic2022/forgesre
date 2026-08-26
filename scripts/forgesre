@@ -54,13 +54,13 @@ Commands:
   install            Guided first-time install (new VM only)
   doctor             Short health lights (Core API, Core (container), Prometheus, …)
   test               Full appliance report (files, HTTP, login, APIs, email, logs)
-  ping [asset]       ICMP + exporter /metrics for inventory (alias: probe)
+  ping [asset]       ICMP + exporter /metrics (number, id, hostname, IP; alias: probe)
   probe [asset]      Same as ping
   verify [asset]     Live chain: exporter → prometheus → alertmanager → core
   status             docker compose ps
   logs [service]     Container logs (default: last 100 lines)
   config             Print config/forgesre.yml
-  assets             List inventory (alias: inventory)
+  assets             List inventory with # (alias: inventory)
   snmp               snmp_exporter health + SNMP HTTP SD targets
   render-monitoring  Rewrite Prometheus / Alertmanager / snmp.yml from templates
   journal [module]   Internal console reports (JSON)
@@ -96,6 +96,7 @@ Examples:
   ./forgesre ping
   ./forgesre ping win-01
   ./forgesre verify
+  ./forgesre verify 12
   ./forgesre verify win-01
   ./forgesre assets
   ./forgesre snmp
@@ -258,6 +259,7 @@ EOF
 verify — live communication for inventory (not ./forgesre test).
 
   ./forgesre verify
+  ./forgesre verify 12
   ./forgesre verify win-01
   ./forgesre verify --timeout 3
   ./forgesre verify --demo
@@ -329,8 +331,10 @@ EOF
 assets — list inventory from the Core API (login as the install admin).
 
   ./forgesre assets
+  ./forgesre assets 12
   ./forgesre inventory          # same command
 
+# is the stable asset number (not a row index; gaps stay after Remove).
 Linux hosts with scrape_address are Prometheus node_exporter targets (:9100).
 Windows Server rows use windows_exporter (:9182). Network device + IP is
 snmp_exporter (UDP/161). ICMP ping is not a scrape — ./forgesre ping.
@@ -684,52 +688,6 @@ EOF
   esac
 }
 
-cmd_assets() {
-  need_env
-  python3 - "$(port_from_env)" <<'PY'
-import json, os, sys, tempfile, subprocess, pathlib
-
-port = sys.argv[1]
-root = pathlib.Path(".").resolve()
-# load secrets
-env = {}
-for line in (root / "secrets/secrets.env").read_text().splitlines():
-    if not line or line.startswith("#") or "=" not in line:
-        continue
-    k, _, v = line.partition("=")
-    env[k] = v
-email = env.get("FORGESRE_ADMIN_EMAIL", "")
-password = env.get("FORGESRE_ADMIN_PASSWORD", "")
-jar = tempfile.NamedTemporaryFile(delete=False)
-jar.close()
-try:
-    subprocess.check_call(
-        [
-            "curl", "-fsS", "-c", jar.name, "-b", jar.name,
-            "-X", "POST", f"http://127.0.0.1:{port}/login",
-            "-d", f"email={email}&password={password}",
-        ],
-        stdout=subprocess.DEVNULL,
-    )
-    raw = subprocess.check_output(
-        ["curl", "-fsS", "-c", jar.name, "-b", jar.name, f"http://127.0.0.1:{port}/api/v1/assets"]
-    )
-finally:
-    os.unlink(jar.name)
-rows = json.loads(raw)
-print(f"{'ASSET':<22} {'IP':<16} {'TYPE':<22} {'SCRAPE / SNMP'}")
-print("-" * 78)
-for item in rows:
-    scrape = item.get("scrape_address") or ""
-    extra = scrape if scrape else ("SNMP UDP/161" if item.get("snmp") else "—")
-    print(f"{item.get('asset_id',''):<22} {item.get('ip',''):<16} {str(item.get('type',''))[:22]:<22} {extra}")
-print()
-print(f"{len(rows)} asset(s). Linux = node_exporter :9100. Windows = windows_exporter :9182. Network device + IP = snmp_exporter.")
-print("Reachability: ./forgesre ping   (ICMP + /metrics; ping alone is not a scrape)")
-print("Live path:    ./forgesre verify (exporter → prometheus → alertmanager → core; not ./forgesre test)")
-PY
-}
-
 cmd_snmp() {
   need_env
   local port code
@@ -946,7 +904,8 @@ case "$cmd" in
     sed -n '1,160p' config/forgesre.yml
     ;;
   assets|inventory)
-    cmd_assets
+    need_env
+    run_cli_ops assets "$@"
     ;;
   snmp)
     cmd_snmp

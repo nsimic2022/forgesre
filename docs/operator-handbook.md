@@ -238,7 +238,7 @@ If you rotate the install admin in the UI, also edit `FORGESRE_ADMIN_PASSWORD` i
 
 ## 6. Adding servers (inventory)
 
-A row on **Assets** is what ForgeSRE calls a server (or switch, or appliance). You can add one **manually** or via **Discovery** (Approve). Prometheus does **not** scan the network.
+A row on **Assets** is what ForgeSRE calls a server (or switch, or appliance). You can add one **manually** or via **Discovery** (Approve). Prometheus does **not** scan the network. The first column **#** is a stable asset number (auto-increment; deleting a host does not renumber the rest). Search and `./forgesre verify 12` use that number — it is not a volatile row index.
 
 - **Linux:** after the host is in inventory with `scrape_address=<ip>:9100`, Prometheus HTTP SD scrapes **node_exporter**.
 - **Windows:** after the host is in inventory with type `Windows Server` and `scrape_address=<ip>:9182`, the same HTTP SD scrapes **windows_exporter**. ICMP ping is not a scrape.
@@ -258,8 +258,8 @@ Who: **analyst**, engineer, or admin (`write_assets`).
 
 - **Edit** opens the same Add form filled in (`/assets?edit=<id>`). Hostname, type (including Auto), IP, scrape address, owner/contact, notes, environment. `asset_id` stays (Prometheus `asset=` label and history). HTTP SD is live from this table — the next Prometheus scrape drops or rewrites the target. Core’s static demo job is not this list.
 - **Clone** copies into the same form with a **new** hostname/id. Tweak before Save. Duplicate hostname or IP is rejected. NetBox id is not copied. If the source is `forge-demo-*`, the suggested name is `copy-…` (a real asset that **can** be scraped). Keep a `forge-demo-*` name only if you want another lab-only row.
-- **Remove** asks for confirm. The row leaves inventory and HTTP/SNMP SD. **Incidents stay** in History with the asset link cleared (not cascade-deleted). Discovery candidates for that IP go back to **new**. Seeded `forge-demo-*` hosts cannot be removed (Dashboard demos use them).
-- **Verify** runs the live path for that row (same as `./forgesre verify <id>`): ping, exporter port or SNMP, Prometheus `up`, scrape target health, family series (`node_` / `windows_` / SNMP), Alertmanager reachable, last Core incident (SKIP if none), last RCA vs PromQL. ForgeAI is listed only if enabled; verify does not call the LLM. Missing exporter = SKIP/FAIL with a reason, not a fake green host. Demo `forge-demo-*` and discovery seed `10.20.30.41` (`disc-10-20-30-41`) are labeled lab and are not scraped. **Verify all** is on the Assets list. This is not `./forgesre test`.
+- **Remove** asks for confirm. The row leaves inventory and HTTP/SNMP SD. **Incidents stay** in History with the asset link cleared (not cascade-deleted). Discovery candidates for that IP go back to **new**. Lab `forge-demo-*` hosts can be removed the same way; seed will not put them back after Core start/update.
+- **Verify** runs the live path for that row (same as `./forgesre verify <id>` or `./forgesre verify 12`): ping, exporter port or SNMP, Prometheus `up`, scrape target health, family series (`node_` / `windows_` / SNMP), Alertmanager reachable, last Core incident (SKIP if none), last RCA vs PromQL. ForgeAI is listed only if enabled; verify does not call the LLM. Missing exporter = SKIP/FAIL with a reason, not a fake green host. Demo `forge-demo-*` and discovery seed `10.20.30.41` (`disc-10-20-30-41`) are labeled lab and are not scraped. **Verify all** is on the Assets list. This is not `./forgesre test`.
 
 What Core does:
 
@@ -855,7 +855,7 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 | POST | `/api/v1/assets` | analyst+ |
 | POST | `/api/v1/assets/{id}` | analyst+ (edit hostname/type/IP/scrape/contacts) |
 | POST | `/api/v1/assets/{id}/clone` | analyst+ |
-| POST | `/api/v1/assets/{id}/delete` | analyst+ (not `forge-demo-*`; incidents stay, FK cleared) |
+| POST | `/api/v1/assets/{id}/delete` | analyst+ (incidents stay, FK cleared; `forge-demo-*` allowed) |
 | GET | `/api/v1/detect-exporter` | analyst+ (`?ip=` — :9182 then :9100 /metrics) |
 | GET | `/api/v1/assets` | viewer+ |
 | GET | `/api/v1/assets/{id}/metrics` | viewer+ (class tiles from Prometheus) |
@@ -890,7 +890,7 @@ Say this out loud so lab expectations stay honest:
 
 - No Kubernetes, no APM, no tracing, no auto-remediation.
 - Playbooks are checklists, not executed runbooks.
-- Assets can be added, edited, cloned, and removed (analyst+). Seeded `forge-demo-*` rows cannot be removed. Users can be edited and removed on Administration (not the install super admin, not yourself). Escalation policies can be created in the UI; there is no ticketing object.
+- Assets can be added, edited, cloned, and removed (analyst+). Lab `forge-demo-*` rows can be removed; they do not come back on update. Users can be edited and removed on Administration (not the install super admin, not yourself). Escalation policies can be created in the UI; there is no ticketing object.
 - Example YAML in `config/examples/` is not applied automatically.
 - Bundled alert rules include demo gauges, SNMP `up` / interface-down, a small `node_exporter` set (down / disk 90% / CPU 95%), and a small `windows_exporter` set (down / volume 90% / CPU 90%). Extra rules go in `alerts.local.yml`.
 - Discovery is TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, 256 hosts max. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.
