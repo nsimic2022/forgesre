@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Wednesday 26 August 2026.** System Health → Prometheus Open is **Targets** (`/targets` scrape jobs), not Prometheus process `/metrics`.
+**Wednesday 26 August 2026.** System Health → Prometheus Open is **Targets** (`/targets?search=` scrape jobs), not Prometheus process `/metrics`.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -43,7 +43,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **287 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~37s each. Python 3.12, pytest 9.x. Prometheus Health Open URLs: `/targets` (primary), `/alerts`, `/graph`.
+Both runs: **287 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~37s each. Python 3.12, pytest 9.x. Prometheus Health Open URLs: `/targets?search=` (primary), `/alerts`, `/graph`.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`.
 
@@ -51,7 +51,7 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-Prometheus **Open** on System Health: **Targets** (`http://127.0.0.1:9090/targets` — scrape jobs `windows-standard` / `linux-standard` / `forgesre-snmp`), **Alerts**, **Graph**. The old Metrics link was Prometheus process `/metrics` (useless for “did Windows actually get scraped?”). Core `/metrics` and Grafana Open are unchanged. Doctor dummy `core` key stays.
+Prometheus **Open** on System Health: **Targets** (`http://127.0.0.1:9090/targets?search=` — scrape jobs `windows-standard` / `linux-standard` / `forgesre-snmp`; port from config), **Alerts**, **Graph**. The old Metrics link was Prometheus process `/metrics` (useless for “did Windows actually get scraped?”). Core `/metrics` and Grafana Open are unchanged. Doctor dummy `core` key stays.
 
 ---
 
@@ -65,7 +65,7 @@ git pull origin main
 ./forgesre update
 ```
 
-Hard-refresh the browser after UI/CSS changes (`/static/app.css` is not cache-busted). Then System Health → Prometheus → **Targets**.
+Hard-refresh the browser after UI/CSS changes (`/static/app.css` is not cache-busted). Then System Health → Prometheus → **Targets** (`http://127.0.0.1:9090/targets?search=`; port from config).
 
 ---
 
@@ -81,7 +81,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Core is an SMTP **client** only. The UI has no IMAP inbox.
 - pytest is a laptop/dev dependency. The Core image must not install it.
 - Real Windows scrape is **windows_exporter :9182**, not the lab demo host.
-- Prometheus Health Open is **Targets** (`:9090/targets`), not Prometheus process `/metrics`. Core `/metrics` stays.
+- Prometheus Health Open is **Targets** (`:9090/targets?search=`), not Prometheus process `/metrics`. Core `/metrics` stays.
 - Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
 - `snmp-exporter` is a **default** compose service.
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it.

@@ -144,7 +144,7 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
         {"id": "postgres", "gui": "", "metrics": ""},
         {
             "id": "prometheus",
-            "gui": prometheus + "/targets",
+            "gui": prometheus + "/targets?search=",
             "gui_label": "Targets",
             "metrics": prometheus + "/alerts",
             "metrics_label": "Alerts",

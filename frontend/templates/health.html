@@ -17,7 +17,7 @@
   Overall:
   <span class="pill {{ health_class(doctor.overall) }}">{{ doctor.overall }}</span>
 </p>
-<p class="muted">Green = running. Yellow = paused / starting / disabled. Red = down. Open goes to that service’s GUI or metrics. Prometheus Open is Targets (scrape jobs), Alerts, Graph — not Prometheus process <code>/metrics</code>. Prometheus/Alertmanager listen on the appliance; use the VM host if the UI rewrote 127.0.0.1.</p>
+<p class="muted">Green = running. Yellow = paused / starting / disabled. Red = down. Open goes to that service’s GUI or metrics. Prometheus Open is Targets (<code>/targets?search=</code> scrape jobs), Alerts, Graph — not Prometheus process <code>/metrics</code>. Prometheus/Alertmanager listen on the appliance; use the VM host if the UI rewrote 127.0.0.1.</p>
 
 <div class="grid health-grid">
   {% for item in stack %}
