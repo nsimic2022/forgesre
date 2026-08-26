@@ -53,7 +53,7 @@
 {% if can('write_assets') %}
 <section class="card asset-detail-actions">
   <h2>Edit, clone, or remove</h2>
-  <p class="muted">Same Add form on the Assets list. Hostname can change; <code>asset_id</code> stays. Default scrape: Linux <code>ip:9100</code> (node_exporter), Windows <code>ip:9182</code> (windows_exporter). Detect probes both from this appliance; ICMP ping is not used for OS.</p>
+  <p class="muted">Same Add form on the Assets list. Asset ID is set at add and cannot change; hostname and IP can. Default scrape: Linux <code>ip:9100</code> (node_exporter), Windows <code>ip:9182</code> (windows_exporter). Detect probes both from this appliance; ICMP ping is not used for OS.</p>
   <div class="row-actions asset-form-actions">
     <a class="button" href="/assets?edit={{ asset.asset_id }}">Edit</a>
     <a class="button" href="/assets?clone={{ asset.asset_id }}">Clone</a>

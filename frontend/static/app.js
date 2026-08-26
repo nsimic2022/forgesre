@@ -94,6 +94,17 @@ if (preset) {
   });
 }
 
+document.querySelectorAll("[data-asset-id]").forEach((field) => {
+  field.addEventListener("input", () => {
+    const start = field.selectionStart;
+    const end = field.selectionEnd;
+    field.value = (field.value || "").toLowerCase();
+    if (start != null && end != null) {
+      field.setSelectionRange(start, end);
+    }
+  });
+});
+
 (function bindExporterDetect() {
   const ip = document.querySelector("[data-detect-ip]");
   const type = document.querySelector("[data-detect-type]");

@@ -54,9 +54,9 @@ Commands:
   install            Guided first-time install (new VM only)
   doctor             Short health lights (Core API, Core (container), Prometheus, …)
   test               Full appliance report (files, HTTP, login, APIs, email, logs)
-  ping [asset]       ICMP + exporter /metrics (number, id, hostname, IP; alias: probe)
+  ping [asset]       ICMP + exporter /metrics (# / id / hostname / IP; alias: probe)
   probe [asset]      Same as ping
-  verify [asset]     Live chain: exporter → prometheus → alertmanager → core
+  verify [asset]     Live chain: exporter → prometheus → alertmanager → core (# / id / hostname / IP)
   status             docker compose ps
   logs [service]     Container logs (default: last 100 lines)
   config             Print config/forgesre.yml
@@ -94,10 +94,12 @@ Examples:
   ./f journal
   ./forgesre help snmp
   ./forgesre ping
-  ./forgesre ping win-01
+  ./forgesre ping win10-gp
   ./forgesre verify
   ./forgesre verify 12
-  ./forgesre verify win-01
+  ./forgesre verify win10-gp
+  ./forgesre verify DESKTOP-CG81N3J
+  ./forgesre verify 10.10.10.60
   ./forgesre assets
   ./forgesre snmp
   ./forgesre jobs
@@ -226,7 +228,9 @@ EOF
 ping — ICMP + exporter /metrics from this VM (alias: probe).
 
   ./forgesre ping
-  ./forgesre ping win-01
+  ./forgesre ping 12
+  ./forgesre ping win10-gp
+  ./forgesre ping DESKTOP-CG81N3J
   ./forgesre ping 10.10.10.60
   ./forgesre ping --timeout 3
   ./forgesre ping --demo
@@ -260,7 +264,9 @@ verify — live communication for inventory (not ./forgesre test).
 
   ./forgesre verify
   ./forgesre verify 12
-  ./forgesre verify win-01
+  ./forgesre verify win10-gp
+  ./forgesre verify DESKTOP-CG81N3J
+  ./forgesre verify 10.10.10.60
   ./forgesre verify --timeout 3
   ./forgesre verify --demo
 
@@ -292,7 +298,7 @@ real scrape and are not in Prometheus HTTP SD. Default run skips them;
 --demo includes them labeled. Verify does not call the LLM, even when
 ForgeAI is enabled.
 
-One name or id prints inventory ForgeSRE already knows plus live probes
+One number, Asset ID, hostname, or IP prints inventory ForgeSRE already knows plus live probes
 (ICMP, port, metric family, Prom up, Prom target, series, Alertmanager,
 Core incident, last RCA mismatch, LLM).
 

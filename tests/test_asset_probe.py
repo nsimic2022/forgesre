@@ -231,6 +231,28 @@ def test_select_skips_demo_unless_named():
     assert skipped_num == 0
 
 
+def test_select_matches_number_id_hostname_and_ip():
+    rows = [
+        {
+            "asset_id": "win10-gp",
+            "hostname": "DESKTOP-CG81N3J",
+            "ip": "10.10.10.60",
+            "number": 12,
+            "scrape_address": "10.10.10.60:9182",
+        },
+        {
+            "asset_id": "app-01",
+            "hostname": "app-01",
+            "ip": "10.10.10.21",
+            "number": 3,
+        },
+    ]
+    for sel in ("12", "win10-gp", "DESKTOP-CG81N3J", "desktop-cg81n3j", "10.10.10.60"):
+        chosen, skipped = select_assets(rows, sel)
+        assert [row["asset_id"] for row in chosen] == ["win10-gp"], sel
+        assert skipped == 0
+
+
 def test_seeded_demo_windows_still_has_empty_scrape():
     db = _db()
     win = db.query(Asset).filter_by(asset_id="forge-demo-win-01").one()

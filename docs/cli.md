@@ -8,7 +8,7 @@ cd ~/forgesre
 ./forgesre help
 ```
 
-`./f` is the same binary. `./forgesre` with no arguments opens a prompt (`forgesre>`). Type `journal`, `incidents`, `doctor` — not `./forgesre` again. Leave with `quit`, `exit`, or Ctrl-D (`./forgesre help quit`). TAB completes command names, Compose services (`logs sn<TAB>`), incident ids, and asset numbers/ids (`verify 1<TAB>`).
+`./f` is the same binary. `./forgesre` with no arguments opens a prompt (`forgesre>`). Type `journal`, `incidents`, `doctor` — not `./forgesre` again. Leave with `quit`, `exit`, or Ctrl-D (`./forgesre help quit`). TAB completes command names, Compose services (`logs sn<TAB>`), incident ids, and asset numbers/ids/hostnames (`verify 1<TAB>`).
 
 Two logins:
 
@@ -27,10 +27,12 @@ Two logins:
 ./forgesre                 # prompt (forgesre>); leave with quit
 ./forgesre doctor          # short lights
 ./forgesre ping            # ICMP + exporter /metrics (alias: probe)
-./forgesre ping win-01
+./forgesre ping win10-gp
 ./forgesre verify          # live chain: exporter → prometheus → alertmanager → core (not test)
-./forgesre verify 12       # same, by stable asset number (also id/hostname)
-./forgesre verify win-01
+./forgesre verify 12                 # asset number #
+./forgesre verify win10-gp           # Asset ID
+./forgesre verify DESKTOP-CG81N3J    # hostname
+./forgesre verify 10.10.10.60        # IP
 ./forgesre test            # detailed report → data/reports/
 ./forgesre status          # docker compose ps
 ./forgesre logs core
@@ -85,7 +87,9 @@ ICMP ping from the appliance only proves **L3** (the host answers ping). ForgeSR
 
 ```bash
 ./forgesre ping
-./forgesre ping win-01
+./forgesre ping 12
+./forgesre ping win10-gp
+./forgesre ping DESKTOP-CG81N3J
 ./forgesre ping 10.10.10.60
 ./forgesre probe              # same command
 ./forgesre help ping
@@ -109,7 +113,9 @@ Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `
 ```bash
 ./forgesre verify
 ./forgesre verify 12
-./forgesre verify win-01
+./forgesre verify win10-gp
+./forgesre verify DESKTOP-CG81N3J
+./forgesre verify 10.10.10.60
 ./forgesre verify --demo
 ./forgesre help verify
 ```
@@ -118,7 +124,7 @@ Path: inventory row → ICMP / exporter (`:9100` `node_` or `:9182` `windows_`) 
 
 Classes are universal, not SKUs: Linux, Windows, Network SNMP, Unknown. Unknown or a missing exporter / no Prom target is **SKIP or FAIL with an honest reason** — never a fake green host. Seeded `forge-demo-*` rows and the discovery Approve seed `10.20.30.41` (`disc-10-20-30-41`) are **lab** (label DEMO), are not in HTTP SD, and are not proof of a real scrape. Verify does **not** call the LLM even when ForgeAI is enabled.
 
-One name or id dumps what ForgeSRE already knows (inventory) plus the live checks. Same action: Assets → **Verify** (analyst / engineer / admin). Viewers are read-only.
+`verify` accepts **all of**: asset number `#`, Asset ID, hostname, and IP. Same keys work for `./forgesre ping`. TAB completes numbers and ids (hostnames too). One key dumps what ForgeSRE already knows (inventory) plus the live checks. Same action: Assets → **Verify** (analyst / engineer / admin). Viewers are read-only.
 
 ---
 

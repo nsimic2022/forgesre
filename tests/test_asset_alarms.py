@@ -74,10 +74,13 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     assert 'name="alarm_disk_threshold"' in page.text
     assert "Auto (detect exporter)" in page.text
     host_at = page.text.find('name="hostname"')
+    id_at = page.text.find('name="asset_id"')
     ip_at = page.text.find('name="ip"')
     alarm_at = page.text.find("alarm-families")
     type_at = page.text.find('name="type"')
-    assert 0 < host_at < ip_at < alarm_at < type_at
+    assert 0 < id_at < host_at < ip_at < alarm_at < type_at
+    assert 'placeholder="win10-gp"' in page.text
+    assert "Set at add; cannot change" not in page.text
     table = page.text.split("<table")[1].split("</table>")[0]
     assert "alarm_disk_threshold" not in table
     assert ">Cancel</a>" in page.text

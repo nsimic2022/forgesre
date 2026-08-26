@@ -54,9 +54,25 @@ def test_tab_after_verify_and_assets_completes_asset_hook():
     assert "--demo" in ping.split()
     verify = _complete(["./forgesre", "verify", "--"], 2)
     assert "--timeout" in verify.split()
+    help_txt = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "verify"], text=True)
+    assert "10.10.10.60" in help_txt
+    assert "win10-gp" in help_txt
+    assert "DESKTOP-CG81N3J" in help_txt
 
     out = _complete(["./forgesre", "logs", "sn"], 2)
     assert "snmp-exporter" in out.split()
+
+
+def test_asset_ref_tokens_are_number_id_then_hostname():
+    from app.cli_ops import asset_ref_tokens
+
+    tokens = asset_ref_tokens(
+        [
+            {"number": 12, "asset_id": "win10-gp", "hostname": "DESKTOP-CG81N3J"},
+            {"number": 3, "asset_id": "app-01", "hostname": "app-01"},
+        ]
+    )
+    assert tokens == ["3", "12", "win10-gp", "app-01", "DESKTOP-CG81N3J"]
 
 
 def test_tab_after_journal_and_help():

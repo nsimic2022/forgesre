@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Wednesday 26 August 2026.** N approved **only** the Memory alarm gap. Bundled Prometheus memory alerts, seeded playrules, Assets Alarms Memory checkbox (webhook filter), and Machine metrics red at the same **90%**.
+**Wednesday 26 August 2026.** N asked for Add/Edit **Asset ID first** (typed short id, not derived from hostname) and `./forgesre verify` by **# / id / hostname / IP**.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -27,7 +27,7 @@ git pull && ./forgesre update
 
 (`./forgesre update` already runs `render-monitoring`.) Also: `./forgesre ping`, `./forgesre verify`, `./forgesre test` (appliance health, not inventory). See [docs/llm.md](llm.md).
 
-Hard-refresh the browser after UI/CSS changes (`/static/app.css` is not cache-busted).
+Hard-refresh the browser after UI/CSS changes (`/static/app.css?v=asset-id-first-1`).
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
 
@@ -42,15 +42,17 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **306 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~39s each. Python 3.12, pytest 9.x.
+Both runs: **310 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x.
 
-If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`.
+If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
 ---
 
 ## 3. Done today / on main
 
-Memory alarms (Linux `NodeMemoryHigh`, Windows `WindowsMemoryHigh`), default **90%** used (MemAvailable/MemTotal and windows_exporter `windows_os_physical_memory_free_bytes` / `windows_cs_physical_memory_bytes`), playrules `node-memory` / `windows-memory` → playbook `MEMORY-HIGH` (guidance only). Assets Alarms Memory enable/% now filters the webhook like CPU/disk. Tiles use the same threshold.
+Add/Edit form order matches the Assets table (skip `#`): **Asset ID**, **Hostname**, **IP**, then the rest. Alarms stays the third column (not rebuilt). Operator types a short unique `asset_id` (`win10-gp`) and a separate hostname (`DESKTOP-CG81N3J`). Edit keeps id immutable. `./forgesre verify` / `ping` accept asset number `#`, id, hostname, and IP. TAB completes numbers, ids, and hostnames.
+
+Do **not** rebuild Alarms or Memory alerts.
 
 ---
 
@@ -62,7 +64,7 @@ Do **not** run `./install.sh`.
 git pull && ./forgesre update
 ```
 
-Hard-refresh the browser after UI/CSS changes (`/static/app.css` is not cache-busted).
+Hard-refresh the browser (CSS query `?v=asset-id-first-1`).
 
 ---
 
@@ -86,6 +88,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`. Do not explode the archive into loose files at `data/backups/` root.
 - Host `./forgesre verify` does not import sqlalchemy (`demo_ids.py`).
 - Memory bundled alerts exist: `NodeMemoryHigh` / `WindowsMemoryHigh` at **90%**, playrules `node-memory` / `windows-memory`. Do not add load / inodes / blackbox / mysql-redis exporters, a 50-collector dropdown, or a Grafana rewrite unless N asks.
+- Add asset: operator types **Asset ID** and **Hostname** separately. Id is immutable after create. Do not derive id from hostname again.
 
 ---
 
