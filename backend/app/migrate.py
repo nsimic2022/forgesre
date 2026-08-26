@@ -24,6 +24,36 @@ def _backfill_asset_numbers(conn: Connection) -> None:
             n += 1
             conn.execute(text("UPDATE assets SET number = :n WHERE id = :id"), {"n": n, "id": pk})
     conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_assets_number ON assets (number)"))
+    _ensure_asset_number_seq(conn)
+
+
+def _ensure_asset_number_seq(conn: Connection) -> None:
+    dialect = conn.engine.dialect.name
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS asset_number_seq ("
+            "id INTEGER PRIMARY KEY, last INTEGER DEFAULT 0)"
+        )
+    )
+    if dialect == "sqlite":
+        conn.execute(text("INSERT OR IGNORE INTO asset_number_seq (id, last) VALUES (1, 0)"))
+    else:
+        conn.execute(
+            text(
+                "INSERT INTO asset_number_seq (id, last) VALUES (1, 0) "
+                "ON CONFLICT (id) DO NOTHING"
+            )
+        )
+    tables = set(inspect(conn).get_table_names())
+    live = 0
+    if "assets" in tables:
+        columns = {col["name"] for col in inspect(conn).get_columns("assets")}
+        if "number" in columns:
+            live = int(conn.execute(text("SELECT COALESCE(MAX(number), 0) FROM assets")).scalar() or 0)
+    conn.execute(
+        text("UPDATE asset_number_seq SET last = :n WHERE id = 1 AND last < :n"),
+        {"n": live},
+    )
 
 
 def migrate(engine: Engine) -> None:

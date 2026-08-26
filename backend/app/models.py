@@ -58,6 +58,15 @@ class Asset(Base):
     incidents: Mapped[list[Incident]] = relationship(back_populates="asset")
 
 
+class AssetNumberSeq(Base):
+    """High-water mark for Asset.number. Never decreases after delete."""
+
+    __tablename__ = "asset_number_seq"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    last: Mapped[int] = mapped_column(Integer, default=0)
+
+
 @event.listens_for(Session, "before_flush")
 def _assign_asset_numbers(session: Session, flush_context, instances) -> None:
     """Stable inventory #. Auto-increment; never reuse after delete (gaps are OK)."""
@@ -65,19 +74,29 @@ def _assign_asset_numbers(session: Session, flush_context, instances) -> None:
     pending = [obj for obj in session.new if isinstance(obj, Asset) and not getattr(obj, "number", None)]
     if not pending:
         return
+    seq = session.get(AssetNumberSeq, 1)
+    if seq is None:
+        for obj in session.new:
+            if isinstance(obj, AssetNumberSeq) and obj.id == 1:
+                seq = obj
+                break
+    if seq is None:
+        live = session.query(func.max(Asset.number)).scalar()
+        seq = AssetNumberSeq(id=1, last=int(live or 0))
+        session.add(seq)
     taken = {
         int(obj.number)
         for obj in list(session.new) + list(session.dirty)
         if isinstance(obj, Asset) and getattr(obj, "number", None)
     }
-    current = session.query(func.max(Asset.number)).scalar()
-    n = int(current or 0)
+    n = int(seq.last or 0)
     for asset in pending:
         n += 1
         while n in taken:
             n += 1
         asset.number = n
         taken.add(n)
+    seq.last = n
 
 
 class Playbook(Base):
