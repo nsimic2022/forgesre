@@ -22,7 +22,9 @@ from app.asset_probe import (
 )
 from app.asset_verify import (
     format_verify_report,
+    urllib_am_health,
     urllib_prom_query,
+    urllib_prom_targets,
     verify_exit,
     verify_target,
 )
@@ -382,9 +384,16 @@ def cmd_verify(port: str, args: list[str]) -> None:
         contexts = {}
     prom_url = str((support or {}).get("prometheus_url") or "http://127.0.0.1:9090")
     ai_enabled = bool((support or {}).get("ai_enabled"))
+    am_health = (support or {}).get("alertmanager") if isinstance(support, dict) else None
+    if not isinstance(am_health, dict):
+        am_url = str((support or {}).get("alertmanager_url") or "http://127.0.0.1:9093")
+        am_health = urllib_am_health(am_url)
 
     def query_fn(expr: str) -> Any:
         return urllib_prom_query(expr, prom_url)
+
+    def targets_fn() -> Any:
+        return urllib_prom_targets(prom_url)
 
     results = []
     for item in chosen:
@@ -403,6 +412,9 @@ def cmd_verify(port: str, args: list[str]) -> None:
                 rca=ctx.get("rca") if isinstance(ctx, dict) else None,
                 live_metrics=ctx.get("live_metrics") if isinstance(ctx, dict) else None,
                 ai_enabled=ai_enabled,
+                targets_fn=targets_fn,
+                am_health=am_health,
+                incident=ctx.get("incident") if isinstance(ctx, dict) else None,
             )
         )
     sys.stdout.write(

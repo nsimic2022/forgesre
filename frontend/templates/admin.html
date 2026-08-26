@@ -190,7 +190,7 @@
   <tbody>
     <tr><td><code>update</code></td><td>Backup, render monitoring, refresh images, restart, doctor</td></tr>
     <tr><td><code>test</code></td><td>Full appliance report (files, HTTP, login, APIs, email, logs)</td></tr>
-    <tr><td><code>verify</code></td><td>Live communication: ICMP/exporter/SNMP → Prometheus up → RCA</td></tr>
+    <tr><td><code>verify</code></td><td>Live chain: exporter → prometheus → alertmanager → core</td></tr>
     <tr><td><code>ping</code></td><td>ICMP + exporter /metrics for inventory (alias: probe)</td></tr>
     <tr><td><code>backup</code></td><td>One folder per run under data/backups (tar.gz + MANIFEST)</td></tr>
     <tr><td><code>restore</code></td><td>List backup folders (newest first); apply only with --yes after stopping Core</td></tr>

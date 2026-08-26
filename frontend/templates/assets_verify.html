@@ -3,7 +3,7 @@
 {% block content %}
 <p><a href="/assets">← Assets</a></p>
 <h1>Verify assets</h1>
-<p class="muted">Live communication for inventory — not <code>./forgesre test</code>. Classes: Linux <code>:9100</code> <code>node_</code>, Windows <code>:9182</code> <code>windows_</code>, Network SNMP, Unknown SKIP. Demo <code>forge-demo-*</code> rows are lab-only.</p>
+<p class="muted">Live communication for inventory — not <code>./forgesre test</code>. Chain: <code>exporter → prometheus → alertmanager → core</code>. Classes: Linux <code>:9100</code> <code>node_</code>, Windows <code>:9182</code> <code>windows_</code>, Network SNMP, Unknown SKIP. Demo <code>forge-demo-*</code> rows are lab-only.</p>
 {% if skipped_demo %}
 <p class="muted">Skipped {{ skipped_demo }} demo lab asset(s). <a href="/assets/verify?demo=1">Include labeled DEMO</a>.</p>
 {% elif include_demo %}
@@ -18,6 +18,10 @@
       <th>Ping</th>
       <th>Port</th>
       <th>Prom up</th>
+      <th>Target</th>
+      <th>Series</th>
+      <th>AM</th>
+      <th>Core</th>
       <th>Family</th>
       <th>RCA</th>
       <th>LLM</th>
@@ -36,6 +40,10 @@
       <td><span class="verify-mark {{ row.icmp.mark|lower }}">{{ row.icmp.mark }}</span></td>
       <td><span class="verify-mark {{ row.port.mark|lower }}">{{ row.port.mark }}</span></td>
       <td><span class="verify-mark {{ row.prom.mark|lower }}">{{ row.prom.mark }}</span></td>
+      <td><span class="verify-mark {{ row.target.mark|lower }}">{{ row.target.mark }}</span></td>
+      <td><span class="verify-mark {{ row.series.mark|lower }}">{{ row.series.mark }}</span></td>
+      <td><span class="verify-mark {{ row.am.mark|lower }}">{{ row.am.mark }}</span></td>
+      <td><span class="verify-mark {{ row.core.mark|lower }}">{{ row.core.mark }}</span></td>
       <td><span class="verify-mark {{ row.family.mark|lower }}">{{ row.family.mark }}</span></td>
       <td><span class="verify-mark {{ row.rca.mark|lower }}">{{ row.rca.mark }}</span></td>
       <td><span class="verify-mark {{ row.llm.mark|lower }}">{{ row.llm.mark }}</span></td>
@@ -45,7 +53,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="9" class="muted">No assets to verify. Add a host, or include DEMO lab rows.</td></tr>
+    <tr><td colspan="13" class="muted">No assets to verify. Add a host, or include DEMO lab rows.</td></tr>
     {% endfor %}
   </tbody>
 </table>

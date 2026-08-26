@@ -1,7 +1,11 @@
 """Live communication verify for inventory assets.
 
-Not ``./forgesre test`` (that is appliance health). Verify is: inventory row →
-ICMP / exporter or SNMP → Prometheus ``up`` → optional last RCA facts vs PromQL.
+Not ``./forgesre test`` (that is appliance health). Verify is the live chain:
+exporter → prometheus → alertmanager → core.
+
+Inventory row → ICMP / exporter or SNMP → Prometheus ``up`` + scrape target
+health + family series → Alertmanager reachable → last Core incident/webhook
+(SKIP if none — no alarm is valid) → optional last RCA facts vs PromQL.
 LLM is reported only when ForgeAI is enabled; verify never invents a host and
 never calls the LLM itself.
 
@@ -26,6 +30,7 @@ from app.asset_probe import (
     AssetProbe,
     CheckResult,
     asset_kind,
+    default_monitoring_profile,
     probe_target,
     select_assets,
 )
@@ -33,8 +38,11 @@ from app.demo_ids import is_demo_asset_id
 from app.exporter_detect import classify_exporter_metrics, is_auto_asset_type
 
 PromQuery = Callable[[str], dict[str, Any]]
+TargetsFn = Callable[[], dict[str, Any]]
 RCALookup = Callable[[str], dict[str, Any] | None]
 SdLookup = Callable[[str], dict[str, bool]]
+
+CHAIN_HEADER = "exporter → prometheus → alertmanager → core"
 
 FACT_METRIC = re.compile(
     r"^(?P<name>[a-z][a-z0-9_]*) is (?P<value>-?[0-9]+(?:\.[0-9]+)?)",
@@ -194,6 +202,250 @@ def prometheus_check(
     return _check("prom", False, f"Prometheus up={number:g} ({expr}) — target listed, scrape failed")
 
 
+def _escape_label(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def scrape_identity(item: dict[str, Any], vclass: str) -> dict[str, str]:
+    """Job/instance/asset labels the same way HTTP SD and verify PromQL already use."""
+    asset_id = str(item.get("asset_id") or "")
+    scrape = str(item.get("scrape_address") or "").strip()
+    ip = str(item.get("ip") or "").strip()
+    if vclass == CLASS_NETWORK:
+        return {"job": "forgesre-snmp", "instance": ip, "asset": asset_id}
+    profile = default_monitoring_profile(
+        str(item.get("type") or ""),
+        str(item.get("monitoring_profile") or ""),
+    )
+    return {"job": profile, "instance": scrape, "asset": asset_id}
+
+
+def _selector_candidates(item: dict[str, Any], vclass: str) -> list[str]:
+    ident = scrape_identity(item, vclass)
+    seen: list[str] = []
+
+    def add(selector: str) -> None:
+        if selector and selector not in seen:
+            seen.append(selector)
+
+    if ident["asset"]:
+        add(f'asset="{_escape_label(ident["asset"])}"')
+    hostname = str(item.get("hostname") or "").strip()
+    if hostname and hostname != ident["asset"]:
+        add(f'asset="{_escape_label(hostname)}"')
+    if ident["instance"]:
+        add(f'instance="{_escape_label(ident["instance"])}"')
+    return seen
+
+
+def _match_prom_target(target: dict[str, Any], ident: dict[str, str]) -> bool:
+    labels = target.get("labels") if isinstance(target.get("labels"), dict) else {}
+    discovered = target.get("discoveredLabels") if isinstance(target.get("discoveredLabels"), dict) else {}
+    blob = {**discovered, **labels}
+    asset = str(blob.get("asset") or "")
+    instance = str(blob.get("instance") or blob.get("__address__") or "")
+    if ident["asset"] and asset == ident["asset"]:
+        return True
+    if ident["instance"] and instance == ident["instance"]:
+        return True
+    return False
+
+
+def prometheus_target_check(
+    item: dict[str, Any],
+    vclass: str,
+    *,
+    lab: bool,
+    in_http_sd: bool,
+    in_snmp_sd: bool,
+    query_fn: PromQuery | None,
+    targets: list[dict[str, Any]] | None = None,
+    targets_error: str = "",
+) -> CheckResult:
+    """Scrape target health=up for this asset's job/instance (not a rewrite of PROM up)."""
+    ident = scrape_identity(item, vclass)
+    job, instance, asset_id = ident["job"], ident["instance"], ident["asset"]
+    where = f'job={job or "—"} instance={instance or "—"} asset={asset_id or "—"}'
+    if lab:
+        return _check(
+            "target",
+            None,
+            "DEMO lab host — scrape target health is not proof of a real scrape",
+        )
+    if vclass == CLASS_UNKNOWN:
+        return _check("target", None, "no exporter class — Prometheus has no scrape target")
+    if vclass == CLASS_NETWORK and not in_snmp_sd:
+        return _check("target", None, "not in SNMP HTTP SD — no scrape target")
+    if vclass != CLASS_NETWORK and not in_http_sd:
+        return _check("target", None, "not in Prometheus HTTP SD — no scrape target")
+    if targets:
+        matched = [row for row in targets if _match_prom_target(row, ident)]
+        if matched:
+            row = matched[0]
+            health = str(row.get("health") or "").lower()
+            labels = row.get("labels") if isinstance(row.get("labels"), dict) else {}
+            shown_job = str(labels.get("job") or job)
+            shown_instance = str(labels.get("instance") or instance)
+            if health == "up":
+                return _check(
+                    "target",
+                    True,
+                    f"scrape target health=up job={shown_job} instance={shown_instance}",
+                )
+            if health == "down":
+                return _check(
+                    "target",
+                    False,
+                    f"scrape target health=down job={shown_job} instance={shown_instance}",
+                )
+            return _check(
+                "target",
+                None,
+                f"scrape target health={health or 'unknown'} job={shown_job} instance={shown_instance}",
+            )
+    if query_fn is None:
+        if targets_error:
+            return _check("target", None, f"Prometheus targets API: {targets_error}")
+        return _check("target", None, f"Prometheus scrape target not queried ({where})")
+    exprs: list[str] = []
+    if vclass == CLASS_NETWORK and asset_id:
+        exprs.append(f'up{{job="forgesre-snmp",asset="{_escape_label(asset_id)}"}}')
+        if instance:
+            exprs.append(f'up{{job="forgesre-snmp",instance="{_escape_label(instance)}"}}')
+    else:
+        if job and asset_id:
+            exprs.append(f'up{{job="{_escape_label(job)}",asset="{_escape_label(asset_id)}"}}')
+        if job and instance:
+            exprs.append(f'up{{job="{_escape_label(job)}",instance="{_escape_label(instance)}"}}')
+        if asset_id:
+            exprs.append(f'up{{asset="{_escape_label(asset_id)}"}}')
+    last_expr = exprs[0] if exprs else where
+    last_error = ""
+    for expr in exprs:
+        last_expr = expr
+        sample = query_fn(expr)
+        if sample.get("error"):
+            last_error = str(sample["error"])
+            continue
+        value = sample.get("value")
+        if value is None:
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if number >= 1:
+            return _check("target", True, f"scrape target health=up ({expr})")
+        return _check("target", False, f"scrape target health=down up={number:g} ({expr})")
+    if last_error:
+        return _check("target", None, f"Prometheus unreachable ({last_expr}): {last_error}")
+    return _check("target", None, f"no scrape target yet for {where} — not PASS")
+
+
+def _series_expr(vclass: str, selector: str) -> str:
+    if vclass == CLASS_LINUX:
+        return f'count({{__name__=~"node_.*",{selector}}})'
+    if vclass == CLASS_WINDOWS:
+        return f'count({{__name__=~"windows_.*",{selector}}})'
+    return (
+        f'count({{__name__=~"ifOperStatus|ifHCInOctets|sysUpTime|ifAdminStatus",'
+        f'job="forgesre-snmp",{selector}}})'
+    )
+
+
+def series_check(
+    item: dict[str, Any],
+    vclass: str,
+    *,
+    lab: bool,
+    in_http_sd: bool,
+    in_snmp_sd: bool,
+    query_fn: PromQuery | None,
+) -> CheckResult:
+    """At least one node_ / windows_ / SNMP family series in Prometheus — not empty Prom."""
+    token = {"linux": "node_", "windows": "windows_", "network": "SNMP"}.get(vclass, "")
+    if lab:
+        return _check("series", None, "DEMO lab host — series are not proof of a real scrape")
+    if vclass == CLASS_UNKNOWN or not token:
+        return _check("series", None, "no exporter class — no node_ / windows_ / SNMP series to expect")
+    if vclass == CLASS_NETWORK and not in_snmp_sd:
+        return _check("series", None, "not in SNMP HTTP SD — Prometheus has no SNMP series")
+    if vclass != CLASS_NETWORK and not in_http_sd:
+        return _check("series", None, "not in Prometheus HTTP SD — no family series")
+    if query_fn is None:
+        return _check("series", None, f"{token} series not queried")
+    last_expr = ""
+    last_error = ""
+    for selector in _selector_candidates(item, vclass):
+        expr = _series_expr(vclass, selector)
+        last_expr = expr
+        sample = query_fn(expr)
+        if sample.get("error"):
+            last_error = str(sample["error"])
+            continue
+        value = sample.get("value")
+        if value is None:
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if number >= 1:
+            return _check("series", True, f"{token} series present (count={number:g}, {selector})")
+        return _check(
+            "series",
+            False,
+            f"Prometheus has no {token} series for {selector} — empty Prom ({expr})",
+        )
+    if last_error:
+        return _check("series", None, f"Prometheus unreachable ({last_expr}): {last_error}")
+    return _check(
+        "series",
+        None,
+        f"no {token} series yet ({last_expr or 'no selectors'}) — wait a scrape interval. Not PASS",
+    )
+
+
+def alertmanager_check(*, am_health: dict[str, Any] | None) -> CheckResult:
+    """Alertmanager reachable (health GET). FAIL if down — this is not 'an alert fired'."""
+    if not am_health:
+        return _check("am", None, "Alertmanager not queried")
+    if am_health.get("error"):
+        return _check(
+            "am",
+            False,
+            f"Alertmanager down ({am_health['error']}) — this is not an alert firing",
+        )
+    ok = am_health.get("ok")
+    detail = str(am_health.get("detail") or "").strip()
+    if ok is True:
+        return _check("am", True, detail or "Alertmanager reachable")
+    if ok is False:
+        return _check(
+            "am",
+            False,
+            (detail or "Alertmanager down") + " — this is not an alert firing",
+        )
+    return _check("am", None, detail or "Alertmanager not queried")
+
+
+def core_check(*, incident: dict[str, Any] | None) -> CheckResult:
+    """Last incident/webhook for this asset. SKIP if none — no alarm is valid."""
+    if not incident:
+        return _check(
+            "core",
+            None,
+            "no incident/webhook for this asset — no alarm is valid",
+        )
+    number = str(incident.get("number") or incident.get("incident") or "").strip() or "incident"
+    status = str(incident.get("status") or "").strip()
+    title = str(incident.get("title") or "").strip()
+    extra = f" {status}" if status else ""
+    if title:
+        extra = f"{extra} {title}".rstrip()
+    return _check("core", True, f"last incident {number}{extra} — webhook reached Core")
+
+
 def parse_fact_metrics(facts: list[dict[str, Any]] | None) -> dict[str, float]:
     found: dict[str, float] = {}
     for fact in facts or []:
@@ -246,14 +498,18 @@ def rca_check(
 
 def llm_check(*, ai_enabled: bool, rca: dict[str, Any] | None) -> CheckResult:
     if not ai_enabled:
-        return _check("llm", None, "ForgeAI disabled — LLM not called")
+        return _check(
+            "llm",
+            None,
+            "ForgeAI disabled (ai.enabled off or no LLM URL) — verify does not call the LLM",
+        )
     provider = str((rca or {}).get("provider") or "")
     if provider == "forgerca-llm":
         return _check("llm", True, "ForgeAI enabled; last RCA prose was rewritten (read-only)")
     return _check(
         "llm",
         None,
-        "ForgeAI enabled; last RCA is ForgeRCA builtin only. Verify does not invoke the LLM",
+        "ForgeAI enabled; last RCA is ForgeRCA builtin only — verify does not invoke the LLM",
     )
 
 
@@ -277,23 +533,28 @@ def overall_status(
     metrics: CheckResult,
     family: CheckResult,
     prom: CheckResult,
+    target: CheckResult | None = None,
+    series: CheckResult | None = None,
+    am: CheckResult | None = None,
 ) -> tuple[str, str]:
     if lab:
         return (
             "SKIP",
             "DEMO lab host (forge-demo-*) — labeled lab, not proof of a real scrape",
         )
+    hops = [metrics, family, prom]
+    if target is not None:
+        hops.append(target)
+    if series is not None:
+        hops.append(series)
+    if am is not None:
+        hops.append(am)
+    failed = [hop for hop in hops if hop.ok is False]
+    if failed:
+        bits = [hop.detail or hop.name for hop in failed]
+        return "FAIL", "; ".join(bits)
     if vclass == CLASS_UNKNOWN:
         return "SKIP", CLASS_REASON[CLASS_UNKNOWN]
-    if metrics.ok is False or family.ok is False or prom.ok is False:
-        bits = []
-        if metrics.ok is False:
-            bits.append(metrics.detail or "exporter/SNMP failed")
-        if family.ok is False:
-            bits.append(family.detail or "metric family mismatch")
-        if prom.ok is False:
-            bits.append(prom.detail or "Prometheus up=0")
-        return "FAIL", "; ".join(bits)
     if metrics.ok is True and family.ok is True and prom.ok is True:
         return "PASS", "ICMP/exporter path plus Prometheus up=1"
     if metrics.ok is True and family.ok is True and prom.ok is None:
@@ -327,6 +588,10 @@ class VerifyReport:
     port: CheckResult
     family: CheckResult
     prom: CheckResult
+    target: CheckResult
+    series: CheckResult
+    am: CheckResult
+    core: CheckResult
     rca: CheckResult
     llm: CheckResult
     overall: str
@@ -363,8 +628,13 @@ class VerifyReport:
             "port": pack(self.port),
             "family": pack(self.family),
             "prom": pack(self.prom),
+            "target": pack(self.target),
+            "series": pack(self.series),
+            "am": pack(self.am),
+            "core": pack(self.core),
             "rca": pack(self.rca),
             "llm": pack(self.llm),
+            "chain": CHAIN_HEADER,
             "overall": self.overall,
             "overall_reason": self.overall_reason,
             "hint": self.hint,
@@ -409,6 +679,10 @@ def compose_verify(
     rca: dict[str, Any] | None = None,
     live_metrics: dict[str, Any] | None = None,
     ai_enabled: bool = False,
+    targets: list[dict[str, Any]] | None = None,
+    targets_fn: TargetsFn | None = None,
+    am_health: dict[str, Any] | None = None,
+    incident: dict[str, Any] | None = None,
 ) -> VerifyReport:
     vclass, class_reason = classify_verify(item)
     lab = is_lab_asset(item)
@@ -423,9 +697,51 @@ def compose_verify(
         in_snmp_sd=in_snmp_sd,
         query_fn=query_fn,
     )
+    targets_error = ""
+    fetched_targets = targets
+    if fetched_targets is None and targets_fn is not None:
+        try:
+            packed = targets_fn() or {}
+        except Exception as exc:  # noqa: BLE001 — live probe
+            packed = {"error": str(exc), "targets": []}
+        if packed.get("error"):
+            targets_error = str(packed["error"])
+        fetched_targets = packed.get("targets") if isinstance(packed.get("targets"), list) else []
+    target = prometheus_target_check(
+        item,
+        vclass,
+        lab=lab,
+        in_http_sd=in_http_sd,
+        in_snmp_sd=in_snmp_sd,
+        query_fn=query_fn,
+        targets=fetched_targets,
+        targets_error=targets_error,
+    )
+    series = series_check(
+        item,
+        vclass,
+        lab=lab,
+        in_http_sd=in_http_sd,
+        in_snmp_sd=in_snmp_sd,
+        query_fn=query_fn,
+    )
+    if not lab and vclass != CLASS_UNKNOWN and prom.ok is True and series.ok is None:
+        token = "node_" if vclass == CLASS_LINUX else ("windows_" if vclass == CLASS_WINDOWS else "SNMP")
+        series = _check("series", False, f"Prometheus up=1 but no {token} series — empty Prom")
+    am = alertmanager_check(am_health=am_health)
+    core = core_check(incident=incident)
     rca_result = rca_check(item, rca=rca, live_metrics=live_metrics)
     llm = llm_check(ai_enabled=ai_enabled, rca=rca)
-    overall, reason = overall_status(lab=lab, vclass=vclass, metrics=port, family=family, prom=prom)
+    overall, reason = overall_status(
+        lab=lab,
+        vclass=vclass,
+        metrics=port,
+        family=family,
+        prom=prom,
+        target=target,
+        series=series,
+        am=am,
+    )
     return VerifyReport(
         asset_id=str(item.get("asset_id") or probe.asset_id),
         hostname=str(item.get("hostname") or probe.hostname or ""),
@@ -449,6 +765,10 @@ def compose_verify(
         port=port,
         family=family,
         prom=prom,
+        target=target,
+        series=series,
+        am=am,
+        core=core,
         rca=rca_result,
         llm=llm,
         overall=overall,
@@ -473,6 +793,10 @@ def verify_target(
     live_metrics: dict[str, Any] | None = None,
     ai_enabled: bool = False,
     probe: AssetProbe | None = None,
+    targets: list[dict[str, Any]] | None = None,
+    targets_fn: TargetsFn | None = None,
+    am_health: dict[str, Any] | None = None,
+    incident: dict[str, Any] | None = None,
 ) -> VerifyReport:
     if probe is None:
         probe = probe_target(
@@ -491,6 +815,10 @@ def verify_target(
         rca=rca,
         live_metrics=live_metrics,
         ai_enabled=ai_enabled,
+        targets=targets,
+        targets_fn=targets_fn,
+        am_health=am_health,
+        incident=incident,
     )
 
 
@@ -515,6 +843,43 @@ def urllib_prom_query(expr: str, base_url: str = "http://127.0.0.1:9090", timeou
     return {"value": None, "query": expr}
 
 
+def urllib_prom_targets(base_url: str = "http://127.0.0.1:9090", timeout: float = 5.0) -> dict[str, Any]:
+    """GET Prometheus /api/v1/targets. Stdlib only — host CLI has no httpx requirement."""
+    root = (base_url or "http://127.0.0.1:9090").rstrip("/")
+    url = f"{root}/api/v1/targets"
+    request = urllib.request.Request(url, method="GET", headers={"User-Agent": "forgesre-verify/1"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as exc:
+        return {"error": f"HTTP {exc.code}", "targets": []}
+    except Exception as exc:  # noqa: BLE001 — live probe
+        return {"error": str(exc), "targets": []}
+    data = payload.get("data") if isinstance(payload, dict) else None
+    active = (data or {}).get("activeTargets") if isinstance(data, dict) else None
+    return {"targets": active if isinstance(active, list) else [], "query": url}
+
+
+def urllib_am_health(base_url: str = "http://127.0.0.1:9093", timeout: float = 4.0) -> dict[str, Any]:
+    """GET Alertmanager /-/ready (then /-/healthy). Reachable ≠ an alert fired."""
+    root = (base_url or "http://127.0.0.1:9093").rstrip("/")
+    last_error = "Alertmanager down"
+    for path in ("/-/ready", "/-/healthy"):
+        url = f"{root}{path}"
+        request = urllib.request.Request(url, method="GET", headers={"User-Agent": "forgesre-verify/1"})
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                code = getattr(response, "status", None) or response.getcode()
+            if int(code) < 400:
+                return {"ok": True, "detail": f"Alertmanager reachable ({path})"}
+            last_error = f"HTTP {code} {path}"
+        except urllib.error.HTTPError as exc:
+            last_error = f"HTTP {exc.code} {path}"
+        except Exception as exc:  # noqa: BLE001 — live probe
+            last_error = str(exc)
+    return {"ok": False, "detail": last_error, "error": last_error}
+
+
 def verify_exit(results: list[VerifyReport]) -> int:
     if any(row.overall == "FAIL" for row in results):
         return 1
@@ -536,6 +901,7 @@ def format_verify_one(report: VerifyReport, *, color: bool = False) -> str:
     lines = [
         paint(f"ForgeSRE verify{lab}  {report.asset_id}", BOLD, color),
         "Live communication (inventory → ICMP/exporter or SNMP → Prometheus). Not ./forgesre test.",
+        CHAIN_HEADER,
         "",
         paint("=== Inventory ===", BOLD, color),
         f"asset_id     {report.asset_id}",
@@ -557,10 +923,15 @@ def format_verify_one(report: VerifyReport, *, color: bool = False) -> str:
         f"{report.vclass:<12} {report.class_reason}",
         "",
         paint("=== Live probes ===", BOLD, color),
+        CHAIN_HEADER,
         f"ICMP     {_mark(report.icmp, color)} {report.icmp.detail}",
         f"PORT     {_mark(report.port, color)} {report.port.detail}",
         f"FAMILY   {_mark(report.family, color)} {report.family.detail}",
         f"PROM     {_mark(report.prom, color)} {report.prom.detail}",
+        f"TARGET   {_mark(report.target, color)} {report.target.detail}",
+        f"SERIES   {_mark(report.series, color)} {report.series.detail}",
+        f"AM       {_mark(report.am, color)} {report.am.detail}",
+        f"CORE     {_mark(report.core, color)} {report.core.detail}",
         f"RCA      {_mark(report.rca, color)} {report.rca.detail}",
         f"LLM      {_mark(report.llm, color)} {report.llm.detail}",
     ]
@@ -588,10 +959,11 @@ def format_verify_many(
     lines = [
         paint("ForgeSRE verify", BOLD, color),
         "Live communication — not ./forgesre test (that is appliance health after update).",
+        f"Chain: {CHAIN_HEADER}",
         "Classes: Linux :9100 node_ · Windows :9182 windows_ · Network SNMP · Unknown SKIP.",
         "",
-        f"{'ASSET':<22} {'CLASS':<10} {'ICMP':<6} {'PORT':<6} {'PROM':<6} {'FAMILY':<6} {'RCA':<6} {'LLM'}",
-        "-" * 88,
+        f"{'ASSET':<22} {'CLASS':<10} {'ICMP':<6} {'PORT':<6} {'FAM':<6} {'PROM':<6} {'TGT':<6} {'SER':<6} {'AM':<6} {'CORE':<6} {'LLM'}",
+        "-" * 104,
     ]
     counts = {"PASS": 0, "FAIL": 0, "SKIP": 0, "WARN": 0}
     for row in results:
@@ -599,8 +971,9 @@ def format_verify_many(
         name = ("DEMO " + row.asset_id) if row.lab else row.asset_id
         lines.append(
             f"{name[:22]:<22} {row.vclass:<10} "
-            f"{_mark(row.icmp, color)} {_mark(row.port, color)} {_mark(row.prom, color)} "
-            f"{_mark(row.family, color)} {_mark(row.rca, color)} {_mark(row.llm, color)}  {row.overall_reason}"
+            f"{_mark(row.icmp, color)} {_mark(row.port, color)} {_mark(row.family, color)} "
+            f"{_mark(row.prom, color)} {_mark(row.target, color)} {_mark(row.series, color)} "
+            f"{_mark(row.am, color)} {_mark(row.core, color)} {_mark(row.llm, color)}  {row.overall_reason}"
         )
     lines.append("")
     summary = f"{counts['PASS']} PASS  {counts['FAIL']} FAIL  {counts['SKIP']} SKIP"
@@ -641,6 +1014,7 @@ def format_verify_report(
 
 
 __all__ = [
+    "CHAIN_HEADER",
     "CLASS_LINUX",
     "CLASS_NETWORK",
     "CLASS_UNKNOWN",
@@ -652,6 +1026,9 @@ __all__ = [
     "is_lab_asset",
     "parse_fact_metrics",
     "select_assets",
+    "urllib_am_health",
+    "urllib_prom_query",
+    "urllib_prom_targets",
     "verify_exit",
     "verify_target",
 ]

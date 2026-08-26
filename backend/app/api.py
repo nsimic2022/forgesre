@@ -45,7 +45,7 @@ from app.inventory import (
 )
 from app.asset_probe import apply_probe_to_asset, refresh_reachability, reachability_snapshot
 from app.asset_verify import select_assets as verify_select_assets
-from app.asset_verify import verify_target
+from app.asset_verify import urllib_am_health, urllib_prom_targets, verify_target
 from app.exporter_detect import detect_exporter, is_auto_asset_type
 from app.seed import is_demo_asset_id, seed
 from app.services import (
@@ -224,6 +224,23 @@ def assets_reachability(
 
 
 
+def _latest_incident(db: Session, asset: Asset) -> dict[str, Any] | None:
+    incident = (
+        db.query(Incident)
+        .filter(Incident.asset_id == asset.id)
+        .order_by(Incident.id.desc())
+        .first()
+    )
+    if incident is None:
+        return None
+    return {
+        "number": incident.number,
+        "title": incident.title or "",
+        "status": incident.status or "",
+        "started_at": incident.started_at.isoformat() if incident.started_at else "",
+    }
+
+
 def _latest_rca(db: Session, asset: Asset) -> dict[str, Any] | None:
     incident = (
         db.query(Incident)
@@ -273,6 +290,8 @@ def run_asset_verify(db: Session, asset: Asset, *, timeout: float = 2.0) -> dict
 
     item = _asset(asset)
     http_ids, snmp_ids = _sd_membership(db)
+    prom_url = settings.prometheus_url or "http://127.0.0.1:9090"
+    am_url = settings.alertmanager_url or "http://127.0.0.1:9093"
     report = verify_target(
         item,
         timeout=timeout,
@@ -282,6 +301,9 @@ def run_asset_verify(db: Session, asset: Asset, *, timeout: float = 2.0) -> dict
         rca=_latest_rca(db, asset),
         live_metrics=_live_metric_values(asset),
         ai_enabled=bool(settings.ai_enabled and settings.llm_url),
+        targets_fn=lambda: urllib_prom_targets(prom_url),
+        am_health=urllib_am_health(am_url),
+        incident=_latest_incident(db, asset),
     )
     if report.probe is not None:
         apply_probe_to_asset(asset, report.probe)
@@ -332,12 +354,16 @@ def verify_support_api(
             "in_http_sd": asset.asset_id in http_ids,
             "in_snmp_sd": asset.asset_id in snmp_ids,
             "rca": _latest_rca(db, asset),
+            "incident": _latest_incident(db, asset),
             "live_metrics": _live_metric_values(asset),
         }
+    am_url = settings.alertmanager_url or "http://127.0.0.1:9093"
     return {
         "assets": payload,
         "ai_enabled": bool(settings.ai_enabled and settings.llm_url),
         "prometheus_url": settings.prometheus_url,
+        "alertmanager_url": am_url,
+        "alertmanager": urllib_am_health(am_url),
     }
 
 

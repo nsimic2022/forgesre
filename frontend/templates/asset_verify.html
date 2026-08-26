@@ -3,7 +3,7 @@
 {% block content %}
 <p><a href="/assets">← Assets</a> · <a href="/assets/{{ report.asset_id }}">{{ report.hostname or report.asset_id }}</a></p>
 <h1>Verify {{ report.hostname or report.asset_id }}</h1>
-<p class="muted">Live communication from this appliance: inventory → ICMP / exporter or SNMP → Prometheus <code>up</code> → last RCA vs PromQL. This is <strong>not</strong> <code>./forgesre test</code> (appliance health). Missing exporter or no Prom target is SKIP/FAIL with a reason — never a fake green host.</p>
+<p class="muted">Live communication from this appliance: <code>exporter → prometheus → alertmanager → core</code>. Inventory → ICMP / exporter or SNMP → Prometheus <code>up</code> + scrape target health + family series → Alertmanager reachable → last Core incident/webhook (SKIP if none). This is <strong>not</strong> <code>./forgesre test</code> (appliance health). Missing exporter or no Prom target is SKIP/FAIL with a reason — never a fake green host.</p>
 {% if report.lab %}
 <div class="banner">DEMO lab host (<code>forge-demo-*</code>). Not proof of a real scrape. Seeded dashboard demos stay labeled lab.</div>
 {% endif %}
@@ -35,6 +35,7 @@
 <p class="muted">Universal classes: Linux <code>:9100</code> <code>node_</code>, Windows <code>:9182</code> <code>windows_</code>, Network SNMP, Unknown SKIP.</p>
 
 <h2>Live probes</h2>
+<p class="muted">{{ report.chain or "exporter → prometheus → alertmanager → core" }}</p>
 <table class="verify-table">
   <thead>
     <tr><th>Check</th><th>Result</th><th>Detail</th></tr>
@@ -44,6 +45,10 @@
     <tr><td>Port / exporter / SNMP</td><td><span class="verify-mark {{ report.port.mark|lower }}">{{ report.port.mark }}</span></td><td>{{ report.port.detail }}</td></tr>
     <tr><td>Metric family</td><td><span class="verify-mark {{ report.family.mark|lower }}">{{ report.family.mark }}</span></td><td>{{ report.family.detail }}</td></tr>
     <tr><td>Prometheus <code>up</code></td><td><span class="verify-mark {{ report.prom.mark|lower }}">{{ report.prom.mark }}</span></td><td>{{ report.prom.detail }}</td></tr>
+    <tr><td>Prom target</td><td><span class="verify-mark {{ report.target.mark|lower }}">{{ report.target.mark }}</span></td><td>{{ report.target.detail }}</td></tr>
+    <tr><td>Series present</td><td><span class="verify-mark {{ report.series.mark|lower }}">{{ report.series.mark }}</span></td><td>{{ report.series.detail }}</td></tr>
+    <tr><td>Alertmanager</td><td><span class="verify-mark {{ report.am.mark|lower }}">{{ report.am.mark }}</span></td><td>{{ report.am.detail }}</td></tr>
+    <tr><td>Core (this asset)</td><td><span class="verify-mark {{ report.core.mark|lower }}">{{ report.core.mark }}</span></td><td>{{ report.core.detail }}</td></tr>
     <tr><td>Last RCA vs PromQL</td><td><span class="verify-mark {{ report.rca.mark|lower }}">{{ report.rca.mark }}</span></td><td>{{ report.rca.detail }}</td></tr>
     <tr><td>LLM (ForgeAI)</td><td><span class="verify-mark {{ report.llm.mark|lower }}">{{ report.llm.mark }}</span></td><td>{{ report.llm.detail }}</td></tr>
   </tbody>

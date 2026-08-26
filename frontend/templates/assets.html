@@ -14,7 +14,7 @@
   <strong>:9100</strong> (node_exporter), <strong>:9182</strong> (windows_exporter), and <strong>SNMP</strong> (UDP/161).
   Last-known colors on first paint; <code>GET /api/v1/assets/reachability</code> refreshes in the background. Viewers can see status.
   {% if can('write_assets') %}
-  <a href="/assets/verify">Verify all</a> runs live ICMP / exporter or SNMP / Prometheus <code>up</code> (not <code>./forgesre test</code>).
+  <a href="/assets/verify">Verify all</a> runs the live chain exporter → prometheus → alertmanager → core (not <code>./forgesre test</code>).
   {% endif %}
 </p>
 <div class="table-scroll">

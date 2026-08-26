@@ -56,7 +56,7 @@ Commands:
   test               Full appliance report (files, HTTP, login, APIs, email, logs)
   ping [asset]       ICMP + exporter /metrics for inventory (alias: probe)
   probe [asset]      Same as ping
-  verify [asset]     Live communication: ICMP/exporter/SNMP → Prometheus up → RCA
+  verify [asset]     Live chain: exporter → prometheus → alertmanager → core
   status             docker compose ps
   logs [service]     Container logs (default: last 100 lines)
   config             Print config/forgesre.yml
@@ -266,8 +266,15 @@ Do not pip install sqlalchemy on the VM. GUI Verify still runs inside Core.
 
 test = appliance health after update (files, compose, login, APIs).
 verify = this host → ICMP / exporter or SNMP → Prometheus sees it →
-optional last RCA facts vs PromQL. LLM is listed only if ForgeAI is on;
-verify does not call the LLM.
+Alertmanager reachable → last Core incident (SKIP if none). Optional last
+RCA facts vs PromQL. LLM is listed only if ForgeAI is on; verify does not
+call the LLM.
+
+Chain: exporter → prometheus → alertmanager → core
+  ICMP / PORT / FAMILY   exporter answers (:9100 node_ / :9182 windows_ / SNMP)
+  PROM / TARGET / SERIES Prometheus up, scrape target health=up, family series
+  AM                     Alertmanager reachable (not "an alert fired")
+  CORE                   last incident/webhook; SKIP if none (no alarm is valid)
 
 Universal classes (not SKUs):
   Linux    :9100  node_exporter / node_
@@ -280,7 +287,8 @@ reason. Seeded forge-demo-* rows are lab-only (label DEMO); they are not
 proof of a real scrape. Default run skips them; --demo includes them labeled.
 
 One name or id prints inventory ForgeSRE already knows plus live probes
-(ICMP, port, metric family, Prom up, last RCA mismatch, LLM).
+(ICMP, port, metric family, Prom up, Prom target, series, Alertmanager,
+Core incident, last RCA mismatch, LLM).
 
 Exit 1 if any row FAILs. SKIP-only is exit 0.
 EOF
@@ -714,7 +722,7 @@ for item in rows:
 print()
 print(f"{len(rows)} asset(s). Linux = node_exporter :9100. Windows = windows_exporter :9182. Network device + IP = snmp_exporter.")
 print("Reachability: ./forgesre ping   (ICMP + /metrics; ping alone is not a scrape)")
-print("Live path:    ./forgesre verify (ICMP/exporter/SNMP → Prometheus; not ./forgesre test)")
+print("Live path:    ./forgesre verify (exporter → prometheus → alertmanager → core; not ./forgesre test)")
 PY
 }
 
