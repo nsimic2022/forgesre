@@ -8,7 +8,7 @@ from app.inventory import approve_candidate, is_snmp_asset, sd_snmp_targets, ups
 from app.jobs import run_pending_jobs
 from app.main import app
 from app.metrics import demo_metric_values, set_demo_cpu
-from app.models import Asset, Evidence, Job, Playrule, User
+from app.models import Asset, Evidence, Job, Playbook, Playrule, User
 from app.security import hash_password
 from app.seed import seed
 from app.services import close_open_incidents, ingest_alertmanager, next_incident_number, query_prometheus
@@ -342,6 +342,11 @@ def test_playrule_gets_default_escalation_policy():
     assert rule.escalation_policy_id is not None
     node = db.query(Playrule).filter_by(name="node-exporter-down").one()
     assert node.condition.get("alertname") == "NodeExporterDown"
+    memory = db.query(Playrule).filter_by(name="node-memory").one()
+    assert memory.condition.get("alertname") == "NodeMemoryHigh"
+    assert memory.condition.get("value") == 90
+    book = db.query(Playbook).filter_by(id=memory.playbook_id).one()
+    assert book.slug == "memory-high"
     db.close()
 
 

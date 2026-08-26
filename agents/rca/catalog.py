@@ -155,7 +155,7 @@ PLAYRULE_PRESETS: list[dict[str, Any]] = [
             {"id": "node-cpu", "label": "NodeCPUHigh — cpu_usage > 95", "name": "node-cpu", "alertname": "NodeCPUHigh", "metric": "cpu_usage", "operator": ">", "value": 95, "severity": "warning", "playbook": "cpu-high"},
             {"id": "node-filesystem", "label": "NodeFilesystemUsageHigh — filesystem_usage > 90", "name": "node-filesystem", "alertname": "NodeFilesystemUsageHigh", "metric": "filesystem_usage", "operator": ">", "value": 90, "severity": "warning", "playbook": "disk-full"},
             {"id": "node-exporter-down", "label": "NodeExporterDown — up == 0", "name": "node-exporter-down", "alertname": "NodeExporterDown", "metric": "up", "operator": "==", "value": 0, "severity": "warning", "playbook": "host-unreachable"},
-            {"id": "node-memory", "label": "NodeMemoryHigh — memory_usage > 90 (if you add that alert)", "name": "node-memory", "alertname": "NodeMemoryHigh", "metric": "memory_usage", "operator": ">", "value": 90, "severity": "warning", "playbook": "host-unreachable"},
+            {"id": "node-memory", "label": "NodeMemoryHigh — memory_usage > 90", "name": "node-memory", "alertname": "NodeMemoryHigh", "metric": "memory_usage", "operator": ">", "value": 90, "severity": "warning", "playbook": "memory-high"},
             {"id": "node-load", "label": "NodeLoadHigh — load > 8 (if you add that alert)", "name": "node-load", "alertname": "NodeLoadHigh", "metric": "load1", "operator": ">", "value": 8, "severity": "warning", "playbook": "cpu-high"},
         ],
     },
@@ -171,6 +171,7 @@ PLAYRULE_PRESETS: list[dict[str, Any]] = [
         "rules": [
             {"id": "win-cpu", "label": "WindowsCPUHigh — cpu_usage > 90", "name": "windows-cpu", "alertname": "WindowsCPUHigh", "metric": "cpu_usage", "operator": ">", "value": 90, "severity": "warning", "playbook": "cpu-high"},
             {"id": "win-disk", "label": "WindowsFilesystemUsageHigh — filesystem_usage > 90", "name": "windows-filesystem", "alertname": "WindowsFilesystemUsageHigh", "metric": "filesystem_usage", "operator": ">", "value": 90, "severity": "warning", "playbook": "disk-full"},
+            {"id": "win-memory", "label": "WindowsMemoryHigh — memory_usage > 90", "name": "windows-memory", "alertname": "WindowsMemoryHigh", "metric": "memory_usage", "operator": ">", "value": 90, "severity": "warning", "playbook": "memory-high"},
             {"id": "win-exporter-down", "label": "WindowsExporterDown — up == 0", "name": "windows-exporter-down", "alertname": "WindowsExporterDown", "metric": "up", "operator": "==", "value": 0, "severity": "warning", "playbook": "windows-unreachable"},
         ],
     },

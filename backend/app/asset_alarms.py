@@ -16,6 +16,7 @@ BUNDLED_ALERT_TILE = {
     "NodeExporterDown": "up",
     "WindowsCPUHigh": "cpu_percent",
     "WindowsFilesystemUsageHigh": "disk_percent",
+    "WindowsMemoryHigh": "memory_percent",
     "WindowsExporterDown": "up",
     "SnmpDeviceUnreachable": "up",
 }
@@ -29,6 +30,7 @@ BUNDLED_ALERT_CLASS = {
     "NodeExporterDown": "linux",
     "WindowsCPUHigh": "windows",
     "WindowsFilesystemUsageHigh": "windows",
+    "WindowsMemoryHigh": "windows",
     "WindowsExporterDown": "windows",
     "SnmpDeviceUnreachable": "network",
 }

@@ -121,6 +121,7 @@ def test_skip_reason_disabled_and_below_threshold():
         "alarms": {
             "cpu_percent": {"enabled": False, "threshold": 90},
             "disk_percent": {"enabled": True, "threshold": 92},
+            "memory_percent": {"enabled": True, "threshold": 85},
         },
     }
     assert "disabled" in bundled_alert_skip_reason(
@@ -135,6 +136,16 @@ def test_skip_reason_disabled_and_below_threshold():
         asset,
         "WindowsFilesystemUsageHigh",
         {"annotations": {"description": "Disk usage is 93% on blachole."}},
+    ) == ""
+    assert "below asset threshold" in bundled_alert_skip_reason(
+        asset,
+        "WindowsMemoryHigh",
+        {"annotations": {"description": "Memory usage is 70% on blachole."}},
+    )
+    assert bundled_alert_skip_reason(
+        asset,
+        "WindowsMemoryHigh",
+        {"annotations": {"description": "Memory usage is 91% on blachole."}},
     ) == ""
     assert bundled_alert_skip_reason(None, "WindowsCPUHigh", {"value": 99}) == ""
     assert alert_sample_value({"annotations": {"description": "Disk usage is 70.4% on host."}}) == 70.4
@@ -199,6 +210,76 @@ def test_ingest_honors_asset_disk_threshold_and_disable():
     db.close()
 
 
+def test_ingest_honors_asset_memory_threshold_and_disable():
+    db = _db()
+    host = create_manual_asset(
+        db,
+        hostname="lnx-quiet-mem",
+        ip="10.66.21.84",
+        type="Linux Server",
+        actor="tester",
+        alarms={
+            "memory_percent": {"enabled": True, "threshold": 92},
+        },
+    )
+    quiet_win = create_manual_asset(
+        db,
+        hostname="win-quiet-mem",
+        ip="10.66.21.85",
+        type="Windows Server",
+        actor="tester",
+        alarms={
+            "memory_percent": {"enabled": False, "threshold": 90},
+        },
+    )
+    noisy = ingest_alertmanager(
+        db,
+        {
+            "status": "firing",
+            "alerts": [
+                {
+                    "status": "firing",
+                    "labels": {"alertname": "NodeMemoryHigh", "severity": "warning", "asset": host.asset_id},
+                    "annotations": {"summary": "Memory high", "description": "Memory usage is 70% on lnx-quiet-mem."},
+                }
+            ],
+        },
+    )
+    assert noisy == []
+    disabled = ingest_alertmanager(
+        db,
+        {
+            "status": "firing",
+            "alerts": [
+                {
+                    "status": "firing",
+                    "labels": {"alertname": "WindowsMemoryHigh", "severity": "warning", "asset": quiet_win.asset_id},
+                    "annotations": {"summary": "Windows memory high", "description": "Memory usage is 99% on win-quiet-mem."},
+                }
+            ],
+        },
+    )
+    assert disabled == []
+    created = ingest_alertmanager(
+        db,
+        {
+            "status": "firing",
+            "alerts": [
+                {
+                    "status": "firing",
+                    "labels": {"alertname": "NodeMemoryHigh", "severity": "warning", "asset": host.asset_id},
+                    "annotations": {"summary": "Memory high", "description": "Memory usage is 93% on lnx-quiet-mem."},
+                }
+            ],
+        },
+    )
+    assert created
+    assert created[0].playrule_id is not None
+    assert db.query(Incident).filter_by(asset_id=host.id).count() == 1
+    assert db.query(Incident).filter_by(asset_id=quiet_win.id).count() == 0
+    db.close()
+
+
 def test_save_edit_persists_custom_disk_threshold():
     client = _login("analyst-alarms2@forgesre.local")
     created = client.post(
@@ -247,11 +328,61 @@ def test_save_edit_persists_custom_disk_threshold():
     assert after["disk_percent"]["threshold"] == 92
 
 
+def test_save_edit_persists_memory_disable_and_threshold():
+    client = _login("analyst-alarms-mem@forgesre.local")
+    created = client.post(
+        "/assets",
+        data={
+            "hostname": "win-th-mem",
+            "ip": "10.66.21.86",
+            "type": "Windows Server",
+            "alarms_present": "1",
+            "alarm_up_enabled": "1",
+            "alarm_cpu_enabled": "1",
+            "alarm_cpu_threshold": "90",
+            "alarm_memory_enabled": "1",
+            "alarm_memory_threshold": "85",
+            "alarm_disk_enabled": "1",
+            "alarm_disk_threshold": "90",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code in {302, 303}
+    alarms = client.get("/api/v1/assets/win-th-mem").json()["alarms"]
+    assert alarms["memory_percent"]["threshold"] == 85
+    assert alarms["memory_percent"]["enabled"] is True
+    edited = client.post(
+        "/assets/win-th-mem/update",
+        data={
+            "hostname": "win-th-mem",
+            "ip": "10.66.21.86",
+            "type": "Windows Server",
+            "scrape_address": "10.66.21.86:9182",
+            "alarms_present": "1",
+            "alarm_up_enabled": "1",
+            "alarm_cpu_enabled": "1",
+            "alarm_cpu_threshold": "90",
+            "alarm_memory_threshold": "92",
+            "alarm_disk_enabled": "1",
+            "alarm_disk_threshold": "90",
+        },
+        follow_redirects=False,
+    )
+    assert edited.status_code in {302, 303}
+    after = client.get("/api/v1/assets/win-th-mem").json()["alarms"]
+    assert after["memory_percent"]["enabled"] is False
+    assert after["memory_percent"]["threshold"] == 92
+
+
 def test_normalize_alarms_defaults_windows_cpu_90():
     values = normalize_alarms(None, "windows")
     assert values["cpu_percent"]["enabled"] is True
     assert values["cpu_percent"]["threshold"] == 90
     assert values["disk_percent"]["threshold"] == 90
+    assert values["memory_percent"]["enabled"] is True
+    assert values["memory_percent"]["threshold"] == 90
+    linux = normalize_alarms(None, "linux")
+    assert linux["memory_percent"]["threshold"] == 90
 
 
 def test_playrules_mentions_saved_asset_alarms():

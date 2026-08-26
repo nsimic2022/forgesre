@@ -1,4 +1,4 @@
-# Session handoff — 25 August 2026
+# Session handoff — 26 August 2026
 
 This file is a **session handoff for the next coding agent or contributor**. It is not an operator manual. Operators start at [install and config](install-config.md) and the [operator handbook](operator-handbook.md).
 
@@ -17,16 +17,15 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Wednesday 26 August 2026.** System Health → Prometheus Open is **Targets** (`/targets?search=` scrape jobs), not Prometheus process `/metrics`.
+**Wednesday 26 August 2026.** N approved **only** the Memory alarm gap. Bundled Prometheus memory alerts, seeded playrules, Assets Alarms Memory checkbox (webhook filter), and Machine metrics red at the same **90%**.
 
 On the Ubuntu VM N uses, resume with:
 
 ```bash
-git pull origin main
-./forgesre update
+git pull && ./forgesre update
 ```
 
-Also: `./forgesre ping`, `./forgesre verify`, `./forgesre test` (appliance health, not inventory). See [docs/llm.md](llm.md).
+(`./forgesre update` already runs `render-monitoring`.) Also: `./forgesre ping`, `./forgesre verify`, `./forgesre test` (appliance health, not inventory). See [docs/llm.md](llm.md).
 
 Hard-refresh the browser after UI/CSS changes (`/static/app.css` is not cache-busted).
 
@@ -43,7 +42,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **287 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~37s each. Python 3.12, pytest 9.x. Prometheus Health Open URLs: `/targets?search=` (primary), `/alerts`, `/graph`.
+Both runs: **306 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~39s each. Python 3.12, pytest 9.x.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`.
 
@@ -51,7 +50,7 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-Prometheus **Open** on System Health: **Targets** (`http://127.0.0.1:9090/targets?search=` — scrape jobs `windows-standard` / `linux-standard` / `forgesre-snmp`; port from config), **Alerts**, **Graph**. The old Metrics link was Prometheus process `/metrics` (useless for “did Windows actually get scraped?”). Core `/metrics` and Grafana Open are unchanged. Doctor dummy `core` key stays.
+Memory alarms (Linux `NodeMemoryHigh`, Windows `WindowsMemoryHigh`), default **90%** used (MemAvailable/MemTotal and windows_exporter `windows_os_physical_memory_free_bytes` / `windows_cs_physical_memory_bytes`), playrules `node-memory` / `windows-memory` → playbook `MEMORY-HIGH` (guidance only). Assets Alarms Memory enable/% now filters the webhook like CPU/disk. Tiles use the same threshold.
 
 ---
 
@@ -60,12 +59,10 @@ Prometheus **Open** on System Health: **Targets** (`http://127.0.0.1:9090/target
 Do **not** run `./install.sh`.
 
 ```bash
-cd ~/forgesre
-git pull origin main
-./forgesre update
+git pull && ./forgesre update
 ```
 
-Hard-refresh the browser after UI/CSS changes (`/static/app.css` is not cache-busted). Then System Health → Prometheus → **Targets** (`http://127.0.0.1:9090/targets?search=`; port from config).
+Hard-refresh the browser after UI/CSS changes (`/static/app.css` is not cache-busted).
 
 ---
 
@@ -88,6 +85,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update` (`docker info`, else `sudo docker compose`). A docker.sock permission error is not “start postgres”.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`. Do not explode the archive into loose files at `data/backups/` root.
 - Host `./forgesre verify` does not import sqlalchemy (`demo_ids.py`).
+- Memory bundled alerts exist: `NodeMemoryHigh` / `WindowsMemoryHigh` at **90%**, playrules `node-memory` / `windows-memory`. Do not add load / inodes / blackbox / mysql-redis exporters, a 50-collector dropdown, or a Grafana rewrite unless N asks.
 
 ---
 
@@ -95,7 +93,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 
 1. `git pull origin main`.
 2. Read **this file**, then [`docs/llm.md`](llm.md) and [`docs/cli.md`](cli.md).
-3. On the VM: `git pull origin main && ./forgesre update`. Never `./install.sh`.
+3. On the VM: `git pull && ./forgesre update`. Never `./install.sh`.
 4. `pip install -r requirements-dev.txt` if needed, then `PYTHONPATH=backend:agents python3 -m pytest tests` **twice**, then merge to `main`. Branch pattern `cursor/<name>-05f8`.
 5. Replies to N are in **Serbian**. OSS docs and code stay in **English**.
 6. `ManagePullRequest` `create_pr` often 403. `git merge --no-ff` plus `git push origin main` still lands the change.
@@ -114,6 +112,8 @@ Do not start these unless N asks:
 - Explode backup tars into many small files at `data/backups/` root.
 - Grafana deep-link on the asset page (N said later).
 - Rewriting all of Prometheus `alerts.yml` per asset.
+- Load, inodes, blackbox, mysql/redis exporters in compose.
+- 50 collectors dropdown on Add asset.
 
 ---
 

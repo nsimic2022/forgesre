@@ -44,6 +44,14 @@ CPU_STEPS = [
     {"id": "escalate", "title": "Escalate if not acknowledged"},
 ]
 
+MEMORY_STEPS = [
+    {"id": "verify", "title": "Verify memory usage (available vs total)"},
+    {"id": "process", "title": "Identify top memory consumers"},
+    {"id": "owner", "title": "Identify owner"},
+    {"id": "notify", "title": "Notify responsible engineer"},
+    {"id": "escalate", "title": "Escalate if not acknowledged"},
+]
+
 HOST_STEPS = [
     {"id": "verify", "title": "Verify the host answers ping / SSH from the management network"},
     {"id": "exporter", "title": "Check node_exporter on TCP/9100 from the ForgeSRE host"},
@@ -271,6 +279,17 @@ def seed(db: Session) -> None:
         db.add(cpu)
         db.flush()
 
+    mem = db.query(Playbook).filter_by(slug="memory-high").first()
+    if mem is None:
+        mem = Playbook(
+            slug="memory-high",
+            name="MEMORY-HIGH",
+            description="High memory usage workflow. Guidance only — no commands are executed.",
+            steps=MEMORY_STEPS,
+        )
+        db.add(mem)
+        db.flush()
+
     net = db.query(Playbook).filter_by(slug="network-unreachable").first()
     if net is None:
         net = Playbook(
@@ -397,6 +416,18 @@ def seed(db: Session) -> None:
                 escalation_policy_id=policy.id,
             )
         )
+    if db.query(Playrule).filter_by(name="node-memory").first() is None:
+        db.add(
+            Playrule(
+                name="node-memory",
+                description="node_exporter memory above 90%",
+                enabled=True,
+                severity="warning",
+                condition={"alertname": "NodeMemoryHigh", "metric": "memory_usage", "operator": ">", "value": 90},
+                playbook_id=mem.id,
+                escalation_policy_id=policy.id,
+            )
+        )
     if db.query(Playrule).filter_by(name="windows-cpu").first() is None:
         db.add(
             Playrule(
@@ -446,6 +477,18 @@ def seed(db: Session) -> None:
                 severity="warning",
                 condition={"alertname": "WindowsFilesystemUsageHigh", "metric": "filesystem_usage", "operator": ">", "value": 90},
                 playbook_id=disk.id,
+                escalation_policy_id=policy.id,
+            )
+        )
+    if db.query(Playrule).filter_by(name="windows-memory").first() is None:
+        db.add(
+            Playrule(
+                name="windows-memory",
+                description="windows_exporter memory above 90%",
+                enabled=True,
+                severity="warning",
+                condition={"alertname": "WindowsMemoryHigh", "metric": "memory_usage", "operator": ">", "value": 90},
+                playbook_id=mem.id,
                 escalation_policy_id=policy.id,
             )
         )

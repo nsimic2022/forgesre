@@ -67,11 +67,39 @@ def test_bundled_thresholds_match_alerts_yml_not_guessed_80():
     assert values["linux"]["memory_percent"] == 90
     assert values["windows"]["cpu_percent"] == 90
     assert values["windows"]["disk_percent"] == 90
+    assert values["windows"]["memory_percent"] == 90
     alerts = (open("monitoring/alerts.yml", encoding="utf-8")).read()
     assert "NodeCPUHigh" in alerts
     assert "> 95" in alerts
     assert "WindowsCPUHigh" in alerts
     assert "> 90" in alerts
+    assert "alert: NodeMemoryHigh" in alerts
+    assert "node_memory_MemAvailable_bytes" in alerts
+    assert "node_memory_MemTotal_bytes" in alerts
+    assert "alert: WindowsMemoryHigh" in alerts
+    assert "windows_os_physical_memory_free_bytes" in alerts
+    assert "windows_cs_physical_memory_bytes" in alerts
+    assert "windows_memory_available_bytes" not in alerts
+
+
+def test_alerts_yml_memory_rules_use_tile_promql_and_five_minutes():
+    from pathlib import Path
+
+    text = Path("monitoring/alerts.yml").read_text(encoding="utf-8")
+    render = Path("scripts/render-monitoring.sh").read_text(encoding="utf-8")
+    assert 'base = (root / "monitoring" / "alerts.yml").read_text()' in render
+    assert '(out / "alerts.yml").write_text' in render
+    linux = text.split("alert: NodeMemoryHigh", 1)[1].split("- alert:", 1)[0]
+    windows = text.split("alert: WindowsMemoryHigh", 1)[1]
+    assert "for: 5m" in linux
+    assert "for: 5m" in windows
+    assert "MemAvailable_bytes" in linux
+    assert "MemTotal_bytes" in linux
+    assert "MemFree_bytes" not in linux
+    assert "windows_os_physical_memory_free_bytes" in windows
+    assert "windows_cs_physical_memory_bytes" in windows
+    assert "> 90" in linux
+    assert "> 90" in windows
 
 
 def test_metric_class_linux_windows_network_demo_unknown():
@@ -118,6 +146,20 @@ def test_linux_cpu_red_at_bundled_node_threshold():
     cpu = next(tile for tile in panel["tiles"] if tile["key"] == "cpu_percent")
     assert cpu["threshold"] == 95
     assert cpu["tone"] == "crit"
+
+
+def test_linux_memory_red_at_bundled_90():
+    panel = asset_metric_panel(
+        {"asset_id": "app-lab-01", "type": "Linux Server"},
+        query_fn=_query({"node_cpu_seconds_total": 10.0, 'up{': 1.0, "node_memory_MemAvailable": 91.0, "node_filesystem": 10.0}),
+        range_fn=_no_spark,
+    )
+    mem = next(tile for tile in panel["tiles"] if tile["key"] == "memory_percent")
+    assert mem["threshold"] == 90
+    assert mem["tone"] == "crit"
+    blob = str(promql_queries_for({"asset_id": "app-lab-01", "type": "Linux Server"}))
+    assert "node_memory_MemAvailable_bytes" in blob
+    assert "node_memory_MemTotal_bytes" in blob
 
 
 def test_missing_series_is_yellow_never_fake_zero():
@@ -205,9 +247,32 @@ def test_windows_tiles_use_windows_metrics_and_90_cpu():
         range_fn=_no_spark,
     )
     cpu = next(tile for tile in panel["tiles"] if tile["key"] == "cpu_percent")
+    mem = next(tile for tile in panel["tiles"] if tile["key"] == "memory_percent")
     assert cpu["threshold"] == 90
     assert cpu["tone"] == "crit"
+    assert mem["threshold"] == 90
     assert panel["class"] == "windows"
+
+
+def test_windows_memory_red_at_bundled_90():
+    panel = asset_metric_panel(
+        {"asset_id": "win-prod-01", "type": "Windows Server"},
+        query_fn=_query(
+            {
+                "windows_cpu_time_total": 10.0,
+                "windows_os_physical_memory": 91.0,
+                "windows_logical_disk": 10.0,
+                'up{': 1.0,
+            }
+        ),
+        range_fn=_no_spark,
+    )
+    mem = next(tile for tile in panel["tiles"] if tile["key"] == "memory_percent")
+    assert mem["threshold"] == 90
+    assert mem["tone"] == "crit"
+    blob = str(promql_queries_for({"asset_id": "win-prod-01", "type": "Windows Server"}))
+    assert "windows_os_physical_memory_free_bytes" in blob
+    assert "windows_cs_physical_memory_bytes" in blob
 
 
 def test_network_tile_is_up_only():
@@ -345,6 +410,30 @@ def test_custom_disk_threshold_colors_tile():
     quiet_disk = next(tile for tile in quiet["tiles"] if tile["key"] == "disk_percent")
     assert quiet_disk["tone"] == "ok"
     assert quiet_disk["alarm_enabled"] is False
+
+
+def test_custom_memory_threshold_colors_tile():
+    asset = {
+        "asset_id": "win-lab-mem",
+        "type": "Windows Server",
+        "alarms": {"memory_percent": {"enabled": True, "threshold": 85}},
+    }
+    panel = asset_metric_panel(
+        asset,
+        query_fn=_query({"windows_os_physical_memory": 87.0, "windows_cpu_time_total": 10.0, "windows_logical_disk": 10.0, 'up{': 1.0}),
+        range_fn=_no_spark,
+    )
+    mem = next(tile for tile in panel["tiles"] if tile["key"] == "memory_percent")
+    assert mem["threshold"] == 85
+    assert mem["tone"] == "crit"
+    quiet = asset_metric_panel(
+        {**asset, "alarms": {"memory_percent": {"enabled": False, "threshold": 85}}},
+        query_fn=_query({"windows_os_physical_memory": 99.0, "windows_cpu_time_total": 10.0, "windows_logical_disk": 10.0, 'up{': 1.0}),
+        range_fn=_no_spark,
+    )
+    quiet_mem = next(tile for tile in quiet["tiles"] if tile["key"] == "memory_percent")
+    assert quiet_mem["tone"] == "ok"
+    assert quiet_mem["alarm_enabled"] is False
 
 
 def test_sparkline_stays_small_when_range_exists():
