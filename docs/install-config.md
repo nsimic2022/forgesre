@@ -479,7 +479,7 @@ git pull origin main
 ./forgesre snmp
 ```
 
-`./forgesre update` = doctor (warn ok) → backup → render-monitoring → NetBox secrets → compose pull/up (including **snmp-exporter** on `127.0.0.1:9116` and **NetBox** on `:8001`) → wait for NetBox `/login/` (migrations can take several minutes; doctor stays yellow until then) → doctor. It does **not** regenerate passwords. Host backup dumps Postgres via `docker compose exec postgres` (no sqlalchemy on the host). A backup failure is a clear error; update still starts the stack.
+`./forgesre update` = doctor (warn ok) → backup → render-monitoring → NetBox secrets → compose pull (unless `--offline`) / `up -d` (including **snmp-exporter** on `127.0.0.1:9116` and **NetBox** on `:8001`; Core `--build` skipped when Dockerfile/backend/agents/frontend are unchanged) → wait for NetBox `/login/` (migrations can take several minutes; doctor stays yellow until then) → doctor. Lab: `./forgesre update --offline` skips image pull. It does **not** regenerate passwords. Host backup dumps Postgres via `docker compose exec postgres` (no sqlalchemy on the host). A backup failure is a clear error; update still starts the stack.
 
 Platform backup files: `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (one folder per run). Restore is not silent — `./forgesre restore FOLDER` prints the plan; add `--yes` after `docker compose stop core`, then `./forgesre update`. Administration can create/import the same archives (admin session only). Details: [`operator-handbook.md`](operator-handbook.md) (Platform backup).
 
@@ -519,6 +519,9 @@ Need 16 GB RAM for the default 14B GGUF, or ~8 GB if you wget Qwen3-4B into `dat
 | Doctor snmp error | `docker compose up -d snmp-exporter && ./forgesre snmp` |
 | LLM download / :8088 down | `docker compose --profile ai up -d llm` then wait for the GGUF to load |
 | Re-install wiped logins | `./install.sh` regenerates secrets; use `update` on a live box |
+| Redis `:6379` already in use | Bundled NetBox binds Redis on `127.0.0.1:6379` (host network). Stop the other Redis, or do not run a second one on the VM |
+| NetBox first boot yellow | Django migrations can take several minutes. Doctor stays **yellow** until `http://127.0.0.1:8001/login/` answers — wait, do not fake green. `docker compose logs --tail=80 netbox` |
+| Mailbox 25 / 993 vs host network | Optional `./forgesre mailbox` uses host networking: inbound SMTP **TCP/25**, IMAP **TCP/993**, Roundcube `:8081`. Free those ports on the VM; many ISPs/clouds block port 25 |
 
 ```bash
 docker compose logs --tail 80 core

@@ -137,6 +137,13 @@ def test_docs_say_bundled_netbox_default_on():
     assert "--netbox-url" in install
     assert "./forgesre update" in cont
     assert "NetBox" in cont
+    cli = (ROOT / "docs" / "cli.md").read_text(encoding="utf-8")
+    assert "8001" in cli
+    assert "./forgesre update" in cli
+    assert "yellow" in cli.lower()
+    v07 = (ROOT / "docs" / "v0.7.md").read_text(encoding="utf-8")
+    assert "not bundled NetBox" not in v07
+    assert "Bundled NetBox is on this V0.7" in v07
     assert "A bundled NetBox or a cloud LLM" not in readme
     completion = (ROOT / "scripts" / "forgesre-completion.bash").read_text(encoding="utf-8")
     assert "netbox-redis" in completion

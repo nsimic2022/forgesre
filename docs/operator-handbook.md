@@ -663,6 +663,8 @@ Alertmanager ingest **enqueues** an investigate job. The webhook does not wait o
 
 Queries are **per asset**. `forge-demo-01` uses Core demo gauges. A real Linux host uses `node_cpu_seconds_total` / `node_filesystem_*` with `asset="<id>"`. A real Windows host uses `windows_cpu_time_total` / `windows_logical_disk_*`. A network device uses `up{job="forgesre-snmp",asset="<id>"}`. Demo CPU/disk numbers are never overlaid on another host.
 
+Loki: Alloy ships **appliance Core logs** labeled `asset=forge-demo-01` / `job=forgesre`. RCA may use those for the DEMO host, labeled DEMO (appliance/demo logs). A real inventory row does **not** get empty Loki presented as logs from that VM — limitation is “no host logs shipped” until Alloy actually has that asset label.
+
 Lab: `./forgesre demo-rca` raises filesystem usage on the **demo gauge** (does not fill a real disk). `./forgesre demo-reset` puts the gauges back.
 
 ---
@@ -888,7 +890,7 @@ Say this out loud so lab expectations stay honest:
 - Playbooks are checklists, not executed runbooks.
 - Assets can be added, edited, cloned, and removed (analyst+). Lab `forge-demo-*` rows can be removed; they do not come back on update. Users can be edited and removed on Administration (not the install super admin, not yourself). Escalation policies can be created in the UI; there is no ticketing object.
 - Example YAML in `config/examples/` is not applied automatically.
-- Bundled alert rules include demo gauges, SNMP `up` / interface-down, a small `node_exporter` set (down / disk 90% / CPU 95%), and a small `windows_exporter` set (down / volume 90% / CPU 90%). Extra rules go in `alerts.local.yml`.
+- Bundled alert rules include demo gauges, SNMP `up` / interface-down, Linux `node_exporter` (down / disk **90%** / **memory 90%** / CPU 95%), and Windows `windows_exporter` (down / volume **90%** / **memory 90%** / CPU 90%). Extra rules go in `alerts.local.yml`. **Grafana is not the alarm path** — it is graphs only. Incidents come from Prometheus → Alertmanager → ForgeSRE.
 - Discovery is TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, 256 hosts max. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.
 - Viewer cannot open Playrules, Playbooks, Escalation, Console, or Discovery (403).
 - Optional TLS is an example Caddyfile, not a default container.

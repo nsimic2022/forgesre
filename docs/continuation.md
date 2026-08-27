@@ -1,4 +1,4 @@
-# Session handoff — 26 August 2026
+# Session handoff — 27 August 2026
 
 This file is a **session handoff for the next coding agent or contributor**. It is not an operator manual. Operators start at [install and config](install-config.md) and the [operator handbook](operator-handbook.md).
 
@@ -17,19 +17,17 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Wednesday 26 August 2026.** Bundled NetBox is a **default** compose service (no profile): UI `:8001`, Redis on `127.0.0.1:6379`, database `netbox` on the existing Postgres (does not wipe `forgesre`). `--netbox-url` still overrides Core. First boot migrations can take several minutes; doctor stays yellow until `/login/` answers.
-
-Add/Edit **Asset ID first** (typed short id, not derived from hostname) and `./forgesre verify` by **# / id / hostname / IP** already landed on `main`. Do not fight that form.
+**Thursday 27 August 2026.** Ordered review fixes on top of bundled-NetBox `main`: docs matched to code, doctor probes (not dummy ok), RCA Loki honesty, LLM worker no longer holds `/ops` reports for 600s, `update.sh` skip Core `--build` when sources unchanged.
 
 On the Ubuntu VM N uses, resume with:
 
 ```bash
-git pull && ./forgesre update
+git pull origin main && ./forgesre update
 ```
 
-(`./forgesre update` already runs `render-monitoring`.) Also: `./forgesre ping`, `./forgesre verify`, `./forgesre test` (appliance health, not inventory). See [docs/llm.md](llm.md).
+Lab without image pull: `./forgesre update --offline`. (`./forgesre update` already runs `render-monitoring` and waits for NetBox `/login/`.) Also: `./forgesre ping`, `./forgesre verify`, `./forgesre test` (appliance health, not inventory). See [docs/llm.md](llm.md).
 
-Hard-refresh the browser after UI/CSS changes (`/static/app.css?v=asset-id-first-1`).
+Hard-refresh the browser after UI/docs changes.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
 
@@ -44,7 +42,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **319 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x.
+Both runs: see the merge commit. Python 3.12, pytest 9.x. One warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore).
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -52,9 +50,11 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-Bundled NetBox default-on (`netbox`, `netbox-redis`, `netbox-db-init`). Core `NETBOX_URL=http://127.0.0.1:8001`. Doctor probes `/login/` and `/api/status/` — yellow while migrating, not fake green.
-
-Add/Edit form order (already on `main`): **Asset ID**, **Hostname**, **IP**. Do **not** rebuild Alarms or Memory alerts.
+1. **Docs = code.** `docs/cli.md` everyday `update` includes NetBox `:8001`, first-boot yellow, wait. `docs/v0.7.md` bundled NetBox **is** on this V0.7 main. Handbook §17 bundled alerts include Linux+Windows **memory 90%**; Grafana is **not** the alarm path. `CONTRIBUTING.md` V0.7. Example YAML `ai.enabled: false` (standard install). Mailpit stays gone. `docs/architecture.md` one line: appliance runtime is Compose, not the Caddy/Go diagram. Install troubleshooting: Redis `:6379`, NetBox first boot, mailbox 25/993.
+2. **Doctor.** Stack `core` probes the same `/api/v1/health` as `doctor.sh` (label **Core (container)**; CLI curl stays **Core API**). `discovery` probes last journal scan + loop heartbeat — not a checkbox. SNMP still **paused** with no network targets. NetBox first-boot stays **warn**.
+3. **RCA Loki.** Alloy labels Core logs `asset=forge-demo-01`. Real inventory does not get empty `{asset="<id>"}` presented as host logs. Limitation: “no host logs shipped”. Demo may still query appliance logs, labeled DEMO.
+4. **LLM vs `/ops` reports.** Default `ai.llm.timeout_seconds` is **90** (lab 4B). Job loop runs `process_scheduled_reports` **before** pending jobs and prefers non-LLM investigate jobs. Builtin RCA path unchanged. No Celery / SKIP LOCKED.
+5. **`update.sh`.** `compose pull` only when not `--offline`. Skip Core `--build` when Dockerfile/backend/agents/frontend hash is unchanged. NetBox wait on first boot stays.
 
 ---
 
@@ -63,10 +63,10 @@ Add/Edit form order (already on `main`): **Asset ID**, **Hostname**, **IP**. Do 
 Do **not** run `./install.sh`.
 
 ```bash
-git pull && ./forgesre update
+git pull origin main && ./forgesre update
 ```
 
-Hard-refresh the browser (CSS query `?v=asset-id-first-1`).
+Hard-refresh the browser.
 
 ---
 
@@ -90,8 +90,10 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update` (`docker info`, else `sudo docker compose`). A docker.sock permission error is not “start postgres”.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`. Do not explode the archive into loose files at `data/backups/` root.
 - Host `./forgesre verify` does not import sqlalchemy (`demo_ids.py`).
-- Memory bundled alerts exist: `NodeMemoryHigh` / `WindowsMemoryHigh` at **90%**, playrules `node-memory` / `windows-memory`. Do not add load / inodes / blackbox / mysql-redis exporters, a 50-collector dropdown, or a Grafana rewrite unless N asks.
+- Memory bundled alerts exist: `NodeMemoryHigh` / `WindowsMemoryHigh` at **90%**, playrules `node-memory` / `windows-memory`. Grafana is not the alarm path.
 - Add asset: operator types **Asset ID** and **Hostname** separately. Id is immutable after create. Do not derive id from hostname again.
+- Doctor labels: **Core API** (`doctor.sh` health curl) vs **Core (container)** (payload `/api/v1/health` probe). Do not rename them back to a single “Core”.
+- Mailpit is gone. Do not add a lab SMTP catcher.
 
 ---
 
@@ -99,7 +101,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 
 1. `git pull origin main`.
 2. Read **this file**, then [`docs/llm.md`](llm.md) and [`docs/cli.md`](cli.md).
-3. On the VM: `git pull && ./forgesre update`. Never `./install.sh`.
+3. On the VM: `git pull origin main && ./forgesre update`. Never `./install.sh`.
 4. `pip install -r requirements-dev.txt` if needed, then `PYTHONPATH=backend:agents python3 -m pytest tests` **twice**, then merge to `main`. Branch pattern `cursor/<name>-05f8`.
 5. Replies to N are in **Serbian**. OSS docs and code stay in **English**.
 6. `ManagePullRequest` `create_pr` often 403. `git merge --no-ff` plus `git push origin main` still lands the change.
@@ -120,6 +122,8 @@ Do not start these unless N asks:
 - Rewriting all of Prometheus `alerts.yml` per asset.
 - Load, inodes, blackbox, mysql/redis exporters in compose.
 - 50 collectors dropdown on Add asset.
+- Celery / Redis job queue / `SKIP LOCKED`.
+- A second log stack (host Alloy for every asset).
 
 ---
 
@@ -131,3 +135,6 @@ Do not start these unless N asks:
 - Old backups already on the VM as `data/backups/forgesre-*.tar.gz` are still valid; new runs write folders.
 - Grafana deep-link from an asset is still later.
 - Prometheus global rules may still fire for a host whose ForgeSRE alarm is disabled or raised; ForgeSRE will not open the incident when the webhook carries the value.
+- Alloy still only ships appliance Core logs as `forge-demo-01`. Real hosts have no Loki until that changes.
+- LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90) after reports in that pass have already run.
+- `config/forgesre.yml` on a live VM is gitignored; a 600s timeout already written there is not overwritten by `update`. Lower it by hand if the worker still blocks.
