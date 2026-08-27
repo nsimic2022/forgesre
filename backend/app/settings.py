@@ -69,14 +69,14 @@ class Settings:
 
     @property
     def llm_timeout(self) -> float:
-        """Seconds to wait for llama.cpp. 14B Q4 on CPU often exceeds 180s."""
+        """Seconds to wait for llama.cpp. Lab 4B default 90; slow 14B CPU may need more."""
         try:
             raw = ((self.yaml.get("ai") or {}).get("llm") or {}).get("timeout_seconds")
             if raw is None:
-                return 600.0
+                return 90.0
             return max(30.0, float(raw))
         except (TypeError, ValueError):
-            return 600.0
+            return 90.0
 
     @property
     def rca_engine(self) -> str:

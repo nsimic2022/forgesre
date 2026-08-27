@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 
@@ -1079,8 +1080,8 @@ def doctor_payload(*, force: bool = False) -> dict[str, Any]:
 def _doctor_payload_fresh() -> dict[str, Any]:
     components = {
         # Machine key "core" = compose service. Display: Core (container).
-        # Always-ok stack row — not the curl of /api/v1/health (that is Core API).
-        "core": _ok("ok"),
+        # Same GET /api/v1/health as doctor.sh (that CLI row is labeled Core API).
+        "core": _core_check(),
         "postgres": _probe_sql(),
         "prometheus": _http(f"{settings.prometheus_url}/-/ready", "GET"),
         "alertmanager": _http(f"{settings.alertmanager_url}/-/ready", "GET"),
@@ -1090,7 +1091,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "snmp": _snmp_check(),
         "llm": _http((settings.llm_url or "").rstrip("/") + "/models", "GET") if settings.llm_url else _ok("disabled"),
         "netbox": _netbox_check(),
-        "discovery": _ok("ok") if settings.discovery_enabled else _ok("disabled"),
+        "discovery": _discovery_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)
@@ -1100,6 +1101,71 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "components": components,
         "failed": failed,
     }
+
+
+def _core_check() -> dict[str, str]:
+    """Same /api/v1/health probe as doctor.sh Core API, labeled Core (container) in the payload."""
+    port = str(os.environ.get("FORGESRE_HTTP_PORT") or "8080").strip() or "8080"
+    url = f"http://127.0.0.1:{port}/api/v1/health"
+    result = _http(url, "GET")
+    result.setdefault("test", f"curl -fsS {url}")
+    if result.get("status") != "ok":
+        result.setdefault("fix", "docker compose logs core && ./forgesre secrets-check")
+    return result
+
+
+def _discovery_check() -> dict[str, str]:
+    """Last scan / journal / loop heartbeat — not a checkbox."""
+    if not settings.discovery_enabled:
+        return _ok("disabled")
+    from app.db import SessionLocal
+    from app.inventory import discovery_loop_age_seconds
+    from app.journal import list_entries
+
+    test = "journal module=discovery; discovery loop heartbeat"
+    age = discovery_loop_age_seconds()
+    last = None
+    try:
+        db = SessionLocal()
+        try:
+            rows = list_entries(db, module="discovery", limit=1)
+            last = rows[0] if rows else None
+        finally:
+            db.close()
+    except Exception as exc:
+        return {
+            "status": "warn",
+            "why": f"Could not read discovery journal: {exc}",
+            "test": test,
+            "fix": "./forgesre journal discovery",
+        }
+    if last is not None and str(last.status or "") == "error":
+        return {
+            "status": "warn",
+            "why": last.summary or "Last discovery journal row is error",
+            "test": test,
+            "fix": "./forgesre journal discovery",
+        }
+    if age is None:
+        return {
+            "status": "warn",
+            "why": "Discovery loop has not reported yet (first scan waits ~30s, then every 6 hours).",
+            "test": test,
+            "fix": "Watch ./forgesre journal discovery after Core is up.",
+        }
+    if age > (6 * 3600 + 120):
+        return {
+            "status": "warn",
+            "why": f"Discovery loop last heartbeat {int(age)}s ago (expected at least every 6 hours).",
+            "test": test,
+            "fix": "docker compose logs core",
+        }
+    why = "Discovery loop is alive."
+    if last is not None:
+        why = f"{why} Last journal: {last.action} {last.status} — {last.summary}"
+    else:
+        why = f"{why} No scan journal yet."
+    return {"status": "ok", "why": why, "test": test}
 
 
 def _snmp_check() -> dict[str, str]:

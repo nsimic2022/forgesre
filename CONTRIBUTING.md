@@ -1,6 +1,6 @@
 # Contributing
 
-V0.1 is a small vertical slice. Please keep it that way.
+V0.7 is still a small vertical slice. Please keep it that way.
 
 ## Before adding a component
 

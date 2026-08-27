@@ -43,7 +43,7 @@ vCPU: 4 is better than 2. Threads default to `nproc - 2` (min 2). First llama.cp
 
 A **4 GB** lab VM should not run either GGUF. Leave `ai.enabled: false` and use ForgeRCA only.
 
-Context window in Compose is **8192** tokens (`-c 8192`). Core waits **`ai.llm.timeout_seconds`** (default **600**) for one completion.
+Context window in Compose is **8192** tokens (`-c 8192`). Core waits **`ai.llm.timeout_seconds`** (default **90**, lab 4B) for one completion. Slow 14B CPU rewrites may need a higher value in `config/forgesre.yml`.
 
 ---
 
@@ -161,7 +161,7 @@ ai:
     mode: external
     url: http://127.0.0.1:8088/v1    # your server; must speak /chat/completions
     model: local                     # or the exact model id
-    timeout_seconds: 600
+    timeout_seconds: 90
 ```
 
 Leave `COMPOSE_PROFILES` without `ai` if you do not want `ghcr.io/ggml-org/llama.cpp:server`. Recreate Core:
@@ -198,7 +198,7 @@ ai:
     mode: bundled          # bundled | external | disabled
     url: http://127.0.0.1:8088/v1
     model: local
-    timeout_seconds: 600
+    timeout_seconds: 90
   rca:
     engine: forgerca
     window_minutes: 30
@@ -428,7 +428,7 @@ docker compose exec -T core python -c "import sys; print('\n'.join(sys.path))"
 | Health `"Status":"unhealthy"` | GGUF missing, curl healthcheck cannot reach `:8088`. `docker inspect` the Test field; `ls -lh data/models/model.gguf` |
 | `/v1/models` ok, chat hangs | CPU 14B is slow or still loading layers. Follow `docker compose logs -f llm`. Do not `compose down` |
 | Doctor `llm: error` after many minutes | GGUF missing/corrupt (file smaller than 1 GB), OOM, or image pull failed. `ls -lh data/models/model.gguf` |
-| Rewrite never finishes | CPU 14B is slow. Check `./forgesre jobs`. Raise `timeout_seconds` (already 600), recreate Core. Lower `FORGESRE_LLM_THREADS` if the VM is thrashing |
+| Rewrite never finishes | CPU 14B is slow. Check `./forgesre jobs`. Raise `timeout_seconds` (default 90; 14B CPU may need 300–600), recreate Core. Lower `FORGESRE_LLM_THREADS` if the VM is thrashing |
 | `LLM returned text that was not JSON` | Model ignored the schema. Builtin ForgeRCA stays. Keep Qwen Instruct; do not swap a base (non-instruct) GGUF |
 | HTTP 400 from llama.cpp | Core already retries without extra template kwargs. Rebuild Core if you are on an old image |
 | Hugging Face download fails | Copy `model.gguf` onto the VM (scp), then `./forgesre fetch-llm --offline` |

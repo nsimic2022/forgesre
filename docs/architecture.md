@@ -6,6 +6,8 @@
 
 This document remains the long-term contract (NetBox, discovery, HA, extra agents). **V0.1 implementation follows `docs/v0.1.md`.** If the two disagree on V0.1 scope or language, `docs/v0.1.md` wins.
 
+**V0.7 runtime on the appliance is Docker Compose on the Ubuntu VM**, not the Caddy/Go diagram below. Do not treat this file as the install guide.
+
 ---
 
 ## 1. What we are building

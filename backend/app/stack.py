@@ -18,7 +18,7 @@ _SNMP_ENSURE_AT = 0.0
 _SNMP_ENSURE_COOLDOWN = 45.0
 
 # Machine keys stay compose service ids (dashboard Open links, failed[], JSON).
-# "core" is the stack row (dummy always-ok), not the /api/v1/health curl.
+# "core" is the stack row; it probes /api/v1/health (same URL as doctor.sh Core API).
 COMPONENT_LABELS = {
     "core": "Core (container)",
 }

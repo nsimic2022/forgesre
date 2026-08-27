@@ -37,14 +37,36 @@ def enqueue(db: Session, kind: str, object_id: str, object_type: str = "incident
     return row
 
 
+def job_is_llm(row: Job) -> bool:
+    """True when this investigate job will wait on llama.cpp."""
+    if row.kind != "investigate":
+        return False
+    payload = row.payload or {}
+    return payload.get("use_llm", True) is not False
+
+
+def next_pending_job(db: Session) -> Job | None:
+    """FIFO among pending jobs, but builtin RCA (use_llm=false) before LLM rewrite."""
+    pending = db.query(Job).filter_by(status="pending").order_by(Job.id).limit(32).all()
+    if not pending:
+        return None
+    for row in pending:
+        if not job_is_llm(row):
+            return row
+    return pending[0]
+
+
 def run_pending_jobs(db: Session, limit: int = 8) -> int:
     """Claim and run pending jobs. Safe for sqlite tests (single-threaded)."""
     from app.services import queue_llm_rewrite, run_investigation
 
     done = 0
     for _ in range(limit):
-        row = db.query(Job).filter_by(status="pending").order_by(Job.id).first()
+        row = next_pending_job(db)
         if row is None:
+            break
+        if job_is_llm(row) and done > 0:
+            # Leave the rewrite pending so the jobs loop can send /ops reports first.
             break
         row.status = "running"
         row.started_at = utcnow()

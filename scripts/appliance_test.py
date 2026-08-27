@@ -397,7 +397,7 @@ def run_all(root: Path) -> Runner:
         r.add(
             "yaml.ai",
             "pass" if url else "warn",
-            f"enabled mode={ai.get('mode')} url={url} timeout={ai.get('timeout_seconds') or '600'}",
+            f"enabled mode={ai.get('mode')} url={url} timeout={ai.get('timeout_seconds') or '90'}",
             "grep -nE 'llm|8088' config/forgesre.yml",
             "set ai.llm.url then docker compose up -d --force-recreate core",
         )

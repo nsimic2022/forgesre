@@ -362,12 +362,26 @@ def collect_evidence(db: Session, incident: Incident, alert: dict[str, Any] | No
     if not labels and isinstance(alert, dict):
         labels = alert
     metrics = query_prometheus(incident.asset)
-    from rca.collector import loki_query_for
+    from rca.collector import DEMO_LOGS_LIMITATION, HOST_LOGS_LIMITATION, loki_query_for
 
     asset_dict = {}
     if incident.asset:
-        asset_dict = {"asset_id": incident.asset.asset_id, "type": incident.asset.type}
-    logs = query_loki(query=loki_query_for(asset_dict))
+        asset_dict = {
+            "asset_id": incident.asset.asset_id,
+            "type": incident.asset.type,
+            "hostname": incident.asset.hostname,
+        }
+    loki_query = loki_query_for(asset_dict)
+    if loki_query:
+        logs = query_loki(query=loki_query)
+        log_payload: dict[str, Any] = {"lines": logs, "query": loki_query}
+        if str(asset_dict.get("asset_id") or "") == "forge-demo-01":
+            log_payload["scope"] = "appliance-demo"
+            log_payload["label"] = "DEMO"
+            log_payload["note"] = DEMO_LOGS_LIMITATION
+    else:
+        logs = []
+        log_payload = {"skipped": True, "reason": HOST_LOGS_LIMITATION, "lines": []}
     history_rows = (
         db.query(Incident)
         .filter(Incident.asset_id == incident.asset_id, Incident.id != incident.id)
@@ -379,7 +393,7 @@ def collect_evidence(db: Session, incident: Incident, alert: dict[str, Any] | No
     items = [
         ("alert", "Alert", alert),
         ("metrics", "Metrics", metrics),
-        ("logs", "Logs", {"lines": logs}),
+        ("logs", "Logs", log_payload),
         ("history", "Previous incidents", {"incidents": history}),
     ]
     if incident.asset:
@@ -471,9 +485,7 @@ def persist_rca_evidence(
 
     def log_fetcher(query: str, start, end) -> dict[str, Any]:
         del query, start, end
-        if logs:
-            return {"lines": logs}
-        return {"error": "no log lines"}
+        return {"lines": list(logs or [])}
 
     bundle, _limitations = collect_evidence_set(
         incident={"number": incident.number, "title": incident.title, "severity": incident.severity, "asset": asset.get("hostname")},
@@ -642,15 +654,27 @@ def query_loki(limit: int = 20, query: str = '{job="forgesre"}', start=None, end
 
 
 def investigation_context(db: Session, incident: Incident) -> dict[str, Any]:
+    from rca.collector import DEMO_LOGS_LIMITATION, HOST_LOGS_LIMITATION
+
     metrics = {}
     logs: list[str] = []
     queries: dict[str, str] = {}
+    skipped_logs = False
+    demo_logs = False
+    limitations: list[str] = []
     for item in incident.evidence:
         if item.kind == "metrics":
             metrics = dict(item.payload or {})
             queries.update((item.payload or {}).get("queries") or {})
         if item.kind == "logs":
-            logs = (item.payload or {}).get("lines") or []
+            packed = dict(item.payload or {})
+            logs = packed.get("lines") or []
+            skipped_logs = bool(packed.get("skipped"))
+            demo_logs = packed.get("label") == "DEMO" or packed.get("scope") == "appliance-demo"
+            if skipped_logs:
+                limitations.append(str(packed.get("reason") or HOST_LOGS_LIMITATION))
+            elif demo_logs:
+                limitations.append(DEMO_LOGS_LIMITATION)
         if item.query:
             queries.setdefault(item.kind, item.query)
     history = [ev.payload for ev in incident.evidence if ev.kind == "history"]
@@ -665,10 +689,9 @@ def investigation_context(db: Session, incident: Incident) -> dict[str, Any]:
         )
     asset_id = incident.asset.asset_id if incident.asset else ""
     maintenance = overlapping_maintenance(db, asset_id, incident.started_at or utcnow())
-    limitations = []
     if metrics.get("error"):
         limitations.append("Metrics unavailable.")
-    if not logs and not settings.loki_enabled:
+    if not logs and not skipped_logs and not demo_logs and not settings.loki_enabled:
         limitations.append("Logs unavailable.")
     return {
         "incident": {

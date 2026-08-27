@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,7 @@ from app.models import Asset, DiscoveryCandidate, Incident, ScheduledReport, utc
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
+_discovery_loop_mono: float = 0.0
 LINUX_EXPORTER_PORT = 9100
 WINDOWS_EXPORTER_PORT = 9182
 DEMO_CANDIDATE_NOTES = (
@@ -189,6 +191,18 @@ def seed_demo_candidate(db: Session) -> DiscoveryCandidate:
     db.commit()
     db.refresh(row)
     return row
+
+
+def mark_discovery_loop_alive() -> None:
+    """Heartbeat so doctor can tell the discovery thread is still running."""
+    global _discovery_loop_mono
+    _discovery_loop_mono = time.monotonic()
+
+
+def discovery_loop_age_seconds() -> float | None:
+    if _discovery_loop_mono <= 0:
+        return None
+    return time.monotonic() - _discovery_loop_mono
 
 
 def run_scan(db: Session) -> dict:

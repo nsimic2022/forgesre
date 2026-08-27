@@ -81,10 +81,10 @@ def test_yaml_ai_reads_example_indent():
     at = _mod()
     example = (ROOT / "config" / "forgesre.example.yml").read_text(encoding="utf-8")
     parsed = at._yaml_ai(example)
-    assert parsed["enabled"] == "true"
-    assert parsed["mode"] == "bundled"
+    assert parsed["enabled"] == "false"
+    assert parsed["mode"] == "disabled"
     assert "8088" in parsed["url"]
-    assert parsed["timeout_seconds"] == "600"
+    assert parsed["timeout_seconds"] == "90"
 
 
 def test_yaml_email_reads_example_indent():

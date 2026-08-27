@@ -42,18 +42,23 @@ def configure_logging() -> None:
 
 
 def _discovery_loop(stop: threading.Event) -> None:
+    from app.inventory import mark_discovery_loop_alive
+
     first = True
+    mark_discovery_loop_alive()
     while not stop.is_set():
         delay = 30 if first else 6 * 60 * 60
         first = False
         if stop.wait(delay):
             break
+        mark_discovery_loop_alive()
         db = SessionLocal()
         try:
             if settings.discovery_enabled and settings.discovery_mode != "manual":
                 run_scan(db)
             if settings.netbox_enabled:
                 sync_netbox(db)
+            mark_discovery_loop_alive()
         except Exception as exc:
             log.exception("discovery loop failed")
             report(db, "discovery", "loop", "error", summary="Discovery loop failed", detail=str(exc))
@@ -63,14 +68,14 @@ def _discovery_loop(stop: threading.Event) -> None:
 
 def _jobs_loop(stop: threading.Event) -> None:
     from app.jobs import run_pending_jobs
+    from app.services import process_scheduled_reports
 
     while not stop.wait(2):
         db = SessionLocal()
         try:
-            run_pending_jobs(db)
-            from app.services import process_scheduled_reports
-
+            # Reports first so an LLM rewrite cannot hold /ops mail for the timeout.
             process_scheduled_reports(db)
+            run_pending_jobs(db)
         except Exception as exc:
             log.exception("jobs loop failed")
             report(db, "rca", "jobs", "error", summary="Job worker failed", detail=str(exc))
