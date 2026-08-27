@@ -20,7 +20,7 @@ def test_compose_netbox_is_default_service():
         assert "profiles" not in svc, name
         assert svc.get("network_mode") == "host"
     netbox = data["services"]["netbox"]
-    assert netbox["image"] == "docker.io/netboxcommunity/netbox:v4.6.9-5.0.2"
+    assert netbox["image"] == "ghcr.io/netbox-community/netbox:v4.6.9-5.0.2"
     assert "v4.4-3.2.0" not in netbox["image"]
     assert netbox["depends_on"]["netbox-db-init"]["condition"] == "service_completed_successfully"
     env = data["services"]["core"]["environment"]
@@ -150,7 +150,9 @@ def test_docs_say_bundled_netbox_default_on():
     assert "netbox-redis" in completion
 
 
-# Hub-verified 27 Aug 2026. Dead tag v4.4-3.2.0 is not in this list.
+# Registry-verified 27 Aug 2026 (Hub + GHCR manifests). Dead Hub tag
+# netboxcommunity/netbox:v4.4-3.2.0 is not in this list.
+_NETBOX_IMAGE = "ghcr.io/netbox-community/netbox:v4.6.9-5.0.2"
 _COMPOSE_IMAGE_PINS = {
     "postgres": "postgres:16-alpine",
     "prometheus": "prom/prometheus:v2.54.1",
@@ -161,7 +163,7 @@ _COMPOSE_IMAGE_PINS = {
     "grafana": "grafana/grafana:11.4.0",
     "netbox-redis": "redis:7-alpine",
     "netbox-db-init": "postgres:16-alpine",
-    "netbox": "docker.io/netboxcommunity/netbox:v4.6.9-5.0.2",
+    "netbox": _NETBOX_IMAGE,
     "llm": "ghcr.io/ggml-org/llama.cpp:server",
     "mailserver": "ghcr.io/docker-mailserver/docker-mailserver:15.1.0",
     "roundcube": "roundcube/roundcubemail:1.6.11-apache",
@@ -176,9 +178,20 @@ def test_compose_and_mailbox_image_pins():
         if "image" in svc
     }
     assert images == _COMPOSE_IMAGE_PINS
+    assert images["netbox"] == _NETBOX_IMAGE
     assert "v4.4-3.2.0" not in images.values()
     assert "build" in data["services"]["core"]
     dockerfile = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
     assert dockerfile.splitlines()[0] == "FROM python:3.12-slim"
     mailbox = (ROOT / "scripts" / "mailbox.sh").read_text(encoding="utf-8")
     assert 'DMS_IMAGE="ghcr.io/docker-mailserver/docker-mailserver:15.1.0"' in mailbox
+    update = (ROOT / "scripts" / "update.sh").read_text(encoding="utf-8")
+    assert not any(line.strip().endswith("pull || true") for line in update.splitlines())
+    handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
+    install = (ROOT / "docs" / "install-config.md").read_text(encoding="utf-8")
+    assert _NETBOX_IMAGE in handbook
+    assert _NETBOX_IMAGE in install
+    assert "redis:7-alpine" in handbook
+    env = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert not any(line.startswith("NETBOX_IMAGE=") for line in env.splitlines())
+    assert "NETBOX_PORT=8001" in env

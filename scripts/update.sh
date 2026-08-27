@@ -59,7 +59,14 @@ fi
 if [[ "$OFFLINE" -eq 1 ]]; then
   echo "Offline: skipping compose pull. Lab use: ./forgesre update --offline"
 else
-  "${DC[@]}" pull || true
+  echo "Pulling published compose images (NetBox is large; first pull is slow)..."
+  if ! "${DC[@]}" pull; then
+    echo "ERROR: docker compose pull failed (missing tag or registry unreachable)."
+    echo "Image pins are git-tracked in docker-compose.yml. config/forgesre.yml is gitignored and does not set images."
+    echo "On the VM: git pull origin main && ./forgesre update"
+    echo "Lab without pull: ./forgesre update --offline"
+    exit 1
+  fi
 fi
 
 if [[ "$need_build" -eq 1 ]]; then

@@ -4,7 +4,7 @@ This file is a **session handoff for the next coding agent or contributor**. It 
 
 Product on `main` at the end of this session: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
 
-Compose image audit (Hub/GHCR, 27 Aug 2026): the only dead pin was **NetBox** `netboxcommunity/netbox:v4.4-3.2.0` (404; that combo never existed — docker-support `3.2.0` was NetBox 4.2 / nginx unit). Current pin is **`v4.6.9-5.0.2`** (Granian, `user: netbox:root`, same `DB_*` / `REDIS_*` env). All other default and mailbox images still exist: `postgres:16-alpine`, `redis:7-alpine`, `prom/prometheus:v2.54.1`, `prom/alertmanager:v0.27.0`, `prom/snmp-exporter:v0.26.0`, `grafana/loki:3.4.2`, `grafana/alloy:v1.7.5`, `grafana/grafana:11.4.0`, `ghcr.io/ggml-org/llama.cpp:server`, `ghcr.io/docker-mailserver/docker-mailserver:15.1.0`, `roundcube/roundcubemail:1.6.11-apache`, Core `python:3.12-slim`. Do not bump working pins without a reason. `./forgesre update` **will** pull the new NetBox image (first pull is slow).
+Compose image re-audit (registry-1.docker.io + GHCR manifests, 27 Aug 2026). Dead pin was **NetBox** `netboxcommunity/netbox:v4.4-3.2.0` (404; that combo never existed — docker-support `3.2.0` was NetBox 4.2 / nginx unit). Current pin is **`ghcr.io/netbox-community/netbox:v4.6.9-5.0.2`** (same digest as Hub `netboxcommunity/netbox:v4.6.9-5.0.2`, Granian, `user: netbox:root`). GHCR avoids Hub anonymous rate-limits that look like “manifest unknown”. Redis **`redis:7-alpine`** still exists (200). Postgres stays **`postgres:16-alpine`** (database `netbox` beside `forgesre` — do not bump to 18). Other default and mailbox pins still exist. `./forgesre update` now **fails** if `compose pull` 404s (no more `pull || true`). Lab: `./forgesre update --offline`.
 
 1. [Who and when](#1-who-and-when)
 2. [Checked twice (pytest)](#2-checked-twice-pytest)
@@ -19,7 +19,7 @@ Compose image audit (Hub/GHCR, 27 Aug 2026): the only dead pin was **NetBox** `n
 
 ## 1. Who and when
 
-**Thursday 27 August 2026.** Compose image pins: replace the dead NetBox Hub tag. Earlier the same day: ordered review fixes (docs = code, doctor probes, RCA Loki honesty, LLM vs `/ops` reports, `update.sh` skip Core `--build`).
+**Thursday 27 August 2026.** Second compose image pass: N still reported a missing NetBox Hub tag. Re-verified every default/mailbox/AI pin against the registry API (no Docker daemon in this lab). Switched NetBox pull to GHCR (same digest as Hub). `update.sh` no longer swallows pull 404s.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -44,7 +44,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **329 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x.
+Pytest count is recorded after the double run on this branch.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -52,9 +52,10 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-1. **Compose image pins.** Hub 404 on `netboxcommunity/netbox:v4.4-3.2.0`. Pinned bundled NetBox to `docker.io/netboxcommunity/netbox:v4.6.9-5.0.2` so Granian + `user: netbox:root` in `scripts/netbox-launch.sh` match the image. Redis stays `redis:7-alpine` on `:6379` (NetBox only). Postgres stays `postgres:16-alpine` (database `netbox` beside `forgesre`). Mailbox overlay still `docker-mailserver:15.1.0` + Roundcube `1.6.11-apache`. Other default pins unchanged because they still exist. Test `test_compose_and_mailbox_image_pins` lists every compose `image:`.
-2. **Docs.** Install troubleshooting row for `manifest unknown`. This file records the Hub audit. Operator path is still `git pull origin main && ./forgesre update` (needs a pull; first NetBox image is large).
-3. Earlier the same day (still on `main`): docs = code, doctor probes, RCA Loki honesty, LLM vs `/ops` reports, `update.sh` skip Core `--build`.
+1. **NetBox image.** Hub `netboxcommunity/netbox:v4.4-3.2.0` = 404. Compose now pulls **`ghcr.io/netbox-community/netbox:v4.6.9-5.0.2`** (manifest 200; digest `sha256:6b0594813c1e…` matches Hub `v4.6.9-5.0.2`). Granian + `user: netbox:root` in `scripts/netbox-launch.sh` still match. First boot wait on `:8001/login/` unchanged.
+2. **Redis / others.** `redis:7-alpine` exists (amd64/arm64). Left as-is. Did **not** switch to Valkey (upstream netbox-docker 5.0.2 uses Valkey; Redis 7 still speaks the protocol NetBox expects). Postgres stays `16-alpine` so the shared volume / `forgesre` DB is not rewritten. Mailbox overlay still `docker-mailserver:15.1.0` + Roundcube `1.6.11-apache`. Prometheus/Grafana/Loki/Alloy/Alertmanager/snmp-exporter/llama.cpp/python:3.12-slim all still exist. No Caddy service in V0.7 compose (architecture.md only).
+3. **`update.sh`.** `docker compose pull || true` hid 404s, then `up --pull never` looked like “image does not exist”. Pull now fails the update with a pointer at git-tracked `docker-compose.yml`. `--offline` still skips pull.
+4. **Docs.** Handbook + install troubleshooting name the GHCR pin. Live `config/forgesre.yml` is gitignored and does **not** set image tags; `./forgesre update` after `git pull` picks up compose. Test `test_compose_and_mailbox_image_pins` lists every compose `image:` and checks docs match.
 
 ---
 
@@ -66,7 +67,7 @@ Do **not** run `./install.sh`.
 git pull origin main && ./forgesre update
 ```
 
-This update **must** pull images (new NetBox tag). First NetBox pull is slow; doctor stays yellow until `:8001/login/` answers.
+This update **must** pull images (NetBox moved Hub → GHCR, same version). First NetBox pull is slow; doctor stays yellow until `:8001/login/` answers.
 
 Hard-refresh the browser.
 
@@ -87,7 +88,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Prometheus Health Open is **Targets** (`:9090/targets?search=`), not Prometheus process `/metrics`. Core `/metrics` stays.
 - Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
 - `snmp-exporter` is a **default** compose service.
-- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2` (not `v4.4-3.2.0`).
+- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `ghcr.io/netbox-community/netbox:v4.6.9-5.0.2` (not Hub `v4.4-3.2.0`). Redis `redis:7-alpine` on `:6379`.
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it.
 - Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update` (`docker info`, else `sudo docker compose`). A docker.sock permission error is not “start postgres”.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`. Do not explode the archive into loose files at `data/backups/` root.
@@ -126,6 +127,7 @@ Do not start these unless N asks:
 - 50 collectors dropdown on Add asset.
 - Celery / Redis job queue / `SKIP LOCKED`.
 - A second log stack (host Alloy for every asset).
+- Switching bundled Redis to Valkey, or Postgres 16 → 18, without a migration plan.
 
 ---
 
@@ -140,3 +142,4 @@ Do not start these unless N asks:
 - Alloy still only ships appliance Core logs as `forge-demo-01`. Real hosts have no Loki until that changes. Limitation: **no host logs shipped**.
 - LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90) after reports in that pass have already run.
 - `config/forgesre.yml` on a live VM is gitignored; a 600s timeout already written there is not overwritten by `update`. Lower it by hand if the worker still blocks.
+- This lab had **no Docker daemon**. Image existence was verified via Hub/GHCR registry APIs, not `docker compose pull`.

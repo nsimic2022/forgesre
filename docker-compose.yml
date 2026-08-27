@@ -201,9 +201,12 @@ services:
   netbox:
     # Default stack (not a profile). Host network; Granian on :8001 (Core owns :8080).
     # First boot runs Django migrations — doctor stays yellow until /login/ answers.
-    # Pin is NetBox 4.6.9 + netbox-docker 5.0.2 (Granian, user netbox). The old
-    # v4.4-3.2.0 tag never existed on Docker Hub (3.2.0 was v4.2 / nginx unit).
-    image: docker.io/netboxcommunity/netbox:v4.6.9-5.0.2
+    # Pin is NetBox 4.6.9 + netbox-docker 5.0.2 (Granian, user netbox).
+    # GHCR = same digest as Docker Hub netboxcommunity/netbox:v4.6.9-5.0.2
+    # (registry-1.docker.io and ghcr.io both sha256:6b0594813c1e…). Hub anonymous
+    # rate-limits look like "manifest unknown". The combo tag v4.4-3.2.0 never
+    # existed (docker-support 3.2.0 was NetBox 4.2 / nginx unit).
+    image: ghcr.io/netbox-community/netbox:v4.6.9-5.0.2
     network_mode: host
     user: "netbox:root"
     env_file:
