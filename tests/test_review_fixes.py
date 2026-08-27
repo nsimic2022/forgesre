@@ -110,6 +110,8 @@ def test_next_pending_job_prefers_builtin_rca_over_llm():
 
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
+    db.query(Job).filter_by(status="pending").delete(synchronize_session=False)
+    db.commit()
     llm = Job(kind="investigate", status="pending", object_id="INC-LLM", payload={"use_llm": True})
     builtin = Job(kind="investigate", status="pending", object_id="INC-RCA", payload={"use_llm": False})
     db.add(llm)

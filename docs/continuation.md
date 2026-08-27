@@ -50,7 +50,7 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-1. **Docs = code.** `docs/cli.md` everyday `update` includes NetBox `:8001`, first-boot yellow, wait. `docs/v0.7.md` bundled NetBox **is** on this V0.7 main. Handbook §17 bundled alerts include Linux+Windows **memory 90%**; Grafana is **not** the alarm path. `CONTRIBUTING.md` V0.7. Example YAML `ai.enabled: false` (standard install). Mailpit stays gone. `docs/architecture.md` one line: appliance runtime is Compose, not the Caddy/Go diagram. Install troubleshooting: Redis `:6379`, NetBox first boot, mailbox 25/993.
+1. **Docs = code.** `docs/cli.md` everyday `update` includes NetBox `:8001`, first-boot yellow, wait. `docs/v0.7.md` bundled NetBox **is** on this V0.7 main. Handbook §17 bundled alerts include Linux+Windows **memory 90%**; Grafana is **not** the alarm path. `CONTRIBUTING.md` V0.7. Example YAML `ai.enabled: false` (standard install). The lab SMTP catcher stays gone. `docs/architecture.md` one line: appliance runtime is Compose, not the Caddy/Go diagram. Install troubleshooting: Redis `:6379`, NetBox first boot, mailbox 25/993.
 2. **Doctor.** Stack `core` probes the same `/api/v1/health` as `doctor.sh` (label **Core (container)**; CLI curl stays **Core API**). `discovery` probes last journal scan + loop heartbeat — not a checkbox. SNMP still **paused** with no network targets. NetBox first-boot stays **warn**.
 3. **RCA Loki.** Alloy labels Core logs `asset=forge-demo-01`. Real inventory does not get empty `{asset="<id>"}` presented as host logs. Limitation: “no host logs shipped”. Demo may still query appliance logs, labeled DEMO.
 4. **LLM vs `/ops` reports.** Default `ai.llm.timeout_seconds` is **90** (lab 4B). Job loop runs `process_scheduled_reports` **before** pending jobs and prefers non-LLM investigate jobs. Builtin RCA path unchanged. No Celery / SKIP LOCKED.
@@ -93,7 +93,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Memory bundled alerts exist: `NodeMemoryHigh` / `WindowsMemoryHigh` at **90%**, playrules `node-memory` / `windows-memory`. Grafana is not the alarm path.
 - Add asset: operator types **Asset ID** and **Hostname** separately. Id is immutable after create. Do not derive id from hostname again.
 - Doctor labels: **Core API** (`doctor.sh` health curl) vs **Core (container)** (payload `/api/v1/health` probe). Do not rename them back to a single “Core”.
-- Mailpit is gone. Do not add a lab SMTP catcher.
+- The lab SMTP catcher is gone. Do not add one.
 
 ---
 
