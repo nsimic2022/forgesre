@@ -4,6 +4,8 @@ This file is a **session handoff for the next coding agent or contributor**. It 
 
 Product on `main` at the end of this session: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
 
+Compose image audit (Hub/GHCR, 27 Aug 2026): the only dead pin was **NetBox** `netboxcommunity/netbox:v4.4-3.2.0` (404; that combo never existed — docker-support `3.2.0` was NetBox 4.2 / nginx unit). Current pin is **`v4.6.9-5.0.2`** (Granian, `user: netbox:root`, same `DB_*` / `REDIS_*` env). All other default and mailbox images still exist: `postgres:16-alpine`, `redis:7-alpine`, `prom/prometheus:v2.54.1`, `prom/alertmanager:v0.27.0`, `prom/snmp-exporter:v0.26.0`, `grafana/loki:3.4.2`, `grafana/alloy:v1.7.5`, `grafana/grafana:11.4.0`, `ghcr.io/ggml-org/llama.cpp:server`, `ghcr.io/docker-mailserver/docker-mailserver:15.1.0`, `roundcube/roundcubemail:1.6.11-apache`, Core `python:3.12-slim`. Do not bump working pins without a reason. `./forgesre update` **will** pull the new NetBox image (first pull is slow).
+
 1. [Who and when](#1-who-and-when)
 2. [Checked twice (pytest)](#2-checked-twice-pytest)
 3. [Done today / on main](#3-done-today--on-main)
@@ -17,7 +19,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Thursday 27 August 2026.** Ordered review fixes on top of bundled-NetBox `main`: docs matched to code, doctor probes (not dummy ok), RCA Loki honesty, LLM worker no longer holds `/ops` reports for 600s, `update.sh` skip Core `--build` when sources unchanged.
+**Thursday 27 August 2026.** Compose image pins: replace the dead NetBox Hub tag. Earlier the same day: ordered review fixes (docs = code, doctor probes, RCA Loki honesty, LLM vs `/ops` reports, `update.sh` skip Core `--build`).
 
 On the Ubuntu VM N uses, resume with:
 
@@ -42,7 +44,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **328 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x.
+Both runs: **329 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -50,11 +52,9 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-1. **Docs = code.** `docs/cli.md` everyday `update` includes NetBox `:8001`, first-boot yellow, wait. `docs/v0.7.md` bundled NetBox **is** on this V0.7 main. Handbook §17 bundled alerts include Linux+Windows **memory 90%**; Grafana is **not** the alarm path. `CONTRIBUTING.md` V0.7. Example YAML `ai.enabled: false` (standard install). The lab SMTP catcher stays gone. `docs/architecture.md` one line: appliance runtime is Compose, not the Caddy/Go diagram. Install troubleshooting: Redis `:6379`, NetBox first boot, mailbox 25/993.
-2. **Doctor.** Stack `core` probes the same `/api/v1/health` as `doctor.sh` (label **Core (container)**; CLI curl stays **Core API**). `discovery` probes last journal scan + loop heartbeat — not a checkbox. SNMP still **paused** with no network targets. NetBox first-boot stays **warn**.
-3. **RCA Loki.** Alloy labels Core logs `asset=forge-demo-01`. Real inventory does not get empty `{asset="<id>"}` presented as host logs. Limitation: “no host logs shipped”. Demo may still query appliance logs, labeled DEMO.
-4. **LLM vs `/ops` reports.** Default `ai.llm.timeout_seconds` is **90** (lab 4B). Job loop runs `process_scheduled_reports` **before** pending jobs and prefers non-LLM investigate jobs. Builtin RCA path unchanged. No Celery / SKIP LOCKED.
-5. **`update.sh`.** `compose pull` only when not `--offline`. Skip Core `--build` when Dockerfile/backend/agents/frontend hash is unchanged. NetBox wait on first boot stays.
+1. **Compose image pins.** Hub 404 on `netboxcommunity/netbox:v4.4-3.2.0`. Pinned bundled NetBox to `docker.io/netboxcommunity/netbox:v4.6.9-5.0.2` so Granian + `user: netbox:root` in `scripts/netbox-launch.sh` match the image. Redis stays `redis:7-alpine` on `:6379` (NetBox only). Postgres stays `postgres:16-alpine` (database `netbox` beside `forgesre`). Mailbox overlay still `docker-mailserver:15.1.0` + Roundcube `1.6.11-apache`. Other default pins unchanged because they still exist. Test `test_compose_and_mailbox_image_pins` lists every compose `image:`.
+2. **Docs.** Install troubleshooting row for `manifest unknown`. This file records the Hub audit. Operator path is still `git pull origin main && ./forgesre update` (needs a pull; first NetBox image is large).
+3. Earlier the same day (still on `main`): docs = code, doctor probes, RCA Loki honesty, LLM vs `/ops` reports, `update.sh` skip Core `--build`.
 
 ---
 
@@ -65,6 +65,8 @@ Do **not** run `./install.sh`.
 ```bash
 git pull origin main && ./forgesre update
 ```
+
+This update **must** pull images (new NetBox tag). First NetBox pull is slow; doctor stays yellow until `:8001/login/` answers.
 
 Hard-refresh the browser.
 
@@ -85,7 +87,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Prometheus Health Open is **Targets** (`:9090/targets?search=`), not Prometheus process `/metrics`. Core `/metrics` stays.
 - Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
 - `snmp-exporter` is a **default** compose service.
-- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override.
+- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2` (not `v4.4-3.2.0`).
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it.
 - Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update` (`docker info`, else `sudo docker compose`). A docker.sock permission error is not “start postgres”.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`. Do not explode the archive into loose files at `data/backups/` root.
@@ -135,6 +137,6 @@ Do not start these unless N asks:
 - Old backups already on the VM as `data/backups/forgesre-*.tar.gz` are still valid; new runs write folders.
 - Grafana deep-link from an asset is still later.
 - Prometheus global rules may still fire for a host whose ForgeSRE alarm is disabled or raised; ForgeSRE will not open the incident when the webhook carries the value.
-- Alloy still only ships appliance Core logs as `forge-demo-01`. Real hosts have no Loki until that changes.
+- Alloy still only ships appliance Core logs as `forge-demo-01`. Real hosts have no Loki until that changes. Limitation: **no host logs shipped**.
 - LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90) after reports in that pass have already run.
 - `config/forgesre.yml` on a live VM is gitignored; a 600s timeout already written there is not overwritten by `update`. Lower it by hand if the worker still blocks.

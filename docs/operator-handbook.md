@@ -330,7 +330,7 @@ Demo candidate `10.20.30.41` is seeded so you can click Approve without a live s
 
 ### C. Bundled NetBox (read-sync)
 
-`docker compose up -d` / `./forgesre update` starts NetBox with **no compose profile**. UI: `http://<VM-IP>:8001`. First login: user `admin`, email `admin@forgesre.local`, password `NETBOX_SUPERUSER_PASSWORD` in `secrets/secrets.env` (not an operator personal email). First boot runs Django migrations and can take several minutes — **System Health** / `./forgesre doctor` stays **yellow** until `http://127.0.0.1:8001/login/` answers. That is not a fake green.
+`docker compose up -d` / `./forgesre update` starts NetBox with **no compose profile**. Image pin: `netboxcommunity/netbox:v4.6.9-5.0.2` (the old `v4.4-3.2.0` tag is not on Docker Hub). UI: `http://<VM-IP>:8001`. First login: user `admin`, email `admin@forgesre.local`, password `NETBOX_SUPERUSER_PASSWORD` in `secrets/secrets.env` (not an operator personal email). First boot pulls a large image then runs Django migrations and can take several minutes — **System Health** / `./forgesre doctor` stays **yellow** until `http://127.0.0.1:8001/login/` answers. That is not a fake green.
 
 Core finds it via compose env `NETBOX_URL=http://127.0.0.1:8001` unless `config/forgesre.yml` `inventory.netbox.url` is set (`./install.sh --netbox-url` for an external instance). Token: `NETBOX_API_TOKEN`. On **Discovery**, **Sync NetBox** (admin), or wait for the 6-hour loop. Devices become local assets (`source=netbox`). Core **never writes** back to NetBox. Local inventory stays the monitoring source of truth.
 
