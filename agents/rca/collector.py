@@ -174,11 +174,25 @@ def promql_queries_for(
     }
 
 
-def loki_query_for(asset: dict[str, Any] | None) -> str:
+def loki_query_for(asset: dict[str, Any] | None) -> str | None:
+    """LogQL for this asset, or None when Alloy does not ship that host.
+
+    Alloy labels appliance Core logs ``asset=forge-demo-01`` / ``job=forgesre``.
+    Querying ``{asset="<real-id>"}`` returns empty and must not look like host logs.
+    """
     asset_id = str((asset or {}).get("asset_id") or "")
     if not asset_id or asset_id == DEMO_ASSET:
         return '{job="forgesre"}'
-    return '{asset="%s"}' % _escape(asset_id)
+    return None
+
+
+HOST_LOGS_LIMITATION = (
+    "No host logs shipped. Alloy labels appliance Core logs as asset=forge-demo-01; "
+    "empty Loki is not evidence from this VM."
+)
+DEMO_LOGS_LIMITATION = (
+    "DEMO: Loki lines are appliance/Core logs (job=forgesre), not a customer host."
+)
 
 
 def collect_evidence_set(
@@ -204,6 +218,8 @@ def collect_evidence_set(
     seq = 1
     queries = promql_queries_for(asset, alert)
     loki_query = loki_query_for(asset)
+    if asset_id == DEMO_ASSET:
+        limitations.append(DEMO_LOGS_LIMITATION)
 
     def add(kind: str, source: str, content: Any, query: str = "", confidence: float = 1.0, extra: dict[str, Any] | None = None) -> None:
         nonlocal seq
@@ -260,12 +276,16 @@ def collect_evidence_set(
                 extra={"window_minutes": window_minutes, "start": started.isoformat()},
             )
 
-    if log_fetcher is None:
+    if loki_query is None:
+        limitations.append(HOST_LOGS_LIMITATION)
+    elif log_fetcher is None:
         limitations.append("Logs unavailable.")
         add("LOG", "loki", {"error": "no fetcher"}, query=loki_query, extra={"unavailable": True}, confidence=0.2)
     else:
         result = log_fetcher(loki_query, started, now)
-        if result.get("error"):
+        if result.get("skipped"):
+            limitations.append(str(result.get("reason") or HOST_LOGS_LIMITATION))
+        elif result.get("error"):
             limitations.append("Logs unavailable.")
             add(
                 "LOG",
@@ -276,8 +296,12 @@ def collect_evidence_set(
                 confidence=0.2,
             )
         else:
+            extra = {"window_minutes": window_minutes}
+            if asset_id == DEMO_ASSET:
+                extra["scope"] = "appliance-demo"
+                extra["label"] = "DEMO"
             for line in (result.get("lines") or [])[:max_log_lines]:
-                add("LOG", "loki", normalize_log(str(line), utc_now()), query=loki_query)
+                add("LOG", "loki", normalize_log(str(line), utc_now()), query=loki_query, extra=extra)
 
     limitations = list(dict.fromkeys(limitations))
     return items, limitations

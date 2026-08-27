@@ -98,9 +98,10 @@ def test_doctor_script_treats_paused_as_ok_and_starts_compose():
     assert "up -d snmp-exporter" in text
 
 
-def test_component_label_core_is_container_not_api():
+def test_component_label_core_is_container_not_api(monkeypatch):
     assert component_label("core") == "Core (container)"
     assert component_label("postgres") == "postgres"
+    monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
     payload = doctor_payload(force=True)
     core = payload["components"]["core"]
     assert "core" in payload["components"]

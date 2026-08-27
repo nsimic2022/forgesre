@@ -118,7 +118,7 @@ def test_forgerca_cpu_compat():
     assert fenced == {"summary": "fenced"}
     from app.settings import settings
 
-    assert settings.llm_timeout >= 600
+    assert 60 <= settings.llm_timeout <= 120
 
 
 def test_forgerca_families_cover_network_storage_windows():
