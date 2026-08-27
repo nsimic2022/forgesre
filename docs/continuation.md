@@ -4,8 +4,6 @@ This file is a **session handoff for the next coding agent or contributor**. It 
 
 Product on `main` at the end of this session: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
 
-Compose image audit (Hub/GHCR, 27 Aug 2026): the only dead pin was **NetBox** `netboxcommunity/netbox:v4.4-3.2.0` (404; that combo never existed — docker-support `3.2.0` was NetBox 4.2 / nginx unit). Current pin is **`v4.6.9-5.0.2`** (Granian, `user: netbox:root`, same `DB_*` / `REDIS_*` env). All other default and mailbox images still exist: `postgres:16-alpine`, `redis:7-alpine`, `prom/prometheus:v2.54.1`, `prom/alertmanager:v0.27.0`, `prom/snmp-exporter:v0.26.0`, `grafana/loki:3.4.2`, `grafana/alloy:v1.7.5`, `grafana/grafana:11.4.0`, `ghcr.io/ggml-org/llama.cpp:server`, `ghcr.io/docker-mailserver/docker-mailserver:15.1.0`, `roundcube/roundcubemail:1.6.11-apache`, Core `python:3.12-slim`. Do not bump working pins without a reason. `./forgesre update` **will** pull the new NetBox image (first pull is slow).
-
 1. [Who and when](#1-who-and-when)
 2. [Checked twice (pytest)](#2-checked-twice-pytest)
 3. [Done today / on main](#3-done-today--on-main)
@@ -19,7 +17,7 @@ Compose image audit (Hub/GHCR, 27 Aug 2026): the only dead pin was **NetBox** `n
 
 ## 1. Who and when
 
-**Thursday 27 August 2026.** Compose image pins: replace the dead NetBox Hub tag. Earlier the same day: ordered review fixes (docs = code, doctor probes, RCA Loki honesty, LLM vs `/ops` reports, `update.sh` skip Core `--build`).
+**Thursday 27 August 2026.** Operator N (Serbian) added a real Linux host (`10.223.9.86`, node_exporter `:9100`). `./forgesre verify` showed Class **unknown** and PORT **SKIP** (`no scrape port`) even though ICMP passed and `/metrics` was live. node_exporter logged `write: broken pipe` toward the appliance (`10.223.9.88`).
 
 On the Ubuntu VM N uses, resume with:
 
@@ -27,7 +25,7 @@ On the Ubuntu VM N uses, resume with:
 git pull origin main && ./forgesre update
 ```
 
-Lab without image pull: `./forgesre update --offline`. (`./forgesre update` already runs `render-monitoring` and waits for NetBox `/login/`.) Also: `./forgesre ping`, `./forgesre verify`, `./forgesre test` (appliance health, not inventory). See [docs/llm.md](llm.md).
+Lab without image pull: `./forgesre update --offline`. Also: `./forgesre ping`, `./forgesre verify`, `./forgesre test` (appliance health, not inventory). See [docs/cli.md](cli.md) § Verify.
 
 Hard-refresh the browser after UI/docs changes.
 
@@ -44,7 +42,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **329 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x.
+Both runs: **332 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -52,9 +50,12 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-1. **Compose image pins.** Hub 404 on `netboxcommunity/netbox:v4.4-3.2.0`. Pinned bundled NetBox to `docker.io/netboxcommunity/netbox:v4.6.9-5.0.2` so Granian + `user: netbox:root` in `scripts/netbox-launch.sh` match the image. Redis stays `redis:7-alpine` on `:6379` (NetBox only). Postgres stays `postgres:16-alpine` (database `netbox` beside `forgesre`). Mailbox overlay still `docker-mailserver:15.1.0` + Roundcube `1.6.11-apache`. Other default pins unchanged because they still exist. Test `test_compose_and_mailbox_image_pins` lists every compose `image:`.
-2. **Docs.** Install troubleshooting row for `manifest unknown`. This file records the Hub audit. Operator path is still `git pull origin main && ./forgesre update` (needs a pull; first NetBox image is large).
-3. Earlier the same day (still on `main`): docs = code, doctor probes, RCA Loki honesty, LLM vs `/ops` reports, `update.sh` skip Core `--build`.
+1. **Verify + Add probe default exporter ports.** An inventory row with an IP but empty `scrape_address` and type Unknown/Auto/empty used to SKIP PORT (`no scrape port (set scrape_address or type)`). Class came only from the saved type, so ICMP green + live node_exporter still looked like “not Linux :9100”. Verify (and ping/reachability) now GET `:9100` and `:9182` on that IP, same as Add Auto / ad-hoc `./forgesre ping <ip>`.
+2. **Persist classification.** When live `/metrics` has `node_` / `windows_`, verify saves `Linux Server` `:9100` or `Windows Server` `:9182` so Prometheus HTTP SD can scrape (wait ~30s, `./forgesre sd`). GUI `run_asset_verify` writes the row; host `./forgesre verify` POSTs the same fields (no sqlalchemy on the host).
+3. **Broken pipe on detect.** `fetch_metrics` used to `read(4096)` / `read(2048)` and close. node_exporter `/metrics` often starts with `go_*` (more than 4 KiB) then `node_*`. Aborting mid-body is `error encoding and sending metric family: write tcp … broken pipe`. Detect now reads until `node_` / `windows_` (up to 256 KiB preview) and **drains** the rest. Timeout 3s. Prometheus inventory scrape is a different client (default `scrape_timeout` 10s) — a huge `/metrics` vs a short scrape timeout is ops, not a new exporter. Inventory HTTP SD still lists only rows **with** `scrape_address`; a host Prometheus scraped that was not in inventory would be a separate bug.
+4. **Docs = code.** [cli.md](cli.md), [operator-handbook.md](operator-handbook.md), Add form, Verify page.
+
+Do **not** treat demo `forge-demo-*` or discovery seed `10.20.30.41` as proof.
 
 ---
 
@@ -66,9 +67,15 @@ Do **not** run `./install.sh`.
 git pull origin main && ./forgesre update
 ```
 
-This update **must** pull images (new NetBox tag). First NetBox pull is slow; doctor stays yellow until `:8001/login/` answers.
+Then either **Verify** the Linux row in the UI or:
 
-Hard-refresh the browser.
+```bash
+./forgesre verify <asset-id-or-ip>
+```
+
+Expect Class **linux**, PORT/FAMILY **PASS** if `:9100/metrics` has `node_`. Type + scrape are saved. Wait one Prometheus HTTP SD refresh (~30s), then `./forgesre sd`. Hard-refresh the browser.
+
+If type is already Linux but scrape was left blank, verify fills `<ip>:9100`. You can still set scrape by hand on Edit.
 
 ---
 
@@ -87,7 +94,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Prometheus Health Open is **Targets** (`:9090/targets?search=`), not Prometheus process `/metrics`. Core `/metrics` stays.
 - Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
 - `snmp-exporter` is a **default** compose service.
-- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2` (not `v4.4-3.2.0`).
+- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2` (not `v4.4-3.2.0`). Do not churn NetBox Hub/GHCR tags unless N asks.
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it.
 - Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update` (`docker info`, else `sudo docker compose`). A docker.sock permission error is not “start postgres”.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`. Do not explode the archive into loose files at `data/backups/` root.
@@ -96,6 +103,8 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Add asset: operator types **Asset ID** and **Hostname** separately. Id is immutable after create. Do not derive id from hostname again.
 - Doctor labels: **Core API** (`doctor.sh` health curl) vs **Core (container)** (payload `/api/v1/health` probe). Do not rename them back to a single “Core”.
 - The lab SMTP catcher is gone. Do not add one.
+- Verify hops: ICMP, PORT, FAMILY, PROM, TARGET, SERIES, AM, CORE, RCA, LLM. LLM SKIP: verify does not invoke the LLM. Reachability: ping **green** ICMP ok; **yellow** ICMP fail but exporter/SNMP ok; **red** both fail. ICMP is not TCP 22.
+- Linux metrics = node_exporter **:9100**. Windows = windows_exporter **:9182**. Network = snmp_exporter :9116 (Prom still scrapes it). Network is not guessed from missing HTTP.
 
 ---
 
@@ -126,6 +135,8 @@ Do not start these unless N asks:
 - 50 collectors dropdown on Add asset.
 - Celery / Redis job queue / `SKIP LOCKED`.
 - A second log stack (host Alloy for every asset).
+- NetBox Docker Hub / GHCR tag churn (separate).
+- Rewriting discovery as nmap.
 
 ---
 

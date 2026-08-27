@@ -120,6 +120,62 @@ def test_unknown_class_overall_skip():
     assert verify_exit([report]) == 0
 
 
+def test_ip_only_unknown_verify_classifies_linux_and_sets_scrape():
+    from app.inventory import create_manual_asset, persist_live_classification, sd_targets
+    from app.seed import seed
+    from app.db import Base, SessionLocal, engine
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    asset = create_manual_asset(
+        db,
+        hostname="bare-lnx-01",
+        ip="10.77.1.86",
+        type="Unknown",
+        actor="tester",
+    )
+    assert asset.scrape_address == ""
+    fetcher = _metrics_map(
+        {
+            "http://10.77.1.86:9100/metrics": (
+                200,
+                "# HELP node_uname_info\nnode_uname_info 1\nnode_cpu_seconds_total 1\n",
+            ),
+            "http://10.77.1.86:9182/metrics": (None, ""),
+        }
+    )
+    item = {
+        "asset_id": asset.asset_id,
+        "hostname": asset.hostname,
+        "ip": asset.ip,
+        "type": asset.type,
+        "scrape_address": asset.scrape_address or "",
+        "monitoring_profile": asset.monitoring_profile or "",
+    }
+    report = verify_target(
+        item,
+        ping_runner=_ping_ok,
+        metrics_fetcher=fetcher,
+        in_http_sd=False,
+    )
+    assert report.vclass == "linux"
+    assert report.port.ok is True
+    assert report.family.ok is True
+    assert "node_" in report.family.detail
+    assert "live /metrics" in report.class_reason
+    assert persist_live_classification(db, asset, report.probe) is True
+    db.commit()
+    db.refresh(asset)
+    assert asset.type == "Linux Server"
+    assert asset.scrape_address == "10.77.1.86:9100"
+    assert asset.monitoring_profile == "linux-standard"
+    targets = sd_targets(db)
+    addresses = [row["targets"][0] for row in targets]
+    assert "10.77.1.86:9100" in addresses
+    db.close()
+
+
 def test_demo_lab_never_counts_as_real_scrape():
     item = {
         "asset_id": "forge-demo-01",

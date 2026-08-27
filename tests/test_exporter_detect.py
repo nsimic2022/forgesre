@@ -43,6 +43,54 @@ def test_classify_metrics_windows_and_linux():
     assert is_auto_asset_type("Linux Server") is False
 
 
+def test_fetch_metrics_reads_past_go_runtime_and_drains():
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from app.exporter_detect import fetch_metrics
+
+    go = b"# HELP go_goroutines Number of goroutines\ngo_goroutines 9\n" * 300
+    node = b"# HELP node_uname_info\nnode_uname_info 1\nnode_cpu_seconds_total 1\n"
+    tail = b"node_memory_MemAvailable_bytes 123\n" * 200
+    payload = go + node + tail
+    assert len(go) > 4096
+
+    class Handler(BaseHTTPRequestHandler):
+        complete = False
+        broken = False
+
+        def log_message(self, *_args):
+            return
+
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            try:
+                self.wfile.write(payload)
+                self.wfile.flush()
+                Handler.complete = True
+            except BrokenPipeError:
+                Handler.broken = True
+            except ConnectionResetError:
+                Handler.broken = True
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.handle_request, daemon=True)
+    thread.start()
+    status, preview, err = fetch_metrics(f"http://127.0.0.1:{port}/metrics", 3.0)
+    thread.join(timeout=4)
+    server.server_close()
+    assert status == 200
+    assert err == ""
+    assert classify_exporter_metrics(preview) == "linux"
+    assert "node_uname" in preview
+    assert Handler.complete is True
+    assert Handler.broken is False
+
+
 def test_detect_windows_only():
     fetcher = _fetch_map(
         {

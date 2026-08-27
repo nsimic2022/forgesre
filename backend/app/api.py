@@ -36,6 +36,7 @@ from app.inventory import (
     delete_asset,
     ignore_candidate,
     is_snmp_asset,
+    persist_live_classification,
     run_scan,
     sd_targets,
     sd_snmp_targets,
@@ -44,9 +45,9 @@ from app.inventory import (
     sync_netbox,
     update_asset,
 )
-from app.asset_probe import apply_probe_to_asset, refresh_reachability, reachability_snapshot
-from app.asset_verify import select_assets as verify_select_assets
-from app.asset_verify import urllib_am_health, urllib_prom_targets, verify_target
+from app.asset_probe import apply_probe_to_asset, probe_target, refresh_reachability, reachability_snapshot
+from app.asset_verify import compose_verify, select_assets as verify_select_assets
+from app.asset_verify import urllib_am_health, urllib_prom_targets
 from app.exporter_detect import detect_exporter, is_auto_asset_type
 from app.demo_ids import is_lab_inventory_row
 from app.seed import seed
@@ -291,12 +292,17 @@ def run_asset_verify(db: Session, asset: Asset, *, timeout: float = 2.0) -> dict
     from app.services import query_prometheus_expr
 
     item = _asset(asset)
+    probe = probe_target(item, timeout=timeout)
+    if persist_live_classification(db, asset, probe):
+        db.commit()
+        db.refresh(asset)
+        item = _asset(asset)
     http_ids, snmp_ids = _sd_membership(db)
     prom_url = settings.prometheus_url or "http://127.0.0.1:9090"
     am_url = settings.alertmanager_url or "http://127.0.0.1:9093"
-    report = verify_target(
+    report = compose_verify(
         item,
-        timeout=timeout,
+        probe,
         in_http_sd=asset.asset_id in http_ids,
         in_snmp_sd=asset.asset_id in snmp_ids,
         query_fn=query_prometheus_expr,
@@ -307,9 +313,8 @@ def run_asset_verify(db: Session, asset: Asset, *, timeout: float = 2.0) -> dict
         am_health=urllib_am_health(am_url),
         incident=_latest_incident(db, asset),
     )
-    if report.probe is not None:
-        apply_probe_to_asset(asset, report.probe)
-        db.commit()
+    apply_probe_to_asset(asset, probe)
+    db.commit()
     return report.as_dict()
 
 

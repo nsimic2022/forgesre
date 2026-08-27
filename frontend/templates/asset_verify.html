@@ -32,7 +32,7 @@
 
 <h2>Class</h2>
 <p><code>{{ report.class }}</code> — {{ report.class_reason }}</p>
-<p class="muted">Universal classes: Linux <code>:9100</code> <code>node_</code>, Windows <code>:9182</code> <code>windows_</code>, Network SNMP, Unknown SKIP.</p>
+<p class="muted">Universal classes: Linux <code>:9100</code> <code>node_</code>, Windows <code>:9182</code> <code>windows_</code>, Network SNMP, Unknown SKIP. Empty scrape + Unknown type still probes <code>:9100</code>/<code>:9182</code> on the IP; a live <code>node_</code> family is saved as Linux so HTTP SD can scrape it.</p>
 
 <h2>Live probes</h2>
 <p class="muted">{{ report.chain or "exporter → prometheus → alertmanager → core" }}</p>

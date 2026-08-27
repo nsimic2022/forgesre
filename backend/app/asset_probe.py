@@ -8,17 +8,14 @@ or snmp_exporter walks UDP/161 for network devices.
 from __future__ import annotations
 
 import ipaddress
-import socket
 import subprocess
 import time
-import urllib.error
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from app.exporter_detect import detect_exporter
+from app.exporter_detect import detect_exporter, fetch_metrics, is_auto_asset_type
 
 LINUX_EXPORTER_PORT = 9100
 WINDOWS_EXPORTER_PORT = 9182
@@ -180,26 +177,7 @@ def _run_ping(host: str, timeout: float) -> tuple[int, str, str]:
 
 
 def _fetch_metrics(url: str, timeout: float) -> tuple[int | None, str, str]:
-    request = urllib.request.Request(url, method="GET", headers={"User-Agent": "forgesre-ping/1"})
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = response.read(2048)
-            preview = body.decode("utf-8", errors="replace")
-            return int(getattr(response, "status", 200) or 200), preview, ""
-    except socket.timeout:
-        return None, "", f"timeout {timeout}s"
-    except TimeoutError:
-        return None, "", f"timeout {timeout}s"
-    except urllib.error.HTTPError as exc:
-        return int(exc.code), "", f"HTTP {exc.code}"
-    except urllib.error.URLError as exc:
-        reason = str(getattr(exc, "reason", exc) or exc)
-        lowered = reason.lower()
-        if "timed out" in lowered or "timeout" in lowered:
-            return None, "", f"timeout {timeout}s"
-        return None, "", reason
-    except OSError as exc:
-        return None, "", str(exc)
+    return fetch_metrics(url, timeout, user_agent="forgesre-ping/1")
 
 
 def probe_icmp(host: str, timeout: float = DEFAULT_TIMEOUT, runner: PingRunner | None = None) -> CheckResult:
@@ -526,16 +504,29 @@ def hint_for(result: AssetProbe) -> str:
     )
 
 
-def _metrics_from_detect(port: int, family_ok: bool, status: int | None, error: str) -> CheckResult:
+def _metrics_from_detect(
+    port: int,
+    family_ok: bool,
+    status: int | None,
+    error: str,
+    preview: str = "",
+) -> CheckResult:
     label = exporter_label(port)
     if family_ok:
-        return CheckResult("metrics", True, f"{label} :{port}/metrics prometheus text", 0)
+        return CheckResult(
+            "metrics",
+            True,
+            f"{label} :{port}/metrics prometheus text",
+            0,
+            preview=preview or "",
+        )
     if status == 200:
         return CheckResult(
             "metrics",
             False,
             f"{label} :{port}/metrics HTTP 200 (not node_/windows_ metrics)",
             0,
+            preview=preview or "",
         )
     if status:
         return CheckResult("metrics", False, f"{label} :{port}/metrics HTTP {status}", 0)
@@ -556,6 +547,8 @@ def probe_target(
     extra: list[CheckResult] = []
     probe_both = str(item.get("_probe_both") or "") == "1"
     detect_message = ""
+    if not probe_both and kind != "network" and host and port is None:
+        probe_both = True
     if kind == "network" and not scrape and not probe_both:
         metrics = probe_snmp(host, timeout, prober=snmp_prober)
     elif probe_both and host:
@@ -567,10 +560,18 @@ def probe_target(
             fetcher=metrics_fetcher,
         )
         linux_m = _metrics_from_detect(
-            LINUX_EXPORTER_PORT, detected.linux, detected.linux_status, detected.linux_error
+            LINUX_EXPORTER_PORT,
+            detected.linux,
+            detected.linux_status,
+            detected.linux_error,
+            preview=detected.linux_preview,
         )
         win_m = _metrics_from_detect(
-            WINDOWS_EXPORTER_PORT, detected.windows, detected.windows_status, detected.windows_error
+            WINDOWS_EXPORTER_PORT,
+            detected.windows,
+            detected.windows_status,
+            detected.windows_error,
+            preview=detected.windows_preview,
         )
         if detected.kind == "windows":
             metrics, extra = win_m, [linux_m]
@@ -583,8 +584,13 @@ def probe_target(
             port = LINUX_EXPORTER_PORT
             scrape = detected.scrape_address or f"{host}:{LINUX_EXPORTER_PORT}"
         else:
-            metrics, extra = linux_m, [win_m]
-            port = port or LINUX_EXPORTER_PORT
+            extra = [linux_m, win_m]
+            metrics = CheckResult(
+                "metrics",
+                None,
+                "no scrape port (tried :9100 and :9182; no node_/windows_)",
+                0,
+            )
             detect_message = detected.message
     elif not host or port is None:
         metrics = CheckResult("metrics", None, "no scrape port (set scrape_address or type)", 0)
@@ -617,6 +623,65 @@ def probe_target(
     if detect_message and result.metrics.ok is not True:
         result.hint = f"{result.asset_id}: {detect_message}"
     return result
+
+
+LIVE_CLASS_TYPE = {
+    "linux": ("Linux Server", "linux-standard"),
+    "windows": ("Windows Server", "windows-standard"),
+}
+
+
+def classification_patch(item: dict[str, Any], probe: AssetProbe) -> dict[str, str]:
+    """Fields to persist so Prometheus HTTP SD can scrape a live Linux/Windows exporter.
+
+    Used when the operator saved IP-only / Auto / Unknown and forgot scrape_address.
+    Does not rewrite Network device. Does not invent a host.
+    """
+    if probe.metrics.ok is not True or probe.kind not in LIVE_CLASS_TYPE:
+        return {}
+    saved_kind = asset_kind(str(item.get("type") or ""), str(item.get("monitoring_profile") or ""))
+    if saved_kind == "network":
+        return {}
+    type_name, profile = LIVE_CLASS_TYPE[probe.kind]
+    scrape = (probe.scrape or "").strip()
+    current_scrape = str(item.get("scrape_address") or "").strip()
+    current_type = str(item.get("type") or "").strip()
+    auto = is_auto_asset_type(current_type)
+    unknown = (not current_type) or current_type.lower() == "unknown" or saved_kind in {
+        "other",
+        "web",
+        "unknown",
+    }
+    patch: dict[str, str] = {}
+    if auto or unknown or saved_kind not in {"linux", "windows"}:
+        if current_type != type_name:
+            patch["type"] = type_name
+        current_profile = str(item.get("monitoring_profile") or "").strip()
+        if current_profile != profile and current_profile in {
+            "",
+            "linux-standard",
+            "windows-standard",
+            "network-switch",
+        }:
+            patch["monitoring_profile"] = profile
+        elif not current_profile:
+            patch["monitoring_profile"] = profile
+    if scrape and not current_scrape:
+        patch["scrape_address"] = scrape
+    elif scrape and (auto or unknown) and current_scrape != scrape:
+        patch["scrape_address"] = scrape
+    return patch
+
+
+def apply_live_class_to_item(item: dict[str, Any], probe: AssetProbe) -> dict[str, Any]:
+    """Copy live linux/windows class onto a verify/ping item (no DB)."""
+    out = dict(item)
+    patch = classification_patch(item, probe)
+    if not patch:
+        return out
+    out.update(patch)
+    out["_classified_live"] = "1"
+    return out
 
 
 def ad_hoc_item(selector: str) -> dict[str, Any]:

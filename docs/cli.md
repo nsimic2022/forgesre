@@ -105,7 +105,7 @@ ICMP ping from the appliance only proves **L3** (the host answers ping). ForgeSR
 | FAIL | FAIL | Wrong IP, host down, or ICMP and the exporter port both blocked. |
 | PASS | SKIP | Network device — HTTP metrics do not apply. Use `./forgesre snmp` (UDP/161). |
 
-Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `scrape_address` wins. An ad-hoc IP (no inventory type) probes **both** ports and classifies `windows_` vs `node_` the same way Assets/Discovery detect does (both → prefer Windows `:9182` unless a saved type exists). Seeded `forge-demo-*` rows and discovery seed `10.20.30.41` are skipped unless you pass `--demo` or the id.
+Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `scrape_address` wins. An ad-hoc IP (no inventory type) **and** an inventory row with empty scrape + Unknown/Auto type probe **both** ports and classify `windows_` vs `node_` the same way Assets/Discovery detect does (both → prefer Windows `:9182` unless a saved type exists). Seeded `forge-demo-*` rows and discovery seed `10.20.30.41` are skipped unless you pass `--demo` or the id.
 
 ---
 
@@ -124,6 +124,10 @@ Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `
 ```
 
 Path: inventory row → ICMP / exporter (`:9100` `node_` or `:9182` `windows_`) or SNMP UDP/161 → Prometheus `up` + scrape target health + family series → Alertmanager reachable → last Core incident/webhook (SKIP if none). ForgeAI/LLM is listed only when enabled; verify does **not** call the LLM. Chain: `exporter → prometheus → alertmanager → core`.
+
+If the row has an IP but **no** `scrape_address` and type is Unknown / Auto / empty, verify still probes **`:9100` and `:9182`** on that IP (same live GET as Add Auto). `node_` → Linux Server `:9100`, `windows_` → Windows Server `:9182`. GUI Verify and `./forgesre verify` **save** type + scrape so Prometheus HTTP SD can pick the host up (wait one refresh, then `./forgesre sd`). ICMP ping alone is not a scrape.
+
+Detect/verify GET `/metrics` with a few-second timeout, read until `node_` / `windows_` is visible (those families often sit after `go_*`), then **drain** the rest of the body. Closing after 2–4 KiB was `error encoding and sending metric family: write: broken pipe` on node_exporter. Prometheus inventory scrape is a different client (`scrape_timeout` default 10s); a huge `/metrics` vs a short scrape timeout is an ops issue, not a new exporter.
 
 Classes are universal, not SKUs: Linux, Windows, Network SNMP, Unknown. Unknown or a missing exporter / no Prom target is **SKIP or FAIL with an honest reason** — never a fake green host. Seeded `forge-demo-*` rows and the discovery Approve seed `10.20.30.41` (`disc-10-20-30-41`) are **lab** (label DEMO), are not in HTTP SD, and are not proof of a real scrape. Verify does **not** call the LLM even when ForgeAI is enabled.
 

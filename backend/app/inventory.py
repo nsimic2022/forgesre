@@ -503,6 +503,48 @@ def update_asset(
     return asset
 
 
+def persist_live_classification(db: Session, asset: Asset, probe: object) -> bool:
+    """Save type + scrape_address when verify/detect saw node_ or windows_ live.
+
+    Prometheus HTTP SD only lists rows with a scrape_address. An IP-only Unknown
+    row is reachable by ICMP but never scraped until this write.
+    """
+    from app.asset_probe import AssetProbe, asset_as_probe_item, classification_patch
+
+    if is_lab_inventory_row(asset):
+        return False
+    if not isinstance(probe, AssetProbe):
+        return False
+    patch = classification_patch(asset_as_probe_item(asset), probe)
+    if not patch:
+        return False
+    if "type" in patch:
+        asset.type = patch["type"]
+    if "monitoring_profile" in patch:
+        asset.monitoring_profile = patch["monitoring_profile"]
+    if "scrape_address" in patch:
+        asset.scrape_address = patch["scrape_address"]
+    audit(
+        db,
+        "asset.update",
+        actor="verify",
+        object_type="asset",
+        object_id=asset.asset_id,
+        data=patch,
+    )
+    report(
+        db,
+        "inventory",
+        "asset.update",
+        "ok",
+        summary=f"Verify classified {asset.hostname} as {asset.type}",
+        detail=f"scrape={asset.scrape_address} patch={patch}",
+        object_type="asset",
+        object_id=asset.asset_id,
+    )
+    return True
+
+
 def similar_incident_groups(db: Session, asset: Asset) -> list[dict]:
     rows = (
         db.query(Incident)
