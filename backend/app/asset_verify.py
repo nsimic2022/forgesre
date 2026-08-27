@@ -30,6 +30,7 @@ from app.asset_probe import (
     WINDOWS_EXPORTER_PORT,
     AssetProbe,
     CheckResult,
+    apply_live_class_to_item,
     asset_kind,
     default_monitoring_profile,
     probe_target,
@@ -700,7 +701,15 @@ def compose_verify(
     am_health: dict[str, Any] | None = None,
     incident: dict[str, Any] | None = None,
 ) -> VerifyReport:
+    classified_live = False
+    live_item = apply_live_class_to_item(item, probe)
+    if str(live_item.get("_classified_live") or "") == "1":
+        classified_live = True
+        live_item.pop("_classified_live", None)
+        item = live_item
     vclass, class_reason = classify_verify(item)
+    if classified_live and vclass in {CLASS_LINUX, CLASS_WINDOWS}:
+        class_reason = CLASS_REASON[vclass] + " (live /metrics; scrape saved for HTTP SD)"
     lab = is_lab_asset(item)
     icmp = probe.icmp
     port = port_check(vclass, probe)
@@ -759,6 +768,14 @@ def compose_verify(
         am=am,
     )
     hint = probe.hint
+    if classified_live and not lab:
+        scrape = str(item.get("scrape_address") or probe.scrape or "")
+        token = "node_" if vclass == CLASS_LINUX else "windows_"
+        hint = (
+            f"{item.get('asset_id') or probe.asset_id}: live /metrics has {token} — "
+            f"saved type {item.get('type')} scrape {scrape}. Prometheus HTTP SD picks "
+            f"it up on the next refresh (~30s), then ./forgesre sd."
+        )
     if lab:
         hint = (
             "DEMO lab (forge-demo-* or discovery seed 10.20.30.41) — not a real VM. "

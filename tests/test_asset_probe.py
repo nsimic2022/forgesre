@@ -196,6 +196,34 @@ def test_ad_hoc_ip_probes_both_exporter_ports():
     assert result.kind == "windows"
 
 
+def test_unknown_type_ip_only_probes_default_linux_port():
+    item = {
+        "asset_id": "bare-lnx",
+        "hostname": "bare-lnx",
+        "ip": "10.77.9.86",
+        "type": "Unknown",
+        "scrape_address": "",
+    }
+    fetcher = _metrics_map(
+        {
+            "http://10.77.9.86:9100/metrics": (
+                200,
+                "# HELP node_uname_info\nnode_uname_info 1\nnode_cpu_seconds_total 1\n",
+            ),
+            "http://10.77.9.86:9182/metrics": (None, ""),
+        }
+    )
+    result = probe_target(item, ping_runner=_ping_ok, metrics_fetcher=fetcher)
+    assert result.kind == "linux"
+    assert result.port == 9100
+    assert result.metrics.ok is True
+    from app.asset_probe import classification_patch
+
+    patch = classification_patch(item, result)
+    assert patch["type"] == "Linux Server"
+    assert patch["scrape_address"] == "10.77.9.86:9100"
+
+
 def test_ad_hoc_prefers_windows_family_over_bare_9100():
     item = ad_hoc_item("10.10.10.62")
     fetcher = _metrics_map(

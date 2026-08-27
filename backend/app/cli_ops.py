@@ -15,6 +15,7 @@ from app.asset_probe import (
     DEFAULT_TIMEOUT,
     ad_hoc_item,
     asset_selector_hit,
+    classification_patch,
     format_report,
     looks_like_host,
     overall_exit,
@@ -132,6 +133,29 @@ def get_json(port: str, jar: Path, path: str) -> Any:
     raw = subprocess.check_output(
         ["curl", "-fsS", "-c", str(jar), "-b", str(jar), f"http://127.0.0.1:{port}{path}"]
     )
+    return json.loads(raw)
+
+
+def post_json(port: str, jar: Path, path: str, payload: dict[str, Any]) -> Any:
+    raw = subprocess.check_output(
+        [
+            "curl",
+            "-fsS",
+            "-c",
+            str(jar),
+            "-b",
+            str(jar),
+            "-H",
+            "Content-Type: application/json",
+            "-X",
+            "POST",
+            "-d",
+            json.dumps(payload),
+            f"http://127.0.0.1:{port}{path}",
+        ]
+    )
+    if not raw:
+        return {}
     return json.loads(raw)
 
 
@@ -486,21 +510,35 @@ def cmd_verify(port: str, args: list[str]) -> None:
         extra_asset = ctx.get("asset") if isinstance(ctx, dict) else None
         if isinstance(extra_asset, dict):
             merged.update(extra_asset)
-        results.append(
-            verify_target(
-                merged,
-                timeout=timeout,
-                in_http_sd=bool(ctx.get("in_http_sd")),
-                in_snmp_sd=bool(ctx.get("in_snmp_sd")),
-                query_fn=query_fn,
-                rca=ctx.get("rca") if isinstance(ctx, dict) else None,
-                live_metrics=ctx.get("live_metrics") if isinstance(ctx, dict) else None,
-                ai_enabled=ai_enabled,
-                targets_fn=targets_fn,
-                am_health=am_health,
-                incident=ctx.get("incident") if isinstance(ctx, dict) else None,
-            )
+        report = verify_target(
+            merged,
+            timeout=timeout,
+            in_http_sd=bool(ctx.get("in_http_sd")),
+            in_snmp_sd=bool(ctx.get("in_snmp_sd")),
+            query_fn=query_fn,
+            rca=ctx.get("rca") if isinstance(ctx, dict) else None,
+            live_metrics=ctx.get("live_metrics") if isinstance(ctx, dict) else None,
+            ai_enabled=ai_enabled,
+            targets_fn=targets_fn,
+            am_health=am_health,
+            incident=ctx.get("incident") if isinstance(ctx, dict) else None,
         )
+        if report.probe is not None and not report.lab:
+            patch = classification_patch(merged, report.probe)
+            if patch:
+                asset_id = quote(str(report.asset_id or merged.get("asset_id") or ""), safe="")
+                try:
+                    saved = post_json(port, jar, f"/api/v1/assets/{asset_id}", patch)
+                except (subprocess.CalledProcessError, json.JSONDecodeError, OSError):
+                    saved = {}
+                if isinstance(saved, dict):
+                    if saved.get("type"):
+                        report.type = str(saved.get("type") or report.type)
+                    if saved.get("scrape_address") is not None:
+                        report.scrape = str(saved.get("scrape_address") or report.scrape)
+                    if saved.get("monitoring_profile"):
+                        report.profile = str(saved.get("monitoring_profile") or report.profile)
+        results.append(report)
     sys.stdout.write(
         format_verify_report(
             results,

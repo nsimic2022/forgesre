@@ -1,7 +1,9 @@
 """Cheap Linux / Windows / network detect from the ForgeSRE host.
 
 GET ``http://<ip>:9182/metrics`` and ``http://<ip>:9100/metrics`` with a short
-timeout. ICMP ping is a reachability hint only — it does not pick an OS or
+timeout. Read enough of ``/metrics`` to see ``node_`` / ``windows_`` (often after
+``go_*``), then drain the rest so node_exporter does not log broken pipe.
+ICMP ping is a reachability hint only — it does not pick an OS or
 mark a device as Network.
 
 Classification:
@@ -31,9 +33,15 @@ from typing import Any, Callable
 
 LINUX_EXPORTER_PORT = 9100
 WINDOWS_EXPORTER_PORT = 9182
-DETECT_TIMEOUT = 1.0
+DETECT_TIMEOUT = 3.0
 METRICS_PATH = "/metrics"
 AUTO_ASSET_TYPE = "Auto (detect exporter)"
+# node_exporter /metrics often starts with go_* / process_* (more than 4 KiB).
+# Aborting after a short read is node_exporter "broken pipe" / "error encoding
+# and sending metric family". Classify from a preview, then drain the rest.
+PREVIEW_LIMIT = 262144
+DRAIN_LIMIT = 8 * 1024 * 1024
+READ_CHUNK = 8192
 
 MetricsFetcher = Callable[[str, float], tuple[int | None, str, str]]
 SnmpProber = Callable[[str], bool]
@@ -110,16 +118,60 @@ def classify_exporter_metrics(text: str) -> str:
     return ""
 
 
-def fetch_metrics(url: str, timeout: float) -> tuple[int | None, str, str]:
-    request = urllib.request.Request(url, method="GET", headers={"User-Agent": "forgesre-detect/1"})
+def _read_and_drain(response: Any, timeout: float) -> str:
+    """Read enough to classify node_/windows_, then drain so the exporter can finish."""
+    del timeout
+    chunks: list[bytes] = []
+    preview_len = 0
+    drained = 0
+    classified = ""
+    while drained < DRAIN_LIMIT:
+        try:
+            piece = response.read(READ_CHUNK)
+        except (socket.timeout, TimeoutError, OSError):
+            break
+        if not piece:
+            break
+        drained += len(piece)
+        if preview_len < PREVIEW_LIMIT:
+            chunks.append(piece)
+            preview_len += len(piece)
+            if not classified:
+                classified = classify_exporter_metrics(
+                    b"".join(chunks).decode("utf-8", errors="replace")
+                )
+    return b"".join(chunks).decode("utf-8", errors="replace")
+
+
+def fetch_metrics(
+    url: str,
+    timeout: float,
+    *,
+    user_agent: str = "forgesre-detect/1",
+) -> tuple[int | None, str, str]:
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={
+            "User-Agent": user_agent,
+            "Accept": "text/plain,*/*",
+            "Connection": "close",
+        },
+    )
+    preview = ""
+    status: int | None = None
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = response.read(4096)
-            preview = body.decode("utf-8", errors="replace")
-            return int(getattr(response, "status", 200) or 200), preview, ""
+            status = int(getattr(response, "status", 200) or 200)
+            preview = _read_and_drain(response, timeout)
+            return status, preview, ""
     except socket.timeout:
+        if preview:
+            return status or 200, preview, ""
         return None, "", f"timeout {timeout}s"
     except TimeoutError:
+        if preview:
+            return status or 200, preview, ""
         return None, "", f"timeout {timeout}s"
     except urllib.error.HTTPError as exc:
         return int(exc.code), "", f"HTTP {exc.code}"
@@ -127,9 +179,13 @@ def fetch_metrics(url: str, timeout: float) -> tuple[int | None, str, str]:
         reason = str(getattr(exc, "reason", exc) or exc)
         lowered = reason.lower()
         if "timed out" in lowered or "timeout" in lowered:
+            if preview:
+                return status or 200, preview, ""
             return None, "", f"timeout {timeout}s"
         return None, "", reason
     except OSError as exc:
+        if preview:
+            return status or 200, preview, ""
         return None, "", str(exc)
 
 
@@ -153,9 +209,14 @@ class ExporterDetect:
     families: dict[str, bool] = field(
         default_factory=lambda: {"up": False, "cpu": False, "memory": False, "disk": False}
     )
+    linux_preview: str = ""
+    windows_preview: str = ""
 
     def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        data.pop("linux_preview", None)
+        data.pop("windows_preview", None)
+        return data
 
 
 def _empty(ip: str, message: str, families: dict[str, bool] | None = None) -> ExporterDetect:
@@ -250,6 +311,8 @@ def detect_exporter(
         "windows_status": win_status,
         "linux_error": lnx_err,
         "windows_error": win_err,
+        "linux_preview": lnx_body or "",
+        "windows_preview": win_body or "",
         "families": merge_families(
             bundled_families_from_metrics(win_body, exporter_up=bool(windows)),
             bundled_families_from_metrics(lnx_body, exporter_up=bool(linux)),
