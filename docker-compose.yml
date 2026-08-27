@@ -201,7 +201,9 @@ services:
   netbox:
     # Default stack (not a profile). Host network; Granian on :8001 (Core owns :8080).
     # First boot runs Django migrations — doctor stays yellow until /login/ answers.
-    image: docker.io/netboxcommunity/netbox:v4.4-3.2.0
+    # Pin is NetBox 4.6.9 + netbox-docker 5.0.2 (Granian, user netbox). The old
+    # v4.4-3.2.0 tag never existed on Docker Hub (3.2.0 was v4.2 / nginx unit).
+    image: docker.io/netboxcommunity/netbox:v4.6.9-5.0.2
     network_mode: host
     user: "netbox:root"
     env_file:

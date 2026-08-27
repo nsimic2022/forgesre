@@ -20,7 +20,8 @@ def test_compose_netbox_is_default_service():
         assert "profiles" not in svc, name
         assert svc.get("network_mode") == "host"
     netbox = data["services"]["netbox"]
-    assert "netboxcommunity/netbox" in netbox["image"]
+    assert netbox["image"] == "docker.io/netboxcommunity/netbox:v4.6.9-5.0.2"
+    assert "v4.4-3.2.0" not in netbox["image"]
     assert netbox["depends_on"]["netbox-db-init"]["condition"] == "service_completed_successfully"
     env = data["services"]["core"]["environment"]
     assert "NETBOX_URL" in env
@@ -147,3 +148,37 @@ def test_docs_say_bundled_netbox_default_on():
     assert "A bundled NetBox or a cloud LLM" not in readme
     completion = (ROOT / "scripts" / "forgesre-completion.bash").read_text(encoding="utf-8")
     assert "netbox-redis" in completion
+
+
+# Hub-verified 27 Aug 2026. Dead tag v4.4-3.2.0 is not in this list.
+_COMPOSE_IMAGE_PINS = {
+    "postgres": "postgres:16-alpine",
+    "prometheus": "prom/prometheus:v2.54.1",
+    "alertmanager": "prom/alertmanager:v0.27.0",
+    "snmp-exporter": "prom/snmp-exporter:v0.26.0",
+    "loki": "grafana/loki:3.4.2",
+    "alloy": "grafana/alloy:v1.7.5",
+    "grafana": "grafana/grafana:11.4.0",
+    "netbox-redis": "redis:7-alpine",
+    "netbox-db-init": "postgres:16-alpine",
+    "netbox": "docker.io/netboxcommunity/netbox:v4.6.9-5.0.2",
+    "llm": "ghcr.io/ggml-org/llama.cpp:server",
+    "mailserver": "ghcr.io/docker-mailserver/docker-mailserver:15.1.0",
+    "roundcube": "roundcube/roundcubemail:1.6.11-apache",
+}
+
+
+def test_compose_and_mailbox_image_pins():
+    data = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    images = {
+        name: svc["image"]
+        for name, svc in data["services"].items()
+        if "image" in svc
+    }
+    assert images == _COMPOSE_IMAGE_PINS
+    assert "v4.4-3.2.0" not in images.values()
+    assert "build" in data["services"]["core"]
+    dockerfile = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
+    assert dockerfile.splitlines()[0] == "FROM python:3.12-slim"
+    mailbox = (ROOT / "scripts" / "mailbox.sh").read_text(encoding="utf-8")
+    assert 'DMS_IMAGE="ghcr.io/docker-mailserver/docker-mailserver:15.1.0"' in mailbox

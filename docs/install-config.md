@@ -520,6 +520,7 @@ Need 16 GB RAM for the default 14B GGUF, or ~8 GB if you wget Qwen3-4B into `dat
 | LLM download / :8088 down | `docker compose --profile ai up -d llm` then wait for the GGUF to load |
 | Re-install wiped logins | `./install.sh` regenerates secrets; use `update` on a live box |
 | Redis `:6379` already in use | Bundled NetBox binds Redis on `127.0.0.1:6379` (host network). Stop the other Redis, or do not run a second one on the VM |
+| NetBox `manifest unknown` / image not found | Docker Hub has no `netboxcommunity/netbox:v4.4-3.2.0`. Current pin is `v4.6.9-5.0.2` (Granian, same Redis/Postgres env). `git pull origin main && ./forgesre update`. First NetBox pull is large and slow. |
 | NetBox first boot yellow | Django migrations can take several minutes. Doctor stays **yellow** until `http://127.0.0.1:8001/login/` answers — wait, do not fake green. `docker compose logs --tail=80 netbox` |
 | Mailbox 25 / 993 vs host network | Optional `./forgesre mailbox` uses host networking: inbound SMTP **TCP/25**, IMAP **TCP/993**, Roundcube `:8081`. Free those ports on the VM; many ISPs/clouds block port 25 |
 
