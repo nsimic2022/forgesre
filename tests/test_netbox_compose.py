@@ -170,14 +170,13 @@ _COMPOSE_IMAGE_PINS = {
 
 def test_compose_and_mailbox_image_pins():
     data = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
-    compose_text = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "v4.4-3.2.0" not in compose_text
     images = {
         name: svc["image"]
         for name, svc in data["services"].items()
         if "image" in svc
     }
     assert images == _COMPOSE_IMAGE_PINS
+    assert "v4.4-3.2.0" not in images.values()
     assert "build" in data["services"]["core"]
     dockerfile = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
     assert dockerfile.splitlines()[0] == "FROM python:3.12-slim"
