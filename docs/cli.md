@@ -58,8 +58,6 @@ Two logins:
 ./forgesre remove backup           # numbered picker; delete that folder only with --yes
 ./forgesre mailbox         # optional; does not rewrite Gmail/Outlook SMTP
 ./forgesre fetch-llm
-./forgesre fetch-llm --list
-./forgesre fetch-llm --model qwen3-1.7b
 ./forgesre update           # includes bundled NetBox :8001 (wait on first boot)
 ./forgesre update --offline # lab: no image pull; skip Core --build if sources unchanged
 ./forgesre version
@@ -180,12 +178,10 @@ docker compose logs --tail=200 llm
 Full implementation guide (including health inspect and `/v1/chat/completions`): [`llm.md`](llm.md) §8.
 
 ```bash
-./forgesre fetch-llm --list
-./forgesre fetch-llm                    # default 14B → model.gguf
-./forgesre fetch-llm --model qwen3-1.7b
-./forgesre fetch-llm --model qwen2.5-1.5b
-./forgesre fetch-llm use qwen2.5-14b
-docker compose --profile ai up -d --force-recreate llm
+./forgesre fetch-llm
+# lab 8 GB RAM: wget Qwen3-4B into data/models/model.gguf, then:
+./forgesre fetch-llm --offline
+docker compose --profile ai up -d llm
 docker compose ps llm
 docker compose ps -q llm | xargs -r docker inspect --format='{{json .State.Health}}'
 curl -sS http://127.0.0.1:8088/v1/models

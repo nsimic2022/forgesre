@@ -96,7 +96,7 @@ _forgesre_complete() {
       COMPREPLY=($(compgen -W "--offline" -- "$cur"))
       ;;
     fetch-llm)
-      COMPREPLY=($(compgen -W "--download-only --offline --list --model --use list use switch qwen2.5-14b qwen3-1.7b qwen2.5-1.5b qwen3-4b" -- "$cur"))
+      COMPREPLY=($(compgen -W "--download-only --offline" -- "$cur"))
       ;;
     test)
       COMPREPLY=($(compgen -W "--json --quiet --out" -- "$cur"))

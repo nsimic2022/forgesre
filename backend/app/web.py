@@ -66,7 +66,6 @@ from app.services import (
     run_demo_windows,
     run_investigation,
 )
-from app.llm_catalog import catalog_status
 from app.stack import enrich_components, rewrite_host
 from app.history import (
     add_note,
@@ -1033,7 +1032,6 @@ def health_page(request: Request, user: User = Depends(login_required)):
         doctor=payload,
         stack=enrich_components(payload.get("components") or {}, host),
         grafana_open=rewrite_host(settings.grafana_public_url, host.split(":")[0]),
-        llm_catalog=catalog_status(),
     )
 
 

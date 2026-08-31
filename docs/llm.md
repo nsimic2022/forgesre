@@ -31,24 +31,19 @@ If the rewrite fails or times out, the incident keeps the ForgeRCA result and re
 
 ## 2. Hardware
 
-Bundled **default** is **Qwen2.5-14B-Instruct Q4_K_M** (~8.4 GB on disk) as `model.gguf`. llama.cpp runs on **CPU** (no GPU required, nested virtualization not required). Official `Qwen/Qwen2.5-14B-Instruct-GGUF` Q4_K_M is now a 3-way split; `fetch-llm` pins the bartowski **single-file** GGUF so Compose can keep `-m /models/model.gguf`.
+Bundled default is **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB on disk). llama.cpp runs on **CPU** (no GPU required, nested virtualization not required).
 
-Lighter catalog entries (same llama.cpp, **not** Ollama):
+| Resource | 14B Q4 (default `fetch-llm`) | 4B Q4 (lab wget, see §3.C) |
+|---|---|---|
+| Disk for GGUF | ~9 GB | ~2.5 GB |
+| RAM with the rest of the stack | 16 GB comfortable | 8 GB is enough |
+| One rewrite on CPU | 1–10 minutes | usually under a minute after load |
 
-| Catalog id | What you get | Disk | RAM | Ctx | File on disk |
-|---|---|---|---|---|---|
-| `qwen2.5-14b` (default) | Qwen2.5-14B-Instruct Q4_K_M | ~8.4 GB | 16 GB comfortable | **8192** | `model.gguf` |
-| `qwen3-1.7b` | Qwen3-1.7B Q4_K_M (unsloth) | ~1.0 GB | 8 GB | 4096 | `Qwen3-1.7B-Q4_K_M.gguf` |
-| `qwen2.5-1.5b` | Qwen2.5-1.5B-Instruct Q4_K_M | ~1.1 GB | 8 GB | 4096 | `qwen2.5-1.5b-instruct-q4_k_m.gguf` |
-| `qwen3-4b` | Qwen3-4B Q4_K_M | ~2.5 GB | 8 GB | 4096 | `Qwen3-4B-Q4_K_M.gguf` |
+vCPU: 4 is better than 2. Threads default to `nproc - 2` (min 2). First llama.cpp load after `up -d llm` is minutes (GGUF mmap).
 
-There is **no** Hugging Face repo `Qwen/Qwen3-1.7B-Instruct-GGUF` (401). Official `Qwen/Qwen3-1.7B-GGUF` ships **Q8_0 only**. Catalog `qwen3-1.7b` is `unsloth/Qwen3-1.7B-GGUF` → `Qwen3-1.7B-Q4_K_M.gguf`. Qwen2-1.5B Instruct Q4_K_M exists (`qwen2-1_5b-instruct-q4_k_m.gguf`); the pin is **Qwen2.5-1.5B-Instruct**.
+A **4 GB** lab VM should not run either GGUF. Leave `ai.enabled: false` and use ForgeRCA only.
 
-vCPU: 4 is better than 2. Threads default to `nproc - 2` (min 2). First llama.cpp load after `up -d llm` is minutes for 14B (GGUF mmap); 1.5B / 1.7B is usually under a minute.
-
-A **4 GB** lab VM should not run the 14B GGUF. Leave `ai.enabled: false` and use ForgeRCA only, or try `qwen3-1.7b` / `qwen2.5-1.5b` on 8 GB.
-
-Default Compose context is **8192** (`-c ${FORGESRE_LLM_CTX:-8192}`). Switching to a light model writes `FORGESRE_LLM_CTX=4096`. Core waits **`ai.llm.timeout_seconds`** (default **90**) for one completion. Slow 14B CPU rewrites may need a higher value in `config/forgesre.yml`.
+Context window in Compose is **8192** tokens (`-c 8192`). Core waits **`ai.llm.timeout_seconds`** (default **90**, lab 4B) for one completion. Slow 14B CPU rewrites may need a higher value in `config/forgesre.yml`.
 
 ---
 
@@ -69,21 +64,11 @@ git pull origin main
 
 `./forgesre fetch-llm` (same as `scripts/fetch-llm.sh`):
 
-1. Downloads the catalog GGUF into `$FORGESRE_DATA/models/` (default file `model.gguf`) if a large enough file is not already there
+1. Downloads the GGUF to `$FORGESRE_DATA/models/model.gguf` (default `./data/models/model.gguf`) if a file larger than 1 GB is not already there
 2. Sets `COMPOSE_PROFILES` to include `ai`
 3. Writes `FORGESRE_LLM_THREADS` if missing
-4. `--model ID` also writes `FORGESRE_LLM_GGUF` + `FORGESRE_LLM_CTX` and recreates **llm**
-5. Sets `ai.enabled: true` and `ai.llm.mode: bundled` in `config/forgesre.yml`
-6. Starts the `llm` container and recreates **Core** so it reloads YAML (first enable)
-
-List and switch without overwriting the default file:
-
-```bash
-./forgesre fetch-llm --list
-./forgesre fetch-llm --model qwen3-1.7b      # light + switch + restart llm
-./forgesre fetch-llm --model qwen2.5-1.5b
-./forgesre fetch-llm use qwen2.5-14b         # back to model.gguf, ctx 8192
-```
+4. Sets `ai.enabled: true` and `ai.llm.mode: bundled` in `config/forgesre.yml`
+5. Starts the `llm` container and recreates **Core** so it reloads YAML
 
 Then wait until llama.cpp answers:
 
@@ -104,90 +89,64 @@ New VM only:
 
 Same effect as `--enable-ai yes`: installer downloads the GGUF, then starts Compose with profile `ai` when `data/models/model.gguf` exists.
 
-### C. Catalog / lighter GGUF / your own file
+### C. Offline / your own GGUF (wget)
 
-Compose loads **one** basename under the models volume:
+Compose always loads **one** file:
 
 ```text
-/models/${FORGESRE_LLM_GGUF:-model.gguf}
+$FORGESRE_DATA/models/model.gguf
 ```
 
-Unset `FORGESRE_LLM_GGUF` is still `-m /models/model.gguf` (the screenshot default). Default `$FORGESRE_DATA` is `./data`. Check what is already there:
+Default `$FORGESRE_DATA` is `./data`. Check what is already there:
 
 ```bash
-./forgesre fetch-llm --list
 ls -lah ./data/models/
 ```
 
-The filename must be a **basename** ending in `.gguf` (no slashes). A `wget -O model.gguf` in the clone root does **not** count — write into `data/models/`.
+The filename on disk **must** be `model.gguf` (the container argument is `-m /models/model.gguf`). A `wget -O model.gguf` in the clone root does **not** count — write into `data/models/`.
 
-**Try a lighter model** (keeps `model.gguf` if you already have 14B):
-
-```bash
-./forgesre fetch-llm --model qwen3-1.7b
-./forgesre fetch-llm --model qwen2.5-1.5b
-curl -fsS http://127.0.0.1:8088/v1/models
-```
-
-System Health → **Local LLM (llama.cpp)** shows the same catalog. Switching is host CLI (`./forgesre fetch-llm use …`) because Core does not restart Compose.
-
-**Optional medium** — Qwen3-4B Q4_K_M (~2.5 GB):
-
-```bash
-./forgesre fetch-llm --model qwen3-4b
-```
-
-Same file as the older wget path (catalog filename, then `use`):
+**Lab / 8 GB RAM** — Qwen3-4B Q4_K_M (~2.5 GB), then enable the profile (does not regenerate secrets):
 
 ```bash
 mkdir -p data/models
-wget -O data/models/Qwen3-4B-Q4_K_M.gguf \
-  https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf
-./forgesre fetch-llm use qwen3-4b --offline
-```
-
-Or overwrite the default compose filename (`-m /models/model.gguf`) and enable without a catalog id:
-
-```bash
 wget -O data/models/model.gguf \
   https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf
+ls -lah data/models/model.gguf
 ./forgesre fetch-llm --offline
 ```
 
-`--offline` skips Hugging Face; the catalog file must already exist and be large enough. It still sets `COMPOSE_PROFILES=ai`, `ai.enabled` / `ai.llm.mode: bundled` in **`config/forgesre.yml`** (not the example template), starts `llm`, and recreates Core on first enable.
+`--offline` skips Hugging Face; the file must already exist and be larger than 1 GB. It still sets `COMPOSE_PROFILES=ai`, `ai.enabled` / `ai.llm.mode: bundled` in **`config/forgesre.yml`** (not the example template), starts `llm`, and recreates Core.
 
-Override any URL (internal mirror) while targeting a catalog id:
-
-```bash
-FORGESRE_LLM_URL='https://example.internal/models/qwen.gguf' \
-  ./forgesre fetch-llm --model qwen2.5-14b
-```
-
-Download only (no Compose / YAML changes):
+Same download through `fetch-llm` (curl with resume) instead of wget:
 
 ```bash
-./forgesre fetch-llm --download-only
-./forgesre fetch-llm --model qwen3-1.7b --download-only
+FORGESRE_LLM_URL='https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf' \
+  ./forgesre fetch-llm
 ```
-
-Prefer an **Instruct** GGUF so the model returns JSON. If ForgeAI stays on builtin ForgeRCA with “not JSON”, `use` another catalog id and wait for llama.cpp to reload.
 
 If the GGUF is already in place and YAML is already enabled:
 
 ```bash
-docker compose --profile ai up -d --force-recreate llm
+docker compose --profile ai up -d llm
 docker compose ps
 docker compose logs -f llm
 ```
 
 Do **not** edit `config/forgesre.example.yml` on a live box — Core reads `config/forgesre.yml`. Do not re-run `./install.sh` to add a model. Do not paste `secrets/secrets.env` into tickets.
 
-If an older 1.5B pin was saved as `model.gguf` (~1.1 GB), move it aside before fetching 14B:
+Download only (no Compose / YAML changes):
 
 ```bash
-mv data/models/model.gguf data/models/qwen2.5-1.5b-instruct-q4_k_m.gguf
-./forgesre fetch-llm --model qwen2.5-14b
+./forgesre fetch-llm --download-only
 ```
+
+Override any URL (internal mirror):
+
+```bash
+FORGESRE_LLM_URL='https://example.internal/models/qwen.gguf' ./forgesre fetch-llm
+```
+
+Prefer an **Instruct** GGUF so the model returns JSON. If ForgeAI stays on builtin ForgeRCA with “not JSON”, swap the file and recreate `llm`.
 
 ### D. External OpenAI-compatible server (same host)
 
@@ -223,9 +182,8 @@ ForgeSRE is not a hosted OpenAI client. Do not put cloud API keys in `secrets/se
 
 | File | What to set | Git |
 |---|---|---|
-| `data/models/*.gguf` | Weights. Default `model.gguf` (~8.4 GB); lights keep their own names | ignored |
-| `.env` | `COMPOSE_PROFILES=ai`, `FORGESRE_LLM_THREADS`, `FORGESRE_DATA`, optional `FORGESRE_LLM_GGUF` / `FORGESRE_LLM_CTX` | ignored |
-| `backend/app/llm_catalog.py` | Catalog ids, URLs, filenames, ctx | committed |
+| `data/models/model.gguf` | Weights. ~9 GB | ignored |
+| `.env` | `COMPOSE_PROFILES=ai` (or `ai,mailbox`), `FORGESRE_LLM_THREADS`, `FORGESRE_DATA` | ignored |
 | `config/forgesre.yml` | `ai.enabled`, `ai.llm.mode` / `url` / `model` / `timeout_seconds` | ignored |
 | `config/forgesre.example.yml` | Template only | committed |
 | `docker-compose.yml` | Service `llm` under Compose **profile `ai`**, host network, port **8088** | committed |
@@ -281,7 +239,7 @@ What the container runs:
 
 - Image `ghcr.io/ggml-org/llama.cpp:server`
 - Host network, bind **127.0.0.1:8088** (not published to the laptop; Core on the same VM talks to it)
-- `-m /models/${FORGESRE_LLM_GGUF:-model.gguf} -c ${FORGESRE_LLM_CTX:-8192} -t $FORGESRE_LLM_THREADS`
+- `-m /models/model.gguf -c 8192 -t $FORGESRE_LLM_THREADS`
 - Health: `curl -f http://127.0.0.1:8088/v1/models`
 
 `.env`:
@@ -289,8 +247,6 @@ What the container runs:
 ```bash
 COMPOSE_PROFILES=ai
 FORGESRE_LLM_THREADS=8
-# FORGESRE_LLM_GGUF=model.gguf    # unset still means model.gguf
-# FORGESRE_LLM_CTX=8192           # light models write 4096
 ```
 
 `./forgesre fetch-llm` sets threads to `nproc - 2` if the variable is missing. Raise or lower it if the VM is CPU-starved (Prometheus/Grafana share the same CPUs). Recreate `llm` after changing threads:
@@ -401,18 +357,17 @@ docker compose logs --tail=50 core | grep "/ai"
 ./forgesre logs core
 ```
 
-llama.cpp should show the GGUF path `/models/${FORGESRE_LLM_GGUF:-model.gguf}` and eventually listening on `127.0.0.1:8088`. Core should show `openai-compatible` / `forgerca-llm` after a successful rewrite, not a traceback.
+llama.cpp should show the GGUF path `/models/model.gguf` and eventually listening on `127.0.0.1:8088`. Core should show `openai-compatible` / `forgerca-llm` after a successful rewrite, not a traceback.
 
 ### 8.4 Config on disk (not secrets passwords)
 
 ```bash
 grep -nE 'llm|8088|model|COMPOSE_PROFILES|FORGESRE_LLM' .env config/forgesre.yml 2>/dev/null
 ./forgesre config
-./forgesre fetch-llm --list
-ls -lh "${FORGESRE_DATA:-./data}/models/"
+ls -lh "${FORGESRE_DATA:-./data}/models/model.gguf"
 ```
 
-You want `COMPOSE_PROFILES` containing `ai`, `ai.enabled: true`, `ai.llm.mode: bundled` (or `external` + your URL), and the **active** GGUF large enough (see `--list`). Do not paste `secrets/secrets.env` into tickets.
+You want `COMPOSE_PROFILES` containing `ai`, `ai.enabled: true`, `ai.llm.mode: bundled` (or `external` + your URL), and a GGUF larger than 1 GB. Do not paste `secrets/secrets.env` into tickets.
 
 ### 8.5 Rebuild Core after Python / compose changes
 
@@ -470,13 +425,13 @@ docker compose exec -T core python -c "import sys; print('\n'.join(sys.path))"
 |---|---|
 | `llm: disabled` / ForgeAI red | `ai.enabled` is false or `mode: disabled`. Enable YAML, recreate Core. Or run `./forgesre fetch-llm` |
 | `curl :8088` connection refused | Profile not `ai`, or container still loading the GGUF. `docker compose --profile ai up -d llm` and wait; watch `logs llm` |
-| Health `"Status":"unhealthy"` | GGUF missing, curl healthcheck cannot reach `:8088`. `docker inspect` the Test field; `./forgesre fetch-llm --list` |
-| `/v1/models` ok, chat hangs | CPU 14B is slow or still loading layers. Follow `docker compose logs -f llm`. Do not `compose down`. Try `--model qwen3-1.7b` |
-| Doctor `llm: error` after many minutes | GGUF missing/corrupt, OOM, or image pull failed. `./forgesre fetch-llm --list` |
-| Rewrite never finishes | CPU 14B is slow. Check `./forgesre jobs`. Raise `timeout_seconds` (default 90; 14B CPU may need 300–600), recreate Core. Or switch to `qwen3-1.7b` / `qwen2.5-1.5b`. Lower `FORGESRE_LLM_THREADS` if the VM is thrashing |
+| Health `"Status":"unhealthy"` | GGUF missing, curl healthcheck cannot reach `:8088`. `docker inspect` the Test field; `ls -lh data/models/model.gguf` |
+| `/v1/models` ok, chat hangs | CPU 14B is slow or still loading layers. Follow `docker compose logs -f llm`. Do not `compose down` |
+| Doctor `llm: error` after many minutes | GGUF missing/corrupt (file smaller than 1 GB), OOM, or image pull failed. `ls -lh data/models/model.gguf` |
+| Rewrite never finishes | CPU 14B is slow. Check `./forgesre jobs`. Raise `timeout_seconds` (default 90; 14B CPU may need 300–600), recreate Core. Lower `FORGESRE_LLM_THREADS` if the VM is thrashing |
 | `LLM returned text that was not JSON` | Model ignored the schema. Builtin ForgeRCA stays. Keep Qwen Instruct; do not swap a base (non-instruct) GGUF |
 | HTTP 400 from llama.cpp | Core already retries without extra template kwargs. Rebuild Core if you are on an old image |
-| Hugging Face download fails | Copy the catalog filename onto the VM (scp), then `./forgesre fetch-llm use ID --offline` |
+| Hugging Face download fails | Copy `model.gguf` onto the VM (scp), then `./forgesre fetch-llm --offline` |
 | Re-install “to add AI” wiped users | Never `./install.sh` on a live box. Use `./forgesre fetch-llm` |
 | Changed `llm.py` but Core ignores it | `docker compose build core && docker compose up -d core` — the container does not bind-mount that file in production |
 
@@ -485,7 +440,6 @@ docker compose exec -T core python -c "import sys; print('\n'.join(sys.path))"
 ## 10. What this version does not do
 
 - No GPU compose profile, no CUDA flags in the default `llm` service
-- Health UI lists the catalog; **switching** is still `./forgesre fetch-llm use` (Core has `.env` read-only and no Docker socket)
+- No multi-model picker in the UI
 - No cloud provider as a supported product path
-- Ollama is not the product default (`ai.llm.mode: external` remains an operator YAML choice)
 - AI never executes the recommended action
