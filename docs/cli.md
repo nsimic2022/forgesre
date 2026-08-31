@@ -179,7 +179,7 @@ Full implementation guide (including health inspect and `/v1/chat/completions`):
 
 ```bash
 ./forgesre fetch-llm
-# default is Qwen2.5-1.5B Q4_K_M (~1.1 GB). Optional larger: wget Qwen3-4B into data/models/model.gguf, then:
+# lab 8 GB RAM: wget Qwen3-4B into data/models/model.gguf, then:
 ./forgesre fetch-llm --offline
 docker compose --profile ai up -d llm
 docker compose ps llm

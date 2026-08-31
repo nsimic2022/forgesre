@@ -816,7 +816,7 @@ Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critica
 ./forgesre demo-rca             # filesystem RCA demo gauge
 ./forgesre demo-reset           # lower demo gauges
 ./forgesre secrets-check
-./forgesre fetch-llm            # GGUF download (~1.1 GB, not in git)
+./forgesre fetch-llm            # GGUF download (~9 GB, not in git)
 ./forgesre backup
 ./forgesre backup --no-secrets
 ./forgesre backup --include-models

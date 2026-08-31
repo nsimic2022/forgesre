@@ -31,19 +31,19 @@ If the rewrite fails or times out, the incident keeps the ForgeRCA result and re
 
 ## 2. Hardware
 
-Bundled default is **Qwen2.5-1.5B-Instruct Q4_K_M** (~1.1 GB on disk). llama.cpp runs on **CPU** (no GPU required, nested virtualization not required). Same ChatML template as the old 14B pin — no extra `--jinja` flag.
+Bundled default is **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB on disk). llama.cpp runs on **CPU** (no GPU required, nested virtualization not required).
 
-| Resource | 1.5B Q4 (default `fetch-llm`) | 4B Q4 (optional wget, see §3.C) |
+| Resource | 14B Q4 (default `fetch-llm`) | 4B Q4 (lab wget, see §3.C) |
 |---|---|---|
-| Disk for GGUF | ~1.1 GB | ~2.5 GB |
-| RAM with the rest of the stack | 8 GB is enough (~2–4 GB extra for the model) | 8 GB is enough |
-| One rewrite on CPU | a few seconds to well under 90s after load | usually under a minute after load |
+| Disk for GGUF | ~9 GB | ~2.5 GB |
+| RAM with the rest of the stack | 16 GB comfortable | 8 GB is enough |
+| One rewrite on CPU | 1–10 minutes | usually under a minute after load |
 
-vCPU: 4 is better than 2. Threads default to `nproc - 2` (min 2). First llama.cpp load after `up -d llm` is typically under a minute for 1.5B (GGUF mmap).
+vCPU: 4 is better than 2. Threads default to `nproc - 2` (min 2). First llama.cpp load after `up -d llm` is minutes (GGUF mmap).
 
-A **4 GB** lab VM should not run the GGUF plus the full stack. Leave `ai.enabled: false` and use ForgeRCA only.
+A **4 GB** lab VM should not run either GGUF. Leave `ai.enabled: false` and use ForgeRCA only.
 
-Context window in Compose is **4096** tokens (`-c 4096`) — enough for a short RCA rewrite (`max_tokens` 512). Core waits **`ai.llm.timeout_seconds`** (default **90**). Do not raise this back to 600s: one worker thread must not hold the queue for minutes. The old 14B Q4 (~9 GB) was too slow for that budget.
+Context window in Compose is **8192** tokens (`-c 8192`). Core waits **`ai.llm.timeout_seconds`** (default **90**, lab 4B) for one completion. Slow 14B CPU rewrites may need a higher value in `config/forgesre.yml`.
 
 ---
 
@@ -64,15 +64,7 @@ git pull origin main
 
 `./forgesre fetch-llm` (same as `scripts/fetch-llm.sh`):
 
-Pinned default (not stored in git):
-
-```text
-https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf
-```
-
-Saved on disk as `$FORGESRE_DATA/models/model.gguf` (the Hugging Face filename is only the download source).
-
-1. Downloads the GGUF to `$FORGESRE_DATA/models/model.gguf` (default `./data/models/model.gguf`) if a file larger than 400 MB is not already there. If that path is still a 14B/4B GGUF, **delete it first** or the script will skip.
+1. Downloads the GGUF to `$FORGESRE_DATA/models/model.gguf` (default `./data/models/model.gguf`) if a file larger than 1 GB is not already there
 2. Sets `COMPOSE_PROFILES` to include `ai`
 3. Writes `FORGESRE_LLM_THREADS` if missing
 4. Sets `ai.enabled: true` and `ai.llm.mode: bundled` in `config/forgesre.yml`
@@ -113,7 +105,7 @@ ls -lah ./data/models/
 
 The filename on disk **must** be `model.gguf` (the container argument is `-m /models/model.gguf`). A `wget -O model.gguf` in the clone root does **not** count — write into `data/models/`.
 
-**Optional larger model** — Qwen3-4B Q4_K_M (~2.5 GB) if JSON quality on 1.5B is weak. Default `fetch-llm` is already 1.5B (fits 8 GB RAM). Then enable the profile (does not regenerate secrets):
+**Lab / 8 GB RAM** — Qwen3-4B Q4_K_M (~2.5 GB), then enable the profile (does not regenerate secrets):
 
 ```bash
 mkdir -p data/models
@@ -123,7 +115,7 @@ ls -lah data/models/model.gguf
 ./forgesre fetch-llm --offline
 ```
 
-`--offline` skips Hugging Face; the file must already exist and be larger than 400 MB. It still sets `COMPOSE_PROFILES=ai`, `ai.enabled` / `ai.llm.mode: bundled` in **`config/forgesre.yml`** (not the example template), starts `llm`, and recreates Core.
+`--offline` skips Hugging Face; the file must already exist and be larger than 1 GB. It still sets `COMPOSE_PROFILES=ai`, `ai.enabled` / `ai.llm.mode: bundled` in **`config/forgesre.yml`** (not the example template), starts `llm`, and recreates Core.
 
 Same download through `fetch-llm` (curl with resume) instead of wget:
 
@@ -190,7 +182,7 @@ ForgeSRE is not a hosted OpenAI client. Do not put cloud API keys in `secrets/se
 
 | File | What to set | Git |
 |---|---|---|
-| `data/models/model.gguf` | Weights. ~1.1 GB (1.5B Q4) | ignored |
+| `data/models/model.gguf` | Weights. ~9 GB | ignored |
 | `.env` | `COMPOSE_PROFILES=ai` (or `ai,mailbox`), `FORGESRE_LLM_THREADS`, `FORGESRE_DATA` | ignored |
 | `config/forgesre.yml` | `ai.enabled`, `ai.llm.mode` / `url` / `model` / `timeout_seconds` | ignored |
 | `config/forgesre.example.yml` | Template only | committed |
@@ -247,7 +239,7 @@ What the container runs:
 
 - Image `ghcr.io/ggml-org/llama.cpp:server`
 - Host network, bind **127.0.0.1:8088** (not published to the laptop; Core on the same VM talks to it)
-- `-m /models/model.gguf -c 4096 -t $FORGESRE_LLM_THREADS`
+- `-m /models/model.gguf -c 8192 -t $FORGESRE_LLM_THREADS`
 - Health: `curl -f http://127.0.0.1:8088/v1/models`
 
 `.env`:
@@ -275,7 +267,7 @@ docker compose --profile ai up -d --force-recreate llm
    - `recommended_action`
    - `limitations` (array of strings)
 4. Shell-like strings in the action (`sudo`, `ssh`, `rm -`, …) are rewritten to **RECOMMENDED ACTION (not executed)**.
-5. Provider becomes `forgerca-llm`. Refresh `/ai/INC-…`. ForgeAI pill goes **green**. Yellow = still running (usually seconds, timeout **90s**). Red = off or failed.
+5. Provider becomes `forgerca-llm`. Refresh `/ai/INC-…`. ForgeAI pill goes **green**. Yellow = still running (minutes on CPU). Red = off or failed.
 
 Alertmanager ingest also enqueues investigate; the webhook does **not** wait on the LLM.
 
@@ -331,7 +323,7 @@ docker compose ps -q llm | xargs -r docker inspect --format='{{json .State.Healt
 docker compose ps -q llm | xargs -r docker inspect --format='{{json .Config.Healthcheck.Test}}'
 ```
 
-Healthy looks like `"Status":"healthy"` and the test should be `curl -f http://127.0.0.1:8088/v1/models`. `starting` for a short while after `up -d llm` is normal (GGUF load). `unhealthy` after that → logs, then GGUF size.
+Healthy looks like `"Status":"healthy"` and the test should be `curl -f http://127.0.0.1:8088/v1/models`. `starting` for several minutes after `up -d llm` is normal (GGUF load). `unhealthy` after that → logs, then GGUF size.
 
 ### 8.2 HTTP on :8088
 
@@ -342,7 +334,7 @@ curl -sS http://127.0.0.1:8088/health
 
 A JSON list with a `data[0].id` means llama.cpp is serving. Empty / connection refused → container down or still loading.
 
-`GET /v1/chat/completions` without a body is **not** a real rewrite. Core always **POST**s. Smoke the same path the client uses (short timeout; 1.5B Q4 should answer well under 90s):
+`GET /v1/chat/completions` without a body is **not** a real rewrite. Core always **POST**s. Smoke the same path the client uses (short timeout; 14B may still take a while):
 
 ```bash
 curl -sS -m 30 http://127.0.0.1:8088/v1/chat/completions \
@@ -375,7 +367,7 @@ grep -nE 'llm|8088|model|COMPOSE_PROFILES|FORGESRE_LLM' .env config/forgesre.yml
 ls -lh "${FORGESRE_DATA:-./data}/models/model.gguf"
 ```
 
-You want `COMPOSE_PROFILES` containing `ai`, `ai.enabled: true`, `ai.llm.mode: bundled` (or `external` + your URL), and a GGUF larger than 400 MB (~1.1 GB for the default 1.5B). Do not paste `secrets/secrets.env` into tickets.
+You want `COMPOSE_PROFILES` containing `ai`, `ai.enabled: true`, `ai.llm.mode: bundled` (or `external` + your URL), and a GGUF larger than 1 GB. Do not paste `secrets/secrets.env` into tickets.
 
 ### 8.5 Rebuild Core after Python / compose changes
 
@@ -434,9 +426,9 @@ docker compose exec -T core python -c "import sys; print('\n'.join(sys.path))"
 | `llm: disabled` / ForgeAI red | `ai.enabled` is false or `mode: disabled`. Enable YAML, recreate Core. Or run `./forgesre fetch-llm` |
 | `curl :8088` connection refused | Profile not `ai`, or container still loading the GGUF. `docker compose --profile ai up -d llm` and wait; watch `logs llm` |
 | Health `"Status":"unhealthy"` | GGUF missing, curl healthcheck cannot reach `:8088`. `docker inspect` the Test field; `ls -lh data/models/model.gguf` |
-| `/v1/models` ok, chat hangs | CPU is busy or still loading layers. Follow `docker compose logs -f llm`. Do not `compose down` |
-| Doctor `llm: error` after many minutes | GGUF missing/corrupt (file smaller than 400 MB), OOM, or image pull failed. `ls -lh data/models/model.gguf` |
-| Rewrite never finishes | Check `./forgesre jobs`. Timeout stays **90s** (do not raise to 600). Lower `FORGESRE_LLM_THREADS` if the VM is thrashing. If `model.gguf` is still a 14B file, delete it and `./forgesre fetch-llm` |
+| `/v1/models` ok, chat hangs | CPU 14B is slow or still loading layers. Follow `docker compose logs -f llm`. Do not `compose down` |
+| Doctor `llm: error` after many minutes | GGUF missing/corrupt (file smaller than 1 GB), OOM, or image pull failed. `ls -lh data/models/model.gguf` |
+| Rewrite never finishes | CPU 14B is slow. Check `./forgesre jobs`. Raise `timeout_seconds` (default 90; 14B CPU may need 300–600), recreate Core. Lower `FORGESRE_LLM_THREADS` if the VM is thrashing |
 | `LLM returned text that was not JSON` | Model ignored the schema. Builtin ForgeRCA stays. Keep Qwen Instruct; do not swap a base (non-instruct) GGUF |
 | HTTP 400 from llama.cpp | Core already retries without extra template kwargs. Rebuild Core if you are on an old image |
 | Hugging Face download fails | Copy `model.gguf` onto the VM (scp), then `./forgesre fetch-llm --offline` |
