@@ -142,7 +142,7 @@ Guided wizard:
 | Flag | Meaning |
 |---|---|
 | `--non-interactive` | No prompts; use flags/defaults |
-| `--profile standard\|full-ai` | Standard = no LLM download. `full-ai` downloads ~9 GB GGUF and starts llama.cpp |
+| `--profile standard\|full-ai` | Standard = no LLM download. `full-ai` downloads ~1.1 GB GGUF and starts llama.cpp |
 | `--timezone ZONE` | Default `Europe/Belgrade` |
 | `--data-dir PATH` | Default `./data` |
 | `--port N` | Core UI/API port (default `8080`) |
@@ -489,7 +489,7 @@ Platform backup files: `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (o
 
 ForgeRCA (Python) always runs. The local model only **rewrites prose**. Full implementation guide: [`llm.md`](llm.md) (hardware, `fetch-llm`, offline GGUF, external `/v1` server, jobs, debug CLI).
 
-Not stored in git. `./forgesre fetch-llm` pulls Qwen2.5-14B-Instruct Q4_K_M (~9 GB) into `$FORGESRE_DATA/models/model.gguf`, sets `COMPOSE_PROFILES=ai`, and starts llama.cpp on `127.0.0.1:8088`.
+Not stored in git. `./forgesre fetch-llm` pulls Qwen2.5-1.5B-Instruct Q4_K_M (~1.1 GB) into `$FORGESRE_DATA/models/model.gguf`, sets `COMPOSE_PROFILES=ai`, and starts llama.cpp on `127.0.0.1:8088`.
 
 ```bash
 ./forgesre fetch-llm
@@ -499,7 +499,7 @@ curl -fsS http://127.0.0.1:8088/v1/models
 ./forgesre test
 ```
 
-Need 16 GB RAM for the default 14B GGUF, or ~8 GB if you wget Qwen3-4B into `data/models/model.gguf` (see [`llm.md`](llm.md) §3.C). Without a model, ForgeRCA still runs. Cloud LLMs are not required. Do not re-run `./install.sh` just to add AI.
+Need about **2–4 GB extra RAM** for the default 1.5B GGUF plus the rest of the stack (8 GB VM is enough). Rewrite-only; Core waits **90s**. If `data/models/model.gguf` is still a 14B/4B file, delete it and run `fetch-llm` again (the script skips when a large file is already there). Optional larger wget: Qwen3-4B into `data/models/model.gguf` (see [`llm.md`](llm.md) §3.C). Without a model, ForgeRCA still runs. Cloud LLMs are not required. Do not re-run `./install.sh` just to add AI.
 
 ---
 

@@ -55,6 +55,7 @@ def test_llm_guide_and_fetch_llm_help():
     assert "/v1/chat/completions" in text
     assert "docker compose logs -f llm" in text
     assert "Qwen3-4B-Q4_K_M.gguf" in text
+    assert "qwen2.5-1.5b-instruct-q4_k_m.gguf" in text
     assert "wget -O data/models/model.gguf" in text
     assert "/health" in text
     help_txt = subprocess.check_output(
@@ -63,12 +64,49 @@ def test_llm_guide_and_fetch_llm_help():
     assert "--download-only" in help_txt
     assert "docs/llm.md" in help_txt
     assert "Qwen3-4B" in help_txt
+    assert "Qwen2.5-1.5B-Instruct" in help_txt
     script_help = subprocess.check_output(
         ["bash", str(ROOT / "scripts" / "fetch-llm.sh"), "--help"], text=True
     )
-    assert "Qwen2.5-14B-Instruct" in script_help
+    assert "Qwen2.5-1.5B-Instruct" in script_help
     assert "Qwen3-4B" in script_help
     assert "Do not re-run ./install.sh" in script_help
+
+
+def test_fetch_llm_default_url_matches_docs_and_compose():
+    """Pinned Hugging Face URL/filename must match fetch-llm.sh, docs, and compose context."""
+    script = (ROOT / "scripts" / "fetch-llm.sh").read_text(encoding="utf-8")
+    url = None
+    filename = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+    for line in script.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("DEFAULT_URL="):
+            url = stripped.split("=", 1)[1].strip().strip('"')
+            break
+    assert url, "scripts/fetch-llm.sh must set DEFAULT_URL"
+    assert filename in url
+    assert url.startswith(
+        "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
+    )
+    llm_doc = (ROOT / "docs" / "llm.md").read_text(encoding="utf-8")
+    assert url in llm_doc
+    assert filename in llm_doc
+    assert "Qwen2.5-1.5B-Instruct" in llm_doc
+    assert "-c 4096" in llm_doc
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    llm_block = compose.split("  llm:", 1)[1].split("\n  mailserver:", 1)[0]
+    assert '- "4096"' in llm_block
+    assert "/models/model.gguf" in llm_block
+    assert "8088" in llm_block
+    example = (ROOT / "config" / "forgesre.example.yml").read_text(encoding="utf-8")
+    assert "timeout_seconds: 90" in example
+    assert "enabled: false" in example
+    install_help = (ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
+    assert "Qwen2.5-1.5B" in install_help
+    assert "Qwen2.5-14B" not in install_help
+    admin = (ROOT / "frontend" / "templates" / "admin.html").read_text(encoding="utf-8")
+    assert "1.5B GGUF" in admin
+    assert "14B GGUF" not in admin
 
 
 def test_root_test_sh_and_scripts_test_sh_exist():

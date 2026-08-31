@@ -269,7 +269,7 @@ services:
       - --port
       - "8088"
       - -c
-      - "8192"
+      - "4096"
       - -t
       - "${FORGESRE_LLM_THREADS:-8}"
     volumes:

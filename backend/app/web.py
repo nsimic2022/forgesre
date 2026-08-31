@@ -212,7 +212,7 @@ def tool_status(investigation, pending: bool, llm_error: bool = False) -> dict:
     if provider == "forgerca-llm":
         ai_class, ai_hint = "ok", "Local LLM rewrote the prose. Facts stay from ForgeRCA."
     elif pending:
-        ai_class, ai_hint = "warn", "ForgeAI rewrite is running. Can take several minutes on CPU."
+        ai_class, ai_hint = "warn", "ForgeAI rewrite is running. Usually seconds on the 1.5B CPU model (timeout 90s)."
     elif llm_error:
         ai_class, ai_hint = "crit", "ForgeAI rewrite failed. Showing ForgeRCA builtin."
     elif not enabled:

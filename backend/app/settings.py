@@ -69,7 +69,7 @@ class Settings:
 
     @property
     def llm_timeout(self) -> float:
-        """Seconds to wait for llama.cpp. Lab 4B default 90; slow 14B CPU may need more."""
+        """Seconds to wait for llama.cpp. Default 90 for the 1.5B Q4 rewrite; do not block the worker for minutes."""
         try:
             raw = ((self.yaml.get("ai") or {}).get("llm") or {}).get("timeout_seconds")
             if raw is None:
