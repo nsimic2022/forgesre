@@ -1,4 +1,4 @@
-# Session handoff — 27 August 2026
+# Session handoff — 31 August 2026
 
 This file is a **session handoff for the next coding agent or contributor**. It is not an operator manual. Operators start at [install and config](install-config.md) and the [operator handbook](operator-handbook.md).
 
@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Thursday 27 August 2026.** Operator N (Serbian) added a real Linux host (`10.223.9.86`, node_exporter `:9100`). `./forgesre verify` showed Class **unknown** and PORT **SKIP** (`no scrape port`) even though ICMP passed and `/metrics` was live. node_exporter logged `write: broken pipe` toward the appliance (`10.223.9.88`).
+**Monday 31 August 2026.** Operator N (Serbian) asked for **Ollama** and said **do not change code yet** — they will decide later whether any product change is needed. Another agent had already merged a llama.cpp GGUF swap to `main` (`cc6a9990636a29a0a7c203b5c6e676c09fa5b234`, branch `cursor/small-fast-llm-05f8`, merge `--no-ff` because `create_pr` 403): Qwen2.5-14B-Instruct Q4_K_M (~9 GB) → Qwen2.5-1.5B-Instruct Q4_K_M (~1.1 GB), compose context 4096. N did not approve that code change. This session **reverts only that GGUF pin**. NetBox tags and verify `:9100` work stay on `main`.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -42,7 +42,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **332 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x.
+Both runs: **332 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x. (Count recorded after the double run on this revert branch.)
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -50,12 +50,10 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-1. **Verify + Add probe default exporter ports.** An inventory row with an IP but empty `scrape_address` and type Unknown/Auto/empty used to SKIP PORT (`no scrape port (set scrape_address or type)`). Class came only from the saved type, so ICMP green + live node_exporter still looked like “not Linux :9100”. Verify (and ping/reachability) now GET `:9100` and `:9182` on that IP, same as Add Auto / ad-hoc `./forgesre ping <ip>`.
-2. **Persist classification.** When live `/metrics` has `node_` / `windows_`, verify saves `Linux Server` `:9100` or `Windows Server` `:9182` so Prometheus HTTP SD can scrape (wait ~30s, `./forgesre sd`). GUI `run_asset_verify` writes the row; host `./forgesre verify` POSTs the same fields (no sqlalchemy on the host).
-3. **Broken pipe on detect.** `fetch_metrics` used to `read(4096)` / `read(2048)` and close. node_exporter `/metrics` often starts with `go_*` (more than 4 KiB) then `node_*`. Aborting mid-body is `error encoding and sending metric family: write tcp … broken pipe`. Detect now reads until `node_` / `windows_` (up to 256 KiB preview) and **drains** the rest. Timeout 3s. Prometheus inventory scrape is a different client (default `scrape_timeout` 10s) — a huge `/metrics` vs a short scrape timeout is ops, not a new exporter. Inventory HTTP SD still lists only rows **with** `scrape_address`; a host Prometheus scraped that was not in inventory would be a separate bug.
-4. **Docs = code.** [cli.md](cli.md), [operator-handbook.md](operator-handbook.md), Add form, Verify page.
-
-Do **not** treat demo `forge-demo-*` or discovery seed `10.20.30.41` as proof.
+1. **Reverted merge `cc6a999` (`git revert -m 1`).** Bundled GGUF pin restored to **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB). Default URL is again `https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m.gguf`. Compose llama.cpp context is **`-c 8192`** again. Docs, `fetch-llm`, example.yml, install wizard, and appliance tests match the restored pin.
+2. **Ollama is not a product default.** It remains an operator YAML choice: `ai.enabled: true`, `ai.llm.mode: external`, `url: http://127.0.0.1:11434/v1` (and a real Ollama model id). No compose/Ollama service, no default-url change. N can still point live `config/forgesre.yml` at Ollama without this repo switching defaults.
+3. **Did not touch** NetBox image tags (`netboxcommunity/netbox:v4.6.9-5.0.2`) or the verify default-port work (`:9100` / `:9182`).
+4. **Did not run `./install.sh`.** Did not implement Ollama as default. The 1.5B GGUF swap stays undone until N asks.
 
 ---
 
@@ -67,15 +65,19 @@ Do **not** run `./install.sh`.
 git pull origin main && ./forgesre update
 ```
 
-Then either **Verify** the Linux row in the UI or:
+The 1.5B GGUF swap is undone. Bundled `./forgesre fetch-llm` is 14B again. If N wants **Ollama** instead of the bundled llama.cpp GGUF, leave `COMPOSE_PROFILES` without `ai` and set live YAML (gitignored) to:
 
-```bash
-./forgesre verify <asset-id-or-ip>
+```yaml
+ai:
+  enabled: true
+  llm:
+    mode: external
+    url: http://127.0.0.1:11434/v1
+    model: <ollama-model-id>
+    timeout_seconds: 90
 ```
 
-Expect Class **linux**, PORT/FAMILY **PASS** if `:9100/metrics` has `node_`. Type + scrape are saved. Wait one Prometheus HTTP SD refresh (~30s), then `./forgesre sd`. Hard-refresh the browser.
-
-If type is already Linux but scrape was left blank, verify fills `<ip>:9100`. You can still set scrape by hand on Edit.
+Then recreate Core (`docker compose up -d --force-recreate core`) and `./forgesre doctor`. That is an operator config, not a product default. Hard-refresh the browser.
 
 ---
 
@@ -104,7 +106,8 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Doctor labels: **Core API** (`doctor.sh` health curl) vs **Core (container)** (payload `/api/v1/health` probe). Do not rename them back to a single “Core”.
 - The lab SMTP catcher is gone. Do not add one.
 - Verify hops: ICMP, PORT, FAMILY, PROM, TARGET, SERIES, AM, CORE, RCA, LLM. LLM SKIP: verify does not invoke the LLM. Reachability: ping **green** ICMP ok; **yellow** ICMP fail but exporter/SNMP ok; **red** both fail. ICMP is not TCP 22.
-- Linux metrics = node_exporter **:9100**. Windows = windows_exporter **:9182**. Network = snmp_exporter :9116 (Prom still scrapes it). Network is not guessed from missing HTTP.
+- Linux metrics = node_exporter **:9100**. Windows = windows_exporter **:9182**. Network = snmp_exporter :9116 (Prom still scrapes it). Network is not guessed from missing HTTP. Verify with empty `scrape_address` probes those default exporter ports (already on `main` from `e95280a`).
+- Bundled LLM pin = **Qwen2.5-14B-Instruct Q4_K_M** via `./forgesre fetch-llm`. llama.cpp on `:8088`. Compose **`-c 8192`**. Timeout **90s**. Do **not** swap the default to 1.5B and do **not** switch the product default runtime to Ollama. Ollama remains YAML `ai.llm.mode: external` + `url: http://127.0.0.1:11434/v1`.
 
 ---
 
@@ -137,6 +140,8 @@ Do not start these unless N asks:
 - A second log stack (host Alloy for every asset).
 - NetBox Docker Hub / GHCR tag churn (separate).
 - Rewriting discovery as nmap.
+- Making Ollama the product default (N will decide later).
+- Re-pinning bundled `fetch-llm` to Qwen2.5-1.5B or another GGUF.
 
 ---
 
@@ -149,5 +154,5 @@ Do not start these unless N asks:
 - Grafana deep-link from an asset is still later.
 - Prometheus global rules may still fire for a host whose ForgeSRE alarm is disabled or raised; ForgeSRE will not open the incident when the webhook carries the value.
 - Alloy still only ships appliance Core logs as `forge-demo-01`. Real hosts have no Loki until that changes. Limitation: **no host logs shipped**.
-- LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90) after reports in that pass have already run.
+- LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90) after reports in that pass have already run. 14B Q4 on CPU may not finish inside 90s; that is why N asked about Ollama / a smaller model — wait for N before changing the pin again.
 - `config/forgesre.yml` on a live VM is gitignored; a 600s timeout already written there is not overwritten by `update`. Lower it by hand if the worker still blocks.
