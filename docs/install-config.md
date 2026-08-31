@@ -142,7 +142,7 @@ Guided wizard:
 | Flag | Meaning |
 |---|---|
 | `--non-interactive` | No prompts; use flags/defaults |
-| `--profile standard\|full-ai` | Standard = no LLM download. `full-ai` downloads the default ~8.4 GB GGUF and starts llama.cpp |
+| `--profile standard\|full-ai` | Standard = no LLM download. `full-ai` downloads ~9 GB GGUF and starts llama.cpp |
 | `--timezone ZONE` | Default `Europe/Belgrade` |
 | `--data-dir PATH` | Default `./data` |
 | `--port N` | Core UI/API port (default `8080`) |
@@ -331,8 +331,6 @@ COMPOSE_PROFILES=          # empty | ai | mailbox | ai,mailbox
 NETBOX_PORT=8001
 NETBOX_URL=http://127.0.0.1:8001
 FORGESRE_LLM_THREADS=8     # llama.cpp CPU threads (fetch-llm sets nproc-2)
-# FORGESRE_LLM_GGUF=model.gguf   # unset still means /models/model.gguf
-# FORGESRE_LLM_CTX=8192          # fetch-llm use writes 4096 for light models
 ```
 
 Start the bundled LLM container later with `COMPOSE_PROFILES=ai` (or `./forgesre fetch-llm`) then:
@@ -491,20 +489,17 @@ Platform backup files: `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (o
 
 ForgeRCA (Python) always runs. The local model only **rewrites prose**. Full implementation guide: [`llm.md`](llm.md) (hardware, `fetch-llm`, offline GGUF, external `/v1` server, jobs, debug CLI).
 
-Not stored in git. `./forgesre fetch-llm` pulls the catalog default **Qwen2.5-14B-Instruct Q4_K_M** (~8.4 GB) into `$FORGESRE_DATA/models/model.gguf`, sets `COMPOSE_PROFILES=ai`, and starts llama.cpp on `127.0.0.1:8088`. Unset `FORGESRE_LLM_GGUF` still loads that path.
+Not stored in git. `./forgesre fetch-llm` pulls Qwen2.5-14B-Instruct Q4_K_M (~9 GB) into `$FORGESRE_DATA/models/model.gguf`, sets `COMPOSE_PROFILES=ai`, and starts llama.cpp on `127.0.0.1:8088`.
 
 ```bash
-./forgesre fetch-llm --list
 ./forgesre fetch-llm
-./forgesre fetch-llm --model qwen3-1.7b
-./forgesre fetch-llm --model qwen2.5-1.5b
 docker compose --profile ai up -d llm
 curl -fsS http://127.0.0.1:8088/v1/models
 ./forgesre doctor          # llm: ok when llama.cpp answers :8088
 ./forgesre test
 ```
 
-Need 16 GB RAM for the default 14B GGUF, or ~8 GB for `qwen3-1.7b` / `qwen2.5-1.5b` (see [`llm.md`](llm.md) §2–§3.C). Without a model, ForgeRCA still runs. Cloud LLMs are not required. Do not re-run `./install.sh` just to add AI.
+Need 16 GB RAM for the default 14B GGUF, or ~8 GB if you wget Qwen3-4B into `data/models/model.gguf` (see [`llm.md`](llm.md) §3.C). Without a model, ForgeRCA still runs. Cloud LLMs are not required. Do not re-run `./install.sh` just to add AI.
 
 ---
 
