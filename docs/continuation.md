@@ -17,7 +17,9 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 31 August 2026.** Operator N (Serbian) asked for **Ollama** and said **do not change code yet** — they will decide later whether any product change is needed. Another agent had already merged a llama.cpp GGUF swap to `main` (`cc6a9990636a29a0a7c203b5c6e676c09fa5b234`, branch `cursor/small-fast-llm-05f8`, merge `--no-ff` because `create_pr` 403): Qwen2.5-14B-Instruct Q4_K_M (~9 GB) → Qwen2.5-1.5B-Instruct Q4_K_M (~1.1 GB), compose context 4096. N did not approve that code change. This session **reverts only that GGUF pin**. NetBox tags and verify `:9100` work stay on `main`.
+**Monday 31 August 2026.** Operator N asked to put everything back as it was **before this LLM session** (before the 14B→1.5B swap and especially before the model catalog/switcher), then make **only** a threads change in their local `.env` if needed. They typed `FORGESE_LLM_THREADS=8` (typo). The real compose key is **`FORGESRE_LLM_THREADS`**.
+
+**LLM catalog experiment reverted.** Operator sets threads in local `.env`. Compose already interpolates `${FORGESRE_LLM_THREADS:-8}`; nothing was committed to tracked example files for threads.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -42,18 +44,20 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **332 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x. (Count recorded after the double run on this revert branch.)
+Both runs: **332 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x. Count recorded after the double run on `cursor/revert-llm-catalog-05f8`.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
 ---
 
-## 3. Done today / on main
+## 3. Done today / on this branch
 
-1. **Reverted merge `cc6a999` (`git revert -m 1`).** Bundled GGUF pin restored to **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB). Default URL is again `https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m.gguf`. Compose llama.cpp context is **`-c 8192`** again. Docs, `fetch-llm`, example.yml, install wizard, and appliance tests match the restored pin.
-2. **Ollama is not a product default.** It remains an operator YAML choice: `ai.enabled: true`, `ai.llm.mode: external`, `url: http://127.0.0.1:11434/v1` (and a real Ollama model id). No compose/Ollama service, no default-url change. N can still point live `config/forgesre.yml` at Ollama without this repo switching defaults.
-3. **Did not touch** NetBox image tags (`netboxcommunity/netbox:v4.6.9-5.0.2`) or the verify default-port work (`:9100` / `:9182`).
-4. **Did not run `./install.sh`.** Did not implement Ollama as default. The 1.5B GGUF swap stays undone until N asks.
+1. **Reverted catalog merge `8a3e2c0` (`git revert -m 1`).** That merge (`cursor/llm-model-switch-05f8`, feature commits `68b3aa9` / `f46e289` / `82feca8`) added `./forgesre fetch-llm --list`, Health LLM picker, `backend/app/llm_catalog.py`, and optional 1.7B / 1.5B pins. Those are gone.
+2. **1.5B-only swap already undone on `main`.** `cc6a999` was reverted via `4ee1156` / merge `e44647a`. This session did not re-revert that.
+3. **Bundled llama.cpp is again** `-m /models/model.gguf`, `:8088`, `-c 8192`, `-t "${FORGESRE_LLM_THREADS:-8}"`. No `FORGESRE_LLM_GGUF` / `FORGESRE_LLM_CTX` interpolation.
+4. **Threads: no repo change.** Compose already reads the operator `.env`. `.env.example` already has `FORGESRE_LLM_THREADS=8`. Default if unset is 8. Did **not** commit `.env`. Did **not** add a threads line to tracked files.
+5. **Did not touch** NetBox image tags (`netboxcommunity/netbox:v4.6.9-5.0.2`) or the verify default-port work (`:9100` / `:9182`).
+6. **Did not** make Ollama the default. **Did not** treat `./install.sh` as an operator command. **Did not** commit GGUF weights. **Did not** put sqlalchemy on the host CLI.
 
 ---
 
@@ -65,19 +69,21 @@ Do **not** run `./install.sh`.
 git pull origin main && ./forgesre update
 ```
 
-The 1.5B GGUF swap is undone. Bundled `./forgesre fetch-llm` is 14B again. If N wants **Ollama** instead of the bundled llama.cpp GGUF, leave `COMPOSE_PROFILES` without `ai` and set live YAML (gitignored) to:
+Correct threads key in **local** (gitignored) `.env`:
 
-```yaml
-ai:
-  enabled: true
-  llm:
-    mode: external
-    url: http://127.0.0.1:11434/v1
-    model: <ollama-model-id>
-    timeout_seconds: 90
+```bash
+FORGESRE_LLM_THREADS=8
 ```
 
-Then recreate Core (`docker compose up -d --force-recreate core`) and `./forgesre doctor`. That is an operator config, not a product default. Hard-refresh the browser.
+Not `FORGESE_LLM_THREADS`. Then recreate llama.cpp:
+
+```bash
+docker compose up -d --force-recreate llm
+# or the same via:
+./forgesre update
+```
+
+If `.env` has no `FORGESRE_LLM_THREADS` line, compose already defaults to **8**, so `=8` matches the default. Catalog / Health model switcher is off `main`. Hard-refresh the browser.
 
 ---
 
@@ -107,7 +113,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - The lab SMTP catcher is gone. Do not add one.
 - Verify hops: ICMP, PORT, FAMILY, PROM, TARGET, SERIES, AM, CORE, RCA, LLM. LLM SKIP: verify does not invoke the LLM. Reachability: ping **green** ICMP ok; **yellow** ICMP fail but exporter/SNMP ok; **red** both fail. ICMP is not TCP 22.
 - Linux metrics = node_exporter **:9100**. Windows = windows_exporter **:9182**. Network = snmp_exporter :9116 (Prom still scrapes it). Network is not guessed from missing HTTP. Verify with empty `scrape_address` probes those default exporter ports (already on `main` from `e95280a`).
-- Bundled LLM pin = **Qwen2.5-14B-Instruct Q4_K_M** via `./forgesre fetch-llm`. llama.cpp on `:8088`. Compose **`-c 8192`**. Timeout **90s**. Do **not** swap the default to 1.5B and do **not** switch the product default runtime to Ollama. Ollama remains YAML `ai.llm.mode: external` + `url: http://127.0.0.1:11434/v1`.
+- Bundled LLM pin = **Qwen2.5-14B-Instruct Q4_K_M** via `./forgesre fetch-llm`. llama.cpp on `:8088`. Compose **`-m /models/model.gguf -c 8192 -t "${FORGESRE_LLM_THREADS:-8}"`**. Timeout **90s**. Do **not** restore the GGUF catalog / Health picker. Do **not** swap the default to 1.5B / 1.7B. Do **not** switch the product default runtime to Ollama. Ollama remains YAML `ai.llm.mode: external` + `url: http://127.0.0.1:11434/v1`. Threads are the operator’s `.env`, not a repo pin.
 
 ---
 
@@ -142,6 +148,7 @@ Do not start these unless N asks:
 - Rewriting discovery as nmap.
 - Making Ollama the product default (N will decide later).
 - Re-pinning bundled `fetch-llm` to Qwen2.5-1.5B or another GGUF.
+- Restoring the llama.cpp GGUF catalog / Health model switcher.
 
 ---
 
