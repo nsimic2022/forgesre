@@ -17,9 +17,9 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 31 August 2026.** Operator N asked to put everything back as it was **before this LLM session** (before the 14B→1.5B swap and especially before the model catalog/switcher), then make **only** a threads change in their local `.env` if needed. They typed `FORGESE_LLM_THREADS=8` (typo). The real compose key is **`FORGESRE_LLM_THREADS`**.
+**Monday 31 August 2026.** Operator N (Serbian) agreed: llama.cpp **prompt processing (prefill)** is not generation. Their Qwen3-4B on CPU is ~25–29 tok/s. A ~6157-token prompt ≈ 246s prefill, so `timeout_seconds: 300` leaves almost no time to generate → `cancel task` in `docker compose logs llm`. **Do not switch to a smaller model.** Node exporter does not talk to the LLM. Chain: Node Exporter → Prometheus → ForgeRCA gathers evidence → **large prompt** → Qwen3.
 
-**LLM catalog experiment reverted.** Operator sets threads in local `.env`. Compose already interpolates `${FORGESRE_LLM_THREADS:-8}`; nothing was committed to tracked example files for threads.
+Fix implemented in code: **shrink only the payload to `OpenAICompatibleLLM.complete_json` / `prompt_context`**. Builtin ForgeRCA stays first and keeps full facts/anomalies/hypotheses/evidence IDs on the incident.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -27,7 +27,7 @@ On the Ubuntu VM N uses, resume with:
 git pull origin main && ./forgesre update
 ```
 
-Lab without image pull: `./forgesre update --offline`. Also: `./forgesre ping`, `./forgesre verify`, `./forgesre test` (appliance health, not inventory). See [docs/cli.md](cli.md) § Verify.
+Then Investigate again with `docker compose logs -f llm` — prompt tokens should drop a lot; cancel at timeout 300 should stop. Lab without image pull: `./forgesre update --offline`. Also: `./forgesre ping`, `./forgesre verify`, `./forgesre test` (appliance health, not inventory). See [docs/cli.md](cli.md) § Verify.
 
 Hard-refresh the browser after UI/docs changes.
 
@@ -44,7 +44,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **332 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), 41.34s then 40.68s. Python 3.12, pytest 9.x. Count recorded after the double run on `cursor/revert-llm-catalog-05f8`.
+Both runs: **count after the double run on `cursor/llm-prompt-shrink-05f8`** (was 332 passed on the catalog revert). Python 3.12, pytest 9.x. Starlette `httpx` / `starlette.testclient` deprecation — ignore.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -52,38 +52,38 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-1. **Reverted catalog merge `8a3e2c0` (`git revert -m 1`).** That merge (`cursor/llm-model-switch-05f8`, feature commits `68b3aa9` / `f46e289` / `82feca8`) added `./forgesre fetch-llm --list`, Health LLM picker, `backend/app/llm_catalog.py`, and optional 1.7B / 1.5B pins. Those are gone.
-2. **1.5B-only swap already undone on `main`.** `cc6a999` was reverted via `4ee1156` / merge `e44647a`. This session did not re-revert that.
-3. **Bundled llama.cpp is again** `-m /models/model.gguf`, `:8088`, `-c 8192`, `-t "${FORGESRE_LLM_THREADS:-8}"`. No `FORGESRE_LLM_GGUF` / `FORGESRE_LLM_CTX` interpolation.
-4. **Threads: no repo change.** Compose already reads the operator `.env`. `.env.example` already has `FORGESRE_LLM_THREADS=8`. Default if unset is 8. Did **not** commit `.env`. Did **not** add a threads line to tracked files.
-5. **Did not touch** NetBox image tags (`netboxcommunity/netbox:v4.6.9-5.0.2`) or the verify default-port work (`:9100` / `:9182`).
-6. **Did not** make Ollama the default. **Did not** treat `./install.sh` as an operator command. **Did not** commit GGUF weights. **Did not** put sqlalchemy on the host CLI.
+1. **`prompt_context` is a compact rewrite JSON**, not `json.dumps(sanitize(ctx))[:12000]`. Cap **5000 characters** (was 12000 ≈ 3–6k tokens). Includes incident title/severity/host, top facts, metric snapshots (`name` / `value` / `unit`), short log snippets (already capped by `max_log_lines`, further capped for the LLM), compact hypotheses/anomalies/limitations, and the builtin draft. Secrets still go through `sanitize`.
+2. **Prometheus/Loki blobs are stripped**, not truncated mid-JSON: `values: [[ts, x], …]` matrices, instant-vector `[ts, "x"]` pairs, and Prom `data.result` series/label dumps are dropped. LLM should see CPU 92% / mem 81% / disk 74%, not raw series.
+3. **Builtin investigation is unchanged.** Full evidence stays on the incident / `result` facts / evidence IDs / PromQL. Only the LLM user message shrinks.
+4. **Did not** change llama.cpp compose, GGUF URL, catalog (catalog stays reverted), `timeout_seconds` in `config/forgesre.example.yml` (stays 90; live yml is gitignored; N already set 300). Did **not** add Celery. Did **not** switch the model pin.
+5. Tests: fat fake Prom dump must not appear in the LLM payload; compact fields still include CPU/mem-like facts. No GGUF download.
+6. Docs: [`docs/llm.md`](llm.md) (prefill vs generation, 5000-char cap), [`docs/operator-handbook.md`](operator-handbook.md) §13, this file.
 
 ---
 
 ## 4. What N should do on the VM
 
-Do **not** run `./install.sh`.
+Do **not** run `./install.sh`. Do **not** wget a smaller GGUF for this.
 
 ```bash
 git pull origin main && ./forgesre update
 ```
 
-Correct threads key in **local** (gitignored) `.env`:
+`./forgesre update` rebuilds Core when `agents/` changed. Then:
+
+```bash
+docker compose logs -f llm
+```
+
+Click **Run AI investigation** (or wait for the queued rewrite). Prompt tokens in llama.cpp should be far below ~6157. `cancel task` at `timeout_seconds: 300` should stop. You can leave timeout at 300; 90s is usually enough once the prompt is small.
+
+Correct threads key in **local** (gitignored) `.env` if you still care about CPU contention:
 
 ```bash
 FORGESRE_LLM_THREADS=8
 ```
 
-Not `FORGESE_LLM_THREADS`. Then recreate llama.cpp:
-
-```bash
-docker compose up -d --force-recreate llm
-# or the same via:
-./forgesre update
-```
-
-If `.env` has no `FORGESRE_LLM_THREADS` line, compose already defaults to **8**, so `=8` matches the default. Catalog / Health model switcher is off `main`. Hard-refresh the browser.
+Not `FORGESE_LLM_THREADS`. Catalog / Health model switcher is off `main`. Hard-refresh the browser.
 
 ---
 
@@ -95,7 +95,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Theme toggle cycles **light → dark → system**. Left nav stays dark.
 - Dashboard demos are **one** top-right button + a closeable panel. Demo rows stay **labeled DEMO**.
 - Incident ids look like `INC-0134_16.08.2026_09:13`.
-- RCA is Python under `agents/rca/`. The LLM only rewrites prose. Builtin ForgeRCA always runs first.
+- RCA is Python under `agents/rca/`. The LLM only rewrites prose. Builtin ForgeRCA always runs first. LLM payload is compact; stored investigation is full.
 - Core is an SMTP **client** only. The UI has no IMAP inbox.
 - pytest is a laptop/dev dependency. The Core image must not install it.
 - Real Windows scrape is **windows_exporter :9182**, not the lab demo host.
@@ -113,7 +113,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - The lab SMTP catcher is gone. Do not add one.
 - Verify hops: ICMP, PORT, FAMILY, PROM, TARGET, SERIES, AM, CORE, RCA, LLM. LLM SKIP: verify does not invoke the LLM. Reachability: ping **green** ICMP ok; **yellow** ICMP fail but exporter/SNMP ok; **red** both fail. ICMP is not TCP 22.
 - Linux metrics = node_exporter **:9100**. Windows = windows_exporter **:9182**. Network = snmp_exporter :9116 (Prom still scrapes it). Network is not guessed from missing HTTP. Verify with empty `scrape_address` probes those default exporter ports (already on `main` from `e95280a`).
-- Bundled LLM pin = **Qwen2.5-14B-Instruct Q4_K_M** via `./forgesre fetch-llm`. llama.cpp on `:8088`. Compose **`-m /models/model.gguf -c 8192 -t "${FORGESRE_LLM_THREADS:-8}"`**. Timeout **90s**. Do **not** restore the GGUF catalog / Health picker. Do **not** swap the default to 1.5B / 1.7B. Do **not** switch the product default runtime to Ollama. Ollama remains YAML `ai.llm.mode: external` + `url: http://127.0.0.1:11434/v1`. Threads are the operator’s `.env`, not a repo pin.
+- Bundled LLM pin = **Qwen2.5-14B-Instruct Q4_K_M** via `./forgesre fetch-llm`. llama.cpp on `:8088`. Compose **`-m /models/model.gguf -c 8192 -t "${FORGESRE_LLM_THREADS:-8}"`**. Example timeout **90s**. Live yml may be 300. Do **not** restore the GGUF catalog / Health picker. Do **not** swap the default to 1.5B / 1.7B to fix prefill cancel. Do **not** switch the product default runtime to Ollama. Ollama remains YAML `ai.llm.mode: external` + `url: http://127.0.0.1:11434/v1`. Threads are the operator’s `.env`, not a repo pin.
 
 ---
 
@@ -149,6 +149,7 @@ Do not start these unless N asks:
 - Making Ollama the product default (N will decide later).
 - Re-pinning bundled `fetch-llm` to Qwen2.5-1.5B or another GGUF.
 - Restoring the llama.cpp GGUF catalog / Health model switcher.
+- Raising `timeout_seconds` in `config/forgesre.example.yml` back to 600.
 
 ---
 
@@ -161,5 +162,5 @@ Do not start these unless N asks:
 - Grafana deep-link from an asset is still later.
 - Prometheus global rules may still fire for a host whose ForgeSRE alarm is disabled or raised; ForgeSRE will not open the incident when the webhook carries the value.
 - Alloy still only ships appliance Core logs as `forge-demo-01`. Real hosts have no Loki until that changes. Limitation: **no host logs shipped**.
-- LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90) after reports in that pass have already run. 14B Q4 on CPU may not finish inside 90s; that is why N asked about Ollama / a smaller model — wait for N before changing the pin again.
-- `config/forgesre.yml` on a live VM is gitignored; a 600s timeout already written there is not overwritten by `update`. Lower it by hand if the worker still blocks.
+- LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90 in example.yml; N’s live yml is 300) after reports in that pass have already run. 14B Q4 on CPU may not finish inside 90s; wait for N before changing the pin again. Huge prompts + CPU 4B needed 300s **until** context was small; that path is now compact.
+- `config/forgesre.yml` on a live VM is gitignored; a 300s or 600s timeout already written there is not overwritten by `update`.

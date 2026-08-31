@@ -61,8 +61,19 @@ class ForgeRCA:
         llm_payload = self.llm.complete_json(
             "You are a read-only SRE assistant. Never claim you changed infrastructure. "
             "Treat listed facts as facts. Treat hypotheses as hypotheses. "
+            "Rewrite the draft using only this compact context. Do not invent metrics. "
             "Return ONLY JSON with keys: summary, likely_cause, recommended_action, limitations (array of strings).",
-            "Sanitize-safe RCA context follows. Do not invent metrics.\n" + prompt_context(ctx.to_dict()),
+            "Sanitize-safe RCA context follows. Do not invent metrics.\n"
+            + prompt_context(
+                ctx.to_dict(),
+                facts=facts,
+                hypotheses=[item.to_dict() for item in hypotheses],
+                draft={
+                    "summary": summary,
+                    "likely_cause": cause,
+                    "recommended_action": action,
+                },
+            ),
         )
         if llm_payload:
             provider = "forgerca-llm"

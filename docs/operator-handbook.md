@@ -665,6 +665,8 @@ Queries are **per asset**. `forge-demo-01` uses Core demo gauges. A real Linux h
 
 Loki: Alloy ships **appliance Core logs** labeled `asset=forge-demo-01` / `job=forgesre`. RCA may use those for the DEMO host, labeled DEMO (appliance/demo logs). A real inventory row does **not** get empty Loki presented as logs from that VM — limitation is “no host logs shipped” until Alloy actually has that asset label.
 
+The optional LLM **rewrites prose only**. It receives a compact context (incident title/severity, top facts, CPU/mem/disk snapshots, short log lines already capped by `max_log_lines`) — not Prometheus `values: [[timestamp, x], …]` matrices. Builtin ForgeRCA still stores the full facts, evidence IDs, and PromQL. A CPU 4B `cancel task` at `timeout_seconds: 300` was prefill of a multi-thousand-token dump, not Node Exporter talking to the model. After `git pull origin main && ./forgesre update`, Investigate again and watch `docker compose logs -f llm` — prompt tokens should drop a lot.
+
 Lab: `./forgesre demo-rca` raises filesystem usage on the **demo gauge** (does not fill a real disk). `./forgesre demo-reset` puts the gauges back.
 
 ---

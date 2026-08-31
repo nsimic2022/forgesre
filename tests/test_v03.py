@@ -1,7 +1,14 @@
 from rca.analysis import candidate_causes, detect_anomalies, facts_from, score_confidence
 from rca.collector import collect_evidence_set
 from rca.engines import DISCLAIMER, ForgeRCA, get_engine
-from rca.llm import NullLLM, extract_json, make_provider, validate_recommendation
+from rca.llm import (
+    PROMPT_CONTEXT_MAX_CHARS,
+    NullLLM,
+    extract_json,
+    make_provider,
+    prompt_context,
+    validate_recommendation,
+)
 from rca.sanitize import sanitize
 from rca.types import RCAContext, normalize_log, normalize_metric
 
@@ -26,6 +33,151 @@ def test_sanitize_secrets():
     assert "[REDACTED]" in cleaned["headers"]["Authorization"]
     assert cleaned["nested"]["smtp_password"] == "[REDACTED]"
     assert cleaned["nested"]["ok"] == "keep"
+
+
+def _fat_prom_matrix(series: int = 16, samples: int = 400) -> dict:
+    """Prometheus query_range-shaped dump (labels + values: [[ts, x], …])."""
+    ts0 = 1_700_000_001
+    values = [[ts0 + i * 15, str(round(90.0 + (i % 10) * 0.1, 1))] for i in range(samples)]
+    result = []
+    for cpu in range(series):
+        result.append(
+            {
+                "metric": {
+                    "__name__": "node_cpu_seconds_total",
+                    "cpu": str(cpu),
+                    "mode": "idle",
+                    "instance": "10.0.0.5:9100",
+                    "job": "node",
+                },
+                "values": list(values),
+            }
+        )
+    return {
+        "status": "success",
+        "data": {"resultType": "matrix", "result": result},
+    }
+
+
+def test_prompt_context_strips_prom_dump_keeps_cpu_mem():
+    fat = _fat_prom_matrix()
+    context = {
+        "incident": {"number": "INC-1", "title": "High CPU", "severity": "warning", "smtp_password": "secret"},
+        "asset": {"hostname": "app-01", "type": "Linux Server", "api_token": "tok-123"},
+        "alerts": [{"alertname": "NodeCPUHigh"}],
+        "metrics": {
+            "cpu_percent": 92.0,
+            "memory_percent": 81.0,
+            "disk_percent": 74.0,
+            "raw": fat,
+        },
+        "evidence": [
+            {
+                "evidence_id": "EV-00001",
+                "type": "METRIC",
+                "hash": "abc" * 10,
+                "query": '100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))',
+                "content": {"type": "metric", "name": "cpu_percent", "value": 92.0, "unit": "percent"},
+            },
+            {
+                "evidence_id": "EV-00002",
+                "type": "METRIC",
+                "content": {"type": "metric", "name": "memory_percent", "value": 81.0, "unit": "percent"},
+            },
+            {
+                "evidence_id": "EV-00003",
+                "type": "METRIC",
+                "content": {"type": "metric", "name": "disk_percent", "value": 74.0, "unit": "percent"},
+            },
+            {
+                "evidence_id": "EV-00004",
+                "type": "METRIC",
+                "content": fat,
+            },
+            {
+                "evidence_id": "EV-00005",
+                "type": "LOG",
+                "content": {"type": "log", "severity": "ERROR", "message": "kernel: oom-killer"},
+            },
+        ],
+        "limitations": ["No host logs shipped."],
+        "facts": [
+            {"id": "fact-cpu", "text": "cpu_percent is 92.0%.", "evidence_ids": ["EV-00001"]},
+            {"id": "fact-mem", "text": "memory_percent is 81.0%.", "evidence_ids": ["EV-00002"]},
+        ],
+    }
+    payload = prompt_context(context)
+    assert len(payload) <= PROMPT_CONTEXT_MAX_CHARS
+    assert PROMPT_CONTEXT_MAX_CHARS < 12000
+    assert "1700000001" not in payload
+    assert "node_cpu_seconds_total" not in payload
+    assert '"values"' not in payload
+    assert "[[170" not in payload
+    assert "abcabc" not in payload
+    assert "secret" not in payload
+    assert "tok-123" not in payload
+    lowered = payload.lower()
+    assert "92" in payload
+    assert "81" in payload
+    assert "74" in payload
+    assert "cpu" in lowered
+    assert "memory" in lowered or "mem" in lowered
+    assert "disk" in lowered
+    assert "oom-killer" in payload or "ERROR" in payload
+
+
+class _CapturingLLM:
+    last_error = ""
+
+    def __init__(self) -> None:
+        self.user = ""
+        self.system = ""
+
+    def get_name(self) -> str:
+        return "capturing"
+
+    def get_model(self) -> str:
+        return "local"
+
+    def complete_json(self, system: str, user: str):
+        self.system = system
+        self.user = user
+        return None
+
+
+def test_forgerca_llm_payload_is_compact_builtin_facts_stay():
+    fat = _fat_prom_matrix()
+    llm = _CapturingLLM()
+    result = ForgeRCA(llm=llm).investigate(
+        {
+            "incident": {"number": "INC-1042", "title": "High CPU", "asset": "app-01", "severity": "warning"},
+            "asset": {"hostname": "app-01", "type": "Linux Server"},
+            "alert": {"alertname": "NodeCPUHigh"},
+            "metrics": {
+                "cpu_percent": 92,
+                "memory_percent": 81,
+                "disk_percent": 74,
+                "raw": fat,
+            },
+            "logs": ["ERROR kernel: oom-killer"],
+            "history": [],
+        }
+    )
+    packed = result["result"]
+    fact_blob = " ".join(str(item.get("text") or "") for item in packed["facts"])
+    assert "92" in fact_blob
+    assert "81" in fact_blob or "memory" in fact_blob.lower()
+    assert packed["hypotheses"]
+    assert packed["facts"]
+    assert llm.user
+    assert len(llm.user) <= PROMPT_CONTEXT_MAX_CHARS + 80
+    assert "1700000001" not in llm.user
+    assert "node_cpu_seconds_total" not in llm.user
+    assert '"values"' not in llm.user
+    assert "92" in llm.user
+    assert "81" in llm.user
+    assert "cpu" in llm.user.lower()
+    assert "memory" in llm.user.lower() or "mem" in llm.user.lower()
 
 
 def test_collector_preserves_queries_and_degrades():
