@@ -657,7 +657,7 @@ You get:
 - A **ForgeSRE confidence score** (not the LLM’s own number)
 - Disclaimer: `AI has not modified the system.`
 
-RCA works with `ai.enabled: false` (builtin analyst). To use a local LLM, download the GGUF (not in git) with `./forgesre fetch-llm`. Implementation (hardware, Compose profile `ai`, offline GGUF, jobs, debug): [`llm.md`](llm.md).
+RCA works with `ai.enabled: false` (builtin analyst). To use a local LLM, download a GGUF (not in git) with `./forgesre fetch-llm` (default 14B; `./forgesre fetch-llm --list` for lighter Qwen3 1.7B / Qwen2.5 1.5B). Implementation: [`llm.md`](llm.md).
 
 Alertmanager ingest **enqueues** an investigate job. The webhook does not wait on the LLM. `./forgesre jobs` lists pending / running / done / error. Demo (`./forgesre demo`) still runs RCA inline so the first-hour path is immediate.
 
@@ -816,7 +816,7 @@ Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critica
 ./forgesre demo-rca             # filesystem RCA demo gauge
 ./forgesre demo-reset           # lower demo gauges
 ./forgesre secrets-check
-./forgesre fetch-llm            # GGUF download (~9 GB, not in git)
+./forgesre fetch-llm            # GGUF catalog (default 14B; optional 1.7B / 1.5B)
 ./forgesre backup
 ./forgesre backup --no-secrets
 ./forgesre backup --include-models
@@ -869,7 +869,7 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 | GET | `/api/v1/journal` | analyst+ (`read_play`; module, status, q) |
 | POST | `/api/v1/journal` | admin (install writes one row here) |
 | GET | `/api/v1/jobs` | analyst+ (`read_play`) |
-| GET | `/api/v1/system/doctor` | login **or** Bearer webhook token |
+| GET | `/api/v1/llm/models` | login (GGUF catalog + which files are on disk; switch is `./forgesre fetch-llm use`) |
 | GET | `/api/v1/sd/prometheus` | Bearer webhook token (Linux node_exporter :9100 and Windows windows_exporter :9182) |
 | GET | `/api/v1/sd/snmp` | Bearer webhook token (network devices) |
 | POST | `/api/v1/webhooks/alertmanager` | Bearer webhook token |

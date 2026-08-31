@@ -405,17 +405,21 @@ def run_all(root: Path) -> Runner:
     data_dir = Path(r.env.get("FORGESRE_DATA") or "data")
     if not data_dir.is_absolute():
         data_dir = root / data_dir
-    gguf = data_dir / "models" / "model.gguf"
+    gguf_name = (r.env.get("FORGESRE_LLM_GGUF") or "model.gguf").strip() or "model.gguf"
+    gguf_name = Path(gguf_name).name
+    if "/" in gguf_name or ".." in gguf_name or not gguf_name.endswith(".gguf"):
+        gguf_name = "model.gguf"
+    gguf = data_dir / "models" / gguf_name
     want_gguf = profile_ai or (ai.get("mode") == "bundled")
     if gguf.is_file():
         size = gguf.stat().st_size
         gb = size / (1024**3)
         r.add(
             "files.gguf",
-            "pass" if size > 1_000_000_000 else "fail",
+            "pass" if size > 400_000_000 else "fail",
             f"{gguf} ({gb:.1f} GB)",
             f"ls -lh {gguf}",
-            "./forgesre fetch-llm",
+            "./forgesre fetch-llm --list",
         )
     elif want_gguf:
         r.add("files.gguf", "fail", f"missing {gguf}", f"ls -lh {gguf}", "./forgesre fetch-llm")

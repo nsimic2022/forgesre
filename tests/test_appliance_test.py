@@ -50,6 +50,8 @@ def test_llm_guide_and_fetch_llm_help():
     assert "ForgeRCA" in text
     assert "ForgeAI" in text
     assert "model.gguf" in text
+    assert "FORGESRE_LLM_GGUF" in text
+    assert "--model qwen3-1.7b" in text
     assert "timeout_seconds" in text
     assert "State.Health" in text
     assert "/v1/chat/completions" in text
@@ -68,6 +70,8 @@ def test_llm_guide_and_fetch_llm_help():
     )
     assert "Qwen2.5-14B-Instruct" in script_help
     assert "Qwen3-4B" in script_help
+    assert "qwen3-1.7b" in script_help
+    assert "FORGESRE_LLM_GGUF" in script_help
     assert "Do not re-run ./install.sh" in script_help
 
 

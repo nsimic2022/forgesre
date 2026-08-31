@@ -313,7 +313,7 @@ def test_asset_table_actions_cell_is_table_cell_not_flex_td():
     assert ".asset-table td.asset-actions" in css
     assert "display: table-cell" in css
     assert "td.row-actions" in css
-    assert "app.css?v=asset-id-first-1" in base
+    assert "app.css?v=llm-catalog-1" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():

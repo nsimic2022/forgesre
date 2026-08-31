@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 31 August 2026.** Operator N (Serbian) asked for **Ollama** and said **do not change code yet** — they will decide later whether any product change is needed. Another agent had already merged a llama.cpp GGUF swap to `main` (`cc6a9990636a29a0a7c203b5c6e676c09fa5b234`, branch `cursor/small-fast-llm-05f8`, merge `--no-ff` because `create_pr` 403): Qwen2.5-14B-Instruct Q4_K_M (~9 GB) → Qwen2.5-1.5B-Instruct Q4_K_M (~1.1 GB), compose context 4096. N did not approve that code change. This session **reverts only that GGUF pin**. NetBox tags and verify `:9100` work stay on `main`.
+**Monday 31 August 2026.** Operator N asked for a **choice** of lighter llama.cpp GGUFs (Qwen3 1.7B and Qwen2 1.5B), switched **from inside ForgeSRE**, not a silent replace of the 14B default. The earlier 14B→1.5B-only swap (`cc6a999` / `cursor/small-fast-llm-05f8`) was reverted on `main` (`e44647a` merge of `cursor/revert-gguf-swap-05f8`) before this work. This session **keeps 14B as the default file** and **adds** catalog lights.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -42,18 +42,23 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **332 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x. (Count recorded after the double run on this revert branch.)
+Both runs: **340 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~42s each. Python 3.12, pytest 9.x. Count recorded after the double run on `cursor/llm-model-switch-05f8`.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
 ---
 
-## 3. Done today / on main
+## 3. Done today / on this branch
 
-1. **Reverted merge `cc6a999` (`git revert -m 1`).** Bundled GGUF pin restored to **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB). Default URL is again `https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m.gguf`. Compose llama.cpp context is **`-c 8192`** again. Docs, `fetch-llm`, example.yml, install wizard, and appliance tests match the restored pin.
-2. **Ollama is not a product default.** It remains an operator YAML choice: `ai.enabled: true`, `ai.llm.mode: external`, `url: http://127.0.0.1:11434/v1` (and a real Ollama model id). No compose/Ollama service, no default-url change. N can still point live `config/forgesre.yml` at Ollama without this repo switching defaults.
-3. **Did not touch** NetBox image tags (`netboxcommunity/netbox:v4.6.9-5.0.2`) or the verify default-port work (`:9100` / `:9182`).
-4. **Did not run `./install.sh`.** Did not implement Ollama as default. The 1.5B GGUF swap stays undone until N asks.
+1. **Catalog + switch, not a silent pin swap.** Default remains **Qwen2.5-14B-Instruct Q4_K_M** as `data/models/model.gguf`. Compose unset env is still `-m /models/model.gguf` and `-c 8192` (N's screenshot). New env: `FORGESRE_LLM_GGUF` (basename only), `FORGESRE_LLM_CTX` (lights write 4096).
+2. **`./forgesre fetch-llm --list` / `--model ID` / `use ID`.** Restarts `llm` (`--force-recreate`). IDs: `qwen2.5-14b`, `qwen3-1.7b`, `qwen2.5-1.5b`, `qwen3-4b`. Source: `backend/app/llm_catalog.py`.
+3. **Verified Hugging Face HEAD (do not invent tags):**
+   - Official `Qwen/Qwen2.5-14B-Instruct-GGUF` single-file `qwen2.5-14b-instruct-q4_k_m.gguf` → **404** (now `…-q4_k_m-00001-of-00003.gguf` shards). Default URL is bartowski single-file `Qwen2.5-14B-Instruct-Q4_K_M.gguf` (**200**, 8988110976 bytes).
+   - `Qwen/Qwen3-1.7B-Instruct-GGUF` → **401** (does not exist). Official `Qwen/Qwen3-1.7B-GGUF` has **Q8_0 only**. Light pin: `unsloth/Qwen3-1.7B-GGUF` `Qwen3-1.7B-Q4_K_M.gguf` (**200**, 1107409472 bytes).
+   - Official `Qwen/Qwen2.5-1.5B-Instruct-GGUF` `qwen2.5-1.5b-instruct-q4_k_m.gguf` (**200**, 1117320736 bytes). Qwen2-1.5B Instruct exists (`qwen2-1_5b-instruct-q4_k_m.gguf`, 986045824) — worse pin, not catalogued.
+   - Official `Qwen/Qwen3-4B-GGUF` `Qwen3-4B-Q4_K_M.gguf` (**200**, 2497280256 bytes).
+4. **Health UI** (`/health-ui` → Local LLM) lists the catalog + on-disk + active file. Switch command is shown; Core cannot recreate Compose (`.env` is read-only, no docker.sock). `GET /api/v1/llm/models`.
+5. **Did not** make Ollama the default. **Did not** replace 14B as the only pin. **Did not** commit GGUF weights. Timeout stays **90s**. `ai.enabled` stays **false** until fetch-llm.
 
 ---
 
@@ -63,21 +68,40 @@ Do **not** run `./install.sh`.
 
 ```bash
 git pull origin main && ./forgesre update
+./forgesre fetch-llm --list
 ```
 
-The 1.5B GGUF swap is undone. Bundled `./forgesre fetch-llm` is 14B again. If N wants **Ollama** instead of the bundled llama.cpp GGUF, leave `COMPOSE_PROFILES` without `ai` and set live YAML (gitignored) to:
+Default (full model, same path as today):
 
-```yaml
-ai:
-  enabled: true
-  llm:
-    mode: external
-    url: http://127.0.0.1:11434/v1
-    model: <ollama-model-id>
-    timeout_seconds: 90
+```bash
+./forgesre fetch-llm
+# or, if already downloaded:
+./forgesre fetch-llm use qwen2.5-14b
 ```
 
-Then recreate Core (`docker compose up -d --force-recreate core`) and `./forgesre doctor`. That is an operator config, not a product default. Hard-refresh the browser.
+Try a lighter model (does **not** delete `model.gguf`):
+
+```bash
+./forgesre fetch-llm --model qwen3-1.7b
+./forgesre fetch-llm --model qwen2.5-1.5b
+curl -fsS http://127.0.0.1:8088/v1/models
+./forgesre doctor
+```
+
+Back to 14B:
+
+```bash
+./forgesre fetch-llm use qwen2.5-14b
+```
+
+If an old ~1.1 GB file is named `model.gguf`, move it before fetching 14B:
+
+```bash
+mv data/models/model.gguf data/models/qwen2.5-1.5b-instruct-q4_k_m.gguf
+./forgesre fetch-llm --model qwen2.5-14b
+```
+
+Ollama stays an operator YAML choice (`ai.llm.mode: external`, `url: http://127.0.0.1:11434/v1`), not a product default. Hard-refresh System Health after `./forgesre update`.
 
 ---
 
@@ -94,7 +118,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - pytest is a laptop/dev dependency. The Core image must not install it.
 - Real Windows scrape is **windows_exporter :9182**, not the lab demo host.
 - Prometheus Health Open is **Targets** (`:9090/targets?search=`), not Prometheus process `/metrics`. Core `/metrics` stays.
-- Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
+- Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host. `llm_catalog.py` is stdlib-only for that reason.
 - `snmp-exporter` is a **default** compose service.
 - Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2` (not `v4.4-3.2.0`). Do not churn NetBox Hub/GHCR tags unless N asks.
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it.
@@ -107,7 +131,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - The lab SMTP catcher is gone. Do not add one.
 - Verify hops: ICMP, PORT, FAMILY, PROM, TARGET, SERIES, AM, CORE, RCA, LLM. LLM SKIP: verify does not invoke the LLM. Reachability: ping **green** ICMP ok; **yellow** ICMP fail but exporter/SNMP ok; **red** both fail. ICMP is not TCP 22.
 - Linux metrics = node_exporter **:9100**. Windows = windows_exporter **:9182**. Network = snmp_exporter :9116 (Prom still scrapes it). Network is not guessed from missing HTTP. Verify with empty `scrape_address` probes those default exporter ports (already on `main` from `e95280a`).
-- Bundled LLM pin = **Qwen2.5-14B-Instruct Q4_K_M** via `./forgesre fetch-llm`. llama.cpp on `:8088`. Compose **`-c 8192`**. Timeout **90s**. Do **not** swap the default to 1.5B and do **not** switch the product default runtime to Ollama. Ollama remains YAML `ai.llm.mode: external` + `url: http://127.0.0.1:11434/v1`.
+- Bundled LLM **default** = **Qwen2.5-14B-Instruct Q4_K_M** as `model.gguf` via `./forgesre fetch-llm`. llama.cpp on `:8088`. Compose **`-c ${FORGESRE_LLM_CTX:-8192}`**. Timeout **90s**. Lights are **optional catalog entries**. Do **not** make 1.5B the only pin and do **not** switch the product default runtime to Ollama. Ollama remains YAML `ai.llm.mode: external` + `url: http://127.0.0.1:11434/v1`.
 
 ---
 
@@ -141,7 +165,7 @@ Do not start these unless N asks:
 - NetBox Docker Hub / GHCR tag churn (separate).
 - Rewriting discovery as nmap.
 - Making Ollama the product default (N will decide later).
-- Re-pinning bundled `fetch-llm` to Qwen2.5-1.5B or another GGUF.
+- Making Qwen2.5-1.5B (or any light GGUF) the **only** bundled pin.
 
 ---
 
@@ -154,5 +178,6 @@ Do not start these unless N asks:
 - Grafana deep-link from an asset is still later.
 - Prometheus global rules may still fire for a host whose ForgeSRE alarm is disabled or raised; ForgeSRE will not open the incident when the webhook carries the value.
 - Alloy still only ships appliance Core logs as `forge-demo-01`. Real hosts have no Loki until that changes. Limitation: **no host logs shipped**.
-- LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90) after reports in that pass have already run. 14B Q4 on CPU may not finish inside 90s; that is why N asked about Ollama / a smaller model — wait for N before changing the pin again.
+- LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90) after reports in that pass have already run. 14B Q4 on CPU may not finish inside 90s — that is why the catalog lights exist. Health UI cannot itself restart `llm`.
 - `config/forgesre.yml` on a live VM is gitignored; a 600s timeout already written there is not overwritten by `update`. Lower it by hand if the worker still blocks.
+- Official Qwen 14B Q4_K_M is sharded; default download is bartowski single-file. If bartowski disappears, pick another **verified** single-file URL — do not resurrect the 404 official path.

@@ -63,4 +63,47 @@
   {% endfor %}
   </tbody>
 </table>
+
+<section class="card llm-catalog" id="llm-models">
+  <h2>Local LLM (llama.cpp)</h2>
+  <p class="muted">
+    Rewrite-only. Runtime is llama.cpp on <code>:8088</code>, not Ollama.
+    Unset <code>FORGESRE_LLM_GGUF</code> still loads <code>/models/model.gguf</code>.
+    Default context is <strong>8192</strong> for that file. Switch from SSH — Core cannot restart Compose:
+  </p>
+  <p>
+    Active file: <code>{{ llm_catalog.active_filename }}</code>
+    · ctx <code>{{ llm_catalog.active_ctx }}</code>
+    {% if llm_catalog.active_id %}· catalog <code>{{ llm_catalog.active_id }}</code>{% endif %}
+  </p>
+  <table class="health-table">
+    <thead>
+      <tr><th>Id</th><th>Kind</th><th>Model</th><th>File</th><th>Ctx</th><th>On disk</th><th>Active</th><th>Switch</th></tr>
+    </thead>
+    <tbody>
+      {% for row in llm_catalog.models %}
+      <tr class="{% if row.active %}health-ok{% endif %}">
+        <td><code>{{ row.id }}</code></td>
+        <td>{{ row.kind }}</td>
+        <td>{{ row.name }} <span class="muted">({{ row.size_hint }})</span></td>
+        <td><code>{{ row.filename }}</code></td>
+        <td>{{ row.ctx }}</td>
+        <td>
+          {% if row.present %}
+            {% if row.ok %}yes{% else %}too small{% endif %}
+          {% else %}
+            no
+          {% endif %}
+        </td>
+        <td>{% if row.active %}yes{% else %}—{% endif %}</td>
+        <td><code>./forgesre fetch-llm {% if row.present %}use{% else %}--model{% endif %} {{ row.id }}</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">
+    List: <code>./forgesre fetch-llm --list</code>.
+    Never <code>./install.sh</code> on a live box. Guide: docs/llm.md
+  </p>
+</section>
 {% endblock %}

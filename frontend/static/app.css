@@ -453,6 +453,8 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 }
 .page-head h1 { margin: 0; }
 .health-grid { margin: 0.9rem 0 1.2rem; }
+.llm-catalog { margin-top: 1.4rem; }
+.llm-catalog table { margin-top: 0.6rem; }
 a.stat { text-decoration: none; color: inherit; }
 .health-table tr.health-ok td:first-child { box-shadow: inset 4px 0 0 var(--ok); }
 .health-table tr.health-warn td:first-child { box-shadow: inset 4px 0 0 var(--warn); }
