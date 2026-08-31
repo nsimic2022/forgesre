@@ -44,7 +44,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **count after the double run on `cursor/llm-prompt-shrink-05f8`** (was 332 passed on the catalog revert). Python 3.12, pytest 9.x. Starlette `httpx` / `starlette.testclient` deprecation — ignore.
+Both runs: **334 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), 41.44s then 40.27s. Python 3.12, pytest 9.x. Count recorded after the double run on `cursor/llm-prompt-shrink-05f8` (was 332 before the two new prompt-shrink tests).
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
