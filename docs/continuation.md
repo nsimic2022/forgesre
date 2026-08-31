@@ -42,7 +42,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **recorded after the double pytest on this branch** (see the PR / later edit of this file). Python 3.12, pytest 9.x. 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore).
+Both runs: **340 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~42s each. Python 3.12, pytest 9.x. Count recorded after the double run on `cursor/llm-model-switch-05f8`.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
