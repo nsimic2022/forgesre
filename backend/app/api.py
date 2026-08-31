@@ -64,6 +64,7 @@ from app.services import (
     run_demo_windows,
 )
 from app.settings import settings
+from app.llm_catalog import catalog_status
 from app.stack import component_label, doctor_soft_status, ensure_snmp_exporter, snmp_target_count
 
 log = logging.getLogger("forgesre")
@@ -963,6 +964,12 @@ def system_status(db: Session = Depends(get_db), user: User = Depends(require("r
         },
         "monitoring": doctor_payload()["components"],
     }
+
+
+@router.get("/llm/models")
+def llm_models(user: User = Depends(require_user)) -> dict[str, Any]:
+    """Catalog + which GGUFs are on disk. Switch is host CLI: ./forgesre fetch-llm use ID."""
+    return catalog_status()
 
 
 @router.get("/system/doctor")

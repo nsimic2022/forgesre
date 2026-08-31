@@ -263,13 +263,13 @@ services:
     network_mode: host
     command:
       - -m
-      - /models/model.gguf
+      - /models/${FORGESRE_LLM_GGUF:-model.gguf}
       - --host
       - 127.0.0.1
       - --port
       - "8088"
       - -c
-      - "8192"
+      - "${FORGESRE_LLM_CTX:-8192}"
       - -t
       - "${FORGESRE_LLM_THREADS:-8}"
     volumes:
