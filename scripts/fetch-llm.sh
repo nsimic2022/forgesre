@@ -18,10 +18,13 @@ while [[ $# -gt 0 ]]; do
       cat <<'EOF'
 Usage: ./forgesre fetch-llm [--download-only] [--offline]
 
-Default download: Qwen2.5-14B-Instruct Q4_K_M (~9 GB)
+Default download: Qwen2.5-1.5B-Instruct Q4_K_M (~1.1 GB)
   → $FORGESRE_DATA/models/model.gguf (gitignored).
 
-Override URL with FORGESRE_LLM_URL. Lab (8 GB RAM), Qwen3-4B Q4_K_M:
+Rewrite-only RCA prose; Core timeout stays 90s. If an older 14B/4B GGUF
+is already named model.gguf, delete it first or fetch-llm will skip.
+
+Override URL with FORGESRE_LLM_URL. Optional larger Qwen3-4B Q4_K_M:
 
   mkdir -p data/models
   wget -O data/models/model.gguf https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf
@@ -53,14 +56,16 @@ fi
 
 MODEL_DIR="$DATA_DIR/models"
 MODEL_PATH="$MODEL_DIR/model.gguf"
-# Official Qwen GGUF, single-file Q4_K_M (~9 GB). Not committed to git.
-DEFAULT_URL="https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m.gguf"
+# Official Qwen GGUF, single-file Q4_K_M (~1.1 GB / 1117320736 bytes). Not committed to git.
+DEFAULT_URL="https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
 URL="${FORGESRE_LLM_URL:-$DEFAULT_URL}"
+# Reject HTML error pages; 1.5B Q4_K_M is ~1.1 GB. 14B leftovers still pass.
+MIN_GGUF_BYTES=400000000
 
 mkdir -p "$MODEL_DIR"
 
 have_model() {
-  [[ -f "$MODEL_PATH" && "$(stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)" -gt 1000000000 ]]
+  [[ -f "$MODEL_PATH" && "$(stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)" -gt "$MIN_GGUF_BYTES" ]]
 }
 
 download_model() {
@@ -77,7 +82,7 @@ download_model() {
     echo "curl is required to download the GGUF." >&2
     exit 1
   fi
-  echo "Downloading local LLM (~9 GB). This is not stored in git."
+  echo "Downloading local LLM (~1.1 GB Qwen2.5-1.5B-Instruct Q4_K_M). This is not stored in git."
   echo "URL: $URL"
   echo "Dest: $MODEL_PATH"
   local tmp="${MODEL_PATH}.partial"

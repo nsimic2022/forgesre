@@ -412,7 +412,7 @@ def run_all(root: Path) -> Runner:
         gb = size / (1024**3)
         r.add(
             "files.gguf",
-            "pass" if size > 1_000_000_000 else "fail",
+            "pass" if size > 400_000_000 else "fail",
             f"{gguf} ({gb:.1f} GB)",
             f"ls -lh {gguf}",
             "./forgesre fetch-llm",

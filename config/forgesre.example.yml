@@ -52,7 +52,7 @@ ai:
     mode: disabled # bundled | external | disabled — fetch-llm sets bundled
     url: http://127.0.0.1:8088/v1
     model: local
-    timeout_seconds: 90 # lab 4B; raise toward 600 only for slow 14B CPU rewrites
+    timeout_seconds: 90 # 1.5B Q4 rewrite; do not raise back to 600 — one worker must not block for minutes
   rca:
     engine: forgerca
     window_minutes: 30

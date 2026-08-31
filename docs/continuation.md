@@ -1,4 +1,4 @@
-# Session handoff — 27 August 2026
+# Session handoff — 31 August 2026
 
 This file is a **session handoff for the next coding agent or contributor**. It is not an operator manual. Operators start at [install and config](install-config.md) and the [operator handbook](operator-handbook.md).
 
@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Thursday 27 August 2026.** Operator N (Serbian) added a real Linux host (`10.223.9.86`, node_exporter `:9100`). `./forgesre verify` showed Class **unknown** and PORT **SKIP** (`no scrape port`) even though ICMP passed and `/metrics` was live. node_exporter logged `write: broken pipe` toward the appliance (`10.223.9.88`).
+**Monday 31 August 2026.** Operator N (Serbian) asked for a smaller, significantly faster on-box LLM. The bundled default was Qwen2.5-14B-Instruct Q4_K_M (~9 GB), which cannot finish a CPU rewrite inside the **90s** timeout on the single worker.
 
 On the Ubuntu VM N uses, resume with:
 
@@ -42,7 +42,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **332 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x.
+Both runs: **333 passed**, 1 warning (Starlette `httpx` / `starlette.testclient` deprecation — ignore), ~40s each. Python 3.12, pytest 9.x.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -50,12 +50,12 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on main
 
-1. **Verify + Add probe default exporter ports.** An inventory row with an IP but empty `scrape_address` and type Unknown/Auto/empty used to SKIP PORT (`no scrape port (set scrape_address or type)`). Class came only from the saved type, so ICMP green + live node_exporter still looked like “not Linux :9100”. Verify (and ping/reachability) now GET `:9100` and `:9182` on that IP, same as Add Auto / ad-hoc `./forgesre ping <ip>`.
-2. **Persist classification.** When live `/metrics` has `node_` / `windows_`, verify saves `Linux Server` `:9100` or `Windows Server` `:9182` so Prometheus HTTP SD can scrape (wait ~30s, `./forgesre sd`). GUI `run_asset_verify` writes the row; host `./forgesre verify` POSTs the same fields (no sqlalchemy on the host).
-3. **Broken pipe on detect.** `fetch_metrics` used to `read(4096)` / `read(2048)` and close. node_exporter `/metrics` often starts with `go_*` (more than 4 KiB) then `node_*`. Aborting mid-body is `error encoding and sending metric family: write tcp … broken pipe`. Detect now reads until `node_` / `windows_` (up to 256 KiB preview) and **drains** the rest. Timeout 3s. Prometheus inventory scrape is a different client (default `scrape_timeout` 10s) — a huge `/metrics` vs a short scrape timeout is ops, not a new exporter. Inventory HTTP SD still lists only rows **with** `scrape_address`; a host Prometheus scraped that was not in inventory would be a separate bug.
-4. **Docs = code.** [cli.md](cli.md), [operator-handbook.md](operator-handbook.md), Add form, Verify page.
+1. **Bundled LLM is now Qwen2.5-1.5B-Instruct Q4_K_M (~1.1 GB).** Official URL: `https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf`. Same ChatML family as the old 14B pin; no `--jinja`. Saved on disk as `$FORGESRE_DATA/models/model.gguf` (gitignored). ~2–4 GB extra RAM; 8 GB VM is enough with the stack.
+2. **`./forgesre fetch-llm`** (existing CLI, not a new command) downloads that file, sets `COMPOSE_PROFILES=ai`, `ai.enabled: true` / `mode: bundled`, starts llama.cpp on `:8088`. Timeout stays **90s**. Compose context **4096**. `ai.enabled: false` remains the example.yml default.
+3. **Docs = code.** [llm.md](llm.md), [cli.md](cli.md), [install-config.md](install-config.md), [operator-handbook.md](operator-handbook.md), CLI help, install wizard, admin cheatsheet. Optional Qwen3-4B wget path kept as a larger override.
+4. **If `data/models/model.gguf` is already a 14B/4B file, fetch-llm skips.** Delete it, then `./forgesre fetch-llm`. Live `config/forgesre.yml` is gitignored — `model: local` is still correct (compose always loads `model.gguf`). A leftover `timeout_seconds: 600` in that file is not overwritten by `update`; lower it to 90 by hand.
 
-Do **not** treat demo `forge-demo-*` or discovery seed `10.20.30.41` as proof.
+Runtime stays llama.cpp. Do **not** switch the default to Ollama.
 
 ---
 
@@ -67,15 +67,20 @@ Do **not** run `./install.sh`.
 git pull origin main && ./forgesre update
 ```
 
-Then either **Verify** the Linux row in the UI or:
+If LLM is already on and `data/models/model.gguf` is still the old 14B (~9 GB) or 4B file:
 
 ```bash
-./forgesre verify <asset-id-or-ip>
+rm -f data/models/model.gguf
+./forgesre fetch-llm
 ```
 
-Expect Class **linux**, PORT/FAMILY **PASS** if `:9100/metrics` has `node_`. Type + scrape are saved. Wait one Prometheus HTTP SD refresh (~30s), then `./forgesre sd`. Hard-refresh the browser.
+If LLM was never enabled:
 
-If type is already Linux but scrape was left blank, verify fills `<ip>:9100`. You can still set scrape by hand on Edit.
+```bash
+./forgesre fetch-llm
+```
+
+Wait until `:8088` answers (`curl -fsS http://127.0.0.1:8088/v1/models`), then `./forgesre doctor` and `./forgesre test`. Hard-refresh the browser. ForgeRCA still runs without a GGUF.
 
 ---
 
@@ -105,6 +110,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - The lab SMTP catcher is gone. Do not add one.
 - Verify hops: ICMP, PORT, FAMILY, PROM, TARGET, SERIES, AM, CORE, RCA, LLM. LLM SKIP: verify does not invoke the LLM. Reachability: ping **green** ICMP ok; **yellow** ICMP fail but exporter/SNMP ok; **red** both fail. ICMP is not TCP 22.
 - Linux metrics = node_exporter **:9100**. Windows = windows_exporter **:9182**. Network = snmp_exporter :9116 (Prom still scrapes it). Network is not guessed from missing HTTP.
+- Bundled LLM = **Qwen2.5-1.5B-Instruct Q4_K_M** via `./forgesre fetch-llm`. llama.cpp on `:8088`. Timeout **90s**. Do not raise it back to 600s. Do not switch the default runtime to Ollama.
 
 ---
 
@@ -151,3 +157,4 @@ Do not start these unless N asks:
 - Alloy still only ships appliance Core logs as `forge-demo-01`. Real hosts have no Loki until that changes. Limitation: **no host logs shipped**.
 - LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90) after reports in that pass have already run.
 - `config/forgesre.yml` on a live VM is gitignored; a 600s timeout already written there is not overwritten by `update`. Lower it by hand if the worker still blocks.
+- An existing `data/models/model.gguf` larger than 400 MB is not replaced by `fetch-llm`. Delete the old 14B/4B file to pull 1.5B.
