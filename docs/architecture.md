@@ -298,7 +298,7 @@ For each component: why it exists, what it does, dependents, whether it can be r
 - **Removable?** Yes. First-class `disabled`. Monitoring and incidents keep working.
 - **Mode:** Bundled, external local endpoint, or disabled. Cloud is not a first-class provider in V1.
 - **Security:** No tools that mutate infra. No Docker socket. No host mounts except the model file. Egress deny in offline mode. Outputs stored as evidence and audit.
-- **Resources:** Small CPU Instruct GGUF (default **Qwen2.5-1.5B Q4_K_M**, ~1.1 GB on disk, a few GB RAM with the stack). GPU optional. Wizard must state this before enable.
+- **Resources:** Dominant cost. CPU-only 7B–14B: plan **16–32 GB RAM**. GPU optional. Wizard must state this before enable.
 
 ### 6.14 Notification service (in Core)
 

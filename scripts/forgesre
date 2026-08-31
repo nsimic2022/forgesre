@@ -76,7 +76,7 @@ Commands:
   sd                 Prometheus HTTP SD (Linux) and SNMP HTTP SD
   version            Appliance version from .env
   secrets-check      Refuse-to-start defaults: SECRET_KEY / webhook token
-  fetch-llm          Download Qwen 1.5B GGUF (~1.1 GB, not in git) and start llama.cpp
+  fetch-llm          Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp
   backup             One folder per run under data/backups (tar.gz + MANIFEST; --no-secrets / --include-models)
   restore            List backup folders (newest first); apply only with --yes after stopping Core
   import             Alias for restore (numbered picker; also: import backup)
@@ -462,7 +462,7 @@ fetch-llm — download a GGUF into $FORGESRE_DATA/models/model.gguf and start ll
   ./forgesre doctor          # llm: ok when :8088 answers
   ./forgesre test
 
-Default file is Qwen2.5-1.5B-Instruct Q4_K_M (~1.1 GB). Optional larger:
+Default file is Qwen2.5-14B-Instruct Q4_K_M (~9 GB). Override:
 
   FORGESRE_LLM_URL='https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf' ./forgesre fetch-llm
 
