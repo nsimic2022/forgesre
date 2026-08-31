@@ -19,13 +19,15 @@ The model **does not**:
 
 - SSH, run playbooks, or change the host
 - Write NetBox
-- Invent a second investigation engine (it sees the same sanitized evidence ForgeRCA already collected)
+- Invent a second investigation engine (it sees a **compact** sanitized rewrite context — facts, CPU/mem/disk snapshots, short logs — not Prometheus matrices or full evidence JSON)
 - Store a GGUF in git
 - Require an OpenAI / Anthropic API key
 
 Core talks HTTP to `ai.llm.url` (`POST …/chat/completions`, `GET …/models`). There is no cloud SDK in the runtime.
 
 If the rewrite fails or times out, the incident keeps the ForgeRCA result and records why (`LLM unreachable; used ForgeRCA…`).
+
+**Prompt size.** llama.cpp **prompt processing (prefill)** is not generation. Qwen3-4B on CPU is often ~25–29 tok/s for prefill; a ~6000-token user message is ~4 minutes before the first output token. `timeout_seconds: 300` then leaves almost no time to generate, and llama.cpp logs `cancel task`. ForgeSRE therefore **does not dump Prom/Loki blobs** into the LLM: `prompt_context` is capped at **5000 characters** (was 12000, which is ~3–6k tokens) and keeps name/value/unit snapshots (for example CPU 92% / mem 81% / disk 74%). Builtin ForgeRCA still stores the full facts, anomalies, evidence IDs, and PromQL on the incident. Do **not** switch to a smaller GGUF to fix a cancel — shrink was the prompt, not the model. Node exporter does not talk to the LLM (Node Exporter → Prometheus → ForgeRCA evidence → compact prompt → Qwen).
 
 ---
 
@@ -43,7 +45,7 @@ vCPU: 4 is better than 2. Threads default to `nproc - 2` (min 2). First llama.cp
 
 A **4 GB** lab VM should not run either GGUF. Leave `ai.enabled: false` and use ForgeRCA only.
 
-Context window in Compose is **8192** tokens (`-c 8192`). Core waits **`ai.llm.timeout_seconds`** (default **90**, lab 4B) for one completion. Slow 14B CPU rewrites may need a higher value in `config/forgesre.yml`.
+Context window in Compose is **8192** tokens (`-c 8192`). Core waits **`ai.llm.timeout_seconds`** (default **90**, lab 4B) for one completion. Slow 14B CPU rewrites may need a higher value in `config/forgesre.yml`. A huge prompt plus CPU 4B can still need **300s** until the rewrite context is small — that is prefill cost, not a reason to change the GGUF. Live `config/forgesre.yml` is gitignored; this repo does not raise the example default back to 600.
 
 ---
 
@@ -394,9 +396,10 @@ docker compose up -d core
 Inspect the client that ships in git (read-only; you do not need to change it to turn LLM on):
 
 ```bash
-sed -n '1,220p' agents/rca/llm.py
-sed -n '1,140p' agents/rca/engines.py
+sed -n '1,250p' agents/rca/llm.py
+sed -n '1,160p' agents/rca/engines.py
 grep -n complete_json agents/rca/*.py backend/app/*.py
+grep -n PROMPT_CONTEXT_MAX_CHARS agents/rca/llm.py
 ```
 
 `complete_json` is the OpenAI-compatible POST. `enable_thinking` / `chat_template_kwargs` are a **fallback** only — Qwen 2.5 gets a plain body first.
@@ -429,6 +432,7 @@ docker compose exec -T core python -c "import sys; print('\n'.join(sys.path))"
 | `/v1/models` ok, chat hangs | CPU 14B is slow or still loading layers. Follow `docker compose logs -f llm`. Do not `compose down` |
 | Doctor `llm: error` after many minutes | GGUF missing/corrupt (file smaller than 1 GB), OOM, or image pull failed. `ls -lh data/models/model.gguf` |
 | Rewrite never finishes | CPU 14B is slow. Check `./forgesre jobs`. Raise `timeout_seconds` (default 90; 14B CPU may need 300–600), recreate Core. Lower `FORGESRE_LLM_THREADS` if the VM is thrashing |
+| llama.cpp `cancel task` after a long prompt | Prefill ate the timeout. Watch `docker compose logs -f llm` for prompt tokens. After `git pull` + `./forgesre update`, the LLM user message is compact (~5000 chars). Do not swap to a smaller model first. Leave `timeout_seconds: 300` if you already set it; 90s is enough once prompt tokens drop |
 | `LLM returned text that was not JSON` | Model ignored the schema. Builtin ForgeRCA stays. Keep Qwen Instruct; do not swap a base (non-instruct) GGUF |
 | HTTP 400 from llama.cpp | Core already retries without extra template kwargs. Rebuild Core if you are on an old image |
 | Hugging Face download fails | Copy `model.gguf` onto the VM (scp), then `./forgesre fetch-llm --offline` |
