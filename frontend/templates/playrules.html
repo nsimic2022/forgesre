@@ -2,8 +2,12 @@
 {% block title %}Playrules · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Playrules</h1>
-<p class="muted">Deterministic rules. AI cannot change them. Matching uses the Alertmanager <code>alertname</code> (and optional metric label). Operator/value is documentation for humans — Prometheus already evaluated the PromQL.</p>
-<p class="muted">Bundled playrules are the <strong>default warning</strong> (seeded rules + <code>monitoring/alerts.yml</code>). A host can differ via <strong>Alarms</strong> on Add/Edit (<code>assets.alarms</code> enable/%). Same Alertmanager webhook — not a second alerting engine.{% if asset_alarm_hosts %} Per-asset <code>assets.alarms</code> already saved on {{ asset_alarm_hosts|length }} host{% if asset_alarm_hosts|length != 1 %}s{% endif %} ({{ asset_alarm_hosts[:8]|join(", ") }}{% if asset_alarm_hosts|length > 8 %}, …{% endif %}).{% endif %}</p>
+<p class="muted">
+  Seeded rules are the <strong>default warning</strong>.
+  Playrules map Prometheus <code>alertname</code> → playbook. They do <strong>not</strong> create Prom rules.
+  <code>monitoring/alerts.yml</code> is the PromQL source. Asset <strong>Alarms</strong> on Add/Edit (<code>assets.alarms</code> enable/%) are a per-host overlay on the same Alertmanager webhook — not a second alerting engine.
+  {% if asset_alarm_hosts %} Saved on {{ asset_alarm_hosts|length }} host{% if asset_alarm_hosts|length != 1 %}s{% endif %} ({{ asset_alarm_hosts[:8]|join(", ") }}{% if asset_alarm_hosts|length > 8 %}, …{% endif %}).{% endif %}
+</p>
 <table>
   <thead><tr><th>Name</th><th>Condition</th><th>Severity</th><th>Playbook</th><th>Enabled</th></tr></thead>
   <tbody>

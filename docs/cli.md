@@ -86,7 +86,9 @@ quit                       # or: exit    or Ctrl-D
 
 ## Ping vs scrape
 
-ICMP ping from the appliance only proves **L3** (the host answers ping). ForgeSRE **sees** a host when Prometheus scrapes exporter `/metrics`. `./forgesre ping` (alias `./forgesre probe`) checks both from this VM, using inventory already in ForgeSRE — no extra flags for the common case.
+ICMP ping from the appliance only proves **L3** (the host answers ping). ForgeSRE **sees** a host when Prometheus scrapes exporter `/metrics`. `./forgesre ping` (alias `./forgesre probe`) checks both **from the Ubuntu host**, using inventory already in ForgeSRE — no extra flags for the common case. Do not `pip install sqlalchemy` on the host.
+
+GUI Verify / asset Ping badges run **inside the Core container**. The Core image installs `iputils-ping` so that ICMP is the same idea as host `./forgesre ping` (one ICMP echo). If ping were missing in Core, the GUI would show `ping not installed (iputils-ping)` instead of a real miss.
 
 ```bash
 ./forgesre ping
@@ -111,7 +113,7 @@ Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `
 
 ## Verify (live communication)
 
-`./forgesre test` is appliance health (files, Compose, login, APIs) after `update`. **`./forgesre verify` is a different command**: live communication for inventory already in ForgeSRE. It runs on the **host** CLI (Ubuntu Python has no sqlalchemy — do not pip-install it). GUI Verify still runs inside Core.
+`./forgesre test` is appliance health (files, Compose, login, APIs) after `update`. **`./forgesre verify` is a different command**: live communication for inventory already in ForgeSRE. **`./forgesre doctor`** is System Health lights. Those three are not the same. Verify runs on the **host** CLI (Ubuntu Python has no sqlalchemy — do not pip-install it). GUI Verify still runs inside Core (ICMP via `iputils-ping` in the Core image).
 
 ```bash
 ./forgesre verify
@@ -132,6 +134,8 @@ Detect/verify GET `/metrics` with a few-second timeout, read until `node_` / `wi
 Classes are universal, not SKUs: Linux, Windows, Network SNMP, Unknown. Unknown or a missing exporter / no Prom target is **SKIP or FAIL with an honest reason** — never a fake green host. Seeded `forge-demo-*` rows and the discovery Approve seed `10.20.30.41` (`disc-10-20-30-41`) are **lab** (label DEMO), are not in HTTP SD, and are not proof of a real scrape. Verify does **not** call the LLM even when ForgeAI is enabled.
 
 `verify` accepts **all of**: asset number `#`, Asset ID, hostname, and IP. Same keys work for `./forgesre ping`. TAB completes numbers and ids (hostnames too). One key dumps what ForgeSRE already knows (inventory) plus the live checks. Same action: Assets → **Verify** (analyst / engineer / admin). Viewers are read-only.
+
+`./forgesre jobs` is the Postgres job table. There is **no Celery**. One worker thread in Core runs scheduled reports then investigate/LLM rewrite; a rewrite can occupy that thread up to `ai.llm.timeout_seconds`.
 
 ---
 

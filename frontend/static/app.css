@@ -405,6 +405,16 @@ button.danger { background: var(--crit); color: var(--btn-danger-text); }
 }
 .incident-actions button.todo { background: var(--warn); color: var(--btn-text); }
 .incident-actions button.done { background: var(--ok); color: var(--btn-text); }
+.incident-actions a.button {
+  display: inline-block;
+  text-decoration: none;
+  padding: 0.55rem 0.9rem;
+  border-radius: 6px;
+  font: inherit;
+  width: auto;
+}
+.incident-actions a.button.todo { background: var(--warn); color: var(--btn-text); }
+.incident-actions a.button.done { background: var(--ok); color: var(--btn-text); }
 .incident-actions button.off,
 .incident-actions button:disabled {
   background: var(--disabled);
@@ -644,7 +654,7 @@ form.ops-compose {
 .metric-tiles { display: grid; gap: 0.35rem; }
 .metric-tile {
   display: grid;
-  grid-template-columns: 5.4rem minmax(3.4rem, auto) minmax(2.4rem, 1fr) 0.65rem auto auto;
+  grid-template-columns: 5.4rem minmax(3.4rem, auto) minmax(2.4rem, 1fr) 0.65rem auto;
   align-items: center;
   column-gap: 0.4rem;
   min-width: 0;

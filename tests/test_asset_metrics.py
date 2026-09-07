@@ -500,6 +500,8 @@ def test_metrics_api_and_detail_html(monkeypatch):
     assert "metric-value" in text
     assert "metric-threshold" in text
     assert 'href="/assets?edit=app-lab-metrics#asset-form"' in text
+    assert "Edit Alarms" in text
+    assert text.count("metric-edit") == 1
     assert "Prometheus sees this target (up=1)." in text
 
 

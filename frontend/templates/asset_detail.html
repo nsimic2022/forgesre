@@ -118,7 +118,7 @@
   <div class="metric-panel-head">
     <h2>Machine metrics</h2>
     {% if can('write_assets') %}
-    <a class="metric-edit" href="/assets?edit={{ asset.asset_id }}#asset-form">Edit</a>
+    <a class="metric-edit" href="/assets?edit={{ asset.asset_id }}#asset-form">Edit Alarms</a>
     {% endif %}
   </div>
   {% if metrics.demo %}<span class="pill demo">DEMO</span>{% endif %}
@@ -144,9 +144,6 @@
         —
         {% endif %}
       </span>
-      {% if can('write_assets') %}
-      <a class="metric-edit" href="/assets?edit={{ asset.asset_id }}#asset-form">Edit</a>
-      {% endif %}
     </div>
     {% endfor %}
   </div>

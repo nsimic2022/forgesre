@@ -122,6 +122,10 @@ def test_install_and_update_bundle_netbox_default_on():
     disc = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
     assert "does not bundle NetBox" not in disc
     assert "8001" in disc
+    assert "not nmap" in disc.lower()
+    assert 'action="/discovery/scan"' in disc
+    assert 'action="/discovery/netbox-sync"' in disc
+    assert disc.find("Scan now") < disc.find("NetBox sync")
     appliance = (ROOT / "scripts" / "appliance_test.py").read_text(encoding="utf-8")
     assert "http.netbox" in appliance
     assert "do not fake green" in appliance.lower() or "migrations" in appliance.lower()
@@ -180,5 +184,6 @@ def test_compose_and_mailbox_image_pins():
     assert "build" in data["services"]["core"]
     dockerfile = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
     assert dockerfile.splitlines()[0] == "FROM python:3.12-slim"
+    assert "iputils-ping" in dockerfile
     mailbox = (ROOT / "scripts" / "mailbox.sh").read_text(encoding="utf-8")
     assert 'DMS_IMAGE="ghcr.io/docker-mailserver/docker-mailserver:15.1.0"' in mailbox

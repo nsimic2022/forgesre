@@ -201,7 +201,7 @@ def test_incident_action_buttons_follow_status_colors():
     assert 'value="INVESTIGATING" class="todo"' in open_page.text
     assert 'value="RESOLVED" class="todo"' in open_page.text
     assert 'value="CLOSED" class="todo"' in open_page.text
-    assert 'class="todo">Run AI investigation' in open_page.text
+    assert 'class="todo">Open ForgeRCA' in open_page.text
     client.post(f"/incidents/{number}/status", data={"status": "INVESTIGATING"}, follow_redirects=False)
     acked = client.get(f"/incidents/{number}")
     assert 'value="INVESTIGATING" class="done"' in acked.text
@@ -220,7 +220,10 @@ def test_incident_action_buttons_follow_status_colors():
     rca = client.post(f"/incidents/{number}/investigate", follow_redirects=False)
     assert rca.status_code in {302, 303}
     after_rca = client.get(f"/incidents/{number}")
-    assert 'class="done">Run AI investigation' in after_rca.text
+    assert f'href="/ai/{number}"' in after_rca.text
+    assert "Open ForgeRCA" in after_rca.text
+    assert "ForgeRCA" in after_rca.text
+    assert "ForgeAI" in after_rca.text
     db.close()
 
 
@@ -243,7 +246,11 @@ def test_send_incident_report_to_address_book_email():
     page = client.get(f"/incidents/{number}")
     assert page.status_code == 200
     assert "Send incident report" in page.text
-    assert "Report outbox" in page.text
+    assert "/ops#mail" in page.text
+    assert "Report outbox" not in page.text
+    assert "Open ForgeRCA" in page.text
+    assert "ForgeRCA" in page.text
+    assert "ForgeAI" in page.text
     assert "platform@forgesre.local" in page.text
     assert page.text.find("Acknowledge") < page.text.find('class="pill open"') or page.text.find("Acknowledge") < page.text.find(">OPEN<")
     posted = client.post(
@@ -252,7 +259,7 @@ def test_send_incident_report_to_address_book_email():
         follow_redirects=False,
     )
     assert posted.status_code == 303
-    assert posted.headers["location"].endswith("#mail")
+    assert posted.headers["location"].endswith(f"/incidents/{number}")
     db.expire_all()
     mail = (
         db.query(Notification)
@@ -267,10 +274,12 @@ def test_send_incident_report_to_address_book_email():
     assert "ForgeRCA has not been run yet." in mail.body
     listed = client.get("/incidents")
     assert listed.status_code == 200
+    assert "Open/firing" in listed.text
     assert "Reported to" in listed.text
     assert "ops@dc.local" in listed.text
     assert f'class="inc-crit" href="/incidents/{number}"' in listed.text
-    assert 'class="inc-ok"' in listed.text
+    archive = client.get("/incidents?open=0")
+    assert 'class="inc-ok"' in archive.text
     client.post(f"/incidents/{number}/investigate", follow_redirects=False)
     again = client.post(
         f"/incidents/{number}/mail",

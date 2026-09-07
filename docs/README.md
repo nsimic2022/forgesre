@@ -26,7 +26,7 @@ What each release actually shipped (read if you want the “why”, not required
 
 These are design notes. You do **not** install or enable them on the VM.
 
-- [Architecture (longer-term)](architecture.md)
+- [Architecture proposal (not the V0.7 appliance runtime)](architecture.md)
 - [V0.3 implementation plan](V03_IMPLEMENTATION_PLAN.md)
 
 **Session handoff** (next coding agent / contributor, not an operator start page): [continuation.md](continuation.md).

@@ -123,17 +123,7 @@
     <div class="stat ok"><span>Resolved</span><strong>{{ stats.resolved }}</strong></div>
   </div>
 </section>
-<section>
-  <h2>Monitoring</h2>
-  <div class="grid">
-    {% for name, item in doctor.components.items() %}
-    <div class="stat {{ health_class(item.status) }}">
-      <span>{{ item.label or name }}</span><strong>{{ item.status }}</strong>
-    </div>
-    {% endfor %}
-  </div>
-  <p class="muted">Overall: <span class="pill {{ health_class(doctor.overall) }}">{{ doctor.overall }}</span>{% if can('read_play') %} · <a href="/journal">Journal</a>{% endif %} · <a href="/health-ui">System Health</a></p>
-</section>
+<p class="muted">Full stack diagnostics live on <a href="/health-ui">System Health</a> (same checks as <code>./forgesre doctor</code>).{% if can('read_play') %} Journal is <a href="/journal">here</a>.{% endif %}</p>
 {% if can('read_play') %}
 <section>
   <h2>Recent journal reports</h2>

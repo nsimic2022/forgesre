@@ -259,7 +259,9 @@ docker compose --profile ai up -d --force-recreate llm
 
 ---
 
-## 6. What happens when you click Run AI investigation
+## 6. What happens when you click Open ForgeRCA
+
+There is **no Celery**. Core has **one worker thread** (Postgres `jobs` table, loop every 2s). An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds` (example.yml default 90). `/ops` scheduled reports run first in the same loop so mail is not stuck behind llama.cpp.
 
 1. Core runs **ForgeRCA immediately** (`use_llm=false`) and shows the builtin report.
 2. If `ai.enabled` and `ai.llm.url` are set, Core **enqueues** a background job (`./forgesre jobs`) with `use_llm=true`.
@@ -278,7 +280,7 @@ Alertmanager ingest also enqueues investigate; the webhook does **not** wait on 
 ./forgesre demo          # first-hour HighCPU; RCA inline, rewrite queued
 ```
 
-Do not mash **Run AI investigation** while a job is `running`.
+Do not mash **Open ForgeRCA** / Investigate while a job is `running`.
 
 ---
 

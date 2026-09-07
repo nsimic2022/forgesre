@@ -40,19 +40,5 @@
 </form>
 {% endif %}
 <h2>Generated notifications</h2>
-<table>
-  <thead><tr><th>When</th><th>Target</th><th>Subject</th><th>Status</th></tr></thead>
-  <tbody>
-  {% for note in notifications %}
-    <tr>
-      <td>{{ note.created_at }}</td>
-      <td>{{ note.target }}</td>
-      <td>{% if is_demo_mail(note) %}<span class="pill demo">DEMO</span> {% endif %}{{ note.subject }}</td>
-        <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
-    </tr>
-  {% else %}
-    <tr><td colspan="4" class="muted">None yet.</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
+<p class="muted">The outbox is one table on <a href="/ops#mail">Email &amp; reports</a>. This page is the ladder only.</p>
 {% endblock %}

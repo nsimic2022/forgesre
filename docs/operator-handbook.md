@@ -122,21 +122,21 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 
 | Menu | URL | What you do there |
 |---|---|---|
-| Dashboard | `/` | Counts, doctor lights, pending discovery banner (analyst+), **Run demo** (admin, top right — Linux / Windows / network lab scenarios), recent journal reports (analyst+) |
-| Assets | `/assets` | List inventory. **Add / Edit / Clone / Remove** (analyst+). Click Edit to reuse the Add form. |
-| Asset detail | `/assets/<id>` | Contacts, scrape, similar-incident history. Edit / Clone / Remove / Detect (analyst+) |
-| Discovery | `/discovery` | Scan, Approve / Ignore (analyst+), optional NetBox sync (admin) |
-| Incidents | `/incidents` | Recent 200 Alertmanager incidents. INC id is green (resolved/closed), yellow (in progress), red (critical). **Reported to** is who received the incident report |
-| History | `/history` | Last 90 days in Postgres. Filters: status, asset, `INC` number. Closed rows stay here. |
-| Incident | `/incidents/INC-…` | **Acknowledge / Resolve / Close** at the top (same yellow/green as below), Who to call, **Send incident report**, **Report outbox**, audit, notes, RCA |
-| Escalation | `/escalation` | Seeded **Default warning**, create policy (Save + Cancel), generated notification log |
-| AI Investigation | `/ai/INC-…` | ForgeRCA (green) then ForgeAI (green/yellow/red). Facts, anomalies, hypotheses |
-| Playrules | `/playrules` | List, toggle, create from Prometheus presets (**analyst**) |
+| Dashboard | `/` | Counts, HOST DOWN banner, pending discovery banner (analyst+), **Run demo** (admin, top right), recent incidents. Full doctor grid is **System Health**, not here. |
+| Assets | `/assets` | List inventory. **Add / Edit / Clone / Remove** (analyst+). One sentence: Verify ≠ doctor ≠ `./forgesre test`. |
+| Asset detail | `/assets/<id>` | Contacts, scrape, similar-incident history. **One Edit Alarms** on the metrics panel (not per tile). |
+| Discovery | `/discovery` | **Scan now** (TCP/SNMP/HTTP, not nmap) separate from **Sync NetBox** (read-only, admin). Demo IP `10.20.30.41` is a DEMO lab seed. |
+| Incidents | `/incidents` | **Open/firing** list (filter: open-only / last days). INC id is green (resolved/closed), yellow (in progress), red (critical). Archive is **History**. |
+| History | `/history` | Archive: last 90 days in Postgres. Filters: status, asset, `INC` number. Closed rows stay here. |
+| Incident | `/incidents/INC-…` | **Acknowledge / Resolve / Close**, Who to call, **Open ForgeRCA** (primary CTA → `/ai/INC-…`), **Send incident report**. Mail outbox is `/ops#mail`. ForgeRCA/ForgeAI pills stay. |
+| Escalation | `/escalation` | Seeded **Default warning**, create policy. Outbox links to `/ops#mail`. |
+| AI Investigation | `/ai/INC-…` | ForgeRCA (green) then ForgeAI (green/yellow/red). Facts, anomalies, hypotheses. Empty host logs: honest limitation (Alloy ships appliance/Core logs only). |
+| Playrules | `/playrules` | Map `alertname` → playbook. Do **not** create Prom rules. `alerts.yml` is PromQL; asset Alarms are overlay. |
 | Playbooks | `/playbooks` | List steps, create (**analyst**) |
-| Escalation | `/escalation` | Seeded **Default warning**, create policy (Save + Cancel), generated notification log |
+| Escalation | `/escalation` | Seeded **Default warning**, create policy (Save + Cancel). Mail: `/ops#mail`. |
 | Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
-| System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Run doctor** re-probes now. Green = running, yellow = paused / starting / disabled, red = down. **Open** column (and the component name) goes to that service’s GUI or metrics. Prometheus Open is **Targets** (`/targets?search=` scrape jobs), **Alerts**, **Graph** — not Prometheus process `/metrics`. **Open Grafana** is on this page too. Prometheus/Alertmanager bind the appliance; the UI rewrites `127.0.0.1` to the host you used. |
-| Email & reports | `/ops` | **Gmail** / **Outlook** send now (YAML + `SMTP_*`). **Own domain + Roundcube** is listed but not enabled until `./forgesre mailbox`. Address book, send, outbox, scheduled reports. Grafana is on System Health. |
+| System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Open Grafana** lives **only here** (not left nav, not the alarm path). Alarm path: Prometheus → Alertmanager → Core. One Core worker thread (not Celery). |
+| Email & reports | `/ops` | Address book, send, **the** mail outbox (`#mail`), scheduled reports. Grafana is on System Health. |
 | Administration | `/admin` | Users: click a row to **edit** or **remove**. **Backup**, then **Import / restore** (left) beside a **ForgeSRE CLI** command list (right). Audit log. No browser PTY — SSH or `./forgesre` / `./forgesre shell` |
 
 ---
@@ -259,7 +259,7 @@ Who: **analyst**, engineer, or admin (`write_assets`).
 - **Edit** opens the same Add form filled in (`/assets?edit=<id>`). **Asset ID is immutable** after create (Prometheus `asset=` label and history). Hostname, type (including Auto), IP, scrape address, owner/contact, notes, environment can change. HTTP SD is live from this table — the next Prometheus scrape drops or rewrites the target. Core’s static demo job is not this list.
 - **Clone** copies into the same form with a **new** Asset ID (and a suggested hostname). Tweak before Save. Duplicate Asset ID or IP is rejected. NetBox id is not copied. If the source is `forge-demo-*`, the suggested id is `copy-…` (a real asset that **can** be scraped). Keep a `forge-demo-*` id only if you want another lab-only row.
 - **Remove** asks for confirm. The row leaves inventory and HTTP/SNMP SD. **Incidents stay** in History with the asset link cleared (not cascade-deleted). Discovery candidates for that IP go back to **new**. Lab `forge-demo-*` hosts can be removed the same way; seed will not put them back after Core start/update.
-- **Verify** runs the live path for that row (same as `./forgesre verify 12` / `win10-gp` / hostname / IP): ping, exporter port or SNMP, Prometheus `up`, scrape target health, family series (`node_` / `windows_` / SNMP), Alertmanager reachable, last Core incident (SKIP if none), last RCA vs PromQL. ForgeAI is listed only if enabled; verify does not call the LLM. If scrape address is empty and type is Unknown/Auto, verify still GETs `:9100` and `:9182` on the IP (same as Add Auto). `node_` → Linux `:9100`, `windows_` → Windows `:9182`, and the row is saved so Prometheus HTTP SD can scrape it (wait ~30s, then `./forgesre sd`). Missing exporter = SKIP/FAIL with a reason, not a fake green host. Demo `forge-demo-*` and discovery seed `10.20.30.41` (`disc-10-20-30-41`) are labeled lab and are not scraped. **Verify all** is on the Assets list. This is not `./forgesre test`.
+- **Verify** runs the live path for that row (same as `./forgesre verify 12` / `win10-gp` / hostname / IP): ping, exporter port or SNMP, Prometheus `up`, scrape target health, family series (`node_` / `windows_` / SNMP), Alertmanager reachable, last Core incident (SKIP if none), last RCA vs PromQL. ForgeAI is listed only if enabled; verify does not call the LLM. If scrape address is empty and type is Unknown/Auto, verify still GETs `:9100` and `:9182` on the IP (same as Add Auto). `node_` → Linux `:9100`, `windows_` → Windows `:9182`, and the row is saved so Prometheus HTTP SD can scrape it (wait ~30s, then `./forgesre sd`). Missing exporter = SKIP/FAIL with a reason, not a fake green host. Demo `forge-demo-*` and discovery seed `10.20.30.41` (`disc-10-20-30-41`) are labeled lab and are not scraped. **Verify all** is on the Assets list. **Verify ≠ `./forgesre doctor` (System Health) ≠ `./forgesre test` (appliance report).** GUI Verify ICMP runs from the **Core container** (image includes `iputils-ping`). Host CLI `./forgesre ping` / `verify` still probe from the Ubuntu VM.
 
 What Core does:
 
@@ -284,7 +284,7 @@ The Assets table shows **Ping** and **:9100 / :9182 / SNMP** color dots after th
 
 On the asset page, **Detect OS / scrape port** re-runs the same probe and fills type + scrape. You can override afterwards.
 
-The same page has a **right-hand Machine metrics** panel (two columns; stacks on a narrow window). Each metric is **one line** (name · value · bar · color · threshold) so a high % does not clip the threshold. Glance at bundled class metrics from Prometheus: Linux `node_` CPU/mem/disk, Windows `windows_` the same idea, network SNMP `up` only. Tiles match the same way verify does (`up{asset="<id>"}` first, then hostname, then `instance=<scrape>` such as `IP:9182`). Missing series stay **yellow** (`not collecting`) — never a fake 0%. When verify PROM is PASS, Collecting is green. Colors follow this asset’s Add/Edit checklist (else bundled alerts/playrules: Linux CPU **95%**, Linux/Windows memory and disk **90%**, Windows CPU **90%**, demo gauges **80%**). A small **Edit** on the tile row opens that host’s Alarms. `forge-demo-*` rows and discovery seed `10.20.30.41` are labeled **DEMO**. Grafana is unchanged.
+The same page has a **right-hand Machine metrics** panel (two columns; stacks on a narrow window). Each metric is **one line** (name · value · bar · color · threshold) so a high % does not clip the threshold. Glance at bundled class metrics from Prometheus: Linux `node_` CPU/mem/disk, Windows `windows_` the same idea, network SNMP `up` only. Tiles match the same way verify does (`up{asset="<id>"}` first, then hostname, then `instance=<scrape>` such as `IP:9182`). Missing series stay **yellow** (`not collecting`) — never a fake 0%. When verify PROM is PASS, Collecting is green. Colors follow this asset’s Add/Edit checklist (else bundled alerts/playrules: Linux CPU **95%**, Linux/Windows memory and disk **90%**, Windows CPU **90%**, demo gauges **80%**). **One Edit Alarms** on the panel head opens that host’s Alarms (not an Edit on every tile). `forge-demo-*` rows and discovery seed `10.20.30.41` are labeled **DEMO**. Grafana is unchanged (graphs only; not the alarm path).
 
 On **Add asset / Edit** (not a third column on the Assets **list**), the form is **Asset ID | Hostname | IP** as the left identity block (same order as the Assets table, skipping `#`), with **Alarms** still the third column beside them. Keep type **Auto (detect exporter)**. The Alarms checklist (cpu / mem / disk / up, enable + threshold %) sits in the third column, not a full-width block below. Detect also shows which bundled families the exporter actually exposes. Stored on the asset (`alarms` JSON). **Save** and **Cancel** are at the bottom (Cancel returns to the asset page or the list). Tiles use that threshold for red/green. Prometheus alert rules stay global — ForgeSRE skips opening an incident for a bundled alert when the alarm is disabled or the webhook value is below the asset threshold. Until you change `monitoring/alerts.yml` / `alerts.local.yml`, Prometheus may still fire; the incident list stays quiet.
 
@@ -306,7 +306,7 @@ discovery:
 ```
 
 2. Recreate Core (settings load at process start).
-3. Open **Discovery**. Click **Scan now**, or wait: first scan ~30s after Core start, then every **6 hours** (unless `mode: manual`). The page shows a **Last scan** row of step pills (CIDR, TCP 22, TCP 80/443, :9100, :9182, SNMP UDP/161, HTTP /metrics). Green = at least one host passed that step, yellow = skipped/none, red = scanner error. This is the live TCP/SNMP/`/metrics` probe — **not ICMP ping** (ping is on Assets).
+3. Open **Discovery**. **Scan now** is the TCP/SNMP/`/metrics` probe — **not nmap**, and **not** NetBox. **Sync NetBox** is a separate admin CTA (read-only). Wait: first scan ~30s after Core start, then every **6 hours** (unless `mode: manual`). The page shows a **Last scan** row of step pills (CIDR, TCP 22, TCP 80/443, :9100, :9182, SNMP UDP/161, HTTP /metrics). Green = at least one host passed that step, yellow = skipped/none, red = scanner error. ICMP ping is on Assets, not Scan now.
 4. Banner **NEW DEVICE DETECTED**. Found hosts stay on **Waiting for Approve** until you decide. They are **not** auto-added to inventory.
 5. **Approve** (on the Discovery page) → creates an asset (`source=discovery`, id like `disc-10-20-30-41`) and sends you to the asset page. **Ignore** rejects the host (out of inventory).
 
@@ -460,27 +460,25 @@ Check the RCA queue with `./forgesre jobs`. If a job is `error`, open Console (`
 
 ## 9. Playrules
 
-A **playrule** is a deterministic mapping: *this Prometheus alert → this playbook + severity*. AI cannot edit playrules.
+A **playrule** maps `alertname` → playbook + severity. AI cannot edit playrules. Creating a playrule does **not** create a Prometheus alert.
 
 Who: **analyst** (permission `write_play`). Engineers can read, not create.
+
+`monitoring/alerts.yml` is the **PromQL source** (bundled rules). Asset **Alarms** on Add/Edit (`assets.alarms` enable/%) are a per-host overlay: same Alertmanager webhook, not a second engine. Prometheus may still fire a global rule; ForgeSRE skips opening an incident when the alarm is disabled or the value is below the host threshold.
 
 ### Create in the UI
 
 1. Optionally create the playbook first (`/playbooks`).
 2. **Playrules** → **Create playrule**.
-3. Name (unique), metric, operator, value, severity, playbook.
+3. Name (unique), **alertname** (must match Prometheus), metric/operator/value for humans, severity, playbook.
 4. **Save**. **Cancel** next to Save returns to this page without creating. Use **Toggle** to disable without deleting.
 
-Bundled playrules are the **default warning** (seeded rules + `monitoring/alerts.yml`). A host can differ via **Alarms** on Add/Edit (`assets.alarms`). That is still the same Alertmanager webhook — not a second alerting engine.
-
-The form stores `condition.alertname` equal to the **name** you typed. Matching on ingest is:
+The form stores `condition.alertname`. Matching on ingest is:
 
 1. Enabled playrule whose `condition.alertname` equals Prometheus `labels.alertname` (case-insensitive), else
 2. `condition.metric` equals a `metric` label or the alert name.
 
-So if Prometheus fires `alertname: HighCPU`, the seeded rule `high-cpu` matches because its condition includes `"alertname": "HighCPU"`. If you create a UI rule named `HighCPU`, that also matches.
-
-**Creating a playrule does not create a Prometheus alert.** Bundled rules live in `monitoring/alerts.yml`. Extra rules: `monitoring/alerts.local.yml`, then `./forgesre render-monitoring`.
+So if Prometheus fires `alertname: HighCPU`, the seeded rule `high-cpu` matches because its condition includes `"alertname": "HighCPU"`. Extra Prom rules: `monitoring/alerts.local.yml`, then `./forgesre render-monitoring`.
 
 ### Seeded rules
 
@@ -531,7 +529,7 @@ A background loop every 30 seconds generates (and optionally sends) those steps 
 
 If the incident’s asset has **owner email**, every step is addressed to that email (demo: `platform@forgesre.local`). The body includes contact name and phone. Policy roles (`team` / `team-lead` / `engineer`) stay in the body as the step name. If owner email is empty, ForgeSRE falls back to `<role>@forgesre.local`.
 
-Incident reports and escalation mail are **multipart** (`text/plain` + `text/html`). Gmail and Outlook show the HTML (severity color bar, DEMO banner when the asset is `forge-demo-*`, ForgeRCA sections). The Report outbox on the incident page still stores the plain-text body. **Send email** on `/ops` (Compose) stays as the operator typed it — ForgeSRE does not rewrite that text into HTML tables.
+Incident reports and escalation mail are **multipart** (`text/plain` + `text/html`). Gmail and Outlook show the HTML (severity color bar, DEMO banner when the asset is `forge-demo-*`, ForgeRCA sections). The **mail outbox** on `/ops#mail` stores the plain-text body. **Send email** on `/ops` (Compose) stays as the operator typed it — ForgeSRE does not rewrite that text into HTML tables.
 
 Analysts can **create** another policy (name, slug, steps as `minutes role` lines) with **Save** and **Cancel**, same pattern as Playbooks. New playrules still attach **Default warning** unless the playrule form picks a different policy. The 30s loop reads that policy’s `after_minutes` / `target` steps. This is not a ticket system.
 
@@ -631,24 +629,26 @@ On `/incidents/<number>`:
 |---|---|---|
 | Acknowledge | analyst+ | Status `INVESTIGATING`, records ack user/time |
 | Resolve / Close | analyst+ (`write_incidents`) | Closes the operational loop; records who resolved |
-| Run AI investigation | analyst+ (`read_ai`) or engineer (`investigate`) | ForgeRCA; does not change the host |
-| **Send incident report** | analyst / engineer / admin | Emails the current INC snapshot when SMTP is on (`sent`) as HTML + plain text. If SMTP is off, stores `generated` in **Report outbox** (plain body). Replies arrive in the real mailbox, not in ForgeSRE |
+| Open ForgeRCA | analyst+ (`read_ai`) or engineer (`investigate`) | Primary CTA to `/ai/INC-…`. Runs builtin ForgeRCA if needed; does not change the host |
+| **Send incident report** | analyst / engineer / admin | Emails the current INC snapshot when SMTP is on (`sent`) as HTML + plain text. If SMTP is off, stores `generated` in the **mail outbox** on `/ops#mail`. Replies arrive in the real mailbox, not in ForgeSRE |
 
-The same page lists **email notifications** for this `INC` (bodies, `generated` vs `sent`), **who did what** (audit: ack, resolve, notes), and **operator notes** (what a person actually did, e.g. cleaned WAL). Notes are not a ticket thread and not RCA.
+The same page lists **who did what** (audit: ack, resolve, notes) and **operator notes**. Mail bodies are on `/ops#mail`, not a second table here. Notes are not a ticket thread and not RCA.
 
-**History** (`/history`) is the 90-day lookback of the same Postgres incidents. Use it for closed work and date filters. Escalation is still the policy + recent mail log. Console (`/journal`) is still process reports, not incident history.
+**Incidents** (`/incidents`) is open/firing work (filter: open-only / last days). **History** (`/history`) is the archive. Escalation is still the policy; its outbox is `/ops#mail`. Console (`/journal`) is still process reports.
 
 Asset health on the dashboard (`healthy` / `warning` / `critical`) follows open incidents on that asset.
 
-Grafana is for graphs. The product incident list is ForgeSRE, not Grafana Alerting.
+**Grafana is not the alarm path.** Incidents come from Prometheus → Alertmanager → Core. Open Grafana only from **System Health**. Grafana is not in the left nav.
 
 ---
 
 ## 13. AI investigation (ForgeRCA)
 
-Open **ForgeRCA investigation** from the incident, or click **Run AI investigation**.
+Open **ForgeRCA** from the incident (primary CTA → `/ai/INC-…`).
 
 The button runs **builtin ForgeRCA immediately** and opens Summary → Root cause → Recommended actions → Facts → Anomalies → Candidate causes → Limitations. Two pills sit at the top: **ForgeRCA** (green when builtin has a result) and **ForgeAI** (green if the LLM rewrote the prose, yellow while the rewrite runs, red if the LLM is off or unreachable). If `ai.enabled` is on, refresh later for ForgeAI. Do not mash Run now.
+
+Jobs: **one worker thread** in Core (Postgres `jobs` table). There is **no Celery**. An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds` (example.yml default 90; live yml is gitignored). Scheduled `/ops` reports run first in the same loop.
 
 You get:
 
@@ -663,7 +663,7 @@ Alertmanager ingest **enqueues** an investigate job. The webhook does not wait o
 
 Queries are **per asset**. `forge-demo-01` uses Core demo gauges. A real Linux host uses `node_cpu_seconds_total` / `node_filesystem_*` with `asset="<id>"`. A real Windows host uses `windows_cpu_time_total` / `windows_logical_disk_*`. A network device uses `up{job="forgesre-snmp",asset="<id>"}`. Demo CPU/disk numbers are never overlaid on another host.
 
-Loki: Alloy ships **appliance Core logs** labeled `asset=forge-demo-01` / `job=forgesre`. RCA may use those for the DEMO host, labeled DEMO (appliance/demo logs). A real inventory row does **not** get empty Loki presented as logs from that VM — limitation is “no host logs shipped” until Alloy actually has that asset label.
+Loki: Alloy still only ships **appliance Core logs** labeled `asset=forge-demo-01` / `job=forgesre` as a demo. RCA may use those for the DEMO host, labeled DEMO. **Real inventory hosts have no Loki until later** — limitation is “no host logs shipped”. Empty Loki is not evidence from that VM. There is no second log stack in V0.7. The RCA page shows that one-liner when the limitation is present.
 
 The optional LLM **rewrites prose only**. It receives a compact context (incident title/severity, top facts, CPU/mem/disk snapshots, short log lines already capped by `max_log_lines`) — not Prometheus `values: [[timestamp, x], …]` matrices. Builtin ForgeRCA still stores the full facts, evidence IDs, and PromQL. A CPU 4B `cancel task` at `timeout_seconds: 300` was prefill of a multi-thousand-token dump, not Node Exporter talking to the model. After `git pull origin main && ./forgesre update`, Investigate again and watch `docker compose logs -f llm` — prompt tokens should drop a lot.
 
