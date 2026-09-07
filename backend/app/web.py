@@ -48,7 +48,7 @@ from app.models import (
     ScheduledReport,
     User,
 )
-from app.netbox import is_local_netbox_url, sync_cta
+from app.netbox import is_local_netbox_url, status_label, sync_cta
 from app.security import can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload, run_asset_verify
 from app.asset_metrics import safe_asset_metric_panel
@@ -533,6 +533,13 @@ def discovery_page(request: Request, db: Session = Depends(get_db), user: User =
         netbox_sync_ready=bool(netbox_sync.get("ready")),
         netbox_sync_clickable=bool(netbox_sync.get("clickable", netbox_sync.get("ready"))),
         netbox_sync_light=str(netbox_sync.get("light") or "grey"),
+        netbox_sync_label=str(
+            netbox_sync.get("label")
+            or status_label(
+                str(netbox_sync.get("light") or "grey"),
+                str(netbox_sync.get("why") or ""),
+            )
+        ),
         netbox_sync_count=int(netbox_sync.get("count") or 0),
         netbox_sync_why=str(netbox_sync.get("why") or ""),
         demo_candidate_ip=DEMO_CANDIDATE_IP,

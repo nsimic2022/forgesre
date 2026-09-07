@@ -18,6 +18,8 @@ Discovery traffic light uses GET /api/dcim/devices/?limit=1 (never writes):
 - green: API 200 and count >= 1
 Empty must not look like 403. Admin Sync stays clickable on yellow and green.
 Grey still allows a retry click when the UI answers (403 / no token).
+Discovery shows a status chip (not a button): Not connected / API 403,
+No devices, Connected — never the English color names Grey/Yellow/Green.
 """
 
 from __future__ import annotations
@@ -107,6 +109,23 @@ def _cta_light(status: dict[str, Any]) -> str:
     return "grey"
 
 
+def status_label(light: str, why: str = "") -> str:
+    """Visible chip text. Never Grey/Yellow/Green — those look like a second button."""
+    if light == "green":
+        return "Connected"
+    if light == "yellow":
+        return "No devices"
+    if "403" in (why or ""):
+        return "API 403"
+    return "Not connected"
+
+
+def _cta_row(**fields: Any) -> dict[str, Any]:
+    row = dict(fields)
+    row["label"] = status_label(str(row.get("light") or "grey"), str(row.get("why") or ""))
+    return row
+
+
 def sync_cta(url: str, token: str, enabled: bool, timeout: float = 2.0) -> dict[str, Any]:
     """Discovery Sync NetBox control for admins.
 
@@ -114,58 +133,59 @@ def sync_cta(url: str, token: str, enabled: bool, timeout: float = 2.0) -> dict[
     Clickable on yellow and green. Grey retry click when the UI answers
     (HTTP 403 / no token) — do not disable that submit. First-boot connect
     failures stay disabled with one sentence. Last journal sync is not a gate.
+    The light is a status chip (label + CSS color), not a second button.
     """
     if not enabled:
-        return {
-            "ready": False,
-            "starting": False,
-            "clickable": False,
-            "light": "grey",
-            "count": 0,
-            "why": "Sync is off in config.",
-        }
+        return _cta_row(
+            ready=False,
+            starting=False,
+            clickable=False,
+            light="grey",
+            count=0,
+            why="Sync is off in config.",
+        )
     status = netbox_status(url, token, timeout=timeout)
     light = _cta_light(status)
     count = int(status.get("count") or 0)
     ui_up = bool(status.get("ok") or status.get("degraded") or status.get("ui_up"))
     if status.get("starting") and not ui_up:
-        return {
-            "ready": False,
-            "starting": True,
-            "clickable": False,
-            "light": "grey",
-            "count": 0,
-            "why": FIRST_BOOT_WHY,
-        }
+        return _cta_row(
+            ready=False,
+            starting=True,
+            clickable=False,
+            light="grey",
+            count=0,
+            why=FIRST_BOOT_WHY,
+        )
     if light == "green":
-        return {
-            "ready": True,
-            "starting": False,
-            "clickable": True,
-            "light": "green",
-            "count": count,
-            "why": "",
-        }
+        return _cta_row(
+            ready=True,
+            starting=False,
+            clickable=True,
+            light="green",
+            count=count,
+            why="",
+        )
     if light == "yellow":
         why = str(status.get("why") or EMPTY_DEVICES_WHY).strip() or EMPTY_DEVICES_WHY
-        return {
-            "ready": True,
-            "starting": False,
-            "clickable": True,
-            "light": "yellow",
-            "count": 0,
-            "why": why,
-        }
+        return _cta_row(
+            ready=True,
+            starting=False,
+            clickable=True,
+            light="yellow",
+            count=0,
+            why=why,
+        )
     why = _cta_why(status)
     ready = bool(ui_up)
-    return {
-        "ready": ready,
-        "starting": False,
-        "clickable": ready,
-        "light": "grey",
-        "count": 0,
-        "why": why,
-    }
+    return _cta_row(
+        ready=ready,
+        starting=False,
+        clickable=ready,
+        light="grey",
+        count=0,
+        why=why,
+    )
 
 
 def netbox_status(url: str, token: str, timeout: float = 5.0) -> dict[str, Any]:
