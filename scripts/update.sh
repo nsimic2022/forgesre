@@ -50,7 +50,7 @@ core_inputs_hash() {
 netbox_launch_hash() {
   (
     cd "$ROOT"
-    sha256sum scripts/netbox-launch.sh docker-compose.yml scripts/ensure-netbox-secrets.sh
+    sha256sum scripts/netbox-launch.sh scripts/netbox-upsert-token.py docker-compose.yml scripts/ensure-netbox-secrets.sh
   ) | sha256sum | awk '{print $1}'
 }
 
