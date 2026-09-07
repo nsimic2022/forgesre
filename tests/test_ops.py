@@ -39,6 +39,11 @@ def test_system_health_has_open_column_and_grafana():
     assert "grafana" in page.text.lower()
     assert "discovery" in page.text
     assert "Core (container)" in page.text
+    assert "SNMP exporter" in page.text
+    assert "NetBox" in page.text
+    assert "paused (no SNMP targets)" in page.text
+    assert "warn" in page.text.lower()
+    assert "API 403 is" in page.text
     assert "GUI" in page.text
     assert "Metrics" in page.text
     assert ">Targets<" in page.text

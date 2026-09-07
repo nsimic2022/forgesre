@@ -14,7 +14,7 @@ from app.settings import settings
 
 log = logging.getLogger("forgesre")
 
-SOFT_STATUSES = frozenset({"ok", "disabled", "paused", "warn", "warning"})
+SOFT_STATUSES = frozenset({"ok", "disabled", "paused", "warn", "warning", "starting"})
 _SNMP_ENSURE_AT = 0.0
 _SNMP_ENSURE_COOLDOWN = 45.0
 
@@ -26,6 +26,8 @@ COMPONENT_LABELS = {
     "prometheus": "Prometheus",
     "alertmanager": "Alertmanager",
     "grafana": "Grafana",
+    "snmp": "SNMP exporter",
+    "netbox": "NetBox",
 }
 
 # Alarm path is Prometheus → Alertmanager → Core. Grafana / Loki graphs are not this list.
@@ -140,14 +142,24 @@ def journal_doctor_alarm_path(db, components: dict[str, Any] | None) -> None:
 
 
 def runtime_state(item: dict[str, Any] | None) -> tuple[str, str]:
-    """running (green), starting/paused (yellow), down (red)."""
+    """running (green), warn/paused/starting (yellow), down (red).
+
+    ``warn`` stays ``warn`` (NetBox UI up + API 403). ``paused`` is only
+    idle-on-purpose (SNMP with no network targets). Do not map warn → paused.
+    """
     item = item or {}
     status = str(item.get("status") or "error").lower()
     why = str(item.get("why") or "").lower()
     if status in {"ok", "healthy"}:
         return "running", "ok"
-    if status in {"disabled", "warn", "warning", "paused"}:
+    if status == "starting":
+        return "starting", "warn"
+    if status == "paused":
         return "paused", "warn"
+    if status == "disabled":
+        return "paused", "warn"
+    if status in {"warn", "warning"}:
+        return "warn", "warn"
     if "timeout" in why or "timed out" in why:
         return "starting", "warn"
     return "down", "crit"
@@ -303,6 +315,8 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
         metrics = spec.get("metrics") or ""
         if cid == "netbox" and not gui:
             gui = ""
+        if cid == "snmp" and str(item.get("status") or "") == "paused":
+            state = "paused (no SNMP targets)"
         why = str(item.get("why") or "")
         if not why and str(item.get("status") or "") == "disabled":
             why = "Disabled in config or not bundled."

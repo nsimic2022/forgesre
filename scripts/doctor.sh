@@ -55,7 +55,7 @@ python3 - <<'PY'
 import json
 from pathlib import Path
 data = json.loads(Path("/tmp/forgesre-doctor.json").read_text())
-ok_status = {"ok", "disabled", "paused", "warn", "warning"}
+ok_status = {"ok", "disabled", "paused", "warn", "warning", "starting"}
 for name, item in data.get("components", {}).items():
     status = item.get("status")
     label = item.get("label") or name

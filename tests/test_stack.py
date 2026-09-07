@@ -28,9 +28,14 @@ def test_runtime_state_maps_green_yellow_red():
     assert runtime_state({"status": "ok"}) == ("running", "ok")
     assert runtime_state({"status": "disabled"}) == ("paused", "warn")
     assert runtime_state({"status": "paused"}) == ("paused", "warn")
+    assert runtime_state({"status": "warn"}) == ("warn", "warn")
+    assert runtime_state({"status": "warning"}) == ("warn", "warn")
+    assert runtime_state({"status": "starting"}) == ("starting", "warn")
     assert runtime_state({"status": "error", "why": "timed out"}) == ("starting", "warn")
     assert runtime_state({"status": "error", "why": "connection refused"}) == ("down", "crit")
     assert doctor_soft_status("paused") is True
+    assert doctor_soft_status("warn") is True
+    assert doctor_soft_status("starting") is True
     assert doctor_soft_status("error") is False
 
 
@@ -41,7 +46,7 @@ def test_ensure_snmp_exporter_skipped_in_dev():
 def test_doctor_snmp_paused_when_no_targets(monkeypatch):
     def _http(url, method):
         if "9116" in url:
-            return {"status": "error", "why": "connection refused"}
+            return {"status": "ok"}
         return {"status": "ok"}
 
     monkeypatch.setattr("app.api._http", _http)
@@ -50,12 +55,23 @@ def test_doctor_snmp_paused_when_no_targets(monkeypatch):
     payload = doctor_payload(force=True)
     snmp = payload["components"]["snmp"]
     assert snmp["status"] == "paused"
-    assert "paused" in (snmp.get("why") or "").lower()
+    assert "paused (no SNMP targets)" in (snmp.get("why") or "")
+    assert "not down" in (snmp.get("why") or "").lower()
     assert "snmp" not in payload["failed"]
     rows = enrich_components(payload["components"], "lab.local:8080")
     row = next(item for item in rows if item["id"] == "snmp")
-    assert row["state"] == "paused"
+    assert row["state"] == "paused (no SNMP targets)"
     assert row["css"] == "warn"
+    assert row["label"] == "SNMP exporter"
+
+
+def test_doctor_snmp_stays_paused_when_exporter_up_but_no_targets(monkeypatch):
+    monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
+    monkeypatch.setattr("app.api.snmp_target_count", lambda: 0)
+    monkeypatch.setattr("app.api.ensure_snmp_exporter", lambda: True)
+    payload = doctor_payload(force=True)
+    assert payload["components"]["snmp"]["status"] == "paused"
+    assert "snmp" not in payload["failed"]
 
 
 def test_doctor_snmp_down_when_network_targets_and_exporter_dark(monkeypatch):
@@ -99,6 +115,7 @@ def test_doctor_snmp_running_after_compose_start(monkeypatch):
 def test_doctor_script_treats_paused_as_ok_and_starts_compose():
     text = (ROOT / "scripts" / "doctor.sh").read_text(encoding="utf-8")
     assert '"paused"' in text
+    assert '"starting"' in text
     assert "snmp-exporter" in text
     assert "up -d snmp-exporter" in text
 
@@ -109,6 +126,8 @@ def test_component_label_core_is_container_not_api(monkeypatch):
     assert component_label("prometheus") == "Prometheus"
     assert component_label("alertmanager") == "Alertmanager"
     assert component_label("grafana") == "Grafana"
+    assert component_label("snmp") == "SNMP exporter"
+    assert component_label("netbox") == "NetBox"
     assert "Stack" not in component_label("prometheus")
     monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
     payload = doctor_payload(force=True)
@@ -186,7 +205,7 @@ def test_doctor_grafana_down_is_warn_not_prometheus_fail(monkeypatch):
     rows = enrich_components(payload["components"], "lab.local")
     row = next(item for item in rows if item["id"] == "grafana")
     assert row["css"] == "warn"
-    assert row["state"] == "paused"
+    assert row["state"] == "warn"
 
 
 def test_healthy_prom_check_does_not_journal_error():

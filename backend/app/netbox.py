@@ -4,15 +4,19 @@ Bundled instance is http://127.0.0.1:8001 unless inventory.netbox.url points
 at an external NetBox (--netbox-url).
 
 Core authenticates with NETBOX_API_TOKEN (Authorization: Token …). That
-plain 40-char value is a NetBox v1 token (plaintext column). v4.6 defaults
-to hashed v2 tokens (key + HMAC); writing the secret into `key` is why
-GET /api/dcim/devices/ returned 403. Launch upserts v1 on every start.
+plain 40-char value is a NetBox v1 token (plaintext column) on the bundled
+Django **superuser** (NETBOX_SUPERUSER_NAME / SUPERUSER_NAME, usually
+``admin``). Core is **not** a NetBox UI login and not a second user. A
+token attached to a user without ``dcim.view_device`` / is_superuser is
+HTTP 403 even when the secret is valid. Launch upserts v1 on every start
+(write_enabled=False, superuser + view permission).
 
 NetBox's REST API returns HTTP 403 (not 401) when the token is missing,
 unknown, or not allowed to read DCIM. User-facing 403 copy must distinguish
 those: empty token → missing; non-empty token → NetBox rejected it. Never
-print the secret. The bundled container upserts the token as
-write_enabled=False on the superuser.
+print the secret. v4.6 defaults to hashed v2 tokens (key + HMAC); writing
+the secret into `key` is why GET /api/dcim/devices/ stayed 403 until the
+v1 plaintext upsert.
 
 Discovery traffic light uses GET /api/dcim/devices/?limit=1 (never writes):
 - grey: UI down, API 403, or no token
