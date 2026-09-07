@@ -1,11 +1,16 @@
 from pathlib import Path
 
 from app.api import doctor_payload
+from app.db import Base, SessionLocal, engine
+from app.journal import list_entries
+from app.seed import seed
 from app.stack import (
+    alarm_path_failure_lines,
     component_label,
     doctor_soft_status,
     enrich_components,
     ensure_snmp_exporter,
+    journal_doctor_alarm_path,
     rewrite_host,
     runtime_state,
 )
@@ -101,6 +106,10 @@ def test_doctor_script_treats_paused_as_ok_and_starts_compose():
 def test_component_label_core_is_container_not_api(monkeypatch):
     assert component_label("core") == "Core (container)"
     assert component_label("postgres") == "postgres"
+    assert component_label("prometheus") == "Prometheus"
+    assert component_label("alertmanager") == "Alertmanager"
+    assert component_label("grafana") == "Grafana"
+    assert "Stack" not in component_label("prometheus")
     monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
     payload = doctor_payload(force=True)
     core = payload["components"]["core"]
@@ -149,3 +158,136 @@ def test_enrich_components_keeps_stack_order_and_open_links():
     assert not prom["metrics"].endswith("/metrics")
     grafana = next(row for row in rows if row["id"] == "grafana")
     assert grafana["gui"]
+    assert grafana["label"] == "Grafana"
+    prom_labeled = next(row for row in rows if row["id"] == "prometheus")
+    assert prom_labeled["label"] == "Prometheus"
+    assert "Stack" not in prom_labeled["label"]
+
+
+def test_doctor_grafana_down_is_warn_not_prometheus_fail(monkeypatch):
+    def _http(url, method):
+        if ":3000" in url or "3000" in url:
+            return {"status": "error", "why": f"{url}: connection refused", "test": f"curl -fsS {url}"}
+        return {"status": "ok"}
+
+    monkeypatch.setattr("app.api._http", _http)
+    monkeypatch.setattr("app.api._probe_sql", lambda: {"status": "ok"})
+    monkeypatch.setattr("app.api._discovery_check", lambda: {"status": "ok", "why": "alive"})
+    monkeypatch.setattr("app.api._snmp_check", lambda: {"status": "paused", "why": "paused"})
+    monkeypatch.setattr("app.api._netbox_check", lambda: {"status": "disabled"})
+    payload = doctor_payload(force=True)
+    grafana = payload["components"]["grafana"]
+    assert grafana["status"] == "warn"
+    assert "grafana" not in payload["failed"]
+    assert "prometheus" not in payload["failed"]
+    assert payload["components"]["prometheus"]["status"] == "ok"
+    assert payload["overall"] == "HEALTHY"
+    assert "graphs only" in (grafana.get("why") or "").lower()
+    rows = enrich_components(payload["components"], "lab.local")
+    row = next(item for item in rows if item["id"] == "grafana")
+    assert row["css"] == "warn"
+    assert row["state"] == "paused"
+
+
+def test_healthy_prom_check_does_not_journal_error():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    before = [row.id for row in list_entries(db, status="error")]
+    components = {
+        "prometheus": {"status": "ok", "why": ""},
+        "alertmanager": {"status": "ok", "why": ""},
+        "grafana": {
+            "status": "warn",
+            "why": "Grafana is graphs only. Yellow, not a Prometheus outage. connection refused",
+        },
+    }
+    assert alarm_path_failure_lines(components) == []
+    journal_doctor_alarm_path(db, components)
+    after = list_entries(db, status="error")
+    new = [row for row in after if row.id not in before]
+    assert not any(row.action == "doctor" for row in new)
+    db.close()
+
+
+def test_unhealthy_prom_journals_failing_hop_not_stack():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    components = {
+        "prometheus": {
+            "status": "error",
+            "why": "http://127.0.0.1:9090/-/ready: connection refused",
+            "test": "curl -fsS http://127.0.0.1:9090/-/ready",
+        },
+        "alertmanager": {"status": "ok", "why": ""},
+        "grafana": {"status": "warn", "why": "graphs only"},
+    }
+    lines = alarm_path_failure_lines(components)
+    assert lines
+    assert any(":9090" in line for line in lines)
+    assert all("Prometheus Stack" not in line for line in lines)
+    assert all("grafana" not in line.lower() for line in lines)
+    journal_doctor_alarm_path(db, components)
+    rows = [row for row in list_entries(db, module="core") if row.action == "doctor"]
+    assert rows
+    latest = rows[0]
+    assert latest.status == "error"
+    assert ":9090" in (latest.summary or "")
+    assert "Prometheus Stack" not in (latest.summary or "")
+    assert "Grafana" not in (latest.summary or "")
+    journal_doctor_alarm_path(db, components)
+    again = [row for row in list_entries(db, module="core") if row.action == "doctor"]
+    assert len(again) == len(rows)
+    db.close()
+
+
+def test_unhealthy_alertmanager_journals_am_hop():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    components = {
+        "prometheus": {"status": "ok"},
+        "alertmanager": {
+            "status": "error",
+            "why": "http://127.0.0.1:9093/-/ready: connection refused",
+            "test": "curl -fsS http://127.0.0.1:9093/-/ready",
+        },
+        "grafana": {"status": "ok"},
+    }
+    journal_doctor_alarm_path(db, components)
+    latest = next(row for row in list_entries(db, module="core") if row.action == "doctor")
+    assert latest.status == "error"
+    assert ":9093" in (latest.summary or "")
+    assert "Alertmanager" in (latest.summary or "")
+    assert "Prometheus Stack" not in (latest.summary or "")
+    db.close()
+
+
+def test_doctor_recovery_journals_ok_after_prom_error():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    down = {
+        "prometheus": {
+            "status": "error",
+            "why": "http://127.0.0.1:9090/-/ready: connection refused",
+            "test": "curl -fsS http://127.0.0.1:9090/-/ready",
+        },
+        "alertmanager": {"status": "ok"},
+    }
+    journal_doctor_alarm_path(db, down)
+    journal_doctor_alarm_path(db, {"prometheus": {"status": "ok"}, "alertmanager": {"status": "ok"}})
+    rows = [row for row in list_entries(db, module="core") if row.action == "doctor"]
+    assert rows[0].status == "ok"
+    assert "Prometheus Stack" not in (rows[0].summary or "")
+    db.close()
+
+
+def test_http_why_includes_probe_url():
+    from app.api import _http
+
+    result = _http("http://127.0.0.1:9/-/ready", "GET")
+    assert result["status"] == "error"
+    assert "127.0.0.1:9" in (result.get("why") or "")
+    assert ":9" in (result.get("why") or "")

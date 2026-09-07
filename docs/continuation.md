@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 7 September 2026.** Operator N (Serbian) sent a Journal screenshot: repeating **NetBox sync failed** with httpx `403 Forbidden` on `http://127.0.0.1:8001/api/dcim/devices/?limit=200` plus the MDN status-code dump. Code and docs stay English. Replies to N are Serbian.
+**Monday 7 September 2026.** Operator N (Serbian) asked to fix a **journal error** related to **“Prometheus Stack”**. There is no user-facing string `Prometheus Stack` / `prometheus_stack` in the tree. The real bug: doctor treated **Grafana** (graphs only, not the alarm path) as a hard FAIL, so System Health looked like the Prometheus monitoring stack was down even when Prometheus `:9090` was up. Failures did not name the hop. Pagination on `main` is left alone. NetBox 403 journal work already landed on `main` in a parallel session. Code and docs stay English. Replies to N are Serbian.
 
 On the Ubuntu VM N uses:
 
@@ -25,7 +25,7 @@ On the Ubuntu VM N uses:
 git pull origin main && ./forgesre update
 ```
 
-Then hard-refresh the browser. Secrets key: `NETBOX_API_TOKEN` in `secrets/secrets.env` (kept in sync with `.env` for compose interpolation).
+Then hard-refresh the browser. Check **System Health** and **Journal**.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
 
@@ -40,7 +40,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-sync-403-05f8`: **354 passed** (twice). Was 347 before this 403 work.
+Pytest count after the double run on `cursor/prometheus-stack-journal-05f8`: **353 passed** (twice). Was 347 before this doctor/journal fix (six new Prom/Grafana journal tests). Main already had the NetBox 403 tests (354 on that branch).
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -48,18 +48,17 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-Journal **NetBox sync failed** HTTP **403** on bundled `:8001` `/api/dcim/devices/`.
+Doctor / Journal no longer lie about Prometheus:
 
-Root cause: NetBox REST API returns **403** (not 401) when the token is missing or unknown. `netboxcommunity/netbox` docker-entrypoint creates `SUPERUSER_API_TOKEN` **only when the superuser row is first inserted**. Later starts print “Superuser Already Exists” and skip the token. Compose mapped `SUPERUSER_API_TOKEN: ${NETBOX_API_TOKEN}` from `.env` while Core could read a different value from `secrets/secrets.env`. Anonymous or unknown-token GET → 403. Core sync is read-only and never writes NetBox. Database `forgesre` is not dropped (`netbox-db-init` still only `CREATE DATABASE netbox`).
+- Grafana down → **warn** (yellow), **not** in `failed[]`, **not** overall DEGRADED by itself, **not** a Journal error.
+- Alarm path is still **Prometheus → Alertmanager → Core**. Grafana is graphs only.
+- Live Core journals `core` / `doctor` **error** only when Prometheus or Alertmanager is actually down. Summary names the hop (`Prometheus :9090`, `Alertmanager :9093`). Never “Prometheus Stack”.
+- Healthy Prom+AM does **not** journal error (Grafana warn is ignored). Duplicate identical doctor errors are not re-written. Recovery writes one `ok` after a previous error.
+- `_http` `why` includes the probe URL (port is visible).
+- Doctor labels: **Prometheus**, **Alertmanager**, **Grafana** (compose ids stay `prometheus` / `alertmanager` / `grafana`).
+- Pytest skips live doctor journal (`FORGESRE_DEV=1`). Tests call `journal_doctor_alarm_path` directly.
 
-Fix:
-
-- Core + NetBox compose env both pass `NETBOX_API_TOKEN`.
-- `scripts/netbox-launch.sh` upserts that key as Django `users.models.Token` with `write_enabled=False` on every start.
-- `scripts/ensure-netbox-secrets.sh` copies `NETBOX_API_TOKEN` from `secrets/secrets.env` into `.env` so interpolation matches.
-- Journal: short 403 text, no MDN URL; identical consecutive NetBox 403 rows are deduped.
-
-Did not add Celery, nmap, React, IMAP, sqlalchemy on the host CLI, or restore the LLM catalog. Ping/Dockerfile and the architecture-proposal banner stay. Did not edit `install.sh`.
+Did not add Celery, nmap, React, IMAP, sqlalchemy on the host CLI, or restore the LLM catalog. Did not revert pagination. Did not undo the NetBox 403 token upsert already on `main`.
 
 ---
 
@@ -71,7 +70,7 @@ Do **not** run `./install.sh`.
 git pull origin main && ./forgesre update
 ```
 
-`./forgesre update` runs `ensure-netbox-secrets` and recreates the NetBox container so launch upserts the read-only token. Then open **Journal** — the repeating 403 blocks should stop. **Discovery → Sync NetBox** (admin) is GET-only.
+Then hard-refresh the browser. Check **System Health** and **Journal**: Grafana dark is yellow; Journal error for Prom must show `:9090` or Alertmanager `:9093`.
 
 Lab without image pull: `./forgesre update --offline`.
 
@@ -81,7 +80,7 @@ Lab without image pull: `./forgesre update --offline`.
 
 These already work on `main`. Do not “fix” them unless N asks.
 
-- `./forgesre test` = appliance health report → `data/reports/`. `./forgesre verify` = live inventory communication. `./forgesre doctor` = System Health lights. Three different commands.
+- `./forgesre test` = appliance health report → `data/reports/`. `./forgesre verify` = live inventory communication. `./forgesre ping` = ICMP + exporter. `./forgesre doctor` = System Health lights. Three different commands (`test` / `verify` / `doctor`).
 - Theme toggle cycles **light → dark → system**. Left nav stays dark.
 - Dashboard demos are **one** top-right button + a closeable panel. Demo rows stay **labeled DEMO**. Demo inject is **admin**.
 - Incident ids look like `INC-0134_16.08.2026_09:13`.
@@ -91,15 +90,15 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Real Windows scrape is **windows_exporter :9182**, not the lab demo host.
 - Prometheus Health Open is **Targets** (`:9090/targets?search=`), not Prometheus process `/metrics`. Core `/metrics` stays.
 - Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
-- `snmp-exporter` is a **default** compose service.
+- `snmp-exporter` is a **default** compose service. No SNMP targets → doctor **paused** (yellow), not DOWN.
 - Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2`. Do not churn NetBox Hub/GHCR tags unless N asks. Core sync token is `NETBOX_API_TOKEN`; launch upserts it read-only. Do not drop database `forgesre` to “fix” NetBox.
-- Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it.
+- Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it. That banner is **not** the Prometheus doctor journal.
 - Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update`.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`.
 - Host `./forgesre verify` does not import sqlalchemy (`demo_ids.py`).
-- Memory bundled alerts exist: `NodeMemoryHigh` / `WindowsMemoryHigh` at **90%**, playrules `node-memory` / `windows-memory`. Grafana is not the alarm path.
+- Memory bundled alerts exist: `NodeMemoryHigh` / `WindowsMemoryHigh` at **90%**, playrules `node-memory` / `windows-memory`. Grafana is not the alarm path. Grafana doctor down is **yellow**, not a Prom FAIL.
 - Add asset: operator types **Asset ID** and **Hostname** separately. Id is immutable after create.
-- Doctor labels: **Core API** vs **Core (container)**.
+- Doctor labels: **Core API** vs **Core (container)**. Core `/api/v1/health` stays a liveness dummy (always-ok). Prom readiness is `/-/ready` on `:9090`.
 - The lab SMTP catcher is gone. Do not add one.
 - Verify hops: ICMP, PORT, FAMILY, PROM, TARGET, SERIES, AM, CORE, RCA, LLM. Reachability: ping **green** ICMP ok; **yellow** ICMP fail but exporter/SNMP ok; **red** both fail.
 - Linux metrics = node_exporter **:9100**. Windows = windows_exporter **:9182**. Network = snmp_exporter :9116.
@@ -107,7 +106,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - `docs/architecture.md` is a **proposal**, not the appliance runtime. **architecture proposal** / **not the V0.7 appliance runtime**.
 - GUI ICMP is from the Core container (`iputils-ping` in the Dockerfile). Host `./forgesre ping` stays on the VM.
 - Jobs: **one worker thread** in Core. There is no Celery.
-- GUI tables are **10 rows** per page (`PAGE_SIZE = 10`, `?page=`).
+- GUI list tables are **10 rows per page** (pagination already on `main`).
 
 Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre test` / doctor. See [`docs/llm.md`](llm.md).
 
@@ -146,6 +145,7 @@ Do not start these unless N asks:
 - Re-pinning bundled `fetch-llm` to Qwen2.5-1.5B or another GGUF.
 - Restoring the llama.cpp GGUF catalog / Health model switcher.
 - Raising `timeout_seconds` in `config/forgesre.example.yml` back to 600.
+- Reverting GUI list pagination.
 
 ---
 
@@ -159,4 +159,4 @@ Do not start these unless N asks:
 - Alloy still only ships appliance Core logs as `forge-demo-01`. Real hosts have no Loki until that changes. Limitation: **no host logs shipped**.
 - LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90 in example.yml; N’s live yml may be 300) after reports in that pass have already run.
 - `config/forgesre.yml` on a live VM is gitignored; a 300s or 600s timeout already written there is not overwritten by `update`.
-- Another agent may still be hunting a “Prometheus Stack” journal string — leave that work alone unless N asks.
+- Loki/Alloy still FAIL doctor when those containers are dark (not Grafana). Only Grafana was moved to warn.

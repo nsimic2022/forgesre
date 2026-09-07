@@ -135,7 +135,7 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 | Playbooks | `/playbooks` | List steps, create (**analyst**) |
 | Escalation | `/escalation` | Seeded **Default warning**, create policy (Save + Cancel). Mail: `/ops#mail`. |
 | Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
-| System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Open Grafana** lives **only here** (not left nav, not the alarm path). Alarm path: Prometheus → Alertmanager → Core. One Core worker thread (not Celery). |
+| System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Open Grafana** lives **only here** (not left nav, not the alarm path). Alarm path: Prometheus → Alertmanager → Core. Grafana down is yellow (graphs only), not a Prometheus FAIL. Prom/AM errors name `:9090` / `:9093`, not “Prometheus Stack”. One Core worker thread (not Celery). |
 | Email & reports | `/ops` | Address book, send, **the** mail outbox (`#mail`), scheduled reports. Grafana is on System Health. |
 | Administration | `/admin` | Users: click a row to **edit** or **remove**. **Backup**, then **Import / restore** (left) beside a **ForgeSRE CLI** command list (right). Audit log. No browser PTY — SSH or `./forgesre` / `./forgesre shell` |
 
@@ -638,7 +638,7 @@ The same page lists **who did what** (audit: ack, resolve, notes) and **operator
 
 Asset health on the dashboard (`healthy` / `warning` / `critical`) follows open incidents on that asset.
 
-**Grafana is not the alarm path.** Incidents come from Prometheus → Alertmanager → Core. Open Grafana only from **System Health**. Grafana is not in the left nav.
+**Grafana is not the alarm path.** Incidents come from Prometheus → Alertmanager → Core. Open Grafana only from **System Health**. Grafana is not in the left nav. If Grafana is down, doctor stays **yellow** (warn) — that is not a Prometheus outage and must not write a Journal error. A real Prom or Alertmanager failure journals `core` / `doctor` **error** naming the hop (`Prometheus :9090`, `Alertmanager :9093`), never a vague “Prometheus Stack”.
 
 ---
 
@@ -878,7 +878,7 @@ Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token
 
 Install/config files: [`install-config.md`](install-config.md). Do not commit `.env`, `secrets/secrets.env`, or `data/`.
 
-**Console** (`/journal`) is the internal process journal: seed, inventory, discovery, snmp, incidents, RCA, notifications, demo, install. Each action writes a short ok/warn/error report. Rows are split by module and pruned automatically (~200 per module) so search stays small. This is not a dump of Docker logs and not the Administration audit log (who clicked what). Prometheus HTTP SD is **not** journaled on every scrape (that would flood the table).
+**Console** (`/journal`) is the internal process journal: seed, inventory, discovery, snmp, incidents, RCA, notifications, demo, install. Each action writes a short ok/warn/error report. Rows are split by module and pruned automatically (~200 per module) so search stays small. This is not a dump of Docker logs and not the Administration audit log (who clicked what). Prometheus HTTP SD is **not** journaled on every scrape (that would flood the table). Doctor journals `core` / `doctor` only when Prometheus or Alertmanager is actually down, naming the hop (`:9090`, `:9093`) — Grafana down does not write that error.
 
 Root wrappers `./doctor.sh`, `./test.sh`, `./backup.sh`, `./update.sh`, `./install.sh` still work; they call the same scripts as `./forgesre`.
 

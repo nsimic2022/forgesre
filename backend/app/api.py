@@ -64,7 +64,13 @@ from app.services import (
     run_demo_windows,
 )
 from app.settings import settings
-from app.stack import component_label, doctor_soft_status, ensure_snmp_exporter, snmp_target_count
+from app.stack import (
+    component_label,
+    doctor_soft_status,
+    ensure_snmp_exporter,
+    journal_doctor_alarm_path,
+    snmp_target_count,
+)
 
 log = logging.getLogger("forgesre")
 router = APIRouter(prefix="/api/v1")
@@ -1092,7 +1098,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "alertmanager": _http(f"{settings.alertmanager_url}/-/ready", "GET"),
         "loki": _http(f"{settings.loki_url}/loki/api/v1/status/buildinfo", "GET") if settings.loki_enabled else _ok("disabled"),
         "alloy": _http("http://127.0.0.1:12345/metrics", "GET") if settings.loki_enabled else _ok("disabled"),
-        "grafana": _http("http://127.0.0.1:3000/api/health", "GET") if settings.grafana_enabled else _ok("disabled"),
+        "grafana": _grafana_check(),
         "snmp": _snmp_check(),
         "llm": _http((settings.llm_url or "").rstrip("/") + "/models", "GET") if settings.llm_url else _ok("disabled"),
         "netbox": _netbox_check(),
@@ -1101,11 +1107,51 @@ def _doctor_payload_fresh() -> dict[str, Any]:
     for name, item in components.items():
         item["label"] = component_label(name)
     failed = [name for name, item in components.items() if not doctor_soft_status(item["status"])]
-    return {
+    payload = {
         "overall": "HEALTHY" if not failed else "DEGRADED",
         "components": components,
         "failed": failed,
     }
+    _maybe_journal_doctor(components)
+    return payload
+
+
+def _maybe_journal_doctor(components: dict[str, Any]) -> None:
+    """Skip under FORGESRE_DEV (pytest). Live Core journals Prom/AM hops only."""
+    if os.environ.get("FORGESRE_DEV", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return
+    try:
+        from app.db import SessionLocal
+
+        db = SessionLocal()
+        try:
+            journal_doctor_alarm_path(db, components)
+        finally:
+            db.close()
+    except Exception:
+        log.debug("doctor journal skipped", exc_info=True)
+
+
+def _grafana_check() -> dict[str, str]:
+    """Grafana is graphs only. Down is yellow warn — not a Prometheus / alarm-path FAIL."""
+    if not settings.grafana_enabled:
+        return _ok("disabled")
+    url = "http://127.0.0.1:3000/api/health"
+    result = _http(url, "GET")
+    if result.get("status") == "ok":
+        return result
+    why = str(result.get("why") or "unreachable")
+    result["status"] = "warn"
+    result["why"] = (
+        "Grafana is graphs only (not Prometheus → Alertmanager → Core). "
+        f"Yellow, not a Prometheus outage. {why}"
+    )
+    result.setdefault("test", f"curl -fsS {url}")
+    result.setdefault(
+        "fix",
+        "docker compose up -d grafana  (optional; incidents still fire without Grafana)",
+    )
+    return result
 
 
 def _core_check() -> dict[str, str]:
@@ -1250,6 +1296,7 @@ def _probe_sql() -> dict[str, str]:
 
 
 def _http(url: str, method: str) -> dict[str, str]:
+    test = f"curl -fsS {url}"
     try:
         with httpx.Client(timeout=4.0) as client:
             response = client.request(method, url)
@@ -1258,14 +1305,14 @@ def _http(url: str, method: str) -> dict[str, str]:
         return {
             "status": "error",
             "why": f"{url} returned {response.status_code}",
-            "test": f"curl -fsS {url}",
+            "test": test,
             "fix": "Check the container logs and config/forgesre.yml",
         }
     except Exception as exc:
         return {
             "status": "error",
-            "why": str(exc),
-            "test": f"curl -fsS {url}",
+            "why": f"{url}: {exc}",
+            "test": test,
             "fix": "Confirm the service is running: ./doctor.sh",
         }
 
