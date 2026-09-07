@@ -149,13 +149,12 @@ def next_error_ack_id(until_id: int | None, current_ack: int | None, shown_ids: 
     return max(previous, target)
 
 
-def list_entries(
+def _entries_query(
     db: Session,
     module: str | None = None,
     status: str | None = None,
     q: str | None = None,
-    limit: int = 200,
-) -> list[JournalEntry]:
+):
     query = db.query(JournalEntry)
     if module:
         query = query.filter(JournalEntry.module == module)
@@ -170,7 +169,29 @@ def list_entries(
             | (JournalEntry.action.ilike(like))
             | (JournalEntry.object_id.ilike(like))
         )
-    return query.order_by(JournalEntry.id.desc()).limit(max(1, min(limit, 500))).all()
+    return query
+
+
+def count_entries(
+    db: Session,
+    module: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+) -> int:
+    return int(_entries_query(db, module=module, status=status, q=q).count() or 0)
+
+
+def list_entries(
+    db: Session,
+    module: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+    limit: int = 200,
+    offset: int = 0,
+) -> list[JournalEntry]:
+    query = _entries_query(db, module=module, status=status, q=q)
+    offset = max(0, int(offset or 0))
+    return query.order_by(JournalEntry.id.desc()).offset(offset).limit(max(1, min(int(limit or 200), 500))).all()
 
 
 def module_counts(db: Session) -> list[dict]:

@@ -27,6 +27,7 @@
   {% endfor %}
   </tbody>
 </table>
+{% include "_pager.html" %}
 {% if can('write_play') %}
 <h2>Create playrule</h2>
 <form method="post" action="/playrules" class="stack" id="playrule-form">

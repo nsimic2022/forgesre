@@ -6,6 +6,7 @@
   <strong>Archive</strong> of incidents in Postgres (default last <strong>{{ days }}</strong> days, including closed).
   Live open/firing work is <a href="/incidents">Incidents</a>. This is not Journal and not Loki.
   Mail bodies are on <a href="/ops#mail">Email &amp; reports</a>; Ack/Resolve are on the incident page.
+  Tables are <strong>10 rows per page</strong>.
 </p>
 <form method="get" action="/history" class="form-grid">
   <label>Days <input name="days" type="number" min="1" max="3660" value="{{ days }}"></label>
@@ -23,7 +24,6 @@
     <a class="muted" href="/history">Reset</a>
   </div>
 </form>
-<p class="muted">{{ total }} match{% if total != 1 %}es{% endif %} · page {{ page }} / {{ pages }}</p>
 <div class="table-scroll">
 <table>
   <thead>
@@ -53,14 +53,5 @@
   </tbody>
 </table>
 </div>
-{% if pages > 1 %}
-<p>
-  {% if page > 1 %}
-  <a href="/history?days={{ days }}&status={{ status }}&asset={{ asset }}&number={{ number }}&page={{ page - 1 }}">Previous</a>
-  {% endif %}
-  {% if page < pages %}
-  <a href="/history?days={{ days }}&status={{ status }}&asset={{ asset }}&number={{ number }}&page={{ page + 1 }}">Next</a>
-  {% endif %}
-</p>
-{% endif %}
+{% include "_pager.html" %}
 {% endblock %}

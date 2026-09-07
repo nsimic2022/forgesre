@@ -697,6 +697,44 @@ form.ops-compose {
 .alarm-families .muted { margin: 0 0 0.35rem; }
 .alarm-row { display: flex; align-items: center; gap: 0.45rem; margin: 0.2rem 0; }
 .alarm-row input[type="number"] { width: 4.5rem; }
+.pager-meta { margin: 0.55rem 0 0.35rem; }
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin: 0 0 1.1rem;
+}
+.pager a,
+.pager span {
+  display: inline-flex;
+  min-width: 2rem;
+  justify-content: center;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  text-decoration: none;
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 600;
+  background: var(--panel);
+}
+.pager a:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pager-current {
+  background: var(--accent);
+  color: var(--btn-text);
+  border-color: var(--accent);
+}
+.pager-ellipsis {
+  border: none;
+  min-width: 0;
+  padding: 0.28rem 0.2rem;
+  background: transparent;
+  color: var(--muted);
+}
 @media (max-width: 900px) {
   .nav { position: static; width: auto; }
   .content { margin-left: 0; }

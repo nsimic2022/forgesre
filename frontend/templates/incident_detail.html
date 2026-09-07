@@ -144,6 +144,7 @@
     {% endfor %}
     </tbody>
   </table>
+{% include "_pager.html" %}
 </section>
 
 <section id="notes">
@@ -157,6 +158,7 @@
   {% else %}
     <p class="muted">No notes yet.</p>
   {% endfor %}
+  {% with pager=notes_pager %}{% include "_pager.html" %}{% endwith %}
   {% if can('write_incidents') %}
   <form method="post" action="/incidents/{{ incident.number }}/notes" class="stack">
     <label>Add note <textarea name="body" rows="3" required placeholder="What you did on the host"></textarea></label>

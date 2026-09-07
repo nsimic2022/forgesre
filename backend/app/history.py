@@ -17,7 +17,82 @@ from app.models import Asset, AuditLog, Incident, IncidentNote, Notification, ut
 DEFAULT_DAYS = 90
 MAX_DAYS = 3660
 LIST_LIMIT = 200
+PAGE_SIZE = 10
 NOTE_MAX = 4000
+
+
+def parse_page(raw: Any, *, total: int, size: int = PAGE_SIZE) -> tuple[int, int, int]:
+    """1-based page, page count, offset. Clamped to the last page when `raw` is past the end."""
+    try:
+        page = int(raw)
+    except (TypeError, ValueError):
+        page = 1
+    size = max(1, int(size or PAGE_SIZE))
+    total = max(0, int(total or 0))
+    pages = max(1, (total + size - 1) // size) if total else 1
+    page = max(1, min(page, pages))
+    return page, pages, (page - 1) * size
+
+
+def page_numbers(page: int, pages: int) -> list[int | None]:
+    """Numbered tabs with None as a gap (render as …)."""
+    pages = max(1, int(pages or 1))
+    page = max(1, min(int(page or 1), pages))
+    if pages <= 7:
+        return list(range(1, pages + 1))
+    keep = {1, pages, page}
+    for delta in (1, 2):
+        if 1 < page - delta:
+            keep.add(page - delta)
+        if page + delta < pages:
+            keep.add(page + delta)
+    ordered = sorted(keep)
+    out: list[int | None] = []
+    prev = 0
+    for n in ordered:
+        if prev and n - prev > 1:
+            out.append(None)
+        out.append(n)
+        prev = n
+    return out
+
+
+def pager_state(
+    raw: Any,
+    *,
+    total: int,
+    size: int = PAGE_SIZE,
+    param: str = "page",
+    fragment: str = "",
+) -> dict[str, Any]:
+    page, pages, offset = parse_page(raw, total=total, size=size)
+    return {
+        "page": page,
+        "pages": pages,
+        "offset": offset,
+        "total": total,
+        "size": size,
+        "param": param,
+        "hash": fragment,
+        "numbers": page_numbers(page, pages),
+        "has_prev": page > 1,
+        "has_next": page < pages,
+        "prev": page - 1,
+        "next": page + 1,
+    }
+
+
+def paginate(
+    items: list,
+    raw: Any,
+    *,
+    size: int = PAGE_SIZE,
+    param: str = "page",
+    fragment: str = "",
+) -> tuple[list, dict[str, Any]]:
+    total = len(items)
+    state = pager_state(raw, total=total, size=size, param=param, fragment=fragment)
+    return items[state["offset"] : state["offset"] + state["size"]], state
 
 
 def clamp_days(raw: Any, default: int = DEFAULT_DAYS) -> int:

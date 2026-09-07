@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from typing import Annotated
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -33,7 +33,7 @@ from app.inventory import (
     update_asset,
     is_snmp_asset,
 )
-from app.journal import MODULES, error_banner_entries, list_entries, module_counts, next_error_ack_id
+from app.journal import MODULES, count_entries, error_banner_entries, list_entries, module_counts, next_error_ack_id
 from app.models import (
     Asset,
     AuditLog,
@@ -68,6 +68,7 @@ from app.services import (
 )
 from app.stack import enrich_components, rewrite_host
 from app.history import (
+    PAGE_SIZE,
     add_note,
     apply_status_fields,
     audit_for,
@@ -75,6 +76,8 @@ from app.history import (
     list_history,
     notes_for,
     notifications_for,
+    paginate,
+    pager_state,
     reported_to_for,
 )
 from rca.catalog import PLAYRULE_PRESETS
@@ -110,6 +113,17 @@ def _snmp_answer(ip: str) -> bool:
     from discovery import probe_snmp_udp
 
     return bool(probe_snmp_udp(ip))
+
+
+def pager_href(request: Request, page: int, param: str = "page", fragment: str = "") -> str:
+    """Keep current filters, replace only the page query key."""
+    items = [(key, value) for key, value in request.query_params.multi_items() if key != param]
+    items.append((param, str(page)))
+    qs = urlencode(items)
+    frag = fragment or ""
+    if frag and not frag.startswith("#"):
+        frag = "#" + frag
+    return f"{request.url.path}?{qs}{frag}"
 
 
 def smtp_provider_id() -> str:
@@ -177,6 +191,7 @@ def ctx(request: Request, user: User | None, **extra):
         "asset_type_abbrev": asset_type_abbrev,
         "demo_candidate_ip": DEMO_CANDIDATE_IP,
         "llm_timeout": settings.llm_timeout,
+        "pager_href": pager_href,
     }
     data.update(extra)
     return data
@@ -350,8 +365,10 @@ def assets_page(
     edit: str = "",
     clone: str = "",
     q: str = "",
+    page: str = "1",
 ):
     rows = assets_matching(db.query(Asset).order_by(Asset.number, Asset.hostname).all(), q)
+    rows, pager = paginate(rows, page)
     form_mode = "add"
     selected = None
     form = asset_form_values()
@@ -382,6 +399,7 @@ def assets_page(
         notice=notice,
         q=q,
         reachability_snapshot=reachability_snapshot,
+        pager=pager,
     )
 
 
@@ -392,6 +410,7 @@ def assets_verify_all(
     db: Session = Depends(get_db),
     user: User = Depends(require_page("write_assets")),
     demo: str = "",
+    page: str = "1",
 ):
     include_demo = demo.strip().lower() in {"1", "true", "yes", "demo"}
     reports: list[dict] = []
@@ -401,6 +420,7 @@ def assets_verify_all(
             skipped_demo += 1
             continue
         reports.append(run_asset_verify(db, asset))
+    reports, pager = paginate(reports, page)
     return render(
         request,
         "assets_verify.html",
@@ -408,6 +428,7 @@ def assets_verify_all(
         reports=reports,
         skipped_demo=skipped_demo,
         include_demo=include_demo,
+        pager=pager,
     )
 
 
@@ -482,9 +503,10 @@ def asset_create(
 
 
 @router.get("/discovery", response_class=HTMLResponse)
-def discovery_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("write_assets"))):
+def discovery_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("write_assets")), page: str = "1"):
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
     pending = [row for row in rows if row.status == "new"]
+    rows, pager = paginate(rows, page)
     return render(
         request,
         "discovery.html",
@@ -497,6 +519,7 @@ def discovery_page(request: Request, db: Session = Depends(get_db), user: User =
         netbox_enabled=settings.netbox_enabled,
         netbox_url=settings.netbox_url,
         demo_candidate_ip=DEMO_CANDIDATE_IP,
+        pager=pager,
     )
 
 
@@ -554,6 +577,8 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         raise HTTPException(status_code=404)
     related = db.query(Incident).filter_by(asset_id=item.id).order_by(Incident.id.desc()).all()
     similar = similar_incident_groups(db, item)
+    related, pager = paginate(related, request.query_params.get("page", "1"))
+    similar, similar_pager = paginate(similar, request.query_params.get("similar_page", "1"), param="similar_page")
     return render(
         request,
         "asset_detail.html",
@@ -567,6 +592,8 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         remove_blocked=delete_blocked(item) if can(user, "write_assets") else "",
         reachability_snapshot=reachability_snapshot,
         metrics=safe_asset_metric_panel(item),
+        pager=pager,
+        similar_pager=similar_pager,
     )
 
 
@@ -697,11 +724,15 @@ def incidents_page(
     user: User = Depends(login_required),
     open_filter: str = Query("1", alias="open"),
     days: str = "",
+    page: str = "1",
 ):
     open_only = (open_filter or "1").strip().lower() not in {"0", "false", "all", "no"}
     days_raw = (days or "").strip()
     days_n = clamp_days(days_raw) if days_raw else None
-    rows, _total = list_history(db, days=days_n, open_only=open_only, limit=200, offset=0)
+    rows, total = list_history(db, days=days_n, open_only=open_only, limit=PAGE_SIZE, offset=0)
+    pager = pager_state(page, total=total)
+    if pager["offset"]:
+        rows, total = list_history(db, days=days_n, open_only=open_only, limit=pager["size"], offset=pager["offset"])
     return render(
         request,
         "incidents.html",
@@ -710,6 +741,7 @@ def incidents_page(
         reported_to=reported_to_for(db, rows),
         open_only=open_only,
         days=days_raw,
+        pager=pager,
     )
 
 
@@ -725,22 +757,26 @@ def history_page(
     page: str = "1",
 ):
     days_n = clamp_days(days)
-    try:
-        page_n = max(1, int(page))
-    except (TypeError, ValueError):
-        page_n = 1
-    limit = 200
-    offset = (page_n - 1) * limit
     rows, total = list_history(
         db,
         days=days_n,
         status=status,
         asset=asset,
         number=number,
-        limit=limit,
-        offset=offset,
+        limit=PAGE_SIZE,
+        offset=0,
     )
-    pages = max(1, (total + limit - 1) // limit)
+    pager = pager_state(page, total=total)
+    if pager["offset"]:
+        rows, total = list_history(
+            db,
+            days=days_n,
+            status=status,
+            asset=asset,
+            number=number,
+            limit=pager["size"],
+            offset=pager["offset"],
+        )
     return render(
         request,
         "history.html",
@@ -750,9 +786,7 @@ def history_page(
         status=status,
         asset=asset,
         number=number,
-        page=page_n,
-        pages=pages,
-        total=total,
+        pager=pager,
         reported_to=reported_to_for(db, rows),
     )
 
@@ -766,6 +800,8 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
     rca = (investigation.result if investigation else None) or {}
     similar = similar_incident_groups(db, item.asset) if item.asset else []
     pending = llm_job_pending(db, number)
+    audit_rows, audit_pager = paginate(audit_for(db, item.number), request.query_params.get("page", "1"))
+    notes, notes_pager = paginate(notes_for(db, item), request.query_params.get("notes_page", "1"), param="notes_page")
     return render(
             request,
             "incident_detail.html",
@@ -777,10 +813,12 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
             timeline_json=json.dumps(item.timeline or []),
             engineer=can(user, "read_evidence"),
             mail=notifications_for(db, item),
-            audit_rows=audit_for(db, item.number),
-            operator_notes=notes_for(db, item),
+            audit_rows=audit_rows,
+            operator_notes=notes,
             llm_pending=pending,
             tools=tool_status(investigation, pending, llm_job_error(db, number)),
+            pager=audit_pager,
+            notes_pager=notes_pager,
             **ops_mail_ctx(db, user, item),
         )
 
@@ -894,8 +932,9 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
 
 
 @router.get("/playrules", response_class=HTMLResponse)
-def playrules_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play"))):
+def playrules_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play")), page: str = "1"):
     rows = db.query(Playrule).order_by(Playrule.name).all()
+    rows, pager = paginate(rows, page)
     books = db.query(Playbook).order_by(Playbook.name).all()
     hosts = saved_alarm_hostnames(db.query(Asset).order_by(Asset.hostname).all())
     policies = db.query(EscalationPolicy).order_by(EscalationPolicy.name).all()
@@ -908,6 +947,7 @@ def playrules_page(request: Request, db: Session = Depends(get_db), user: User =
         presets=PLAYRULE_PRESETS,
         asset_alarm_hosts=hosts,
         policies=policies,
+        pager=pager,
     )
 
 
@@ -959,9 +999,10 @@ def playrule_toggle(rule_id: int, db: Session = Depends(get_db), user: User = De
 
 
 @router.get("/playbooks", response_class=HTMLResponse)
-def playbooks_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play"))):
+def playbooks_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play")), page: str = "1"):
     rows = db.query(Playbook).order_by(Playbook.name).all()
-    return render(request, "playbooks.html", user, playbooks=rows)
+    rows, pager = paginate(rows, page)
+    return render(request, "playbooks.html", user, playbooks=rows, pager=pager)
 
 
 @router.post("/playbooks")
@@ -987,10 +1028,10 @@ def playbook_create(
 
 
 @router.get("/escalation", response_class=HTMLResponse)
-def escalation_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play"))):
+def escalation_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play")), page: str = "1"):
     policies = db.query(EscalationPolicy).order_by(EscalationPolicy.name).all()
-    notes = db.query(Notification).order_by(Notification.id.desc()).limit(20).all()
-    return render(request, "escalation.html", user, policies=policies, notifications=notes)
+    policies, pager = paginate(policies, page)
+    return render(request, "escalation.html", user, policies=policies, pager=pager)
 
 
 @router.post("/escalation")
@@ -1023,8 +1064,18 @@ def journal_page(
     module: str = "",
     status: str = "",
     q: str = "",
+    page: str = "1",
 ):
-    rows = list_entries(db, module=module or None, status=status or None, q=q or None, limit=200)
+    total = count_entries(db, module=module or None, status=status or None, q=q or None)
+    pager = pager_state(page, total=total)
+    rows = list_entries(
+        db,
+        module=module or None,
+        status=status or None,
+        q=q or None,
+        limit=pager["size"],
+        offset=pager["offset"],
+    )
     counts = module_counts(db)
     return render(
         request,
@@ -1036,6 +1087,7 @@ def journal_page(
         filter_module=module,
         filter_status=status,
         filter_q=q,
+        pager=pager,
     )
 
 
@@ -1060,11 +1112,19 @@ def health_refresh(user: User = Depends(login_required)):
 
 
 @router.get("/ops", response_class=HTMLResponse)
-def ops_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
+def ops_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    page: str = "1",
+    reports_page: str = "1",
+):
     from app.services import list_mail_addresses
 
-    mail = db.query(Notification).order_by(Notification.id.desc()).limit(80).all()
+    mail = db.query(Notification).order_by(Notification.id.desc()).all()
     reports = db.query(ScheduledReport).order_by(ScheduledReport.id.desc()).all()
+    mail, mail_pager = paginate(mail, page, fragment="#mail")
+    reports, reports_pager = paginate(reports, reports_page, param="reports_page", fragment="#reports")
     assets = db.query(Asset).order_by(Asset.hostname).all()
     contacts = db.query(MailContact).order_by(MailContact.email).all()
     return render(
@@ -1080,6 +1140,8 @@ def ops_page(request: Request, db: Session = Depends(get_db), user: User = Depen
         can_send=can_send_ops(user),
         webmail_url=_webmail_url(request),
         smtp_provider=smtp_provider_id(),
+        mail_pager=mail_pager,
+        reports_pager=reports_pager,
     )
 
 
@@ -1226,16 +1288,24 @@ def admin_page(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     selected: int | None = Query(None),
+    page: str = "1",
+    audit_page: str = "1",
+    backup_page: str = "1",
 ):
     if not can(user, "admin"):
         raise HTTPException(status_code=403)
     users = db.query(User).order_by(User.email).all()
-    audits = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(30).all()
+    users, users_pager = paginate(users, page)
+    audits = db.query(AuditLog).order_by(AuditLog.id.desc()).all()
+    audits, audit_pager = paginate(audits, audit_page, param="audit_page")
     chosen = db.get(User, selected) if selected else None
     from app.backup import format_size, list_archives, layout_from_env
     from app.users import delete_blocked, edit_blocked
 
     lay = layout_from_env()
+    backups = list_archives(lay)
+    backup_choices = backups
+    backups, backup_pager = paginate(backups, backup_page, param="backup_page")
     return render(
         request,
         "admin.html",
@@ -1245,9 +1315,13 @@ def admin_page(
         selected=chosen,
         can_edit_selected=bool(chosen) and not edit_blocked(user, chosen),
         can_delete_selected=bool(chosen) and not delete_blocked(user, chosen),
-        backups=list_archives(lay),
+        backups=backups,
+        backup_choices=backup_choices,
         backup_files_writable=lay.files_writable,
         format_size=format_size,
+        pager=users_pager,
+        audit_pager=audit_pager,
+        backup_pager=backup_pager,
     )
 
 

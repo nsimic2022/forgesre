@@ -155,6 +155,7 @@
     {% endfor %}
     </tbody>
   </table>
+{% with pager=mail_pager %}{% include "_pager.html" %}{% endwith %}
 </section>
 
 <section class="card" id="reports">
@@ -246,5 +247,6 @@
     {% endfor %}
     </tbody>
   </table>
+{% with pager=reports_pager %}{% include "_pager.html" %}{% endwith %}
 </section>
 {% endblock %}

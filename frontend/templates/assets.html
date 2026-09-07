@@ -72,8 +72,8 @@
       {% if can('write_assets') %}
       <td class="asset-actions">
         <div class="row-actions">
-        <a class="button" href="/assets?edit={{ asset.asset_id }}">Edit</a>
-        <a class="button" href="/assets?clone={{ asset.asset_id }}">Clone</a>
+        <a class="button" href="/assets?edit={{ asset.asset_id }}{% if q %}&q={{ q }}{% endif %}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Edit</a>
+        <a class="button" href="/assets?clone={{ asset.asset_id }}{% if q %}&q={{ q }}{% endif %}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Clone</a>
         <a class="button" href="/assets/{{ asset.asset_id }}/verify">Verify</a>
         {% if not delete_blocked(asset) %}
         <form method="post" action="/assets/{{ asset.asset_id }}/delete" onsubmit="return confirm('Remove {{ asset.hostname }}? Prometheus will stop scraping it. Incidents stay in History without this host. Core is unchanged.');">
@@ -88,6 +88,7 @@
   </tbody>
 </table>
 </div>
+{% include "_pager.html" %}
 {% if can('write_assets') %}
 {% include "_asset_form.html" %}
 {% endif %}

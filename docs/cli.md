@@ -8,7 +8,7 @@ cd ~/forgesre
 ./forgesre help
 ```
 
-`./f` is the same binary. `./forgesre` with no arguments opens a prompt (`forgesre>`). Type `journal`, `incidents`, `doctor` — not `./forgesre` again. Leave with `quit`, `exit`, or Ctrl-D (`./forgesre help quit`). TAB completes command names, Compose services (`logs sn<TAB>`), incident ids, and asset numbers/ids/hostnames (`verify 1<TAB>`).
+`./f` is the same binary. `./forgesre` with no arguments opens a prompt (`forgesre>`). Type `journal`, `incidents`, `doctor` — not `./forgesre` again. Leave with `quit`, `exit`, or Ctrl-D (`./forgesre help quit`). TAB completes command names, Compose services (`logs sn<TAB>`), incident ids, and asset numbers/ids/hostnames (`verify 1<TAB>`). GUI tables are **10 rows per page** (tabs plus Previous / Next); the CLI lists are unchanged.
 
 Two logins:
 
