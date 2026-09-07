@@ -5,6 +5,9 @@
 # first inserted. Later starts print "Superuser Already Exists" and skip the
 # token, so Core's NETBOX_API_TOKEN 403s /api/dcim/devices/. Upsert a
 # read-only token on every start. Does not touch database forgesre.
+#
+# UI token create (v2) also needs API_TOKEN_PEPPERS (≥50 chars). Compose sets
+# API_TOKEN_PEPPER_1 from NETBOX_API_TOKEN_PEPPER in secrets/secrets.env.
 set -euo pipefail
 PORT="${NETBOX_HTTP_PORT:-8001}"
 HOST="${NETBOX_BIND_HOST:-0.0.0.0}"

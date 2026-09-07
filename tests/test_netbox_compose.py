@@ -29,6 +29,12 @@ def test_compose_netbox_is_default_service():
     assert env.get("NETBOX_API_TOKEN") == "${NETBOX_API_TOKEN}"
     assert netbox["environment"].get("NETBOX_API_TOKEN") == "${NETBOX_API_TOKEN}"
     assert netbox["environment"].get("SUPERUSER_API_TOKEN") == "${NETBOX_API_TOKEN}"
+    assert netbox["environment"].get("SECRET_KEY") == "${NETBOX_SECRET_KEY}"
+    assert netbox["environment"].get("API_TOKEN_PEPPER_1") == "${NETBOX_API_TOKEN_PEPPER}"
+    assert netbox["environment"].get("NETBOX_API_TOKEN_PEPPER") == "${NETBOX_API_TOKEN_PEPPER}"
+    vols = netbox.get("volumes") or []
+    assert any("config/netbox/forgesre.py" in str(v) for v in vols)
+    assert any("/etc/netbox/config/forgesre.py" in str(v) for v in vols)
     init = (ROOT / "scripts" / "netbox-db-init.sh").read_text(encoding="utf-8")
     assert "CREATE DATABASE netbox" in init
     assert "forgesre" in init
@@ -37,12 +43,45 @@ def test_compose_netbox_is_default_service():
     assert "8001" in launch
     assert "granian" in launch
     assert "NETBOX_API_TOKEN" in launch
+    assert "API_TOKEN_PEPPER" in launch
     assert "write_enabled=False" in launch
     assert "users.models import Token" in launch
     assert "DROP DATABASE" not in launch.upper()
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "mailpit" not in compose.lower()
     assert "profiles:" not in compose[compose.index("  netbox:"):compose.index("  llm:")]
+    extra = (ROOT / "config" / "netbox" / "forgesre.py").read_text(encoding="utf-8")
+    assert "API_TOKEN_PEPPERS" in extra
+    assert "API_TOKEN_PEPPER_1" in extra
+    assert "NETBOX_API_TOKEN_PEPPER" in extra
+    assert "kp7ht" not in extra
+
+
+def test_netbox_forgesre_extra_sets_peppers_from_env(monkeypatch):
+    import importlib.util
+
+    path = ROOT / "config" / "netbox" / "forgesre.py"
+    pepper = "x" * 50
+    monkeypatch.delenv("API_TOKEN_PEPPER_1", raising=False)
+    monkeypatch.setenv("NETBOX_API_TOKEN_PEPPER", pepper)
+    spec = importlib.util.spec_from_file_location("forgesre_netbox_extra", path)
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    assert mod.API_TOKEN_PEPPERS == {1: pepper}
+
+
+def test_netbox_forgesre_extra_skips_empty_pepper(monkeypatch):
+    import importlib.util
+
+    path = ROOT / "config" / "netbox" / "forgesre.py"
+    monkeypatch.delenv("API_TOKEN_PEPPER_1", raising=False)
+    monkeypatch.delenv("NETBOX_API_TOKEN_PEPPER", raising=False)
+    spec = importlib.util.spec_from_file_location("forgesre_netbox_extra_empty", path)
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    assert not hasattr(mod, "API_TOKEN_PEPPERS")
 
 
 def test_netbox_status_marks_connect_as_starting():
@@ -113,6 +152,9 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "NETBOX_MODE=" in install
     assert "admin@forgesre.local" in install
     assert "never bundles NetBox" not in install
+    assert "NETBOX_API_TOKEN" in install
+    assert "NETBOX_API_TOKEN_PEPPER" in install
+    assert "API_TOKEN_PEPPER_1" in install
     update = (ROOT / "scripts" / "update.sh").read_text(encoding="utf-8")
     assert "ensure-netbox-secrets" in update
     assert "up -d snmp-exporter netbox-redis netbox" in update
@@ -120,6 +162,9 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "yellow" in update.lower()
     secrets = (ROOT / "scripts" / "ensure-netbox-secrets.sh").read_text(encoding="utf-8")
     assert "NETBOX_API_TOKEN" in secrets
+    assert "NETBOX_API_TOKEN_PEPPER" in secrets
+    assert "API_TOKEN_PEPPER_1" in secrets
+    assert "openssl rand -hex 32" in secrets
     assert "sed -i" in secrets
     assert "DROP DATABASE" not in secrets.upper()
     help_txt = (ROOT / "scripts" / "forgesre").read_text(encoding="utf-8")
@@ -127,6 +172,7 @@ def test_install_and_update_bundle_netbox_default_on():
     env = (ROOT / ".env.example").read_text(encoding="utf-8")
     assert "NETBOX_PORT=8001" in env
     assert "NETBOX_SUPERUSER_EMAIL=admin@forgesre.local" in env
+    assert "NETBOX_API_TOKEN_PEPPER" in env
     example = (ROOT / "config" / "forgesre.example.yml").read_text(encoding="utf-8")
     assert "mode: bundled" in example
     assert "http://127.0.0.1:8001" in example
@@ -152,12 +198,16 @@ def test_docs_say_bundled_netbox_default_on():
     assert "NETBOX_API_TOKEN" in handbook
     assert "403" in handbook
     assert "write_enabled=False" in handbook or "read-only" in handbook.lower()
+    assert "API_TOKEN_PEPPER" in handbook or "peppers" in handbook.lower()
+    assert "install.sh" in handbook
     assert "8001" in install
     assert "--netbox-url" in install
+    assert "NETBOX_API_TOKEN_PEPPER" in install
     assert "./forgesre update" in cont
     assert "NetBox" in cont
     assert "NETBOX_API_TOKEN" in cont
     assert "403" in cont
+    assert "API_TOKEN_PEPPER" in cont or "peppers" in cont.lower()
     assert "install.sh" in cont
     cli = (ROOT / "docs" / "cli.md").read_text(encoding="utf-8")
     assert "8001" in cli
@@ -166,6 +216,7 @@ def test_docs_say_bundled_netbox_default_on():
     v07 = (ROOT / "docs" / "v0.7.md").read_text(encoding="utf-8")
     assert "not bundled NetBox" not in v07
     assert "Bundled NetBox is on this V0.7" in v07
+    assert "API_TOKEN_PEPPER" in v07 or "peppers" in v07.lower()
     assert "A bundled NetBox or a cloud LLM" not in readme
     completion = (ROOT / "scripts" / "forgesre-completion.bash").read_text(encoding="utf-8")
     assert "netbox-redis" in completion
