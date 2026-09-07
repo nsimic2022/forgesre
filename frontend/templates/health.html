@@ -22,7 +22,9 @@
   Grafana down is <strong>yellow</strong> (optional graphs), not a Prometheus outage and not a journal error.
   A real Prom/Alertmanager failure names the hop (<code>:9090</code>, Alertmanager <code>:9093</code>) — never a vague “Prometheus Stack”.
   Jobs: <strong>one worker thread</strong> in Core (not Celery). An LLM rewrite can occupy it up to <code>ai.llm.timeout_seconds</code> ({{ llm_timeout|int }}s).
-  Green = running. Yellow = paused / starting / disabled. Red = down. Open goes to that service’s GUI or metrics. Prometheus Open is Targets (<code>/targets?search=</code> scrape jobs), Alerts, Graph — not Prometheus process <code>/metrics</code>. Prometheus/Alertmanager listen on the appliance; use the VM host if the UI rewrote 127.0.0.1.
+  Green = running. Yellow = warn / paused / starting / disabled. Red = down.
+  NetBox UI up with API 403 is <strong>warn</strong>, not paused. SNMP with no Network device + IP is <strong>paused (no SNMP targets)</strong>, not down — do not add devices just to un-pause it.
+  Open goes to that service’s GUI or metrics. Prometheus Open is Targets (<code>/targets?search=</code> scrape jobs), Alerts, Graph — not Prometheus process <code>/metrics</code>. Prometheus/Alertmanager listen on the appliance; use the VM host if the UI rewrote 127.0.0.1.
 </p>
 
 <div class="grid health-grid">

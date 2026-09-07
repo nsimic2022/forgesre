@@ -1220,21 +1220,31 @@ def _discovery_check() -> dict[str, str]:
 
 
 def _snmp_check() -> dict[str, str]:
-    """snmp-exporter: running when :9116 answers; paused (not DOWN) with no targets."""
+    """snmp-exporter: running when :9116 answers *and* there are targets.
+
+    Zero real network SNMP targets → paused (not DOWN), even if :9116 is up.
+    Do not start the exporter or call the tile broken just to un-pause it.
+    """
     if not settings.snmp_enabled:
         return _ok("disabled")
     url = f"{settings.snmp_exporter_url}/metrics"
-    result = _http(url, "GET")
-    if result.get("status") == "ok":
-        return result
     targets = snmp_target_count()
     if targets <= 0:
         return {
             "status": "paused",
-            "why": "No SNMP/network targets; snmp-exporter is paused (not down).",
+            "why": (
+                "paused (no SNMP targets) — no Network device + IP yet; "
+                "snmp-exporter is idle (not down)."
+            ),
             "test": f"curl -fsS {url}",
-            "fix": "Add a Network device with an IP, then docker compose up -d snmp-exporter",
+            "fix": (
+                "Add a Network device with an IP when you have one. "
+                "Do not add devices just to un-pause this tile."
+            ),
         }
+    result = _http(url, "GET")
+    if result.get("status") == "ok":
+        return result
     if ensure_snmp_exporter():
         time.sleep(1.5)
         result = _http(url, "GET")
@@ -1246,6 +1256,7 @@ def _snmp_check() -> dict[str, str]:
 
 
 def _netbox_check() -> dict[str, str]:
+    """Align with Discovery traffic light: ok / warn / starting — never paused when UI is up."""
     if not settings.netbox_enabled:
         return _ok("disabled")
     from app.netbox import netbox_status, token_presence
@@ -1262,16 +1273,16 @@ def _netbox_check() -> dict[str, str]:
         if why and not why.endswith("."):
             why += "."
         why = f"{why} {presence}."
-    if result.get("starting"):
+    if result.get("starting") and not result.get("ui_up"):
         return {
-            "status": "warn",
+            "status": "starting",
             "why": why,
             "test": test,
             "fix": "Wait for first-boot migrations (can take several minutes). Then: docker compose logs netbox. External override: inventory.netbox.url + NETBOX_API_TOKEN.",
         }
-    if result.get("degraded") or "403" in why:
+    if result.get("ui_up") or result.get("degraded") or "403" in why:
         fix = (
-            "Recreate netbox+core after changing secrets.env."
+            "Recreate netbox+core after changing secrets.env. Core is a token on the NetBox superuser (NETBOX_SUPERUSER_NAME), not a separate UI login."
             if token_presence(token) == "yes"
             else "Set NETBOX_API_TOKEN in secrets/secrets.env, then recreate core."
         )

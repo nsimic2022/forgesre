@@ -54,7 +54,7 @@
       {% endif %}
     </div>
     {% if netbox_url_is_local %}
-    <p class="muted">NetBox: bundled at <code>{{ netbox_url }}</code> (also <code>http://&lt;VM-IP&gt;:8001</code>). Core uses <code>NETBOX_API_TOKEN</code> from secrets (API token: {{ netbox_token_present }}) — you do not need a second token from the NetBox UI.</p>
+    <p class="muted">NetBox: bundled at <code>{{ netbox_url }}</code> (also <code>http://&lt;VM-IP&gt;:8001</code>). Core is not a NetBox UI login — <code>NETBOX_API_TOKEN</code> is a read-only token on the NetBox superuser (<code>NETBOX_SUPERUSER_NAME</code>, usually <code>admin</code>). API token: {{ netbox_token_present }}. You do not need a second token from the NetBox UI.</p>
     {% else %}
     <p class="muted">NetBox: <code>{{ netbox_url }}</code> (external via <code>inventory.netbox.url</code> / <code>--netbox-url</code>). API token: {{ netbox_token_present }}.</p>
     {% endif %}

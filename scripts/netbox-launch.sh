@@ -12,9 +12,11 @@
 # hash the REST API does not accept as Authorization: Token …).
 #
 # Upsert a legacy v1 token on every start: plaintext = NETBOX_API_TOKEN (40 hex
-# chars), assigned to the superuser, write_enabled=False. Core already sends
-# Authorization: Token <NETBOX_API_TOKEN>. Do not copy a second token from the
-# NetBox UI. Does not touch database forgesre.
+# chars), assigned to the Django superuser (SUPERUSER_NAME / NETBOX_SUPERUSER_NAME),
+# write_enabled=False, plus dcim.view_device. Core is not a NetBox UI login —
+# it is that token. A token on a non-superuser without DCIM view is HTTP 403
+# even when the secret is valid. Do not copy a second token from the NetBox UI.
+# Does not touch database forgesre.
 #
 # UI token create (v2) still needs API_TOKEN_PEPPERS (≥50 chars). Compose sets
 # API_TOKEN_PEPPER_1 from NETBOX_API_TOKEN_PEPPER in secrets/secrets.env.
@@ -88,17 +90,42 @@ if len(token_key) != 40:
 
 User = get_user_model()
 user = User.objects.filter(username=username).first()
+if user is None and email:
+    user = User.objects.filter(email=email).first()
+if user is None:
+    user = User.objects.filter(is_superuser=True).order_by("pk").first()
 if user is None:
     if not password:
         print("forgesre: no NetBox superuser and SUPERUSER_PASSWORD empty")
         raise SystemExit(0)
     user = User.objects.create_superuser(username, email, password)
     print("forgesre: created NetBox superuser", username)
-elif not user.is_active or not user.is_staff or not user.is_superuser:
-    user.is_active = True
-    user.is_staff = True
-    user.is_superuser = True
-    user.save()
+else:
+    dirty = False
+    if not user.is_active:
+        user.is_active = True
+        dirty = True
+    if not user.is_staff:
+        user.is_staff = True
+        dirty = True
+    if not user.is_superuser:
+        user.is_superuser = True
+        dirty = True
+        print("forgesre: promoted", user.username, "to superuser for Core API token")
+    if dirty:
+        user.save()
+
+# Django model perm: REST 403 if the token user cannot view devices.
+try:
+    from django.contrib.auth.models import Permission
+
+    dj_perm = Permission.objects.filter(
+        content_type__app_label="dcim", codename="view_device"
+    ).first()
+    if dj_perm is not None:
+        user.user_permissions.add(dj_perm)
+except Exception as exc:
+    print("forgesre: dcim.view_device django permission skipped:", exc)
 
 # Previous upsert wrote the 40-char secret into v2 `key` (max 12). Delete it.
 stale = Token.objects.filter(key=token_key)
@@ -139,13 +166,25 @@ else:
     else:
         print("forgesre: API token already present (read-only v1)")
 
-ready = Token.objects.filter(
-    version=TokenVersionChoices.V1, plaintext=token_key, enabled=True
-).exists()
-if not ready:
+owner = (
+    Token.objects.filter(version=TokenVersionChoices.V1, plaintext=token_key, enabled=True)
+    .select_related("user")
+    .first()
+)
+if owner is None:
     print("forgesre: v1 token upsert did not persist")
     raise SystemExit(1)
-print("forgesre: v1 token ready for GET /api/dcim/devices/")
+if owner.user_id != user.id:
+    owner.user = user
+    owner.save()
+    print("forgesre: reattached v1 token to superuser", user.username)
+if not owner.user.is_superuser:
+    print("forgesre: Core token user is not a NetBox superuser")
+    raise SystemExit(1)
+print(
+    "forgesre: v1 token ready for GET /api/dcim/devices/ (superuser",
+    owner.user.username + ")",
+)
 
 # Superuser already lists devices. Attach ObjectPermission too so a later
 # non-superuser assignment still GETs /api/dcim/devices/.

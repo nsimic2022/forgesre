@@ -516,7 +516,8 @@ Need 16 GB RAM for the default 14B GGUF, or ~8 GB if you wget Qwen3-4B into `dat
 | Doctor cannot fetch | `./forgesre secrets-check` — doctor uses the webhook token |
 | Core will not start | Shipped default `SECRET_KEY` / token. Put real values in secrets |
 | SNMP empty `[]` | No Network device with an IP yet |
-| Doctor snmp paused | No Network device + IP yet — yellow, not DOWN. Overall stays healthy for snmp. |
+| Doctor snmp paused (no SNMP targets) | No Network device + IP yet — yellow, not DOWN. Do not add devices just to un-pause. Overall stays healthy for snmp. |
+| Doctor / Health NetBox paused | Wrong if the bundled UI on `:8001` is up. UI up + API 403 is **warn** (yellow). First-boot (UI down) is **starting**. Recreate netbox+core after secrets. Core is a token on the NetBox superuser (`NETBOX_SUPERUSER_NAME`), not a UI login. |
 | Doctor snmp error | `docker compose up -d snmp-exporter && ./forgesre snmp` |
 | LLM download / :8088 down | `docker compose --profile ai up -d llm` then wait for the GGUF to load |
 | Re-install wiped logins | `./install.sh` regenerates secrets; use `update` on a live box |

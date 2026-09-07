@@ -73,8 +73,14 @@ def test_compose_netbox_is_default_service():
     assert "plaintext=token_key" in launch
     assert "token=token_key" in launch
     assert "ForgeSRE Core read-sync" in launch
+    assert "is_superuser" in launch
+    assert "dcim.view_device" in launch
+    assert "user_permissions.add" in launch
+    assert "codename=\"view_device\"" in launch or "codename='view_device'" in launch
     assert "dcim" in launch and "view" in launch
     assert "v1 token ready for GET /api/dcim/devices/" in launch
+    assert "superuser" in launch
+    assert "not a NetBox UI login" in launch
     assert "/run/secrets/forgesre-secrets.env" in launch
     assert "DROP DATABASE" not in launch.upper()
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
@@ -385,6 +391,8 @@ def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
     assert "NETBOX_API_TOKEN" in html
     assert "API token: yes" in html
     assert "do not need a second token" in html
+    assert "NETBOX_SUPERUSER_NAME" in html
+    assert "not a NetBox UI login" in html
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "pointer-events" not in css
     db.close()
@@ -551,7 +559,7 @@ def test_discovery_sync_is_admin_only_for_engineer(monkeypatch):
     db.close()
 
 
-def test_doctor_netbox_warn_when_starting(monkeypatch):
+def test_doctor_netbox_starting_when_ui_down(monkeypatch):
     monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
     monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
     monkeypatch.setattr("app.settings.Settings.netbox_token", "token")
@@ -563,14 +571,16 @@ def test_doctor_netbox_warn_when_starting(monkeypatch):
     monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
     payload = doctor_payload(force=True)
     item = payload["components"]["netbox"]
-    assert item["status"] == "warn"
+    assert item["status"] == "starting"
     assert "migration" in (item.get("why") or "").lower()
     assert "API token: yes" in (item.get("why") or "")
     assert "netbox" not in payload["failed"]
-    assert doctor_soft_status("warn") is True
+    assert doctor_soft_status("starting") is True
     rows = enrich_components(payload["components"], "lab.local:8080")
     row = next(item for item in rows if item["id"] == "netbox")
     assert row["css"] == "warn"
+    assert row["state"] == "starting"
+    assert row["label"] == "NetBox"
     assert "8001" in row["gui"]
 
 
@@ -611,6 +621,13 @@ def test_doctor_netbox_403_rejected_when_token_present(monkeypatch):
     assert leak not in (item.get("why") or "")
     assert leak not in (item.get("fix") or "")
     assert "recreate netbox+core" in (item.get("fix") or "").lower()
+    assert "superuser" in (item.get("fix") or "").lower()
+    assert "netbox" not in payload["failed"]
+    rows = enrich_components(payload["components"], "lab.local")
+    row = next(item for item in rows if item["id"] == "netbox")
+    assert row["state"] == "warn"
+    assert row["css"] == "warn"
+    assert row["state"] != "paused"
 
 
 def test_doctor_netbox_403_missing_when_token_empty(monkeypatch):
@@ -708,6 +725,8 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "API token:" in disc
     assert "netbox_token_present" in disc
     assert "do not need a second token" in disc
+    assert "NETBOX_SUPERUSER_NAME" in disc
+    assert "not a NetBox UI login" in disc
     assert "netbox_url_is_local" in disc
     assert "netbox_sync_clickable" in disc
     assert "netbox_sync_light" in disc
@@ -746,6 +765,11 @@ def test_docs_say_bundled_netbox_default_on():
     assert "second" in handbook.lower()
     assert "TokenVersionChoices" not in handbook
     assert "API_TOKEN_PEPPER" in handbook or "peppers" in handbook.lower()
+    assert "NETBOX_SUPERUSER_NAME" in handbook
+    assert "not a NetBox UI login" in handbook
+    assert "dcim" in handbook.lower()
+    assert "paused (no SNMP targets)" in handbook
+    assert "/health-ui" in handbook
     assert "/api/status/" in handbook
     assert "Admin only" in handbook
     assert "grey" in handbook.lower()
@@ -763,6 +787,8 @@ def test_docs_say_bundled_netbox_default_on():
     assert "NETBOX_API_TOKEN" in cont
     assert "403" in cont
     assert "rejected" in cont.lower()
+    assert "superuser" in cont.lower()
+    assert "paused (no SNMP targets)" in cont
     assert "yellow" in cont.lower()
     assert "grey" in cont.lower()
     assert "No devices yet" in cont
