@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 7 September 2026.** Operator N (Serbian) asked for the ordered GUI/platform/docs list (dashboard doctor demotion through Core `iputils-ping`). Code and docs stay English. Replies to N are Serbian.
+**Monday 7 September 2026.** Operator N (Serbian) asked for GUI list pagination: at most **10 rows** per table, rest on bottom tabs **1, 2, 3 … Previous / Next**. Called out: email, reports, incidents, logs, journals. Code and docs stay English. Replies to N are Serbian.
 
 On the Ubuntu VM N uses:
 
@@ -25,7 +25,7 @@ On the Ubuntu VM N uses:
 git pull origin main && ./forgesre update
 ```
 
-Then **hard-refresh** the browser (`Ctrl+Shift+R`) so `/static/app.css?v=n-ordered-1` is not a cached old sheet.
+Then **hard-refresh** the browser (`Ctrl+Shift+R`) so `/static/app.css?v=paginate-2` is not a cached old sheet.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
 
@@ -40,7 +40,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Both runs: **339 passed**, 2 warnings (Starlette `httpx` / `starlette.testclient` deprecation — ignore), 41.34s then 41.04s. Python 3.12, pytest 9.x. Count recorded after the double run on `cursor/n-ordered-improvements-05f8` (was 334 before these GUI/docs tests).
+Pytest count after the double run on `cursor/gui-list-paginate-05f8`: **347 passed** (twice). Was 339 before this pager work.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -48,26 +48,27 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-N’s ordered list, in order:
+GUI tables that can grow past ~10 rows now share one pager (`PAGE_SIZE = 10` in `backend/app/history.py`, Jinja partial `frontend/templates/_pager.html`, `?page=` plus clamp / Previous / Next / numbered tabs). Filters stay; submitting a filter form omits `page` so the list resets to 1.
 
-1. **Dashboard** — no duplicate doctor grid. HOST DOWN banner, stats, recent incidents stay. Link **System Health**.
-2. **Incident page** — short RCA preview; one primary CTA **Open ForgeRCA** → `/ai/{number}`. Ack/Resolve/Who to call stay. ForgeRCA/ForgeAI pills stay.
-3. **Mail** — one outbox table on `/ops#mail`. Incident and Escalation **link** there. **Send incident report** stays on the incident.
-4. **Asset detail** — one **Edit Alarms** on the metrics panel, not Edit on every tile.
-5. **Incidents vs History** — open/firing vs archive copy. `/incidents` filter: open-only / last days.
-6. **Discovery** — demo `10.20.30.41` has a DEMO pill and lab-seed copy. **Scan now** separate from **Sync NetBox**. NetBox read-only.
-7. **Assets** — one sentence: verify ≠ doctor ≠ `./forgesre test`.
-8. **`POST /demo*`** (HTML) uses `require_page("admin")`, not mere `login_required`. API already required admin.
-9. **Grafana** stays out of left nav and out of the alarm path. Open only from `/health-ui`. Alarm path: Prom → AM → Core.
-10. Discovery stays TCP/SNMP/HTTP probe — **not nmap**. Copy says so. NetBox read-only.
-11. **No new log stack.** Alloy still only ships appliance/Core logs as demo. Docs + RCA one-liner when host logs are empty.
-12. **No Celery.** Docs: one worker thread; LLM rewrite can occupy it up to `timeout_seconds`. Health/AI copy.
-13. UI/docs: `alerts.yml` = PromQL source; asset Alarms = per-host enable/% overlay, not a second engine.
-14. Playrules: shorter copy — map `alertname` → playbook, do not create Prom rules.
-15. `docs/architecture.md` banner: **architecture proposal / not the V0.7 appliance runtime** (Compose, bundled NetBox, Redis for NetBox, no Caddy-as-runtime). Do not implement the Go/K8s rewrite. Operators: handbook + CLI.
-16. Core Dockerfile installs **`iputils-ping`**. GUI ICMP is from the Core container; host `./forgesre ping` stays on the VM. Do not `pip install sqlalchemy` on the host.
+Paginated (max **10** rows, bottom **Previous / 1 / 2 / 3 / Next**, query `?page=` unless noted; filters stay):
 
-LLM prompt shrink (5000 chars) and reverted catalog stay. Did not add Celery, nmap, or a second log stack.
+- Dashboard **Recent incidents** (pager only if more than 10)
+- `/incidents` (open/firing)
+- `/history` (aligned from 200/page to 10)
+- `/ops` mail outbox (`?page=` + `#mail`) and scheduled reports (`?reports_page=` + `#reports`)
+- `/journal` (module / status / q preserved) — mandatory
+- `/assets` (search stays; result set is paged)
+- `/assets/verify`
+- `/discovery` candidates (pending banner still counts all)
+- `/playrules`, `/playbooks`, `/escalation` policy cards
+- `/admin` users, audit log, backup table (restore dropdown still lists every archive)
+- Asset detail incident list + similar groups; incident **Who did what** and notes
+
+Not paginated (not those operator lists): metric tiles, doctor / System Health rows, Dashboard journal preview (still a short recent slice), HOST DOWN banner, incident/escalation mail tables (they link to `/ops#mail`).
+
+CSS cache-bust: `app.css?v=paginate-2`. Handbook + CLI one-liners: GUI tables are 10 per page.
+
+Did not add Celery, nmap, React, IMAP, sqlalchemy on the host CLI, or restore the LLM catalog. Ping/Dockerfile and the architecture-proposal banner stay.
 
 ---
 
@@ -79,7 +80,7 @@ Do **not** run `./install.sh`.
 git pull origin main && ./forgesre update
 ```
 
-`./forgesre update` rebuilds Core (Dockerfile now has `iputils-ping`; frontend CSS cache-bust `n-ordered-1`). Then hard-refresh the browser.
+`./forgesre update` rebuilds Core (frontend CSS cache-bust `paginate-2`). Then hard-refresh the browser.
 
 Lab without image pull: `./forgesre update --offline`.
 
@@ -112,7 +113,11 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Verify hops: ICMP, PORT, FAMILY, PROM, TARGET, SERIES, AM, CORE, RCA, LLM. Reachability: ping **green** ICMP ok; **yellow** ICMP fail but exporter/SNMP ok; **red** both fail.
 - Linux metrics = node_exporter **:9100**. Windows = windows_exporter **:9182**. Network = snmp_exporter :9116.
 - Bundled LLM pin = **Qwen2.5-14B-Instruct Q4_K_M** via `./forgesre fetch-llm`. Do **not** restore the GGUF catalog / Health picker.
-- `docs/architecture.md` is a **proposal**, not the appliance runtime.
+- `docs/architecture.md` is a **proposal**, not the appliance runtime. **architecture proposal** / **not the V0.7 appliance runtime**.
+- GUI ICMP is from the Core container (`iputils-ping` in the Dockerfile). Host `./forgesre ping` stays on the VM.
+- Jobs: **one worker thread** in Core. There is no Celery.
+
+Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre test` / doctor. See [`docs/llm.md`](llm.md).
 
 ---
 

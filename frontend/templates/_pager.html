@@ -1,0 +1,24 @@
+{% if pager and pager.pages > 1 %}
+<p class="pager-meta muted">{{ pager.total }} · page {{ pager.page }} / {{ pager.pages }} · {{ pager.size }} per page</p>
+<nav class="pager" aria-label="Pagination">
+  {% if pager.has_prev %}
+  <a href="{{ pager_href(request, pager.prev, pager.param, pager.hash) }}">Previous</a>
+  {% else %}
+  <span class="pager-disabled">Previous</span>
+  {% endif %}
+  {% for n in pager.numbers %}
+    {% if n is none %}
+    <span class="pager-ellipsis">…</span>
+    {% elif n == pager.page %}
+    <span class="pager-current" aria-current="page">{{ n }}</span>
+    {% else %}
+    <a href="{{ pager_href(request, n, pager.param, pager.hash) }}">{{ n }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if pager.has_next %}
+  <a href="{{ pager_href(request, pager.next, pager.param, pager.hash) }}">Next</a>
+  {% else %}
+  <span class="pager-disabled">Next</span>
+  {% endif %}
+</nav>
+{% endif %}

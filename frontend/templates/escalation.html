@@ -23,6 +23,7 @@
 {% else %}
 <p class="muted">No policies yet. Create one below, or keep using the seeded Default warning after seed.</p>
 {% endfor %}
+{% include "_pager.html" %}
 {% if can('write_play') %}
 <h2>Create escalation policy</h2>
 <form method="post" action="/escalation" class="stack" id="escalation-form">

@@ -313,7 +313,7 @@ def test_asset_table_actions_cell_is_table_cell_not_flex_td():
     assert ".asset-table td.asset-actions" in css
     assert "display: table-cell" in css
     assert "td.row-actions" in css
-    assert "app.css?v=n-ordered-1" in base
+    assert "app.css?v=paginate-2" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():
@@ -670,9 +670,9 @@ def test_asset_numbers_are_stable_searchable_and_not_reused():
     listed = client.get("/assets")
     assert listed.status_code == 200
     assert b">#</th>" in listed.content
-    assert str(host.number).encode() in listed.content
     found = client.get(f"/assets?q={host.number}")
     assert found.status_code == 200
+    assert str(host.number).encode() in found.content
     assert b"unique-num-host" in found.content
     api = client.get("/api/v1/assets").json()
     match = next(item for item in api if item["asset_id"] == "unique-num-host")

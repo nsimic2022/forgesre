@@ -100,6 +100,7 @@
   {% endfor %}
   </tbody>
 </table>
+{% with pager=similar_pager %}{% include "_pager.html" %}{% endwith %}
 {% else %}
 <p class="muted">No incidents for this asset yet.</p>
 {% endif %}
@@ -112,6 +113,7 @@
     <li class="muted">No incidents for this asset.</li>
   {% endfor %}
 </ul>
+{% include "_pager.html" %}
 </div>
 
 <aside class="asset-detail-metrics card" data-asset-metrics="{{ asset.asset_id }}">

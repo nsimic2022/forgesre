@@ -9,19 +9,22 @@
   The install admin bootstrap copy in <code>secrets/secrets.env</code> is separate (see handbook §5).
 </p>
 <div class="split">
+  <div>
   <div class="table-scroll">
   <table class="user-table">
     <thead><tr><th>Email</th><th>Name</th><th>Role</th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr class="{% if selected and selected.id == u.id %}selected{% endif %}">
-        <td><a href="/admin?selected={{ u.id }}">{{ u.email }}</a></td>
+        <td><a href="/admin?selected={{ u.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">{{ u.email }}</a></td>
         <td>{{ u.name }}</td>
         <td>{{ role_label(u.role) }}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
+  {% include "_pager.html" %}
   </div>
   <div>
     {% if selected %}
@@ -100,6 +103,7 @@
   </tbody>
 </table>
 </div>
+{% with pager=audit_pager %}{% include "_pager.html" %}{% endwith %}
 <h2>Platform backup</h2>
 {% if request.query_params.get('backup') %}
 <p class="banner"><strong>Backup written</strong> {{ request.query_params.get('backup') }} under <code>data/backups/</code> (mode 600, gitignored).</p>
@@ -152,6 +156,7 @@
   </tbody>
 </table>
 </div>
+{% with pager=backup_pager %}{% include "_pager.html" %}{% endwith %}
 {% else %}
 <p class="muted">No archives yet. Create one, or import a <code>forgesre.tar.gz</code> (or legacy <code>forgesre-YYYYMMDDTHHMMSSZ.tar.gz</code>).</p>
 {% endif %}
@@ -167,11 +172,11 @@
   <input type="file" name="archive" accept=".tar.gz,application/gzip" required>
   <button type="submit">Import</button>
 </form>
-{% if backups %}
+{% if backup_choices %}
 <form method="post" action="/admin/backups/restore" class="stack backup-restore" onsubmit="return confirm('This overwrites the live database. Continue only if you typed RESTORE and you can recover from another copy.');">
   <label>Backup folder (newest first)
     <select name="name" required>
-      {% for b in backups %}
+      {% for b in backup_choices %}
       <option value="{{ b.name }}">{{ b.label }}</option>
       {% endfor %}
     </select>

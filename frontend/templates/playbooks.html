@@ -14,6 +14,7 @@
   </ol>
 </section>
 {% endfor %}
+{% include "_pager.html" %}
 {% if can('write_play') %}
 <h2>Create playbook</h2>
 <form method="post" action="/playbooks" class="stack">

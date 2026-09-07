@@ -95,11 +95,17 @@ def test_grafana_only_on_health_ui_not_nav_or_incidents():
 def test_discovery_demo_ip_is_labeled_and_netbox_is_separate():
     db = _db()
     db.close()
-    page = _login("admin@forgesre.local").get("/discovery")
+    client = _login("admin@forgesre.local")
+    page = client.get("/discovery")
     assert page.status_code == 200
-    assert "10.20.30.41" in page.text
-    assert 'class="pill demo"' in page.text
-    assert "lab seed" in page.text.lower()
+    html = page.text
+    n = 1
+    while "10.20.30.41" not in html and n < 8:
+        n += 1
+        html = client.get(f"/discovery?page={n}").text
+    assert "10.20.30.41" in html
+    assert 'class="pill demo"' in html
+    assert "lab seed" in html.lower()
     assert "not nmap" in page.text.lower()
     assert page.text.find("Scan now") < page.text.find("NetBox sync")
     assert "read-only" in page.text.lower()
