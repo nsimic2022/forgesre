@@ -9,7 +9,7 @@ from app.db import Base, SessionLocal, engine
 from app.inventory import sync_netbox
 from app.journal import list_entries, report
 from app.models import JournalEntry
-from app.netbox import format_client_error, list_devices
+from app.netbox import format_client_error, list_devices, _authorization
 from app.seed import seed
 
 MDN = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
@@ -47,6 +47,13 @@ def test_format_client_error_strips_mdn_from_plain_string():
 def test_list_devices_empty_token_does_not_call_netbox():
     with pytest.raises(RuntimeError, match="NETBOX_API_TOKEN is empty"):
         list_devices("http://127.0.0.1:8001", "")
+
+
+def test_authorization_uses_token_prefix_for_v1_plaintext():
+    assert _authorization("a" * 40) == f"Token {'a' * 40}"
+    assert _authorization("Token secret") == "Token secret"
+    assert _authorization("nbt_abcdefghijkl.secret") == "Bearer nbt_abcdefghijkl.secret"
+    assert _authorization("Bearer nbt_x.y") == "Bearer nbt_x.y"
 
 
 def test_list_devices_403_is_short(monkeypatch):

@@ -3,20 +3,30 @@
 Bundled instance is http://127.0.0.1:8001 unless inventory.netbox.url points
 at an external NetBox (--netbox-url).
 
-Core authenticates with NETBOX_API_TOKEN (Authorization: Token …). NetBox's
-REST API returns HTTP 403 (not 401) when the token is missing, unknown, or
-not allowed to read DCIM. The bundled container upserts that token on every
-start as write_enabled=False.
+Core authenticates with NETBOX_API_TOKEN (Authorization: Token …). That
+plain 40-char value is a NetBox v1 token (plaintext column). v4.6 defaults
+to hashed v2 tokens (key + HMAC); writing the secret into `key` is why
+GET /api/dcim/devices/ returned 403. Launch upserts v1 on every start.
+
+NetBox's REST API returns HTTP 403 (not 401) when the token is missing,
+unknown, or not allowed to read DCIM. The bundled container upserts that
+token as write_enabled=False on the superuser.
 """
 
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
 _MDN_HELP = "For more information check:"
+
+
+def is_local_netbox_url(url: str) -> bool:
+    """True when Core is talking to bundled NetBox on this VM (not --netbox-url)."""
+    host = (urlparse((url or "").strip()).hostname or "").lower()
+    return host in {"127.0.0.1", "localhost", "::1"}
 
 
 def format_client_error(exc: BaseException) -> str:
@@ -146,9 +156,19 @@ def list_devices(url: str, token: str, timeout: float = 10.0) -> list[dict[str, 
     return devices
 
 
+def _authorization(token: str) -> str:
+    value = (token or "").strip()
+    lower = value.lower()
+    if lower.startswith("bearer ") or lower.startswith("token "):
+        return value
+    if value.startswith("nbt_"):
+        return f"Bearer {value}"
+    return f"Token {value}"
+
+
 def _headers(token: str) -> dict[str, str]:
     return {
-        "Authorization": f"Token {token}",
+        "Authorization": _authorization(token),
         "Accept": "application/json",
         "Content-Type": "application/json",
     }

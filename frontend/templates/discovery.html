@@ -48,7 +48,11 @@
       <span class="muted">{{ netbox_sync_why }}</span>
       {% endif %}
     </div>
-    <p class="muted">NetBox: <code>{{ netbox_url }}</code>. Bundled UI is <code>http://&lt;VM-IP&gt;:8001</code>. <code>--netbox-url</code> still points Core at an external instance.</p>
+    {% if netbox_url_is_local %}
+    <p class="muted">NetBox: bundled at <code>{{ netbox_url }}</code> (also <code>http://&lt;VM-IP&gt;:8001</code>). Core uses <code>NETBOX_API_TOKEN</code> from secrets — you do not need a second token from the NetBox UI.</p>
+    {% else %}
+    <p class="muted">NetBox: <code>{{ netbox_url }}</code> (external via <code>inventory.netbox.url</code> / <code>--netbox-url</code>).</p>
+    {% endif %}
     {% endif %}
   {% else %}
   <p class="muted">Admin only.</p>

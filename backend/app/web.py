@@ -48,7 +48,7 @@ from app.models import (
     ScheduledReport,
     User,
 )
-from app.netbox import sync_cta
+from app.netbox import is_local_netbox_url, sync_cta
 from app.security import can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload, run_asset_verify
 from app.asset_metrics import safe_asset_metric_panel
@@ -529,6 +529,7 @@ def discovery_page(request: Request, db: Session = Depends(get_db), user: User =
         discovery_cidrs=settings.discovery_cidrs,
         netbox_enabled=settings.netbox_enabled,
         netbox_url=settings.netbox_url,
+        netbox_url_is_local=is_local_netbox_url(settings.netbox_url),
         netbox_sync_ready=bool(netbox_sync.get("ready")),
         netbox_sync_why=str(netbox_sync.get("why") or ""),
         demo_candidate_ip=DEMO_CANDIDATE_IP,

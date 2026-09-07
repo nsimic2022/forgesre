@@ -73,6 +73,9 @@ else
   fi
 fi
 "${DC[@]}" up -d snmp-exporter netbox-redis netbox
+# launch-netbox.sh is bind-mounted; recreate so ensure_core_api_token runs
+# (a leftover process still 403s GET /api/dcim/devices/ with the old token row).
+"${DC[@]}" up -d --no-deps --force-recreate netbox
 echo "Waiting for health..."
 sleep 5
 NB_PORT=8001
