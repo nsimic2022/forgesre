@@ -40,7 +40,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Count is recorded after the double run on `cursor/n-ordered-improvements-05f8`. If this paragraph still says “pending”, pytest had not finished when the handoff was written — re-run twice and update the count.
+Both runs: **339 passed**, 2 warnings (Starlette `httpx` / `starlette.testclient` deprecation — ignore), 41.34s then 41.04s. Python 3.12, pytest 9.x. Count recorded after the double run on `cursor/n-ordered-improvements-05f8` (was 334 before these GUI/docs tests).
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
