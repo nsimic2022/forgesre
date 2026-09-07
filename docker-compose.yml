@@ -246,6 +246,7 @@ services:
       RELEASE_CHECK_URL: ""
     volumes:
       - ./scripts/netbox-launch.sh:/opt/netbox/launch-netbox.sh:ro
+      - ./scripts/netbox-upsert-token.py:/opt/netbox/forgesre-upsert-token.py:ro
       - ./config/netbox/forgesre.py:/etc/netbox/config/forgesre.py:ro
       - ./secrets/secrets.env:/run/secrets/forgesre-secrets.env:ro
       - ${FORGESRE_DATA:-./data}/netbox/media:/opt/netbox/netbox/media

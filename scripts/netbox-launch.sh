@@ -11,12 +11,17 @@
 # key=<40-char NETBOX_API_TOKEN> fails the version check constraint (or stores a
 # hash the REST API does not accept as Authorization: Token …).
 #
-# Upsert a legacy v1 token on every start: plaintext = NETBOX_API_TOKEN (40 hex
-# chars), assigned to the Django superuser (SUPERUSER_NAME / NETBOX_SUPERUSER_NAME),
-# write_enabled=False, plus dcim.view_device. Core is not a NetBox UI login —
-# it is that token. A token on a non-superuser without DCIM view is HTTP 403
-# even when the secret is valid. Do not copy a second token from the NetBox UI.
-# Does not touch database forgesre.
+# Upsert a legacy v1 token on every start via scripts/netbox-upsert-token.py:
+# plaintext = NETBOX_API_TOKEN (40 hex chars), assigned to the Django superuser
+# (SUPERUSER_NAME / NETBOX_SUPERUSER_NAME), write_enabled=False, plus
+# dcim.view_device. Core is not a NetBox UI login — it is that token. A token on
+# a non-superuser without DCIM view is HTTP 403 even when the secret is valid.
+# Do not copy a second token from the NetBox UI. Does not touch database forgesre.
+#
+# NetBox 4.5+ User has no is_staff. The previous inline shell touched is_staff
+# and AttributeError was swallowed as "could not upsert" while Granian still
+# started — Discovery stayed HTTP 403. The helper logs exception type + message
+# (never the token). UI start is not blocked if upsert fails; doctor stays honest.
 #
 # UI token create (v2) still needs API_TOKEN_PEPPERS (≥50 chars). Compose sets
 # API_TOKEN_PEPPER_1 from NETBOX_API_TOKEN_PEPPER in secrets/secrets.env.
@@ -61,154 +66,22 @@ ensure_core_api_token() {
     echo "forgesre: NETBOX_API_TOKEN empty — Core sync will get HTTP 403" >&2
     return 0
   fi
+  local upsert_py="${FORGESRE_UPSERT_TOKEN_PY:-/opt/netbox/forgesre-upsert-token.py}"
+  if [[ ! -f "${upsert_py}" ]]; then
+    echo "forgesre: upsert script missing at ${upsert_py} (UI still starts)" >&2
+    echo "forgesre: that means the token never landed in the NetBox DB; Discovery stays HTTP 403" >&2
+    return 0
+  fi
   (
     cd /opt/netbox/netbox
     FORGESRE_NB_TOKEN="${token}" \
     FORGESRE_NB_USER="${SUPERUSER_NAME:-admin}" \
     FORGESRE_NB_EMAIL="${SUPERUSER_EMAIL:-admin@forgesre.local}" \
     FORGESRE_NB_PASSWORD="${SUPERUSER_PASSWORD:-}" \
-    python /opt/netbox/netbox/manage.py shell --no-startup --no-imports --interface python <<'PY'
-import os
-
-from django.contrib.auth import get_user_model
-from users.choices import TokenVersionChoices
-from users.models import Token
-
-token_key = (os.environ.get("FORGESRE_NB_TOKEN") or "").strip()
-username = (os.environ.get("FORGESRE_NB_USER") or "admin").strip()
-email = (os.environ.get("FORGESRE_NB_EMAIL") or "admin@forgesre.local").strip()
-password = os.environ.get("FORGESRE_NB_PASSWORD") or ""
-if not token_key:
-    raise SystemExit(0)
-if len(token_key) != 40:
-    print(
-        "forgesre: NETBOX_API_TOKEN length",
-        len(token_key),
-        "(v1 plaintext must be 40 characters; openssl rand -hex 20)",
-    )
-    raise SystemExit(1)
-
-User = get_user_model()
-user = User.objects.filter(username=username).first()
-if user is None and email:
-    user = User.objects.filter(email=email).first()
-if user is None:
-    user = User.objects.filter(is_superuser=True).order_by("pk").first()
-if user is None:
-    if not password:
-        print("forgesre: no NetBox superuser and SUPERUSER_PASSWORD empty")
-        raise SystemExit(0)
-    user = User.objects.create_superuser(username, email, password)
-    print("forgesre: created NetBox superuser", username)
-else:
-    dirty = False
-    if not user.is_active:
-        user.is_active = True
-        dirty = True
-    if not user.is_staff:
-        user.is_staff = True
-        dirty = True
-    if not user.is_superuser:
-        user.is_superuser = True
-        dirty = True
-        print("forgesre: promoted", user.username, "to superuser for Core API token")
-    if dirty:
-        user.save()
-
-# Django model perm: REST 403 if the token user cannot view devices.
-try:
-    from django.contrib.auth.models import Permission
-
-    dj_perm = Permission.objects.filter(
-        content_type__app_label="dcim", codename="view_device"
-    ).first()
-    if dj_perm is not None:
-        user.user_permissions.add(dj_perm)
-except Exception as exc:
-    print("forgesre: dcim.view_device django permission skipped:", exc)
-
-# Previous upsert wrote the 40-char secret into v2 `key` (max 12). Delete it.
-stale = Token.objects.filter(key=token_key)
-if stale.exists():
-    n = stale.count()
-    stale.delete()
-    print("forgesre: removed", n, "invalid token(s) that stored the secret in key")
-
-row = Token.objects.filter(version=TokenVersionChoices.V1, plaintext=token_key).first()
-if row is None:
-    row = Token(
-        user=user,
-        version=TokenVersionChoices.V1,
-        write_enabled=False,
-        enabled=True,
-        description="ForgeSRE Core read-sync",
-        key=None,
-        pepper_id=None,
-        hmac_digest=None,
-        token=token_key,
-    )
-    row.save()
-    print("forgesre: created read-only v1 API token for Core sync")
-else:
-    changed = False
-    if row.user_id != user.id:
-        row.user = user
-        changed = True
-    if getattr(row, "write_enabled", True):
-        row.write_enabled = False
-        changed = True
-    if not getattr(row, "enabled", True):
-        row.enabled = True
-        changed = True
-    if changed:
-        row.save()
-        print("forgesre: updated v1 API token to read-only Core sync")
-    else:
-        print("forgesre: API token already present (read-only v1)")
-
-owner = (
-    Token.objects.filter(version=TokenVersionChoices.V1, plaintext=token_key, enabled=True)
-    .select_related("user")
-    .first()
-)
-if owner is None:
-    print("forgesre: v1 token upsert did not persist")
-    raise SystemExit(1)
-if owner.user_id != user.id:
-    owner.user = user
-    owner.save()
-    print("forgesre: reattached v1 token to superuser", user.username)
-if not owner.user.is_superuser:
-    print("forgesre: Core token user is not a NetBox superuser")
-    raise SystemExit(1)
-print(
-    "forgesre: v1 token ready for GET /api/dcim/devices/ (superuser",
-    owner.user.username + ")",
-)
-
-# Superuser already lists devices. Attach ObjectPermission too so a later
-# non-superuser assignment still GETs /api/dcim/devices/.
-try:
-    from core.models import ObjectType
-    from users.models import ObjectPermission
-
-    ot = ObjectType.objects.filter(app_label="dcim", model="device").first()
-    if ot is not None:
-        perm = ObjectPermission.objects.filter(name="ForgeSRE Core read devices").first()
-        if perm is None:
-            perm = ObjectPermission(name="ForgeSRE Core read devices", enabled=True, actions=["view"])
-            perm.save()
-        elif list(perm.actions) != ["view"] or not perm.enabled:
-            perm.actions = ["view"]
-            perm.enabled = True
-            perm.save()
-        perm.users.add(user)
-        perm.object_types.add(ot)
-except Exception as exc:
-    print("forgesre: dcim.view_device object permission skipped:", exc)
-PY
+    python "${upsert_py}"
   ) || {
     echo "forgesre: could not upsert NetBox API token (UI still starts)" >&2
+    echo "forgesre: that means the token never landed in the NetBox DB; Discovery stays HTTP 403" >&2
   }
 }
 

@@ -57,32 +57,44 @@ def test_compose_netbox_is_default_service():
     vols = netbox.get("volumes") or []
     assert any("config/netbox/forgesre.py" in str(v) for v in vols)
     assert any("/etc/netbox/config/forgesre.py" in str(v) for v in vols)
+    assert any("scripts/netbox-upsert-token.py" in str(v) for v in vols)
+    assert any("/opt/netbox/forgesre-upsert-token.py" in str(v) for v in vols)
     assert any("secrets/secrets.env" in str(v) and "/run/secrets/forgesre-secrets.env" in str(v) for v in vols)
     init = (ROOT / "scripts" / "netbox-db-init.sh").read_text(encoding="utf-8")
     assert "CREATE DATABASE netbox" in init
     assert "forgesre" in init
     assert "DROP DATABASE" not in init.upper()
     launch = (ROOT / "scripts" / "netbox-launch.sh").read_text(encoding="utf-8")
+    upsert = (ROOT / "scripts" / "netbox-upsert-token.py").read_text(encoding="utf-8")
     assert "8001" in launch
     assert "granian" in launch
     assert "NETBOX_API_TOKEN" in launch
     assert "API_TOKEN_PEPPER" in launch
-    assert "write_enabled=False" in launch
-    assert "users.models import Token" in launch
-    assert "TokenVersionChoices.V1" in launch
-    assert "plaintext=token_key" in launch
-    assert "token=token_key" in launch
-    assert "ForgeSRE Core read-sync" in launch
-    assert "is_superuser" in launch
-    assert "dcim.view_device" in launch
-    assert "user_permissions.add" in launch
-    assert "codename=\"view_device\"" in launch or "codename='view_device'" in launch
-    assert "dcim" in launch and "view" in launch
-    assert "v1 token ready for GET /api/dcim/devices/" in launch
-    assert "superuser" in launch
+    assert "netbox-upsert-token.py" in launch
+    assert "forgesre-upsert-token.py" in launch
+    assert "could not upsert NetBox API token (UI still starts)" in launch
+    assert "token never landed in the NetBox DB" in launch
+    assert "if not user.is_staff" not in launch
+    assert "user.is_staff =" not in launch
+    assert "if not user.is_staff" not in upsert
+    assert "user.is_staff =" not in upsert
+    assert "write_enabled=False" in upsert
+    assert "users.models" in upsert
+    assert "TokenVersionChoices" in upsert
+    assert "plaintext" in upsert
+    assert "token_key" in upsert
+    assert "ForgeSRE Core read-sync" in upsert
+    assert "is_superuser" in upsert
+    assert "dcim.view_device" in upsert
+    assert "user_permissions.add" in upsert
+    assert "codename=\"view_device\"" in upsert or "codename='view_device'" in upsert
+    assert "dcim" in upsert and "view" in upsert
+    assert "v1 token ready for GET /api/dcim/devices/" in upsert
+    assert "superuser" in launch and "superuser" in upsert
     assert "not a NetBox UI login" in launch
     assert "/run/secrets/forgesre-secrets.env" in launch
     assert "DROP DATABASE" not in launch.upper()
+    assert "DROP DATABASE" not in upsert.upper()
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "mailpit" not in compose.lower()
     assert "profiles:" not in compose[compose.index("  netbox:"):compose.index("  llm:")]
@@ -689,6 +701,7 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "up -d snmp-exporter netbox-redis netbox" in update
     assert "--force-recreate netbox" in update
     assert "netbox_launch_hash" in update
+    assert "netbox-upsert-token.py" in update
     assert ".netbox-launch.stamp" in update
     assert "--force-recreate core" in update
     assert "first boot can take several minutes" in update.lower() or "migrations" in update.lower()
@@ -763,6 +776,9 @@ def test_docs_say_bundled_netbox_default_on():
     assert "write_enabled=False" in handbook or "read-only" in handbook.lower()
     assert "plaintext" in handbook.lower()
     assert "second" in handbook.lower()
+    assert "could not upsert" in handbook
+    assert "v1 token ready" in handbook
+    assert "never landed" in handbook.lower() or "NetBox DB" in handbook
     assert "TokenVersionChoices" not in handbook
     assert "API_TOKEN_PEPPER" in handbook or "peppers" in handbook.lower()
     assert "NETBOX_SUPERUSER_NAME" in handbook
@@ -785,6 +801,10 @@ def test_docs_say_bundled_netbox_default_on():
     assert "./forgesre update" in cont
     assert "NetBox" in cont
     assert "NETBOX_API_TOKEN" in cont
+    assert "could not upsert" in cont
+    assert "v1 token ready" in cont
+    assert "netbox-upsert-token.py" in cont
+    assert "is_staff" in cont
     assert "403" in cont
     assert "rejected" in cont.lower()
     assert "superuser" in cont.lower()
