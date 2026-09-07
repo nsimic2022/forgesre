@@ -42,7 +42,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-status-traffic-05f8`: **(fill after SHA pytest)**. Was 372 after the NetBox token upsert.
+Pytest count after the double run on `cursor/netbox-status-traffic-05f8` SHA `0e69ee7e8ab04fc5f8c4778192217cc3cd1fd7f5`: **377 passed** (twice). Was 372 after the NetBox token upsert.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
