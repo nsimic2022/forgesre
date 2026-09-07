@@ -112,9 +112,9 @@ def test_sync_netbox_403_journal_is_short_and_deduped(monkeypatch):
     seed(db)
     db.query(JournalEntry).filter_by(module="netbox").delete()
     db.commit()
-    monkeypatch.setattr("app.inventory.settings.netbox_enabled", True)
-    monkeypatch.setattr("app.inventory.settings.netbox_url", "http://127.0.0.1:8001")
-    monkeypatch.setattr("app.inventory.settings.netbox_token", "a" * 40)
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", "a" * 40)
 
     def boom(*_a, **_k):
         raise RuntimeError(format_client_error(_httpx_403()))
