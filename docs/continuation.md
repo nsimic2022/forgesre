@@ -42,7 +42,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-status-403-05f8` rebased onto `main` (traffic light): fill after pytest. Was 377 after the NetBox traffic light.
+Pytest count after the double run on `cursor/netbox-status-403-05f8` SHA `9724875` (rebased onto traffic-light `main`): **377 passed** (twice). Same count as the traffic-light merge; this branch adds the NetBox secrets bind-mount so upsert actually runs.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
