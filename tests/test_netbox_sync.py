@@ -9,7 +9,13 @@ from app.db import Base, SessionLocal, engine
 from app.inventory import sync_netbox
 from app.journal import list_entries, report
 from app.models import JournalEntry
-from app.netbox import format_client_error, list_devices, _authorization
+from app.netbox import (
+    FORBIDDEN_MISSING_WHY,
+    FORBIDDEN_REJECTED_WHY,
+    format_client_error,
+    list_devices,
+    _authorization,
+)
 from app.seed import seed
 
 MDN = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403"
@@ -26,11 +32,18 @@ def _httpx_403() -> httpx.HTTPStatusError:
 
 
 def test_format_client_error_drops_mdn_on_403():
-    msg = format_client_error(_httpx_403())
-    assert "403" in msg
+    msg = format_client_error(_httpx_403(), "a" * 40)
+    assert msg == FORBIDDEN_REJECTED_WHY
     assert "mozilla" not in msg.lower()
     assert "For more information check" not in msg
-    assert "devices" in msg
+    assert "token missing" not in msg
+    assert "a" * 40 not in msg
+
+
+def test_format_client_error_403_empty_token_keeps_missing():
+    msg = format_client_error(_httpx_403(), "")
+    assert msg == FORBIDDEN_MISSING_WHY
+    assert "rejected" not in msg
 
 
 def test_format_client_error_strips_mdn_from_plain_string():
@@ -70,9 +83,10 @@ def test_list_devices_403_is_short(monkeypatch):
     with pytest.raises(RuntimeError) as caught:
         list_devices("http://127.0.0.1:8001", "a" * 40)
     msg = str(caught.value)
-    assert "403" in msg
+    assert msg == FORBIDDEN_REJECTED_WHY
     assert "mozilla" not in msg.lower()
     assert "For more information check" not in msg
+    assert "a" * 40 not in msg
 
 
 def test_list_devices_reads_results(monkeypatch):
@@ -124,15 +138,16 @@ def test_sync_netbox_403_journal_is_short_and_deduped(monkeypatch):
     monkeypatch.setattr("app.settings.Settings.netbox_token", "a" * 40)
 
     def boom(*_a, **_k):
-        raise RuntimeError(format_client_error(_httpx_403()))
+        raise RuntimeError(format_client_error(_httpx_403(), "a" * 40))
 
     monkeypatch.setattr("app.netbox.list_devices", boom)
     first = sync_netbox(db)
     second = sync_netbox(db)
     db.close()
     assert first["synced"] == 0
-    assert "403" in first["error"]
+    assert first["error"] == FORBIDDEN_REJECTED_WHY
     assert "mozilla" not in first["error"].lower()
+    assert "a" * 40 not in first["error"]
     assert second["error"] == first["error"]
 
     db = SessionLocal()

@@ -9,8 +9,10 @@ to hashed v2 tokens (key + HMAC); writing the secret into `key` is why
 GET /api/dcim/devices/ returned 403. Launch upserts v1 on every start.
 
 NetBox's REST API returns HTTP 403 (not 401) when the token is missing,
-unknown, or not allowed to read DCIM. The bundled container upserts that
-token as write_enabled=False on the superuser.
+unknown, or not allowed to read DCIM. User-facing 403 copy must distinguish
+those: empty token → missing; non-empty token → NetBox rejected it. Never
+print the secret. The bundled container upserts the token as
+write_enabled=False on the superuser.
 
 Discovery traffic light uses GET /api/dcim/devices/?limit=1 (never writes):
 - grey: UI down, API 403, or no token
@@ -38,18 +40,36 @@ def is_local_netbox_url(url: str) -> bool:
     return host in {"127.0.0.1", "localhost", "::1"}
 
 
-def format_client_error(exc: BaseException) -> str:
-    """One-line operator text. Never include httpx's MDN status-code dump."""
+FORBIDDEN_REJECTED_WHY = (
+    "NetBox rejected the API token (HTTP 403). Recreate netbox+core after changing secrets.env."
+)
+FORBIDDEN_MISSING_WHY = (
+    "HTTP 403 Forbidden on NetBox devices API "
+    "(token missing, not created in NetBox, or not allowed to read)."
+)
+TOKEN_EMPTY_WHY = "NetBox UI answers but NETBOX_API_TOKEN is empty"
+
+
+def token_presence(token: str) -> str:
+    """yes/no only. Never the secret."""
+    return "yes" if (token or "").strip() else "no"
+
+
+def forbidden_why(token: str) -> str:
+    """403 copy: rejected if Core has a token, missing if it does not."""
+    if (token or "").strip():
+        return FORBIDDEN_REJECTED_WHY
+    return FORBIDDEN_MISSING_WHY
+
+
+def format_client_error(exc: BaseException, token: str = "") -> str:
+    """Operator text. Never include httpx's MDN dump or the token value."""
     if isinstance(exc, httpx.HTTPStatusError):
         code = int(exc.response.status_code)
         url = str(exc.request.url) if exc.request is not None else ""
         path = url.split("?", 1)[0]
         if code == 403:
-            return (
-                "HTTP 403 Forbidden on NetBox devices API "
-                "(token missing, not created in NetBox, or not allowed to read). "
-                f"{path}"
-            ).strip()
+            return forbidden_why(token)
         return f"HTTP {code} from NetBox {path}".strip()
     text = str(exc).strip()
     if _MDN_HELP in text:
@@ -66,6 +86,10 @@ EMPTY_DEVICES_WHY = "No devices yet; add in NetBox UI :8001 or use Assets/Discov
 
 def _cta_why(status: dict[str, Any]) -> str:
     why = str(status.get("why") or "NetBox is not ready for sync.").strip()
+    if "403" in why:
+        if why and not why.endswith("."):
+            why += "."
+        return why
     first = why.split(". ", 1)[0].strip()
     if first and not first.endswith("."):
         first += "."
@@ -211,16 +235,13 @@ def netbox_status(url: str, token: str, timeout: float = 5.0) -> dict[str, Any]:
                     return _grey(
                         degraded=True,
                         ui_up=True,
-                        why="NetBox UI answers but NETBOX_API_TOKEN is empty",
+                        why=TOKEN_EMPTY_WHY,
                     )
                 if api_code == 403:
                     return _grey(
                         degraded=True,
                         ui_up=True,
-                        why=(
-                            "NetBox UI up; API HTTP 403 (token missing, not created "
-                            "in NetBox, or not allowed to read devices)"
-                        ),
+                        why=forbidden_why(token),
                     )
                 return _grey(
                     degraded=True,
@@ -232,8 +253,7 @@ def netbox_status(url: str, token: str, timeout: float = 5.0) -> dict[str, Any]:
                     degraded=True,
                     ui_up=True,
                     why=(
-                        "NetBox UI up; API HTTP 403 (token missing, not created "
-                        "in NetBox, or not allowed to read devices)"
+                        forbidden_why(token)
                         if api_code == 403
                         else f"NetBox UI up; API returned HTTP {api_code}"
                     ),
@@ -262,7 +282,7 @@ def list_devices(url: str, token: str, timeout: float = 10.0) -> list[dict[str, 
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
-                raise RuntimeError(format_client_error(exc)) from exc
+                raise RuntimeError(format_client_error(exc, token)) from exc
             payload = response.json()
             for row in payload.get("results") or []:
                 primary = (row.get("primary_ip") or {}).get("address") or ""

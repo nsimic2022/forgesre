@@ -701,7 +701,7 @@ def sync_netbox(db: Session) -> dict:
     except Exception as exc:
         from app.netbox import format_client_error
 
-        detail = format_client_error(exc)
+        detail = format_client_error(exc, settings.netbox_token)
         summary = "NetBox sync failed: HTTP 403" if "403" in detail else "NetBox sync failed"
         log.warning("netbox sync failed: %s", detail)
         report(db, "netbox", "sync", "error", summary=summary, detail=detail)

@@ -48,7 +48,7 @@ from app.models import (
     ScheduledReport,
     User,
 )
-from app.netbox import is_local_netbox_url, status_label, sync_cta
+from app.netbox import is_local_netbox_url, status_label, sync_cta, token_presence
 from app.security import can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload, run_asset_verify
 from app.asset_metrics import safe_asset_metric_panel
@@ -517,7 +517,8 @@ def discovery_page(request: Request, db: Session = Depends(get_db), user: User =
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
     pending = [row for row in rows if row.status == "new"]
     rows, pager = paginate(rows, page)
-    netbox_sync = sync_cta(settings.netbox_url, settings.netbox_token, settings.netbox_enabled)
+    token = settings.netbox_token
+    netbox_sync = sync_cta(settings.netbox_url, token, settings.netbox_enabled)
     return render(
         request,
         "discovery.html",
@@ -530,6 +531,7 @@ def discovery_page(request: Request, db: Session = Depends(get_db), user: User =
         netbox_enabled=settings.netbox_enabled,
         netbox_url=settings.netbox_url,
         netbox_url_is_local=is_local_netbox_url(settings.netbox_url),
+        netbox_token_present=token_presence(token),
         netbox_sync_ready=bool(netbox_sync.get("ready")),
         netbox_sync_clickable=bool(netbox_sync.get("clickable", netbox_sync.get("ready"))),
         netbox_sync_light=str(netbox_sync.get("light") or "grey"),
