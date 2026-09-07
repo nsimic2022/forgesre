@@ -40,7 +40,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count is recorded after the double run on `cursor/gui-list-paginate-05f8` (was 339 before the pager work).
+Pytest count after the double run on `cursor/gui-list-paginate-05f8`: **347 passed** (twice). Was 339 before this pager work.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
