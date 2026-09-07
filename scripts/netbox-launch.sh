@@ -13,9 +13,9 @@
 # Prefer that full v2 string in NETBOX_API_TOKEN. scripts/netbox-upsert-token.py
 # skips v1 create when the secret looks like v2 — do not overwrite N's UI token.
 # A legacy 40-char v1 value is still upserted as plaintext (write_enabled=False,
-# SUPERUSER_NAME / NETBOX_SUPERUSER_NAME, dcim.view_device). Core is not a
-# NetBox UI login. A token on a non-superuser without DCIM view is HTTP 403
-# even when the secret is valid. Does not touch database forgesre.
+# SUPERUSER_NAME / NETBOX_SUPERUSER_NAME, dcim.view_device). Core is not a NetBox UI login.
+# A token on a non-superuser without DCIM view is HTTP 403 even when the secret
+# is valid. Does not touch database forgesre.
 #
 # NetBox 4.5+ User has no is_staff. The previous inline shell touched is_staff
 # and AttributeError was swallowed as "could not upsert" while Granian still
