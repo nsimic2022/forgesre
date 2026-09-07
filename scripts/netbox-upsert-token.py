@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
-"""Upsert NETBOX_API_TOKEN as a NetBox v4.6 v1 plaintext token.
+"""Attach NETBOX_API_TOKEN for Core sync. Prefer a NetBox UI v2 token.
 
 Runs inside the bundled netboxcommunity/netbox:v4.6.x container (called from
 scripts/netbox-launch.sh). Never prints the token value.
+
+NetBox 4.6 UI issues v2 tokens (``nbt_<12-char key>.<secret>``, shown once).
+If secrets already hold that full string, skip v1 create — do not overwrite
+N's v2 token with a 40-char plaintext row. Core sends Authorization: Bearer.
+
+If the secret is still a legacy 40-char v1 value, upsert v1 plaintext as
+fallback (write_enabled=False, superuser + view permission). v1 is deprecated
+in the NetBox UI; that is OK for this fallback.
 
 NetBox 4.6 Token (users.models.Token / users.models.tokens.Token):
   version      1 = v1 plaintext (deprecated); 2 = v2 HMAC (model default)
@@ -33,10 +41,29 @@ import traceback
 FORGESRE_PREFIX = "forgesre:"
 CORE_DESCRIPTION = "ForgeSRE Core read-sync"
 V1_LENGTH = 40
+V2_PREFIX = "nbt_"
+V2_PUBLIC_KEY_LENGTH = 12
 
 
 class UpsertError(RuntimeError):
     """Operator-visible upsert failure (never includes the token)."""
+
+
+def looks_like_v2_token(token_key: str) -> bool:
+    """True for NetBox v2 secrets (typically nbt_<key>.<secret>). Never log the value."""
+    value = (token_key or "").strip()
+    lower = value.lower()
+    if lower.startswith("bearer ") or lower.startswith("token "):
+        parts = value.split(None, 1)
+        value = parts[1].strip() if len(parts) == 2 else value
+        lower = value.lower()
+    return lower.startswith(V2_PREFIX)
+
+
+def looks_like_v2_public_key(token_key: str) -> bool:
+    """12-char key shown in the UI list — not the full secret shown once at create."""
+    value = (token_key or "").strip()
+    return len(value) == V2_PUBLIC_KEY_LENGTH and not looks_like_v2_token(value) and value.isalnum()
 
 
 def redact(text: object, secret: str = "") -> str:
@@ -399,10 +426,16 @@ def upsert_core_token(
     User,
     v1: int = 1,
 ) -> str:
-    """Attach a read-only v1 token to the NetBox superuser. Returns a short status."""
+    """Attach Core's token. Skip v1 when secrets already hold a v2 secret."""
     if not token_key:
         log("NETBOX_API_TOKEN empty — Core sync will get HTTP 403")
         return "empty"
+    if looks_like_v2_token(token_key):
+        log("NETBOX_API_TOKEN is a v2 token — skipping v1 upsert; Core uses Authorization: Bearer")
+        return "v2"
+    if looks_like_v2_public_key(token_key):
+        log("NETBOX_API_TOKEN looks like a 12-character v2 key, not the full nbt_… secret shown once at create")
+        raise UpsertError("NETBOX_API_TOKEN looks like a 12-character v2 key, not the full token")
     if len(token_key) != V1_LENGTH:
         log(f"NETBOX_API_TOKEN length {len(token_key)} (v1 plaintext must be 40 characters; openssl rand -hex 20)")
         raise UpsertError("NETBOX_API_TOKEN length is not 40")

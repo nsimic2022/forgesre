@@ -6,17 +6,16 @@
 # is also set (v2 tokens). Later starts print "already exists" and skip the
 # token, so Core's NETBOX_API_TOKEN 403s /api/dcim/devices/.
 #
-# NetBox v4.6 Token model: default version is v2. `key` is a 12-char public id;
-# the secret is HMAC'd with API_TOKEN_PEPPERS and never stored. Creating with
-# key=<40-char NETBOX_API_TOKEN> fails the version check constraint (or stores a
-# hash the REST API does not accept as Authorization: Token …).
+# NetBox v4.6 Token model: default version is v2. `key` is a 12-char public id,
+# NOT the secret (HMAC with API_TOKEN_PEPPERS). The UI shows the full secret
+# once: nbt_<key>.<secret>. REST wants Authorization: Bearer nbt_….
 #
-# Upsert a legacy v1 token on every start via scripts/netbox-upsert-token.py:
-# plaintext = NETBOX_API_TOKEN (40 hex chars), assigned to the Django superuser
-# (SUPERUSER_NAME / NETBOX_SUPERUSER_NAME), write_enabled=False, plus
-# dcim.view_device. Core is not a NetBox UI login — it is that token. A token on
-# a non-superuser without DCIM view is HTTP 403 even when the secret is valid.
-# Do not copy a second token from the NetBox UI. Does not touch database forgesre.
+# Prefer that full v2 string in NETBOX_API_TOKEN. scripts/netbox-upsert-token.py
+# skips v1 create when the secret looks like v2 — do not overwrite N's UI token.
+# A legacy 40-char v1 value is still upserted as plaintext (write_enabled=False,
+# SUPERUSER_NAME / NETBOX_SUPERUSER_NAME, dcim.view_device). Core is not a
+# NetBox UI login. A token on a non-superuser without DCIM view is HTTP 403
+# even when the secret is valid. Does not touch database forgesre.
 #
 # NetBox 4.5+ User has no is_staff. The previous inline shell touched is_staff
 # and AttributeError was swallowed as "could not upsert" while Granian still

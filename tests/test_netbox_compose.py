@@ -90,8 +90,12 @@ def test_compose_netbox_is_default_service():
     assert "codename=\"view_device\"" in upsert or "codename='view_device'" in upsert
     assert "dcim" in upsert and "view" in upsert
     assert "v1 token ready for GET /api/dcim/devices/" in upsert
+    assert "skipping v1 upsert" in upsert
+    assert "looks_like_v2_token" in upsert
     assert "superuser" in launch and "superuser" in upsert
     assert "not a NetBox UI login" in launch
+    assert "Bearer" in launch
+    assert "nbt_" in launch
     assert "/run/secrets/forgesre-secrets.env" in launch
     assert "DROP DATABASE" not in launch.upper()
     assert "DROP DATABASE" not in upsert.upper()
@@ -197,6 +201,73 @@ def test_netbox_status_ok_on_devices_200(monkeypatch):
     assert result.get("count") == 0
     assert "403" not in (result.get("why") or "")
     assert result.get("why") == EMPTY_DEVICES_WHY
+
+
+def test_netbox_status_v2_token_200_empty_is_yellow(monkeypatch):
+    import httpx
+
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["authorization"] = request.headers.get("authorization") or request.headers.get("Authorization") or ""
+        path = str(request.url)
+        if "/api/dcim/devices/" in path:
+            return httpx.Response(200, json={"count": 0, "results": []}, request=request)
+        if "/login/" in path:
+            return httpx.Response(200, text="login", request=request)
+        return httpx.Response(404, request=request)
+
+    real = httpx.Client
+
+    def wrapped(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", wrapped)
+    token = "nbt_abcdefghijkl.notarealsecret"
+    result = netbox_status("http://127.0.0.1:8001", token)
+    assert seen["authorization"] == f"Bearer {token}"
+    assert result["ok"] is True
+    assert result.get("light") == "yellow"
+    assert result.get("count") == 0
+    assert "403" not in (result.get("why") or "")
+    assert "recreate" not in (result.get("why") or "").lower()
+    assert result.get("why") == EMPTY_DEVICES_WHY
+    assert token not in (result.get("why") or "")
+
+
+def test_netbox_status_v2_token_200_with_devices_is_green(monkeypatch):
+    import httpx
+
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["authorization"] = request.headers.get("authorization") or ""
+        path = str(request.url)
+        if "/api/dcim/devices/" in path:
+            return httpx.Response(
+                200,
+                json={"count": 2, "results": [{"id": 1}, {"id": 2}]},
+                request=request,
+            )
+        return httpx.Response(404, request=request)
+
+    real = httpx.Client
+
+    def wrapped(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", wrapped)
+    token = "nbt_abcdefghijkl.notarealsecret"
+    result = netbox_status("http://127.0.0.1:8001", token)
+    assert seen["authorization"] == f"Bearer {token}"
+    assert result["ok"] is True
+    assert result.get("light") == "green"
+    assert result.get("count") == 2
+    assert result.get("why") == ""
+    assert "recreate" not in (result.get("why") or "").lower()
+    assert token not in str(result)
 
 
 def test_netbox_status_403_ignores_status_endpoint_200(monkeypatch):
@@ -402,7 +473,9 @@ def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
     assert "still points Core at an external instance" not in html
     assert "NETBOX_API_TOKEN" in html
     assert "API token: yes" in html
-    assert "do not need a second token" in html
+    assert "v2" in html
+    assert "nbt_" in html
+    assert "12-character" in html
     assert "NETBOX_SUPERUSER_NAME" in html
     assert "not a NetBox UI login" in html
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
@@ -507,7 +580,7 @@ def test_discovery_footer_names_external_when_url_is_not_local(monkeypatch):
     assert "https://netbox.example.local" in html
     assert "inventory.netbox.url" in html
     assert "--netbox-url" in html
-    assert "do not need a second token" not in html
+    assert "12-character" not in html
     assert "API token: yes" in html
     db.close()
 
@@ -642,6 +715,56 @@ def test_doctor_netbox_403_rejected_when_token_present(monkeypatch):
     assert row["state"] != "paused"
 
 
+def test_doctor_netbox_v2_403_does_not_push_v1_recreate(monkeypatch):
+    from app.netbox import FORBIDDEN_REJECTED_V2_WHY
+
+    secret = "nbt_abcdefghijkl.notarealsecret"
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", secret)
+    monkeypatch.setattr(
+        "app.netbox.netbox_status",
+        lambda *a, **k: {
+            "ok": False,
+            "degraded": True,
+            "ui_up": True,
+            "why": FORBIDDEN_REJECTED_V2_WHY,
+        },
+    )
+    monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
+    payload = doctor_payload(force=True)
+    item = payload["components"]["netbox"]
+    assert item["status"] == "warn"
+    assert FORBIDDEN_REJECTED_V2_WHY in (item.get("why") or "")
+    assert "recreate netbox+core" not in (item.get("fix") or "").lower()
+    assert "will not replace a v2 token with v1" in (item.get("fix") or "")
+    assert "recreate core" in (item.get("fix") or "").lower()
+    assert "12-character" in (item.get("fix") or "")
+    assert secret not in (item.get("why") or "")
+    assert secret not in (item.get("fix") or "")
+    assert "API token: yes" in (item.get("why") or "")
+
+
+def test_doctor_netbox_v2_ok_does_not_tell_them_to_recreate_v1(monkeypatch):
+    secret = "nbt_abcdefghijkl.notarealsecret"
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", secret)
+    monkeypatch.setattr(
+        "app.netbox.netbox_status",
+        lambda *a, **k: {"ok": True, "light": "yellow", "count": 0, "ui_up": True},
+    )
+    monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
+    payload = doctor_payload(force=True)
+    item = payload["components"]["netbox"]
+    assert item["status"] == "ok"
+    assert item.get("why") == "API token: yes"
+    assert "recreate" not in (item.get("why") or "").lower()
+    assert "v1" not in (item.get("why") or "").lower()
+    assert secret not in (item.get("why") or "")
+    assert "netbox" not in payload["failed"]
+
+
 def test_doctor_netbox_403_missing_when_token_empty(monkeypatch):
     monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
     monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
@@ -737,7 +860,9 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "NETBOX_API_TOKEN" in disc
     assert "API token:" in disc
     assert "netbox_token_present" in disc
-    assert "do not need a second token" in disc
+    assert "v2" in disc
+    assert "nbt_" in disc
+    assert "12-character" in disc
     assert "NETBOX_SUPERUSER_NAME" in disc
     assert "not a NetBox UI login" in disc
     assert "netbox_url_is_local" in disc
@@ -778,6 +903,8 @@ def test_docs_say_bundled_netbox_default_on():
     assert "second" in handbook.lower()
     assert "could not upsert" in handbook
     assert "v1 token ready" in handbook
+    assert "nbt_" in handbook
+    assert "skipping v1" in handbook or "skips" in handbook.lower()
     assert "never landed" in handbook.lower() or "NetBox DB" in handbook
     assert "TokenVersionChoices" not in handbook
     assert "API_TOKEN_PEPPER" in handbook or "peppers" in handbook.lower()
@@ -803,6 +930,8 @@ def test_docs_say_bundled_netbox_default_on():
     assert "NETBOX_API_TOKEN" in cont
     assert "could not upsert" in cont
     assert "v1 token ready" in cont
+    assert "skipping v1 upsert" in cont
+    assert "nbt_" in cont
     assert "netbox-upsert-token.py" in cont
     assert "is_staff" in cont
     assert "403" in cont
