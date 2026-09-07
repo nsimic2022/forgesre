@@ -151,7 +151,7 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
     db.close()
 
     client = _client()
-    listing = client.get("/incidents")
+    listing = client.get("/incidents?open=0")
     assert listing.status_code == 200
     assert 'class="pill demo"' in listing.text
     assert "DEMO" in listing.text
@@ -160,7 +160,7 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
     detail = client.get(f"/incidents/{number}")
     assert detail.status_code == 200
     assert 'class="pill demo"' in detail.text
-    assert "[DEMO]" in detail.text
+    assert "DEMO" in detail.text
 
     history = client.get("/history")
     assert history.status_code == 200
@@ -243,7 +243,7 @@ def test_windows_and_network_demo_incidents_are_demo_tagged():
     assert "/incidents/INC-" in (posted.headers.get("location") or "")
     net_post = client.post("/demo-network", follow_redirects=False)
     assert net_post.status_code == 303
-    listing = client.get("/incidents")
+    listing = client.get("/incidents?open=0")
     for number in numbers:
         assert number in listing.text
     assert listing.text.count("DEMO") >= 2

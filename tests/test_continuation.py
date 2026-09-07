@@ -23,7 +23,7 @@ def test_continuation_handoff_exists_and_points_at_test_and_llm():
     assert "Grafana is not the alarm path" in handbook
     arch = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
     assert "Not the V0.7 appliance runtime" in arch
-    assert "Do **not** implement the Go / Kubernetes" in arch or "Do **not** implement the Go / Kubernetes / Caddy rewrite" in arch
+    assert "Do **not** implement the Go / Kubernetes" in arch
     dockerfile = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
     assert "iputils-ping" in dockerfile
     assert "celery" not in dockerfile.lower()

@@ -137,7 +137,10 @@ def test_ack_resolve_and_operator_note_on_incident():
     assert page.status_code == 200
     assert "admin@forgesre.local" in page.text
     assert "Cleaned WAL on the host." in page.text
-    assert "Owner mail body" in page.text
+    assert "/ops#mail" in page.text
+    ops = client.get("/ops")
+    assert ops.status_code == 200
+    assert "Owner mail body" in ops.text
     assert "incident.status" in page.text or "Who did what" in page.text
     api = client.get(f"/api/v1/incidents/{number}")
     assert api.status_code == 200

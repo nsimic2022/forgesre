@@ -1,7 +1,8 @@
 # ForgeSRE Architecture Proposal
 
 > **Not the V0.7 appliance runtime.** This file is a **long-term architecture proposal**.
-> Do **not** treat it as what runs on the Ubuntu VM today, and do **not** implement the Go / Kubernetes / Caddy rewrite from these diagrams.
+> Do **not** treat it as what runs on the Ubuntu VM today.
+> Do **not** implement the Go / Kubernetes / Caddy rewrite from these diagrams.
 >
 > **What actually runs (V0.7):** Docker Compose on one Ubuntu VM. Python FastAPI Core, Jinja2 UI, Bash CLI (`./forgesre`). Bundled NetBox is a default Compose service (`:8001`). Redis exists **only** because bundled NetBox requires it — not a ForgeSRE job broker. There is **no Caddy-as-runtime**. Grafana is graphs only; the alarm path is Prometheus → Alertmanager → Core. Jobs are **one worker thread** in Core (not Celery).
 >
