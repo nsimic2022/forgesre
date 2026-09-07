@@ -42,7 +42,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-sync-button-05f8`: **pending this session**. Previous: **362 passed** (twice) after NetBox token peppers.
+Pytest count after the double run on `cursor/netbox-sync-button-05f8`: **368 passed** (twice). Was 362 after NetBox token peppers.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
