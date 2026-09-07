@@ -39,6 +39,32 @@ def format_client_error(exc: BaseException) -> str:
     return text.strip()[:400]
 
 
+FIRST_BOOT_WHY = (
+    "NetBox is still running first-boot migrations; wait until the API answers, then refresh."
+)
+
+
+def sync_cta(url: str, token: str, enabled: bool, timeout: float = 2.0) -> dict[str, Any]:
+    """Discovery Sync NetBox control for admins.
+
+    Ready only when NetBox is enabled and netbox_status reports ok
+    (/api/status/ 200 with a working token). First-boot connect failures stay
+    disabled with one sentence. Last journal sync success is not a gate.
+    """
+    if not enabled:
+        return {"ready": False, "starting": False, "why": "Sync is off in config."}
+    status = netbox_status(url, token, timeout=timeout)
+    if status.get("ok"):
+        return {"ready": True, "starting": False, "why": ""}
+    if status.get("starting"):
+        return {"ready": False, "starting": True, "why": FIRST_BOOT_WHY}
+    why = str(status.get("why") or "NetBox is not ready for sync.").strip()
+    first = why.split(". ", 1)[0].strip()
+    if first and not first.endswith("."):
+        first += "."
+    return {"ready": False, "starting": False, "why": first}
+
+
 def netbox_status(url: str, token: str, timeout: float = 5.0) -> dict[str, Any]:
     if not url:
         return {"ok": False, "why": "NetBox URL missing"}

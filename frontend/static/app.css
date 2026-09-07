@@ -345,6 +345,11 @@ button, input, select, textarea {
 button {
   background: var(--accent); color: var(--btn-text); border: 0; font-weight: 600; cursor: pointer; padding: 0.5rem 0.9rem;
 }
+button:disabled {
+  background: var(--disabled);
+  color: var(--muted);
+  cursor: not-allowed;
+}
 button.secondary { background: var(--secondary); color: var(--text); }
 button.danger { background: var(--crit); color: var(--btn-danger-text); }
 .stack { display: flex; flex-direction: column; gap: 0.6rem; max-width: 420px; }
