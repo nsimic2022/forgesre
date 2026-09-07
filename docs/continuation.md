@@ -17,15 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 7 September 2026.** Operator N (Serbian): Discovery **Sync NetBox** must be a **traffic light**. Empty NetBox (API HTTP 200, zero devices) is normal and must **not** look like 403.
-
-- **Grey** = not working (UI down, API 403, no token)
-- **Yellow** = API 200 but **no devices**. Sentence: *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.*
-- **Green** = API 200 and count ≥ 1
-
-Admin clickable on yellow and green. Grey still allows a retry click when the UI answers. Core uses `NETBOX_API_TOKEN` from `secrets/secrets.env`. v1 upsert + `./forgesre update` `--force-recreate`s `netbox`. Never write back to NetBox. Never `./install.sh`.
-
-Root cause: NetBox **v4.6** `Token` default is **v2** (`key` = 12-char public id, HMAC digest with `API_TOKEN_PEPPERS`, plaintext never stored). Launch upserted `Token.objects.create(..., key=NETBOX_API_TOKEN)` with the 40-char secret in `key`. The REST API does not accept `Authorization: Token <that string>`. netbox-docker 5.0.2 also skips `SUPERUSER_API_TOKEN` unless `SUPERUSER_API_KEY` is set, and only on first superuser insert.
+**Monday 7 September 2026.** Operator N (Serbian): after `f94b659` (v1 token upsert) + `4535700` (grey CSS), they **cannot click Sync NetBox at all**. NetBox UI is up on `:8001`. Devices API may still be HTTP **403** until `netbox` is recreated — a `disabled` button blocked the retry. Do **not** require a second token from the NetBox UI. Do **not** revert the v1 upsert. Journal 403 rows stay short and deduped.
 
 Code and docs stay English. Replies to N are Serbian.
 
@@ -42,69 +34,35 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-status-traffic-05f8` SHA `0e69ee7e8ab04fc5f8c4778192217cc3cd1fd7f5`: **377 passed** (twice). Was 372 after the NetBox token upsert.
+Pytest count after the double run on `cursor/netbox-sync-click-05f8`: **(fill after SHA pytest)**. Was 372 after the NetBox token upsert.
 
-If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
+If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`. `create_pr` often **403** — merge `--no-ff` plus `git push origin main` still lands the change.
 
 ---
 
 ## 3. Done today / on this branch
 
-Bundled NetBox accepts `NETBOX_API_TOKEN` from secrets on **every** start (existing DB, not first-boot-only):
+Admin **Sync NetBox** is clickable when the NetBox UI answers (`/login/` or `/api/status/`). Devices API HTTP **403** is a warning next to the orange POST submit, not `disabled`. First-boot (UI not answering) stays disabled with one sentence. Non-admin: disabled + **Admin only.** POST `/discovery/netbox-sync` (and `/api/v1/discovery/netbox-sync`) stays admin-only.
 
-- Launch upserts a **v1** token: `plaintext=NETBOX_API_TOKEN` (40 hex chars), superuser, `write_enabled=False`, `enabled=True`, plus `ObjectPermission` view on `dcim.device`.
-- Deletes a leftover v2 row that stored the secret in `key`.
-- `./forgesre update` `--force-recreate`s `netbox` so the bind-mounted `netbox-launch.sh` actually runs.
-- Discovery footer: bundled (`127.0.0.1` / `localhost`) says Core uses `NETBOX_API_TOKEN` — no second UI token. `--netbox-url` / external copy only when `inventory.netbox.url` is not localhost.
-- Did not write back to NetBox. Did not revert GUI list pagination / grey-button CSS. Did not drop database `forgesre`. Did not tell N to run `./install.sh`.
-
-Expect after recreate: `GET /api/dcim/devices/?limit=1` is **HTTP 200**. Empty list is **yellow** (*No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.*), not 403. Count ≥ 1 is **green**.
+- Form is `method=post` `action=/discovery/netbox-sync` `button type=submit`. No `pointer-events: none`. No `type=button` without a handler when clickable.
+- Did not require a matching NetBox-UI token. Did not revert the v1 upsert. Did not write back to NetBox. Did not touch `install.sh`.
 
 ---
 
 ## 4. What N should do on the VM
 
-Šta N radi na VM. Ne pokreći `./install.sh`. Ne kopiraj token iz NetBox UI u `secrets.env`.
-
-```bash
-git pull origin main && ./forgesre update
-```
-
-`update` ponovo kreira **netbox** (i **core** kad se promeni launch skripta) da bi v1 upsert stvarno prošao. Zatim tvrdi refresh Discovery (Ctrl-Shift-R).
-
-Provera — samo HTTP kod, **ne ispisuj token**:
-
-```bash
-set -a && source secrets/secrets.env && set +a
-curl -sS -o /dev/null -w '%{http_code}\n' \
-  -H "Authorization: Token ${NETBOX_API_TOKEN}" \
-  -H "Accept: application/json" \
-  "http://127.0.0.1:8001/api/dcim/devices/?limit=1"
-```
-
-Mora biti `200`. Prazna lista je u redu.
-
-
 Do **not** run `./install.sh`. Do **not** paste a token from the NetBox UI into `secrets.env`.
 
 ```bash
 git pull origin main && ./forgesre update
-# update force-recreates netbox. If the API is still 403:
+```
+
+Hard-refresh Discovery (Ctrl-Shift-R). Admin: **Sync NetBox** is orange and clickable even if the 403 sentence is still next to it. Click it. If the flash/journal is still 403, recreate netbox as before:
+
+```bash
 docker compose up -d --no-deps --force-recreate netbox
 docker compose up -d --no-deps --force-recreate core
 ```
-
-Check:
-
-```bash
-set -a && source secrets/secrets.env && set +a
-curl -sS -o /dev/null -w '%{http_code}\n' \
-  -H "Authorization: Token ${NETBOX_API_TOKEN}" \
-  -H "Accept: application/json" \
-  "http://127.0.0.1:8001/api/dcim/devices/?limit=1"
-```
-
-Must print `200`. Then hard-refresh Discovery: admin → orange **Sync NetBox**.
 
 Lab without image pull: `./forgesre update --offline`.
 
@@ -142,7 +100,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - GUI ICMP is from the Core container (`iputils-ping` in the Dockerfile). Host `./forgesre ping` stays on the VM.
 - Jobs: **one worker thread** in Core. There is no Celery.
 - GUI list tables are **10 rows per page** (pagination already on `main`). Do not revert it.
-- Discovery **Sync NetBox**: primary admin button when `/api/status/` is 200 and the token works. First-boot migrations keep it `disabled` with one sentence. Engineer/analyst see **Admin only.** Viewers cannot open `/discovery`. Never write back to NetBox. Bundled footer must not say “external instance”. The previous grey look was `class="secondary"`, not a permission hole to open to all roles.
+- Discovery **Sync NetBox**: primary (orange) admin POST when the UI answers (`/login/` or `/api/status/`). Devices API 403 is a warning, not `disabled`. First-boot (UI down) stays disabled with one sentence. Engineer/analyst see disabled + **Admin only.** Viewers cannot open `/discovery`. Never write back to NetBox. Bundled footer must not say “external instance”. Launch still upserts the v1 token; `update` `--force-recreate`s `netbox`. Do not require a second UI token.
 
 Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre test` / doctor. See [`docs/llm.md`](llm.md).
 

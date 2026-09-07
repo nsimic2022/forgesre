@@ -245,6 +245,25 @@ def test_sync_cta_off_when_disabled(monkeypatch):
     assert "off in config" in result["why"].lower()
 
 
+def test_sync_cta_ready_when_ui_up_despite_devices_403(monkeypatch):
+    monkeypatch.setattr(
+        "app.netbox.netbox_status",
+        lambda *a, **k: {
+            "ok": False,
+            "degraded": True,
+            "ui_up": True,
+            "why": (
+                "NetBox UI up; API HTTP 403 (token missing, not created "
+                "in NetBox, or not allowed to read devices)"
+            ),
+        },
+    )
+    result = sync_cta("http://127.0.0.1:8001", "token", True)
+    assert result["ready"] is True
+    assert result["starting"] is False
+    assert "403" in result["why"]
+
+
 def _discovery_client(email: str = "admin@forgesre.local") -> tuple[TestClient, object]:
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -276,6 +295,54 @@ def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
     assert "still points Core at an external instance" not in html
     assert "NETBOX_API_TOKEN" in html
     assert "do not need a second token" in html
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    assert "pointer-events" not in css
+    db.close()
+
+
+def test_discovery_sync_button_enabled_for_admin_when_ui_up_403(monkeypatch):
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", "token")
+    monkeypatch.setattr(
+        "app.netbox.netbox_status",
+        lambda *a, **k: {
+            "ok": False,
+            "degraded": True,
+            "ui_up": True,
+            "why": (
+                "NetBox UI up; API HTTP 403 (token missing, not created "
+                "in NetBox, or not allowed to read devices)"
+            ),
+        },
+    )
+    client, db = _discovery_client()
+    page = client.get("/discovery")
+    assert page.status_code == 200
+    html = page.text
+    assert ">Sync NetBox<" in html
+    assert "disabled>Sync NetBox<" not in html
+    assert 'class="secondary">Sync NetBox' not in html
+    assert 'method="post"' in html
+    assert 'action="/discovery/netbox-sync"' in html
+    assert 'type="submit"' in html
+    assert "403" in html
+    assert "Admin only." not in html
+    db.close()
+
+
+def test_discovery_admin_can_post_netbox_sync(monkeypatch):
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", "token")
+    monkeypatch.setattr("app.web.sync_netbox", lambda db: {"synced": 0})
+    monkeypatch.setattr("app.inventory.sync_netbox", lambda db: {"synced": 0})
+    monkeypatch.setattr("app.api.sync_netbox", lambda db: {"synced": 0})
+    client, db = _discovery_client()
+    posted = client.post("/discovery/netbox-sync", follow_redirects=False)
+    assert posted.status_code in {302, 303}
+    api = client.post("/api/v1/discovery/netbox-sync")
+    assert api.status_code == 200
     db.close()
 
 
@@ -354,8 +421,11 @@ def test_discovery_sync_is_admin_only_for_engineer(monkeypatch):
     assert page.status_code == 200
     assert "Admin only." in page.text
     assert 'action="/discovery/netbox-sync"' not in page.text
+    assert "disabled>Sync NetBox<" in page.text
     blocked = client.post("/discovery/netbox-sync", follow_redirects=False)
     assert blocked.status_code == 403
+    api = client.post("/api/v1/discovery/netbox-sync")
+    assert api.status_code == 403
     db.close()
 
 
