@@ -38,7 +38,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/prometheus-stack-journal-05f8`: fill in after the two runs (was **347** on pagination).
+Pytest count after the double run on `cursor/prometheus-stack-journal-05f8`: **353 passed** (twice). Was 347 before this doctor/journal fix (six new Prom/Grafana journal tests).
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
