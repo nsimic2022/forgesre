@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 7 September 2026.** Operator N (Serbian) asked to fix a **journal error** related to **“Prometheus Stack”**. There is no user-facing string `Prometheus Stack` / `prometheus_stack` in the tree. The real bug: doctor treated **Grafana** (graphs only, not the alarm path) as a hard FAIL, so System Health looked like the Prometheus monitoring stack was down even when Prometheus `:9090` was up. Failures did not name the hop. Pagination on `main` is left alone. NetBox 403 journal work already landed on `main` in a parallel session. Code and docs stay English. Replies to N are Serbian.
+**Monday 7 September 2026.** Operator N (Serbian) tried to create an API token **in the NetBox UI** (`:8001`) and got **“API token peppers not defined”**. NetBox v4.5+ (image `netboxcommunity/netbox:v4.6.9-5.0.2`) hashes v2 tokens with `API_TOKEN_PEPPERS`. The official docker image reads env `API_TOKEN_PEPPER_1`. ForgeSRE did not set that. The 403 Core-sync upsert (`NETBOX_API_TOKEN`) is already on `main` and is unchanged. Code and docs stay English. Replies to N are Serbian.
 
 On the Ubuntu VM N uses:
 
@@ -25,7 +25,7 @@ On the Ubuntu VM N uses:
 git pull origin main && ./forgesre update
 ```
 
-Then hard-refresh the browser. Check **System Health** and **Journal**.
+Then hard-refresh the NetBox UI. Creating a token in `:8001` should work. N may **not** need a UI token if `NETBOX_API_TOKEN` is in `secrets/secrets.env` (launch upserts it read-only).
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
 
@@ -40,7 +40,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/prometheus-stack-journal-05f8`: **353 passed** (twice). Was 347 before this doctor/journal fix (six new Prom/Grafana journal tests). Main already had the NetBox 403 tests (354 on that branch).
+Pytest count after the double run on `cursor/netbox-token-peppers-05f8`: **362 passed** (twice). Was 354 after the NetBox 403 merge.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -48,17 +48,14 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-Doctor / Journal no longer lie about Prometheus:
+NetBox UI token create no longer fails for missing peppers:
 
-- Grafana down → **warn** (yellow), **not** in `failed[]`, **not** overall DEGRADED by itself, **not** a Journal error.
-- Alarm path is still **Prometheus → Alertmanager → Core**. Grafana is graphs only.
-- Live Core journals `core` / `doctor` **error** only when Prometheus or Alertmanager is actually down. Summary names the hop (`Prometheus :9090`, `Alertmanager :9093`). Never “Prometheus Stack”.
-- Healthy Prom+AM does **not** journal error (Grafana warn is ignored). Duplicate identical doctor errors are not re-written. Recovery writes one `ok` after a previous error.
-- `_http` `why` includes the probe URL (port is visible).
-- Doctor labels: **Prometheus**, **Alertmanager**, **Grafana** (compose ids stay `prometheus` / `alertmanager` / `grafana`).
-- Pytest skips live doctor journal (`FORGESRE_DEV=1`). Tests call `journal_doctor_alarm_path` directly.
-
-Did not add Celery, nmap, React, IMAP, sqlalchemy on the host CLI, or restore the LLM catalog. Did not revert pagination. Did not undo the NetBox 403 token upsert already on `main`.
+- Official image env: `API_TOKEN_PEPPER_1` → `API_TOKEN_PEPPERS[1]` (must be ≥50 chars).
+- ForgeSRE secret: `NETBOX_API_TOKEN_PEPPER` generated once (`openssl rand -hex 32` = 64 chars) into `secrets/secrets.env` and `.env` by `scripts/ensure-netbox-secrets.sh` (`./forgesre update`). Also writes `API_TOKEN_PEPPER_1` into `secrets.env` for `env_file`.
+- Compose maps `API_TOKEN_PEPPER_1: ${NETBOX_API_TOKEN_PEPPER}` and `SECRET_KEY: ${NETBOX_SECRET_KEY}` (already present).
+- Extra config fallback: `config/netbox/forgesre.py` → `/etc/netbox/config/forgesre.py`.
+- Core sync still uses `NETBOX_API_TOKEN` upserted read-only on launch. N does not have to create a UI token.
+- Did not drop database `forgesre`. Did not add a lab SMTP catcher, a cloud LLM default, or rewrite discovery as a port scanner. Did not tell N to run `./install.sh`.
 
 ---
 
@@ -70,7 +67,7 @@ Do **not** run `./install.sh`.
 git pull origin main && ./forgesre update
 ```
 
-Then hard-refresh the browser. Check **System Health** and **Journal**: Grafana dark is yellow; Journal error for Prom must show `:9090` or Alertmanager `:9093`.
+Then hard-refresh the NetBox UI (`:8001`). Token create should work. Core sync does not require a new UI token when `NETBOX_API_TOKEN` is already in `secrets/secrets.env`.
 
 Lab without image pull: `./forgesre update --offline`.
 
