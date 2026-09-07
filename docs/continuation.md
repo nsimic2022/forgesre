@@ -25,7 +25,7 @@ On the Ubuntu VM N uses:
 git pull origin main && ./forgesre update
 ```
 
-Then **hard-refresh** the browser (`Ctrl+Shift+R`) so `/static/app.css?v=paginate-1` is not a cached old sheet.
+Then **hard-refresh** the browser (`Ctrl+Shift+R`) so `/static/app.css?v=paginate-2` is not a cached old sheet.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
 
@@ -40,7 +40,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count is recorded after the double run on `cursor/gui-list-paginate-05f8` (was 339 before these pager tests).
+Pytest count is recorded after the double run on `cursor/gui-list-paginate-05f8` (was 339 before the pager work).
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -50,12 +50,13 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 GUI tables that can grow past ~10 rows now share one pager (`PAGE_SIZE = 10` in `backend/app/history.py`, Jinja partial `frontend/templates/_pager.html`, `?page=` plus clamp / Previous / Next / numbered tabs). Filters stay; submitting a filter form omits `page` so the list resets to 1.
 
-Paginated:
+Paginated (max **10** rows, bottom **Previous / 1 / 2 / 3 / Next**, query `?page=` unless noted; filters stay):
 
+- Dashboard **Recent incidents** (pager only if more than 10)
 - `/incidents` (open/firing)
 - `/history` (aligned from 200/page to 10)
 - `/ops` mail outbox (`?page=` + `#mail`) and scheduled reports (`?reports_page=` + `#reports`)
-- `/journal` (module / status / q preserved)
+- `/journal` (module / status / q preserved) — mandatory
 - `/assets` (search stays; result set is paged)
 - `/assets/verify`
 - `/discovery` candidates (pending banner still counts all)
@@ -63,9 +64,9 @@ Paginated:
 - `/admin` users, audit log, backup table (restore dropdown still lists every archive)
 - Asset detail incident list + similar groups; incident **Who did what** and notes
 
-Not paginated (not record lists): metric tiles, doctor / System Health rows, Dashboard journal preview (still a short recent slice), incident/escalation mail tables (they link to `/ops#mail`).
+Not paginated (not those operator lists): metric tiles, doctor / System Health rows, Dashboard journal preview (still a short recent slice), HOST DOWN banner, incident/escalation mail tables (they link to `/ops#mail`).
 
-CSS cache-bust: `app.css?v=paginate-1`. Handbook + CLI one-liners: GUI tables are 10 per page.
+CSS cache-bust: `app.css?v=paginate-2`. Handbook + CLI one-liners: GUI tables are 10 per page.
 
 Did not add Celery, nmap, React, IMAP, sqlalchemy on the host CLI, or restore the LLM catalog. Ping/Dockerfile and the architecture-proposal banner stay.
 
@@ -79,7 +80,7 @@ Do **not** run `./install.sh`.
 git pull origin main && ./forgesre update
 ```
 
-`./forgesre update` rebuilds Core (frontend CSS cache-bust `paginate-1`). Then hard-refresh the browser.
+`./forgesre update` rebuilds Core (frontend CSS cache-bust `paginate-2`). Then hard-refresh the browser.
 
 Lab without image pull: `./forgesre update --offline`.
 

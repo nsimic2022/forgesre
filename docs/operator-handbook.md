@@ -118,7 +118,7 @@ Login session lasts **12 hours** (httponly cookie).
 
 ## 4. Screen map
 
-Left nav is a constant dark shell (does not follow the theme). The control at the bottom cycles **Light / Dark / System**; System follows the OS for the main pane only. After a CSS change, hard-refresh so `/static/app.css` is not served from cache. Operator list tables (incidents, history, journal, mail outbox, reports, assets, discovery, playrules, admin users/audit) show **10 rows per page** with numbered tabs and Previous / Next.
+Left nav is a constant dark shell (does not follow the theme). The control at the bottom cycles **Light / Dark / System**; System follows the OS for the main pane only. After a CSS change, hard-refresh so `/static/app.css` is not served from cache. Operator list tables (dashboard recent incidents, incidents, history, journal, mail outbox, reports, assets, discovery) show **10 rows per page** with Previous / 1 / 2 / 3 / Next.
 
 | Menu | URL | What you do there |
 |---|---|---|

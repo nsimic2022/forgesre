@@ -307,7 +307,12 @@ def logout(request: Request, db: Session = Depends(get_db), user: User | None = 
 
 
 @router.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
+def dashboard(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    page: str = "1",
+):
     from sqlalchemy import func
 
     pending = db.query(func.count(DiscoveryCandidate.id)).filter_by(status="new").scalar() or 0
@@ -323,7 +328,10 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
         "resolved": db.query(func.count(Incident.id)).filter_by(status="RESOLVED").scalar() or 0,
         "pending_discovery": pending,
     }
-    recent = db.query(Incident).order_by(Incident.id.desc()).limit(8).all()
+    recent, total = list_history(db, days=None, open_only=False, limit=PAGE_SIZE, offset=0)
+    pager = pager_state(page, total=total)
+    if pager["offset"]:
+        recent, total = list_history(db, days=None, open_only=False, limit=pager["size"], offset=pager["offset"])
     journal_error = error_banner_entries(db, getattr(user, "journal_error_ack_id", 0), limit=5)
     journal_recent = list_entries(db, limit=8)
     down_incidents = list_host_down_incidents(db)
@@ -336,6 +344,7 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
         journal_error=journal_error,
         journal_recent=journal_recent,
         down_incidents=down_incidents,
+        pager=pager,
     )
 
 

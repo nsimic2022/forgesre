@@ -735,6 +735,10 @@ form.ops-compose {
   background: transparent;
   color: var(--muted);
 }
+.pager-disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 @media (max-width: 900px) {
   .nav { position: static; width: auto; }
   .content { margin-left: 0; }
