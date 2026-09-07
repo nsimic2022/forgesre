@@ -206,13 +206,17 @@ class Settings:
 
     @property
     def netbox_token(self) -> str:
-        """Prefer secrets/secrets.env over compose interpolation of .env."""
+        """Read NETBOX_API_TOKEN from the bind-mounted secrets file at runtime.
+
+        FORGESRE_SECRETS_FILE (compose: /host-secrets.env → secrets/secrets.env)
+        is the source of truth. An empty or stale project .env must not override
+        it. Fall back to the process environment only when that file is absent.
+        """
         secrets_path = Path(
             os.environ.get("FORGESRE_SECRETS_FILE") or (_repo_root() / "secrets" / "secrets.env")
         )
-        from_file = _dotenv_value(secrets_path, "NETBOX_API_TOKEN")
-        if from_file:
-            return from_file
+        if secrets_path.is_file():
+            return _dotenv_value(secrets_path, "NETBOX_API_TOKEN")
         return (os.environ.get("NETBOX_API_TOKEN") or "").strip()
 
 

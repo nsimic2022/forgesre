@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 7 September 2026.** Operator N (Serbian): the small **Grey** pill next to orange **Sync NetBox** looked like a second button. It is the traffic light (grey = API fail / 403). English color names Grey / Yellow / Green as a visible label confuse. Do **not** require a second token from the NetBox UI. Do **not** revert the v1 upsert. Journal 403 rows stay short and deduped. Devices API may still be HTTP **403** until `netbox` is recreated — the longer 403 sentence stays next to the orange POST.
+**Monday 7 September 2026.** Operator N (Serbian): they **did** put `NETBOX_API_TOKEN` in `secrets/secrets.env`, but Discovery still showed **API 403** and the long sentence still said “token missing, not created in NetBox…”. That copy is wrong when Core already has a token and NetBox rejects it (HTTP 403). They must recreate **core** (and netbox) after editing secrets. Do **not** print the token. Do **not** require a second token from the NetBox UI. Do **not** revert the v1 upsert.
 
 Code and docs stay English. Replies to N are Serbian.
 
@@ -34,7 +34,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-status-pill-05f8` (`e5dd3d0`): **381 passed** (twice). Was 380 after the Sync NetBox click fix.
+Pytest count after the double run on `cursor/netbox-403-copy-05f8` (`47f4f28`): **388 passed** (twice). Was 381 after the status-chip fix.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`. `create_pr` often **403** — merge `--no-ff` plus `git push origin main` still lands the change.
 
@@ -42,28 +42,46 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-Discovery NetBox traffic light is a **status chip**, not a button. Visible labels are **Not connected** / **API 403** (grey), **No devices** (yellow), **Connected** (green). Never Grey / Yellow / Green as the chip text. `role="status"`. CSS colored dot. Not `type=button`. **Sync NetBox** remains the only action. Longer 403 sentence stays if the devices API is still 403.
+Discovery/doctor 403 copy now depends on whether Core has a token (yes/no only, never the value):
 
-- Form is `method=post` `action=/discovery/netbox-sync` `button type=submit`. No `pointer-events: none`. No `type=button` without a handler when clickable.
-- Did not require a matching NetBox-UI token. Did not revert the v1 upsert. Did not write back to NetBox. Did not touch `install.sh`.
-- Core still reads `NETBOX_API_TOKEN` from bind-mounted `secrets/secrets.env` (`FORGESRE_SECRETS_FILE`). Launch upserts the v1 token on every start.
+- Token **present** → **NetBox rejected the API token (HTTP 403). Recreate netbox+core after changing secrets.env.**
+- Token **empty** → keep the missing-token sentence (`NETBOX_API_TOKEN is empty` / token missing).
+- Chip label stays **API 403**. Sync NetBox stays the only action.
+
+Core reads `NETBOX_API_TOKEN` from bind-mounted `secrets/secrets.env` (`FORGESRE_SECRETS_FILE=/host-secrets.env`). Compose does **not** interpolate `${NETBOX_API_TOKEN}` into Core `environment` (empty/stale `.env` must not override). If the secrets file exists, Settings uses that file even when the key is empty — process env / `.env` cannot override it.
+
+Doctor and Discovery show `API token: yes` or `API token: no` only.
 
 ---
 
 ## 4. What N should do on the VM
 
-Do **not** run `./install.sh`. Do **not** paste a token from the NetBox UI into `secrets.env`.
+Do **not** run `./install.sh`. Do **not** paste a NetBox UI token (or the 12-character **key prefix**) into `secrets.env`.
 
 ```bash
 git pull origin main && ./forgesre update
 ```
 
-Hard-refresh Discovery (Ctrl-Shift-R). Mali čip pored Sync NetBox = **status**, ne dugme. Tekst: **Not connected** / **API 403** (sivo), **No devices** (žuto), **Connected** (zeleno). **Sync NetBox** = klik. Ako je i dalje 403, rečenica pored ostaje. Click Sync NetBox. If the flash/journal is still 403, recreate netbox as before:
+That recreates **netbox** and **core**. After editing `secrets/secrets.env` they **must** recreate **core** (bind mount is read at runtime, but env_file and NetBox launch still need a recreate):
 
 ```bash
 docker compose up -d --no-deps --force-recreate netbox
 docker compose up -d --no-deps --force-recreate core
 ```
+
+Hard-refresh Discovery (Ctrl-Shift-R). Chip = **status** (Not connected / API 403 / No devices / Connected). **Sync NetBox** = click. Footer shows `API token: yes` or `no` — never the secret.
+
+If **API token: yes** and still 403, they likely pasted the NetBox **key prefix** (12 chars) instead of the full token shown once at create, or **core was not recreated**. curl the devices API (do not print the token):
+
+```bash
+set -a && source secrets/secrets.env && set +a
+code=$(curl -sS -o /dev/null -w '%{http_code}' \
+  -H "Authorization: Token ${NETBOX_API_TOKEN}" \
+  http://127.0.0.1:8001/api/dcim/devices/?limit=1)
+echo "$code"
+```
+
+**200** = Core can sync. **403** with token present = NetBox rejected it (wrong prefix, or netbox not recreated so the v1 upsert did not run).
 
 Lab without image pull: `./forgesre update --offline`.
 
@@ -101,7 +119,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - GUI ICMP is from the Core container (`iputils-ping` in the Dockerfile). Host `./forgesre ping` stays on the VM.
 - Jobs: **one worker thread** in Core. There is no Celery.
 - GUI list tables are **10 rows per page** (pagination already on `main`). Do not revert it.
-- Discovery **Sync NetBox**: primary (orange) admin POST when the UI answers (`/login/` or `/api/status/`). Devices API 403 is a warning, not `disabled`. First-boot (UI down) stays disabled with one sentence. Engineer/analyst see disabled + **Admin only.** Viewers cannot open `/discovery`. Never write back to NetBox. Bundled footer must not say “external instance”. Launch still upserts the v1 token; `update` `--force-recreate`s `netbox`. Do not require a second UI token. The chip next to Sync is status only (Not connected / API 403 / No devices / Connected) — grey/yellow/green CSS, not a second button. Sentence *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.* stays on yellow.
+- Discovery **Sync NetBox**: primary (orange) admin POST when the UI answers (`/login/` or `/api/status/`). Devices API 403 is a warning, not `disabled`. First-boot (UI down) stays disabled with one sentence. Engineer/analyst see disabled + **Admin only.** Viewers cannot open `/discovery`. Never write back to NetBox. Bundled footer must not say “external instance”. Launch still upserts the v1 token; `update` `--force-recreate`s `netbox`. Do not require a second UI token. The chip next to Sync is status only (Not connected / API 403 / No devices / Connected) — grey/yellow/green CSS, not a second button. Sentence *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.* stays on yellow. 403 with a token present says rejected (recreate netbox+core), not “token missing”.
 
 Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre test` / doctor. See [`docs/llm.md`](llm.md).
 
@@ -111,7 +129,7 @@ Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre t
 
 1. `git pull origin main`.
 2. Read **this file**, then [`docs/llm.md`](llm.md) and [`docs/cli.md`](cli.md).
-3. On the VM: `git pull origin main && ./forgesre update`. Never `./install.sh`. Never a second NetBox UI token for Core.
+3. On the VM: `git pull origin main && ./forgesre update`. Never `./install.sh`. Never a second NetBox UI token for Core. Recreate **core** after editing `secrets.env`.
 4. `pip install -r requirements-dev.txt` if needed, then `PYTHONPATH=backend:agents python3 -m pytest tests` **twice**, then merge to `main`. Branch pattern `cursor/<name>-05f8`.
 5. Replies to N are in **Serbian**. OSS docs and code stay in **English**.
 6. `ManagePullRequest` `create_pr` often 403. `git merge --no-ff` plus `git push origin main` still lands the change.

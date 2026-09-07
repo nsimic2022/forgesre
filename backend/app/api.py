@@ -1248,20 +1248,38 @@ def _snmp_check() -> dict[str, str]:
 def _netbox_check() -> dict[str, str]:
     if not settings.netbox_enabled:
         return _ok("disabled")
-    from app.netbox import netbox_status
+    from app.netbox import netbox_status, token_presence
 
     url = (settings.netbox_url or "http://127.0.0.1:8001").rstrip("/")
-    result = netbox_status(url, settings.netbox_token)
+    token = settings.netbox_token
+    result = netbox_status(url, token)
+    presence = f"API token: {token_presence(token)}"
     test = f"curl -fsS {url}/login/"
     if result.get("ok"):
-        return _ok("ok")
-    why = str(result.get("why") or "NetBox unreachable")
-    if result.get("starting") or result.get("degraded"):
+        return {"status": "ok", "why": presence}
+    why = str(result.get("why") or "NetBox unreachable").strip()
+    if presence not in why:
+        if why and not why.endswith("."):
+            why += "."
+        why = f"{why} {presence}."
+    if result.get("starting"):
         return {
             "status": "warn",
             "why": why,
             "test": test,
             "fix": "Wait for first-boot migrations (can take several minutes). Then: docker compose logs netbox. External override: inventory.netbox.url + NETBOX_API_TOKEN.",
+        }
+    if result.get("degraded") or "403" in why:
+        fix = (
+            "Recreate netbox+core after changing secrets.env."
+            if token_presence(token) == "yes"
+            else "Set NETBOX_API_TOKEN in secrets/secrets.env, then recreate core."
+        )
+        return {
+            "status": "warn",
+            "why": why,
+            "test": test,
+            "fix": fix,
         }
     return {
         "status": "error",

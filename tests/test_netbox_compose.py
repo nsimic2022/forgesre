@@ -14,10 +14,14 @@ from app.models import User
 from app.netbox import (
     EMPTY_DEVICES_WHY,
     FIRST_BOOT_WHY,
+    FORBIDDEN_MISSING_WHY,
+    FORBIDDEN_REJECTED_WHY,
+    TOKEN_EMPTY_WHY,
     is_local_netbox_url,
     netbox_status,
     status_label,
     sync_cta,
+    token_presence,
 )
 from app.security import hash_password
 from app.seed import seed
@@ -41,7 +45,9 @@ def test_compose_netbox_is_default_service():
     assert "8001" in str(env["NETBOX_URL"])
     assert "NETBOX_API_TOKEN" not in env
     assert "secrets/secrets.env" in data["services"]["core"]["env_file"]
-    assert "FORGESRE_SECRETS_FILE" in env
+    assert env.get("FORGESRE_SECRETS_FILE") == "/host-secrets.env"
+    core_vols = data["services"]["core"].get("volumes") or []
+    assert any("secrets/secrets.env" in str(v) and "/host-secrets.env" in str(v) for v in core_vols)
     assert "NETBOX_API_TOKEN" not in netbox["environment"]
     assert "SUPERUSER_API_TOKEN" not in netbox["environment"]
     assert "secrets/secrets.env" in netbox["env_file"]
@@ -121,6 +127,30 @@ def test_netbox_token_prefers_secrets_file(monkeypatch, tmp_path):
     s = Settings()
     assert s.netbox_token == file_token
     assert _dotenv_value(secrets, "NETBOX_API_TOKEN") == file_token
+    assert env_token not in (s.netbox_token,)
+
+
+def test_netbox_token_empty_file_not_overridden_by_env(monkeypatch, tmp_path):
+    from app.settings import Settings
+
+    secrets = tmp_path / "secrets.env"
+    secrets.write_text("NETBOX_API_TOKEN=\n", encoding="utf-8")
+    monkeypatch.setenv("FORGESRE_SECRETS_FILE", str(secrets))
+    monkeypatch.setenv("NETBOX_API_TOKEN", "e" * 40)
+    s = Settings()
+    assert s.netbox_token == ""
+    assert token_presence(s.netbox_token) == "no"
+
+
+def test_netbox_token_absent_file_falls_back_to_env(monkeypatch, tmp_path):
+    from app.settings import Settings
+
+    missing = tmp_path / "no-such-secrets.env"
+    monkeypatch.setenv("FORGESRE_SECRETS_FILE", str(missing))
+    monkeypatch.setenv("NETBOX_API_TOKEN", "e" * 40)
+    s = Settings()
+    assert s.netbox_token == "e" * 40
+    assert token_presence(s.netbox_token) == "yes"
 
 
 def test_netbox_status_ok_on_devices_200(monkeypatch):
@@ -171,11 +201,37 @@ def test_netbox_status_403_ignores_status_endpoint_200(monkeypatch):
         return real(*args, **kwargs)
 
     monkeypatch.setattr(httpx, "Client", wrapped)
-    result = netbox_status("http://127.0.0.1:8001", "a" * 40)
+    token = "a" * 40
+    result = netbox_status("http://127.0.0.1:8001", token)
     assert result["ok"] is False
     assert result.get("light") == "grey"
-    assert "403" in result["why"]
+    assert result["why"] == FORBIDDEN_REJECTED_WHY
+    assert "token missing" not in result["why"]
+    assert token not in result["why"]
     assert "No devices yet" not in result["why"]
+
+
+def test_netbox_status_empty_token_keeps_missing(monkeypatch):
+    import httpx
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = str(request.url)
+        if "/login/" in path:
+            return httpx.Response(200, text="login", request=request)
+        return httpx.Response(404, request=request)
+
+    real = httpx.Client
+
+    def wrapped(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", wrapped)
+    result = netbox_status("http://127.0.0.1:8001", "")
+    assert result["ok"] is False
+    assert result.get("light") == "grey"
+    assert result["why"] == TOKEN_EMPTY_WHY
+    assert "rejected" not in result["why"]
 
 def test_is_local_netbox_url():
     assert is_local_netbox_url("http://127.0.0.1:8001") is True
@@ -223,7 +279,7 @@ def test_sync_cta_grey_403_stays_clickable_retry(monkeypatch):
             "light": "grey",
             "degraded": True,
             "ui_up": True,
-            "why": "NetBox UI up; API HTTP 403 (token missing, not created in NetBox, or not allowed to read devices)",
+            "why": FORBIDDEN_REJECTED_WHY,
         },
     )
     result = sync_cta("http://127.0.0.1:8001", "token", True)
@@ -231,7 +287,8 @@ def test_sync_cta_grey_403_stays_clickable_retry(monkeypatch):
     assert result["clickable"] is True
     assert result["light"] == "grey"
     assert result["label"] == "API 403"
-    assert "403" in result["why"]
+    assert result["why"] == FORBIDDEN_REJECTED_WHY
+    assert "token missing" not in result["why"]
     assert "No devices yet" not in result["why"]
 
 
@@ -266,23 +323,21 @@ def test_sync_cta_ready_when_ui_up_despite_devices_403(monkeypatch):
             "ok": False,
             "degraded": True,
             "ui_up": True,
-            "why": (
-                "NetBox UI up; API HTTP 403 (token missing, not created "
-                "in NetBox, or not allowed to read devices)"
-            ),
+            "why": FORBIDDEN_REJECTED_WHY,
         },
     )
     result = sync_cta("http://127.0.0.1:8001", "token", True)
     assert result["ready"] is True
     assert result["starting"] is False
     assert result["label"] == "API 403"
-    assert "403" in result["why"]
+    assert result["why"] == FORBIDDEN_REJECTED_WHY
 
 
 def test_status_label_never_uses_color_names():
     assert status_label("green") == "Connected"
     assert status_label("yellow") == "No devices"
-    assert status_label("grey", "NetBox UI up; API HTTP 403") == "API 403"
+    assert status_label("grey", FORBIDDEN_REJECTED_WHY) == "API 403"
+    assert status_label("grey", FORBIDDEN_MISSING_WHY) == "API 403"
     assert status_label("grey", FIRST_BOOT_WHY) == "Not connected"
     assert status_label("grey", "Sync is off in config.") == "Not connected"
     for name in ("Grey", "Yellow", "Green"):
@@ -328,6 +383,7 @@ def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
     assert "Admin only." not in html
     assert "still points Core at an external instance" not in html
     assert "NETBOX_API_TOKEN" in html
+    assert "API token: yes" in html
     assert "do not need a second token" in html
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "pointer-events" not in css
@@ -337,17 +393,15 @@ def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
 def test_discovery_sync_button_enabled_for_admin_when_ui_up_403(monkeypatch):
     monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
     monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
-    monkeypatch.setattr("app.settings.Settings.netbox_token", "token")
+    leak = "LEAKME_NETBOX_SECRET_99"
+    monkeypatch.setattr("app.settings.Settings.netbox_token", leak)
     monkeypatch.setattr(
         "app.netbox.netbox_status",
         lambda *a, **k: {
             "ok": False,
             "degraded": True,
             "ui_up": True,
-            "why": (
-                "NetBox UI up; API HTTP 403 (token missing, not created "
-                "in NetBox, or not allowed to read devices)"
-            ),
+            "why": FORBIDDEN_REJECTED_WHY,
         },
     )
     client, db = _discovery_client()
@@ -365,8 +419,32 @@ def test_discovery_sync_button_enabled_for_admin_when_ui_up_403(monkeypatch):
     assert 'class="netbox-status grey"' in html
     assert 'role="status"' in html
     assert ">Grey<" not in html
-    assert "NetBox UI up; API HTTP 403" in html
+    assert FORBIDDEN_REJECTED_WHY in html
+    assert "token missing" not in html
+    assert "API token: yes" in html
+    assert leak not in html
     assert "Admin only." not in html
+    db.close()
+
+
+def test_discovery_empty_token_keeps_missing_copy(monkeypatch):
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", "")
+    monkeypatch.setattr(
+        "app.netbox.netbox_status",
+        lambda *a, **k: {
+            "ok": False,
+            "degraded": True,
+            "ui_up": True,
+            "why": TOKEN_EMPTY_WHY,
+        },
+    )
+    client, db = _discovery_client()
+    html = client.get("/discovery").text
+    assert TOKEN_EMPTY_WHY in html
+    assert "API token: no" in html
+    assert FORBIDDEN_REJECTED_WHY not in html
     db.close()
 
 
@@ -395,6 +473,7 @@ def test_discovery_footer_omits_external_when_bundled(monkeypatch):
     assert "bundled at" in html
     assert "still points Core at an external instance" not in html
     assert "NETBOX_API_TOKEN" in html
+    assert "API token: yes" in html
     db.close()
 
 
@@ -409,6 +488,7 @@ def test_discovery_footer_names_external_when_url_is_not_local(monkeypatch):
     assert "inventory.netbox.url" in html
     assert "--netbox-url" in html
     assert "do not need a second token" not in html
+    assert "API token: yes" in html
     db.close()
 
 
@@ -485,6 +565,7 @@ def test_doctor_netbox_warn_when_starting(monkeypatch):
     item = payload["components"]["netbox"]
     assert item["status"] == "warn"
     assert "migration" in (item.get("why") or "").lower()
+    assert "API token: yes" in (item.get("why") or "")
     assert "netbox" not in payload["failed"]
     assert doctor_soft_status("warn") is True
     rows = enrich_components(payload["components"], "lab.local:8080")
@@ -500,8 +581,59 @@ def test_doctor_netbox_ok_when_api_answers(monkeypatch):
     monkeypatch.setattr("app.netbox.netbox_status", lambda *a, **k: {"ok": True})
     monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
     payload = doctor_payload(force=True)
-    assert payload["components"]["netbox"]["status"] == "ok"
+    item = payload["components"]["netbox"]
+    assert item["status"] == "ok"
+    assert item.get("why") == "API token: yes"
     assert "netbox" not in payload["failed"]
+
+
+def test_doctor_netbox_403_rejected_when_token_present(monkeypatch):
+    leak = "LEAKME_NETBOX_SECRET_99"
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", leak)
+    monkeypatch.setattr(
+        "app.netbox.netbox_status",
+        lambda *a, **k: {
+            "ok": False,
+            "degraded": True,
+            "ui_up": True,
+            "why": FORBIDDEN_REJECTED_WHY,
+        },
+    )
+    monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
+    payload = doctor_payload(force=True)
+    item = payload["components"]["netbox"]
+    assert item["status"] == "warn"
+    assert FORBIDDEN_REJECTED_WHY in (item.get("why") or "")
+    assert "token missing" not in (item.get("why") or "")
+    assert "API token: yes" in (item.get("why") or "")
+    assert leak not in (item.get("why") or "")
+    assert leak not in (item.get("fix") or "")
+    assert "recreate netbox+core" in (item.get("fix") or "").lower()
+
+
+def test_doctor_netbox_403_missing_when_token_empty(monkeypatch):
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", "")
+    monkeypatch.setattr(
+        "app.netbox.netbox_status",
+        lambda *a, **k: {
+            "ok": False,
+            "degraded": True,
+            "ui_up": True,
+            "why": TOKEN_EMPTY_WHY,
+        },
+    )
+    monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
+    payload = doctor_payload(force=True)
+    item = payload["components"]["netbox"]
+    assert item["status"] == "warn"
+    assert TOKEN_EMPTY_WHY in (item.get("why") or "")
+    assert "API token: no" in (item.get("why") or "")
+    assert FORBIDDEN_REJECTED_WHY not in (item.get("why") or "")
+    assert "secrets.env" in (item.get("fix") or "")
 
 
 def test_doctor_netbox_disabled_in_pytest_config():
@@ -573,6 +705,8 @@ def test_install_and_update_bundle_netbox_default_on():
     assert disc.find("Scan now") < disc.find("NetBox sync")
     assert "still points Core at an external instance" not in disc
     assert "NETBOX_API_TOKEN" in disc
+    assert "API token:" in disc
+    assert "netbox_token_present" in disc
     assert "do not need a second token" in disc
     assert "netbox_url_is_local" in disc
     assert "netbox_sync_clickable" in disc
@@ -606,6 +740,7 @@ def test_docs_say_bundled_netbox_default_on():
     assert "does not bundle NetBox" not in handbook
     assert "NETBOX_API_TOKEN" in handbook
     assert "403" in handbook
+    assert "rejected" in handbook.lower()
     assert "write_enabled=False" in handbook or "read-only" in handbook.lower()
     assert "plaintext" in handbook.lower()
     assert "second" in handbook.lower()
@@ -627,6 +762,7 @@ def test_docs_say_bundled_netbox_default_on():
     assert "NetBox" in cont
     assert "NETBOX_API_TOKEN" in cont
     assert "403" in cont
+    assert "rejected" in cont.lower()
     assert "yellow" in cont.lower()
     assert "grey" in cont.lower()
     assert "No devices yet" in cont
