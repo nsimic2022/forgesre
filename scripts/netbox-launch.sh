@@ -24,8 +24,37 @@ HOST="${NETBOX_BIND_HOST:-0.0.0.0}"
 # shellcheck disable=SC1091
 source /opt/netbox/venv/bin/activate
 
+# Last KEY= in a dotenv file. Prints the value to stdout for capture; caller must not log it.
+_dotenv_value() {
+  local file="$1" key="$2" found="" line name value
+  [[ -f "$file" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" || "$line" == \#* || "$line" != *=* ]] && continue
+    name="${line%%=*}"
+    value="${line#*=}"
+    name="${name%"${name##*[![:space:]]}"}"
+    name="${name#"${name%%[![:space:]]*}"}"
+    if [[ "$name" == "$key" ]]; then
+      value="${value%\"}"
+      value="${value#\"}"
+      value="${value%\'}"
+      value="${value#\'}"
+      found="$value"
+    fi
+  done < "$file"
+  printf '%s' "$found"
+}
+
 ensure_core_api_token() {
   local token="${NETBOX_API_TOKEN:-${SUPERUSER_API_TOKEN:-}}"
+  if [[ -z "${token}" && -f /run/secrets/forgesre-secrets.env ]]; then
+    token="$(_dotenv_value /run/secrets/forgesre-secrets.env NETBOX_API_TOKEN)"
+    if [[ -z "${token}" ]]; then
+      token="$(_dotenv_value /run/secrets/forgesre-secrets.env SUPERUSER_API_TOKEN)"
+    fi
+  fi
   if [[ -z "${token}" ]]; then
     echo "forgesre: NETBOX_API_TOKEN empty — Core sync will get HTTP 403" >&2
     return 0

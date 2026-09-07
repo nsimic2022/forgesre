@@ -44,6 +44,7 @@ def test_compose_netbox_is_default_service():
     vols = netbox.get("volumes") or []
     assert any("config/netbox/forgesre.py" in str(v) for v in vols)
     assert any("/etc/netbox/config/forgesre.py" in str(v) for v in vols)
+    assert any("secrets/secrets.env" in str(v) and "/run/secrets/forgesre-secrets.env" in str(v) for v in vols)
     init = (ROOT / "scripts" / "netbox-db-init.sh").read_text(encoding="utf-8")
     assert "CREATE DATABASE netbox" in init
     assert "forgesre" in init
@@ -61,6 +62,7 @@ def test_compose_netbox_is_default_service():
     assert "ForgeSRE Core read-sync" in launch
     assert "dcim" in launch and "view" in launch
     assert "v1 token ready for GET /api/dcim/devices/" in launch
+    assert "/run/secrets/forgesre-secrets.env" in launch
     assert "DROP DATABASE" not in launch.upper()
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "mailpit" not in compose.lower()

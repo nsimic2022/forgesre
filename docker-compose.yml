@@ -247,6 +247,7 @@ services:
     volumes:
       - ./scripts/netbox-launch.sh:/opt/netbox/launch-netbox.sh:ro
       - ./config/netbox/forgesre.py:/etc/netbox/config/forgesre.py:ro
+      - ./secrets/secrets.env:/run/secrets/forgesre-secrets.env:ro
       - ${FORGESRE_DATA:-./data}/netbox/media:/opt/netbox/netbox/media
       - ${FORGESRE_DATA:-./data}/netbox/reports:/opt/netbox/netbox/reports
       - ${FORGESRE_DATA:-./data}/netbox/scripts:/opt/netbox/netbox/scripts

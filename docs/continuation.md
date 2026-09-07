@@ -42,7 +42,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-status-traffic-05f8` SHA `0e69ee7e8ab04fc5f8c4778192217cc3cd1fd7f5`: **377 passed** (twice). Was 372 after the NetBox token upsert.
+Pytest count after the double run on `cursor/netbox-status-403-05f8` SHA `9724875` (rebased onto traffic-light `main`): **377 passed** (twice). Same count as the traffic-light merge; this branch adds the NetBox secrets bind-mount so upsert actually runs.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -54,7 +54,9 @@ Bundled NetBox accepts `NETBOX_API_TOKEN` from secrets on **every** start (exist
 
 - Launch upserts a **v1** token: `plaintext=NETBOX_API_TOKEN` (40 hex chars), superuser, `write_enabled=False`, `enabled=True`, plus `ObjectPermission` view on `dcim.device`.
 - Deletes a leftover v2 row that stored the secret in `key`.
-- `./forgesre update` `--force-recreate`s `netbox` so the bind-mounted `netbox-launch.sh` actually runs.
+- `./forgesre update` `--force-recreate`s `netbox` (and `core` when the launch hash changes) so the bind-mounted `netbox-launch.sh` actually runs the v1 upsert.
+- Core reads `NETBOX_API_TOKEN` from bind-mounted `secrets/secrets.env` (`FORGESRE_SECRETS_FILE`). Compose does not interpolate `${NETBOX_API_TOKEN}` over `env_file`.
+- NetBox launch also reads `/run/secrets/forgesre-secrets.env` if the container env token is empty. Do not print that value.
 - Discovery footer: bundled (`127.0.0.1` / `localhost`) says Core uses `NETBOX_API_TOKEN` — no second UI token. `--netbox-url` / external copy only when `inventory.netbox.url` is not localhost.
 - Did not write back to NetBox. Did not revert GUI list pagination / grey-button CSS. Did not drop database `forgesre`. Did not tell N to run `./install.sh`.
 
