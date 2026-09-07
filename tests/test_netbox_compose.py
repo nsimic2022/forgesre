@@ -32,9 +32,12 @@ def test_compose_netbox_is_default_service():
     env = data["services"]["core"]["environment"]
     assert "NETBOX_URL" in env
     assert "8001" in str(env["NETBOX_URL"])
-    assert env.get("NETBOX_API_TOKEN") == "${NETBOX_API_TOKEN}"
-    assert netbox["environment"].get("NETBOX_API_TOKEN") == "${NETBOX_API_TOKEN}"
-    assert netbox["environment"].get("SUPERUSER_API_TOKEN") == "${NETBOX_API_TOKEN}"
+    assert "NETBOX_API_TOKEN" not in env
+    assert "secrets/secrets.env" in data["services"]["core"]["env_file"]
+    assert "FORGESRE_SECRETS_FILE" in env
+    assert "NETBOX_API_TOKEN" not in netbox["environment"]
+    assert "SUPERUSER_API_TOKEN" not in netbox["environment"]
+    assert "secrets/secrets.env" in netbox["env_file"]
     assert netbox["environment"].get("SECRET_KEY") == "${NETBOX_SECRET_KEY}"
     assert netbox["environment"].get("API_TOKEN_PEPPER_1") == "${NETBOX_API_TOKEN_PEPPER}"
     assert netbox["environment"].get("NETBOX_API_TOKEN_PEPPER") == "${NETBOX_API_TOKEN_PEPPER}"
@@ -57,6 +60,7 @@ def test_compose_netbox_is_default_service():
     assert "token=token_key" in launch
     assert "ForgeSRE Core read-sync" in launch
     assert "dcim" in launch and "view" in launch
+    assert "v1 token ready for GET /api/dcim/devices/" in launch
     assert "DROP DATABASE" not in launch.upper()
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "mailpit" not in compose.lower()
@@ -94,6 +98,69 @@ def test_netbox_forgesre_extra_skips_empty_pepper(monkeypatch):
     spec.loader.exec_module(mod)
     assert not hasattr(mod, "API_TOKEN_PEPPERS")
 
+
+
+def test_netbox_token_prefers_secrets_file(monkeypatch, tmp_path):
+    from app.settings import Settings, _dotenv_value
+
+    secrets = tmp_path / "secrets.env"
+    file_token = "s" * 40
+    env_token = "e" * 40
+    secrets.write_text("NETBOX_API_TOKEN=" + file_token + "\n", encoding="utf-8")
+    monkeypatch.setenv("FORGESRE_SECRETS_FILE", str(secrets))
+    monkeypatch.setenv("NETBOX_API_TOKEN", env_token)
+    s = Settings()
+    assert s.netbox_token == file_token
+    assert _dotenv_value(secrets, "NETBOX_API_TOKEN") == file_token
+
+
+def test_netbox_status_ok_on_devices_200(monkeypatch):
+    import httpx
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = str(request.url)
+        if "/api/dcim/devices/" in path:
+            return httpx.Response(200, json={"count": 0, "results": []}, request=request)
+        if "/login/" in path:
+            return httpx.Response(200, text="login", request=request)
+        if "/api/status/" in path:
+            return httpx.Response(403, json={}, request=request)
+        return httpx.Response(404, request=request)
+
+    real = httpx.Client
+
+    def wrapped(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", wrapped)
+    result = netbox_status("http://127.0.0.1:8001", "a" * 40)
+    assert result["ok"] is True
+
+
+def test_netbox_status_403_ignores_status_endpoint_200(monkeypatch):
+    import httpx
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = str(request.url)
+        if "/api/dcim/devices/" in path:
+            return httpx.Response(403, json={}, request=request)
+        if "/api/status/" in path:
+            return httpx.Response(200, json={"netbox-version": "4.6.9"}, request=request)
+        if "/login/" in path:
+            return httpx.Response(200, text="login", request=request)
+        return httpx.Response(404, request=request)
+
+    real = httpx.Client
+
+    def wrapped(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", wrapped)
+    result = netbox_status("http://127.0.0.1:8001", "a" * 40)
+    assert result["ok"] is False
+    assert "403" in result["why"]
 
 def test_is_local_netbox_url():
     assert is_local_netbox_url("http://127.0.0.1:8001") is True
@@ -316,10 +383,14 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "ensure-netbox-secrets" in update
     assert "up -d snmp-exporter netbox-redis netbox" in update
     assert "--force-recreate netbox" in update
+    assert "netbox_launch_hash" in update
+    assert ".netbox-launch.stamp" in update
+    assert "--force-recreate core" in update
     assert "first boot can take several minutes" in update.lower() or "migrations" in update.lower()
     assert "yellow" in update.lower()
     secrets = (ROOT / "scripts" / "ensure-netbox-secrets.sh").read_text(encoding="utf-8")
     assert "NETBOX_API_TOKEN" in secrets
+    assert "SUPERUSER_API_TOKEN" in secrets
     assert "NETBOX_API_TOKEN_PEPPER" in secrets
     assert "API_TOKEN_PEPPER_1" in secrets
     assert "openssl rand -hex 32" in secrets

@@ -110,6 +110,14 @@ else:
     else:
         print("forgesre: API token already present (read-only v1)")
 
+ready = Token.objects.filter(
+    version=TokenVersionChoices.V1, plaintext=token_key, enabled=True
+).exists()
+if not ready:
+    print("forgesre: v1 token upsert did not persist")
+    raise SystemExit(1)
+print("forgesre: v1 token ready for GET /api/dcim/devices/")
+
 # Superuser already lists devices. Attach ObjectPermission too so a later
 # non-superuser assignment still GETs /api/dcim/devices/.
 try:

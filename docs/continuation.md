@@ -58,6 +58,27 @@ Expect after recreate: `GET /api/dcim/devices/?limit=1` with that token is **HTT
 
 ## 4. What N should do on the VM
 
+Šta N radi na VM. Ne pokreći `./install.sh`. Ne kopiraj token iz NetBox UI u `secrets.env`.
+
+```bash
+git pull origin main && ./forgesre update
+```
+
+`update` ponovo kreira **netbox** (i **core** kad se promeni launch skripta) da bi v1 upsert stvarno prošao. Zatim tvrdi refresh Discovery (Ctrl-Shift-R).
+
+Provera — samo HTTP kod, **ne ispisuj token**:
+
+```bash
+set -a && source secrets/secrets.env && set +a
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Token ${NETBOX_API_TOKEN}" \
+  -H "Accept: application/json" \
+  "http://127.0.0.1:8001/api/dcim/devices/?limit=1"
+```
+
+Mora biti `200`. Prazna lista je u redu.
+
+
 Do **not** run `./install.sh`. Do **not** paste a token from the NetBox UI into `secrets.env`.
 
 ```bash

@@ -34,7 +34,8 @@ services:
       ALERTMANAGER_URL: http://127.0.0.1:9093
       GRAFANA_PUBLIC_URL: http://localhost:${GRAFANA_PORT:-3000}
       NETBOX_URL: ${NETBOX_URL:-http://127.0.0.1:8001}
-      NETBOX_API_TOKEN: ${NETBOX_API_TOKEN}
+      # NETBOX_API_TOKEN comes from env_file secrets/secrets.env (listed last).
+      # Do not interpolate ${NETBOX_API_TOKEN} here: empty/stale .env overrides env_file.
       FORGESRE_BACKUP_DIR: /backups
       FORGESRE_DOTENV: /host-dotenv
       FORGESRE_SECRETS_FILE: /host-secrets.env
@@ -237,8 +238,7 @@ services:
       SUPERUSER_NAME: ${NETBOX_SUPERUSER_NAME:-admin}
       SUPERUSER_EMAIL: ${NETBOX_SUPERUSER_EMAIL:-admin@forgesre.local}
       SUPERUSER_PASSWORD: ${NETBOX_SUPERUSER_PASSWORD}
-      SUPERUSER_API_TOKEN: ${NETBOX_API_TOKEN}
-      NETBOX_API_TOKEN: ${NETBOX_API_TOKEN}
+      # NETBOX_API_TOKEN / SUPERUSER_API_TOKEN come from env_file secrets/secrets.env.
       NETBOX_HTTP_PORT: ${NETBOX_PORT:-8001}
       GRANIAN_WORKERS: "2"
       MAX_DB_WAIT_TIME: "180"

@@ -47,6 +47,13 @@ core_inputs_hash() {
   ) | sha256sum | awk '{print $1}'
 }
 
+netbox_launch_hash() {
+  (
+    cd "$ROOT"
+    sha256sum scripts/netbox-launch.sh docker-compose.yml scripts/ensure-netbox-secrets.sh
+  ) | sha256sum | awk '{print $1}'
+}
+
 STAMP="$ROOT/data/.core-image.stamp"
 mkdir -p "$ROOT/data"
 cur="$(core_inputs_hash)"
@@ -73,9 +80,20 @@ else
   fi
 fi
 "${DC[@]}" up -d snmp-exporter netbox-redis netbox
-# launch-netbox.sh is bind-mounted; recreate so ensure_core_api_token runs
-# (a leftover process still 403s GET /api/dcim/devices/ with the old token row).
-"${DC[@]}" up -d --no-deps --force-recreate netbox
+NB_STAMP="$ROOT/data/.netbox-launch.stamp"
+nb_cur="$(netbox_launch_hash)"
+need_nb=1
+if [[ -f "$NB_STAMP" ]] && [[ "$(cat "$NB_STAMP" 2>/dev/null || true)" == "$nb_cur" ]]; then
+  need_nb=0
+fi
+if [[ "$need_nb" -eq 1 ]]; then
+  echo "NetBox launch script or compose token env changed; recreating netbox so the v1 token upsert runs."
+  "${DC[@]}" up -d --no-deps --force-recreate netbox
+  "${DC[@]}" up -d --no-deps --force-recreate core
+  printf '%s\n' "$nb_cur" > "$NB_STAMP"
+else
+  "${DC[@]}" up -d --no-deps --force-recreate netbox
+fi
 echo "Waiting for health..."
 sleep 5
 NB_PORT=8001

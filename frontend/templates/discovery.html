@@ -39,12 +39,15 @@
   {% if can('admin') %}
     {% if netbox_enabled %}
     <div class="tool-row">
-      {% if netbox_sync_ready %}
+      <span class="pill {{ netbox_sync_light }}">{{ netbox_sync_light|title }}</span>
+      {% if netbox_sync_clickable or netbox_sync_ready %}
       <form method="post" action="/discovery/netbox-sync" class="inline">
         <button type="submit">Sync NetBox</button>
       </form>
       {% else %}
       <button type="button" disabled>Sync NetBox</button>
+      {% endif %}
+      {% if netbox_sync_why %}
       <span class="muted">{{ netbox_sync_why }}</span>
       {% endif %}
     </div>
@@ -55,7 +58,8 @@
     {% endif %}
     {% endif %}
   {% else %}
-  <p class="muted">Admin only.</p>
+  <button type="button" disabled>Sync NetBox</button>
+  <span class="muted">Admin only.</span>
   {% endif %}
 </section>
 
