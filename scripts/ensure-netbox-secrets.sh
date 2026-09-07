@@ -85,6 +85,10 @@ if [[ -n "${nb_token_value}" ]]; then
   if grep -qE "^NETBOX_API_TOKEN=" "$ROOT/.env"; then
     sed -i "s|^NETBOX_API_TOKEN=.*|NETBOX_API_TOKEN=${nb_token_value}|" "$ROOT/.env"
   fi
+  ensure_nonempty "$ROOT/secrets/secrets.env" SUPERUSER_API_TOKEN "$nb_token_value"
+  if grep -qE "^SUPERUSER_API_TOKEN=" "$ROOT/secrets/secrets.env"; then
+    sed -i "s|^SUPERUSER_API_TOKEN=.*|SUPERUSER_API_TOKEN=${nb_token_value}|" "$ROOT/secrets/secrets.env"
+  fi
 fi
 ensure_nonempty "$ROOT/.env" NETBOX_SUPERUSER_NAME "admin"
 ensure_nonempty "$ROOT/.env" NETBOX_SUPERUSER_EMAIL "admin@forgesre.local"

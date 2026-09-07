@@ -11,6 +11,13 @@ GET /api/dcim/devices/ returned 403. Launch upserts v1 on every start.
 NetBox's REST API returns HTTP 403 (not 401) when the token is missing,
 unknown, or not allowed to read DCIM. The bundled container upserts that
 token as write_enabled=False on the superuser.
+
+Discovery traffic light uses GET /api/dcim/devices/?limit=1 (never writes):
+- grey: UI down, API 403, or no token
+- yellow: API 200 and count == 0 (empty NetBox is normal)
+- green: API 200 and count >= 1
+Empty must not look like 403. Admin Sync stays clickable on yellow and green.
+Grey still allows a retry click when the UI answers (403 / no token).
 """
 
 from __future__ import annotations
@@ -52,79 +59,176 @@ def format_client_error(exc: BaseException) -> str:
 FIRST_BOOT_WHY = (
     "NetBox is still running first-boot migrations; wait until the API answers, then refresh."
 )
+EMPTY_DEVICES_WHY = "No devices yet; add in NetBox UI :8001 or use Assets/Discovery."
+
+
+def _cta_why(status: dict[str, Any]) -> str:
+    why = str(status.get("why") or "NetBox is not ready for sync.").strip()
+    first = why.split(". ", 1)[0].strip()
+    if first and not first.endswith("."):
+        first += "."
+    return first
+
+
+def _device_count(payload: Any) -> int:
+    if not isinstance(payload, dict):
+        return 0
+    raw = payload.get("count")
+    if isinstance(raw, int) and raw >= 0:
+        return raw
+    results = payload.get("results") or []
+    return len(results) if isinstance(results, list) else 0
+
+
+def _grey(*, why: str, count: int = 0, **extra: Any) -> dict[str, Any]:
+    row = {"ok": False, "light": "grey", "count": count, "why": why}
+    row.update(extra)
+    return row
+
+
+def _working(count: int) -> dict[str, Any]:
+    if count >= 1:
+        return {"ok": True, "ui_up": True, "light": "green", "count": count, "why": ""}
+    return {
+        "ok": True,
+        "ui_up": True,
+        "light": "yellow",
+        "count": 0,
+        "why": EMPTY_DEVICES_WHY,
+    }
+
+
+def _cta_light(status: dict[str, Any]) -> str:
+    light = str(status.get("light") or "")
+    if light:
+        return light
+    if status.get("ok"):
+        return "green" if int(status.get("count") or 0) >= 1 else "yellow"
+    return "grey"
 
 
 def sync_cta(url: str, token: str, enabled: bool, timeout: float = 2.0) -> dict[str, Any]:
     """Discovery Sync NetBox control for admins.
 
-    Ready only when NetBox is enabled and netbox_status reports ok
-    (/api/status/ 200 with a working token). First-boot connect failures stay
-    disabled with one sentence. Last journal sync success is not a gate.
+    Traffic light from GET /api/dcim/devices/?limit=1.
+    Clickable on yellow and green. Grey retry click when the UI answers
+    (HTTP 403 / no token) — do not disable that submit. First-boot connect
+    failures stay disabled with one sentence. Last journal sync is not a gate.
     """
     if not enabled:
-        return {"ready": False, "starting": False, "why": "Sync is off in config."}
+        return {
+            "ready": False,
+            "starting": False,
+            "clickable": False,
+            "light": "grey",
+            "count": 0,
+            "why": "Sync is off in config.",
+        }
     status = netbox_status(url, token, timeout=timeout)
-    if status.get("ok"):
-        return {"ready": True, "starting": False, "why": ""}
-    if status.get("starting"):
-        return {"ready": False, "starting": True, "why": FIRST_BOOT_WHY}
-    why = str(status.get("why") or "NetBox is not ready for sync.").strip()
-    first = why.split(". ", 1)[0].strip()
-    if first and not first.endswith("."):
-        first += "."
-    return {"ready": False, "starting": False, "why": first}
+    light = _cta_light(status)
+    count = int(status.get("count") or 0)
+    ui_up = bool(status.get("ok") or status.get("degraded") or status.get("ui_up"))
+    if status.get("starting") and not ui_up:
+        return {
+            "ready": False,
+            "starting": True,
+            "clickable": False,
+            "light": "grey",
+            "count": 0,
+            "why": FIRST_BOOT_WHY,
+        }
+    if light == "green":
+        return {
+            "ready": True,
+            "starting": False,
+            "clickable": True,
+            "light": "green",
+            "count": count,
+            "why": "",
+        }
+    if light == "yellow":
+        why = str(status.get("why") or EMPTY_DEVICES_WHY).strip() or EMPTY_DEVICES_WHY
+        return {
+            "ready": True,
+            "starting": False,
+            "clickable": True,
+            "light": "yellow",
+            "count": 0,
+            "why": why,
+        }
+    why = _cta_why(status)
+    ready = bool(ui_up)
+    return {
+        "ready": ready,
+        "starting": False,
+        "clickable": ready,
+        "light": "grey",
+        "count": 0,
+        "why": why,
+    }
 
 
 def netbox_status(url: str, token: str, timeout: float = 5.0) -> dict[str, Any]:
     if not url:
-        return {"ok": False, "why": "NetBox URL missing"}
+        return _grey(why="NetBox URL missing")
     base = url.rstrip("/") + "/"
     try:
         headers = _headers(token) if token else {"Accept": "text/html,application/json"}
         with httpx.Client(timeout=timeout, headers=headers, follow_redirects=True) as client:
             api_code = 0
             if token:
-                response = client.get(urljoin(base, "api/status/"))
-                api_code = int(response.status_code)
-                if response.status_code >= 400:
-                    response = client.get(urljoin(base, "api/dcim/devices/?limit=1"))
-                    api_code = int(response.status_code)
-                if response.status_code < 400:
-                    return {"ok": True}
+                devices = client.get(urljoin(base, "api/dcim/devices/?limit=1"))
+                api_code = int(devices.status_code)
+                if devices.status_code < 400:
+                    try:
+                        payload = devices.json()
+                    except ValueError:
+                        payload = {}
+                    return _working(_device_count(payload))
             login = client.get(urljoin(base, "login/"))
             if login.status_code < 400:
                 if not token:
-                    return {
-                        "ok": False,
-                        "degraded": True,
-                        "why": "NetBox UI answers but NETBOX_API_TOKEN is empty",
-                    }
+                    return _grey(
+                        degraded=True,
+                        ui_up=True,
+                        why="NetBox UI answers but NETBOX_API_TOKEN is empty",
+                    )
                 if api_code == 403:
-                    return {
-                        "ok": False,
-                        "degraded": True,
-                        "why": (
+                    return _grey(
+                        degraded=True,
+                        ui_up=True,
+                        why=(
                             "NetBox UI up; API HTTP 403 (token missing, not created "
                             "in NetBox, or not allowed to read devices)"
                         ),
-                    }
-                return {
-                    "ok": False,
-                    "degraded": True,
-                    "why": f"NetBox UI up; API returned HTTP {api_code}",
-                }
-            return {"ok": False, "why": f"NetBox HTTP {login.status_code}"}
+                    )
+                return _grey(
+                    degraded=True,
+                    ui_up=True,
+                    why=f"NetBox UI up; API returned HTTP {api_code}",
+                )
+            if api_code and api_code < 500:
+                return _grey(
+                    degraded=True,
+                    ui_up=True,
+                    why=(
+                        "NetBox UI up; API HTTP 403 (token missing, not created "
+                        "in NetBox, or not allowed to read devices)"
+                        if api_code == 403
+                        else f"NetBox UI up; API returned HTTP {api_code}"
+                    ),
+                )
+            return _grey(why=f"NetBox HTTP {login.status_code}")
     except (httpx.ConnectError, httpx.TimeoutException, OSError) as exc:
-        return {
-            "ok": False,
-            "starting": True,
-            "why": (
+        return _grey(
+            starting=True,
+            why=(
                 "NetBox is not answering yet (first boot runs database migrations; "
                 f"wait a few minutes): {exc}"
             ),
-        }
+        )
     except Exception as exc:
-        return {"ok": False, "why": format_client_error(exc)}
+        return _grey(why=format_client_error(exc))
 
 
 def list_devices(url: str, token: str, timeout: float = 10.0) -> list[dict[str, Any]]:

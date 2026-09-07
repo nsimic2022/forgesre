@@ -11,7 +11,7 @@ from app.api import doctor_payload
 from app.db import Base, SessionLocal, engine
 from app.main import app
 from app.models import User
-from app.netbox import FIRST_BOOT_WHY, is_local_netbox_url, netbox_status, sync_cta
+from app.netbox import EMPTY_DEVICES_WHY, FIRST_BOOT_WHY, is_local_netbox_url, netbox_status, sync_cta
 from app.security import hash_password
 from app.seed import seed
 from app.stack import doctor_soft_status, enrich_components, rewrite_host
@@ -32,9 +32,12 @@ def test_compose_netbox_is_default_service():
     env = data["services"]["core"]["environment"]
     assert "NETBOX_URL" in env
     assert "8001" in str(env["NETBOX_URL"])
-    assert env.get("NETBOX_API_TOKEN") == "${NETBOX_API_TOKEN}"
-    assert netbox["environment"].get("NETBOX_API_TOKEN") == "${NETBOX_API_TOKEN}"
-    assert netbox["environment"].get("SUPERUSER_API_TOKEN") == "${NETBOX_API_TOKEN}"
+    assert "NETBOX_API_TOKEN" not in env
+    assert "secrets/secrets.env" in data["services"]["core"]["env_file"]
+    assert "FORGESRE_SECRETS_FILE" in env
+    assert "NETBOX_API_TOKEN" not in netbox["environment"]
+    assert "SUPERUSER_API_TOKEN" not in netbox["environment"]
+    assert "secrets/secrets.env" in netbox["env_file"]
     assert netbox["environment"].get("SECRET_KEY") == "${NETBOX_SECRET_KEY}"
     assert netbox["environment"].get("API_TOKEN_PEPPER_1") == "${NETBOX_API_TOKEN_PEPPER}"
     assert netbox["environment"].get("NETBOX_API_TOKEN_PEPPER") == "${NETBOX_API_TOKEN_PEPPER}"
@@ -57,6 +60,7 @@ def test_compose_netbox_is_default_service():
     assert "token=token_key" in launch
     assert "ForgeSRE Core read-sync" in launch
     assert "dcim" in launch and "view" in launch
+    assert "v1 token ready for GET /api/dcim/devices/" in launch
     assert "DROP DATABASE" not in launch.upper()
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "mailpit" not in compose.lower()
@@ -95,6 +99,75 @@ def test_netbox_forgesre_extra_skips_empty_pepper(monkeypatch):
     assert not hasattr(mod, "API_TOKEN_PEPPERS")
 
 
+
+def test_netbox_token_prefers_secrets_file(monkeypatch, tmp_path):
+    from app.settings import Settings, _dotenv_value
+
+    secrets = tmp_path / "secrets.env"
+    file_token = "s" * 40
+    env_token = "e" * 40
+    secrets.write_text("NETBOX_API_TOKEN=" + file_token + "\n", encoding="utf-8")
+    monkeypatch.setenv("FORGESRE_SECRETS_FILE", str(secrets))
+    monkeypatch.setenv("NETBOX_API_TOKEN", env_token)
+    s = Settings()
+    assert s.netbox_token == file_token
+    assert _dotenv_value(secrets, "NETBOX_API_TOKEN") == file_token
+
+
+def test_netbox_status_ok_on_devices_200(monkeypatch):
+    import httpx
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = str(request.url)
+        if "/api/dcim/devices/" in path:
+            return httpx.Response(200, json={"count": 0, "results": []}, request=request)
+        if "/login/" in path:
+            return httpx.Response(200, text="login", request=request)
+        if "/api/status/" in path:
+            return httpx.Response(403, json={}, request=request)
+        return httpx.Response(404, request=request)
+
+    real = httpx.Client
+
+    def wrapped(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", wrapped)
+    result = netbox_status("http://127.0.0.1:8001", "a" * 40)
+    assert result["ok"] is True
+    assert result.get("light") == "yellow"
+    assert result.get("count") == 0
+    assert "403" not in (result.get("why") or "")
+    assert result.get("why") == EMPTY_DEVICES_WHY
+
+
+def test_netbox_status_403_ignores_status_endpoint_200(monkeypatch):
+    import httpx
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = str(request.url)
+        if "/api/dcim/devices/" in path:
+            return httpx.Response(403, json={}, request=request)
+        if "/api/status/" in path:
+            return httpx.Response(200, json={"netbox-version": "4.6.9"}, request=request)
+        if "/login/" in path:
+            return httpx.Response(200, text="login", request=request)
+        return httpx.Response(404, request=request)
+
+    real = httpx.Client
+
+    def wrapped(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", wrapped)
+    result = netbox_status("http://127.0.0.1:8001", "a" * 40)
+    assert result["ok"] is False
+    assert result.get("light") == "grey"
+    assert "403" in result["why"]
+    assert "No devices yet" not in result["why"]
+
 def test_is_local_netbox_url():
     assert is_local_netbox_url("http://127.0.0.1:8001") is True
     assert is_local_netbox_url("http://localhost:8001") is True
@@ -113,8 +186,41 @@ def test_sync_cta_ready_when_api_ok(monkeypatch):
     monkeypatch.setattr("app.netbox.netbox_status", lambda *a, **k: {"ok": True})
     result = sync_cta("http://127.0.0.1:8001", "token", True)
     assert result["ready"] is True
-    assert result["why"] == ""
+    assert result.get("clickable") is True
+    assert result.get("light") == "yellow"
+    assert result["why"] == EMPTY_DEVICES_WHY
     assert result["starting"] is False
+
+
+def test_sync_cta_green_when_devices(monkeypatch):
+    monkeypatch.setattr(
+        "app.netbox.netbox_status",
+        lambda *a, **k: {"ok": True, "light": "green", "count": 2, "ui_up": True},
+    )
+    result = sync_cta("http://127.0.0.1:8001", "token", True)
+    assert result["ready"] is True
+    assert result["clickable"] is True
+    assert result["light"] == "green"
+    assert result["why"] == ""
+
+
+def test_sync_cta_grey_403_stays_clickable_retry(monkeypatch):
+    monkeypatch.setattr(
+        "app.netbox.netbox_status",
+        lambda *a, **k: {
+            "ok": False,
+            "light": "grey",
+            "degraded": True,
+            "ui_up": True,
+            "why": "NetBox UI up; API HTTP 403 (token missing, not created in NetBox, or not allowed to read devices)",
+        },
+    )
+    result = sync_cta("http://127.0.0.1:8001", "token", True)
+    assert result["ready"] is True
+    assert result["clickable"] is True
+    assert result["light"] == "grey"
+    assert "403" in result["why"]
+    assert "No devices yet" not in result["why"]
 
 
 def test_sync_cta_first_boot_keeps_disabled(monkeypatch):
@@ -162,6 +268,10 @@ def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
     assert "disabled>Sync NetBox<" not in html
     assert 'class="secondary">Sync NetBox' not in html
     assert 'action="/discovery/netbox-sync"' in html
+    assert 'class="pill yellow"' in html
+    assert "Yellow" in html
+    assert EMPTY_DEVICES_WHY in html
+    assert "403" not in html
     assert "Admin only." not in html
     assert "still points Core at an external instance" not in html
     assert "NETBOX_API_TOKEN" in html
@@ -211,6 +321,7 @@ def test_discovery_sync_button_disabled_during_first_boot(monkeypatch):
     assert "disabled" in html
     assert FIRST_BOOT_WHY in html
     assert 'action="/discovery/netbox-sync"' not in html
+    assert 'class="pill grey"' in html
     db.close()
 
 
@@ -316,10 +427,14 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "ensure-netbox-secrets" in update
     assert "up -d snmp-exporter netbox-redis netbox" in update
     assert "--force-recreate netbox" in update
+    assert "netbox_launch_hash" in update
+    assert ".netbox-launch.stamp" in update
+    assert "--force-recreate core" in update
     assert "first boot can take several minutes" in update.lower() or "migrations" in update.lower()
     assert "yellow" in update.lower()
     secrets = (ROOT / "scripts" / "ensure-netbox-secrets.sh").read_text(encoding="utf-8")
     assert "NETBOX_API_TOKEN" in secrets
+    assert "SUPERUSER_API_TOKEN" in secrets
     assert "NETBOX_API_TOKEN_PEPPER" in secrets
     assert "API_TOKEN_PEPPER_1" in secrets
     assert "openssl rand -hex 32" in secrets
@@ -348,6 +463,9 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "NETBOX_API_TOKEN" in disc
     assert "do not need a second token" in disc
     assert "netbox_url_is_local" in disc
+    assert "netbox_sync_clickable" in disc
+    assert "netbox_sync_light" in disc
+    assert "pill {{ netbox_sync_light }}" in disc
     assert "--netbox-url" in disc
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "/api/status/" in handbook
@@ -373,6 +491,9 @@ def test_docs_say_bundled_netbox_default_on():
     assert "API_TOKEN_PEPPER" in handbook or "peppers" in handbook.lower()
     assert "/api/status/" in handbook
     assert "Admin only" in handbook
+    assert "grey" in handbook.lower()
+    assert "yellow" in handbook.lower()
+    assert "No devices yet" in handbook or "no devices" in handbook.lower()
     assert "install.sh" in handbook
     assert "8001" in install
     assert "--netbox-url" in install
@@ -381,6 +502,9 @@ def test_docs_say_bundled_netbox_default_on():
     assert "NetBox" in cont
     assert "NETBOX_API_TOKEN" in cont
     assert "403" in cont
+    assert "yellow" in cont.lower()
+    assert "grey" in cont.lower()
+    assert "No devices yet" in cont
     assert "API_TOKEN_PEPPER" in cont or "peppers" in cont.lower()
     assert "install.sh" in cont
     cli = (ROOT / "docs" / "cli.md").read_text(encoding="utf-8")

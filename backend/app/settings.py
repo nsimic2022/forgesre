@@ -11,6 +11,25 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _dotenv_value(path: Path, key: str) -> str:
+    """Last assignment of KEY= in a dotenv file. Does not print the value."""
+    if not path.is_file():
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    found = ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        if name.strip() == key:
+            found = value.strip().strip("'").strip('"')
+    return found
+
+
 class Settings:
     def __init__(self) -> None:
         self.frontend_dir = Path(os.environ.get("FRONTEND_DIR") or (_repo_root() / "frontend"))
@@ -187,7 +206,14 @@ class Settings:
 
     @property
     def netbox_token(self) -> str:
-        return os.environ.get("NETBOX_API_TOKEN", "")
+        """Prefer secrets/secrets.env over compose interpolation of .env."""
+        secrets_path = Path(
+            os.environ.get("FORGESRE_SECRETS_FILE") or (_repo_root() / "secrets" / "secrets.env")
+        )
+        from_file = _dotenv_value(secrets_path, "NETBOX_API_TOKEN")
+        if from_file:
+            return from_file
+        return (os.environ.get("NETBOX_API_TOKEN") or "").strip()
 
 
     @property

@@ -17,7 +17,13 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 7 September 2026.** Operator N (Serbian): Discovery **Sync NetBox** stayed disabled with `NetBox UI up; API HTTP 403 (token missing, not created in NetBox, or not allowed to read devices.)`. Footer wrongly said `--netbox-url` still points Core at an **external** instance while they are on bundled `:8001`. They will **not** copy a NetBox-UI-created token into `secrets.env` (two different tokens). Core uses `NETBOX_API_TOKEN` from `secrets/secrets.env`. Journal 403 spam was already reduced; `GET /api/dcim/devices/` was still 403 from Core’s token, so the grey button was correct.
+**Monday 7 September 2026.** Operator N (Serbian): Discovery **Sync NetBox** must be a **traffic light**. Empty NetBox (API HTTP 200, zero devices) is normal and must **not** look like 403.
+
+- **Grey** = not working (UI down, API 403, no token)
+- **Yellow** = API 200 but **no devices**. Sentence: *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.*
+- **Green** = API 200 and count ≥ 1
+
+Admin clickable on yellow and green. Grey still allows a retry click when the UI answers. Core uses `NETBOX_API_TOKEN` from `secrets/secrets.env`. v1 upsert + `./forgesre update` `--force-recreate`s `netbox`. Never write back to NetBox. Never `./install.sh`.
 
 Root cause: NetBox **v4.6** `Token` default is **v2** (`key` = 12-char public id, HMAC digest with `API_TOKEN_PEPPERS`, plaintext never stored). Launch upserted `Token.objects.create(..., key=NETBOX_API_TOKEN)` with the 40-char secret in `key`. The REST API does not accept `Authorization: Token <that string>`. netbox-docker 5.0.2 also skips `SUPERUSER_API_TOKEN` unless `SUPERUSER_API_KEY` is set, and only on first superuser insert.
 
@@ -36,7 +42,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-token-upsert-05f8`: **372 passed** (twice). Was 368 after the Sync NetBox button.
+Pytest count after the double run on `cursor/netbox-status-traffic-05f8` SHA `0e69ee7e8ab04fc5f8c4778192217cc3cd1fd7f5`: **377 passed** (twice). Was 372 after the NetBox token upsert.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -52,11 +58,32 @@ Bundled NetBox accepts `NETBOX_API_TOKEN` from secrets on **every** start (exist
 - Discovery footer: bundled (`127.0.0.1` / `localhost`) says Core uses `NETBOX_API_TOKEN` — no second UI token. `--netbox-url` / external copy only when `inventory.netbox.url` is not localhost.
 - Did not write back to NetBox. Did not revert GUI list pagination / grey-button CSS. Did not drop database `forgesre`. Did not tell N to run `./install.sh`.
 
-Expect after recreate: `GET /api/dcim/devices/?limit=1` with that token is **HTTP 200** (empty list OK). Admin **Sync NetBox** is orange.
+Expect after recreate: `GET /api/dcim/devices/?limit=1` is **HTTP 200**. Empty list is **yellow** (*No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.*), not 403. Count ≥ 1 is **green**.
 
 ---
 
 ## 4. What N should do on the VM
+
+Šta N radi na VM. Ne pokreći `./install.sh`. Ne kopiraj token iz NetBox UI u `secrets.env`.
+
+```bash
+git pull origin main && ./forgesre update
+```
+
+`update` ponovo kreira **netbox** (i **core** kad se promeni launch skripta) da bi v1 upsert stvarno prošao. Zatim tvrdi refresh Discovery (Ctrl-Shift-R).
+
+Provera — samo HTTP kod, **ne ispisuj token**:
+
+```bash
+set -a && source secrets/secrets.env && set +a
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Token ${NETBOX_API_TOKEN}" \
+  -H "Accept: application/json" \
+  "http://127.0.0.1:8001/api/dcim/devices/?limit=1"
+```
+
+Mora biti `200`. Prazna lista je u redu.
+
 
 Do **not** run `./install.sh`. Do **not** paste a token from the NetBox UI into `secrets.env`.
 

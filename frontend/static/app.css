@@ -264,7 +264,9 @@ table tbody tr:hover td { background: var(--row-hover); }
 .pill.critical, .pill.crit, .pill.open { background: var(--pill-crit-bg); color: var(--pill-crit); }
 .pill.new { background: var(--pill-warn-bg); color: var(--pill-warn); }
 .pill.approved { background: var(--pill-ok-bg); color: var(--pill-ok); }
-.pill.ignored, .pill.offline { background: var(--pill); color: var(--muted); }
+.pill.ignored, .pill.offline, .pill.grey { background: var(--pill); color: var(--muted); }
+.pill.yellow { background: var(--pill-warn-bg); color: var(--pill-warn); }
+.pill.green { background: var(--pill-ok-bg); color: var(--pill-ok); }
 .banner {
   background: var(--pill-warn-bg);
   border: 1px solid var(--warn);
