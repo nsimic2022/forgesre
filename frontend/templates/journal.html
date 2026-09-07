@@ -8,9 +8,9 @@
   Raw Docker/Loki logs are separate — this is the operator view, not a bash shell.
 </p>
 <nav class="pills">
-  <a class="pill {% if not filter_module %}ok{% endif %}" href="/journal?status={{ filter_status }}&q={{ filter_q }}">All</a>
+  <a class="pill {% if not filter_module %}ok{% endif %}" href="/journal?status={{ filter_status|urlencode }}&amp;q={{ filter_q|urlencode }}">All</a>
   {% for item in counts %}
-  <a class="pill {% if filter_module == item.module %}ok{% endif %}" href="/journal?module={{ item.module }}&status={{ filter_status }}&q={{ filter_q }}">{{ item.module }} ({{ item.count }})</a>
+  <a class="pill {% if filter_module == item.module %}ok{% endif %}" href="/journal?module={{ item.module|urlencode }}&amp;status={{ filter_status|urlencode }}&amp;q={{ filter_q|urlencode }}">{{ item.module }} ({{ item.count }})</a>
   {% endfor %}
 </nav>
 <form method="get" action="/journal" class="row-actions" style="margin: 0.8rem 0;">
@@ -32,7 +32,7 @@
   {% for row in entries %}
     <tr>
       <td class="muted">{{ row.at }}</td>
-      <td><a href="/journal?module={{ row.module }}">{{ row.module }}</a></td>
+      <td><a href="/journal?module={{ row.module|urlencode }}">{{ row.module }}</a></td>
       <td>{{ row.action }}</td>
       <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>
       <td>

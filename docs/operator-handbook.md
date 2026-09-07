@@ -7,7 +7,7 @@ CLI reference (everyday + advanced): [`cli.md`](cli.md).
 Verification report: [`verify.md`](verify.md).  
 Local LLM (ForgeAI): [`llm.md`](llm.md).
 
-Version notes (`v0.1.md` … `v0.7.md`) explain *what shipped*. This document explains *how you run the product*.
+Version notes (`v0.1.md` … `v0.7.md`) explain *what shipped*. This document explains *how you run the product*. Commands live in [`cli.md`](cli.md). Learning order: [`docs/README.md`](README.md).
 
 Code: https://github.com/nsimic2022/forgesre (`main`). UI: `http://<VM-IP>:8080`.
 
@@ -15,6 +15,7 @@ ForgeSRE does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on t
 
 ---
 
+0. [How to learn the platform](#0-how-to-learn-the-platform)
 1. [How the system fits together](#1-how-the-system-fits-together)
 2. [Where work happens](#2-where-work-happens)
 3. [Roles and who can click what](#3-roles-and-who-can-click-what)
@@ -32,6 +33,23 @@ ForgeSRE does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on t
 15. [Worked example: new alert + playrule + playbook](#15-worked-example-new-alert--playrule--playbook)
 16. [Operator CLI and API](#16-operator-cli-and-api)
 17. [What this version does not do yet](#17-what-this-version-does-not-do-yet)
+
+---
+
+## 0. How to learn the platform
+
+Follow this order on a live box. This handbook is **why and when**. Typed commands: [`cli.md`](cli.md).
+
+1. **Install or update.** New VM: [`install-config.md`](install-config.md) then `./install.sh`. Live box: `git pull origin main && ./forgesre update`. Never `./install.sh` again (it regenerates passwords).
+2. **Login.** `http://<VM-IP>:8080` with `installation-report.md` / `secrets/secrets.env` (§5).
+3. **System Health** (`/health-ui`) = `./forgesre doctor`. Open Grafana only here. Alarm path is Prometheus → Alertmanager → Core. NetBox UI up with API 403 is yellow **warn**, not paused. SNMP with no Network device + IP is **paused (no SNMP targets)** (yellow — leave it).
+4. **Assets** (`/assets`). Local inventory is the monitoring source of truth. Add / Edit / Verify.
+5. **Discovery vs NetBox** (`/discovery`). **Scan now** = TCP 22/80/443/9100/9182 + SNMP **UDP/161** + `/metrics` (not nmap). **Sync NetBox** = read-only from bundled `:8001`. Empty NetBox is **yellow No devices** — that is OK. Approve or Ignore; nothing is auto-added.
+6. **Incidents** (`/incidents`) then **History** (`/history`). IDs look like `INC-0134_16.08.2026_09:13`.
+7. **ForgeRCA vs ForgeAI.** Open ForgeRCA on the incident. ForgeRCA (Python) always first. ForgeAI only rewrites prose (optional, default 90s timeout, one worker thread).
+8. **verify ≠ doctor ≠ test.** `./forgesre verify` = live inventory path. `./forgesre doctor` = Health lights. `./forgesre test` = appliance report → `data/reports/`.
+9. **Backup.** Administration or `./forgesre backup`. Restore is not silent (`--yes`).
+10. **CLI cheat sheet.** [`cli.md`](cli.md). On the box: `./forgesre help`.
 
 ---
 
@@ -80,7 +98,7 @@ Three places. Do not mix them.
 | **`config/forgesre.yml`** | Discovery CIDRs, NetBox URL, AI/LLM, SMTP on/off, Loki/Grafana | File on the VM |
 | **Repo / generated files** | Prometheus *alert expressions*, scrape jobs, Alertmanager webhook | `monitoring/alerts.yml`, `.env`, `secrets/secrets.env` |
 
-YAML under `config/examples/` is the **future spec** (Playrule/Playbook/Escalation as files). V0.4 does **not** import those files. Live playrules and playbooks are created in the UI (or API) and stored in Postgres.
+YAML under `config/examples/` is the **future spec** (Playrule/Playbook/Escalation as files). V0.7 does **not** import those files. Live playrules and playbooks are created in the UI (or API) and stored in Postgres.
 
 After editing `config/forgesre.yml`, recreate Core:
 
@@ -129,7 +147,6 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 | Incidents | `/incidents` | **Open/firing** list (filter: open-only / last days). INC id is green (resolved/closed), yellow (in progress), red (critical). Archive is **History**. |
 | History | `/history` | Archive: last 90 days in Postgres. Filters: status, asset, `INC` number. Closed rows stay here. |
 | Incident | `/incidents/INC-…` | **Acknowledge / Resolve / Close**, Who to call, **Open ForgeRCA** (primary CTA → `/ai/INC-…`), **Send incident report**. Mail outbox is `/ops#mail`. ForgeRCA/ForgeAI pills stay. |
-| Escalation | `/escalation` | Seeded **Default warning**, create policy. Outbox links to `/ops#mail`. |
 | AI Investigation | `/ai/INC-…` | ForgeRCA (green) then ForgeAI (green/yellow/red). Facts, anomalies, hypotheses. Empty host logs: honest limitation (Alloy ships appliance/Core logs only). |
 | Playrules | `/playrules` | Map `alertname` → playbook. Do **not** create Prom rules. `alerts.yml` is PromQL; asset Alarms are overlay. |
 | Playbooks | `/playbooks` | List steps, create (**analyst**) |
@@ -306,7 +323,7 @@ discovery:
 ```
 
 2. Recreate Core (settings load at process start).
-3. Open **Discovery**. **Scan now** is the TCP/SNMP/`/metrics` probe — **not nmap**, and **not** NetBox. **Sync NetBox** is a separate admin CTA (read-only). Wait: first scan ~30s after Core start, then every **6 hours** (unless `mode: manual`). The page shows a **Last scan** row of step pills (CIDR, TCP 22, TCP 80/443, :9100, :9182, SNMP UDP/161, HTTP /metrics). Green = at least one host passed that step, yellow = skipped/none, red = scanner error. ICMP ping is on Assets, not Scan now.
+3. Open **Discovery**. **Scan now** is the TCP/SNMP/`/metrics` probe — **not nmap**, and **not** NetBox. **Sync NetBox** is a separate admin CTA (read-only). Wait: first scan ~30s after Core start, then every **6 hours** (unless `mode: manual`). Scan results land in the candidate table (10 per page) and in Journal module `discovery`. ICMP ping is on Assets, not Scan now.
 4. Banner **NEW DEVICE DETECTED**. Found hosts stay on **Waiting for Approve** until you decide. They are **not** auto-added to inventory.
 5. **Approve** (on the Discovery page) → creates an asset (`source=discovery`, id like `disc-10-20-30-41`) and sends you to the asset page. **Ignore** rejects the host (out of inventory).
 
@@ -606,24 +623,9 @@ SMTP_PASSWORD=...
 
 Work / school Microsoft 365: same host `smtp.office365.com`, your work address. Consumer Outlook.com / Hotmail: same host (or `smtp-mail.outlook.com` if that is what Microsoft shows for the account). MFA accounts need an app password.
 
-### Own domain + Roundcube (not enabled)
+### Own domain (not enabled)
 
-Compose services `mailserver` and `roundcube` sit in `docker-compose.yml` under profile **`mailbox`**. Install does **not** start them. Core, incidents, and Gmail/Outlook SMTP stay as they are.
-
-When you have bought a domain and want the on-box server:
-
-```bash
-# optional: MAIL_DOMAIN=ops.example.com in .env first (default forgesre.local)
-./forgesre mailbox
-```
-
-That starts Postfix + Dovecot + Roundcube (`:8081`) and writes `MAILBOX_*` in secrets. It does **not** change `config/forgesre.yml` or `SMTP_PASSWORD`. Gmail/Outlook keep sending.
-
-`--bind-core` is the later switch if you want Core to submit to `127.0.0.1:587` instead of Gmail/Outlook.
-
-Internet receive still needs MX at this host and **TCP/25**. Many ISPs/clouds block port 25.
-
-There is no lab SMTP catcher container. Leave YAML email **disabled** for an on-box outbox (`generated`), or send through Gmail / Outlook / host Postfix.
+Compose profile **`mailbox`** (Postfix + Dovecot + Roundcube `:8081`) is off at install. `./forgesre mailbox` starts it later and does **not** rewrite Core SMTP unless you pass `--bind-core`. Receive still needs MX and **TCP/25** (often blocked). There is no lab SMTP catcher container. Leave YAML email **disabled** for an on-box outbox (`generated`), or send through Gmail / Outlook.
 
 ---
 
@@ -758,129 +760,23 @@ If the incident has no asset, the alert `asset` / `instance` label did not match
 
 ## 16. Operator CLI and API
 
-On the VM, from the clone directory, `./forgesre` is the operator CLI. `./forgesre help` lists commands. `./forgesre help <command>` prints explanation and examples.
+**Commands:** [`cli.md`](cli.md). `./forgesre help` / `./forgesre help <command>` on the VM. This section is **when to use which**.
 
-`./forgesre` with no extra words opens a prompt (`forgesre>`). After that you type the **full** command (`journal`, `incidents`, `history`, `doctor`, `help snmp`) without repeating `./forgesre`. Leave with `quit`, `exit`, or Ctrl-D — `./forgesre help quit`. `./f` is the same binary with a shorter filename (`./f journal`). Command names are not one-letter aliases.
+| When | Command |
+|---|---|
+| Live box after `git pull` | `./forgesre update` — never `./install.sh` |
+| Stack lights (same as `/health-ui`) | `./forgesre doctor` |
+| Appliance report → `data/reports/` | `./forgesre test` |
+| Live inventory path (exporter → Prom → AM → Core) | `./forgesre verify` / `./forgesre ping` |
+| SNMP targets JSON | `./forgesre snmp` |
+| RCA / LLM queue | `./forgesre jobs` (one worker thread, no Celery) |
+| Safety copy | `./forgesre backup` |
 
-### SSH from your laptop
+`./forgesre` with no extra words opens `forgesre>`. Type `journal`, `incidents`, `doctor` — not `./forgesre` again. Leave with `quit`. Host CLI must not import sqlalchemy (do not `pip install sqlalchemy` on the VM).
 
-ForgeSRE does **not** speak SSH of its own. You SSH into the Ubuntu VM, then use the CLI on localhost.
+ForgeSRE does **not** speak SSH of its own. SSH to Ubuntu, then run the CLI on localhost. Two logins: Linux account vs ForgeSRE user (`./forgesre login` → `data/cli.session`). Without that cookie, the CLI uses the install admin from `secrets.env` if readable.
 
-```bash
-ssh you@forgesre-vm
-cd /path/to/forgesre
-./forgesre login                 # ForgeSRE user, e.g. engineer@dc.local
-./forgesre whoami
-./forgesre                       # prompt
-incidents                        # red / yellow / green board
-incidents INC-000012             # mail, audit, notes for that INC
-history --days 90
-quit
-```
-
-Two different logins:
-
-1. **Linux SSH** — OS account on the VM (`ssh engineer@vm`). Your sysadmin creates this.
-2. **ForgeSRE role** — UI user created under Administration (`engineer` / `analyst` / `viewer`). `./forgesre login` stores `data/cli.session`. Without that cookie, the CLI uses the install admin from `secrets.env` if the file is readable.
-
-Colors (TTY only; `FORGESRE_COLOR=1` to force, `=0` to disable): **red** critical/open, **yellow** in progress / warning, **green** resolved/closed.
-
-```bash
-./forgesre                  # interactive prompt
-./forgesre login
-./forgesre incidents
-./forgesre incidents INC-000012
-./f journal
-./forgesre help                 # overview
-./forgesre help quit            # leave the forgesre> prompt
-./forgesre help snmp            # one command
-./forgesre help ping            # ICMP vs /metrics
-./forgesre help verify          # live path vs ./forgesre test
-./forgesre help tls             # optional HTTPS
-./forgesre doctor               # short HEALTHY / DEGRADED
-./forgesre ping                 # ICMP + exporter /metrics (alias: probe)
-./forgesre ping win-01
-./forgesre verify               # inventory → ICMP/exporter/SNMP → Prometheus
-./forgesre verify win-01
-./forgesre test                 # detailed report → data/reports/
-./forgesre status               # compose ps
-./forgesre logs core
-./forgesre logs snmp-exporter
-./forgesre config               # print YAML
-./forgesre assets               # inventory table (alias: inventory)
-./forgesre snmp                 # exporter HTTP check + SNMP SD JSON
-./forgesre sd                   # Linux + Windows HTTP SD, then SNMP HTTP SD
-./forgesre incidents            # colored board; INC-… opens one row
-./forgesre login                # ForgeSRE UI user (engineer/analyst)
-./forgesre whoami
-./forgesre logout
-./forgesre history              # 90-day lookback (filters; INC-… for mail/audit/notes)
-./forgesre jobs                 # background RCA queue
-./forgesre render-monitoring    # rewrite generated prometheus/alertmanager/snmp/alerts.yml
-./forgesre journal              # last process reports
-./forgesre journal snmp
-./forgesre journal inventory
-./forgesre demo                 # HighCPU + owner notification + similar history
-./forgesre demo-rca             # filesystem RCA demo gauge
-./forgesre demo-reset           # lower demo gauges
-./forgesre secrets-check
-./forgesre fetch-llm            # GGUF download (~9 GB, not in git)
-./forgesre backup
-./forgesre backup --no-secrets
-./forgesre backup --include-models
-./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ
-./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes
-./forgesre update               # backup + render-monitoring + compose up + doctor
-./forgesre mailbox              # optional Roundcube later; does not rewrite Core SMTP
-./forgesre version
-```
-
-Examples (existing VM after `git pull origin main` — **do not** run `./install.sh`):
-
-```bash
-./forgesre update
-./forgesre secrets-check
-./forgesre snmp
-```
-
-Add a switch, then confirm it is an SNMP target:
-
-```bash
-./forgesre assets
-./forgesre snmp
-# expect 10.x.x.x in the JSON list, not in /api/v1/sd/prometheus
-```
-
-Useful APIs (cookie from `/login`, except webhooks/SD which use the bearer token):
-
-| Method | Path | Who |
-|---|---|---|
-| POST | `/api/v1/users` | admin (create) |
-| POST | `/api/v1/users/{id}` | admin (edit; omit password to keep it) |
-| POST | `/api/v1/users/{id}/delete` | admin (cannot delete self or super_admin) |
-| POST | `/api/v1/assets` | analyst+ |
-| POST | `/api/v1/assets/{id}` | analyst+ (edit hostname/type/IP/scrape/contacts) |
-| POST | `/api/v1/assets/{id}/clone` | analyst+ |
-| POST | `/api/v1/assets/{id}/delete` | analyst+ (incidents stay, FK cleared; `forge-demo-*` allowed) |
-| GET | `/api/v1/detect-exporter` | analyst+ (`?ip=` — :9182 then :9100 /metrics) |
-| GET | `/api/v1/assets` | viewer+ |
-| GET | `/api/v1/assets/{id}/metrics` | viewer+ (class tiles from Prometheus) |
-| POST | `/api/v1/discovery/scan` | analyst+ |
-| POST | `/api/v1/discovery/candidates/{id}/approve` | analyst+ |
-| POST | `/api/v1/playrules` | analyst+ |
-| POST | `/api/v1/playbooks` | analyst+ |
-| GET | `/api/v1/history` | viewer+ (`read_incidents`; `days`, `status`, `asset`, `number`) |
-| GET | `/api/v1/incidents/{number}` | viewer+ (includes notifications, audit, notes) |
-| POST | `/api/v1/incidents/{number}/notes` | analyst+ |
-| POST | `/api/v1/incidents/{number}/status` | analyst+ |
-| POST | `/api/v1/incidents/{number}/investigate` | analyst+ |
-| GET | `/api/v1/journal` | analyst+ (`read_play`; module, status, q) |
-| POST | `/api/v1/journal` | admin (install writes one row here) |
-| GET | `/api/v1/jobs` | analyst+ (`read_play`) |
-| GET | `/api/v1/system/doctor` | login **or** Bearer webhook token |
-| GET | `/api/v1/sd/prometheus` | Bearer webhook token (Linux node_exporter :9100 and Windows windows_exporter :9182) |
-| GET | `/api/v1/sd/snmp` | Bearer webhook token (network devices) |
-| POST | `/api/v1/webhooks/alertmanager` | Bearer webhook token |
+API paths (session cookie after `/login`, except webhooks/SD which use the bearer token): [`cli.md`](cli.md) § API.
 
 Install/config files: [`install-config.md`](install-config.md). Do not commit `.env`, `secrets/secrets.env`, or `data/`.
 

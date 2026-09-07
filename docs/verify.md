@@ -47,12 +47,13 @@ The script **does not send email**, **does not run `./install.sh`**, and **does 
 11. Last 80 Core log lines for `error` / `exception` / `traceback`
 12. When profile `ai` is on: GGUF size, `ai.llm` YAML, llama.cpp health inspect, last LLM log errors
 
-## doctor vs test vs pytest
+## doctor vs test vs verify vs pytest
 
 | Command | When |
 |---|---|
-| `./forgesre doctor` | Every morning / after `update`. Fast. |
+| `./forgesre doctor` | Every morning / after `update`. Fast. Same as **System Health**. |
 | `./forgesre test` | After install, after `git pull`, before you trust mail/RCA. Writes a file. |
+| `./forgesre verify` | Live inventory communication (Assets → Verify). Not doctor, not test. |
 | `pytest tests` | Developer laptop. `pip install -r requirements-dev.txt` then `PYTHONPATH=backend:agents pytest tests`. Core image does not install pytest. See [`CONTRIBUTING.md`](../CONTRIBUTING.md). |
 
 ## After an update

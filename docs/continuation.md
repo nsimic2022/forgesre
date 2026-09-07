@@ -17,9 +17,9 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 7 September 2026.** Operator N (Serbian) created a **NetBox v2 API token** in the UI because **v1 is deprecated**. The stack still upserted **v1 plaintext** on every NetBox start and Core sent `Authorization: Token` for 40-char secrets. That fought N: a UI v2 secret in `NETBOX_API_TOKEN` was treated as a bad v1 length, and launch could not leave the hashed v2 row alone.
+**Monday 7 September 2026.** Operator N asked for a **full V0.7 pass**: all code/pages, fix what should be fixed, test everything, and make operator docs one professional learning path. Report in Serbian. OSS docs stay English.
 
-Earlier the same day: v1 upsert failed on live v4.6 because launch read **`user.is_staff`** (removed in NetBox 4.5). That is already on `main` (`b76aeeb`). Do not redo it. Never touch `is_staff`.
+NetBox **v2** tokens (`nbt_…` Bearer) already landed on `main` (`03b442d`, 410 passed). Do not fight that work. Never touch `is_staff`. Discovery **No devices** yellow and Health NetBox **running** on N’s VM must stay honest.
 
 Code and docs stay English. Replies to N are Serbian.
 
@@ -36,7 +36,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-v2-token-05f8` (`ace153b`): **410 passed** (twice). Was 399 after the v1 upsert `is_staff` fix.
+Pytest count after the double run on `cursor/operator-pass-05f8`: fill in after SHA. Was **410** after NetBox v2 tokens on `main`.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`. `create_pr` often **403** — merge `--no-ff` plus `git push origin main` still lands the change.
 
@@ -44,42 +44,43 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-### First-class NetBox v2 tokens
+### Operator learning path (docs)
 
-NetBox 4.6 REST: v2 = `Authorization: Bearer nbt_<12-char key>.<secret>` (full string shown **once** at create). v1 = `Authorization: Token <40char>`. `key` in the DB is the 12-character public id, not the secret.
+- [`docs/README.md`](README.md) is the **ordered start page**: install/update → login → Health → Assets → Discovery vs NetBox → Incidents → ForgeRCA vs ForgeAI → verify ≠ doctor ≠ test → backup → CLI.
+- [`operator-handbook.md`](operator-handbook.md) is the SoT for **why/when**. [`cli.md`](cli.md) is **commands**. Cut the duplicated CLI dump and the fake Discovery “Last scan step pills” (that UI does not exist). Empty NetBox = yellow is documented as OK.
+- GitHub `README.md` no longer says Dashboard “doctor lights” or Incidents “recent 200” (lists are **10 per page**).
 
-- `backend/app/netbox.py` `_authorization`: `nbt_…` → `Bearer`; 40-char → `Token`. Case-insensitive prefix. Do not send a v2 secret as `Token`.
-- `scripts/netbox-upsert-token.py`: if `NETBOX_API_TOKEN` looks like v2, **skip** v1 create (`skipping v1 upsert`). 40-char v1 still upserts as fallback (`v1 token ready`). A 12-character key-only value is rejected (not upserted as v1). Never touches `is_staff`.
-- Discovery/doctor: HTTP **200** with v2 is **yellow** (0 devices) / **green** (≥1). Do not tell them to recreate a v1 token when v2 in secrets already works. 403 with a v2 secret says paste the full `nbt_…` value and recreate **core**, not recreate netbox+core for v1. **`could not upsert`** is still honest for a failed **v1** secret.
+### GUI / cheap code
+
+- Discovery copy listed TCP **161**. Scan skips TCP/161 (SNMP is **UDP/161**). Copy matches `agents/discovery.py`.
+- Journal filter links URL-encode `module` / `status` / `q`.
+- Incidents / History / Dashboard pager: one `list_history(..., page=)` query instead of count-then-offset on page 2+.
+
+NetBox v2 (`skipping v1 upsert`, `nbt_…`, Bearer) is already on `main`. This branch does not reopen 403 “token missing”.
 
 ---
 
 ## 4. What N should do on the VM
 
-Do **not** run `./install.sh`. Put the **full v2 token** (shown once at create, not the 12-character key) in `NETBOX_API_TOKEN`. Recreate **core**. NetBox upsert must **not** replace v2. Never print the token.
+Do **not** run `./install.sh`. Hard-refresh the UI after update (CSS cache).
 
 ```bash
 git pull origin main && ./forgesre update
-# after editing secrets/secrets.env:
-docker compose up -d --no-deps --force-recreate core
+```
+
+NetBox: keep the **full v2 token** (shown once at create, not the 12-character key) in `NETBOX_API_TOKEN`. Recreate **core** only if secrets changed. Never print the token.
+
+```bash
 docker compose logs netbox | grep forgesre
 ```
 
 Expect **`skipping v1 upsert`** (v2 already in secrets) or **`v1 token ready`** (legacy 40-char). Not **`could not upsert`** for a valid v2 secret.
 
-```bash
-set -a && source secrets/secrets.env && set +a
-# v2:
-code=$(curl -sS -o /dev/null -w '%{http_code}' \
-  -H "Authorization: Bearer ${NETBOX_API_TOKEN}" \
-  http://127.0.0.1:8001/api/dcim/devices/?limit=1)
-echo "$code"
-# python3 -c 'import os,urllib.request; t=os.environ["NETBOX_API_TOKEN"]; r=urllib.request.Request("http://127.0.0.1:8001/api/dcim/devices/?limit=1", headers={"Authorization": ("Bearer " if t.startswith("nbt_") else "Token ")+t,"Accept":"application/json"}); print(urllib.request.urlopen(r).status)'
-```
-
-**200** = Core can sync (Discovery yellow if empty, green if ≥1 device). **403** with a v2 secret = not the full `nbt_…` string, or core not recreated. Recreate **core**. Never print the token.
+**200** on `GET /api/dcim/devices/?limit=1` = Core can sync (Discovery yellow if empty, green if ≥1 device). **403** with a v2 secret = not the full `nbt_…` string, or core not recreated. Recreate **core**. Never print the token.
 
 Lab without image pull: `./forgesre update --offline`.
+
+Learn the box in the order in [`docs/README.md`](README.md).
 
 ---
 
@@ -124,8 +125,8 @@ Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre t
 ## 6. How to continue next session
 
 1. `git pull origin main`.
-2. Read **this file**, then [`docs/llm.md`](llm.md) and [`docs/cli.md`](cli.md).
-3. On the VM: put the full v2 token in `NETBOX_API_TOKEN`, `git pull origin main && ./forgesre update`, recreate **core**. `docker compose logs netbox | grep forgesre` should say **skipping v1 upsert** (v2) or **v1 token ready** (fallback), not could not upsert for a valid v2 secret. Never `./install.sh`. Never print tokens.
+2. Read **this file**, then the [docs index](README.md), [`docs/llm.md`](llm.md) and [`docs/cli.md`](cli.md).
+3. On the VM: `git pull origin main && ./forgesre update`. Keep the full v2 token in `NETBOX_API_TOKEN`. `docker compose logs netbox | grep forgesre` should say **skipping v1 upsert** (v2) or **v1 token ready** (fallback), not could not upsert for a valid v2 secret. Never `./install.sh`. Never print tokens.
 4. `pip install -r requirements-dev.txt` if needed, then `PYTHONPATH=backend:agents python3 -m pytest tests` **twice**, then merge to `main`. Branch pattern `cursor/<name>-05f8`.
 5. Replies to N are in **Serbian**. OSS docs and code stay in **English**.
 6. `ManagePullRequest` `create_pr` often 403. `git merge --no-ff` plus `git push origin main` still lands the change.

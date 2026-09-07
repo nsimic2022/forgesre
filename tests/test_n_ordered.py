@@ -109,6 +109,24 @@ def test_discovery_demo_ip_is_labeled_and_netbox_is_separate():
     assert "not nmap" in page.text.lower()
     assert page.text.find("Scan now") < page.text.find("NetBox sync")
     assert "read-only" in page.text.lower()
+    assert "UDP/161" in page.text
+    assert "TCP/161 is skipped" in page.text
+    assert "ports 22, 80, 443, 161" not in page.text
+
+
+def test_discovery_template_does_not_list_tcp_161_as_a_probe_port():
+    html = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
+    assert "UDP/161" in html
+    assert "TCP/161 is skipped" in html
+    assert "ports 22, 80, 443, 161" not in html
+
+
+def test_readme_does_not_claim_dashboard_doctor_or_incidents_200():
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "doctor lights" not in text
+    assert "recent 200" not in text
+    assert "10 per page" in text
+    assert "System Health" in text
 
 
 def test_architecture_doc_is_proposal_not_runtime():

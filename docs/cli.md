@@ -1,5 +1,7 @@
 # ForgeSRE operator CLI
 
+This page is the **command list**. Why and when: [operator handbook](operator-handbook.md). Learning order: [docs index](README.md).
+
 All commands run **on the VM**, from the clone directory (`~/forgesre`). ForgeSRE does not speak SSH of its own — you SSH to Ubuntu, then use this CLI on localhost.
 
 ```bash

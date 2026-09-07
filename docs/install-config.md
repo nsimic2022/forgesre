@@ -12,7 +12,7 @@ Repository: https://github.com/nsimic2022/forgesre (`main`).
 | [4. Host preparation](#4-host-preparation) | apt, Docker, clone |
 | [5. First install](#5-first-install) | `./install.sh` (new VM only) |
 | [6. Open the UI](#6-open-the-ui) | URLs and firewall |
-| [7. Verify the appliance](#7-verify-the-appliance) | `./forgesre test` and `./forgesre doctor` |
+| [7. Verify the appliance](#7-verify-the-appliance) | `./forgesre doctor` vs `test` vs `verify` |
 | [8. Configuration files](#8-configuration-files) | `.env`, YAML, secrets |
 | [9. `config/forgesre.yml`](#9-configforgesreyml) | Features |
 | [10. `.env`](#10-env) | Deployment |
@@ -194,17 +194,19 @@ Then in the UI: Dashboard **Run demo** (top right) → pick Linux HighCPU → in
 
 ## 7. Verify the appliance
 
-Two commands. They do not replace each other.
+Three commands. They do not replace each other.
 
 | Command | What it is |
 |---|---|
 | `./forgesre doctor` | Short lights (same as System Health). HEALTHY or DEGRADED |
-| `./forgesre test` | Long report: host, files, Compose, HTTP, login, APIs, email config, Core logs |
+| `./forgesre test` | Long appliance report: host, files, Compose, HTTP, login, APIs |
+| `./forgesre verify` | Live **inventory** path (ICMP / exporter / SNMP → Prometheus). Not doctor, not test. |
 
 ```bash
 ./forgesre test
 ./test.sh                 # same
 ./forgesre doctor
+./forgesre verify
 ```
 
 The test writes Markdown + JSON under `data/reports/forgesre-test-<timestamp>.*` and prints the table. Exit code `1` only when a check **FAIL**s. **SKIP** means the feature is off (LLM, mailbox, SMTP). **WARN** is degraded but usable.
@@ -412,58 +414,9 @@ Full list and debug recipes: [`cli.md`](cli.md).
 
 ## 13. Advanced CLI
 
-Use these on an **already installed** VM. Do not run `./install.sh` again.
+Recipes (logs, rebuild Core, LLM profile, git pull): [`cli.md`](cli.md) § Advanced CLI. LLM debug: [`llm.md`](llm.md) §8.
 
-**Compose status and Core logs** (what you actually use when RCA or LLM looks stuck):
-
-```bash
-docker compose ps
-docker compose ps core
-docker compose logs --tail=100 core
-docker compose logs --tail=100 core | grep -iE "llm|rca|error|exception"
-docker compose logs --tail=50 core | grep "/ai"
-docker compose logs -f core
-docker compose logs --tail=200 llm
-docker compose logs -f llm
-docker compose ps -q llm | xargs -r docker inspect --format='{{json .State.Health}}'
-curl -sS http://127.0.0.1:8088/v1/models
-```
-
-LLM debug (health, `:8088`, Core grep): [`llm.md`](llm.md) §8.
-
-Same via the CLI:
-
-```bash
-./forgesre status
-./forgesre logs core
-./forgesre logs snmp-exporter
-./forgesre logs llm
-```
-
-**Rebuild Core after a git pull that changed Python** (without reinstalling):
-
-```bash
-docker compose build core
-docker compose up -d core
-docker compose ps core
-```
-
-**Inspect the Core container** (working directory, imports):
-
-```bash
-docker compose exec -T core pwd
-docker compose exec -T core ls
-docker compose exec -T core python -c "import sys; print('\n'.join(sys.path))"
-```
-
-**Read live YAML on disk:**
-
-```bash
-./forgesre config
-# or:  less config/forgesre.yml
-```
-
-Do not commit `config/forgesre.yml`, `.env`, or `secrets/`. Commit only `config/forgesre.example.yml` if you are changing the template.
+Do not run `./install.sh` again on a live box. `config/forgesre.yml` is gitignored — edit it on the VM, then recreate Core.
 
 ---
 
@@ -524,7 +477,7 @@ Need 16 GB RAM for the default 14B GGUF, or ~8 GB if you wget Qwen3-4B into `dat
 | Redis `:6379` already in use | Bundled NetBox binds Redis on `127.0.0.1:6379` (host network). Stop the other Redis, or do not run a second one on the VM |
 | NetBox `manifest unknown` / image not found | Docker Hub has no `netboxcommunity/netbox:v4.4-3.2.0`. Current pin is `v4.6.9-5.0.2` (Granian, same Redis/Postgres env). `git pull origin main && ./forgesre update`. First NetBox pull is large and slow. |
 | NetBox first boot yellow | Django migrations can take several minutes. Doctor stays **yellow** until `http://127.0.0.1:8001/login/` answers — wait, do not fake green. `docker compose logs --tail=80 netbox` |
-| Mailbox 25 / 993 vs host network | Optional `./forgesre mailbox` uses host networking: inbound SMTP **TCP/25**, IMAP **TCP/993**, Roundcube `:8081`. Free those ports on the VM; many ISPs/clouds block port 25 |
+| Mailbox 25 / 993 | Optional `./forgesre mailbox` uses a **bridge** network and publishes inbound SMTP **TCP/25**, IMAP **TCP/993**, Roundcube `:8081`. Free those ports on the VM; many ISPs/clouds block port 25 |
 
 ```bash
 docker compose logs --tail 80 core
