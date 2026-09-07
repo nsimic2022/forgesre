@@ -699,9 +699,13 @@ def sync_netbox(db: Session) -> dict:
     try:
         devices = list_devices(settings.netbox_url, settings.netbox_token)
     except Exception as exc:
-        log.warning("netbox sync failed: %s", exc)
-        report(db, "netbox", "sync", "error", summary="NetBox sync failed", detail=str(exc))
-        return {"synced": 0, "error": str(exc)}
+        from app.netbox import format_client_error
+
+        detail = format_client_error(exc)
+        summary = "NetBox sync failed: HTTP 403" if "403" in detail else "NetBox sync failed"
+        log.warning("netbox sync failed: %s", detail)
+        report(db, "netbox", "sync", "error", summary=summary, detail=detail)
+        return {"synced": 0, "error": detail}
     count = 0
     for device in devices:
         slug = device["name"]

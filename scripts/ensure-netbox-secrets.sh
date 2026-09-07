@@ -47,7 +47,15 @@ ensure_nonempty "$ROOT/.env" NETBOX_URL "http://127.0.0.1:8001"
 ensure_nonempty "$ROOT/.env" NETBOX_DB_PASSWORD "$(awk -F= '/^NETBOX_DB_PASSWORD=/ {print $2}' "$ROOT/secrets/secrets.env" | tail -1)"
 ensure_nonempty "$ROOT/.env" NETBOX_REDIS_PASSWORD "$(awk -F= '/^NETBOX_REDIS_PASSWORD=/ {print $2}' "$ROOT/secrets/secrets.env" | tail -1)"
 ensure_nonempty "$ROOT/.env" NETBOX_SECRET_KEY "$(awk -F= '/^NETBOX_SECRET_KEY=/ {print $2}' "$ROOT/secrets/secrets.env" | tail -1)"
-ensure_nonempty "$ROOT/.env" NETBOX_API_TOKEN "$(awk -F= '/^NETBOX_API_TOKEN=/ {print $2}' "$ROOT/secrets/secrets.env" | tail -1)"
+# Compose interpolates ${NETBOX_API_TOKEN} from .env; Core also reads secrets.env.
+# Keep .env aligned with secrets so the bundled token is the same string NetBox upserts.
+nb_token_value="$(awk -F= '/^NETBOX_API_TOKEN=/ {print substr($0, index($0,"=")+1)}' "$ROOT/secrets/secrets.env" | tail -1)"
+if [[ -n "${nb_token_value}" ]]; then
+  ensure_nonempty "$ROOT/.env" NETBOX_API_TOKEN "$nb_token_value"
+  if grep -qE "^NETBOX_API_TOKEN=" "$ROOT/.env"; then
+    sed -i "s|^NETBOX_API_TOKEN=.*|NETBOX_API_TOKEN=${nb_token_value}|" "$ROOT/.env"
+  fi
+fi
 ensure_nonempty "$ROOT/.env" NETBOX_SUPERUSER_NAME "admin"
 ensure_nonempty "$ROOT/.env" NETBOX_SUPERUSER_EMAIL "admin@forgesre.local"
 ensure_nonempty "$ROOT/.env" NETBOX_SUPERUSER_PASSWORD "$(awk -F= '/^NETBOX_SUPERUSER_PASSWORD=/ {print $2}' "$ROOT/secrets/secrets.env" | tail -1)"
