@@ -448,7 +448,41 @@ a.inc-ok { color: var(--ok); font-weight: 700; }
 a.inc-warn { color: var(--warn); font-weight: 700; }
 a.inc-crit { color: var(--crit); font-weight: 700; }
 .tool-row { display: flex; gap: 0.45rem; align-items: center; flex-wrap: wrap; margin: 0.35rem 0 0.8rem; }
-.tool-row .pill { font-weight: 600; letter-spacing: 0.02em; }
+.netbox-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.16rem 0.6rem 0.16rem 0.42rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--code-bg);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: default;
+}
+.netbox-status-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: #8a93a6;
+  flex: 0 0 auto;
+}
+.netbox-status.grey { color: var(--muted); }
+.netbox-status.grey .netbox-status-dot { background: #8a93a6; }
+.netbox-status.yellow {
+  background: var(--pill-warn-bg);
+  color: var(--pill-warn);
+  border-color: var(--warn);
+}
+.netbox-status.yellow .netbox-status-dot { background: var(--warn); }
+.netbox-status.green {
+  background: var(--pill-ok-bg);
+  color: var(--pill-ok);
+  border-color: var(--ok);
+}
+.netbox-status.green .netbox-status-dot { background: var(--ok); }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1.05rem 1.2rem; margin-bottom: 1.1rem; }
 .split { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1.5rem; }
 .flow { list-style: none; padding: 0; }

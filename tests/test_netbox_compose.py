@@ -11,7 +11,14 @@ from app.api import doctor_payload
 from app.db import Base, SessionLocal, engine
 from app.main import app
 from app.models import User
-from app.netbox import EMPTY_DEVICES_WHY, FIRST_BOOT_WHY, is_local_netbox_url, netbox_status, sync_cta
+from app.netbox import (
+    EMPTY_DEVICES_WHY,
+    FIRST_BOOT_WHY,
+    is_local_netbox_url,
+    netbox_status,
+    status_label,
+    sync_cta,
+)
 from app.security import hash_password
 from app.seed import seed
 from app.stack import doctor_soft_status, enrich_components, rewrite_host
@@ -190,6 +197,7 @@ def test_sync_cta_ready_when_api_ok(monkeypatch):
     assert result["ready"] is True
     assert result.get("clickable") is True
     assert result.get("light") == "yellow"
+    assert result["label"] == "No devices"
     assert result["why"] == EMPTY_DEVICES_WHY
     assert result["starting"] is False
 
@@ -203,6 +211,7 @@ def test_sync_cta_green_when_devices(monkeypatch):
     assert result["ready"] is True
     assert result["clickable"] is True
     assert result["light"] == "green"
+    assert result["label"] == "Connected"
     assert result["why"] == ""
 
 
@@ -221,6 +230,7 @@ def test_sync_cta_grey_403_stays_clickable_retry(monkeypatch):
     assert result["ready"] is True
     assert result["clickable"] is True
     assert result["light"] == "grey"
+    assert result["label"] == "API 403"
     assert "403" in result["why"]
     assert "No devices yet" not in result["why"]
 
@@ -233,6 +243,7 @@ def test_sync_cta_first_boot_keeps_disabled(monkeypatch):
     result = sync_cta("http://127.0.0.1:8001", "token", True)
     assert result["ready"] is False
     assert result["starting"] is True
+    assert result["label"] == "Not connected"
     assert result["why"] == FIRST_BOOT_WHY
     assert result["why"].count(".") == 1
 
@@ -244,6 +255,7 @@ def test_sync_cta_off_when_disabled(monkeypatch):
     monkeypatch.setattr("app.netbox.netbox_status", boom)
     result = sync_cta("http://127.0.0.1:8001", "token", False)
     assert result["ready"] is False
+    assert result["label"] == "Not connected"
     assert "off in config" in result["why"].lower()
 
 
@@ -263,7 +275,23 @@ def test_sync_cta_ready_when_ui_up_despite_devices_403(monkeypatch):
     result = sync_cta("http://127.0.0.1:8001", "token", True)
     assert result["ready"] is True
     assert result["starting"] is False
+    assert result["label"] == "API 403"
     assert "403" in result["why"]
+
+
+def test_status_label_never_uses_color_names():
+    assert status_label("green") == "Connected"
+    assert status_label("yellow") == "No devices"
+    assert status_label("grey", "NetBox UI up; API HTTP 403") == "API 403"
+    assert status_label("grey", FIRST_BOOT_WHY) == "Not connected"
+    assert status_label("grey", "Sync is off in config.") == "Not connected"
+    for name in ("Grey", "Yellow", "Green"):
+        assert name not in (
+            status_label("grey"),
+            status_label("yellow"),
+            status_label("green"),
+            status_label("grey", "403"),
+        )
 
 
 def _discovery_client(email: str = "admin@forgesre.local") -> tuple[TestClient, object]:
@@ -289,8 +317,12 @@ def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
     assert "disabled>Sync NetBox<" not in html
     assert 'class="secondary">Sync NetBox' not in html
     assert 'action="/discovery/netbox-sync"' in html
-    assert 'class="pill yellow"' in html
-    assert "Yellow" in html
+    assert 'class="netbox-status yellow"' in html
+    assert 'role="status"' in html
+    assert "No devices" in html
+    assert ">Yellow<" not in html
+    assert ">Grey<" not in html
+    assert ">Green<" not in html
     assert EMPTY_DEVICES_WHY in html
     assert "403" not in html
     assert "Admin only." not in html
@@ -329,6 +361,11 @@ def test_discovery_sync_button_enabled_for_admin_when_ui_up_403(monkeypatch):
     assert 'action="/discovery/netbox-sync"' in html
     assert 'type="submit"' in html
     assert "403" in html
+    assert "API 403" in html
+    assert 'class="netbox-status grey"' in html
+    assert 'role="status"' in html
+    assert ">Grey<" not in html
+    assert "NetBox UI up; API HTTP 403" in html
     assert "Admin only." not in html
     db.close()
 
@@ -390,7 +427,10 @@ def test_discovery_sync_button_disabled_during_first_boot(monkeypatch):
     assert "disabled" in html
     assert FIRST_BOOT_WHY in html
     assert 'action="/discovery/netbox-sync"' not in html
-    assert 'class="pill grey"' in html
+    assert 'class="netbox-status grey"' in html
+    assert "Not connected" in html
+    assert 'role="status"' in html
+    assert ">Grey<" not in html
     db.close()
 
 
@@ -537,7 +577,17 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "netbox_url_is_local" in disc
     assert "netbox_sync_clickable" in disc
     assert "netbox_sync_light" in disc
-    assert "pill {{ netbox_sync_light }}" in disc
+    assert "netbox_sync_label" in disc
+    assert 'role="status"' in disc
+    assert "netbox-status" in disc
+    assert "netbox_sync_light|title" not in disc
+    assert ">Grey<" not in disc
+    assert ">Yellow<" not in disc
+    assert ">Green<" not in disc
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".netbox-status" in css
+    assert ".netbox-status-dot" in css
+    assert "pointer-events" not in css
     assert "--netbox-url" in disc
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "/api/status/" in handbook
@@ -566,6 +616,9 @@ def test_docs_say_bundled_netbox_default_on():
     assert "grey" in handbook.lower()
     assert "yellow" in handbook.lower()
     assert "No devices yet" in handbook or "no devices" in handbook.lower()
+    assert "Not connected" in handbook
+    assert "Connected" in handbook
+    assert "role=status" in handbook
     assert "install.sh" in handbook
     assert "8001" in install
     assert "--netbox-url" in install

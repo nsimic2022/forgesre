@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 7 September 2026.** Operator N (Serbian): after `f94b659` (v1 token upsert) + `4535700` (grey CSS), they **cannot click Sync NetBox at all**. NetBox UI is up on `:8001`. Devices API may still be HTTP **403** until `netbox` is recreated — a `disabled` button blocked the retry. Do **not** require a second token from the NetBox UI. Do **not** revert the v1 upsert. Journal 403 rows stay short and deduped.
+**Monday 7 September 2026.** Operator N (Serbian): the small **Grey** pill next to orange **Sync NetBox** looked like a second button. It is the traffic light (grey = API fail / 403). English color names Grey / Yellow / Green as a visible label confuse. Do **not** require a second token from the NetBox UI. Do **not** revert the v1 upsert. Journal 403 rows stay short and deduped. Devices API may still be HTTP **403** until `netbox` is recreated — the longer 403 sentence stays next to the orange POST.
 
 Code and docs stay English. Replies to N are Serbian.
 
@@ -34,7 +34,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-sync-click-05f8` (`8ebac46` / `ef316ce`): **380 passed** (twice). Was 377 after the NetBox traffic light / secrets bind-mount.
+Pytest count after the double run on `cursor/netbox-status-pill-05f8`: **(fill after SHA pytest)**. Was 380 after the Sync NetBox click fix.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`. `create_pr` often **403** — merge `--no-ff` plus `git push origin main` still lands the change.
 
@@ -42,7 +42,7 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-Admin **Sync NetBox** is clickable when the NetBox UI answers (`/login/` or `/api/status/`). Devices API HTTP **403** is a warning next to the orange POST submit, not `disabled`. First-boot (UI not answering) stays disabled with one sentence. Non-admin: disabled + **Admin only.** POST `/discovery/netbox-sync` (and `/api/v1/discovery/netbox-sync`) stays admin-only.
+Discovery NetBox traffic light is a **status chip**, not a button. Visible labels are **Not connected** / **API 403** (grey), **No devices** (yellow), **Connected** (green). Never Grey / Yellow / Green as the chip text. `role="status"`. CSS colored dot. Not `type=button`. **Sync NetBox** remains the only action. Longer 403 sentence stays if the devices API is still 403.
 
 - Form is `method=post` `action=/discovery/netbox-sync` `button type=submit`. No `pointer-events: none`. No `type=button` without a handler when clickable.
 - Did not require a matching NetBox-UI token. Did not revert the v1 upsert. Did not write back to NetBox. Did not touch `install.sh`.
@@ -58,7 +58,7 @@ Do **not** run `./install.sh`. Do **not** paste a token from the NetBox UI into 
 git pull origin main && ./forgesre update
 ```
 
-Hard-refresh Discovery (Ctrl-Shift-R). Admin: **Sync NetBox** is orange and clickable even if the 403 sentence is still next to it. Click it. If the flash/journal is still 403, recreate netbox as before:
+Hard-refresh Discovery (Ctrl-Shift-R). Mali čip pored Sync NetBox = **status**, ne dugme. Tekst: **Not connected** / **API 403** (sivo), **No devices** (žuto), **Connected** (zeleno). **Sync NetBox** = klik. Ako je i dalje 403, rečenica pored ostaje. Click Sync NetBox. If the flash/journal is still 403, recreate netbox as before:
 
 ```bash
 docker compose up -d --no-deps --force-recreate netbox
@@ -101,7 +101,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - GUI ICMP is from the Core container (`iputils-ping` in the Dockerfile). Host `./forgesre ping` stays on the VM.
 - Jobs: **one worker thread** in Core. There is no Celery.
 - GUI list tables are **10 rows per page** (pagination already on `main`). Do not revert it.
-- Discovery **Sync NetBox** traffic light: **grey** = UI down / API 403 / no token; **yellow** = API 200 and no devices (*No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.*); **green** = API 200 and count ≥ 1. Admin POST is orange/clickable when the UI answers (`/login/` or `/api/status/`). Devices API 403 is a warning, not `disabled`. First-boot (UI down) stays disabled with one sentence. Engineer/analyst see disabled + **Admin only.** Viewers cannot open `/discovery`. Never write back to NetBox. Bundled footer must not say “external instance”. Launch still upserts the v1 token; `update` `--force-recreate`s `netbox`. Do not require a second UI token.
+- Discovery **Sync NetBox**: primary (orange) admin POST when the UI answers (`/login/` or `/api/status/`). Devices API 403 is a warning, not `disabled`. First-boot (UI down) stays disabled with one sentence. Engineer/analyst see disabled + **Admin only.** Viewers cannot open `/discovery`. Never write back to NetBox. Bundled footer must not say “external instance”. Launch still upserts the v1 token; `update` `--force-recreate`s `netbox`. Do not require a second UI token. The chip next to Sync is status only (Not connected / API 403 / No devices / Connected) — grey/yellow/green CSS, not a second button. Sentence *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.* stays on yellow.
 
 Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre test` / doctor. See [`docs/llm.md`](llm.md).
 
