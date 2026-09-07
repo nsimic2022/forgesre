@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.audit import audit
 from app.db import get_db
 from app.asset_probe import reachability_snapshot
-from app.demo_ids import is_lab_inventory_row
+from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.asset_alarms import alarms_from_form, saved_alarm_hostnames
 from app.inventory import (
@@ -175,6 +175,8 @@ def ctx(request: Request, user: User | None, **extra):
         "is_demo_mail": is_demo_mail,
         "is_demo_journal": is_demo_journal,
         "asset_type_abbrev": asset_type_abbrev,
+        "demo_candidate_ip": DEMO_CANDIDATE_IP,
+        "llm_timeout": settings.llm_timeout,
     }
     data.update(extra)
     return data
@@ -306,7 +308,6 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
         "resolved": db.query(func.count(Incident.id)).filter_by(status="RESOLVED").scalar() or 0,
         "pending_discovery": pending,
     }
-    doctor = doctor_payload()
     recent = db.query(Incident).order_by(Incident.id.desc()).limit(8).all()
     journal_error = error_banner_entries(db, getattr(user, "journal_error_ack_id", 0), limit=5)
     journal_recent = list_entries(db, limit=8)
@@ -316,7 +317,6 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
         "dashboard.html",
         user,
         stats=stats,
-        doctor=doctor,
         recent=recent,
         journal_error=journal_error,
         journal_recent=journal_recent,
@@ -496,6 +496,7 @@ def discovery_page(request: Request, db: Session = Depends(get_db), user: User =
         discovery_cidrs=settings.discovery_cidrs,
         netbox_enabled=settings.netbox_enabled,
         netbox_url=settings.netbox_url,
+        demo_candidate_ip=DEMO_CANDIDATE_IP,
     )
 
 
@@ -690,9 +691,26 @@ def asset_delete(
 
 
 @router.get("/incidents", response_class=HTMLResponse)
-def incidents_page(request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
-    rows = db.query(Incident).order_by(Incident.id.desc()).limit(200).all()
-    return render(request, "incidents.html", user, incidents=rows, reported_to=reported_to_for(db, rows))
+def incidents_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    open_filter: str = Query("1", alias="open"),
+    days: str = "",
+):
+    open_only = (open_filter or "1").strip().lower() not in {"0", "false", "all", "no"}
+    days_raw = (days or "").strip()
+    days_n = clamp_days(days_raw) if days_raw else None
+    rows, _total = list_history(db, days=days_n, open_only=open_only, limit=200, offset=0)
+    return render(
+        request,
+        "incidents.html",
+        user,
+        incidents=rows,
+        reported_to=reported_to_for(db, rows),
+        open_only=open_only,
+        days=days_raw,
+    )
 
 
 @router.get("/history", response_class=HTMLResponse)
@@ -849,7 +867,7 @@ def incident_send_report(
         send_incident_report(db, item, chosen, actor=user.email)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return RedirectResponse(f"/incidents/{number}#mail", status_code=303)
+    return RedirectResponse(f"/incidents/{number}", status_code=303)
 
 
 @router.get("/ai/{number}", response_class=HTMLResponse)
@@ -1446,62 +1464,48 @@ def admin_restore_backup(
 
 
 @router.post("/demo")
-def demo_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
-    if not can(user, "admin"):
-        raise HTTPException(status_code=403)
+def demo_page(db: Session = Depends(get_db), user: User = Depends(require_page("admin"))):
     incident = run_demo(db)
     number = incident.number if incident else ""
     return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=303)
 
 
 @router.post("/demo-rca")
-def demo_rca_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
-    if not can(user, "admin"):
-        raise HTTPException(status_code=403)
+def demo_rca_page(db: Session = Depends(get_db), user: User = Depends(require_page("admin"))):
     incident = run_demo_rca(db)
     number = incident.number if incident else ""
     return RedirectResponse(f"/ai/{number}" if number else "/incidents", status_code=303)
 
 
 @router.post("/demo-host")
-def demo_host_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
-    if not can(user, "admin"):
-        raise HTTPException(status_code=403)
+def demo_host_page(db: Session = Depends(get_db), user: User = Depends(require_page("admin"))):
     incident = run_demo_host(db)
     number = incident.number if incident else ""
     return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=303)
 
 
 @router.post("/demo-windows")
-def demo_windows_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
-    if not can(user, "admin"):
-        raise HTTPException(status_code=403)
+def demo_windows_page(db: Session = Depends(get_db), user: User = Depends(require_page("admin"))):
     incident = run_demo_windows(db)
     number = incident.number if incident else ""
     return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=303)
 
 
 @router.post("/demo-network")
-def demo_network_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
-    if not can(user, "admin"):
-        raise HTTPException(status_code=403)
+def demo_network_page(db: Session = Depends(get_db), user: User = Depends(require_page("admin"))):
     incident = run_demo_network(db)
     number = incident.number if incident else ""
     return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=303)
 
 
 @router.post("/demo-nodecpu")
-def demo_nodecpu_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
-    if not can(user, "admin"):
-        raise HTTPException(status_code=403)
+def demo_nodecpu_page(db: Session = Depends(get_db), user: User = Depends(require_page("admin"))):
     incident = run_demo_nodecpu(db)
     number = incident.number if incident else ""
     return RedirectResponse(f"/incidents/{number}" if number else "/incidents", status_code=303)
 
 
 @router.post("/demo-reset")
-def demo_reset_page(user: User = Depends(login_required)):
-    if not can(user, "admin"):
-        raise HTTPException(status_code=403)
+def demo_reset_page(user: User = Depends(require_page("admin"))):
     reset_demo_gauges()
     return RedirectResponse("/?demo=1", status_code=303)

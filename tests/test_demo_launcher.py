@@ -58,7 +58,10 @@ def test_dashboard_has_one_run_demo_control_not_two_forms():
     home = client.get("/")
     assert home.status_code == 200
     html = home.text
-    assert "Core (container)" in html
+    assert "System Health" in html
+    assert "/health-ui" in html
+    assert html.count(">Monitoring<") == 0
+    assert "Core (container)" not in html
     assert html.count('id="demo-open"') == 1
     assert html.count("data-demo-open") == 1
     assert html.count("Run demo") >= 1
@@ -148,7 +151,7 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
     db.close()
 
     client = _client()
-    listing = client.get("/incidents")
+    listing = client.get("/incidents?open=0")
     assert listing.status_code == 200
     assert 'class="pill demo"' in listing.text
     assert "DEMO" in listing.text
@@ -157,7 +160,7 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
     detail = client.get(f"/incidents/{number}")
     assert detail.status_code == 200
     assert 'class="pill demo"' in detail.text
-    assert "[DEMO]" in detail.text
+    assert "DEMO" in detail.text
 
     history = client.get("/history")
     assert history.status_code == 200
@@ -165,7 +168,8 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
 
     esc = client.get("/escalation")
     assert esc.status_code == 200
-    assert 'class="pill demo"' in esc.text or "[DEMO]" in esc.text
+    assert "/ops#mail" in esc.text
+    assert "Generated notifications" in esc.text
 
     ops = client.get("/ops")
     assert ops.status_code == 200
@@ -239,7 +243,7 @@ def test_windows_and_network_demo_incidents_are_demo_tagged():
     assert "/incidents/INC-" in (posted.headers.get("location") or "")
     net_post = client.post("/demo-network", follow_redirects=False)
     assert net_post.status_code == 303
-    listing = client.get("/incidents")
+    listing = client.get("/incidents?open=0")
     for number in numbers:
         assert number in listing.text
     assert listing.text.count("DEMO") >= 2

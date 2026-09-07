@@ -22,11 +22,15 @@
     {% endif %}
   </form>
   {% if can('investigate') or can('read_ai') %}
-  <form method="post" action="/incidents/{{ incident.number }}/investigate">
-    <button type="submit" class="{{ 'done' if investigation else 'todo' }}">Run AI investigation</button>
-  </form>
+  {% if investigation %}
+  <a class="button done" href="/ai/{{ incident.number }}">Open ForgeRCA</a>
   {% else %}
-  <button type="button" class="off" disabled>Run AI investigation</button>
+  <form method="post" action="/incidents/{{ incident.number }}/investigate">
+    <button type="submit" class="todo">Open ForgeRCA</button>
+  </form>
+  {% endif %}
+  {% else %}
+  <button type="button" class="off" disabled>Open ForgeRCA</button>
   {% endif %}
 </div>
 <p>
@@ -59,9 +63,9 @@
   <p class="muted">
     Current snapshot (alert + ForgeRCA if it has run). Does not change status.
     {% if smtp_on %}
-    SMTP is <strong>on</strong> — this leaves the VM to the address you pick.
+    SMTP is <strong>on</strong> — this leaves the VM to the address you pick. Outbox: <a href="/ops#mail">Email &amp; reports</a>.
     {% else %}
-    SMTP is <strong>off</strong> — the row is stored as <em>generated</em> in Report outbox. Gmail will not receive it until you enable SMTP (see operator handbook §11).
+    SMTP is <strong>off</strong> — the row is stored as <em>generated</em> in the <a href="/ops#mail">mail outbox</a>. Gmail will not receive it until you enable SMTP (see operator handbook §11).
     {% endif %}
   </p>
   <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail">
@@ -79,81 +83,16 @@
 </section>
 {% endif %}
 
-<div class="split" id="ai">
-  <section>
-    <h2>What happened?</h2>
-    <p>{{ incident.summary or "Awaiting evidence." }}</p>
-    {% if investigation %}
-    <p><strong>Why is it important?</strong> {{ investigation.summary }}</p>
-    <p><strong>Likely cause:</strong> {{ investigation.likely_cause }}</p>
-    <p><strong>Confidence:</strong> {{ investigation.confidence|int }}%
-      <span class="muted">(ForgeSRE score, not a validated model)</span></p>
-    <p><strong>What should I do?</strong> {{ investigation.recommended_action }}</p>
-    {% if incident.playbook %}
-    <p><strong>Who / playbook:</strong> {{ incident.playbook.name }} (guidance only — not executed)</p>
-    {% endif %}
-    <p class="muted">{{ investigation.disclaimer }} · Engine {{ investigation.engine or "forgerca" }} {{ investigation.engine_version or "" }}</p>
-    <p><a href="/ai/{{ incident.number }}">Open ForgeRCA investigation</a></p>
-    {% else %}
-    <p class="muted">No ForgeRCA result yet. Click Run AI investigation (top of this page) to open the full builtin page now. The local LLM, if enabled, rewrites text in the background.</p>
-    {% endif %}
-  </section>
-  <section>
-    <h2>Visual investigation</h2>
-    <ol class="flow" id="flow">
-      {% set nodes = rca.visual if rca.visual else [] %}
-      {% if nodes %}
-        {% for node in nodes %}
-        <li>
-          <button type="button" class="node" data-detail="{{ node.detail }}">{{ node.title }}</button>
-          {% if not loop.last %}<div class="arrow">↓</div>{% endif %}
-        </li>
-        {% endfor %}
-      {% else %}
-        {% for node in incident.timeline or [] %}
-        <li>
-          <button type="button" class="node" data-detail="{{ node.detail }}">{{ node.title }}</button>
-          {% if not loop.last %}<div class="arrow">↓</div>{% endif %}
-        </li>
-        {% else %}
-        <li class="muted">No timeline yet.</li>
-        {% endfor %}
-      {% endif %}
-    </ol>
-    <pre class="detail-box" id="node-detail">Click a node for details.</pre>
-  </section>
-</div>
-
-{% if rca %}
-<section>
-  <h2>Facts</h2>
-  <ul>
-    {% for fact in rca.facts or [] %}
-    <li>{{ fact.text }}</li>
-    {% else %}
-    <li class="muted">No facts stored.</li>
-    {% endfor %}
-  </ul>
-  <h2>Anomalies</h2>
-  <ul>
-    {% for item in rca.anomalies or [] %}
-    <li>{{ item.summary }}</li>
-    {% else %}
-    <li class="muted">No deterministic anomaly.</li>
-    {% endfor %}
-  </ul>
-  <h2>Candidate causes</h2>
-  <ol>
-    {% for hyp in rca.hypotheses or [] %}
-    <li>
-      {{ hyp.summary }}
-      · confidence {{ '%.0f'|format((hyp.confidence or 0) * 100) }}%
-      · supporting {{ (hyp.supporting_evidence or [])|join(", ") or "none" }}
-    </li>
-    {% endfor %}
-  </ol>
+<section class="card" id="ai">
+  <h2>What happened?</h2>
+  <p>{{ incident.summary or "Awaiting evidence." }}</p>
+  {% if investigation %}
+  <p>{{ investigation.summary }}</p>
+  <p class="muted">{{ investigation.disclaimer }} · Engine {{ investigation.engine or "forgerca" }} {{ investigation.engine_version or "" }}</p>
+  {% else %}
+  <p class="muted">No ForgeRCA result yet. Use <strong>Open ForgeRCA</strong> above for the full builtin page (facts, anomalies, causes). The local LLM, if enabled, rewrites text in the background.</p>
+  {% endif %}
 </section>
-{% endif %}
 
 {% if incident.playrule or incident.playbook %}
 <section>
@@ -186,31 +125,7 @@
 </section>
 {% endif %}
 
-<section class="card report-outbox" id="mail">
-  <h2>Report outbox</h2>
-  <p class="muted">Mail stored for this incident. <code>generated</code> = SMTP off (lab). <code>sent</code> = handed to SMTP. Includes incident reports and escalation rows.</p>
-  <table>
-    <thead><tr><th>When</th><th>Step</th><th>To</th><th>Status</th><th>Subject</th></tr></thead>
-    <tbody>
-    {% for note in mail %}
-      <tr>
-        <td>{{ note.created_at }}</td>
-        <td>{{ note.step_key or "—" }}</td>
-        <td>{{ note.target }}</td>
-        <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
-        <td>{% if is_demo_mail(note) %}<span class="pill demo">DEMO</span> {% endif %}{{ note.subject }}</td>
-      </tr>
-      <tr>
-        <td colspan="5"><pre class="journal-detail">{{ note.body }}{% if note.error %}
-
-{{ note.error }}{% endif %}</pre></td>
-      </tr>
-    {% else %}
-      <tr><td colspan="5" class="muted">No notification rows.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-</section>
+<p class="muted" id="mail">Incident and escalation mail for this appliance is the <a href="/ops#mail">mail outbox</a> (one table). This page only sends.</p>
 
 <section id="audit">
   <h2>Who did what</h2>
@@ -253,7 +168,6 @@
 {% if can('read_evidence') %}
 <section>
   <h2>Engineer evidence</h2>
-  {% if grafana_enabled %}<p><a href="{{ grafana_url }}" target="_blank" rel="noreferrer">Open Grafana</a></p>{% endif %}
   {% for ev in incident.evidence %}
     <h3 id="{{ ev.evidence_id or ev.kind }}">{{ ev.title }} <span class="muted">{{ ev.evidence_id }}</span></h3>
     {% if ev.query %}<p>Query: <code>{{ ev.query }}</code></p>{% endif %}

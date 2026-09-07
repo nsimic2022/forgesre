@@ -17,7 +17,11 @@
   Overall:
   <span class="pill {{ health_class(doctor.overall) }}">{{ doctor.overall }}</span>
 </p>
-<p class="muted">Green = running. Yellow = paused / starting / disabled. Red = down. Open goes to that service’s GUI or metrics. Prometheus Open is Targets (<code>/targets?search=</code> scrape jobs), Alerts, Graph — not Prometheus process <code>/metrics</code>. Prometheus/Alertmanager listen on the appliance; use the VM host if the UI rewrote 127.0.0.1.</p>
+<p class="muted">
+  Alarm path is <strong>Prometheus → Alertmanager → Core</strong> (webhook). Grafana is graphs only — Open Grafana on this page, not in the left nav, not on incidents.
+  Jobs: <strong>one worker thread</strong> in Core (not Celery). An LLM rewrite can occupy it up to <code>ai.llm.timeout_seconds</code> ({{ llm_timeout|int }}s).
+  Green = running. Yellow = paused / starting / disabled. Red = down. Open goes to that service’s GUI or metrics. Prometheus Open is Targets (<code>/targets?search=</code> scrape jobs), Alerts, Graph — not Prometheus process <code>/metrics</code>. Prometheus/Alertmanager listen on the appliance; use the VM host if the UI rewrote 127.0.0.1.
+</p>
 
 <div class="grid health-grid">
   {% for item in stack %}

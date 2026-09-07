@@ -1,12 +1,18 @@
 # ForgeSRE Architecture Proposal
 
-**Status:** amended for V0.1 (see `docs/v0.1.md`)  
-**Date:** 2026-08-20  
-**Scope:** Long-term architecture. V0.1 runtime uses Python/FastAPI + Bash, not Go/React/Caddy.
+> **Not the V0.7 appliance runtime.** This file is a **long-term architecture proposal**.
+> Do **not** treat it as what runs on the Ubuntu VM today.
+> Do **not** implement the Go / Kubernetes / Caddy rewrite from these diagrams.
+>
+> **What actually runs (V0.7):** Docker Compose on one Ubuntu VM. Python FastAPI Core, Jinja2 UI, Bash CLI (`./forgesre`). Bundled NetBox is a default Compose service (`:8001`). Redis exists **only** because bundled NetBox requires it — not a ForgeSRE job broker. There is **no Caddy-as-runtime**. Grafana is graphs only; the alarm path is Prometheus → Alertmanager → Core. Jobs are **one worker thread** in Core (not Celery).
+>
+> Operators: start at [`operator-handbook.md`](operator-handbook.md) and [`cli.md`](cli.md). Install: [`install-config.md`](install-config.md). GitHub README is the product summary.
 
-This document remains the long-term contract (NetBox, discovery, HA, extra agents). **V0.1 implementation follows `docs/v0.1.md`.** If the two disagree on V0.1 scope or language, `docs/v0.1.md` wins.
+**Status:** proposal / longer-term contract (amended notes for V0.1 in `docs/v0.1.md`)  
+**Date:** 2026-08-20 (banner updated 2026-09-07)  
+**Scope:** Future architecture. V0.7 runtime is Python/FastAPI + Bash + Compose, not Go/React/Caddy/K8s.
 
-**V0.7 runtime on the appliance is Docker Compose on the Ubuntu VM**, not the Caddy/Go diagram below. Do not treat this file as the install guide.
+This document remains a design note (NetBox at scale, discovery worker isolation, HA, extra agents). **It is not the install guide and not a backlog to execute in V0.7.** If this file disagrees with the handbook or `docs/v0.7.md` on what ships now, the handbook / CLI / Compose file win.
 
 ---
 

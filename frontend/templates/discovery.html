@@ -9,7 +9,7 @@
   <code>node_</code> metrics → Linux Server <code>:9100</code>.
   SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics.
   TCP open without exporter text is <strong>not</strong> an OS pick (ICMP ping is not a scrape).
-  Not nmap.
+  This is <strong>not nmap</strong> and does not replace nmap.
   New hosts wait here until an engineer Approves or Ignores them.
   Mode: <code>{{ discovery_mode }}</code>
   · CIDRs: <code>{{ discovery_cidrs or "none" }}</code>
@@ -24,15 +24,26 @@
 {% endif %}
 
 {% if can('write_assets') %}
-<form method="post" action="/discovery/scan" class="inline">
-  <button type="submit">Scan now</button>
-</form>
+<section class="card">
+  <h2>Scan now</h2>
+  <p class="muted">TCP / SNMP / HTTP probe of configured CIDRs. Not nmap. Does not write inventory until you Approve.</p>
+  <form method="post" action="/discovery/scan" class="inline">
+    <button type="submit">Scan now</button>
+  </form>
+</section>
 {% endif %}
-{% if can('admin') and netbox_enabled %}
-<form method="post" action="/discovery/netbox-sync" class="inline">
-  <button type="submit" class="secondary">Sync NetBox</button>
-</form>
-<p class="muted">NetBox: <code>{{ netbox_url }}</code> (read-only sync). Bundled UI is <code>http://&lt;VM-IP&gt;:8001</code>. ForgeSRE never writes back. <code>--netbox-url</code> still points Core at an external instance.</p>
+
+{% if can('admin') %}
+<section class="card">
+  <h2>NetBox sync</h2>
+  <p class="muted">Read-only. ForgeSRE never writes back. Separate from Scan now.{% if not netbox_enabled %} Sync is off in config.{% endif %}</p>
+  {% if netbox_enabled %}
+  <form method="post" action="/discovery/netbox-sync" class="inline">
+    <button type="submit" class="secondary">Sync NetBox</button>
+  </form>
+  <p class="muted">NetBox: <code>{{ netbox_url }}</code>. Bundled UI is <code>http://&lt;VM-IP&gt;:8001</code>. <code>--netbox-url</code> still points Core at an external instance.</p>
+  {% endif %}
+</section>
 {% endif %}
 
 <table>
@@ -49,7 +60,13 @@
   <tbody>
   {% for row in candidates %}
     <tr>
-      <td>{{ row.ip }}{% if row.source == 'demo' %} <span class="pill demo">DEMO</span>{% endif %}</td>
+      <td>
+        {{ row.ip }}
+        {% if row.source == 'demo' or row.ip == demo_candidate_ip %}
+        <span class="pill demo">DEMO</span>
+        <span class="muted">lab seed — not a Scan now production hit</span>
+        {% endif %}
+      </td>
       <td>{{ row.proposed_role }}</td>
       <td>{{ row.open_ports|join(", ") }}</td>
       <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>

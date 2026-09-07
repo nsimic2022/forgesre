@@ -7,7 +7,8 @@
   <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
   <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
 </div>
-<p class="muted">{{ tools.rca_hint }} · {{ tools.ai_hint }}</p>
+<p class="muted">{{ tools.rca_hint }} · {{ tools.ai_hint }}
+  · ForgeAI rewrite uses the same Core worker thread (not Celery) and can occupy it up to <code>ai.llm.timeout_seconds</code> ({{ llm_timeout|int }}s).</p>
 {% if investigation %}
 <p class="muted">{{ investigation.disclaimer }} ·
   {% if investigation.provider == "forgerca-llm" %}
@@ -35,7 +36,7 @@
 {% if can_send %}
 <section class="card" id="send-report">
   <h2>Send incident report</h2>
-  <p class="muted">Sends the same snapshot as the incident page. Does not change incident status. SMTP off stores it as <em>generated</em>.</p>
+  <p class="muted">Sends the same snapshot as the incident page. Does not change incident status. SMTP off stores it as <em>generated</em> in the <a href="/ops#mail">mail outbox</a>.</p>
   <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail">
     <label>To
       <select name="target">
@@ -51,26 +52,13 @@
 </section>
 {% endif %}
 
-<section class="card report-outbox" id="mail">
-  <h2>Report outbox</h2>
-  <p class="muted">Mail stored for this incident. <code>generated</code> = SMTP off (lab). <code>sent</code> = handed to SMTP.</p>
-  <table>
-    <thead><tr><th>When</th><th>Step</th><th>To</th><th>Status</th><th>Subject</th></tr></thead>
-    <tbody>
-    {% for note in mail %}
-      <tr>
-        <td>{{ note.created_at }}</td>
-        <td>{{ note.step_key or "—" }}</td>
-        <td>{{ note.target }}</td>
-        <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
-        <td>{% if is_demo_mail(note) %}<span class="pill demo">DEMO</span> {% endif %}{{ note.subject }}</td>
-      </tr>
-    {% else %}
-      <tr><td colspan="5" class="muted">No mail yet.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-</section>
+<p class="muted" id="mail">Mail for this incident is the <a href="/ops#mail">mail outbox</a>.</p>
+
+{% for line in rca.limitations or [] %}
+  {% if "host logs" in line|lower or "empty Loki" in line or "No host logs" in line %}
+  <p class="muted">{{ line }}</p>
+  {% endif %}
+{% endfor %}
 
 <section class="card">
   <h2>Facts</h2>

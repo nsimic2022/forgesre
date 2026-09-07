@@ -35,17 +35,21 @@ def cutoff_since(days: int) -> datetime:
 def list_history(
     db: Session,
     *,
-    days: int = DEFAULT_DAYS,
+    days: int | None = DEFAULT_DAYS,
     status: str = "",
     asset: str = "",
     number: str = "",
     limit: int = LIST_LIMIT,
     offset: int = 0,
+    open_only: bool = False,
 ) -> tuple[list[Incident], int]:
-    days = clamp_days(days)
     limit = max(1, min(int(limit or LIST_LIMIT), 500))
     offset = max(0, int(offset or 0))
-    query = db.query(Incident).filter(Incident.started_at >= cutoff_since(days))
+    query = db.query(Incident)
+    if days is not None:
+        query = query.filter(Incident.started_at >= cutoff_since(clamp_days(days)))
+    if open_only:
+        query = query.filter(Incident.status.notin_(["RESOLVED", "CLOSED"]))
     status = (status or "").strip().upper()
     if status:
         query = query.filter(Incident.status == status)
