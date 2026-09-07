@@ -68,7 +68,7 @@ cd forgesre
 ./install.sh --non-interactive --profile standard --port 8080
 ```
 
-Sign in at `http://<VM-IP>:8080` with the credentials in `installation-report.md` (also `secrets/secrets.env`). Dashboard → first-hour walkthrough → `forge-demo-01`. Then:
+Sign in at `http://<VM-IP>:8080` with the credentials in `installation-report.md` (also `secrets/secrets.env`). Dashboard → **Run demo** (admin, top right) → `forge-demo-01`. Then:
 
 ```bash
 ./forgesre demo          # live HighCPU + mail to the asset owner
@@ -94,12 +94,12 @@ Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. L
 
 | URL | What you do |
 |---|---|
-| `/` | Dashboard, doctor lights, first-hour walkthrough |
+| `/` | Dashboard: counts, HOST DOWN banner, **Run demo** (admin). Full doctor grid is **System Health**. |
 | `/assets` | Inventory and owner contacts |
-| `/discovery` | Approve / Ignore new devices |
-| `/incidents` | Alertmanager incidents (recent 200) |
+| `/discovery` | Scan now (not nmap) / Approve / Ignore; **Sync NetBox** (read-only, admin). Empty NetBox = yellow. |
+| `/incidents` | Open/firing incidents (**10 per page**). Archive is History. |
 | `/history` | 90-day lookback, filters, closed rows |
-| `/ai/INC-…` | Read-only RCA |
+| `/ai/INC-…` | Read-only RCA (ForgeRCA first, ForgeAI rewrite-only) |
 | `/playrules` `/playbooks` `/escalation` | Workflow |
 | `/journal` | Internal console |
 | `/health-ui` | Same checks as `./forgesre doctor`; Open Grafana / Prometheus Targets / … |
@@ -153,15 +153,6 @@ Config: `config/forgesre.yml` (behavior), `.env` (ports/paths), `secrets/secrets
 
 ## Docs
 
-**Operators (start here)**
-
-- [Install and config (Ubuntu / vCenter)](docs/install-config.md)
-- [Operator handbook (users, servers, playrules, incidents, CLI)](docs/operator-handbook.md)
-- [Verify the appliance](docs/verify.md) (`./forgesre test`)
-- [Operator CLI](docs/cli.md)
-- [Local LLM](docs/llm.md)
-- [Docs index](docs/README.md)
-
-**What each release shipped** (optional): [V0.1](docs/v0.1.md) · [V0.2](docs/v0.2.md) · [V0.3](docs/v0.3.md) · [V0.4](docs/v0.4.md) · [V0.5 snmp_exporter](docs/v0.5.md) · [V0.6 hardening](docs/v0.6.md) · [V0.7 history](docs/v0.7.md)
+Start at the [operator learning path](docs/README.md). Why/when: [handbook](docs/operator-handbook.md). Commands: [cli.md](docs/cli.md).
 
 Longer-term design notes (not a runtime guide): [architecture.md](docs/architecture.md). Security notes: [SECURITY.md](SECURITY.md). License: [Apache-2.0](LICENSE).

@@ -117,9 +117,9 @@ def list_history(
     limit: int = LIST_LIMIT,
     offset: int = 0,
     open_only: bool = False,
+    page: Any | None = None,
 ) -> tuple[list[Incident], int]:
     limit = max(1, min(int(limit or LIST_LIMIT), 500))
-    offset = max(0, int(offset or 0))
     query = db.query(Incident)
     if days is not None:
         query = query.filter(Incident.started_at >= cutoff_since(clamp_days(days)))
@@ -145,6 +145,10 @@ def list_history(
             )
         )
     total = query.count()
+    if page is not None:
+        _, _, offset = parse_page(page, total=total, size=limit)
+    else:
+        offset = max(0, int(offset or 0))
     rows = query.options(joinedload(Incident.asset)).order_by(Incident.id.desc()).offset(offset).limit(limit).all()
     return rows, total
 

@@ -3,7 +3,8 @@
 {% block content %}
 <h1>Discovery</h1>
 <p class="muted">
-  Semi-automatic TCP probe (ports 22, 80, 443, 161, 9100, 9182) plus HTTP GET
+  Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on
+  <strong>UDP/161</strong> (TCP/161 is skipped — that is not SNMP) and HTTP GET
   <code>/metrics</code> on <code>:9182</code> and <code>:9100</code> when a host is alive.
   <code>windows_</code> metrics → Windows Server <code>:9182</code>.
   <code>node_</code> metrics → Linux Server <code>:9100</code>.
