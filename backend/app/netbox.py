@@ -3,20 +3,24 @@
 Bundled instance is http://127.0.0.1:8001 unless inventory.netbox.url points
 at an external NetBox (--netbox-url).
 
-Core authenticates with NETBOX_API_TOKEN (Authorization: Token …). That
-plain 40-char value is a NetBox v1 token (plaintext column) on the bundled
-Django **superuser** (NETBOX_SUPERUSER_NAME / SUPERUSER_NAME, usually
-``admin``). Core is **not** a NetBox UI login and not a second user. A
-token attached to a user without ``dcim.view_device`` / is_superuser is
-HTTP 403 even when the secret is valid. Launch upserts v1 on every start
-(write_enabled=False, superuser + view permission).
+Core authenticates with NETBOX_API_TOKEN. NetBox 4.6 issues **v2** tokens in
+the UI (``nbt_<12-char key>.<secret>``, shown once at create). REST wants
+``Authorization: Bearer nbt_…``. A legacy 40-char **v1** secret still uses
+``Authorization: Token <40char>``. Do not send Bearer v2 as Token, and do
+not treat a v2 secret as v1 plaintext. Core is **not** a NetBox UI login
+and not a second user. A token on a user without ``dcim.view_device`` /
+is_superuser is HTTP 403 even when the secret is valid.
+
+Prefer a UI v2 token in secrets. Launch skips v1 upsert when the secret
+looks like v2. A 40-char v1 value is still upserted as fallback
+(write_enabled=False, superuser + view permission). v1 is deprecated in
+the NetBox UI; that is OK for the fallback path.
 
 NetBox's REST API returns HTTP 403 (not 401) when the token is missing,
 unknown, or not allowed to read DCIM. User-facing 403 copy must distinguish
 those: empty token → missing; non-empty token → NetBox rejected it. Never
-print the secret. v4.6 defaults to hashed v2 tokens (key + HMAC); writing
-the secret into `key` is why GET /api/dcim/devices/ stayed 403 until the
-v1 plaintext upsert.
+print the secret. A working v2 GET (HTTP 200) is yellow (0 devices) or
+green (≥1) — do not tell the operator to recreate a v1 token.
 
 Discovery traffic light uses GET /api/dcim/devices/?limit=1 (never writes):
 - grey: UI down, API 403, or no token
@@ -47,11 +51,16 @@ def is_local_netbox_url(url: str) -> bool:
 FORBIDDEN_REJECTED_WHY = (
     "NetBox rejected the API token (HTTP 403). Recreate netbox+core after changing secrets.env."
 )
+FORBIDDEN_REJECTED_V2_WHY = (
+    "NetBox rejected the API token (HTTP 403). Put the full v2 token shown once at create "
+    "(nbt_…, not the 12-character key) in NETBOX_API_TOKEN, then recreate core."
+)
 FORBIDDEN_MISSING_WHY = (
     "HTTP 403 Forbidden on NetBox devices API "
     "(token missing, not created in NetBox, or not allowed to read)."
 )
 TOKEN_EMPTY_WHY = "NetBox UI answers but NETBOX_API_TOKEN is empty"
+V2_PREFIX = "nbt_"
 
 
 def token_presence(token: str) -> str:
@@ -59,11 +68,28 @@ def token_presence(token: str) -> str:
     return "yes" if (token or "").strip() else "no"
 
 
+def _bare_secret(token: str) -> str:
+    """Strip an optional Bearer/Token scheme. Never log the value."""
+    value = (token or "").strip()
+    lower = value.lower()
+    if lower.startswith("bearer ") or lower.startswith("token "):
+        parts = value.split(None, 1)
+        return parts[1].strip() if len(parts) == 2 else value
+    return value
+
+
+def looks_like_v2_token(token: str) -> bool:
+    """True for NetBox v2 secrets (typically nbt_<key>.<secret>)."""
+    return _bare_secret(token).lower().startswith(V2_PREFIX)
+
+
 def forbidden_why(token: str) -> str:
     """403 copy: rejected if Core has a token, missing if it does not."""
-    if (token or "").strip():
-        return FORBIDDEN_REJECTED_WHY
-    return FORBIDDEN_MISSING_WHY
+    if not (token or "").strip():
+        return FORBIDDEN_MISSING_WHY
+    if looks_like_v2_token(token):
+        return FORBIDDEN_REJECTED_V2_WHY
+    return FORBIDDEN_REJECTED_WHY
 
 
 def format_client_error(exc: BaseException, token: str = "") -> str:
@@ -305,13 +331,15 @@ def list_devices(url: str, token: str, timeout: float = 10.0) -> list[dict[str, 
 
 
 def _authorization(token: str) -> str:
+    """NetBox 4.6: v2 → Bearer nbt_…; v1 40-char → Token <plaintext>."""
     value = (token or "").strip()
+    bare = _bare_secret(value)
+    if looks_like_v2_token(value):
+        return f"Bearer {bare}"
     lower = value.lower()
     if lower.startswith("bearer ") or lower.startswith("token "):
         return value
-    if value.startswith("nbt_"):
-        return f"Bearer {value}"
-    return f"Token {value}"
+    return f"Token {bare}"
 
 
 def _headers(token: str) -> dict[str, str]:

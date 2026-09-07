@@ -87,7 +87,7 @@ if [[ -f "$NB_STAMP" ]] && [[ "$(cat "$NB_STAMP" 2>/dev/null || true)" == "$nb_c
   need_nb=0
 fi
 if [[ "$need_nb" -eq 1 ]]; then
-  echo "NetBox launch script or compose token env changed; recreating netbox so the v1 token upsert runs."
+  echo "NetBox launch script or compose token env changed; recreating netbox so the token helper runs."
   "${DC[@]}" up -d --no-deps --force-recreate netbox
   "${DC[@]}" up -d --no-deps --force-recreate core
   printf '%s\n' "$nb_cur" > "$NB_STAMP"

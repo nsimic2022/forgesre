@@ -191,6 +191,17 @@ def setup_function():
     FakeUser.objects = _UserManager(FakeUser.store)
 
 
+def test_looks_like_v2_token_helpers():
+    mod = _load()
+    assert mod.looks_like_v2_token("nbt_abcdefghijkl.notarealsecret") is True
+    assert mod.looks_like_v2_token("Bearer nbt_abcdefghijkl.notarealsecret") is True
+    assert mod.looks_like_v2_token("a" * 40) is False
+    assert mod.looks_like_v2_token("") is False
+    assert mod.looks_like_v2_public_key("AbCdEfGhIjKl") is True
+    assert mod.looks_like_v2_public_key("nbt_abcdefghijkl.notarealsecret") is False
+    assert mod.looks_like_v2_public_key("a" * 40) is False
+
+
 def test_redact_strips_token():
     mod = _load()
     secret = "a" * 40
@@ -308,11 +319,54 @@ def test_upsert_empty_token_is_honest_403_path(capsys):
     assert "HTTP 403" in capsys.readouterr().out
 
 
-def test_upsert_wrong_length_raises():
+def test_upsert_skips_v2_token(capsys):
     mod = _load()
+    secret = "nbt_abcdefghijkl.notarealsecret"
+    user = FakeUser()
+    FakeUser.reset(user)
+    status = mod.upsert_core_token(
+        token_key=secret,
+        username="admin",
+        email="admin@forgesre.local",
+        password="x",
+        Token=FakeToken,
+        User=FakeUser,
+        v1=1,
+    )
+    assert status == "v2"
+    assert FakeToken.store == []
+    out = capsys.readouterr().out
+    assert "skipping v1 upsert" in out
+    assert "v1 token ready" not in out
+    assert secret not in out
+    assert "nbt_abcdefghijkl" not in out
+
+
+def test_upsert_skips_v2_token_with_bearer_prefix(capsys):
+    mod = _load()
+    secret = "nbt_abcdefghijkl.notarealsecret"
+    status = mod.upsert_core_token(
+        token_key=f"Bearer {secret}",
+        username="admin",
+        email="admin@forgesre.local",
+        password="x",
+        Token=FakeToken,
+        User=FakeUser,
+        v1=1,
+    )
+    assert status == "v2"
+    assert FakeToken.store == []
+    out = capsys.readouterr().out
+    assert "skipping v1 upsert" in out
+    assert secret not in out
+
+
+def test_upsert_rejects_12_char_v2_key(capsys):
+    mod = _load()
+    key_only = "AbCdEfGhIjKl"
     try:
         mod.upsert_core_token(
-            token_key="short",
+            token_key=key_only,
             username="admin",
             email="admin@forgesre.local",
             password="x",
@@ -321,9 +375,14 @@ def test_upsert_wrong_length_raises():
             v1=1,
         )
     except mod.UpsertError as exc:
-        assert "40" in str(exc)
+        assert "12-character" in str(exc)
+        assert key_only not in str(exc)
     else:
         raise AssertionError("expected UpsertError")
+    assert FakeToken.store == []
+    out = capsys.readouterr().out
+    assert "12-character" in out
+    assert key_only not in out
 
 
 def test_upsert_uses_existing_superuser_when_name_mismatches(capsys):
@@ -349,6 +408,24 @@ def test_upsert_uses_existing_superuser_when_name_mismatches(capsys):
     assert "v1 token ready" in out
 
 
+def test_upsert_wrong_length_raises():
+    mod = _load()
+    try:
+        mod.upsert_core_token(
+            token_key="short",
+            username="admin",
+            email="admin@forgesre.local",
+            password="x",
+            Token=FakeToken,
+            User=FakeUser,
+            v1=1,
+        )
+    except mod.UpsertError as exc:
+        assert "40" in str(exc)
+    else:
+        raise AssertionError("expected UpsertError")
+
+
 def test_launch_and_compose_call_helper():
     launch = (ROOT / "scripts" / "netbox-launch.sh").read_text(encoding="utf-8")
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
@@ -363,5 +440,7 @@ def test_launch_and_compose_call_helper():
     assert "could not upsert NetBox API token (UI still starts)" in launch
     assert "token never landed" in launch
     assert "v1 token ready" in upsert
+    assert "skipping v1 upsert" in upsert
+    assert "looks_like_v2_token" in upsert
     assert "granian" in launch
     assert "exec granian" in launch

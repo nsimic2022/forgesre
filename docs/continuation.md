@@ -17,13 +17,13 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 7 September 2026.** Operator N (Serbian): NetBox logs show **`forgesre could not upsert netbox api token ui still starts`** (or similar). Discovery stays HTTP **403** / “rejected API token”. Granian still starts, so the UI is up while the token never landed in the NetBox DB.
+**Monday 7 September 2026.** Operator N (Serbian) created a **NetBox v2 API token** in the UI because **v1 is deprecated**. The stack still upserted **v1 plaintext** on every NetBox start and Core sent `Authorization: Token` for 40-char secrets. That fought N: a UI v2 secret in `NETBOX_API_TOKEN` was treated as a bad v1 length, and launch could not leave the hashed v2 row alone.
 
-Root cause: the inline `manage.py shell` in `scripts/netbox-launch.sh` read **`user.is_staff`**. NetBox **4.5+** removed that field (`users.0013_user_remove_is_staff`). On a **live existing** v4.6 DB that raises `AttributeError`, the exception was swallowed, and Granian started anyway.
+Earlier the same day: v1 upsert failed on live v4.6 because launch read **`user.is_staff`** (removed in NetBox 4.5). That is already on `main` (`b76aeeb`). Do not redo it. Never touch `is_staff`.
 
 Code and docs stay English. Replies to N are Serbian.
 
-**Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
+**Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses. Never print tokens.
 
 ---
 
@@ -36,7 +36,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-upsert-fail-05f8` (`9a73abb`): **399 passed** (twice). Was 389 after the Health NetBox/SNMP tiles fix.
+Pytest count after the double run on `cursor/netbox-v2-token-05f8` (`ace153b`): **410 passed** (twice). Was 399 after the v1 upsert `is_staff` fix.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`. `create_pr` often **403** — merge `--no-ff` plus `git push origin main` still lands the change.
 
@@ -44,43 +44,40 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-### NetBox v1 token upsert actually succeeds on v4.6
+### First-class NetBox v2 tokens
 
-`scripts/netbox-upsert-token.py` (mounted at `/opt/netbox/forgesre-upsert-token.py`, called from `scripts/netbox-launch.sh`):
+NetBox 4.6 REST: v2 = `Authorization: Bearer nbt_<12-char key>.<secret>` (full string shown **once** at create). v1 = `Authorization: Token <40char>`. `key` in the DB is the 12-character public id, not the secret.
 
-- Never touches **`is_staff`**.
-- Official `Token(token=…, version=1)` first; fallbacks: `plaintext=`, `Token.objects.create`, legacy `key=` (pre-v2 schema), raw SQL.
-- `users.models.Token` with fallback `users.models.tokens.Token`. `TokenVersionChoices` missing → `version=1`.
-- SUPERUSER_NAME miss → email match → any existing superuser.
-- Logs **exception type + message** (never the token). UI still starts if upsert fails.
-- Success line: **`forgesre: v1 token ready`**. Failure line **`could not upsert`** means the token **never landed in the NetBox DB** — Discovery/doctor 403 is honest.
-
-`./forgesre update` hashes `scripts/netbox-upsert-token.py` into `.netbox-launch.stamp` and `--force-recreate`s `netbox`.
+- `backend/app/netbox.py` `_authorization`: `nbt_…` → `Bearer`; 40-char → `Token`. Case-insensitive prefix. Do not send a v2 secret as `Token`.
+- `scripts/netbox-upsert-token.py`: if `NETBOX_API_TOKEN` looks like v2, **skip** v1 create (`skipping v1 upsert`). 40-char v1 still upserts as fallback (`v1 token ready`). A 12-character key-only value is rejected (not upserted as v1). Never touches `is_staff`.
+- Discovery/doctor: HTTP **200** with v2 is **yellow** (0 devices) / **green** (≥1). Do not tell them to recreate a v1 token when v2 in secrets already works. 403 with a v2 secret says paste the full `nbt_…` value and recreate **core**, not recreate netbox+core for v1. **`could not upsert`** is still honest for a failed **v1** secret.
 
 ---
 
 ## 4. What N should do on the VM
 
-Do **not** run `./install.sh`. Do **not** paste a NetBox UI token.
+Do **not** run `./install.sh`. Put the **full v2 token** (shown once at create, not the 12-character key) in `NETBOX_API_TOKEN`. Recreate **core**. NetBox upsert must **not** replace v2. Never print the token.
 
 ```bash
 git pull origin main && ./forgesre update
-docker compose up -d --no-deps --force-recreate netbox
+# after editing secrets/secrets.env:
+docker compose up -d --no-deps --force-recreate core
 docker compose logs netbox | grep forgesre
 ```
 
-Expect **`v1 token ready`**, not **`could not upsert`**. Never print the token. Then:
+Expect **`skipping v1 upsert`** (v2 already in secrets) or **`v1 token ready`** (legacy 40-char). Not **`could not upsert`** for a valid v2 secret.
 
 ```bash
-docker compose up -d --no-deps --force-recreate core
 set -a && source secrets/secrets.env && set +a
+# v2:
 code=$(curl -sS -o /dev/null -w '%{http_code}' \
-  -H "Authorization: Token ${NETBOX_API_TOKEN}" \
+  -H "Authorization: Bearer ${NETBOX_API_TOKEN}" \
   http://127.0.0.1:8001/api/dcim/devices/?limit=1)
 echo "$code"
+# python3 -c 'import os,urllib.request; t=os.environ["NETBOX_API_TOKEN"]; r=urllib.request.Request("http://127.0.0.1:8001/api/dcim/devices/?limit=1", headers={"Authorization": ("Bearer " if t.startswith("nbt_") else "Token ")+t,"Accept":"application/json"}); print(urllib.request.urlopen(r).status)'
 ```
 
-**200** = Core can sync. **403** with token present = NetBox still rejected it (upsert did not persist — read the `forgesre:` exception type in netbox logs).
+**200** = Core can sync (Discovery yellow if empty, green if ≥1 device). **403** with a v2 secret = not the full `nbt_…` string, or core not recreated. Recreate **core**. Never print the token.
 
 Lab without image pull: `./forgesre update --offline`.
 
@@ -101,7 +98,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Prometheus Health Open is **Targets** (`:9090/targets?search=`), not Prometheus process `/metrics`. Core `/metrics` stays.
 - Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
 - `snmp-exporter` is a **default** compose service. No SNMP targets → doctor **paused (no SNMP targets)** (yellow), not DOWN. Do not un-pause by adding dummy devices.
-- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2`. Do not churn NetBox Hub/GHCR tags unless N asks. Core sync token is `NETBOX_API_TOKEN` on the NetBox **superuser**; `scripts/netbox-upsert-token.py` upserts it as a **v1 plaintext** token (`write_enabled=False`) on every start. Success log: **`forgesre: v1 token ready`**. **`could not upsert`** means the token never landed in the NetBox DB (UI still starts; Discovery 403 is honest). Never touch `User.is_staff` (removed in NetBox 4.5). Core is **not** a NetBox UI login. N does **not** need a second UI token. Do not drop database `forgesre` to “fix” NetBox. Health NetBox tile: UI up + 403 = **warn**, not paused.
+- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2`. Do not churn NetBox Hub/GHCR tags unless N asks. Prefer a NetBox UI **v2** token (full `nbt_…`) in `NETBOX_API_TOKEN`; Core sends `Authorization: Bearer`. `scripts/netbox-upsert-token.py` **skips** v1 create for that secret. A 40-character **v1 plaintext** value is still upserted as fallback (`write_enabled=False`) on the **superuser**. Success log: **`skipping v1 upsert`** or **`v1 token ready`**. **`could not upsert`** means a v1 secret never landed in the NetBox DB (UI still starts; Discovery 403 is honest). Never touch `User.is_staff` (removed in NetBox 4.5). Core is **not** a NetBox UI login. Do not drop database `forgesre` to “fix” NetBox. Health NetBox tile: UI up + 403 = **warn**, not paused. HTTP 200 with v2 is yellow (0 devices) / green (≥1).
 - NetBox UI **API token peppers not defined**: v4.5+ needs `API_TOKEN_PEPPERS`. Official image reads `API_TOKEN_PEPPER_1`. ForgeSRE generates `NETBOX_API_TOKEN_PEPPER` once in `secrets/secrets.env` (and `.env`) via `ensure-netbox-secrets.sh`. Extra config: `config/netbox/forgesre.py` → `/etc/netbox/config/forgesre.py`. Do not re-run `./install.sh`.
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it. That banner is **not** the Prometheus doctor journal.
 - Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update`.
@@ -118,7 +115,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - GUI ICMP is from the Core container (`iputils-ping` in the Dockerfile). Host `./forgesre ping` stays on the VM.
 - Jobs: **one worker thread** in Core. There is no Celery.
 - GUI list tables are **10 rows per page** (pagination already on `main`). Do not revert it.
-- Discovery **Sync NetBox**: primary (orange) admin POST when the UI answers (`/login/` or `/api/status/`). Devices API 403 is a warning, not `disabled`. First-boot (UI down) stays disabled with one sentence. Engineer/analyst see disabled + **Admin only.** Viewers cannot open `/discovery`. Never write back to NetBox. Bundled footer must not say “external instance”. Launch still upserts the v1 token on the superuser; `update` `--force-recreate`s `netbox`. Do not require a second UI token. The chip next to Sync is status only (Not connected / API 403 / No devices / Connected) — grey/yellow/green CSS, not a second button. Sentence *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.* stays on yellow. 403 with a token present says rejected (recreate netbox+core), not “token missing”.
+- Discovery **Sync NetBox**: primary (orange) admin POST when the UI answers (`/login/` or `/api/status/`). Devices API 403 is a warning, not `disabled`. First-boot (UI down) stays disabled with one sentence. Engineer/analyst see disabled + **Admin only.** Viewers cannot open `/discovery`. Never write back to NetBox. Bundled footer must not say “external instance”. Prefer UI v2 in `NETBOX_API_TOKEN`; launch skips v1 upsert for `nbt_…`; 40-char v1 is fallback. `update` `--force-recreate`s `netbox`. The chip next to Sync is status only (Not connected / API 403 / No devices / Connected) — grey/yellow/green CSS, not a second button. Sentence *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.* stays on yellow. 403 with a v1 token present says rejected (recreate netbox+core); 403 with v2 says full `nbt_…` then recreate **core** — not “token missing”.
 
 Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre test` / doctor. See [`docs/llm.md`](llm.md).
 
@@ -128,7 +125,7 @@ Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre t
 
 1. `git pull origin main`.
 2. Read **this file**, then [`docs/llm.md`](llm.md) and [`docs/cli.md`](cli.md).
-3. On the VM: `git pull origin main && ./forgesre update`, then **force-recreate netbox**. `docker compose logs netbox | grep forgesre` should say **v1 token ready**, not could not upsert. Never `./install.sh`. Never a second NetBox UI token for Core. Recreate **core** after editing `secrets.env`.
+3. On the VM: put the full v2 token in `NETBOX_API_TOKEN`, `git pull origin main && ./forgesre update`, recreate **core**. `docker compose logs netbox | grep forgesre` should say **skipping v1 upsert** (v2) or **v1 token ready** (fallback), not could not upsert for a valid v2 secret. Never `./install.sh`. Never print tokens.
 4. `pip install -r requirements-dev.txt` if needed, then `PYTHONPATH=backend:agents python3 -m pytest tests` **twice**, then merge to `main`. Branch pattern `cursor/<name>-05f8`.
 5. Replies to N are in **Serbian**. OSS docs and code stay in **English**.
 6. `ManagePullRequest` `create_pr` often 403. `git merge --no-ff` plus `git push origin main` still lands the change.

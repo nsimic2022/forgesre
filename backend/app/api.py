@@ -1259,7 +1259,7 @@ def _netbox_check() -> dict[str, str]:
     """Align with Discovery traffic light: ok / warn / starting — never paused when UI is up."""
     if not settings.netbox_enabled:
         return _ok("disabled")
-    from app.netbox import netbox_status, token_presence
+    from app.netbox import looks_like_v2_token, netbox_status, token_presence
 
     url = (settings.netbox_url or "http://127.0.0.1:8001").rstrip("/")
     token = settings.netbox_token
@@ -1281,11 +1281,18 @@ def _netbox_check() -> dict[str, str]:
             "fix": "Wait for first-boot migrations (can take several minutes). Then: docker compose logs netbox. External override: inventory.netbox.url + NETBOX_API_TOKEN.",
         }
     if result.get("ui_up") or result.get("degraded") or "403" in why:
-        fix = (
-            "Recreate netbox+core after changing secrets.env. Core is a token on the NetBox superuser (NETBOX_SUPERUSER_NAME), not a separate UI login."
-            if token_presence(token) == "yes"
-            else "Set NETBOX_API_TOKEN in secrets/secrets.env, then recreate core."
-        )
+        if token_presence(token) != "yes":
+            fix = "Set NETBOX_API_TOKEN in secrets/secrets.env, then recreate core."
+        elif looks_like_v2_token(token):
+            fix = (
+                "Confirm NETBOX_API_TOKEN is the full v2 secret shown once in the NetBox UI "
+                "(nbt_…, not the 12-character key), then recreate core. Launch will not replace a v2 token with v1."
+            )
+        else:
+            fix = (
+                "Recreate netbox+core after changing secrets.env. Core is a token on the NetBox superuser "
+                "(NETBOX_SUPERUSER_NAME), not a separate UI login."
+            )
         return {
             "status": "warn",
             "why": why,

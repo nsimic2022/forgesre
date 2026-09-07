@@ -11,9 +11,11 @@ from app.journal import list_entries, report
 from app.models import JournalEntry
 from app.netbox import (
     FORBIDDEN_MISSING_WHY,
+    FORBIDDEN_REJECTED_V2_WHY,
     FORBIDDEN_REJECTED_WHY,
     format_client_error,
     list_devices,
+    looks_like_v2_token,
     _authorization,
 )
 from app.seed import seed
@@ -62,11 +64,29 @@ def test_list_devices_empty_token_does_not_call_netbox():
         list_devices("http://127.0.0.1:8001", "")
 
 
-def test_authorization_uses_token_prefix_for_v1_plaintext():
-    assert _authorization("a" * 40) == f"Token {'a' * 40}"
+def test_authorization_v1_40_char_uses_token_prefix():
+    secret = "a" * 40
+    assert _authorization(secret) == f"Token {secret}"
     assert _authorization("Token secret") == "Token secret"
-    assert _authorization("nbt_abcdefghijkl.secret") == "Bearer nbt_abcdefghijkl.secret"
-    assert _authorization("Bearer nbt_x.y") == "Bearer nbt_x.y"
+    assert not looks_like_v2_token(secret)
+
+
+def test_authorization_v2_nbt_uses_bearer():
+    secret = "nbt_abcdefghijkl.notarealsecret"
+    assert looks_like_v2_token(secret) is True
+    assert _authorization(secret) == f"Bearer {secret}"
+    assert _authorization(f"Bearer {secret}") == f"Bearer {secret}"
+    assert _authorization(f"Token {secret}") == f"Bearer {secret}"
+    assert _authorization("NBT_abcdefghijkl.notarealsecret") == "Bearer NBT_abcdefghijkl.notarealsecret"
+    assert looks_like_v2_token("a" * 40) is False
+    assert looks_like_v2_token("") is False
+
+
+def test_format_client_error_403_v2_does_not_push_v1_recreate():
+    msg = format_client_error(_httpx_403(), "nbt_abcdefghijkl.notarealsecret")
+    assert msg == FORBIDDEN_REJECTED_V2_WHY
+    assert "recreate netbox+core" not in msg.lower()
+    assert "nbt_abcdefghijkl.notarealsecret" not in msg
 
 
 def test_list_devices_403_is_short(monkeypatch):
@@ -125,6 +145,25 @@ def test_list_devices_reads_results(monkeypatch):
             "status": "active",
         }
     ]
+
+
+def test_list_devices_v2_sends_bearer(monkeypatch):
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["authorization"] = request.headers.get("authorization") or ""
+        return httpx.Response(200, json={"results": [], "next": None}, request=request)
+
+    real = httpx.Client
+
+    def wrapped(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", wrapped)
+    token = "nbt_abcdefghijkl.notarealsecret"
+    assert list_devices("http://127.0.0.1:8001", token) == []
+    assert seen["authorization"] == f"Bearer {token}"
 
 
 def test_sync_netbox_403_journal_is_short_and_deduped(monkeypatch):
