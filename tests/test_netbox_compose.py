@@ -11,7 +11,7 @@ from app.api import doctor_payload
 from app.db import Base, SessionLocal, engine
 from app.main import app
 from app.models import User
-from app.netbox import FIRST_BOOT_WHY, netbox_status, sync_cta
+from app.netbox import FIRST_BOOT_WHY, is_local_netbox_url, netbox_status, sync_cta
 from app.security import hash_password
 from app.seed import seed
 from app.stack import doctor_soft_status, enrich_components, rewrite_host
@@ -52,6 +52,11 @@ def test_compose_netbox_is_default_service():
     assert "API_TOKEN_PEPPER" in launch
     assert "write_enabled=False" in launch
     assert "users.models import Token" in launch
+    assert "TokenVersionChoices.V1" in launch
+    assert "plaintext=token_key" in launch
+    assert "token=token_key" in launch
+    assert "ForgeSRE Core read-sync" in launch
+    assert "dcim" in launch and "view" in launch
     assert "DROP DATABASE" not in launch.upper()
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "mailpit" not in compose.lower()
@@ -88,6 +93,13 @@ def test_netbox_forgesre_extra_skips_empty_pepper(monkeypatch):
     assert spec.loader is not None
     spec.loader.exec_module(mod)
     assert not hasattr(mod, "API_TOKEN_PEPPERS")
+
+
+def test_is_local_netbox_url():
+    assert is_local_netbox_url("http://127.0.0.1:8001") is True
+    assert is_local_netbox_url("http://localhost:8001") is True
+    assert is_local_netbox_url("https://netbox.example.local") is False
+    assert is_local_netbox_url("") is False
 
 
 def test_netbox_status_marks_connect_as_starting():
@@ -151,6 +163,36 @@ def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
     assert 'class="secondary">Sync NetBox' not in html
     assert 'action="/discovery/netbox-sync"' in html
     assert "Admin only." not in html
+    assert "still points Core at an external instance" not in html
+    assert "NETBOX_API_TOKEN" in html
+    assert "do not need a second token" in html
+    db.close()
+
+
+def test_discovery_footer_omits_external_when_bundled(monkeypatch):
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", "token")
+    monkeypatch.setattr("app.netbox.netbox_status", lambda *a, **k: {"ok": True})
+    client, db = _discovery_client()
+    html = client.get("/discovery").text
+    assert "bundled at" in html
+    assert "still points Core at an external instance" not in html
+    assert "NETBOX_API_TOKEN" in html
+    db.close()
+
+
+def test_discovery_footer_names_external_when_url_is_not_local(monkeypatch):
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "https://netbox.example.local")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", "token")
+    monkeypatch.setattr("app.netbox.netbox_status", lambda *a, **k: {"ok": True})
+    client, db = _discovery_client()
+    html = client.get("/discovery").text
+    assert "https://netbox.example.local" in html
+    assert "inventory.netbox.url" in html
+    assert "--netbox-url" in html
+    assert "do not need a second token" not in html
     db.close()
 
 
@@ -273,6 +315,7 @@ def test_install_and_update_bundle_netbox_default_on():
     update = (ROOT / "scripts" / "update.sh").read_text(encoding="utf-8")
     assert "ensure-netbox-secrets" in update
     assert "up -d snmp-exporter netbox-redis netbox" in update
+    assert "--force-recreate netbox" in update
     assert "first boot can take several minutes" in update.lower() or "migrations" in update.lower()
     assert "yellow" in update.lower()
     secrets = (ROOT / "scripts" / "ensure-netbox-secrets.sh").read_text(encoding="utf-8")
@@ -301,6 +344,11 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "Admin only." in disc
     assert "disabled" in disc
     assert disc.find("Scan now") < disc.find("NetBox sync")
+    assert "still points Core at an external instance" not in disc
+    assert "NETBOX_API_TOKEN" in disc
+    assert "do not need a second token" in disc
+    assert "netbox_url_is_local" in disc
+    assert "--netbox-url" in disc
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "/api/status/" in handbook
     assert "Admin only" in handbook
@@ -319,6 +367,9 @@ def test_docs_say_bundled_netbox_default_on():
     assert "NETBOX_API_TOKEN" in handbook
     assert "403" in handbook
     assert "write_enabled=False" in handbook or "read-only" in handbook.lower()
+    assert "plaintext" in handbook.lower()
+    assert "second" in handbook.lower()
+    assert "TokenVersionChoices" not in handbook
     assert "API_TOKEN_PEPPER" in handbook or "peppers" in handbook.lower()
     assert "/api/status/" in handbook
     assert "Admin only" in handbook

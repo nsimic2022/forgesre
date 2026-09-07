@@ -1,12 +1,22 @@
 #!/bin/bash
 # Granian bind for host-network NetBox. Core already owns :8080.
 #
-# docker-entrypoint creates SUPERUSER_API_TOKEN only when the superuser is
-# first inserted. Later starts print "Superuser Already Exists" and skip the
-# token, so Core's NETBOX_API_TOKEN 403s /api/dcim/devices/. Upsert a
-# read-only token on every start. Does not touch database forgesre.
+# docker-entrypoint creates a superuser only on first insert. netbox-docker
+# 5.0.2 / NetBox v4.6 will not mint SUPERUSER_API_TOKEN unless SUPERUSER_API_KEY
+# is also set (v2 tokens). Later starts print "already exists" and skip the
+# token, so Core's NETBOX_API_TOKEN 403s /api/dcim/devices/.
 #
-# UI token create (v2) also needs API_TOKEN_PEPPERS (≥50 chars). Compose sets
+# NetBox v4.6 Token model: default version is v2. `key` is a 12-char public id;
+# the secret is HMAC'd with API_TOKEN_PEPPERS and never stored. Creating with
+# key=<40-char NETBOX_API_TOKEN> fails the version check constraint (or stores a
+# hash the REST API does not accept as Authorization: Token …).
+#
+# Upsert a legacy v1 token on every start: plaintext = NETBOX_API_TOKEN (40 hex
+# chars), assigned to the superuser, write_enabled=False. Core already sends
+# Authorization: Token <NETBOX_API_TOKEN>. Do not copy a second token from the
+# NetBox UI. Does not touch database forgesre.
+#
+# UI token create (v2) still needs API_TOKEN_PEPPERS (≥50 chars). Compose sets
 # API_TOKEN_PEPPER_1 from NETBOX_API_TOKEN_PEPPER in secrets/secrets.env.
 set -euo pipefail
 PORT="${NETBOX_HTTP_PORT:-8001}"
@@ -28,7 +38,9 @@ ensure_core_api_token() {
     FORGESRE_NB_PASSWORD="${SUPERUSER_PASSWORD:-}" \
     python /opt/netbox/netbox/manage.py shell --no-startup --no-imports --interface python <<'PY'
 import os
+
 from django.contrib.auth import get_user_model
+from users.choices import TokenVersionChoices
 from users.models import Token
 
 token_key = (os.environ.get("FORGESRE_NB_TOKEN") or "").strip()
@@ -37,6 +49,14 @@ email = (os.environ.get("FORGESRE_NB_EMAIL") or "admin@forgesre.local").strip()
 password = os.environ.get("FORGESRE_NB_PASSWORD") or ""
 if not token_key:
     raise SystemExit(0)
+if len(token_key) != 40:
+    print(
+        "forgesre: NETBOX_API_TOKEN length",
+        len(token_key),
+        "(v1 plaintext must be 40 characters; openssl rand -hex 20)",
+    )
+    raise SystemExit(1)
+
 User = get_user_model()
 user = User.objects.filter(username=username).first()
 if user is None:
@@ -50,10 +70,29 @@ elif not user.is_active or not user.is_staff or not user.is_superuser:
     user.is_staff = True
     user.is_superuser = True
     user.save()
-row = Token.objects.filter(key=token_key).first()
+
+# Previous upsert wrote the 40-char secret into v2 `key` (max 12). Delete it.
+stale = Token.objects.filter(key=token_key)
+if stale.exists():
+    n = stale.count()
+    stale.delete()
+    print("forgesre: removed", n, "invalid token(s) that stored the secret in key")
+
+row = Token.objects.filter(version=TokenVersionChoices.V1, plaintext=token_key).first()
 if row is None:
-    Token.objects.create(user=user, key=token_key, write_enabled=False)
-    print("forgesre: created read-only API token for Core sync")
+    row = Token(
+        user=user,
+        version=TokenVersionChoices.V1,
+        write_enabled=False,
+        enabled=True,
+        description="ForgeSRE Core read-sync",
+        key=None,
+        pepper_id=None,
+        hmac_digest=None,
+        token=token_key,
+    )
+    row.save()
+    print("forgesre: created read-only v1 API token for Core sync")
 else:
     changed = False
     if row.user_id != user.id:
@@ -62,13 +101,39 @@ else:
     if getattr(row, "write_enabled", True):
         row.write_enabled = False
         changed = True
+    if not getattr(row, "enabled", True):
+        row.enabled = True
+        changed = True
     if changed:
         row.save()
-        print("forgesre: updated API token to read-only Core sync")
+        print("forgesre: updated v1 API token to read-only Core sync")
     else:
-        print("forgesre: API token already present (read-only)")
+        print("forgesre: API token already present (read-only v1)")
+
+# Superuser already lists devices. Attach ObjectPermission too so a later
+# non-superuser assignment still GETs /api/dcim/devices/.
+try:
+    from core.models import ObjectType
+    from users.models import ObjectPermission
+
+    ot = ObjectType.objects.filter(app_label="dcim", model="device").first()
+    if ot is not None:
+        perm = ObjectPermission.objects.filter(name="ForgeSRE Core read devices").first()
+        if perm is None:
+            perm = ObjectPermission(name="ForgeSRE Core read devices", enabled=True, actions=["view"])
+            perm.save()
+        elif list(perm.actions) != ["view"] or not perm.enabled:
+            perm.actions = ["view"]
+            perm.enabled = True
+            perm.save()
+        perm.users.add(user)
+        perm.object_types.add(ot)
+except Exception as exc:
+    print("forgesre: dcim.view_device object permission skipped:", exc)
 PY
-  ) || echo "forgesre: could not upsert NetBox API token (UI still starts)" >&2
+  ) || {
+    echo "forgesre: could not upsert NetBox API token (UI still starts)" >&2
+  }
 }
 
 ensure_core_api_token

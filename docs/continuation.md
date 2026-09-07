@@ -17,17 +17,11 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 7 September 2026.** Operator N (Serbian): Journal no longer shows NetBox **403**, but **Sync NetBox** on Discovery stayed **grey**. On `origin/main` the control was `class="secondary"` (same grey family as disabled) with no `disabled` attribute and no live `/api/status/` gate. N is admin → not an RBAC miss. Do not open Sync to viewers. Code and docs stay English. Replies to N are Serbian.
+**Monday 7 September 2026.** Operator N (Serbian): Discovery **Sync NetBox** stayed disabled with `NetBox UI up; API HTTP 403 (token missing, not created in NetBox, or not allowed to read devices.)`. Footer wrongly said `--netbox-url` still points Core at an **external** instance while they are on bundled `:8001`. They will **not** copy a NetBox-UI-created token into `secrets.env` (two different tokens). Core uses `NETBOX_API_TOKEN` from `secrets/secrets.env`. Journal 403 spam was already reduced; `GET /api/dcim/devices/` was still 403 from Core’s token, so the grey button was correct.
 
-The 403 upsert (`NETBOX_API_TOKEN`) and UI **API token peppers** (`API_TOKEN_PEPPER_1` / `NETBOX_API_TOKEN_PEPPER`) are already on `main` (`7498f97` / `236c482`).
+Root cause: NetBox **v4.6** `Token` default is **v2** (`key` = 12-char public id, HMAC digest with `API_TOKEN_PEPPERS`, plaintext never stored). Launch upserted `Token.objects.create(..., key=NETBOX_API_TOKEN)` with the 40-char secret in `key`. The REST API does not accept `Authorization: Token <that string>`. netbox-docker 5.0.2 also skips `SUPERUSER_API_TOKEN` unless `SUPERUSER_API_KEY` is set, and only on first superuser insert.
 
-On the Ubuntu VM N uses:
-
-```bash
-git pull origin main && ./forgesre update
-```
-
-Then hard-refresh Discovery (CSS). If N is **admin** and NetBox `/api/status/` is 200 with a working token, **Sync NetBox** is the same orange primary as Scan now and is clickable. First-boot migrations: still grey/`disabled` with one sentence next to it. Engineer/analyst: **Admin only.** — not a dead button. Viewers still cannot open `/discovery`.
+Code and docs stay English. Replies to N are Serbian.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
 
@@ -42,7 +36,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-sync-button-05f8`: **368 passed** (twice). Was 362 after NetBox token peppers.
+Pytest count after the double run on `cursor/netbox-token-upsert-05f8`: **372 passed** (twice). Was 368 after the Sync NetBox button.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -50,25 +44,40 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-Discovery **Sync NetBox** is clickable for admin when the API is up:
+Bundled NetBox accepts `NETBOX_API_TOKEN` from secrets on **every** start (existing DB, not first-boot-only):
 
-- Root cause on `origin/main`: `class="secondary"` (grey) with no health check and no why. Not `require_page("admin")` if N is admin. Not last-sync-success (that gate did not exist).
-- Enable when `netbox_status()` is ok (`/api/status/` 200 and token works). Primary button, not `.secondary`.
-- First-boot connect/migrations: `disabled` + one sentence next to the button.
-- Engineer/analyst on Discovery: **Admin only.** POST `/discovery/netbox-sync` stays 403. Viewers still cannot open Discovery (`write_assets`).
-- Did not write back to NetBox. Did not revert GUI list pagination. Did not drop database `forgesre`. Did not tell N to run `./install.sh`.
+- Launch upserts a **v1** token: `plaintext=NETBOX_API_TOKEN` (40 hex chars), superuser, `write_enabled=False`, `enabled=True`, plus `ObjectPermission` view on `dcim.device`.
+- Deletes a leftover v2 row that stored the secret in `key`.
+- `./forgesre update` `--force-recreate`s `netbox` so the bind-mounted `netbox-launch.sh` actually runs.
+- Discovery footer: bundled (`127.0.0.1` / `localhost`) says Core uses `NETBOX_API_TOKEN` — no second UI token. `--netbox-url` / external copy only when `inventory.netbox.url` is not localhost.
+- Did not write back to NetBox. Did not revert GUI list pagination / grey-button CSS. Did not drop database `forgesre`. Did not tell N to run `./install.sh`.
+
+Expect after recreate: `GET /api/dcim/devices/?limit=1` with that token is **HTTP 200** (empty list OK). Admin **Sync NetBox** is orange.
 
 ---
 
 ## 4. What N should do on the VM
 
-Do **not** run `./install.sh`.
+Do **not** run `./install.sh`. Do **not** paste a token from the NetBox UI into `secrets.env`.
 
 ```bash
 git pull origin main && ./forgesre update
+# update force-recreates netbox. If the API is still 403:
+docker compose up -d --no-deps --force-recreate netbox
+docker compose up -d --no-deps --force-recreate core
 ```
 
-Then hard-refresh Discovery. Admin + NetBox API healthy → orange **Sync NetBox**. Still migrating → grey button with a sentence. Not admin → **Admin only.** Core sync does not require a new UI token when `NETBOX_API_TOKEN` is already in `secrets/secrets.env`.
+Check:
+
+```bash
+set -a && source secrets/secrets.env && set +a
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Token ${NETBOX_API_TOKEN}" \
+  -H "Accept: application/json" \
+  "http://127.0.0.1:8001/api/dcim/devices/?limit=1"
+```
+
+Must print `200`. Then hard-refresh Discovery: admin → orange **Sync NetBox**.
 
 Lab without image pull: `./forgesre update --offline`.
 
@@ -89,8 +98,8 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Prometheus Health Open is **Targets** (`:9090/targets?search=`), not Prometheus process `/metrics`. Core `/metrics` stays.
 - Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
 - `snmp-exporter` is a **default** compose service. No SNMP targets → doctor **paused** (yellow), not DOWN.
-- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2`. Do not churn NetBox Hub/GHCR tags unless N asks. Core sync token is `NETBOX_API_TOKEN`; launch upserts it read-only. Do not drop database `forgesre` to “fix” NetBox.
-- NetBox UI **API token peppers not defined**: v4.5+ needs `API_TOKEN_PEPPERS`. Official image reads `API_TOKEN_PEPPER_1`. ForgeSRE generates `NETBOX_API_TOKEN_PEPPER` once in `secrets/secrets.env` (and `.env`) via `ensure-netbox-secrets.sh`. Extra config: `config/netbox/forgesre.py` → `/etc/netbox/config/forgesre.py`. N does not need a UI token if launch upserts `NETBOX_API_TOKEN`. Do not re-run `./install.sh`.
+- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2`. Do not churn NetBox Hub/GHCR tags unless N asks. Core sync token is `NETBOX_API_TOKEN`; launch upserts it as a **v1 plaintext** token (`write_enabled=False`) on every start. N does **not** need a second UI token. Do not drop database `forgesre` to “fix” NetBox.
+- NetBox UI **API token peppers not defined**: v4.5+ needs `API_TOKEN_PEPPERS`. Official image reads `API_TOKEN_PEPPER_1`. ForgeSRE generates `NETBOX_API_TOKEN_PEPPER` once in `secrets/secrets.env` (and `.env`) via `ensure-netbox-secrets.sh`. Extra config: `config/netbox/forgesre.py` → `/etc/netbox/config/forgesre.py`. Do not re-run `./install.sh`.
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it. That banner is **not** the Prometheus doctor journal.
 - Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update`.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`.
@@ -106,7 +115,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - GUI ICMP is from the Core container (`iputils-ping` in the Dockerfile). Host `./forgesre ping` stays on the VM.
 - Jobs: **one worker thread** in Core. There is no Celery.
 - GUI list tables are **10 rows per page** (pagination already on `main`). Do not revert it.
-- Discovery **Sync NetBox**: primary admin button when `/api/status/` is 200 and the token works. First-boot migrations keep it `disabled` with one sentence. Engineer/analyst see **Admin only.** Viewers cannot open `/discovery`. Never write back to NetBox. The previous grey look was `class="secondary"`, not a permission hole to open to all roles.
+- Discovery **Sync NetBox**: primary admin button when `/api/status/` is 200 and the token works. First-boot migrations keep it `disabled` with one sentence. Engineer/analyst see **Admin only.** Viewers cannot open `/discovery`. Never write back to NetBox. Bundled footer must not say “external instance”. The previous grey look was `class="secondary"`, not a permission hole to open to all roles.
 
 Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre test` / doctor. See [`docs/llm.md`](llm.md).
 
@@ -116,7 +125,7 @@ Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre t
 
 1. `git pull origin main`.
 2. Read **this file**, then [`docs/llm.md`](llm.md) and [`docs/cli.md`](cli.md).
-3. On the VM: `git pull origin main && ./forgesre update`. Never `./install.sh`.
+3. On the VM: `git pull origin main && ./forgesre update`. Never `./install.sh`. Never a second NetBox UI token for Core.
 4. `pip install -r requirements-dev.txt` if needed, then `PYTHONPATH=backend:agents python3 -m pytest tests` **twice**, then merge to `main`. Branch pattern `cursor/<name>-05f8`.
 5. Replies to N are in **Serbian**. OSS docs and code stay in **English**.
 6. `ManagePullRequest` `create_pr` often 403. `git merge --no-ff` plus `git push origin main` still lands the change.
