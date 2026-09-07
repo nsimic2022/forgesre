@@ -36,7 +36,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/netbox-v2-token-05f8`: fill in after SHA. Was 399 after the v1 upsert `is_staff` fix.
+Pytest count after the double run on `cursor/netbox-v2-token-05f8` (`ace153b`): **410 passed** (twice). Was 399 after the v1 upsert `is_staff` fix.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`. `create_pr` often **403** — merge `--no-ff` plus `git push origin main` still lands the change.
 
