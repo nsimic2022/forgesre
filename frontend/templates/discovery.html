@@ -33,18 +33,27 @@
 </section>
 {% endif %}
 
-{% if can('admin') %}
 <section class="card">
   <h2>NetBox sync</h2>
   <p class="muted">Read-only. ForgeSRE never writes back. Separate from Scan now.{% if not netbox_enabled %} Sync is off in config.{% endif %}</p>
-  {% if netbox_enabled %}
-  <form method="post" action="/discovery/netbox-sync" class="inline">
-    <button type="submit" class="secondary">Sync NetBox</button>
-  </form>
-  <p class="muted">NetBox: <code>{{ netbox_url }}</code>. Bundled UI is <code>http://&lt;VM-IP&gt;:8001</code>. <code>--netbox-url</code> still points Core at an external instance.</p>
+  {% if can('admin') %}
+    {% if netbox_enabled %}
+    <div class="tool-row">
+      {% if netbox_sync_ready %}
+      <form method="post" action="/discovery/netbox-sync" class="inline">
+        <button type="submit">Sync NetBox</button>
+      </form>
+      {% else %}
+      <button type="button" disabled>Sync NetBox</button>
+      <span class="muted">{{ netbox_sync_why }}</span>
+      {% endif %}
+    </div>
+    <p class="muted">NetBox: <code>{{ netbox_url }}</code>. Bundled UI is <code>http://&lt;VM-IP&gt;:8001</code>. <code>--netbox-url</code> still points Core at an external instance.</p>
+    {% endif %}
+  {% else %}
+  <p class="muted">Admin only.</p>
   {% endif %}
 </section>
-{% endif %}
 
 <table>
   <thead>

@@ -5,9 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+from fastapi.testclient import TestClient
 
 from app.api import doctor_payload
-from app.netbox import netbox_status
+from app.db import Base, SessionLocal, engine
+from app.main import app
+from app.models import User
+from app.netbox import FIRST_BOOT_WHY, netbox_status, sync_cta
+from app.security import hash_password
+from app.seed import seed
 from app.stack import doctor_soft_status, enrich_components, rewrite_host
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +95,115 @@ def test_netbox_status_marks_connect_as_starting():
     assert result["ok"] is False
     assert result.get("starting") is True
     assert "migration" in result["why"].lower() or "not answering" in result["why"].lower()
+
+
+def test_sync_cta_ready_when_api_ok(monkeypatch):
+    monkeypatch.setattr("app.netbox.netbox_status", lambda *a, **k: {"ok": True})
+    result = sync_cta("http://127.0.0.1:8001", "token", True)
+    assert result["ready"] is True
+    assert result["why"] == ""
+    assert result["starting"] is False
+
+
+def test_sync_cta_first_boot_keeps_disabled(monkeypatch):
+    monkeypatch.setattr(
+        "app.netbox.netbox_status",
+        lambda *a, **k: {"ok": False, "starting": True, "why": "connect refused"},
+    )
+    result = sync_cta("http://127.0.0.1:8001", "token", True)
+    assert result["ready"] is False
+    assert result["starting"] is True
+    assert result["why"] == FIRST_BOOT_WHY
+    assert result["why"].count(".") == 1
+
+
+def test_sync_cta_off_when_disabled(monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("netbox_status must not run when sync is off")
+
+    monkeypatch.setattr("app.netbox.netbox_status", boom)
+    result = sync_cta("http://127.0.0.1:8001", "token", False)
+    assert result["ready"] is False
+    assert "off in config" in result["why"].lower()
+
+
+def _discovery_client(email: str = "admin@forgesre.local") -> tuple[TestClient, object]:
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    client = TestClient(app)
+    posted = client.post("/login", data={"email": email, "password": "testpass"}, follow_redirects=False)
+    assert posted.status_code in {302, 303}
+    return client, db
+
+
+def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", "token")
+    monkeypatch.setattr("app.netbox.netbox_status", lambda *a, **k: {"ok": True})
+    client, db = _discovery_client()
+    page = client.get("/discovery")
+    assert page.status_code == 200
+    html = page.text
+    assert ">Sync NetBox<" in html
+    assert "disabled>Sync NetBox<" not in html
+    assert 'class="secondary">Sync NetBox' not in html
+    assert 'action="/discovery/netbox-sync"' in html
+    assert "Admin only." not in html
+    db.close()
+
+
+def test_discovery_sync_button_disabled_during_first_boot(monkeypatch):
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", "token")
+    monkeypatch.setattr(
+        "app.netbox.netbox_status",
+        lambda *a, **k: {"ok": False, "starting": True, "why": "connect refused"},
+    )
+    client, db = _discovery_client()
+    page = client.get("/discovery")
+    assert page.status_code == 200
+    html = page.text
+    assert "disabled" in html
+    assert FIRST_BOOT_WHY in html
+    assert 'action="/discovery/netbox-sync"' not in html
+    db.close()
+
+
+def test_discovery_sync_is_admin_only_for_engineer(monkeypatch):
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
+    monkeypatch.setattr("app.settings.Settings.netbox_token", "token")
+    monkeypatch.setattr("app.netbox.netbox_status", lambda *a, **k: {"ok": True})
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    if db.query(User).filter_by(email="engineer@forgesre.local").first() is None:
+        db.add(
+            User(
+                email="engineer@forgesre.local",
+                name="engineer",
+                password_hash=hash_password("testpass"),
+                role="engineer",
+            )
+        )
+        db.commit()
+    client = TestClient(app)
+    posted = client.post(
+        "/login",
+        data={"email": "engineer@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    assert posted.status_code in {302, 303}
+    page = client.get("/discovery")
+    assert page.status_code == 200
+    assert "Admin only." in page.text
+    assert 'action="/discovery/netbox-sync"' not in page.text
+    blocked = client.post("/discovery/netbox-sync", follow_redirects=False)
+    assert blocked.status_code == 403
+    db.close()
 
 
 def test_doctor_netbox_warn_when_starting(monkeypatch):
@@ -182,7 +297,13 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "not nmap" in disc.lower()
     assert 'action="/discovery/scan"' in disc
     assert 'action="/discovery/netbox-sync"' in disc
+    assert 'class="secondary">Sync NetBox' not in disc
+    assert "Admin only." in disc
+    assert "disabled" in disc
     assert disc.find("Scan now") < disc.find("NetBox sync")
+    handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
+    assert "/api/status/" in handbook
+    assert "Admin only" in handbook
     appliance = (ROOT / "scripts" / "appliance_test.py").read_text(encoding="utf-8")
     assert "http.netbox" in appliance
     assert "do not fake green" in appliance.lower() or "migrations" in appliance.lower()
@@ -199,6 +320,8 @@ def test_docs_say_bundled_netbox_default_on():
     assert "403" in handbook
     assert "write_enabled=False" in handbook or "read-only" in handbook.lower()
     assert "API_TOKEN_PEPPER" in handbook or "peppers" in handbook.lower()
+    assert "/api/status/" in handbook
+    assert "Admin only" in handbook
     assert "install.sh" in handbook
     assert "8001" in install
     assert "--netbox-url" in install
