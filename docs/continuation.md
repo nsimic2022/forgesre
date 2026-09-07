@@ -92,6 +92,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
 - `snmp-exporter` is a **default** compose service. No SNMP targets → doctor **paused** (yellow), not DOWN.
 - Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2`. Do not churn NetBox Hub/GHCR tags unless N asks. Core sync token is `NETBOX_API_TOKEN`; launch upserts it read-only. Do not drop database `forgesre` to “fix” NetBox.
+- NetBox UI **API token peppers not defined**: v4.5+ needs `API_TOKEN_PEPPERS`. Official image reads `API_TOKEN_PEPPER_1`. ForgeSRE generates `NETBOX_API_TOKEN_PEPPER` once in `secrets/secrets.env` (and `.env`) via `ensure-netbox-secrets.sh`. Extra config: `config/netbox/forgesre.py` → `/etc/netbox/config/forgesre.py`. N does not need a UI token if launch upserts `NETBOX_API_TOKEN`. Do not re-run `./install.sh`.
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it. That banner is **not** the Prometheus doctor journal.
 - Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update`.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`.

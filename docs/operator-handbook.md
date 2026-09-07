@@ -334,6 +334,8 @@ Demo candidate `10.20.30.41` is seeded so you can click Approve without a live s
 
 Core finds it via compose env `NETBOX_URL=http://127.0.0.1:8001` and `NETBOX_API_TOKEN` (same key in `secrets/secrets.env` and `.env`) unless `config/forgesre.yml` `inventory.netbox.url` is set (`--netbox-url` for an external instance). The bundled NetBox container upserts that token on every start as **read-only** (`write_enabled=False`). docker-entrypoint only creates `SUPERUSER_API_TOKEN` when the superuser is first inserted — a later start without the matching Django token is why Journal showed **NetBox sync failed** HTTP **403** on `/api/dcim/devices/`. After `git pull origin main && ./forgesre update`, Core sync is GET-only. On **Discovery**, **Sync NetBox** (admin), or wait for the 6-hour loop. Devices become local assets (`source=netbox`). Core **never writes** back to NetBox. Local inventory stays the monitoring source of truth. Do **not** re-run `./install.sh` (that regenerates secrets).
 
+You do **not** need to create an API token in the NetBox UI (`:8001`) for Core sync: `NETBOX_API_TOKEN` in `secrets/secrets.env` is upserted on launch. If you still create a token in the UI, NetBox v4.5+ needs `API_TOKEN_PEPPERS` (image env `API_TOKEN_PEPPER_1`). `./forgesre update` writes `NETBOX_API_TOKEN_PEPPER` once into `secrets/secrets.env` (and `.env`) if it is missing — that is what was missing when the UI said **API token peppers not defined**. `SECRET_KEY` for NetBox is `NETBOX_SECRET_KEY` (already generated). Do not drop database `forgesre`.
+
 To disable the Core sync (container can keep running): `inventory.netbox.mode: disabled`. To use only an existing DC NetBox: `mode: external` and the URL/token.
 
 ---

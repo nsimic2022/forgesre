@@ -211,7 +211,7 @@ write_files() {
   chmod 750 "$DATA_DIR/logs" 2>/dev/null || true
   chmod 770 "$DATA_DIR/postgres" "$DATA_DIR/prometheus" "$DATA_DIR/grafana" "$DATA_DIR/loki" "$DATA_DIR/alloy" 2>/dev/null || true
   sudo chown 70:70 "$DATA_DIR/postgres" 2>/dev/null || true
-  local pg_pass admin_pass gf_pass webhook secret nb_db nb_redis nb_secret nb_admin nb_token
+  local pg_pass admin_pass gf_pass webhook secret nb_db nb_redis nb_secret nb_admin nb_token nb_pepper
   pg_pass="$(openssl rand -hex 12)"
   admin_pass="$(openssl rand -hex 8)"
   gf_pass="$(openssl rand -hex 8)"
@@ -221,6 +221,7 @@ write_files() {
   nb_redis="$(openssl rand -hex 16)"
   nb_secret="$(openssl rand -hex 32)"
   nb_admin="$(openssl rand -hex 8)"
+  nb_pepper="$(openssl rand -hex 32)"
   if [[ -n "${NETBOX_TOKEN}" ]]; then
     nb_token="${NETBOX_TOKEN}"
   else
@@ -238,6 +239,8 @@ SECRET_KEY=${secret}
 SMTP_USERNAME=
 SMTP_PASSWORD=
 NETBOX_API_TOKEN=${nb_token}
+NETBOX_API_TOKEN_PEPPER=${nb_pepper}
+API_TOKEN_PEPPER_1=${nb_pepper}
 NETBOX_DB_PASSWORD=${nb_db}
 NETBOX_REDIS_PASSWORD=${nb_redis}
 NETBOX_SECRET_KEY=${nb_secret}
@@ -308,6 +311,7 @@ NETBOX_DB_PASSWORD=${nb_db}
 NETBOX_REDIS_PASSWORD=${nb_redis}
 NETBOX_SECRET_KEY=${nb_secret}
 NETBOX_API_TOKEN=${nb_token}
+NETBOX_API_TOKEN_PEPPER=${nb_pepper}
 NETBOX_SUPERUSER_NAME=admin
 NETBOX_SUPERUSER_EMAIL=admin@forgesre.local
 NETBOX_SUPERUSER_PASSWORD=${nb_admin}

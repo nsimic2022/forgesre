@@ -226,6 +226,11 @@ services:
       REDIS_SSL: "false"
       REDIS_CACHE_SSL: "false"
       SECRET_KEY: ${NETBOX_SECRET_KEY}
+      # NetBox v4.5+ UI token create needs API_TOKEN_PEPPERS. Official image
+      # reads API_TOKEN_PEPPER_1 (see configuration.py). ≥50 chars; generated
+      # once into secrets/secrets.env as NETBOX_API_TOKEN_PEPPER.
+      API_TOKEN_PEPPER_1: ${NETBOX_API_TOKEN_PEPPER}
+      NETBOX_API_TOKEN_PEPPER: ${NETBOX_API_TOKEN_PEPPER}
       ALLOWED_HOSTS: "* localhost 127.0.0.1 ::1"
       CORS_ORIGIN_ALLOW_ALL: "true"
       SKIP_SUPERUSER: "false"
@@ -241,6 +246,7 @@ services:
       RELEASE_CHECK_URL: ""
     volumes:
       - ./scripts/netbox-launch.sh:/opt/netbox/launch-netbox.sh:ro
+      - ./config/netbox/forgesre.py:/etc/netbox/config/forgesre.py:ro
       - ${FORGESRE_DATA:-./data}/netbox/media:/opt/netbox/netbox/media
       - ${FORGESRE_DATA:-./data}/netbox/reports:/opt/netbox/netbox/reports
       - ${FORGESRE_DATA:-./data}/netbox/scripts:/opt/netbox/netbox/scripts

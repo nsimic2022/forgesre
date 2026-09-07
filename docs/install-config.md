@@ -357,6 +357,7 @@ SMTP_USERNAME=
 SMTP_PASSWORD=
 SNMP_COMMUNITY=public
 NETBOX_API_TOKEN=          # Core read-sync; NetBox upserts this token on every start (read-only)
+NETBOX_API_TOKEN_PEPPER=   # NetBox v4.5+ UI v2 tokens; compose maps to API_TOKEN_PEPPER_1 (≥50 chars)
 NETBOX_SUPERUSER_NAME=admin
 NETBOX_SUPERUSER_EMAIL=admin@forgesre.local
 NETBOX_SUPERUSER_PASSWORD=

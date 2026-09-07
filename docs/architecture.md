@@ -814,7 +814,8 @@ POSTGRES_PASSWORD
 FORGESRE_ADMIN_PASSWORD          # bootstrap, then users live in DB
 ALERTMANAGER_WEBHOOK_TOKEN
 GRAFANA_ADMIN_PASSWORD           # if Grafana enabled
-NETBOX_API_TOKEN                 # if NetBox enabled
+NETBOX_API_TOKEN                 # if NetBox enabled (Core read-sync)
+NETBOX_API_TOKEN_PEPPER          # NetBox v4.5+ UI v2 tokens (API_TOKEN_PEPPER_1)
 SMTP_USERNAME
 SMTP_PASSWORD
 LLM_API_KEY                      # optional even for local
