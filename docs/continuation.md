@@ -17,7 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 7 September 2026.** Operator N (Serbian) asked for GUI list pagination: at most **10 rows** per table, rest on bottom tabs **1, 2, 3 … Previous / Next**. Called out: email, reports, incidents, logs, journals. Code and docs stay English. Replies to N are Serbian.
+**Monday 7 September 2026.** Operator N (Serbian) sent a Journal screenshot: repeating **NetBox sync failed** with httpx `403 Forbidden` on `http://127.0.0.1:8001/api/dcim/devices/?limit=200` plus the MDN status-code dump. Code and docs stay English. Replies to N are Serbian.
 
 On the Ubuntu VM N uses:
 
@@ -25,7 +25,7 @@ On the Ubuntu VM N uses:
 git pull origin main && ./forgesre update
 ```
 
-Then **hard-refresh** the browser (`Ctrl+Shift+R`) so `/static/app.css?v=paginate-2` is not a cached old sheet.
+Then hard-refresh the browser. Secrets key: `NETBOX_API_TOKEN` in `secrets/secrets.env` (kept in sync with `.env` for compose interpolation).
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses.
 
@@ -40,7 +40,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/gui-list-paginate-05f8`: **347 passed** (twice). Was 339 before this pager work.
+Pytest count after the double run on `cursor/netbox-sync-403-05f8`: **354 passed** (twice). Was 347 before this 403 work.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`.
 
@@ -48,27 +48,18 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-GUI tables that can grow past ~10 rows now share one pager (`PAGE_SIZE = 10` in `backend/app/history.py`, Jinja partial `frontend/templates/_pager.html`, `?page=` plus clamp / Previous / Next / numbered tabs). Filters stay; submitting a filter form omits `page` so the list resets to 1.
+Journal **NetBox sync failed** HTTP **403** on bundled `:8001` `/api/dcim/devices/`.
 
-Paginated (max **10** rows, bottom **Previous / 1 / 2 / 3 / Next**, query `?page=` unless noted; filters stay):
+Root cause: NetBox REST API returns **403** (not 401) when the token is missing or unknown. `netboxcommunity/netbox` docker-entrypoint creates `SUPERUSER_API_TOKEN` **only when the superuser row is first inserted**. Later starts print “Superuser Already Exists” and skip the token. Compose mapped `SUPERUSER_API_TOKEN: ${NETBOX_API_TOKEN}` from `.env` while Core could read a different value from `secrets/secrets.env`. Anonymous or unknown-token GET → 403. Core sync is read-only and never writes NetBox. Database `forgesre` is not dropped (`netbox-db-init` still only `CREATE DATABASE netbox`).
 
-- Dashboard **Recent incidents** (pager only if more than 10)
-- `/incidents` (open/firing)
-- `/history` (aligned from 200/page to 10)
-- `/ops` mail outbox (`?page=` + `#mail`) and scheduled reports (`?reports_page=` + `#reports`)
-- `/journal` (module / status / q preserved) — mandatory
-- `/assets` (search stays; result set is paged)
-- `/assets/verify`
-- `/discovery` candidates (pending banner still counts all)
-- `/playrules`, `/playbooks`, `/escalation` policy cards
-- `/admin` users, audit log, backup table (restore dropdown still lists every archive)
-- Asset detail incident list + similar groups; incident **Who did what** and notes
+Fix:
 
-Not paginated (not those operator lists): metric tiles, doctor / System Health rows, Dashboard journal preview (still a short recent slice), HOST DOWN banner, incident/escalation mail tables (they link to `/ops#mail`).
+- Core + NetBox compose env both pass `NETBOX_API_TOKEN`.
+- `scripts/netbox-launch.sh` upserts that key as Django `users.models.Token` with `write_enabled=False` on every start.
+- `scripts/ensure-netbox-secrets.sh` copies `NETBOX_API_TOKEN` from `secrets/secrets.env` into `.env` so interpolation matches.
+- Journal: short 403 text, no MDN URL; identical consecutive NetBox 403 rows are deduped.
 
-CSS cache-bust: `app.css?v=paginate-2`. Handbook + CLI one-liners: GUI tables are 10 per page.
-
-Did not add Celery, nmap, React, IMAP, sqlalchemy on the host CLI, or restore the LLM catalog. Ping/Dockerfile and the architecture-proposal banner stay.
+Did not add Celery, nmap, React, IMAP, sqlalchemy on the host CLI, or restore the LLM catalog. Ping/Dockerfile and the architecture-proposal banner stay. Did not edit `install.sh`.
 
 ---
 
@@ -80,7 +71,7 @@ Do **not** run `./install.sh`.
 git pull origin main && ./forgesre update
 ```
 
-`./forgesre update` rebuilds Core (frontend CSS cache-bust `paginate-2`). Then hard-refresh the browser.
+`./forgesre update` runs `ensure-netbox-secrets` and recreates the NetBox container so launch upserts the read-only token. Then open **Journal** — the repeating 403 blocks should stop. **Discovery → Sync NetBox** (admin) is GET-only.
 
 Lab without image pull: `./forgesre update --offline`.
 
@@ -101,7 +92,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - Prometheus Health Open is **Targets** (`:9090/targets?search=`), not Prometheus process `/metrics`. Core `/metrics` stays.
 - Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
 - `snmp-exporter` is a **default** compose service.
-- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2`. Do not churn NetBox Hub/GHCR tags unless N asks.
+- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2`. Do not churn NetBox Hub/GHCR tags unless N asks. Core sync token is `NETBOX_API_TOKEN`; launch upserts it read-only. Do not drop database `forgesre` to “fix” NetBox.
 - Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it.
 - Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update`.
 - One restore unit = one `.tar.gz` inside `backup_<stamp>/`.
@@ -116,6 +107,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - `docs/architecture.md` is a **proposal**, not the appliance runtime. **architecture proposal** / **not the V0.7 appliance runtime**.
 - GUI ICMP is from the Core container (`iputils-ping` in the Dockerfile). Host `./forgesre ping` stays on the VM.
 - Jobs: **one worker thread** in Core. There is no Celery.
+- GUI tables are **10 rows** per page (`PAGE_SIZE = 10`, `?page=`).
 
 Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre test` / doctor. See [`docs/llm.md`](llm.md).
 
@@ -167,3 +159,4 @@ Do not start these unless N asks:
 - Alloy still only ships appliance Core logs as `forge-demo-01`. Real hosts have no Loki until that changes. Limitation: **no host logs shipped**.
 - LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90 in example.yml; N’s live yml may be 300) after reports in that pass have already run.
 - `config/forgesre.yml` on a live VM is gitignored; a 300s or 600s timeout already written there is not overwritten by `update`.
+- Another agent may still be hunting a “Prometheus Stack” journal string — leave that work alone unless N asks.

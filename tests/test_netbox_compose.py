@@ -26,6 +26,9 @@ def test_compose_netbox_is_default_service():
     env = data["services"]["core"]["environment"]
     assert "NETBOX_URL" in env
     assert "8001" in str(env["NETBOX_URL"])
+    assert env.get("NETBOX_API_TOKEN") == "${NETBOX_API_TOKEN}"
+    assert netbox["environment"].get("NETBOX_API_TOKEN") == "${NETBOX_API_TOKEN}"
+    assert netbox["environment"].get("SUPERUSER_API_TOKEN") == "${NETBOX_API_TOKEN}"
     init = (ROOT / "scripts" / "netbox-db-init.sh").read_text(encoding="utf-8")
     assert "CREATE DATABASE netbox" in init
     assert "forgesre" in init
@@ -33,6 +36,10 @@ def test_compose_netbox_is_default_service():
     launch = (ROOT / "scripts" / "netbox-launch.sh").read_text(encoding="utf-8")
     assert "8001" in launch
     assert "granian" in launch
+    assert "NETBOX_API_TOKEN" in launch
+    assert "write_enabled=False" in launch
+    assert "users.models import Token" in launch
+    assert "DROP DATABASE" not in launch.upper()
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "mailpit" not in compose.lower()
     assert "profiles:" not in compose[compose.index("  netbox:"):compose.index("  llm:")]
@@ -111,6 +118,10 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "up -d snmp-exporter netbox-redis netbox" in update
     assert "first boot can take several minutes" in update.lower() or "migrations" in update.lower()
     assert "yellow" in update.lower()
+    secrets = (ROOT / "scripts" / "ensure-netbox-secrets.sh").read_text(encoding="utf-8")
+    assert "NETBOX_API_TOKEN" in secrets
+    assert "sed -i" in secrets
+    assert "DROP DATABASE" not in secrets.upper()
     help_txt = (ROOT / "scripts" / "forgesre").read_text(encoding="utf-8")
     assert "http://127.0.0.1:8001" in help_txt
     env = (ROOT / ".env.example").read_text(encoding="utf-8")
@@ -138,10 +149,16 @@ def test_docs_say_bundled_netbox_default_on():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "8001" in handbook and "bundled" in handbook.lower()
     assert "does not bundle NetBox" not in handbook
+    assert "NETBOX_API_TOKEN" in handbook
+    assert "403" in handbook
+    assert "write_enabled=False" in handbook or "read-only" in handbook.lower()
     assert "8001" in install
     assert "--netbox-url" in install
     assert "./forgesre update" in cont
     assert "NetBox" in cont
+    assert "NETBOX_API_TOKEN" in cont
+    assert "403" in cont
+    assert "install.sh" in cont
     cli = (ROOT / "docs" / "cli.md").read_text(encoding="utf-8")
     assert "8001" in cli
     assert "./forgesre update" in cli

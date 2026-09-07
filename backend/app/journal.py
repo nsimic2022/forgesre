@@ -56,8 +56,19 @@ def report(
     module = (module or "core").strip()[:64] or "core"
     action = (action or "").strip()[:64]
     summary = (summary or "")[:512]
-    detail = (detail or "")[:DETAIL_MAX]
+    detail = _without_mdn_help(detail or "")[:DETAIL_MAX]
     try:
+        last = (
+            db.query(JournalEntry)
+            .filter_by(module=module, action=action)
+            .order_by(JournalEntry.id.desc())
+            .first()
+        )
+        if _is_repeat_netbox_403(last, module, action, status, summary, detail):
+            last.at = utcnow()
+            if commit:
+                db.commit()
+            return last
         row = JournalEntry(
             at=utcnow(),
             module=module,
@@ -220,3 +231,30 @@ def entry_as_dict(row: JournalEntry) -> dict:
         "object_id": row.object_id,
         "duration_ms": row.duration_ms,
     }
+
+
+def _without_mdn_help(detail: str) -> str:
+    """httpx HTTPStatusError appends an MDN URL; the journal must not dump it."""
+    text = detail or ""
+    if "For more information check:" in text:
+        text = text.split("For more information check:", 1)[0]
+    return text.replace("https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403", "").strip()
+
+
+def _is_repeat_netbox_403(
+    last: JournalEntry | None,
+    module: str,
+    action: str,
+    status: str,
+    summary: str,
+    detail: str,
+) -> bool:
+    """Skip identical consecutive NetBox 403 journal rows (sync loop / Core restart)."""
+    if last is None:
+        return False
+    if module != "netbox" or action != "sync" or status != "error":
+        return False
+    blob = f"{summary}\n{detail}"
+    if "403" not in blob:
+        return False
+    return last.status == status and last.summary == summary and last.detail == detail
