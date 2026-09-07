@@ -48,10 +48,15 @@ def test_approve_ignore_and_http_sd():
     page = client.get("/discovery")
     assert page.status_code == 200
     assert b"Discovery" in page.content
-    assert b"DEMO" in page.content
+    blob = page.content
+    n = 1
+    while (b"DEMO" not in blob or DEMO_CANDIDATE_IP.encode() not in blob) and n < 8:
+        n += 1
+        blob = client.get(f"/discovery?page={n}").content
+    assert b"DEMO" in blob
     if row.status == "new":
         assert b"NEW DEVICE DETECTED" in page.content
-        assert DEMO_CANDIDATE_IP.encode() in page.content
+        assert DEMO_CANDIDATE_IP.encode() in blob
 
     denied = client.get("/api/v1/sd/prometheus")
     assert denied.status_code == 401

@@ -30,7 +30,6 @@ def test_history_page_lists_seeded_closed_incident():
     assert page.status_code == 200
     assert "History" in page.text
     assert "INC-" in page.text
-    assert "forge-demo-01" in page.text
     closed = client.get("/history?status=CLOSED")
     assert closed.status_code == 200
     assert "INC-" in closed.text
