@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import time
 from typing import Any
@@ -19,9 +20,17 @@ _SNMP_ENSURE_COOLDOWN = 45.0
 
 # Machine keys stay compose service ids (dashboard Open links, failed[], JSON).
 # "core" is the stack row; it probes /api/v1/health (same URL as doctor.sh Core API).
+# Grafana is graphs only — never group it with Prometheus as a "Prometheus Stack".
 COMPONENT_LABELS = {
     "core": "Core (container)",
+    "prometheus": "Prometheus",
+    "alertmanager": "Alertmanager",
+    "grafana": "Grafana",
 }
+
+# Alarm path is Prometheus → Alertmanager → Core. Grafana / Loki graphs are not this list.
+ALARM_PATH_IDS = ("prometheus", "alertmanager")
+_PORT_RE = re.compile(r":(\d{2,5})\b")
 
 
 def component_label(cid: str) -> str:
@@ -47,6 +56,87 @@ def rewrite_host(url: str, hostname: str) -> str:
 def doctor_soft_status(status: str) -> bool:
     """Statuses that must not turn overall doctor DEGRADED / DOWN."""
     return str(status or "").lower() in SOFT_STATUSES
+
+
+def _port_from_text(*parts: str) -> str:
+    blob = " ".join(str(part or "") for part in parts)
+    match = _PORT_RE.search(blob)
+    return f":{match.group(1)}" if match else ""
+
+
+def default_hop_port(cid: str) -> str:
+    """Compose listen port for an alarm-path hop, from settings URL when set."""
+    if cid == "prometheus":
+        parsed = urlparse(settings.prometheus_url or "http://127.0.0.1:9090")
+        return f":{parsed.port}" if parsed.port else ":9090"
+    if cid == "alertmanager":
+        parsed = urlparse(settings.alertmanager_url or "http://127.0.0.1:9093")
+        return f":{parsed.port}" if parsed.port else ":9093"
+    return ""
+
+
+def alarm_path_failure_lines(components: dict[str, Any] | None) -> list[str]:
+    """One line per down Prom/AM hop. Grafana is never listed — it is not the alarm path."""
+    lines: list[str] = []
+    packed = components or {}
+    for cid in ALARM_PATH_IDS:
+        item = dict(packed.get(cid) or {})
+        if doctor_soft_status(item.get("status")):
+            continue
+        label = component_label(cid)
+        why = str(item.get("why") or "unreachable").strip() or "unreachable"
+        hop = _port_from_text(why, str(item.get("test") or "")) or default_hop_port(cid)
+        head = f"{label} {hop}".strip()
+        lines.append(f"{head} {why}".strip())
+    return lines
+
+
+def journal_doctor_alarm_path(db, components: dict[str, Any] | None) -> None:
+    """Journal Prom/AM doctor results. Healthy Prom does not write error. Grafana must not.
+
+    Errors name the failing container/port (``Prometheus :9090``, ``Alertmanager :9093``),
+    never a vague ``Prometheus Stack``. Duplicate identical errors are skipped.
+    """
+    from app.journal import report
+    from app.models import JournalEntry
+
+    failures = alarm_path_failure_lines(components)
+    last = (
+        db.query(JournalEntry)
+        .filter_by(module="core", action="doctor")
+        .order_by(JournalEntry.id.desc())
+        .first()
+    )
+    if not failures:
+        if last is None or str(last.status or "") != "error":
+            return
+        prom = default_hop_port("prometheus") or ":9090"
+        am = default_hop_port("alertmanager") or ":9093"
+        report(
+            db,
+            "core",
+            "doctor",
+            "ok",
+            summary=f"Prometheus {prom} and Alertmanager {am} ready",
+            detail="Alarm path is Prometheus → Alertmanager → Core. Grafana is graphs only.",
+            object_type="component",
+            object_id="prometheus",
+        )
+        return
+    summary = "; ".join(failures)[:512]
+    if last is not None and str(last.status or "") == "error" and (last.summary or "") == summary:
+        return
+    object_id = "prometheus" if "prometheus" in summary.lower() else "alertmanager"
+    report(
+        db,
+        "core",
+        "doctor",
+        "error",
+        summary=summary,
+        detail="Alarm path is Prometheus → Alertmanager → Core. Grafana is graphs only — not this error.",
+        object_type="component",
+        object_id=object_id,
+    )
 
 
 def runtime_state(item: dict[str, Any] | None) -> tuple[str, str]:

@@ -25,7 +25,7 @@ Two logins:
 ./forgesre help test
 ./forgesre help snmp
 ./forgesre                 # prompt (forgesre>); leave with quit
-./forgesre doctor          # short lights
+./forgesre doctor          # short lights (Grafana yellow ≠ Prom down)
 ./forgesre ping            # ICMP + exporter /metrics (alias: probe)
 ./forgesre ping win10-gp
 ./forgesre verify          # live chain: exporter → prometheus → alertmanager → core (not test)
@@ -113,7 +113,7 @@ Linux default scrape is `:9100`. Windows Server default is `:9182`. Configured `
 
 ## Verify (live communication)
 
-`./forgesre test` is appliance health (files, Compose, login, APIs) after `update`. **`./forgesre verify` is a different command**: live communication for inventory already in ForgeSRE. **`./forgesre doctor`** is System Health lights. Those three are not the same. Verify runs on the **host** CLI (Ubuntu Python has no sqlalchemy — do not pip-install it). GUI Verify still runs inside Core (ICMP via `iputils-ping` in the Core image).
+`./forgesre test` is appliance health (files, Compose, login, APIs) after `update`. **`./forgesre verify` is a different command**: live communication for inventory already in ForgeSRE. **`./forgesre doctor`** is System Health lights. Grafana down is yellow (graphs only) — not a Prometheus FAIL and not a Journal error. A real Prom/Alertmanager failure names `:9090` / `:9093`. Those three commands are not the same. Verify runs on the **host** CLI (Ubuntu Python has no sqlalchemy — do not pip-install it). GUI Verify still runs inside Core (ICMP via `iputils-ping` in the Core image).
 
 ```bash
 ./forgesre verify

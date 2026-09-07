@@ -32,9 +32,11 @@ def test_system_health_has_open_column_and_grafana():
     assert page.status_code == 200
     assert "Open Grafana" in page.text
     assert "<th>Open</th>" in page.text
-    assert "prometheus" in page.text
+    assert "Prometheus" in page.text
+    assert "prometheus" in page.text.lower()
     assert "alloy" in page.text
-    assert "grafana" in page.text
+    assert "Grafana" in page.text
+    assert "grafana" in page.text.lower()
     assert "discovery" in page.text
     assert "Core (container)" in page.text
     assert "GUI" in page.text

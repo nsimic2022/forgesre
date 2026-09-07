@@ -19,6 +19,8 @@
 </p>
 <p class="muted">
   Alarm path is <strong>Prometheus → Alertmanager → Core</strong> (webhook). Grafana is graphs only — Open Grafana on this page, not in the left nav, not on incidents.
+  Grafana down is <strong>yellow</strong> (optional graphs), not a Prometheus outage and not a journal error.
+  A real Prom/Alertmanager failure names the hop (<code>:9090</code>, Alertmanager <code>:9093</code>) — never a vague “Prometheus Stack”.
   Jobs: <strong>one worker thread</strong> in Core (not Celery). An LLM rewrite can occupy it up to <code>ai.llm.timeout_seconds</code> ({{ llm_timeout|int }}s).
   Green = running. Yellow = paused / starting / disabled. Red = down. Open goes to that service’s GUI or metrics. Prometheus Open is Targets (<code>/targets?search=</code> scrape jobs), Alerts, Graph — not Prometheus process <code>/metrics</code>. Prometheus/Alertmanager listen on the appliance; use the VM host if the UI rewrote 127.0.0.1.
 </p>
