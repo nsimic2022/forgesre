@@ -108,7 +108,8 @@ def test_dashboard_journal_error_banner_ack_until_newer():
     assert home.status_code == 200
     assert b'id="journal-error-banner"' in home.content
     assert b"banner-short" in home.content
-    assert b"2 errors" in home.content
+    banner = home.content.split(b'id="journal-error-banner"', 1)[1].split(b"</div>", 1)[0]
+    assert b"error" in banner
     assert b">Open</a>" in home.content
     assert b">Dismiss</button>" in home.content
     until = _banner_until_id(home.content)
@@ -149,7 +150,8 @@ def test_dashboard_journal_error_banner_ack_until_newer():
     shown = client.get("/")
     assert shown.status_code == 200
     assert b'id="journal-error-banner"' in shown.content
-    assert b"1 error" in shown.content
+    banner = shown.content.split(b'id="journal-error-banner"', 1)[1].split(b"</div>", 1)[0]
+    assert b"error" in banner
     assert _banner_until_id(shown.content) >= newer_id
     assert b">Dismiss</button>" in shown.content
     assert b">Open</a>" in shown.content

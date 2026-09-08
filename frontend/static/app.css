@@ -769,6 +769,33 @@ form.ops-compose {
   max-width: none;
 }
 .ops-report-cols fieldset { max-width: none; }
+.ops-report-form-actions { margin-top: 0.35rem; flex-wrap: wrap; }
+.ops-report-form-actions button { width: auto; }
+td.ops-report-actions {
+  display: table-cell;
+  vertical-align: middle;
+}
+td.ops-report-actions .row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+td.ops-report-actions .row-actions form { margin: 0; }
+td.ops-report-actions .row-actions button,
+td.ops-report-actions .row-actions a.button {
+  padding: 0.28rem 0.55rem;
+  font-size: 0.82rem;
+  width: auto;
+  text-decoration: none;
+  display: inline-block;
+}
+td.ops-report-actions .row-actions a.button {
+  background: var(--secondary);
+  color: var(--text);
+  font-weight: 600;
+  border-radius: 9px;
+}
 .mail-providers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .mail-providers h3 { margin: 0 0 0.4rem; font-size: 1rem; }
 .asset-detail-split {
