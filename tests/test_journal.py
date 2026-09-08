@@ -107,8 +107,9 @@ def test_dashboard_journal_error_banner_ack_until_newer():
     home = client.get("/")
     assert home.status_code == 200
     assert b'id="journal-error-banner"' in home.content
-    assert b"recent error report" in home.content
-    assert b"Open Journal" in home.content
+    assert b"banner-short" in home.content
+    assert b"2 errors" in home.content
+    assert b">Open</a>" in home.content
     assert b">Dismiss</button>" in home.content
     until = _banner_until_id(home.content)
     assert until >= second_id
@@ -124,7 +125,6 @@ def test_dashboard_journal_error_banner_ack_until_newer():
     hidden = client.get("/")
     assert hidden.status_code == 200
     assert b'id="journal-error-banner"' not in hidden.content
-    assert b"recent error report" not in hidden.content
 
     db = SessionLocal()
     admin = db.query(User).filter_by(email="admin@forgesre.local").one()
@@ -149,7 +149,7 @@ def test_dashboard_journal_error_banner_ack_until_newer():
     shown = client.get("/")
     assert shown.status_code == 200
     assert b'id="journal-error-banner"' in shown.content
-    assert b"1 recent error report" in shown.content
+    assert b"1 error" in shown.content
     assert _banner_until_id(shown.content) >= newer_id
     assert b">Dismiss</button>" in shown.content
-    assert b"Open Journal" in shown.content
+    assert b">Open</a>" in shown.content

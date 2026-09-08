@@ -1311,6 +1311,7 @@ def _candidate(item: DiscoveryCandidate) -> dict[str, Any]:
     return {
         "id": item.id,
         "ip": item.ip,
+        "hostname": item.hostname or "",
         "proposed_role": item.proposed_role,
         "open_ports": item.open_ports,
         "status": item.status,

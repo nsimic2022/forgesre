@@ -276,7 +276,10 @@ def test_send_incident_report_to_address_book_email():
     assert "ForgeRCA has not been run yet." in mail.body
     listed = client.get("/incidents")
     assert listed.status_code == 200
-    assert "Open/firing" in listed.text
+    assert "All" in listed.text
+    assert "Open" in listed.text
+    assert "Closed" in listed.text
+    assert "Open/firing" not in listed.text
     assert "Reported to" in listed.text
     assert "ops@dc.local" in listed.text
     assert f'class="inc-crit" href="/incidents/{number}"' in listed.text

@@ -7,13 +7,24 @@
   <div>
   <div class="table-scroll">
   <table class="user-table">
-    <thead><tr><th>Email</th><th>Name</th><th>Role</th></tr></thead>
+    <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Actions</th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr class="{% if selected and selected.id == u.id %}selected{% endif %}">
         <td><a href="/admin?selected={{ u.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">{{ u.email }}</a></td>
         <td>{{ u.name }}</td>
         <td>{{ role_label(u.role) }}</td>
+        <td class="row-actions">
+          <div class="row-actions">
+          <a class="button" href="/admin?selected={{ u.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Edit</a>
+          <a class="button" href="/admin?clone={{ u.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Clone</a>
+          {% if not (u.id == user.id or u.role == "super_admin") %}
+          <form method="post" action="/admin/users/{{ u.id }}/delete" onsubmit="return confirm('Remove {{ u.email }}? They will not be able to sign in.');">
+            <button type="submit" class="danger">Remove</button>
+          </form>
+          {% endif %}
+          </div>
+        </td>
       </tr>
     {% endfor %}
     </tbody>
@@ -50,9 +61,10 @@
       {% if can_edit_selected %}
       <button type="submit" form="edit-user-form">Save</button>
       {% endif %}
+      <a class="button" href="/admin?clone={{ selected.id }}">Clone</a>
       {% if can_delete_selected %}
       <form method="post" action="/admin/users/{{ selected.id }}/delete" class="inline" onsubmit="return confirm('Remove {{ selected.email }}? They will not be able to sign in.');">
-        <button type="submit" class="danger">Remove user</button>
+        <button type="submit" class="danger">Remove</button>
       </form>
       {% else %}
         {% if selected.id == user.id %}
@@ -63,6 +75,26 @@
       {% endif %}
     </div>
     <p class="muted"><a href="/admin">Create another user</a></p>
+    {% elif clone_of %}
+    <form method="post" action="/admin/users" class="stack">
+      <h3>Clone user</h3>
+      <p class="muted">Copy of <strong>{{ clone_of.email }}</strong> — type a new email and password.</p>
+      <label>Email <input name="email" type="email" required value="{{ clone_of.email }}"></label>
+      <label>Name <input name="name" required value="{{ clone_of.name }}"></label>
+      <label>Password <input name="password" type="password" required></label>
+      <label><span class="label-line">Role {% with %}{% set tip %}Analyst: incidents, inventory, playrules, playbooks. Engineer: detailed RCA, inventory. System admin: users and appliance. Viewer: read only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+        <select name="role">
+          <option value="analyst" {% if clone_role == "analyst" %}selected{% endif %}>Analyst — incidents, inventory, playrules, playbooks</option>
+          <option value="engineer" {% if clone_role == "engineer" %}selected{% endif %}>Engineer — detailed RCA, inventory</option>
+          <option value="admin" {% if clone_role == "admin" %}selected{% endif %}>System admin — users and appliance</option>
+          <option value="viewer" {% if clone_role == "viewer" %}selected{% endif %}>Viewer — read only</option>
+        </select>
+      </label>
+      <div class="row-actions">
+        <button type="submit">Save</button>
+        <a href="/admin">Cancel</a>
+      </div>
+    </form>
     {% else %}
     <form method="post" action="/admin/users" class="stack">
       <h3>Create user</h3>
@@ -77,7 +109,10 @@
           <option value="viewer">Viewer — read only</option>
         </select>
       </label>
-      <button type="submit">Create</button>
+      <div class="row-actions">
+        <button type="submit">Create</button>
+        <a href="/admin">Cancel</a>
+      </div>
     </form>
     {% endif %}
   </div>

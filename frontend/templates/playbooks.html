@@ -2,31 +2,49 @@
 {% block title %}Playbooks · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Playbooks {% with %}{% set tip %}V0.1 playbooks are instructions and workflow. They do not execute commands on the host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
-<p class="muted">V0.1 playbooks are instructions and workflow. They do not execute commands.</p>
+{% if notice %}
+<div class="banner">{{ notice }}</div>
+{% endif %}
+<div class="playbook-grid">
 {% for book in playbooks %}
-<section class="card">
+<section class="card playbook-card {% if selected and selected.id == book.id %}selected{% endif %}">
   <h2>{{ book.name }}</h2>
-  <p>{{ book.description }}</p>
+  {% if book.description %}<p>{{ book.description }}</p>{% endif %}
   <ol>
     {% for step in book.steps %}
     <li>{{ step.title }}</li>
     {% endfor %}
   </ol>
+  {% if can('write_play') %}
+  <div class="row-actions asset-form-actions">
+    <a class="button" href="/playbooks?edit={{ book.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Edit</a>
+    <a class="button" href="/playbooks?clone={{ book.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Clone</a>
+    <form method="post" action="/playbooks/{{ book.id }}/delete" onsubmit="return confirm('Remove {{ book.name }}? Playrules keep working without this playbook.');">
+      <button type="submit" class="danger">Remove</button>
+    </form>
+  </div>
+  {% endif %}
 </section>
 {% endfor %}
+</div>
 {% include "_pager.html" %}
 {% if can('write_play') %}
+{% if form_mode == "edit" %}
+<h2>Edit playbook</h2>
+<form method="post" action="/playbooks/{{ selected.id }}/update" class="stack">
+{% elif form_mode == "clone" %}
+<h2>Clone playbook</h2>
+<p class="muted">Copy of <strong>{{ selected.name }}</strong> — slug must be unique.</p>
+<form method="post" action="/playbooks" class="stack">
+{% else %}
 <h2>Create playbook</h2>
 <form method="post" action="/playbooks" class="stack">
-  <label>Name <input name="name" placeholder="DISK-FULL" required></label>
-  <label>Slug <input name="slug" placeholder="disk-full" required></label>
-  <label>Steps (one per line) <textarea name="steps" rows="6">Verify disk usage
-Check growth
-Identify owner
-Notify responsible engineer
-Escalate if not acknowledged</textarea></label>
+{% endif %}
+  <label>Name <input name="name" placeholder="DISK-FULL" required value="{{ form.name }}"></label>
+  <label>Slug <input name="slug" placeholder="disk-full" required value="{{ form.slug }}" {% if form_mode == "edit" %}readonly{% endif %}></label>
+  <label>Steps (one per line) <textarea name="steps" rows="6">{{ form.steps }}</textarea></label>
   <div class="row-actions">
-    <button type="submit">Save</button>
+    <button type="submit">{% if form_mode == "clone" %}Save copy{% else %}Save{% endif %}</button>
     <a href="/playbooks">Cancel</a>
   </div>
 </form>

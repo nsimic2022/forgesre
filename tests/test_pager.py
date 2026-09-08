@@ -121,8 +121,8 @@ def test_incidents_page_two_is_ten_rows():
     assert "PageTest" in first.text
     filtered = client.get("/incidents?open=1")
     assert "name=\"page\"" not in filtered.text.split("<form", 1)[1].split("</form>", 1)[0]
-    kept = client.get("/incidents?open=0&page=2")
-    assert "open=0" in kept.text
+    kept = client.get("/incidents?status=all&page=2")
+    assert "status=all" in kept.text
     db.close()
 
 

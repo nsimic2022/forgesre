@@ -71,10 +71,10 @@
 </div>
 {% endif %}
 {% if journal_error and can('read_play') %}
-<div class="banner" id="journal-error-banner">
-  <strong>JOURNAL</strong>
-  {{ journal_error|length }} recent error report{% if journal_error|length != 1 %}s{% endif %}.
-  <a href="/journal?status=error">Open Journal</a>
+<div class="banner banner-short" id="journal-error-banner">
+  <strong>Journal</strong>
+  {{ journal_error|length }} error{% if journal_error|length != 1 %}s{% endif %}
+  <a href="/journal?status=error">Open</a>
   <form method="post" action="/dashboard/journal-ack" class="inline banner-ack">
     <input type="hidden" name="until_id" value="{{ journal_error[0].id }}">
     <button type="submit" class="secondary">Dismiss</button>
@@ -100,22 +100,22 @@
   </ul>
 </div>
 <section>
-  <h2>Infrastructure</h2>
+  <h2>Infrastructure {% with %}{% set tip %}Asset inventory counts — shortcut to Assets. Total / healthy / warning / critical / offline.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="grid">
-    <div class="stat"><span>Total Assets</span><strong>{{ stats.assets_total }}</strong></div>
-    <div class="stat ok"><span>Healthy</span><strong>{{ stats.healthy }}</strong></div>
-    <div class="stat warn"><span>Warning</span><strong>{{ stats.warning }}</strong></div>
-    <div class="stat crit"><span>Critical</span><strong>{{ stats.critical }}</strong></div>
-    <div class="stat"><span>Offline</span><strong>{{ stats.offline }}</strong></div>
+    <a class="stat" href="/assets"><span>Total Assets</span><strong>{{ stats.assets_total }}</strong></a>
+    <a class="stat ok" href="/assets?status=healthy"><span>Healthy</span><strong>{{ stats.healthy }}</strong></a>
+    <a class="stat warn" href="/assets?status=warning"><span>Warning</span><strong>{{ stats.warning }}</strong></a>
+    <a class="stat crit" href="/assets?status=critical"><span>Critical</span><strong>{{ stats.critical }}</strong></a>
+    <a class="stat" href="/assets?status=offline"><span>Offline</span><strong>{{ stats.offline }}</strong></a>
   </div>
 </section>
 <section>
-  <h2>Incidents</h2>
+  <h2>Incidents {% with %}{% set tip %}Incident counts — shortcut to Incidents. History is the closed archive.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="grid">
-    <div class="stat"><span>Open</span><strong>{{ stats.open }}</strong></div>
-    <div class="stat crit"><span>Critical</span><strong>{{ stats.inc_critical }}</strong></div>
-    <div class="stat warn"><span>Investigating</span><strong>{{ stats.investigating }}</strong></div>
-    <div class="stat ok"><span>Resolved</span><strong>{{ stats.resolved }}</strong></div>
+    <a class="stat" href="/incidents?status=open"><span>Open</span><strong>{{ stats.open }}</strong></a>
+    <a class="stat crit" href="/incidents"><span>Critical</span><strong>{{ stats.inc_critical }}</strong></a>
+    <a class="stat warn" href="/incidents?status=INVESTIGATING"><span>Investigating</span><strong>{{ stats.investigating }}</strong></a>
+    <a class="stat ok" href="/incidents?status=RESOLVED"><span>Resolved</span><strong>{{ stats.resolved }}</strong></a>
   </div>
 </section>
 <p class="muted">Full stack diagnostics live on <a href="/health-ui">System Health</a>.{% if can('read_play') %} Journal is <a href="/journal">here</a>.{% endif %}</p>

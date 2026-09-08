@@ -21,6 +21,20 @@ DEMO_CANDIDATE_NOTES = (
     "DEMO discovery seed (10.20.30.41). Not a real machine. "
     "Lab only — not scraped. Used so /discovery has an Approve click."
 )
+CANDIDATE_ROLE_CHOICES = [
+    "Possible Linux server",
+    "Possible Windows server",
+    "Possible network device",
+    "Possible web/appliance",
+    "Unknown device",
+]
+CANDIDATE_ROLE_CHOICES = [
+    "Possible Linux server",
+    "Possible Windows server",
+    "Possible network device",
+    "Possible web/appliance",
+    "Unknown device",
+]
 
 
 def asset_kind(type: str = "", profile: str = "") -> str:
@@ -616,14 +630,15 @@ def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset
             atype, profile, scrape = "Unknown", "", ""
         else:
             atype, profile, scrape = "Web/appliance", "web-standard", ""
+        hostname = (getattr(row, "hostname", None) or "").strip() or slug
         notes = (
             DEMO_CANDIDATE_NOTES
-            if is_lab_inventory(asset_id=slug, hostname=slug, ip=row.ip, scrape_address=scrape)
+            if is_lab_inventory(asset_id=slug, hostname=hostname, ip=row.ip, scrape_address=scrape)
             else ""
         )
         asset = Asset(
             asset_id=slug,
-            hostname=slug,
+            hostname=hostname,
             ip=row.ip,
             type=atype,
             environment="Production",
@@ -689,6 +704,122 @@ def ignore_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> None:
         object_type="candidate",
         object_id=row.ip,
     )
+
+
+def suggest_clone_candidate_ip(db: Session, ip: str) -> str:
+    """Next unused IPv4-looking address for Clone. Does not ping the network."""
+    used = {item.ip for item in db.query(DiscoveryCandidate).all() if item.ip}
+    parts = (ip or "").strip().split(".")
+    if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
+        last = int(parts[3])
+        prefix = ".".join(parts[:3])
+        for step in range(1, 256):
+            candidate = f"{prefix}.{(last + step) % 256}"
+            if candidate not in used:
+                return candidate
+    n = 2
+    base = (ip or "10.0.0.1").strip() or "10.0.0.1"
+    while True:
+        candidate = f"{base}-{n}"
+        if candidate not in used:
+            return candidate
+        n += 1
+
+
+def update_candidate(
+    db: Session,
+    row: DiscoveryCandidate,
+    *,
+    ip: str,
+    hostname: str = "",
+    proposed_role: str = "",
+    actor: str = "",
+) -> DiscoveryCandidate:
+    ip = (ip or "").strip()
+    if not ip:
+        raise ValueError("IP is required")
+    clash = (
+        db.query(DiscoveryCandidate)
+        .filter(DiscoveryCandidate.ip == ip, DiscoveryCandidate.id != row.id)
+        .first()
+    )
+    if clash is not None:
+        raise ValueError("IP already exists")
+    row.ip = ip
+    row.hostname = (hostname or "").strip()
+    role = (proposed_role or "").strip()
+    if role:
+        row.proposed_role = role
+    audit(db, "discovery.update", actor=actor, object_type="candidate", object_id=row.ip)
+    db.commit()
+    db.refresh(row)
+    report(
+        db,
+        "discovery",
+        "update",
+        "ok",
+        summary=f"Updated candidate {row.ip}",
+        object_type="candidate",
+        object_id=row.ip,
+    )
+    return row
+
+
+def clone_candidate(
+    db: Session,
+    row: DiscoveryCandidate,
+    *,
+    ip: str,
+    hostname: str = "",
+    proposed_role: str = "",
+    actor: str = "",
+) -> DiscoveryCandidate:
+    ip = (ip or "").strip()
+    if not ip:
+        raise ValueError("IP is required")
+    if db.query(DiscoveryCandidate).filter_by(ip=ip).first() is not None:
+        raise ValueError("IP already exists")
+    copy = DiscoveryCandidate(
+        ip=ip,
+        hostname=(hostname or "").strip(),
+        proposed_role=(proposed_role or "").strip() or row.proposed_role,
+        open_ports=list(row.open_ports or []),
+        status="new",
+        source=row.source if row.source == "demo" else "scan",
+    )
+    db.add(copy)
+    db.flush()
+    audit(db, "discovery.clone", actor=actor, object_type="candidate", object_id=copy.ip)
+    db.commit()
+    db.refresh(copy)
+    report(
+        db,
+        "discovery",
+        "clone",
+        "ok",
+        summary=f"Cloned candidate {row.ip} → {copy.ip}",
+        object_type="candidate",
+        object_id=copy.ip,
+    )
+    return copy
+
+
+def delete_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> str:
+    """Delete the candidate row. Does not remove an approved asset."""
+    ip = row.ip
+    db.delete(row)
+    audit(db, "discovery.remove", actor=actor, object_type="candidate", object_id=ip)
+    db.commit()
+    report(
+        db,
+        "discovery",
+        "remove",
+        "ok",
+        summary=f"Removed candidate {ip}",
+        object_type="candidate",
+        object_id=ip,
+    )
+    return ip
 
 
 def sync_netbox(db: Session) -> dict:
@@ -917,12 +1048,16 @@ def asset_search_blob(asset: Asset) -> str:
     ).lower()
 
 
-def assets_matching(rows: list[Asset], q: str = "") -> list[Asset]:
-    """Filter inventory by asset number, id, hostname, or IP (substring)."""
+def assets_matching(rows: list[Asset], q: str = "", status: str = "") -> list[Asset]:
+    """Filter inventory by asset number, id, hostname, or IP (substring), and optional status."""
     needle = (q or "").strip().lower()
-    if not needle:
-        return list(rows)
-    return [row for row in rows if needle in asset_search_blob(row)]
+    wanted = (status or "").strip().lower()
+    out = list(rows)
+    if needle:
+        out = [row for row in out if needle in asset_search_blob(row)]
+    if wanted:
+        out = [row for row in out if (row.status or "").lower() == wanted]
+    return out
 
 
 def delete_blocked(asset: Asset) -> str:
