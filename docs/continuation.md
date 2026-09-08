@@ -1,4 +1,4 @@
-# Session handoff — 7 September 2026
+# Session handoff — 8 September 2026
 
 This file is a **session handoff for the next coding agent or contributor**. It is not an operator manual. Operators start at [install and config](install-config.md) and the [operator handbook](operator-handbook.md).
 
@@ -17,9 +17,9 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Monday 7 September 2026.** Operator N asked for a **full V0.7 pass**: all code/pages, fix what should be fixed, test everything, and make operator docs one professional learning path. Report in Serbian. OSS docs stay English.
+**Tuesday 8 September 2026.** Operator N on `/ops` Email & reports: scheduled/cron report rows had a structure (`next`, `enabled`) but no explanation of the toggle, and no **Edit / Cancel / Remove / Clone**. Once created, a job could only be turned off.
 
-NetBox **v2** tokens (`nbt_…` Bearer) already landed on `main` (`03b442d`, 410 passed). Do not fight that work. Never touch `is_staff`. Discovery **No devices** yellow and Health NetBox **running** on N’s VM must stay honest.
+Do not fight `cursor/gui-help-tooltips-05f8` ⓘ tooltips on `ops.html` if that branch merges first — rebase this work. Do not revert GUI list pagination (10/page, `reports_page`).
 
 Code and docs stay English. Replies to N are Serbian.
 
@@ -36,7 +36,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/gui-help-tooltips-05f8`: **415 passed** (twice). Was **412** after the operator docs pass on `main`.
+Pytest count after the double run on `cursor/ops-report-job-actions-05f8`: **pending rebase pytest** (tooltips on `main` were **415**).
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`. `create_pr` often **403** — merge `--no-ff` plus `git push origin main` still lands the change.
 
@@ -44,30 +44,32 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-### Operator learning path (docs)
+### `/ops` scheduled report actions
 
-- [`docs/README.md`](README.md) is the **ordered start page**: install/update → login → Health → Assets → Discovery vs NetBox → Incidents → ForgeRCA vs ForgeAI → verify ≠ doctor ≠ test → backup → CLI.
-- [`operator-handbook.md`](operator-handbook.md) is the SoT for **why/when**. [`cli.md`](cli.md) is **commands**. Cut the duplicated CLI dump and the fake Discovery “Last scan step pills” (that UI does not exist). Empty NetBox = yellow is documented as OK.
-- GitHub `README.md` no longer says Dashboard “doctor lights” or Incidents “recent 200” (lists are **10 per page**).
+Jobs live in Postgres `scheduled_reports` (not Celery, not YAML). SMTP send path and `/ops` Compose are unchanged. Incident Send report is unchanged.
 
-### GUI / cheap code
+For analyst/engineer/admin (`can_send_ops`):
 
-- **Contextual ⓘ help (this branch):** long persistent helper paragraphs on the GUI moved into one `_info_tip.html` include (`.info-tip` / `.info-tip-bubble` in `app.css`, hover delay in `app.js`). Warnings, DEMO/HOST DOWN/403, status chips, ForgeRCA/ForgeAI pills, and short verify ≠ doctor ≠ test one-liners stay visible. CSS cache-bust `app.css?v=help-1`. Hard-refresh after `git pull origin main && ./forgesre update`. Pytest on this branch: **415 passed** (twice).
-- Discovery copy listed TCP **161**. Scan skips TCP/161 (SNMP is **UDP/161**). Copy matches `agents/discovery.py`.
-- Journal filter links URL-encode `module` / `status` / `q`.
-- Incidents / History / Dashboard pager: one `list_history(..., page=)` query instead of count-then-offset on page 2+.
+- **Edit** — `/ops?edit=<id>#reports` reopens the create form with that job’s fields. Save `POST /ops/reports/<id>/update`.
+- **Cancel** — next to Save (and on the row being edited) discards the draft and returns to the list.
+- **Clone** — `/ops?clone=<id>#reports` prefills a new draft; Save creates a new row.
+- **Remove** — `POST /ops/reports/<id>/delete` with confirm (outbox mail stays).
+- **Enabled** — labeled; Enable/Disable (not Toggle). On = fire at `next`; off = stored, scheduler skips (`process_scheduled_reports` filters `enabled.is_(True)`).
+- Rebased onto `cursor/gui-help-tooltips-05f8` (ⓘ on `/ops`). Kept that include; Enabled meaning stays visible as a one-liner plus in the tip.
 
-NetBox v2 (`skipping v1 upsert`, `nbt_…`, Bearer) is already on `main`. This branch does not reopen 403 “token missing”.
+Pagination stays 10/page (`reports_page`). CSS cache-bust `app.css?v=report-jobs-1`.
 
 ---
 
 ## 4. What N should do on the VM
 
-Do **not** run `./install.sh`. Hard-refresh the UI after update (CSS cache).
+Do **not** run `./install.sh`. Hard-refresh `/ops#reports` after update (CSS cache).
 
 ```bash
 git pull origin main && ./forgesre update
 ```
+
+**Enabled** = the job fires at **Next**. **Disable** keeps the row; the scheduler skips it. That is not Remove. Edit / Clone / Remove sit on each row; Cancel sits next to Save on the form.
 
 NetBox: keep the **full v2 token** (shown once at create, not the 12-character key) in `NETBOX_API_TOKEN`. Recreate **core** only if secrets changed. Never print the token.
 
@@ -117,6 +119,7 @@ These already work on `main`. Do not “fix” them unless N asks.
 - GUI ICMP is from the Core container (`iputils-ping` in the Dockerfile). Host `./forgesre ping` stays on the VM.
 - Jobs: **one worker thread** in Core. There is no Celery.
 - GUI list tables are **10 rows per page** (pagination already on `main`). Do not revert it.
+- `/ops#reports` scheduled jobs: **Edit / Clone / Remove / Enable** on the row; **Cancel** next to Save. **Enabled** = fire at Next; off = stored, skipped. Postgres `scheduled_reports`. No Celery.
 - Discovery **Sync NetBox**: primary (orange) admin POST when the UI answers (`/login/` or `/api/status/`). Devices API 403 is a warning, not `disabled`. First-boot (UI down) stays disabled with one sentence. Engineer/analyst see disabled + **Admin only.** Viewers cannot open `/discovery`. Never write back to NetBox. Bundled footer must not say “external instance”. Prefer UI v2 in `NETBOX_API_TOKEN`; launch skips v1 upsert for `nbt_…`; 40-char v1 is fallback. `update` `--force-recreate`s `netbox`. The chip next to Sync is status only (Not connected / API 403 / No devices / Connected) — grey/yellow/green CSS, not a second button. Sentence *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.* stays on yellow. 403 with a v1 token present says rejected (recreate netbox+core); 403 with v2 says full `nbt_…` then recreate **core** — not “token missing”.
 
 Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre test` / doctor. See [`docs/llm.md`](llm.md).
@@ -163,7 +166,8 @@ Do not start these unless N asks:
 ## 8. Known leftovers
 
 - Many remote `origin/cursor/*-05f8` branches still exist and are **already merged to `main`**.
-- Scheduled `/ops` reports are still plain text.
+- Scheduled `/ops` reports are still plain text. Row actions (Edit / Clone / Remove / Enable) are done; do not add IMAP/Mailpit or Celery.
+- ⓘ GUI help tooltips (`cursor/gui-help-tooltips-05f8`) may land separately; rebase rather than fighting `ops.html`.
 - Old backups already on the VM as `data/backups/forgesre-*.tar.gz` are still valid; new runs write folders.
 - Grafana deep-link from an asset is still later.
 - Prometheus global rules may still fire for a host whose ForgeSRE alarm is disabled or raised; ForgeSRE will not open the incident when the webhook carries the value.

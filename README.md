@@ -103,7 +103,7 @@ Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. L
 | `/playrules` `/playbooks` `/escalation` | Workflow |
 | `/journal` | Internal console |
 | `/health-ui` | Same checks as `./forgesre doctor`; Open Grafana / Prometheus Targets / … |
-| `/ops` | Email & reports: address book, send, outbox, scheduled reports |
+| `/ops` | Email & reports: address book, send, outbox, scheduled reports (Edit / Clone / Remove / Enable) |
 | `/admin` | Users: click a row to edit or remove; platform backup / import; audit |
 
 Roles: super admin (install user), system admin, analyst (inventory + playrules), engineer (deep RCA), viewer.

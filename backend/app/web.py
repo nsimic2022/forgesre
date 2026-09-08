@@ -110,6 +110,51 @@ def can_send_ops(user: User) -> bool:
     return can(user, "write_play") or can(user, "write_incidents") or can(user, "admin")
 
 
+def _parse_id_query(raw: str) -> int | None:
+    text = (raw or "").strip()
+    if not text.isdigit():
+        return None
+    value = int(text)
+    return value if value > 0 else None
+
+
+def parse_scheduled_report_form(
+    db: Session,
+    *,
+    name: str,
+    to_email: str,
+    new_email: str,
+    interval_hours: int,
+    asset_id: list[str],
+    actor: str,
+) -> tuple[str, str, int, list[str]]:
+    """Name, recipient, interval, asset ids for a scheduled report. SMTP path unchanged."""
+    from app.services import remember_mail_contact
+
+    hours = max(1, min(168, int(interval_hours or 6)))
+    ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
+    chosen = (new_email or "").strip() or (to_email or "").strip()
+    contact = remember_mail_contact(db, chosen, actor=actor)
+    if contact is None:
+        raise HTTPException(status_code=400, detail="Pick a saved address or enter a new email")
+    return (name.strip() or "performance", contact.email, hours, ids)
+
+
+def scheduled_report_form_values(row: ScheduledReport | None = None, *, clone: bool = False) -> dict:
+    """Prefill the /ops create form for edit or clone. Clone is a draft until Save."""
+    if row is None:
+        return {"name": "storage-6h", "to_email": "", "interval_hours": 6, "asset_ids": []}
+    name = (row.name or "performance").strip() or "performance"
+    if clone:
+        name = f"{name}-copy"
+    return {
+        "name": name,
+        "to_email": row.to_email or "",
+        "interval_hours": max(1, int(row.interval_hours or 6)),
+        "asset_ids": list(row.asset_ids or []),
+    }
+
+
 def _snmp_answer(ip: str) -> bool:
     from discovery import probe_snmp_udp
 
@@ -1130,6 +1175,8 @@ def ops_page(
     user: User = Depends(login_required),
     page: str = "1",
     reports_page: str = "1",
+    edit: str = "",
+    clone: str = "",
 ):
     from app.services import list_mail_addresses
 
@@ -1139,6 +1186,23 @@ def ops_page(
     reports, reports_pager = paginate(reports, reports_page, param="reports_page", fragment="#reports")
     assets = db.query(Asset).order_by(Asset.hostname).all()
     contacts = db.query(MailContact).order_by(MailContact.email).all()
+    report_form_mode = "add"
+    report_form = scheduled_report_form_values()
+    editing_report = None
+    clone_source_name = ""
+    edit_id = _parse_id_query(edit)
+    clone_id = _parse_id_query(clone)
+    if edit_id is not None:
+        editing_report = db.get(ScheduledReport, edit_id)
+        if editing_report is not None:
+            report_form_mode = "edit"
+            report_form = scheduled_report_form_values(editing_report)
+    elif clone_id is not None:
+        source = db.get(ScheduledReport, clone_id)
+        if source is not None:
+            report_form_mode = "clone"
+            report_form = scheduled_report_form_values(source, clone=True)
+            clone_source_name = source.name or "report"
     return render(
         request,
         "ops.html",
@@ -1154,6 +1218,10 @@ def ops_page(
         smtp_provider=smtp_provider_id(),
         mail_pager=mail_pager,
         reports_pager=reports_pager,
+        report_form_mode=report_form_mode,
+        report_form=report_form,
+        editing_report=editing_report,
+        clone_source_name=clone_source_name,
     )
 
 
@@ -1211,17 +1279,20 @@ def ops_create_report(
         raise HTTPException(status_code=403)
     from datetime import timedelta
 
-    from app.services import remember_mail_contact, utcnow
+    from app.services import utcnow
 
-    hours = max(1, min(168, int(interval_hours or 6)))
-    ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
-    chosen = (new_email or "").strip() or (to_email or "").strip()
-    contact = remember_mail_contact(db, chosen, actor=user.email)
-    if contact is None:
-        raise HTTPException(status_code=400, detail="Pick a saved address or enter a new email")
+    label, email, hours, ids = parse_scheduled_report_form(
+        db,
+        name=name,
+        to_email=to_email,
+        new_email=new_email,
+        interval_hours=interval_hours,
+        asset_id=asset_id,
+        actor=user.email,
+    )
     row = ScheduledReport(
-        name=name.strip() or "performance",
-        to_email=contact.email,
+        name=label,
+        to_email=email,
         interval_hours=hours,
         asset_ids=ids,
         enabled=True,
@@ -1278,6 +1349,78 @@ def ops_run_report(
     return RedirectResponse("/ops#reports", status_code=303)
 
 
+@router.post("/ops/reports/{report_id}/update")
+def ops_update_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    name: str = Form(...),
+    to_email: str = Form(""),
+    new_email: str = Form(""),
+    interval_hours: int = Form(6),
+    asset_id: Annotated[list[str], Form()] = [],
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    from datetime import timedelta
+
+    from app.services import utcnow
+
+    row = db.get(ScheduledReport, report_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    label, email, hours, ids = parse_scheduled_report_form(
+        db,
+        name=name,
+        to_email=to_email,
+        new_email=new_email,
+        interval_hours=interval_hours,
+        asset_id=asset_id,
+        actor=user.email,
+    )
+    interval_changed = int(row.interval_hours or 0) != hours
+    row.name = label
+    row.to_email = email
+    row.interval_hours = hours
+    row.asset_ids = ids
+    if interval_changed:
+        row.next_run_at = utcnow() + timedelta(hours=hours)
+    audit(
+        db,
+        "report.update",
+        actor=user.email,
+        object_type="report",
+        object_id=str(row.id),
+        data={"name": row.name, "to": row.to_email, "hours": hours},
+    )
+    db.commit()
+    return RedirectResponse("/ops#reports", status_code=303)
+
+
+@router.post("/ops/reports/{report_id}/delete")
+def ops_delete_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    row = db.get(ScheduledReport, report_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    audit(
+        db,
+        "report.delete",
+        actor=user.email,
+        object_type="report",
+        object_id=str(row.id),
+        data={"name": row.name, "to": row.to_email},
+    )
+    db.delete(row)
+    db.commit()
+    return RedirectResponse("/ops#reports", status_code=303)
+
+
 @router.post("/ops/reports/{report_id}/toggle")
 def ops_toggle_report(
     report_id: int,
@@ -1290,6 +1433,14 @@ def ops_toggle_report(
     if row is None:
         raise HTTPException(status_code=404)
     row.enabled = not bool(row.enabled)
+    audit(
+        db,
+        "report.toggle",
+        actor=user.email,
+        object_type="report",
+        object_id=str(row.id),
+        data={"enabled": bool(row.enabled)},
+    )
     db.commit()
     return RedirectResponse("/ops#reports", status_code=303)
 

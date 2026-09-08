@@ -81,6 +81,10 @@ def test_ops_page_lists_outbox_and_reports():
     assert "ops-add-email" in page.text
     assert "max-width: 38%" in page.text
     assert "min-width: 58%" in page.text
+    reports = page.text.split('id="reports"', 1)[1]
+    assert "Enabled means the job fires" in reports
+    assert 'href="/ops#reports">Cancel</a>' in reports
+    assert ">Toggle<" not in reports
     db.close()
 
 
@@ -95,6 +99,15 @@ def test_ops_compose_column_is_forced_wider_than_add_email():
     assert "max-width: 38%" in css
     assert "min-width: 58%" in css
     assert ".split { display: grid; grid-template-columns: 1.2fr 0.8fr;" in css
+    assert 'href="/ops#reports">Cancel</a>' in ops
+    assert ">Edit<" in ops
+    assert ">Clone<" in ops
+    assert ">Remove<" in ops
+    assert "Disable" in ops
+    assert "Enable" in ops
+    assert "Toggle" not in ops
+    assert "td.ops-report-actions" in css
+    assert "confirm(" in ops
 
 
 def test_ops_add_contact_then_pick_from_list():
@@ -271,4 +284,140 @@ def test_ops_send_now_rejects_viewer():
     )
     assert posted.status_code == 403
     assert db.query(Notification).filter_by(target="nope-now@example.local", step_key="report").first() is None
+    db.close()
+
+
+def test_ops_scheduled_report_edit_clone_disable_remove():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    created = client.post(
+        "/ops/reports",
+        data={
+            "name": "storage-job",
+            "to_email": "cron@example.local",
+            "interval_hours": "6",
+            "asset_id": "forge-demo-01",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+    row = db.query(ScheduledReport).filter_by(name="storage-job").one()
+    listed = client.get("/ops")
+    reports = listed.text.split('id="reports"', 1)[1]
+    assert f"/ops?edit={row.id}" in reports
+    assert f"/ops?clone={row.id}" in reports
+    assert f"/ops/reports/{row.id}/delete" in reports
+    assert ">Disable<" in reports
+    assert ">Remove<" in reports
+    assert ">Edit<" in reports
+    assert ">Clone<" in reports
+    assert ">Enabled<" in reports
+    assert "confirm(" in reports
+
+    edit_page = client.get(f"/ops?edit={row.id}")
+    assert edit_page.status_code == 200
+    assert f'<form method="post" action="/ops/reports/{row.id}/update" class="stack" id="report-schedule-form">' in edit_page.text
+    form = edit_page.text.split('id="report-schedule-form"', 1)[1].split("</form>", 1)[0]
+    assert "Edit report" in form
+    assert 'value="storage-job"' in form
+    assert 'value="cron@example.local"' in form and "selected" in form
+    assert 'value="forge-demo-01"' in form and "checked" in form
+    assert 'href="/ops#reports">Cancel</a>' in form
+    cancelled = client.get("/ops")
+    assert "Edit report" not in cancelled.text
+    assert "New report" in cancelled.text
+
+    updated = client.post(
+        f"/ops/reports/{row.id}/update",
+        data={
+            "name": "storage-daily",
+            "to_email": "nightly@example.local",
+            "interval_hours": "24",
+            "asset_id": "forge-demo-win-01",
+        },
+        follow_redirects=False,
+    )
+    assert updated.status_code == 303
+    db.expire_all()
+    row = db.get(ScheduledReport, row.id)
+    assert row.name == "storage-daily"
+    assert row.to_email == "nightly@example.local"
+    assert row.interval_hours == 24
+    assert row.asset_ids == ["forge-demo-win-01"]
+    assert db.query(ScheduledReport).filter_by(name="storage-job").first() is None
+
+    clone_page = client.get(f"/ops?clone={row.id}")
+    assert '<form method="post" action="/ops/reports" class="stack" id="report-schedule-form">' in clone_page.text
+    clone_form = clone_page.text.split('id="report-schedule-form"', 1)[1].split("</form>", 1)[0]
+    assert "Clone report" in clone_form
+    assert "storage-daily-copy" in clone_form
+    assert ">Save copy<" in clone_form
+    cloned = client.post(
+        "/ops/reports",
+        data={
+            "name": "storage-daily-copy",
+            "to_email": "nightly@example.local",
+            "interval_hours": "24",
+            "asset_id": "forge-demo-win-01",
+        },
+        follow_redirects=False,
+    )
+    assert cloned.status_code == 303
+    copy = db.query(ScheduledReport).filter_by(name="storage-daily-copy").one()
+    assert copy.id != row.id
+    assert copy.to_email == "nightly@example.local"
+    assert copy.interval_hours == 24
+    assert copy.asset_ids == ["forge-demo-win-01"]
+    assert copy.enabled is True
+
+    past = datetime.now(timezone.utc) - timedelta(minutes=1)
+    row.next_run_at = past
+    row.enabled = True
+    db.commit()
+    disabled = client.post(f"/ops/reports/{row.id}/toggle", follow_redirects=False)
+    assert disabled.status_code == 303
+    db.expire_all()
+    row = db.get(ScheduledReport, row.id)
+    assert row.enabled is False
+    before_mail = db.query(Notification).filter_by(target="nightly@example.local", step_key="report").count()
+    process_scheduled_reports(db)
+    assert db.query(Notification).filter_by(target="nightly@example.local", step_key="report").count() == before_mail
+    db.refresh(row)
+    assert row.last_run_at is None
+
+    removed = client.post(f"/ops/reports/{row.id}/delete", follow_redirects=False)
+    assert removed.status_code == 303
+    assert db.get(ScheduledReport, row.id) is None
+    assert db.query(ScheduledReport).filter_by(name="storage-daily-copy").one().id == copy.id
+    db.close()
+
+
+def test_ops_report_actions_reject_viewer():
+    db = _db()
+    row = ScheduledReport(
+        name="viewer-block",
+        to_email="block@example.local",
+        interval_hours=6,
+        enabled=True,
+    )
+    db.add(row)
+    db.commit()
+    if db.query(User).filter_by(email="viewer@forgesre.local").first() is None:
+        db.add(User(email="viewer@forgesre.local", name="V", password_hash=hash_password("testpass"), role="viewer"))
+        db.commit()
+    client = TestClient(app)
+    _login(client, "viewer@forgesre.local")
+    page = client.get("/ops")
+    reports = page.text.split('id="reports"', 1)[1]
+    assert ">Edit<" not in reports
+    assert ">Clone<" not in reports
+    assert ">Remove<" not in reports
+    assert ">Disable<" not in reports
+    assert client.post(f"/ops/reports/{row.id}/update", data={"name": "nope", "to_email": "x@example.local"}, follow_redirects=False).status_code == 403
+    assert client.post(f"/ops/reports/{row.id}/delete", follow_redirects=False).status_code == 403
+    assert client.post(f"/ops/reports/{row.id}/toggle", follow_redirects=False).status_code == 403
+    db.refresh(row)
+    assert row.name == "viewer-block"
+    assert row.enabled is True
     db.close()
