@@ -167,7 +167,7 @@ Do not start these unless N asks:
 
 - Many remote `origin/cursor/*-05f8` branches still exist and are **already merged to `main`**.
 - Scheduled `/ops` reports are still plain text. Row actions (Edit / Clone / Remove / Enable) are done; do not add an IMAP inbox or Celery.
-- ⓘ GUI help tooltips (`cursor/gui-help-tooltips-05f8`) may land separately; rebase rather than fighting `ops.html`.
+- ⓘ GUI help tooltips are on `main`. This branch rebased; `/ops` keeps the include.
 - Old backups already on the VM as `data/backups/forgesre-*.tar.gz` are still valid; new runs write folders.
 - Grafana deep-link from an asset is still later.
 - Prometheus global rules may still fire for a host whose ForgeSRE alarm is disabled or raised; ForgeSRE will not open the incident when the webhook carries the value.
