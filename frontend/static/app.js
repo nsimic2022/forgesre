@@ -231,3 +231,114 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
   load();
   setInterval(load, 20000);
 })();
+
+(function bindInfoTips() {
+  const DELAY_MS = 400;
+  const GAP = 8;
+  let timer = 0;
+  let active = null;
+  const bubble = document.createElement("div");
+  bubble.className = "info-tip-bubble";
+  bubble.setAttribute("role", "tooltip");
+  bubble.hidden = true;
+  document.body.appendChild(bubble);
+
+  const tipText = (el) =>
+    String(el.getAttribute("data-tip") || el.getAttribute("aria-label") || el.getAttribute("title") || "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const restoreTitle = (el) => {
+    if (!el) return;
+    const saved = el.getAttribute("data-native-title");
+    if (saved != null) {
+      el.setAttribute("title", saved);
+      el.removeAttribute("data-native-title");
+    }
+  };
+
+  const hide = () => {
+    if (timer) {
+      window.clearTimeout(timer);
+      timer = 0;
+    }
+    bubble.hidden = true;
+    bubble.textContent = "";
+    if (active) {
+      active.classList.remove("is-open");
+      restoreTitle(active);
+      active = null;
+    }
+  };
+
+  const place = (el) => {
+    const text = tipText(el);
+    if (!text) return;
+    bubble.textContent = text;
+    bubble.hidden = false;
+    bubble.style.left = "0px";
+    bubble.style.top = "0px";
+    const rect = el.getBoundingClientRect();
+    const size = bubble.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.bottom + GAP;
+    if (left + size.width > window.innerWidth - GAP) {
+      left = window.innerWidth - size.width - GAP;
+    }
+    if (left < GAP) left = GAP;
+    if (top + size.height > window.innerHeight - GAP) {
+      top = rect.top - size.height - GAP;
+    }
+    if (top < GAP) top = GAP;
+    bubble.style.left = Math.round(left) + "px";
+    bubble.style.top = Math.round(top) + "px";
+  };
+
+  const show = (el) => {
+    if (active && active !== el) {
+      active.classList.remove("is-open");
+      restoreTitle(active);
+    }
+    active = el;
+    el.classList.add("is-open");
+    if (el.hasAttribute("title") && !el.hasAttribute("data-native-title")) {
+      el.setAttribute("data-native-title", el.getAttribute("title") || "");
+      el.removeAttribute("title");
+    }
+    place(el);
+  };
+
+  document.addEventListener("pointerover", (event) => {
+    const el = event.target.closest(".info-tip");
+    if (!el) return;
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(() => show(el), DELAY_MS);
+  });
+  document.addEventListener("pointerout", (event) => {
+    const el = event.target.closest(".info-tip");
+    if (!el) return;
+    if (el.contains(event.relatedTarget)) return;
+    hide();
+  });
+  document.addEventListener("focusin", (event) => {
+    const el = event.target.closest(".info-tip");
+    if (el) show(el);
+  });
+  document.addEventListener("focusout", (event) => {
+    const el = event.target.closest(".info-tip");
+    if (!el) return;
+    if (el.contains(event.relatedTarget)) return;
+    hide();
+  });
+  document.addEventListener("click", (event) => {
+    const el = event.target.closest(".info-tip");
+    if (!el) return;
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") hide();
+  });
+  window.addEventListener("scroll", hide, true);
+  window.addEventListener("resize", hide);
+})();

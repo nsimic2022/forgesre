@@ -1,0 +1,5 @@
+{#- Contextual ⓘ help. Set `tip` in the caller (plain text). -#}
+{% if tip %}
+{% set _tip = ' '.join((tip | striptags).split()) %}
+<span class="info-tip" tabindex="0" title="{{ _tip }}" aria-label="{{ _tip }}" data-tip="{{ _tip }}"><span class="info-tip-icon" aria-hidden="true">ⓘ</span></span>
+{% endif %}

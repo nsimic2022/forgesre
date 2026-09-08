@@ -1,13 +1,8 @@
 {% extends "base.html" %}
 {% block title %}History · ForgeSRE{% endblock %}
 {% block content %}
-<h1>History</h1>
-<p class="muted">
-  <strong>Archive</strong> of incidents in Postgres (default last <strong>{{ days }}</strong> days, including closed).
-  Live open/firing work is <a href="/incidents">Incidents</a>. This is not Journal and not Loki.
-  Mail bodies are on <a href="/ops#mail">Email &amp; reports</a>; Ack/Resolve are on the incident page.
-  Tables are <strong>10 rows per page</strong>.
-</p>
+<h1>History {% with %}{% set tip %}Archive of incidents in Postgres (default last {{ days }} days, including closed). This is not Journal and not Loki. Mail bodies are on Email &amp; reports; Ack/Resolve are on the incident page. Tables are 10 rows per page.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<p class="muted">Live open/firing work is <a href="/incidents">Incidents</a>.</p>
 <form method="get" action="/history" class="form-grid">
   <label>Days <input name="days" type="number" min="1" max="3660" value="{{ days }}"></label>
   <label>Status

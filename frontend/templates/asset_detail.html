@@ -10,7 +10,7 @@
 <h1>{{ asset.hostname }}{% if metrics.demo %} <span class="pill demo">DEMO</span>{% endif %}</h1>
 <dl class="kv">
   <dt>Asset number</dt><dd>#{{ asset.number or "—" }}</dd>
-  <dt>Asset ID</dt><dd>{{ asset.asset_id }}</dd>
+  <dt><span class="label-line">Asset ID {% with %}{% set tip %}Set at add and cannot change. Prometheus asset= labels and history keep matching this slug. Hostname and IP can change.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt><dd>{{ asset.asset_id }}</dd>
   <dt>IP</dt>
   <dd>
     {{ asset.ip or "—" }}
@@ -31,7 +31,7 @@
   <dt>Notes</dt><dd>{{ asset.notes or "—" }}</dd>
   <dt>Source</dt><dd>{{ asset.source }}</dd>
   <dt>NetBox ID</dt><dd>{{ asset.netbox_id or "—" }}</dd>
-  <dt>Scrape address</dt><dd>{{ asset.scrape_address or "—" }}</dd>
+  <dt><span class="label-line">Scrape address {% with %}{% set tip %}Prometheus HTTP target. Linux default ip:9100 (node_exporter), Windows ip:9182 (windows_exporter). Network devices use SNMP, not this field.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt><dd>{{ asset.scrape_address or "—" }}</dd>
   <dt>SNMP</dt>
   <dd>
     {% if snmp_target %}
@@ -52,8 +52,7 @@
 
 {% if can('write_assets') %}
 <section class="card asset-detail-actions">
-  <h2>Edit, clone, or remove</h2>
-  <p class="muted">Same Add form on the Assets list. Asset ID is set at add and cannot change; hostname and IP can. Default scrape: Linux <code>ip:9100</code> (node_exporter), Windows <code>ip:9182</code> (windows_exporter). Detect probes both from this appliance; ICMP ping is not used for OS.</p>
+  <h2>Edit, clone, or remove {% with %}{% set tip %}Same Add form on the Assets list. Asset ID is set at add and cannot change; hostname and IP can. Default scrape: Linux ip:9100 (node_exporter), Windows ip:9182 (windows_exporter). Detect probes both from this appliance; ICMP ping is not used for OS.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="row-actions asset-form-actions">
     <a class="button" href="/assets?edit={{ asset.asset_id }}">Edit</a>
     <a class="button" href="/assets?clone={{ asset.asset_id }}">Clone</a>
@@ -72,8 +71,7 @@
 </section>
 {% endif %}
 
-<h2>Similar incident history</h2>
-<p class="muted">Same asset, grouped by alert. Use this to see whether HighCPU (or anything else) has happened here before.</p>
+<h2>Similar incident history {% with %}{% set tip %}Same asset, grouped by alert. Use this to see whether HighCPU (or anything else) has happened here before.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% if similar %}
 <table>
   <thead>
@@ -118,14 +116,13 @@
 
 <aside class="asset-detail-metrics card" data-asset-metrics="{{ asset.asset_id }}">
   <div class="metric-panel-head">
-    <h2>Machine metrics</h2>
+    <h2>Machine metrics {% with %}{% set tip %}Bundled {{ metrics.class }} class — cpu / mem / disk / up only, not every exporter series. Alarm % is the per-host overlay (Edit Alarms), not a rewrite of monitoring/alerts.yml.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
     {% if can('write_assets') %}
     <a class="metric-edit" href="/assets?edit={{ asset.asset_id }}#asset-form">Edit Alarms</a>
     {% endif %}
   </div>
   {% if metrics.demo %}<span class="pill demo">DEMO</span>{% endif %}
   <p class="muted">{{ metrics.collecting_line }}</p>
-  <p class="muted">Bundled {{ metrics.class }} class — not every exporter series.</p>
   <div class="metric-tiles">
     {% for tile in metrics.tiles %}
     <div class="metric-tile" data-metric="{{ tile.key }}">

@@ -1,12 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Journal · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Journal</h1>
-<p class="muted">
-  Internal process journal. Each module writes a short ok / warn / error report when it finishes a job.
-  Old rows are dropped automatically (about 200 per module) so search stays small.
-  Raw Docker/Loki logs are separate — this is the operator view, not a bash shell.
-</p>
+<h1>Journal {% with %}{% set tip %}Internal process journal. Each module writes a short ok / warn / error report when it finishes a job. Old rows are dropped automatically (about 200 per module) so search stays small. Raw Docker/Loki logs are separate — this is the operator view, not a bash shell.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <nav class="pills">
   <a class="pill {% if not filter_module %}ok{% endif %}" href="/journal?status={{ filter_status|urlencode }}&amp;q={{ filter_q|urlencode }}">All</a>
   {% for item in counts %}

@@ -2,8 +2,8 @@
 {% block title %}Verify {{ report.hostname or report.asset_id }} · ForgeSRE{% endblock %}
 {% block content %}
 <p><a href="/assets">← Assets</a> · <a href="/assets/{{ report.asset_id }}">{{ report.hostname or report.asset_id }}</a></p>
-<h1>Verify {{ report.hostname or report.asset_id }}</h1>
-<p class="muted">Live communication from this appliance (Core container; ICMP uses <code>iputils-ping</code> in the Core image): <code>exporter → prometheus → alertmanager → core</code>. Inventory → ICMP / exporter or SNMP → Prometheus <code>up</code> + scrape target health + family series → Alertmanager reachable → last Core incident/webhook (SKIP if none). This is <strong>not</strong> <code>./forgesre test</code> (appliance health) and <strong>not</strong> <code>./forgesre doctor</code> (System Health). Host CLI <code>./forgesre ping</code> / <code>verify</code> still run on the Ubuntu VM. Missing exporter or no Prom target is SKIP/FAIL with a reason — never a fake green host. Ping ICMP FAIL is yellow (not red) when exporter/SNMP still answers — typical Windows, ICMP unused/blocked. Overall can stay PASS. ICMP and port 22 are not required.</p>
+<h1>Verify {{ report.hostname or report.asset_id }} {% with %}{% set tip %}Live communication from this appliance (Core container; ICMP uses iputils-ping in the Core image): exporter → prometheus → alertmanager → core. Inventory → ICMP / exporter or SNMP → Prometheus up + scrape target health + family series → Alertmanager reachable → last Core incident/webhook (SKIP if none). Host CLI ./forgesre ping / verify still run on the Ubuntu VM. Missing exporter or no Prom target is SKIP/FAIL with a reason — never a fake green host. Ping ICMP FAIL is yellow (not red) when exporter/SNMP still answers.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<p class="muted">This is not <code>./forgesre test</code> (appliance health) and not <code>./forgesre doctor</code> (System Health). ICMP and port 22 are not required.</p>
 {% if report.lab %}
 <div class="banner">DEMO lab host (<code>forge-demo-*</code> or discovery seed <code>10.20.30.41</code>). Not a real VM and not proof of a scrape.</div>
 {% endif %}
@@ -30,9 +30,8 @@
   <dt>Notes</dt><dd>{{ report.notes or "—" }}</dd>
 </dl>
 
-<h2>Class</h2>
+<h2>Class {% with %}{% set tip %}Universal classes: Linux :9100 node_, Windows :9182 windows_, Network SNMP, Unknown SKIP. Empty scrape + Unknown type still probes :9100/:9182 on the IP; a live node_ family is saved as Linux so HTTP SD can scrape it.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 <p><code>{{ report.class }}</code> — {{ report.class_reason }}</p>
-<p class="muted">Universal classes: Linux <code>:9100</code> <code>node_</code>, Windows <code>:9182</code> <code>windows_</code>, Network SNMP, Unknown SKIP. Empty scrape + Unknown type still probes <code>:9100</code>/<code>:9182</code> on the IP; a live <code>node_</code> family is saved as Linux so HTTP SD can scrape it.</p>
 
 <h2>Live probes</h2>
 <p class="muted">{{ report.chain or "exporter → prometheus → alertmanager → core" }}</p>

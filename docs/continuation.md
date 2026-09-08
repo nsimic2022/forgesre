@@ -52,6 +52,7 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ### GUI / cheap code
 
+- **Contextual ⓘ help (this branch):** long persistent helper paragraphs on the GUI moved into one `_info_tip.html` include (`.info-tip` / `.info-tip-bubble` in `app.css`, hover delay in `app.js`). Warnings, DEMO/HOST DOWN/403, status chips, ForgeRCA/ForgeAI pills, and short verify ≠ doctor ≠ test one-liners stay visible. CSS cache-bust `app.css?v=help-1`. Hard-refresh after `git pull origin main && ./forgesre update`.
 - Discovery copy listed TCP **161**. Scan skips TCP/161 (SNMP is **UDP/161**). Copy matches `agents/discovery.py`.
 - Journal filter links URL-encode `module` / `status` / `q`.
 - Incidents / History / Dashboard pager: one `list_history(..., page=)` query instead of count-then-offset on page 2+.

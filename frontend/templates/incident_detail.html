@@ -46,22 +46,21 @@
 
 {% if incident.asset %}
 <section class="card">
-  <h2>Who to call</h2>
+  <h2>Who to call {% with %}{% set tip %}Escalation uses the owner email when it is set. Edit contacts on the asset if this is empty — then ForgeSRE falls back to policy role@forgesre.local.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <dl class="kv">
     <dt>Owner / team</dt><dd>{{ incident.asset.owner or "—" }}</dd>
     <dt>Contact</dt><dd>{{ incident.asset.contact_name or "—" }}</dd>
     <dt>Email</dt><dd>{{ incident.asset.owner_email or "—" }}</dd>
     <dt>Phone</dt><dd>{{ incident.asset.owner_phone or "—" }}</dd>
   </dl>
-  <p class="muted">Escalation uses the owner email when it is set. <a href="/assets/{{ incident.asset.asset_id }}">Edit contacts on the asset</a>.</p>
+  <p class="muted"><a href="/assets/{{ incident.asset.asset_id }}">Edit contacts on the asset</a>.</p>
 </section>
 {% endif %}
 
 {% if can_send %}
 <section class="card" id="send-report">
-  <h2>Send incident report</h2>
+  <h2>Send incident report {% with %}{% set tip %}Current snapshot (alert + ForgeRCA if it has run). Does not change status.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <p class="muted">
-    Current snapshot (alert + ForgeRCA if it has run). Does not change status.
     {% if smtp_on %}
     SMTP is <strong>on</strong> — this leaves the VM to the address you pick. Outbox: <a href="/ops#mail">Email &amp; reports</a>.
     {% else %}
@@ -84,7 +83,7 @@
 {% endif %}
 
 <section class="card" id="ai">
-  <h2>What happened?</h2>
+  <h2>What happened? {% with %}{% set tip %}ForgeRCA is the builtin facts/anomalies/causes page. The local LLM, if enabled, only rewrites text in the background.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <p>{{ incident.summary or "Awaiting evidence." }}</p>
   {% if investigation %}
   <p>{{ investigation.summary }}</p>
@@ -125,11 +124,10 @@
 </section>
 {% endif %}
 
-<p class="muted" id="mail">Incident and escalation mail for this appliance is the <a href="/ops#mail">mail outbox</a> (one table). This page only sends.</p>
+<p class="muted" id="mail">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>
 
 <section id="audit">
-  <h2>Who did what</h2>
-  <p class="muted">Audit rows for this <code>INC</code> (login clicks, status, notes). Not an email read-receipt.</p>
+  <h2>Who did what {% with %}{% set tip %}Audit rows for this INC (login clicks, status, notes). Not an email read-receipt.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <table>
     <thead><tr><th>When</th><th>Actor</th><th>Action</th></tr></thead>
     <tbody>
@@ -148,8 +146,7 @@
 </section>
 
 <section id="notes">
-  <h2>Operator notes</h2>
-  <p class="muted">What a person actually did (e.g. cleaned WAL). Not the playbook and not RCA.</p>
+  <h2>Operator notes {% with %}{% set tip %}What a person actually did (e.g. cleaned WAL). Not the playbook and not RCA.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   {% for row in operator_notes %}
     <div class="card">
       <p class="muted">{{ row.at }} · {{ row.actor }}</p>

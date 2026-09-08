@@ -135,6 +135,7 @@ def test_architecture_doc_is_proposal_not_runtime():
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "map `alertname`" in handbook or "maps `alertname`" in handbook
     play = (ROOT / "frontend" / "templates" / "playrules.html").read_text(encoding="utf-8")
-    assert "do <strong>not</strong> create Prom rules" in play
+    assert 'include "_info_tip.html"' in play
+    assert "do not create Prom rules" in play
     assert "alerts.yml" in play
     assert "not a second alerting engine" in play

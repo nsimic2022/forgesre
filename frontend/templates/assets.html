@@ -1,23 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Assets · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Assets</h1>
+<h1>Assets {% with %}{% set tip %}Inventory this appliance monitors. Asset ID is the immutable slug. Ping / comms pills refresh in the background from GET /api/v1/assets/reachability. Viewers can see status.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 {% if notice %}
 <div class="banner">{{ notice }}</div>
 {% endif %}
 <p class="muted reach-legend">
-  <strong>Ping / comms</strong> pills (green / yellow / red):
-  <span class="reach-dot green">Ping</span> ICMP ok ·
-  <span class="reach-dot yellow">Ping</span> not probed, or ICMP failed but exporter/SNMP (<code>/metrics</code>) answers (typical Windows: ping unused/blocked) ·
-  <span class="reach-dot red">Ping</span> ICMP failed <em>and</em> exporter/SNMP failed or timed out — likely down or wrong IP.
-  ICMP and port 22 are not required.
-  Same colors for communication (independent of ping):
-  <strong>:9100</strong> (node_exporter), <strong>:9182</strong> (windows_exporter), and <strong>SNMP</strong> (UDP/161).
-  Last-known colors on first paint; <code>GET /api/v1/assets/reachability</code> refreshes in the background. Viewers can see status.
-  {% if can('write_assets') %}
-  <a href="/assets/verify">Verify all</a> runs the live chain exporter → prometheus → alertmanager → core.
-  {% endif %}
   Verify (this inventory path) is not System Health / <code>./forgesre doctor</code> and is not <code>./forgesre test</code> (appliance report).
+  {% if can('write_assets') %}
+  <a href="/assets/verify">Verify all</a>
+  {% endif %}
 </p>
 <form method="get" action="/assets" class="row-actions" style="margin: 0.8rem 0;">
   <input name="q" value="{{ q }}" placeholder="search #, id, hostname, IP">
@@ -29,13 +21,13 @@
   <thead>
     <tr>
       <th title="Asset number">#</th>
-      <th>Asset ID</th>
+      <th><span class="label-line">Asset ID {% with %}{% set tip %}Short unique slug set at add. Cannot change afterwards — Prometheus asset= labels and history keep matching.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th>Hostname</th>
       <th>IP</th>
-      <th>Ping / comms</th>
+      <th><span class="label-line">Ping / comms {% with %}{% set tip %}Green / yellow / red. Ping: green ICMP ok; yellow not probed, or ICMP failed but exporter/SNMP (/metrics) answers (typical Windows: ping unused/blocked); red ICMP failed and exporter/SNMP failed or timed out. ICMP and port 22 are not required. Same colors for communication (independent of ping): :9100 (node_exporter), :9182 (windows_exporter), SNMP (UDP/161). Last-known colors on first paint.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th>Owner</th>
       <th>Contact</th>
-      <th>Type</th>
+      <th><span class="label-line">Type {% with %}{% set tip %}Linux Server = node_exporter :9100. Windows Server = windows_exporter :9182. Network device = snmp_exporter UDP/161. Auto detects from /metrics on this appliance.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th>Environment</th>
       <th>Status</th>
       <th>Source</th>

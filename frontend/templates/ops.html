@@ -36,36 +36,19 @@
 {% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Email &amp; reports</h1>
+  <h1>Email &amp; reports {% with %}{% set tip %}This page only sends mail. There is no inbox — ForgeSRE does not receive email. Outbox is every generated / sent / failed message this appliance stored. SMTP off keeps the row as generated (lab). Escalation mail on an incident is unchanged. Grafana lives on System Health.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 </div>
-<p class="muted">
-  This page only <strong>sends</strong> mail. There is no inbox — ForgeSRE does not receive email.
-  Outbox is every generated / sent / failed message this appliance stored.
-  SMTP off keeps the row as <em>generated</em> (lab). Escalation mail on an incident is unchanged.
-  Grafana lives on <a href="/health-ui">System Health</a>.
-</p>
 
 <section class="card" id="providers">
-  <h2>Send through</h2>
-  <p class="muted">
-    Core SMTP does not change when you pull this. Use <strong>Gmail</strong> or <strong>Outlook</strong> now.
-    Own domain + Roundcube is a Compose profile that stays <strong>off</strong> until you enable it later.
-  </p>
+  <h2>Send through {% with %}{% set tip %}Core SMTP does not change when you pull this. Use Gmail or Outlook now. Own domain + Roundcube is a Compose profile that stays off until you enable it later.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="mail-providers">
     <div>
-      <h3>Gmail {% if smtp_provider == "gmail" %}<span class="pill ok">in use</span>{% endif %}</h3>
-      <p class="muted">
-        YAML <code>host: smtp.gmail.com</code> port <code>587</code> <code>tls: true</code>.
-        App password in <code>SMTP_USERNAME</code> / <code>SMTP_PASSWORD</code>.
-        Replies stay in Gmail.
-      </p>
+      <h3>Gmail {% if smtp_provider == "gmail" %}<span class="pill ok">in use</span>{% endif %}
+        {% with %}{% set tip %}YAML host: smtp.gmail.com port 587 tls: true. App password in SMTP_USERNAME / SMTP_PASSWORD. Replies stay in Gmail.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     </div>
     <div>
-      <h3>Outlook / Microsoft 365 {% if smtp_provider == "outlook" %}<span class="pill ok">in use</span>{% endif %}</h3>
-      <p class="muted">
-        YAML <code>host: smtp.office365.com</code> port <code>587</code> <code>tls: true</code>.
-        Same <code>SMTP_*</code> secrets. Replies stay in Outlook.
-      </p>
+      <h3>Outlook / Microsoft 365 {% if smtp_provider == "outlook" %}<span class="pill ok">in use</span>{% endif %}
+        {% with %}{% set tip %}YAML host: smtp.office365.com port 587 tls: true. Same SMTP_* secrets. Replies stay in Outlook.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     </div>
     <div>
       <h3>Own domain + Roundcube
@@ -74,18 +57,11 @@
         {% else %}
         <span class="pill">not enabled</span>
         {% endif %}
+        {% with %}{% set tip %}Off by default. After you own a domain: ./forgesre mailbox (starts Postfix + Dovecot + Roundcube, does not rewrite Core SMTP). Core can keep sending through Gmail/Outlook unless you pass ./forgesre mailbox --bind-core.{% endset %}{% include "_info_tip.html" %}{% endwith %}
       </h3>
       {% if webmail_url %}
       <p class="muted">
         <a href="{{ webmail_url }}" target="_blank" rel="noopener">Open Roundcube</a>
-        on this host. Core can keep sending through Gmail/Outlook unless you pass
-        <code>./forgesre mailbox --bind-core</code>.
-      </p>
-      {% else %}
-      <p class="muted">
-        Off by default. After you own a domain:
-        <code>./forgesre mailbox</code>
-        (starts Postfix + Dovecot + Roundcube, does not rewrite Core SMTP).
       </p>
       {% endif %}
     </div>
@@ -97,8 +73,7 @@
   {% if can_send %}
   <div class="ops-mail-cols">
     <form method="post" action="/ops/contacts" class="stack ops-add-email">
-      <h3>Add email</h3>
-      <p class="muted">Saves an address to this page’s book. Asset owner emails from <a href="/assets">Assets</a> already appear in the list.</p>
+      <h3>Add email {% with %}{% set tip %}Saves an address to this page’s book. Asset owner emails from Assets already appear in the list.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
       <label>Name <input name="name" placeholder="Storage on-call"></label>
       <label>Email <input name="email" type="email" required placeholder="ops@example.local"></label>
       <button type="submit">Save address</button>
@@ -132,8 +107,7 @@
 </section>
 
 <section class="card" id="mail">
-  <h2>Mail outbox</h2>
-  <p class="muted">One table for this appliance: this page, scheduled reports, and incident/escalation mail. Not an inbox. Incident and Escalation pages link here.</p>
+  <h2>Mail outbox {% with %}{% set tip %}One table for this appliance: this page, scheduled reports, and incident/escalation mail. Not an inbox. Incident and Escalation pages link here.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <table>
     <thead><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th><th>Body</th></tr></thead>
     <tbody>
@@ -159,14 +133,7 @@
 </section>
 
 <section class="card" id="reports">
-  <h2>Scheduled reports</h2>
-  <p class="muted">
-    Cron-like, inside Core. Pick assets and an interval, or use <strong>Send now</strong>
-    for a one-shot mail (does not wait 6 hours). ForgeSRE snapshots CPU/disk/up
-    from Prometheus (or demo gauges) even when there is no incident, then emails the text.
-    Choose the recipient from the address book, or type a destination email.
-    SMTP off stores the row as <em>generated</em> (not sent).
-  </p>
+  <h2>Scheduled reports {% with %}{% set tip %}Cron-like, inside Core. Pick assets and an interval, or use Send now for a one-shot mail (does not wait 6 hours). ForgeSRE snapshots CPU/disk/up from Prometheus (or demo gauges) even when there is no incident, then emails the text. Choose the recipient from the address book, or type a destination email. SMTP off stores the row as generated (not sent). This is not the incident escalation ladder.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   {% if can_send %}
   <div class="ops-report-cols">
   <form method="post" action="/ops/reports" class="stack">
@@ -200,8 +167,7 @@
     <button type="submit">Save schedule</button>
   </form>
   <form method="post" action="/ops/reports/send-now" class="stack ops-report-now">
-    <h3>Send now</h3>
-    <p class="muted">One snapshot, immediately. Does not create a 6-hour schedule.</p>
+    <h3>Send now {% with %}{% set tip %}One snapshot, immediately. Does not create a 6-hour schedule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     <label>Send to
       <select name="to_email">
         <option value="">Select an address</option>
