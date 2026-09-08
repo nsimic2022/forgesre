@@ -8,6 +8,10 @@
   · Enabled: <code>{{ "On" if discovery_enabled else "Off" }}</code>
 </p>
 
+{% if notice %}
+<div class="banner">{{ notice }}</div>
+{% endif %}
+
 {% if pending %}
 <div class="banner">
   <strong>NEW DEVICE DETECTED</strong>
@@ -69,12 +73,12 @@
       <th>Open ports</th>
       <th>Status</th>
       <th>Source</th>
-      <th></th>
+      <th>Actions</th>
     </tr>
   </thead>
   <tbody>
   {% for row in candidates %}
-    <tr>
+    <tr class="{% if selected and selected.id == row.id %}selected{% endif %}">
       <td>
         {{ row.ip }}
         {% if row.source == 'demo' or row.ip == demo_candidate_ip %}
@@ -87,14 +91,26 @@
       <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>
       <td>{{ row.source }}</td>
       <td class="row-actions">
-        {% if row.status == 'new' and can('write_assets') %}
+        <div class="row-actions">
+        {% if can('write_assets') %}
+        {% if row.status == 'new' %}
         <form method="post" action="/discovery/{{ row.id }}/approve"><button type="submit">Approve</button></form>
+        {% endif %}
+        <a class="button" href="/discovery?edit={{ row.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Edit</a>
+        <a class="button" href="/discovery?clone={{ row.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Clone</a>
+        {% if row.status == 'new' %}
         <form method="post" action="/discovery/{{ row.id }}/ignore"><button type="submit" class="secondary">Ignore</button></form>
-        {% elif row.asset_id %}
+        {% endif %}
+        <form method="post" action="/discovery/{{ row.id }}/delete" onsubmit="return confirm('Remove candidate {{ row.ip }}? This does not remove an approved asset.');">
+          <button type="submit" class="danger">Remove</button>
+        </form>
+        {% endif %}
+        {% if row.asset_id %}
         <a href="/assets/{{ row.asset_id }}">{{ row.asset_id }}</a>
-        {% else %}
+        {% elif not can('write_assets') %}
         —
         {% endif %}
+        </div>
       </td>
     </tr>
   {% else %}
@@ -103,4 +119,33 @@
   </tbody>
 </table>
 {% include "_pager.html" %}
+{% if can('write_assets') and form_mode %}
+<section class="card" id="candidate-form">
+  {% if form_mode == "edit" %}
+  <h2>Edit candidate</h2>
+  <form method="post" action="/discovery/{{ selected.id }}/update" class="form-grid">
+  {% else %}
+  <h2>Clone candidate</h2>
+  <p class="muted wide">Copy of <strong>{{ selected.ip }}</strong> — type a new IP. DEMO source stays a lab row.</p>
+  <form method="post" action="/discovery/{{ selected.id }}/clone" class="form-grid">
+  {% endif %}
+    <label>IP <input name="ip" value="{{ form.ip }}" required></label>
+    <label>Hostname <input name="hostname" value="{{ form.hostname }}" placeholder="optional"></label>
+    <label>Type
+      <select name="proposed_role">
+        {% for opt in role_choices %}
+        <option value="{{ opt }}" {% if form.proposed_role == opt %}selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+        {% if form.proposed_role and form.proposed_role not in role_choices %}
+        <option value="{{ form.proposed_role }}" selected>{{ form.proposed_role }}</option>
+        {% endif %}
+      </select>
+    </label>
+    <div class="wide row-actions asset-form-actions">
+      <button type="submit">{% if form_mode == "clone" %}Save copy{% else %}Save{% endif %}</button>
+      <a href="/discovery">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endif %}
 {% endblock %}

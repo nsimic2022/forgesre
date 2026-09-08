@@ -1,13 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Incidents · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Incidents {% with %}{% set tip %}Open/firing work (not the archive). Green ID = resolved/closed. Yellow = in progress (warning). Red = critical.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
-<p class="muted">Closed and older rows live in <a href="/history">History</a>.</p>
-<form method="get" action="/incidents" class="row-actions" style="margin: 0.8rem 0;">
-  <label>Show
-    <select name="open">
-      <option value="1" {% if open_only %}selected{% endif %}>Open/firing only</option>
-      <option value="0" {% if not open_only %}selected{% endif %}>All statuses</option>
+<h1>Incidents {% with %}{% set tip %}Live incident list (default: all statuses). Green ID = resolved/closed. Yellow = in progress (warning). Red = critical. Closed archive is History.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<p class="muted">Closed and older rows also live in <a href="/history">History</a>.</p>
+<form method="get" action="/incidents" class="list-filters">
+  <label>Status
+    <select name="status">
+      <option value="all" {% if status_group == "all" %}selected{% endif %}>All</option>
+      <option value="open" {% if status_group == "open" %}selected{% endif %}>Open</option>
+      <option value="closed" {% if status_group == "closed" %}selected{% endif %}>Closed</option>
+      {% if status_group not in ["all", "open", "closed"] %}
+      <option value="{{ status_group }}" selected>{{ status_group }}</option>
+      {% endif %}
     </select>
   </label>
   <label>Last days <input name="days" type="number" min="1" max="3660" value="{{ days }}" placeholder="any age"></label>
@@ -31,7 +35,7 @@
       <td>{% if reported_to.get(item.id) %}{{ reported_to.get(item.id) }}{% else %}<span class="muted">—</span>{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="7" class="muted">No incidents in this filter.{% if open_only %} Try All statuses or <a href="/history">History</a>.{% endif %}</td></tr>
+    <tr><td colspan="7" class="muted">No incidents in this filter.{% if status_group != "all" %} Try All or <a href="/history">History</a>.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>

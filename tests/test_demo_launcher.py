@@ -85,7 +85,7 @@ def test_dashboard_has_one_run_demo_control_not_two_forms():
     before = html[:panel_at]
     assert 'action="/demo"' not in before
     assert 'action="/demo-rca"' not in before
-    infra = html.find(">Infrastructure<")
+    infra = html.find(">Infrastructure")
     assert infra > 0
     assert panel_at < infra
     assert "windows_exporter is scraping" not in html.lower()

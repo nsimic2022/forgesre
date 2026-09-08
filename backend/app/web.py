@@ -18,19 +18,24 @@ from app.exporter_detect import AUTO_ASSET_TYPE
 from app.asset_alarms import alarms_from_form, saved_alarm_hostnames
 from app.inventory import (
     ASSET_TYPE_CHOICES,
+    CANDIDATE_ROLE_CHOICES,
     approve_candidate,
     asset_form_values,
     asset_type_abbrev,
     assets_matching,
+    clone_candidate,
     clone_prefill,
     create_manual_asset,
     delete_asset,
     delete_blocked,
+    delete_candidate,
     ignore_candidate,
     run_scan,
     similar_incident_groups,
+    suggest_clone_candidate_ip,
     sync_netbox,
     update_asset,
+    update_candidate,
     is_snmp_asset,
 )
 from app.journal import MODULES, count_entries, error_banner_entries, list_entries, module_counts, next_error_ack_id
@@ -49,7 +54,7 @@ from app.models import (
     User,
 )
 from app.netbox import is_local_netbox_url, status_label, sync_cta, token_presence
-from app.security import can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
+from app.security import CREATABLE_ROLES, can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
 from app.api import doctor_payload, run_asset_verify
 from app.asset_metrics import safe_asset_metric_panel
 from app.metrics import reset_demo_gauges
@@ -70,6 +75,7 @@ from app.services import (
 from app.stack import enrich_components, rewrite_host
 from app.history import (
     PAGE_SIZE,
+    ack_circle,
     add_note,
     apply_status_fields,
     audit_for,
@@ -238,6 +244,7 @@ def ctx(request: Request, user: User | None, **extra):
         "demo_candidate_ip": DEMO_CANDIDATE_IP,
         "llm_timeout": settings.llm_timeout,
         "pager_href": pager_href,
+        "ack_circle": ack_circle,
     }
     data.update(extra)
     return data
@@ -418,9 +425,10 @@ def assets_page(
     edit: str = "",
     clone: str = "",
     q: str = "",
+    status: str = "",
     page: str = "1",
 ):
-    rows = assets_matching(db.query(Asset).order_by(Asset.number, Asset.hostname).all(), q)
+    rows = assets_matching(db.query(Asset).order_by(Asset.number, Asset.hostname).all(), q, status)
     rows, pager = paginate(rows, page)
     form_mode = "add"
     selected = None
@@ -451,6 +459,7 @@ def assets_page(
         delete_blocked=delete_blocked,
         notice=notice,
         q=q,
+        status=status,
         reachability_snapshot=reachability_snapshot,
         pager=pager,
     )
@@ -556,18 +565,53 @@ def asset_create(
 
 
 @router.get("/discovery", response_class=HTMLResponse)
-def discovery_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("write_assets")), page: str = "1"):
+def discovery_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("write_assets")),
+    page: str = "1",
+    edit: str = "",
+    clone: str = "",
+):
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
     pending = [row for row in rows if row.status == "new"]
     rows, pager = paginate(rows, page)
     token = settings.netbox_token
     netbox_sync = sync_cta(settings.netbox_url, token, settings.netbox_enabled)
+    form_mode = ""
+    selected = None
+    form = {"ip": "", "hostname": "", "proposed_role": "Unknown device"}
+    notice = request.query_params.get("notice") or ""
+    if edit.strip().isdigit():
+        selected = db.get(DiscoveryCandidate, int(edit.strip()))
+        if selected is not None:
+            form_mode = "edit"
+            form = {
+                "ip": selected.ip,
+                "hostname": selected.hostname or "",
+                "proposed_role": selected.proposed_role or "Unknown device",
+            }
+    elif clone.strip().isdigit():
+        source = db.get(DiscoveryCandidate, int(clone.strip()))
+        if source is not None:
+            selected = source
+            form_mode = "clone"
+            form = {
+                "ip": suggest_clone_candidate_ip(db, source.ip),
+                "hostname": source.hostname or "",
+                "proposed_role": source.proposed_role or "Unknown device",
+            }
     return render(
         request,
         "discovery.html",
         user,
         candidates=rows,
         pending=pending,
+        form_mode=form_mode,
+        selected=selected,
+        form=form,
+        role_choices=CANDIDATE_ROLE_CHOICES,
+        notice=notice,
         discovery_enabled=settings.discovery_enabled,
         discovery_mode=settings.discovery_mode,
         discovery_cidrs=settings.discovery_cidrs,
@@ -628,6 +672,69 @@ def discovery_ignore_page(
     if row is None:
         raise HTTPException(status_code=404)
     ignore_candidate(db, row, actor=user.email)
+    return RedirectResponse("/discovery", status_code=302)
+
+
+@router.post("/discovery/{candidate_id}/update")
+def discovery_update_page(
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    ip: str = Form(...),
+    hostname: str = Form(""),
+    proposed_role: str = Form(""),
+):
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    row = db.get(DiscoveryCandidate, candidate_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    try:
+        update_candidate(db, row, ip=ip, hostname=hostname, proposed_role=proposed_role, actor=user.email)
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/discovery?edit={candidate_id}&notice={quote(str(exc))}",
+            status_code=302,
+        )
+    return RedirectResponse("/discovery", status_code=302)
+
+
+@router.post("/discovery/{candidate_id}/clone")
+def discovery_clone_page(
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    ip: str = Form(...),
+    hostname: str = Form(""),
+    proposed_role: str = Form(""),
+):
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    row = db.get(DiscoveryCandidate, candidate_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    try:
+        clone_candidate(db, row, ip=ip, hostname=hostname, proposed_role=proposed_role, actor=user.email)
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/discovery?clone={candidate_id}&notice={quote(str(exc))}",
+            status_code=302,
+        )
+    return RedirectResponse("/discovery", status_code=302)
+
+
+@router.post("/discovery/{candidate_id}/delete")
+def discovery_delete_page(
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    row = db.get(DiscoveryCandidate, candidate_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    delete_candidate(db, row, actor=user.email)
     return RedirectResponse("/discovery", status_code=302)
 
 
@@ -791,14 +898,39 @@ def incidents_page(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
-    open_filter: str = Query("1", alias="open"),
+    open_filter: str = Query("", alias="open"),
+    status: str = "",
     days: str = "",
     page: str = "1",
 ):
-    open_only = (open_filter or "1").strip().lower() not in {"0", "false", "all", "no"}
+    real_status = {"OPEN", "INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED"}
+    status_raw = (status or "").strip()
+    status_key = status_raw.upper()
+    open_raw = (open_filter or "").strip().lower()
+    open_only = False
+    closed_only = False
+    exact = ""
+    status_group = "all"
+    if status_key in real_status:
+        exact = status_key
+        status_group = status_key
+    elif status_raw.lower() == "closed":
+        closed_only = True
+        status_group = "closed"
+    elif status_raw.lower() == "open" or open_raw in {"1", "true", "yes"}:
+        open_only = True
+        status_group = "open"
     days_raw = (days or "").strip()
     days_n = clamp_days(days_raw) if days_raw else None
-    rows, total = list_history(db, days=days_n, open_only=open_only, limit=PAGE_SIZE, page=page)
+    rows, total = list_history(
+        db,
+        days=days_n,
+        status=exact,
+        open_only=open_only,
+        closed_only=closed_only,
+        limit=PAGE_SIZE,
+        page=page,
+    )
     pager = pager_state(page, total=total)
     return render(
         request,
@@ -807,6 +939,7 @@ def incidents_page(
         incidents=rows,
         reported_to=reported_to_for(db, rows),
         open_only=open_only,
+        status_group=status_group,
         days=days_raw,
         pager=pager,
     )
@@ -1055,11 +1188,89 @@ def playrule_toggle(rule_id: int, db: Session = Depends(get_db), user: User = De
     return RedirectResponse("/playrules", status_code=302)
 
 
+def _playbook_steps(text: str) -> list[dict]:
+    rows = []
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if line:
+            rows.append({"title": line.lstrip("0123456789.-) ").strip()})
+    return rows
+
+
+def _playbook_steps_text(book: Playbook) -> str:
+    lines = []
+    for step in book.steps or []:
+        if isinstance(step, dict):
+            title = str(step.get("title") or "").strip()
+        else:
+            title = str(step).strip()
+        if title:
+            lines.append(title)
+    return "\n".join(lines)
+
+
+def _playbook_slug(raw: str) -> str:
+    slug = "".join(ch if ch.isalnum() or ch == "-" else "-" for ch in (raw or "").strip().lower())
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug.strip("-") or "playbook"
+
+
+def _unique_playbook_slug(db: Session, base: str) -> str:
+    slug = _playbook_slug(base)
+    n = 2
+    candidate = slug
+    while db.query(Playbook).filter_by(slug=candidate).first() is not None:
+        candidate = f"{slug}-{n}"
+        n += 1
+    return candidate
+
+
 @router.get("/playbooks", response_class=HTMLResponse)
-def playbooks_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play")), page: str = "1"):
+def playbooks_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("read_play")),
+    page: str = "1",
+    edit: str = "",
+    clone: str = "",
+):
     rows = db.query(Playbook).order_by(Playbook.name).all()
     rows, pager = paginate(rows, page)
-    return render(request, "playbooks.html", user, playbooks=rows, pager=pager)
+    form_mode = "create"
+    selected = None
+    form = {
+        "name": "",
+        "slug": "",
+        "steps": "Verify disk usage\nCheck growth\nIdentify owner\nNotify responsible engineer\nEscalate if not acknowledged",
+    }
+    notice = request.query_params.get("notice") or ""
+    if edit.strip().isdigit():
+        selected = db.get(Playbook, int(edit.strip()))
+        if selected is not None:
+            form_mode = "edit"
+            form = {"name": selected.name, "slug": selected.slug, "steps": _playbook_steps_text(selected)}
+    elif clone.strip().isdigit():
+        source = db.get(Playbook, int(clone.strip()))
+        if source is not None:
+            selected = source
+            form_mode = "clone"
+            form = {
+                "name": f"{source.name} (copy)",
+                "slug": _unique_playbook_slug(db, f"{source.slug}-copy"),
+                "steps": _playbook_steps_text(source),
+            }
+    return render(
+        request,
+        "playbooks.html",
+        user,
+        playbooks=rows,
+        pager=pager,
+        form_mode=form_mode,
+        selected=selected,
+        form=form,
+        notice=notice,
+    )
 
 
 @router.post("/playbooks")
@@ -1072,14 +1283,53 @@ def playbook_create(
 ):
     if not can(user, "write_play"):
         raise HTTPException(status_code=403)
-    step_rows = []
-    for line in steps.splitlines():
-        line = line.strip()
-        if line:
-            step_rows.append({"title": line.lstrip("0123456789.-) ").strip()})
-    row = Playbook(name=name, slug=slug, steps=step_rows)
+    slug = _playbook_slug(slug)
+    if db.query(Playbook).filter_by(slug=slug).first() is not None:
+        raise HTTPException(status_code=400, detail="playbook slug already exists")
+    row = Playbook(name=name.strip(), slug=slug, steps=_playbook_steps(steps))
     db.add(row)
     audit(db, "playbook.create", actor=user.email, object_type="playbook", object_id=slug)
+    db.commit()
+    return RedirectResponse("/playbooks", status_code=302)
+
+
+@router.post("/playbooks/{book_id}/update")
+def playbook_update(
+    book_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    name: str = Form(...),
+    slug: str = Form(""),
+    steps: str = Form(""),
+):
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    row = db.get(Playbook, book_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    row.name = name.strip()
+    row.steps = _playbook_steps(steps)
+    audit(db, "playbook.update", actor=user.email, object_type="playbook", object_id=row.slug)
+    db.commit()
+    return RedirectResponse("/playbooks", status_code=302)
+
+
+@router.post("/playbooks/{book_id}/delete")
+def playbook_delete(
+    book_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    row = db.get(Playbook, book_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    slug = row.slug
+    db.query(Playrule).filter(Playrule.playbook_id == row.id).update({Playrule.playbook_id: None})
+    db.query(Incident).filter(Incident.playbook_id == row.id).update({Incident.playbook_id: None})
+    db.delete(row)
+    audit(db, "playbook.remove", actor=user.email, object_type="playbook", object_id=slug)
     db.commit()
     return RedirectResponse("/playbooks", status_code=302)
 
@@ -1451,6 +1701,7 @@ def admin_page(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     selected: int | None = Query(None),
+    clone: int | None = Query(None),
     page: str = "1",
     audit_page: str = "1",
     backup_page: str = "1",
@@ -1462,6 +1713,7 @@ def admin_page(
     audits = db.query(AuditLog).order_by(AuditLog.id.desc()).all()
     audits, audit_pager = paginate(audits, audit_page, param="audit_page")
     chosen = db.get(User, selected) if selected else None
+    clone_of = db.get(User, clone) if clone else None
     from app.backup import format_size, list_archives, layout_from_env
     from app.users import delete_blocked, edit_blocked
 
@@ -1476,6 +1728,8 @@ def admin_page(
         users=users,
         audits=audits,
         selected=chosen,
+        clone_of=clone_of,
+        clone_role=(clone_of.role if clone_of and clone_of.role in CREATABLE_ROLES else "analyst") if clone_of else "",
         can_edit_selected=bool(chosen) and not edit_blocked(user, chosen),
         can_delete_selected=bool(chosen) and not delete_blocked(user, chosen),
         backups=backups,

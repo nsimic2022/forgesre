@@ -233,8 +233,9 @@ def test_admin_backup_buttons_before_cli_cheatsheet(tmp_path, monkeypatch):
     assert "UTC" in text
     assert "SECRET_KEY" not in text
     assert ">Download</a>" in text
-    assert ">Remove<" in text
-    assert text.index(">Download</a>") < text.index(">Remove<")
+    assert 'action="/admin/backups/remove"' in text
+    backups = text[text.index("Platform backup") :]
+    assert backups.index(">Download</a>") < backups.index(">Remove<")
     assert "/admin/backups/remove" in text
     assert "onsubmit=" in text
     assert "confirm(" in text
@@ -879,11 +880,11 @@ def test_admin_remove_backup_is_admin_only(tmp_path, monkeypatch):
     page = client.get("/admin")
     text = page.text
     assert ">Download</a>" in text
-    assert ">Remove<" in text
     assert 'action="/admin/backups/remove"' in text
     assert "onsubmit=" in text
     assert "confirm(" in text
-    assert text.index(">Download</a>") < text.index(">Remove<")
+    backups = text[text.index("Platform backup") :]
+    assert backups.index(">Download</a>") < backups.index(">Remove<")
     traversal = client.post(
         "/admin/backups/remove",
         data={"name": "../secrets.env"},

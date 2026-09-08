@@ -60,6 +60,10 @@ def migrate(engine: Engine) -> None:
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
     statements: list[str] = []
+    if "discovery_candidates" in tables:
+        existing = {col["name"] for col in inspector.get_columns("discovery_candidates")}
+        if "hostname" not in existing:
+            statements.append("ALTER TABLE discovery_candidates ADD COLUMN hostname VARCHAR(255) DEFAULT ''")
     if "users" in tables:
         existing = {col["name"] for col in inspector.get_columns("users")}
         if "journal_error_ack_id" not in existing:

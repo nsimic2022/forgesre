@@ -17,9 +17,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 ## 1. Who and when
 
-**Tuesday 8 September 2026.** Operator N on `/ops` Email & reports: scheduled/cron report rows had a structure (`next`, `enabled`) but no explanation of the toggle, and no **Edit / Cancel / Remove / Clone**. Once created, a job could only be turned off.
-
-Rebased onto `cursor/gui-help-tooltips-05f8` after it merged to `main`. Do not revert GUI list pagination (10/page, `reports_page`).
+**Tuesday 8 September 2026.** Operator N asked for small GUI fixes on V0.7 (dashboard bar, clickable tiles, Assets / Discovery / Incidents / History / Playbooks / Admin users). English UI. No React. Do not revert ⓘ tooltips (`410fbb5`) or `/ops` scheduled-report Edit/Clone/Remove (`edba058`).
 
 Code and docs stay English. Replies to N are Serbian.
 
@@ -36,7 +34,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/ops-report-job-actions-05f8` (rebased onto tooltips): **417 passed** (twice). Was **415** after GUI ⓘ help on `main`.
+Pytest count after the double run on `cursor/gui-small-fixes-05f8`: **425 passed** (twice). Was **417** on `main` after scheduled report job actions.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`. `create_pr` often **403** — merge `--no-ff` plus `git push origin main` still lands the change.
 
@@ -44,26 +42,13 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-### `/ops` scheduled report actions
-
-Jobs live in Postgres `scheduled_reports` (not Celery, not YAML). SMTP send path and `/ops` Compose are unchanged. Incident Send report is unchanged.
-
-For analyst/engineer/admin (`can_send_ops`):
-
-- **Edit** — `/ops?edit=<id>#reports` reopens the create form with that job’s fields. Save `POST /ops/reports/<id>/update`.
-- **Cancel** — next to Save (and on the row being edited) discards the draft and returns to the list.
-- **Clone** — `/ops?clone=<id>#reports` prefills a new draft; Save creates a new row.
-- **Remove** — `POST /ops/reports/<id>/delete` with confirm (outbox mail stays).
-- **Enabled** — labeled; Enable/Disable (not Toggle). On = fire at `next`; off = stored, scheduler skips (`process_scheduled_reports` filters `enabled.is_(True)`).
-- Rebased onto `cursor/gui-help-tooltips-05f8` (ⓘ on `/ops`). Kept that include; Enabled meaning stays visible as a one-liner plus in the tip.
-
-Pagination stays 10/page (`reports_page`). CSS cache-bust `app.css?v=report-jobs-1`.
+N’s small GUI pass on V0.7 (English, no React): Dashboard journal warning is shorter (`banner-short`, e.g. “Journal 2 errors”) and still pale yellow; Infrastructure/Incidents headings have ⓘ (inventory counts vs incident counts) and every stat square is a full-tile shortcut to `/assets` (status filter when it matches) or `/incidents`; Assets moves verify ≠ doctor ≠ test into the title ⓘ and drops the always-on sentence (Verify buttons and Verify all stay); Discovery candidate rows get Edit / Clone / Ignore / Remove (Remove deletes the candidate; DEMO pill stays); Incidents Filter is spaced on `list-filters` and defaults to **All** (Open / Closed; History remains the archive); History Ack is a green/yellow/red status circle with Acknowledged / Not acknowledged tooltip; Playbooks drops the duplicate body paragraph, cards are two per row, each has Edit / Clone / Remove, create/edit is Save + Cancel; Administration users get the same Edit / Clone / Remove (cannot delete self or install super_admin). CSS cache-bust `app.css?v=gui-1`. Hard-refresh after `git pull origin main && ./forgesre update`. Pytest **425 passed** (twice). Do not revert ⓘ help or `/ops` report jobs.
 
 ---
 
 ## 4. What N should do on the VM
 
-Do **not** run `./install.sh`. Hard-refresh `/ops#reports` after update (CSS cache).
+Do **not** run `./install.sh`. Hard-refresh the UI after update (CSS cache `app.css?v=gui-1`).
 
 ```bash
 git pull origin main && ./forgesre update

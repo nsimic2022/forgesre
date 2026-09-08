@@ -317,6 +317,7 @@ class DiscoveryCandidate(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ip: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    hostname: Mapped[str] = mapped_column(String(255), default="")
     proposed_role: Mapped[str] = mapped_column(String(128), default="Unknown device")
     open_ports: Mapped[list] = mapped_column(JSONType, default=list)
     status: Mapped[str] = mapped_column(String(32), default="new", index=True)

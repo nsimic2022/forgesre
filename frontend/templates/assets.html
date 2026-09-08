@@ -1,20 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Assets · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Assets {% with %}{% set tip %}Inventory this appliance monitors. Asset ID is the immutable slug. Ping / comms pills refresh in the background from GET /api/v1/assets/reachability. Viewers can see status.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Assets {% with %}{% set tip %}Inventory this appliance monitors. Asset ID is the immutable slug. Ping / comms pills refresh in the background from GET /api/v1/assets/reachability. Viewers can see status. Verify (this inventory path) is not System Health / ./forgesre doctor and is not ./forgesre test (appliance report).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 {% if notice %}
 <div class="banner">{{ notice }}</div>
 {% endif %}
-<p class="muted reach-legend">
-  Verify (this inventory path) is not System Health / <code>./forgesre doctor</code> and is not <code>./forgesre test</code> (appliance report).
-  {% if can('write_assets') %}
-  <a href="/assets/verify">Verify all</a>
-  {% endif %}
-</p>
-<form method="get" action="/assets" class="row-actions" style="margin: 0.8rem 0;">
+<form method="get" action="/assets" class="row-actions list-filters">
   <input name="q" value="{{ q }}" placeholder="search #, id, hostname, IP">
+  {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
   <button type="submit">Search</button>
-  {% if q %}<a class="muted" href="/assets">Reset</a>{% endif %}
+  {% if can('write_assets') %}
+  <a class="button" href="/assets/verify">Verify all</a>
+  {% endif %}
+  {% if q or status %}<a class="muted" href="/assets">Reset</a>{% endif %}
 </form>
 <div class="table-scroll">
 <table class="asset-table" data-asset-reachability>

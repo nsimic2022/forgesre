@@ -117,6 +117,7 @@ def list_history(
     limit: int = LIST_LIMIT,
     offset: int = 0,
     open_only: bool = False,
+    closed_only: bool = False,
     page: Any | None = None,
 ) -> tuple[list[Incident], int]:
     limit = max(1, min(int(limit or LIST_LIMIT), 500))
@@ -125,6 +126,8 @@ def list_history(
         query = query.filter(Incident.started_at >= cutoff_since(clamp_days(days)))
     if open_only:
         query = query.filter(Incident.status.notin_(["RESOLVED", "CLOSED"]))
+    if closed_only:
+        query = query.filter(Incident.status.in_(["RESOLVED", "CLOSED"]))
     status = (status or "").strip().upper()
     if status:
         query = query.filter(Incident.status == status)
@@ -219,6 +222,15 @@ def add_note(db: Session, incident: Incident, actor: str, body: str) -> Incident
     db.commit()
     db.refresh(row)
     return row
+
+
+def ack_circle(incident: Incident) -> dict[str, str]:
+    """History Ack column: green acked, yellow in-progress without ack, red not acked."""
+    if incident.ack_at or (incident.ack_by or "").strip():
+        return {"css": "green", "label": "Acknowledged"}
+    if (incident.status or "").upper() in {"INVESTIGATING", "ESCALATED"}:
+        return {"css": "yellow", "label": "Not acknowledged"}
+    return {"css": "red", "label": "Not acknowledged"}
 
 
 def apply_status_fields(incident: Incident, status: str, actor: str) -> None:
