@@ -386,11 +386,14 @@ def test_ops_scheduled_report_edit_clone_disable_remove():
     db.refresh(row)
     assert row.last_run_at is None
 
-    removed = client.post(f"/ops/reports/{row.id}/delete", follow_redirects=False)
+    removed_id = row.id
+    copy_id = copy.id
+    removed = client.post(f"/ops/reports/{removed_id}/delete", follow_redirects=False)
     assert removed.status_code == 303
     db.expire_all()
-    assert db.query(ScheduledReport).filter_by(id=row.id).first() is None
-    assert db.query(ScheduledReport).filter_by(name="storage-daily-copy").one().id == copy.id
+    assert db.query(ScheduledReport).filter_by(id=removed_id).first() is None
+    assert db.get(ScheduledReport, copy_id) is not None
+    assert db.get(ScheduledReport, copy_id).name == "storage-daily-copy"
     db.close()
 
 
