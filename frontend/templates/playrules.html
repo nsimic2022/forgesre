@@ -1,13 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Playrules · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Playrules</h1>
-<p class="muted">
-  Seeded rules are the <strong>default warning</strong>.
-  Playrules map Prometheus <code>alertname</code> → playbook. They do <strong>not</strong> create Prom rules.
-  <code>monitoring/alerts.yml</code> is the PromQL source. Asset <strong>Alarms</strong> on Add/Edit (<code>assets.alarms</code> enable/%) are a per-host overlay on the same Alertmanager webhook — not a second alerting engine.
-  {% if asset_alarm_hosts %} Saved on {{ asset_alarm_hosts|length }} host{% if asset_alarm_hosts|length != 1 %}s{% endif %} ({{ asset_alarm_hosts[:8]|join(", ") }}{% if asset_alarm_hosts|length > 8 %}, …{% endif %}).{% endif %}
-</p>
+<h1>Playrules {% with %}{% set tip %}Seeded rules are the default warning. Playrules map Prometheus alertname → playbook. They do not create Prom rules. monitoring/alerts.yml is the PromQL source. Asset Alarms on Add/Edit (assets.alarms enable/%) are a per-host overlay on the same Alertmanager webhook — not a second alerting engine.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+{% if asset_alarm_hosts %}
+<p class="muted">Saved on {{ asset_alarm_hosts|length }} host{% if asset_alarm_hosts|length != 1 %}s{% endif %} ({{ asset_alarm_hosts[:8]|join(", ") }}{% if asset_alarm_hosts|length > 8 %}, …{% endif %}).</p>
+{% endif %}
 <table>
   <thead><tr><th>Name</th><th>Condition</th><th>Severity</th><th>Playbook</th><th>Enabled</th></tr></thead>
   <tbody>
@@ -31,7 +28,7 @@
 {% if can('write_play') %}
 <h2>Create playrule</h2>
 <form method="post" action="/playrules" class="stack" id="playrule-form">
-  <label>Preset
+  <label><span class="label-line">Preset {% with %}{% set tip %}Fills the fields below from bundled examples. Does not write monitoring/alerts.yml.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <select id="playrule-preset">
       <option value="">Custom — type the fields below</option>
       {% for group in presets %}
@@ -52,7 +49,8 @@
     </select>
   </label>
   <label>Name <input name="name" placeholder="high-disk" required></label>
-  <label>Alertname <input name="alertname" placeholder="FilesystemUsageHigh"></label>
+  <label><span class="label-line">Alertname {% with %}{% set tip %}Must match the Prometheus alertname from monitoring/alerts.yml (e.g. FilesystemUsageHigh). This playrule does not create a Prom rule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="alertname" placeholder="FilesystemUsageHigh"></label>
   <label>Metric
     <select name="metric" id="playrule-metric">
       <option value="cpu_usage">cpu_usage</option>
@@ -86,7 +84,7 @@
       {% endfor %}
     </select>
   </label>
-  <label>Escalation
+  <label><span class="label-line">Escalation {% with %}{% set tip %}Email ladder for this alert. Seeded Default warning is 0 / 15 / 30 min. Delivery uses the asset owner email when set.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <select name="escalation_policy_id">
       {% for policy in policies %}
       <option value="{{ policy.id }}" {% if policy.slug == 'default-warning' %}selected{% endif %}>{{ policy.name }}</option>

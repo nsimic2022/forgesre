@@ -2,12 +2,7 @@
 {% block title %}Administration · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Administration</h1>
-<h2>Users</h2>
-<p class="muted">
-  Click a user on the left to edit or remove them.
-  Login passwords are stored as bcrypt hashes in Postgres — never in git, never shown here.
-  The install admin bootstrap copy in <code>secrets/secrets.env</code> is separate (see handbook §5).
-</p>
+<h2>Users {% with %}{% set tip %}Click a user on the left to edit or remove them. Login passwords are stored as bcrypt hashes in Postgres — never in git, never shown here. The install admin bootstrap copy in secrets/secrets.env is separate (see handbook §5).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 <div class="split">
   <div>
   <div class="table-scroll">
@@ -36,7 +31,7 @@
       <label>Email <input name="email" type="email" required value="{{ selected.email }}" {% if not can_edit_selected %}readonly{% endif %}></label>
       <label>Name <input name="name" required value="{{ selected.name }}" {% if not can_edit_selected %}readonly{% endif %}></label>
       <label>New password <input name="password" type="password" placeholder="leave blank to keep" {% if not can_edit_selected %}disabled{% endif %}></label>
-      <label>Role
+      <label><span class="label-line">Role {% with %}{% set tip %}Analyst: incidents, inventory, playrules, playbooks. Engineer: detailed RCA, inventory. System admin: users and appliance. Viewer: read only. Super admin is the install account and cannot change.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
         <select name="role" {% if not can_edit_selected or selected.role == 'super_admin' %}disabled{% endif %}>
           <option value="analyst" {% if selected.role == "analyst" %}selected{% endif %}>Analyst — incidents, inventory, playrules, playbooks</option>
           <option value="engineer" {% if selected.role == "engineer" %}selected{% endif %}>Engineer — detailed RCA, inventory</option>
@@ -74,7 +69,7 @@
       <label>Email <input name="email" type="email" required></label>
       <label>Name <input name="name" required></label>
       <label>Password <input name="password" type="password" required></label>
-      <label>Role
+      <label><span class="label-line">Role {% with %}{% set tip %}Analyst: incidents, inventory, playrules, playbooks. Engineer: detailed RCA, inventory. System admin: users and appliance. Viewer: read only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
         <select name="role">
           <option value="analyst">Analyst — incidents, inventory, playrules, playbooks</option>
           <option value="engineer">Engineer — detailed RCA, inventory</option>
@@ -104,7 +99,7 @@
 </table>
 </div>
 {% with pager=audit_pager %}{% include "_pager.html" %}{% endwith %}
-<h2>Platform backup</h2>
+<h2>Platform backup {% with %}{% set tip %}Full-system archive for crash recovery or VM migration. Each run is a folder data/backups/backup_YYYYMMDDTHHMMSSZ/ (gitignored, directory mode 700) with one forgesre.tar.gz (mode 600) plus a short MANIFEST.txt. Import that tar — do not unpack it into loose files. Includes config/forgesre.yml, .env, secrets/secrets.env, a logical Postgres dump (users, incidents, playbooks, playrules, journal), compressed logs, monitoring/alerts.local.yml, and data/generated/. Not in the backup: container images, Prometheus/Loki/Grafana volumes, nested backups, optional mailbox mail. LLM GGUF weights are skipped unless you tick the checkbox (they are often multi-GB). Download requires this admin session — there is no unauthenticated URL.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% if request.query_params.get('backup') %}
 <p class="banner"><strong>Backup written</strong> {{ request.query_params.get('backup') }} under <code>data/backups/</code> (mode 600, gitignored).</p>
 {% endif %}
@@ -119,20 +114,8 @@
 {% if request.query_params.get('removed') %}
 <p class="banner"><strong>Backup removed</strong> {{ request.query_params.get('removed') }}. Other folders under <code>data/backups/</code> are unchanged.</p>
 {% endif %}
-<p>
-  Full-system archive for crash recovery or VM migration. Each run is a folder
-  <code>data/backups/backup_YYYYMMDDTHHMMSSZ/</code> (gitignored, directory mode 700)
-  with one <code>forgesre.tar.gz</code> (mode 600) plus a short <code>MANIFEST.txt</code>.
-  Import that tar — do not unpack it into loose files. Includes
-  <code>config/forgesre.yml</code>, <code>.env</code>, <code>secrets/secrets.env</code>, a logical Postgres dump (users, incidents, playbooks, playrules, journal), compressed logs, <code>monitoring/alerts.local.yml</code>, and <code>data/generated/</code>.
-</p>
-<p class="muted">
-  Not in the backup: container images, Prometheus/Loki/Grafana volumes, nested backups, optional mailbox mail.
-  LLM GGUF weights are skipped unless you tick the checkbox (they are often multi-GB).
-  Download requires this admin session — there is no unauthenticated URL.
-</p>
 <form method="post" action="/admin/backups" class="row-actions backup-actions">
-  <label class="inline-check"><input type="checkbox" name="include_models" value="1"> Include LLM GGUF (multi-GB)</label>
+  <label class="inline-check"><input type="checkbox" name="include_models" value="1"> Include LLM GGUF (multi-GB) {% with %}{% set tip %}Skipped unless ticked. GGUF weights are often multi-GB and are not required to restore incidents or users.{% endset %}{% include "_info_tip.html" %}{% endwith %}</label>
   <button type="submit">Backup</button>
 </form>
 {% if backups %}
@@ -162,12 +145,8 @@
 {% endif %}
 <div class="admin-backup-cli">
 <div class="admin-restore-pane">
-<h3>Import / restore</h3>
-<p class="muted">
-  Import only <strong>stores</strong> a tar.gz under <code>data/backups/backup_…/</code>.
-  Restore overwrites the live database (users, incidents, playbooks). It does <strong>not</strong> run unless you tick the box and type <code>RESTORE</code>.
-  Preferred after a crash or when migrating: SSH, stop Core, <code>./forgesre restore</code> (pick a number) or <code>./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes</code>, then <code>./forgesre update</code>.
-</p>
+<h3>Import / restore {% with %}{% set tip %}Import only stores a tar.gz under data/backups/backup_…/. Preferred after a crash or when migrating: SSH, stop Core, ./forgesre restore (pick a number) or ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes, then ./forgesre update. Config / .env / secrets on disk are not rewritten from this browser (Core mounts them read-only).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+<p class="muted">Restore overwrites the live database (users, incidents, playbooks). It does <strong>not</strong> run unless you tick the box and type <code>RESTORE</code>.</p>
 <form method="post" action="/admin/backups/import" enctype="multipart/form-data" class="row-actions backup-actions">
   <input type="file" name="archive" accept=".tar.gz,application/gzip" required>
   <button type="submit">Import</button>

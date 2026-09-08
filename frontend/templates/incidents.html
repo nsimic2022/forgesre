@@ -1,11 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Incidents · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Incidents</h1>
-<p class="muted">
-  <strong>Open/firing</strong> work (not the archive). Green ID = resolved/closed. Yellow = in progress (warning). Red = critical.
-  Closed and older rows live in <a href="/history">History</a> (the archive).
-</p>
+<h1>Incidents {% with %}{% set tip %}Open/firing work (not the archive). Green ID = resolved/closed. Yellow = in progress (warning). Red = critical.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<p class="muted">Closed and older rows live in <a href="/history">History</a>.</p>
 <form method="get" action="/incidents" class="row-actions" style="margin: 0.8rem 0;">
   <label>Show
     <select name="open">

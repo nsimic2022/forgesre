@@ -479,7 +479,8 @@ def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
     assert "NETBOX_SUPERUSER_NAME" in html
     assert "not a NetBox UI login" in html
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "pointer-events" not in css
+    netbox_css = css[css.find(".netbox-status") : css.find(".card {")]
+    assert "pointer-events" not in netbox_css
     db.close()
 
 
@@ -878,7 +879,8 @@ def test_install_and_update_bundle_netbox_default_on():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".netbox-status" in css
     assert ".netbox-status-dot" in css
-    assert "pointer-events" not in css
+    netbox_css = css[css.find(".netbox-status") : css.find(".card {")]
+    assert "pointer-events" not in netbox_css
     assert "--netbox-url" in disc
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "/api/status/" in handbook

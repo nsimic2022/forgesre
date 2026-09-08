@@ -1,17 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Discovery · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Discovery</h1>
+<h1>Discovery {% with %}{% set tip %}Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on UDP/161 (TCP/161 is skipped — that is not SNMP) and HTTP GET /metrics on :9182 and :9100 when a host is alive. windows_ metrics → Windows Server :9182. node_ metrics → Linux Server :9100. SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics. TCP open without exporter text is not an OS pick (ICMP ping is not a scrape). This is not nmap and does not replace nmap. New hosts wait here until an engineer Approves or Ignores them.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <p class="muted">
-  Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on
-  <strong>UDP/161</strong> (TCP/161 is skipped — that is not SNMP) and HTTP GET
-  <code>/metrics</code> on <code>:9182</code> and <code>:9100</code> when a host is alive.
-  <code>windows_</code> metrics → Windows Server <code>:9182</code>.
-  <code>node_</code> metrics → Linux Server <code>:9100</code>.
-  SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics.
-  TCP open without exporter text is <strong>not</strong> an OS pick (ICMP ping is not a scrape).
-  This is <strong>not nmap</strong> and does not replace nmap.
-  New hosts wait here until an engineer Approves or Ignores them.
   Mode: <code>{{ discovery_mode }}</code>
   · CIDRs: <code>{{ discovery_cidrs or "none" }}</code>
   · Enabled: <code>{{ "On" if discovery_enabled else "Off" }}</code>
@@ -26,8 +17,7 @@
 
 {% if can('write_assets') %}
 <section class="card">
-  <h2>Scan now</h2>
-  <p class="muted">TCP / SNMP / HTTP probe of configured CIDRs. Not nmap. Does not write inventory until you Approve.</p>
+  <h2>Scan now {% with %}{% set tip %}TCP / SNMP / HTTP probe of configured CIDRs. Not nmap. Does not write inventory until you Approve.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <form method="post" action="/discovery/scan" class="inline">
     <button type="submit">Scan now</button>
   </form>
@@ -35,8 +25,7 @@
 {% endif %}
 
 <section class="card">
-  <h2>NetBox sync</h2>
-  <p class="muted">Read-only. ForgeSRE never writes back. Separate from Scan now.{% if not netbox_enabled %} Sync is off in config.{% endif %}</p>
+  <h2>NetBox sync {% with %}{% set tip %}Read-only. ForgeSRE never writes back. Separate from Scan now. Empty inventory is yellow (No devices), not a failure.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   {% if can('admin') %}
     {% if netbox_enabled %}
     <div class="tool-row">
@@ -55,10 +44,16 @@
       {% endif %}
     </div>
     {% if netbox_url_is_local %}
-    <p class="muted">NetBox: bundled at <code>{{ netbox_url }}</code> (also <code>http://&lt;VM-IP&gt;:8001</code>). Core is not a NetBox UI login. Prefer a NetBox UI <strong>v2</strong> token — the full <code>nbt_…</code> secret shown once at create, not the 12-character key — in <code>NETBOX_API_TOKEN</code>, then recreate <code>core</code>. Launch will not replace a v2 token with v1. A 40-character v1 value is still upserted as fallback on the superuser (<code>NETBOX_SUPERUSER_NAME</code>, usually <code>admin</code>). API token: {{ netbox_token_present }}.</p>
+    <p class="muted">API token: {{ netbox_token_present }}
+      {% with %}{% set tip %}NetBox: bundled at {{ netbox_url }} (also http://VM-IP:8001). Core is not a NetBox UI login. Prefer a NetBox UI v2 token — the full nbt_… secret shown once at create, not the 12-character key — in NETBOX_API_TOKEN, then recreate core. Launch will not replace a v2 token with v1. A 40-character v1 value is still upserted as fallback on the superuser (NETBOX_SUPERUSER_NAME, usually admin).{% endset %}{% include "_info_tip.html" %}{% endwith %}
+    </p>
     {% else %}
-    <p class="muted">NetBox: <code>{{ netbox_url }}</code> (external via <code>inventory.netbox.url</code> / <code>--netbox-url</code>). API token: {{ netbox_token_present }}.</p>
+    <p class="muted">API token: {{ netbox_token_present }}
+      {% with %}{% set tip %}NetBox: {{ netbox_url }} (external via inventory.netbox.url / --netbox-url). Read-only sync. ForgeSRE never writes back.{% endset %}{% include "_info_tip.html" %}{% endwith %}
+    </p>
     {% endif %}
+    {% else %}
+    <p class="muted">Sync is off in config.</p>
     {% endif %}
   {% else %}
   <button type="button" disabled>Sync NetBox</button>

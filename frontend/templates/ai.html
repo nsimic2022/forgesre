@@ -2,13 +2,13 @@
 {% block title %}ForgeRCA · {{ incident.number }}{% endblock %}
 {% block content %}
 <p><a href="/incidents/{{ incident.number }}">← {{ incident.number }}</a></p>
-<h1>ForgeRCA investigation {% if is_demo_incident(incident) %}<span class="pill demo">DEMO</span>{% endif %}</h1>
+<h1>ForgeRCA investigation {% if is_demo_incident(incident) %}<span class="pill demo">DEMO</span>{% endif %}
+  {% with %}{% set tip %}ForgeRCA is the Python builtin and always runs first. ForgeAI only rewrites prose; facts stay from ForgeRCA. Rewrite uses the same Core worker thread (not Celery) and can occupy it up to ai.llm.timeout_seconds ({{ llm_timeout|int }}s).{% endset %}{% include "_info_tip.html" %}{% endwith %}
+</h1>
 <div class="tool-row">
   <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
   <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
 </div>
-<p class="muted">{{ tools.rca_hint }} · {{ tools.ai_hint }}
-  · ForgeAI rewrite uses the same Core worker thread (not Celery) and can occupy it up to <code>ai.llm.timeout_seconds</code> ({{ llm_timeout|int }}s).</p>
 {% if investigation %}
 <p class="muted">{{ investigation.disclaimer }} ·
   {% if investigation.provider == "forgerca-llm" %}
@@ -28,15 +28,14 @@
   <h2>Root cause</h2>
   <p>{{ investigation.likely_cause }}</p>
   <p>Confidence: <strong>{{ investigation.confidence|int }}%</strong>
-    <span class="muted">calculated by ForgeSRE from evidence/anomalies/history, not taken from the LLM.</span></p>
+    {% with %}{% set tip %}Calculated by ForgeSRE from evidence/anomalies/history, not taken from the LLM.{% endset %}{% include "_info_tip.html" %}{% endwith %}</p>
   <h2>Recommended actions</h2>
   <p>{{ investigation.recommended_action }}</p>
   <p class="muted">Recommended only. Nothing was executed.</p>
 </section>
 {% if can_send %}
 <section class="card" id="send-report">
-  <h2>Send incident report</h2>
-  <p class="muted">Sends the same snapshot as the incident page. Does not change incident status. SMTP off stores it as <em>generated</em> in the <a href="/ops#mail">mail outbox</a>.</p>
+  <h2>Send incident report {% with %}{% set tip %}Sends the same snapshot as the incident page. Does not change incident status. SMTP off stores it as generated in the mail outbox.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail">
     <label>To
       <select name="target">
@@ -52,7 +51,7 @@
 </section>
 {% endif %}
 
-<p class="muted" id="mail">Mail for this incident is the <a href="/ops#mail">mail outbox</a>.</p>
+<p class="muted" id="mail">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>
 
 {% for line in rca.limitations or [] %}
   {% if "host logs" in line|lower or "empty Loki" in line or "No host logs" in line %}

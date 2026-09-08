@@ -1,15 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Escalation · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Escalation</h1>
-<p class="muted">
-  This page is the email ladder and the generated outbox — same 30s loop as before, not a ticket system.
-  Seeded <strong>Default warning</strong> (0 / 15 / 30 min) is what new playrules attach unless you pick another policy on <a href="/playrules">Playrules</a>.
-  Steps still name roles (<code>team</code>, <code>team-lead</code>, <code>engineer</code>).
-  Delivery goes to the <strong>asset owner email</strong> when that field is set (demo: <code>platform@forgesre.local</code> on forge-demo-01).
-  If the asset has no owner email, ForgeSRE falls back to <code>&lt;role&gt;@forgesre.local</code>.
-  SMTP off means the row stays <em>generated</em> — that is the lab outbox.
-</p>
+<h1>Escalation {% with %}{% set tip %}This page is the email ladder — same 30s loop as before, not a ticket system. Seeded Default warning (0 / 15 / 30 min) is what new playrules attach unless you pick another policy on Playrules. Steps still name roles (team, team-lead, engineer). Delivery goes to the asset owner email when that field is set (demo: platform@forgesre.local on forge-demo-01). If the asset has no owner email, ForgeSRE falls back to role@forgesre.local. SMTP off means the row stays generated — that is the lab outbox. Ops scheduled reports are a different mail path.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 {% for policy in policies %}
 <section class="card">
   <h2>{{ policy.name }}</h2>
@@ -29,7 +21,7 @@
 <form method="post" action="/escalation" class="stack" id="escalation-form">
   <label>Name <input name="name" placeholder="Default warning" required></label>
   <label>Slug <input name="slug" placeholder="default-warning" required></label>
-  <label>Steps (one per line: minutes then role)
+  <label><span class="label-line">Steps (one per line: minutes then role) {% with %}{% set tip %}Each line is minutes then a role name (team, team-lead, engineer). Mail still goes to the asset owner email when set.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <textarea name="steps" rows="6">0 team
 15 team-lead
 30 engineer</textarea>

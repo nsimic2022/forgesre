@@ -2,8 +2,8 @@
 {% block title %}Verify assets · ForgeSRE{% endblock %}
 {% block content %}
 <p><a href="/assets">← Assets</a></p>
-<h1>Verify assets</h1>
-<p class="muted">Live communication for inventory — not <code>./forgesre test</code> and not <code>./forgesre doctor</code>. ICMP is from the Core container (<code>iputils-ping</code>). Chain: <code>exporter → prometheus → alertmanager → core</code>. Classes: Linux <code>:9100</code> <code>node_</code>, Windows <code>:9182</code> <code>windows_</code>, Network SNMP, Unknown SKIP. Demo <code>forge-demo-*</code> rows and discovery seed <code>10.20.30.41</code> are lab-only.</p>
+<h1>Verify assets {% with %}{% set tip %}Live communication for inventory. ICMP is from the Core container (iputils-ping). Chain: exporter → prometheus → alertmanager → core. Classes: Linux :9100 node_, Windows :9182 windows_, Network SNMP, Unknown SKIP. Demo forge-demo-* rows and discovery seed 10.20.30.41 are lab-only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<p class="muted">This is not <code>./forgesre test</code> and not <code>./forgesre doctor</code> (System Health).</p>
 {% if skipped_demo %}
 <p class="muted">Skipped {{ skipped_demo }} demo lab asset(s). <a href="/assets/verify?demo=1">Include labeled DEMO</a>.</p>
 {% elif include_demo %}
@@ -15,16 +15,16 @@
     <tr>
       <th>Asset</th>
       <th>Class</th>
-      <th>Ping</th>
-      <th>Port</th>
-      <th>Prom up</th>
-      <th>Target</th>
-      <th>Series</th>
-      <th>AM</th>
-      <th>Core</th>
-      <th>Family</th>
-      <th>RCA</th>
-      <th>LLM</th>
+      <th><span class="label-line">Ping {% with %}{% set tip %}ICMP from the Core container. FAIL is yellow (not red) when exporter/SNMP still answers — typical Windows, ICMP unused/blocked. ICMP and port 22 are not required.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th><span class="label-line">Port {% with %}{% set tip %}Exporter /metrics (HTTP) or SNMP UDP/161, depending on class.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th><span class="label-line">Prom up {% with %}{% set tip %}Prometheus up series for this scrape target.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th><span class="label-line">Target {% with %}{% set tip %}Prometheus scrape target health (HTTP SD). Missing exporter or no Prom target is SKIP/FAIL with a reason — never a fake green host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th><span class="label-line">Series {% with %}{% set tip %}Bundled family series present (cpu / mem / disk / up), not every exporter metric.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th><span class="label-line">AM {% with %}{% set tip %}Alertmanager reachable on this appliance.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th><span class="label-line">Core {% with %}{% set tip %}Last Core incident/webhook for this asset. SKIP if none.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th><span class="label-line">Family {% with %}{% set tip %}Detected metric family: node_ (Linux), windows_ (Windows), or SNMP.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th><span class="label-line">RCA {% with %}{% set tip %}Last ForgeRCA result vs PromQL. Builtin Python always runs first.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th><span class="label-line">LLM {% with %}{% set tip %}ForgeAI rewrite only. Does not invent facts. Optional; timeout uses ai.llm.timeout_seconds.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th>Overall</th>
     </tr>
   </thead>

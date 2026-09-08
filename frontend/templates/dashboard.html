@@ -2,7 +2,7 @@
 {% block title %}Dashboard · ForgeSRE{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Dashboard</h1>
+  <h1>Dashboard {% with %}{% set tip %}Infrastructure and incident counts for this appliance. Stack lights live on System Health (same checks as ./forgesre doctor). Journal is the internal process log, not Loki.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
   {% if can('admin') %}
   <button type="button" id="demo-open" data-demo-open>Run demo</button>
   {% endif %}
@@ -25,44 +25,39 @@
     </ol>
     <div class="demo-scenarios">
       <article class="demo-scenario" id="demo-highcpu">
-        <h3>Linux HighCPU</h3>
+        <h3>Linux HighCPU {% with %}{% set tip %}Raises the demo CPU gauge to 94% and opens a HighCPU incident with owner mail. Next: incident page → Who to call → Escalation outbox. Same as ./forgesre demo.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
         <p>Raises the demo CPU gauge to 94% and opens a HighCPU incident with owner mail.</p>
-        <p class="muted">What you’ll see next: incident page → Who to call → Escalation outbox. Same as <code>./forgesre demo</code>.</p>
         <form method="post" action="/demo"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-disk">
-        <h3>Linux disk / ForgeRCA</h3>
+        <h3>Linux disk / ForgeRCA {% with %}{% set tip %}Raises the demo disk gauge to 94% and opens FilesystemUsageHigh with builtin RCA. Next: ForgeRCA page (facts / likely cause). Click Refresh if the LLM rewrite is still queued. Same as ./forgesre demo-rca.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
         <p>Raises the demo disk gauge to 94% and opens FilesystemUsageHigh with builtin RCA.</p>
-        <p class="muted">What you’ll see next: ForgeRCA page (facts / likely cause). Click Refresh if the LLM rewrite is still queued. Same as <code>./forgesre demo-rca</code>.</p>
         <form method="post" action="/demo-rca"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-host">
-        <h3>Linux host unreachable</h3>
+        <h3>Linux host unreachable {% with %}{% set tip %}Opens a NodeExporterDown incident and HOST-UNREACHABLE playbook on the demo host. Lab only — the real node_exporter scrape is unchanged.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
         <p>Opens a NodeExporterDown incident and HOST-UNREACHABLE playbook on the demo host. Does not stop a real scrape.</p>
-        <p class="muted">What you’ll see next: incident with Who to call. Lab incident only — the real node_exporter scrape is unchanged.</p>
         <form method="post" action="/demo-host"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-windows">
-        <h3>Windows CPU (lab)</h3>
+        <h3>Windows CPU (lab) {% with %}{% set tip %}Opens WindowsCPUHigh on seeded forge-demo-win-01. Lab only — that host is not scraped. Real Windows assets use windows_exporter :9182.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
         <p>Opens WindowsCPUHigh on seeded <a href="/assets/forge-demo-win-01">forge-demo-win-01</a>. Lab scenario, DEMO tagged.</p>
-        <p class="muted">What you’ll see next: incident + owner mail. Lab only — forge-demo-win-01 is not scraped. Real Windows assets use windows_exporter :9182.</p>
         <form method="post" action="/demo-windows"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-network">
-        <h3>Network SNMP unreachable (lab)</h3>
+        <h3>Network SNMP unreachable (lab) {% with %}{% set tip %}Opens SnmpDeviceUnreachable on seeded forge-demo-sw-01. Not a live SNMP walk — snmp_exporter is not polling this switch.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
         <p>Opens SnmpDeviceUnreachable on seeded <a href="/assets/forge-demo-sw-01">forge-demo-sw-01</a>. Lab scenario, DEMO tagged.</p>
-        <p class="muted">What you’ll see next: incident + NETWORK-UNREACHABLE playbook. Not a live SNMP walk — snmp_exporter is not polling this switch.</p>
         <form method="post" action="/demo-network"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-nodecpu">
-        <h3>Linux NodeCPUHigh</h3>
+        <h3>Linux NodeCPUHigh {% with %}{% set tip %}Opens NodeCPUHigh on forge-demo-01. Same demo host, different Linux alertname. Lab only — does not change a real host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
         <p>Opens NodeCPUHigh on <a href="/assets/forge-demo-01">forge-demo-01</a>. Same demo host, different Linux alertname.</p>
-        <p class="muted">What you’ll see next: incident with Who to call. Lab only — does not change a real host.</p>
         <form method="post" action="/demo-nodecpu"><button type="submit">Run</button></form>
       </article>
     </div>
     <div class="demo-reset">
-      <p class="muted">Reset demo CPU/disk gauges to 12% / 35% when you are done (same as <code>./forgesre demo-reset</code>). Open incidents stay until you Resolve / Close them.</p>
+      <p class="muted"><span class="label-line">Reset demo gauges {% with %}{% set tip %}Sets demo CPU/disk gauges back to 12% / 35% (same as ./forgesre demo-reset). Does not resolve or close open DEMO incidents.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+      Open incidents stay until you Resolve / Close them.</p>
       <form method="post" action="/demo-reset"><button type="submit" class="secondary">Reset demo gauges</button></form>
     </div>
   </div>
@@ -123,10 +118,10 @@
     <div class="stat ok"><span>Resolved</span><strong>{{ stats.resolved }}</strong></div>
   </div>
 </section>
-<p class="muted">Full stack diagnostics live on <a href="/health-ui">System Health</a> (same checks as <code>./forgesre doctor</code>).{% if can('read_play') %} Journal is <a href="/journal">here</a>.{% endif %}</p>
+<p class="muted">Full stack diagnostics live on <a href="/health-ui">System Health</a>.{% if can('read_play') %} Journal is <a href="/journal">here</a>.{% endif %}</p>
 {% if can('read_play') %}
 <section>
-  <h2>Recent journal reports</h2>
+  <h2>Recent journal reports {% with %}{% set tip %}Latest internal process reports (ok / warn / error). Not Docker/Loki logs.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <table class="console">
     <thead><tr><th>Module</th><th>Status</th><th>Report</th></tr></thead>
     <tbody>

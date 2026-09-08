@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Playbooks · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Playbooks</h1>
+<h1>Playbooks {% with %}{% set tip %}V0.1 playbooks are instructions and workflow. They do not execute commands on the host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <p class="muted">V0.1 playbooks are instructions and workflow. They do not execute commands.</p>
 {% for book in playbooks %}
 <section class="card">
