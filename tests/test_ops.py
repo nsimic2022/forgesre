@@ -82,7 +82,7 @@ def test_ops_page_lists_outbox_and_reports():
     assert "max-width: 38%" in page.text
     assert "min-width: 58%" in page.text
     reports = page.text.split('id="reports"', 1)[1]
-    assert "Enabled means the job fires" in reports
+    assert "means the job fires" in reports and "Next" in reports
     assert 'href="/ops#reports">Cancel</a>' in reports
     assert ">Toggle<" not in reports
     db.close()
@@ -388,7 +388,8 @@ def test_ops_scheduled_report_edit_clone_disable_remove():
 
     removed = client.post(f"/ops/reports/{row.id}/delete", follow_redirects=False)
     assert removed.status_code == 303
-    assert db.get(ScheduledReport, row.id) is None
+    db.expire_all()
+    assert db.query(ScheduledReport).filter_by(id=row.id).first() is None
     assert db.query(ScheduledReport).filter_by(name="storage-daily-copy").one().id == copy.id
     db.close()
 

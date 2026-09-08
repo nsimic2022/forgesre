@@ -166,7 +166,7 @@ Do not start these unless N asks:
 ## 8. Known leftovers
 
 - Many remote `origin/cursor/*-05f8` branches still exist and are **already merged to `main`**.
-- Scheduled `/ops` reports are still plain text. Row actions (Edit / Clone / Remove / Enable) are done; do not add IMAP/Mailpit or Celery.
+- Scheduled `/ops` reports are still plain text. Row actions (Edit / Clone / Remove / Enable) are done; do not add an IMAP inbox or Celery.
 - ⓘ GUI help tooltips (`cursor/gui-help-tooltips-05f8`) may land separately; rebase rather than fighting `ops.html`.
 - Old backups already on the VM as `data/backups/forgesre-*.tar.gz` are still valid; new runs write folders.
 - Grafana deep-link from an asset is still later.
