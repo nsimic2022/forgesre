@@ -64,6 +64,7 @@ from app.services import (
     run_demo_windows,
 )
 from app.settings import settings
+from app.host_resources import appliance_resources
 from app.stack import (
     component_label,
     doctor_soft_status,
@@ -978,6 +979,13 @@ def doctor(request: Request, user: User | None = Depends(current_user)) -> dict:
     if user is None and token != settings.webhook_token:
         raise HTTPException(status_code=401, detail="authentication required")
     return doctor_payload()
+
+
+@router.get("/system/resources")
+def system_resources(user: User = Depends(require_user)) -> dict:
+    """This appliance VM (node_exporter / /proc), not a random inventory asset."""
+    del user
+    return appliance_resources()
 
 
 @router.get("/jobs")

@@ -44,11 +44,17 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 N’s small GUI pass on V0.7 (English, no React): Dashboard journal warning is shorter (`banner-short`, e.g. “Journal 2 errors”) and still pale yellow; Infrastructure/Incidents headings have ⓘ (inventory counts vs incident counts) and every stat square is a full-tile shortcut to `/assets` (status filter when it matches) or `/incidents`; Assets moves verify ≠ doctor ≠ test into the title ⓘ and drops the always-on sentence (Verify buttons and Verify all stay); Discovery candidate rows get Edit / Clone / Ignore / Remove (Remove deletes the candidate; DEMO pill stays); Incidents Filter is spaced on `list-filters` and defaults to **All** (Open / Closed; History remains the archive); History Ack is a green/yellow/red status circle with Acknowledged / Not acknowledged tooltip; Playbooks drops the duplicate body paragraph, cards are two per row, each has Edit / Clone / Remove, create/edit is Save + Cancel; Administration users get the same Edit / Clone / Remove (cannot delete self or install super_admin). CSS cache-bust `app.css?v=gui-1`. Hard-refresh after `git pull origin main && ./forgesre update`. Pytest **425 passed** (twice). Do not revert ⓘ help or `/ops` report jobs.
 
+### Left nav clock + this-appliance resources (this branch)
+
+- Below Administration: larger local clock (vanilla JS, 24h tick) and this VM’s **CPU / RAM / HDD** text glance — `GET /api/v1/system/resources` (node_exporter on `:9100` if present, else `/proc` + `statvfs`). Not Grafana, not a random inventory asset.
+- Logout is shifted right (`margin-left: auto`) with a gap from the theme picker.
+- CSS/JS cache-bust `app.css?v=nav-1` and `app.js?v=nav-1`. Hard-refresh after `git pull origin main && ./forgesre update`. Does not revert ⓘ tooltips or `/ops` report-job row actions.
+
 ---
 
 ## 4. What N should do on the VM
 
-Do **not** run `./install.sh`. Hard-refresh the UI after update (CSS cache `app.css?v=gui-1`).
+Do **not** run `./install.sh`. Hard-refresh the UI after update (CSS/JS cache `app.css?v=nav-1` and `app.js?v=nav-1`: clock, appliance glance, logout spacing).
 
 ```bash
 git pull origin main && ./forgesre update

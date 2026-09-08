@@ -15,7 +15,7 @@
       document.documentElement.setAttribute("data-theme", theme);
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=gui-1">
+  <link rel="stylesheet" href="/static/app.css?v=nav-1">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -46,6 +46,14 @@
     <a href="/ops" class="{% if request.url.path.startswith('/ops') %}active{% endif %}">Email &amp; reports</a>
     {% if can('admin') %}<a href="/admin" class="{% if request.url.path.startswith('/admin') %}active{% endif %}">Administration</a>{% endif %}
     <div class="nav-foot">
+      <div class="nav-glance">
+        <div class="nav-clock" data-nav-clock>—</div>
+        <div class="nav-resources" data-nav-resources>
+          <div data-nav-cpu>CPU —</div>
+          <div data-nav-ram>RAM —</div>
+          <div data-nav-hdd>HDD —</div>
+        </div>
+      </div>
       <div class="who">
         {% set display_name = distinct_who_name(user.name, user.role) %}
         {% if display_name %}<span class="who-name">{{ display_name }}</span>{% endif %}
@@ -53,7 +61,7 @@
       </div>
       <div class="nav-foot-actions">
         {{ theme_toggle() }}
-        <form method="post" action="/logout"><button type="submit" class="secondary">Logout</button></form>
+        <form class="nav-logout" method="post" action="/logout"><button type="submit" class="secondary">Logout</button></form>
       </div>
     </div>
   </aside>
@@ -68,6 +76,6 @@
     </div>
   </main>
   {% endif %}
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=nav-1"></script>
 </body>
 </html>
