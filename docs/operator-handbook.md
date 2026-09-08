@@ -153,7 +153,7 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 | Escalation | `/escalation` | Seeded **Default warning**, create policy (Save + Cancel). Mail: `/ops#mail`. |
 | Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
 | System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Open Grafana** lives **only here** (not left nav, not the alarm path). Alarm path: Prometheus → Alertmanager → Core. Grafana down is yellow (graphs only), not a Prometheus FAIL. Prom/AM errors name `:9090` / `:9093`, not “Prometheus Stack”. One Core worker thread (not Celery). **NetBox** UI up with API 403 is **warn** (yellow), not paused — Core is a token on the NetBox superuser, not a UI login. **SNMP exporter** with no Network device + IP is **paused (no SNMP targets)** (yellow, not down). Do not add devices just to un-pause SNMP. |
-| Email & reports | `/ops` | Address book, send, **the** mail outbox (`#mail`), scheduled reports. Grafana is on System Health. |
+| Email & reports | `/ops` | Address book, send, **the** mail outbox (`#mail`), scheduled reports with **Edit / Clone / Remove / Enable**. Grafana is on System Health. |
 | Administration | `/admin` | Users: click a row to **edit** or **remove**. **Backup**, then **Import / restore** (left) beside a **ForgeSRE CLI** command list (right). Audit log. No browser PTY — SSH or `./forgesre` / `./forgesre shell` |
 
 ---
@@ -626,6 +626,10 @@ Work / school Microsoft 365: same host `smtp.office365.com`, your work address. 
 ### Own domain (not enabled)
 
 Compose profile **`mailbox`** (Postfix + Dovecot + Roundcube `:8081`) is off at install. `./forgesre mailbox` starts it later and does **not** rewrite Core SMTP unless you pass `--bind-core`. Receive still needs MX and **TCP/25** (often blocked). There is no lab SMTP catcher container. Leave YAML email **disabled** for an on-box outbox (`generated`), or send through Gmail / Outlook.
+
+### Scheduled reports (`/ops#reports`)
+
+Rows are Postgres `scheduled_reports` (not Celery, not YAML). Analyst / engineer / admin can **Edit** (same create form; **Save** updates that row; **Cancel** next to Save discards and returns to the list), **Clone** (draft copy until Save), and **Remove** (confirm; outbox mail already generated stays). **Enabled** means the job fires at **Next**; **Disable** keeps the row stored and the scheduler skips it. Send now and incident **Send report** are unchanged.
 
 ---
 

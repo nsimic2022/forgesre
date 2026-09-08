@@ -133,38 +133,56 @@
 </section>
 
 <section class="card" id="reports">
-  <h2>Scheduled reports {% with %}{% set tip %}Cron-like, inside Core. Pick assets and an interval, or use Send now for a one-shot mail (does not wait 6 hours). ForgeSRE snapshots CPU/disk/up from Prometheus (or demo gauges) even when there is no incident, then emails the text. Choose the recipient from the address book, or type a destination email. SMTP off stores the row as generated (not sent). This is not the incident escalation ladder.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Scheduled reports {% with %}{% set tip %}Cron-like, inside Core. Pick assets and an interval, or use Send now for a one-shot mail (does not wait 6 hours). ForgeSRE snapshots CPU/disk/up from Prometheus (or demo gauges) even when there is no incident, then emails the text. Choose the recipient from the address book, or type a destination email. SMTP off stores the row as generated (not sent). This is not the incident escalation ladder. Enabled means the job fires at Next. Off keeps the row stored; the scheduler skips it. That is not Remove.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <p class="muted">
+    <strong>Enabled</strong> means the job fires at <strong>Next</strong>. Off keeps the row stored; the scheduler skips it. That is not Remove.
+  </p>
   {% if can_send %}
+  {% set report_mode = report_form_mode or "add" %}
+  {% set rf = report_form or {} %}
   <div class="ops-report-cols">
-  <form method="post" action="/ops/reports" class="stack">
-    <h3>New report</h3>
-    <label>Name <input name="name" value="storage-6h" required></label>
+  <form method="post" action="{% if report_mode == 'edit' %}/ops/reports/{{ editing_report.id }}/update{% else %}/ops/reports{% endif %}" class="stack" id="report-schedule-form">
+    <h3>
+      {% if report_mode == "edit" %}Edit report
+      {% elif report_mode == "clone" %}Clone report
+      {% else %}New report{% endif %}
+    </h3>
+    {% if report_mode == "edit" %}
+    <p class="muted">Same fields as create. Save updates this row. Cancel discards the edits and returns to the list.</p>
+    {% elif report_mode == "clone" %}
+    <p class="muted">Copy of <strong>{{ clone_source_name }}</strong>. Tweak fields, then Save to create a new job. Cancel discards the draft.</p>
+    {% endif %}
+    <label>Name <input name="name" value="{{ rf.name or 'storage-6h' }}" required></label>
     <label>Send to
       <select name="to_email">
         <option value="">Select an address</option>
         {% for item in addresses %}
-        <option value="{{ item.email }}">{% if item.label %}{{ item.label }} — {% endif %}{{ item.email }} ({{ item.source }})</option>
+        <option value="{{ item.email }}" {% if item.email == rf.to_email %}selected{% endif %}>{% if item.label %}{{ item.label }} — {% endif %}{{ item.email }} ({{ item.source }})</option>
         {% endfor %}
       </select>
     </label>
     <label>Or new email <input name="new_email" type="email" placeholder="only if it is not in the list yet"></label>
     <label>Every
       <select name="interval_hours">
-        <option value="1">1 hour</option>
-        <option value="6" selected>6 hours</option>
-        <option value="12">12 hours</option>
-        <option value="24">24 hours</option>
+        {% set hours = rf.interval_hours if rf.interval_hours else 6 %}
+        <option value="1" {% if hours == 1 %}selected{% endif %}>1 hour</option>
+        <option value="6" {% if hours == 6 %}selected{% endif %}>6 hours</option>
+        <option value="12" {% if hours == 12 %}selected{% endif %}>12 hours</option>
+        <option value="24" {% if hours == 24 %}selected{% endif %}>24 hours</option>
       </select>
     </label>
     <fieldset>
       <legend>Assets</legend>
       {% for asset in assets %}
-      <label class="check"><input type="checkbox" name="asset_id" value="{{ asset.asset_id }}"> {{ asset.hostname }} ({{ asset.asset_id }})</label>
+      <label class="check"><input type="checkbox" name="asset_id" value="{{ asset.asset_id }}" {% if asset.asset_id in (rf.asset_ids or []) %}checked{% endif %}> {{ asset.hostname }} ({{ asset.asset_id }})</label>
       {% else %}
       <p class="muted">No assets in inventory.</p>
       {% endfor %}
     </fieldset>
-    <button type="submit">Save schedule</button>
+    <div class="row-actions ops-report-form-actions">
+      <button type="submit">{% if report_mode == "clone" %}Save copy{% else %}Save schedule{% endif %}</button>
+      <a href="/ops#reports">Cancel</a>
+    </div>
   </form>
   <form method="post" action="/ops/reports/send-now" class="stack ops-report-now">
     <h3>Send now {% with %}{% set tip %}One snapshot, immediately. Does not create a 6-hour schedule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
@@ -193,18 +211,33 @@
     <thead><tr><th>Name</th><th>To</th><th>Every</th><th>Assets</th><th>Last</th><th>Next</th><th>Enabled</th><th></th></tr></thead>
     <tbody>
     {% for row in reports %}
-      <tr>
+      <tr{% if editing_report and editing_report.id == row.id %} class="selected"{% endif %}>
         <td>{{ row.name }}</td>
         <td>{{ row.to_email }}</td>
         <td>{{ row.interval_hours }}h</td>
         <td>{{ (row.asset_ids or [])|join(", ") or "all" }}</td>
         <td class="muted">{{ row.last_run_at or "—" }}</td>
         <td class="muted">{{ row.next_run_at or "—" }}</td>
-        <td><span class="pill {{ 'ok' if row.enabled else 'ignored' }}">{{ "On" if row.enabled else "Off" }}</span></td>
         <td>
+          <span class="pill {{ 'ok' if row.enabled else 'ignored' }}">{{ "Enabled" if row.enabled else "Off" }}</span>
+        </td>
+        <td class="ops-report-actions">
           {% if can_send %}
-          <form method="post" action="/ops/reports/{{ row.id }}/run" class="inline"><button type="submit">Run now</button></form>
-          <form method="post" action="/ops/reports/{{ row.id }}/toggle" class="inline"><button type="submit" class="secondary">Toggle</button></form>
+          <div class="row-actions">
+            {% if editing_report and editing_report.id == row.id %}
+            <a class="button" href="/ops#reports">Cancel</a>
+            {% else %}
+            <a class="button" href="/ops?edit={{ row.id }}{% if reports_pager.page > 1 %}&amp;reports_page={{ reports_pager.page }}{% endif %}#reports">Edit</a>
+            {% endif %}
+            <a class="button" href="/ops?clone={{ row.id }}{% if reports_pager.page > 1 %}&amp;reports_page={{ reports_pager.page }}{% endif %}#reports">Clone</a>
+            <form method="post" action="/ops/reports/{{ row.id }}/run"><button type="submit">Run now</button></form>
+            <form method="post" action="/ops/reports/{{ row.id }}/toggle">
+              <button type="submit" class="secondary" title="Enabled: fire at Next. Off: stored, scheduler skips.">{% if row.enabled %}Disable{% else %}Enable{% endif %}</button>
+            </form>
+            <form method="post" action="/ops/reports/{{ row.id }}/delete" onsubmit="return confirm('Remove this scheduled report? The job is deleted. Outbox mail already generated stays.');">
+              <button type="submit" class="danger">Remove</button>
+            </form>
+          </div>
           {% endif %}
         </td>
       </tr>
