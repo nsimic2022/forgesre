@@ -131,11 +131,33 @@ a { color: var(--accent); }
 }
 .nav a.active:hover { background: var(--shell-hover); }
 .nav-foot { margin-top: auto; }
+.nav-glance {
+  margin: 0 0 0.85rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--shell-line);
+}
+.nav-clock {
+  font-size: 1.7rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--shell-text);
+  line-height: 1.1;
+}
+.nav-resources {
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  color: var(--shell-muted);
+}
+.nav-resources div { white-space: nowrap; }
 .who { color: var(--shell-muted); font-size: 0.8rem; margin-bottom: 0.5rem; }
 .who-name, .who-role { display: block; }
 .who-name + .who-role { margin-top: 0.15rem; }
 .nav-foot-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
 .nav-foot-actions form { margin: 0; }
+.nav-foot-actions form.nav-logout { margin-left: auto; padding-left: 0.85rem; }
 .nav-foot-actions button { width: auto; }
 .nav button.secondary {
   background: var(--shell-hover);

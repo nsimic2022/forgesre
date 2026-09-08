@@ -32,6 +32,58 @@ document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
 });
 applyTheme(currentTheme());
 
+(function bindNavClock() {
+  const el = document.querySelector("[data-nav-clock]");
+  if (!el) return;
+  const tick = () => {
+    try {
+      el.textContent = new Date().toLocaleTimeString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      });
+    } catch (err) {
+      el.textContent = new Date().toTimeString().slice(0, 8);
+    }
+  };
+  tick();
+  window.setInterval(tick, 1000);
+})();
+
+(function bindNavResources() {
+  const box = document.querySelector("[data-nav-resources]");
+  if (!box) return;
+  const cpuEl = box.querySelector("[data-nav-cpu]");
+  const ramEl = box.querySelector("[data-nav-ram]");
+  const hddEl = box.querySelector("[data-nav-hdd]");
+  const gib = (n) => {
+    const v = Number(n) / 1073741824;
+    if (!isFinite(v) || v < 0) return "—";
+    return (v >= 10 ? v.toFixed(0) : v.toFixed(1)) + " GB";
+  };
+  const paint = (data) => {
+    if (!data) return;
+    if (cpuEl && data.cpu_percent != null && isFinite(Number(data.cpu_percent))) {
+      cpuEl.textContent = "CPU " + Math.round(Number(data.cpu_percent)) + "%";
+    }
+    if (ramEl && data.ram_total_bytes) {
+      ramEl.textContent = "RAM " + gib(data.ram_used_bytes) + " / " + gib(data.ram_total_bytes);
+    }
+    if (hddEl && data.hdd_total_bytes) {
+      hddEl.textContent = "HDD " + gib(data.hdd_used_bytes) + " / " + gib(data.hdd_total_bytes);
+    }
+  };
+  const load = () => {
+    fetch("/api/v1/system/resources", { headers: { Accept: "application/json" } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(paint)
+      .catch(() => {});
+  };
+  load();
+  window.setInterval(load, 8000);
+})();
+
 (function bindDemoPanel() {
   const dialog = document.getElementById("demo-panel");
   if (!dialog || typeof dialog.showModal !== "function") return;
