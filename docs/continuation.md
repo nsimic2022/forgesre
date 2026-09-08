@@ -19,7 +19,7 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 
 **Tuesday 8 September 2026.** Operator N on `/ops` Email & reports: scheduled/cron report rows had a structure (`next`, `enabled`) but no explanation of the toggle, and no **Edit / Cancel / Remove / Clone**. Once created, a job could only be turned off.
 
-Do not fight `cursor/gui-help-tooltips-05f8` ⓘ tooltips on `ops.html` if that branch merges first — rebase this work. Do not revert GUI list pagination (10/page, `reports_page`).
+Rebased onto `cursor/gui-help-tooltips-05f8` after it merged to `main`. Do not revert GUI list pagination (10/page, `reports_page`).
 
 Code and docs stay English. Replies to N are Serbian.
 
@@ -36,7 +36,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/ops-report-job-actions-05f8`: **pending rebase pytest** (tooltips on `main` were **415**).
+Pytest count after the double run on `cursor/ops-report-job-actions-05f8` (rebased onto tooltips): **417 passed** (twice). Was **415** after GUI ⓘ help on `main`.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`. `create_pr` often **403** — merge `--no-ff` plus `git push origin main` still lands the change.
 
