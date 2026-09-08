@@ -34,7 +34,7 @@ PYTHONPATH=backend:agents python3 -m pytest tests
 PYTHONPATH=backend:agents python3 -m pytest tests
 ```
 
-Pytest count after the double run on `cursor/gui-small-fixes-05f8`: **425 passed** (twice). Was **417** on `main` after scheduled report job actions.
+Pytest count after the double run on `cursor/nav-clock-resources-05f8` (rebased onto `origin/main` `471fd97` GUI small-fixes): **420 passed** before that rebase; GUI small-fixes were **425 passed**. Do not revert `471fd97`. Re-run pytest after this rebase.
 
 If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`. `create_pr` often **403** — merge `--no-ff` plus `git push origin main` still lands the change.
 
