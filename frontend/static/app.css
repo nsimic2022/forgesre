@@ -359,6 +359,11 @@ a.button {
 .pill.ignored, .pill.offline, .pill.grey { background: var(--pill); color: var(--muted); }
 .pill.yellow { background: var(--pill-warn-bg); color: var(--pill-warn); }
 .pill.green { background: var(--pill-ok-bg); color: var(--pill-ok); }
+.banner.warn {
+  border-color: var(--warn);
+  background: var(--pill-warn-bg);
+  color: var(--pill-warn);
+}
 .banner {
   background: var(--pill-warn-bg);
   border: 1px solid var(--warn);
@@ -602,8 +607,17 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 }
 .playbook-grid .card { margin-bottom: 0; }
 .playbook-card.selected { border-color: var(--accent); }
+.discovery-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.9rem 1rem;
+  margin-bottom: 1.1rem;
+}
+.discovery-actions .card { margin-bottom: 0; }
+.discovery-scan-form { max-width: none; }
 @media (max-width: 800px) {
   .playbook-grid { grid-template-columns: 1fr; }
+  .discovery-actions { grid-template-columns: 1fr; }
 }
 .ack-dot {
   display: inline-block;

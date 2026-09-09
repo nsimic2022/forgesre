@@ -64,6 +64,12 @@ def migrate(engine: Engine) -> None:
         existing = {col["name"] for col in inspector.get_columns("discovery_candidates")}
         if "hostname" not in existing:
             statements.append("ALTER TABLE discovery_candidates ADD COLUMN hostname VARCHAR(255) DEFAULT ''")
+        if "snmp_ok" not in existing:
+            statements.append("ALTER TABLE discovery_candidates ADD COLUMN snmp_ok BOOLEAN DEFAULT 0")
+        if "node_exporter" not in existing:
+            statements.append("ALTER TABLE discovery_candidates ADD COLUMN node_exporter BOOLEAN DEFAULT 0")
+        if "windows_exporter" not in existing:
+            statements.append("ALTER TABLE discovery_candidates ADD COLUMN windows_exporter BOOLEAN DEFAULT 0")
     if "users" in tables:
         existing = {col["name"] for col in inspector.get_columns("users")}
         if "journal_error_ack_id" not in existing:

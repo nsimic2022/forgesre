@@ -573,6 +573,8 @@ def discovery_page(
     edit: str = "",
     clone: str = "",
 ):
+    from discovery import resolve_scan_cidrs, suggested_connected_cidrs
+
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
     pending = [row for row in rows if row.status == "new"]
     rows, pager = paginate(rows, page)
@@ -601,6 +603,11 @@ def discovery_page(
                 "hostname": source.hostname or "",
                 "proposed_role": source.proposed_role or "Unknown device",
             }
+    saved_cidrs = list(settings.discovery_cidrs)
+    resolved = resolve_scan_cidrs(saved_cidrs)
+    auto_cidrs = list(resolved.get("auto") or suggested_connected_cidrs())
+    scan_cidrs = list(resolved.get("cidrs") or [])
+    cidr_prefill = ", ".join(saved_cidrs) if saved_cidrs else ", ".join(auto_cidrs)
     return render(
         request,
         "discovery.html",
@@ -614,7 +621,12 @@ def discovery_page(
         notice=notice,
         discovery_enabled=settings.discovery_enabled,
         discovery_mode=settings.discovery_mode,
-        discovery_cidrs=settings.discovery_cidrs,
+        discovery_cidrs=saved_cidrs,
+        detected_cidrs=auto_cidrs,
+        detected_interfaces=list(resolved.get("interfaces") or []),
+        discovery_warnings=list(resolved.get("warnings") or []),
+        discovery_scan_cidrs=scan_cidrs,
+        cidr_prefill=cidr_prefill,
         netbox_enabled=settings.netbox_enabled,
         netbox_url=settings.netbox_url,
         netbox_url_is_local=is_local_netbox_url(settings.netbox_url),
@@ -637,12 +649,42 @@ def discovery_page(
 
 
 @router.post("/discovery/scan")
-def discovery_scan_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
+def discovery_scan_page(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    cidrs: str = Form(""),
+):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
-    run_scan(db)
-    audit(db, "discovery.scan", actor=user.email, commit=True)
-    return RedirectResponse("/discovery", status_code=302)
+    from discovery import normalize_cidrs
+
+    parsed = normalize_cidrs(cidrs)
+    if parsed:
+        settings.set_discovery_cidrs(parsed)
+        result = run_scan(db, cidrs=parsed, merge_auto=False)
+    else:
+        result = run_scan(db)
+        if result.get("cidrs"):
+            settings.set_discovery_cidrs(list(result["cidrs"]))
+    if result.get("skipped_reason") == "empty_cidrs":
+        return RedirectResponse(
+            f"/discovery?notice={quote('No connected IPv4 networks detected and discovery.cidrs empty — nothing to scan.')}",
+            status_code=302,
+        )
+    audit(
+        db,
+        "discovery.scan",
+        actor=user.email,
+        data={"cidrs": result.get("cidrs"), "found": result.get("found"), "source": result.get("source")},
+        commit=True,
+    )
+    found = int(result.get("found") or 0)
+    used = ", ".join(result.get("cidrs") or [])
+    notice = f"Saved {used}; scan found={found}" if used else f"Scan finished found={found}"
+    warns = list(result.get("warnings") or [])
+    if warns:
+        notice = notice + " · " + " ".join(warns[:2])
+    return RedirectResponse(f"/discovery?notice={quote(notice)}", status_code=302)
 
 
 @router.post("/discovery/{candidate_id}/approve")

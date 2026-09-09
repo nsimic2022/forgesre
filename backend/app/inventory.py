@@ -176,14 +176,36 @@ def sd_snmp_targets(db: Session) -> list[dict]:
     return targets
 
 
-def upsert_candidate(db: Session, ip: str, role: str, ports: list[int], source: str = "scan") -> DiscoveryCandidate:
+def upsert_candidate(
+    db: Session,
+    ip: str,
+    role: str,
+    ports: list[int],
+    source: str = "scan",
+    *,
+    snmp_ok: bool = False,
+    node_exporter: bool = False,
+    windows_exporter: bool = False,
+) -> DiscoveryCandidate:
     row = db.query(DiscoveryCandidate).filter_by(ip=ip).first()
     if row is None:
-        row = DiscoveryCandidate(ip=ip, proposed_role=role, open_ports=ports, status="new", source=source)
+        row = DiscoveryCandidate(
+            ip=ip,
+            proposed_role=role,
+            open_ports=list(ports or []),
+            snmp_ok=bool(snmp_ok),
+            node_exporter=bool(node_exporter),
+            windows_exporter=bool(windows_exporter),
+            status="new",
+            source=source,
+        )
         db.add(row)
     elif row.status == "new":
         row.proposed_role = role
-        row.open_ports = ports
+        row.open_ports = list(ports or [])
+        row.snmp_ok = bool(snmp_ok)
+        row.node_exporter = bool(node_exporter)
+        row.windows_exporter = bool(windows_exporter)
         row.seen_at = utcnow()
     return row
 
@@ -196,6 +218,7 @@ def seed_demo_candidate(db: Session) -> DiscoveryCandidate:
         "Possible Linux server",
         [22, 9100],
         source="demo",
+        node_exporter=True,
     )
     if existing_asset:
         row.status = "approved"
@@ -219,36 +242,105 @@ def discovery_loop_age_seconds() -> float | None:
     return time.monotonic() - _discovery_loop_mono
 
 
-def run_scan(db: Session) -> dict:
-    from discovery import hosts_from_cidrs, probe_host
+def run_scan(
+    db: Session,
+    cidrs: list[str] | None = None,
+    *,
+    merge_auto: bool = True,
+    ip_output: str | None = None,
+) -> dict:
+    """Probe hosts from YAML discovery.cidrs union auto-detected connected nets."""
+    from discovery import normalize_cidrs, probe_host, resolve_scan_cidrs, scan_plan
 
-    cidrs = settings.discovery_cidrs
+    yaml_side = list(cidrs) if cidrs is not None else list(settings.discovery_cidrs)
+    if merge_auto:
+        resolved = resolve_scan_cidrs(yaml_side, ip_output=ip_output)
+    else:
+        cleaned = normalize_cidrs(yaml_side)
+        plan = scan_plan(cleaned)
+        resolved = {
+            "cidrs": cleaned,
+            "yaml": cleaned,
+            "auto": [],
+            "source": "yaml" if cleaned else "none",
+            "warnings": list(plan["warnings"]),
+            "hosts": list(plan["hosts"]),
+            "host_count": int(plan["total"]),
+            "truncated": bool(plan["truncated"]),
+        }
+    targets = list(resolved["cidrs"])
+    hosts = list(resolved.get("hosts") or [])
+    warnings = list(resolved.get("warnings") or [])
+    if not targets:
+        log.info("discovery scan skipped: no YAML cidrs and no connected nets")
+        report(
+            db,
+            "discovery",
+            "scan",
+            "warn",
+            summary="Scan skipped: no discovery.cidrs and no auto-detected connected nets",
+            detail="empty yaml + empty auto",
+        )
+        return {
+            "found": 0,
+            "skipped": 0,
+            "cidrs": [],
+            "yaml": list(resolved.get("yaml") or []),
+            "auto": list(resolved.get("auto") or []),
+            "source": "none",
+            "warnings": warnings,
+            "skipped_reason": "empty_cidrs",
+            "hosts_planned": 0,
+            "truncated": False,
+        }
     found = 0
     skipped = 0
     known_ips = {item.ip for item in db.query(Asset).all() if item.ip}
-    for ip in hosts_from_cidrs(cidrs):
+    for ip in hosts:
         if ip in known_ips:
             skipped += 1
             continue
         result = probe_host(ip)
         if not result["alive"]:
             continue
-        upsert_candidate(db, ip, result["proposed_role"], result["open_ports"])
+        kind = str(result.get("exporter_kind") or "")
+        upsert_candidate(
+            db,
+            ip,
+            result["proposed_role"],
+            result["open_ports"],
+            snmp_ok=bool(result.get("snmp_ok")),
+            node_exporter=kind == "linux",
+            windows_exporter=kind == "windows",
+        )
         found += 1
     if settings.discovery_mode == "automatic":
         for row in db.query(DiscoveryCandidate).filter_by(status="new").all():
             approve_candidate(db, row, actor="system-automatic")
     db.commit()
-    log.info("discovery scan cidrs=%s found=%s skipped=%s", cidrs, found, skipped)
+    log.info("discovery scan cidrs=%s found=%s skipped=%s source=%s", targets, found, skipped, resolved.get("source"))
+    detail = f"cidrs={targets} source={resolved.get('source')}"
+    if warnings:
+        detail = detail + f" warnings={warnings}"
     report(
         db,
         "discovery",
         "scan",
-        "ok",
+        "ok" if not warnings else "warn",
         summary=f"Scan finished found={found} skipped={skipped}",
-        detail=f"cidrs={cidrs}",
+        detail=detail,
     )
-    return {"found": found, "skipped": skipped, "cidrs": cidrs}
+    return {
+        "found": found,
+        "skipped": skipped,
+        "cidrs": targets,
+        "yaml": list(resolved.get("yaml") or []),
+        "auto": list(resolved.get("auto") or []),
+        "source": str(resolved.get("source") or ""),
+        "warnings": warnings,
+        "hosts_planned": int(resolved.get("host_count") or len(hosts)),
+        "truncated": bool(resolved.get("truncated")),
+    }
 
 
 def create_manual_asset(
@@ -610,21 +702,27 @@ def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset
     if asset is None:
         role = row.proposed_role or ""
         ports = {int(p) for p in (row.open_ports or []) if str(p).isdigit() or isinstance(p, int)}
-        if "Windows" in role:
-            confirmed = "no windows_exporter" not in role and "pick OS" not in role
+        has_windows = bool(getattr(row, "windows_exporter", False))
+        has_node = bool(getattr(row, "node_exporter", False))
+        if has_windows or "Windows" in role:
+            confirmed = has_windows or ("no windows_exporter" not in role and "pick OS" not in role)
             atype, profile, scrape = (
                 "Windows Server",
                 "windows-standard",
                 (f"{row.ip}:{WINDOWS_EXPORTER_PORT}" if confirmed else ""),
             )
-        elif "Linux" in role:
-            confirmed = "no node_exporter" not in role and "pick OS" not in role
+        elif has_node or "Linux" in role:
+            confirmed = has_node or ("no node_exporter" not in role and "pick OS" not in role)
             atype, profile, scrape = (
                 "Linux Server",
                 "linux-standard",
-                (f"{row.ip}:{LINUX_EXPORTER_PORT}" if confirmed and LINUX_EXPORTER_PORT in ports else ""),
+                (
+                    f"{row.ip}:{LINUX_EXPORTER_PORT}"
+                    if confirmed and (has_node or LINUX_EXPORTER_PORT in ports)
+                    else ""
+                ),
             )
-        elif "network" in role.lower():
+        elif bool(getattr(row, "snmp_ok", False)) or "network" in role.lower():
             atype, profile, scrape = "Network device", "network-switch", ""
         elif "pick OS" in role:
             atype, profile, scrape = "Unknown", "", ""
@@ -784,6 +882,9 @@ def clone_candidate(
         hostname=(hostname or "").strip(),
         proposed_role=(proposed_role or "").strip() or row.proposed_role,
         open_ports=list(row.open_ports or []),
+        snmp_ok=bool(getattr(row, "snmp_ok", False)),
+        node_exporter=bool(getattr(row, "node_exporter", False)),
+        windows_exporter=bool(getattr(row, "windows_exporter", False)),
         status="new",
         source=row.source if row.source == "demo" else "scan",
     )

@@ -181,6 +181,34 @@ class Settings:
             return [part.strip() for part in raw.split(",") if part.strip()]
         return [str(item).strip() for item in raw if str(item).strip()]
 
+    def set_discovery_cidrs(self, cidrs: list[str] | str | None) -> list[str]:
+        """Write discovery.cidrs to the live YAML and refresh in-memory settings."""
+        from discovery import normalize_cidrs
+
+        cleaned = normalize_cidrs(cidrs)
+        path = self.config_path
+        data: dict[str, Any] = {}
+        if path.exists():
+            with path.open() as handle:
+                data = yaml.safe_load(handle) or {}
+        elif self.yaml:
+            data = dict(self.yaml)
+        discovery = dict(data.get("discovery") or {})
+        discovery["cidrs"] = cleaned
+        if "enabled" not in discovery:
+            discovery["enabled"] = True
+        if "mode" not in discovery:
+            discovery["mode"] = "semi-automatic"
+        data["discovery"] = discovery
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as handle:
+            yaml.safe_dump(data, handle, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        self.yaml = data
+        return cleaned
+
+    def reload_yaml(self) -> None:
+        self.yaml = self._load_yaml()
+
     @property
     def netbox_enabled(self) -> bool:
         inventory = self.yaml.get("inventory") or {}

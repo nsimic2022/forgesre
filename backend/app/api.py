@@ -671,9 +671,22 @@ def list_candidates(db: Session = Depends(get_db), user: User = Depends(require(
 
 
 @router.post("/discovery/scan")
-def discovery_scan(db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
-    result = run_scan(db)
-    audit(db, "discovery.scan", actor=user.email, commit=True)
+def discovery_scan(
+    db: Session = Depends(get_db),
+    user: User = Depends(require("write_assets")),
+    cidrs: list[str] | None = None,
+) -> dict:
+    from discovery import normalize_cidrs
+
+    parsed = normalize_cidrs(cidrs or [])
+    if parsed:
+        settings.set_discovery_cidrs(parsed)
+        result = run_scan(db, cidrs=parsed, merge_auto=False)
+    else:
+        result = run_scan(db)
+        if result.get("cidrs"):
+            settings.set_discovery_cidrs(list(result["cidrs"]))
+    audit(db, "discovery.scan", actor=user.email, data={"cidrs": result.get("cidrs")}, commit=True)
     return result
 
 
@@ -1322,6 +1335,9 @@ def _candidate(item: DiscoveryCandidate) -> dict[str, Any]:
         "hostname": item.hostname or "",
         "proposed_role": item.proposed_role,
         "open_ports": item.open_ports,
+        "snmp_ok": bool(getattr(item, "snmp_ok", False)),
+        "node_exporter": bool(getattr(item, "node_exporter", False)),
+        "windows_exporter": bool(getattr(item, "windows_exporter", False)),
         "status": item.status,
         "source": item.source,
         "asset_id": item.asset_id,

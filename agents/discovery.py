@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 import socket
+import subprocess
 from typing import Any
 
 LINUX_PORTS = {22, 9100}
@@ -15,10 +17,239 @@ DEFAULT_PORTS = (22, 80, 443, 161, 9100, 9182)
 MAX_HOSTS_PER_CIDR = 256
 MAX_HOSTS_TOTAL = 1024
 
+_IP_ADDR_RE = re.compile(
+    r"^\d+:\s+(\S+)\s+inet\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\b",
+    re.MULTILINE,
+)
 
-def hosts_from_cidrs(cidrs: list[str], limit: int = MAX_HOSTS_PER_CIDR, total_limit: int = MAX_HOSTS_TOTAL) -> list[str]:
-    """Enumerate hosts. `limit` is per CIDR (default 256). Truncation is logged by the caller via returned length."""
+
+def is_docker_bridge(ifname: str) -> bool:
+    """True for docker0, br-*, and veth* — skipped by default on Scan now."""
+    name = (ifname or "").strip().lower()
+    return name == "docker0" or name.startswith("br-") or name.startswith("veth")
+
+
+def _skip_network(network: ipaddress.IPv4Network) -> bool:
+    if network.version != 4:
+        return True
+    if network.prefixlen == 0 or network == ipaddress.ip_network("0.0.0.0/0"):
+        return True
+    if network.is_loopback or network.is_multicast or network.is_unspecified:
+        return True
+    if network.is_link_local:
+        return True
+    return False
+
+
+def _skip_host(host: ipaddress.IPv4Address) -> bool:
+    return bool(
+        host.is_loopback
+        or host.is_multicast
+        or host.is_unspecified
+        or host.is_link_local
+    )
+
+
+def _iface_inet_rows(ip_output: str | None = None) -> list[dict[str, Any]]:
+    """Parse `ip -4 -o addr show` rows into iface/addr/prefixlen dicts."""
+    text = ip_output
+    if text is None:
+        try:
+            proc = subprocess.run(
+                ["ip", "-4", "-o", "addr", "show"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+            text = proc.stdout or ""
+        except (OSError, subprocess.SubprocessError):
+            text = ""
+    rows: list[dict[str, Any]] = []
+    for match in _IP_ADDR_RE.finditer(text or ""):
+        iface, addr_s, prefix_s = match.group(1), match.group(2), match.group(3)
+        iface = iface.split("@", 1)[0]
+        try:
+            addr = ipaddress.ip_address(addr_s)
+            prefixlen = int(prefix_s)
+        except ValueError:
+            continue
+        if addr.version != 4 or prefixlen < 0 or prefixlen > 32:
+            continue
+        rows.append({"iface": iface, "addr": str(addr), "prefixlen": prefixlen})
+    return rows
+
+
+def detect_connected_networks(
+    *,
+    include_docker: bool = False,
+    ip_output: str | None = None,
+    limit: int = MAX_HOSTS_PER_CIDR,
+    total_limit: int = MAX_HOSTS_TOTAL,
+) -> dict[str, Any]:
+    """Enumerate host IPv4 connected networks (real prefixlen).
+
+    Core runs with ``network_mode: host``, so this sees appliance interfaces.
+    Skips loopback, link-local, multicast, ``0.0.0.0/0``, and by default Docker
+    bridges (``docker0``, ``br-*``, ``veth*``). Returns actual prefixes — never
+    hardcodes ``/24``.
+    """
+    interfaces: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+    cidrs: list[str] = []
+    seen: set[str] = set()
+    for row in _iface_inet_rows(ip_output):
+        iface = str(row["iface"])
+        if not include_docker and is_docker_bridge(iface):
+            skipped.append({"iface": iface, "reason": "docker_bridge"})
+            continue
+        try:
+            iface_ip = ipaddress.ip_interface(f"{row['addr']}/{row['prefixlen']}")
+        except ValueError:
+            skipped.append({"iface": iface, "reason": "invalid"})
+            continue
+        network = iface_ip.network
+        if _skip_network(network):
+            reason = "loopback" if network.is_loopback else (
+                "link_local" if network.is_link_local else (
+                    "multicast" if network.is_multicast else (
+                        "default_route" if network.prefixlen == 0 else "excluded"
+                    )
+                )
+            )
+            skipped.append({"iface": iface, "reason": reason})
+            continue
+        cidr = str(network)
+        interfaces.append(
+            {
+                "iface": iface,
+                "addr": str(iface_ip.ip),
+                "cidr": cidr,
+                "prefixlen": int(network.prefixlen),
+            }
+        )
+        if cidr not in seen:
+            seen.add(cidr)
+            cidrs.append(cidr)
+    plan = scan_plan(cidrs, limit=limit, total_limit=total_limit)
+    return {
+        "cidrs": cidrs,
+        "interfaces": interfaces,
+        "skipped": skipped,
+        "warnings": list(plan["warnings"]),
+        "host_count": int(plan["total"]),
+        "truncated": bool(plan["truncated"]),
+    }
+
+
+def suggested_connected_cidrs(
+    *,
+    include_docker: bool = False,
+    ip_output: str | None = None,
+) -> list[str]:
+    """Connected IPv4 CIDRs with real prefixes (multi-homed OK). Not /24-only."""
+    return list(
+        detect_connected_networks(include_docker=include_docker, ip_output=ip_output)["cidrs"]
+    )
+
+
+def normalize_cidrs(raw: list[str] | str | None) -> list[str]:
+    """Parse operator CIDR text into unique IPv4 networks. Invalid / excluded dropped."""
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        parts = [part.strip() for part in raw.replace("\n", ",").replace(";", ",").split(",")]
+    else:
+        parts = [str(item).strip() for item in raw]
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        if not part:
+            continue
+        try:
+            network = ipaddress.ip_network(part, strict=False)
+        except ValueError:
+            continue
+        if network.version != 4 or _skip_network(network):
+            continue
+        text = str(network)
+        if text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
+
+
+
+def merge_cidrs(*groups: list[str] | None) -> list[str]:
+    """Dedupe IPv4 CIDRs preserving first-seen order across groups."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for cidr in normalize_cidrs(group):
+            if cidr in seen:
+                continue
+            seen.add(cidr)
+            out.append(cidr)
+    return out
+
+
+def resolve_scan_cidrs(
+    yaml_cidrs: list[str] | str | None = None,
+    *,
+    include_docker: bool = False,
+    ip_output: str | None = None,
+    limit: int = MAX_HOSTS_PER_CIDR,
+    total_limit: int = MAX_HOSTS_TOTAL,
+) -> dict[str, Any]:
+    """Union of live YAML ``discovery.cidrs`` and auto-detected connected nets.
+
+    Never hardcodes ``/24``.
+    """
+    from_yaml = normalize_cidrs(yaml_cidrs)
+    detected = detect_connected_networks(
+        include_docker=include_docker,
+        ip_output=ip_output,
+        limit=limit,
+        total_limit=total_limit,
+    )
+    from_auto = list(detected["cidrs"])
+    merged = merge_cidrs(from_yaml, from_auto)
+    if from_yaml and from_auto:
+        source = "yaml+auto"
+    elif from_yaml:
+        source = "yaml"
+    elif from_auto:
+        source = "auto"
+    else:
+        source = "none"
+    plan = scan_plan(merged, limit=limit, total_limit=total_limit)
+    return {
+        "cidrs": merged,
+        "yaml": from_yaml,
+        "auto": from_auto,
+        "source": source,
+        "interfaces": list(detected["interfaces"]),
+        "skipped": list(detected["skipped"]),
+        "warnings": list(plan["warnings"]),
+        "host_count": int(plan["total"]),
+        "truncated": bool(plan["truncated"]),
+        "per_cidr": list(plan["per_cidr"]),
+        "hosts": list(plan["hosts"]),
+    }
+
+
+
+def scan_plan(
+    cidrs: list[str],
+    limit: int = MAX_HOSTS_PER_CIDR,
+    total_limit: int = MAX_HOSTS_TOTAL,
+) -> dict[str, Any]:
+    """Expand CIDRs with per-network truncation warnings (256/CIDR, 1024 total)."""
     hosts: list[str] = []
+    per_cidr: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    truncated = False
     for raw in cidrs:
         raw = (raw or "").strip()
         if not raw:
@@ -27,20 +258,67 @@ def hosts_from_cidrs(cidrs: list[str], limit: int = MAX_HOSTS_PER_CIDR, total_li
             network = ipaddress.ip_network(raw, strict=False)
         except ValueError:
             continue
-        if network.version != 4:
+        if network.version != 4 or _skip_network(network):
             continue
-        iterator = network.hosts() if network.num_addresses > 2 else network
-        taken = 0
-        for host in iterator:
-            if host.is_loopback or host.is_multicast or host.is_unspecified:
+        usable = 0
+        for host in network.hosts() if network.num_addresses > 2 else network:
+            if _skip_host(host):
                 continue
-            hosts.append(str(host))
-            taken += 1
-            if taken >= limit or len(hosts) >= total_limit:
+            usable += 1
+        room = max(0, total_limit - len(hosts))
+        take = min(limit, room, usable)
+        cidr_hosts: list[str] = []
+        for host in network.hosts() if network.num_addresses > 2 else network:
+            if _skip_host(host):
+                continue
+            cidr_hosts.append(str(host))
+            if len(cidr_hosts) >= take:
                 break
+        hosts.extend(cidr_hosts)
+        was_cut = usable > take
+        if was_cut:
+            truncated = True
+            if usable > limit:
+                warnings.append(
+                    f"{network} has {usable} usable hosts; scan probes the first {take} "
+                    f"(limit {limit}/CIDR)."
+                )
+            elif room < usable:
+                warnings.append(
+                    f"{network}: total host budget {total_limit} reached; "
+                    f"only {take} of {usable} hosts queued."
+                )
+        per_cidr.append(
+            {
+                "cidr": str(network),
+                "usable": usable,
+                "planned": len(cidr_hosts),
+                "truncated": was_cut,
+            }
+        )
         if len(hosts) >= total_limit:
-            return hosts
-    return hosts
+            truncated = True
+            if not any("total host budget" in w for w in warnings):
+                warnings.append(
+                    f"Total host budget is {total_limit}; later CIDRs are truncated or skipped."
+                )
+            break
+    return {
+        "hosts": hosts,
+        "per_cidr": per_cidr,
+        "warnings": warnings,
+        "total": len(hosts),
+        "truncated": truncated,
+    }
+
+
+def hosts_from_cidrs(
+    cidrs: list[str],
+    limit: int = MAX_HOSTS_PER_CIDR,
+    total_limit: int = MAX_HOSTS_TOTAL,
+) -> list[str]:
+    """Enumerate hosts. `limit` is per CIDR (default 256). Truncation via scan_plan."""
+    return list(scan_plan(cidrs, limit=limit, total_limit=total_limit)["hosts"])
 
 
 def probe_host(
