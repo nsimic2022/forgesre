@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import unquote
 
 import yaml
 from fastapi.testclient import TestClient
@@ -58,8 +59,9 @@ def test_discovery_buttons_not_stacked_helper_in_tip():
     html = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "scan-actions" in html
-    assert "Save &amp; scan" in html
-    assert html.find("Save &amp; scan") < html.find("Scan now")
+    actions = html[html.index("scan-actions") :]
+    assert "Save &amp; scan" in actions
+    assert actions.find("Save &amp; scan") < actions.find(">Scan now")
     assert "flex-direction: row" in css.split(".discovery-scan-form .wide.scan-actions")[1].split("}")[0]
     assert "background job" in html or "background probe" in html
     assert "Scan uses the union of YAML + auto (deduped). Empty YAML → auto only. Limits:" not in html
@@ -109,7 +111,7 @@ def test_post_scan_enqueues_pending_job_and_redirects(tmp_path, monkeypatch):
     assert posted.status_code == 302
     location = posted.headers.get("location") or ""
     assert "/discovery" in location
-    assert "queued" in location.lower()
+    assert "queued" in unquote(location).lower()
     assert called["n"] == 0
     written = yaml.safe_load(cfg.read_text(encoding="utf-8"))
     assert written["discovery"]["cidrs"] == ["10.55.0.0/24"]
@@ -122,7 +124,7 @@ def test_post_scan_enqueues_pending_job_and_redirects(tmp_path, monkeypatch):
 
     scan_now = client.post("/discovery/scan", data={"cidrs": "10.55.0.0/24"}, follow_redirects=False)
     assert scan_now.status_code == 302
-    assert "already queued" in (scan_now.headers.get("location") or "").lower()
+    assert "already queued" in unquote(scan_now.headers.get("location") or "").lower()
     db = SessionLocal()
     assert db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).count() == 1
     db.close()
