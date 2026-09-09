@@ -19,7 +19,7 @@ Product on `main`: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env`. Never print tokens. Never commit real secrets.
 
-Branches: `cursor/env-comments-docs-05f8` (initial comments + docs + install copy) then follow-ups for service groups / docs tables (`fd2133c`, `06e6eac`, …) merged `--no-ff` to `main`. Prefer `git merge --no-ff` when PR create is 403.
+Branches: `cursor/env-comments-docs-05f8` (initial comments + docs + install copy; `d2db0c1`, `fd2133c`, `06e6eac`, …) then `cursor/env-service-groups-76fa` (`cf90f9e` handoff + tighter tests). Latest `--no-ff` merge to `main`: `299eaec`. Prefer `git merge --no-ff` when PR create is 403.
 
 ---
 
