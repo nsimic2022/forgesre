@@ -108,24 +108,34 @@
 
 <section class="card" id="mail">
   <h2>Mail outbox {% with %}{% set tip %}One table for this appliance: this page, scheduled reports, and incident/escalation mail. Not an inbox. Incident and Escalation pages link here.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <table>
-    <thead><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th><th>Body</th></tr></thead>
+  <table class="scan-list mail-list">
+    <thead><tr><th>Mail</th><th>Status</th><th>When</th><th>Body</th></tr></thead>
     <tbody>
     {% for note in mail %}
-      <tr>
-        <td class="muted">{{ note.created_at }}</td>
-        <td>{{ note.target }}</td>
-        <td>{% if is_demo_mail(note) %}<span class="pill demo">DEMO</span> {% endif %}{{ note.subject }}</td>
+      {% set inc_no = mail_incidents.get(note.incident_id) if mail_incidents and note.incident_id else none %}
+      {% set purpose = mail_purpose(note.step_key) %}
+      <tr class="{{ mail_tone(note.status) }}{% if note.status == 'sent' %} inc-row-done{% elif note.status == 'failed' %} mail-row-fail{% endif %}">
+        <td class="inc-cell">
+          {% if inc_no %}
+          <a class="inc-short" href="/incidents/{{ inc_no }}" title="{{ inc_no }}">{{ incident_short_label(inc_no) }}</a>
+          {% endif %}
+          {% if is_demo_mail(note) %}<span class="inc-demo" title="Lab demo mail">· DEMO</span>{% endif %}
+          <div class="inc-title"{% if note.subject %} title="{{ note.subject }}"{% endif %}>{{ note.subject or purpose or "Mail" }}</div>
+          <div class="inc-host" title="{{ note.target }}">{{ short_recipients(note.target) }}{% if purpose and note.subject %} · {{ purpose }}{% endif %}</div>
+        </td>
         <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
+        <td class="inc-when"><span title="{{ format_started_at(note.created_at) }}">{{ short_when_label(note.created_at) or format_started_at(note.created_at) }}</span></td>
         <td>
           <details>
             <summary>View</summary>
+            <p class="muted">To: {{ note.target }}</p>
+            {% if note.error %}<p class="mail-error">{{ note.error }}</p>{% endif %}
             <pre class="mail-body">{{ note.body or "—" }}</pre>
           </details>
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">No mail yet.</td></tr>
+      <tr><td colspan="4" class="muted">No mail yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>

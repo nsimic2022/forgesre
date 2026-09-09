@@ -1,0 +1,5 @@
+<td class="inc-cell">
+  {% include "_incident_id_link.html" %}
+  <div class="inc-title"{% if item.title %} title="{{ item.title }}"{% endif %}>{{ item.title }}</div>
+  {% if item.asset and item.asset.hostname %}<div class="inc-host">{{ item.asset.hostname }}</div>{% endif %}
+</td>

@@ -400,6 +400,17 @@ a.button {
 }
 .list-filters label { min-width: 8rem; }
 .list-filters button { margin-left: 0.15rem; }
+.list-filters a.list-reset {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  padding: 0.45rem 0.15rem;
+  align-self: flex-end;
+}
+.list-filters a.list-reset:hover { color: var(--text); text-decoration: underline; }
+.incidents-filters { gap: 0.55rem 0.85rem; margin: 0.55rem 0 0.9rem; }
+.incidents-filters label { min-width: 0; }
 /* display:flex on a <td> shrinks the cell to content height, so
    border-bottom steps up vs taller cells in the same row. */
 td.row-actions {
@@ -681,6 +692,65 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 .health-table tr.health-ok td:first-child { box-shadow: inset 4px 0 0 var(--ok); }
 .health-table tr.health-warn td:first-child { box-shadow: inset 4px 0 0 var(--warn); }
 .health-table tr.health-crit td:first-child { box-shadow: inset 4px 0 0 var(--crit); }
+.scan-list tr.inc-ok td:first-child,
+.incidents-table tr.inc-ok td:first-child { box-shadow: inset 4px 0 0 var(--ok); }
+.scan-list tr.inc-warn td:first-child,
+.incidents-table tr.inc-warn td:first-child { box-shadow: inset 4px 0 0 var(--warn); }
+.scan-list tr.inc-crit td:first-child,
+.incidents-table tr.inc-crit td:first-child { box-shadow: inset 4px 0 0 var(--crit); }
+.scan-list tr.inc-crit:not(.inc-row-done) td:first-child,
+.incidents-table tr.inc-crit:not(.inc-row-done) td:first-child { box-shadow: inset 5px 0 0 var(--crit); }
+.scan-list td.inc-cell,
+.incidents-table td.inc-cell { vertical-align: top; padding-top: 0.55rem; padding-bottom: 0.55rem; }
+.scan-list .inc-title,
+.incidents-table .inc-title {
+  color: var(--text);
+  font-weight: 600;
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scan-list .inc-host,
+.incidents-table .inc-host {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.08rem;
+}
+.scan-list td.inc-when,
+.incidents-table td.inc-when { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+.scan-list tr.inc-row-done td,
+.incidents-table tr.inc-row-done td { color: var(--muted); }
+.scan-list tr.inc-row-done .inc-title,
+.incidents-table tr.inc-row-done .inc-title { font-weight: 500; color: var(--text); }
+.scan-list tr.inc-row-done a.inc-ok,
+.scan-list tr.inc-row-done a.inc-warn,
+.scan-list tr.inc-row-done a.inc-crit,
+.incidents-table tr.inc-row-done a.inc-ok,
+.incidents-table tr.inc-row-done a.inc-warn,
+.incidents-table tr.inc-row-done a.inc-crit { font-weight: 600; }
+.inc-demo {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  margin-left: 0.15rem;
+  white-space: nowrap;
+}
+.scan-list a.inc-short {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-decoration: none;
+  margin-right: 0.15rem;
+}
+.scan-list a.inc-short:hover { color: var(--accent); }
+.mail-list tr.mail-queued td:first-child { box-shadow: inset 4px 0 0 var(--warn); }
+.mail-list tr.mail-sent td:first-child { box-shadow: inset 4px 0 0 var(--ok); }
+.mail-list tr.mail-fail td:first-child { box-shadow: inset 5px 0 0 var(--crit); }
+.mail-list tr.mail-sent td { color: var(--muted); }
+.mail-list tr.mail-row-fail .inc-title { font-weight: 700; color: var(--crit); }
+.mail-list .mail-error { color: var(--crit); margin: 0.35rem 0; }
 .button-link {
   display: inline-flex;
   align-items: center;

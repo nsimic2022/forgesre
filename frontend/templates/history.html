@@ -20,32 +20,26 @@
   </div>
 </form>
 <div class="table-scroll">
-<table>
+<table class="scan-list">
   <thead>
     <tr>
-      <th>ID</th><th>Title</th><th>Status</th><th>Asset</th>
-      <th>Started</th><th>Reported to</th>
+      <th>Incident</th><th>Severity</th><th>Status</th><th>When</th>
       <th><span class="label-line">Ack {% with %}{% set tip %}Green = acknowledged. Yellow = in progress without ack. Red = not acknowledged.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th>Resolved</th>
     </tr>
   </thead>
   <tbody>
   {% for item in incidents %}
-    <tr>
-      <td>
-        <a class="{{ incident_tone(item.status, item.severity) }}" href="/incidents/{{ item.number }}">{{ item.number }}</a>
-        {% if is_demo_incident(item) %}<span class="pill demo">DEMO</span>{% endif %}
-      </td>
-      <td>{{ item.title }}</td>
+    <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}">
+      {% include "_incident_cell.html" %}
+      <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
       <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
-      <td>{% if item.asset %}{{ item.asset.hostname }}{% else %}—{% endif %}</td>
-      <td>{{ item.started_at }}</td>
-      <td>{% if reported_to.get(item.id) %}{{ reported_to.get(item.id) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      {% include "_incident_when.html" %}
       <td>{% set ack = ack_circle(item) %}<span class="ack-dot {{ ack.css }}" title="{{ ack.label }}" aria-label="{{ ack.label }}"></span></td>
       <td>{% if item.resolved_by %}{{ item.resolved_by }}{% else %}—{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="8" class="muted">No incidents in this window.</td></tr>
+    <tr><td colspan="6" class="muted">No incidents in this window.</td></tr>
   {% endfor %}
   </tbody>
 </table>

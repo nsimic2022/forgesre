@@ -183,15 +183,135 @@ def incident_seq(number: str) -> int | None:
     return int(head)
 
 
-def format_incident_number(seq: int, when: datetime | None = None) -> str:
-    """INC-0134_16.08.2026_09:13 in the appliance timezone (wall clock)."""
+def incident_short_label(number: str) -> str:
+    """Visible list label: #42 from INC-0042_…. Full id stays in the URL."""
+    seq = incident_seq(number)
+    return f"#{seq}" if seq is not None else str(number or "")
+
+
+def parse_incident_wall(number: str) -> tuple[str, str] | None:
+    """(DD.MM.YYYY, HH:MM) baked into INC-NNNN_DD.MM.YYYY_HH:MM."""
+    parts = str(number or "").split("_")
+    if len(parts) < 3:
+        return None
+    date, clock = parts[1], parts[2]
+    if len(date) >= 10 and date[2:3] == "." and len(clock) >= 5 and clock[2:3] == ":":
+        return date[:10], clock[:5]
+    return None
+
+
+def _appliance_local(when: datetime | None = None) -> datetime:
     stamp = when or utcnow()
     if stamp.tzinfo is None:
         stamp = stamp.replace(tzinfo=timezone.utc)
     try:
-        local = stamp.astimezone(ZoneInfo(settings.timezone))
+        return stamp.astimezone(ZoneInfo(settings.timezone))
     except Exception:
-        local = stamp.astimezone(timezone.utc)
+        return stamp.astimezone(timezone.utc)
+
+
+def incident_when_label(number: str, now: datetime | None = None) -> str:
+    """Same calendar day as now → HH:MM; older → DD.MM HH:MM. Empty if the id has no wall clock."""
+    parsed = parse_incident_wall(number)
+    if parsed is None:
+        return ""
+    date, clock = parsed
+    today = _appliance_local(now).strftime("%d.%m.%Y")
+    if date == today:
+        return clock
+    return f"{date[:5]} {clock}"
+
+
+def format_started_at(value: Any) -> str:
+    """Full started_at for tooltips, without Postgres microseconds."""
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return _appliance_local(value).strftime("%d.%m.%Y %H:%M:%S")
+    text = str(value).strip().replace("T", " ")
+    if not text:
+        return ""
+    if "." in text:
+        head, tail = text.split(".", 1)
+        tz = ""
+        for idx, ch in enumerate(tail):
+            if ch in "+-Z":
+                tz = tail[idx:]
+                break
+        return f"{head}{tz}"
+    return text
+
+
+def short_when_label(value: Any, now: datetime | None = None) -> str:
+    """Same calendar day → HH:MM; older → DD.MM HH:MM from an appliance-local datetime."""
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        local = _appliance_local(value)
+        today = _appliance_local(now)
+        if local.date() == today.date():
+            return local.strftime("%H:%M")
+        return local.strftime("%d.%m %H:%M")
+    text = format_started_at(value)
+    return text[:16] if text else ""
+
+
+def severity_pill(severity: str) -> str:
+    """List severity chip: critical stays red even when the row is resolved."""
+    sev = str(severity or "").upper()
+    if sev in {"CRITICAL", "CRIT", "FATAL", "EMERGENCY"}:
+        return "crit"
+    return "warn"
+
+
+def mail_tone(status: str) -> str:
+    """Outbox left-border: failed pops, sent is quiet, generated/queued is in-flight."""
+    st = str(status or "").lower()
+    if st == "failed":
+        return "mail-fail"
+    if st == "sent":
+        return "mail-sent"
+    return "mail-queued"
+
+
+def short_recipients(target: str) -> str:
+    """Local-part, or first local-part plus leftover count. Full addresses stay on detail."""
+    parts = [item.strip() for item in str(target or "").replace(";", ",").split(",") if item.strip()]
+    if not parts:
+        return "—"
+
+    def _local(addr: str) -> str:
+        return addr.split("@", 1)[0] if "@" in addr else addr
+
+    if len(parts) == 1:
+        return _local(parts[0])
+    return f"{_local(parts[0])} +{len(parts) - 1}"
+
+
+_MAIL_PURPOSE = {
+    "incident-report": "Incident report",
+    "immediate": "Escalation",
+    "t0": "Escalation",
+    "t15": "Escalation",
+    "t30": "Escalation",
+    "t60": "Escalation",
+    "report": "Scheduled report",
+    "manual": "Compose",
+}
+
+
+def mail_purpose(step_key: str) -> str:
+    key = str(step_key or "").strip()
+    if key in _MAIL_PURPOSE:
+        return _MAIL_PURPOSE[key]
+    if len(key) > 1 and key[0] in "tT" and key[1:].isdigit():
+        return "Escalation"
+    return ""
+
+
+def format_incident_number(seq: int, when: datetime | None = None) -> str:
+    """INC-0134_16.08.2026_09:13 in the appliance timezone (wall clock)."""
+    local = _appliance_local(when)
     return f"INC-{seq:04d}_{local:%d.%m.%Y}_{local:%H:%M}"
 
 

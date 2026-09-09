@@ -153,7 +153,8 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
     client = _client()
     listing = client.get("/incidents?open=0")
     assert listing.status_code == 200
-    assert 'class="pill demo"' in listing.text
+    assert 'class="inc-demo"' in listing.text
+    assert "· DEMO" in listing.text
     assert "DEMO" in listing.text
     assert number in listing.text
 
@@ -164,7 +165,8 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
 
     history = client.get("/history")
     assert history.status_code == 200
-    assert 'class="pill demo"' in history.text
+    assert 'class="inc-demo"' in history.text
+    assert "· DEMO" in history.text
 
     esc = client.get("/escalation")
     assert esc.status_code == 200
