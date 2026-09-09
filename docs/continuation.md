@@ -1,8 +1,8 @@
-# Session handoff — 8 September 2026
+# Session handoff — 9 September 2026
 
 This file is a **session handoff for the next coding agent or contributor**. It is not an operator manual. Operators start at [install and config](install-config.md) and the [operator handbook](operator-handbook.md).
 
-Product on `main` at the end of this session: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
+Product on `main`: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
 
 1. [Who and when](#1-who-and-when)
 2. [Checked twice (pytest)](#2-checked-twice-pytest)
@@ -10,59 +10,50 @@ Product on `main` at the end of this session: **V0.7**. Repository: https://gith
 4. [What N should do on the VM](#4-what-n-should-do-on-the-vm)
 5. [Product facts not to redo](#5-product-facts-not-to-redo)
 6. [How to continue next session](#6-how-to-continue-next-session)
-7. [Out of scope](#7-out-of-scope)
-8. [Known leftovers](#8-known-leftovers)
 
 ---
 
 ## 1. Who and when
 
-**Tuesday 8 September 2026.** Operator N asked for small GUI fixes on V0.7 (dashboard bar, clickable tiles, Assets / Discovery / Incidents / History / Playbooks / Admin users). English UI. No React. Do not revert ⓘ tooltips (`410fbb5`) or `/ops` scheduled-report Edit/Clone/Remove (`edba058`).
+**Wednesday 9 September 2026.** Operator N asked for `#` comments on **every variable**, **grouped**, for both `.env` and `secrets/secrets.env` patterns, plus docs (where files live, how to edit passwords, plaintext vs bcrypt). English comments in examples (OSS docs English; Serbian-ready later). Two files stay separate — do not merge.
 
-Code and docs stay English. Replies to N are Serbian.
+**Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env`. Never print tokens. Never commit real secrets.
 
-**Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env` and will wipe the install admin the operator already uses. Never print tokens.
+Branch: `cursor/env-comments-docs-05f8`. Feature SHA: `d2db0c1`. Merged to `main` with `--no-ff` → merge SHA `7ff7bff`.
 
 ---
 
 ## 2. Checked twice (pytest)
 
-From this branch, after `pip install -r requirements-dev.txt`:
-
 ```bash
-PYTHONPATH=backend:agents python3 -m pytest tests
-PYTHONPATH=backend:agents python3 -m pytest tests
+PYTHONPATH=backend:agents python3 -m pytest tests/test_netbox_compose.py tests/test_hardening.py
 ```
 
-Pytest count after the double run on `cursor/nav-clock-resources-05f8` (rebased onto `origin/main` `471fd97` GUI small-fixes): **428 passed** (twice on the previous rebase). Was **417** after report-job actions, **425** for GUI small-fixes, **420** for clock/resources before that GUI tip. Report-job row actions CSS kept. ⓘ tooltips kept. Do not revert `471fd97`.
+**58 passed** on this change set (compose/docs assertions for examples + gitignore). Full suite not re-run for this docs/install-only pass; prior main was green.
 
-If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twice**, then `git merge --no-ff` to `main`. Branch pattern `cursor/<name>-05f8`. `create_pr` often **403** — merge `--no-ff` plus `git push origin main` still lands the change.
+`create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change (done this session).
 
 ---
 
 ## 3. Done today / on this branch
 
-Docs: GitHub README **Install / config** (after Quick start) plus [`install-config.md`](install-config.md) §15 — `./forgesre fetch-llm` lands at `data/models/model.gguf`, then profile `ai` + `ai.enabled: true`; wait `:8088/v1/models` / `./forgesre doctor`. LLM optional (~9 GB 14B). No catalog/switcher; Ollama not default; mailbox opt-in. Docs index step 1 mentions LLM as optional.
-
-N’s small GUI pass on V0.7 (English, no React): Dashboard journal warning is shorter (`banner-short`, e.g. “Journal 2 errors”) and still pale yellow; Infrastructure/Incidents headings have ⓘ (inventory counts vs incident counts) and every stat square is a full-tile shortcut to `/assets` (status filter when it matches) or `/incidents`; Assets moves verify ≠ doctor ≠ test into the title ⓘ and drops the always-on sentence (Verify buttons and Verify all stay); Discovery candidate rows get Edit / Clone / Ignore / Remove (Remove deletes the candidate; DEMO pill stays); Incidents Filter is spaced on `list-filters` and defaults to **All** (Open / Closed; History remains the archive); History Ack is a green/yellow/red status circle with Acknowledged / Not acknowledged tooltip; Playbooks drops the duplicate body paragraph, cards are two per row, each has Edit / Clone / Remove, create/edit is Save + Cancel; Administration users get the same Edit / Clone / Remove (cannot delete self or install super_admin). CSS cache-bust `app.css?v=gui-1`. Hard-refresh after `git pull origin main && ./forgesre update`. Pytest **425 passed** (twice). Do not revert ⓘ help or `/ops` report jobs.
-
-### Left nav clock + this-appliance resources (this branch)
-
-- Below Administration: larger local clock (vanilla JS, 24h tick) and this VM’s **CPU / RAM / HDD** text glance — `GET /api/v1/system/resources` (node_exporter on `:9100` if present, else `/proc` + `statvfs`). Not Grafana, not a random inventory asset.
-- Logout is shifted right (`margin-left: auto`) with a gap from the theme picker.
-- CSS/JS cache-bust `app.css?v=nav-1` and `app.js?v=nav-1`. Hard-refresh after `git pull origin main && ./forgesre update`. Does not revert ⓘ tooltips or `/ops` report-job row actions.
+- [`.env.example`](../.env.example) — full grouped English `#` comments for every deployment key (appliance, ports, profiles, NetBox URL, Compose password mirrors, generated paths, optional mailbox).
+- [`secrets/secrets.example.env`](../secrets/secrets.example.env) — committed template with empty/example placeholders; grouped comments. States clearly: **all values are plaintext** for Docker/Postgres/NetBox/Grafana/SMTP/SNMP — **not** hashes. ForgeSRE UI passwords are **bcrypt in Postgres** after first-boot seed (`backend/app/seed.py` only creates the admin when the email is missing).
+- [`.gitignore`](../.gitignore) — still ignores `secrets/secrets.env` and `secrets/*.env`, with `!secrets/secrets.example.env` so the example is tracked.
+- [`scripts/install.sh`](../scripts/install.sh) — copies examples → live files, then `set_kv` fills generated passwords (comments preserved).
+- Docs: [`install-config.md`](install-config.md) §§8/10/11/11a, [`README.md`](README.md) index, [`operator-handbook.md`](operator-handbook.md) “Where passwords live”. Changing `FORGESRE_ADMIN_PASSWORD` after first boot does **not** update the DB — documented truthfully.
 
 ---
 
 ## 4. What N should do on the VM
 
-Do **not** run `./install.sh`. Hard-refresh the UI after update (CSS/JS cache `app.css?v=nav-1` and `app.js?v=nav-1`: clock, appliance glance, logout spacing).
+Do **not** run `./install.sh`.
 
 ```bash
 git pull origin main && ./forgesre update
 ```
 
-**Enabled** = the job fires at **Next**. **Disable** keeps the row; the scheduler skips it. That is not Remove. Edit / Clone / Remove sit on each row; Cancel sits next to Save on the form.
+To inspect templates only: `.env.example` and `secrets/secrets.example.env` in the clone. Live secrets stay in `secrets/secrets.env` (mode `600`). To rotate container secrets: edit `secrets/secrets.env` → `docker compose up -d --force-recreate …` as in install-config §11a. UI password changes: Administration (bcrypt in DB), then optionally sync `FORGESRE_ADMIN_PASSWORD` for CLI fallback.
 
 NetBox: keep the **full v2 token** (shown once at create, not the 12-character key) in `NETBOX_API_TOKEN`. Recreate **core** only if secrets changed. Never print the token.
 
@@ -72,99 +63,24 @@ docker compose logs netbox | grep forgesre
 
 Expect **`skipping v1 upsert`** (v2 already in secrets) or **`v1 token ready`** (legacy 40-char). Not **`could not upsert`** for a valid v2 secret.
 
-**200** on `GET /api/dcim/devices/?limit=1` = Core can sync (Discovery yellow if empty, green if ≥1 device). **403** with a v2 secret = not the full `nbt_…` string, or core not recreated. Recreate **core**. Never print the token.
-
-Lab without image pull: `./forgesre update --offline`.
-
-Learn the box in the order in [`docs/README.md`](README.md).
-
 ---
 
 ## 5. Product facts not to redo
 
-These already work on `main`. Do not “fix” them unless N asks.
-
-- `./forgesre test` = appliance health report → `data/reports/`. `./forgesre verify` = live inventory communication. `./forgesre ping` = ICMP + exporter. `./forgesre doctor` = System Health lights. Three different commands (`test` / `verify` / `doctor`).
-- Theme toggle cycles **light → dark → system**. Left nav stays dark.
-- Dashboard demos are **one** top-right button + a closeable panel. Demo rows stay **labeled DEMO**. Demo inject is **admin**.
-- Incident ids look like `INC-0134_16.08.2026_09:13`.
-- RCA is Python under `agents/rca/`. The LLM only rewrites prose. Builtin ForgeRCA always runs first. LLM payload is compact (5000 chars); stored investigation is full.
-- Core is an SMTP **client** only. The UI has no IMAP inbox. One mail outbox: `/ops#mail`.
-- pytest is a laptop/dev dependency. The Core image must not install it.
-- Real Windows scrape is **windows_exporter :9182**, not the lab demo host.
-- Prometheus Health Open is **Targets** (`:9090/targets?search=`), not Prometheus process `/metrics`. Core `/metrics` stays.
-- Host CLI must not require sqlalchemy/PyYAML. Do not `pip install sqlalchemy` on the Ubuntu host.
-- `snmp-exporter` is a **default** compose service. No SNMP targets → doctor **paused (no SNMP targets)** (yellow), not DOWN. Do not un-pause by adding dummy devices.
-- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. `--netbox-url` remains an external override. Image pin is `netboxcommunity/netbox:v4.6.9-5.0.2`. Do not churn NetBox Hub/GHCR tags unless N asks. Prefer a NetBox UI **v2** token (full `nbt_…`) in `NETBOX_API_TOKEN`; Core sends `Authorization: Bearer`. `scripts/netbox-upsert-token.py` **skips** v1 create for that secret. A 40-character **v1 plaintext** value is still upserted as fallback (`write_enabled=False`) on the **superuser**. Success log: **`skipping v1 upsert`** or **`v1 token ready`**. **`could not upsert`** means a v1 secret never landed in the NetBox DB (UI still starts; Discovery 403 is honest). Never touch `User.is_staff` (removed in NetBox 4.5). Core is **not** a NetBox UI login. Do not drop database `forgesre` to “fix” NetBox. Health NetBox tile: UI up + 403 = **warn**, not paused. HTTP 200 with v2 is yellow (0 devices) / green (≥1).
-- NetBox UI **API token peppers not defined**: v4.5+ needs `API_TOKEN_PEPPERS`. Official image reads `API_TOKEN_PEPPER_1`. ForgeSRE generates `NETBOX_API_TOKEN_PEPPER` once in `secrets/secrets.env` (and `.env`) via `ensure-netbox-secrets.sh`. Extra config: `config/netbox/forgesre.py` → `/etc/netbox/config/forgesre.py`. Do not re-run `./install.sh`.
-- Dashboard **HOST DOWN** banner (open exporter/SNMP-down incidents). Do not redo it. That banner is **not** the Prometheus doctor journal.
-- Backup on the host dumps Postgres via `docker compose exec postgres` with the same docker rights as `./forgesre update`.
-- One restore unit = one `.tar.gz` inside `backup_<stamp>/`.
-- Host `./forgesre verify` does not import sqlalchemy (`demo_ids.py`).
-- Memory bundled alerts exist: `NodeMemoryHigh` / `WindowsMemoryHigh` at **90%**, playrules `node-memory` / `windows-memory`. Grafana is not the alarm path. Grafana doctor down is **yellow**, not a Prom FAIL.
-- Add asset: operator types **Asset ID** and **Hostname** separately. Id is immutable after create.
-- Doctor labels: **Core API** vs **Core (container)**. Core `/api/v1/health` stays a liveness dummy (always-ok). Prom readiness is `/-/ready` on `:9090`.
-- The lab SMTP catcher is gone. Do not add one.
-- Verify hops: ICMP, PORT, FAMILY, PROM, TARGET, SERIES, AM, CORE, RCA, LLM. Reachability: ping **green** ICMP ok; **yellow** ICMP fail but exporter/SNMP ok; **red** both fail.
-- Linux metrics = node_exporter **:9100**. Windows = windows_exporter **:9182**. Network = snmp_exporter :9116.
-- Bundled LLM pin = **Qwen2.5-14B-Instruct Q4_K_M** via `./forgesre fetch-llm`. Do **not** restore the GGUF catalog / Health picker.
-- `docs/architecture.md` is a **proposal**, not the appliance runtime. **architecture proposal** / **not the V0.7 appliance runtime**.
-- GUI ICMP is from the Core container (`iputils-ping` in the Dockerfile). Host `./forgesre ping` stays on the VM.
-- Jobs: **one worker thread** in Core. There is no Celery.
-- GUI list tables are **10 rows per page** (pagination already on `main`). Do not revert it.
-- `/ops#reports` scheduled jobs: **Edit / Clone / Remove / Enable** on the row; **Cancel** next to Save. **Enabled** = fire at Next; off = stored, skipped. Postgres `scheduled_reports`. No Celery.
-- Discovery **Sync NetBox**: primary (orange) admin POST when the UI answers (`/login/` or `/api/status/`). Devices API 403 is a warning, not `disabled`. First-boot (UI down) stays disabled with one sentence. Engineer/analyst see disabled + **Admin only.** Viewers cannot open `/discovery`. Never write back to NetBox. Bundled footer must not say “external instance”. Prefer UI v2 in `NETBOX_API_TOKEN`; launch skips v1 upsert for `nbt_…`; 40-char v1 is fallback. `update` `--force-recreate`s `netbox`. The chip next to Sync is status only (Not connected / API 403 / No devices / Connected) — grey/yellow/green CSS, not a second button. Sentence *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.* stays on yellow. 403 with a v1 token present says rejected (recreate netbox+core); 403 with v2 says full `nbt_…` then recreate **core** — not “token missing”.
-
-Also: `./forgesre ping` and `./forgesre verify` stay distinct from `./forgesre test` / doctor. See [`docs/llm.md`](llm.md).
+- Two files: `.env` (deployment at repo root) vs `secrets/secrets.env` (secrets). Do not merge.
+- `secrets.env` values are **plaintext** env for containers. Do not claim they are hashes.
+- UI users: bcrypt in `users.password_hash` only. Seed uses `FORGESRE_ADMIN_PASSWORD` once.
+- Comments in example files stay **English**.
+- Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. Prefer a NetBox UI **v2** token (full `nbt_…`) in `NETBOX_API_TOKEN`; Core sends `Authorization: Bearer`. `scripts/netbox-upsert-token.py` **skips** v1 create for that secret. A 40-character **v1 plaintext** value is still upserted as fallback (`write_enabled=False`) on the **superuser**. Success log: **`skipping v1 upsert`** or **`v1 token ready`**. **`could not upsert`** means a v1 secret never landed in the NetBox DB (UI still starts; Discovery 403 is honest). Never touch `User.is_staff` (removed in NetBox 4.5). Core is **not** a NetBox UI login. Do not drop database `forgesre` to “fix” NetBox. Health NetBox tile: UI up + 403 = **warn**, not paused. HTTP 200 with v2 is yellow (0 devices) / green (≥1).
+- NetBox UI **API token peppers**: v4.5+ needs `API_TOKEN_PEPPERS` / `NETBOX_API_TOKEN_PEPPER`. Official image reads `API_TOKEN_PEPPER_1`.
+- Discovery **Sync NetBox**: Devices API 403 is a warning (rejected / recreate), not “token missing” when a secret is present. Status chip: Not connected / API 403 / No devices / Connected — grey/yellow/green. Sentence *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.* stays on yellow. **Admin only** for engineer/analyst; viewers cannot open `/discovery`.
+- SNMP with no Network device + IP is **paused (no SNMP targets)** (yellow — OK).
 
 ---
 
 ## 6. How to continue next session
 
 1. `git pull origin main`.
-2. Read **this file**, then the [docs index](README.md), [`docs/llm.md`](llm.md) and [`docs/cli.md`](cli.md).
+2. Read **this file**, then the [docs index](README.md).
 3. On the VM: `git pull origin main && ./forgesre update`. Keep the full v2 token in `NETBOX_API_TOKEN`. `docker compose logs netbox | grep forgesre` should say **skipping v1 upsert** (v2) or **v1 token ready** (fallback), not could not upsert for a valid v2 secret. Never `./install.sh`. Never print tokens.
-4. `pip install -r requirements-dev.txt` if needed, then `PYTHONPATH=backend:agents python3 -m pytest tests` **twice**, then merge to `main`. Branch pattern `cursor/<name>-05f8`.
-5. Replies to N are in **Serbian**. OSS docs and code stay in **English**.
-6. `ManagePullRequest` `create_pr` often 403. `git merge --no-ff` plus `git push origin main` still lands the change.
-
----
-
-## 7. Out of scope
-
-Do not start these unless N asks:
-
-- Go / Kubernetes rewrite in [`docs/architecture.md`](architecture.md).
-- Zabbix templates, or ticketing as a second Ticket object.
-- IMAP inbox in the UI.
-- React, Tailwind, Bootstrap, PatternFly npm.
-- Fake a live Windows scrape or SNMP walk in the demo panel.
-- Explode backup tars into many small files at `data/backups/` root.
-- Grafana deep-link on the asset page (N said later).
-- Rewriting all of Prometheus `alerts.yml` per asset.
-- Load, inodes, blackbox, mysql/redis exporters in compose.
-- 50 collectors dropdown on Add asset.
-- Celery / Redis job queue / `SKIP LOCKED`.
-- A second log stack (host Alloy for every asset).
-- NetBox Docker Hub / GHCR tag churn (separate).
-- Rewriting discovery as nmap.
-- Making Ollama the product default (N will decide later).
-- Re-pinning bundled `fetch-llm` to Qwen2.5-1.5B or another GGUF.
-- Restoring the llama.cpp GGUF catalog / Health model switcher.
-- Raising `timeout_seconds` in `config/forgesre.example.yml` back to 600.
-- Reverting GUI list pagination.
-
----
-
-## 8. Known leftovers
-
-- Many remote `origin/cursor/*-05f8` branches still exist and are **already merged to `main`**.
-- Scheduled `/ops` reports are still plain text. Row actions (Edit / Clone / Remove / Enable) are done; do not add an IMAP inbox or Celery.
-- ⓘ GUI help tooltips are on `main`. This branch rebased; `/ops` keeps the include.
-- Old backups already on the VM as `data/backups/forgesre-*.tar.gz` are still valid; new runs write folders.
-- Grafana deep-link from an asset is still later.
-- Prometheus global rules may still fire for a host whose ForgeSRE alarm is disabled or raised; ForgeSRE will not open the incident when the webhook carries the value.
-- Alloy still only ships appliance Core logs as `forge-demo-01`. Real hosts have no Loki until that changes. Limitation: **no host logs shipped**.
-- LLM rewrite can still occupy the single job loop for up to `timeout_seconds` (default 90 in example.yml; N’s live yml may be 300) after reports in that pass have already run.
-- `config/forgesre.yml` on a live VM is gitignored; a 300s or 600s timeout already written there is not overwritten by `update`.
-- Loki/Alloy still FAIL doctor when those containers are dark (not Grafana). Only Grafana was moved to warn.
+4. Branch pattern `cursor/<name>-05f8`. Prefer `git merge --no-ff` to `main` when PR create is 403. Replies to N are in **Serbian**. OSS docs and code stay in **English**.
