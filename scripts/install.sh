@@ -202,6 +202,20 @@ wizard() {
   fi
 }
 
+# Set KEY=value in a dotenv file (preserves comments / grouping from the example).
+set_kv() {
+  local file="$1" key="$2" value="$3"
+  if [[ ! -f "$file" ]]; then
+    printf '%s=%s\n' "$key" "$value" > "$file"
+    return
+  fi
+  if grep -qE "^${key}=" "$file"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+  fi
+}
+
 write_files() {
   mkdir -p "$DATA_DIR"/{postgres,prometheus,alertmanager,loki,grafana,logs,alloy,models,backups,generated,netbox/media,netbox/reports,netbox/scripts,netbox/redis} secrets config
   touch "$DATA_DIR/logs/forgesre.log"
@@ -229,26 +243,31 @@ write_files() {
   fi
 
   umask 077
-  cat > "$ROOT/secrets/secrets.env" <<EOF
-POSTGRES_PASSWORD=${pg_pass}
-FORGESRE_ADMIN_EMAIL=admin@forgesre.local
-FORGESRE_ADMIN_PASSWORD=${admin_pass}
-GRAFANA_ADMIN_PASSWORD=${gf_pass}
-ALERTMANAGER_WEBHOOK_TOKEN=${webhook}
-SECRET_KEY=${secret}
-SMTP_USERNAME=
-SMTP_PASSWORD=
-NETBOX_API_TOKEN=${nb_token}
-NETBOX_API_TOKEN_PEPPER=${nb_pepper}
-API_TOKEN_PEPPER_1=${nb_pepper}
-NETBOX_DB_PASSWORD=${nb_db}
-NETBOX_REDIS_PASSWORD=${nb_redis}
-NETBOX_SECRET_KEY=${nb_secret}
-NETBOX_SUPERUSER_NAME=admin
-NETBOX_SUPERUSER_EMAIL=admin@forgesre.local
-NETBOX_SUPERUSER_PASSWORD=${nb_admin}
-SNMP_COMMUNITY=public
-EOF
+  # Prefer commented template from the repo, then substitute generated passwords.
+  if [[ -f "$ROOT/secrets/secrets.example.env" ]]; then
+    cp "$ROOT/secrets/secrets.example.env" "$ROOT/secrets/secrets.env"
+  else
+    : > "$ROOT/secrets/secrets.env"
+  fi
+  set_kv "$ROOT/secrets/secrets.env" POSTGRES_PASSWORD "$pg_pass"
+  set_kv "$ROOT/secrets/secrets.env" FORGESRE_ADMIN_EMAIL "admin@forgesre.local"
+  set_kv "$ROOT/secrets/secrets.env" FORGESRE_ADMIN_PASSWORD "$admin_pass"
+  set_kv "$ROOT/secrets/secrets.env" GRAFANA_ADMIN_PASSWORD "$gf_pass"
+  set_kv "$ROOT/secrets/secrets.env" ALERTMANAGER_WEBHOOK_TOKEN "$webhook"
+  set_kv "$ROOT/secrets/secrets.env" SECRET_KEY "$secret"
+  set_kv "$ROOT/secrets/secrets.env" SMTP_USERNAME ""
+  set_kv "$ROOT/secrets/secrets.env" SMTP_PASSWORD ""
+  set_kv "$ROOT/secrets/secrets.env" NETBOX_API_TOKEN "$nb_token"
+  set_kv "$ROOT/secrets/secrets.env" SUPERUSER_API_TOKEN "$nb_token"
+  set_kv "$ROOT/secrets/secrets.env" NETBOX_API_TOKEN_PEPPER "$nb_pepper"
+  set_kv "$ROOT/secrets/secrets.env" API_TOKEN_PEPPER_1 "$nb_pepper"
+  set_kv "$ROOT/secrets/secrets.env" NETBOX_DB_PASSWORD "$nb_db"
+  set_kv "$ROOT/secrets/secrets.env" NETBOX_REDIS_PASSWORD "$nb_redis"
+  set_kv "$ROOT/secrets/secrets.env" NETBOX_SECRET_KEY "$nb_secret"
+  set_kv "$ROOT/secrets/secrets.env" NETBOX_SUPERUSER_NAME "admin"
+  set_kv "$ROOT/secrets/secrets.env" NETBOX_SUPERUSER_EMAIL "admin@forgesre.local"
+  set_kv "$ROOT/secrets/secrets.env" NETBOX_SUPERUSER_PASSWORD "$nb_admin"
+  set_kv "$ROOT/secrets/secrets.env" SNMP_COMMUNITY "public"
   chmod 600 "$ROOT/secrets/secrets.env"
 
   local compose_profiles="" llm_mode="disabled" ai_enabled="false" llm_threads="8"
@@ -293,33 +312,36 @@ EOF
     cidrs_yaml+="]"
   fi
 
-  cat > "$ROOT/.env" <<EOF
-FORGESRE_VERSION=0.7.0
-FORGESRE_DOMAIN=forgesre.local
-FORGESRE_DATA=${DATA_DIR}
-FORGESRE_TIMEZONE=${TIMEZONE}
-FORGESRE_HTTP_PORT=${HTTP_PORT}
-GRAFANA_PORT=3000
-FORGESRE_PROFILE=${PROFILE}
-COMPOSE_PROFILES=${compose_profiles}
-FORGESRE_LLM_THREADS=${llm_threads}
-POSTGRES_PASSWORD=${pg_pass}
-GRAFANA_ADMIN_PASSWORD=${gf_pass}
-NETBOX_PORT=8001
-NETBOX_URL=${NETBOX_URL}
-NETBOX_DB_PASSWORD=${nb_db}
-NETBOX_REDIS_PASSWORD=${nb_redis}
-NETBOX_SECRET_KEY=${nb_secret}
-NETBOX_API_TOKEN=${nb_token}
-NETBOX_API_TOKEN_PEPPER=${nb_pepper}
-NETBOX_SUPERUSER_NAME=admin
-NETBOX_SUPERUSER_EMAIL=admin@forgesre.local
-NETBOX_SUPERUSER_PASSWORD=${nb_admin}
-ALERTMANAGER_CONFIG=${DATA_DIR}/generated/alertmanager.yml
-PROMETHEUS_CONFIG=${DATA_DIR}/generated/prometheus.yml
-PROMETHEUS_ALERTS=${DATA_DIR}/generated/alerts.yml
-SNMP_EXPORTER_CONFIG=${DATA_DIR}/generated/snmp.yml
-EOF
+  if [[ -f "$ROOT/.env.example" ]]; then
+    cp "$ROOT/.env.example" "$ROOT/.env"
+  else
+    : > "$ROOT/.env"
+  fi
+  set_kv "$ROOT/.env" FORGESRE_VERSION "0.7.0"
+  set_kv "$ROOT/.env" FORGESRE_DOMAIN "forgesre.local"
+  set_kv "$ROOT/.env" FORGESRE_DATA "${DATA_DIR}"
+  set_kv "$ROOT/.env" FORGESRE_TIMEZONE "${TIMEZONE}"
+  set_kv "$ROOT/.env" FORGESRE_HTTP_PORT "${HTTP_PORT}"
+  set_kv "$ROOT/.env" GRAFANA_PORT "3000"
+  set_kv "$ROOT/.env" FORGESRE_PROFILE "${PROFILE}"
+  set_kv "$ROOT/.env" COMPOSE_PROFILES "${compose_profiles}"
+  set_kv "$ROOT/.env" FORGESRE_LLM_THREADS "${llm_threads}"
+  set_kv "$ROOT/.env" POSTGRES_PASSWORD "$pg_pass"
+  set_kv "$ROOT/.env" GRAFANA_ADMIN_PASSWORD "$gf_pass"
+  set_kv "$ROOT/.env" NETBOX_PORT "8001"
+  set_kv "$ROOT/.env" NETBOX_URL "${NETBOX_URL}"
+  set_kv "$ROOT/.env" NETBOX_DB_PASSWORD "$nb_db"
+  set_kv "$ROOT/.env" NETBOX_REDIS_PASSWORD "$nb_redis"
+  set_kv "$ROOT/.env" NETBOX_SECRET_KEY "$nb_secret"
+  set_kv "$ROOT/.env" NETBOX_API_TOKEN "$nb_token"
+  set_kv "$ROOT/.env" NETBOX_API_TOKEN_PEPPER "$nb_pepper"
+  set_kv "$ROOT/.env" NETBOX_SUPERUSER_NAME "admin"
+  set_kv "$ROOT/.env" NETBOX_SUPERUSER_EMAIL "admin@forgesre.local"
+  set_kv "$ROOT/.env" NETBOX_SUPERUSER_PASSWORD "$nb_admin"
+  set_kv "$ROOT/.env" ALERTMANAGER_CONFIG "${DATA_DIR}/generated/alertmanager.yml"
+  set_kv "$ROOT/.env" PROMETHEUS_CONFIG "${DATA_DIR}/generated/prometheus.yml"
+  set_kv "$ROOT/.env" PROMETHEUS_ALERTS "${DATA_DIR}/generated/alerts.yml"
+  set_kv "$ROOT/.env" SNMP_EXPORTER_CONFIG "${DATA_DIR}/generated/snmp.yml"
 
   local grafana_enabled="true" loki_enabled="true"
   [[ "$BUNDLED_GRAFANA" == "yes" ]] || grafana_enabled="false"

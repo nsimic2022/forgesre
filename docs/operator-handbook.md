@@ -44,7 +44,7 @@ Follow this order on a live box. This handbook is **why and when**. Typed comman
 2. **Login.** `http://<VM-IP>:8080` with `installation-report.md` / `secrets/secrets.env` (§5).
 3. **System Health** (`/health-ui`) = `./forgesre doctor`. Open Grafana only here. Alarm path is Prometheus → Alertmanager → Core. NetBox UI up with API 403 is yellow **warn**, not paused. SNMP with no Network device + IP is **paused (no SNMP targets)** (yellow — leave it).
 4. **Assets** (`/assets`). Local inventory is the monitoring source of truth. Add / Edit / Verify.
-5. **Discovery vs NetBox** (`/discovery`). **Scan now** unions live `discovery.cidrs` with **auto-detected connected IPv4 nets** (real prefixlen — not a hardcoded `/24`). Candidate table: open ports, node_exporter, windows_exporter, SNMP. **Sync NetBox** sits beside Scan now (read-only from bundled `:8001`). Empty NetBox is **yellow No devices** — that is OK. Approve or Ignore; Manual Assets stay SoT. Manual Assets stay SoT.
+5. **Discovery vs NetBox** (`/discovery`). **Scan now** unions live `discovery.cidrs` with **auto-detected connected IPv4 nets** (real prefixlen — not a hardcoded `/24`). Candidate table: open ports, node_exporter, windows_exporter, SNMP. **Sync NetBox** sits beside Scan now (read-only from bundled `:8001`). Empty NetBox is **yellow No devices** — that is OK. Approve or Ignore; Manual Assets stay SoT.
 6. **Incidents** (`/incidents`) then **History** (`/history`). IDs look like `INC-0134_16.08.2026_09:13`.
 7. **ForgeRCA vs ForgeAI.** Open ForgeRCA on the incident. ForgeRCA (Python) always first. ForgeAI only rewrites prose (optional, default 90s timeout, one worker thread).
 8. **verify ≠ doctor ≠ test.** `./forgesre verify` = live inventory path. `./forgesre doctor` = Health lights. `./forgesre test` = appliance report → `data/reports/`.
@@ -243,11 +243,14 @@ ForgeSRE UI users are **not** Linux/SSH accounts.
 
 | What | Where | Protected? |
 |---|---|---|
-| Every UI user’s login password | PostgreSQL table `users.password_hash` | **Yes** — bcrypt hash. The plaintext is never stored and never shown in Administration. |
-| Install bootstrap admin | `secrets/secrets.env` (`FORGESRE_ADMIN_EMAIL` / `FORGESRE_ADMIN_PASSWORD`) and `installation-report.md` | File on disk, mode `600`. This is a **copy for first login / CLI fallback**, not the live hash. Changing the password in Administration updates Postgres only. |
-| Session cookie | httponly, 12 hours | Signed with `SECRET_KEY` (also in `secrets/secrets.env`). |
+| Every UI user’s login password | PostgreSQL table `users.password_hash` | **Yes** — bcrypt hash (`backend/app/security.py`). The plaintext is never stored and never shown in Administration. |
+| Install bootstrap admin | `secrets/secrets.env` (`FORGESRE_ADMIN_EMAIL` / `FORGESRE_ADMIN_PASSWORD`) and `installation-report.md` | File on disk, mode `600`. Values in that file are **plaintext** (not hashes). First Core boot seeds bcrypt into Postgres when the email row is missing (`backend/app/seed.py`). Changing `FORGESRE_ADMIN_PASSWORD` in the file after first boot does **not** update the DB — use Administration, and keep the file in sync for CLI fallback. |
+| Session cookie | httponly, 12 hours | Signed with `SECRET_KEY` (also **plaintext** in `secrets/secrets.env`). |
+| NetBox / Postgres / Grafana / SMTP / SNMP | Same `secrets/secrets.env` | **Plaintext** env for containers. Rotate by editing the file and recreating the affected service — see [`install-config.md` §11a](install-config.md#11a-changing-passwords). |
 
-`data/` (Postgres volume), `.env`, and `secrets/` are gitignored. Do not commit them. SMTP app passwords and Grafana live in the same `secrets/secrets.env` file — different keys, same protection.
+Templates (committed, no real secrets): [`.env.example`](../.env.example) and [`secrets/secrets.example.env`](../secrets/secrets.example.env). Live `.env` and `secrets/secrets.env` are gitignored.
+
+`data/` (Postgres volume), `.env`, and `secrets/secrets.env` are gitignored. Do not commit them.
 
 If you rotate the install admin in the UI, also edit `FORGESRE_ADMIN_PASSWORD` in `secrets/secrets.env` if you still use `./forgesre` commands that log in with that file.
 
@@ -785,7 +788,7 @@ Say this out loud so lab expectations stay honest:
 - Assets can be added, edited, cloned, and removed (analyst+). Lab `forge-demo-*` rows can be removed; they do not come back on update. Users can be edited and removed on Administration (not the install super admin, not yourself). Escalation policies can be created in the UI; there is no ticketing object.
 - Example YAML in `config/examples/` is not applied automatically.
 - Bundled alert rules include demo gauges, SNMP `up` / interface-down, Linux `node_exporter` (down / disk **90%** / **memory 90%** / CPU 95%), and Windows `windows_exporter` (down / volume **90%** / **memory 90%** / CPU 90%). Extra rules go in `alerts.local.yml`. **Grafana is not the alarm path** — it is graphs only. Incidents come from Prometheus → Alertmanager → ForgeSRE.
-- Discovery is TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, 256 hosts max. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.
+- Discovery is TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, YAML `discovery.cidrs` ∪ auto-detected connected nets, **256 hosts/CIDR** and **1024 total**. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.
 - Viewer cannot open Playrules, Playbooks, Escalation, Console, or Discovery (403).
 - Optional TLS is an example Caddyfile, not a default container.
 - NetBox is read-only. Bundled UI is on by default; Core never writes back.

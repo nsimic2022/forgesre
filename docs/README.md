@@ -4,7 +4,7 @@ The GitHub README is the product summary (what ForgeSRE is, what it is not, firs
 
 **Why / when:** [operator handbook](operator-handbook.md) (source of truth for running the box).  
 **Commands:** [cli.md](cli.md).  
-**New Ubuntu VM:** [install-config.md](install-config.md).  
+**New Ubuntu VM:** [install-config.md](install-config.md) (`.env` at repo root = deployment; `secrets/secrets.env` = plaintext secrets; UI passwords = bcrypt in Postgres).  
 **Existing VM:** `git pull origin main && ./forgesre update` — never `./install.sh` again.
 
 ---
