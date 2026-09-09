@@ -15,7 +15,7 @@ Product on `main`: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
 
 ## 1. Who and when
 
-**Wednesday 9 September 2026.** Operator N asked whether Discovery autodetection was **done on `main`**. It was **not** on `origin/main` at the start of this session. Product work landed as `6f003a6` (YAML `discovery.cidrs` ∪ auto-detected connected IPv4 nets, real prefixlen, candidate columns, Scan now | NetBox 50/50). Follow-up `986178c` isolates pytest sqlite.
+**Wednesday 9 September 2026.** Operator N asked whether Discovery autodetection was **done on `main`**. Product work: YAML `discovery.cidrs` ∪ auto-detected connected IPv4 nets. Final `--no-ff` merge to `main`: **`a0c68c9`**.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env`. Never print tokens. Never commit real secrets.
 
