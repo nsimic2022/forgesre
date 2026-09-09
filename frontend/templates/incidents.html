@@ -23,13 +23,17 @@
   <tbody>
   {% for item in incidents %}
     <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}">
-      {% include "_incident_cell.html" %}
-      <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
+      <td class="inc-cell">
+        {% include "_incident_id_link.html" %}
+        <div class="inc-title"{% if item.title %} title="{{ item.title }}"{% endif %}>{{ item.title }}</div>
+        {% if item.asset and item.asset.hostname %}<div class="inc-host">{{ item.asset.hostname }}</div>{% endif %}
+      </td>
+      <td><span class="pill {{ 'crit' if item.severity|upper in ['CRITICAL', 'CRIT', 'FATAL', 'EMERGENCY'] else 'warn' }}">{{ item.severity }}</span></td>
       <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
-      {% include "_incident_when.html" %}
+      <td class="inc-when"><span title="{{ format_started_at(item.started_at) }}">{{ incident_when_label(item.number) or format_started_at(item.started_at) }}</span></td>
     </tr>
   {% else %}
-    <tr><td colspan="4" class="muted">No incidents in this filter.{% if status_group != "all" %} Try All or <a href="/history">History</a>.{% endif %}</td></tr>
+    <tr><td colspan="4" class="muted">No incidents match this filter.{% if status_group != "all" %} Try All or <a href="/history">History</a>.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>

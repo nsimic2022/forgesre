@@ -80,6 +80,7 @@ def test_incidents_default_is_all_and_filter_is_spaced():
     listed = client.get("/incidents")
     assert listed.status_code == 200
     assert "list-filters" in listed.text
+    assert "incidents-filters" in listed.text
     assert 'value="all"' in listed.text
     assert "Open/firing" not in listed.text
     form = listed.text.split('action="/incidents"', 1)[1].split("</form>", 1)[0]

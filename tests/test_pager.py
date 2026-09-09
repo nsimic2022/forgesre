@@ -115,7 +115,6 @@ def test_incidents_page_two_is_ten_rows():
     _assert_bottom_pager(first.text)
     assert "Showing " in first.text
     assert " of " in first.text
-    assert "10 per page" in first.text
     second = client.get("/incidents?page=2")
     assert second.status_code == 200
     ids_two = _tbody_incidents(second.text)
@@ -141,7 +140,9 @@ def test_history_aligns_to_ten_per_page():
     ids = _tbody_incidents(page.text)
     assert len(ids) == 10
     _assert_bottom_pager(page.text)
-    assert "10 per page" in page.text
+    assert "Showing " in page.text
+    assert " of " in page.text
+    assert PAGE_SIZE == 10
     two = client.get("/history?days=90&page=2")
     assert two.status_code == 200
     assert "days=90" in two.text

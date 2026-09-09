@@ -74,6 +74,23 @@ def test_incident_number_has_local_date_and_short_seq():
         assert number == "INC-0134_16.08.2026_09:13"
 
 
+def test_incident_list_display_helpers_short_id_and_when():
+    from datetime import datetime, timezone
+
+    from app.services import format_started_at, incident_short_label, incident_when_label
+
+    assert incident_short_label("INC-0042_09.09.2026_13:07") == "#42"
+    assert incident_short_label("INC-000012") == "#12"
+    same_day = datetime(2026, 9, 9, 12, 0, tzinfo=timezone.utc)
+    older = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+    assert incident_when_label("INC-0042_09.09.2026_13:07", now=same_day) == "13:07"
+    assert incident_when_label("INC-0042_09.09.2026_13:07", now=older) == "09.09 13:07"
+    stamp = datetime(2026, 9, 9, 11, 7, 5, 123456, tzinfo=timezone.utc)
+    shown = format_started_at(stamp)
+    assert "123456" not in shown
+    assert "11:07:05" in shown or "13:07:05" in shown
+
+
 def test_new_incident_number_increments_legacy_six_digit():
     db = _db()
     from app.models import Incident
