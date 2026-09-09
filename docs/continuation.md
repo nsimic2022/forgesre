@@ -19,7 +19,7 @@ Product on `main`: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env`. Never print tokens. Never commit real secrets.
 
-Branch: `cursor/env-comments-docs-05f8`. Tip: `fd2133c` (+ follow-ups). On `main` via `--no-ff` (latest merge `81a56ea`).
+Branch: `cursor/env-comments-docs-05f8`. Tip: `06e6eac`. On `main` via `--no-ff` (latest merge `c3273e2`).
 
 ---
 
