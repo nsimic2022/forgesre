@@ -42,9 +42,9 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-### Discovery multi-CIDR autodetection (not /24-only)
+### Discovery multi-CIDR autodetection (not hardcoded /24)
 
-- **Scan now** enumerates **all connected IPv4 networks** on the appliance (Core `network_mode: host`) with each interface’s **real prefixlen** — never hardcodes `/24`.
+- **Scan now** enumerates **all connected IPv4 networks** on the appliance (Core `network_mode: host`) with each interface’s **real prefixlen** — never hardcodes `/24` (N rejected `/24`-only).
 - Skips loopback, link-local, multicast, `0.0.0.0/0`, and Docker bridges (`docker0`, `br-*`, `veth*`) by default.
 - UI prefills saved `discovery.cidrs` or detected CIDRs; operator may edit; Scan now **saves** to live YAML and probes.
 - Limits stay **256/CIDR**, **1024** total; huge prefixes truncate with a **UI warning**. Ports: TCP **22, 80, 443, 9100, 9182** + SNMP **UDP/161**. Not nmap. Approve queue unchanged.
