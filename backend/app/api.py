@@ -37,7 +37,6 @@ from app.inventory import (
     ignore_candidate,
     is_snmp_asset,
     persist_live_classification,
-    run_scan,
     sd_targets,
     sd_snmp_targets,
     seed_demo_candidate,
@@ -676,34 +675,60 @@ def discovery_scan(
     user: User = Depends(require("write_assets")),
     cidrs: list[str] | None = None,
 ) -> dict:
-    """Scan YAML discovery.cidrs ∪ auto-detected connected nets (deduped)."""
+    """Queue YAML ∪ auto discovery probe. Does not run_scan on the request thread."""
     from discovery import normalize_cidrs
+    from app.jobs import enqueue_discovery_scan, active_discovery_scan
 
-    parsed = normalize_cidrs(cidrs or [])
-    if parsed:
-        settings.set_discovery_cidrs(parsed)
-        result = run_scan(db, cidrs=parsed)
-    else:
-        result = run_scan(db)
-    if result.get("skipped_reason") == "empty_cidrs":
-        raise HTTPException(
-            status_code=400,
-            detail="No discovery.cidrs and no auto-detected connected nets — nothing to scan.",
+    try:
+        parsed = normalize_cidrs(cidrs or [])
+        saved = bool(parsed)
+        if saved:
+            try:
+                settings.set_discovery_cidrs(parsed)
+            except OSError:
+                log.exception("API discovery.cidrs persist failed")
+        already = active_discovery_scan(db) is not None
+        job = enqueue_discovery_scan(
+            db,
+            actor=user.email,
+            cidrs=parsed if saved else None,
+            saved=saved,
         )
-    audit(
-        db,
-        "discovery.scan",
-        actor=user.email,
-        data={
-            "cidrs": result.get("cidrs"),
-            "yaml": result.get("yaml"),
-            "auto": result.get("auto"),
-            "source": result.get("source"),
-            "found": result.get("found"),
-        },
-        commit=True,
-    )
-    return result
+        audit(
+            db,
+            "discovery.scan",
+            actor=user.email,
+            data={
+                "queued": True,
+                "job_id": job.id if job else None,
+                "cidrs": parsed if saved else None,
+                "saved": saved,
+                "already": already,
+            },
+            commit=True,
+        )
+        return {
+            "queued": True,
+            "already": already,
+            "job_id": job.id if job else None,
+            "status": job.status if job else "pending",
+            "kind": "discovery_scan",
+            "saved": saved,
+            "cidrs": parsed if saved else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.exception("API discovery scan failed")
+        report(
+            db,
+            "discovery",
+            "scan",
+            "error",
+            summary="Could not queue discovery scan",
+            detail=str(exc),
+        )
+        return {"queued": False, "error": str(exc)[:500], "kind": "discovery_scan"}
 
 
 

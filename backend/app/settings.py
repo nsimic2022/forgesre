@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+log = logging.getLogger("forgesre")
 
 
 def _repo_root() -> Path:
@@ -182,28 +185,43 @@ class Settings:
         return [str(item).strip() for item in raw if str(item).strip()]
 
     def set_discovery_cidrs(self, cidrs: list[str] | str | None) -> list[str]:
-        """Write discovery.cidrs to the live YAML and refresh in-memory settings."""
+        """Write discovery.cidrs to the live YAML and refresh in-memory settings.
+
+        In-memory YAML is always updated so this Core process can scan. A
+        read-only bind mount used to raise EROFS and 500 the Discovery POST.
+        """
         from discovery import normalize_cidrs
 
         cleaned = normalize_cidrs(cidrs)
         path = self.config_path
         data: dict[str, Any] = {}
-        if path.exists():
-            with path.open() as handle:
-                data = yaml.safe_load(handle) or {}
-        elif self.yaml:
-            data = dict(self.yaml)
-        discovery = dict(data.get("discovery") or {})
+        try:
+            if path.exists():
+                with path.open() as handle:
+                    loaded = yaml.safe_load(handle) or {}
+                data = loaded if isinstance(loaded, dict) else {}
+            elif isinstance(self.yaml, dict):
+                data = dict(self.yaml)
+        except OSError as exc:
+            log.exception("could not read %s for discovery.cidrs", path)
+            if isinstance(self.yaml, dict):
+                data = dict(self.yaml)
+            raise OSError(f"could not read {path}: {exc}") from exc
+        discovery = dict(data.get("discovery") or {}) if isinstance(data.get("discovery"), dict) else {}
         discovery["cidrs"] = cleaned
         if "enabled" not in discovery:
             discovery["enabled"] = True
         if "mode" not in discovery:
             discovery["mode"] = "semi-automatic"
         data["discovery"] = discovery
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w") as handle:
-            yaml.safe_dump(data, handle, default_flow_style=False, sort_keys=False, allow_unicode=True)
         self.yaml = data
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("w") as handle:
+                yaml.safe_dump(data, handle, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        except OSError as exc:
+            log.exception("could not persist discovery.cidrs to %s", path)
+            raise
         return cleaned
 
     def reload_yaml(self) -> None:

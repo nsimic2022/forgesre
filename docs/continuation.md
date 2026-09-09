@@ -15,11 +15,11 @@ Product on `main`: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
 
 ## 1. Who and when
 
-**Wednesday 9 September 2026.** Core failed to start: Postgres `DatatypeMismatch` on `ALTER TABLE discovery_candidates ADD COLUMN snmp_ok BOOLEAN DEFAULT 0`. Final `--no-ff` merge to `main`: **`ee6aed5`**.
+**Wednesday 9 September 2026.** Discovery **Save & scan** / **Scan now** 500’d (read-only YAML mount + in-request probe). Scan is a Postgres job; YAML mount is rw; autodetect never 500s. Branch: `cursor/discovery-scan-500-05f8`. Prefer `git merge --no-ff` when PR create is 403.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env`. Never print tokens. Never commit real secrets.
 
-Branch: `cursor/fix-snmp-ok-bool-05f8`. Prefer `git merge --no-ff` when PR create is 403.
+Replies to N are in **Serbian**. OSS docs and code stay in **English**.
 
 ---
 
@@ -30,23 +30,22 @@ PYTHONPATH=backend:agents python3 -m pytest
 PYTHONPATH=backend:agents python3 -m pytest
 ```
 
-**438 passed** twice. `create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
+**448 passed** twice. Record pass counts after both runs. `create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
 
 ---
 
 ## 3. Done today / on this branch
 
-### Postgres boolean defaults for discovery flags
+### Discovery scan is a Postgres job (not inline, not Celery)
 
-- `migrate.py` now uses `BOOLEAN DEFAULT FALSE` for `snmp_ok`, `node_exporter`, and `windows_exporter` on `discovery_candidates`. Postgres rejects integer `DEFAULT 0` on boolean columns.
-- SQLite `scheduled_reports.enabled BOOLEAN DEFAULT 1` is unchanged (Postgres path already used `TRUE`).
-- Did not touch Core 8080 / Discovery UI files held by a parallel agent.
-
-Discovery scan (already on `main`): YAML `discovery.cidrs` ∪ auto-detected connected IPv4 nets with real prefixes. Candidate table still has **Open ports**, **node_exporter**, **windows_exporter**, **SNMP**.
+- `POST /discovery/scan` (**Save & scan** and **Scan now**) and `POST /api/v1/discovery/scan` **enqueue** `jobs.kind=discovery_scan` with `status=pending`. They do **not** call `run_scan` on the request thread.
+- `_jobs_loop` / `run_pending_jobs` executes `run_scan` in try/except. Probe exceptions → `job.error` + Journal (`discovery` / `scan`) when they escape the scan; per-host probe failures are logged and skipped so one SNMP GET cannot abort the job. uvicorn stays up.
+- HTTP always **redirects** with a flash (`Scan queued…`). Duplicate clicks reuse the pending/running row.
+- Layout: **Save & scan** | **Scan now** 50/50 in `.discovery-scan-actions`; Scan card | NetBox **50/50** (`.discovery-actions`). Long probe copy lives in ⓘ. CSS `app.css?v=disc-500`.
+- `docker-compose.yml` mounts `config/forgesre.yml` **rw** so Save & scan can persist `discovery.cidrs` (`:ro` was EROFS → HTTP 500). `scan_plan` no longer walks a `/8` just to count hosts.
+- YAML ∪ auto-detect (real prefixes) is unchanged. No Celery. One worker thread.
 
 Do not revert ⓘ tooltips, nav clock/resources, `/ops` report-job row actions, or `.env` / `secrets.example.env` **service-group** comments.
-
-Core image installs **iproute2** (`ip -4 addr`) plus **iputils-ping**. Autodetect also has an ioctl fallback if `ip` is missing. Tests set `FORGESRE_DISCOVERY_AUTO=0` so pytest never probes the live LAN.
 
 ---
 
@@ -54,13 +53,11 @@ Core image installs **iproute2** (`ip -4 addr`) plus **iputils-ping**. Autodetec
 
 Do **not** run `./install.sh`.
 
-Core is down until this migrate fix is applied. Then:
-
 ```bash
 git pull origin main && ./forgesre update
 ```
 
-SHA: **`ee6aed5`**. After Core is up, open **Discovery**. Review autodetected connected CIDRs (edit YAML extras if needed), then **Scan now**. **Sync NetBox** sits beside it (read-only). Approve / Ignore as before; manual Assets stay SoT.
+Open **Discovery** (hard-refresh). **Save & scan** / **Scan now** should return immediately (flash: queued), not a black 500. Candidates appear after the job finishes; `./forgesre jobs` shows `discovery_scan`. **Sync NetBox** sits beside Scan now (read-only). Approve / Ignore as before; manual Assets stay SoT.
 
 `./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: **no host logs shipped**. [architecture.md](architecture.md) is a long-term **architecture proposal**, not the V0.7 appliance runtime.
 
@@ -77,6 +74,7 @@ Expect **`skipping v1 upsert`** (v2 already in secrets) or **`v1 token ready`** 
 ## 5. Product facts not to redo
 
 - Discovery **Scan now** = YAML `discovery.cidrs` ∪ auto-detected connected IPv4 nets (real prefixes). Not `/24`-only. Not nmap. Approve still required in semi-automatic mode.
+- Discovery **Save & scan** / **Scan now** enqueue Postgres `discovery_scan`. Never run `run_scan` inline on the UI request. No Celery.
 - Discovery candidate booleans (`snmp_ok`, `node_exporter`, `windows_exporter`) migrate with `BOOLEAN DEFAULT FALSE`. Postgres rejects `DEFAULT 0`.
 - Two files: `.env` (deployment at repo root) vs `secrets/secrets.env` (secrets). Do not merge.
 - Example comments stay **English** and **grouped by service**.

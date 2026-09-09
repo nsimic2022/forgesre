@@ -253,22 +253,38 @@ def run_scan(
     from discovery import normalize_cidrs, probe_host, resolve_scan_cidrs, scan_plan
 
     yaml_side = list(cidrs) if cidrs is not None else list(settings.discovery_cidrs)
-    if merge_auto:
-        resolved = resolve_scan_cidrs(yaml_side, ip_output=ip_output)
-    else:
+    try:
+        if merge_auto:
+            resolved = resolve_scan_cidrs(yaml_side, ip_output=ip_output)
+        else:
+            cleaned = normalize_cidrs(yaml_side)
+            plan = scan_plan(cleaned)
+            resolved = {
+                "cidrs": cleaned,
+                "yaml": cleaned,
+                "auto": [],
+                "source": "yaml" if cleaned else "none",
+                "warnings": list(plan["warnings"]),
+                "hosts": list(plan["hosts"]),
+                "host_count": int(plan["total"]),
+                "truncated": bool(plan["truncated"]),
+            }
+    except Exception as exc:
+        log.exception("discovery resolve_scan_cidrs failed")
         cleaned = normalize_cidrs(yaml_side)
-        plan = scan_plan(cleaned)
-        resolved = {
+        return {
+            "found": 0,
+            "skipped": 0,
             "cidrs": cleaned,
             "yaml": cleaned,
             "auto": [],
             "source": "yaml" if cleaned else "none",
-            "warnings": list(plan["warnings"]),
-            "hosts": list(plan["hosts"]),
-            "host_count": int(plan["total"]),
-            "truncated": bool(plan["truncated"]),
+            "warnings": [f"autodetect skipped: {type(exc).__name__}"],
+            "skipped_reason": "resolve_failed" if not cleaned else "",
+            "hosts_planned": 0,
+            "truncated": False,
         }
-    targets = list(resolved["cidrs"])
+    targets = list(resolved.get("cidrs") or [])
     hosts = list(resolved.get("hosts") or [])
     warnings = list(resolved.get("warnings") or [])
     if not targets:
@@ -300,7 +316,11 @@ def run_scan(
         if ip in known_ips:
             skipped += 1
             continue
-        result = probe_host(ip)
+        try:
+            result = probe_host(ip)
+        except Exception:
+            log.exception("discovery probe_host failed ip=%s", ip)
+            continue
         if not result["alive"]:
             continue
         kind = str(result.get("exporter_kind") or "")

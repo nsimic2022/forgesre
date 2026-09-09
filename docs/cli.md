@@ -141,7 +141,7 @@ Classes are universal, not SKUs: Linux, Windows, Network SNMP, Unknown. Unknown 
 
 `verify` accepts **all of**: asset number `#`, Asset ID, hostname, and IP. Same keys work for `./forgesre ping`. TAB completes numbers and ids (hostnames too). One key dumps what ForgeSRE already knows (inventory) plus the live checks. Same action: Assets → **Verify** (analyst / engineer / admin). Viewers are read-only.
 
-`./forgesre jobs` is the Postgres job table. There is **no Celery**. One worker thread in Core runs scheduled reports then investigate/LLM rewrite; a rewrite can occupy that thread up to `ai.llm.timeout_seconds`. Scheduled `/ops#reports` jobs are a different table (`scheduled_reports`): **Edit / Clone / Remove** on the row, **Cancel** next to Save on the form, **Enabled** = fire at Next (off = stored, skipped). Same SMTP send path as Compose.
+`./forgesre jobs` is the Postgres job table. There is **no Celery**. One worker thread in Core runs scheduled reports then pending jobs (`investigate` and `discovery_scan`). Discovery **Save & scan** / **Scan now** enqueue `discovery_scan` (`status=pending`); the worker runs `run_scan` in try/except so a probe crash becomes `job.error` + Journal, not a Core 500. An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds`. Scheduled `/ops#reports` jobs are a different table (`scheduled_reports`): **Edit / Clone / Remove** on the row, **Cancel** next to Save on the form, **Enabled** = fire at Next (off = stored, skipped). Same SMTP send path as Compose.
 
 ---
 
