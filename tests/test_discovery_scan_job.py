@@ -127,8 +127,11 @@ def test_post_scan_enqueues_pending_job_and_redirects(tmp_path, monkeypatch):
     assert "already queued" in unquote(scan_now.headers.get("location") or "").lower()
     db = SessionLocal()
     assert db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).count() == 1
+    run_pending_jobs(db)
+    row = db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).one()
+    assert row.status == "error"
     db.close()
-    assert called["n"] == 0
+    assert called["n"] == 1
 
 
 def test_run_pending_jobs_executes_scan_and_swallows_probe_errors(monkeypatch):
@@ -196,3 +199,9 @@ def test_api_scan_enqueues_without_probing(monkeypatch):
     assert body.get("queued") is True
     assert body.get("kind") == "discovery_scan"
     assert called["n"] == 0
+    db = SessionLocal()
+    run_pending_jobs(db)
+    row = db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).one()
+    assert row.status == "error"
+    db.close()
+    assert called["n"] == 1
