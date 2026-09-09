@@ -15,8 +15,9 @@ Repository: https://github.com/nsimic2022/forgesre (`main`).
 | [7. Verify the appliance](#7-verify-the-appliance) | `./forgesre doctor` vs `test` vs `verify` |
 | [8. Configuration files](#8-configuration-files) | `.env`, YAML, secrets |
 | [9. `config/forgesre.yml`](#9-configforgesreyml) | Features |
-| [10. `.env`](#10-env) | Deployment |
-| [11. `secrets/secrets.env`](#11-secretssecretsenv) | Passwords and tokens |
+| [10. `.env`](#10-env) | Deployment (ports, profiles) |
+| [11. `secrets/secrets.env`](#11-secretssecretsenv) | Passwords and tokens (plaintext) |
+| [11a. Changing passwords](#11a-changing-passwords) | Edit secrets → recreate containers |
 | [12. Operator CLI](#12-operator-cli) | Everyday `./forgesre` commands |
 | [13. Advanced CLI](#13-advanced-cli) | Logs, rebuild Core, LLM profile, git pull |
 | [14. Updates](#14-updates) | Existing VM after `git pull` |
@@ -127,6 +128,8 @@ If `docker info` still needs `sudo`, `./install.sh` and Compose still work via `
 
 **New VM only.** Do not re-run this on a box that already has `secrets/secrets.env`.
 
+Install copies [`.env.example`](../.env.example) → `.env` and [`secrets/secrets.example.env`](../secrets/secrets.example.env) → `secrets/secrets.env`, then fills generated passwords (comments/groups kept). Manual lab without install: copy those two templates yourself; never put real passwords in git.
+
 Non-interactive lab:
 
 ```bash
@@ -219,19 +222,24 @@ Details: [`verify.md`](verify.md).
 
 ## 8. Configuration files
 
-Three files. Do not mix them.
+Three files. Do not merge `.env` and `secrets/secrets.env`.
 
 | File | Purpose | Git |
 |---|---|---|
-| `.env` | Ports, data dir, compose profiles, generated Prometheus paths | ignored |
+| `.env` (repo root) | Deployment: ports, data dir, compose profiles, generated monitoring paths. Install also mirrors some NetBox/Postgres passwords here for Compose `${VAR}` interpolation. | ignored (example [`.env.example`](../.env.example) is committed) |
 | `config/forgesre.yml` | Discovery, NetBox URL, AI/RCA, Loki, Grafana, SMTP host | ignored (example is committed) |
-| `secrets/secrets.env` | Passwords and tokens | ignored, mode `600` |
+| `secrets/secrets.env` | Secrets: passwords and tokens. **Plaintext** for Docker / Postgres / NetBox / Grafana / SMTP — not bcrypt hashes. | ignored, mode `600` (example [`secrets/secrets.example.env`](../secrets/secrets.example.env) is committed) |
 
-Template: [`config/forgesre.example.yml`](../config/forgesre.example.yml). The installer writes `config/forgesre.yml`. If that live file is missing:
+Templates:
 
 ```bash
+cp .env.example .env
+cp secrets/secrets.example.env secrets/secrets.env
+chmod 700 secrets && chmod 600 secrets/secrets.env
 cp config/forgesre.example.yml config/forgesre.yml
 ```
+
+`./install.sh` (new VM only) copies the `.env` and secrets examples, then fills generated passwords. Do not re-run install on a live box.
 
 Do not commit `config/forgesre.yml`, `.env`, or `secrets/secrets.env`. Do not paste secrets into tickets. Core reads the live YAML, not the example.
 
@@ -327,21 +335,20 @@ notifications:
 
 ## 10. `.env`
 
-Written by `./install.sh`.
+**Where:** repo root (next to `docker-compose.yml`).  
+**What for:** deployment — ports, data directory, compose profiles, generated Prometheus/Alertmanager/SNMP paths.  
+**Template:** [`.env.example`](../.env.example) (grouped `#` comments in English; every variable documented).
 
-```bash
-FORGESRE_VERSION=0.7.0
-FORGESRE_DATA=./data
-FORGESRE_TIMEZONE=Europe/Belgrade
-FORGESRE_HTTP_PORT=8080
-GRAFANA_PORT=3000
-FORGESRE_PROFILE=standard
-COMPOSE_PROFILES=          # empty | ai | mailbox | ai,mailbox
-# NetBox is default-on (not a profile). UI :8001
-NETBOX_PORT=8001
-NETBOX_URL=http://127.0.0.1:8001
-FORGESRE_LLM_THREADS=8     # llama.cpp CPU threads (fetch-llm sets nproc-2)
-```
+Written by `./install.sh` from the example. Full key list and comments live in the example file; the live file is gitignored.
+
+| Group | Examples | Used for |
+|---|---|---|
+| Appliance | `FORGESRE_VERSION`, `FORGESRE_DATA`, `FORGESRE_TIMEZONE`, `FORGESRE_PROFILE` | Paths and labels |
+| Ports | `FORGESRE_HTTP_PORT`, `GRAFANA_PORT`, `NETBOX_PORT` | Host listen ports |
+| Profiles | `COMPOSE_PROFILES`, `FORGESRE_LLM_THREADS` | Optional `ai` / `mailbox` |
+| NetBox URL | `NETBOX_URL` | Where Core calls NetBox |
+| Compose mirrors | `POSTGRES_PASSWORD`, `NETBOX_*`, `GRAFANA_ADMIN_PASSWORD` | Docker Compose `${VAR}` only — canonical secrets stay in `secrets/secrets.env` |
+| Generated paths | `PROMETHEUS_CONFIG`, `ALERTMANAGER_CONFIG`, … | Under `FORGESRE_DATA` |
 
 Start the bundled LLM container later with `COMPOSE_PROFILES=ai` (or `./forgesre fetch-llm`) then:
 
@@ -356,31 +363,49 @@ Details: [`llm.md`](llm.md).
 
 ## 11. `secrets/secrets.env`
 
-```bash
-POSTGRES_PASSWORD=
-FORGESRE_ADMIN_EMAIL=admin@forgesre.local
-FORGESRE_ADMIN_PASSWORD=
-GRAFANA_ADMIN_PASSWORD=
-ALERTMANAGER_WEBHOOK_TOKEN=
-SECRET_KEY=
-SMTP_USERNAME=
-SMTP_PASSWORD=
-SNMP_COMMUNITY=public
-NETBOX_API_TOKEN=          # Prefer full NetBox UI v2 token (nbt_… shown once). 40-char v1 is launch fallback.
-NETBOX_API_TOKEN_PEPPER=   # NetBox v4.5+ UI v2 tokens; compose maps to API_TOKEN_PEPPER_1 (≥50 chars)
-NETBOX_SUPERUSER_NAME=admin
-NETBOX_SUPERUSER_EMAIL=admin@forgesre.local
-NETBOX_SUPERUSER_PASSWORD=
-NETBOX_DB_PASSWORD=
-NETBOX_REDIS_PASSWORD=
-NETBOX_SECRET_KEY=
-```
+**Where:** `secrets/secrets.env` (directory mode `700`, file mode `600`).  
+**What for:** passwords and tokens consumed by containers and Core.  
+**Template:** [`secrets/secrets.example.env`](../secrets/secrets.example.env) (grouped `#` comments; placeholder empty/example values only — never real secrets in git).
 
-Directory `secrets/` mode `700`, file `600`. UI users created in Administration live in Postgres as bcrypt hashes — not in this file.
+### Plaintext vs bcrypt (check the code)
+
+| Value | Stored as | Where |
+|---|---|---|
+| Everything in `secrets/secrets.env` | **Plaintext** env strings | File on disk → Docker `env_file` / Core bind-mount |
+| Postgres / Grafana / NetBox Django / SMTP / SNMP / `SECRET_KEY` / tokens | **Plaintext** in that file | Containers read them as env |
+| ForgeSRE UI users (including the install admin after first boot) | **bcrypt** hash | Postgres table `users.password_hash` (`backend/app/seed.py` hashes `FORGESRE_ADMIN_PASSWORD` once when the email row is missing) |
+
+Do **not** treat `FORGESRE_ADMIN_PASSWORD` or `NETBOX_SUPERUSER_PASSWORD` in the secrets file as hashes — they are plaintext for first boot / CLI fallback / NetBox container env.
+
+| Group | Keys | Used for |
+|---|---|---|
+| Postgres | `POSTGRES_PASSWORD` | ForgeSRE DB + Core `DATABASE_URL` |
+| ForgeSRE Core | `FORGESRE_ADMIN_EMAIL`, `FORGESRE_ADMIN_PASSWORD`, `SECRET_KEY`, `ALERTMANAGER_WEBHOOK_TOKEN` | First-boot admin seed, sessions, HTTP SD / webhook |
+| Grafana | `GRAFANA_ADMIN_PASSWORD` | Bundled Grafana admin |
+| SMTP | `SMTP_USERNAME`, `SMTP_PASSWORD` (+ optional mailbox bind keys) | Email when YAML enables it |
+| SNMP | `SNMP_COMMUNITY` | Discovery + snmp_exporter |
+| NetBox | `NETBOX_SUPERUSER_*`, `NETBOX_DB_PASSWORD`, `NETBOX_REDIS_PASSWORD`, `NETBOX_SECRET_KEY`, `NETBOX_API_TOKEN`, `SUPERUSER_API_TOKEN`, `NETBOX_API_TOKEN_PEPPER`, `API_TOKEN_PEPPER_1` | Bundled NetBox UI/API |
 
 ```bash
 ./forgesre secrets-check
 ```
+
+---
+
+## 11a. Changing passwords
+
+1. Edit `secrets/secrets.env` (keep mode `600`). If Compose interpolates the same key from `.env`, update that mirror too (or run `./forgesre update` / `scripts/ensure-netbox-secrets.sh` for NetBox keys).
+2. Recreate affected containers, for example:
+
+```bash
+docker compose up -d --force-recreate postgres core
+docker compose up -d --force-recreate netbox netbox-redis
+docker compose up -d --force-recreate grafana
+```
+
+3. **ForgeSRE UI admin (`FORGESRE_ADMIN_PASSWORD`):** changing the file after first boot does **not** update Postgres. Seed only creates the user when that email is absent. Change the password in **Administration → users**, or delete the user row and recreate Core so seed runs again. If the CLI still uses the secrets-file fallback (no `./forgesre login` session), keep `FORGESRE_ADMIN_PASSWORD` matching the password you actually type.
+4. **NetBox UI (`NETBOX_SUPERUSER_PASSWORD`):** first boot creates the Django superuser. Changing the env later may not rewrite an existing NetBox user — rotate inside the NetBox UI at `:8001` when needed, then keep secrets in sync for documentation/CLI.
+5. **Postgres / Redis data passwords:** changing them after volumes exist usually requires aligning the DB role password with the new secret (or a controlled reset). Prefer rotating before production data lands, or follow a deliberate Postgres `ALTER USER` + recreate path. Never re-run `./install.sh` on a live box (it regenerates secrets).
 
 ---
 
