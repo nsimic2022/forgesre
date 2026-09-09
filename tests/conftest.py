@@ -16,6 +16,8 @@ os.environ["FORGESRE_ADMIN_EMAIL"] = "admin@forgesre.local"
 os.environ["FORGESRE_ADMIN_PASSWORD"] = "testpass"
 os.environ["ALERTMANAGER_WEBHOOK_TOKEN"] = "forgesre-dev-webhook-token"
 os.environ["FORGESRE_LOG_FILE"] = ""
+# Do not auto-detect / probe the live lab network during pytest.
+os.environ["FORGESRE_DISCOVERY_AUTO"] = "0"
 os.environ["FRONTEND_DIR"] = str(ROOT / "frontend")
 os.environ["PROMETHEUS_URL"] = "http://127.0.0.1:9"
 os.environ["LOKI_URL"] = "http://127.0.0.1:9"

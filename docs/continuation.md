@@ -47,6 +47,8 @@ Full suite twice after merging `origin/main` into the discovery branch. `create_
 
 Do not revert ⓘ tooltips, nav clock/resources, `/ops` report-job row actions, or `.env` / `secrets.example.env` **service-group** comments.
 
+Core image installs **iproute2** (`ip -4 addr`) plus **iputils-ping**. Autodetect also has an ioctl fallback if `ip` is missing. Tests set `FORGESRE_DISCOVERY_AUTO=0` so pytest never probes the live LAN.
+
 ---
 
 ## 4. What N should do on the VM
@@ -60,6 +62,8 @@ git pull origin main && ./forgesre update
 ```
 
 Open **Discovery**. Review autodetected connected CIDRs (edit YAML extras if needed), then **Scan now**. **Sync NetBox** sits beside it (read-only). Approve / Ignore as before; manual Assets stay SoT.
+
+`./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: **no host logs shipped**. [architecture.md](architecture.md) is a long-term **architecture proposal**, not the V0.7 appliance runtime.
 
 NetBox: keep the **full v2 token** (shown once at create, not the 12-character key) in `NETBOX_API_TOKEN`. Recreate **core** only if secrets changed. Never print the token.
 

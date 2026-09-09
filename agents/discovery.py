@@ -50,21 +50,31 @@ def _skip_host(host: ipaddress.IPv4Address) -> bool:
     )
 
 
-def _iface_inet_rows(ip_output: str | None = None) -> list[dict[str, Any]]:
-    """Parse `ip -4 -o addr show` rows into iface/addr/prefixlen dicts."""
-    text = ip_output
-    if text is None:
+def _discovery_auto_enabled() -> bool:
+    """Tests set FORGESRE_DISCOVERY_AUTO=0 so pytest never probes the live LAN."""
+    raw = os.environ.get("FORGESRE_DISCOVERY_AUTO", "1").strip().lower()
+    return raw not in {"0", "false", "off", "no"}
+
+
+def _ip_cmd_output() -> str:
+    """`ip -4 -o addr show` from iproute2 (Core image). Tries common paths."""
+    for binary in ("ip", "/sbin/ip", "/usr/sbin/ip", "/bin/ip"):
         try:
             proc = subprocess.run(
-                ["ip", "-4", "-o", "addr", "show"],
+                [binary, "-4", "-o", "addr", "show"],
                 check=False,
                 capture_output=True,
                 text=True,
                 timeout=2.0,
             )
-            text = proc.stdout or ""
+            if proc.stdout:
+                return proc.stdout
         except (OSError, subprocess.SubprocessError):
-            text = ""
+            continue
+    return ""
+
+
+def _parse_ip_addr_output(text: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for match in _IP_ADDR_RE.finditer(text or ""):
         iface, addr_s, prefix_s = match.group(1), match.group(2), match.group(3)
@@ -78,6 +88,45 @@ def _iface_inet_rows(ip_output: str | None = None) -> list[dict[str, Any]]:
             continue
         rows.append({"iface": iface, "addr": str(addr), "prefixlen": prefixlen})
     return rows
+
+
+def _ioctl_inet_rows() -> list[dict[str, Any]]:
+    """Linux SIOCGIFADDR / SIOCGIFNETMASK — real prefixlen if `ip` is missing."""
+    try:
+        import fcntl
+        import struct
+    except ImportError:
+        return []
+    try:
+        names = [name for _idx, name in socket.if_nameindex()]
+    except OSError:
+        return []
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    rows: list[dict[str, Any]] = []
+    try:
+        for name in names:
+            packed = name.encode("ascii", "replace")[:15]
+            ifreq = struct.pack("256s", packed)
+            try:
+                addr = socket.inet_ntoa(fcntl.ioctl(sock, 0x8915, ifreq)[20:24])
+                mask = socket.inet_ntoa(fcntl.ioctl(sock, 0x891B, ifreq)[20:24])
+                prefixlen = ipaddress.IPv4Network(f"0.0.0.0/{mask}").prefixlen
+            except OSError:
+                continue
+            rows.append({"iface": name.split("@", 1)[0], "addr": addr, "prefixlen": prefixlen})
+    finally:
+        sock.close()
+    return rows
+
+
+def _iface_inet_rows(ip_output: str | None = None) -> list[dict[str, Any]]:
+    """Parse `ip -4 -o addr show` rows into iface/addr/prefixlen dicts."""
+    if ip_output is not None:
+        return _parse_ip_addr_output(ip_output)
+    rows = _parse_ip_addr_output(_ip_cmd_output())
+    if rows:
+        return rows
+    return _ioctl_inet_rows()
 
 
 def detect_connected_networks(
@@ -94,6 +143,15 @@ def detect_connected_networks(
     bridges (``docker0``, ``br-*``, ``veth*``). Returns actual prefixes — never
     hardcodes ``/24``.
     """
+    if ip_output is None and not _discovery_auto_enabled():
+        return {
+            "cidrs": [],
+            "interfaces": [],
+            "skipped": [],
+            "warnings": [],
+            "host_count": 0,
+            "truncated": False,
+        }
     interfaces: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     cidrs: list[str] = []

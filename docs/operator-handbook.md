@@ -318,7 +318,7 @@ Who: **analyst**, engineer, or admin to scan and Approve. After Approve, fill co
 
 1. Open **Discovery**. Scan targets are the **union** (deduped) of:
    - `discovery.cidrs` from live `config/forgesre.yml` (always honored when present)
-   - **Auto-detected** connected IPv4 nets on this appliance (real `prefixlen` — never a hardcoded `/24`). Skips loopback, link-local, multicast, `0.0.0.0/0`, and Docker bridges (`docker0`, `br-*`, `veth*`).
+   - **Auto-detected** connected IPv4 nets on this appliance (real `prefixlen` — never a hardcoded `/24`). Core uses `ip -4 -o addr` (`iproute2` in the Core image) with an ioctl fallback. Skips loopback, link-local, multicast, `0.0.0.0/0`, and Docker bridges (`docker0`, `br-*`, `veth*`).
 2. Empty YAML → auto only. Auto-detect fails → YAML only. Both present → merge. **Save & scan** writes the form into `discovery.cidrs`; **Scan now** always merges auto-detect. Edit YAML by hand if you prefer — no `install.sh` needed.
 
 ```yaml

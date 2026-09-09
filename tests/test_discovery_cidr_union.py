@@ -161,4 +161,49 @@ def test_run_scan_yaml_only_when_auto_empty(monkeypatch):
     db.close()
 
 
+def test_auto_env_off_skips_live_ifaces(monkeypatch):
+    monkeypatch.setenv("FORGESRE_DISCOVERY_AUTO", "0")
+    detected = detect_connected_networks()
+    assert detected["cidrs"] == []
+    assert detected["interfaces"] == []
+
+
+def test_ioctl_fallback_skips_loopback_and_docker(monkeypatch):
+    import ipaddress
+
+    monkeypatch.setenv("FORGESRE_DISCOVERY_AUTO", "1")
+    monkeypatch.setattr("discovery._ip_cmd_output", lambda: "")
+    detected = detect_connected_networks()
+    reasons = {row["iface"]: row["reason"] for row in detected["skipped"]}
+    if "lo" in reasons:
+        assert reasons["lo"] == "loopback"
+    if "docker0" in reasons:
+        assert reasons["docker0"] == "docker_bridge"
+    for cidr in detected["cidrs"]:
+        net = ipaddress.ip_network(cidr)
+        assert not net.is_loopback
+        assert str(net) != "0.0.0.0/0"
+    for row in detected["interfaces"]:
+        assert 1 <= int(row["prefixlen"]) <= 32
+        assert not str(row["cidr"]).endswith("/0")
+
+
+def test_core_image_has_iproute2():
+    text = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
+    assert "iproute2" in text
+    assert "iputils-ping" in text
+
+
+def test_docs_and_template_say_union():
+    html = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
+    handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
+    blob = html.lower()
+    assert "discovery-actions" in html and "node_exporter" in html
+    assert ("unions" in blob) or ("∪" in html) or ("auto-detected" in blob and "discovery.cidrs" in blob)
+    assert ("hardcoded /24" in blob) or ("real prefix" in blob)
+    hb = handbook.lower()
+    assert ("union" in hb) or ("auto-detect" in hb) or ("connected" in hb)
+    assert "256" in handbook and "1024" in handbook
+
+
 
