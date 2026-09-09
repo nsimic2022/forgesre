@@ -337,18 +337,19 @@ notifications:
 
 **Where:** repo root (next to `docker-compose.yml`).  
 **What for:** deployment — ports, data directory, compose profiles, generated Prometheus/Alertmanager/SNMP paths.  
-**Template:** [`.env.example`](../.env.example) (grouped `#` comments in English; every variable documented).
+**Template:** [`.env.example`](../.env.example) (English `#` comments; variables grouped by service — `# --- Postgres ---`, `# --- NetBox ---`, etc.).
 
 Written by `./install.sh` from the example. Full key list and comments live in the example file; the live file is gitignored.
 
-| Group | Examples | Used for |
+| Group (`# --- … ---`) | Examples | Used for |
 |---|---|---|
-| Appliance | `FORGESRE_VERSION`, `FORGESRE_DATA`, `FORGESRE_TIMEZONE`, `FORGESRE_PROFILE` | Paths and labels |
-| Ports | `FORGESRE_HTTP_PORT`, `GRAFANA_PORT`, `NETBOX_PORT` | Host listen ports |
-| Profiles | `COMPOSE_PROFILES`, `FORGESRE_LLM_THREADS` | Optional `ai` / `mailbox` |
-| NetBox URL | `NETBOX_URL` | Where Core calls NetBox |
-| Compose mirrors | `POSTGRES_PASSWORD`, `NETBOX_*`, `GRAFANA_ADMIN_PASSWORD` | Docker Compose `${VAR}` only — canonical secrets stay in `secrets/secrets.env` |
-| Generated paths | `PROMETHEUS_CONFIG`, `ALERTMANAGER_CONFIG`, … | Under `FORGESRE_DATA` |
+| Appliance | `FORGESRE_VERSION`, `FORGESRE_DATA`, `FORGESRE_HTTP_PORT`, … | Paths, labels, Core listen port |
+| Compose profiles | `COMPOSE_PROFILES`, `FORGESRE_LLM_THREADS` | Optional `ai` / `mailbox` |
+| Postgres | `POSTGRES_PASSWORD` | Compose `${VAR}` mirror — canonical in `secrets/secrets.env` |
+| Grafana | `GRAFANA_PORT`, `GRAFANA_ADMIN_PASSWORD` | Grafana listen port + Compose password mirror |
+| NetBox | `NETBOX_PORT`, `NETBOX_URL`, `NETBOX_*` | Bundled NetBox port/URL + Compose secret mirrors |
+| Generated monitoring | `PROMETHEUS_CONFIG`, `ALERTMANAGER_CONFIG`, … | Under `FORGESRE_DATA` |
+| Optional mailbox | `MAIL_DOMAIN`, … (commented) | When `./forgesre mailbox` is enabled |
 
 Start the bundled LLM container later with `COMPOSE_PROFILES=ai` (or `./forgesre fetch-llm`) then:
 
@@ -365,7 +366,7 @@ Details: [`llm.md`](llm.md).
 
 **Where:** `secrets/secrets.env` (directory mode `700`, file mode `600`).  
 **What for:** passwords and tokens consumed by containers and Core.  
-**Template:** [`secrets/secrets.example.env`](../secrets/secrets.example.env) (grouped `#` comments; placeholder empty/example values only — never real secrets in git).
+**Template:** [`secrets/secrets.example.env`](../secrets/secrets.example.env) (English `#` comments grouped by service — `# --- Postgres ---`, `# --- NetBox ---`, …; placeholder empty/example values only — never real secrets in git).
 
 ### Plaintext vs bcrypt (check the code)
 
@@ -377,7 +378,7 @@ Details: [`llm.md`](llm.md).
 
 Do **not** treat `FORGESRE_ADMIN_PASSWORD` or `NETBOX_SUPERUSER_PASSWORD` in the secrets file as hashes — they are plaintext for first boot / CLI fallback / NetBox container env.
 
-| Group | Keys | Used for |
+| Group (`# --- … ---`) | Keys | Used for |
 |---|---|---|
 | Postgres | `POSTGRES_PASSWORD` | ForgeSRE DB + Core `DATABASE_URL` |
 | ForgeSRE Core | `FORGESRE_ADMIN_EMAIL`, `FORGESRE_ADMIN_PASSWORD`, `SECRET_KEY`, `ALERTMANAGER_WEBHOOK_TOKEN` | First-boot admin seed, sessions, HTTP SD / webhook |
@@ -385,6 +386,7 @@ Do **not** treat `FORGESRE_ADMIN_PASSWORD` or `NETBOX_SUPERUSER_PASSWORD` in the
 | SMTP | `SMTP_USERNAME`, `SMTP_PASSWORD` (+ optional mailbox bind keys) | Email when YAML enables it |
 | SNMP | `SNMP_COMMUNITY` | Discovery + snmp_exporter |
 | NetBox | `NETBOX_SUPERUSER_*`, `NETBOX_DB_PASSWORD`, `NETBOX_REDIS_PASSWORD`, `NETBOX_SECRET_KEY`, `NETBOX_API_TOKEN`, `SUPERUSER_API_TOKEN`, `NETBOX_API_TOKEN_PEPPER`, `API_TOKEN_PEPPER_1` | Bundled NetBox UI/API |
+| Optional mailbox | `MAILBOX_*` (commented) | Local mailserver when enabled |
 
 ```bash
 ./forgesre secrets-check
