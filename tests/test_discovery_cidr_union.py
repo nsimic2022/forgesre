@@ -168,6 +168,35 @@ def test_auto_env_off_skips_live_ifaces(monkeypatch):
     assert detected["interfaces"] == []
 
 
+def test_detect_swallows_ip_addr_failures(monkeypatch):
+    monkeypatch.setenv("FORGESRE_DISCOVERY_AUTO", "1")
+
+    def boom(*_args, **_kwargs):
+        raise OSError("ip: not found")
+
+    monkeypatch.setattr("discovery._iface_inet_rows", boom)
+    detected = detect_connected_networks()
+    assert detected["cidrs"] == []
+    assert detected["interfaces"] == []
+    assert detected["host_count"] == 0
+    assert any("autodetect skipped" in str(item) for item in detected["warnings"])
+
+
+def test_resolve_scan_keeps_yaml_when_autodetect_raises(monkeypatch):
+    monkeypatch.setenv("FORGESRE_DISCOVERY_AUTO", "1")
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("ioctl failed")
+
+    monkeypatch.setattr("discovery._iface_inet_rows", boom)
+    resolved = resolve_scan_cidrs(["10.1.1.0/30"])
+    assert resolved["source"] == "yaml"
+    assert resolved["cidrs"] == ["10.1.1.0/30"]
+    assert resolved["yaml"] == ["10.1.1.0/30"]
+    assert resolved["auto"] == []
+    assert any("autodetect skipped" in str(item) for item in resolved["warnings"])
+
+
 def test_ioctl_fallback_skips_loopback_and_docker(monkeypatch):
     import ipaddress
 

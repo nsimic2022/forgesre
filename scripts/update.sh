@@ -95,11 +95,27 @@ else
   "${DC[@]}" up -d --no-deps --force-recreate netbox
 fi
 echo "Waiting for health..."
-sleep 5
+HTTP_PORT=8080
 NB_PORT=8001
 if [[ -f .env ]]; then
+  HTTP_PORT="$(awk -F= '/^[[:space:]]*FORGESRE_HTTP_PORT=/ {v=$2} END {print v}' .env | tr -d '"' | tr -d "'" | tr -d '\r' | awk '{print $1}' || true)"
+  HTTP_PORT="${HTTP_PORT:-8080}"
   NB_PORT="$(awk -F= '/^NETBOX_PORT=/ {print $2}' .env | tail -1 | tr -d '"' || true)"
   NB_PORT="${NB_PORT:-8001}"
+fi
+echo "Waiting for Core on :${HTTP_PORT} (GET /api/v1/health, no token)..."
+core_ok=0
+for _i in $(seq 1 30); do
+  if curl -fsS -m 2 "http://127.0.0.1:${HTTP_PORT}/api/v1/health" >/dev/null 2>&1; then
+    echo "Core is up."
+    core_ok=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$core_ok" -ne 1 ]]; then
+  echo "Core is not answering GET /api/v1/health on :${HTTP_PORT}."
+  echo "Logs: docker compose logs core --tail=80"
 fi
 echo "Waiting for NetBox on :${NB_PORT} (first boot can take several minutes)..."
 nb_ok=0

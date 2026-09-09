@@ -196,8 +196,10 @@ doctor — same checks as /health-ui. Overall HEALTHY or DEGRADED.
   ./forgesre doctor
   ./doctor.sh
 
-Core API is curl /api/v1/health. Core (container) is the compose service stack
-row (always-ok dummy, not a second probe). Machine JSON key stays "core".
+Core API is curl /api/v1/health (no auth). That probe decides if Core is up.
+/api/v1/system/doctor needs the webhook token only after health answers.
+Core (container) is the compose service stack row (always-ok dummy, not a
+second probe). Machine JSON key stays "core".
 
 Grafana is graphs only. Down is yellow (warn), not DEGRADED, not a Journal error.
 Prometheus / Alertmanager failures name the hop (:9090 / :9093), never "Prometheus Stack".

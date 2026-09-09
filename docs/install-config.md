@@ -570,7 +570,7 @@ Without a model, ForgeRCA still runs. Cloud LLMs are not required. Do not commit
 | `docker info` denied | `usermod -aG docker "$USER"` then re-login, or use sudo |
 | Clone URL fails | Use `https://github.com/nsimic2022/forgesre.git` (slash after `.com`) |
 | UI only on the VM | You used `127.0.0.1` from the laptop, or 8080 is blocked |
-| Doctor cannot fetch | `./forgesre secrets-check` — doctor uses the webhook token |
+| Core UI/API not reachable on :8080 | Unauthenticated `GET /api/v1/health` failed — Core is down or the port is wrong, not a missing webhook. `curl -fsS http://127.0.0.1:8080/api/v1/health` then `docker compose logs core --tail=80`. Webhook token is only for `/api/v1/system/doctor` after Core answers. |
 | Core will not start | Shipped default `SECRET_KEY` / token. Put real values in secrets |
 | SNMP empty `[]` | No Network device with an IP yet |
 | Doctor snmp paused (no SNMP targets) | No Network device + IP yet — yellow, not DOWN. Do not add devices just to un-pause. Overall stays healthy for snmp. |
