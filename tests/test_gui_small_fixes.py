@@ -27,7 +27,7 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=disc-1" in base
+    assert "app.css?v=inc-list" in base
     assert ".banner-short" in css
     assert ".playbook-grid" in css
     assert ".ack-dot" in css
@@ -79,7 +79,8 @@ def test_incidents_default_is_all_and_filter_is_spaced():
     _login(client)
     listed = client.get("/incidents")
     assert listed.status_code == 200
-    assert 'class="list-filters"' in listed.text
+    assert "list-filters" in listed.text
+    assert "incidents-filters" in listed.text
     assert 'value="all"' in listed.text
     assert "Open/firing" not in listed.text
     form = listed.text.split('action="/incidents"', 1)[1].split("</form>", 1)[0]

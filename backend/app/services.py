@@ -183,6 +183,65 @@ def incident_seq(number: str) -> int | None:
     return int(head)
 
 
+def incident_short_label(number: str) -> str:
+    """Visible list label: #42 from INC-0042_…. Full id stays in the URL."""
+    seq = incident_seq(number)
+    return f"#{seq}" if seq is not None else str(number or "")
+
+
+def parse_incident_wall(number: str) -> tuple[str, str] | None:
+    """(DD.MM.YYYY, HH:MM) baked into INC-NNNN_DD.MM.YYYY_HH:MM."""
+    parts = str(number or "").split("_")
+    if len(parts) < 3:
+        return None
+    date, clock = parts[1], parts[2]
+    if len(date) >= 10 and date[2:3] == "." and len(clock) >= 5 and clock[2:3] == ":":
+        return date[:10], clock[:5]
+    return None
+
+
+def _appliance_local(when: datetime | None = None) -> datetime:
+    stamp = when or utcnow()
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    try:
+        return stamp.astimezone(ZoneInfo(settings.timezone))
+    except Exception:
+        return stamp.astimezone(timezone.utc)
+
+
+def incident_when_label(number: str, now: datetime | None = None) -> str:
+    """Same calendar day as now → HH:MM; older → DD.MM HH:MM. Empty if the id has no wall clock."""
+    parsed = parse_incident_wall(number)
+    if parsed is None:
+        return ""
+    date, clock = parsed
+    today = _appliance_local(now).strftime("%d.%m.%Y")
+    if date == today:
+        return clock
+    return f"{date[:5]} {clock}"
+
+
+def format_started_at(value: Any) -> str:
+    """Full started_at for tooltips, without Postgres microseconds."""
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return _appliance_local(value).strftime("%d.%m.%Y %H:%M:%S")
+    text = str(value).strip().replace("T", " ")
+    if not text:
+        return ""
+    if "." in text:
+        head, tail = text.split(".", 1)
+        tz = ""
+        for idx, ch in enumerate(tail):
+            if ch in "+-Z":
+                tz = tail[idx:]
+                break
+        return f"{head}{tz}"
+    return text
+
+
 def format_incident_number(seq: int, when: datetime | None = None) -> str:
     """INC-0134_16.08.2026_09:13 in the appliance timezone (wall clock)."""
     stamp = when or utcnow()

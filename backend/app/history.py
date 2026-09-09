@@ -66,12 +66,16 @@ def pager_state(
     fragment: str = "",
 ) -> dict[str, Any]:
     page, pages, offset = parse_page(raw, total=total, size=size)
+    start = (offset + 1) if total else 0
+    end = min(offset + size, total) if total else 0
     return {
         "page": page,
         "pages": pages,
         "offset": offset,
         "total": total,
         "size": size,
+        "start": start,
+        "end": end,
         "param": param,
         "hash": fragment,
         "numbers": page_numbers(page, pages),
