@@ -675,27 +675,33 @@ def discovery_scan(
     user: User = Depends(require("write_assets")),
     cidrs: list[str] | None = None,
 ) -> dict:
-    """Queue discovery probe; persist operator CIDRs or autodetection. No run_scan here."""
-    from discovery import normalize_cidrs, suggested_connected_cidrs
+    """Queue discovery probe of confirmed discovery.cidrs. No run_scan on request thread."""
+    from discovery import normalize_cidrs
     from app.jobs import enqueue_discovery_scan, active_discovery_scan
 
     try:
         parsed = normalize_cidrs(cidrs or [])
-        if not parsed:
-            parsed = list(suggested_connected_cidrs() or [])
-        saved = False
         if parsed:
             try:
                 settings.set_discovery_cidrs(parsed)
-                saved = True
             except OSError:
                 log.exception("API discovery.cidrs persist failed")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Could not write discovery.cidrs",
+                )
+        saved = list(settings.discovery_cidrs)
+        if not saved:
+            raise HTTPException(
+                status_code=400,
+                detail="No discovery.cidrs. Confirm a management /24 first (empty = no scan).",
+            )
         already = active_discovery_scan(db) is not None
         job = enqueue_discovery_scan(
             db,
             actor=user.email,
-            cidrs=parsed if parsed else None,
-            saved=saved,
+            cidrs=saved,
+            saved=bool(parsed),
         )
         audit(
             db,
@@ -704,8 +710,8 @@ def discovery_scan(
             data={
                 "queued": True,
                 "job_id": job.id if job else None,
-                "cidrs": parsed if parsed else None,
-                "saved": saved,
+                "cidrs": saved,
+                "saved": bool(parsed),
                 "already": already,
             },
             commit=True,
@@ -716,8 +722,8 @@ def discovery_scan(
             "job_id": job.id if job else None,
             "status": job.status if job else "pending",
             "kind": "discovery_scan",
-            "saved": saved,
-            "cidrs": parsed if parsed else None,
+            "saved": bool(parsed),
+            "cidrs": saved,
         }
     except HTTPException:
         raise

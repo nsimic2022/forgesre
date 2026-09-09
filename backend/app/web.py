@@ -574,7 +574,7 @@ def discovery_page(
     edit: str = "",
     clone: str = "",
 ):
-    from discovery import resolve_scan_cidrs
+    from discovery import suggested_management_cidr
     from app.jobs import active_discovery_scan
 
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
@@ -613,21 +613,8 @@ def discovery_page(
                 "proposed_role": source.proposed_role or "Unknown device",
             }
     saved_cidrs = list(settings.discovery_cidrs)
-    try:
-        resolved = resolve_scan_cidrs(saved_cidrs)
-    except Exception as exc:
-        log.exception("discovery page resolve_scan_cidrs failed")
-        resolved = {
-            "cidrs": saved_cidrs,
-            "auto": [],
-            "yaml": saved_cidrs,
-            "source": "yaml" if saved_cidrs else "none",
-            "interfaces": [],
-            "warnings": [f"autodetect skipped: {type(exc).__name__}"],
-        }
-    auto_cidrs = list(resolved.get("auto") or [])
-    scan_cidrs = list(resolved.get("cidrs") or [])
-    cidr_prefill = ", ".join(scan_cidrs) if scan_cidrs else ", ".join(auto_cidrs or saved_cidrs)
+    suggested = suggested_management_cidr()
+    cidr_prefill = ", ".join(saved_cidrs) if saved_cidrs else (suggested or "")
     return render(
         request,
         "discovery.html",
@@ -642,14 +629,9 @@ def discovery_page(
         discovery_enabled=settings.discovery_enabled,
         discovery_mode=settings.discovery_mode,
         discovery_cidrs=saved_cidrs,
-        discovery_auto_cidrs=auto_cidrs,
-        discovery_scan_cidrs=scan_cidrs,
-        discovery_cidr_source=str(resolved.get("source") or "none"),
-        discovery_can_scan=bool(scan_cidrs),
-        detected_cidrs=auto_cidrs,
-        detected_interfaces=list(resolved.get("interfaces") or []),
-        discovery_warnings=list(resolved.get("warnings") or []),
-        suggested_cidr=", ".join(auto_cidrs),
+        discovery_has_cidrs=bool(saved_cidrs),
+        discovery_warnings=[],
+        suggested_cidr=suggested or "",
         cidr_prefill=cidr_prefill,
         netbox_enabled=settings.netbox_enabled,
         netbox_url=settings.netbox_url,
@@ -680,36 +662,70 @@ def discovery_scan_page(
     cidrs: str = Form(""),
     confirm: str = Form(""),
 ):
-    """Queue a background probe. Never call run_scan on the request thread."""
+    """Confirm CIDRs and/or queue a background probe. Never call run_scan inline."""
     notice = "Scan queued. Candidates appear when the background job finishes."
     try:
         if not can(user, "write_assets"):
             raise HTTPException(status_code=403)
-        from discovery import normalize_cidrs, suggested_connected_cidrs
+        from discovery import normalize_cidrs
         from app.jobs import enqueue_discovery_scan, active_discovery_scan
 
-        want_save = (confirm or "").strip().lower() in {"1", "true", "yes", "on", "confirm", "save"}
+        want_confirm = (confirm or "").strip().lower() in {
+            "1", "true", "yes", "on", "confirm", "save",
+        }
         parsed = normalize_cidrs(cidrs)
-        if not parsed:
-            parsed = list(suggested_connected_cidrs() or [])
-        saved = False
-        persist_note = ""
-        if parsed or want_save:
+        if want_confirm:
+            if not parsed:
+                return RedirectResponse(
+                    f"/discovery?notice={quote('Confirm a management CIDR first (suggested /24 from this VM). Empty cidrs = no scan.')}",
+                    status_code=302,
+                )
+            persist_note = ""
             try:
                 settings.set_discovery_cidrs(parsed)
-                saved = True
             except OSError as exc:
                 log.exception("discovery.cidrs persist failed")
                 persist_note = (
                     f" Could not write config/forgesre.yml ({type(exc).__name__}); "
-                    "scan still queued. Recreate Core so the YAML mount is writable."
+                    "scan still queued with in-memory CIDRs."
                 )
+            already = active_discovery_scan(db) is not None
+            job = enqueue_discovery_scan(
+                db, actor=user.email, cidrs=parsed, saved=True,
+            )
+            audit(
+                db,
+                "discovery.scan",
+                actor=user.email,
+                data={
+                    "queued": True,
+                    "job_id": job.id if job else None,
+                    "cidrs": parsed,
+                    "confirm": True,
+                    "already": already,
+                },
+                commit=True,
+            )
+            if already:
+                notice = "Confirmed discovery.cidrs; scan already queued."
+            else:
+                notice = (
+                    f"Confirmed discovery.cidrs={', '.join(parsed)}; "
+                    "scan queued. Candidates appear when the background job finishes."
+                )
+            if persist_note:
+                notice = notice + persist_note
+            return RedirectResponse(f"/discovery?notice={quote(notice)}", status_code=302)
+
+        saved = list(settings.discovery_cidrs)
+        if not saved:
+            return RedirectResponse(
+                f"/discovery?notice={quote('No discovery.cidrs yet. Confirm the suggested management /24 first.')}",
+                status_code=302,
+            )
         already = active_discovery_scan(db) is not None
         job = enqueue_discovery_scan(
-            db,
-            actor=user.email,
-            cidrs=parsed if parsed else None,
-            saved=saved,
+            db, actor=user.email, cidrs=saved, saved=False,
         )
         audit(
             db,
@@ -718,8 +734,8 @@ def discovery_scan_page(
             data={
                 "queued": True,
                 "job_id": job.id if job else None,
-                "cidrs": parsed if parsed else None,
-                "saved": saved,
+                "cidrs": saved,
+                "confirm": False,
                 "already": already,
             },
             commit=True,
@@ -728,11 +744,6 @@ def discovery_scan_page(
             notice = "Scan already queued. It will use the latest saved CIDRs."
         else:
             notice = "Scan queued. Candidates appear when the background job finishes."
-        if persist_note:
-            notice = notice + persist_note
-        elif saved:
-            saved_txt = ", ".join(parsed) if parsed else "(cleared)"
-            notice = f"Saved discovery.cidrs={saved_txt}; " + notice
     except HTTPException:
         raise
     except Exception as exc:

@@ -185,7 +185,7 @@ class Settings:
         return [str(item).strip() for item in raw if str(item).strip()]
 
     def set_discovery_cidrs(self, cidrs: list[str] | str | None) -> list[str]:
-        """Write discovery.cidrs to the live YAML and refresh in-memory settings.
+        """Write discovery.cidrs to live YAML. Empty OK — empty means no scan.
 
         In-memory YAML is always updated so this Core process can scan. A
         read-only bind mount used to raise EROFS and 500 the Discovery POST.
@@ -214,7 +214,11 @@ class Settings:
         if "mode" not in discovery:
             discovery["mode"] = "semi-automatic"
         data["discovery"] = discovery
-        self.yaml = data
+        # Keep unrelated in-memory sections (tests may use a sparse YAML file).
+        merged = dict(self.yaml or {})
+        merged.update(data)
+        merged["discovery"] = discovery
+        self.yaml = merged
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("w") as handle:

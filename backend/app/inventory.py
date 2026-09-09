@@ -246,63 +246,49 @@ def run_scan(
     db: Session,
     cidrs: list[str] | None = None,
     *,
-    merge_auto: bool = True,
+    merge_auto: bool = False,
     ip_output: str | None = None,
 ) -> dict:
-    """Probe hosts from YAML discovery.cidrs union auto-detected connected nets."""
-    from discovery import normalize_cidrs, probe_host, resolve_scan_cidrs, scan_plan
+    """Probe hosts from confirmed YAML ``discovery.cidrs`` only.
 
+    Empty cidrs = no scan (does not silently scan all VLANs). ``merge_auto`` is
+    ignored (kept for call-site compatibility with the job worker).
+    """
+    from discovery import normalize_cidrs, probe_host, scan_plan
+
+    _ = (merge_auto, ip_output)
     yaml_side = list(cidrs) if cidrs is not None else list(settings.discovery_cidrs)
-    try:
-        if merge_auto:
-            resolved = resolve_scan_cidrs(yaml_side, ip_output=ip_output)
-        else:
-            cleaned = normalize_cidrs(yaml_side)
-            plan = scan_plan(cleaned)
-            resolved = {
-                "cidrs": cleaned,
-                "yaml": cleaned,
-                "auto": [],
-                "source": "yaml" if cleaned else "none",
-                "warnings": list(plan["warnings"]),
-                "hosts": list(plan["hosts"]),
-                "host_count": int(plan["total"]),
-                "truncated": bool(plan["truncated"]),
-            }
-    except Exception as exc:
-        log.exception("discovery resolve_scan_cidrs failed")
-        cleaned = normalize_cidrs(yaml_side)
-        return {
-            "found": 0,
-            "skipped": 0,
-            "cidrs": cleaned,
-            "yaml": cleaned,
-            "auto": [],
-            "source": "yaml" if cleaned else "none",
-            "warnings": [f"autodetect skipped: {type(exc).__name__}"],
-            "skipped_reason": "resolve_failed" if not cleaned else "",
-            "hosts_planned": 0,
-            "truncated": False,
-        }
+    cleaned = normalize_cidrs(yaml_side)
+    plan = scan_plan(cleaned)
+    resolved = {
+        "cidrs": cleaned,
+        "yaml": cleaned,
+        "auto": [],
+        "source": "yaml" if cleaned else "none",
+        "warnings": list(plan["warnings"]),
+        "hosts": list(plan["hosts"]),
+        "host_count": int(plan["total"]),
+        "truncated": bool(plan["truncated"]),
+    }
     targets = list(resolved.get("cidrs") or [])
     hosts = list(resolved.get("hosts") or [])
     warnings = list(resolved.get("warnings") or [])
     if not targets:
-        log.info("discovery scan skipped: no YAML cidrs and no connected nets")
+        log.info("discovery scan skipped: empty discovery.cidrs")
         report(
             db,
             "discovery",
             "scan",
             "warn",
-            summary="Scan skipped: no discovery.cidrs and no auto-detected connected nets",
-            detail="empty yaml + empty auto",
+            summary="Scan skipped: no discovery.cidrs (Confirm a management /24 first)",
+            detail="empty cidrs — not scanning all VLANs",
         )
         return {
             "found": 0,
             "skipped": 0,
             "cidrs": [],
-            "yaml": list(resolved.get("yaml") or []),
-            "auto": list(resolved.get("auto") or []),
+            "yaml": [],
+            "auto": [],
             "source": "none",
             "warnings": warnings,
             "skipped_reason": "empty_cidrs",
