@@ -15,7 +15,7 @@ Product on `main`: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
 
 ## 1. Who and when
 
-**Wednesday 9 September 2026.** In-request Discovery `run_scan` could 500 Core/UI (black page). Scan is now a Postgres job. Branch: `cursor/discovery-scan-job-05f8`. Prefer `git merge --no-ff` when PR create is 403.
+**Wednesday 9 September 2026.** Discovery **Save & scan** / **Scan now** 500’d (read-only YAML mount + in-request probe). Scan is a Postgres job; YAML mount is rw; autodetect never 500s. Branch: `cursor/discovery-scan-500-05f8`. Prefer `git merge --no-ff` when PR create is 403.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env`. Never print tokens. Never commit real secrets.
 
@@ -41,7 +41,7 @@ Record pass counts after both runs. `create_pr` / `ManagePullRequest` often **40
 - `POST /discovery/scan` (**Save & scan** and **Scan now**) and `POST /api/v1/discovery/scan` **enqueue** `jobs.kind=discovery_scan` with `status=pending`. They do **not** call `run_scan` on the request thread.
 - `_jobs_loop` / `run_pending_jobs` executes `run_scan` in try/except. Probe exceptions → `job.error` + Journal (`discovery` / `scan`) when they escape the scan; per-host probe failures are logged and skipped so one SNMP GET cannot abort the job. uvicorn stays up.
 - HTTP always **redirects** with a flash (`Scan queued…`). Duplicate clicks reuse the pending/running row.
-- Layout: **Save & scan** and **Scan now** on one row (`.scan-actions`, not stacked). Long probe copy lives in ⓘ. Autodetected nets stay as a short status line.
+- Layout: **Save & scan** | **Scan now** 50/50 in `.discovery-scan-actions`; Scan card | NetBox **50/50** (`.discovery-actions`). Long probe copy lives in ⓘ. CSS `app.css?v=disc-500`.
 - `docker-compose.yml` mounts `config/forgesre.yml` **rw** so Save & scan can persist `discovery.cidrs` (`:ro` was EROFS → HTTP 500). `scan_plan` no longer walks a `/8` just to count hosts.
 - YAML ∪ auto-detect (real prefixes) is unchanged. No Celery. One worker thread.
 
@@ -57,7 +57,7 @@ Do **not** run `./install.sh`.
 git pull origin main && ./forgesre update
 ```
 
-Open **Discovery**. **Save & scan** / **Scan now** should return immediately (flash: queued). Candidates appear after the job finishes; `./forgesre jobs` shows `discovery_scan`. **Sync NetBox** sits beside Scan now (read-only). Approve / Ignore as before; manual Assets stay SoT.
+Open **Discovery** (hard-refresh). **Save & scan** / **Scan now** should return immediately (flash: queued), not a black 500. Candidates appear after the job finishes; `./forgesre jobs` shows `discovery_scan`. **Sync NetBox** sits beside Scan now (read-only). Approve / Ignore as before; manual Assets stay SoT.
 
 `./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: **no host logs shipped**. [architecture.md](architecture.md) is a long-term **architecture proposal**, not the V0.7 appliance runtime.
 

@@ -686,7 +686,7 @@ def discovery_scan(
             try:
                 settings.set_discovery_cidrs(parsed)
             except OSError:
-                pass
+                log.exception("API discovery.cidrs persist failed")
         already = active_discovery_scan(db) is not None
         job = enqueue_discovery_scan(
             db,
@@ -719,6 +719,7 @@ def discovery_scan(
     except HTTPException:
         raise
     except Exception as exc:
+        log.exception("API discovery scan failed")
         report(
             db,
             "discovery",

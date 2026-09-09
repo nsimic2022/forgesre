@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import unquote
 
 import yaml
 from fastapi.testclient import TestClient
@@ -57,12 +58,16 @@ def test_web_and_api_handlers_do_not_call_run_scan_inline():
 def test_discovery_buttons_not_stacked_helper_in_tip():
     html = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "scan-actions" in html
+    assert "discovery-scan-actions" in html
+    assert "discovery-scan-actions" in css
     assert "Save &amp; scan" in html
     assert html.find("Save &amp; scan") < html.find("Scan now")
-    assert "flex-direction: row" in css.split(".discovery-scan-form .wide.scan-actions")[1].split("}")[0]
+    assert html.find("Scan now") < html.find("NetBox sync")
+    assert "grid-template-columns: 1fr 1fr" in css.split(".discovery-scan-actions")[1].split("}")[0]
+    assert "grid-template-columns: 1fr 1fr" in css.split(".discovery-actions")[1].split("}")[0]
+    assert "form-grid discovery-scan-form" not in html
+    assert "Autodetected connected nets (real prefixes):" not in html
     assert "background job" in html or "background probe" in html
-    assert "Scan uses the union of YAML + auto (deduped). Empty YAML → auto only. Limits:" not in html
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "discovery_scan" in handbook
     assert "no Celery" in handbook or "not Celery" in handbook.lower() or "**no Celery**" in handbook
@@ -100,7 +105,7 @@ def test_post_scan_enqueues_pending_job_and_redirects(tmp_path, monkeypatch):
     client = _login()
     page = client.get("/discovery")
     assert page.status_code == 200
-    assert "scan-actions" in page.text
+    assert "discovery-scan-actions" in page.text
     posted = client.post(
         "/discovery/scan",
         data={"confirm": "1", "cidrs": "10.55.0.0/24"},
@@ -194,3 +199,64 @@ def test_api_scan_enqueues_without_probing(monkeypatch):
     assert body.get("queued") is True
     assert body.get("kind") == "discovery_scan"
     assert called["n"] == 0
+
+
+def test_post_scan_empty_cidrs_and_mocked_ip_does_not_500(monkeypatch):
+    """POST /discovery/scan must never return the black Starlette 500 page."""
+    db = _db()
+    db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
+    db.commit()
+    db.close()
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("ioctl failed")
+
+    monkeypatch.setattr("discovery.detect_connected_networks", boom)
+    monkeypatch.setattr("discovery._iface_inet_rows", boom)
+    monkeypatch.setattr(
+        "app.inventory.run_scan",
+        lambda db, cidrs=None, **kwargs: {"found": 0, "skipped": 0, "cidrs": cidrs or []},
+    )
+    client = _login()
+    page = client.get("/discovery")
+    assert page.status_code == 200
+
+    empty = client.post("/discovery/scan", data={"cidrs": ""}, follow_redirects=False)
+    assert empty.status_code == 302, empty.text[:800]
+    assert empty.status_code != 500
+
+    save_empty = client.post(
+        "/discovery/scan",
+        data={"confirm": "1", "cidrs": ""},
+        follow_redirects=False,
+    )
+    assert save_empty.status_code == 302, save_empty.text[:800]
+
+    mocked = client.post(
+        "/discovery/scan",
+        data={"cidrs": "10.66.1.0/30"},
+        follow_redirects=False,
+    )
+    assert mocked.status_code == 302, mocked.text[:800]
+    loc = (mocked.headers.get("location") or "").lower()
+    assert "saved discovery.cidrs" not in loc
+
+
+def test_save_scan_readonly_yaml_does_not_500(monkeypatch):
+    def deny(*_args, **_kwargs):
+        raise OSError(30, "Read-only file system")
+
+    monkeypatch.setattr(settings, "set_discovery_cidrs", deny)
+    monkeypatch.setattr(
+        "app.inventory.run_scan",
+        lambda db, cidrs=None, **kwargs: {"found": 0, "skipped": 0, "cidrs": cidrs or []},
+    )
+    client = _login()
+    resp = client.post(
+        "/discovery/scan",
+        data={"confirm": "1", "cidrs": "10.1.0.0/28"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302, resp.text[:800]
+    loc = unquote(resp.headers.get("location") or "").lower()
+    assert "could not write" in loc or "queued" in loc

@@ -683,13 +683,17 @@ def discovery_scan_page(
 
         want_save = (confirm or "").strip().lower() in {"1", "true", "yes", "on", "confirm", "save"}
         parsed = normalize_cidrs(cidrs)
-        saved = bool(want_save or parsed)
+        saved = bool(want_save)
         persist_note = ""
         if saved:
             try:
                 settings.set_discovery_cidrs(parsed)
             except OSError as exc:
-                persist_note = f" YAML not written ({type(exc).__name__}); scan uses in-memory CIDRs."
+                log.exception("discovery.cidrs persist failed")
+                persist_note = (
+                    f" Could not write config/forgesre.yml ({type(exc).__name__}); "
+                    "scan still queued. Recreate Core so the YAML mount is writable."
+                )
         already = active_discovery_scan(db) is not None
         job = enqueue_discovery_scan(
             db,
@@ -722,6 +726,7 @@ def discovery_scan_page(
     except HTTPException:
         raise
     except Exception as exc:
+        log.exception("discovery scan POST failed")
         report(
             db,
             "discovery",
@@ -730,7 +735,7 @@ def discovery_scan_page(
             summary="Could not queue discovery scan",
             detail=str(exc),
         )
-        notice = "Could not queue scan. Core stayed up — see Journal."
+        notice = f"Could not queue scan ({type(exc).__name__}). Core stayed up — see Journal."
     return RedirectResponse(f"/discovery?notice={quote(notice)}", status_code=302)
 
 

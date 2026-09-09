@@ -24,7 +24,7 @@ def test_info_tip_partial_and_css_exist():
     assert ".info-tip" in css
     assert ".info-tip-bubble" in css
     assert "bindInfoTips" in js
-    assert "app.css?v=scan-job-1" in base
+    assert "app.css?v=disc-500" in base
 
 
 def test_discovery_and_assets_include_info_tip():

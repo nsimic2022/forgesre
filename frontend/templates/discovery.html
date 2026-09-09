@@ -39,25 +39,12 @@
 <div class="discovery-actions">
 {% if can('write_assets') %}
 <section class="card">
-  <h2>Scan now {% with %}{% set tip %}Save &amp; scan writes the form into config/forgesre.yml then queues a background probe (Postgres jobs table, one Core worker thread). Scan now queues the same probe; empty field uses live YAML ∪ auto-detect (real prefixes — never a hardcoded /24). The page always redirects immediately so Core/UI cannot freeze. TCP 22, 80, 443, 9100, 9182 + SNMP GET UDP/161 (TCP/161 is skipped) + HTTP GET /metrics on :9182 and :9100. Not nmap. Max 256 hosts/CIDR, 1024 total. Empty YAML → auto only; auto fail → YAML only; both → merge. Does not write inventory until you Approve. Manual Assets stay SoT.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <form method="post" action="/discovery/scan" class="form-grid discovery-scan-form">
-    <label class="wide">CIDR(s) for YAML (optional extras beyond auto-detect)
+  <h2>Scan now {% with %}{% set tip %}Save &amp; scan writes the CIDR box into config/forgesre.yml then queues a background probe (Postgres jobs table, one Core worker — not Celery). Scan now queues YAML discovery.cidrs ∪ auto-detected connected IPv4 nets without writing the file (real prefixlen — never a hardcoded /24). Skips loopback / link-local / multicast / 0.0.0.0/0 and Docker bridges (docker0, br-*, veth*). Empty YAML → auto only; auto fail → YAML only; both → merge. TCP 22, 80, 443, 9100, 9182 + SNMP GET UDP/161 (TCP/161 is skipped) + HTTP GET /metrics on :9182/:9100. Not nmap. Max 256 hosts/CIDR, 1024 total. Does not write inventory until you Approve. Manual Assets stay SoT.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <form method="post" action="/discovery/scan" class="discovery-scan-form">
+    <label>CIDR(s) for YAML
       <input name="cidrs" value="{{ cidr_prefill }}" placeholder="{{ suggested_cidr or (detected_cidrs|join(', ') if detected_cidrs else '10.10.10.0/24, 192.168.1.0/25') }}" autocomplete="off">
     </label>
-    <p class="muted wide discovery-auto-status">
-      {% if detected_interfaces %}
-      Autodetected connected nets (real prefixes):
-      {% for iface in detected_interfaces %}
-      <code>{{ iface.iface }} {{ iface.addr }}/{{ iface.prefixlen }} → {{ iface.cidr }}</code>{% if not loop.last %}; {% endif %}
-      {% endfor %}.
-      Docker bridges skipped.
-      {% elif detected_cidrs or discovery_auto_cidrs %}
-      Autodetected: <code>{{ (detected_cidrs or discovery_auto_cidrs)|join(", ") }}</code>.
-      {% else %}
-      No connected IPv4 nets detected yet — Scan now still honors YAML <code>discovery.cidrs</code> if set.
-      {% endif %}
-    </p>
-    <div class="wide scan-actions">
+    <div class="discovery-scan-actions">
       <button type="submit" name="confirm" value="1">Save &amp; scan</button>
       <button type="submit"{% if not discovery_can_scan and not cidr_prefill %} disabled title="No YAML cidrs and no auto-detected nets"{% endif %}>Scan now</button>
     </div>
