@@ -856,9 +856,9 @@ def test_install_and_update_bundle_netbox_default_on():
     pg_hdr = env.index("# --- Postgres ---")
     nb_hdr = env.index("# --- NetBox ---")
     gf_hdr = env.index("# --- Grafana ---")
-    assert pg_hdr < env.index("\nPOSTGRES_PASSWORD=", pg_hdr) < nb_hdr
-    assert nb_hdr < env.index("\nNETBOX_PORT=", nb_hdr)
+    assert pg_hdr < env.index("\nPOSTGRES_PASSWORD=", pg_hdr) < gf_hdr
     assert gf_hdr < env.index("\nGRAFANA_PORT=", gf_hdr) < nb_hdr
+    assert nb_hdr < env.index("\nNETBOX_PORT=", nb_hdr)
     secrets_ex = (ROOT / "secrets" / "secrets.example.env").read_text(encoding="utf-8")
     assert "# --- Postgres ---" in secrets_ex
     assert "# --- ForgeSRE Core ---" in secrets_ex
