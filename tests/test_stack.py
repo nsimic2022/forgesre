@@ -144,6 +144,21 @@ def test_doctor_script_prints_core_api_for_health_curl():
     assert 'ok "Core"' not in text
     assert 'item.get("label")' in text
     assert "/api/v1/health" in text
+    health_start = text.index('bad "Core API"')
+    doctor_fetch = text.index("Could not fetch /api/v1/system/doctor")
+    assert health_start < doctor_fetch
+    health_fail = text[health_start:doctor_fetch]
+    assert "exit 1" in health_fail
+    assert "Could not reach GET /api/v1/health" in health_fail
+    assert "webhook token is missing" not in health_fail
+    assert "docker compose logs core --tail=80" in health_fail
+    token_fail = text[doctor_fetch:]
+    assert "webhook token is missing or wrong" in token_fail
+    assert "secrets-check" in token_fail
+    update = (ROOT / "scripts" / "update.sh").read_text(encoding="utf-8")
+    assert "Waiting for Core" in update
+    assert "/api/v1/health" in update
+    assert "docker compose logs core --tail=80" in update
 
 
 def test_enrich_components_keeps_stack_order_and_open_links():

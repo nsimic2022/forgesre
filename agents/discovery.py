@@ -99,9 +99,9 @@ def _ioctl_inet_rows() -> list[dict[str, Any]]:
         return []
     try:
         names = [name for _idx, name in socket.if_nameindex()]
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     except OSError:
         return []
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     rows: list[dict[str, Any]] = []
     try:
         for name in names:
@@ -111,9 +111,11 @@ def _ioctl_inet_rows() -> list[dict[str, Any]]:
                 addr = socket.inet_ntoa(fcntl.ioctl(sock, 0x8915, ifreq)[20:24])
                 mask = socket.inet_ntoa(fcntl.ioctl(sock, 0x891B, ifreq)[20:24])
                 prefixlen = ipaddress.IPv4Network(f"0.0.0.0/{mask}").prefixlen
-            except OSError:
+            except (OSError, ValueError):
                 continue
             rows.append({"iface": name.split("@", 1)[0], "addr": addr, "prefixlen": prefixlen})
+    except Exception:
+        return []
     finally:
         sock.close()
     return rows
@@ -121,12 +123,15 @@ def _ioctl_inet_rows() -> list[dict[str, Any]]:
 
 def _iface_inet_rows(ip_output: str | None = None) -> list[dict[str, Any]]:
     """Parse `ip -4 -o addr show` rows into iface/addr/prefixlen dicts."""
-    if ip_output is not None:
-        return _parse_ip_addr_output(ip_output)
-    rows = _parse_ip_addr_output(_ip_cmd_output())
-    if rows:
-        return rows
-    return _ioctl_inet_rows()
+    try:
+        if ip_output is not None:
+            return _parse_ip_addr_output(ip_output)
+        rows = _parse_ip_addr_output(_ip_cmd_output())
+        if rows:
+            return rows
+        return _ioctl_inet_rows()
+    except Exception:
+        return []
 
 
 def detect_connected_networks(
@@ -143,61 +148,67 @@ def detect_connected_networks(
     bridges (``docker0``, ``br-*``, ``veth*``). Returns actual prefixes — never
     hardcodes ``/24``.
     """
+    empty = {
+        "cidrs": [],
+        "interfaces": [],
+        "skipped": [],
+        "warnings": [],
+        "host_count": 0,
+        "truncated": False,
+    }
     if ip_output is None and not _discovery_auto_enabled():
-        return {
-            "cidrs": [],
-            "interfaces": [],
-            "skipped": [],
-            "warnings": [],
-            "host_count": 0,
-            "truncated": False,
-        }
-    interfaces: list[dict[str, Any]] = []
-    skipped: list[dict[str, str]] = []
-    cidrs: list[str] = []
-    seen: set[str] = set()
-    for row in _iface_inet_rows(ip_output):
-        iface = str(row["iface"])
-        if not include_docker and is_docker_bridge(iface):
-            skipped.append({"iface": iface, "reason": "docker_bridge"})
-            continue
-        try:
-            iface_ip = ipaddress.ip_interface(f"{row['addr']}/{row['prefixlen']}")
-        except ValueError:
-            skipped.append({"iface": iface, "reason": "invalid"})
-            continue
-        network = iface_ip.network
-        if _skip_network(network):
-            reason = "loopback" if network.is_loopback else (
-                "link_local" if network.is_link_local else (
-                    "multicast" if network.is_multicast else (
-                        "default_route" if network.prefixlen == 0 else "excluded"
+        return empty
+    try:
+        interfaces: list[dict[str, Any]] = []
+        skipped: list[dict[str, str]] = []
+        cidrs: list[str] = []
+        seen: set[str] = set()
+        for row in _iface_inet_rows(ip_output):
+            iface = str(row["iface"])
+            if not include_docker and is_docker_bridge(iface):
+                skipped.append({"iface": iface, "reason": "docker_bridge"})
+                continue
+            try:
+                iface_ip = ipaddress.ip_interface(f"{row['addr']}/{row['prefixlen']}")
+            except ValueError:
+                skipped.append({"iface": iface, "reason": "invalid"})
+                continue
+            network = iface_ip.network
+            if _skip_network(network):
+                reason = "loopback" if network.is_loopback else (
+                    "link_local" if network.is_link_local else (
+                        "multicast" if network.is_multicast else (
+                            "default_route" if network.prefixlen == 0 else "excluded"
+                        )
                     )
                 )
+                skipped.append({"iface": iface, "reason": reason})
+                continue
+            cidr = str(network)
+            interfaces.append(
+                {
+                    "iface": iface,
+                    "addr": str(iface_ip.ip),
+                    "cidr": cidr,
+                    "prefixlen": int(network.prefixlen),
+                }
             )
-            skipped.append({"iface": iface, "reason": reason})
-            continue
-        cidr = str(network)
-        interfaces.append(
-            {
-                "iface": iface,
-                "addr": str(iface_ip.ip),
-                "cidr": cidr,
-                "prefixlen": int(network.prefixlen),
-            }
-        )
-        if cidr not in seen:
-            seen.add(cidr)
-            cidrs.append(cidr)
-    plan = scan_plan(cidrs, limit=limit, total_limit=total_limit)
-    return {
-        "cidrs": cidrs,
-        "interfaces": interfaces,
-        "skipped": skipped,
-        "warnings": list(plan["warnings"]),
-        "host_count": int(plan["total"]),
-        "truncated": bool(plan["truncated"]),
-    }
+            if cidr not in seen:
+                seen.add(cidr)
+                cidrs.append(cidr)
+        plan = scan_plan(cidrs, limit=limit, total_limit=total_limit)
+        return {
+            "cidrs": cidrs,
+            "interfaces": interfaces,
+            "skipped": skipped,
+            "warnings": list(plan["warnings"]),
+            "host_count": int(plan["total"]),
+            "truncated": bool(plan["truncated"]),
+        }
+    except Exception as exc:
+        # Core must still boot if `ip addr` / ioctl is missing or throws.
+        empty["warnings"] = [f"autodetect skipped: {type(exc).__name__}"]
+        return empty
 
 
 def suggested_connected_cidrs(
@@ -282,6 +293,8 @@ def resolve_scan_cidrs(
     else:
         source = "none"
     plan = scan_plan(merged, limit=limit, total_limit=total_limit)
+    warnings = [str(item) for item in (detected.get("warnings") or []) if str(item).strip()]
+    warnings.extend(str(item) for item in plan["warnings"] if str(item).strip())
     return {
         "cidrs": merged,
         "yaml": from_yaml,
@@ -289,7 +302,7 @@ def resolve_scan_cidrs(
         "source": source,
         "interfaces": list(detected["interfaces"]),
         "skipped": list(detected["skipped"]),
-        "warnings": list(plan["warnings"]),
+        "warnings": warnings,
         "host_count": int(plan["total"]),
         "truncated": bool(plan["truncated"]),
         "per_cidr": list(plan["per_cidr"]),

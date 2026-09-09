@@ -314,6 +314,8 @@ def test_viewer_cannot_open_playrules_or_journal():
     assert client.get("/").status_code == 200
     assert client.get("/api/v1/system/doctor").status_code == 200
     anon = TestClient(app)
+    assert anon.get("/api/v1/health").status_code == 200
+    assert anon.get("/api/v1/health").json()["status"] == "ok"
     assert anon.get("/api/v1/system/doctor").status_code == 401
     db.close()
 

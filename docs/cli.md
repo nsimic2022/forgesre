@@ -244,6 +244,7 @@ After `./forgesre login` or a UI login cookie:
 | POST | `/api/v1/assets/{id}/clone` | analyst+ |
 | POST | `/api/v1/assets/{id}/delete` | analyst+ |
 | GET | `/api/v1/history` | viewer+ |
+| GET | `/api/v1/health` | none (Core liveness; `./forgesre doctor` Core-up probe) |
 | GET | `/api/v1/system/doctor` | login or Bearer webhook token |
 | GET | `/api/v1/sd/prometheus` | Bearer webhook token |
 | GET | `/api/v1/sd/snmp` | Bearer webhook token |

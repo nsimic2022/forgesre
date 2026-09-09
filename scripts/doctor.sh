@@ -5,9 +5,8 @@ cd "$ROOT"
 
 PORT=8080
 if [[ -f .env ]]; then
-  # shellcheck disable=SC1091
-  PORT="$(awk -F= '/FORGESRE_HTTP_PORT/ {print $2}' .env | tail -1 | tr -d '"' || true)"
-  PORT="${PORT:-8080}"
+  _p="$(awk -F= '/^[[:space:]]*FORGESRE_HTTP_PORT=/ {v=$2} END {print v}' .env | tr -d '"' | tr -d "'" | tr -d '\r' | awk '{print $1}' || true)"
+  PORT="${_p:-8080}"
 fi
 
 echo "ForgeSRE Health"
@@ -16,12 +15,18 @@ echo
 ok() { printf "  %-20s ✓\n" "$1"; }
 bad() { printf "  %-20s ✗  %s\n" "$1" "$2"; }
 
-FAIL=0
+# Unauthenticated liveness. /api/v1/system/doctor needs a webhook token and must
+# not be used to decide whether Core is up.
 if curl -fsS "http://127.0.0.1:${PORT}/api/v1/health" >/dev/null 2>&1; then
   ok "Core API"
 else
   bad "Core API" "UI/API not reachable on port ${PORT}"
-  FAIL=1
+  echo
+  echo "Could not reach GET /api/v1/health (no login, no webhook token)."
+  echo "Why: Core is down or the port is wrong — not a missing webhook token."
+  echo "Test: curl -v http://127.0.0.1:${PORT}/api/v1/health"
+  echo "Fix: docker compose logs core --tail=80"
+  exit 1
 fi
 
 TOKEN=""
@@ -45,9 +50,9 @@ fi
 if ! curl -fsS -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:${PORT}/api/v1/system/doctor" >/tmp/forgesre-doctor.json 2>/dev/null; then
   echo
   echo "Could not fetch /api/v1/system/doctor"
-  echo "Why: Core is down, the port is wrong, or the webhook token is missing."
+  echo "Why: Core answered /api/v1/health, so the webhook token is missing or wrong."
   echo "Test: curl -v http://127.0.0.1:${PORT}/api/v1/health"
-  echo "Fix: docker compose logs core   and   ./forgesre secrets-check"
+  echo "Fix: ./forgesre secrets-check"
   exit 1
 fi
 
