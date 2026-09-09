@@ -849,11 +849,22 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "# --- Postgres ---" in env
     assert "# --- Grafana ---" in env
     assert "# --- NetBox ---" in env
+    assert "# --- Generated monitoring ---" in env
+    assert "# --- Ports ---" not in env
     assert "COMPOSE_PROFILES=" in env
     assert "FORGESRE_HTTP_PORT=" in env
+    pg_hdr = env.index("# --- Postgres ---")
+    nb_hdr = env.index("# --- NetBox ---")
+    gf_hdr = env.index("# --- Grafana ---")
+    assert pg_hdr < env.index("\nPOSTGRES_PASSWORD=", pg_hdr) < nb_hdr
+    assert nb_hdr < env.index("\nNETBOX_PORT=", nb_hdr)
+    assert gf_hdr < env.index("\nGRAFANA_PORT=", gf_hdr) < nb_hdr
     secrets_ex = (ROOT / "secrets" / "secrets.example.env").read_text(encoding="utf-8")
     assert "# --- Postgres ---" in secrets_ex
     assert "# --- ForgeSRE Core ---" in secrets_ex
+    assert "# --- Grafana ---" in secrets_ex
+    assert "# --- SMTP ---" in secrets_ex
+    assert "# --- SNMP ---" in secrets_ex
     assert "# --- NetBox ---" in secrets_ex
     assert "POSTGRES_PASSWORD=" in secrets_ex
     assert "FORGESRE_ADMIN_PASSWORD=" in secrets_ex
@@ -864,6 +875,11 @@ def test_install_and_update_bundle_netbox_default_on():
     for line in secrets_ex.splitlines():
         if line.startswith("FORGESRE_ADMIN_PASSWORD="):
             assert line == "FORGESRE_ADMIN_PASSWORD=" or line.endswith("=")
+    spg = secrets_ex.index("# --- Postgres ---")
+    score = secrets_ex.index("# --- ForgeSRE Core ---")
+    snb = secrets_ex.index("# --- NetBox ---")
+    assert spg < secrets_ex.index("\nPOSTGRES_PASSWORD=", spg) < score
+    assert snb < secrets_ex.index("\nNETBOX_SUPERUSER_NAME=", snb)
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     assert "secrets/secrets.env" in gitignore
     assert "!secrets/secrets.example.env" in gitignore
