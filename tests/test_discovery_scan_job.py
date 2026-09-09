@@ -203,6 +203,12 @@ def test_api_scan_enqueues_without_probing(monkeypatch):
     assert body.get("queued") is True
     assert body.get("kind") == "discovery_scan"
     assert called["n"] == 0
+    db = SessionLocal()
+    run_pending_jobs(db)
+    db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
+    db.commit()
+    db.close()
+    assert called["n"] == 1
 
 
 def test_post_scan_empty_cidrs_and_mocked_ip_does_not_500(monkeypatch):
