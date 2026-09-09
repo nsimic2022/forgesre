@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import re
 import socket
 import subprocess
 from typing import Any
+
+log = logging.getLogger("forgesre.discovery")
 
 LINUX_PORTS = {22, 9100}
 WINDOWS_PORTS = {9182}
@@ -206,7 +209,8 @@ def detect_connected_networks(
             "truncated": bool(plan["truncated"]),
         }
     except Exception as exc:
-        # Core must still boot if `ip addr` / ioctl is missing or throws.
+        # Core / Scan now must still answer if `ip addr` / ioctl is missing or throws.
+        log.exception("autodetect connected networks failed")
         empty["warnings"] = [f"autodetect skipped: {type(exc).__name__}"]
         return empty
 
@@ -263,6 +267,36 @@ def merge_cidrs(*groups: list[str] | None) -> list[str]:
     return out
 
 
+def _yaml_only_resolve(
+    yaml_cidrs: list[str] | str | None,
+    *,
+    warning: str = "",
+    limit: int = MAX_HOSTS_PER_CIDR,
+    total_limit: int = MAX_HOSTS_TOTAL,
+) -> dict[str, Any]:
+    from_yaml = normalize_cidrs(yaml_cidrs)
+    try:
+        plan = scan_plan(from_yaml, limit=limit, total_limit=total_limit)
+    except Exception:
+        log.exception("scan_plan failed while recovering from autodetect error")
+        plan = {"hosts": [], "per_cidr": [], "warnings": [], "total": 0, "truncated": False}
+    warnings = [warning] if warning else []
+    warnings.extend(str(item) for item in plan["warnings"] if str(item).strip())
+    return {
+        "cidrs": from_yaml,
+        "yaml": from_yaml,
+        "auto": [],
+        "source": "yaml" if from_yaml else "none",
+        "interfaces": [],
+        "skipped": [],
+        "warnings": warnings,
+        "host_count": int(plan["total"]),
+        "truncated": bool(plan["truncated"]),
+        "per_cidr": list(plan["per_cidr"]),
+        "hosts": list(plan["hosts"]),
+    }
+
+
 def resolve_scan_cidrs(
     yaml_cidrs: list[str] | str | None = None,
     *,
@@ -273,41 +307,50 @@ def resolve_scan_cidrs(
 ) -> dict[str, Any]:
     """Union of live YAML ``discovery.cidrs`` and auto-detected connected nets.
 
-    Never hardcodes ``/24``.
+    Never hardcodes ``/24``. Never raises — autodetect failures become warnings.
     """
-    from_yaml = normalize_cidrs(yaml_cidrs)
-    detected = detect_connected_networks(
-        include_docker=include_docker,
-        ip_output=ip_output,
-        limit=limit,
-        total_limit=total_limit,
-    )
-    from_auto = list(detected["cidrs"])
-    merged = merge_cidrs(from_yaml, from_auto)
-    if from_yaml and from_auto:
-        source = "yaml+auto"
-    elif from_yaml:
-        source = "yaml"
-    elif from_auto:
-        source = "auto"
-    else:
-        source = "none"
-    plan = scan_plan(merged, limit=limit, total_limit=total_limit)
-    warnings = [str(item) for item in (detected.get("warnings") or []) if str(item).strip()]
-    warnings.extend(str(item) for item in plan["warnings"] if str(item).strip())
-    return {
-        "cidrs": merged,
-        "yaml": from_yaml,
-        "auto": from_auto,
-        "source": source,
-        "interfaces": list(detected["interfaces"]),
-        "skipped": list(detected["skipped"]),
-        "warnings": warnings,
-        "host_count": int(plan["total"]),
-        "truncated": bool(plan["truncated"]),
-        "per_cidr": list(plan["per_cidr"]),
-        "hosts": list(plan["hosts"]),
-    }
+    try:
+        from_yaml = normalize_cidrs(yaml_cidrs)
+        detected = detect_connected_networks(
+            include_docker=include_docker,
+            ip_output=ip_output,
+            limit=limit,
+            total_limit=total_limit,
+        )
+        from_auto = list(detected.get("cidrs") or [])
+        merged = merge_cidrs(from_yaml, from_auto)
+        if from_yaml and from_auto:
+            source = "yaml+auto"
+        elif from_yaml:
+            source = "yaml"
+        elif from_auto:
+            source = "auto"
+        else:
+            source = "none"
+        plan = scan_plan(merged, limit=limit, total_limit=total_limit)
+        warnings = [str(item) for item in (detected.get("warnings") or []) if str(item).strip()]
+        warnings.extend(str(item) for item in plan["warnings"] if str(item).strip())
+        return {
+            "cidrs": merged,
+            "yaml": from_yaml,
+            "auto": from_auto,
+            "source": source,
+            "interfaces": list(detected.get("interfaces") or []),
+            "skipped": list(detected.get("skipped") or []),
+            "warnings": warnings,
+            "host_count": int(plan["total"]),
+            "truncated": bool(plan["truncated"]),
+            "per_cidr": list(plan["per_cidr"]),
+            "hosts": list(plan["hosts"]),
+        }
+    except Exception as exc:
+        log.exception("resolve_scan_cidrs failed")
+        return _yaml_only_resolve(
+            yaml_cidrs,
+            warning=f"autodetect skipped: {type(exc).__name__}",
+            limit=limit,
+            total_limit=total_limit,
+        )
 
 
 
@@ -331,15 +374,16 @@ def scan_plan(
             continue
         if network.version != 4 or _skip_network(network):
             continue
-        usable = 0
-        for host in network.hosts() if network.num_addresses > 2 else network:
-            if _skip_host(host):
-                continue
-            usable += 1
+        # Do not walk a /8 just to count — that hung Scan now into a 500/timeout.
+        if network.num_addresses <= 2:
+            usable = sum(1 for host in network if not _skip_host(host))
+        else:
+            usable = max(0, int(network.num_addresses) - 2)
         room = max(0, total_limit - len(hosts))
         take = min(limit, room, usable)
         cidr_hosts: list[str] = []
-        for host in network.hosts() if network.num_addresses > 2 else network:
+        iterator = network if network.num_addresses <= 2 else network.hosts()
+        for host in iterator:
             if _skip_host(host):
                 continue
             cidr_hosts.append(str(host))

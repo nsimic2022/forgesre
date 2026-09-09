@@ -23,6 +23,12 @@
 </div>
 {% endif %}
 
+{% if scan_job %}
+<div class="banner">
+  Scan <code>{{ scan_job.status }}</code> — probing in the background. Refresh for candidates. This page does not wait on the probe.
+</div>
+{% endif %}
+
 {% if pending %}
 <div class="banner">
   <strong>NEW DEVICE DETECTED</strong>
@@ -33,12 +39,12 @@
 <div class="discovery-actions">
 {% if can('write_assets') %}
 <section class="card">
-  <h2>Scan now {% with %}{% set tip %}TCP / SNMP / HTTP probe of YAML discovery.cidrs ∪ connected nets (real prefixes, not a hardcoded /24). Max 256/CIDR, 1024 total. Save &amp; scan writes the form into config/forgesre.yml; Scan now always merges auto-detect. Not nmap. Does not write inventory until you Approve. Manual Assets stay SoT.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Scan now {% with %}{% set tip %}Save &amp; scan writes the form into config/forgesre.yml then queues a background probe (Postgres jobs table, one Core worker thread). Scan now queues the same probe; empty field uses live YAML ∪ auto-detect (real prefixes — never a hardcoded /24). The page always redirects immediately so Core/UI cannot freeze. TCP 22, 80, 443, 9100, 9182 + SNMP GET UDP/161 (TCP/161 is skipped) + HTTP GET /metrics on :9182 and :9100. Not nmap. Max 256 hosts/CIDR, 1024 total. Empty YAML → auto only; auto fail → YAML only; both → merge. Does not write inventory until you Approve. Manual Assets stay SoT.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <form method="post" action="/discovery/scan" class="form-grid discovery-scan-form">
     <label class="wide">CIDR(s) for YAML (optional extras beyond auto-detect)
       <input name="cidrs" value="{{ cidr_prefill }}" placeholder="{{ suggested_cidr or (detected_cidrs|join(', ') if detected_cidrs else '10.10.10.0/24, 192.168.1.0/25') }}" autocomplete="off">
     </label>
-    <p class="muted wide">
+    <p class="muted wide discovery-auto-status">
       {% if detected_interfaces %}
       Autodetected connected nets (real prefixes):
       {% for iface in detected_interfaces %}
@@ -50,9 +56,8 @@
       {% else %}
       No connected IPv4 nets detected yet — Scan now still honors YAML <code>discovery.cidrs</code> if set.
       {% endif %}
-      Scan uses the union of YAML + auto (deduped). Empty YAML → auto only. Limits: 256 hosts/CIDR, 1024 total. Ports: TCP 22, 80, 443, 9100, 9182 + SNMP UDP/161.
     </p>
-    <div class="wide row-actions">
+    <div class="wide scan-actions">
       <button type="submit" name="confirm" value="1">Save &amp; scan</button>
       <button type="submit"{% if not discovery_can_scan and not cidr_prefill %} disabled title="No YAML cidrs and no auto-detected nets"{% endif %}>Scan now</button>
     </div>

@@ -615,6 +615,17 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 }
 .discovery-actions .card { margin-bottom: 0; }
 .discovery-scan-form { max-width: none; }
+.discovery-scan-form .wide.scan-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+.discovery-scan-form .scan-actions button {
+  width: auto;
+  flex: 0 0 auto;
+}
 @media (max-width: 800px) {
   .playbook-grid { grid-template-columns: 1fr; }
   .discovery-actions { grid-template-columns: 1fr; }

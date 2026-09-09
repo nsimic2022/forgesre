@@ -11,6 +11,9 @@ from app.models import Incident, Job, utcnow
 
 log = logging.getLogger("forgesre")
 
+DISCOVERY_SCAN_KIND = "discovery_scan"
+DISCOVERY_SCAN_OBJECT_ID = "scan"
+
 
 def enqueue(db: Session, kind: str, object_id: str, object_type: str = "incident", payload: dict | None = None) -> Job | None:
     existing = (
@@ -35,6 +38,40 @@ def enqueue(db: Session, kind: str, object_id: str, object_type: str = "incident
     db.commit()
     db.refresh(row)
     return row
+
+
+def active_discovery_scan(db: Session) -> Job | None:
+    """Pending or running discovery probe, if any."""
+    return (
+        db.query(Job)
+        .filter(
+            Job.kind == DISCOVERY_SCAN_KIND,
+            Job.object_id == DISCOVERY_SCAN_OBJECT_ID,
+            Job.status.in_(["pending", "running"]),
+        )
+        .order_by(Job.id.desc())
+        .first()
+    )
+
+
+def enqueue_discovery_scan(
+    db: Session,
+    *,
+    actor: str = "system",
+    cidrs: list[str] | None = None,
+    saved: bool = False,
+) -> Job | None:
+    """Queue a discovery probe. Dedupes while one is pending/running. Does not probe here."""
+    payload: dict = {"actor": actor, "saved": saved}
+    if cidrs is not None:
+        payload["cidrs"] = list(cidrs)
+    return enqueue(
+        db,
+        DISCOVERY_SCAN_KIND,
+        DISCOVERY_SCAN_OBJECT_ID,
+        object_type="discovery",
+        payload=payload,
+    )
 
 
 def job_is_llm(row: Job) -> bool:
@@ -88,6 +125,11 @@ def run_pending_jobs(db: Session, limit: int = 8) -> int:
                     force=bool(payload.get("force")),
                     use_llm=use_llm,
                 )
+            elif row.kind == DISCOVERY_SCAN_KIND:
+                from app.inventory import run_scan
+
+                # Always read live YAML ∪ auto. HTTP Save already wrote cidrs.
+                run_scan(db)
             else:
                 raise RuntimeError(f"unknown job kind {row.kind}")
             row.status = "done"
@@ -107,10 +149,12 @@ def run_pending_jobs(db: Session, limit: int = 8) -> int:
             row.finished_at = utcnow()
             row.error = str(exc)[:2000]
             db.commit()
+            module = "discovery" if row.kind == DISCOVERY_SCAN_KIND else "rca"
+            action = "scan" if row.kind == DISCOVERY_SCAN_KIND else "job"
             report(
                 db,
-                "rca",
-                "job",
+                module,
+                action,
                 "error",
                 summary=f"Job {row.kind} failed for {row.object_id}",
                 detail=str(exc),

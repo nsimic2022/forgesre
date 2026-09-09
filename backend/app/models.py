@@ -332,7 +332,7 @@ class DiscoveryCandidate(Base):
 
 
 class Job(Base):
-    """Background work (RCA). Not a message broker — one table, one worker thread."""
+    """Background work (RCA, discovery scan). Not a message broker — one table, one worker thread."""
 
     __tablename__ = "jobs"
 
