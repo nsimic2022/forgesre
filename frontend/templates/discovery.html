@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Discovery · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Discovery {% with %}{% set tip %}Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on UDP/161 (TCP/161 is skipped — that is not SNMP) and HTTP GET /metrics on :9182 and :9100 when a host is alive. windows_ metrics → Windows Server :9182. node_ metrics → Linux Server :9100. SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics. TCP open without exporter text is not an OS pick (ICMP ping is not a scrape). Scan now autodetects all connected IPv4 networks on this appliance (real prefixlen, not a hardcoded /24), skips loopback / link-local / multicast / 0.0.0.0/0 and Docker bridges (docker0, br-*, veth*), fills the CIDR field, and saves to discovery.cidrs. Limits stay 256 hosts/CIDR and 1024 total — huge prefixes are truncated with a warning. This is not nmap and does not replace nmap. New hosts wait here until an engineer Approves or Ignores them.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Discovery {% with %}{% set tip %}Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on UDP/161 (TCP/161 is skipped — that is not SNMP) and HTTP GET /metrics on :9182 and :9100 when a host is alive. windows_ metrics → Windows Server :9182. node_ metrics → Linux Server :9100. SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics. TCP open without exporter text is not an OS pick (ICMP ping is not a scrape). Scan now unions live discovery.cidrs from config/forgesre.yml with auto-detected connected IPv4 nets (real prefixlen — never a hardcoded /24). Skips loopback / link-local / multicast / 0.0.0.0/0 and Docker bridges (docker0, br-*, veth*). Empty YAML → auto only; auto fail → YAML only; both → merge. Limits 256 hosts/CIDR and 1024 total. Manual Assets stay the inventory source of truth until Approve. This is not nmap.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <p class="muted">
   Mode: <code>{{ discovery_mode }}</code>
-  · CIDRs: <code>{{ discovery_cidrs or "none (will autodetect on Scan now)" }}</code>
+  · YAML: <code>{{ discovery_cidrs or "[]" }}</code>
+  · Auto: <code>{{ discovery_auto_cidrs or detected_cidrs or "none" }}</code>
+  · Scan: <code>{{ discovery_scan_cidrs or "none" }}</code>
+  · Source: <code>{{ discovery_cidr_source or "?" }}</code>
   · Enabled: <code>{{ "On" if discovery_enabled else "Off" }}</code>
-  {% if detected_cidrs %}
-  · Detected: <code>{{ detected_cidrs|join(", ") }}</code>
-  {% endif %}
 </p>
 
 {% if notice %}
@@ -33,27 +33,28 @@
 <div class="discovery-actions">
 {% if can('write_assets') %}
 <section class="card">
-  <h2>Scan now {% with %}{% set tip %}TCP / SNMP / HTTP probe of connected networks (real prefixes). Prefills every non-Docker IPv4 network on this VM; edit before scan if needed. Scan now saves discovery.cidrs and probes (max 256/CIDR, 1024 total). Not nmap. Does not write inventory until you Approve.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Scan now {% with %}{% set tip %}TCP / SNMP / HTTP probe of YAML discovery.cidrs ∪ connected nets (real prefixes, not a hardcoded /24). Max 256/CIDR, 1024 total. Save &amp; scan writes the form into config/forgesre.yml; Scan now always merges auto-detect. Not nmap. Does not write inventory until you Approve. Manual Assets stay SoT.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <form method="post" action="/discovery/scan" class="form-grid discovery-scan-form">
-    <label class="wide">Connected CIDR(s)
-      <input name="cidrs" value="{{ cidr_prefill }}" placeholder="{{ detected_cidrs|join(', ') if detected_cidrs else '10.10.10.0/24, 192.168.1.0/25' }}" autocomplete="off">
+    <label class="wide">CIDR(s) for YAML (optional extras beyond auto-detect)
+      <input name="cidrs" value="{{ cidr_prefill }}" placeholder="{{ suggested_cidr or (detected_cidrs|join(', ') if detected_cidrs else '10.10.10.0/24, 192.168.1.0/25') }}" autocomplete="off">
     </label>
     <p class="muted wide">
       {% if detected_interfaces %}
-      Autodetected from this appliance (host network):
+      Autodetected connected nets (real prefixes):
       {% for iface in detected_interfaces %}
       <code>{{ iface.iface }} {{ iface.addr }}/{{ iface.prefixlen }} → {{ iface.cidr }}</code>{% if not loop.last %}; {% endif %}
       {% endfor %}.
-      Docker bridges are skipped. Edit the list before Scan now if needed.
-      {% elif detected_cidrs %}
-      Autodetected: <code>{{ detected_cidrs|join(", ") }}</code>. Edit before Scan now if needed.
+      Docker bridges skipped.
+      {% elif detected_cidrs or discovery_auto_cidrs %}
+      Autodetected: <code>{{ (detected_cidrs or discovery_auto_cidrs)|join(", ") }}</code>.
       {% else %}
-      No connected IPv4 networks detected yet. Type real prefixes (not a forced /24), then Scan now.
+      No connected IPv4 nets detected yet — Scan now still honors YAML <code>discovery.cidrs</code> if set.
       {% endif %}
-      Limits: 256 hosts per CIDR, 1024 total. Ports: TCP 22, 80, 443, 9100, 9182 + SNMP UDP/161.
+      Scan uses the union of YAML + auto (deduped). Empty YAML → auto only. Limits: 256 hosts/CIDR, 1024 total. Ports: TCP 22, 80, 443, 9100, 9182 + SNMP UDP/161.
     </p>
     <div class="wide row-actions">
-      <button type="submit">Scan now</button>
+      <button type="submit" name="confirm" value="1">Save &amp; scan</button>
+      <button type="submit"{% if not discovery_can_scan and not cidr_prefill %} disabled title="No YAML cidrs and no auto-detected nets"{% endif %}>Scan now</button>
     </div>
   </form>
 </section>
@@ -102,11 +103,6 @@
 </section>
 </div>
 
-{% if pending %}
-<h2>Waiting for Approve</h2>
-<p class="muted">Approve creates an asset. Ignore leaves it out of inventory. Same probe ports as Scan now.</p>
-{% endif %}
-
 <table>
   <thead>
     <tr>
@@ -114,6 +110,7 @@
       <th>Proposed role</th>
       <th>Open ports</th>
       <th>node_exporter</th>
+      <th>windows_exporter</th>
       <th>SNMP</th>
       <th>Status</th>
       <th>Source</th>
@@ -133,6 +130,7 @@
       <td>{{ row.proposed_role }}</td>
       <td>{{ row.open_ports|join(", ") if row.open_ports else "—" }}</td>
       <td>{{ "yes" if row.node_exporter else "no" }}</td>
+      <td>{{ "yes" if row.windows_exporter else "no" }}</td>
       <td>{{ "yes" if row.snmp_ok else "no" }}</td>
       <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>
       <td>{{ row.source }}</td>
@@ -160,7 +158,7 @@
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="8" class="muted">No candidates yet. Run Scan now (autodetects connected CIDRs) or use the demo workflow.</td></tr>
+    <tr><td colspan="9" class="muted">No candidates yet. Scan now (YAML ∪ auto), or use the demo workflow. Manual Assets on /assets stay valid without discovery.</td></tr>
   {% endfor %}
   </tbody>
 </table>

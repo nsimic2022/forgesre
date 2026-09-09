@@ -44,7 +44,7 @@ Follow this order on a live box. This handbook is **why and when**. Typed comman
 2. **Login.** `http://<VM-IP>:8080` with `installation-report.md` / `secrets/secrets.env` (§5).
 3. **System Health** (`/health-ui`) = `./forgesre doctor`. Open Grafana only here. Alarm path is Prometheus → Alertmanager → Core. NetBox UI up with API 403 is yellow **warn**, not paused. SNMP with no Network device + IP is **paused (no SNMP targets)** (yellow — leave it).
 4. **Assets** (`/assets`). Local inventory is the monitoring source of truth. Add / Edit / Verify.
-5. **Discovery vs NetBox** (`/discovery`). **Scan now** autodetects all connected IPv4 networks (real prefixes — not a hardcoded `/24`), fills+saves `discovery.cidrs`, probes TCP 22/80/443/9100/9182 + SNMP **UDP/161** + `/metrics` (not nmap). Candidate table: open ports, node_exporter, SNMP. **Sync NetBox** half-width beside Scan now. Empty NetBox is **yellow No devices** — that is OK. Approve or Ignore; nothing is auto-added.
+5. **Discovery vs NetBox** (`/discovery`). **Scan now** unions live `discovery.cidrs` with **auto-detected connected IPv4 nets** (real prefixlen — not a hardcoded `/24`). Candidate table: open ports, node_exporter, windows_exporter, SNMP. **Sync NetBox** sits beside Scan now (read-only from bundled `:8001`). Empty NetBox is **yellow No devices** — that is OK. Approve or Ignore; Manual Assets stay SoT. Manual Assets stay SoT.
 6. **Incidents** (`/incidents`) then **History** (`/history`). IDs look like `INC-0134_16.08.2026_09:13`.
 7. **ForgeRCA vs ForgeAI.** Open ForgeRCA on the incident. ForgeRCA (Python) always first. ForgeAI only rewrites prose (optional, default 90s timeout, one worker thread).
 8. **verify ≠ doctor ≠ test.** `./forgesre verify` = live inventory path. `./forgesre doctor` = Health lights. `./forgesre test` = appliance report → `data/reports/`.
@@ -143,7 +143,7 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 | Dashboard | `/` | Counts, HOST DOWN banner, pending discovery banner (analyst+), **Run demo** (admin, top right), recent incidents. Full doctor grid is **System Health**, not here. |
 | Assets | `/assets` | List inventory. **Add / Edit / Clone / Remove** (analyst+). One sentence: Verify ≠ doctor ≠ `./forgesre test`. |
 | Asset detail | `/assets/<id>` | Contacts, scrape, similar-incident history. **One Edit Alarms** on the metrics panel (not per tile). |
-| Discovery | `/discovery` | **Scan now** autodetects connected CIDRs (real prefixes; not `/24`-only), saves `discovery.cidrs`, probes TCP/SNMP/HTTP (not nmap). Side-by-side with **Sync NetBox** (read-only, admin). Candidate columns: open ports, node_exporter, SNMP. Demo IP `10.20.30.41` is a DEMO lab seed. |
+| Discovery | `/discovery` | Suggests management `/24` from this VM; **Confirm & scan** / **Scan now** (TCP/SNMP/HTTP, not nmap; empty cidrs = no scan) side-by-side with **Sync NetBox** (read-only, admin). Columns: open ports, node_exporter, windows_exporter, SNMP. Demo IP `10.20.30.41` is a DEMO lab seed. |
 | Incidents | `/incidents` | **Open/firing** list (filter: open-only / last days). INC id is green (resolved/closed), yellow (in progress), red (critical). Archive is **History**. |
 | History | `/history` | Archive: last 90 days in Postgres. Filters: status, asset, `INC` number. Closed rows stay here. |
 | Incident | `/incidents/INC-…` | **Acknowledge / Resolve / Close**, Who to call, **Open ForgeRCA** (primary CTA → `/ai/INC-…`), **Send incident report**. Mail outbox is `/ops#mail`. ForgeRCA/ForgeAI pills stay. |
@@ -311,40 +311,25 @@ Similar-incident history on the asset page groups past incidents by alert/title 
 
 ### B. Discovery (scan the management network)
 
-Who: **analyst**, engineer, or admin to scan and Approve. After Approve, fill contacts on the asset page — discovery does not guess who owns the box.
+Who: **analyst**, engineer, or admin to scan and Approve. After Approve, fill contacts on the asset page — discovery does not guess who owns the box. You can still add **manual Assets** on `/assets` without ever running discovery — inventory stays the monitoring source of truth.
 
-1. Open **Discovery**. ForgeSRE **autodetects all connected IPv4 networks** on this appliance (Core `network_mode: host`) using each interface’s **real prefixlen** — not a hardcoded `/24`. Loopback, link-local, multicast, `0.0.0.0/0`, and Docker bridges (`docker0`, `br-*`, `veth*`) are skipped.
-2. The CIDR field is prefilled with saved `discovery.cidrs` when present, otherwise with every detected network. Edit before scanning if needed. **Scan now** writes `discovery.cidrs` to live `config/forgesre.yml` and runs the probe (no Core recreate, no `install.sh`).
+1. Open **Discovery**. Scan targets are the **union** (deduped) of:
+   - `discovery.cidrs` from live `config/forgesre.yml` (always honored when present)
+   - **Auto-detected** connected IPv4 nets on this appliance (real `prefixlen` — never a hardcoded `/24`). Skips loopback, link-local, multicast, `0.0.0.0/0`, and Docker bridges (`docker0`, `br-*`, `veth*`).
+2. Empty YAML → auto only. Auto-detect fails → YAML only. Both present → merge. **Save & scan** writes the form into `discovery.cidrs`; **Scan now** always merges auto-detect. Edit YAML by hand if you prefer — no `install.sh` needed.
 
 ```yaml
 discovery:
   enabled: true
   mode: semi-automatic   # manual | semi-automatic | automatic
-  cidrs: ["10.20.30.0/25", "192.168.10.0/24"]   # real prefixes; Scan now can refill
+  cidrs: ["10.20.30.0/24"]   # optional extras; [] still scans auto-detected nets
 ```
 
-3. **Scan now** is the TCP/SNMP/`/metrics` probe — **not nmap**, and **not** NetBox. Limits: **256 hosts per CIDR**, **1024 total**. A huge prefix (e.g. `/16`) is truncated with a **warning** in the UI. **Sync NetBox** is a separate admin CTA (read-only), shown **half-width side-by-side** with Scan now. Background loop: first scan ~30s after Core start, then every **6 hours** (unless `mode: manual`) — uses saved cidrs ∪ autodetection. Results land in the candidate table (10 per page) and in Journal module `discovery`. ICMP ping is on Assets, not Scan now.
+3. **Scan now** is the TCP/SNMP/`/metrics` probe — **not nmap**, and **not** NetBox. Limits: **256 hosts per CIDR**, **1024 total**. **Sync NetBox** is a separate admin CTA (read-only), shown **side-by-side** with Scan now. Background loop uses the same YAML ∪ auto sources. Hosts already in Assets are skipped. Results land in the candidate table (10 per page) and in Journal module `discovery`. ICMP ping is on Assets, not Scan now.
 4. Banner **NEW DEVICE DETECTED**. Found hosts stay on **Waiting for Approve** until you decide. They are **not** auto-added to inventory.
-5. Candidate table shows **Open ports**, **node_exporter** (yes/no: :9100 + `node_` metrics), and **SNMP** (`snmp_ok`).
+5. Candidate table shows **Open ports**, **node_exporter**, **windows_exporter**, and **SNMP** (`snmp_ok`).
 6. **Approve** (on the Discovery page) → creates an asset (`source=discovery`, id like `disc-10-20-30-41`) and sends you to the asset page. **Ignore** rejects the host (out of inventory).
 
-Probe is **not nmap**. It tries TCP **22, 80, 443, 9100, 9182** and an SNMPv2c GET on **UDP/161** (TCP/161 is skipped — that is not SNMP). When a host is alive, Core also GETs `/metrics` on **:9182** and **:9100** (same detect as Add Asset):
-
-| Probe | Proposed role | After Approve |
-|---|---|---|
-| `:9182/metrics` has `windows_` | Possible Windows server | `scrape_address=<ip>:9182` (windows_exporter) |
-| `:9100/metrics` has `node_` | Possible Linux server | `scrape_address=<ip>:9100` (node_exporter) |
-| Both exporters | Prefer saved type; else Windows `:9182` | matching scrape |
-| TCP 9100/9182 open, no exporter text | Caveat in the role (`no … /metrics`) | inventory; **no** scrape until /metrics works |
-| UDP/161 SNMP GET succeeds (even if SSH is open) | Possible network device | SNMP UDP/161 (no HTTP exporter scrape) |
-| 22 only | Possible Linux server | inventory only — **no** `:9100` until node_exporter answers |
-| 80 or 443 | Possible web/appliance | inventory only |
-
-TCP open on 9100 or 9182 is **not** an OS pick. ICMP ping is not used for OS and is **not** a Scan now step.
-
-`mode: automatic` used to approve with `actor=system-automatic`. Scan now **no longer writes inventory** in any mode — found hosts wait for Approve on Discovery. Seeded `forge-demo-*` lab hosts in a CIDR are skipped (not auto-approved). Prefer `semi-automatic` in the YAML so the background loop still runs.
-
-Demo candidate `10.20.30.41` is seeded so you can click Approve without a live subnet. It is labeled DEMO seed — not a Scan now hit. After Approve it becomes `disc-10-20-30-41`, still lab: **not** in Prometheus HTTP SD, and `./forgesre verify` labels DEMO / SKIP (not a production FAIL). `./forgesre demo` puts the candidate back if missing.
 
 ### C. Bundled NetBox (read-sync)
 
@@ -694,7 +679,7 @@ Goal: host `app-01` at `10.10.10.50` appears under Assets and is scraped on `:91
 4. Wait up to 30s, then check SD JSON (command in §7) contains that target.
 5. On the VM: open Grafana (`:3000`) or Prometheus UI (`http://127.0.0.1:9090` from the host) and query `{asset="app-01"}` or `up{instance="10.10.10.50:9100"}`.
 
-Optional discovery path: put `10.10.10.0/24` in `discovery.cidrs`, Scan now, Approve the `10.10.10.50` candidate instead of the manual form.
+Optional discovery path: Confirm `10.10.10.0/24` on Discovery (or put it in `discovery.cidrs`), Scan now, Approve the `10.10.10.50` candidate instead of the manual form.
 
 This still will **not** open `INC-…` until a Prometheus alert fires with a matching playrule. Bundled `NodeExporterDown` / `NodeFilesystemUsageHigh` / `NodeCPUHigh` / `NodeMemoryHigh` already match seeded playrules once node_exporter is scraped. Custom thresholds: §15.
 

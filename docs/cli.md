@@ -86,6 +86,10 @@ quit                       # or: exit    or Ctrl-D
 
 ---
 
+`./forgesre config` shows the live YAML path. Discovery **Save & scan** writes `discovery.cidrs` there; Scan now unions auto-detected connected nets. Do not re-run `./install.sh` just to change CIDRs.
+
+---
+
 ## Ping vs scrape
 
 ICMP ping from the appliance only proves **L3** (the host answers ping). ForgeSRE **sees** a host when Prometheus scrapes exporter `/metrics`. `./forgesre ping` (alias `./forgesre probe`) checks both **from the Ubuntu host**, using inventory already in ForgeSRE — no extra flags for the common case. Do not `pip install sqlalchemy` on the host.
@@ -218,7 +222,7 @@ sudo systemctl enable --now open-vm-tools
 systemctl status vmtoolsd
 ```
 
-`config/forgesre.yml` is local to the VM (gitignored). Change it, then recreate Core. Do not commit it. The committed template is `config/forgesre.example.yml`.
+`config/forgesre.yml` is local to the VM (gitignored). Discovery **Save & scan** writes `discovery.cidrs` there; Scan now also unions auto-detected connected nets (real prefixes — not a hardcoded `/24`). Empty YAML still scans auto nets. Change other keys, then recreate Core. Do not commit the live file. The committed template is `config/forgesre.example.yml`.
 
 ---
 

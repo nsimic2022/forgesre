@@ -622,6 +622,10 @@ def discovery_page(
         discovery_enabled=settings.discovery_enabled,
         discovery_mode=settings.discovery_mode,
         discovery_cidrs=saved_cidrs,
+        discovery_auto_cidrs=auto_cidrs,
+        discovery_scan_cidrs=scan_cidrs,
+        discovery_cidr_source=str(resolved.get("source") or "none"),
+        discovery_can_scan=bool(scan_cidrs),
         detected_cidrs=auto_cidrs,
         detected_interfaces=list(resolved.get("interfaces") or []),
         discovery_warnings=list(resolved.get("warnings") or []),
@@ -653,38 +657,50 @@ def discovery_scan_page(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     cidrs: str = Form(""),
+    confirm: str = Form(""),
 ):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
     from discovery import normalize_cidrs
 
+    want_save = (confirm or "").strip().lower() in {"1", "true", "yes", "on", "confirm", "save"}
     parsed = normalize_cidrs(cidrs)
-    if parsed:
+    if want_save or parsed:
         settings.set_discovery_cidrs(parsed)
-        result = run_scan(db, cidrs=parsed, merge_auto=False)
+        result = run_scan(db, cidrs=parsed)
     else:
         result = run_scan(db)
-        if result.get("cidrs"):
-            settings.set_discovery_cidrs(list(result["cidrs"]))
     if result.get("skipped_reason") == "empty_cidrs":
         return RedirectResponse(
-            f"/discovery?notice={quote('No connected IPv4 networks detected and discovery.cidrs empty — nothing to scan.')}",
+            f"/discovery?notice={quote('No YAML discovery.cidrs and no auto-detected connected nets — nothing to scan.')}",
             status_code=302,
         )
     audit(
         db,
         "discovery.scan",
         actor=user.email,
-        data={"cidrs": result.get("cidrs"), "found": result.get("found"), "source": result.get("source")},
+        data={
+            "cidrs": result.get("cidrs"),
+            "yaml": result.get("yaml"),
+            "auto": result.get("auto"),
+            "source": result.get("source"),
+            "found": result.get("found"),
+            "saved": bool(want_save or parsed),
+        },
         commit=True,
     )
     found = int(result.get("found") or 0)
-    used = ", ".join(result.get("cidrs") or [])
-    notice = f"Saved {used}; scan found={found}" if used else f"Scan finished found={found}"
+    source = result.get("source") or "?"
+    notice = f"Scan finished source={source} found={found}"
+    if want_save or parsed:
+        saved_txt = ", ".join(parsed) if parsed else "(cleared)"
+        notice = f"Saved discovery.cidrs={saved_txt}; " + notice
     warns = list(result.get("warnings") or [])
     if warns:
         notice = notice + " · " + " ".join(warns[:2])
     return RedirectResponse(f"/discovery?notice={quote(notice)}", status_code=302)
+
+
 
 
 @router.post("/discovery/{candidate_id}/approve")

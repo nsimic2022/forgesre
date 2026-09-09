@@ -676,18 +676,36 @@ def discovery_scan(
     user: User = Depends(require("write_assets")),
     cidrs: list[str] | None = None,
 ) -> dict:
+    """Scan YAML discovery.cidrs ∪ auto-detected connected nets (deduped)."""
     from discovery import normalize_cidrs
 
     parsed = normalize_cidrs(cidrs or [])
     if parsed:
         settings.set_discovery_cidrs(parsed)
-        result = run_scan(db, cidrs=parsed, merge_auto=False)
+        result = run_scan(db, cidrs=parsed)
     else:
         result = run_scan(db)
-        if result.get("cidrs"):
-            settings.set_discovery_cidrs(list(result["cidrs"]))
-    audit(db, "discovery.scan", actor=user.email, data={"cidrs": result.get("cidrs")}, commit=True)
+    if result.get("skipped_reason") == "empty_cidrs":
+        raise HTTPException(
+            status_code=400,
+            detail="No discovery.cidrs and no auto-detected connected nets — nothing to scan.",
+        )
+    audit(
+        db,
+        "discovery.scan",
+        actor=user.email,
+        data={
+            "cidrs": result.get("cidrs"),
+            "yaml": result.get("yaml"),
+            "auto": result.get("auto"),
+            "source": result.get("source"),
+            "found": result.get("found"),
+        },
+        commit=True,
+    )
     return result
+
+
 
 
 @router.post("/discovery/candidates/{candidate_id}/approve")
