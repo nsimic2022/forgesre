@@ -578,6 +578,13 @@ def discovery_page(
     from app.jobs import active_discovery_scan
 
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
+    rows = sorted(
+        rows,
+        key=lambda row: (
+            0 if (getattr(row, "source", "") == "demo" or row.ip == DEMO_CANDIDATE_IP) else 1,
+            -(row.id or 0),
+        ),
+    )
     pending = [row for row in rows if row.status == "new"]
     rows, pager = paginate(rows, page)
     token = settings.netbox_token
@@ -620,7 +627,7 @@ def discovery_page(
         }
     auto_cidrs = list(resolved.get("auto") or [])
     scan_cidrs = list(resolved.get("cidrs") or [])
-    cidr_prefill = ", ".join(saved_cidrs) if saved_cidrs else ", ".join(auto_cidrs)
+    cidr_prefill = ", ".join(scan_cidrs) if scan_cidrs else ", ".join(auto_cidrs or saved_cidrs)
     return render(
         request,
         "discovery.html",
@@ -678,16 +685,19 @@ def discovery_scan_page(
     try:
         if not can(user, "write_assets"):
             raise HTTPException(status_code=403)
-        from discovery import normalize_cidrs
+        from discovery import normalize_cidrs, suggested_connected_cidrs
         from app.jobs import enqueue_discovery_scan, active_discovery_scan
 
         want_save = (confirm or "").strip().lower() in {"1", "true", "yes", "on", "confirm", "save"}
         parsed = normalize_cidrs(cidrs)
-        saved = bool(want_save)
+        if not parsed:
+            parsed = list(suggested_connected_cidrs() or [])
+        saved = False
         persist_note = ""
-        if saved:
+        if parsed or want_save:
             try:
                 settings.set_discovery_cidrs(parsed)
+                saved = True
             except OSError as exc:
                 log.exception("discovery.cidrs persist failed")
                 persist_note = (
@@ -698,7 +708,7 @@ def discovery_scan_page(
         job = enqueue_discovery_scan(
             db,
             actor=user.email,
-            cidrs=parsed if saved else None,
+            cidrs=parsed if parsed else None,
             saved=saved,
         )
         audit(
@@ -708,7 +718,7 @@ def discovery_scan_page(
             data={
                 "queued": True,
                 "job_id": job.id if job else None,
-                "cidrs": parsed if saved else None,
+                "cidrs": parsed if parsed else None,
                 "saved": saved,
                 "already": already,
             },

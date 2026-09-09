@@ -128,8 +128,14 @@ def run_pending_jobs(db: Session, limit: int = 8) -> int:
             elif row.kind == DISCOVERY_SCAN_KIND:
                 from app.inventory import run_scan
 
-                # Always read live YAML ∪ auto. HTTP Save already wrote cidrs.
-                run_scan(db)
+                # Payload cidrs = operator-edited list (already persisted). Do not
+                # silently re-merge auto nets. Missing payload → YAML ∪ auto.
+                payload = row.payload or {}
+                cidrs = payload.get("cidrs")
+                if isinstance(cidrs, list) and cidrs:
+                    run_scan(db, cidrs=list(cidrs), merge_auto=False)
+                else:
+                    run_scan(db)
             else:
                 raise RuntimeError(f"unknown job kind {row.kind}")
             row.status = "done"

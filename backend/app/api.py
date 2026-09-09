@@ -675,23 +675,26 @@ def discovery_scan(
     user: User = Depends(require("write_assets")),
     cidrs: list[str] | None = None,
 ) -> dict:
-    """Queue YAML ∪ auto discovery probe. Does not run_scan on the request thread."""
-    from discovery import normalize_cidrs
+    """Queue discovery probe; persist operator CIDRs or autodetection. No run_scan here."""
+    from discovery import normalize_cidrs, suggested_connected_cidrs
     from app.jobs import enqueue_discovery_scan, active_discovery_scan
 
     try:
         parsed = normalize_cidrs(cidrs or [])
-        saved = bool(parsed)
-        if saved:
+        if not parsed:
+            parsed = list(suggested_connected_cidrs() or [])
+        saved = False
+        if parsed:
             try:
                 settings.set_discovery_cidrs(parsed)
+                saved = True
             except OSError:
                 log.exception("API discovery.cidrs persist failed")
         already = active_discovery_scan(db) is not None
         job = enqueue_discovery_scan(
             db,
             actor=user.email,
-            cidrs=parsed if saved else None,
+            cidrs=parsed if parsed else None,
             saved=saved,
         )
         audit(
@@ -701,7 +704,7 @@ def discovery_scan(
             data={
                 "queued": True,
                 "job_id": job.id if job else None,
-                "cidrs": parsed if saved else None,
+                "cidrs": parsed if parsed else None,
                 "saved": saved,
                 "already": already,
             },
@@ -714,7 +717,7 @@ def discovery_scan(
             "status": job.status if job else "pending",
             "kind": "discovery_scan",
             "saved": saved,
-            "cidrs": parsed if saved else None,
+            "cidrs": parsed if parsed else None,
         }
     except HTTPException:
         raise
@@ -728,7 +731,7 @@ def discovery_scan(
             summary="Could not queue discovery scan",
             detail=str(exc),
         )
-        return {"queued": False, "error": str(exc)[:500], "kind": "discovery_scan"}
+        raise HTTPException(status_code=500, detail=f"Could not queue scan: {type(exc).__name__}") from exc
 
 
 
