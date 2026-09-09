@@ -42,6 +42,8 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
+Docs: GitHub README **Install / config** (after Quick start) plus [`install-config.md`](install-config.md) §15 — `./forgesre fetch-llm` lands at `data/models/model.gguf`, then profile `ai` + `ai.enabled: true`; wait `:8088/v1/models` / `./forgesre doctor`. LLM optional (~9 GB 14B). No catalog/switcher; Ollama not default; mailbox opt-in. Docs index step 1 mentions LLM as optional.
+
 N’s small GUI pass on V0.7 (English, no React): Dashboard journal warning is shorter (`banner-short`, e.g. “Journal 2 errors”) and still pale yellow; Infrastructure/Incidents headings have ⓘ (inventory counts vs incident counts) and every stat square is a full-tile shortcut to `/assets` (status filter when it matches) or `/incidents`; Assets moves verify ≠ doctor ≠ test into the title ⓘ and drops the always-on sentence (Verify buttons and Verify all stay); Discovery candidate rows get Edit / Clone / Ignore / Remove (Remove deletes the candidate; DEMO pill stays); Incidents Filter is spaced on `list-filters` and defaults to **All** (Open / Closed; History remains the archive); History Ack is a green/yellow/red status circle with Acknowledged / Not acknowledged tooltip; Playbooks drops the duplicate body paragraph, cards are two per row, each has Edit / Clone / Remove, create/edit is Save + Cancel; Administration users get the same Edit / Clone / Remove (cannot delete self or install super_admin). CSS cache-bust `app.css?v=gui-1`. Hard-refresh after `git pull origin main && ./forgesre update`. Pytest **425 passed** (twice). Do not revert ⓘ help or `/ops` report jobs.
 
 ### Left nav clock + this-appliance resources (this branch)
