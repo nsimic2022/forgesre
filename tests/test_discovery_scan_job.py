@@ -249,7 +249,9 @@ def test_post_scan_empty_cidrs_and_mocked_ip_does_not_500(monkeypatch):
     )
     assert mocked.status_code == 302, mocked.text[:800]
     loc = unquote(mocked.headers.get("location") or "").lower()
-    assert "saved discovery.cidrs" not in loc
+    # Scan now persists the operator CIDR list (multi-CIDR real prefixes), then queues.
+    assert "saved discovery.cidrs" in loc
+    assert "10.66.1.0/30" in loc
     db = SessionLocal()
     run_pending_jobs(db)
     db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)

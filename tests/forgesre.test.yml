@@ -1,24 +1,20 @@
-# Pytest copy of the example config with AI off so tests never call llama.cpp.
 schema_version: 1
-
 system:
-  mode: online # online | offline
+  mode: online
   timezone: Europe/Belgrade
   log_level: info
-  cookie_secure: false # true when Core is served over HTTPS (or set FORGESRE_COOKIE_SECURE=1)
-
+  cookie_secure: false
 inventory:
-  provider: local # local inventory is SoT; NetBox is read-sync
+  provider: local
   netbox:
     enabled: false
     mode: disabled
-    url: ""
-
+    url: ''
 discovery:
   enabled: true
-  mode: semi-automatic # manual | semi-automatic | automatic
-  cidrs: []
-
+  mode: semi-automatic
+  cidrs:
+  - 10.66.1.0/30
 monitoring:
   prometheus:
     enabled: true
@@ -32,7 +28,6 @@ monitoring:
     enabled: true
     exporter_url: http://127.0.0.1:9116
     module: if_mib
-
 logging:
   loki:
     enabled: true
@@ -40,17 +35,15 @@ logging:
     url: http://127.0.0.1:3100
   alloy:
     enabled: true
-
 grafana:
   enabled: true
   mode: bundled
   url: http://127.0.0.1:3000
-
 ai:
   enabled: false
   provider: local
   llm:
-    mode: disabled # bundled | external | disabled
+    mode: disabled
     url: http://127.0.0.1:8088/v1
     model: local
     timeout_seconds: 90
@@ -59,7 +52,6 @@ ai:
     window_minutes: 30
     max_log_lines: 20
     max_evidence: 40
-
 notifications:
   email:
     enabled: false
@@ -69,7 +61,6 @@ notifications:
     tls: true
   webhook:
     enabled: false
-
 features:
   playrules: true
   playbooks: true
