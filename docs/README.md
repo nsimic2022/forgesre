@@ -1,6 +1,6 @@
 # Docs
 
-The GitHub README is the product summary (what ForgeSRE is, what it is not, first install). This folder is how you **learn to operate** the appliance.
+The GitHub README is the product summary (what ForgeSRE is, what it is not, first install, **optional LLM** download into `data/models/model.gguf`). This folder is how you **learn to operate** the appliance.
 
 **Why / when:** [operator handbook](operator-handbook.md) (source of truth for running the box).  
 **Commands:** [cli.md](cli.md).  
@@ -11,7 +11,7 @@ The GitHub README is the product summary (what ForgeSRE is, what it is not, firs
 
 ## Learn the platform (this order)
 
-1. **Install or update** — New VM: [install and config](install-config.md) then `./install.sh`. Live box: `git pull origin main && ./forgesre update`.
+1. **Install or update** — New VM: [install and config](install-config.md) then `./install.sh`. Live box: `git pull origin main && ./forgesre update`. Optional local LLM (not required): `./forgesre fetch-llm` downloads into `data/models/model.gguf`, then profile `ai` + `ai.enabled: true` — [llm.md](llm.md).
 2. **Login** — `http://<VM-IP>:8080`. Credentials: `installation-report.md` and `secrets/secrets.env`. Handbook [§5](operator-handbook.md#5-users-and-admins).
 3. **System Health** — UI `/health-ui` = `./forgesre doctor`. Grafana lives **only here** (graphs, not the alarm path). NetBox UI up + API 403 is yellow **warn**, not paused. SNMP with no Network device + IP is **paused (no SNMP targets)** (yellow — that is OK).
 4. **Assets** — `/assets`. Local inventory is what Prometheus scrapes. Add / Edit / Clone / Verify. Handbook [§6–7](operator-handbook.md#6-adding-servers-inventory).

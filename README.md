@@ -90,6 +90,64 @@ Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. L
 
 ---
 
+## Install / config
+
+| When | Command |
+|---|---|
+| **New box** | `./install.sh` (once). Guided wizard, or `--non-interactive --profile standard --port 8080`. |
+| **Live box** | `git pull origin main && ./forgesre update`. Never `./install.sh` again (it regenerates passwords). |
+
+`./install.sh` writes the live files. If you are not using the installer, copy the template:
+
+```bash
+cp config/forgesre.example.yml config/forgesre.yml
+```
+
+Live `config/forgesre.yml`, `.env`, and `secrets/secrets.env` are **gitignored**. Do not commit passwords, tokens, or SMTP secrets. Core reads `config/forgesre.yml`, not the example. After YAML edits: `docker compose up -d --force-recreate core`.
+
+Longer Ubuntu / vCenter manual: [docs/install-config.md](docs/install-config.md).
+
+### Optional local LLM (download + activate)
+
+ForgeRCA (Python) always investigates. The GGUF is **optional** — skip this on a 4 GB VM. Default pin is **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB on disk; ~16 GB RAM with the rest of the stack). Not stored in git. Ollama is not the product default. Mailbox stays opt-in (`./forgesre mailbox`); do not add profile `mailbox` just to turn AI on.
+
+**Where the file lands:** `$FORGESRE_DATA/models/model.gguf` (default **`./data/models/model.gguf`**). The filename **must** be `model.gguf`. A `wget` in the clone root does **not** count.
+
+Usual path on an existing install (`scripts/fetch-llm.sh`):
+
+```bash
+./forgesre fetch-llm
+```
+
+That downloads into `data/models/model.gguf` (unless a file larger than 1 GB is already there), sets `COMPOSE_PROFILES=ai` in `.env`, writes `ai.enabled: true` and `ai.llm.mode: bundled` in `config/forgesre.yml`, and starts Compose service `llm` (`127.0.0.1:8088`). Then wait until llama.cpp answers and check doctor:
+
+```bash
+curl -fsS http://127.0.0.1:8088/v1/models
+./forgesre doctor          # llm: ok
+```
+
+First load after `up -d llm` takes minutes (GGUF mmap). Do not re-run `./install.sh` to add the model.
+
+If you only downloaded (`./forgesre fetch-llm --download-only`) or copied a GGUF yourself, **activate**:
+
+1. `.env`: `COMPOSE_PROFILES=ai` (or `ai,mailbox` only if the mailbox profile is already on).
+2. `config/forgesre.yml` (copy keys from `config/forgesre.example.yml` if the `ai:` block is missing): `ai.enabled: true`, `ai.llm.mode: bundled`. Timeout default is `timeout_seconds: 90` (lab 4B; raise toward 600 only for slow 14B CPU).
+3. `docker compose --profile ai up -d llm` then `docker compose up -d --force-recreate core`.
+4. Wait for `http://127.0.0.1:8088/v1/models`, then `./forgesre doctor`.
+
+**Lab / 8 GB RAM** — Qwen3-4B Q4_K_M (~2.5 GB), still documented in `scripts/fetch-llm.sh --help`:
+
+```bash
+mkdir -p data/models
+wget -O data/models/model.gguf \
+  https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf
+./forgesre fetch-llm --offline
+```
+
+`--offline` skips Hugging Face; the file must already exist at `data/models/model.gguf` and be larger than 1 GB. Details: [docs/llm.md](docs/llm.md).
+
+---
+
 ## UI
 
 | URL | What you do |
@@ -137,7 +195,7 @@ Type `./forgesre` with no arguments for a prompt, then `journal`, `incidents`, `
 ./forgesre backup --no-secrets
 ./forgesre backup --include-models
 ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes
-./forgesre fetch-llm           # optional ~9 GB GGUF, not stored in git
+./forgesre fetch-llm           # optional ~9 GB → data/models/model.gguf
 ./forgesre mailbox             # optional Roundcube later; Core SMTP unchanged
 ```
 
@@ -153,6 +211,6 @@ Config: `config/forgesre.yml` (behavior), `.env` (ports/paths), `secrets/secrets
 
 ## Docs
 
-Start at the [operator learning path](docs/README.md). Why/when: [handbook](docs/operator-handbook.md). Commands: [cli.md](docs/cli.md).
+Install / config (including optional LLM) is in this README above. Longer Ubuntu manual: [docs/install-config.md](docs/install-config.md). Learning path: [docs/README.md](docs/README.md). Why/when: [handbook](docs/operator-handbook.md). Commands: [cli.md](docs/cli.md). LLM details: [docs/llm.md](docs/llm.md).
 
 Longer-term design notes (not a runtime guide): [architecture.md](docs/architecture.md). Security notes: [SECURITY.md](SECURITY.md). License: [Apache-2.0](LICENSE).

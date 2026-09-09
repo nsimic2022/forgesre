@@ -20,7 +20,7 @@ Repository: https://github.com/nsimic2022/forgesre (`main`).
 | [12. Operator CLI](#12-operator-cli) | Everyday `./forgesre` commands |
 | [13. Advanced CLI](#13-advanced-cli) | Logs, rebuild Core, LLM profile, git pull |
 | [14. Updates](#14-updates) | Existing VM after `git pull` |
-| [15. Optional local LLM](#15-optional-local-llm) | GGUF / llama.cpp — full guide: [`llm.md`](llm.md) |
+| [15. Optional local LLM](#15-optional-local-llm) | Download into `data/models/model.gguf`, activate profile `ai` + `ai.enabled` — details: [`llm.md`](llm.md) |
 | [16. Troubleshooting](#16-troubleshooting) | Common failures |
 
 Day-to-day product work (users, inventory, incidents, email): [`operator-handbook.md`](operator-handbook.md).  
@@ -159,6 +159,8 @@ After install, verify:
 ./forgesre doctor
 ```
 
+The local LLM is **optional**. A standard profile does not download a GGUF. On this box later, use `./forgesre fetch-llm` — do **not** re-run `./install.sh` to add AI. Where the file lands and how to activate: [§15](#15-optional-local-llm) and [`llm.md`](llm.md).
+
 ---
 
 ## 6. Open the UI
@@ -225,7 +227,13 @@ Three files. Do not mix them.
 | `config/forgesre.yml` | Discovery, NetBox URL, AI/RCA, Loki, Grafana, SMTP host | ignored (example is committed) |
 | `secrets/secrets.env` | Passwords and tokens | ignored, mode `600` |
 
-Template: [`config/forgesre.example.yml`](../config/forgesre.example.yml).
+Template: [`config/forgesre.example.yml`](../config/forgesre.example.yml). The installer writes `config/forgesre.yml`. If that live file is missing:
+
+```bash
+cp config/forgesre.example.yml config/forgesre.yml
+```
+
+Do not commit `config/forgesre.yml`, `.env`, or `secrets/secrets.env`. Do not paste secrets into tickets. Core reads the live YAML, not the example.
 
 ```bash
 ./forgesre config
@@ -441,19 +449,88 @@ Platform backup files: `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (o
 
 ## 15. Optional local LLM
 
-ForgeRCA (Python) always runs. The local model only **rewrites prose**. Full implementation guide: [`llm.md`](llm.md) (hardware, `fetch-llm`, offline GGUF, external `/v1` server, jobs, debug CLI).
+ForgeRCA (Python) always runs. The local model only **rewrites prose**. Skip this on a 4 GB VM. Full implementation guide (hardware, jobs, debug CLI, external `/v1`): [`llm.md`](llm.md).
 
-Not stored in git. `./forgesre fetch-llm` pulls Qwen2.5-14B-Instruct Q4_K_M (~9 GB) into `$FORGESRE_DATA/models/model.gguf`, sets `COMPOSE_PROFILES=ai`, and starts llama.cpp on `127.0.0.1:8088`.
+Not stored in git. Default pin is **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB). Ollama is not the product default. There is no GGUF catalog or Health model switcher. Mailbox stays opt-in (`./forgesre mailbox`); `COMPOSE_PROFILES=ai` does not turn mail on.
+
+### Where the file lands
+
+Compose always loads **one** file named `model.gguf`:
+
+```text
+$FORGESRE_DATA/models/model.gguf
+```
+
+Default `$FORGESRE_DATA` is `./data` (from `.env`). Check:
+
+```bash
+ls -lah ./data/models/
+```
+
+A `wget -O model.gguf` in the **clone root** does not count. The container argument is `-m /models/model.gguf` (volume `${FORGESRE_DATA:-./data}/models`).
+
+### Download
+
+On an existing install (`scripts/fetch-llm.sh`, same as `./forgesre fetch-llm`):
 
 ```bash
 ./forgesre fetch-llm
+```
+
+Without `--download-only` this also **activates**: `COMPOSE_PROFILES=ai` in `.env`, `ai.enabled: true` and `ai.llm.mode: bundled` in **`config/forgesre.yml`** (not the example), starts service `llm` on `127.0.0.1:8088`, recreates Core.
+
+Download only (no Compose / YAML changes):
+
+```bash
+./forgesre fetch-llm --download-only
+```
+
+**Lab / 8 GB RAM** — Qwen3-4B Q4_K_M (~2.5 GB), still in `scripts/fetch-llm.sh --help`:
+
+```bash
+mkdir -p data/models
+wget -O data/models/model.gguf \
+  https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf
+./forgesre fetch-llm --offline
+```
+
+`--offline` skips Hugging Face; the file must already exist and be larger than 1 GB. Override URL: `FORGESRE_LLM_URL='https://…' ./forgesre fetch-llm`.
+
+Need **~16 GB RAM** for the default 14B, or **~8 GB** for the 4B lab wget. Do not re-run `./install.sh` just to add AI.
+
+### Activate
+
+If `fetch-llm` already ran without `--download-only`, skip to the wait/`doctor` block. Otherwise:
+
+1. `.env`: `COMPOSE_PROFILES=ai` (or `ai,mailbox` only if mailbox is already enabled).
+2. Live `config/forgesre.yml` (gitignored; copy keys from [`config/forgesre.example.yml`](../config/forgesre.example.yml) if `ai:` is missing):
+
+```yaml
+ai:
+  enabled: true
+  llm:
+    mode: bundled          # bundled | external | disabled
+    url: http://127.0.0.1:8088/v1
+    model: local
+    timeout_seconds: 90    # lab 4B; raise toward 600 only for slow 14B CPU
+```
+
+3. Start llama.cpp and reload Core:
+
+```bash
 docker compose --profile ai up -d llm
+docker compose up -d --force-recreate core
+```
+
+4. Wait until `:8088` answers (first GGUF load is minutes), then doctor:
+
+```bash
 curl -fsS http://127.0.0.1:8088/v1/models
-./forgesre doctor          # llm: ok when llama.cpp answers :8088
+./forgesre doctor          # llm: ok
 ./forgesre test
 ```
 
-Need 16 GB RAM for the default 14B GGUF, or ~8 GB if you wget Qwen3-4B into `data/models/model.gguf` (see [`llm.md`](llm.md) §3.C). Without a model, ForgeRCA still runs. Cloud LLMs are not required. Do not re-run `./install.sh` just to add AI.
+Without a model, ForgeRCA still runs. Cloud LLMs are not required. Do not commit the GGUF or the live YAML.
 
 ---
 
