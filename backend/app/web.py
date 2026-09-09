@@ -629,7 +629,7 @@ def discovery_page(
         detected_cidrs=auto_cidrs,
         detected_interfaces=list(resolved.get("interfaces") or []),
         discovery_warnings=list(resolved.get("warnings") or []),
-        discovery_scan_cidrs=scan_cidrs,
+        suggested_cidr=", ".join(auto_cidrs),
         cidr_prefill=cidr_prefill,
         netbox_enabled=settings.netbox_enabled,
         netbox_url=settings.netbox_url,
