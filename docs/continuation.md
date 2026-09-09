@@ -30,7 +30,7 @@ PYTHONPATH=backend:agents python3 -m pytest
 PYTHONPATH=backend:agents python3 -m pytest
 ```
 
-**451 passed** twice. Final `--no-ff` merge to `main`: **`3340b3c`**. Record pass counts after both runs. `create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
+**451 passed** twice. Final `--no-ff` merge to `main`: **`46dab39`**. Record pass counts after both runs. `create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
 
 ---
 
@@ -43,6 +43,7 @@ PYTHONPATH=backend:agents python3 -m pytest
 - HTTP always **redirects** with a flash (`Scan queued…`). Duplicate clicks reuse the pending/running row.
 - Layout: **Save & scan** | **Scan now** 50/50 in `.discovery-scan-actions`; Scan card | NetBox **50/50** (`.discovery-actions`). Long probe copy lives in ⓘ. CSS `app.css?v=disc-500`.
 - `docker-compose.yml` mounts `config/forgesre.yml` **rw** so Save & scan can persist `discovery.cidrs` (`:ro` was EROFS → HTTP 500). `scan_plan` no longer walks a `/8` just to count hosts.
+- Restored empty `discovery.cidrs: []` in pytest config after a merge glitch.
 - **Multi-CIDR:** prefills all connected nets (real prefixes — not `/24`-only); Scan now / Save & scan persist `discovery.cidrs` and queue a probe of that list (`merge_auto=False` in the worker). Empty form → autodetection + save. No Celery. One worker thread. No **Confirm & scan**.
 
 Do not revert ⓘ tooltips, nav clock/resources, `/ops` report-job row actions, or `.env` / `secrets.example.env` **service-group** comments.
@@ -57,7 +58,7 @@ Do **not** run `./install.sh`.
 git pull origin main && ./forgesre update
 ```
 
-SHA: **`3340b3c`**. Open **Discovery** (hard-refresh). Review prefilled connected CIDRs (edit if needed). **Save & scan** / **Scan now** return immediately (flash: queued + saved), not a black 500. Candidates appear after the job finishes; `./forgesre jobs` shows `discovery_scan`. **Sync NetBox** sits beside Scan now (read-only). Approve / Ignore as before; manual Assets stay SoT.
+SHA: **`46dab39`**. Open **Discovery** (hard-refresh). Review prefilled connected CIDRs (edit if needed). **Save & scan** / **Scan now** return immediately (flash: queued + saved), not a black 500. Candidates appear after the job finishes; `./forgesre jobs` shows `discovery_scan`. **Sync NetBox** sits beside Scan now (read-only). Approve / Ignore as before; manual Assets stay SoT.
 
 `./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: **no host logs shipped**. [architecture.md](architecture.md) is a long-term **architecture proposal**, not the V0.7 appliance runtime.
 
