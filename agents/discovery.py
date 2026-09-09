@@ -221,9 +221,13 @@ def suggested_connected_cidrs(
     ip_output: str | None = None,
 ) -> list[str]:
     """Connected IPv4 CIDRs with real prefixes (multi-homed OK). Not /24-only."""
-    return list(
-        detect_connected_networks(include_docker=include_docker, ip_output=ip_output)["cidrs"]
-    )
+    try:
+        return list(
+            detect_connected_networks(include_docker=include_docker, ip_output=ip_output)["cidrs"]
+        )
+    except Exception:
+        log.exception("suggested_connected_cidrs failed")
+        return []
 
 
 def normalize_cidrs(raw: list[str] | str | None) -> list[str]:

@@ -42,7 +42,14 @@ def configure_logging() -> None:
 
 
 def _discovery_loop(stop: threading.Event) -> None:
+    import os
+
     from app.inventory import mark_discovery_loop_alive
+
+    # Pytest sets FORGESRE_DISCOVERY_AUTO=0 — skip background scans (tests mutate
+    # discovery.cidrs in-process; a 30s loop would pollute shared sqlite).
+    auto_raw = os.environ.get("FORGESRE_DISCOVERY_AUTO", "1").strip().lower()
+    loop_disabled = auto_raw in {"0", "false", "off", "no"}
 
     first = True
     mark_discovery_loop_alive()
@@ -52,6 +59,8 @@ def _discovery_loop(stop: threading.Event) -> None:
         if stop.wait(delay):
             break
         mark_discovery_loop_alive()
+        if loop_disabled:
+            continue
         db = SessionLocal()
         try:
             if settings.discovery_enabled and settings.discovery_mode != "manual":

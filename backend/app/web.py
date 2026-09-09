@@ -574,7 +574,7 @@ def discovery_page(
     edit: str = "",
     clone: str = "",
 ):
-    from discovery import resolve_scan_cidrs, suggested_connected_cidrs
+    from discovery import resolve_scan_cidrs
     from app.jobs import active_discovery_scan
 
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
@@ -618,7 +618,7 @@ def discovery_page(
             "interfaces": [],
             "warnings": [f"autodetect skipped: {type(exc).__name__}"],
         }
-    auto_cidrs = list(resolved.get("auto") or suggested_connected_cidrs())
+    auto_cidrs = list(resolved.get("auto") or [])
     scan_cidrs = list(resolved.get("cidrs") or [])
     cidr_prefill = ", ".join(saved_cidrs) if saved_cidrs else ", ".join(auto_cidrs)
     return render(
