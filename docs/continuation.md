@@ -15,11 +15,11 @@ Product on `main`: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
 
 ## 1. Who and when
 
-**Wednesday 9 September 2026.** Operator N asked whether Discovery autodetection was **done on `main`**. Product work: YAML `discovery.cidrs` ∪ auto-detected connected IPv4 nets. Final `--no-ff` merge to `main`: **`a0c68c9`**.
+**Wednesday 9 September 2026.** Core failed to start: Postgres `DatatypeMismatch` on `ALTER TABLE discovery_candidates ADD COLUMN snmp_ok BOOLEAN DEFAULT 0`. Final `--no-ff` merge to `main`: **`ee6aed5`**.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env`. Never print tokens. Never commit real secrets.
 
-Branch: `cursor/discovery-scan-upgrade-05f8`. Prefer `git merge --no-ff` when PR create is 403.
+Branch: `cursor/fix-snmp-ok-bool-05f8`. Prefer `git merge --no-ff` when PR create is 403.
 
 ---
 
@@ -30,20 +30,19 @@ PYTHONPATH=backend:agents python3 -m pytest
 PYTHONPATH=backend:agents python3 -m pytest
 ```
 
-**437 passed** twice (`986178c`). `create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
+**438 passed** twice. `create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
 
 ---
 
 ## 3. Done today / on this branch
 
-### Discovery scan: YAML ∪ auto-detected connected nets
+### Postgres boolean defaults for discovery flags
 
-- **Scan now** unions live `discovery.cidrs` with **all connected IPv4 networks** on the appliance (Core `network_mode: host`) using each interface’s **real prefixlen** — never a hardcoded `/24`.
-- Skips loopback, link-local, multicast, `0.0.0.0/0`, and Docker bridges (`docker0`, `br-*`, `veth*`).
-- Empty YAML → auto only; auto-detect empty → YAML only; both → merge (deduped). **Save & scan** writes the form into `config/forgesre.yml`; **Scan now** always merges auto-detect.
-- Limits **256 hosts/CIDR**, **1024 total**; truncation shows a UI warning. Ports: TCP **22, 80, 443, 9100, 9182** + SNMP **UDP/161**. Not nmap. Hosts already in Assets are skipped. Approve queue unchanged (same ports / exporter flags).
-- Candidate table: **Open ports**, **node_exporter**, **windows_exporter**, **SNMP**. Flags persisted (`migrate` adds columns).
-- Layout: **Scan now** and **NetBox sync** half-width (`.discovery-actions`). CSS/JS cache `app.css?v=disc-1` / `app.js?v=disc-1`.
+- `migrate.py` now uses `BOOLEAN DEFAULT FALSE` for `snmp_ok`, `node_exporter`, and `windows_exporter` on `discovery_candidates`. Postgres rejects integer `DEFAULT 0` on boolean columns.
+- SQLite `scheduled_reports.enabled BOOLEAN DEFAULT 1` is unchanged (Postgres path already used `TRUE`).
+- Did not touch Core 8080 / Discovery UI files held by a parallel agent.
+
+Discovery scan (already on `main`): YAML `discovery.cidrs` ∪ auto-detected connected IPv4 nets with real prefixes. Candidate table still has **Open ports**, **node_exporter**, **windows_exporter**, **SNMP**.
 
 Do not revert ⓘ tooltips, nav clock/resources, `/ops` report-job row actions, or `.env` / `secrets.example.env` **service-group** comments.
 
@@ -55,13 +54,13 @@ Core image installs **iproute2** (`ip -4 addr`) plus **iputils-ping**. Autodetec
 
 Do **not** run `./install.sh`.
 
-Hard-refresh after update (`app.css?v=disc-1`).
+Core is down until this migrate fix is applied. Then:
 
 ```bash
 git pull origin main && ./forgesre update
 ```
 
-Open **Discovery**. Review autodetected connected CIDRs (edit YAML extras if needed), then **Scan now**. **Sync NetBox** sits beside it (read-only). Approve / Ignore as before; manual Assets stay SoT.
+SHA: **`ee6aed5`**. After Core is up, open **Discovery**. Review autodetected connected CIDRs (edit YAML extras if needed), then **Scan now**. **Sync NetBox** sits beside it (read-only). Approve / Ignore as before; manual Assets stay SoT.
 
 `./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: **no host logs shipped**. [architecture.md](architecture.md) is a long-term **architecture proposal**, not the V0.7 appliance runtime.
 
@@ -78,6 +77,7 @@ Expect **`skipping v1 upsert`** (v2 already in secrets) or **`v1 token ready`** 
 ## 5. Product facts not to redo
 
 - Discovery **Scan now** = YAML `discovery.cidrs` ∪ auto-detected connected IPv4 nets (real prefixes). Not `/24`-only. Not nmap. Approve still required in semi-automatic mode.
+- Discovery candidate booleans (`snmp_ok`, `node_exporter`, `windows_exporter`) migrate with `BOOLEAN DEFAULT FALSE`. Postgres rejects `DEFAULT 0`.
 - Two files: `.env` (deployment at repo root) vs `secrets/secrets.env` (secrets). Do not merge.
 - Example comments stay **English** and **grouped by service**.
 - `secrets.env` values are **plaintext** env for containers. Do not claim they are hashes.
