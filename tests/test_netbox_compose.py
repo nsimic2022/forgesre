@@ -844,6 +844,29 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "NETBOX_PORT=8001" in env
     assert "NETBOX_SUPERUSER_EMAIL=admin@forgesre.local" in env
     assert "NETBOX_API_TOKEN_PEPPER" in env
+    assert "# --- Appliance ---" in env
+    assert "# --- Ports ---" in env
+    assert "COMPOSE_PROFILES=" in env
+    assert "FORGESRE_HTTP_PORT=" in env
+    secrets_ex = (ROOT / "secrets" / "secrets.example.env").read_text(encoding="utf-8")
+    assert "# --- Postgres" in secrets_ex
+    assert "# --- ForgeSRE Core ---" in secrets_ex
+    assert "# --- NetBox" in secrets_ex
+    assert "POSTGRES_PASSWORD=" in secrets_ex
+    assert "FORGESRE_ADMIN_PASSWORD=" in secrets_ex
+    assert "NETBOX_SUPERUSER_PASSWORD=" in secrets_ex
+    assert "plaintext" in secrets_ex.lower()
+    assert "bcrypt" in secrets_ex.lower()
+    assert "change-me-real-password" not in secrets_ex.lower()
+    for line in secrets_ex.splitlines():
+        if line.startswith("FORGESRE_ADMIN_PASSWORD="):
+            assert line == "FORGESRE_ADMIN_PASSWORD=" or line.endswith("=")
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "secrets/secrets.env" in gitignore
+    assert "!secrets/secrets.example.env" in gitignore
+    assert "secrets.example.env" in install
+    assert "set_kv" in install
+    assert ".env.example" in install
     example = (ROOT / "config" / "forgesre.example.yml").read_text(encoding="utf-8")
     assert "mode: bundled" in example
     assert "http://127.0.0.1:8001" in example

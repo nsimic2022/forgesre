@@ -243,11 +243,14 @@ ForgeSRE UI users are **not** Linux/SSH accounts.
 
 | What | Where | Protected? |
 |---|---|---|
-| Every UI user’s login password | PostgreSQL table `users.password_hash` | **Yes** — bcrypt hash. The plaintext is never stored and never shown in Administration. |
-| Install bootstrap admin | `secrets/secrets.env` (`FORGESRE_ADMIN_EMAIL` / `FORGESRE_ADMIN_PASSWORD`) and `installation-report.md` | File on disk, mode `600`. This is a **copy for first login / CLI fallback**, not the live hash. Changing the password in Administration updates Postgres only. |
-| Session cookie | httponly, 12 hours | Signed with `SECRET_KEY` (also in `secrets/secrets.env`). |
+| Every UI user’s login password | PostgreSQL table `users.password_hash` | **Yes** — bcrypt hash (`backend/app/security.py`). The plaintext is never stored and never shown in Administration. |
+| Install bootstrap admin | `secrets/secrets.env` (`FORGESRE_ADMIN_EMAIL` / `FORGESRE_ADMIN_PASSWORD`) and `installation-report.md` | File on disk, mode `600`. Values in that file are **plaintext** (not hashes). First Core boot seeds bcrypt into Postgres when the email row is missing (`backend/app/seed.py`). Changing `FORGESRE_ADMIN_PASSWORD` in the file after first boot does **not** update the DB — use Administration, and keep the file in sync for CLI fallback. |
+| Session cookie | httponly, 12 hours | Signed with `SECRET_KEY` (also **plaintext** in `secrets/secrets.env`). |
+| NetBox / Postgres / Grafana / SMTP / SNMP | Same `secrets/secrets.env` | **Plaintext** env for containers. Rotate by editing the file and recreating the affected service — see [`install-config.md` §11a](install-config.md#11a-changing-passwords). |
 
-`data/` (Postgres volume), `.env`, and `secrets/` are gitignored. Do not commit them. SMTP app passwords and Grafana live in the same `secrets/secrets.env` file — different keys, same protection.
+Templates (committed, no real secrets): [`.env.example`](../.env.example) and [`secrets/secrets.example.env`](../secrets/secrets.example.env). Live `.env` and `secrets/secrets.env` are gitignored.
+
+`data/` (Postgres volume), `.env`, and `secrets/secrets.env` are gitignored. Do not commit them.
 
 If you rotate the install admin in the UI, also edit `FORGESRE_ADMIN_PASSWORD` in `secrets/secrets.env` if you still use `./forgesre` commands that log in with that file.
 
