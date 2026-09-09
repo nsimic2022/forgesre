@@ -77,6 +77,11 @@ def test_ops_page_lists_outbox_and_reports():
     assert "Stack UIs" not in page.text
     assert "platform@forgesre.local" in page.text
     assert "Send now" in page.text
+    mail = page.text.split('id="mail"', 1)[1].split('id="reports"', 1)[0]
+    assert ">When<" in mail
+    assert ">To<" in mail
+    assert ">Subject<" in mail
+    assert "scan-list" not in mail
     assert "ops-compose" in page.text
     assert "ops-add-email" in page.text
     assert "max-width: 38%" in page.text

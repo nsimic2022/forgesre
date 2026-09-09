@@ -264,51 +264,6 @@ def severity_pill(severity: str) -> str:
     return "warn"
 
 
-def mail_tone(status: str) -> str:
-    """Outbox left-border: failed pops, sent is quiet, generated/queued is in-flight."""
-    st = str(status or "").lower()
-    if st == "failed":
-        return "mail-fail"
-    if st == "sent":
-        return "mail-sent"
-    return "mail-queued"
-
-
-def short_recipients(target: str) -> str:
-    """Local-part, or first local-part plus leftover count. Full addresses stay on detail."""
-    parts = [item.strip() for item in str(target or "").replace(";", ",").split(",") if item.strip()]
-    if not parts:
-        return "—"
-
-    def _local(addr: str) -> str:
-        return addr.split("@", 1)[0] if "@" in addr else addr
-
-    if len(parts) == 1:
-        return _local(parts[0])
-    return f"{_local(parts[0])} +{len(parts) - 1}"
-
-
-_MAIL_PURPOSE = {
-    "incident-report": "Incident report",
-    "immediate": "Escalation",
-    "t0": "Escalation",
-    "t15": "Escalation",
-    "t30": "Escalation",
-    "t60": "Escalation",
-    "report": "Scheduled report",
-    "manual": "Compose",
-}
-
-
-def mail_purpose(step_key: str) -> str:
-    key = str(step_key or "").strip()
-    if key in _MAIL_PURPOSE:
-        return _MAIL_PURPOSE[key]
-    if len(key) > 1 and key[0] in "tT" and key[1:].isdigit():
-        return "Escalation"
-    return ""
-
-
 def format_incident_number(seq: int, when: datetime | None = None) -> str:
     """INC-0134_16.08.2026_09:13 in the appliance timezone (wall clock)."""
     local = _appliance_local(when)

@@ -65,10 +65,7 @@ from app.services import (
     is_demo_incident,
     is_demo_journal,
     is_demo_mail,
-    mail_purpose,
-    mail_tone,
     severity_pill,
-    short_recipients,
     short_when_label,
     list_host_down_incidents,
     parse_policy_steps,
@@ -251,9 +248,6 @@ def ctx(request: Request, user: User | None, **extra):
         "format_started_at": format_started_at,
         "short_when_label": short_when_label,
         "severity_pill": severity_pill,
-        "mail_tone": mail_tone,
-        "mail_purpose": mail_purpose,
-        "short_recipients": short_recipients,
         "is_demo_incident": is_demo_incident,
         "is_demo_mail": is_demo_mail,
         "is_demo_journal": is_demo_journal,
@@ -1566,13 +1560,6 @@ def ops_page(
     mail = db.query(Notification).order_by(Notification.id.desc()).all()
     reports = db.query(ScheduledReport).order_by(ScheduledReport.id.desc()).all()
     mail, mail_pager = paginate(mail, page, fragment="#mail")
-    mail_ids = {row.incident_id for row in mail if row.incident_id}
-    mail_incidents = {}
-    if mail_ids:
-        mail_incidents = {
-            item.id: item.number
-            for item in db.query(Incident).filter(Incident.id.in_(mail_ids)).all()
-        }
     reports, reports_pager = paginate(reports, reports_page, param="reports_page", fragment="#reports")
     assets = db.query(Asset).order_by(Asset.hostname).all()
     contacts = db.query(MailContact).order_by(MailContact.email).all()
@@ -1598,7 +1585,6 @@ def ops_page(
         "ops.html",
         user,
         mail=mail,
-        mail_incidents=mail_incidents,
         reports=reports,
         assets=assets,
         contacts=contacts,

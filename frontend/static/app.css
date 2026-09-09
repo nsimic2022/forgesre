@@ -737,20 +737,6 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
   margin-left: 0.15rem;
   white-space: nowrap;
 }
-.scan-list a.inc-short {
-  color: var(--muted);
-  font-weight: 600;
-  font-size: 0.85rem;
-  text-decoration: none;
-  margin-right: 0.15rem;
-}
-.scan-list a.inc-short:hover { color: var(--accent); }
-.mail-list tr.mail-queued td:first-child { box-shadow: inset 4px 0 0 var(--warn); }
-.mail-list tr.mail-sent td:first-child { box-shadow: inset 4px 0 0 var(--ok); }
-.mail-list tr.mail-fail td:first-child { box-shadow: inset 5px 0 0 var(--crit); }
-.mail-list tr.mail-sent td { color: var(--muted); }
-.mail-list tr.mail-row-fail .inc-title { font-weight: 700; color: var(--crit); }
-.mail-list .mail-error { color: var(--crit); margin: 0.35rem 0; }
 .button-link {
   display: inline-flex;
   align-items: center;
