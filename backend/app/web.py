@@ -59,6 +59,9 @@ from app.api import doctor_payload, run_asset_verify
 from app.asset_metrics import safe_asset_metric_panel
 from app.metrics import reset_demo_gauges
 from app.services import (
+    format_started_at,
+    incident_short_label,
+    incident_when_label,
     is_demo_incident,
     is_demo_journal,
     is_demo_mail,
@@ -238,6 +241,9 @@ def ctx(request: Request, user: User | None, **extra):
         "ai_enabled": settings.ai_enabled,
         "health_class": health_class,
         "incident_tone": incident_tone,
+        "incident_short_label": incident_short_label,
+        "incident_when_label": incident_when_label,
+        "format_started_at": format_started_at,
         "is_demo_incident": is_demo_incident,
         "is_demo_mail": is_demo_mail,
         "is_demo_journal": is_demo_journal,

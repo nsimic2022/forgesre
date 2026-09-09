@@ -280,9 +280,22 @@ def test_send_incident_report_to_address_book_email():
     assert "Open" in listed.text
     assert "Closed" in listed.text
     assert "Open/firing" not in listed.text
-    assert "Reported to" in listed.text
-    assert "ops@dc.local" in listed.text
+    headers = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
+    assert "Incident" in headers
+    assert "Severity" in headers
+    assert "Status" in headers
+    assert "When" in headers
+    assert "Reported to" not in headers
+    tbody = listed.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+    assert "ops@dc.local" not in tbody
     assert f'class="inc-crit" href="/incidents/{number}"' in listed.text
+    from app.services import incident_seq
+
+    assert f">#{incident_seq(number)}<" in listed.text
+    detail = client.get(f"/incidents/{number}")
+    assert detail.status_code == 200
+    assert "ops@dc.local" in detail.text
+    assert "Send incident report" in detail.text
     archive = client.get("/incidents?open=0")
     assert 'class="inc-ok"' in archive.text
     client.post(f"/incidents/{number}/investigate", follow_redirects=False)

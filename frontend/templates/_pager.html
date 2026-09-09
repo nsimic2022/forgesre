@@ -1,5 +1,5 @@
 {% if pager and pager.pages > 1 %}
-<p class="pager-meta muted">{{ pager.total }} · page {{ pager.page }} / {{ pager.pages }} · {{ pager.size }} per page</p>
+<p class="pager-meta muted">Showing {{ pager.start }}–{{ pager.end }} of {{ pager.total }}</p>
 <nav class="pager" aria-label="Pagination">
   {% if pager.has_prev %}
   <a href="{{ pager_href(request, pager.prev, pager.param, pager.hash) }}">Previous</a>

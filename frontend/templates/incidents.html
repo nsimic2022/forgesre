@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Incidents · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Incidents {% with %}{% set tip %}Live incident list (default: all statuses). Green ID = resolved/closed. Yellow = in progress (warning). Red = critical. Closed archive is History.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Incidents {% with %}{% set tip %}Live incident list (default: all statuses). Green #N = resolved/closed. Yellow = in progress (warning). Red = critical. Closed archive is History.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <p class="muted">Closed and older rows also live in <a href="/history">History</a>.</p>
-<form method="get" action="/incidents" class="list-filters">
+<form method="get" action="/incidents" class="list-filters incidents-filters">
   <label>Status
     <select name="status">
       <option value="all" {% if status_group == "all" %}selected{% endif %}>All</option>
@@ -16,26 +16,24 @@
   </label>
   <label>Last days <input name="days" type="number" min="1" max="3660" value="{{ days }}" placeholder="any age"></label>
   <button type="submit">Filter</button>
-  <a class="muted" href="/incidents">Reset</a>
+  <a class="muted list-reset" href="/incidents">Reset</a>
 </form>
-<table>
-  <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Status</th><th>Asset</th><th>Started</th><th>Reported to</th></tr></thead>
+<table class="incidents-table">
+  <thead><tr><th>Incident</th><th>Severity</th><th>Status</th><th>When</th></tr></thead>
   <tbody>
   {% for item in incidents %}
-    <tr>
-      <td>
-        <a class="{{ incident_tone(item.status, item.severity) }}" href="/incidents/{{ item.number }}">{{ item.number }}</a>
-        {% if is_demo_incident(item) %}<span class="pill demo">DEMO</span>{% endif %}
+    <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}">
+      <td class="inc-cell">
+        {% include "_incident_id_link.html" %}
+        <div class="inc-title"{% if item.title %} title="{{ item.title }}"{% endif %}>{{ item.title }}</div>
+        {% if item.asset and item.asset.hostname %}<div class="inc-host">{{ item.asset.hostname }}</div>{% endif %}
       </td>
-      <td>{{ item.title }}</td>
-      <td>{{ item.severity }}</td>
+      <td><span class="pill {{ 'crit' if item.severity|upper in ['CRITICAL', 'CRIT', 'FATAL', 'EMERGENCY'] else 'warn' }}">{{ item.severity }}</span></td>
       <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
-      <td>{% if item.asset %}{{ item.asset.hostname }}{% else %}—{% endif %}</td>
-      <td>{{ item.started_at }}</td>
-      <td>{% if reported_to.get(item.id) %}{{ reported_to.get(item.id) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="inc-when"><span title="{{ format_started_at(item.started_at) }}">{{ incident_when_label(item.number) or format_started_at(item.started_at) }}</span></td>
     </tr>
   {% else %}
-    <tr><td colspan="7" class="muted">No incidents in this filter.{% if status_group != "all" %} Try All or <a href="/history">History</a>.{% endif %}</td></tr>
+    <tr><td colspan="4" class="muted">No incidents match this filter.{% if status_group != "all" %} Try All or <a href="/history">History</a>.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>

@@ -23,6 +23,9 @@ def test_paginate_page_two_of_twenty_five_and_last_remainder():
     assert first["page"] == 1
     assert first["pages"] == 3
     assert first["total"] == 25
+    assert first["start"] == 1
+    assert first["end"] == 10
+    assert first["size"] == 10
     page_two, mid = paginate(rows, "2")
     assert page_two == list(range(10, 20))
     assert mid["page"] == 2
@@ -30,6 +33,8 @@ def test_paginate_page_two_of_twenty_five_and_last_remainder():
     assert last == list(range(20, 25))
     assert end["page"] == 3
     assert len(last) == 5
+    assert end["start"] == 21
+    assert end["end"] == 25
     clamped, past = paginate(rows, "99")
     assert clamped == last
     assert past["page"] == 3
@@ -108,6 +113,8 @@ def test_incidents_page_two_is_ten_rows():
     ids_one = _tbody_incidents(first.text)
     assert len(ids_one) == 10
     _assert_bottom_pager(first.text)
+    assert "Showing " in first.text
+    assert " of " in first.text
     second = client.get("/incidents?page=2")
     assert second.status_code == 200
     ids_two = _tbody_incidents(second.text)
