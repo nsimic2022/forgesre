@@ -24,10 +24,10 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
     client.post("/login", data={"email": email, "password": password}, follow_redirects=False)
 
 
-def test_css_cache_bust_is_gui_1():
+def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=nav-1" in base
+    assert "app.css?v=disc-1" in base
     assert ".banner-short" in css
     assert ".playbook-grid" in css
     assert ".ack-dot" in css

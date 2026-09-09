@@ -148,7 +148,7 @@ Guided wizard:
 | `--port N` | Core UI/API port (default `8080`) |
 | `--enable-ai yes\|no` | `yes` downloads the GGUF. ForgeRCA still works without it |
 | `--enable-discovery yes\|no` | Default yes |
-| `--discovery-cidrs 10.20.30.0/24,10.10.0.0/24` | TCP 22/80/443/9100/9182 + SNMP GET UDP/161 + HTTP /metrics on :9182/:9100 when a host is alive |
+| `--discovery-cidrs 10.20.30.0/25,10.10.0.0/24` | Optional seed CIDRs (real prefixes). Empty is fine — Discovery **Scan now** autodetects connected networks and writes live YAML. TCP 22/80/443/9100/9182 + SNMP GET UDP/161 + HTTP /metrics on :9182/:9100 when a host is alive |
 | `--netbox-url URL` | Point Core at an **external** NetBox; bundled still starts unless you stop it |
 | `--offline` | Do not pull images |
 
@@ -275,7 +275,7 @@ inventory:
 discovery:
   enabled: true
   mode: semi-automatic
-  cidrs: ["10.20.30.0/24"]
+  cidrs: []   # empty OK; Scan now autodetects connected CIDRs (real prefixes) and saves here
 
 monitoring:
   prometheus:
@@ -320,7 +320,7 @@ notifications:
 
 - **Discovery** probes TCP **22 / 80 / 443 / 9100 / 9182** and SNMPv2c GET on **UDP/161**. Alive hosts also get HTTP GET `/metrics` on **:9182** and **:9100** so the default type/port is Windows vs Linux from exporter text, not “always Linux :9100”.
 - **RCA** works with `ai.enabled: false`. Set `ai.enabled: true` only with a local OpenAI-compatible endpoint or a GGUF.
-- Changing `cidrs` needs a Core recreate, not a reinstall.
+- Changing `cidrs` via Discovery **Scan now** writes live YAML (no Core recreate). Hand-edited YAML still applies on next Core reload/recreate — not a reinstall.
 - Changing `SNMP_COMMUNITY` needs `./forgesre render-monitoring`.
 
 ---

@@ -1,4 +1,4 @@
-# Session handoff — 8 September 2026
+# Session handoff — 9 September 2026
 
 This file is a **session handoff for the next coding agent or contributor**. It is not an operator manual. Operators start at [install and config](install-config.md) and the [operator handbook](operator-handbook.md).
 
@@ -42,25 +42,28 @@ If pytest fails next session: fix on a `cursor/<name>-05f8` branch, re-run **twi
 
 ## 3. Done today / on this branch
 
-Docs: GitHub README **Install / config** (after Quick start) plus [`install-config.md`](install-config.md) §15 — `./forgesre fetch-llm` lands at `data/models/model.gguf`, then profile `ai` + `ai.enabled: true`; wait `:8088/v1/models` / `./forgesre doctor`. LLM optional (~9 GB 14B). No catalog/switcher; Ollama not default; mailbox opt-in. Docs index step 1 mentions LLM as optional.
+### Discovery multi-CIDR autodetection (not /24-only)
 
-N’s small GUI pass on V0.7 (English, no React): Dashboard journal warning is shorter (`banner-short`, e.g. “Journal 2 errors”) and still pale yellow; Infrastructure/Incidents headings have ⓘ (inventory counts vs incident counts) and every stat square is a full-tile shortcut to `/assets` (status filter when it matches) or `/incidents`; Assets moves verify ≠ doctor ≠ test into the title ⓘ and drops the always-on sentence (Verify buttons and Verify all stay); Discovery candidate rows get Edit / Clone / Ignore / Remove (Remove deletes the candidate; DEMO pill stays); Incidents Filter is spaced on `list-filters` and defaults to **All** (Open / Closed; History remains the archive); History Ack is a green/yellow/red status circle with Acknowledged / Not acknowledged tooltip; Playbooks drops the duplicate body paragraph, cards are two per row, each has Edit / Clone / Remove, create/edit is Save + Cancel; Administration users get the same Edit / Clone / Remove (cannot delete self or install super_admin). CSS cache-bust `app.css?v=gui-1`. Hard-refresh after `git pull origin main && ./forgesre update`. Pytest **425 passed** (twice). Do not revert ⓘ help or `/ops` report jobs.
+- **Scan now** enumerates **all connected IPv4 networks** on the appliance (Core `network_mode: host`) with each interface’s **real prefixlen** — never hardcodes `/24`.
+- Skips loopback, link-local, multicast, `0.0.0.0/0`, and Docker bridges (`docker0`, `br-*`, `veth*`) by default.
+- UI prefills saved `discovery.cidrs` or detected CIDRs; operator may edit; Scan now **saves** to live YAML and probes.
+- Limits stay **256/CIDR**, **1024** total; huge prefixes truncate with a **UI warning**. Ports: TCP **22, 80, 443, 9100, 9182** + SNMP **UDP/161**. Not nmap. Approve queue unchanged.
+- Candidate table: **Open ports**, **node_exporter**, **SNMP**. Flags persisted on candidates (migrate).
+- Layout: **Scan now** and **NetBox sync** half-width side-by-side (`.discovery-actions`). CSS/JS cache `app.css?v=disc-1` / `app.js?v=disc-1`.
 
-### Left nav clock + this-appliance resources (this branch)
-
-- Below Administration: larger local clock (vanilla JS, 24h tick) and this VM’s **CPU / RAM / HDD** text glance — `GET /api/v1/system/resources` (node_exporter on `:9100` if present, else `/proc` + `statvfs`). Not Grafana, not a random inventory asset.
-- Logout is shifted right (`margin-left: auto`) with a gap from the theme picker.
-- CSS/JS cache-bust `app.css?v=nav-1` and `app.js?v=nav-1`. Hard-refresh after `git pull origin main && ./forgesre update`. Does not revert ⓘ tooltips or `/ops` report-job row actions.
-
----
+Do not revert ⓘ tooltips, nav clock/resources, or `/ops` report-job row actions.
 
 ## 4. What N should do on the VM
 
 Do **not** run `./install.sh`. Hard-refresh the UI after update (CSS/JS cache `app.css?v=nav-1` and `app.js?v=nav-1`: clock, appliance glance, logout spacing).
 
+Hard-refresh after update (`app.css?v=disc-1`).
+
 ```bash
 git pull origin main && ./forgesre update
 ```
+
+Open **Discovery**, review autodetected connected CIDRs (edit if needed), then **Scan now**.
 
 **Enabled** = the job fires at **Next**. **Disable** keeps the row; the scheduler skips it. That is not Remove. Edit / Clone / Remove sit on each row; Cancel sits next to Save on the form.
 

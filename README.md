@@ -154,7 +154,7 @@ wget -O data/models/model.gguf \
 |---|---|
 | `/` | Dashboard: counts, HOST DOWN banner, **Run demo** (admin). Full doctor grid is **System Health**. |
 | `/assets` | Inventory and owner contacts |
-| `/discovery` | Scan now (not nmap) / Approve / Ignore; **Sync NetBox** (read-only, admin). Empty NetBox = yellow. |
+| `/discovery` | Scan now autodetects connected CIDRs (real prefixes, not hardcoded `/24`) / Approve / Ignore; **Sync NetBox** beside it (read-only, admin). Empty NetBox = yellow. |
 | `/incidents` | Open/firing incidents (**10 per page**). Archive is History. |
 | `/history` | 90-day lookback, filters, closed rows |
 | `/ai/INC-…` | Read-only RCA (ForgeRCA first, ForgeAI rewrite-only) |
