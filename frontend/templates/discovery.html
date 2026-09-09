@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Discovery · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Discovery {% with %}{% set tip %}Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on UDP/161 (TCP/161 is skipped — that is not SNMP) and HTTP GET /metrics on :9182 and :9100 when a host is alive. windows_ metrics → Windows Server :9182. node_ metrics → Linux Server :9100. SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics. TCP open without exporter text is not an OS pick (ICMP ping is not a scrape). Scan now unions live discovery.cidrs from config/forgesre.yml with auto-detected connected IPv4 nets (real prefixlen — never a hardcoded /24). Skips loopback / link-local / multicast / 0.0.0.0/0 and Docker bridges (docker0, br-*, veth*). Empty YAML → auto only; auto fail → YAML only; both → merge. Limits 256 hosts/CIDR and 1024 total. Manual Assets stay the inventory source of truth until Approve. This is not nmap.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Discovery {% with %}{% set tip %}Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on UDP/161 (TCP/161 is skipped — that is not SNMP) and HTTP GET /metrics on :9182 and :9100 when a host is alive. windows_ metrics → Windows Server :9182. node_ metrics → Linux Server :9100. SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics. TCP open without exporter text is not an OS pick (ICMP ping is not a scrape). Scan now prefills every connected IPv4 net on this appliance (real prefixlen — never a hardcoded /24) plus any YAML discovery.cidrs; edit the list, then scan — the form is saved to discovery.cidrs and a background job probes that list. Empty form → autodetection only. Skips loopback / link-local / multicast / 0.0.0.0/0 and Docker bridges (docker0, br-*, veth*). Limits 256 hosts/CIDR and 1024 total (truncate + warn). Manual Assets stay the inventory source of truth until Approve. This is not nmap.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <p class="muted">
   Mode: <code>{{ discovery_mode }}</code>
   · YAML: <code>{{ discovery_cidrs or "[]" }}</code>
@@ -39,9 +39,9 @@
 <div class="discovery-actions">
 {% if can('write_assets') %}
 <section class="card">
-  <h2>Scan now {% with %}{% set tip %}Save &amp; scan writes the CIDR box into config/forgesre.yml then queues a background probe (Postgres jobs table, one Core worker — not Celery). Scan now queues YAML discovery.cidrs ∪ auto-detected connected IPv4 nets without writing the file (real prefixlen — never a hardcoded /24). Skips loopback / link-local / multicast / 0.0.0.0/0 and Docker bridges (docker0, br-*, veth*). Empty YAML → auto only; auto fail → YAML only; both → merge. TCP 22, 80, 443, 9100, 9182 + SNMP GET UDP/161 (TCP/161 is skipped) + HTTP GET /metrics on :9182/:9100. Not nmap. Max 256 hosts/CIDR, 1024 total. Does not write inventory until you Approve. Manual Assets stay SoT.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Scan now {% with %}{% set tip %}Prefills every connected IPv4 net (real prefixlen — never a hardcoded /24) plus YAML. Edit before scan. Save &amp; scan / Scan now write discovery.cidrs and queue a background probe of that list (Postgres jobs, one Core worker — not Celery). Empty form → autodetection + save. Skips loopback / link-local / multicast / 0.0.0.0/0 and Docker bridges. TCP 22, 80, 443, 9100, 9182 + SNMP GET UDP/161 + HTTP GET /metrics on :9182/:9100. Not nmap. Max 256/CIDR, 1024 total. Approve still required. Manual Assets stay SoT.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <form method="post" action="/discovery/scan" class="discovery-scan-form">
-    <label>CIDR(s) for YAML
+    <label>CIDR(s) to scan (connected nets prefilled)
       <input name="cidrs" value="{{ cidr_prefill }}" placeholder="{{ suggested_cidr or (detected_cidrs|join(', ') if detected_cidrs else '10.10.10.0/24, 192.168.1.0/25') }}" autocomplete="off">
     </label>
     <div class="discovery-scan-actions">

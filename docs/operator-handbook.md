@@ -682,7 +682,7 @@ Goal: host `app-01` at `10.10.10.50` appears under Assets and is scraped on `:91
 4. Wait up to 30s, then check SD JSON (command in §7) contains that target.
 5. On the VM: open Grafana (`:3000`) or Prometheus UI (`http://127.0.0.1:9090` from the host) and query `{asset="app-01"}` or `up{instance="10.10.10.50:9100"}`.
 
-Optional discovery path: Confirm `10.10.10.0/24` on Discovery (or put it in `discovery.cidrs`), Scan now, Approve the `10.10.10.50` candidate instead of the manual form.
+Optional discovery path: put `10.10.10.0/24` on Discovery (or put it in `discovery.cidrs`), Scan now, Approve the `10.10.10.50` candidate instead of the manual form.
 
 This still will **not** open `INC-…` until a Prometheus alert fires with a matching playrule. Bundled `NodeExporterDown` / `NodeFilesystemUsageHigh` / `NodeCPUHigh` / `NodeMemoryHigh` already match seeded playrules once node_exporter is scraped. Custom thresholds: §15.
 

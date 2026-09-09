@@ -50,7 +50,7 @@ def test_web_and_api_handlers_do_not_call_run_scan_inline():
     jobs = (ROOT / "backend" / "app" / "jobs.py").read_text(encoding="utf-8")
     loop = jobs[jobs.index("def run_pending_jobs") :]
     assert "DISCOVERY_SCAN_KIND" in loop
-    assert "run_scan(db)" in loop
+    assert "run_scan" in loop and "merge_auto" in loop
     assert "import celery" not in jobs.lower()
     assert "from celery" not in jobs.lower()
 
@@ -249,7 +249,9 @@ def test_post_scan_empty_cidrs_and_mocked_ip_does_not_500(monkeypatch):
     )
     assert mocked.status_code == 302, mocked.text[:800]
     loc = unquote(mocked.headers.get("location") or "").lower()
-    assert "saved discovery.cidrs" not in loc
+    # Scan now persists the operator CIDR list (multi-CIDR real prefixes), then queues.
+    assert "saved discovery.cidrs" in loc
+    assert "10.66.1.0/30" in loc
     db = SessionLocal()
     run_pending_jobs(db)
     db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
@@ -279,4 +281,28 @@ def test_save_scan_readonly_yaml_does_not_500(monkeypatch):
     run_pending_jobs(db)
     db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
     db.commit()
+    db.close()
+
+
+def test_job_worker_uses_operator_cidrs_without_remerge(monkeypatch):
+    from app.db import Base, SessionLocal, engine
+    from app.jobs import enqueue_discovery_scan, run_pending_jobs
+    from app.migrate import migrate
+    from app.seed import seed
+
+    Base.metadata.create_all(bind=engine)
+    migrate(engine)
+    db = SessionLocal()
+    seed(db)
+    seen = []
+
+    def fake_run_scan(db, cidrs=None, merge_auto=True, **kwargs):
+        seen.append({"cidrs": list(cidrs or []), "merge_auto": merge_auto})
+        return {"found": 0, "skipped": 0, "cidrs": list(cidrs or []), "warnings": []}
+
+    monkeypatch.setattr("app.inventory.run_scan", fake_run_scan)
+    enqueue_discovery_scan(db, actor="t", cidrs=["10.20.30.0/25"], saved=True)
+    run_pending_jobs(db)
+    assert seen and seen[-1]["merge_auto"] is False
+    assert seen[-1]["cidrs"] == ["10.20.30.0/25"]
     db.close()

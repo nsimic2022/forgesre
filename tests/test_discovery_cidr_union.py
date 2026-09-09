@@ -223,12 +223,13 @@ def test_core_image_has_iproute2():
     assert "iputils-ping" in text
 
 
-def test_docs_and_template_say_union():
+def test_docs_and_template_say_multi_cidr():
     html = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     blob = html.lower()
     assert "discovery-actions" in html and "node_exporter" in html
-    assert ("unions" in blob) or ("∪" in html) or ("auto-detected" in blob and "discovery.cidrs" in blob)
+    assert "Confirm & scan" not in html
+    assert ("real prefix" in blob) or ("hardcoded /24" in blob) or ("connected" in blob)
     assert ("hardcoded /24" in blob) or ("real prefix" in blob)
     hb = handbook.lower()
     assert ("union" in hb) or ("auto-detect" in hb) or ("connected" in hb)
@@ -236,3 +237,83 @@ def test_docs_and_template_say_union():
 
 
 
+
+
+def test_scan_now_persists_form_and_queues_operator_cidrs(monkeypatch):
+    from app.db import Base, SessionLocal, engine
+    from app.jobs import DISCOVERY_SCAN_KIND, run_pending_jobs
+    from app.main import create_app
+    from app.migrate import migrate
+    from app.models import Job
+    from app.seed import seed
+    from app.settings import settings
+
+    Base.metadata.create_all(bind=engine)
+    migrate(engine)
+    db = SessionLocal()
+    seed(db)
+    db.close()
+    monkeypatch.setattr(
+        "discovery.suggested_connected_cidrs",
+        lambda **kwargs: ["10.20.30.0/25", "192.168.10.0/24"],
+    )
+    seen = []
+
+    def fake_run_scan(db, cidrs=None, merge_auto=True, **kwargs):
+        seen.append({"cidrs": list(cidrs or []), "merge_auto": merge_auto})
+        return {"found": 0, "skipped": 0, "cidrs": list(cidrs or []), "warnings": []}
+
+    monkeypatch.setattr("app.inventory.run_scan", fake_run_scan)
+    client = TestClient(create_app())
+    client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    posted = client.post(
+        "/discovery/scan",
+        data={"cidrs": "10.20.30.0/25"},
+        follow_redirects=False,
+    )
+    assert posted.status_code == 302
+    assert settings.discovery_cidrs == ["10.20.30.0/25"]
+    db = SessionLocal()
+    job = db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).order_by(Job.id.desc()).first()
+    assert job is not None
+    assert (job.payload or {}).get("cidrs") == ["10.20.30.0/25"]
+    run_pending_jobs(db)
+    db.close()
+    assert seen and seen[-1]["merge_auto"] is False
+    assert seen[-1]["cidrs"] == ["10.20.30.0/25"]
+
+
+def test_empty_scan_autodetects_saves_and_queues(monkeypatch):
+    from app.db import Base, SessionLocal, engine
+    from app.main import create_app
+    from app.migrate import migrate
+    from app.seed import seed
+    from app.settings import settings
+
+    Base.metadata.create_all(bind=engine)
+    migrate(engine)
+    db = SessionLocal()
+    seed(db)
+    db.close()
+    monkeypatch.setitem(settings.yaml.setdefault("discovery", {}), "cidrs", [])
+    monkeypatch.setattr(
+        "discovery.suggested_connected_cidrs",
+        lambda **kwargs: ["10.1.2.0/28", "10.9.9.0/29"],
+    )
+    monkeypatch.setattr(
+        "app.inventory.run_scan",
+        lambda *a, **k: {"found": 0, "skipped": 0, "cidrs": [], "warnings": []},
+    )
+    client = TestClient(create_app())
+    client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    posted = client.post("/discovery/scan", data={"cidrs": ""}, follow_redirects=False)
+    assert posted.status_code == 302
+    assert settings.discovery_cidrs == ["10.1.2.0/28", "10.9.9.0/29"]
