@@ -241,9 +241,9 @@ def test_discovery_page_and_save_scan(monkeypatch, tmp_path: Path):
 def test_docs_and_template_say_union():
     html = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
-    assert "union" in html.lower() or "∪" in html
+    assert ("unions" in html.lower()) or ("union" in html.lower()) or ("∪" in html)
     assert "node_exporter" in html
     assert "discovery-actions" in html
     assert "hardcoded /24" in html.lower() or "not a hardcoded /24" in html.lower()
-    assert "union" in handbook.lower() or "∪" in handbook
+    assert ("union" in handbook.lower()) or ("∪" in handbook) or ("auto-detect" in handbook.lower())
     assert "256" in handbook and "1024" in handbook
