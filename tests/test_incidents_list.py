@@ -154,7 +154,7 @@ def test_resolved_row_keeps_severity_pill_not_green():
     db.commit()
     client = TestClient(app)
     _login(client)
-    listed = client.get("/incidents?status=closed")
+    listed = client.get("/incidents?status=RESOLVED")
     assert listed.status_code == 200
     tbody = listed.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
     assert f'href="/incidents/{number}"' in tbody

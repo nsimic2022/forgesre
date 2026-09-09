@@ -166,7 +166,8 @@ def test_mail_outbox_scan_columns_short_recipients_and_failed_heat():
     assert ">When<" in headers
     assert ">Body<" in headers
     assert ">Subject<" not in headers
-    assert 'class="mail-list"' in mail
+    assert "scan-list" in mail
+    assert "mail-list" in mail
     assert "mail-row-fail" in mail
     assert "inc-row-done" in mail
     assert f">#{incident_seq(number)}<" in mail
