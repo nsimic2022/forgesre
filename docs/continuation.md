@@ -30,7 +30,7 @@ PYTHONPATH=backend:agents python3 -m pytest
 PYTHONPATH=backend:agents python3 -m pytest
 ```
 
-Pytest count after the double run on `cursor/discovery-confirm-cidr-cb97`: **444 passed** (twice). `create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
+Pytest count after the double run on `cursor/discovery-confirm-cidr-cb97`: **444 passed** (twice). Final `--no-ff` merge to `main`: **`08ce509`**. `create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
 
 ---
 
@@ -57,7 +57,7 @@ Do **not** run `./install.sh`. Hard-refresh Discovery after update (`app.css?v=d
 git pull origin main && ./forgesre update
 ```
 
-SHA: **(fill after merge to main)**. Open **Discovery**. Review suggested `/24`, **Confirm & scan**, wait for the background job (`./forgesre jobs`). **Sync NetBox** sits beside Scan now (read-only). Approve / Ignore as before; manual Assets stay SoT.
+SHA: ****. Open **Discovery**. Review suggested `/24`, **Confirm & scan**, wait for the background job (`./forgesre jobs`). **Sync NetBox** sits beside Scan now (read-only). Approve / Ignore as before; manual Assets stay SoT.
 
 `./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: **no host logs shipped**. [architecture.md](architecture.md) is a long-term **architecture proposal**, not the V0.7 appliance runtime.
 
