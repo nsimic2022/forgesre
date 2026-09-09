@@ -845,13 +845,16 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "NETBOX_SUPERUSER_EMAIL=admin@forgesre.local" in env
     assert "NETBOX_API_TOKEN_PEPPER" in env
     assert "# --- Appliance ---" in env
-    assert "# --- Ports ---" in env
+    assert "# --- Compose profiles ---" in env
+    assert "# --- Postgres ---" in env
+    assert "# --- Grafana ---" in env
+    assert "# --- NetBox ---" in env
     assert "COMPOSE_PROFILES=" in env
     assert "FORGESRE_HTTP_PORT=" in env
     secrets_ex = (ROOT / "secrets" / "secrets.example.env").read_text(encoding="utf-8")
-    assert "# --- Postgres" in secrets_ex
+    assert "# --- Postgres ---" in secrets_ex
     assert "# --- ForgeSRE Core ---" in secrets_ex
-    assert "# --- NetBox" in secrets_ex
+    assert "# --- NetBox ---" in secrets_ex
     assert "POSTGRES_PASSWORD=" in secrets_ex
     assert "FORGESRE_ADMIN_PASSWORD=" in secrets_ex
     assert "NETBOX_SUPERUSER_PASSWORD=" in secrets_ex
