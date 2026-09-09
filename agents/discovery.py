@@ -26,6 +26,50 @@ _IP_ADDR_RE = re.compile(
 )
 
 
+
+def primary_ipv4() -> str | None:
+    """Appliance primary IPv4 (host network / core ``network_mode: host``).
+
+    Uses the kernel's chosen source address for a UDP connect — no packets are
+    sent. Skips loopback and link-local. Does not enumerate every VLAN.
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.settimeout(0.2)
+        sock.connect(("1.1.1.1", 80))
+        ip = sock.getsockname()[0]
+    except OSError:
+        ip = ""
+    finally:
+        sock.close()
+    if not ip:
+        return None
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return None
+    if addr.version != 4 or addr.is_loopback or addr.is_link_local or addr.is_unspecified:
+        return None
+    return str(addr)
+
+
+def suggested_management_cidr(ip: str | None = None) -> str | None:
+    """Suggest one management /24 from the appliance primary IPv4.
+
+    Operators must Confirm before scan. Never silently scan all VLANs.
+    """
+    raw = (ip or primary_ipv4() or "").strip()
+    if not raw:
+        return None
+    try:
+        addr = ipaddress.ip_address(raw)
+    except ValueError:
+        return None
+    if addr.version != 4 or addr.is_loopback or addr.is_link_local or addr.is_unspecified:
+        return None
+    return str(ipaddress.ip_network(f"{addr}/24", strict=False))
+
+
 def is_docker_bridge(ifname: str) -> bool:
     """True for docker0, br-*, and veth* — skipped by default on Scan now."""
     name = (ifname or "").strip().lower()
@@ -220,14 +264,10 @@ def suggested_connected_cidrs(
     include_docker: bool = False,
     ip_output: str | None = None,
 ) -> list[str]:
-    """Connected IPv4 CIDRs with real prefixes (multi-homed OK). Not /24-only."""
-    try:
-        return list(
-            detect_connected_networks(include_docker=include_docker, ip_output=ip_output)["cidrs"]
-        )
-    except Exception:
-        log.exception("suggested_connected_cidrs failed")
-        return []
+    """Legacy helper: at most the suggested management /24 (not all VLANs)."""
+    _ = (include_docker, ip_output)
+    one = suggested_management_cidr()
+    return [one] if one else []
 
 
 def normalize_cidrs(raw: list[str] | str | None) -> list[str]:
@@ -309,52 +349,13 @@ def resolve_scan_cidrs(
     limit: int = MAX_HOSTS_PER_CIDR,
     total_limit: int = MAX_HOSTS_TOTAL,
 ) -> dict[str, Any]:
-    """Union of live YAML ``discovery.cidrs`` and auto-detected connected nets.
+    """Confirmed YAML ``discovery.cidrs`` only.
 
-    Never hardcodes ``/24``. Never raises — autodetect failures become warnings.
+    Does **not** auto-union connected VLANs. Empty cidrs → no scan.
+    ``include_docker`` / ``ip_output`` kept for call-site compatibility (ignored).
     """
-    try:
-        from_yaml = normalize_cidrs(yaml_cidrs)
-        detected = detect_connected_networks(
-            include_docker=include_docker,
-            ip_output=ip_output,
-            limit=limit,
-            total_limit=total_limit,
-        )
-        from_auto = list(detected.get("cidrs") or [])
-        merged = merge_cidrs(from_yaml, from_auto)
-        if from_yaml and from_auto:
-            source = "yaml+auto"
-        elif from_yaml:
-            source = "yaml"
-        elif from_auto:
-            source = "auto"
-        else:
-            source = "none"
-        plan = scan_plan(merged, limit=limit, total_limit=total_limit)
-        warnings = [str(item) for item in (detected.get("warnings") or []) if str(item).strip()]
-        warnings.extend(str(item) for item in plan["warnings"] if str(item).strip())
-        return {
-            "cidrs": merged,
-            "yaml": from_yaml,
-            "auto": from_auto,
-            "source": source,
-            "interfaces": list(detected.get("interfaces") or []),
-            "skipped": list(detected.get("skipped") or []),
-            "warnings": warnings,
-            "host_count": int(plan["total"]),
-            "truncated": bool(plan["truncated"]),
-            "per_cidr": list(plan["per_cidr"]),
-            "hosts": list(plan["hosts"]),
-        }
-    except Exception as exc:
-        log.exception("resolve_scan_cidrs failed")
-        return _yaml_only_resolve(
-            yaml_cidrs,
-            warning=f"autodetect skipped: {type(exc).__name__}",
-            limit=limit,
-            total_limit=total_limit,
-        )
+    _ = (include_docker, ip_output)
+    return _yaml_only_resolve(yaml_cidrs, limit=limit, total_limit=total_limit)
 
 
 

@@ -44,7 +44,7 @@ Follow this order on a live box. This handbook is **why and when**. Typed comman
 2. **Login.** `http://<VM-IP>:8080` with `installation-report.md` / `secrets/secrets.env` (§5).
 3. **System Health** (`/health-ui`) = `./forgesre doctor`. Open Grafana only here. Alarm path is Prometheus → Alertmanager → Core. NetBox UI up with API 403 is yellow **warn**, not paused. SNMP with no Network device + IP is **paused (no SNMP targets)** (yellow — leave it).
 4. **Assets** (`/assets`). Local inventory is the monitoring source of truth. Add / Edit / Verify.
-5. **Discovery vs NetBox** (`/discovery`). **Save & scan** / **Scan now** queue a background `discovery_scan` job (Postgres `jobs` table, one worker, no Celery) then redirect. The probe unions live `discovery.cidrs` with **auto-detected connected IPv4 nets** (real prefixlen — not a hardcoded `/24`). Candidate table: open ports, node_exporter, windows_exporter, SNMP. **Sync NetBox** sits beside Scan now (read-only from bundled `:8001`). Empty NetBox is **yellow No devices** — that is OK. Approve or Ignore; Manual Assets stay SoT.
+5. **Discovery vs NetBox** (`/discovery`). Suggests this VM’s primary IPv4 `/24`; **Confirm & scan** writes `discovery.cidrs` (empty = no scan) and queues a background `discovery_scan` job (Postgres `jobs` table, one worker, **no Celery**). **Scan now** only after a confirmed CIDR. Probe: TCP 22/80/443/9100/9182 + SNMP **UDP/161** + `/metrics` (not nmap). Candidate table: open ports, node_exporter, windows_exporter, SNMP. **Sync NetBox** sits beside Scan now (read-only from bundled `:8001`). Empty NetBox is **yellow No devices** — that is OK. Approve or Ignore; Manual Assets stay SoT.
 6. **Incidents** (`/incidents`) then **History** (`/history`). IDs look like `INC-0134_16.08.2026_09:13`.
 7. **ForgeRCA vs ForgeAI.** Open ForgeRCA on the incident. ForgeRCA (Python) always first. ForgeAI only rewrites prose (optional, default 90s timeout, one worker thread).
 8. **verify ≠ doctor ≠ test.** `./forgesre verify` = live inventory path. `./forgesre doctor` = Health lights. `./forgesre test` = appliance report → `data/reports/`.
@@ -143,7 +143,7 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 | Dashboard | `/` | Counts, HOST DOWN banner, pending discovery banner (analyst+), **Run demo** (admin, top right), recent incidents. Full doctor grid is **System Health**, not here. |
 | Assets | `/assets` | List inventory. **Add / Edit / Clone / Remove** (analyst+). One sentence: Verify ≠ doctor ≠ `./forgesre test`. |
 | Asset detail | `/assets/<id>` | Contacts, scrape, similar-incident history. **One Edit Alarms** on the metrics panel (not per tile). |
-| Discovery | `/discovery` | **Save & scan** / **Scan now** side-by-side (not stacked); long probe copy in ⓘ. Buttons queue a Postgres `discovery_scan` job and always redirect (TCP/SNMP/HTTP, not nmap; YAML ∪ auto-detected nets). **Sync NetBox** beside Scan now (read-only, admin). Columns: open ports, node_exporter, windows_exporter, SNMP. Demo IP `10.20.30.41` is a DEMO lab seed. |
+| Discovery | `/discovery` | Prefills primary IPv4 `/24`; **Confirm & scan** / **Scan now** (disabled until confirmed) side-by-side; queue Postgres `discovery_scan` (no Celery; not nmap). Empty `discovery.cidrs` = no scan. **Sync NetBox** beside Scan now (read-only, admin). Columns: open ports, node_exporter, windows_exporter, SNMP. Demo IP `10.20.30.41` is a DEMO lab seed. |
 | Incidents | `/incidents` | **Open/firing** list (filter: open-only / last days). INC id is green (resolved/closed), yellow (in progress), red (critical). Archive is **History**. |
 | History | `/history` | Archive: last 90 days in Postgres. Filters: status, asset, `INC` number. Closed rows stay here. |
 | Incident | `/incidents/INC-…` | **Acknowledge / Resolve / Close**, Who to call, **Open ForgeRCA** (primary CTA → `/ai/INC-…`), **Send incident report**. Mail outbox is `/ops#mail`. ForgeRCA/ForgeAI pills stay. |
@@ -316,21 +316,19 @@ Similar-incident history on the asset page groups past incidents by alert/title 
 
 Who: **analyst**, engineer, or admin to scan and Approve. After Approve, fill contacts on the asset page — discovery does not guess who owns the box. You can still add **manual Assets** on `/assets` without ever running discovery — inventory stays the monitoring source of truth.
 
-1. Open **Discovery**. Scan targets are the **union** (deduped) of:
-   - `discovery.cidrs` from live `config/forgesre.yml` (always honored when present)
-   - **Auto-detected** connected IPv4 nets on this appliance (real `prefixlen` — never a hardcoded `/24`). Core uses `ip -4 -o addr` (`iproute2` in the Core image) with an ioctl fallback. Skips loopback, link-local, multicast, `0.0.0.0/0`, and Docker bridges (`docker0`, `br-*`, `veth*`).
-2. Empty YAML → auto only. Auto-detect fails → YAML only. Both present → merge. **Save & scan** writes the form into `discovery.cidrs`; **Scan now** always merges auto-detect. Edit YAML by hand if you prefer — no `install.sh` needed.
+1. Open **Discovery**. Prefill is this appliance’s **primary IPv4 as `/24`** (host network / Core `network_mode: host`). ForgeSRE does **not** silently scan every connected VLAN.
+2. Prefill is a suggestion only. Type or keep the CIDR(s), then **Confirm & scan** — that writes `discovery.cidrs` in live `config/forgesre.yml` and queues a background probe. **Scan now** stays disabled until a CIDR is confirmed (empty `discovery.cidrs` = **no scan**). You can still edit YAML by hand; Core reloads cidrs on Confirm without `install.sh`.
 
 ```yaml
 discovery:
   enabled: true
   mode: semi-automatic   # manual | semi-automatic | automatic
-  cidrs: ["10.20.30.0/24"]   # optional extras; [] still scans auto-detected nets
+  cidrs: ["10.20.30.0/24"]   # empty = no scan
 ```
 
-3. **Save & scan** / **Scan now** enqueue kind `discovery_scan` on the existing Postgres `jobs` table (`status=pending`). The HTTP handler **never** runs `run_scan` inline — it always **redirects** with a flash. `_jobs_loop` / `run_pending_jobs` executes the TCP/SNMP/`/metrics` probe in try/except. A probe exception sets `job.error` and a Journal row; Core/uvicorn stay up. **Not nmap**, and **not** NetBox. Limits: **256 hosts per CIDR**, **1024 total**. **Sync NetBox** is a separate admin CTA (read-only), shown **side-by-side** with Scan now. **Save & scan** and **Scan now** sit on one row (not stacked). Long helper text is in the ⓘ tip. Background loop uses the same YAML ∪ auto sources. Hosts already in Assets are skipped. Results land in the candidate table (10 per page) and in Journal module `discovery`. ICMP ping is on Assets, not Scan now. There is **no Celery**.
+3. **Confirm & scan** / **Scan now** enqueue kind `discovery_scan` on the existing Postgres `jobs` table (`status=pending`). The HTTP handler **never** runs `run_scan` inline — it always **redirects** with a flash. `_jobs_loop` / `run_pending_jobs` executes the TCP/SNMP/`/metrics` probe in try/except. A probe exception sets `job.error` and a Journal row; Core/uvicorn stay up. **Not nmap**, and **not** NetBox. Ports: TCP **22, 80, 443, 9100, 9182** + SNMP **UDP/161**. Limits: **256 hosts per CIDR**, **1024 total**. **Sync NetBox** is a separate admin CTA (read-only), shown **side-by-side** (~50%) with Scan now. **Confirm & scan** and **Scan now** sit on one row. Long helper text is in the ⓘ tip. Background loop uses confirmed YAML cidrs only. Hosts already in Assets are skipped. Results land in the candidate table (10 per page) and in Journal module `discovery`. ICMP ping is on Assets, not Scan now. There is **no Celery**.
 4. Banner **NEW DEVICE DETECTED**. Found hosts stay on **Waiting for Approve** until you decide. They are **not** auto-added to inventory.
-5. Candidate table shows **Open ports**, **node_exporter**, **windows_exporter**, and **SNMP** (`snmp_ok`).
+5. Candidate table shows **Open ports**, **node_exporter** (yes/no: :9100 + `node_` metrics), **windows_exporter** (yes/no: :9182 + `windows_` metrics), and **SNMP** (`snmp_ok`).
 6. **Approve** (on the Discovery page) → creates an asset (`source=discovery`, id like `disc-10-20-30-41`) and sends you to the asset page. **Ignore** rejects the host (out of inventory).
 
 
@@ -649,7 +647,7 @@ Open **ForgeRCA** from the incident (primary CTA → `/ai/INC-…`).
 
 The button runs **builtin ForgeRCA immediately** and opens Summary → Root cause → Recommended actions → Facts → Anomalies → Candidate causes → Limitations. Two pills sit at the top: **ForgeRCA** (green when builtin has a result) and **ForgeAI** (green if the LLM rewrote the prose, yellow while the rewrite runs, red if the LLM is off or unreachable). If `ai.enabled` is on, refresh later for ForgeAI. Do not mash Run now.
 
-Jobs: **one worker thread** in Core (Postgres `jobs` table). There is **no Celery**. Kinds: `investigate` (RCA / LLM rewrite) and `discovery_scan` (Discovery Save & scan / Scan now). An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds` (example.yml default 90; live yml is gitignored). Scheduled `/ops` reports run first in the same loop.
+Jobs: **one worker thread** in Core (Postgres `jobs` table). There is **no Celery**. Kinds: `investigate` (RCA / LLM rewrite) and `discovery_scan` (Discovery Confirm & scan / Scan now). An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds` (example.yml default 90; live yml is gitignored). Scheduled `/ops` reports run first in the same loop.
 
 You get:
 
@@ -788,7 +786,7 @@ Say this out loud so lab expectations stay honest:
 - Assets can be added, edited, cloned, and removed (analyst+). Lab `forge-demo-*` rows can be removed; they do not come back on update. Users can be edited and removed on Administration (not the install super admin, not yourself). Escalation policies can be created in the UI; there is no ticketing object.
 - Example YAML in `config/examples/` is not applied automatically.
 - Bundled alert rules include demo gauges, SNMP `up` / interface-down, Linux `node_exporter` (down / disk **90%** / **memory 90%** / CPU 95%), and Windows `windows_exporter` (down / volume **90%** / **memory 90%** / CPU 90%). Extra rules go in `alerts.local.yml`. **Grafana is not the alarm path** — it is graphs only. Incidents come from Prometheus → Alertmanager → ForgeSRE.
-- Discovery is TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, YAML `discovery.cidrs` ∪ auto-detected connected nets, **256 hosts/CIDR** and **1024 total**. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.
+- Discovery is TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, confirmed YAML `discovery.cidrs` only (suggested primary IPv4 `/24`; empty = no scan), **256 hosts/CIDR** and **1024 total**. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.
 - Viewer cannot open Playrules, Playbooks, Escalation, Console, or Discovery (403).
 - Optional TLS is an example Caddyfile, not a default container.
 - NetBox is read-only. Bundled UI is on by default; Core never writes back.

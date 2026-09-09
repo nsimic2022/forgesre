@@ -1,4 +1,4 @@
-"""Discovery Save & scan / Scan now enqueue a Postgres job; probe stays off the HTTP thread."""
+"""Discovery Confirm & scan / Scan now enqueue a Postgres job; probe stays off the HTTP thread."""
 
 from __future__ import annotations
 
@@ -61,17 +61,16 @@ def test_discovery_buttons_not_stacked_helper_in_tip():
     assert "discovery-scan-actions" in html
     assert "discovery-scan-actions" in css
     actions = html[html.index("discovery-scan-actions") :]
-    assert "Save &amp; scan" in actions
-    assert actions.find("Save &amp; scan") < actions.find(">Scan now")
+    assert "Confirm &amp; scan" in actions
+    assert actions.find("Confirm &amp; scan") < actions.find("Scan now")
     assert html.find("Scan now") < html.find("NetBox sync")
     assert "grid-template-columns: 1fr 1fr" in css.split(".discovery-scan-actions")[1].split("}")[0]
     assert "grid-template-columns: 1fr 1fr" in css.split(".discovery-actions")[1].split("}")[0]
-    assert "form-grid discovery-scan-form" not in html
-    assert "Autodetected connected nets (real prefixes):" not in html
     assert "background job" in html or "background probe" in html
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "discovery_scan" in handbook
     assert "no Celery" in handbook or "not Celery" in handbook.lower() or "**no Celery**" in handbook
+    assert "Confirm & scan" in handbook or "Confirm &amp; scan" in handbook
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "./config/forgesre.yml:/config/forgesre.yml:ro" not in compose
     assert "./config/forgesre.yml:/config/forgesre.yml" in compose
@@ -95,6 +94,7 @@ def test_post_scan_enqueues_pending_job_and_redirects(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     monkeypatch.setattr(settings, "config_path", cfg)
+    original_yaml = dict(settings.yaml)
     settings.yaml = yaml.safe_load(cfg.read_text(encoding="utf-8"))
     called = {"n": 0}
 
@@ -103,39 +103,42 @@ def test_post_scan_enqueues_pending_job_and_redirects(tmp_path, monkeypatch):
         raise RuntimeError("probe exploded")
 
     monkeypatch.setattr("app.inventory.run_scan", boom)
-    client = _login()
-    page = client.get("/discovery")
-    assert page.status_code == 200
-    assert "discovery-scan-actions" in page.text
-    posted = client.post(
-        "/discovery/scan",
-        data={"confirm": "1", "cidrs": "10.55.0.0/24"},
-        follow_redirects=False,
-    )
-    assert posted.status_code == 302
-    location = posted.headers.get("location") or ""
-    assert "/discovery" in location
-    assert "queued" in location.lower()
-    assert called["n"] == 0
-    written = yaml.safe_load(cfg.read_text(encoding="utf-8"))
-    assert written["discovery"]["cidrs"] == ["10.55.0.0/24"]
-    db = SessionLocal()
-    jobs = db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).all()
-    assert len(jobs) == 1
-    assert jobs[0].status == "pending"
-    assert jobs[0].object_id == "scan"
-    db.close()
+    try:
+        client = _login()
+        page = client.get("/discovery")
+        assert page.status_code == 200
+        assert "discovery-scan-actions" in page.text
+        posted = client.post(
+            "/discovery/scan",
+            data={"confirm": "1", "cidrs": "10.55.0.0/24"},
+            follow_redirects=False,
+        )
+        assert posted.status_code == 302
+        location = posted.headers.get("location") or ""
+        assert "/discovery" in location
+        assert "queued" in location.lower() or "Confirmed" in unquote(location)
+        assert called["n"] == 0
+        written = yaml.safe_load(cfg.read_text(encoding="utf-8"))
+        assert written["discovery"]["cidrs"] == ["10.55.0.0/24"]
+        db = SessionLocal()
+        jobs = db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).all()
+        assert len(jobs) == 1
+        assert jobs[0].status == "pending"
+        assert jobs[0].object_id == "scan"
+        db.close()
 
-    scan_now = client.post("/discovery/scan", data={"cidrs": "10.55.0.0/24"}, follow_redirects=False)
-    assert scan_now.status_code == 302
-    assert "already queued" in unquote(scan_now.headers.get("location") or "").lower()
-    db = SessionLocal()
-    assert db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).count() == 1
-    run_pending_jobs(db)
-    db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
-    db.commit()
-    db.close()
-    assert called["n"] == 1
+        scan_now = client.post("/discovery/scan", data={"cidrs": "10.55.0.0/24"}, follow_redirects=False)
+        assert scan_now.status_code == 302
+        assert "already queued" in unquote(scan_now.headers.get("location") or "").lower()
+        db = SessionLocal()
+        assert db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).count() == 1
+        run_pending_jobs(db)
+        db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+        assert called["n"] == 1
+    finally:
+        settings.yaml = original_yaml
 
 
 def test_run_pending_jobs_executes_scan_and_swallows_probe_errors(monkeypatch):
@@ -184,7 +187,7 @@ def test_run_pending_jobs_marks_scan_done(monkeypatch):
     db.close()
 
 
-def test_api_scan_enqueues_without_probing(monkeypatch):
+def test_api_scan_requires_saved_cidrs(monkeypatch):
     db = _db()
     db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
     db.commit()
@@ -196,7 +199,13 @@ def test_api_scan_enqueues_without_probing(monkeypatch):
         raise RuntimeError("should not run on request")
 
     monkeypatch.setattr("app.inventory.run_scan", boom)
+    monkeypatch.setitem(settings.yaml.setdefault("discovery", {}), "cidrs", [])
     client = _login()
+    empty = client.post("/api/v1/discovery/scan")
+    assert empty.status_code == 400
+    assert called["n"] == 0
+
+    monkeypatch.setitem(settings.yaml.setdefault("discovery", {}), "cidrs", ["10.1.0.0/28"])
     resp = client.post("/api/v1/discovery/scan")
     assert resp.status_code == 200
     body = resp.json()
@@ -211,18 +220,13 @@ def test_api_scan_enqueues_without_probing(monkeypatch):
     assert called["n"] == 1
 
 
-def test_post_scan_empty_cidrs_and_mocked_ip_does_not_500(monkeypatch):
+def test_post_scan_empty_cidrs_does_not_500(monkeypatch):
     """POST /discovery/scan must never return the black Starlette 500 page."""
     db = _db()
     db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
     db.commit()
     db.close()
-
-    def boom(*_args, **_kwargs):
-        raise RuntimeError("ioctl failed")
-
-    monkeypatch.setattr("discovery.detect_connected_networks", boom)
-    monkeypatch.setattr("discovery._iface_inet_rows", boom)
+    monkeypatch.setitem(settings.yaml.setdefault("discovery", {}), "cidrs", [])
     monkeypatch.setattr(
         "app.inventory.run_scan",
         lambda db, cidrs=None, **kwargs: {"found": 0, "skipped": 0, "cidrs": cidrs or []},
@@ -233,7 +237,7 @@ def test_post_scan_empty_cidrs_and_mocked_ip_does_not_500(monkeypatch):
 
     empty = client.post("/discovery/scan", data={"cidrs": ""}, follow_redirects=False)
     assert empty.status_code == 302, empty.text[:800]
-    assert empty.status_code != 500
+    assert "Confirm" in unquote(empty.headers.get("location") or "")
 
     save_empty = client.post(
         "/discovery/scan",
@@ -241,25 +245,10 @@ def test_post_scan_empty_cidrs_and_mocked_ip_does_not_500(monkeypatch):
         follow_redirects=False,
     )
     assert save_empty.status_code == 302, save_empty.text[:800]
-
-    mocked = client.post(
-        "/discovery/scan",
-        data={"cidrs": "10.66.1.0/30"},
-        follow_redirects=False,
-    )
-    assert mocked.status_code == 302, mocked.text[:800]
-    loc = unquote(mocked.headers.get("location") or "").lower()
-    # Scan now persists the operator CIDR list (multi-CIDR real prefixes), then queues.
-    assert "saved discovery.cidrs" in loc
-    assert "10.66.1.0/30" in loc
-    db = SessionLocal()
-    run_pending_jobs(db)
-    db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
-    db.commit()
-    db.close()
+    assert "Confirm" in unquote(save_empty.headers.get("location") or "")
 
 
-def test_save_scan_readonly_yaml_does_not_500(monkeypatch):
+def test_confirm_scan_readonly_yaml_does_not_500(monkeypatch):
     def deny(*_args, **_kwargs):
         raise OSError(30, "Read-only file system")
 
@@ -285,15 +274,7 @@ def test_save_scan_readonly_yaml_does_not_500(monkeypatch):
 
 
 def test_job_worker_uses_operator_cidrs_without_remerge(monkeypatch):
-    from app.db import Base, SessionLocal, engine
-    from app.jobs import enqueue_discovery_scan, run_pending_jobs
-    from app.migrate import migrate
-    from app.seed import seed
-
-    Base.metadata.create_all(bind=engine)
-    migrate(engine)
-    db = SessionLocal()
-    seed(db)
+    db = _db()
     seen = []
 
     def fake_run_scan(db, cidrs=None, merge_auto=True, **kwargs):

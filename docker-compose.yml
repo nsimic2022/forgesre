@@ -45,7 +45,7 @@ services:
       FORGESRE_LOGS_DIR: /logs
       FORGESRE_FILES_WRITABLE: "0"
     volumes:
-      # rw: Discovery Save & scan persists discovery.cidrs. :ro was EROFS → HTTP 500.
+      # rw: Discovery Confirm & scan persists discovery.cidrs. :ro was EROFS → HTTP 500.
       - ./config/forgesre.yml:/config/forgesre.yml
       - ${FORGESRE_DATA:-./data}/logs:/logs
       - ${FORGESRE_DATA:-./data}/backups:/backups

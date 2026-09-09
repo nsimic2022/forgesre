@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Discovery · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Discovery {% with %}{% set tip %}Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on UDP/161 (TCP/161 is skipped — that is not SNMP) and HTTP GET /metrics on :9182 and :9100 when a host is alive. windows_ metrics → Windows Server :9182. node_ metrics → Linux Server :9100. SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics. TCP open without exporter text is not an OS pick (ICMP ping is not a scrape). Scan now prefills every connected IPv4 net on this appliance (real prefixlen — never a hardcoded /24) plus any YAML discovery.cidrs; edit the list, then scan — the form is saved to discovery.cidrs and a background job probes that list. Empty form → autodetection only. Skips loopback / link-local / multicast / 0.0.0.0/0 and Docker bridges (docker0, br-*, veth*). Limits 256 hosts/CIDR and 1024 total (truncate + warn). Manual Assets stay the inventory source of truth until Approve. This is not nmap.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Discovery {% with %}{% set tip %}Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on UDP/161 (TCP/161 is skipped — that is not SNMP) and HTTP GET /metrics on :9182 and :9100 when a host is alive. windows_ metrics → Windows Server :9182. node_ metrics → Linux Server :9100. SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics. TCP open without exporter text is not an OS pick (ICMP ping is not a scrape). Suggested CIDR is this VM’s primary IPv4 /24 — Confirm &amp; scan writes discovery.cidrs and queues a background probe (Postgres jobs, one Core worker — not Celery). Empty discovery.cidrs = no scan (not all VLANs). This is not nmap and does not replace nmap. New hosts wait here until an engineer Approves or Ignores them.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <p class="muted">
   Mode: <code>{{ discovery_mode }}</code>
-  · YAML: <code>{{ discovery_cidrs or "[]" }}</code>
-  · Auto: <code>{{ discovery_auto_cidrs or detected_cidrs or "none" }}</code>
-  · Scan: <code>{{ discovery_scan_cidrs or "none" }}</code>
-  · Source: <code>{{ discovery_cidr_source or "?" }}</code>
+  · CIDRs: <code>{{ discovery_cidrs or "none (confirm first)" }}</code>
   · Enabled: <code>{{ "On" if discovery_enabled else "Off" }}</code>
+  {% if suggested_cidr %}
+  · Suggested: <code>{{ suggested_cidr }}</code>
+  {% endif %}
 </p>
 
 {% if notice %}
@@ -39,14 +39,26 @@
 <div class="discovery-actions">
 {% if can('write_assets') %}
 <section class="card">
-  <h2>Scan now {% with %}{% set tip %}Prefills every connected IPv4 net (real prefixlen — never a hardcoded /24) plus YAML. Edit before scan. Save &amp; scan / Scan now write discovery.cidrs and queue a background probe of that list (Postgres jobs, one Core worker — not Celery). Empty form → autodetection + save. Skips loopback / link-local / multicast / 0.0.0.0/0 and Docker bridges. TCP 22, 80, 443, 9100, 9182 + SNMP GET UDP/161 + HTTP GET /metrics on :9182/:9100. Not nmap. Max 256/CIDR, 1024 total. Approve still required. Manual Assets stay SoT.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Scan now {% with %}{% set tip %}TCP / SNMP / HTTP probe of confirmed discovery.cidrs only (max 256/CIDR, 1024 total). Prefills this VM’s primary IPv4 as /24 — Confirm &amp; scan writes config/forgesre.yml and queues a background probe (Postgres jobs — not Celery). Scan now stays disabled until a CIDR is confirmed. Empty cidrs = no scan. Not nmap. Does not write inventory until you Approve.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <form method="post" action="/discovery/scan" class="discovery-scan-form">
-    <label>CIDR(s) to scan (connected nets prefilled)
-      <input name="cidrs" value="{{ cidr_prefill }}" placeholder="{{ suggested_cidr or (detected_cidrs|join(', ') if detected_cidrs else '10.10.10.0/24, 192.168.1.0/25') }}" autocomplete="off">
+    <label>Management CIDR(s)
+      <input name="cidrs" value="{{ cidr_prefill }}" placeholder="{{ suggested_cidr or '10.10.10.0/24' }}" autocomplete="off">
     </label>
+    <p class="muted">
+      {% if suggested_cidr %}
+      Suggested from this appliance primary IPv4: <code>{{ suggested_cidr }}</code>. Confirm before scanning — ForgeSRE will not scan every VLAN.
+      {% else %}
+      Could not detect a primary IPv4. Type a management /24 (or comma-separated CIDRs), then Confirm &amp; scan.
+      {% endif %}
+      Limits: 256 hosts per CIDR, 1024 total. Ports: TCP 22, 80, 443, 9100, 9182 + SNMP UDP/161.
+    </p>
     <div class="discovery-scan-actions">
-      <button type="submit" name="confirm" value="1">Save &amp; scan</button>
-      <button type="submit"{% if not discovery_can_scan and not cidr_prefill %} disabled title="No YAML cidrs and no auto-detected nets"{% endif %}>Scan now</button>
+      <button type="submit" name="confirm" value="1">Confirm &amp; scan</button>
+      {% if discovery_has_cidrs %}
+      <button type="submit">Scan now</button>
+      {% else %}
+      <button type="button" disabled title="Confirm a management CIDR first">Scan now</button>
+      {% endif %}
     </div>
   </form>
 </section>
@@ -150,7 +162,7 @@
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="9" class="muted">No candidates yet. Scan now (YAML ∪ auto), or use the demo workflow. Manual Assets on /assets stay valid without discovery.</td></tr>
+    <tr><td colspan="9" class="muted">No candidates yet. Confirm a management CIDR and scan, or use the demo workflow.</td></tr>
   {% endfor %}
   </tbody>
 </table>

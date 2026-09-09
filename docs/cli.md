@@ -86,7 +86,7 @@ quit                       # or: exit    or Ctrl-D
 
 ---
 
-`./forgesre config` shows the live YAML path. Discovery **Save & scan** writes `discovery.cidrs` there; Scan now unions auto-detected connected nets. Do not re-run `./install.sh` just to change CIDRs.
+`./forgesre config` shows the live YAML path. Discovery **Confirm & scan** on `/discovery` writes `discovery.cidrs` there (suggested management `/24` from this VM’s primary IPv4; empty cidrs = no scan). Do not re-run `./install.sh` just to change CIDRs.
 
 ---
 
@@ -141,7 +141,7 @@ Classes are universal, not SKUs: Linux, Windows, Network SNMP, Unknown. Unknown 
 
 `verify` accepts **all of**: asset number `#`, Asset ID, hostname, and IP. Same keys work for `./forgesre ping`. TAB completes numbers and ids (hostnames too). One key dumps what ForgeSRE already knows (inventory) plus the live checks. Same action: Assets → **Verify** (analyst / engineer / admin). Viewers are read-only.
 
-`./forgesre jobs` is the Postgres job table. There is **no Celery**. One worker thread in Core runs scheduled reports then pending jobs (`investigate` and `discovery_scan`). Discovery **Save & scan** / **Scan now** enqueue `discovery_scan` (`status=pending`); the worker runs `run_scan` in try/except so a probe crash becomes `job.error` + Journal, not a Core 500. An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds`. Scheduled `/ops#reports` jobs are a different table (`scheduled_reports`): **Edit / Clone / Remove** on the row, **Cancel** next to Save on the form, **Enabled** = fire at Next (off = stored, skipped). Same SMTP send path as Compose.
+`./forgesre jobs` is the Postgres job table. There is **no Celery**. One worker thread in Core runs scheduled reports then pending jobs (`investigate` and `discovery_scan`). Discovery **Confirm & scan** / **Scan now** enqueue `discovery_scan` (`status=pending`); the worker runs `run_scan` in try/except so a probe crash becomes `job.error` + Journal, not a Core 500. An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds`. Scheduled `/ops#reports` jobs are a different table (`scheduled_reports`): **Edit / Clone / Remove** on the row, **Cancel** next to Save on the form, **Enabled** = fire at Next (off = stored, skipped). Same SMTP send path as Compose.
 
 ---
 
@@ -222,7 +222,7 @@ sudo systemctl enable --now open-vm-tools
 systemctl status vmtoolsd
 ```
 
-`config/forgesre.yml` is local to the VM (gitignored). Discovery **Save & scan** writes `discovery.cidrs` there; Scan now also unions auto-detected connected nets (real prefixes — not a hardcoded `/24`). Empty YAML still scans auto nets. Change other keys, then recreate Core. Do not commit the live file. The committed template is `config/forgesre.example.yml`.
+`config/forgesre.yml` is local to the VM (gitignored). Discovery **Confirm & scan** writes `discovery.cidrs` there (suggested primary IPv4 `/24`; empty = no scan). Change other keys, then recreate Core. Do not commit the live file. The committed template is `config/forgesre.example.yml`.
 
 ---
 

@@ -151,7 +151,7 @@ Guided wizard:
 | `--port N` | Core UI/API port (default `8080`) |
 | `--enable-ai yes\|no` | `yes` downloads the GGUF. ForgeRCA still works without it |
 | `--enable-discovery yes\|no` | Default yes |
-| `--discovery-cidrs 10.20.30.0/25,10.10.0.0/24` | Optional YAML CIDRs (always honored). **Scan now** unions them with auto-detected connected nets (real prefixes). Empty YAML → auto only. TCP 22/80/443/9100/9182 + SNMP GET UDP/161 + HTTP /metrics on :9182/:9100 when a host is alive |
+| `--discovery-cidrs 10.20.30.0/24,10.10.0.0/24` | Optional YAML CIDRs. Empty = no scan until Confirm. GUI suggests primary IPv4 `/24`. TCP 22/80/443/9100/9182 + SNMP GET UDP/161 + HTTP /metrics on :9182/:9100 when a host is alive |
 | `--netbox-url URL` | Point Core at an **external** NetBox; bundled still starts unless you stop it |
 | `--offline` | Do not pull images |
 
@@ -283,7 +283,7 @@ inventory:
 discovery:
   enabled: true
   mode: semi-automatic
-  cidrs: []   # empty OK; Scan now autodetects connected CIDRs (real prefixes) and saves here
+  cidrs: []   # empty = no scan; Confirm & scan writes suggested primary IPv4 /24 here
 
 monitoring:
   prometheus:

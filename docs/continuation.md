@@ -15,7 +15,7 @@ Product on `main`: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
 
 ## 1. Who and when
 
-**Wednesday 9 September 2026.** N rejected hardcoded `/24`. Discovery autodetection is **multi-CIDR** (all connected IPv4 nets, real `prefixlen`) on top of the Postgres `discovery_scan` job (no inline `run_scan`). Branch: `cursor/discovery-autocidr-abbb`. Prefer `git merge --no-ff` when PR create is 403.
+**Wednesday 9 September 2026.** N approved Discovery upgrade (“uradi sve”): safer **Confirm `/24`** (not silent all-VLAN scan), candidate exporter/SNMP columns, Scan now | NetBox side-by-side. Keep Postgres `discovery_scan` job (no inline `run_scan`, **no Celery**). Branch: `cursor/discovery-confirm-cidr-cb97`. Prefer `git merge --no-ff` when PR create is 403.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env`. Never print tokens. Never commit real secrets.
 
@@ -30,21 +30,20 @@ PYTHONPATH=backend:agents python3 -m pytest
 PYTHONPATH=backend:agents python3 -m pytest
 ```
 
-**451 passed** twice. Final `--no-ff` merge to `main`: **`46dab39`**. Record pass counts after both runs. `create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
+Pytest count after the double run on `cursor/discovery-confirm-cidr-cb97`: **444 passed** (twice). `create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
 
 ---
 
 ## 3. Done today / on this branch
 
-### Discovery scan is a Postgres job (not inline, not Celery)
+### Discovery Confirm /24 (safer “scan my network”)
 
-- `POST /discovery/scan` (**Save & scan** and **Scan now**) and `POST /api/v1/discovery/scan` **enqueue** `jobs.kind=discovery_scan` with `status=pending`. They do **not** call `run_scan` on the request thread.
-- `_jobs_loop` / `run_pending_jobs` executes `run_scan` in try/except. Probe exceptions → `job.error` + Journal (`discovery` / `scan`) when they escape the scan; per-host probe failures are logged and skipped so one SNMP GET cannot abort the job. uvicorn stays up.
-- HTTP always **redirects** with a flash (`Scan queued…`). Duplicate clicks reuse the pending/running row.
-- Layout: **Save & scan** | **Scan now** 50/50 in `.discovery-scan-actions`; Scan card | NetBox **50/50** (`.discovery-actions`). Long probe copy lives in ⓘ. CSS `app.css?v=disc-500`.
-- `docker-compose.yml` mounts `config/forgesre.yml` **rw** so Save & scan can persist `discovery.cidrs` (`:ro` was EROFS → HTTP 500). `scan_plan` no longer walks a `/8` just to count hosts.
-- Restored empty `discovery.cidrs: []` in pytest config after a merge glitch.
-- **Multi-CIDR:** prefills all connected nets (real prefixes — not `/24`-only); Scan now / Save & scan persist `discovery.cidrs` and queue a probe of that list (`merge_auto=False` in the worker). Empty form → autodetection + save. No Celery. One worker thread. No **Confirm & scan**.
+- Suggested management CIDR = appliance **primary IPv4 `/24`**. Does **not** silently scan all VLANs.
+- UI: CIDR field prefilled; **Confirm & scan** writes `discovery.cidrs` to live `config/forgesre.yml` and **enqueues** `discovery_scan`. **Scan now** only after confirmed CIDRs. Empty `discovery.cidrs` = **no scan** (API 400; background loop skips).
+- Limits **256/CIDR**, **1024** total. Ports: TCP **22, 80, 443, 9100, 9182** + SNMP **UDP/161**. Not nmap. Approve queue unchanged.
+- Candidate table: **Open ports**, **node_exporter**, **windows_exporter**, **SNMP** (`snmp_ok`). `upsert_candidate` persists flags (DB columns + migrate).
+- Layout: **Confirm & scan** | **Scan now** in `.discovery-scan-actions`; Scan card | NetBox **50/50** (`.discovery-actions`). CSS/JS `app.css?v=disc-1` / `app.js?v=disc-1`.
+- Job queue kept: HTTP never calls `run_scan` inline. Worker uses confirmed YAML cidrs only (`merge_auto=False`). No Celery.
 
 Do not revert ⓘ tooltips, nav clock/resources, `/ops` report-job row actions, or `.env` / `secrets.example.env` **service-group** comments.
 
@@ -52,13 +51,13 @@ Do not revert ⓘ tooltips, nav clock/resources, `/ops` report-job row actions, 
 
 ## 4. What N should do on the VM
 
-Do **not** run `./install.sh`.
+Do **not** run `./install.sh`. Hard-refresh Discovery after update (`app.css?v=disc-1`).
 
 ```bash
 git pull origin main && ./forgesre update
 ```
 
-SHA: **`46dab39`**. Open **Discovery** (hard-refresh). Review prefilled connected CIDRs (edit if needed). **Save & scan** / **Scan now** return immediately (flash: queued + saved), not a black 500. Candidates appear after the job finishes; `./forgesre jobs` shows `discovery_scan`. **Sync NetBox** sits beside Scan now (read-only). Approve / Ignore as before; manual Assets stay SoT.
+SHA: **(fill after merge to main)**. Open **Discovery**. Review suggested `/24`, **Confirm & scan**, wait for the background job (`./forgesre jobs`). **Sync NetBox** sits beside Scan now (read-only). Approve / Ignore as before; manual Assets stay SoT.
 
 `./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: **no host logs shipped**. [architecture.md](architecture.md) is a long-term **architecture proposal**, not the V0.7 appliance runtime.
 
@@ -74,8 +73,8 @@ Expect **`skipping v1 upsert`** (v2 already in secrets) or **`v1 token ready`** 
 
 ## 5. Product facts not to redo
 
-- Discovery **Scan now** = multi-CIDR autodetection of all connected IPv4 nets (real prefixes). Not `/24`-only. Not Confirm & scan. Not nmap. Approve still required in semi-automatic mode. Worker uses operator CIDRs with `merge_auto=False`.
-- Discovery **Save & scan** / **Scan now** enqueue Postgres `discovery_scan`. Never run `run_scan` inline on the UI request. No Celery.
+- Discovery suggests **primary IPv4 `/24`**. Operator must **Confirm & scan**. Empty `discovery.cidrs` = **no scan**. Does **not** auto-union every connected VLAN.
+- Discovery **Confirm & scan** / **Scan now** enqueue Postgres `discovery_scan`. Never run `run_scan` inline on the UI request. No Celery.
 - Discovery candidate booleans (`snmp_ok`, `node_exporter`, `windows_exporter`) migrate with `BOOLEAN DEFAULT FALSE`. Postgres rejects `DEFAULT 0`.
 - Two files: `.env` (deployment at repo root) vs `secrets/secrets.env` (secrets). Do not merge.
 - Example comments stay **English** and **grouped by service**.
