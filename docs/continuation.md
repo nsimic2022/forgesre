@@ -15,11 +15,11 @@ Product on `main`: **V0.7**. Repository: https://github.com/nsimic2022/forgesre.
 
 ## 1. Who and when
 
-**Wednesday 9 September 2026.** Operator N asked for `#` comments on **every variable**, **grouped**, for both `.env` and `secrets/secrets.env` patterns, plus docs (where files live, how to edit passwords, plaintext vs bcrypt). English comments in examples (OSS docs English; Serbian-ready later). Two files stay separate — do not merge.
+**Wednesday 9 September 2026.** Operator N asked for `#` comments on **every variable**, **grouped by service** (`# --- Postgres ---`, `# --- NetBox ---`, `# --- Grafana ---`, … — not mixed “Ports” / “Compose mirrors” blocks), for both `.env` and `secrets/secrets.env` patterns, plus docs (where files live, how to edit passwords, plaintext vs bcrypt, install copies from examples). English comments in examples (OSS docs English). Two files stay separate — do not merge.
 
 **Never** re-run `./install.sh` on a live box. That regenerates passwords in `secrets/secrets.env`. Never print tokens. Never commit real secrets.
 
-Branch: `cursor/env-comments-docs-05f8`. Tip: `06e6eac`. On `main` via `--no-ff` (latest merge `c3273e2`).
+Branches: `cursor/env-comments-docs-05f8` (initial comments + docs + install copy) then follow-ups for service groups / docs tables (`fd2133c`, `06e6eac`, …) merged `--no-ff` to `main`. Prefer `git merge --no-ff` when PR create is 403.
 
 ---
 
@@ -27,21 +27,23 @@ Branch: `cursor/env-comments-docs-05f8`. Tip: `06e6eac`. On `main` via `--no-ff`
 
 ```bash
 PYTHONPATH=backend:agents python3 -m pytest tests/test_netbox_compose.py tests/test_hardening.py
+PYTHONPATH=backend:agents python3 -m pytest tests/test_netbox_compose.py tests/test_hardening.py
 ```
 
-**58 passed** on this change set (compose/docs assertions for examples + gitignore). Full suite not re-run for this docs/install-only pass; prior main was green.
+Focused compose/docs assertions for examples + gitignore must stay green. Full suite not required for example-comment-only edits when prior `main` was green. (Some hardening tests may fail independently of this docs change — fix on their own branch if they regress.)
 
-`create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change (done this session).
+`create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
 
 ---
 
 ## 3. Done today / on this branch
 
-- [`.env.example`](../.env.example) — full grouped English `#` comments for every deployment key (appliance, ports, profiles, NetBox URL, Compose password mirrors, generated paths, optional mailbox).
-- [`secrets/secrets.example.env`](../secrets/secrets.example.env) — committed template with empty/example placeholders; grouped comments. States clearly: **all values are plaintext** for Docker/Postgres/NetBox/Grafana/SMTP/SNMP — **not** hashes. ForgeSRE UI passwords are **bcrypt in Postgres** after first-boot seed (`backend/app/seed.py` only creates the admin when the email is missing).
+- [`.env.example`](../.env.example) — English `#` comments; **service groups**: Appliance, Compose profiles, Postgres, Grafana, NetBox, Generated monitoring, Optional mailbox. Header states where the live file lives, install/`cp` from example, plaintext Compose mirrors vs bcrypt UI hashes, and “do not merge with secrets”.
+- [`secrets/secrets.example.env`](../secrets/secrets.example.env) — same pattern: Postgres, ForgeSRE Core, Grafana, SMTP, SNMP, NetBox, Optional mailbox. All values **plaintext**; UI bcrypt only in Postgres after first-boot seed (`backend/app/seed.py` only creates the admin when the email is missing).
 - [`.gitignore`](../.gitignore) — still ignores `secrets/secrets.env` and `secrets/*.env`, with `!secrets/secrets.example.env` so the example is tracked.
-- [`scripts/install.sh`](../scripts/install.sh) — copies examples → live files, then `set_kv` fills generated passwords (comments preserved).
-- Docs: [`install-config.md`](install-config.md) §§8/10/11/11a, [`README.md`](README.md) index, [`operator-handbook.md`](operator-handbook.md) “Where passwords live”. Changing `FORGESRE_ADMIN_PASSWORD` after first boot does **not** update the DB — documented truthfully.
+- [`scripts/install.sh`](../scripts/install.sh) — copies examples → live `.env` / `secrets/secrets.env`, then `set_kv` fills passwords (comments preserved).
+- Docs: [`install-config.md`](install-config.md) §§8/10/11/11a tables match service groups; plaintext vs bcrypt; [`operator-handbook.md`](operator-handbook.md) “Where passwords live”; [`README.md`](README.md) index. Changing `FORGESRE_ADMIN_PASSWORD` after first boot does **not** update the DB — documented truthfully.
+- Tests assert service headers and that Postgres/Grafana/NetBox keys sit under those headers (no `# --- Ports ---`).
 
 ---
 
@@ -68,9 +70,9 @@ Expect **`skipping v1 upsert`** (v2 already in secrets) or **`v1 token ready`** 
 ## 5. Product facts not to redo
 
 - Two files: `.env` (deployment at repo root) vs `secrets/secrets.env` (secrets). Do not merge.
+- Example comments stay **English** and **grouped by service**.
 - `secrets.env` values are **plaintext** env for containers. Do not claim they are hashes.
 - UI users: bcrypt in `users.password_hash` only. Seed uses `FORGESRE_ADMIN_PASSWORD` once.
-- Comments in example files stay **English**.
 - Bundled **NetBox** is a **default** compose service (`:8001`). Do not put it behind a profile. Prefer a NetBox UI **v2** token (full `nbt_…`) in `NETBOX_API_TOKEN`; Core sends `Authorization: Bearer`. `scripts/netbox-upsert-token.py` **skips** v1 create for that secret. A 40-character **v1 plaintext** value is still upserted as fallback (`write_enabled=False`) on the **superuser**. Success log: **`skipping v1 upsert`** or **`v1 token ready`**. **`could not upsert`** means a v1 secret never landed in the NetBox DB (UI still starts; Discovery 403 is honest). Never touch `User.is_staff` (removed in NetBox 4.5). Core is **not** a NetBox UI login. Do not drop database `forgesre` to “fix” NetBox. Health NetBox tile: UI up + 403 = **warn**, not paused. HTTP 200 with v2 is yellow (0 devices) / green (≥1).
 - NetBox UI **API token peppers**: v4.5+ needs `API_TOKEN_PEPPERS` / `NETBOX_API_TOKEN_PEPPER`. Official image reads `API_TOKEN_PEPPER_1`.
 - Discovery **Sync NetBox**: Devices API 403 is a warning (rejected / recreate), not “token missing” when a secret is present. Status chip: Not connected / API 403 / No devices / Connected — grey/yellow/green. Sentence *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.* stays on yellow. **Admin only** for engineer/analyst; viewers cannot open `/discovery`.
@@ -83,4 +85,4 @@ Expect **`skipping v1 upsert`** (v2 already in secrets) or **`v1 token ready`** 
 1. `git pull origin main`.
 2. Read **this file**, then the [docs index](README.md).
 3. On the VM: `git pull origin main && ./forgesre update`. Keep the full v2 token in `NETBOX_API_TOKEN`. `docker compose logs netbox | grep forgesre` should say **skipping v1 upsert** (v2) or **v1 token ready** (fallback), not could not upsert for a valid v2 secret. Never `./install.sh`. Never print tokens.
-4. Branch pattern `cursor/<name>-05f8`. Prefer `git merge --no-ff` to `main` when PR create is 403. Replies to N are in **Serbian**. OSS docs and code stay in **English**.
+4. Branch pattern `cursor/<name>-05f8` (or task suffix). Prefer `git merge --no-ff` to `main` when PR create is 403. Replies to N are in **Serbian**. OSS docs and code stay in **English**.
