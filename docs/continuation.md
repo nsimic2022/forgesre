@@ -30,7 +30,7 @@ PYTHONPATH=backend:agents python3 -m pytest
 PYTHONPATH=backend:agents python3 -m pytest
 ```
 
-Record pass counts after both runs. `create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
+**448 passed** twice. Record pass counts after both runs. `create_pr` / `ManagePullRequest` often **403** — `git merge --no-ff` plus `git push origin main` still lands the change.
 
 ---
 
