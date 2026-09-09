@@ -58,13 +58,15 @@ def test_web_and_api_handlers_do_not_call_run_scan_inline():
 def test_discovery_buttons_not_stacked_helper_in_tip():
     html = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "scan-actions" in html
-    actions = html[html.index("scan-actions") :]
+    assert "discovery-scan-actions" in html
+    assert "discovery-scan-actions" in css
+    actions = html[html.index("discovery-scan-actions") :]
     assert "Save &amp; scan" in actions
     assert actions.find("Save &amp; scan") < actions.find(">Scan now")
-    assert "flex-direction: row" in css.split(".discovery-scan-form .wide.scan-actions")[1].split("}")[0]
+    assert "grid-template-columns: 1fr 1fr" in css.split(".discovery-scan-actions")[1].split("}")[0]
+    assert "form-grid discovery-scan-form" not in html
+    assert "Autodetected connected nets (real prefixes):" not in html
     assert "background job" in html or "background probe" in html
-    assert "Scan uses the union of YAML + auto (deduped). Empty YAML → auto only. Limits:" not in html
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "discovery_scan" in handbook
     assert "no Celery" in handbook or "not Celery" in handbook.lower() or "**no Celery**" in handbook
@@ -102,7 +104,7 @@ def test_post_scan_enqueues_pending_job_and_redirects(tmp_path, monkeypatch):
     client = _login()
     page = client.get("/discovery")
     assert page.status_code == 200
-    assert "scan-actions" in page.text
+    assert "discovery-scan-actions" in page.text
     posted = client.post(
         "/discovery/scan",
         data={"confirm": "1", "cidrs": "10.55.0.0/24"},
@@ -205,3 +207,55 @@ def test_api_scan_enqueues_without_probing(monkeypatch):
     assert row.status == "error"
     db.close()
     assert called["n"] == 1
+
+
+def test_post_scan_always_redirects_when_autodetect_raises(monkeypatch):
+    db = _db()
+    db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
+    db.commit()
+    db.close()
+    monkeypatch.setattr("discovery.detect_connected_networks", lambda **k: (_ for _ in ()).throw(RuntimeError("ioctl failed")))
+    monkeypatch.setattr(
+        "app.inventory.run_scan",
+        lambda db, cidrs=None, **kwargs: {"found": 0, "skipped": 0, "cidrs": cidrs or []},
+    )
+    client = _login()
+    assert client.get("/discovery").status_code == 200
+    empty = client.post("/discovery/scan", data={"cidrs": ""}, follow_redirects=False)
+    assert empty.status_code == 302
+    save_empty = client.post(
+        "/discovery/scan",
+        data={"confirm": "1", "cidrs": ""},
+        follow_redirects=False,
+    )
+    assert save_empty.status_code == 302
+    db = SessionLocal()
+    run_pending_jobs(db)
+    db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
+    db.commit()
+    db.close()
+
+
+def test_save_scan_readonly_yaml_still_redirects(monkeypatch):
+    def deny(*_args, **_kwargs):
+        raise OSError(30, "Read-only file system")
+
+    monkeypatch.setattr(settings, "set_discovery_cidrs", deny)
+    monkeypatch.setattr(
+        "app.inventory.run_scan",
+        lambda db, cidrs=None, **kwargs: {"found": 0, "skipped": 0, "cidrs": cidrs or []},
+    )
+    client = _login()
+    resp = client.post(
+        "/discovery/scan",
+        data={"confirm": "1", "cidrs": "10.1.0.0/28"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    loc = unquote(resp.headers.get("location") or "").lower()
+    assert "queued" in loc or "could not" in loc
+    db = SessionLocal()
+    run_pending_jobs(db)
+    db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
+    db.commit()
+    db.close()
