@@ -60,8 +60,9 @@ def test_discovery_buttons_not_stacked_helper_in_tip():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "discovery-scan-actions" in html
     assert "discovery-scan-actions" in css
-    assert "Save &amp; scan" in html
-    assert html.find("Save &amp; scan") < html.find("Scan now")
+    actions = html[html.index("discovery-scan-actions") :]
+    assert "Save &amp; scan" in actions
+    assert actions.find("Save &amp; scan") < actions.find(">Scan now")
     assert html.find("Scan now") < html.find("NetBox sync")
     assert "grid-template-columns: 1fr 1fr" in css.split(".discovery-scan-actions")[1].split("}")[0]
     assert "grid-template-columns: 1fr 1fr" in css.split(".discovery-actions")[1].split("}")[0]
@@ -127,11 +128,14 @@ def test_post_scan_enqueues_pending_job_and_redirects(tmp_path, monkeypatch):
 
     scan_now = client.post("/discovery/scan", data={"cidrs": "10.55.0.0/24"}, follow_redirects=False)
     assert scan_now.status_code == 302
-    assert "already queued" in (scan_now.headers.get("location") or "").lower()
+    assert "already queued" in unquote(scan_now.headers.get("location") or "").lower()
     db = SessionLocal()
     assert db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).count() == 1
+    run_pending_jobs(db)
+    db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
+    db.commit()
     db.close()
-    assert called["n"] == 0
+    assert called["n"] == 1
 
 
 def test_run_pending_jobs_executes_scan_and_swallows_probe_errors(monkeypatch):
@@ -238,8 +242,13 @@ def test_post_scan_empty_cidrs_and_mocked_ip_does_not_500(monkeypatch):
         follow_redirects=False,
     )
     assert mocked.status_code == 302, mocked.text[:800]
-    loc = (mocked.headers.get("location") or "").lower()
+    loc = unquote(mocked.headers.get("location") or "").lower()
     assert "saved discovery.cidrs" not in loc
+    db = SessionLocal()
+    run_pending_jobs(db)
+    db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
+    db.commit()
+    db.close()
 
 
 def test_save_scan_readonly_yaml_does_not_500(monkeypatch):
@@ -260,3 +269,8 @@ def test_save_scan_readonly_yaml_does_not_500(monkeypatch):
     assert resp.status_code == 302, resp.text[:800]
     loc = unquote(resp.headers.get("location") or "").lower()
     assert "could not write" in loc or "queued" in loc
+    db = SessionLocal()
+    run_pending_jobs(db)
+    db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
+    db.commit()
+    db.close()
