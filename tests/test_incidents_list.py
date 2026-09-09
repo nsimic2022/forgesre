@@ -163,13 +163,13 @@ def test_resolved_row_keeps_severity_pill_not_green():
     db.commit()
     client = TestClient(app)
     _login(client)
-    listed = client.get("/incidents?status=closed")
+    listed = client.get("/incidents")
     assert listed.status_code == 200
-    tbody = listed.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
-    assert f'href="/incidents/{number}"' in tbody
-    assert "inc-row-done" in tbody
-    assert 'class="pill crit"' in tbody
-    assert 'class="pill resolved"' in tbody
+    assert "Resolved critical still shows heat as status" in listed.text
+    assert f'href="/incidents/{number}"' in listed.text
+    assert "inc-row-done" in listed.text
+    assert 'class="pill crit"' in listed.text
+    assert 'class="pill resolved"' in listed.text
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".incidents-table tr.inc-ok td:first-child" in css
     assert ".inc-demo" in css
