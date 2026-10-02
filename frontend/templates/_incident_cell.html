@@ -1,7 +1,7 @@
 <td class="inc-cell">
   <a class="inc-title" href="/incidents/{{ item.number }}"{% if item.title %} title="{{ item.title }}"{% endif %} tabindex="-1">{{ item.title or item.number }}</a>
   <div class="inc-meta">
-    <a class="inc-num {{ incident_tone(item.status, item.severity) }}" href="/incidents/{{ item.number }}" title="{{ item.number }}">{{ incident_short_label(item.number) }}</a>
+    <a class="{{ incident_tone(item.status, item.severity) }}" href="/incidents/{{ item.number }}" title="{{ item.number }}">{{ incident_short_label(item.number) }}</a>
     {% if item.asset and item.asset.hostname %}<span class="inc-host">· {{ item.asset.hostname }}</span>{% endif %}
     {% if is_demo_incident(item) %}<span class="inc-demo" title="Lab demo incident">· DEMO</span>{% endif %}
   </div>

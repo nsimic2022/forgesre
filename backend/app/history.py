@@ -143,8 +143,8 @@ def incident_query(
 def dashboard_incident_tiles(db: Session) -> list[dict[str, Any]]:
     """Tile label, count, CSS tone, and the exact /incidents link whose list has that many rows."""
     specs = [
-        ("Open", "open", {"open_only": True}, "/incidents?status=open"),
-        ("Critical", "crit", {"open_only": True, "critical_only": True}, "/incidents?status=open&severity=critical"),
+        ("Open", "crit", {"status": "OPEN"}, "/incidents?status=OPEN"),
+        ("Critical", "crit", {"open_only": True, "critical_only": True}, "/incidents?status=active&severity=critical"),
         ("Investigating", "warn", {"status": "INVESTIGATING"}, "/incidents?status=INVESTIGATING"),
         ("Escalated", "warn", {"status": "ESCALATED"}, "/incidents?status=ESCALATED"),
         ("Resolved", "ok", {"status": "RESOLVED"}, "/incidents?status=RESOLVED"),

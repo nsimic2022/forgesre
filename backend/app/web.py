@@ -1053,15 +1053,12 @@ def incidents_page(
     closed_only = False
     exact = ""
     status_group = "all"
-    if status_key in real_status:
+    if status_raw.lower() == "active" or (not status_raw and open_raw in {"1", "true", "yes"}):
+        open_only = True
+        status_group = "active"
+    elif status_key in real_status:
         exact = status_key
         status_group = status_key
-    elif status_raw.lower() == "closed":
-        closed_only = True
-        status_group = "closed"
-    elif status_raw.lower() == "open" or open_raw in {"1", "true", "yes"}:
-        open_only = True
-        status_group = "open"
     days_raw = (days or "").strip()
     days_n = clamp_days(days_raw) if days_raw else None
     rows, total = list_history(

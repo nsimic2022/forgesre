@@ -1086,8 +1086,8 @@ td.ops-report-actions .row-actions a.button {
   margin-top: 0.1rem;
   font-size: 0.8rem;
 }
-.inc-meta a.inc-num { font-variant-numeric: tabular-nums; text-decoration: none; }
-.inc-meta a.inc-num:hover { text-decoration: underline; }
+.inc-meta > a { font-variant-numeric: tabular-nums; text-decoration: none; }
+.inc-meta > a:hover { text-decoration: underline; }
 .inc-meta .inc-host { color: var(--muted); margin-top: 0; }
 .inc-meta .inc-demo { margin-left: 0; }
 .scan-list tr.inc-row-done td:first-child,

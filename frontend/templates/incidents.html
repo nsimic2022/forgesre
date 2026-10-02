@@ -5,10 +5,10 @@
 <form method="get" action="/incidents" class="list-filters incidents-filters">
   <label>Status
     <select name="status">
-      {% for value, label in [("all", "All"), ("open", "Open (not resolved)"), ("INVESTIGATING", "Investigating"), ("ESCALATED", "Escalated"), ("RESOLVED", "Resolved"), ("CLOSED", "Closed"), ("closed", "Done (resolved + closed)")] %}
+      {% for value, label in [("all", "All"), ("active", "Active (not resolved)"), ("OPEN", "Open"), ("INVESTIGATING", "Investigating"), ("ESCALATED", "Escalated"), ("RESOLVED", "Resolved"), ("CLOSED", "Closed")] %}
       <option value="{{ value }}" {% if status_group == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
-      {% if status_group not in ["all", "open", "closed", "INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED"] %}
+      {% if status_group not in ["all", "active", "OPEN", "INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED"] %}
       <option value="{{ status_group }}" selected>{{ status_group }}</option>
       {% endif %}
     </select>
