@@ -143,6 +143,51 @@ if (preset) {
         }
       }
     }
+    const alertField = form.querySelector("[data-alertname-input]");
+    if (alertField) alertField.dispatchEvent(new Event("input"));
+  });
+}
+
+const alertRulesData = document.getElementById("alert-rules-data");
+const alertNameInput = document.querySelector("[data-alertname-input]");
+const rulePreviewBody = document.querySelector("[data-rule-preview-body]");
+if (alertRulesData && alertNameInput && rulePreviewBody) {
+  let table = {};
+  try {
+    table = JSON.parse(alertRulesData.textContent || "{}");
+  } catch (err) {
+    table = {};
+  }
+  const lookup = (name) => {
+    const wanted = (name || "").trim().toLowerCase();
+    for (const key of Object.keys(table)) {
+      if (key.toLowerCase() === wanted) return table[key];
+    }
+    return [];
+  };
+  alertNameInput.addEventListener("input", () => {
+    const name = alertNameInput.value.trim();
+    const rules = lookup(name);
+    rulePreviewBody.replaceChildren();
+    if (!rules.length) {
+      const span = document.createElement("span");
+      span.className = "muted";
+      span.textContent = name ? "none in alerts.yml for this alertname" : "pick an alertname";
+      rulePreviewBody.appendChild(span);
+      return;
+    }
+    rules.forEach((rule, index) => {
+      if (index) rulePreviewBody.appendChild(document.createElement("br"));
+      const code = document.createElement("code");
+      code.textContent = rule.expr;
+      rulePreviewBody.appendChild(code);
+      if (rule.for) {
+        const span = document.createElement("span");
+        span.className = "muted";
+        span.textContent = ` for ${rule.for}`;
+        rulePreviewBody.appendChild(span);
+      }
+    });
   });
 }
 

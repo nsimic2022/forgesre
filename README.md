@@ -35,10 +35,10 @@ Find or enter a host
 | **Discovery** | Light probe: TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, then HTTP `/metrics` on :9182/:9100 to default Windows vs Linux. Approve or Ignore. Optional read-sync from bundled NetBox (`:8001`) or `--netbox-url`. |
 | **Inventory** | Hostname, IP, type (default **Auto (detect exporter)**), owner email/phone. Analysts can add and edit. |
 | **Monitoring** | Prometheus HTTP SD for Linux (`node_exporter` :9100) and Windows (`windows_exporter` :9182). Bundled snmp_exporter for network devices. Grafana for graphs. |
-| **Incidents** | Alertmanager webhook opens `INC-…`. Fingerprint is alert + asset. |
+| **Incidents** | Alertmanager webhook opens `INC-0134_16.08.2026_09:13`. Fingerprint is alert + asset. A resolved alert sets `RESOLVED` (not `CLOSED`); the same alert firing again opens a new incident. |
 | **History** | `/history` — last 90 days in Postgres, plus mail/audit/notes on the incident. |
-| **Playrules / playbooks** | Deterministic mapping: this alert → this checklist. Nothing is executed. |
-| **Escalation** | Generated mail to the **asset owner** (SMTP optional: Gmail, Outlook, or later the off-by-default mailbox profile). |
+| **Playrules / playbooks** | Deterministic mapping by `alertname`: this alert → this checklist. Thresholds live in Prometheus `alerts.yml`, not in playrules. Nothing is executed. |
+| **Escalation** | Generated mail to the **asset owner** (or an address written on the policy step; no owner email = `no-recipient`, nothing sent). SMTP optional: Gmail, Outlook, or later the off-by-default mailbox profile. |
 | **ForgeRCA / ForgeAI** | Read-only investigation. ForgeRCA (Python builtin) always first; ForgeAI is the optional local LLM rewrite. |
 | **Journal** | `/journal` — per-module ok/warn/error, not Docker logs and not a bash shell. |
 
@@ -155,7 +155,7 @@ wget -O data/models/model.gguf \
 | `/` | Dashboard: counts, HOST DOWN banner, **Run demo** (admin). Full doctor grid is **System Health**. |
 | `/assets` | Inventory and owner contacts |
 | `/discovery` | Prefills primary IPv4 `/24`; **Confirm & scan** writes `discovery.cidrs` and queues a background probe; **Scan now** after confirm (empty = no scan) / Approve / Ignore; **Sync NetBox** beside it (read-only, admin). Empty NetBox = yellow. |
-| `/incidents` | Open/firing incidents (**10 per page**). Archive is History. |
+| `/incidents` | All incidents by default, newest first (**10 per page**); filter **Active (not resolved)** for live work. Archive is History. |
 | `/history` | 90-day lookback, filters, closed rows |
 | `/ai/INC-…` | Read-only RCA (ForgeRCA first, ForgeAI rewrite-only) |
 | `/playrules` `/playbooks` `/escalation` | Workflow |

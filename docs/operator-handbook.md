@@ -140,17 +140,17 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 
 | Menu | URL | What you do there |
 |---|---|---|
-| Dashboard | `/` | Counts, HOST DOWN banner, pending discovery banner (analyst+), **Run demo** (admin, top right), recent incidents. Full doctor grid is **System Health**, not here. |
+| Dashboard | `/` | Counts, HOST DOWN banner, pending discovery banner (analyst+), **Run demo** (admin, top right), recent incidents. Full doctor grid is **System Health**, not here. Every count is a link, and the number equals the list behind the click (same query): incident tiles **Open / Critical / Investigating / Escalated / Resolved** open `/incidents` filtered; asset tiles open `/assets` filtered (**Offline / unreachable** = NetBox offline or last stored ping red — probes refresh when the Assets list polls; **No owner email** = escalation has nobody to mail). |
 | Assets | `/assets` | List inventory. **Add / Edit / Clone / Remove** (analyst+). One sentence: Verify ≠ doctor ≠ `./forgesre test`. |
 | Asset detail | `/assets/<id>` | Contacts, scrape, similar-incident history. **One Edit Alarms** on the metrics panel (not per tile). |
 | Discovery | `/discovery` | Prefills primary IPv4 `/24`; **Confirm & scan** / **Scan now** (disabled until confirmed) side-by-side; queue Postgres `discovery_scan` (no Celery; not nmap). Empty `discovery.cidrs` = no scan. **Sync NetBox** beside Scan now (read-only, admin). Columns: open ports, node_exporter, windows_exporter, SNMP. Demo IP `10.20.30.41` is a DEMO lab seed. |
-| Incidents | `/incidents` | **Open/firing** list (filter: open-only / last days). INC id is green (resolved/closed), yellow (in progress), red (critical). Archive is **History**. |
+| Incidents | `/incidents` | Default **All** statuses, newest first (10 per page). Filters: status (**All**, **Active (not resolved)** = Open + Investigating + Escalated, or one exact status), severity (**Critical**), last days. Title is the primary link; `#N` is colored green (resolved/closed), yellow (in progress), red (critical, not done). Older rows: **History**. |
 | History | `/history` | Archive: last 90 days in Postgres. Filters: status, asset, `INC` number. Closed rows stay here. |
 | Incident | `/incidents/INC-…` | **Acknowledge / Resolve / Close**, Who to call, **Open ForgeRCA** (primary CTA → `/ai/INC-…`), **Send incident report**. Mail outbox is `/ops#mail`. ForgeRCA/ForgeAI pills stay. |
 | AI Investigation | `/ai/INC-…` | ForgeRCA (green) then ForgeAI (green/yellow/red). Facts, anomalies, hypotheses. Empty host logs: honest limitation (Alloy ships appliance/Core logs only). |
-| Playrules | `/playrules` | Map `alertname` → playbook. Do **not** create Prom rules. `alerts.yml` is PromQL; asset Alarms are overlay. |
-| Playbooks | `/playbooks` | List steps, create (**analyst**) |
-| Escalation | `/escalation` | Seeded **Default warning**, create policy (Save + Cancel). Mail: `/ops#mail`. |
+| Playrules | `/playrules` | Map `alertname` → playbook. Do **not** create Prom rules. `alerts.yml` is PromQL (shown read-only as **Fires when**); asset Alarms are overlay. Create / **Edit** / Toggle / **Remove** (analyst). |
+| Playbooks | `/playbooks` | List steps, create (**analyst**). Guidance only — nothing is executed. |
+| Escalation | `/escalation` | Seeded **Default warning**, create policy (Save + Cancel), recipient rules. Mail: `/ops#mail`. |
 | Journal | `/journal` | Internal process reports, split by module (ok / warn / error). Not a bash shell. |
 | System Health | `/health-ui` | Same checks as `./forgesre doctor`. **Open Grafana** lives **only here** (not left nav, not the alarm path). Alarm path: Prometheus → Alertmanager → Core. Grafana down is yellow (graphs only), not a Prometheus FAIL. Prom/AM errors name `:9090` / `:9093`, not “Prometheus Stack”. One Core worker thread (not Celery). **NetBox** UI up with API 403 is **warn** (yellow), not paused — Core is a token on the NetBox superuser, not a UI login. **SNMP exporter** with no Network device + IP is **paused (no SNMP targets)** (yellow, not down). Do not add devices just to un-pause SNMP. |
 | Email & reports | `/ops` | Address book, send, **the** mail outbox (`#mail`), scheduled reports with **Edit / Clone / Remove / Enable**. Grafana is on System Health. |
@@ -340,7 +340,7 @@ discovery:
 
 On **System Health** (`/health-ui`) the NetBox tile follows the Discovery traffic light, not “paused”: **starting** (yellow) while first-boot migrations run; **warn** (yellow) when the UI answers but the devices API is 403 / token empty; **running** (green) when the API is 200. A bundled NetBox UI that is up must not show **paused**. **SNMP exporter** is a different tile: with **no** Network device + IP it is **paused (no SNMP targets)** — that is idle, not broken, and you do not need to add devices to un-pause it.
 
-Core finds it via compose env `NETBOX_URL=http://127.0.0.1:8001` and `NETBOX_API_TOKEN` from `secrets/secrets.env` (Core reads the bind-mounted secrets file; do not interpolate an empty project `.env` over `env_file`). Discovery only mentions `--netbox-url` / an external instance when `inventory.netbox.url` is **not** localhost. When `NETBOX_API_TOKEN` is still a **plain** 40-character **v1** value, launch upserts it (`plaintext` column, `write_enabled=False`, on `NETBOX_SUPERUSER_NAME`, permission to list devices) via `scripts/netbox-upsert-token.py` — success log **`v1 token ready`**. When the secret looks like **v2** (`nbt_…`), launch **skips** that upsert (`skipping v1 upsert`) and Core sends `Authorization: Bearer`. **`could not upsert`** (UI still starts) means a v1 secret **never landed in the NetBox DB** — Discovery stays HTTP 403 and that is honest. The helper logs the Python exception type and message (never the token). NetBox 4.5+ has no `User.is_staff`; touching it was why upsert failed on a live v4.6 database. NetBox v4.6 defaults to hashed **v2** tokens (`key` is a 12-character public id + HMAC digest); writing the secret into `key` is why `GET /api/dcim/devices/` stayed HTTP **403**. netbox-docker 5.0.2 also skips `SUPERUSER_API_TOKEN` unless `SUPERUSER_API_KEY` is set, and first-insert-only superuser creation does not help an existing database. After `git pull origin main && ./forgesre update` (recreates `netbox` so launch runs), Core sync is GET-only. On **Discovery**, the NetBox light is a non-clickable status chip (`role=status`, CSS color, not a `<button>`; **Sync NetBox** is the only action) from `GET /api/dcim/devices/` (not a write): **grey** **Not connected** / **API 403** (UI down, API 403, no token); **yellow** **No devices** (API 200 and count == 0; empty is normal). Sentence: *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.* **green** **Connected** (API 200 and count ≥ 1). Empty must not look like 403. HTTP 200 with a v2 token is yellow or green — do not recreate a v1 token. HTTP 403 with `API token: yes` means NetBox rejected the token Core already has (often a 12-character key instead of the full `nbt_…` secret, or core not recreated after `secrets.env`) — recreate **core** for v2, **netbox+core** for v1; `API token: no` means the token is empty. Admin **Sync NetBox** is clickable on yellow and green; grey still allows a retry click when the UI answers (`/login/` / `/api/status/`) — a devices 403 is a warning, not `disabled`. First-boot (UI not answering) stays disabled with one sentence. Engineers see a disabled CTA and **Admin only.** Devices become local assets (`source=netbox`). Core **never writes** back to NetBox. Local inventory stays the monitoring source of truth. Do **not** re-run `./install.sh` (that regenerates secrets).
+Core finds it via compose env `NETBOX_URL=http://127.0.0.1:8001` and `NETBOX_API_TOKEN` from `secrets/secrets.env` (Core reads the bind-mounted secrets file; do not interpolate an empty project `.env` over `env_file`). Discovery only mentions `--netbox-url` / an external instance when `inventory.netbox.url` is **not** localhost. When `NETBOX_API_TOKEN` is still a **plain** 40-character **v1** value, launch upserts it (`plaintext` column, `write_enabled=False`, on `NETBOX_SUPERUSER_NAME`, permission to list devices) via `scripts/netbox-upsert-token.py` — success log **`v1 token ready`**. When the secret looks like **v2** (`nbt_…`), launch **skips** that upsert (`skipping v1 upsert`) and Core sends `Authorization: Bearer`. **`could not upsert`** (UI still starts) means a v1 secret **never landed in the NetBox DB** — Discovery stays HTTP 403 and that is honest. The helper logs the Python exception type and message (never the token). NetBox 4.5+ has no `User.is_staff`; touching it was why upsert failed on a live v4.6 database. NetBox v4.6 defaults to hashed **v2** tokens (`key` is a 12-character public id + HMAC digest); writing the secret into `key` is why `GET /api/dcim/devices/` stayed HTTP **403**. netbox-docker 5.0.2 also skips `SUPERUSER_API_TOKEN` unless `SUPERUSER_API_KEY` is set, and first-insert-only superuser creation does not help an existing database. After `git pull origin main && ./forgesre update` (recreates `netbox` so launch runs), Core sync is GET-only. On **Discovery**, the NetBox light is a non-clickable status chip (`role=status`, CSS color, not a `<button>`; **Sync NetBox** is the only action) from `GET /api/dcim/devices/` (not a write): **grey** **Not connected** / **API 403** (UI down, API 403, no token); **yellow** **No devices** (API 200 and count == 0; empty is normal). Sentence: *No devices yet; add in NetBox UI `:8001` or use Assets/Discovery.* **green** **Connected** (API 200 and count ≥ 1). Empty must not look like 403. HTTP 200 with a v2 token is yellow or green — do not recreate a v1 token. HTTP 403 with `API token: yes` means NetBox rejected the token Core already has (often a 12-character key instead of the full `nbt_…` secret, or core not recreated after `secrets.env`) — recreate **core** for v2, **netbox+core** for v1; `API token: no` means the token is empty. Admin **Sync NetBox** is clickable on yellow and green; grey still allows a retry click when the UI answers (`/login/` / `/api/status/`) — a devices 403 is a warning, not `disabled`. First-boot (UI not answering) stays disabled with one sentence. Engineers see a disabled CTA and **Admin only.** Devices become local assets (`source=netbox`): asset id = slug of the NetBox name (lowercase, digits, hyphens; `nb-<id>` if empty), type **Auto (detect exporter)**, **empty** scrape address and monitoring profile (no `linux-standard` / `:9100` guess — run **Verify** or edit the row), no owner. NetBox site / tenant / role / tags / model go into **notes** once, at first import (read-only copy, not kept in sync). An asset that already exists (matched by NetBox id, then by slug) keeps its owner, contact, email, notes, type and scrape; sync only fills an empty NetBox id/source and an empty IP. The flash says *N new, M already linked*. Automatic sync runs ~30 s after Core start and every 6 h when `inventory.netbox.auto_sync: true` (default); set it `false` for manual **Sync NetBox** only — Discovery says which mode is on. Core **never writes** back to NetBox and is not a CMDB writer. Local inventory stays the monitoring source of truth. Do **not** re-run `./install.sh` (that regenerates secrets).
 
 **Prefer a NetBox UI v2 token.** NetBox 4.6 deprecates v1 in the UI; that is OK. Create a token at `:8001`, copy the **full** secret shown **once** (`nbt_<key>.<secret>` — not the 12-character key in the list), put it in `NETBOX_API_TOKEN` in `secrets/secrets.env`, then recreate **core**. Core sends `Authorization: Bearer`. Launch **skips** the v1 upsert when that secret looks like v2 and will not overwrite it. A 40-character v1 value is still upserted as fallback (`write_enabled=False` on `NETBOX_SUPERUSER_NAME`). Do not create a second Core user in NetBox. v2 hashing still needs `API_TOKEN_PEPPERS` (image env `API_TOKEN_PEPPER_1`). `./forgesre update` writes `NETBOX_API_TOKEN_PEPPER` once into `secrets/secrets.env` (and `.env`) if it is missing. `SECRET_KEY` for NetBox is `NETBOX_SECRET_KEY` (already generated). Do not drop database `forgesre`. Never print the token. Do not re-run `./install.sh`.
 
@@ -451,18 +451,22 @@ CLI and doctor:
 Prometheus rule fires
   → Alertmanager
   → POST /api/v1/webhooks/alertmanager  (Bearer ALERTMANAGER_WEBHOOK_TOKEN)
-  → incident INC-00000N
+  → incident INC-0134_16.08.2026_09:13
   → playrule matched by labels.alertname
   → playbook attached
   → notification generated
   → investigate job enqueued (worker runs ForgeRCA; webhook does not wait)
 ```
 
-Incident is tied to an asset when `labels.asset` or `labels.instance` equals `asset_id` or hostname. Demo alerts use `asset: forge-demo-01`.
+Incident is tied to an asset when `labels.asset` or `labels.instance` equals `asset_id` or hostname. Demo alerts use `asset: forge-demo-01`. An alert with neither label is **not** attached to the demo host; it opens with no asset (fingerprint `alertname:unlabeled`).
 
-Statuses: `OPEN` → `INVESTIGATING` (Acknowledge) → `RESOLVED` / `CLOSED`. Unacked time can move to `ESCALATED`.
+Statuses: `OPEN` → `INVESTIGATING` (Acknowledge) → `RESOLVED` → `CLOSED`. Unacked time past the first policy step moves `OPEN` / `INVESTIGATING` to `ESCALATED`.
 
-Fingerprint is `alertname:asset`. A second fire of the same pair updates the open incident; it does not open a duplicate until the old one is `CLOSED`. A **resolved** alert closes the open incident and does not create a new one. New numbers look like `INC-0134_16.08.2026_09:13` (short seq + local date/time). Older `INC-000012` rows stay valid. Sequence is still `max(seq)+1`, not `count(*)+1`. TAB in `./forgesre` completes those ids after `incidents` / `history`.
+Fingerprint is `alertname:asset`. While an incident with that fingerprint is **active** (`OPEN` / `INVESTIGATING` / `ESCALATED`), another fire updates it — no duplicate.
+
+**Resolved is not Close.** When Alertmanager sends `resolved`, Core sets the active incident to `RESOLVED` (timeline: *resolved by Alertmanager*). It does **not** set `CLOSED`; Close is a human click on the incident page. If the same alert **fires again** after that, Core opens a **new** incident (new number, new escalation clock from step 0) and writes **RE-FIRED** on both timelines (*Same alert fired again after INC-… was RESOLVED* / *Fired again as INC-…*). A `CLOSED` incident is final and never reopens either — the next fire is also a new incident. A flapping alert therefore produces one incident per fire after each resolve; the RE-FIRED links show the chain.
+
+New numbers look like `INC-0134_16.08.2026_09:13` (short seq + local date/time). Older `INC-000012` rows stay valid. Sequence is still `max(seq)+1`, not `count(*)+1`. TAB in `./forgesre` completes those ids after `incidents` / `history`.
 
 Check the RCA queue with `./forgesre jobs`. If a job is `error`, open Console (`/journal`) module `rca`.
 
@@ -480,13 +484,12 @@ Who: **analyst** (permission `write_play`). Engineers can read, not create.
 
 1. Optionally create the playbook first (`/playbooks`).
 2. **Playrules** → **Create playrule**.
-3. Name (unique), **alertname** (must match Prometheus), metric/operator/value for humans, severity, playbook.
-4. **Save**. **Cancel** next to Save returns to this page without creating. Use **Toggle** to disable without deleting.
+3. Name (unique), **alertname** (must match Prometheus; the form suggests names from `alerts.yml` and previews that rule's PromQL read-only), severity, playbook, escalation policy. **Operator note — not executed:** metric / operator / value are free text for humans. ForgeSRE never evaluates them; the threshold lives in the Prometheus rule.
+4. **Save**. **Cancel** next to Save returns to this page without creating. **Edit** loads the same form (Save updates the row). **Toggle** disables without deleting. **Remove** deletes the playrule; existing incidents keep their playbook, new alerts with that name open without one.
 
-The form stores `condition.alertname`. Matching on ingest is:
+The list column **Fires when (alerts.yml)** shows the PromQL `expr` / `for` read from `monitoring/alerts.yml` + `alerts.local.yml` (`FORGESRE_MONITORING_DIR`). **No Prometheus rule** means no bundled/local rule has that alertname — the playrule will never match until one does.
 
-1. Enabled playrule whose `condition.alertname` equals Prometheus `labels.alertname` (case-insensitive), else
-2. `condition.metric` equals a `metric` label or the alert name.
+The form stores `condition.alertname`. Matching on ingest is **alertname only**: the first enabled playrule whose `condition.alertname` equals Prometheus `labels.alertname` (case-insensitive). Metric / operator / value are not used for matching.
 
 So if Prometheus fires `alertname: HighCPU`, the seeded rule `high-cpu` matches because its condition includes `"alertname": "HighCPU"`. Extra Prom rules: `monitoring/alerts.local.yml`, then `./forgesre render-monitoring`.
 
@@ -506,7 +509,7 @@ So if Prometheus fires `alertname: HighCPU`, the seeded rule `high-cpu` matches 
 | `windows-memory` | `WindowsMemoryHigh` | `MEMORY-HIGH` |
 | `windows-exporter-down` | `WindowsExporterDown` | `WINDOWS-UNREACHABLE` |
 
-API: `POST /api/v1/playrules` with `name`, `condition` (object), `playbook_id`, `severity`.
+API: `POST /api/v1/playrules` with `name`, `condition` (object), `playbook_id`, `severity`. Only `condition.alertname` is used for matching.
 
 ---
 
@@ -535,9 +538,13 @@ YAML examples in `config/examples/playbook-*.yml` are documentation for a later 
 - 15 min → `team-lead`
 - 30 min → `engineer`
 
-A background loop every 30 seconds generates (and optionally sends) those steps while the incident stays `OPEN` / `INVESTIGATING`. The table **Generated notifications** is the outbox.
+A background loop every 30 seconds generates (and optionally sends) those steps, counted from the incident start, until someone **Acknowledges** (status `OPEN` / `INVESTIGATING` / `ESCALATED` with no ack). Each step is written once per incident. The outbox is `/ops#mail`.
 
-If the incident’s asset has **owner email**, every step is addressed to that email (demo: `platform@forgesre.local`). The body includes contact name and phone. Policy roles (`team` / `team-lead` / `engineer`) stay in the body as the step name. If owner email is empty, ForgeSRE falls back to `<role>@forgesre.local`.
+Recipient per step, in order:
+
+1. The step target is an **email address** (policy line `15 oncall@example.com`) → that address.
+2. Else the asset’s **owner email** (demo: `platform@forgesre.local`). The body includes contact name and phone; the role (`team` / `team-lead` / `engineer`) stays in the body as the step name.
+3. Else **no recipient**: ForgeSRE records the step with status `no-recipient` (no SMTP attempt, Journal `error`, timeline *no recipient (role)*). It does **not** invent `<role>@forgesre.local` addresses. Assets shows a **No owner email** pill and the Dashboard tile/filter `flag=no-email` lists those hosts.
 
 Incident reports and escalation mail are **multipart** (`text/plain` + `text/html`). Gmail and Outlook show the HTML (severity color bar, DEMO banner when the asset is `forge-demo-*`, ForgeRCA sections). The **mail outbox** on `/ops#mail` stores the plain-text body. **Send email** on `/ops` (Compose) stays as the operator typed it — ForgeSRE does not rewrite that text into HTML tables.
 
@@ -627,13 +634,16 @@ On `/incidents/<number>`:
 | Button | Who | Effect |
 |---|---|---|
 | Acknowledge | analyst+ | Status `INVESTIGATING`, records ack user/time |
-| Resolve / Close | analyst+ (`write_incidents`) | Closes the operational loop; records who resolved |
+| Resolve | analyst+ (`write_incidents`) | Status `RESOLVED` (the problem is gone; Alertmanager `resolved` does the same). A later fire of the same alert opens a new incident |
+| Close | analyst+ (`write_incidents`) | Status `CLOSED` — final; the human says the work is done. Records who closed |
 | Open ForgeRCA | analyst+ (`read_ai`) or engineer (`investigate`) | Primary CTA to `/ai/INC-…`. Runs builtin ForgeRCA if needed; does not change the host |
 | **Send incident report** | analyst / engineer / admin | Emails the current INC snapshot when SMTP is on (`sent`) as HTML + plain text. If SMTP is off, stores `generated` in the **mail outbox** on `/ops#mail`. Replies arrive in the real mailbox, not in ForgeSRE |
 
 The same page lists **who did what** (audit: ack, resolve, notes) and **operator notes**. Mail bodies are on `/ops#mail`, not a second table here. Notes are not a ticket thread and not RCA.
 
-**Incidents** (`/incidents`) is open/firing work (filter: open-only / last days). **History** (`/history`) is the archive. Escalation is still the policy; its outbox is `/ops#mail`. Console (`/journal`) is still process reports.
+The **Workflow** card on the incident is the attached playbook as a plain list — guidance only; nothing is executed or ticked off.
+
+**Incidents** (`/incidents`) defaults to **All** statuses, newest first (filter **Active (not resolved)** for live work, or an exact status / Critical / last days). **History** (`/history`) is the 90-day archive. Escalation is still the policy; its outbox is `/ops#mail`. Console (`/journal`) is still process reports.
 
 Asset health on the dashboard (`healthy` / `warning` / `critical`) follows open incidents on that asset.
 
@@ -743,7 +753,7 @@ HTTP SD already sets label `asset` from `asset_id`.
 
 **C. Playrule:** seeded `node-filesystem` already matches `NodeFilesystemUsageHigh`. For a custom alert name, **Playrules** → name **must be** the Prometheus `alertname` → **Save**. New playrules get the default escalation policy.
 
-**D. Verify:** force usage or temporarily lower the threshold in `alerts.local.yml`, then **Incidents** should show a new `INC-…` linked to `app-01`, with the playbook name, **Who to call**, and a generated notification on **Escalation** addressed to the asset owner email if you filled it. RCA appears a few seconds later (`./forgesre jobs`).
+**D. Verify:** force usage or temporarily lower the threshold in `alerts.local.yml`, then **Incidents** should show a new `INC-…` linked to `app-01`, with the playbook name, **Who to call**, and an escalation row in the mail outbox (`/ops#mail`) addressed to the asset owner email if you filled it (status `no-recipient` if you did not). RCA appears a few seconds later (`./forgesre jobs`).
 
 If the incident has no asset, the alert `asset` / `instance` label did not match `asset_id` or hostname.
 

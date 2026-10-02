@@ -2,19 +2,20 @@
 {% block title %}Playbooks · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Playbooks {% with %}{% set tip %}V0.1 playbooks are instructions and workflow. They do not execute commands on the host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<p class="page-lede">A playbook is a checklist shown on the incident page. ForgeSRE never runs these steps and does not tick them off.</p>
 {% if notice %}
 <div class="banner">{{ notice }}</div>
 {% endif %}
 <div class="playbook-grid">
 {% for book in playbooks %}
 <section class="card playbook-card {% if selected and selected.id == book.id %}selected{% endif %}">
-  <h2>{{ book.name }}</h2>
-  {% if book.description %}<p>{{ book.description }}</p>{% endif %}
-  <ol>
+  <h2>{{ book.name }} <span class="muted policy-slug"><code>{{ book.slug }}</code></span></h2>
+  {% if book.description %}<p class="muted">{{ book.description }}</p>{% endif %}
+  <ul class="playbook-guide">
     {% for step in book.steps %}
-    <li>{{ step.title }}</li>
+    <li>{{ step.title if step is mapping else step }}</li>
     {% endfor %}
-  </ol>
+  </ul>
   {% if can('write_play') %}
   <div class="row-actions asset-form-actions">
     <a class="button" href="/playbooks?edit={{ book.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Edit</a>

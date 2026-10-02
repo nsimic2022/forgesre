@@ -65,7 +65,7 @@ def _discovery_loop(stop: threading.Event) -> None:
         try:
             if settings.discovery_enabled and settings.discovery_mode != "manual":
                 run_scan(db)
-            if settings.netbox_enabled:
+            if settings.netbox_enabled and settings.netbox_auto_sync:
                 sync_netbox(db)
             mark_discovery_loop_alive()
         except Exception as exc:

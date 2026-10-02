@@ -12,6 +12,7 @@ inventory:
     enabled: true
     mode: bundled # bundled | external | disabled
     url: "http://127.0.0.1:8001" # override with --netbox-url / an external instance
+    auto_sync: true # read-only sync ~30 s after Core start, then every 6 h; false = only the Sync NetBox button
 
 discovery:
   enabled: true

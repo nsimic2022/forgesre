@@ -2,7 +2,7 @@
 {% block title %}History · ForgeSRE{% endblock %}
 {% block content %}
 <h1>History {% with %}{% set tip %}Archive of incidents in Postgres (default last {{ days }} days, including closed). This is not Journal and not Loki. Mail bodies are on Email &amp; reports; Ack/Resolve are on the incident page. Tables are 10 rows per page.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
-<p class="muted">Live open/firing work is <a href="/incidents">Incidents</a>.</p>
+<p class="muted">Same rows as <a href="/incidents">Incidents</a>, with a day window, asset and number search, Ack and Resolved-by columns.</p>
 <form method="get" action="/history" class="form-grid">
   <label>Days <input name="days" type="number" min="1" max="3660" value="{{ days }}"></label>
   <label>Status
@@ -30,7 +30,7 @@
   </thead>
   <tbody>
   {% for item in incidents %}
-    <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}">
+    <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}">
       {% include "_incident_cell.html" %}
       <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
       <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>

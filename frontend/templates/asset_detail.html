@@ -26,7 +26,7 @@
   <dt>Monitoring profile</dt><dd>{{ asset.monitoring_profile }}</dd>
   <dt>Owner / team</dt><dd>{{ asset.owner or "—" }}</dd>
   <dt>Contact</dt><dd>{{ asset.contact_name or "—" }}</dd>
-  <dt>Email</dt><dd>{% if asset.owner_email %}{{ asset.owner_email }}{% else %}<span class="muted">No owner email — escalation falls back to policy role@forgesre.local</span>{% endif %}</dd>
+  <dt>Email</dt><dd>{% if asset.owner_email %}{{ asset.owner_email }}{% else %}<span class="pill warn">No owner email</span> <span class="muted">Escalation mail is recorded as no-recipient and not sent, unless the escalation step names an address.</span>{% endif %}</dd>
   <dt>Phone</dt><dd>{{ asset.owner_phone or "—" }}</dd>
   <dt>Notes</dt><dd>{{ asset.notes or "—" }}</dd>
   <dt>Source</dt><dd>{{ asset.source }}</dd>

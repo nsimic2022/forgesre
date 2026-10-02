@@ -8,12 +8,19 @@
 <form method="get" action="/assets" class="row-actions list-filters">
   <input name="q" value="{{ q }}" placeholder="search #, id, hostname, IP">
   {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+  {% if flag %}<input type="hidden" name="flag" value="{{ flag }}">{% endif %}
   <button type="submit">Search</button>
   {% if can('write_assets') %}
   <a class="button" href="/assets/verify">Verify all</a>
   {% endif %}
-  {% if q or status %}<a class="muted" href="/assets">Reset</a>{% endif %}
+  {% if q or status or flag %}<a class="muted list-reset" href="/assets">Reset</a>{% endif %}
 </form>
+<nav class="filter-chips" aria-label="Asset filters">
+  {% for key, value, label in [("", "", "All"), ("status", "critical", "Critical"), ("status", "warning", "Warning"), ("flag", "unreachable", "Offline / unreachable"), ("flag", "no-email", "No owner email")] %}
+  {% set on = (not key and not status and not flag) or (key == "status" and status == value) or (key == "flag" and flag == value) %}
+  <a class="chip{% if on %} on{% endif %}" href="/assets{% if key %}?{{ key }}={{ value }}{% endif %}{% if q %}{{ '&' if key else '?' }}q={{ q }}{% endif %}">{{ label }}</a>
+  {% endfor %}
+</nav>
 <div class="table-scroll">
 <table class="asset-table" data-asset-reachability>
   <thead>
@@ -48,11 +55,11 @@
       </td>
       <td>{{ asset.owner or "—" }}</td>
       <td>
-        {% if asset.contact_name or asset.owner_email or asset.owner_phone %}
-          {{ asset.contact_name or "—" }}
-          {% if asset.owner_email %}<div class="muted">{{ asset.owner_email }}</div>{% endif %}
+        {% if asset.contact_name %}{{ asset.contact_name }}{% endif %}
+        {% if asset_missing_email(asset) %}
+          <div><span class="pill warn" title="Escalation role steps have nobody to mail. Edit the asset and add an owner email.">No owner email</span></div>
         {% else %}
-          <span class="muted">—</span>
+          <div class="muted">{{ asset.owner_email }}</div>
         {% endif %}
       </td>
       <td class="asset-type" title="{{ asset.type }}">{{ asset_type_abbrev(asset.type) }}</td>

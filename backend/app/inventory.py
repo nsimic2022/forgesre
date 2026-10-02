@@ -210,8 +210,22 @@ def upsert_candidate(
     return row
 
 
-def seed_demo_candidate(db: Session) -> DiscoveryCandidate:
+def _demo_candidate_removed(db: Session) -> bool:
+    """True after an operator Removed the 10.20.30.41 lab candidate. Seed must not put it back."""
+    from app.models import AuditLog
+
+    return (
+        db.query(AuditLog.id)
+        .filter(AuditLog.action == "discovery.remove", AuditLog.object_id == DEMO_CANDIDATE_IP)
+        .first()
+        is not None
+    )
+
+
+def seed_demo_candidate(db: Session) -> DiscoveryCandidate | None:
     existing_asset = db.query(Asset).filter_by(ip=DEMO_CANDIDATE_IP).first()
+    if db.query(DiscoveryCandidate.id).filter_by(ip=DEMO_CANDIDATE_IP).first() is None and _demo_candidate_removed(db):
+        return None
     row = upsert_candidate(
         db,
         DEMO_CANDIDATE_IP,
@@ -702,9 +716,24 @@ def similar_incident_groups(db: Session, asset: Asset) -> list[dict]:
     return [groups[key] for key in order]
 
 
+def approve_asset_id(db: Session, row: DiscoveryCandidate) -> str:
+    """Hostname slug when the candidate has one (set via Edit) and it is free; else disc-<ip>. No reverse DNS."""
+    fallback = _asset_id_from_ip(row.ip)
+    hostname = (getattr(row, "hostname", None) or "").strip()
+    if not hostname:
+        return fallback
+    slug = netbox_asset_id(hostname)
+    if not ASSET_ID_RE.fullmatch(slug):
+        return fallback
+    if db.query(Asset.id).filter(Asset.asset_id == slug).first() is not None:
+        return fallback
+    return slug
+
+
 def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset:
-    slug = _asset_id_from_ip(row.ip)
-    asset = db.query(Asset).filter((Asset.asset_id == slug) | (Asset.ip == row.ip)).first()
+    fallback = _asset_id_from_ip(row.ip)
+    asset = db.query(Asset).filter((Asset.asset_id == fallback) | (Asset.ip == row.ip)).first()
+    slug = asset.asset_id if asset is not None else approve_asset_id(db, row)
     if asset is None:
         role = row.proposed_role or ""
         ports = {int(p) for p in (row.open_ports or []) if str(p).isdigit() or isinstance(p, int)}
@@ -944,41 +973,77 @@ def sync_netbox(db: Session) -> dict:
         log.warning("netbox sync failed: %s", detail)
         report(db, "netbox", "sync", "error", summary=summary, detail=detail)
         return {"synced": 0, "error": detail}
-    count = 0
+    created = 0
+    linked = 0
     for device in devices:
-        slug = device["name"]
-        asset = db.query(Asset).filter((Asset.netbox_id == device["netbox_id"]) | (Asset.asset_id == slug)).first()
+        netbox_id = str(device.get("netbox_id") or "")
+        name = str(device.get("name") or "").strip()
+        slug = netbox_asset_id(name, netbox_id)
+        asset = None
+        if netbox_id:
+            asset = db.query(Asset).filter(Asset.netbox_id == netbox_id).first()
+        if asset is None:
+            asset = db.query(Asset).filter(Asset.asset_id == slug).first()
+        ip = str(device.get("ip") or "").strip()
         if asset is None:
             asset = Asset(
                 asset_id=slug,
-                hostname=slug,
-                ip=device.get("ip") or "",
-                type=device.get("type") or "device",
+                hostname=name or slug,
+                ip=ip,
+                type=AUTO_ASSET_TYPE,
                 environment="Production",
                 status="healthy" if device.get("status") == "active" else "offline",
-                monitoring_profile="linux-standard",
-                owner="netbox",
+                monitoring_profile="",
+                owner="",
                 source="netbox",
-                netbox_id=device["netbox_id"],
-                scrape_address=f"{device['ip']}:9100" if device.get("ip") else "",
+                netbox_id=netbox_id,
+                scrape_address="",
+                notes=netbox_notes(device),
             )
             db.add(asset)
-            count += 1
-        else:
-            asset.netbox_id = device["netbox_id"]
-            asset.source = asset.source or "netbox"
-            if device.get("ip"):
-                asset.ip = device["ip"]
-            count += 1
+            db.flush()
+            created += 1
+            continue
+        if netbox_id and not (asset.netbox_id or "").strip():
+            asset.netbox_id = netbox_id
+        if not (asset.source or "").strip():
+            asset.source = "netbox"
+        if ip and (not (asset.ip or "").strip() or asset.source == "netbox"):
+            asset.ip = ip
+        linked += 1
     db.commit()
     report(
         db,
         "netbox",
         "sync",
         "ok",
-        summary=f"NetBox sync wrote {count} asset(s)",
+        summary=f"NetBox sync: {created} new, {linked} already linked",
+        detail="New devices: type Auto, no scrape address. Owner, contact, email, and notes on existing assets are never changed.",
     )
-    return {"synced": count}
+    return {"synced": created + linked, "created": created, "linked": linked}
+
+
+def netbox_asset_id(name: str, netbox_id: str = "") -> str:
+    """Valid ForgeSRE asset_id from a NetBox device name (lowercase, a-z0-9-, ≤63)."""
+    slug = re.sub(r"[^a-z0-9-]+", "-", (name or "").strip().lower())
+    slug = re.sub(r"-{2,}", "-", slug).strip("-")[:63].strip("-")
+    if not slug:
+        slug = f"nb-{re.sub(r'[^a-z0-9]', '', str(netbox_id).lower()) or 'device'}"
+    return slug
+
+
+def netbox_notes(device: dict) -> str:
+    """Read-only NetBox snapshot for a newly imported asset. Never rewritten on later syncs."""
+    parts = []
+    for key, label in (("site", "site"), ("tenant", "tenant"), ("role", "role"), ("type", "model")):
+        value = str(device.get(key) or "").strip()
+        if value:
+            parts.append(f"{label}={value}")
+    tags = [str(tag).strip() for tag in (device.get("tags") or []) if str(tag).strip()]
+    if tags:
+        parts.append(f"tags={', '.join(tags)}")
+    head = f"Imported from NetBox ({'; '.join(parts)})." if parts else "Imported from NetBox."
+    return f"{head} Type is Auto and nothing is scraped yet — use Detect or Edit to pick the exporter."
 
 
 def _asset_id_from_ip(ip: str) -> str:
@@ -1155,8 +1220,32 @@ def asset_search_blob(asset: Asset) -> str:
     ).lower()
 
 
-def assets_matching(rows: list[Asset], q: str = "", status: str = "") -> list[Asset]:
-    """Filter inventory by asset number, id, hostname, or IP (substring), and optional status."""
+def asset_unreachable(asset: Asset) -> bool:
+    """Last-known probe: ICMP and exporter/SNMP both failed, or NetBox marks it non-active (status offline).
+
+    Same stored colors as the Assets Ping pill. Not continuous monitoring — Prometheus up alerts are.
+    """
+    from app.asset_probe import ping_badge_from_stored
+
+    if (asset.status or "").lower() == "offline":
+        return True
+    return ping_badge_from_stored(asset.ping_status, asset.exporter_status) == "red"
+
+
+def asset_missing_email(asset: Asset) -> bool:
+    text = (asset.owner_email or "").strip()
+    local, _, domain = text.partition("@")
+    return not (local and "." in domain)
+
+
+ASSET_FLAGS = {
+    "unreachable": asset_unreachable,
+    "no-email": asset_missing_email,
+}
+
+
+def assets_matching(rows: list[Asset], q: str = "", status: str = "", flag: str = "") -> list[Asset]:
+    """Filter inventory by asset number, id, hostname, or IP (substring), optional status, optional flag."""
     needle = (q or "").strip().lower()
     wanted = (status or "").strip().lower()
     out = list(rows)
@@ -1164,7 +1253,26 @@ def assets_matching(rows: list[Asset], q: str = "", status: str = "") -> list[As
         out = [row for row in out if needle in asset_search_blob(row)]
     if wanted:
         out = [row for row in out if (row.status or "").lower() == wanted]
+    check = ASSET_FLAGS.get((flag or "").strip().lower())
+    if check is not None:
+        out = [row for row in out if check(row)]
     return out
+
+
+def asset_tiles(rows: list[Asset]) -> list[dict]:
+    """Dashboard infrastructure tiles. Each count is the length of the /assets list behind its link."""
+    specs = [
+        ("Total assets", "", {}, "/assets"),
+        ("No open incident", "ok", {"status": "healthy"}, "/assets?status=healthy"),
+        ("Warning", "warn", {"status": "warning"}, "/assets?status=warning"),
+        ("Critical", "crit", {"status": "critical"}, "/assets?status=critical"),
+        ("Offline / unreachable", "crit", {"flag": "unreachable"}, "/assets?flag=unreachable"),
+        ("No owner email", "warn", {"flag": "no-email"}, "/assets?flag=no-email"),
+    ]
+    return [
+        {"label": label, "tone": tone, "href": href, "count": len(assets_matching(rows, **filters))}
+        for label, tone, filters, href in specs
+    ]
 
 
 def delete_blocked(asset: Asset) -> str:
