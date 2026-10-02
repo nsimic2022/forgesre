@@ -206,11 +206,11 @@ def test_dashboard_asset_tiles_match_assets_filters():
     home = client.get("/")
     assert 'href="/assets?flag=no-email"' in home.text
     assert 'href="/assets?flag=unreachable"' in home.text
-    listed = client.get("/assets?flag=no-email")
+    listed = client.get(f"/assets?flag=no-email&q={host.asset_id}")
     assert listed.status_code == 200
     assert host.asset_id in listed.text
     assert "No owner email" in listed.text
-    down = client.get("/assets?flag=unreachable")
+    down = client.get(f"/assets?flag=unreachable&q={host.asset_id}")
     assert host.asset_id in down.text
     db.close()
 
@@ -416,7 +416,7 @@ def test_removed_demo_candidate_is_not_reseeded():
     db.close()
 
 
-def test_analyst_templates_say_the_honest_thing():
+def test_analyst_templates_say_the_honest_thing(monkeypatch):
     db = _db()
     client = TestClient(app)
     _login(client)
@@ -424,9 +424,13 @@ def test_analyst_templates_say_the_honest_thing():
     assert "no-recipient" in esc.text
     assert "does not invent" in esc.text
     assert "falls back to" not in esc.text
+    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.netbox_auto_sync", True)
     disc = client.get("/discovery")
-    assert "every 6 h" in disc.text or "Manual only" in disc.text
+    assert "every 6 h" in disc.text
     assert "Auto" in disc.text
+    monkeypatch.setattr("app.settings.Settings.netbox_auto_sync", False)
+    assert "Manual only" in client.get("/discovery").text
     incident = db.query(Incident).filter(Incident.playbook_id.isnot(None)).order_by(Incident.id.desc()).first()
     if incident is not None:
         page = client.get(f"/incidents/{incident.number}")
