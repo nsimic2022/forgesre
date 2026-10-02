@@ -779,6 +779,8 @@ fieldset legend { font-size: 0.8rem; color: var(--muted); }
 .pill.generated { background: var(--pill); color: var(--pill-generated); }
 .pill.sent { background: var(--pill-ok-bg); color: var(--pill-ok); }
 .pill.failed { background: var(--pill-crit-bg); color: var(--pill-crit); }
+.pill.no-recipient { background: var(--pill-warn-bg); color: var(--pill-warn); }
+.pill.off { background: var(--pill); color: var(--muted); }
 .pill.demo {
   background: var(--pill-warn-bg);
   color: var(--pill-warn);
@@ -1058,3 +1060,90 @@ td.ops-report-actions .row-actions a.button {
     max-width: 720px;
   }
 }
+
+/* Analyst pass: one scan language across Dashboard, Incidents, History, Assets, Playrules, Escalation. */
+.page-lede { margin: 0.1rem 0 0.7rem; max-width: 62rem; }
+.stat-row { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.6rem; }
+.stat-row .stat { padding: 0.7rem 0.85rem; border-radius: 10px; }
+.stat-row .stat strong { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.stat.ok, .stat.warn, .stat.crit { border-left-width: 4px; }
+.stat.ok { border-left-color: var(--ok); }
+.stat.warn { border-left-color: var(--warn); }
+.stat.crit { border-left-color: var(--crit); }
+.stat.stat-zero { border-left-color: var(--line); }
+.stat.stat-zero strong { color: var(--muted); font-weight: 600; }
+
+.scan-list a.inc-title,
+.incidents-table a.inc-title { display: block; text-decoration: none; }
+.scan-list a.inc-title:hover,
+.incidents-table a.inc-title:hover { text-decoration: underline; }
+.scan-list tr.inc-crit:not(.inc-row-done) .inc-title { font-weight: 700; }
+.inc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.3rem;
+  margin-top: 0.1rem;
+  font-size: 0.8rem;
+}
+.inc-meta a.inc-num { font-variant-numeric: tabular-nums; text-decoration: none; }
+.inc-meta a.inc-num:hover { text-decoration: underline; }
+.inc-meta .inc-host { color: var(--muted); margin-top: 0; }
+.inc-meta .inc-demo { margin-left: 0; }
+.scan-list tr.inc-row-done td:first-child,
+.incidents-table tr.inc-row-done td:first-child { box-shadow: inset 3px 0 0 var(--ok); }
+.scan-list tr.inc-row-done .pill,
+.incidents-table tr.inc-row-done .pill { opacity: 0.85; }
+.scan-list tr.inc-row-demo .inc-title,
+.incidents-table tr.inc-row-demo .inc-title { font-weight: 500; }
+.scan-list tr.inc-row-demo:not(.inc-row-done) td:first-child { box-shadow: inset 3px 0 0 var(--line), inset 5px 0 0 var(--warn); }
+.scan-list tr.inc-row-demo.inc-crit:not(.inc-row-done) td:first-child { box-shadow: inset 3px 0 0 var(--line), inset 5px 0 0 var(--crit); }
+.list-filters .list-count { align-self: flex-end; padding: 0.45rem 0; font-size: 0.85rem; margin-left: auto; }
+
+.filter-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: -0.2rem 0 0.8rem; }
+.filter-chips .chip {
+  display: inline-block;
+  padding: 0.18rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+.filter-chips .chip:hover { color: var(--text); border-color: var(--accent); }
+.filter-chips .chip.on { color: var(--text); border-color: var(--text); font-weight: 600; }
+
+.rule-list td.rule-expr { max-width: 30rem; }
+.rule-list td.rule-expr code { font-size: 0.82rem; word-break: break-word; }
+.rule-list .rule-note { font-size: 0.78rem; margin-top: 0.2rem; }
+.rule-list tr.rule-off td { color: var(--muted); }
+.rule-list tr.rule-off td:first-child { box-shadow: inset 3px 0 0 var(--line); }
+.rule-list td.row-actions { white-space: nowrap; }
+.rule-preview {
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
+  background: var(--code-bg);
+}
+.rule-preview code { word-break: break-word; }
+details.rule-note-fields { border: 1px solid var(--line); border-radius: 9px; padding: 0.5rem 0.75rem; }
+details.rule-note-fields summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+.alarm-limit { font-size: 0.82rem; margin: 0.15rem 0 0.35rem; }
+
+.policy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.8rem; margin-bottom: 1rem; }
+.policy-grid .card { margin-bottom: 0; }
+.policy-slug { font-size: 0.8rem; font-weight: 400; }
+.step-list th, .step-list td { padding: 0.4rem 0.55rem; font-size: 0.88rem; }
+.recipient-rules { margin: 0 0 1rem; }
+.recipient-rules li { margin: 0.2rem 0; }
+
+ul.playbook-guide { list-style: none; padding-left: 0; margin: 0.4rem 0 0; }
+ul.playbook-guide li { padding: 0.28rem 0 0.28rem 1.1rem; position: relative; border-bottom: 1px dashed var(--line); }
+ul.playbook-guide li:last-child { border-bottom: 0; }
+ul.playbook-guide li::before { content: "–"; position: absolute; left: 0.2rem; color: var(--muted); }
+
+h1.incident-head { margin-bottom: 0.1rem; }
+.incident-id { margin: 0 0 0.6rem; font-size: 0.85rem; }
+.incident-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.8rem; }

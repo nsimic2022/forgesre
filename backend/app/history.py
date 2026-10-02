@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import exists, or_
+from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.audit import audit
@@ -111,6 +111,58 @@ def cutoff_since(days: int) -> datetime:
     return utcnow() - timedelta(days=days)
 
 
+CRITICAL_SEVERITIES = ("CRITICAL", "CRIT", "FATAL", "EMERGENCY")
+DONE_STATUSES = ("RESOLVED", "CLOSED")
+
+
+def incident_query(
+    db: Session,
+    *,
+    days: int | None = None,
+    status: str = "",
+    open_only: bool = False,
+    closed_only: bool = False,
+    critical_only: bool = False,
+):
+    """Single filter used by the Incidents list and the Dashboard tiles (tile count = rows behind the click)."""
+    query = db.query(Incident)
+    if days is not None:
+        query = query.filter(Incident.started_at >= cutoff_since(clamp_days(days)))
+    if open_only:
+        query = query.filter(Incident.status.notin_(DONE_STATUSES))
+    if closed_only:
+        query = query.filter(Incident.status.in_(DONE_STATUSES))
+    if critical_only:
+        query = query.filter(func.upper(Incident.severity).in_(CRITICAL_SEVERITIES))
+    status = (status or "").strip().upper()
+    if status:
+        query = query.filter(Incident.status == status)
+    return query
+
+
+def dashboard_incident_tiles(db: Session) -> list[dict[str, Any]]:
+    """Tile label, count, CSS tone, and the exact /incidents link whose list has that many rows."""
+    specs = [
+        ("Open", "open", {"open_only": True}, "/incidents?status=open"),
+        ("Critical", "crit", {"open_only": True, "critical_only": True}, "/incidents?status=open&severity=critical"),
+        ("Investigating", "warn", {"status": "INVESTIGATING"}, "/incidents?status=INVESTIGATING"),
+        ("Escalated", "warn", {"status": "ESCALATED"}, "/incidents?status=ESCALATED"),
+        ("Resolved", "ok", {"status": "RESOLVED"}, "/incidents?status=RESOLVED"),
+    ]
+    tiles = []
+    for label, tone, filters, href in specs:
+        tiles.append(
+            {
+                "label": label,
+                "tone": tone,
+                "href": href,
+                "count": incident_query(db, **filters).count(),
+                "key": label.lower(),
+            }
+        )
+    return tiles
+
+
 def list_history(
     db: Session,
     *,
@@ -122,19 +174,18 @@ def list_history(
     offset: int = 0,
     open_only: bool = False,
     closed_only: bool = False,
+    critical_only: bool = False,
     page: Any | None = None,
 ) -> tuple[list[Incident], int]:
     limit = max(1, min(int(limit or LIST_LIMIT), 500))
-    query = db.query(Incident)
-    if days is not None:
-        query = query.filter(Incident.started_at >= cutoff_since(clamp_days(days)))
-    if open_only:
-        query = query.filter(Incident.status.notin_(["RESOLVED", "CLOSED"]))
-    if closed_only:
-        query = query.filter(Incident.status.in_(["RESOLVED", "CLOSED"]))
-    status = (status or "").strip().upper()
-    if status:
-        query = query.filter(Incident.status == status)
+    query = incident_query(
+        db,
+        days=days,
+        status=status,
+        open_only=open_only,
+        closed_only=closed_only,
+        critical_only=critical_only,
+    )
     number = (number or "").strip()
     if number:
         query = query.filter(Incident.number.ilike(f"%{number}%"))

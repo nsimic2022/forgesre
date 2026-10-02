@@ -100,22 +100,19 @@
   </ul>
 </div>
 <section>
-  <h2>Infrastructure {% with %}{% set tip %}Asset inventory counts — shortcut to Assets. Total / healthy / warning / critical / offline.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <div class="grid">
-    <a class="stat" href="/assets"><span>Total Assets</span><strong>{{ stats.assets_total }}</strong></a>
-    <a class="stat ok" href="/assets?status=healthy"><span>Healthy</span><strong>{{ stats.healthy }}</strong></a>
-    <a class="stat warn" href="/assets?status=warning"><span>Warning</span><strong>{{ stats.warning }}</strong></a>
-    <a class="stat crit" href="/assets?status=critical"><span>Critical</span><strong>{{ stats.critical }}</strong></a>
-    <a class="stat" href="/assets?status=offline"><span>Offline</span><strong>{{ stats.offline }}</strong></a>
+  <h2>Incidents {% with %}{% set tip %}Each number is exactly the row count of the Incidents list behind the click. Open = not RESOLVED and not CLOSED (OPEN, INVESTIGATING, ESCALATED). Critical = open and severity critical. Resolved means Alertmanager or a person marked it resolved — it is not Closed. History is the archive.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="grid stat-row">
+    {% for tile in incident_tiles %}
+    <a class="stat {{ tile.tone }}{% if not tile.count %} stat-zero{% endif %}" href="{{ tile.href }}" data-tile="{{ tile.key }}"><span>{{ tile.label }}</span><strong>{{ tile.count }}</strong></a>
+    {% endfor %}
   </div>
 </section>
 <section>
-  <h2>Incidents {% with %}{% set tip %}Incident counts — shortcut to Incidents. History is the closed archive.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <div class="grid">
-    <a class="stat" href="/incidents?status=open"><span>Open</span><strong>{{ stats.open }}</strong></a>
-    <a class="stat crit" href="/incidents"><span>Critical</span><strong>{{ stats.inc_critical }}</strong></a>
-    <a class="stat warn" href="/incidents?status=INVESTIGATING"><span>Investigating</span><strong>{{ stats.investigating }}</strong></a>
-    <a class="stat ok" href="/incidents?status=RESOLVED"><span>Resolved</span><strong>{{ stats.resolved }}</strong></a>
+  <h2>Infrastructure {% with %}{% set tip %}Each number is the row count of the Assets list behind the click. No open incident / Warning / Critical come from open incidents on that asset — not from a liveness check. Offline / unreachable = last Assets-page probe failed both ICMP and the exporter/SNMP check, or NetBox marks the device non-active. Probes refresh when someone opens Assets; Prometheus up alerts (NodeExporterDown, WindowsExporterDown, SnmpDeviceUnreachable) are the real-time signal. No owner email = escalation has nobody to mail for role steps.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="grid stat-row">
+    {% for tile in asset_tiles %}
+    <a class="stat {{ tile.tone }}{% if not tile.count %} stat-zero{% endif %}" href="{{ tile.href }}"><span>{{ tile.label }}</span><strong>{{ tile.count }}</strong></a>
+    {% endfor %}
   </div>
 </section>
 <p class="muted">Full stack diagnostics live on <a href="/health-ui">System Health</a>.{% if can('read_play') %} Journal is <a href="/journal">here</a>.{% endif %}</p>
@@ -145,7 +142,7 @@
     <thead><tr><th>Incident</th><th>Severity</th><th>Status</th><th>When</th></tr></thead>
     <tbody>
     {% for item in recent %}
-      <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}">
+      <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}">
         {% include "_incident_cell.html" %}
         <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
         <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>

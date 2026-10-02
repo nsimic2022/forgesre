@@ -2,7 +2,8 @@
 {% block title %}{{ incident.number }} · ForgeSRE{% endblock %}
 {% block content %}
 <p><a href="/incidents">← Incidents</a> · <a href="/history">History</a></p>
-<h1>{{ incident.number }} {% if is_demo_incident(incident) %}<span class="pill demo">DEMO</span>{% endif %} <span class="muted">{{ incident.title }}</span></h1>
+<h1 class="incident-head">{{ incident.title or incident.number }} {% if is_demo_incident(incident) %}<span class="pill demo">DEMO</span>{% endif %}</h1>
+<p class="incident-id muted"><code>{{ incident.number }}</code></p>
 <div class="tool-row">
   <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
   <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
@@ -33,24 +34,29 @@
   <button type="button" class="off" disabled>Open ForgeRCA</button>
   {% endif %}
 </div>
-<p>
+<p class="incident-facts">
   <span class="pill {{ incident.status|lower }}">{{ incident.status }}</span>
-  <span class="pill {{ 'crit' if incident.severity|upper in ['CRITICAL', 'CRIT', 'FATAL'] else 'warn' }}">{{ incident.severity }}</span>
+  <span class="pill {{ severity_pill(incident.severity) }}">{{ incident.severity }}</span>
   {% if incident.asset %}
-  Asset: <a href="/assets/{{ incident.asset.asset_id }}">{{ incident.asset.hostname }}</a>
+  <span>Asset <a href="/assets/{{ incident.asset.asset_id }}">{{ incident.asset.hostname }}</a></span>
+  {% else %}
+  <span class="muted">No asset matched the alert labels</span>
   {% endif %}
-  · Started {{ incident.started_at }}
-  {% if incident.ack_by %} · Ack {{ incident.ack_by }} {{ incident.ack_at }}{% endif %}
-  {% if incident.resolved_by %} · {{ incident.status }} by {{ incident.resolved_by }} {{ incident.resolved_at or incident.ended_at }}{% endif %}
+  <span class="muted">Started <span title="{{ format_started_at(incident.started_at) }}">{{ short_when_label(incident.started_at) or format_started_at(incident.started_at) }}</span></span>
+  {% if incident.ack_by %}<span class="muted">Ack {{ incident.ack_by }} · {{ short_when_label(incident.ack_at) }}</span>{% endif %}
+  {% if incident.resolved_by %}<span class="muted">{{ incident.status }} by {{ incident.resolved_by }} · {{ short_when_label(incident.resolved_at or incident.ended_at) }}</span>{% endif %}
 </p>
+{% if incident.status|upper == "RESOLVED" %}
+<p class="muted">Resolved is not Closed. If the same alert fires again, ForgeSRE opens a new incident and links it here. Close when the work is finished.</p>
+{% endif %}
 
 {% if incident.asset %}
 <section class="card">
-  <h2>Who to call {% with %}{% set tip %}Escalation uses the owner email when it is set. Edit contacts on the asset if this is empty — then ForgeSRE falls back to policy role@forgesre.local.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Who to call {% with %}{% set tip %}Escalation role steps mail the owner email below. A step that names an address mails that address instead. With no owner email, role steps are recorded as no-recipient and nothing is sent.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <dl class="kv">
     <dt>Owner / team</dt><dd>{{ incident.asset.owner or "—" }}</dd>
     <dt>Contact</dt><dd>{{ incident.asset.contact_name or "—" }}</dd>
-    <dt>Email</dt><dd>{{ incident.asset.owner_email or "—" }}</dd>
+    <dt>Email</dt><dd>{% if incident.asset.owner_email %}{{ incident.asset.owner_email }}{% else %}<span class="pill warn">No owner email</span> <span class="muted">escalation has nobody to mail</span>{% endif %}</dd>
     <dt>Phone</dt><dd>{{ incident.asset.owner_phone or "—" }}</dd>
   </dl>
   <p class="muted"><a href="/assets/{{ incident.asset.asset_id }}">Edit contacts on the asset</a>.</p>
@@ -94,16 +100,19 @@
 </section>
 
 {% if incident.playrule or incident.playbook %}
-<section>
-  <h2>Workflow</h2>
-  <p>Playrule: {{ incident.playrule.name if incident.playrule else "—" }}</p>
-  <p>Playbook: {{ incident.playbook.name if incident.playbook else "—" }}</p>
-  {% if incident.playbook %}
-  <ol>
+<section class="card workflow">
+  <h2>Workflow {% with %}{% set tip %}The playbook is a checklist for the person on call. ForgeSRE does not run these steps and does not track which ones were done — write what you did in Operator notes.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <p class="muted">
+    Matched playrule <strong>{{ incident.playrule.name if incident.playrule else "—" }}</strong>
+    → playbook <strong>{{ incident.playbook.name if incident.playbook else "—" }}</strong>.
+    Guidance only — nothing here is executed or ticked off.
+  </p>
+  {% if incident.playbook and incident.playbook.steps %}
+  <ul class="playbook-guide">
     {% for step in incident.playbook.steps %}
-    <li>{{ step.title }}</li>
+    <li>{{ step.title if step is mapping else step }}</li>
     {% endfor %}
-  </ol>
+  </ul>
   {% endif %}
 </section>
 {% endif %}

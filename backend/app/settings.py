@@ -248,6 +248,15 @@ class Settings:
         return True
 
     @property
+    def netbox_auto_sync(self) -> bool:
+        """inventory.netbox.auto_sync (default true): read-only sync ~30 s after Core start, then every 6 h."""
+        netbox = (self.yaml.get("inventory") or {}).get("netbox") or {}
+        value = netbox.get("auto_sync", True)
+        if isinstance(value, str):
+            return value.strip().lower() not in {"0", "false", "no", "off"}
+        return bool(value)
+
+    @property
     def netbox_url(self) -> str:
         yaml_url = str(((self.yaml.get("inventory") or {}).get("netbox") or {}).get("url") or "").strip().rstrip("/")
         if yaml_url:

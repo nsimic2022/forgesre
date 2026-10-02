@@ -70,7 +70,17 @@
 {% endif %}
 
 <section class="card">
-  <h2>NetBox sync {% with %}{% set tip %}Read-only. ForgeSRE never writes back. Separate from Scan now. Empty inventory is yellow (No devices), not a failure.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>NetBox sync {% with %}{% set tip %}Read-only. ForgeSRE never writes back. Separate from Scan now. Empty inventory is yellow (No devices), not a failure. New NetBox devices become assets with type Auto and no scrape address — ForgeSRE does not guess Linux :9100. Owner, contact, email, and notes on assets that already exist are never overwritten.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  {% if netbox_enabled %}
+  <p class="muted">
+    {% if netbox_auto_sync %}
+    Automatic: runs about 30 s after Core start and every 6 h (<code>inventory.netbox.auto_sync: true</code>).
+    {% else %}
+    Manual only: <code>inventory.netbox.auto_sync: false</code>. Use Sync NetBox below.
+    {% endif %}
+    New devices arrive as <strong>Auto</strong> type, no scrape, no owner email.
+  </p>
+  {% endif %}
   {% if can('admin') %}
     {% if netbox_enabled %}
     <div class="tool-row">
@@ -126,6 +136,7 @@
     <tr class="{% if selected and selected.id == row.id %}selected{% endif %}">
       <td>
         {{ row.ip }}
+        {% if row.hostname %}<div class="muted" title="Approve uses this as the asset ID when it is free">{{ row.hostname }}</div>{% endif %}
         {% if row.source == 'demo' or row.ip == demo_candidate_ip %}
         <span class="pill demo">DEMO</span>
         <span class="muted">lab seed — not a Scan now production hit</span>
@@ -142,7 +153,7 @@
         <div class="row-actions">
         {% if can('write_assets') %}
         {% if row.status == 'new' %}
-        <form method="post" action="/discovery/{{ row.id }}/approve"><button type="submit">Approve</button></form>
+        <form method="post" action="/discovery/{{ row.id }}/approve"><button type="submit" title="Asset ID: hostname slug if set (Edit), else disc-&lt;ip&gt;">Approve</button></form>
         {% endif %}
         <a class="button" href="/discovery?edit={{ row.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Edit</a>
         <a class="button" href="/discovery?clone={{ row.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Clone</a>

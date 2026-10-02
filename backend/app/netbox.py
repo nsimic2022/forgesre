@@ -317,15 +317,24 @@ def list_devices(url: str, token: str, timeout: float = 10.0) -> list[dict[str, 
             for row in payload.get("results") or []:
                 primary = (row.get("primary_ip") or {}).get("address") or ""
                 ip = primary.split("/")[0]
-                devices.append(
-                    {
-                        "netbox_id": str(row.get("id") or ""),
-                        "name": row.get("name") or f"nb-{row.get('id')}",
-                        "ip": ip,
-                        "type": ((row.get("device_type") or {}).get("model")) or "device",
-                        "status": (row.get("status") or {}).get("value") or "active",
-                    }
-                )
+                device = {
+                    "netbox_id": str(row.get("id") or ""),
+                    "name": row.get("name") or f"nb-{row.get('id')}",
+                    "ip": ip,
+                    "type": ((row.get("device_type") or {}).get("model")) or "device",
+                    "status": (row.get("status") or {}).get("value") or "active",
+                }
+                extras = {
+                    "site": (row.get("site") or {}).get("name") or "",
+                    "tenant": (row.get("tenant") or {}).get("name") or "",
+                    "role": (row.get("role") or row.get("device_role") or {}).get("name") or "",
+                }
+                device.update({key: value for key, value in extras.items() if value})
+                tags = [str(tag.get("name") or tag.get("slug") or "") for tag in (row.get("tags") or []) if isinstance(tag, dict)]
+                tags = [tag for tag in tags if tag]
+                if tags:
+                    device["tags"] = tags
+                devices.append(device)
             endpoint = payload.get("next")
     return devices
 

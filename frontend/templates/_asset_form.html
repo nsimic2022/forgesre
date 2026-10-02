@@ -27,6 +27,7 @@
     {% set cpu_a = alarms.get('cpu_percent') or {} %}
     {% set mem_a = alarms.get('memory_percent') or {} %}
     {% set disk_a = alarms.get('disk_percent') or {} %}
+    <p class="muted alarm-limit">This overlay can only mute an alert on this host or ignore it below your %. It cannot fire earlier than the Prometheus rule in alerts.yml.</p>
     <label class="alarm-row"><input type="checkbox" name="alarm_up_enabled" value="1" data-alarm-up {% if up_a.get('enabled', True) %}checked{% endif %}> Collecting (up)</label>
     <label class="alarm-row"><input type="checkbox" name="alarm_cpu_enabled" value="1" data-alarm-cpu {% if cpu_a.get('enabled', True) %}checked{% endif %}> CPU
       <input type="number" name="alarm_cpu_threshold" min="1" max="100" step="1" value="{{ cpu_a.get('threshold') or 90 }}" data-alarm-cpu-th> %</label>
@@ -49,7 +50,7 @@
   <label>Environment <input name="environment" value="{{ form.environment or 'Production' }}"></label>
   <label>Owner / team <input name="owner" value="{{ form.owner or 'platform' }}" placeholder="platform"></label>
   <label>Contact name <input name="contact_name" value="{{ form.contact_name }}" placeholder="Who to call"></label>
-  <label><span class="label-line">Owner email {% with %}{% set tip %}Escalation uses this address when set, instead of a generic team inbox (role@forgesre.local).{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+  <label><span class="label-line">Owner email {% with %}{% set tip %}Escalation role steps (team, team-lead, engineer) mail this address. Empty = the mail is recorded as no-recipient and not sent.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <input name="owner_email" type="email" value="{{ form.owner_email }}" placeholder="oncall@dc.local"></label>
   <label>Owner phone <input name="owner_phone" value="{{ form.owner_phone }}" placeholder="+381-11-000-0000"></label>
   <label><span class="label-line">Scrape address {% with %}{% set tip %}Prometheus HTTP target (ip:9100 or ip:9182). Leave blank to default from type. Network devices use SNMP UDP/161, not this HTTP scrape.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>

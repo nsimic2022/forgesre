@@ -279,15 +279,15 @@ def next_incident_number(db: Session, when: datetime | None = None) -> str:
     return format_incident_number(highest + 1, when)
 
 
-def match_playrule(db: Session, alertname: str, labels: dict[str, Any]) -> Playrule | None:
-    rules = db.query(Playrule).filter_by(enabled=True).all()
-    for rule in rules:
-        condition = rule.condition or {}
-        expected = str(condition.get("alertname") or "")
-        if expected and expected.lower() == alertname.lower():
-            return rule
-        metric = str(condition.get("metric") or "")
-        if metric and metric in {str(labels.get("metric") or ""), alertname.lower()}:
+def match_playrule(db: Session, alertname: str, labels: dict[str, Any] | None = None) -> Playrule | None:
+    """Alertname only. condition.metric/operator/value are operator notes and are never evaluated."""
+    del labels
+    wanted = (alertname or "").strip().lower()
+    if not wanted:
+        return None
+    for rule in db.query(Playrule).filter_by(enabled=True).order_by(Playrule.id).all():
+        expected = str((rule.condition or {}).get("alertname") or "").strip().lower()
+        if expected and expected == wanted:
             return rule
     return None
 
@@ -331,7 +331,18 @@ def refresh_asset_status(db: Session, asset: Asset | None) -> None:
         asset.status = "healthy"
 
 
+ACTIVE_INCIDENT_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED")
+UNLABELED_ASSET = "unlabeled"
+
+
 def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
+    """Alertmanager webhook → incidents.
+
+    One active incident per ``alertname:asset``. A firing alert after that
+    incident went RESOLVED opens a new INC (fresh escalation ladder) and links
+    both timelines. CLOSED is final. A resolved alert marks the active incident
+    RESOLVED; it never closes it.
+    """
     from app.jobs import enqueue
 
     created: list[Incident] = []
@@ -341,27 +352,37 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
         annotations = alert.get("annotations") or {}
         alert_status = (alert.get("status") or group_status).lower()
         alertname = str(labels.get("alertname") or "Alert")
-        asset_name = str(labels.get("asset") or labels.get("instance") or DEMO_ASSET)
-        fingerprint = f"{alertname}:{asset_name}"
+        asset_name = str(labels.get("asset") or labels.get("instance") or "").strip()
+        fingerprint = f"{alertname}:{asset_name or UNLABELED_ASSET}"
         incident = (
             db.query(Incident)
-            .filter(Incident.fingerprint == fingerprint, Incident.status.notin_(["CLOSED"]))
+            .filter(Incident.fingerprint == fingerprint, Incident.status.in_(ACTIVE_INCIDENT_STATUSES))
             .order_by(Incident.id.desc())
             .first()
         )
-        asset = (
-            db.query(Asset).filter((Asset.asset_id == asset_name) | (Asset.hostname == asset_name)).first()
-        )
+        asset = None
+        if asset_name:
+            asset = (
+                db.query(Asset).filter((Asset.asset_id == asset_name) | (Asset.hostname == asset_name)).first()
+            )
         if alert_status == "resolved":
             if incident:
                 incident.status = "RESOLVED"
                 incident.ended_at = utcnow()
-                append_timeline(incident, "alert", "ALERT", f"{alertname} resolved")
+                append_timeline(incident, "alert", "ALERT", f"{alertname} resolved by Alertmanager")
                 db.add(IncidentEvent(incident_id=incident.id, kind="resolved", data=labels))
                 refresh_asset_status(db, asset)
                 if asset and asset.asset_id == DEMO_ASSET:
                     reset_demo_gauges()
             continue
+        previous_resolved = None
+        if incident is None:
+            previous_resolved = (
+                db.query(Incident)
+                .filter(Incident.fingerprint == fingerprint, Incident.status == "RESOLVED")
+                .order_by(Incident.id.desc())
+                .first()
+            )
         if incident is None:
             from app.asset_alarms import bundled_alert_skip_reason
 
@@ -396,6 +417,19 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
             db.flush()
             append_timeline(incident, "alert", "ALERT", f"{alertname} fired")
             append_timeline(incident, "incident", "INCIDENT", f"{incident.number} created")
+            if previous_resolved is not None:
+                append_timeline(
+                    incident,
+                    "refire",
+                    "RE-FIRED",
+                    f"Same alert fired again after {previous_resolved.number} was RESOLVED",
+                )
+                append_timeline(
+                    previous_resolved,
+                    "refire",
+                    "RE-FIRED",
+                    f"Fired again as {incident.number}",
+                )
             if rule:
                 append_timeline(incident, "playrule", "PLAYRULE", rule.name)
                 if rule.playbook:
@@ -406,7 +440,10 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
                 action="incident.create",
                 object_type="incident",
                 object_id=incident.number,
-                data={"alertname": alertname},
+                data={
+                    "alertname": alertname,
+                    **({"refire_of": previous_resolved.number} if previous_resolved is not None else {}),
+                },
             )
             created.append(incident)
         if incident.id and not db.query(Evidence.id).filter_by(incident_id=incident.id).first():
@@ -948,6 +985,19 @@ def queue_llm_rewrite(db: Session, incident: Incident, actor: str = "system") ->
     )
 
 
+NO_RECIPIENT_STATUS = "no-recipient"
+NO_RECIPIENT_ERROR = "No recipient: asset has no owner email and the escalation step names a role, not an address. Not sent."
+
+
+def escalation_recipient(incident: Incident, step_target: str) -> str:
+    """Explicit address on the step wins; else the asset owner email; else empty (do not invent role@…)."""
+    explicit = _valid_email(step_target) if "@" in (step_target or "") else ""
+    if explicit:
+        return explicit
+    asset = getattr(incident, "asset", None)
+    return _valid_email((getattr(asset, "owner_email", "") or "") if asset is not None else "")
+
+
 def ensure_notification(db: Session, incident: Incident, step_key: str, target: str | None = None) -> Notification:
     existing = (
         db.query(Notification)
@@ -961,11 +1011,11 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
         "15m": "team-lead",
         "30m": "engineer",
     }
-    policy_role = target or mapped.get(step_key, "team")
+    policy_role = (target or mapped.get(step_key, "team")).strip() or "team"
     if incident.asset is None and incident.asset_id:
         incident.asset = db.get(Asset, incident.asset_id)
-    owner_email = ((incident.asset.owner_email if incident.asset else "") or "").strip()
-    stored_target = owner_email or policy_role
+    recipient = escalation_recipient(incident, policy_role)
+    stored_target = recipient or policy_role
     subject = demo_mail_subject(incident, f"{incident.number} {incident.title}")
     body = build_escalation_body(incident, step_key, policy_role)
     html_body = build_escalation_html(incident, step_key, policy_role)
@@ -978,9 +1028,12 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
         status="generated",
         step_key=step_key,
     )
-    if settings.email_enabled and settings.smtp_host:
+    if not recipient:
+        row.status = NO_RECIPIENT_STATUS
+        row.error = NO_RECIPIENT_ERROR
+    elif settings.email_enabled and settings.smtp_host:
         try:
-            _send_smtp(stored_target, subject, body, html=html_body)
+            _send_smtp(recipient, subject, body, html=html_body)
             row.status = "sent"
         except Exception as exc:
             row.status = "failed"
@@ -998,9 +1051,10 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
     )
     if step_key != "immediate" and incident.status in {"OPEN", "INVESTIGATING"}:
         incident.status = "ESCALATED"
-        append_timeline(incident, "playbook", "PLAYBOOK", f"Escalated to {stored_target}")
+        detail = f"Escalated to {stored_target}" if recipient else f"Escalation step {step_key}: no recipient ({policy_role})"
+        append_timeline(incident, "playbook", "PLAYBOOK", detail)
     db.commit()
-    note_status = "error" if row.status == "failed" else "ok"
+    note_status = "error" if row.status in {"failed", NO_RECIPIENT_STATUS} else "ok"
     mark = "DEMO " if is_demo_incident(incident) else ""
     report(
         db,

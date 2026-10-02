@@ -2,31 +2,63 @@
 {% block title %}Playrules · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Playrules {% with %}{% set tip %}Seeded rules are the default warning. Playrules map Prometheus alertname → playbook. They do not create Prom rules. monitoring/alerts.yml is the PromQL source. Asset Alarms on Add/Edit (assets.alarms enable/%) are a per-host overlay on the same Alertmanager webhook — not a second alerting engine.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
-{% if asset_alarm_hosts %}
-<p class="muted">Saved on {{ asset_alarm_hosts|length }} host{% if asset_alarm_hosts|length != 1 %}s{% endif %} ({{ asset_alarm_hosts[:8]|join(", ") }}{% if asset_alarm_hosts|length > 8 %}, …{% endif %}).</p>
+<p class="page-lede">A playrule fires nothing. Prometheus evaluates <code>monitoring/alerts.yml</code>; when an alert arrives, ForgeSRE matches its <strong>alertname</strong> here and attaches the playbook and escalation ladder.</p>
+<p class="muted">Asset Alarms (Edit on an asset) can only mute a bundled alert on that host — they cannot fire earlier than the Prometheus rule.{% if asset_alarm_hosts %} Saved on {{ asset_alarm_hosts|length }} host{% if asset_alarm_hosts|length != 1 %}s{% endif %} ({{ asset_alarm_hosts[:8]|join(", ") }}{% if asset_alarm_hosts|length > 8 %}, …{% endif %}).{% endif %}</p>
+{% if notice %}
+<div class="banner">{{ notice }}</div>
 {% endif %}
-<table>
-  <thead><tr><th>Name</th><th>Condition</th><th>Severity</th><th>Playbook</th><th>Enabled</th></tr></thead>
+<div class="table-scroll">
+<table class="scan-list rule-list">
+  <thead><tr><th>Playrule</th><th>Fires when (alerts.yml)</th><th>Severity</th><th>Playbook</th><th>Enabled</th>{% if can('write_play') %}<th></th>{% endif %}</tr></thead>
   <tbody>
   {% for rule in playrules %}
-    <tr>
-      <td>{{ rule.name }}</td>
-      <td><code>{{ (rule.condition or {}).get('alertname') }} · {{ (rule.condition or {}).get('metric') }} {{ (rule.condition or {}).get('operator') }} {{ (rule.condition or {}).get('value') }}</code></td>
-      <td>{{ rule.severity }}</td>
-      <td>{{ rule.playbook.name if rule.playbook else "—" }}</td>
-      <td>
-        {{ "On" if rule.enabled else "Off" }}
-        {% if can('write_play') %}
-        <form method="post" action="/playrules/{{ rule.id }}/toggle" class="inline"><button>Toggle</button></form>
+    {% set cond = rule.condition or {} %}
+    {% set prom = rules_for(cond.get('alertname') or '') %}
+    <tr class="{% if not rule.enabled %}rule-off{% endif %}{% if selected and selected.id == rule.id %} selected{% endif %}">
+      <td class="inc-cell">
+        <div class="inc-title">{{ rule.name }}</div>
+        <div class="inc-host"><code>{{ cond.get('alertname') or '—' }}</code></div>
+      </td>
+      <td class="rule-expr">
+        {% for item in prom %}
+        <code>{{ item.expr }}</code>{% if item['for'] %} <span class="muted">for {{ item['for'] }}</span>{% endif %}{% if item.file != 'alerts.yml' %} <span class="muted">· {{ item.file }}</span>{% endif %}
+        {% if not loop.last %}<br>{% endif %}
+        {% else %}
+        <span class="pill warn">No Prometheus rule</span>
+        <span class="muted">Never matches until alerts.yml has this alertname.</span>
+        {% endfor %}
+        {% if cond.get('metric') %}
+        <div class="muted rule-note" title="Operator note. Not evaluated.">Note: {{ cond.get('metric') }} {{ cond.get('operator') or '' }} {{ cond.get('value') if cond.get('value') is not none else '' }} · not executed</div>
         {% endif %}
       </td>
+      <td><span class="pill {{ severity_pill(rule.severity) }}">{{ rule.severity }}</span></td>
+      <td>{{ rule.playbook.name if rule.playbook else "—" }}{% if rule.escalation_policy %}<div class="muted">{{ rule.escalation_policy.name }}</div>{% endif %}</td>
+      <td>
+        <span class="pill {{ 'ok' if rule.enabled else 'off' }}">{{ "On" if rule.enabled else "Off" }}</span>
+        {% if can('write_play') %}
+        <form method="post" action="/playrules/{{ rule.id }}/toggle" class="inline"><button class="secondary">Toggle</button></form>
+        {% endif %}
+      </td>
+      {% if can('write_play') %}
+      <td class="row-actions">
+        <a class="button" href="/playrules?edit={{ rule.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}#playrule-form">Edit</a>
+        <form method="post" action="/playrules/{{ rule.id }}/delete" class="inline" onsubmit="return confirm('Remove playrule {{ rule.name }}? Existing incidents keep their playbook. New {{ cond.get('alertname') or rule.name }} alerts will open without a playbook.');">
+          <button type="submit" class="danger">Remove</button>
+        </form>
+      </td>
+      {% endif %}
     </tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% include "_pager.html" %}
 {% if can('write_play') %}
-<h2>Create playrule</h2>
+{% if form_mode == "edit" %}
+<h2 id="playrule-form-title">Edit playrule <span class="muted">{{ selected.name }}</span></h2>
+<form method="post" action="/playrules/{{ selected.id }}/update" class="stack" id="playrule-form">
+{% else %}
+<h2 id="playrule-form-title">Create playrule</h2>
 <form method="post" action="/playrules" class="stack" id="playrule-form">
   <label><span class="label-line">Preset {% with %}{% set tip %}Fills the fields below from bundled examples. Does not write monitoring/alerts.yml.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <select id="playrule-preset">
@@ -48,49 +80,67 @@
       {% endfor %}
     </select>
   </label>
-  <label>Name <input name="name" placeholder="high-disk" required></label>
-  <label><span class="label-line">Alertname {% with %}{% set tip %}Must match the Prometheus alertname from monitoring/alerts.yml (e.g. FilesystemUsageHigh). This playrule does not create a Prom rule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
-    <input name="alertname" placeholder="FilesystemUsageHigh"></label>
-  <label>Metric
-    <select name="metric" id="playrule-metric">
-      <option value="cpu_usage">cpu_usage</option>
-      <option value="filesystem_usage" selected>filesystem_usage</option>
-      <option value="memory_usage">memory_usage</option>
-      <option value="load1">load1</option>
-      <option value="up">up</option>
-      <option value="ifOperStatus">ifOperStatus</option>
-    </select>
-  </label>
-  <label>Operator
-    <select name="operator">
-      <option value=">" selected>&gt;</option>
-      <option value=">=">&gt;=</option>
-      <option value="==">==</option>
-      <option value="<">&lt;</option>
-    </select>
-  </label>
-  <label>Value <input name="value" type="number" value="80"></label>
+{% endif %}
+  <label>Name <input name="name" value="{{ form.name }}" placeholder="high-disk" required></label>
+  <label><span class="label-line">Alertname {% with %}{% set tip %}The only thing ForgeSRE matches. Must equal the Prometheus alertname in monitoring/alerts.yml (e.g. FilesystemUsageHigh). This playrule does not create a Prom rule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="alertname" value="{{ form.alertname }}" placeholder="FilesystemUsageHigh" list="alertnames" data-alertname-input autocomplete="off"></label>
+  <datalist id="alertnames">
+    {% for name in alert_rules.keys()|sort %}<option value="{{ name }}">{% endfor %}
+  </datalist>
+  <div class="rule-preview" data-rule-preview>
+    <span class="muted">Prometheus rule:</span>
+    <span data-rule-preview-body>
+      {% set prom = rules_for(form.alertname) %}
+      {% for item in prom %}<code>{{ item.expr }}</code>{% if item['for'] %} <span class="muted">for {{ item['for'] }}</span>{% endif %}{% if not loop.last %}<br>{% endif %}{% else %}<span class="muted">{% if form.alertname %}none in alerts.yml for this alertname{% else %}pick an alertname{% endif %}</span>{% endfor %}
+    </span>
+  </div>
+  <script type="application/json" id="alert-rules-data">{{ alert_rules|tojson }}</script>
   <label>Severity
     <select name="severity">
-      <option value="warning" selected>warning</option>
-      <option value="critical">critical</option>
+      <option value="warning" {% if form.severity|lower != 'critical' %}selected{% endif %}>warning</option>
+      <option value="critical" {% if form.severity|lower == 'critical' %}selected{% endif %}>critical</option>
     </select>
   </label>
   <label>Playbook
     <select name="playbook_id">
       <option value="">—</option>
       {% for book in playbooks %}
-      <option value="{{ book.id }}" data-slug="{{ book.slug }}">{{ book.name }}</option>
+      <option value="{{ book.id }}" data-slug="{{ book.slug }}" {% if form.playbook_id == book.id %}selected{% endif %}>{{ book.name }}</option>
       {% endfor %}
     </select>
   </label>
-  <label><span class="label-line">Escalation {% with %}{% set tip %}Email ladder for this alert. Seeded Default warning is 0 / 15 / 30 min. Delivery uses the asset owner email when set.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+  <label><span class="label-line">Escalation {% with %}{% set tip %}Email ladder for this alert. Seeded Default warning is 0 / 15 / 30 min. A step with an email address mails that address; a role step mails the asset owner email; no address at all is recorded as no-recipient and not sent.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <select name="escalation_policy_id">
       {% for policy in policies %}
-      <option value="{{ policy.id }}" {% if policy.slug == 'default-warning' %}selected{% endif %}>{{ policy.name }}</option>
+      <option value="{{ policy.id }}" {% if (form.escalation_policy_id and form.escalation_policy_id == policy.id) or (not form.escalation_policy_id and policy.slug == 'default-warning') %}selected{% endif %}>{{ policy.name }}</option>
       {% endfor %}
     </select>
   </label>
+  <details class="rule-note-fields" {% if form.metric %}open{% endif %}>
+    <summary>Operator note — not executed</summary>
+    <p class="muted">Free-text reminder of the threshold. ForgeSRE never evaluates it; change the real threshold in <code>monitoring/alerts.yml</code> (or <code>alerts.local.yml</code>).</p>
+    <div class="form-grid">
+      <label>Metric
+        <select name="metric" id="playrule-metric">
+          <option value="" {% if not form.metric %}selected{% endif %}>—</option>
+          {% for opt in ["cpu_usage", "filesystem_usage", "memory_usage", "load1", "up", "ifOperStatus"] %}
+          <option value="{{ opt }}" {% if form.metric == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+          {% if form.metric and form.metric not in ["cpu_usage", "filesystem_usage", "memory_usage", "load1", "up", "ifOperStatus"] %}
+          <option value="{{ form.metric }}" selected>{{ form.metric }}</option>
+          {% endif %}
+        </select>
+      </label>
+      <label>Operator
+        <select name="operator">
+          {% for opt in [">", ">=", "==", "<"] %}
+          <option value="{{ opt }}" {% if (form.operator or '>') == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Value <input name="value" value="{{ form.value }}" placeholder="80"></label>
+    </div>
+  </details>
   <div class="row-actions">
     <button type="submit">Save</button>
     <a href="/playrules">Cancel</a>

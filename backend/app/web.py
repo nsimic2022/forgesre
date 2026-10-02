@@ -22,6 +22,8 @@ from app.inventory import (
     CANDIDATE_ROLE_CHOICES,
     approve_candidate,
     asset_form_values,
+    asset_missing_email,
+    asset_tiles,
     asset_type_abbrev,
     assets_matching,
     clone_candidate,
@@ -85,6 +87,7 @@ from app.history import (
     apply_status_fields,
     audit_for,
     clamp_days,
+    dashboard_incident_tiles,
     list_history,
     notes_for,
     notifications_for,
@@ -380,18 +383,9 @@ def dashboard(
     from sqlalchemy import func
 
     pending = db.query(func.count(DiscoveryCandidate.id)).filter_by(status="new").scalar() or 0
-    stats = {
-        "assets_total": db.query(func.count(Asset.id)).scalar() or 0,
-        "healthy": db.query(func.count(Asset.id)).filter_by(status="healthy").scalar() or 0,
-        "warning": db.query(func.count(Asset.id)).filter_by(status="warning").scalar() or 0,
-        "critical": db.query(func.count(Asset.id)).filter_by(status="critical").scalar() or 0,
-        "offline": db.query(func.count(Asset.id)).filter_by(status="offline").scalar() or 0,
-        "open": db.query(func.count(Incident.id)).filter_by(status="OPEN").scalar() or 0,
-        "inc_critical": db.query(func.count(Incident.id)).filter(Incident.severity == "CRITICAL", Incident.status.notin_(["RESOLVED", "CLOSED"])).scalar() or 0,
-        "investigating": db.query(func.count(Incident.id)).filter_by(status="INVESTIGATING").scalar() or 0,
-        "resolved": db.query(func.count(Incident.id)).filter_by(status="RESOLVED").scalar() or 0,
-        "pending_discovery": pending,
-    }
+    stats = {"pending_discovery": pending}
+    asset_rows = asset_tiles(db.query(Asset).all())
+    incident_rows = dashboard_incident_tiles(db)
     recent, total = list_history(db, days=None, open_only=False, limit=PAGE_SIZE, page=page)
     pager = pager_state(page, total=total)
     journal_error = error_banner_entries(db, getattr(user, "journal_error_ack_id", 0), limit=5)
@@ -402,6 +396,8 @@ def dashboard(
         "dashboard.html",
         user,
         stats=stats,
+        asset_tiles=asset_rows,
+        incident_tiles=incident_rows,
         recent=recent,
         journal_error=journal_error,
         journal_recent=journal_recent,
@@ -437,9 +433,10 @@ def assets_page(
     clone: str = "",
     q: str = "",
     status: str = "",
+    flag: str = "",
     page: str = "1",
 ):
-    rows = assets_matching(db.query(Asset).order_by(Asset.number, Asset.hostname).all(), q, status)
+    rows = assets_matching(db.query(Asset).order_by(Asset.number, Asset.hostname).all(), q, status, flag)
     rows, pager = paginate(rows, page)
     form_mode = "add"
     selected = None
@@ -471,6 +468,8 @@ def assets_page(
         notice=notice,
         q=q,
         status=status,
+        flag=flag,
+        asset_missing_email=asset_missing_email,
         reachability_snapshot=reachability_snapshot,
         pager=pager,
     )
@@ -644,6 +643,7 @@ def discovery_page(
         suggested_cidr=suggested or "",
         cidr_prefill=cidr_prefill,
         netbox_enabled=settings.netbox_enabled,
+        netbox_auto_sync=settings.netbox_auto_sync,
         netbox_url=settings.netbox_url,
         netbox_url_is_local=is_local_netbox_url(settings.netbox_url),
         netbox_token_present=token_presence(token),
@@ -784,7 +784,11 @@ def discovery_approve_page(
     if row is None:
         raise HTTPException(status_code=404)
     asset = approve_candidate(db, row, actor=user.email)
-    return RedirectResponse(f"/assets/{asset.asset_id}", status_code=302)
+    suffix = ""
+    if asset_missing_email(asset):
+        notice = "Approved. Add an owner email (Edit) so escalation mail has a recipient."
+        suffix = f"?notice={quote(notice)}"
+    return RedirectResponse(f"/assets/{asset.asset_id}{suffix}", status_code=302)
 
 
 @router.post("/discovery/{candidate_id}/ignore")
@@ -869,8 +873,17 @@ def discovery_delete_page(
 def discovery_netbox_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
     if not can(user, "admin"):
         raise HTTPException(status_code=403)
-    sync_netbox(db)
-    return RedirectResponse("/discovery", status_code=302)
+    result = sync_netbox(db) or {}
+    if result.get("error"):
+        notice = f"NetBox sync failed: {result['error']}"
+    elif result.get("skipped"):
+        notice = "NetBox sync is off in config."
+    else:
+        notice = (
+            f"NetBox sync: {int(result.get('created') or 0)} new, {int(result.get('linked') or 0)} already linked. "
+            "New devices are Auto type with no scrape — set Type / owner email on Assets."
+        )
+    return RedirectResponse(f"/discovery?notice={quote(notice)}", status_code=302)
 
 
 @router.get("/assets/{asset_id}", response_class=HTMLResponse)
@@ -1027,10 +1040,12 @@ def incidents_page(
     user: User = Depends(login_required),
     open_filter: str = Query("", alias="open"),
     status: str = "",
+    severity: str = "",
     days: str = "",
     page: str = "1",
 ):
     real_status = {"OPEN", "INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED"}
+    critical_only = (severity or "").strip().lower() in {"critical", "crit"}
     status_raw = (status or "").strip()
     status_key = status_raw.upper()
     open_raw = (open_filter or "").strip().lower()
@@ -1055,6 +1070,7 @@ def incidents_page(
         status=exact,
         open_only=open_only,
         closed_only=closed_only,
+        critical_only=critical_only,
         limit=PAGE_SIZE,
         page=page,
     )
@@ -1067,6 +1083,7 @@ def incidents_page(
         reported_to=reported_to_for(db, rows),
         open_only=open_only,
         status_group=status_group,
+        severity_group="critical" if critical_only else "",
         days=days_raw,
         pager=pager,
     )
@@ -1248,13 +1265,68 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
     )
 
 
+def playrule_form_values(rule: Playrule | None = None) -> dict:
+    condition = dict(rule.condition or {}) if rule is not None else {}
+    return {
+        "name": rule.name if rule is not None else "",
+        "alertname": str(condition.get("alertname") or ""),
+        "metric": str(condition.get("metric") or ""),
+        "operator": str(condition.get("operator") or ""),
+        "value": "" if condition.get("value") in (None, "") else str(condition.get("value")),
+        "severity": (rule.severity if rule is not None else "warning") or "warning",
+        "playbook_id": rule.playbook_id if rule is not None else None,
+        "escalation_policy_id": rule.escalation_policy_id if rule is not None else None,
+    }
+
+
+def playrule_condition(alertname: str, name: str, metric: str, operator: str, value: str) -> dict:
+    """alertname is the only matched key. metric/operator/value are a free-text note, never evaluated."""
+    condition: dict = {"alertname": (alertname or name).strip()}
+    note_value: float | str | None = None
+    raw = (value or "").strip()
+    if raw:
+        try:
+            note_value = float(raw)
+        except ValueError:
+            note_value = raw
+    if (metric or "").strip():
+        condition["metric"] = metric.strip()
+        condition["operator"] = (operator or ">").strip()
+        if note_value is not None:
+            condition["value"] = note_value
+    return condition
+
+
+def _playrule_policy(db: Session, escalation_policy_id: int | None) -> EscalationPolicy | None:
+    policy = db.get(EscalationPolicy, escalation_policy_id) if escalation_policy_id else None
+    if policy is None:
+        policy = db.query(EscalationPolicy).filter_by(slug="default-warning").first()
+    return policy
+
+
+def _optional_id(raw: str) -> int | None:
+    text = (raw or "").strip()
+    return int(text) if text.isdigit() else None
+
+
 @router.get("/playrules", response_class=HTMLResponse)
-def playrules_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play")), page: str = "1"):
+def playrules_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("read_play")),
+    page: str = "1",
+    edit: str = "",
+):
+    from app.alert_rules import load_alert_rules, rules_for
+
     rows = db.query(Playrule).order_by(Playrule.name).all()
     rows, pager = paginate(rows, page)
     books = db.query(Playbook).order_by(Playbook.name).all()
     hosts = saved_alarm_hostnames(db.query(Asset).order_by(Asset.hostname).all())
     policies = db.query(EscalationPolicy).order_by(EscalationPolicy.name).all()
+    alert_rules = load_alert_rules()
+    selected = db.get(Playrule, int(edit)) if edit.strip().isdigit() else None
+    form = playrule_form_values(selected)
     return render(
         request,
         "playrules.html",
@@ -1265,6 +1337,12 @@ def playrules_page(request: Request, db: Session = Depends(get_db), user: User =
         asset_alarm_hosts=hosts,
         policies=policies,
         pager=pager,
+        alert_rules=alert_rules,
+        rules_for=lambda name: rules_for(name, alert_rules),
+        selected=selected,
+        form=form,
+        form_mode="edit" if selected is not None else "create",
+        notice=request.query_params.get("notice") or "",
     )
 
 
@@ -1274,32 +1352,86 @@ def playrule_create(
     user: User = Depends(login_required),
     name: str = Form(...),
     alertname: str = Form(""),
-    metric: str = Form("filesystem_usage"),
+    metric: str = Form(""),
     operator: str = Form(">"),
-    value: float = Form(80),
+    value: str = Form(""),
     severity: str = Form("warning"),
-    playbook_id: int | None = Form(None),
-    escalation_policy_id: int | None = Form(None),
+    playbook_id: str = Form(""),
+    escalation_policy_id: str = Form(""),
 ):
     if not can(user, "write_play"):
         raise HTTPException(status_code=403)
-    policy = None
-    if escalation_policy_id:
-        policy = db.get(EscalationPolicy, escalation_policy_id)
-    if policy is None:
-        policy = db.query(EscalationPolicy).filter_by(slug="default-warning").first()
+    clean = name.strip()
+    if not clean:
+        raise HTTPException(status_code=400, detail="name required")
+    if db.query(Playrule).filter_by(name=clean).first() is not None:
+        return RedirectResponse(f"/playrules?notice={quote('A playrule with that name already exists.')}", status_code=302)
+    policy = _playrule_policy(db, _optional_id(escalation_policy_id))
     row = Playrule(
-        name=name,
+        name=clean,
         enabled=True,
         severity=severity,
-        condition={"metric": metric, "operator": operator, "value": value, "alertname": (alertname or name).strip()},
-        playbook_id=playbook_id or None,
+        condition=playrule_condition(alertname, clean, metric, operator, value),
+        playbook_id=_optional_id(playbook_id),
         escalation_policy_id=policy.id if policy else None,
     )
     db.add(row)
-    audit(db, "playrule.create", actor=user.email, object_type="playrule", object_id=name)
+    audit(db, "playrule.create", actor=user.email, object_type="playrule", object_id=clean)
     db.commit()
     return RedirectResponse("/playrules", status_code=302)
+
+
+@router.post("/playrules/{rule_id}/update")
+def playrule_update(
+    rule_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    name: str = Form(...),
+    alertname: str = Form(""),
+    metric: str = Form(""),
+    operator: str = Form(">"),
+    value: str = Form(""),
+    severity: str = Form("warning"),
+    playbook_id: str = Form(""),
+    escalation_policy_id: str = Form(""),
+):
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    row = db.get(Playrule, rule_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    clean = name.strip() or row.name
+    clash = db.query(Playrule).filter(Playrule.name == clean, Playrule.id != row.id).first()
+    if clash is not None:
+        return RedirectResponse(
+            f"/playrules?edit={row.id}&notice={quote('A playrule with that name already exists.')}",
+            status_code=302,
+        )
+    policy = _playrule_policy(db, _optional_id(escalation_policy_id))
+    row.name = clean
+    row.severity = severity
+    row.condition = playrule_condition(alertname, clean, metric, operator, value)
+    row.playbook_id = _optional_id(playbook_id)
+    row.escalation_policy_id = policy.id if policy else None
+    audit(db, "playrule.update", actor=user.email, object_type="playrule", object_id=clean)
+    db.commit()
+    return RedirectResponse("/playrules", status_code=302)
+
+
+@router.post("/playrules/{rule_id}/delete")
+def playrule_delete(rule_id: int, db: Session = Depends(get_db), user: User = Depends(login_required)):
+    """Existing incidents keep their playbook; only the playrule link is cleared."""
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    row = db.get(Playrule, rule_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    name = row.name
+    db.query(Incident).filter(Incident.playrule_id == row.id).update({Incident.playrule_id: None})
+    db.delete(row)
+    audit(db, "playrule.remove", actor=user.email, object_type="playrule", object_id=name)
+    db.commit()
+    return RedirectResponse(f"/playrules?notice={quote(f'Removed playrule {name}.')}", status_code=302)
 
 
 @router.post("/playrules/{rule_id}/toggle")
