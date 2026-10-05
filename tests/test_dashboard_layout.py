@@ -243,14 +243,17 @@ def test_dashboard_order_banners_tiles_appliance_sections():
     host = html.index('id="host-down-banner"')
     device = html.index("NEW DEVICE DETECTED")
     journal = html.index('id="journal-error-banner"')
+    title = html.index("<h1>Dashboard")
     top = html.index('class="dash-top"')
-    assert host < device < journal < top
     incidents_tile = html.index("data-incident-tile")
     infra = html.index("dash-tiles-infra")
     appliance = html.index("data-appliance-card")
+    banners = html.index('class="dash-banners"')
     recent = html.index("<h2>Recent incidents</h2>")
     journal_list = html.index("Recent journal reports")
-    assert top < incidents_tile < infra < appliance < recent < journal_list
+    assert title < top < incidents_tile < infra < appliance < banners
+    assert banners < host < device < journal < recent < journal_list
+    assert "banner" not in html[title:top]
     assert html.count("stat-row-big") == 2
     card = html[appliance : html.index("</aside>", appliance)]
     assert "data-clock" in card
@@ -304,4 +307,4 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.8rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-3" in base
+    assert "app.css?v=v08-4" in base
