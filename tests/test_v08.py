@@ -120,8 +120,8 @@ def test_version_is_0_8_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v0.8</span>" in base
     assert "v0.7" not in base
-    assert "app.css?v=v08-2" in base
-    assert "app.js?v=v08-2" in base
+    assert "app.css?v=v08-3" in base
+    assert "app.js?v=v08-3" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.8.0" in text
@@ -362,7 +362,8 @@ def test_asset_extras_persist_edit_clone_and_show_on_incident():
 
     detail = client.get(f"/assets/{asset_id}")
     assert "Backup on-call phone" in detail.text and "+381-11-555-0102" in detail.text
-    assert "None — global alertname match" in detail.text
+    card = _between(detail.text, "data-asset-playrules", "</section>")
+    assert "No client playrules — global Playrules apply." in card
 
     edit = client.get(f"/assets?edit={asset_id}")
     assert 'value="Europe/Belgrade"' in edit.text
@@ -645,4 +646,194 @@ def test_support_shows_on_list_detail_incident_and_never_opens_an_incident():
     plain_who = client.get(f"/incidents/{plain.number}").text.split("Who to call", 1)[1].split("Send incident report", 1)[0]
     assert "Unknown — support dates not filled" in plain_who
     assert "Support:" not in build_escalation_body(plain, "immediate", "team")
+    db.close()
+
+
+# --- Asset detail: full fact list + Client playrules card --------------------------
+
+DETAIL_LABELS = (
+    "Asset number", "Hostname", "Type", "Environment", "Customer / domain", "Site / DC / room", "Notes",
+    "Owner / team", "Contact", "Email", "Phone", "Backup on-call name", "Backup on-call phone",
+    "Backup on-call email", "Support hours", "Timezone", "License / contract / SLA", "Runbook note",
+    "Under support", "From", "To", "Lead time",
+)
+
+
+def _dd(html: str, label: str) -> str:
+    match = re.search(r"<dt>" + re.escape(label) + r"</dt>\s*<dd[^>]*>(.*?)</dd>", html, re.S)
+    assert match, label
+    return match.group(1).strip()
+
+
+def _facts(html: str) -> str:
+    return _between(html, 'class="asset-detail-main"', 'class="asset-detail-side"')
+
+
+def _viewer_client() -> TestClient:
+    from app.models import User
+    from app.security import hash_password
+
+    db = _db()
+    email = "viewer-v08@forgesre.local"
+    if db.query(User).filter_by(email=email).first() is None:
+        db.add(User(email=email, name="V08 viewer", password_hash=hash_password("testpass"), role="viewer"))
+        db.commit()
+    db.close()
+    client = TestClient(app)
+    client.post("/login", data={"email": email, "password": "testpass"}, follow_redirects=False)
+    return client
+
+
+def test_asset_detail_lists_every_add_field_with_dash_when_empty():
+    db = _db()
+    client = _client()
+    token = uuid4().hex[:6]
+    octet = int(token[:2], 16) % 250 + 1
+    full_id = f"v08-df-{token}"
+    _post_asset(
+        client, full_id, f"10.211.1.{octet}", notes="Rack door sticks",
+        contact_name="Ana", owner_phone="+381-11-555-0100",
+        **_support_form("internal", date(2026, 1, 1), date(2030, 1, 1), lead=30),
+    )
+    bare_id = f"v08-de-{token}"
+    resp = client.post(
+        "/assets",
+        data={"asset_id": bare_id, "hostname": bare_id, "ip": f"10.211.2.{octet}", "type": "Linux Server", "owner": ""},
+        follow_redirects=False,
+    )
+    assert resp.status_code in {302, 303}
+
+    full = _facts(client.get(f"/assets/{full_id}").text)
+    for label in DETAIL_LABELS:
+        assert _dd(full, label) not in {"", "—", "None"}, label
+    for label, value in (
+        ("Hostname", full_id), ("Customer / domain", "acme.local"), ("Site / DC / room", "BG-DC1 room 2 rack 14"),
+        ("Backup on-call email", "mila@acme.local"), ("Timezone", "Europe/Belgrade"),
+        ("License / contract / SLA", "SLA gold 4h"), ("Under support", "Internal — we hold it"),
+        ("From", "2026-01-01"), ("To", "2030-01-01"), ("Lead time", "30 days"),
+    ):
+        assert _dd(full, label) == value, label
+    assert "Ignore disk until 95%; then call Mila." in _dd(full, "Runbook note")
+    assert 'data-support-state="in">In support</span>' in full
+    assert "data-asset-facts=\"identity\"" in full and "data-asset-facts=\"support\"" in full
+
+    bare = _facts(client.get(f"/assets/{bare_id}").text)
+    for label in (
+        "Customer / domain", "Site / DC / room", "Notes", "Contact", "Phone", "Backup on-call name",
+        "Backup on-call phone", "Backup on-call email", "Support hours", "Timezone", "License / contract / SLA",
+        "Runbook note", "Under support", "From", "To", "Lead time",
+    ):
+        assert _dd(bare, label) == "—", label
+    assert _dd(bare, "Email").startswith("—")
+    assert "No owner email" in _dd(bare, "Email")
+    assert 'data-support-state="unknown">Support unknown</span>' in bare
+    assert ">None<" not in bare
+    db.close()
+
+
+def test_asset_detail_without_stored_extras_still_renders():
+    db = _db()
+    client = _client()
+    token = uuid4().hex[:6]
+    asset_id = f"v08-dn-{token}"
+    _post_asset(client, asset_id, f"10.212.1.{int(token[:2], 16) % 250 + 1}")
+    db.expire_all()
+    asset = db.query(Asset).filter_by(asset_id=asset_id).one()
+    asset.extras = None
+    asset.playrule_ids = None
+    db.commit()
+    page = client.get(f"/assets/{asset_id}")
+    assert page.status_code == 200
+    facts = _facts(page.text)
+    assert _dd(facts, "Customer / domain") == "—"
+    assert _dd(facts, "Under support") == "—"
+    card = _between(page.text, "data-asset-playrules", "</section>")
+    assert "No client playrules — global Playrules apply." in card
+    db.close()
+
+
+def test_asset_detail_client_playrules_card_sits_under_machine_metrics():
+    db = _db()
+    token = uuid4().hex[:6]
+    enabled = _rule(db, f"v08-card-{token}", f"Card{token}")
+    disabled = _rule(db, f"v08-cardoff-{token}", f"CardOff{token}", enabled=False)
+    enabled_id, disabled_id = enabled.id, disabled.id
+    db.close()
+    client = _client()
+    asset_id = f"v08-dc-{token}"
+    _post_asset(client, asset_id, f"10.213.1.{int(token[:2], 16) % 250 + 1}")
+    text = client.get(f"/assets/{asset_id}").text
+
+    side = text.split('class="asset-detail-side"', 1)[1]
+    assert side.index("asset-detail-metrics card") < side.index("asset-detail-playrules card")
+    assert "Machine metrics" in side.split("asset-detail-playrules", 1)[0]
+    assert "Client playrules" not in _facts(text)
+
+    card = _between(text, "data-asset-playrules", "</section>")
+    assert '<div class="metric-panel-head">' in card and "<h2>Client playrules" in card
+    assert "Does not create Prometheus thresholds" in card
+    assert f'action="/assets/{asset_id}/playrules"' in card
+    assert '<input type="hidden" name="playrules_present" value="1">' in card
+    assert '<select name="playrule_add" data-playrule-add' in card
+    assert f'<option value="{enabled_id}"' in card
+    assert f'<option value="{disabled_id}"' not in card
+    assert "data-playrule-list" in card
+    empty = _between(card, "data-playrule-empty", "</p>")
+    assert "hidden" not in empty
+    assert "No client playrules — global Playrules apply." in empty
+
+    viewer = _between(_viewer_client().get(f"/assets/{asset_id}").text, "data-asset-playrules", "</section>")
+    assert "No client playrules — global Playrules apply." in viewer
+    assert "<form" not in viewer and "playrule_add" not in viewer
+
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".asset-detail-side {" in css and ".asset-detail-playrules {" in css
+
+
+def test_asset_detail_playrules_post_adds_and_removes_without_touching_other_fields():
+    db = _db()
+    token = uuid4().hex[:6]
+    first = _rule(db, f"v08-pa-{token}", f"PA{token}")
+    second = _rule(db, f"v08-pb-{token}", f"PB{token}")
+    first_id, second_id = first.id, second.id
+    first_name, second_name = first.name, second.name
+    client = _client()
+    asset_id = f"v08-dp-{token}"
+    _post_asset(client, asset_id, f"10.214.1.{int(token[:2], 16) % 250 + 1}", notes="keep me")
+    db.expire_all()
+    before = db.query(Asset).filter_by(asset_id=asset_id).one()
+    snapshot = (before.hostname, before.ip, before.type, before.scrape_address, before.notes, dict(before.extras), dict(before.alarms or {}))
+
+    def post(**data):
+        resp = client.post(f"/assets/{asset_id}/playrules", data={"playrules_present": "1", **data}, follow_redirects=False)
+        assert resp.status_code in {302, 303}, resp.text
+        assert resp.headers["location"].startswith(f"/assets/{asset_id}?notice=")
+        db.expire_all()
+        return db.query(Asset).filter_by(asset_id=asset_id).one()
+
+    assert post(playrule_add=str(first_id)).playrule_ids == [first_id]
+    after = post(playrule_ids=[str(first_id)], playrule_add=str(second_id))
+    assert after.playrule_ids == [first_id, second_id]
+    assert (after.hostname, after.ip, after.type, after.scrape_address, after.notes, dict(after.extras), dict(after.alarms or {})) == snapshot
+
+    card = _between(client.get(f"/assets/{asset_id}").text, "data-asset-playrules", "</section>")
+    rows = _between(card, "data-playrule-list", "</ol>")
+    assert rows.index(f'value="{first_id}"') < rows.index(f'value="{second_id}"')
+    assert f"{first_name} <span class=\"muted\">· PA{token}" in rows
+    assert f"{second_name} <span class=\"muted\">· PB{token}" in rows
+    assert "data-playrule-remove" in rows
+    assert f'<option value="{first_id}" data-name="{first_name}" data-meta="PA{token}" disabled>' in card
+    assert "hidden>No client playrules" in card
+
+    assert post(playrule_ids=[str(second_id), "999999"]).playrule_ids == [second_id]
+    assert post().playrule_ids == []
+    assert match_playrule(db, f"PB{token}", asset=db.query(Asset).filter_by(asset_id=asset_id).one()).id == second_id
+
+    denied = _viewer_client().post(
+        f"/assets/{asset_id}/playrules", data={"playrules_present": "1", "playrule_add": str(first_id)}, follow_redirects=False
+    )
+    assert denied.status_code == 403
+    db.expire_all()
+    assert db.query(Asset).filter_by(asset_id=asset_id).one().playrule_ids == []
+    assert client.post("/assets/v08-missing-asset/playrules", data={"playrules_present": "1"}).status_code == 404
     db.close()

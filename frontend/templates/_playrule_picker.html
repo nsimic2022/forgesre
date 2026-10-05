@@ -1,0 +1,25 @@
+    {% set picked = picked or [] %}
+    {% set picked_rules = [] %}
+    {% for pk in picked %}{% for rule in playrule_choices or [] if rule.id == pk %}{% set _ = picked_rules.append(rule) %}{% endfor %}{% endfor %}
+    {% set enabled_rules = (playrule_choices or [])|selectattr("enabled")|list %}
+    <label class="playrule-add"><span class="label-line">Add a playrule</span>
+      <select name="playrule_add" data-playrule-add{% if not enabled_rules %} disabled{% endif %}>
+        <option value="">{% if enabled_rules %}Choose a playrule…{% else %}No enabled playrules{% endif %}</option>
+        {% for rule in enabled_rules %}
+        <option value="{{ rule.id }}" data-name="{{ rule.name }}" data-meta="{{ rule.alertname or 'no alertname' }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}"{% if rule.id in picked %} disabled{% endif %}>{{ rule.name }} · {{ rule.alertname or "no alertname" }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <ol class="playrule-list" data-playrule-list>
+      {% for rule in picked_rules %}
+      <li class="playrule-chip" data-playrule-id="{{ rule.id }}">
+        <input type="hidden" name="playrule_ids" value="{{ rule.id }}">
+        <span class="playrule-chip-text">{{ rule.name }} <span class="muted">· {{ rule.alertname or "no alertname" }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}{% if not rule.enabled %} · disabled{% endif %}</span></span>
+        <button type="button" class="playrule-remove" data-playrule-remove aria-label="Remove {{ rule.name }}" title="Remove">×</button>
+      </li>
+      {% endfor %}
+    </ol>
+    <p class="muted playrule-empty" data-playrule-empty{% if picked_rules %} hidden{% endif %}>No client playrules — global Playrules apply.</p>
+    {% if not playrule_choices %}
+    <p class="muted">No playrules yet. Create one on <a href="/playrules">Playrules</a>.</p>
+    {% endif %}

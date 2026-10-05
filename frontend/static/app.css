@@ -997,6 +997,25 @@ td.ops-report-actions .row-actions a.button {
 .asset-detail-actions .row-actions {
   flex-wrap: wrap;
 }
+.asset-detail-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
+}
+.asset-facts-head {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--line);
+}
+.asset-detail-main h1 + .asset-facts-head { margin-top: 0.4rem; }
+.asset-detail-main .kv.asset-facts { margin: 0 0 0.4rem; }
+.asset-detail-playrules { min-width: 0; max-width: 100%; }
+.asset-detail-playrules h2 { margin-top: 0; }
+.asset-detail-playrules .playrule-add { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.5rem; }
+.asset-detail-playrules .playrule-detail-actions { margin-top: 0.7rem; flex-wrap: wrap; }
 .asset-detail-metrics h2 { margin-top: 0; }
 .asset-detail-metrics .pill.demo { margin: 0 0 0.55rem; }
 .metric-panel-head {

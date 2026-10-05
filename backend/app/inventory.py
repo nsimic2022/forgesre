@@ -640,6 +640,34 @@ def update_asset(
     return asset
 
 
+def set_asset_playrules(db: Session, asset: Asset, playrule_ids: list | None, *, actor: str = "system") -> Asset:
+    """Save only the Client playrule list (asset detail card). No detect, scrape, or SD change."""
+    before = asset_playrule_ids(asset)
+    asset.playrule_ids = known_playrule_ids(db, playrule_ids)
+    after = list(asset.playrule_ids or [])
+    audit(
+        db,
+        "asset.playrules",
+        actor=actor,
+        object_type="asset",
+        object_id=asset.asset_id,
+        data={"before": before, "after": after},
+    )
+    db.commit()
+    db.refresh(asset)
+    report(
+        db,
+        "inventory",
+        "asset.playrules",
+        "ok",
+        summary=f"Client playrules for {asset.hostname}: {len(after)}",
+        detail=f"actor={actor} before={before} after={after}",
+        object_type="asset",
+        object_id=asset.asset_id,
+    )
+    return asset
+
+
 def persist_live_classification(db: Session, asset: Asset, probe: object) -> bool:
     """Save type + scrape_address when verify/detect saw node_ or windows_ live.
 
