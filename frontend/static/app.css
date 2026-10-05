@@ -1407,6 +1407,35 @@ h1.incident-head .sev-warn { color: var(--warn); }
   .dash-top { grid-template-columns: 1fr; grid-template-areas: "inc" "infra" "app"; }
 }
 
+/* Dashboard: Recent incidents left, Prometheus graphs for the selected incident's host right. */
+.dash-incidents {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.dash-incidents > section { margin: 0; min-width: 0; }
+.dash-graphs { position: sticky; top: 1rem; margin: 2.35rem 0 0; min-width: 0; }
+.dash-graph-subject { margin: 0 0 0.25rem; font-weight: 600; overflow-wrap: anywhere; }
+.dash-graph-empty { margin: 0 0 0.5rem; font-size: 0.85rem; }
+.dash-graph-list { display: grid; gap: 0.55rem; }
+.dash-graph { border-top: 1px solid var(--line); padding-top: 0.45rem; }
+.dash-graph-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 0.9rem; }
+.dash-graph-none { margin: 0.2rem 0 0; font-size: 0.8rem; }
+.dash-chart { display: block; width: 100%; height: 3rem; margin-top: 0.2rem; background: var(--bg); border-radius: 6px; }
+.dash-chart-line { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke: var(--warn); }
+.dash-chart-line.ok { stroke: var(--ok); }
+.dash-chart-line.crit { stroke: var(--crit); }
+.dash-chart-threshold { stroke: var(--crit); stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.55; vector-effect: non-scaling-stroke; }
+.scan-list tr[data-dash-incident] { cursor: pointer; }
+.scan-list tr[data-dash-incident].is-selected td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.scan-list tr[data-dash-incident].is-selected td:last-child { box-shadow: inset -3px 0 0 var(--accent); }
+.scan-list tr[data-dash-incident]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 1100px) {
+  .dash-incidents { grid-template-columns: 1fr; }
+  .dash-graphs { position: static; margin-top: 0; }
+}
+
 /* Pager tabs on the left, rows-per-page select bottom-right. */
 .pager-bar {
   display: flex;

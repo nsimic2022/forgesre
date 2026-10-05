@@ -445,6 +445,174 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
   setInterval(load, 20000);
 })();
 
+(function bindDashGraphs() {
+  const pane = document.querySelector("[data-dash-graphs]");
+  const table = document.querySelector("[data-dash-incident-table]");
+  if (!pane || !table) return;
+  const rows = Array.from(table.querySelectorAll("tr[data-dash-incident]"));
+  const subject = pane.querySelector("[data-dash-graph-subject]");
+  const empty = pane.querySelector("[data-dash-graph-empty]");
+  const list = pane.querySelector("[data-dash-graph-list]");
+  const assetLink = pane.querySelector("[data-dash-graph-asset]");
+  const SVG = "http://www.w3.org/2000/svg";
+  const W = 200;
+  const H = 48;
+  let selected = null;
+  let timer = 0;
+  let seq = 0;
+
+  const showEmpty = (text) => {
+    if (list) list.replaceChildren();
+    if (!empty) return;
+    empty.textContent = text || "";
+    empty.hidden = !text;
+  };
+
+  const svgEl = (name, attrs) => {
+    const el = document.createElementNS(SVG, name);
+    Object.keys(attrs).forEach((key) => el.setAttribute(key, String(attrs[key])));
+    return el;
+  };
+
+  const yFor = (tile, v) => {
+    if (tile.kind === "up") return v >= 1 ? 4 : H - 4;
+    const clamped = Math.max(0, Math.min(100, v));
+    return H - 2 - (clamped / 100) * (H - 4);
+  };
+
+  const chart = (tile, values) => {
+    const svg = svgEl("svg", {
+      class: "dash-chart",
+      viewBox: "0 0 " + W + " " + H,
+      preserveAspectRatio: "none",
+      role: "img",
+      "aria-label": tile.name + " last hour",
+    });
+    if (tile.kind !== "up" && tile.threshold != null && tile.alarm_enabled !== false) {
+      const y = yFor(tile, Number(tile.threshold)).toFixed(1);
+      svg.appendChild(svgEl("line", { class: "dash-chart-threshold", x1: 0, x2: W, y1: y, y2: y }));
+    }
+    const last = values.length - 1;
+    const pts = [];
+    values.forEach((v, i) => {
+      const x = (i * W) / last;
+      const y = yFor(tile, v);
+      if (tile.kind === "up" && pts.length) pts.push(x.toFixed(1) + "," + pts[pts.length - 1].split(",")[1]);
+      pts.push(x.toFixed(1) + "," + y.toFixed(1));
+    });
+    svg.appendChild(svgEl("polyline", { class: "dash-chart-line " + (tile.tone || "warn"), points: pts.join(" ") }));
+    return svg;
+  };
+
+  const tileRow = (tile, labelEmpty) => {
+    const box = document.createElement("div");
+    box.className = "dash-graph";
+    box.setAttribute("data-graph", tile.key);
+    box.setAttribute("data-tone", tile.tone || "warn");
+    const head = document.createElement("div");
+    head.className = "dash-graph-head";
+    const name = document.createElement("span");
+    name.className = "metric-name";
+    name.textContent = tile.name;
+    const value = document.createElement("span");
+    value.className = "metric-value " + (tile.tone || "warn");
+    value.textContent = tile.value == null ? "—" : tile.display;
+    head.append(name, value);
+    box.appendChild(head);
+    const values = (Array.isArray(tile.series) ? tile.series : []).map(Number).filter((v) => isFinite(v));
+    if (values.length >= 2) {
+      box.appendChild(chart(tile, values));
+    } else if (labelEmpty) {
+      const none = document.createElement("p");
+      none.className = "muted dash-graph-none";
+      none.textContent = "No samples yet";
+      box.appendChild(none);
+    }
+    return box;
+  };
+
+  const paint = (data) => {
+    if (!data || !Array.isArray(data.tiles)) {
+      showEmpty("Metrics unavailable.");
+      return;
+    }
+    const tiles = data.tiles;
+    const anySeries = tiles.some((t) => Array.isArray(t.series) && t.series.length >= 2);
+    if (data.collecting === null && data.error) {
+      showEmpty("Prometheus is unreachable — no samples.");
+      return;
+    }
+    if (empty) {
+      const line = data.collecting_line || "";
+      empty.textContent = anySeries ? line : "No samples yet" + (line ? " — " + line : "");
+      empty.hidden = false;
+    }
+    if (list) list.replaceChildren(...tiles.map((tile) => tileRow(tile, anySeries)));
+  };
+
+  const load = () => {
+    if (!selected) return;
+    const asset = selected.getAttribute("data-asset") || "";
+    if (!asset) return;
+    const mine = ++seq;
+    fetch("/api/v1/assets/" + encodeURIComponent(asset) + "/metrics", { headers: { Accept: "application/json" } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (mine === seq) paint(data);
+      })
+      .catch(() => {
+        if (mine === seq) showEmpty("Metrics unavailable.");
+      });
+  };
+
+  const select = (row) => {
+    if (!row) return;
+    rows.forEach((r) => {
+      r.classList.toggle("is-selected", r === row);
+      if (r === row) r.setAttribute("aria-current", "true");
+      else r.removeAttribute("aria-current");
+    });
+    selected = row;
+    seq++;
+    if (timer) window.clearInterval(timer);
+    timer = 0;
+    const number = row.getAttribute("data-dash-incident") || "";
+    const asset = row.getAttribute("data-asset") || "";
+    const host = row.getAttribute("data-host") || "";
+    if (subject) subject.textContent = number + (asset || host ? " · " + (asset || host) : "");
+    if (assetLink) {
+      assetLink.hidden = !asset;
+      assetLink.href = asset ? "/assets/" + encodeURIComponent(asset) : "#";
+    }
+    if (!asset) {
+      showEmpty("No host to chart");
+      return;
+    }
+    showEmpty("Loading…");
+    load();
+    timer = window.setInterval(load, 30000);
+  };
+
+  table.addEventListener("click", (event) => {
+    if (event.target.closest("a, input, button, label")) return;
+    const row = event.target.closest("tr[data-dash-incident]");
+    if (row) select(row);
+  });
+  table.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const row = event.target.closest("tr[data-dash-incident]");
+    if (!row || event.target !== row) return;
+    event.preventDefault();
+    select(row);
+  });
+
+  if (!rows.length) {
+    showEmpty("No host to chart");
+    return;
+  }
+  select(rows.find((r) => r.getAttribute("data-active") === "true") || rows[0]);
+})();
+
 (function bindInfoTips() {
   const DELAY_MS = 400;
   const GAP = 8;

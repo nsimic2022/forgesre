@@ -243,6 +243,7 @@ def _tile(
     *,
     threshold: float | None,
     spark: str = "",
+    series: list[float] | None = None,
     query: str = "",
     enabled: bool = True,
 ) -> dict[str, Any]:
@@ -261,6 +262,7 @@ def _tile(
         "alarm_enabled": enabled,
         "bar_pct": bar,
         "spark": spark,
+        "series": [round(float(v), 3) for v in (series or [])],
         "query": query,
     }
 
@@ -312,6 +314,7 @@ def asset_metric_panel(
     samples: dict[str, float | None] = {}
     queries: dict[str, str] = {}
     sparks: dict[str, str] = {}
+    series: dict[str, list[float]] = {}
     prom_error = ""
     prom_down = False
     selectors = promql_selectors_for(info)
@@ -370,9 +373,9 @@ def asset_metric_panel(
             ranged = spark_fetch(expr)
             if ranged.get("error"):
                 break
-            sparks[key] = _spark_points(
-                [v for v in (_finite(raw) for raw in (ranged.get("values") or [])) if v is not None]
-            )
+            values = [v for v in (_finite(raw) for raw in (ranged.get("values") or [])) if v is not None]
+            series[key] = values
+            sparks[key] = _spark_points(values)
 
     collecting: bool | None
     if prom_down:
@@ -394,6 +397,7 @@ def asset_metric_panel(
             samples.get(key),
             threshold=tile_threshold(alarms, key, bundled.get(key)) if key != "up" else None,
             spark=sparks.get(key) or "",
+            series=series.get(key),
             query=queries.get(key) or "",
             enabled=tile_enabled(alarms, key),
         )
