@@ -29,6 +29,9 @@
   <dt>Email</dt><dd>{% if asset.owner_email %}{{ asset.owner_email }}{% else %}<span class="pill warn">No owner email</span> <span class="muted">Escalation mail is recorded as no-recipient and not sent, unless the escalation step names an address.</span>{% endif %}</dd>
   <dt>Phone</dt><dd>{{ asset.owner_phone or "—" }}</dd>
   <dt>Notes</dt><dd>{{ asset.notes or "—" }}</dd>
+  {% set sup = support_status(asset) %}
+  <dt><span class="label-line">Support {% with %}{% set tip %}From the asset's Support coverage (Edit → NOC contacts). Expiring = the To date is within {{ sup.lead_days }} days. Reminder only — no alert, incident, or Playrule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt>
+  <dd><span class="pill support-pill {{ sup.tone }}" data-support-state="{{ sup.state }}">{{ sup.label }}</span> <span class="muted">{{ sup.detail }}</span></dd>
   {% for key, label, value in extras_rows(asset) %}
   <dt>{{ label }}</dt><dd class="extra-{{ key }}">{% if key == 'runbook_note' %}<span class="pre-wrap">{{ value }}</span>{% else %}{{ value }}{% endif %}</dd>
   {% endfor %}
@@ -127,6 +130,9 @@
     {% endif %}
   </div>
   {% if metrics.demo %}<span class="pill demo">DEMO</span>{% endif %}
+  {% if sup.warn %}
+  <div class="support-warning" data-support-warning role="status"><strong>{{ sup.label }}</strong> — {{ sup.detail }}. Warning only; no alert or incident is opened for this.</div>
+  {% endif %}
   <p class="muted">{{ metrics.collecting_line }}</p>
   <div class="metric-tiles">
     {% for tile in metrics.tiles %}

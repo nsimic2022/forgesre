@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.asset_extras import extras_rows
+from app.asset_extras import extras_rows, support_status
 from app.email_html import DASH, esc, prose_to_html, render_email
 from app.models import Incident
 
@@ -45,6 +45,9 @@ def build_escalation_body(incident: Incident, step_key: str, policy_role: str) -
             ]
         )
         lines.extend(f"{label}: {value}" for _key, label, value in extras_rows(asset))
+        support = support_status(asset)
+        if support["state"] != "unknown":
+            lines.append(f"Support: {support['call_note']}")
         if asset.notes:
             lines.append(f"Notes: {asset.notes}")
     return "\n".join(lines) + "\n"
@@ -75,6 +78,9 @@ def build_escalation_html(incident: Incident, step_key: str, policy_role: str) -
             ]
         )
         meta.extend((label, esc(value)) for key, label, value in extras_rows(asset) if key != "runbook_note")
+        support = support_status(asset)
+        if support["state"] != "unknown":
+            meta.append(("Support", esc(support["call_note"])))
         for key, label, value in extras_rows(asset):
             if key == "runbook_note":
                 sections.append((label, prose_to_html(value), True))

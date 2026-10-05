@@ -65,6 +65,8 @@
         {% else %}
           <div class="muted">{{ asset.owner_email }}</div>
         {% endif %}
+        {% set sup = support_status(asset) %}
+        <div><span class="pill support-pill {{ sup.tone }}" data-support-state="{{ sup.state }}" title="{{ sup.detail }}">{{ sup.label }}</span></div>
       </td>
       <td class="asset-type" title="{{ asset.type }}">{{ asset_type_abbrev(asset.type) }}</td>
       <td>{{ asset.environment }}</td>

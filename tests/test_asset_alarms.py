@@ -81,8 +81,9 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     alarm_at = page.text.find("alarm-families")
     type_at = page.text.find('name="type"')
     left_at = page.text.find("asset-form-left")
+    middle_at = page.text.find("asset-form-middle")
     right_at = page.text.find("asset-form-right")
-    assert 0 < left_at < id_at < host_at < ip_at < type_at < right_at < alarm_at
+    assert 0 < left_at < id_at < host_at < ip_at < type_at < middle_at < alarm_at < right_at
     assert 'placeholder="win10-gp"' in page.text
     assert "Set at add; cannot change" not in page.text
     table = page.text.split("<table")[1].split("</table>")[0]

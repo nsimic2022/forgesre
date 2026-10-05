@@ -1,16 +1,27 @@
-"""V0.8: version string, appliance NET dash, Dashboard journal pager, asset NOC extras, Client playrules."""
+"""V0.8: version string, appliance NET dash, Dashboard journal pager, asset NOC extras, Client playrules,
+support coverage."""
 
 from __future__ import annotations
 
 import re
 import subprocess
+from datetime import date, timedelta
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.asset_extras import EXTRA_KEYS, extras_from_form, normalize_extras, playrule_ids_from_form
+from app.asset_extras import (
+    DISPLAY_KEYS,
+    EXTRA_KEYS,
+    SUPPORT_KEYS,
+    extras_from_form,
+    extras_rows,
+    normalize_extras,
+    playrule_ids_from_form,
+    support_status,
+)
 from app.db import Base, SessionLocal, engine
 from app.host_resources import network_status
 from app.journal import report
@@ -109,8 +120,8 @@ def test_version_is_0_8_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v0.8</span>" in base
     assert "v0.7" not in base
-    assert "app.css?v=v08-1" in base
-    assert "app.js?v=v08-1" in base
+    assert "app.css?v=v08-2" in base
+    assert "app.js?v=v08-2" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.8.0" in text
@@ -265,35 +276,76 @@ def test_extras_normalize_and_form_helpers():
     assert playrule_ids_from_form("1", []) == []
     assert playrule_ids_from_form("1", ["3", "x", "3", "-1", "5"]) == [3, 5]
     assert len(normalize_extras({"runbook_note": "a" * 9000})["runbook_note"]) == 4000
-    assert set(EXTRA_KEYS) == {
+    assert set(DISPLAY_KEYS) == {
         "customer", "site", "backup_name", "backup_phone", "backup_email",
         "support_hours", "timezone", "contract", "runbook_note",
     }
+    assert SUPPORT_KEYS == ("support", "support_from", "support_to", "support_lead_days")
+    assert set(EXTRA_KEYS) == set(DISPLAY_KEYS) | set(SUPPORT_KEYS)
+    assert playrule_ids_from_form("1", ["3"], "7") == [3, 7]
+    assert playrule_ids_from_form("1", ["3"], "3") == [3]
+    assert playrule_ids_from_form("1", [], "") == []
 
 
-def test_asset_form_is_two_columns_with_new_fields():
-    _db().close()
+def _between(text: str, start: str, end: str) -> str:
+    return text.split(start, 1)[1].split(end, 1)[0]
+
+
+def test_asset_form_is_three_columns_with_dropdown_playrules():
+    db = _db()
+    token = uuid4().hex[:6]
+    enabled = _rule(db, f"v08-drop-{token}", f"Drop{token}")
+    disabled = _rule(db, f"v08-off-{token}", f"Off{token}", enabled=False)
+    enabled_id, disabled_id = enabled.id, disabled.id
+    db.close()
     page = _client().get("/assets")
     assert page.status_code == 200
     text = page.text
     left = text.index("asset-form-left")
+    middle = text.index("asset-form-middle")
     right = text.index("asset-form-right")
+    assert left < middle < right
     for name in (
         "extra_customer", "extra_site", "extra_backup_name", "extra_backup_phone", "extra_backup_email",
         "extra_support_hours", "extra_timezone", "extra_contract", "extra_runbook_note",
+        "extra_support", "extra_support_from", "extra_support_to", "extra_support_lead_days",
         "asset_id", "hostname", "owner_email", "owner_phone", "scrape_address", "notes",
     ):
         at = text.index(f'name="{name}"')
-        assert left < at < right, name
-    assert right < text.index("alarm-families") < text.index("data-client-playrules")
+        assert left < at < middle, name
+    assert text.index("data-asset-contacts") < text.index("data-asset-support") < middle
+    assert middle < text.index("alarm-families") < right < text.index("data-client-playrules")
     assert "Standard alarms" in text
     assert "It cannot fire earlier than the Prometheus rule in alerts.yml." in text
-    assert "Client playrules" in text
-    assert "This does not create Prometheus thresholds." in text
     assert '<textarea name="extra_runbook_note"' in text
+
+    support = _between(text, "data-asset-support", "asset-form-middle")
+    for value in ("yes", "no", "internal"):
+        assert f'<option value="{value}"' in support
+    assert 'type="date"' in support
+    assert '<option value="14" selected>14 days</option>' in support
+    assert '<option value="7"' in support and '<option value="30"' in support
+
+    playrules = _between(text, "data-client-playrules", "</form>")
+    assert "Client playrules" in playrules
+    assert "This does not create Prometheus thresholds." in playrules
+    assert 'type="checkbox"' not in playrules
+    assert '<select name="playrule_add" data-playrule-add' in playrules
+    assert f'<option value="{enabled_id}"' in playrules
+    assert f'<option value="{disabled_id}"' not in playrules
+    assert "data-playrule-list" in playrules
+    assert 'name="playrule_ids"' not in playrules
+    empty = _between(playrules, "data-playrule-empty", "</p>")
+    assert "hidden" not in empty
+    assert "No client playrules — global Playrules apply." in empty
+
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".asset-form-split" in css
-    assert "border-left: 1px solid var(--line);" in css.split(".asset-form-right {", 1)[1].split("}", 1)[0]
+    block = css.split("/* Add / Edit asset: three columns", 1)[1].split(".asset-form-block {", 1)[0]
+    assert "grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr) minmax(16rem, 1.1fr);" in block
+    rules = block.split(".asset-form-middle,\n.asset-form-right {", 1)[1].split("}", 1)[0]
+    assert "border-left: 1px solid var(--line);" in rules
+    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    assert "bindClientPlayrules" in js and "[data-playrule-remove]" in js
 
 
 def test_asset_extras_persist_edit_clone_and_show_on_incident():
@@ -420,9 +472,27 @@ def test_playrule_picker_does_not_change_match_for_unlinked_assets():
     assert match_playrule(db, alertname, asset=linked) is global_rule
 
     edit = client.get(f"/assets?edit={linked_id}")
-    picker = edit.text.split("data-client-playrules", 1)[1]
-    assert f'name="playrule_ids" value="{client_rule.id}" checked' in picker
-    assert "disabled" in picker
+    picker = edit.text.split("data-client-playrules", 1)[1].split("</form>", 1)[0]
+    rows = picker.split("data-playrule-list", 1)[1].split("</ol>", 1)[0]
+    assert rows.index(f'value="{other_rule.id}"') < rows.index(f'value="{client_rule.id}"')
+    assert f'<input type="hidden" name="playrule_ids" value="{client_rule.id}">' in rows
+    assert "· disabled" in rows
+    assert "data-playrule-remove" in rows
+    assert f'<option value="{client_rule.id}"' not in picker
+    assert f'<option value="{other_rule.id}" data-name="{other_rule.name}"' in picker
+    assert "hidden>No client playrules" in picker
+
+    added = client.post(
+        f"/assets/{linked_id}/update",
+        data={
+            "hostname": linked_id, "ip": linked.ip, "type": "Linux Server", "playrules_present": "1",
+            "playrule_ids": [str(other_rule.id)], "playrule_add": str(global_rule.id),
+        },
+        follow_redirects=False,
+    )
+    assert added.status_code in {302, 303}
+    db.expire_all()
+    assert db.query(Asset).filter_by(asset_id=linked_id).one().playrule_ids == [other_rule.id, global_rule.id]
     cleared = client.post(
         f"/assets/{linked_id}/update",
         data={"hostname": linked_id, "ip": linked.ip, "type": "Linux Server", "playrules_present": "1"},
@@ -433,4 +503,146 @@ def test_playrule_picker_does_not_change_match_for_unlinked_assets():
     after = db.query(Asset).filter_by(asset_id=linked_id).one()
     assert after.playrule_ids == []
     assert after.extras["backup_name"] == "Mila Backup"
+    db.close()
+
+
+# --- Support coverage -------------------------------------------------------------
+
+
+class _Row:
+    def __init__(self, **extras):
+        self.extras = extras
+
+
+def test_support_status_states_and_lead_time():
+    today = date(2026, 10, 5)
+
+    def state(**extras):
+        return support_status(_Row(**extras), today=today)
+
+    unknown = state()
+    assert (unknown["state"], unknown["tone"], unknown["warn"]) == ("unknown", "grey", False)
+    assert state(support="yes")["state"] == "unknown"
+    assert state(support="internal")["state"] == "unknown"
+
+    inside = state(support="yes", support_from="2026-01-01", support_to="2027-01-01")
+    assert (inside["state"], inside["label"], inside["tone"], inside["warn"]) == ("in", "In support", "ok", False)
+    assert inside["detail"] == "Support until 2027-01-01"
+    open_end = state(support="internal", support_from="2026-01-01")
+    assert open_end["state"] == "in" and open_end["detail"] == "Internal support, no end date"
+    assert state(support_to="2027-01-01")["state"] == "in"
+
+    soon = state(support="yes", support_from="2026-01-01", support_to="2026-10-15")
+    assert (soon["state"], soon["tone"], soon["warn"]) == ("expiring", "warn", True)
+    assert soon["lead_days"] == 14 and soon["days_left"] == 10
+    assert soon["call_note"] == "Expiring — Support ends 2026-10-15 (in 10 days)"
+    assert state(support="yes", support_to="2026-10-19")["state"] == "expiring"
+    assert state(support="yes", support_to="2026-10-20")["state"] == "in"
+    assert state(support="yes", support_to="2026-10-05")["detail"].endswith("(today)")
+    assert state(support="yes", support_to="2026-10-15", support_lead_days="7")["state"] == "in"
+    assert state(support="yes", support_to="2026-11-01", support_lead_days="30")["state"] == "expiring"
+
+    past = state(support="yes", support_from="2025-01-01", support_to="2026-10-04")
+    assert (past["state"], past["label"], past["tone"], past["warn"]) == ("expired", "Out of support", "crit", True)
+    assert past["call_note"] == "Out of support — vendor may not take a ticket"
+    assert past["detail"] == "Support ended 2026-10-04"
+    no_contract = state(support="no")
+    assert no_contract["state"] == "expired" and no_contract["detail"] == "No support contract"
+    assert state(support="no", support_to="2030-01-01")["state"] == "expired"
+    assert state(support="yes", support_from="2026-11-01")["state"] == "expired"
+
+    assert {unknown["state"], inside["state"], soon["state"], past["state"]} == {"unknown", "in", "expiring", "expired"}
+
+
+def test_support_normalize_keeps_block_out_of_generic_rows():
+    raw = {
+        "support": " Internal ", "support_from": "2026-01-01", "support_to": "not-a-date",
+        "support_lead_days": "45", "site": "DC1",
+    }
+    assert normalize_extras(raw) == {
+        "site": "DC1", "support": "internal", "support_from": "2026-01-01", "support_lead_days": "14",
+    }
+    assert normalize_extras({"support": "maybe", "support_lead_days": "30"}) == {}
+    assert normalize_extras({"support": "no", "support_lead_days": "7"})["support_lead_days"] == "7"
+    keys = [key for key, _label, _value in extras_rows(_Row(**normalize_extras(raw)))]
+    assert keys == ["site"]
+
+
+def _support_form(kind: str, start: date | None, end: date | None, lead: int = 14) -> dict:
+    return {
+        "extra_support": kind,
+        "extra_support_from": start.isoformat() if start else "",
+        "extra_support_to": end.isoformat() if end else "",
+        "extra_support_lead_days": str(lead),
+    }
+
+
+def test_support_shows_on_list_detail_incident_and_never_opens_an_incident():
+    db = _db()
+    client = _client()
+    token = uuid4().hex[:6]
+    today = date.today()
+    octet = int(token[:2], 16) % 250 + 1
+    cases = {
+        "in": _support_form("yes", today - timedelta(days=100), today + timedelta(days=200)),
+        "expiring": _support_form("yes", today - timedelta(days=100), today + timedelta(days=5)),
+        "expired": _support_form("yes", today - timedelta(days=400), today - timedelta(days=1)),
+        "unknown": _support_form("", None, None),
+    }
+    ids = {}
+    for n, (state, form) in enumerate(cases.items()):
+        asset_id = f"v08-s{state}-{token}"
+        ids[state] = asset_id
+        _post_asset(client, asset_id, f"10.210.{n + 1}.{octet}", **form)
+    db.expire_all()
+    before = db.query(Incident).count()
+
+    stored = db.query(Asset).filter_by(asset_id=ids["expiring"]).one().extras
+    assert stored["support"] == "yes" and stored["support_lead_days"] == "14"
+    assert stored["support_to"] == (today + timedelta(days=5)).isoformat()
+    assert "support" not in db.query(Asset).filter_by(asset_id=ids["unknown"]).one().extras
+
+    listing = client.get("/assets?per_page=100&q=" + token).text
+    for state, asset_id in ids.items():
+        row = listing.split(f">{asset_id}<", 1)[1].split("</tr>", 1)[0]
+        assert f'data-support-state="{state}"' in row, state
+
+    labels = {"in": "In support", "expiring": "Support expiring", "expired": "Out of support", "unknown": "Support unknown"}
+    for state, asset_id in ids.items():
+        detail = client.get(f"/assets/{asset_id}").text
+        assert f'data-support-state="{state}">{labels[state]}</span>' in detail, state
+        panel = detail.split("data-asset-metrics", 1)[1]
+        if state in {"expiring", "expired"}:
+            assert "data-support-warning" in panel
+            assert "no alert or incident is opened" in panel
+        else:
+            assert "data-support-warning" not in panel
+
+    edit = client.get(f"/assets?edit={ids['expiring']}").text
+    support = edit.split("data-asset-support", 1)[1].split("asset-form-middle", 1)[0]
+    assert '<option value="yes" selected>' in support
+    assert f'value="{(today + timedelta(days=5)).isoformat()}"' in support
+
+    clone_id = f"v08-sclone-{token}"
+    api_clone = client.post(f"/api/v1/assets/{ids['expired']}/clone", json={"asset_id": clone_id, "hostname": clone_id})
+    assert api_clone.status_code == 200, api_clone.text
+    assert api_clone.json()["extras"]["support_to"] == (today - timedelta(days=1)).isoformat()
+    assert api_clone.json()["support_status"]["state"] == "expired"
+    assert "support_to" in client.get(f"/assets?clone={ids['expired']}").text.split("data-asset-support", 1)[1]
+
+    db.expire_all()
+    assert db.query(Incident).count() == before
+    alerts = (ROOT / "monitoring" / "alerts.yml").read_text(encoding="utf-8")
+    assert "Support" not in alerts
+
+    incident = ingest_alertmanager(db, _alert("V08SupportProbe", ids["expired"]))[0]
+    who = client.get(f"/incidents/{incident.number}").text.split("Who to call", 1)[1].split("Send incident report", 1)[0]
+    assert 'data-support-state="expired"' in who
+    assert "Out of support — vendor may not take a ticket" in who
+    assert "Support ended" in who
+    assert "Support: Out of support — vendor may not take a ticket" in build_escalation_body(incident, "immediate", "team")
+    plain = ingest_alertmanager(db, _alert("V08SupportProbe", ids["unknown"]))[0]
+    plain_who = client.get(f"/incidents/{plain.number}").text.split("Who to call", 1)[1].split("Send incident report", 1)[0]
+    assert "Unknown — support dates not filled" in plain_who
+    assert "Support:" not in build_escalation_body(plain, "immediate", "team")
     db.close()

@@ -58,6 +58,8 @@
     <dt>Contact</dt><dd>{{ incident.asset.contact_name or "—" }}</dd>
     <dt>Email</dt><dd>{% if incident.asset.owner_email %}{{ incident.asset.owner_email }}{% else %}<span class="pill warn">No owner email</span> <span class="muted">escalation has nobody to mail</span>{% endif %}</dd>
     <dt>Phone</dt><dd>{{ incident.asset.owner_phone or "—" }}</dd>
+    {% set sup = support_status(incident.asset) %}
+    <dt>Support</dt><dd data-support-state="{{ sup.state }}"><span class="pill support-pill {{ sup.tone }}">{{ sup.label }}</span> {{ sup.call_note }}{% if sup.state == 'expired' %} <span class="muted">({{ sup.detail }})</span>{% endif %}</dd>
     {% for key, label, value in extras_rows(incident.asset) if key != 'runbook_note' %}
     <dt>{{ label }}</dt><dd class="extra-{{ key }}">{{ value }}</dd>
     {% endfor %}

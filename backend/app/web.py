@@ -17,7 +17,16 @@ from app.asset_probe import reachability_snapshot
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.asset_alarms import alarms_from_form, saved_alarm_hostnames
-from app.asset_extras import EXTRA_FIELDS, extras_from_form, extras_rows, playrule_ids_from_form
+from app.asset_extras import (
+    EXTRA_FIELDS,
+    SUPPORT_CHOICES,
+    SUPPORT_LEAD_CHOICES,
+    SUPPORT_LEAD_DEFAULT,
+    extras_from_form,
+    extras_rows,
+    playrule_ids_from_form,
+    support_status,
+)
 from app.inventory import (
     ASSET_TYPE_CHOICES,
     CANDIDATE_ROLE_CHOICES,
@@ -282,6 +291,7 @@ def ctx(request: Request, user: User | None, **extra):
         "pager_keep": pager_keep,
         "ack_circle": ack_circle,
         "extras_rows": extras_rows,
+        "support_status": support_status,
     }
     data.update(extra)
     return data
@@ -513,6 +523,9 @@ def assets_page(
         pager=pager,
         extra_fields=EXTRA_FIELDS,
         playrule_choices=playrule_choices(db),
+        support_choices=SUPPORT_CHOICES,
+        support_lead_choices=SUPPORT_LEAD_CHOICES,
+        support_lead_default=SUPPORT_LEAD_DEFAULT,
     )
 
 
@@ -604,8 +617,13 @@ def asset_create(
     extra_timezone: str = Form(""),
     extra_contract: str = Form(""),
     extra_runbook_note: str = Form(""),
+    extra_support: str = Form(""),
+    extra_support_from: str = Form(""),
+    extra_support_to: str = Form(""),
+    extra_support_lead_days: str = Form(""),
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
+    playrule_add: str = Form(""),
 ):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
@@ -631,8 +649,12 @@ def asset_create(
         timezone=extra_timezone,
         contract=extra_contract,
         runbook_note=extra_runbook_note,
+        support=extra_support,
+        support_from=extra_support_from,
+        support_to=extra_support_to,
+        support_lead_days=extra_support_lead_days,
     )
-    posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids)
+    posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
     try:
         asset = create_manual_asset(
             db,
@@ -1066,8 +1088,13 @@ def asset_update(
     extra_timezone: str = Form(""),
     extra_contract: str = Form(""),
     extra_runbook_note: str = Form(""),
+    extra_support: str = Form(""),
+    extra_support_from: str = Form(""),
+    extra_support_to: str = Form(""),
+    extra_support_lead_days: str = Form(""),
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
+    playrule_add: str = Form(""),
 ):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
@@ -1095,8 +1122,12 @@ def asset_update(
         timezone=extra_timezone,
         contract=extra_contract,
         runbook_note=extra_runbook_note,
+        support=extra_support,
+        support_from=extra_support_from,
+        support_to=extra_support_to,
+        support_lead_days=extra_support_lead_days,
     )
-    posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids)
+    posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
     update_asset(
         db,
         item,

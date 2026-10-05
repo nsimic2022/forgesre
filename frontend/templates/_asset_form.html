@@ -61,9 +61,31 @@
   <label class="wide"><span class="label-line">Runbook note {% with %}{% set tip %}Free text for the operator on shift, shown on the incident page. ForgeSRE does not act on it — e.g. it does not change any threshold.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <textarea name="extra_runbook_note" rows="3" placeholder="Ignore disk until 95%; then call the backup on-call.">{{ ex.runbook_note }}</textarea></label>
   </div>
+  <div class="asset-support" data-asset-support>
+  <h4 class="asset-support-head label-line">Support coverage {% with %}{% set tip %}Whether a vendor or your own team will take a ticket for this host, and until when. Shown as a pill on Assets and on the incident Who to call. Expiring = the To date is within the lead time. This is a reminder only — it does not create an alert, incident, or Playrule, and nothing is written to NetBox.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h4>
+  <div class="form-grid asset-form-grid">
+  <label>Under support
+    <select name="extra_support" data-support-kind>
+      <option value="" {% if not ex.support %}selected{% endif %}>Not set</option>
+      {% for value, label in support_choices %}
+      <option value="{{ value }}" {% if ex.support == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select></label>
+  <label>Lead time
+    <select name="extra_support_lead_days">
+      {% set lead = (ex.support_lead_days or support_lead_default)|int %}
+      {% for days in support_lead_choices %}
+      <option value="{{ days }}" {% if lead == days %}selected{% endif %}>{{ days }} days</option>
+      {% endfor %}
+    </select></label>
+  <label>From <input name="extra_support_from" type="date" value="{{ ex.support_from }}"></label>
+  <label><span class="label-line">To {% with %}{% set tip %}Empty = no end date.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="extra_support_to" type="date" value="{{ ex.support_to }}"></label>
   </div>
   </div>
-  <div class="asset-form-col asset-form-right">
+  </div>
+  </div>
+  <div class="asset-form-col asset-form-middle">
   <input type="hidden" name="alarms_present" value="1">
   <div class="asset-form-block alarm-families" data-alarm-families>
     <h3 class="asset-form-block-head alarm-heading label-line">Standard alarms {% with %}{% set tip %}Per-host enable and % overlay on the Alertmanager webhook. PromQL still lives in monitoring/alerts.yml. Not a second alerting engine and not a Playrule. cpu / mem / disk / up only — not every exporter series. Auto-detect still picks Linux / Windows / Network.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
@@ -81,17 +103,37 @@
     <label class="alarm-row"><input type="checkbox" name="alarm_disk_enabled" value="1" data-alarm-disk {% if disk_a.get('enabled', True) %}checked{% endif %}> Disk
       <input type="number" name="alarm_disk_threshold" min="1" max="100" step="1" value="{{ disk_a.get('threshold') or 90 }}" data-alarm-disk-th> %</label>
   </div>
+  </div>
+  <div class="asset-form-col asset-form-right">
   <div class="asset-form-block client-playrules" data-client-playrules>
-    <h3 class="asset-form-block-head label-line">Client playrules {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the ticked playrule (and its playbook / escalation) instead of the first global playrule with the same alertname. Ticked rules are tried in list order. Nothing ticked, or no ticked rule matches the alertname = the global playrule match, unchanged. Disabled playrules are skipped.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h3 class="asset-form-block-head label-line">Client playrules {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first playrule in this list (enabled, same alertname) and its playbook / escalation instead of the first global playrule with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = the global playrule match, unchanged. Disabled playrules are skipped.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     <input type="hidden" name="playrules_present" value="1">
     <p class="muted alarm-limit">This does not create Prometheus thresholds. It records which playrule / playbook this asset prefers when that alertname arrives. Matching is still by alertname only.</p>
     {% set picked = form.playrule_ids or [] %}
-    {% for rule in playrule_choices or [] %}
-    <label class="alarm-row playrule-pick"><input type="checkbox" name="playrule_ids" value="{{ rule.id }}" {% if rule.id in picked %}checked{% endif %}>
-      <span>{{ rule.name }} <span class="muted">· {{ rule.alertname or "no alertname" }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}{% if not rule.enabled %} · disabled{% endif %}</span></span></label>
-    {% else %}
-    <p class="muted">No playrules yet. Create one on <a href="/playrules">Playrules</a>; global alertname matching applies meanwhile.</p>
-    {% endfor %}
+    {% set picked_rules = [] %}
+    {% for pk in picked %}{% for rule in playrule_choices or [] if rule.id == pk %}{% set _ = picked_rules.append(rule) %}{% endfor %}{% endfor %}
+    {% set enabled_rules = (playrule_choices or [])|selectattr("enabled")|list %}
+    <label class="playrule-add"><span class="label-line">Add a playrule</span>
+      <select name="playrule_add" data-playrule-add{% if not enabled_rules %} disabled{% endif %}>
+        <option value="">{% if enabled_rules %}Choose a playrule…{% else %}No enabled playrules{% endif %}</option>
+        {% for rule in enabled_rules %}
+        <option value="{{ rule.id }}" data-name="{{ rule.name }}" data-meta="{{ rule.alertname or 'no alertname' }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}"{% if rule.id in picked %} disabled{% endif %}>{{ rule.name }} · {{ rule.alertname or "no alertname" }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <ol class="playrule-list" data-playrule-list>
+      {% for rule in picked_rules %}
+      <li class="playrule-chip" data-playrule-id="{{ rule.id }}">
+        <input type="hidden" name="playrule_ids" value="{{ rule.id }}">
+        <span class="playrule-chip-text">{{ rule.name }} <span class="muted">· {{ rule.alertname or "no alertname" }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}{% if not rule.enabled %} · disabled{% endif %}</span></span>
+        <button type="button" class="playrule-remove" data-playrule-remove aria-label="Remove {{ rule.name }}" title="Remove">×</button>
+      </li>
+      {% endfor %}
+    </ol>
+    <p class="muted playrule-empty" data-playrule-empty{% if picked_rules %} hidden{% endif %}>No client playrules — global Playrules apply.</p>
+    {% if not playrule_choices %}
+    <p class="muted">No playrules yet. Create one on <a href="/playrules">Playrules</a>.</p>
+    {% endif %}
   </div>
   </div>
   {% if form_mode == "clone" %}

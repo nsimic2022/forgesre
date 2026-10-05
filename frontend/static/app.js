@@ -310,6 +310,61 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
   ip.addEventListener("change", run);
 })();
 
+(function bindClientPlayrules() {
+  const box = document.querySelector("[data-client-playrules]");
+  if (!box) return;
+  const select = box.querySelector("[data-playrule-add]");
+  const list = box.querySelector("[data-playrule-list]");
+  const empty = box.querySelector("[data-playrule-empty]");
+  if (!select || !list) return;
+  const sync = () => {
+    if (empty) empty.hidden = list.children.length > 0;
+  };
+  const optionFor = (id) => select.querySelector('option[value="' + id + '"]');
+  list.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-playrule-remove]");
+    if (!button) return;
+    const row = button.closest("[data-playrule-id]");
+    if (!row) return;
+    const option = optionFor(row.getAttribute("data-playrule-id"));
+    if (option) option.disabled = false;
+    row.remove();
+    sync();
+  });
+  select.addEventListener("change", () => {
+    const id = select.value;
+    if (!id) return;
+    const option = optionFor(id);
+    select.value = "";
+    if (!option || list.querySelector('[data-playrule-id="' + id + '"]')) return;
+    const row = document.createElement("li");
+    row.className = "playrule-chip";
+    row.setAttribute("data-playrule-id", id);
+    const hidden = document.createElement("input");
+    hidden.type = "hidden";
+    hidden.name = "playrule_ids";
+    hidden.value = id;
+    const text = document.createElement("span");
+    text.className = "playrule-chip-text";
+    text.textContent = (option.getAttribute("data-name") || option.textContent) + " ";
+    const meta = document.createElement("span");
+    meta.className = "muted";
+    meta.textContent = "· " + (option.getAttribute("data-meta") || "");
+    text.appendChild(meta);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "playrule-remove";
+    remove.setAttribute("data-playrule-remove", "");
+    remove.setAttribute("aria-label", "Remove " + (option.getAttribute("data-name") || ""));
+    remove.title = "Remove";
+    remove.textContent = "×";
+    row.append(hidden, text, remove);
+    list.appendChild(row);
+    option.disabled = true;
+    sync();
+  });
+})();
+
 (function bindAssetReachability() {
   const boxes = document.querySelectorAll("[data-asset-reach]");
   if (!boxes.length) return;
