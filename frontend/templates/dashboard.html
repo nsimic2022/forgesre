@@ -64,6 +64,39 @@
   </div>
 </dialog>
 {% endif %}
+<div class="dash-top">
+<section class="dash-tiles-incidents">
+  <div class="tile-group{% if incident_heat %} heat-{{ incident_heat }}{% endif %}" data-incident-tile data-incident-heat="{{ incident_heat or 'calm' }}">
+  <h2>Incidents {% with %}{% set tip %}Incident counts — each number is exactly the row count of the Incidents list behind the click. Open = status OPEN (nobody acknowledged yet). Open + Investigating + Escalated = all active work. Critical = any active incident with severity critical. Resolved means Alertmanager or a person marked it resolved — it is not Closed. History is the archive. This box pulses softly red while an active critical incident exists, slower yellow while other incidents are active, and stays still when nothing is active (no pulse if your system asks for reduced motion).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="grid stat-row stat-row-big">
+    {% for tile in incident_tiles %}
+    <a class="stat {{ tile.tone }}{% if not tile.count %} stat-zero{% endif %}" href="{{ tile.href }}" data-tile="{{ tile.key }}"><span>{{ tile.label }}</span><strong>{{ tile.count }}</strong></a>
+    {% endfor %}
+  </div>
+  </div>
+</section>
+<section class="dash-tiles-infra">
+  <div class="tile-group">
+  <h2>Infrastructure {% with %}{% set tip %}Asset inventory counts — each number is the row count of the Assets list behind the click. No open incident / Warning / Critical come from open incidents on that asset — not from a liveness check. Offline / unreachable = last Assets-page probe failed both ICMP and the exporter/SNMP check, or NetBox marks the device non-active. Probes refresh when someone opens Assets; Prometheus up alerts (NodeExporterDown, WindowsExporterDown, SnmpDeviceUnreachable) are the real-time signal. No owner email = escalation has nobody to mail for role steps.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="grid stat-row stat-row-big">
+    {% for tile in asset_tiles %}
+    <a class="stat {{ tile.tone }}{% if not tile.count %} stat-zero{% endif %}" href="{{ tile.href }}"><span>{{ tile.label }}</span><strong>{{ tile.count }}</strong></a>
+    {% endfor %}
+  </div>
+  </div>
+</section>
+<aside class="appliance-card" data-appliance-card aria-label="This ForgeSRE appliance">
+  <h2>This appliance {% with %}{% set tip %}The ForgeSRE VM running Core — not an inventory asset. Clock is this browser's local time. CPU from the host /proc/stat; RAM and HDD from node_exporter on this VM (or /proc and statvfs). Refreshes every 8 s. Dash: green below {{ resource_warn }}%, yellow {{ resource_warn }}–{{ resource_crit - 1 }}%, red {{ resource_crit }}% or more, or no reading (blocked). NET: green = this VM has a default route on a non-docker interface whose link is up; red = no usable default route, or that interface is down. No ping and no internet probe — an air-gapped lab with a LAN gateway is green. Network throughput is not measured.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="appliance-clock" data-clock>—</div>
+  <ul class="appliance-metrics" data-appliance-resources>
+    <li class="appliance-metric" data-metric="cpu" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">CPU</span><span class="metric-reading" data-metric-value>—</span></li>
+    <li class="appliance-metric" data-metric="ram" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">RAM</span><span class="metric-reading" data-metric-value>—</span></li>
+    <li class="appliance-metric" data-metric="hdd" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">HDD</span><span class="metric-reading" data-metric-value>—</span></li>
+    <li class="appliance-metric" data-metric="net" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">NET</span><span class="metric-reading" data-metric-value>—</span></li>
+  </ul>
+</aside>
+</div>
+<div class="dash-banners">
 <div class="banner banner-crit" id="host-down-banner" data-host-down-banner {% if not down_incidents %}hidden{% endif %}>
   <strong>HOST DOWN</strong>
   <span data-host-down-count>
@@ -100,37 +133,6 @@
   </form>
 </div>
 {% endif %}
-<div class="dash-top">
-<section class="dash-tiles-incidents">
-  <div class="tile-group{% if incident_heat %} heat-{{ incident_heat }}{% endif %}" data-incident-tile data-incident-heat="{{ incident_heat or 'calm' }}">
-  <h2>Incidents {% with %}{% set tip %}Incident counts — each number is exactly the row count of the Incidents list behind the click. Open = status OPEN (nobody acknowledged yet). Open + Investigating + Escalated = all active work. Critical = any active incident with severity critical. Resolved means Alertmanager or a person marked it resolved — it is not Closed. History is the archive. This box pulses softly red while an active critical incident exists, slower yellow while other incidents are active, and stays still when nothing is active (no pulse if your system asks for reduced motion).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <div class="grid stat-row stat-row-big">
-    {% for tile in incident_tiles %}
-    <a class="stat {{ tile.tone }}{% if not tile.count %} stat-zero{% endif %}" href="{{ tile.href }}" data-tile="{{ tile.key }}"><span>{{ tile.label }}</span><strong>{{ tile.count }}</strong></a>
-    {% endfor %}
-  </div>
-  </div>
-</section>
-<section class="dash-tiles-infra">
-  <div class="tile-group">
-  <h2>Infrastructure {% with %}{% set tip %}Asset inventory counts — each number is the row count of the Assets list behind the click. No open incident / Warning / Critical come from open incidents on that asset — not from a liveness check. Offline / unreachable = last Assets-page probe failed both ICMP and the exporter/SNMP check, or NetBox marks the device non-active. Probes refresh when someone opens Assets; Prometheus up alerts (NodeExporterDown, WindowsExporterDown, SnmpDeviceUnreachable) are the real-time signal. No owner email = escalation has nobody to mail for role steps.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <div class="grid stat-row stat-row-big">
-    {% for tile in asset_tiles %}
-    <a class="stat {{ tile.tone }}{% if not tile.count %} stat-zero{% endif %}" href="{{ tile.href }}"><span>{{ tile.label }}</span><strong>{{ tile.count }}</strong></a>
-    {% endfor %}
-  </div>
-  </div>
-</section>
-<aside class="appliance-card" data-appliance-card aria-label="This ForgeSRE appliance">
-  <h2>This appliance {% with %}{% set tip %}The ForgeSRE VM running Core — not an inventory asset. Clock is this browser's local time. CPU from the host /proc/stat; RAM and HDD from node_exporter on this VM (or /proc and statvfs). Refreshes every 8 s. Dash: green below {{ resource_warn }}%, yellow {{ resource_warn }}–{{ resource_crit - 1 }}%, red {{ resource_crit }}% or more, or no reading (blocked). NET: green = this VM has a default route on a non-docker interface whose link is up; red = no usable default route, or that interface is down. No ping and no internet probe — an air-gapped lab with a LAN gateway is green. Network throughput is not measured.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <div class="appliance-clock" data-clock>—</div>
-  <ul class="appliance-metrics" data-appliance-resources>
-    <li class="appliance-metric" data-metric="cpu" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">CPU</span><span class="metric-reading" data-metric-value>—</span></li>
-    <li class="appliance-metric" data-metric="ram" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">RAM</span><span class="metric-reading" data-metric-value>—</span></li>
-    <li class="appliance-metric" data-metric="hdd" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">HDD</span><span class="metric-reading" data-metric-value>—</span></li>
-    <li class="appliance-metric" data-metric="net" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">NET</span><span class="metric-reading" data-metric-value>—</span></li>
-  </ul>
-</aside>
 </div>
 <p class="muted">Full stack diagnostics live on <a href="/health-ui">System Health</a>.{% if can('read_play') %} Journal is <a href="/journal">here</a>.{% endif %}</p>
 <section>

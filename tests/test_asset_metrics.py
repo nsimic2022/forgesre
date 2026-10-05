@@ -1,5 +1,7 @@
 """Class-based metric tiles on asset detail. No live Prometheus required."""
 
+import re
+
 from fastapi.testclient import TestClient
 
 from app.asset_metrics import asset_metric_panel, bundled_thresholds, metric_class_for, safe_asset_metric_panel
@@ -463,9 +465,9 @@ def test_metrics_api_and_detail_html(monkeypatch):
         if "node_cpu" in expr:
             return {"value": 22.0, "query": expr}
         if "node_memory" in expr:
-            return {"value": 33.0, "query": expr}
+            return {"value": None, "query": expr}
         if "node_filesystem" in expr:
-            return {"value": 44.0, "query": expr}
+            return {"value": 97.0, "query": expr}
         if "up{" in expr or expr.strip() == "up":
             return {"value": 1.0, "query": expr}
         return {"value": None, "query": expr}
@@ -496,13 +498,43 @@ def test_metrics_api_and_detail_html(monkeypatch):
     assert 0 <= main_at < actions_at < metrics_at
     assert "CPU" in text
     assert "22%" in text
-    assert "metric-tile-head" not in text
-    assert "metric-value" in text
-    assert "metric-threshold" in text
     assert 'href="/assets?edit=app-lab-metrics#asset-form"' in text
     assert "Edit Alarms" in text
     assert text.count("metric-edit") == 1
-    assert "Prometheus sees this target (up=1)." in text
+
+    card = text.split("data-asset-metrics", 1)[1].split("</aside>", 1)[0]
+    rows = re.findall(r'<div class="metric-row" data-metric="([^"]+)" data-tone="([^"]+)" title="([^"]*)">(.*?)</div>', card, re.S)
+    assert [key for key, *_ in rows] == ["up", "cpu_percent", "memory_percent", "disk_percent"]
+    by_key = {key: (tone, title, body) for key, tone, title, body in rows}
+    tone, title, body = by_key["up"]
+    assert tone == "ok" and title == "Prometheus sees this target (up=1)."
+    assert '<span class="metric-name">Collecting</span>' in body
+    assert '<span class="metric-cube ok" role="img" aria-label="ok"></span>' in body
+    assert '<span class="metric-value ok">up</span>' in body
+    tone, title, body = by_key["cpu_percent"]
+    assert tone == "ok" and title.startswith("Alarm at ") and title.endswith("%")
+    assert '<span class="metric-cube ok"' in body and '<span class="metric-value ok">22%</span>' in body
+    assert by_key["memory_percent"][0] == "warn"
+    assert '<span class="metric-value warn">—</span>' in by_key["memory_percent"][2]
+    assert by_key["disk_percent"][0] == "crit"
+    assert '<span class="metric-cube crit"' in by_key["disk_percent"][2]
+    assert '<span class="metric-value crit">97%</span>' in by_key["disk_percent"][2]
+    for gone in ("metric-tile", "metric-bar", "metric-swatch", "collecting_line", "Prometheus sees this target (up=1).</p>"):
+        assert gone not in card
+    assert "<p" not in card
+
+
+def test_asset_detail_compact_metric_row_css():
+    from pathlib import Path
+
+    css = Path("frontend/static/app.css").read_text()
+    row = css.split(".metric-row {", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns" in row and "border-bottom" in row
+    cube = css.split(".metric-cube {", 1)[1].split("}", 1)[0]
+    assert "border-radius: 2px" in cube
+    for tone in ("ok", "warn", "crit"):
+        assert f".metric-cube.{tone} {{ background: var(--{tone})" in css
+    assert ".metric-bar" not in css and ".metric-swatch" not in css
 
 
 def test_asset_detail_css_equal_columns():
