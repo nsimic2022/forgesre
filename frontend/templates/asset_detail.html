@@ -8,9 +8,11 @@
 <div class="asset-detail-split">
 <div class="asset-detail-main">
 <h1>{{ asset.hostname }}{% if metrics.demo %} <span class="pill demo">DEMO</span>{% endif %}</h1>
-<dl class="kv">
-  <dt>Asset number</dt><dd>#{{ asset.number or "—" }}</dd>
+<h3 class="asset-facts-head">Identity</h3>
+<dl class="kv asset-facts" data-asset-facts="identity">
+  <dt>Asset number</dt><dd>{% if asset.number %}#{{ asset.number }}{% else %}—{% endif %}</dd>
   <dt><span class="label-line">Asset ID {% with %}{% set tip %}Set at add and cannot change. Prometheus asset= labels and history keep matching this slug. Hostname and IP can change.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt><dd>{{ asset.asset_id }}</dd>
+  <dt>Hostname</dt><dd>{{ asset.hostname or "—" }}</dd>
   <dt>IP</dt>
   <dd>
     {{ asset.ip or "—" }}
@@ -20,26 +22,46 @@
       <span class="reach-dot exporter {{ r.exporter }}" title="{{ r.exporter_label }}: {{ r.exporter_detail }}">{{ r.exporter_label }}</span>
     </span>
   </dd>
-  <dt>Type</dt><dd>{{ asset.type }}</dd>
-  <dt>Environment</dt><dd>{{ asset.environment }}</dd>
-  <dt>Status</dt><dd><span class="pill {{ asset.status }}">{{ asset.status }}</span></dd>
-  <dt>Monitoring profile</dt><dd>{{ asset.monitoring_profile }}</dd>
+  <dt>Type</dt><dd>{{ asset.type or "—" }}</dd>
+  <dt>Environment</dt><dd>{{ asset.environment or "—" }}</dd>
+  <dt><span class="label-line">Scrape address {% with %}{% set tip %}Prometheus HTTP target. Linux default ip:9100 (node_exporter), Windows ip:9182 (windows_exporter). Network devices use SNMP, not this field.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt><dd>{{ asset.scrape_address or "—" }}</dd>
+  <dt>Customer / domain</dt><dd class="extra-customer">{{ ex.customer or "—" }}</dd>
+  <dt>Site / DC / room</dt><dd class="extra-site">{{ ex.site or "—" }}</dd>
+  <dt>Notes</dt><dd>{% if asset.notes %}<span class="pre-wrap">{{ asset.notes }}</span>{% else %}—{% endif %}</dd>
+</dl>
+
+<h3 class="asset-facts-head">NOC contacts</h3>
+<dl class="kv asset-facts" data-asset-facts="contacts">
   <dt>Owner / team</dt><dd>{{ asset.owner or "—" }}</dd>
   <dt>Contact</dt><dd>{{ asset.contact_name or "—" }}</dd>
-  <dt>Email</dt><dd>{% if asset.owner_email %}{{ asset.owner_email }}{% else %}<span class="pill warn">No owner email</span> <span class="muted">Escalation mail is recorded as no-recipient and not sent, unless the escalation step names an address.</span>{% endif %}</dd>
+  <dt>Email</dt><dd>{% if asset.owner_email %}{{ asset.owner_email }}{% else %}— <span class="pill warn">No owner email</span> <span class="muted">Escalation mail is recorded as no-recipient and not sent, unless the escalation step names an address.</span>{% endif %}</dd>
   <dt>Phone</dt><dd>{{ asset.owner_phone or "—" }}</dd>
-  <dt>Notes</dt><dd>{{ asset.notes or "—" }}</dd>
-  {% set sup = support_status(asset) %}
-  <dt><span class="label-line">Support {% with %}{% set tip %}From the asset's Support coverage (Edit → NOC contacts). Expiring = the To date is within {{ sup.lead_days }} days. Reminder only — no alert, incident, or Playrule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt>
+  <dt>Backup on-call name</dt><dd class="extra-backup_name">{{ ex.backup_name or "—" }}</dd>
+  <dt>Backup on-call phone</dt><dd class="extra-backup_phone">{{ ex.backup_phone or "—" }}</dd>
+  <dt>Backup on-call email</dt><dd class="extra-backup_email">{{ ex.backup_email or "—" }}</dd>
+  <dt>Support hours</dt><dd class="extra-support_hours">{{ ex.support_hours or "—" }}</dd>
+  <dt>Timezone</dt><dd class="extra-timezone">{{ ex.timezone or "—" }}</dd>
+  <dt>License / contract / SLA</dt><dd class="extra-contract">{{ ex.contract or "—" }}</dd>
+  <dt>Runbook note</dt><dd class="extra-runbook_note">{% if ex.runbook_note %}<span class="pre-wrap">{{ ex.runbook_note }}</span>{% else %}—{% endif %}</dd>
+</dl>
+
+{% set sup = support_status(asset) %}
+<h3 class="asset-facts-head label-line">Support coverage {% with %}{% set tip %}From the asset's Support coverage (Edit → NOC contacts). Expiring = the To date is within {{ sup.lead_days }} days. Reminder only — no alert, incident, or Playrule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+<dl class="kv asset-facts" data-asset-facts="support">
+  <dt>Under support</dt><dd class="extra-support">{{ support_labels.get(ex.support) or "—" }}</dd>
+  <dt>From</dt><dd class="extra-support_from">{{ ex.support_from or "—" }}</dd>
+  <dt>To</dt><dd class="extra-support_to">{{ ex.support_to or "—" }}</dd>
+  <dt>Lead time</dt><dd class="extra-support_lead_days">{% if ex.support_lead_days %}{{ ex.support_lead_days }} days{% else %}—{% endif %}</dd>
+  <dt>Status</dt>
   <dd><span class="pill support-pill {{ sup.tone }}" data-support-state="{{ sup.state }}">{{ sup.label }}</span> <span class="muted">{{ sup.detail }}</span></dd>
-  {% for key, label, value in extras_rows(asset) %}
-  <dt>{{ label }}</dt><dd class="extra-{{ key }}">{% if key == 'runbook_note' %}<span class="pre-wrap">{{ value }}</span>{% else %}{{ value }}{% endif %}</dd>
-  {% endfor %}
-  <dt><span class="label-line">Client playrules {% with %}{% set tip %}Preferred playrule when that alertname fires on this asset. Does not create Prometheus thresholds. None = global alertname match.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt>
-  <dd>{% for rule in client_playrules %}<a href="/playrules?edit={{ rule.id }}">{{ rule.name }}</a>{% if not rule.enabled %} <span class="muted">(disabled)</span>{% endif %}{% if not loop.last %}, {% endif %}{% else %}<span class="muted">None — global alertname match</span>{% endfor %}</dd>
-  <dt>Source</dt><dd>{{ asset.source }}</dd>
+</dl>
+
+<h3 class="asset-facts-head">Monitoring</h3>
+<dl class="kv asset-facts" data-asset-facts="monitoring">
+  <dt>Status</dt><dd>{% if asset.status %}<span class="pill {{ asset.status }}">{{ asset.status }}</span>{% else %}—{% endif %}</dd>
+  <dt>Monitoring profile</dt><dd>{{ asset.monitoring_profile or "—" }}</dd>
+  <dt>Source</dt><dd>{{ asset.source or "—" }}</dd>
   <dt>NetBox ID</dt><dd>{{ asset.netbox_id or "—" }}</dd>
-  <dt><span class="label-line">Scrape address {% with %}{% set tip %}Prometheus HTTP target. Linux default ip:9100 (node_exporter), Windows ip:9182 (windows_exporter). Network devices use SNMP, not this field.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt><dd>{{ asset.scrape_address or "—" }}</dd>
   <dt>SNMP</dt>
   <dd>
     {% if snmp_target %}
@@ -122,6 +144,7 @@
 {% include "_pager.html" %}
 </div>
 
+<div class="asset-detail-side">
 <aside class="asset-detail-metrics card" data-asset-metrics="{{ asset.asset_id }}">
   <div class="metric-panel-head">
     <h2>Machine metrics {% with %}{% set tip %}Bundled {{ metrics.class }} class — cpu / mem / disk / up only, not every exporter series. Alarm % is the per-host overlay (Edit Alarms), not a rewrite of monitoring/alerts.yml.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
@@ -158,5 +181,34 @@
     {% endfor %}
   </div>
 </aside>
+
+<section class="asset-detail-playrules card client-playrules" id="client-playrules" data-client-playrules data-asset-playrules="{{ asset.asset_id }}">
+  <div class="metric-panel-head">
+    <h2>Client playrules {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first playrule in this list (enabled, same alertname) and its playbook / escalation instead of the first global playrule with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = the global playrule match, unchanged. Disabled playrules are skipped.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  </div>
+  <p class="muted">Does not create Prometheus thresholds — only which playrule / playbook this asset prefers when that alertname arrives.</p>
+  {% if can('write_assets') %}
+  <form method="post" action="/assets/{{ asset.asset_id }}/playrules" class="playrule-detail-form">
+    <input type="hidden" name="playrules_present" value="1">
+    {% with picked=picked_playrules %}{% include "_playrule_picker.html" %}{% endwith %}
+    <div class="row-actions playrule-detail-actions">
+      <button type="submit">Save playrules</button>
+      <span class="muted" data-playrule-unsaved hidden>Unsaved changes</span>
+    </div>
+  </form>
+  {% else %}
+  {% set shown = [] %}
+  {% for pk in picked_playrules %}{% for rule in playrule_choices if rule.id == pk %}{% set _ = shown.append(rule) %}{% endfor %}{% endfor %}
+  <ol class="playrule-list">
+    {% for rule in shown %}
+    <li class="playrule-chip" data-playrule-id="{{ rule.id }}">
+      <span class="playrule-chip-text">{{ rule.name }} <span class="muted">· {{ rule.alertname or "no alertname" }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}{% if not rule.enabled %} · disabled{% endif %}</span></span>
+    </li>
+    {% endfor %}
+  </ol>
+  <p class="muted playrule-empty"{% if shown %} hidden{% endif %}>No client playrules — global Playrules apply.</p>
+  {% endif %}
+</section>
+</div>
 </div>
 {% endblock %}

@@ -22,8 +22,10 @@ from app.asset_extras import (
     SUPPORT_CHOICES,
     SUPPORT_LEAD_CHOICES,
     SUPPORT_LEAD_DEFAULT,
+    asset_playrule_ids,
     extras_from_form,
     extras_rows,
+    form_extras,
     playrule_ids_from_form,
     support_status,
 )
@@ -43,6 +45,7 @@ from app.inventory import (
     delete_blocked,
     delete_candidate,
     ignore_candidate,
+    set_asset_playrules,
     similar_incident_groups,
     suggest_clone_candidate_ip,
     sync_netbox,
@@ -1030,8 +1033,32 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         metrics=safe_asset_metric_panel(item),
         pager=pager,
         similar_pager=similar_pager,
-        client_playrules=asset_playrules(db, item),
+        playrule_choices=playrule_choices(db),
+        picked_playrules=asset_playrule_ids(item),
+        ex=form_extras(item),
+        support_labels=dict(SUPPORT_CHOICES),
     )
+
+
+@router.post("/assets/{asset_id}/playrules")
+def asset_playrules_update(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    playrules_present: str = Form(""),
+    playrule_ids: list[str] = Form([]),
+    playrule_add: str = Form(""),
+):
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    item = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if item is None:
+        raise HTTPException(status_code=404)
+    posted = playrule_ids_from_form(playrules_present or "1", playrule_ids, playrule_add)
+    set_asset_playrules(db, item, posted, actor=user.email)
+    count = len(item.playrule_ids or [])
+    notice = f"Client playrules saved ({count})." if count else "Client playrules cleared — global Playrules apply."
+    return RedirectResponse(f"/assets/{asset_id}?notice={quote(notice)}#client-playrules", status_code=302)
 
 
 

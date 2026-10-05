@@ -109,31 +109,7 @@
     <h3 class="asset-form-block-head label-line">Client playrules {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first playrule in this list (enabled, same alertname) and its playbook / escalation instead of the first global playrule with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = the global playrule match, unchanged. Disabled playrules are skipped.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     <input type="hidden" name="playrules_present" value="1">
     <p class="muted alarm-limit">This does not create Prometheus thresholds. It records which playrule / playbook this asset prefers when that alertname arrives. Matching is still by alertname only.</p>
-    {% set picked = form.playrule_ids or [] %}
-    {% set picked_rules = [] %}
-    {% for pk in picked %}{% for rule in playrule_choices or [] if rule.id == pk %}{% set _ = picked_rules.append(rule) %}{% endfor %}{% endfor %}
-    {% set enabled_rules = (playrule_choices or [])|selectattr("enabled")|list %}
-    <label class="playrule-add"><span class="label-line">Add a playrule</span>
-      <select name="playrule_add" data-playrule-add{% if not enabled_rules %} disabled{% endif %}>
-        <option value="">{% if enabled_rules %}Choose a playrule…{% else %}No enabled playrules{% endif %}</option>
-        {% for rule in enabled_rules %}
-        <option value="{{ rule.id }}" data-name="{{ rule.name }}" data-meta="{{ rule.alertname or 'no alertname' }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}"{% if rule.id in picked %} disabled{% endif %}>{{ rule.name }} · {{ rule.alertname or "no alertname" }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <ol class="playrule-list" data-playrule-list>
-      {% for rule in picked_rules %}
-      <li class="playrule-chip" data-playrule-id="{{ rule.id }}">
-        <input type="hidden" name="playrule_ids" value="{{ rule.id }}">
-        <span class="playrule-chip-text">{{ rule.name }} <span class="muted">· {{ rule.alertname or "no alertname" }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}{% if not rule.enabled %} · disabled{% endif %}</span></span>
-        <button type="button" class="playrule-remove" data-playrule-remove aria-label="Remove {{ rule.name }}" title="Remove">×</button>
-      </li>
-      {% endfor %}
-    </ol>
-    <p class="muted playrule-empty" data-playrule-empty{% if picked_rules %} hidden{% endif %}>No client playrules — global Playrules apply.</p>
-    {% if not playrule_choices %}
-    <p class="muted">No playrules yet. Create one on <a href="/playrules">Playrules</a>.</p>
-    {% endif %}
+    {% with picked=form.playrule_ids %}{% include "_playrule_picker.html" %}{% endwith %}
   </div>
   </div>
   {% if form_mode == "clone" %}

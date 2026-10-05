@@ -317,8 +317,10 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
   const list = box.querySelector("[data-playrule-list]");
   const empty = box.querySelector("[data-playrule-empty]");
   if (!select || !list) return;
+  const unsaved = box.querySelector("[data-playrule-unsaved]");
   const sync = () => {
     if (empty) empty.hidden = list.children.length > 0;
+    if (unsaved) unsaved.hidden = false;
   };
   const optionFor = (id) => select.querySelector('option[value="' + id + '"]');
   list.addEventListener("click", (event) => {
