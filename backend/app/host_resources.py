@@ -63,6 +63,7 @@ def appliance_resources(*, node_text: str | None = None, probe_node: bool = True
     ok = ram_total is not None or hdd_total is not None or cpu is not None
     ram_percent = _percent(ram_used, ram_total)
     hdd_percent = _percent(hdd_used, hdd_total)
+    net = network_status()
     return {
         "ok": bool(ok),
         "source": source,
@@ -74,13 +75,137 @@ def appliance_resources(*, node_text: str | None = None, probe_node: bool = True
         "hdd_mount": hdd_mount,
         "ram_percent": ram_percent,
         "hdd_percent": hdd_percent,
+        "net": net,
         "levels": {
             "cpu": resource_level(cpu),
             "ram": resource_level(ram_percent),
             "hdd": resource_level(hdd_percent),
+            "net": net["level"],
         },
         "thresholds": {"warn": RESOURCE_WARN_PERCENT, "crit": RESOURCE_CRIT_PERCENT},
     }
+
+
+_VIRTUAL_IFACE_PREFIXES = ("lo", "docker", "br-", "veth", "virbr", "cni", "flannel", "cali", "vxlan", "tunl", "kube")
+_RTF_UP = 0x0001
+_RTF_REJECT = 0x0200
+_SYS_NET = "/sys/class/net"
+
+
+def _is_virtual_iface(name: str) -> bool:
+    return not name or name.startswith(_VIRTUAL_IFACE_PREFIXES)
+
+
+def _hex_ipv4(raw: str) -> str:
+    try:
+        n = int(raw, 16)
+    except ValueError:
+        return ""
+    if not n:
+        return ""
+    return ".".join(str((n >> shift) & 0xFF) for shift in (0, 8, 16, 24))
+
+
+def _default_routes_v4(text: str) -> list[tuple[int, str, str]]:
+    """(metric, iface, gateway) for every UP 0.0.0.0/0 route in /proc/net/route on a non-docker iface."""
+    out: list[tuple[int, str, str]] = []
+    for line in text.splitlines()[1:]:
+        parts = line.split()
+        if len(parts) < 8:
+            continue
+        iface, dest, gateway, flags, metric, mask = parts[0], parts[1], parts[2], parts[3], parts[6], parts[7]
+        try:
+            flag_bits = int(flags, 16)
+            metric_n = int(metric)
+        except ValueError:
+            continue
+        if dest != "00000000" or mask != "00000000" or not flag_bits & _RTF_UP or flag_bits & _RTF_REJECT:
+            continue
+        if _is_virtual_iface(iface):
+            continue
+        out.append((metric_n, iface, _hex_ipv4(gateway)))
+    return sorted(out)
+
+
+def _default_routes_v6(text: str) -> list[tuple[int, str, str]]:
+    """(metric, iface, '') for every UP ::/0 route in /proc/net/ipv6_route on a non-docker iface."""
+    out: list[tuple[int, str, str]] = []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 10:
+            continue
+        dest, plen, metric, flags, iface = parts[0], parts[1], parts[5], parts[8], parts[9]
+        try:
+            flag_bits = int(flags, 16)
+            metric_n = int(metric, 16)
+        except ValueError:
+            continue
+        if dest != "0" * 32 or plen != "00" or not flag_bits & _RTF_UP or flag_bits & _RTF_REJECT:
+            continue
+        if _is_virtual_iface(iface):
+            continue
+        out.append((metric_n, iface, ""))
+    return sorted(out)
+
+
+def _read_text(path: str) -> str | None:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
+def _iface_link(iface: str, sys_net: str = _SYS_NET) -> str:
+    """'up' / 'down' / 'unknown' for one interface from sysfs operstate (carrier when operstate is unknown)."""
+    state = (_read_text(os.path.join(sys_net, iface, "operstate")) or "").strip().lower()
+    if state == "up":
+        return "up"
+    if state in {"down", "lowerlayerdown", "notpresent", "dormant"}:
+        return "down"
+    carrier = (_read_text(os.path.join(sys_net, iface, "carrier")) or "").strip()
+    if carrier == "1":
+        return "up"
+    if carrier == "0":
+        return "down"
+    return "unknown"
+
+
+def network_status(
+    *,
+    route_text: str | None = None,
+    ipv6_route_text: str | None = None,
+    sys_net: str = _SYS_NET,
+) -> dict[str, Any]:
+    """This VM has net = a default route on a non-docker interface whose link is up. Green ok, red crit.
+
+    No ping and no internet probe: an air-gapped lab with a LAN gateway is green. Red means no usable
+    default route, or the interface carrying it is down. Core runs with network_mode: host, so /proc/net
+    and /sys/class/net are the VM's own.
+    """
+    v4 = route_text if route_text is not None else _read_text("/proc/net/route")
+    v6 = ipv6_route_text if ipv6_route_text is not None else _read_text("/proc/net/ipv6_route")
+    routes = _default_routes_v4(v4 or "")
+    family = "ipv4"
+    if not routes:
+        routes = _default_routes_v6(v6 or "")
+        family = "ipv6"
+    if v4 is None and v6 is None:
+        return {"level": "crit", "iface": "", "gateway": "", "family": "", "link": "unknown",
+                "reading": "no reading", "detail": "/proc/net/route not readable"}
+    if not routes:
+        return {"level": "crit", "iface": "", "gateway": "", "family": "", "link": "unknown",
+                "reading": "no default route", "detail": "no default route on a non-docker interface"}
+    for _metric, iface, gateway in routes:
+        link = _iface_link(iface, sys_net)
+        if link != "down":
+            reading = f"{iface} up" + (f" · gw {gateway}" if gateway else "")
+            detail = "default route present" + ("; link state unreadable" if link == "unknown" else "")
+            return {"level": "ok", "iface": iface, "gateway": gateway, "family": family, "link": link,
+                    "reading": reading, "detail": detail}
+    iface = routes[0][1]
+    return {"level": "crit", "iface": iface, "gateway": routes[0][2], "family": family, "link": "down",
+            "reading": f"{iface} down", "detail": "default route interface link is down"}
 
 
 def fetch_node_exporter(url: str = NODE_EXPORTER_URL, timeout: float = 0.25) -> str | None:

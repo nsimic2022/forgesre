@@ -6,7 +6,12 @@
 {% else %}
 <h2>Add asset {% with %}{% set tip %}Analysts, engineers, and admins can add hosts. Asset ID is a short unique slug you type (e.g. win10-gp) — it is not taken from hostname. Hostname can be the OS name (e.g. DESKTOP-CG81N3J). Fill who to call — escalation uses that email instead of a generic team inbox. Default type Auto (detect exporter): ForgeSRE GETs http://IP:9182/metrics and :9100/metrics from this appliance (reads enough to see node_ / windows_, then drains the body). windows_exporter / windows_ → Windows Server :9182. node_exporter / node_ → Linux Server :9100. Both: keep a saved type if set, else prefer Windows :9182. SNMP UDP/161 (the same path as snmp_exporter after Approve) → Network device, empty scrape. HTTP silence is not a network guess. ICMP ping is not a scrape. You can override the type.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% endif %}
-<form method="post" action="{% if form_mode == 'edit' %}/assets/{{ selected.asset_id }}/update{% else %}/assets{% endif %}" class="form-grid asset-form-grid" id="asset-form">
+<form method="post" action="{% if form_mode == 'edit' %}/assets/{{ selected.asset_id }}/update{% else %}/assets{% endif %}" class="asset-form-split" id="asset-form">
+  {% set ex = form.extras or {} %}
+  <div class="asset-form-col asset-form-left">
+  <div class="asset-form-block" data-asset-identity>
+  <h3 class="asset-form-block-head">Identity</h3>
+  <div class="form-grid asset-form-grid">
   {% if form_mode == "edit" %}
   <label><span class="label-line">Asset ID {% with %}{% set tip %}Set at add; cannot change (Prometheus label / history).{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <input name="asset_id" value="{{ selected.asset_id }}" readonly>
@@ -19,9 +24,49 @@
   <label><span class="label-line">Hostname {% with %}{% set tip %}OS name is fine (e.g. DESKTOP-CG81N3J). Separate from Asset ID.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <input name="hostname" required value="{{ form.hostname }}" placeholder="DESKTOP-CG81N3J"></label>
   <label>IP <input name="ip" placeholder="10.10.10.21" value="{{ form.ip }}" data-detect-ip></label>
+  <label><span class="label-line">Type {% with %}{% set tip %}Auto GETs :9182 then :9100 /metrics from this appliance (windows_ → Windows :9182, node_ → Linux :9100). SNMP UDP/161 → Network device, empty scrape. HTTP silence is not a network guess. ICMP ping is not a scrape. If type is still Unknown, Verify probes :9100 and :9182 on the IP and saves type + scrape when /metrics has node_ or windows_.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <select name="type" data-detect-type>
+      {% set current_type = form.type or '' %}
+      {% for opt in type_choices %}
+      <option value="{{ opt }}" {% if current_type == opt or (opt.startswith('Auto') and current_type.startswith('Auto')) %}selected{% endif %}>{{ opt }}</option>
+      {% endfor %}
+      {% if current_type and current_type not in type_choices and not current_type.startswith('Auto') %}
+      <option value="{{ current_type }}" selected>{{ current_type }}</option>
+      {% endif %}
+    </select>
+  </label>
+  <label>Environment <input name="environment" value="{{ form.environment or 'Production' }}"></label>
+  <label><span class="label-line">Scrape address {% with %}{% set tip %}Prometheus HTTP target (ip:9100 or ip:9182). Leave blank to default from type. Network devices use SNMP UDP/161, not this HTTP scrape.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="scrape_address" value="{{ form.scrape_address }}" placeholder="10.10.10.21:9100 or :9182"></label>
+  <label>Customer / domain <input name="extra_customer" value="{{ ex.customer }}" placeholder="acme.local"></label>
+  <label>Site / DC / room <input name="extra_site" value="{{ ex.site }}" placeholder="BG-DC1 · room 2 · rack 14"></label>
+  <label class="wide">Notes <input name="notes" value="{{ form.notes }}" placeholder="Anything else the next operator should know"></label>
+  </div>
+  </div>
+  <div class="asset-form-block" data-asset-contacts>
+  <h3 class="asset-form-block-head">NOC contacts {% with %}{% set tip %}Shown on the incident page under Who to call and in the escalation mail. Escalation role steps still mail Owner email only — the backup contact is for the human on shift, not an automatic second recipient.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+  <div class="form-grid asset-form-grid">
+  <input type="hidden" name="extras_present" value="1">
+  <label>Owner / team <input name="owner" value="{{ form.owner or 'platform' }}" placeholder="platform"></label>
+  <label>Contact name <input name="contact_name" value="{{ form.contact_name }}" placeholder="Who to call"></label>
+  <label><span class="label-line">Owner email {% with %}{% set tip %}Escalation role steps (team, team-lead, engineer) mail this address. Empty = the mail is recorded as no-recipient and not sent.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="owner_email" type="email" value="{{ form.owner_email }}" placeholder="oncall@dc.local"></label>
+  <label>Owner phone <input name="owner_phone" value="{{ form.owner_phone }}" placeholder="+381-11-000-0000"></label>
+  <label>Backup on-call name <input name="extra_backup_name" value="{{ ex.backup_name }}" placeholder="Second person to call"></label>
+  <label>Backup on-call phone <input name="extra_backup_phone" value="{{ ex.backup_phone }}" placeholder="+381-11-000-0001"></label>
+  <label>Backup on-call email <input name="extra_backup_email" type="email" value="{{ ex.backup_email }}" placeholder="backup@dc.local"></label>
+  <label>Support hours <input name="extra_support_hours" value="{{ ex.support_hours }}" placeholder="24/7 or Mon–Fri 08–17"></label>
+  <label>Timezone <input name="extra_timezone" value="{{ ex.timezone }}" placeholder="Europe/Belgrade"></label>
+  <label>License / contract / SLA <input name="extra_contract" value="{{ ex.contract }}" placeholder="SLA gold · 4h response"></label>
+  <label class="wide"><span class="label-line">Runbook note {% with %}{% set tip %}Free text for the operator on shift, shown on the incident page. ForgeSRE does not act on it — e.g. it does not change any threshold.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <textarea name="extra_runbook_note" rows="3" placeholder="Ignore disk until 95%; then call the backup on-call.">{{ ex.runbook_note }}</textarea></label>
+  </div>
+  </div>
+  </div>
+  <div class="asset-form-col asset-form-right">
   <input type="hidden" name="alarms_present" value="1">
-  <div class="alarm-families" data-alarm-families>
-    <span class="alarm-heading label-line">Alarms {% with %}{% set tip %}Per-host enable and % overlay on the Alertmanager webhook. PromQL still lives in monitoring/alerts.yml. Not a second alerting engine and not a Playrule. cpu / mem / disk / up only — not every exporter series. Auto-detect still picks Linux / Windows / Network.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+  <div class="asset-form-block alarm-families" data-alarm-families>
+    <h3 class="asset-form-block-head alarm-heading label-line">Standard alarms {% with %}{% set tip %}Per-host enable and % overlay on the Alertmanager webhook. PromQL still lives in monitoring/alerts.yml. Not a second alerting engine and not a Playrule. cpu / mem / disk / up only — not every exporter series. Auto-detect still picks Linux / Windows / Network.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     {% set alarms = form.alarms or {} %}
     {% set up_a = alarms.get('up') or {} %}
     {% set cpu_a = alarms.get('cpu_percent') or {} %}
@@ -36,26 +81,19 @@
     <label class="alarm-row"><input type="checkbox" name="alarm_disk_enabled" value="1" data-alarm-disk {% if disk_a.get('enabled', True) %}checked{% endif %}> Disk
       <input type="number" name="alarm_disk_threshold" min="1" max="100" step="1" value="{{ disk_a.get('threshold') or 90 }}" data-alarm-disk-th> %</label>
   </div>
-  <label><span class="label-line">Type {% with %}{% set tip %}Auto GETs :9182 then :9100 /metrics from this appliance (windows_ → Windows :9182, node_ → Linux :9100). SNMP UDP/161 → Network device, empty scrape. HTTP silence is not a network guess. ICMP ping is not a scrape. If type is still Unknown, Verify probes :9100 and :9182 on the IP and saves type + scrape when /metrics has node_ or windows_.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
-    <select name="type" data-detect-type>
-      {% set current_type = form.type or '' %}
-      {% for opt in type_choices %}
-      <option value="{{ opt }}" {% if current_type == opt or (opt.startswith('Auto') and current_type.startswith('Auto')) %}selected{% endif %}>{{ opt }}</option>
-      {% endfor %}
-      {% if current_type and current_type not in type_choices and not current_type.startswith('Auto') %}
-      <option value="{{ current_type }}" selected>{{ current_type }}</option>
-      {% endif %}
-    </select>
-  </label>
-  <label>Environment <input name="environment" value="{{ form.environment or 'Production' }}"></label>
-  <label>Owner / team <input name="owner" value="{{ form.owner or 'platform' }}" placeholder="platform"></label>
-  <label>Contact name <input name="contact_name" value="{{ form.contact_name }}" placeholder="Who to call"></label>
-  <label><span class="label-line">Owner email {% with %}{% set tip %}Escalation role steps (team, team-lead, engineer) mail this address. Empty = the mail is recorded as no-recipient and not sent.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
-    <input name="owner_email" type="email" value="{{ form.owner_email }}" placeholder="oncall@dc.local"></label>
-  <label>Owner phone <input name="owner_phone" value="{{ form.owner_phone }}" placeholder="+381-11-000-0000"></label>
-  <label><span class="label-line">Scrape address {% with %}{% set tip %}Prometheus HTTP target (ip:9100 or ip:9182). Leave blank to default from type. Network devices use SNMP UDP/161, not this HTTP scrape.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
-    <input name="scrape_address" value="{{ form.scrape_address }}" placeholder="10.10.10.21:9100 or :9182"></label>
-  <label class="wide">Notes <input name="notes" value="{{ form.notes }}" placeholder="Rack, customer, how to reach them"></label>
+  <div class="asset-form-block client-playrules" data-client-playrules>
+    <h3 class="asset-form-block-head label-line">Client playrules {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the ticked playrule (and its playbook / escalation) instead of the first global playrule with the same alertname. Ticked rules are tried in list order. Nothing ticked, or no ticked rule matches the alertname = the global playrule match, unchanged. Disabled playrules are skipped.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <input type="hidden" name="playrules_present" value="1">
+    <p class="muted alarm-limit">This does not create Prometheus thresholds. It records which playrule / playbook this asset prefers when that alertname arrives. Matching is still by alertname only.</p>
+    {% set picked = form.playrule_ids or [] %}
+    {% for rule in playrule_choices or [] %}
+    <label class="alarm-row playrule-pick"><input type="checkbox" name="playrule_ids" value="{{ rule.id }}" {% if rule.id in picked %}checked{% endif %}>
+      <span>{{ rule.name }} <span class="muted">· {{ rule.alertname or "no alertname" }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}{% if not rule.enabled %} · disabled{% endif %}</span></span></label>
+    {% else %}
+    <p class="muted">No playrules yet. Create one on <a href="/playrules">Playrules</a>; global alertname matching applies meanwhile.</p>
+    {% endfor %}
+  </div>
+  </div>
   {% if form_mode == "clone" %}
   <input type="hidden" name="clone_of" value="{{ clone_source }}">
   {% endif %}

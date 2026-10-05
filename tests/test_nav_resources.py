@@ -76,7 +76,9 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert data["hdd_total_bytes"] > 1_000_000
     assert data["cpu_percent"] is None or 0 <= data["cpu_percent"] <= 100
     assert "asset_id" not in data
-    assert set(data["levels"]) == {"cpu", "ram", "hdd"}
+    assert set(data["levels"]) == {"cpu", "ram", "hdd", "net"}
+    assert data["levels"]["net"] in {"ok", "crit"}
+    assert data["net"]["level"] == data["levels"]["net"]
     assert data["thresholds"] == {"warn": 80, "crit": 95}
     home = client.get("/")
     assert home.status_code == 200
@@ -101,8 +103,8 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "form.nav-logout" in css
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=dash-layout-1" in base
-    assert "app.js?v=dash-layout-1" in base
+    assert "app.css?v=v08-1" in base
+    assert "app.js?v=v08-1" in base
     assert "bindInfoTips" in js
     assert "ops-report-actions" in css
 

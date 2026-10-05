@@ -480,25 +480,47 @@ button.danger { background: var(--crit); color: var(--btn-danger-text); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; max-width: 720px; }
 .form-grid label, .form-grid .wide { display: flex; flex-direction: column; gap: 0.25rem; }
 .form-grid .wide { grid-column: 1 / -1; }
-.form-grid.asset-form-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(13rem, 1.05fr);
-  max-width: 64rem;
+/* Add / Edit asset: identity + NOC contacts left, Standard alarms + Client playrules right. */
+.asset-form-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(16rem, 1fr);
+  gap: 1.4rem;
+  max-width: 72rem;
   align-items: start;
 }
-.form-grid.asset-form-grid .alarm-families {
-  grid-column: 3;
-  grid-row: 1 / span 5;
+.asset-form-split > .wide { grid-column: 1 / -1; }
+.asset-form-col { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.asset-form-right {
+  border-left: 1px solid var(--line);
+  padding-left: 1.4rem;
+}
+.asset-form-block { min-width: 0; }
+.asset-form-block-head {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--line);
+}
+.form-grid.asset-form-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  max-width: none;
+  align-items: start;
+}
+.form-grid.asset-form-grid textarea { width: 100%; min-height: 4.2rem; resize: vertical; font: inherit; }
+.asset-form-right .alarm-families,
+.asset-form-right .client-playrules {
   margin: 0;
   padding: 0;
   border: 0;
   background: none;
-  max-width: none;
-  min-width: 0;
-  align-self: start;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
+.asset-form-right label.alarm-row { flex-direction: row; align-items: center; gap: 0.45rem; margin: 0.2rem 0; }
+.asset-form-right label.playrule-pick { align-items: flex-start; }
+.asset-form-right label.playrule-pick input { margin-top: 0.2rem; }
 .form-grid label.alarm-row {
   flex-direction: row;
   align-items: center;
@@ -990,7 +1012,7 @@ td.ops-report-actions .row-actions a.button {
 .alarm-heading { display: block; }
 .alarm-families .muted { margin: 0 0 0.35rem; }
 .alarm-row { display: flex; align-items: center; gap: 0.45rem; margin: 0.2rem 0; }
-.alarm-row input[type="number"] { width: 4.5rem; }
+.alarm-row input[type="number"] { width: 5.4rem; }
 .pager-meta { margin: 0.55rem 0 0.35rem; }
 .pager {
   display: flex;
@@ -1050,10 +1072,8 @@ td.ops-report-actions .row-actions a.button {
   }
   .ops-report-cols { flex-direction: column; }
   .asset-detail-split { grid-template-columns: 1fr; }
-  .form-grid.asset-form-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(11rem, 1fr);
-    max-width: 720px;
-  }
+  .asset-form-split { grid-template-columns: 1fr; }
+  .asset-form-right { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 1rem; }
 }
 
 /* Analyst pass: one scan language across Dashboard, Incidents, History, Assets, Playrules, Escalation. */
@@ -1288,3 +1308,14 @@ td.row-select { width: 2.2rem; padding-right: 0.15rem; text-align: center; }
 .select-page-bar input[type="checkbox"],
 .card-select input[type="checkbox"] { width: auto; margin: 0; padding: 0; cursor: pointer; }
 .card-select { float: right; margin: 0.15rem 0 0 0.5rem; }
+
+/* V0.8 asset NOC fields on Who to call. */
+.pre-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.runbook-note {
+  margin: 0.6rem 0 0.4rem;
+  padding: 0.55rem 0.8rem;
+  border-left: 4px solid var(--warn);
+  background: var(--panel);
+  border-radius: 6px;
+}
+.runbook-note p { margin: 0.25rem 0 0; }

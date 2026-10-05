@@ -59,7 +59,7 @@ def _host(db, name: str, **extra) -> Asset:
     return create_manual_asset(
         db,
         hostname=name,
-        ip=extra.pop("ip", "10.77.0.%d" % (abs(hash(name)) % 200 + 20)),
+        ip=extra.pop("ip", "10.77.%d.%d" % (uuid4().int % 250 + 1, uuid4().int % 230 + 20)),
         type=extra.pop("type", "Linux Server"),
         actor="tester",
         **extra,
@@ -437,7 +437,7 @@ def test_analyst_templates_say_the_honest_thing(monkeypatch):
         assert "Guidance only" in page.text
         assert "playbook-guide" in page.text
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=dash-layout-1" in base
+    assert "app.css?v=v08-1" in base
     for name in ["incident_detail.html", "asset_detail.html", "_asset_form.html", "escalation.html"]:
         text = (ROOT / "frontend" / "templates" / name).read_text(encoding="utf-8")
         assert "falls back to policy role@forgesre.local" not in text

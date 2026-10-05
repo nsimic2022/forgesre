@@ -1,18 +1,18 @@
 # ForgeSRE Architecture Proposal
 
-> **Not the V0.7 appliance runtime.** This file is a **long-term architecture proposal**.
+> **Not the V0.8 appliance runtime.** This file is a **long-term architecture proposal**.
 > Do **not** treat it as what runs on the Ubuntu VM today.
 > Do **not** implement the Go / Kubernetes / Caddy rewrite from these diagrams.
 >
-> **What actually runs (V0.7):** Docker Compose on one Ubuntu VM. Python FastAPI Core, Jinja2 UI, Bash CLI (`./forgesre`). Bundled NetBox is a default Compose service (`:8001`). Redis exists **only** because bundled NetBox requires it — not a ForgeSRE job broker. There is **no Caddy-as-runtime**. Grafana is graphs only; the alarm path is Prometheus → Alertmanager → Core. Jobs are **one worker thread** in Core (not Celery).
+> **What actually runs (V0.8):** Docker Compose on one Ubuntu VM. Python FastAPI Core, Jinja2 UI, Bash CLI (`./forgesre`). Bundled NetBox is a default Compose service (`:8001`). Redis exists **only** because bundled NetBox requires it — not a ForgeSRE job broker. There is **no Caddy-as-runtime**. Grafana is graphs only; the alarm path is Prometheus → Alertmanager → Core. Jobs are **one worker thread** in Core (not Celery).
 >
 > Operators: start at [`operator-handbook.md`](operator-handbook.md) and [`cli.md`](cli.md). Install: [`install-config.md`](install-config.md). GitHub README is the product summary.
 
 **Status:** proposal / longer-term contract (amended notes for V0.1 in `docs/v0.1.md`)  
 **Date:** 2026-08-20 (banner updated 2026-09-07)  
-**Scope:** Future architecture. V0.7 runtime is Python/FastAPI + Bash + Compose, not Go/React/Caddy/K8s.
+**Scope:** Future architecture. V0.8 runtime is Python/FastAPI + Bash + Compose, not Go/React/Caddy/K8s.
 
-This document remains a design note (NetBox at scale, discovery worker isolation, HA, extra agents). **It is not the install guide and not a backlog to execute in V0.7.** If this file disagrees with the handbook or `docs/v0.7.md` on what ships now, the handbook / CLI / Compose file win.
+This document remains a design note (NetBox at scale, discovery worker isolation, HA, extra agents). **It is not the install guide and not a backlog to execute in V0.8.** If this file disagrees with the handbook or `docs/v0.7.md` on what ships now, the handbook / CLI / Compose file win.
 
 ---
 
@@ -334,7 +334,7 @@ Open WebUI, Promtail, blackbox_exporter as a separate container, Redis (unless b
 
 **V0.5 exception:** `snmp_exporter` *is* a compose service (`127.0.0.1:9116`). Alloy SNMP remains a later unification.
 
-**V0.7 exception:** optional Compose profile `mailbox` (docker-mailserver + Roundcube) via `./forgesre mailbox`. Off at install.
+**V0.8 exception:** optional Compose profile `mailbox` (docker-mailserver + Roundcube) via `./forgesre mailbox`. Off at install.
 
 ---
 

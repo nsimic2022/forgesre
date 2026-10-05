@@ -6,6 +6,7 @@ import time
 
 from sqlalchemy.orm import Session
 
+from app.asset_extras import asset_playrule_ids, form_extras, known_playrule_ids, normalize_extras
 from app.audit import audit
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE, detect_exporter, is_auto_asset_type
@@ -384,6 +385,8 @@ def create_manual_asset(
     cloned_from: str = "",
     alarms: dict | None = None,
     asset_id: str = "",
+    extras: dict | None = None,
+    playrule_ids: list | None = None,
 ) -> Asset:
     hostname = (hostname or "").strip()
     ip = (ip or "").strip()
@@ -462,6 +465,8 @@ def create_manual_asset(
         source="manual",
         scrape_address=address,
         alarms=stored_alarms,
+        extras=normalize_extras(extras),
+        playrule_ids=known_playrule_ids(db, playrule_ids),
     )
     db.add(asset)
     audit(
@@ -524,6 +529,8 @@ def update_asset(
     snmp_ok: bool | None = None,
     snmp_prober=None,
     alarms: dict | None = None,
+    extras: dict | None = None,
+    playrule_ids: list | None = None,
 ) -> Asset:
     old_ip = asset.ip or ""
     old_type = asset.type or ""
@@ -604,6 +611,10 @@ def update_asset(
         from app.asset_alarms import normalize_alarms
 
         asset.alarms = normalize_alarms(alarms, new_kind)
+    if extras is not None:
+        asset.extras = normalize_extras(extras)
+    if playrule_ids is not None:
+        asset.playrule_ids = known_playrule_ids(db, playrule_ids)
     audit(
         db,
         "asset.update",
@@ -1161,6 +1172,8 @@ def clone_prefill(db: Session, asset: Asset) -> dict:
         "cloned_from": asset.asset_id,
         "lab_source": lab,
         "alarms": _form_alarms(asset),
+        "extras": form_extras(asset),
+        "playrule_ids": asset_playrule_ids(asset),
     }
 
 
@@ -1190,6 +1203,8 @@ def asset_form_values(asset: Asset | None = None) -> dict:
             "cloned_from": "",
             "lab_source": False,
             "alarms": _form_alarms(),
+            "extras": form_extras(),
+            "playrule_ids": [],
         }
     return {
         "asset_id": asset.asset_id or "",
@@ -1206,6 +1221,8 @@ def asset_form_values(asset: Asset | None = None) -> dict:
         "cloned_from": "",
         "lab_source": False,
         "alarms": _form_alarms(asset),
+        "extras": form_extras(asset),
+        "playrule_ids": asset_playrule_ids(asset),
     }
 
 

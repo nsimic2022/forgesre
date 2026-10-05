@@ -37,13 +37,13 @@ UI: `http://<VM-IP>:8080`. NetBox UI: `:8001`. Grafana: `:3000` (open from Syste
 
 What each release shipped (optional “why it exists”, not required to operate):
 
-- [V0.1](v0.1.md) · [V0.2](v0.2.md) · [V0.3](v0.3.md) · [V0.4](v0.4.md) · [V0.5](v0.5.md) · [V0.6](v0.6.md) · [V0.7](v0.7.md)
+- [V0.1](v0.1.md) · [V0.2](v0.2.md) · [V0.3](v0.3.md) · [V0.4](v0.4.md) · [V0.5](v0.5.md) · [V0.6](v0.6.md) · [V0.7](v0.7.md) · [V0.8](v0.8.md)
 
 ## For developers (not used in production)
 
 These are design notes. You do **not** install or enable them on the VM.
 
-- [Architecture proposal (not the V0.7 appliance runtime)](architecture.md)
+- [Architecture proposal (not the V0.8 appliance runtime)](architecture.md)
 - [V0.3 implementation plan](V03_IMPLEMENTATION_PLAN.md)
 
 **Session handoff** (next coding agent / contributor, not an operator start page): [continuation.md](continuation.md).

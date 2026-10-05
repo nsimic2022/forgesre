@@ -152,6 +152,6 @@ def test_example_yaml_ai_off_and_short_timeout():
     assert 60 <= settings.llm_timeout <= 120
     docs = " ".join(
         (ROOT / "docs" / name).read_text(encoding="utf-8").lower()
-        for name in ("cli.md", "install-config.md", "operator-handbook.md", "continuation.md", "v0.7.md")
+        for name in ("cli.md", "install-config.md", "operator-handbook.md", "continuation.md", "v0.7.md", "v0.8.md")
     )
     assert "mailpit" not in docs

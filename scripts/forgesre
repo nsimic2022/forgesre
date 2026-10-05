@@ -639,7 +639,7 @@ EOF
       ;;
     version)
       cat <<'EOF'
-version — print FORGESRE_VERSION from .env (0.7.0 after this release).
+version — print FORGESRE_VERSION from .env (0.8.0 after this release).
 
   ./forgesre version
 EOF
@@ -991,7 +991,7 @@ case "$cmd" in
     if [[ -f .env ]] && grep -q '^FORGESRE_VERSION=' .env; then
       awk -F= '/^FORGESRE_VERSION=/ {print $2}' .env | tail -1 | tr -d '"'
     else
-      echo "0.7.0"
+      echo "0.8.0"
     fi
     ;;
   tls)

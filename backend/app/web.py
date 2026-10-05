@@ -17,6 +17,7 @@ from app.asset_probe import reachability_snapshot
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.asset_alarms import alarms_from_form, saved_alarm_hostnames
+from app.asset_extras import EXTRA_FIELDS, extras_from_form, extras_rows, playrule_ids_from_form
 from app.inventory import (
     ASSET_TYPE_CHOICES,
     CANDIDATE_ROLE_CHOICES,
@@ -280,6 +281,7 @@ def ctx(request: Request, user: User | None, **extra):
         "pager_href": pager_href,
         "pager_keep": pager_keep,
         "ack_circle": ack_circle,
+        "extras_rows": extras_rows,
     }
     data.update(extra)
     return data
@@ -400,6 +402,7 @@ def dashboard(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     page: str = "1",
+    journal_page: str = "1",
 ):
     from sqlalchemy import func
 
@@ -411,7 +414,17 @@ def dashboard(
     recent, total = list_history(db, days=None, open_only=False, limit=size, page=page)
     pager = pager_state(page, total=total, size=size)
     journal_error = error_banner_entries(db, getattr(user, "journal_error_ack_id", 0), limit=5)
-    journal_recent = list_entries(db, limit=8)
+    journal_recent: list = []
+    journal_pager = None
+    if can(user, "read_play"):
+        journal_pager = pager_state(
+            journal_page,
+            total=count_entries(db),
+            size=per_page(request, "journal_page"),
+            param="journal_page",
+            fragment="#journal",
+        )
+        journal_recent = list_entries(db, limit=journal_pager["size"], offset=journal_pager["offset"])
     down_incidents = list_host_down_incidents(db)
     return render(
         request,
@@ -426,6 +439,7 @@ def dashboard(
         recent=recent,
         journal_error=journal_error,
         journal_recent=journal_recent,
+        journal_pager=journal_pager,
         down_incidents=down_incidents,
         pager=pager,
     )
@@ -497,8 +511,35 @@ def assets_page(
         asset_missing_email=asset_missing_email,
         reachability_snapshot=reachability_snapshot,
         pager=pager,
+        extra_fields=EXTRA_FIELDS,
+        playrule_choices=playrule_choices(db),
     )
 
+
+def playrule_choices(db: Session) -> list[dict]:
+    """Client playrule picker rows: every playrule with its alertname and playbook. Read-only."""
+    rows = db.query(Playrule).order_by(Playrule.name).all()
+    return [
+        {
+            "id": rule.id,
+            "name": rule.name,
+            "alertname": str((rule.condition or {}).get("alertname") or ""),
+            "enabled": bool(rule.enabled),
+            "playbook": rule.playbook.name if rule.playbook else "",
+        }
+        for rule in rows
+    ]
+
+
+def asset_playrules(db: Session, asset: Asset | None) -> list[Playrule]:
+    """Client playrules saved on this asset, in saved order. Missing ids are skipped."""
+    from app.asset_extras import asset_playrule_ids
+
+    ids = asset_playrule_ids(asset)
+    if not ids:
+        return []
+    by_id = {rule.id: rule for rule in db.query(Playrule).filter(Playrule.id.in_(ids)).all()}
+    return [by_id[pk] for pk in ids if pk in by_id]
 
 
 @router.get("/assets/verify", response_class=HTMLResponse)
@@ -553,6 +594,18 @@ def asset_create(
     alarm_memory_threshold: str = Form(""),
     alarm_disk_enabled: str = Form(""),
     alarm_disk_threshold: str = Form(""),
+    extras_present: str = Form(""),
+    extra_customer: str = Form(""),
+    extra_site: str = Form(""),
+    extra_backup_name: str = Form(""),
+    extra_backup_phone: str = Form(""),
+    extra_backup_email: str = Form(""),
+    extra_support_hours: str = Form(""),
+    extra_timezone: str = Form(""),
+    extra_contract: str = Form(""),
+    extra_runbook_note: str = Form(""),
+    playrules_present: str = Form(""),
+    playrule_ids: list[str] = Form([]),
 ):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
@@ -567,6 +620,19 @@ def asset_create(
         disk_enabled=alarm_disk_enabled,
         disk_threshold=alarm_disk_threshold,
     )
+    posted_extras = extras_from_form(
+        extras_present,
+        customer=extra_customer,
+        site=extra_site,
+        backup_name=extra_backup_name,
+        backup_phone=extra_backup_phone,
+        backup_email=extra_backup_email,
+        support_hours=extra_support_hours,
+        timezone=extra_timezone,
+        contract=extra_contract,
+        runbook_note=extra_runbook_note,
+    )
+    posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids)
     try:
         asset = create_manual_asset(
             db,
@@ -586,6 +652,8 @@ def asset_create(
             cloned_from=cloned_from,
             snmp_prober=_snmp_answer,
             alarms=posted_alarms,
+            extras=posted_extras,
+            playrule_ids=posted_playrules,
         )
     except ValueError as exc:
         if cloned_from:
@@ -940,6 +1008,7 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         metrics=safe_asset_metric_panel(item),
         pager=pager,
         similar_pager=similar_pager,
+        client_playrules=asset_playrules(db, item),
     )
 
 
@@ -987,6 +1056,18 @@ def asset_update(
     alarm_memory_threshold: str = Form(""),
     alarm_disk_enabled: str = Form(""),
     alarm_disk_threshold: str = Form(""),
+    extras_present: str = Form(""),
+    extra_customer: str = Form(""),
+    extra_site: str = Form(""),
+    extra_backup_name: str = Form(""),
+    extra_backup_phone: str = Form(""),
+    extra_backup_email: str = Form(""),
+    extra_support_hours: str = Form(""),
+    extra_timezone: str = Form(""),
+    extra_contract: str = Form(""),
+    extra_runbook_note: str = Form(""),
+    playrules_present: str = Form(""),
+    playrule_ids: list[str] = Form([]),
 ):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
@@ -1003,6 +1084,19 @@ def asset_update(
         disk_enabled=alarm_disk_enabled,
         disk_threshold=alarm_disk_threshold,
     )
+    posted_extras = extras_from_form(
+        extras_present,
+        customer=extra_customer,
+        site=extra_site,
+        backup_name=extra_backup_name,
+        backup_phone=extra_backup_phone,
+        backup_email=extra_backup_email,
+        support_hours=extra_support_hours,
+        timezone=extra_timezone,
+        contract=extra_contract,
+        runbook_note=extra_runbook_note,
+    )
+    posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids)
     update_asset(
         db,
         item,
@@ -1019,6 +1113,8 @@ def asset_update(
         actor=user.email,
         snmp_prober=_snmp_answer,
         alarms=posted_alarms,
+        extras=posted_extras,
+        playrule_ids=posted_playrules,
     )
     notice = getattr(item, "_detect_message", "") or ""
     suffix = f"?notice={quote(notice)}" if notice else ""
@@ -1189,6 +1285,7 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
             tools=tool_status(investigation, pending, llm_job_error(db, number)),
             pager=audit_pager,
             notes_pager=notes_pager,
+            client_playrules=asset_playrules(db, item.asset),
             **ops_mail_ctx(db, user, item),
         )
 
