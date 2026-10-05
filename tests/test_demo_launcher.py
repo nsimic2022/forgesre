@@ -61,7 +61,8 @@ def test_dashboard_has_one_run_demo_control_not_two_forms():
     assert "System Health" in html
     assert "/health-ui" in html
     assert html.count(">Monitoring<") == 0
-    assert "Core (container)" not in html
+    assert ">Core (container)<" not in html
+    assert "health-table" not in html
     assert html.count('id="demo-open"') == 1
     assert html.count("data-demo-open") == 1
     assert html.count("Run demo") >= 1

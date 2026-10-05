@@ -307,4 +307,92 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.8rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-4" in base
+    assert "app.css?v=v08-5" in base
+
+
+def _fake_doctor(**_kw):
+    return {
+        "overall": "DEGRADED",
+        "failed": ["alertmanager"],
+        "components": {
+            "core": {"status": "ok"},
+            "postgres": {"status": "ok"},
+            "prometheus": {"status": "ok"},
+            "alertmanager": {"status": "error", "why": "connection refused"},
+            "grafana": {"status": "warn", "why": "graphs only"},
+            "snmp": {"status": "paused"},
+            "loki": {"status": "ok"},
+            "alloy": {"status": "ok"},
+            "llm": {"status": "disabled"},
+            "netbox": {"status": "ok"},
+            "discovery": {"status": "ok"},
+            "mailpit": {"status": "ok"},
+        },
+    }
+
+
+def _card(html: str) -> str:
+    start = html.index("data-appliance-card")
+    return html[start : html.index("</aside>", start)]
+
+
+def test_dashboard_card_titled_forgesre_with_health_cubes(monkeypatch):
+    import app.web as web
+
+    monkeypatch.setattr(web, "doctor_payload", _fake_doctor)
+    _db().close()
+    html = _client().get("/").text
+    card = _card(html)
+    assert "<h2>ForgeSRE " in card
+    assert "This appliance" not in html
+    assert 'data-metric="net"' in card and "data-clock" in card
+    assert card.index('data-metric="net"') < card.index("data-stack-cubes")
+    assert '<a class="stack-cubes" href="/health-ui"' in card
+    cubes = {cid: css for css, cid in re.findall(r'<span class="stack-cube (\w+)" data-cube="(\w+)"', card)}
+    expected = {
+        "core": "ok",
+        "postgres": "ok",
+        "prometheus": "ok",
+        "alertmanager": "crit",
+        "grafana": "warn",
+        "snmp": "warn",
+        "loki": "ok",
+        "alloy": "ok",
+        "llm": "warn",
+        "netbox": "ok",
+        "discovery": "ok",
+        "mailpit": "ok",
+    }
+    assert cubes == expected
+    for short in ("Core", "Postgres", "Prom", "Alertmgr", "Grafana", "Loki", "NetBox", "LLM", "Discovery", "Mailpit"):
+        assert f">{short}<span" in card
+    assert 'title="Alertmanager: down"' in card
+
+
+def test_dashboard_cubes_match_health_page_tones(monkeypatch):
+    import app.web as web
+
+    monkeypatch.setattr(web, "doctor_payload", _fake_doctor)
+    _db().close()
+    client = _client()
+    card = _card(client.get("/").text)
+    health = client.get("/health-ui").text
+    dash = re.findall(r'class="stack-cube (\w+)" data-cube="\w+" title="([^":]+):', card)
+    rows = re.findall(r'<tr class="health-(\w+)">\s*<td>\s*(?:<a [^>]+>)?([^<\n]+?)\s*(?:</a>)?\s*</td>', health)
+    assert dash and rows
+    assert [(label, css) for css, label in dash] == [(label, css) for css, label in rows]
+
+
+def test_dashboard_card_has_no_container_controls(monkeypatch):
+    import app.web as web
+
+    monkeypatch.setattr(web, "doctor_payload", _fake_doctor)
+    _db().close()
+    card = _card(_client().get("/").text).lower()
+    assert "<form" not in card and "<button" not in card
+    for word in ("start", "stop", "restart", "docker", ">on<", ">off<"):
+        assert word not in card.split("</h2>", 1)[1], word
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".stack-cube.ok { background: var(--ok)" in css
+    assert ".stack-cube.warn { background: var(--warn)" in css
+    assert ".stack-cube.crit { background: var(--crit)" in css
