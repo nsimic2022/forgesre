@@ -103,7 +103,7 @@ def test_dashboard_host_down_banner_lists_open_incidents_with_demo():
     assert f'href="/incidents/{host.number}"' in html
     assert f'href="/incidents/{net.number}"' in html
     assert html.count('id="host-down-banner"') == 1
-    banner = html[html.find('id="host-down-banner"') : html.find("<section>")]
+    banner = html[html.find('id="host-down-banner"') : html.find('class="dash-top"')]
     assert "DEMO" in banner
     assert cpu.number not in banner
 
