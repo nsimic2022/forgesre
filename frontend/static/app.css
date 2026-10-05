@@ -1227,7 +1227,11 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .scan-list tr.inc-row-done .inc-title.sev-warn,
 .incidents-table tr.inc-row-done .inc-title.sev-warn { color: var(--muted); color: color-mix(in srgb, var(--warn) 45%, var(--muted)); }
 .scan-list td.inc-when .inc-age,
-.incidents-table td.inc-when .inc-age { color: var(--text); font-weight: 600; }
+.incidents-table td.inc-when .inc-age { display: block; color: var(--text); font-weight: 600; }
+.scan-list tr.inc-row-done td.inc-when .inc-age,
+.incidents-table tr.inc-row-done td.inc-when .inc-age { font-weight: 500; }
+.scan-list td.inc-when .inc-wall,
+.incidents-table td.inc-when .inc-wall { display: block; margin-top: 0.08rem; color: var(--muted); font-size: 0.78rem; }
 
 .incident-strip {
   margin: 0 0 0.8rem;
