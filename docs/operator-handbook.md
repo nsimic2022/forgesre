@@ -766,6 +766,7 @@ If the incident has no asset, the alert `asset` / `instance` label did not match
 | When | Command |
 |---|---|
 | Live box after `git pull` | `./forgesre update` — never `./install.sh` |
+| Bounce containers only (no pull / install / secrets change) | `./forgesre restart` |
 | Stack lights (same as `/health-ui`) | `./forgesre doctor` |
 | Appliance report → `data/reports/` | `./forgesre test` |
 | Live inventory path (exporter → Prom → AM → Core) | `./forgesre verify` / `./forgesre ping` |
