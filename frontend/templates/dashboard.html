@@ -3,7 +3,7 @@
 {% block title %}Dashboard · ForgeSRE{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Dashboard {% with %}{% set tip %}Infrastructure and incident counts for this appliance. Stack lights live on System Health (same checks as ./forgesre doctor). Journal is the internal process log, not Loki.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+  <h1>Dashboard {% with %}{% set tip %}Infrastructure and incident counts for this appliance. The cubes on the ForgeSRE card mirror System Health (same checks as ./forgesre doctor); details and Fix live there. Journal is the internal process log, not Loki.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
   {% if can('admin') %}
   <button type="button" id="demo-open" data-demo-open>Run demo</button>
   {% endif %}
@@ -86,7 +86,7 @@
   </div>
 </section>
 <aside class="appliance-card" data-appliance-card aria-label="This ForgeSRE appliance">
-  <h2>This appliance {% with %}{% set tip %}The ForgeSRE VM running Core — not an inventory asset. Clock is this browser's local time. CPU from the host /proc/stat; RAM and HDD from node_exporter on this VM (or /proc and statvfs). Refreshes every 8 s. Dash: green below {{ resource_warn }}%, yellow {{ resource_warn }}–{{ resource_crit - 1 }}%, red {{ resource_crit }}% or more, or no reading (blocked). NET: green = this VM has a default route on a non-docker interface whose link is up; red = no usable default route, or that interface is down. No ping and no internet probe — an air-gapped lab with a LAN gateway is green. Network throughput is not measured.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>ForgeSRE {% with %}{% set tip %}The ForgeSRE VM running Core — not an inventory asset. Clock is this browser's local time. CPU from the host /proc/stat; RAM and HDD from node_exporter on this VM (or /proc and statvfs). Refreshes every 8 s. Dash: green below {{ resource_warn }}%, yellow {{ resource_warn }}–{{ resource_crit - 1 }}%, red {{ resource_crit }}% or more, or no reading (blocked). NET: green = this VM has a default route on a non-docker interface whose link is up; red = no usable default route, or that interface is down. No ping and no internet probe — an air-gapped lab with a LAN gateway is green. Network throughput is not measured. Cubes are the System Health rows (same checks as ./forgesre doctor, as of page load): green running, yellow warn / paused / starting / disabled, red down. Read-only — click to open System Health.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="appliance-clock" data-clock>—</div>
   <ul class="appliance-metrics" data-appliance-resources>
     <li class="appliance-metric" data-metric="cpu" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">CPU</span><span class="metric-reading" data-metric-value>—</span></li>
@@ -94,6 +94,13 @@
     <li class="appliance-metric" data-metric="hdd" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">HDD</span><span class="metric-reading" data-metric-value>—</span></li>
     <li class="appliance-metric" data-metric="net" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">NET</span><span class="metric-reading" data-metric-value>—</span></li>
   </ul>
+  {% if stack %}
+  <a class="stack-cubes" href="/health-ui" data-stack-cubes title="Open System Health">
+    {% for item in stack %}
+    <span class="stack-cube {{ item.css }}" data-cube="{{ item.id }}" title="{{ item.label or item.id }}: {{ item.state }}">{{ item.short }}<span class="sr-only"> {{ item.state }}</span></span>
+    {% endfor %}
+  </a>
+  {% endif %}
 </aside>
 </div>
 <div class="dash-banners">

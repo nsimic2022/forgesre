@@ -30,6 +30,23 @@ COMPONENT_LABELS = {
     "netbox": "NetBox",
 }
 
+# Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
+COMPONENT_SHORT = {
+    "core": "Core",
+    "postgres": "Postgres",
+    "prometheus": "Prom",
+    "alertmanager": "Alertmgr",
+    "grafana": "Grafana",
+    "snmp": "SNMP",
+    "loki": "Loki",
+    "alloy": "Alloy",
+    "llm": "LLM",
+    "netbox": "NetBox",
+    "discovery": "Discovery",
+    "redis": "Redis",
+    "mailpit": "Mailpit",
+}
+
 # Alarm path is Prometheus → Alertmanager → Core. Grafana / Loki graphs are not this list.
 ALARM_PATH_IDS = ("prometheus", "alertmanager")
 _PORT_RE = re.compile(r":(\d{2,5})\b")
@@ -38,6 +55,11 @@ _PORT_RE = re.compile(r":(\d{2,5})\b")
 def component_label(cid: str) -> str:
     """Human name for doctor CLI and Health UI. Unknown keys print as-is."""
     return COMPONENT_LABELS.get(str(cid or ""), str(cid or ""))
+
+
+def component_short(cid: str) -> str:
+    key = str(cid or "")
+    return COMPONENT_SHORT.get(key) or key[:1].upper() + key[1:]
 
 
 def request_hostname(host_header: str) -> str:
@@ -324,6 +346,7 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
             {
                 "id": cid,
                 "label": spec.get("label") or item.get("label") or component_label(cid),
+                "short": component_short(cid),
                 "status": item.get("status") or "disabled",
                 "state": state,
                 "css": css,
@@ -347,6 +370,7 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
             {
                 "id": cid,
                 "label": packed.get("label") or component_label(cid),
+                "short": component_short(cid),
                 "status": packed.get("status") or "error",
                 "state": state,
                 "css": css,

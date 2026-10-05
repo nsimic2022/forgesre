@@ -439,11 +439,13 @@ def dashboard(
         )
         journal_recent = list_entries(db, limit=journal_pager["size"], offset=journal_pager["offset"])
     down_incidents = list_host_down_incidents(db)
+    stack = enrich_components(doctor_payload().get("components") or {}, request.headers.get("host") or "localhost")
     return render(
         request,
         "dashboard.html",
         user,
         stats=stats,
+        stack=stack,
         asset_tiles=asset_rows,
         incident_tiles=incident_rows,
         incident_heat=incident_heat(incident_rows),
