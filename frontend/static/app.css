@@ -1012,7 +1012,7 @@ td.ops-report-actions .row-actions a.button {
 .alarm-heading { display: block; }
 .alarm-families .muted { margin: 0 0 0.35rem; }
 .alarm-row { display: flex; align-items: center; gap: 0.45rem; margin: 0.2rem 0; }
-.alarm-row input[type="number"] { width: 4.5rem; }
+.alarm-row input[type="number"] { width: 5.4rem; }
 .pager-meta { margin: 0.55rem 0 0.35rem; }
 .pager {
   display: flex;
