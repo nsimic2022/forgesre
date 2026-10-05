@@ -46,6 +46,8 @@ Existing VM after git pull:
   ./forgesre update
   ./forgesre doctor
   ./forgesre test
+Bounce containers only (no pull, no install, secrets untouched):
+  ./forgesre restart
 
 Commands:
   help [command]     This overview, or detailed help for one command
@@ -82,6 +84,7 @@ Commands:
   import             Alias for restore (numbered picker; also: import backup)
   remove             Delete one backup folder (tar + MANIFEST); confirm with --yes or typed yes
   update             Backup, render monitoring, refresh images, restart, doctor
+  restart            Restart running stack containers only (no git pull, install, or secrets)
   mailbox            Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)
   completion         Print a `source …completion.bash` line for ~/.bashrc
 
@@ -676,6 +679,28 @@ docker compose rights as this command (docker info, else sudo docker compose).
 If backup fails, update prints a clear error and continues so the stack
 (including snmp-exporter and NetBox) still comes up. Do not pip install sqlalchemy
 on the host. Do not run ./install.sh. Use this after git pull origin main.
+
+Lighter bounce without pull/backup/render: ./forgesre restart
+EOF
+      ;;
+    restart)
+      cat <<'EOF'
+restart — restart the stack containers in place (same containers, new processes).
+
+  ./forgesre restart
+
+Order: Postgres (waits for pg_isready), NetBox Redis, Prometheus, Alertmanager,
+snmp_exporter, Loki, Alloy, Grafana, LLM, NetBox, mailbox, then Core (waits for
+GET /api/v1/health). Only services that already have a container are restarted;
+profile-off services (llm, mailserver, roundcube) are skipped, not an error.
+The one-shot netbox-db-init is not re-run.
+
+Does not git pull, does not run ./install.sh, does not render monitoring,
+and does not write .env or secrets/. Volumes and data/ are kept.
+Exit 1 if Postgres or Core cannot be restarted or Core does not answer health.
+An optional service that fails to restart is a WARN and the rest continue.
+
+New code after git pull, changed images, or edited compose: ./forgesre update
 EOF
       ;;
     mailbox)
@@ -811,6 +836,7 @@ case "$cmd" in
     exec "$ROOT/scripts/remove.sh" "$@"
     ;;
   update) exec "$ROOT/scripts/update.sh" "$@" ;;
+  restart) exec "$ROOT/scripts/restart.sh" "$@" ;;
   mailbox)
     need_env
     exec "$ROOT/scripts/mailbox.sh" "$@"

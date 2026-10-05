@@ -86,6 +86,8 @@ git pull origin main
 ./forgesre update
 ```
 
+To bounce the running containers without pulling, re-rendering, or touching `.env` / `secrets/`: `./forgesre restart`.
+
 Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. Linux stays on node_exporter `:9100`. Windows uses windows_exporter `:9182` (not node_exporter).
 
 ---

@@ -62,6 +62,7 @@ Two logins:
 ./forgesre fetch-llm
 ./forgesre update           # includes bundled NetBox :8001 (wait on first boot)
 ./forgesre update --offline # lab: no image pull; skip Core --build if sources unchanged
+./forgesre restart          # restart existing containers only; no git pull, install.sh, or secrets/.env writes
 ./forgesre version
 ./forgesre login
 ./forgesre whoami
