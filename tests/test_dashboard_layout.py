@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import or_
 
 from app.db import Base, SessionLocal, engine
 from app.history import (
@@ -22,7 +24,7 @@ from app.history import (
 )
 from app.journal import report
 from app.main import app
-from app.models import AuditLog, DiscoveryCandidate, Incident, Notification, ScheduledReport
+from app.models import AuditLog, DiscoveryCandidate, Incident, JournalEntry, Notification, ScheduledReport
 from app.seed import seed
 from app.services import next_incident_number
 
@@ -35,6 +37,24 @@ def _db():
     db = SessionLocal()
     seed(db)
     return db
+
+
+@pytest.fixture(autouse=True)
+def _drop_layout_rows():
+    """Shared sqlite DB: later tests assume a small incident count (next_incident_number), so remove what we add."""
+    yield
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    db.query(Incident).filter(
+        or_(Incident.fingerprint.like("layout:%"), Incident.fingerprint.like("NodeExporterDown:layout-%"))
+    ).delete(synchronize_session=False)
+    db.query(Notification).filter(Notification.step_key == "layout").delete(synchronize_session=False)
+    db.query(ScheduledReport).filter(ScheduledReport.name.like("layout-%")).delete(synchronize_session=False)
+    db.query(DiscoveryCandidate).filter(DiscoveryCandidate.ip.like("10.66.%")).delete(synchronize_session=False)
+    db.query(AuditLog).filter(AuditLog.action == "layout.test").delete(synchronize_session=False)
+    db.query(JournalEntry).filter(JournalEntry.action == "layout").delete(synchronize_session=False)
+    db.commit()
+    db.close()
 
 
 def _client() -> TestClient:
@@ -180,6 +200,9 @@ def test_pager_select_bottom_right_on_every_listed_surface():
 def test_row_checkboxes_named_selected_on_list_surfaces():
     db = _db()
     _add_incidents(db, 2)
+    db.add(Notification(target="sel@example.local", subject="Layout select", body="x", status="generated", step_key="layout"))
+    db.add(ScheduledReport(name=f"layout-sel-{uuid4().hex[:6]}", to_email="ops@example.local", interval_hours=6))
+    db.commit()
     client = _client()
     for path in ["/", "/incidents", "/history", "/assets", "/discovery", "/playrules", "/playbooks", "/ops", "/admin"]:
         page = client.get(path)
@@ -201,9 +224,17 @@ def test_row_checkboxes_named_selected_on_list_surfaces():
 
 def test_dashboard_order_banners_tiles_appliance_sections():
     db = _db()
-    from app.services import run_demo_host
-
-    run_demo_host(db)
+    db.add(
+        Incident(
+            number=next_incident_number(db),
+            title="Layout host down",
+            severity="CRITICAL",
+            status="OPEN",
+            fingerprint=f"NodeExporterDown:layout-{uuid4().hex[:6]}",
+            started_at=datetime.now(timezone.utc),
+        )
+    )
+    db.commit()
     report(db, "jobs", "layout", "error", summary="Layout journal error")
     if not db.query(DiscoveryCandidate).filter_by(status="new").count():
         db.add(DiscoveryCandidate(ip="10.66.250.9", proposed_role="Unknown device", status="new", source="scan"))
