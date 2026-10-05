@@ -81,20 +81,23 @@ from app.services import (
 )
 from app.stack import enrich_components, rewrite_host
 from app.history import (
-    PAGE_SIZE,
     ack_circle,
     add_note,
     apply_status_fields,
     audit_for,
     clamp_days,
     dashboard_incident_tiles,
+    incident_heat,
     list_history,
     notes_for,
     notifications_for,
     paginate,
     pager_state,
+    parse_per_page,
+    per_page_param,
     reported_to_for,
 )
+from app.host_resources import RESOURCE_CRIT_PERCENT, RESOURCE_WARN_PERCENT
 from rca.catalog import PLAYRULE_PRESETS
 from app.settings import settings
 
@@ -186,6 +189,23 @@ def pager_href(request: Request, page: int, param: str = "page", fragment: str =
     return f"{request.url.path}?{qs}{frag}"
 
 
+def per_page(request: Request, page_param: str = "page") -> int:
+    """Rows per page for one list, from its ?per_page= (or audit_per_page=, …) query key."""
+    return parse_per_page(request.query_params.get(per_page_param(page_param)))
+
+
+def pager_keep(pager: dict | None, *, page: bool = True) -> str:
+    """'&page=2&per_page=20' tail for Edit/Clone/filter links so they land on the same slice. Empty when default."""
+    if not pager:
+        return ""
+    items = []
+    if page and int(pager.get("page") or 1) > 1:
+        items.append((pager["param"], str(pager["page"])))
+    if pager.get("size") and pager["size"] != pager.get("default_size"):
+        items.append((pager["size_param"], str(pager["size"])))
+    return "&" + urlencode(items) if items else ""
+
+
 def smtp_provider_id() -> str:
     """Which documented SMTP path Core is using. Display only — does not send mail."""
     if not (settings.email_enabled and settings.smtp_host):
@@ -258,6 +278,7 @@ def ctx(request: Request, user: User | None, **extra):
         "demo_candidate_ip": DEMO_CANDIDATE_IP,
         "llm_timeout": settings.llm_timeout,
         "pager_href": pager_href,
+        "pager_keep": pager_keep,
         "ack_circle": ack_circle,
     }
     data.update(extra)
@@ -386,8 +407,9 @@ def dashboard(
     stats = {"pending_discovery": pending}
     asset_rows = asset_tiles(db.query(Asset).all())
     incident_rows = dashboard_incident_tiles(db)
-    recent, total = list_history(db, days=None, open_only=False, limit=PAGE_SIZE, page=page)
-    pager = pager_state(page, total=total)
+    size = per_page(request)
+    recent, total = list_history(db, days=None, open_only=False, limit=size, page=page)
+    pager = pager_state(page, total=total, size=size)
     journal_error = error_banner_entries(db, getattr(user, "journal_error_ack_id", 0), limit=5)
     journal_recent = list_entries(db, limit=8)
     down_incidents = list_host_down_incidents(db)
@@ -398,6 +420,9 @@ def dashboard(
         stats=stats,
         asset_tiles=asset_rows,
         incident_tiles=incident_rows,
+        incident_heat=incident_heat(incident_rows),
+        resource_warn=RESOURCE_WARN_PERCENT,
+        resource_crit=RESOURCE_CRIT_PERCENT,
         recent=recent,
         journal_error=journal_error,
         journal_recent=journal_recent,
@@ -437,7 +462,7 @@ def assets_page(
     page: str = "1",
 ):
     rows = assets_matching(db.query(Asset).order_by(Asset.number, Asset.hostname).all(), q, status, flag)
-    rows, pager = paginate(rows, page)
+    rows, pager = paginate(rows, page, size=per_page(request))
     form_mode = "add"
     selected = None
     form = asset_form_values()
@@ -492,7 +517,7 @@ def assets_verify_all(
             skipped_demo += 1
             continue
         reports.append(run_asset_verify(db, asset))
-    reports, pager = paginate(reports, page)
+    reports, pager = paginate(reports, page, size=per_page(request))
     return render(
         request,
         "assets_verify.html",
@@ -595,7 +620,7 @@ def discovery_page(
         ),
     )
     pending = [row for row in rows if row.status == "new"]
-    rows, pager = paginate(rows, page)
+    rows, pager = paginate(rows, page, size=per_page(request))
     token = settings.netbox_token
     netbox_sync = sync_cta(settings.netbox_url, token, settings.netbox_enabled)
     form_mode = ""
@@ -893,8 +918,13 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         raise HTTPException(status_code=404)
     related = db.query(Incident).filter_by(asset_id=item.id).order_by(Incident.id.desc()).all()
     similar = similar_incident_groups(db, item)
-    related, pager = paginate(related, request.query_params.get("page", "1"))
-    similar, similar_pager = paginate(similar, request.query_params.get("similar_page", "1"), param="similar_page")
+    related, pager = paginate(related, request.query_params.get("page", "1"), size=per_page(request))
+    similar, similar_pager = paginate(
+        similar,
+        request.query_params.get("similar_page", "1"),
+        size=per_page(request, "similar_page"),
+        param="similar_page",
+    )
     return render(
         request,
         "asset_detail.html",
@@ -1061,6 +1091,7 @@ def incidents_page(
         status_group = status_key
     days_raw = (days or "").strip()
     days_n = clamp_days(days_raw) if days_raw else None
+    size = per_page(request)
     rows, total = list_history(
         db,
         days=days_n,
@@ -1068,10 +1099,10 @@ def incidents_page(
         open_only=open_only,
         closed_only=closed_only,
         critical_only=critical_only,
-        limit=PAGE_SIZE,
+        limit=size,
         page=page,
     )
-    pager = pager_state(page, total=total)
+    pager = pager_state(page, total=total, size=size)
     return render(
         request,
         "incidents.html",
@@ -1098,16 +1129,17 @@ def history_page(
     page: str = "1",
 ):
     days_n = clamp_days(days)
+    size = per_page(request)
     rows, total = list_history(
         db,
         days=days_n,
         status=status,
         asset=asset,
         number=number,
-        limit=PAGE_SIZE,
+        limit=size,
         page=page,
     )
-    pager = pager_state(page, total=total)
+    pager = pager_state(page, total=total, size=size)
     return render(
         request,
         "history.html",
@@ -1131,8 +1163,15 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
     rca = (investigation.result if investigation else None) or {}
     similar = similar_incident_groups(db, item.asset) if item.asset else []
     pending = llm_job_pending(db, number)
-    audit_rows, audit_pager = paginate(audit_for(db, item.number), request.query_params.get("page", "1"))
-    notes, notes_pager = paginate(notes_for(db, item), request.query_params.get("notes_page", "1"), param="notes_page")
+    audit_rows, audit_pager = paginate(
+        audit_for(db, item.number), request.query_params.get("page", "1"), size=per_page(request)
+    )
+    notes, notes_pager = paginate(
+        notes_for(db, item),
+        request.query_params.get("notes_page", "1"),
+        size=per_page(request, "notes_page"),
+        param="notes_page",
+    )
     return render(
             request,
             "incident_detail.html",
@@ -1317,7 +1356,7 @@ def playrules_page(
     from app.alert_rules import load_alert_rules, rules_for
 
     rows = db.query(Playrule).order_by(Playrule.name).all()
-    rows, pager = paginate(rows, page)
+    rows, pager = paginate(rows, page, size=per_page(request))
     books = db.query(Playbook).order_by(Playbook.name).all()
     hosts = saved_alarm_hostnames(db.query(Asset).order_by(Asset.hostname).all())
     policies = db.query(EscalationPolicy).order_by(EscalationPolicy.name).all()
@@ -1492,7 +1531,7 @@ def playbooks_page(
     clone: str = "",
 ):
     rows = db.query(Playbook).order_by(Playbook.name).all()
-    rows, pager = paginate(rows, page)
+    rows, pager = paginate(rows, page, size=per_page(request))
     form_mode = "create"
     selected = None
     form = {
@@ -1593,7 +1632,7 @@ def playbook_delete(
 @router.get("/escalation", response_class=HTMLResponse)
 def escalation_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play")), page: str = "1"):
     policies = db.query(EscalationPolicy).order_by(EscalationPolicy.name).all()
-    policies, pager = paginate(policies, page)
+    policies, pager = paginate(policies, page, size=per_page(request))
     return render(request, "escalation.html", user, policies=policies, pager=pager)
 
 
@@ -1630,7 +1669,7 @@ def journal_page(
     page: str = "1",
 ):
     total = count_entries(db, module=module or None, status=status or None, q=q or None)
-    pager = pager_state(page, total=total)
+    pager = pager_state(page, total=total, size=per_page(request))
     rows = list_entries(
         db,
         module=module or None,
@@ -1688,8 +1727,14 @@ def ops_page(
 
     mail = db.query(Notification).order_by(Notification.id.desc()).all()
     reports = db.query(ScheduledReport).order_by(ScheduledReport.id.desc()).all()
-    mail, mail_pager = paginate(mail, page, fragment="#mail")
-    reports, reports_pager = paginate(reports, reports_page, param="reports_page", fragment="#reports")
+    mail, mail_pager = paginate(mail, page, size=per_page(request), fragment="#mail")
+    reports, reports_pager = paginate(
+        reports,
+        reports_page,
+        size=per_page(request, "reports_page"),
+        param="reports_page",
+        fragment="#reports",
+    )
     assets = db.query(Asset).order_by(Asset.hostname).all()
     contacts = db.query(MailContact).order_by(MailContact.email).all()
     report_form_mode = "add"
@@ -1965,9 +2010,9 @@ def admin_page(
     if not can(user, "admin"):
         raise HTTPException(status_code=403)
     users = db.query(User).order_by(User.email).all()
-    users, users_pager = paginate(users, page)
+    users, users_pager = paginate(users, page, size=per_page(request))
     audits = db.query(AuditLog).order_by(AuditLog.id.desc()).all()
-    audits, audit_pager = paginate(audits, audit_page, param="audit_page")
+    audits, audit_pager = paginate(audits, audit_page, size=per_page(request, "audit_page"), param="audit_page")
     chosen = db.get(User, selected) if selected else None
     clone_of = db.get(User, clone) if clone else None
     from app.backup import format_size, list_archives, layout_from_env
@@ -1976,7 +2021,7 @@ def admin_page(
     lay = layout_from_env()
     backups = list_archives(lay)
     backup_choices = backups
-    backups, backup_pager = paginate(backups, backup_page, param="backup_page")
+    backups, backup_pager = paginate(backups, backup_page, size=per_page(request, "backup_page"), param="backup_page")
     return render(
         request,
         "admin.html",

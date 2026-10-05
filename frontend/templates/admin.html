@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_select.html" as sel %}
 {% block title %}Administration · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Administration</h1>
@@ -11,13 +12,13 @@
     <tbody>
     {% for u in users %}
       <tr class="{% if selected and selected.id == u.id %}selected{% endif %}">
-        <td><a href="/admin?selected={{ u.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">{{ u.email }}</a></td>
+        <td><a href="/admin?selected={{ u.id }}{{ pager_keep(pager) }}">{{ u.email }}</a></td>
         <td>{{ u.name }}</td>
         <td>{{ role_label(u.role) }}</td>
         <td class="row-actions">
           <div class="row-actions">
-          <a class="button" href="/admin?selected={{ u.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Edit</a>
-          <a class="button" href="/admin?clone={{ u.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Clone</a>
+          <a class="button" href="/admin?selected={{ u.id }}{{ pager_keep(pager) }}">Edit</a>
+          <a class="button" href="/admin?clone={{ u.id }}{{ pager_keep(pager) }}">Clone</a>
           {% if not (u.id == user.id or u.role == "super_admin") %}
           <form method="post" action="/admin/users/{{ u.id }}/delete" onsubmit="return confirm('Remove {{ u.email }}? They will not be able to sign in.');">
             <button type="submit" class="danger">Remove</button>
@@ -120,10 +121,11 @@
 <h2>Audit log</h2>
 <div class="table-scroll">
 <table>
-  <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Object</th></tr></thead>
+  <thead><tr>{{ sel.head() }}<th>When</th><th>Actor</th><th>Action</th><th>Object</th></tr></thead>
   <tbody>
   {% for row in audits %}
     <tr>
+      {{ sel.cell(row.id, row.action) }}
       <td>{{ row.at }}</td>
       <td>{{ row.actor }}</td>
       <td>{{ row.action }}</td>
@@ -156,10 +158,11 @@
 {% if backups %}
 <div class="table-scroll">
 <table>
-  <thead><tr><th>Archive</th><th>Size</th><th></th></tr></thead>
+  <thead><tr>{{ sel.head() }}<th>Archive</th><th>Size</th><th></th></tr></thead>
   <tbody>
   {% for b in backups %}
     <tr>
+      {{ sel.cell(b.name) }}
       <td><code>{{ b.name }}</code></td>
       <td>{{ format_size(b.size) }}</td>
       <td class="row-actions">

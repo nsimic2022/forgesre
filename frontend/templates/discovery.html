@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_select.html" as sel %}
 {% block title %}Discovery · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Discovery {% with %}{% set tip %}Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on UDP/161 (TCP/161 is skipped — that is not SNMP) and HTTP GET /metrics on :9182 and :9100 when a host is alive. windows_ metrics → Windows Server :9182. node_ metrics → Linux Server :9100. SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics. TCP open without exporter text is not an OS pick (ICMP ping is not a scrape). Suggested CIDR is this VM’s primary IPv4 /24 — Confirm &amp; scan writes discovery.cidrs and queues a background probe (Postgres jobs, one Core worker — not Celery). Empty discovery.cidrs = no scan (not all VLANs). This is not nmap and does not replace nmap. New hosts wait here until an engineer Approves or Ignores them.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
@@ -120,6 +121,7 @@
 <table>
   <thead>
     <tr>
+      {{ sel.head() }}
       <th>IP</th>
       <th>Proposed role</th>
       <th>Open ports</th>
@@ -134,6 +136,7 @@
   <tbody>
   {% for row in candidates %}
     <tr class="{% if selected and selected.id == row.id %}selected{% endif %}">
+      {{ sel.cell(row.id, row.ip) }}
       <td>
         {{ row.ip }}
         {% if row.hostname %}<div class="muted" title="Approve uses this as the asset ID when it is free">{{ row.hostname }}</div>{% endif %}
@@ -155,8 +158,8 @@
         {% if row.status == 'new' %}
         <form method="post" action="/discovery/{{ row.id }}/approve"><button type="submit" title="Asset ID: hostname slug if set (Edit), else disc-&lt;ip&gt;">Approve</button></form>
         {% endif %}
-        <a class="button" href="/discovery?edit={{ row.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Edit</a>
-        <a class="button" href="/discovery?clone={{ row.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Clone</a>
+        <a class="button" href="/discovery?edit={{ row.id }}{{ pager_keep(pager) }}">Edit</a>
+        <a class="button" href="/discovery?clone={{ row.id }}{{ pager_keep(pager) }}">Clone</a>
         {% if row.status == 'new' %}
         <form method="post" action="/discovery/{{ row.id }}/ignore"><button type="submit" class="secondary">Ignore</button></form>
         {% endif %}
@@ -173,7 +176,7 @@
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="9" class="muted">No candidates yet. Confirm a management CIDR and scan, or use the demo workflow.</td></tr>
+    <tr><td colspan="10" class="muted">No candidates yet. Confirm a management CIDR and scan, or use the demo workflow.</td></tr>
   {% endfor %}
   </tbody>
 </table>
