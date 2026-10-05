@@ -59,7 +59,7 @@ def _host(db, name: str, **extra) -> Asset:
     return create_manual_asset(
         db,
         hostname=name,
-        ip=extra.pop("ip", "10.77.0.%d" % (abs(hash(name)) % 200 + 20)),
+        ip=extra.pop("ip", "10.77.%d.%d" % (uuid4().int % 250 + 1, uuid4().int % 230 + 20)),
         type=extra.pop("type", "Linux Server"),
         actor="tester",
         **extra,
