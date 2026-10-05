@@ -111,6 +111,11 @@ def html_list(items: list[Any]) -> str:
     )
 
 
+def meta_table(rows: list[tuple[str, str]]) -> str:
+    """Label/value table for a section body. Values must already be escaped HTML."""
+    return _meta_table(rows) or DASH
+
+
 def _meta_table(rows: list[tuple[str, str]]) -> str:
     cells = []
     for label, value in rows:

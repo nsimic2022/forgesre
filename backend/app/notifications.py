@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from app.asset_extras import extras_rows, support_status
-from app.email_html import DASH, esc, prose_to_html, render_email
+from app.email_html import DASH, esc, meta_table, prose_to_html, render_email
+from app.incident_report_mail import incident_header_rows
 from app.models import Incident
 
 ESCALATION_FOOTER = "This is a snapshot. ForgeSRE does not execute playbooks."
@@ -57,18 +58,15 @@ def build_escalation_html(incident: Incident, step_key: str, policy_role: str) -
     """HTML alternative for the same facts as build_escalation_body."""
     asset = incident.asset
     demo, demo_line = _demo(incident)
-    meta: list[tuple[str, str]] = [
-        ("Incident", esc(incident.number)),
-        ("Title", esc(incident.title)),
-        ("Severity", esc(incident.severity)),
-        ("Status", esc(incident.status)),
-        ("Escalation step", esc(f"{step_key} (policy role: {policy_role})")),
+    meta = incident_header_rows(incident, asset)
+    meta.append(("Escalation step", esc(f"{step_key} (policy role: {policy_role})")))
+    details: list[tuple[str, str]] = [
         ("Asset", esc(asset.hostname if asset else "unknown")),
         ("Playbook", esc(incident.playbook.name if incident.playbook else "n/a")),
     ]
     sections: list[tuple[str, str, bool]] = []
     if asset:
-        meta.extend(
+        details.extend(
             [
                 ("Owner", esc(asset.owner or DASH)),
                 ("Contact", esc(asset.contact_name or DASH)),
@@ -77,10 +75,12 @@ def build_escalation_html(incident: Incident, step_key: str, policy_role: str) -
                 ("IP", esc(asset.ip or DASH)),
             ]
         )
-        meta.extend((label, esc(value)) for key, label, value in extras_rows(asset) if key != "runbook_note")
+        details.extend((label, esc(value)) for key, label, value in extras_rows(asset) if key != "runbook_note")
         support = support_status(asset)
         if support["state"] != "unknown":
-            meta.append(("Support", esc(support["call_note"])))
+            details.append(("Support", esc(support["call_note"])))
+    sections.append(("Details", meta_table(details), False))
+    if asset:
         for key, label, value in extras_rows(asset):
             if key == "runbook_note":
                 sections.append((label, prose_to_html(value), True))
@@ -90,7 +90,7 @@ def build_escalation_html(incident: Incident, step_key: str, policy_role: str) -
         sections.append(("Alert summary", prose_to_html(incident.summary), True))
     return render_email(
         kicker="Escalation notification",
-        heading=str(incident.number or "Incident"),
+        heading=str(incident.title or incident.number or "Incident"),
         severity=str(incident.severity or ""),
         status=str(incident.status or ""),
         is_demo=demo,

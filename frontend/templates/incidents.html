@@ -2,7 +2,7 @@
 {% import "_select.html" as sel %}
 {% block title %}Incidents · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Incidents {% with %}{% set tip %}Live incident list (default: all statuses, newest first). Left bar and #N color: red = critical, yellow = warning in progress, green = resolved or closed. RESOLVED means the alert cleared (or a person resolved it) — it is not Closed. If the same alert fires again after RESOLVED, a new incident opens. Closed archive is History.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Incidents {% with %}{% set tip %}Live incident list (default: all statuses, newest first). Left bar and #N color: red = critical, yellow = warning in progress, green = resolved or closed. Title color follows severity. When shows age (18m, 2h 14m, 4d 3h) for Open / Investigating / Escalated and the start clock for Resolved / Closed; hover for the full start time. RESOLVED means the alert cleared (or a person resolved it) — it is not Closed. If the same alert fires again after RESOLVED, a new incident opens. Closed archive is History.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <form method="get" action="/incidents" class="list-filters incidents-filters">
   <label>Status
     <select name="status">

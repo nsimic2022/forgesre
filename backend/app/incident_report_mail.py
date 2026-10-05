@@ -6,10 +6,55 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.email_html import DASH, esc, html_list, prose_to_html, render_email
+from app.email_html import DASH, esc, html_list, meta_table, prose_to_html, render_email
 from app.models import Asset, Incident
 
 SNAPSHOT_FOOTER = "This is a snapshot. ForgeSRE does not execute playbooks."
+
+
+def who_to_call(asset: Asset | None) -> str:
+    """Contact (or owner) · email · phone — only the parts the asset actually has."""
+    if asset is None:
+        return ""
+    parts = [asset.contact_name or asset.owner, asset.owner_email, asset.owner_phone]
+    return " · ".join(str(part).strip() for part in parts if part and str(part).strip())
+
+
+def incident_header_facts(incident: Incident, asset: Asset | None = None) -> list[tuple[str, str]]:
+    """Plain (label, text) facts for the top of incident mail: host, #N, first, duration, status, who to call."""
+    from app.services import (
+        format_started_at,
+        incident_duration,
+        incident_end,
+        incident_host,
+        incident_is_live,
+        incident_short_label,
+    )
+
+    facts: list[tuple[str, str]] = []
+    host = incident_host(incident)
+    if host:
+        facts.append(("Host", host))
+    short = incident_short_label(incident.number)
+    facts.append(("Incident", f"{short} · {incident.number}" if short != incident.number else str(incident.number)))
+    first = format_started_at(incident.started_at)
+    if first:
+        facts.append(("First", first))
+    duration = incident_duration(incident)
+    if duration:
+        if incident_is_live(incident.status):
+            facts.append(("Duration", f"{duration} (still open)"))
+        else:
+            facts.append(("Duration", f"{duration} (ended {format_started_at(incident_end(incident))})"))
+    facts.append(("Status", str(incident.status or DASH)))
+    who = who_to_call(asset)
+    if who:
+        facts.append(("Who to call", who))
+    return facts
+
+
+def incident_header_rows(incident: Incident, asset: Asset | None = None) -> list[tuple[str, str]]:
+    return [(label, esc(value)) for label, value in incident_header_facts(incident, asset)]
 
 
 def _demo(incident: Incident) -> tuple[bool, str]:
@@ -60,23 +105,19 @@ def build_incident_report(db: Session, incident: Incident) -> str:
     asset = _attach_asset(db, incident)
     investigation, rca = _rca_payload(incident)
     demo, demo_line = _demo(incident)
+    from app.services import format_started_at
+
     lines = ["ForgeSRE incident report"]
     if demo:
         lines.append(demo_line)
-    lines.extend(
-        [
-            f"Incident: {incident.number}",
-            f"Title: {incident.title}",
-            f"Severity: {incident.severity}",
-            f"Status: {incident.status}",
-            f"Started: {incident.started_at}",
-        ]
-    )
+    lines.append(f"Title: {incident.title}")
+    lines.extend(f"{label}: {value}" for label, value in incident_header_facts(incident, asset))
+    lines.append(f"Severity: {incident.severity}")
     if incident.ack_by:
-        lines.append(f"Ack: {incident.ack_by} {incident.ack_at or ''}".rstrip())
+        lines.append(f"Ack: {incident.ack_by} {format_started_at(incident.ack_at)}".rstrip())
     if incident.resolved_by:
         lines.append(
-            f"Resolved/closed: {incident.resolved_by} {incident.resolved_at or incident.ended_at or ''}".rstrip()
+            f"Resolved/closed: {incident.resolved_by} {format_started_at(incident.resolved_at or incident.ended_at)}".rstrip()
         )
     if asset:
         lines.extend(
@@ -142,21 +183,18 @@ def build_incident_report_html(db: Session | None, incident: Incident) -> str:
     """HTML alternative for the same facts as build_incident_report."""
     asset = _attach_asset(db, incident)
     investigation, rca = _rca_payload(incident)
+    from app.services import format_started_at
+
     demo, demo_line = _demo(incident)
-    meta: list[tuple[str, str]] = [
-        ("Incident", esc(incident.number)),
-        ("Title", esc(incident.title)),
-        ("Severity", esc(incident.severity)),
-        ("Status", esc(incident.status)),
-        ("Started", esc(incident.started_at)),
-    ]
+    meta = incident_header_rows(incident, asset)
+    details: list[tuple[str, str]] = []
     if incident.ack_by:
-        meta.append(("Ack", esc(f"{incident.ack_by} {incident.ack_at or ''}".rstrip())))
+        details.append(("Ack", esc(f"{incident.ack_by} {format_started_at(incident.ack_at)}".rstrip())))
     if incident.resolved_by:
-        when = incident.resolved_at or incident.ended_at or ""
-        meta.append(("Resolved/closed", esc(f"{incident.resolved_by} {when}".rstrip())))
+        when = format_started_at(incident.resolved_at or incident.ended_at)
+        details.append(("Resolved/closed", esc(f"{incident.resolved_by} {when}".rstrip())))
     if asset:
-        meta.extend(
+        details.extend(
             [
                 ("Asset", esc(f"{asset.hostname} ({asset.asset_id})")),
                 ("Type", esc(asset.type or DASH)),
@@ -168,11 +206,13 @@ def build_incident_report_html(db: Session | None, incident: Incident) -> str:
             ]
         )
     if incident.playbook:
-        meta.append(("Playbook", esc(f"{incident.playbook.name} (guidance only — not executed)")))
+        details.append(("Playbook", esc(f"{incident.playbook.name} (guidance only — not executed)")))
 
     sections: list[tuple[str, str, bool]] = []
     if incident.summary:
         sections.append(("Alert summary", prose_to_html(incident.summary), True))
+    if details:
+        sections.append(("Details", meta_table(details), False))
     if investigation:
         engine = f"{investigation.engine or 'forgerca'} {investigation.engine_version or ''} · {investigation.provider or ''}".strip()
         sections.append((f"ForgeRCA · {engine}", prose_to_html(investigation.summary or DASH), False))
@@ -208,7 +248,7 @@ def build_incident_report_html(db: Session | None, incident: Incident) -> str:
 
     return render_email(
         kicker="Incident report",
-        heading=str(incident.number or "Incident"),
+        heading=str(incident.title or incident.number or "Incident"),
         severity=str(incident.severity or ""),
         status=str(incident.status or ""),
         is_demo=demo,
