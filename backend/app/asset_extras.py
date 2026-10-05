@@ -2,10 +2,14 @@
 
 Local Core data only — never written to NetBox. Playrule ids are a preference for which enabled
 playrule handles an alertname on this host; they never create or change Prometheus rules.
+
+Support coverage (support / support_from / support_to / support_lead_days) lives in the same JSON.
+Its status is derived on read for the UI and mail bodies only — no alert, incident, or Playrule.
 """
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Iterable
 
 # key, English label, max length
@@ -20,8 +24,43 @@ EXTRA_FIELDS: tuple[tuple[str, str, int], ...] = (
     ("contract", "License / contract / SLA", 500),
     ("runbook_note", "Runbook note", 4000),
 )
-EXTRA_KEYS = tuple(key for key, _label, _max in EXTRA_FIELDS)
+DISPLAY_KEYS = tuple(key for key, _label, _max in EXTRA_FIELDS)
+SUPPORT_KEYS = ("support", "support_from", "support_to", "support_lead_days")
+EXTRA_KEYS = DISPLAY_KEYS + SUPPORT_KEYS
 EXTRA_LABELS = {key: label for key, label, _max in EXTRA_FIELDS}
+
+SUPPORT_CHOICES: tuple[tuple[str, str], ...] = (
+    ("yes", "Yes — vendor / contract"),
+    ("internal", "Internal — we hold it"),
+    ("no", "No contract"),
+)
+SUPPORT_LEAD_CHOICES = (7, 14, 30)
+SUPPORT_LEAD_DEFAULT = 14
+
+
+def _iso_date(value: Any) -> date | None:
+    try:
+        return date.fromisoformat(str(value or "").strip()[:10])
+    except ValueError:
+        return None
+
+
+def _normalize_support(raw: dict) -> dict[str, str]:
+    out: dict[str, str] = {}
+    kind = str(raw.get("support") or "").strip().lower()
+    if kind in {key for key, _label in SUPPORT_CHOICES}:
+        out["support"] = kind
+    for key in ("support_from", "support_to"):
+        parsed = _iso_date(raw.get(key))
+        if parsed is not None:
+            out[key] = parsed.isoformat()
+    if out:
+        try:
+            lead = int(str(raw.get("support_lead_days") or "").strip())
+        except ValueError:
+            lead = SUPPORT_LEAD_DEFAULT
+        out["support_lead_days"] = str(lead if lead in SUPPORT_LEAD_CHOICES else SUPPORT_LEAD_DEFAULT)
+    return out
 
 
 def normalize_extras(raw: Any) -> dict[str, str]:
@@ -36,6 +75,7 @@ def normalize_extras(raw: Any) -> dict[str, str]:
         text = str(value).strip()[:limit]
         if text:
             out[key] = text
+    out.update(_normalize_support(raw))
     return out
 
 
@@ -48,7 +88,50 @@ def form_extras(asset: Any = None) -> dict[str, str]:
 def extras_rows(asset: Any) -> list[tuple[str, str, str]]:
     """(key, label, value) for filled fields, in form order. Used by Who to call and mail bodies."""
     stored = normalize_extras(getattr(asset, "extras", None))
-    return [(key, EXTRA_LABELS[key], stored[key]) for key in EXTRA_KEYS if key in stored]
+    return [(key, EXTRA_LABELS[key], stored[key]) for key in DISPLAY_KEYS if key in stored]
+
+
+def support_status(asset: Any, today: date | None = None) -> dict[str, Any]:
+    """In support / Expiring / Out of support / Unknown from the stored support block. Read-only."""
+    stored = normalize_extras(getattr(asset, "extras", None) if asset is not None else None)
+    today = today or date.today()
+    kind = stored.get("support", "")
+    start = _iso_date(stored.get("support_from"))
+    end = _iso_date(stored.get("support_to"))
+    lead = int(stored.get("support_lead_days") or SUPPORT_LEAD_DEFAULT)
+    days_left = (end - today).days if end else None
+
+    def _out(state: str, label: str, tone: str, detail: str, call_note: str) -> dict[str, Any]:
+        return {
+            "state": state,
+            "label": label,
+            "tone": tone,
+            "detail": detail,
+            "call_note": call_note,
+            "kind": kind,
+            "start": start.isoformat() if start else "",
+            "end": end.isoformat() if end else "",
+            "lead_days": lead,
+            "days_left": days_left,
+            "warn": state in {"expiring", "expired"},
+        }
+
+    out_note = "Out of support — vendor may not take a ticket"
+    if kind == "no":
+        return _out("expired", "Out of support", "crit", "No support contract", out_note)
+    if start is None and end is None:
+        return _out("unknown", "Support unknown", "grey", "Support dates not filled", "Unknown — support dates not filled")
+    if end is not None and today > end:
+        return _out("expired", "Out of support", "crit", f"Support ended {end.isoformat()}", out_note)
+    if start is not None and today < start:
+        return _out("expired", "Out of support", "crit", f"Support starts {start.isoformat()}", out_note)
+    holder = "Internal support" if kind == "internal" else "Support"
+    if end is not None and days_left is not None and days_left <= lead:
+        left = "today" if days_left == 0 else f"in {days_left} day{'s' if days_left != 1 else ''}"
+        detail = f"{holder} ends {end.isoformat()} ({left})"
+        return _out("expiring", "Support expiring", "warn", detail, f"Expiring — {detail}")
+    detail = f"{holder} until {end.isoformat()}" if end else f"{holder}, no end date"
+    return _out("in", "In support", "ok", detail, f"In support — {detail}")
 
 
 def normalize_playrule_ids(raw: Any) -> list[int]:
@@ -90,8 +173,9 @@ def extras_from_form(present: str, **values: str) -> dict[str, str] | None:
     return normalize_extras({key: values.get(key, "") for key in EXTRA_KEYS})
 
 
-def playrule_ids_from_form(present: str, posted: list[str] | None) -> list[int] | None:
-    """Posted Client playrule checkboxes. None when the block was absent; [] when all are unticked."""
+def playrule_ids_from_form(present: str, posted: list[str] | None, add: str = "") -> list[int] | None:
+    """Posted Client playrule list (hidden playrule_ids rows, then the dropdown pick if JS did not
+    move it into the list). None when the block was absent; [] when every row was removed."""
     if not str(present or "").strip():
         return None
-    return normalize_playrule_ids(posted or [])
+    return normalize_playrule_ids([*(posted or []), *([add] if str(add or "").strip() else [])])

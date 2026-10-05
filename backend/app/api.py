@@ -63,7 +63,7 @@ from app.services import (
     run_demo_windows,
 )
 from app.settings import settings
-from app.asset_extras import asset_playrule_ids, normalize_extras
+from app.asset_extras import asset_playrule_ids, normalize_extras, support_status
 from app.host_resources import appliance_resources
 from app.stack import (
     component_label,
@@ -1470,6 +1470,7 @@ def _asset(item: Asset) -> dict[str, Any]:
         "alarms": getattr(item, "alarms", None) or {},
         "extras": normalize_extras(getattr(item, "extras", None)),
         "playrule_ids": asset_playrule_ids(item),
+        "support_status": {key: value for key, value in support_status(item).items() if key in {"state", "label", "detail"}},
         "snmp": is_snmp_asset(item),
         "ping": reach["ping"],
         "ping_detail": reach["ping_detail"],
