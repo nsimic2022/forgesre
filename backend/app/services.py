@@ -290,9 +290,28 @@ def incident_is_live(status: str) -> bool:
     return str(status or "").upper() in ACTIVE_INCIDENT_STATUSES
 
 
+def _last_timeline_at(incident: Incident) -> datetime | None:
+    latest: datetime | None = None
+    for item in getattr(incident, "timeline", None) or []:
+        raw = item.get("at") if isinstance(item, dict) else None
+        if not raw:
+            continue
+        try:
+            stamp = _as_utc(datetime.fromisoformat(str(raw).replace("Z", "+00:00")))
+        except ValueError:
+            continue
+        if stamp is not None and (latest is None or stamp > latest):
+            latest = stamp
+    return latest
+
+
 def incident_end(incident: Incident) -> datetime | None:
-    """When a RESOLVED/CLOSED incident stopped: person resolve time, else alert end."""
-    return _as_utc(getattr(incident, "resolved_at", None)) or _as_utc(getattr(incident, "ended_at", None))
+    """When a RESOLVED/CLOSED incident stopped: person resolve time, else alert end, else last timeline step."""
+    return (
+        _as_utc(getattr(incident, "resolved_at", None))
+        or _as_utc(getattr(incident, "ended_at", None))
+        or _last_timeline_at(incident)
+    )
 
 
 def incident_duration(incident: Incident, now: datetime | None = None) -> str:
@@ -310,23 +329,39 @@ def incident_duration(incident: Incident, now: datetime | None = None) -> str:
 
 
 def incident_wall(incident: Incident, now: datetime | None = None) -> str:
-    """13:07 today, 09.09 13:07 otherwise."""
+    """13:07 today, 09.09 13:07 otherwise — from started_at; the id clock only when started_at is missing."""
     return (
-        incident_when_label(incident.number, now)
-        or short_when_label(incident.started_at, now)
+        short_when_label(incident.started_at, now)
+        or incident_when_label(incident.number, now)
         or format_started_at(incident.started_at)
     )
 
 
 def incident_when(incident: Incident, now: datetime | None = None) -> dict[str, Any]:
-    """When column: age for OPEN/INVESTIGATING/ESCALATED, wall clock for RESOLVED/CLOSED."""
+    """When column: duration first for every status (open for / lasted), start wall clock second."""
+    live = incident_is_live(incident.status)
     wall = incident_wall(incident, now)
     full = format_started_at(incident.started_at)
     duration = incident_duration(incident, now)
-    if incident_is_live(incident.status) and duration:
-        return {"live": True, "primary": duration, "wall": wall, "duration": duration, "title": f"Started {wall} · {full}"}
-    title = f"{full} · lasted {duration}" if duration else full
-    return {"live": False, "primary": wall, "wall": wall, "duration": duration, "title": title}
+    verb = "Open for" if live else "Lasted"
+    end = None if live else incident_end(incident)
+    parts = [f"{verb} {duration}"] if duration else []
+    if full:
+        parts.append(f"started {full}")
+    if end is not None and duration:
+        parts.append(f"ended {format_started_at(end)}")
+    title = " · ".join(parts) or full
+    return {
+        "live": live,
+        "primary": duration or wall,
+        "secondary": wall if duration else "",
+        "wall": wall,
+        "duration": duration,
+        "verb": verb,
+        "ended": short_when_label(end, now) if end is not None else "",
+        "ended_full": format_started_at(end) if end is not None else "",
+        "title": title[:1].upper() + title[1:] if title else "",
+    }
 
 
 def incident_host(incident: Incident | None) -> str:

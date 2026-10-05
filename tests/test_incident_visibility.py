@@ -13,7 +13,7 @@ from app.main import app
 from app.models import Asset, Incident
 from app.notifications import build_escalation_html
 from app.seed import seed
-from app.services import duration_label, incident_host, incident_when, next_incident_number
+from app.services import duration_label, incident_host, incident_when, next_incident_number, short_when_label
 
 ROOT = Path(__file__).resolve().parents[1]
 AGE_RE = r"(?:<1m|\d+m|\d+h(?: \d+m)?|\d+d(?: \d+h)?)"
@@ -71,7 +71,11 @@ def test_duration_label_buckets():
     assert duration_label(4 * 86400 + 3 * 3600 + 59) == "4d 3h"
 
 
-def test_active_row_shows_age_closed_row_shows_wall_clock():
+def _when_cell(row_html: str) -> str:
+    return '<td class="inc-when"' + row_html.split('<td class="inc-when"', 1)[1].split("</td>", 1)[0] + "</td>"
+
+
+def test_every_row_when_leads_with_duration_then_clock():
     db = _db()
     now = datetime.now(timezone.utc)
     live = _add(
@@ -90,6 +94,14 @@ def test_active_row_shows_age_closed_row_shows_wall_clock():
         resolved_at=now - timedelta(days=2),
         title=f"Closed cpu {uuid4().hex[:6]}",
     )
+    resolved = _add(
+        db,
+        status="RESOLVED",
+        severity="CRITICAL",
+        started=now - timedelta(hours=3),
+        resolved_at=now - timedelta(minutes=46),
+        title=f"Resolved mem {uuid4().hex[:6]}",
+    )
     client = TestClient(app)
     _login(client)
     for path in ("/incidents", "/history", "/"):
@@ -97,16 +109,75 @@ def test_active_row_shows_age_closed_row_shows_wall_clock():
         assert page.status_code == 200
         html = page.text.split("Recent incidents", 1)[1] if path == "/" else page.text
         live_row = _row(html, live.number)
-        assert re.search(r'<span class="inc-age" title="Started ' + WALL_RE + r" · [^\"]+\">2h 1[45]m</span>", live_row)
+        live_when = _when_cell(live_row)
+        assert re.search(r'title="Open for 2h 1[45]m · started [^"]+"', live_when)
+        assert re.search(r'<span class="inc-age inc-age-live"[^>]*>2h 1[45]m</span><span class="inc-wall">' + WALL_RE + "</span>", live_when)
         assert 'class="inc-title sev-crit"' in live_row
         assert '<span class="inc-host">· 10.20.30.40</span>' in live_row
-        done_row = _row(html, done.number)
-        assert "inc-age" not in done_row
-        when = done_row.split('<td class="inc-when">', 1)[1].split("</td>", 1)[0]
-        assert re.search(r'title="[^"]+ · lasted 1h">' + WALL_RE + "</span>", when)
-        assert 'class="inc-title sev-warn"' in done_row
-        assert "inc-row-done" in done_row
+
+        done_when = _when_cell(_row(html, done.number))
+        assert re.search(r'title="Lasted 1h · started [^"]+ · ended [^"]+"', done_when)
+        assert re.search(r'<span class="inc-age"[^>]*>1h</span><span class="inc-wall">' + WALL_RE + "</span>", done_when)
+        assert "inc-age-live" not in done_when
+
+        if path != "/history":
+            res_row = _row(html, resolved.number)
+            res_when = _when_cell(res_row)
+            assert re.search(r'<span class="inc-age"[^>]*>2h 1[34]m</span>', res_when)
+            assert re.search(r"\d+h", res_when) and re.search(r"\d+m", res_when)
+            assert re.search(r'<span class="inc-wall">' + WALL_RE + "</span>", res_when)
+            assert "inc-row-done" in res_row
+            assert 'class="inc-title sev-crit"' in res_row
     db.close()
+
+
+def test_incidents_default_all_shows_duration_for_resolved_without_filter():
+    db = _db()
+    now = datetime.now(timezone.utc)
+    row = _add(
+        db,
+        status="RESOLVED",
+        severity="WARNING",
+        started=now - timedelta(minutes=58),
+        resolved_at=now - timedelta(minutes=40),
+        title=f"Default view {uuid4().hex[:6]}",
+    )
+    client = TestClient(app)
+    _login(client)
+    page = client.get("/incidents")
+    assert page.status_code == 200
+    when = _when_cell(_row(page.text, row.number))
+    assert re.search(r'<span class="inc-age"[^>]*>18m</span><span class="inc-wall">' + WALL_RE + "</span>", when)
+    db.close()
+
+
+def test_closed_without_end_stamp_uses_last_timeline_step():
+    start = datetime(2026, 10, 5, 8, 0, tzinfo=timezone.utc)
+    row = Incident(
+        number="INC-0009_05.10.2026_08:00",
+        title="x",
+        status="CLOSED",
+        severity="WARNING",
+        started_at=start,
+        timeline=[
+            {"id": "a", "at": (start + timedelta(minutes=5)).isoformat()},
+            {"id": "b", "at": (start + timedelta(hours=1, minutes=12)).isoformat()},
+        ],
+    )
+    info = incident_when(row, start + timedelta(hours=5))
+    assert info["primary"] == "1h 12m"
+    assert info["secondary"]
+    assert info["ended"]
+
+
+def test_wall_clock_comes_from_started_at_not_id():
+    now = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+    row = Incident(number="INC-0010_01.01.2026_00:00", title="x", status="OPEN", severity="WARNING",
+                   started_at=now - timedelta(minutes=18))
+    info = incident_when(row, now)
+    assert info["primary"] == "18m"
+    assert info["secondary"] == short_when_label(row.started_at, now)
+    assert "01.01" not in info["secondary"]
 
 
 def test_incident_when_helper_live_and_done():
@@ -115,7 +186,9 @@ def test_incident_when_helper_live_and_done():
                     started_at=now - timedelta(hours=2, minutes=14))
     info = incident_when(live, now)
     assert info["live"] and info["primary"] == "2h 14m"
-    assert info["title"].startswith("Started ")
+    assert info["secondary"] == short_when_label(live.started_at, now)
+    assert info["title"].startswith("Open for 2h 14m · started ")
+    assert info["ended"] == ""
     naive = Incident(number="INC-0002", title="x", status="INVESTIGATING", severity="WARNING",
                      started_at=(now - timedelta(minutes=18)).replace(tzinfo=None))
     assert incident_when(naive, now)["primary"] == "18m"
@@ -123,8 +196,11 @@ def test_incident_when_helper_live_and_done():
                     started_at=now - timedelta(days=4), resolved_at=now - timedelta(days=4) + timedelta(minutes=40))
     info = incident_when(done, now)
     assert not info["live"]
-    assert info["primary"] == "01.10 09:00"
-    assert info["title"].endswith("lasted 40m")
+    assert info["primary"] == "40m"
+    assert re.fullmatch(WALL_RE, info["secondary"])
+    assert info["secondary"] == short_when_label(done.started_at, now)
+    assert info["title"].startswith("Lasted 40m · started ")
+    assert info["ended"] and info["ended_full"] in info["title"]
 
 
 def test_incident_host_prefers_asset_then_labels():
@@ -214,4 +290,4 @@ def test_stack_cube_font_bumped_box_unchanged():
     assert "padding: 0.28rem" in block
     assert "line-height: 0.77rem" in block
     assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v08-6" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "app.css?v=v08-7" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

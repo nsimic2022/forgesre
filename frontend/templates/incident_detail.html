@@ -19,7 +19,7 @@
     <span class="pill {{ severity_pill(incident.severity) }}">{{ incident.severity }}</span>
     <span class="muted">First <span class="incident-fact" title="{{ format_started_at(incident.started_at) }}">{{ when.wall }}</span></span>
     {% if when.duration %}<span class="muted">{% if when.live %}Open{% else %}Lasted{% endif %} <span class="incident-fact" data-incident-duration>{{ when.duration }}</span></span>{% endif %}
-    {% if not when.live and (incident.resolved_at or incident.ended_at) %}<span class="muted">Ended <span class="incident-fact" title="{{ format_started_at(incident.resolved_at or incident.ended_at) }}">{{ short_when_label(incident.resolved_at or incident.ended_at) }}</span></span>{% endif %}
+    {% if when.ended %}<span class="muted">Ended <span class="incident-fact" title="{{ when.ended_full }}">{{ when.ended }}</span></span>{% endif %}
     {% if incident.ack_by %}<span class="muted">Ack {{ incident.ack_by }} · {{ short_when_label(incident.ack_at) }}</span>{% endif %}
     {% if incident.resolved_by %}<span class="muted">{{ incident.status }} by {{ incident.resolved_by }}</span>{% endif %}
     <code class="incident-id muted">{{ incident.number }}</code>
