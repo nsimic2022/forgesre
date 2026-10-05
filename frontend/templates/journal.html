@@ -17,6 +17,7 @@
     <option value="error" {% if filter_status == "error" %}selected{% endif %}>error</option>
   </select>
   <input name="q" value="{{ filter_q }}" placeholder="search summary, detail, id">
+  {% include "_pager_keep.html" %}
   <button type="submit">Search</button>
 </form>
 <table class="console">

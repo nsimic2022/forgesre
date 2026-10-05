@@ -45,7 +45,7 @@ Pytest count after the double run on `cursor/discovery-confirm-cidr-cb97`: **444
 - Layout: **Confirm & scan** | **Scan now** in `.discovery-scan-actions`; Scan card | NetBox **50/50** (`.discovery-actions`). CSS/JS `app.css?v=disc-1` / `app.js?v=disc-1`.
 - Job queue kept: HTTP never calls `run_scan` inline. Worker uses confirmed YAML cidrs only (`merge_auto=False`). No Celery.
 
-Do not revert ⓘ tooltips, nav clock/resources, `/ops` report-job row actions, or `.env` / `secrets.example.env` **service-group** comments.
+Do not revert ⓘ tooltips, the Dashboard **This appliance** card (clock + CPU/RAM/HDD moved there from the nav footer; nav keeps a slim clock off-Dashboard), `/ops` report-job row actions, or `.env` / `secrets.example.env` **service-group** comments.
 
 ---
 

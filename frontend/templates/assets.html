@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_select.html" as sel %}
 {% block title %}Assets · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Assets {% with %}{% set tip %}Inventory this appliance monitors. Asset ID is the immutable slug. Ping / comms pills refresh in the background from GET /api/v1/assets/reachability. Viewers can see status. Verify (this inventory path) is not System Health / ./forgesre doctor and is not ./forgesre test (appliance report).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
@@ -9,6 +10,7 @@
   <input name="q" value="{{ q }}" placeholder="search #, id, hostname, IP">
   {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
   {% if flag %}<input type="hidden" name="flag" value="{{ flag }}">{% endif %}
+  {% include "_pager_keep.html" %}
   <button type="submit">Search</button>
   {% if can('write_assets') %}
   <a class="button" href="/assets/verify">Verify all</a>
@@ -18,13 +20,14 @@
 <nav class="filter-chips" aria-label="Asset filters">
   {% for key, value, label in [("", "", "All"), ("status", "critical", "Critical"), ("status", "warning", "Warning"), ("flag", "unreachable", "Offline / unreachable"), ("flag", "no-email", "No owner email")] %}
   {% set on = (not key and not status and not flag) or (key == "status" and status == value) or (key == "flag" and flag == value) %}
-  <a class="chip{% if on %} on{% endif %}" href="/assets{% if key %}?{{ key }}={{ value }}{% endif %}{% if q %}{{ '&' if key else '?' }}q={{ q }}{% endif %}">{{ label }}</a>
+  <a class="chip{% if on %} on{% endif %}" href="/assets{% if key %}?{{ key }}={{ value }}{% endif %}{% if q %}{{ '&' if key else '?' }}q={{ q }}{% endif %}{% set size_tail = pager_keep(pager, page=False) %}{% if size_tail %}{{ size_tail if (key or q) else '?' ~ size_tail[1:] }}{% endif %}">{{ label }}</a>
   {% endfor %}
 </nav>
 <div class="table-scroll">
 <table class="asset-table" data-asset-reachability>
   <thead>
     <tr>
+      {{ sel.head() }}
       <th title="Asset number">#</th>
       <th><span class="label-line">Asset ID {% with %}{% set tip %}Short unique slug set at add. Cannot change afterwards — Prometheus asset= labels and history keep matching.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th>Hostname</th>
@@ -42,6 +45,7 @@
   <tbody>
     {% for asset in assets %}
     <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}">
+      {{ sel.cell(asset.asset_id) }}
       <td>{{ asset.number or "—" }}</td>
       <td><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
       <td>{{ asset.hostname }}</td>
@@ -69,8 +73,8 @@
       {% if can('write_assets') %}
       <td class="asset-actions">
         <div class="row-actions">
-        <a class="button" href="/assets?edit={{ asset.asset_id }}{% if q %}&q={{ q }}{% endif %}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Edit</a>
-        <a class="button" href="/assets?clone={{ asset.asset_id }}{% if q %}&q={{ q }}{% endif %}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}">Clone</a>
+        <a class="button" href="/assets?edit={{ asset.asset_id }}{% if q %}&q={{ q }}{% endif %}{{ pager_keep(pager) }}">Edit</a>
+        <a class="button" href="/assets?clone={{ asset.asset_id }}{% if q %}&q={{ q }}{% endif %}{{ pager_keep(pager) }}">Clone</a>
         <a class="button" href="/assets/{{ asset.asset_id }}/verify">Verify</a>
         {% if not delete_blocked(asset) %}
         <form method="post" action="/assets/{{ asset.asset_id }}/delete" onsubmit="return confirm('Remove {{ asset.hostname }}? Prometheus will stop scraping it. Incidents stay in History without this host. Core is unchanged.');">

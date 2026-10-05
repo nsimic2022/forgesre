@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% import "_select.html" as sel %}
 {% block title %}History · ForgeSRE{% endblock %}
 {% block content %}
-<h1>History {% with %}{% set tip %}Archive of incidents in Postgres (default last {{ days }} days, including closed). This is not Journal and not Loki. Mail bodies are on Email &amp; reports; Ack/Resolve are on the incident page. Tables are 10 rows per page.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>History {% with %}{% set tip %}Archive of incidents in Postgres (default last {{ days }} days, including closed). This is not Journal and not Loki. Mail bodies are on Email &amp; reports; Ack/Resolve are on the incident page. Tables show 10 rows per page by default; pick 20, 50 or 100 with Rows at the bottom right.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <p class="muted">Same rows as <a href="/incidents">Incidents</a>, with a day window, asset and number search, Ack and Resolved-by columns.</p>
 <form method="get" action="/history" class="form-grid">
   <label>Days <input name="days" type="number" min="1" max="3660" value="{{ days }}"></label>
@@ -15,6 +16,7 @@
   </label>
   <label>Asset / hostname / IP <input name="asset" value="{{ asset }}" placeholder="db-01"></label>
   <label>Incident number <input name="number" value="{{ number }}" placeholder="INC-0134_16.08.2026_09:13"></label>
+  {% include "_pager_keep.html" %}
   <div class="wide"><button type="submit">Filter</button>
     <a class="muted" href="/history">Reset</a>
   </div>
@@ -23,6 +25,7 @@
 <table class="scan-list">
   <thead>
     <tr>
+      {{ sel.head() }}
       <th>Incident</th><th>Severity</th><th>Status</th><th>When</th>
       <th><span class="label-line">Ack {% with %}{% set tip %}Green = acknowledged. Yellow = in progress without ack. Red = not acknowledged.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th>Resolved</th>
@@ -31,6 +34,7 @@
   <tbody>
   {% for item in incidents %}
     <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}">
+      {{ sel.cell(item.number) }}
       {% include "_incident_cell.html" %}
       <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
       <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
@@ -39,7 +43,7 @@
       <td>{% if item.resolved_by %}{{ item.resolved_by }}{% else %}—{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="muted">No incidents in this window.</td></tr>
+    <tr><td colspan="7" class="muted">No incidents in this window.</td></tr>
   {% endfor %}
   </tbody>
 </table>

@@ -76,22 +76,48 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert data["hdd_total_bytes"] > 1_000_000
     assert data["cpu_percent"] is None or 0 <= data["cpu_percent"] <= 100
     assert "asset_id" not in data
+    assert set(data["levels"]) == {"cpu", "ram", "hdd"}
+    assert data["thresholds"] == {"warn": 80, "crit": 95}
     home = client.get("/")
     assert home.status_code == 200
-    assert 'data-nav-clock' in home.text
-    assert 'data-nav-resources' in home.text
-    assert 'data-nav-cpu' in home.text
+    assert "data-appliance-card" in home.text
+    assert "data-appliance-resources" in home.text
+    assert 'data-metric="cpu"' in home.text
+    nav = home.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    assert "data-clock" not in nav
+    assert "CPU" not in nav
     assert 'class="nav-logout"' in home.text
     assert ">Logout<" in home.text
-    assert "bindNavClock" in (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
-    assert "bindNavResources" in (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    other = client.get("/incidents")
+    other_nav = other.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    assert "nav-clock" in other_nav and "data-clock" in other_nav
+    assert "data-appliance-card" not in other.text
+    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    assert "bindClock" in js
+    assert "bindApplianceResources" in js
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".nav-clock" in css
-    assert "font-size: 1.7rem" in css
+    assert ".nav a.nav-clock" in css
+    assert ".appliance-clock" in css
     assert "form.nav-logout" in css
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=analyst-pass-1" in base
-    assert "app.js?v=analyst-pass-1" in base
-    assert "bindInfoTips" in (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    assert "app.css?v=dash-layout-1" in base
+    assert "app.js?v=dash-layout-1" in base
+    assert "bindInfoTips" in js
     assert "ops-report-actions" in css
+
+
+def test_resource_levels_thresholds():
+    from app.host_resources import resource_level
+
+    assert resource_level(10) == "ok"
+    assert resource_level(79.9) == "ok"
+    assert resource_level(80) == "warn"
+    assert resource_level(94.9) == "warn"
+    assert resource_level(95) == "crit"
+    assert resource_level(100) == "crit"
+    assert resource_level(None) == "crit"
+    data = appliance_resources(node_text=NODE_SAMPLE, probe_node=False)
+    assert data["ram_percent"] == 75.0
+    assert data["levels"]["ram"] == "ok"
+    assert data["hdd_percent"] == 33.3

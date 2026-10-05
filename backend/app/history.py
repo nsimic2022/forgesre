@@ -18,7 +18,31 @@ DEFAULT_DAYS = 90
 MAX_DAYS = 3660
 LIST_LIMIT = 200
 PAGE_SIZE = 10
+PAGE_SIZE_CHOICES = (10, 20, 50, 100)
+MAX_PAGE_SIZE = PAGE_SIZE_CHOICES[-1]
 NOTE_MAX = 4000
+
+
+def parse_per_page(raw: Any, default: int = PAGE_SIZE) -> int:
+    """Rows per page from ?per_page=. Junk or <1 → default; above 100 → 100; in-between snaps up to 10/20/50/100."""
+    try:
+        size = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return default
+    if size < 1:
+        return default
+    for choice in PAGE_SIZE_CHOICES:
+        if size <= choice:
+            return choice
+    return MAX_PAGE_SIZE
+
+
+def per_page_param(page_param: str = "page") -> str:
+    """Query key for the rows-per-page select that pairs with a page key (page → per_page, audit_page → audit_per_page)."""
+    if page_param == "page":
+        return "per_page"
+    base = page_param[: -len("_page")] if page_param.endswith("_page") else page_param
+    return f"{base}_per_page"
 
 
 def parse_page(raw: Any, *, total: int, size: int = PAGE_SIZE) -> tuple[int, int, int]:
@@ -61,10 +85,11 @@ def pager_state(
     raw: Any,
     *,
     total: int,
-    size: int = PAGE_SIZE,
+    size: Any = PAGE_SIZE,
     param: str = "page",
     fragment: str = "",
 ) -> dict[str, Any]:
+    size = parse_per_page(size)
     page, pages, offset = parse_page(raw, total=total, size=size)
     start = (offset + 1) if total else 0
     end = min(offset + size, total) if total else 0
@@ -74,6 +99,10 @@ def pager_state(
         "offset": offset,
         "total": total,
         "size": size,
+        "default_size": PAGE_SIZE,
+        "choices": PAGE_SIZE_CHOICES,
+        "size_param": per_page_param(param),
+        "show_size": total > PAGE_SIZE_CHOICES[0],
         "start": start,
         "end": end,
         "param": param,
@@ -90,7 +119,7 @@ def paginate(
     items: list,
     raw: Any,
     *,
-    size: int = PAGE_SIZE,
+    size: Any = PAGE_SIZE,
     param: str = "page",
     fragment: str = "",
 ) -> tuple[list, dict[str, Any]]:
@@ -161,6 +190,16 @@ def dashboard_incident_tiles(db: Session) -> list[dict[str, Any]]:
             }
         )
     return tiles
+
+
+def incident_heat(tiles: list[dict[str, Any]]) -> str:
+    """Dashboard Incidents tile pulse: crit = any active critical, warn = other active work, "" = calm (no pulse)."""
+    counts = {tile.get("key"): int(tile.get("count") or 0) for tile in tiles}
+    if counts.get("critical"):
+        return "crit"
+    if counts.get("open") or counts.get("investigating") or counts.get("escalated"):
+        return "warn"
+    return ""
 
 
 def list_history(

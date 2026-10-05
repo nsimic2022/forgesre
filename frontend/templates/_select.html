@@ -1,0 +1,7 @@
+{#- Row checkboxes. No bulk action reads them yet; keep name="selected" so a later pass can wrap them in a form. -#}
+{% macro head() -%}
+<th class="row-select"><input type="checkbox" data-select-page aria-label="Select all rows on this page"></th>
+{%- endmacro %}
+{% macro cell(value, label="") -%}
+<td class="row-select"><input type="checkbox" name="selected" value="{{ value }}" data-select-row aria-label="Select {{ label or value }}"></td>
+{%- endmacro %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_select.html" as sel %}
 {% block title %}Playrules · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Playrules {% with %}{% set tip %}Seeded rules are the default warning. Playrules map Prometheus alertname → playbook. They do not create Prom rules. monitoring/alerts.yml is the PromQL source. Asset Alarms on Add/Edit (assets.alarms enable/%) are a per-host overlay on the same Alertmanager webhook — not a second alerting engine.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
@@ -9,12 +10,13 @@
 {% endif %}
 <div class="table-scroll">
 <table class="scan-list rule-list">
-  <thead><tr><th>Playrule</th><th>Fires when (alerts.yml)</th><th>Severity</th><th>Playbook</th><th>Enabled</th>{% if can('write_play') %}<th></th>{% endif %}</tr></thead>
+  <thead><tr>{{ sel.head() }}<th>Playrule</th><th>Fires when (alerts.yml)</th><th>Severity</th><th>Playbook</th><th>Enabled</th>{% if can('write_play') %}<th></th>{% endif %}</tr></thead>
   <tbody>
   {% for rule in playrules %}
     {% set cond = rule.condition or {} %}
     {% set prom = rules_for(cond.get('alertname') or '') %}
     <tr class="{% if not rule.enabled %}rule-off{% endif %}{% if selected and selected.id == rule.id %} selected{% endif %}">
+      {{ sel.cell(rule.id, rule.name) }}
       <td class="inc-cell">
         <div class="inc-title">{{ rule.name }}</div>
         <div class="inc-host"><code>{{ cond.get('alertname') or '—' }}</code></div>
@@ -41,7 +43,7 @@
       </td>
       {% if can('write_play') %}
       <td class="row-actions">
-        <a class="button" href="/playrules?edit={{ rule.id }}{% if pager.page > 1 %}&page={{ pager.page }}{% endif %}#playrule-form">Edit</a>
+        <a class="button" href="/playrules?edit={{ rule.id }}{{ pager_keep(pager) }}#playrule-form">Edit</a>
         <form method="post" action="/playrules/{{ rule.id }}/delete" class="inline" onsubmit="return confirm('Remove playrule {{ rule.name }}? Existing incidents keep their playbook. New {{ cond.get('alertname') or rule.name }} alerts will open without a playbook.');">
           <button type="submit" class="danger">Remove</button>
         </form>

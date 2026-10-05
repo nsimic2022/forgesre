@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_select.html" as sel %}
 {% block title %}Email & reports · ForgeSRE{% endblock %}
 {% block extra_head %}
 <style>
@@ -109,10 +110,11 @@
 <section class="card" id="mail">
   <h2>Mail outbox {% with %}{% set tip %}One table for this appliance: this page, scheduled reports, and incident/escalation mail. Not an inbox. Incident and Escalation pages link here.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <table>
-    <thead><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th><th>Body</th></tr></thead>
+    <thead><tr>{{ sel.head() }}<th>When</th><th>To</th><th>Subject</th><th>Status</th><th>Body</th></tr></thead>
     <tbody>
     {% for note in mail %}
       <tr>
+        {{ sel.cell(note.id, note.subject) }}
         <td class="muted">{{ note.created_at }}</td>
         <td>{{ note.target }}</td>
         <td>{% if is_demo_mail(note) %}<span class="pill demo">DEMO</span> {% endif %}{{ note.subject }}</td>
@@ -125,7 +127,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">No mail yet.</td></tr>
+      <tr><td colspan="6" class="muted">No mail yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -208,10 +210,11 @@
   </div>
   {% endif %}
   <table>
-    <thead><tr><th>Name</th><th>To</th><th>Every</th><th>Assets</th><th>Last</th><th>Next</th><th>Enabled</th><th></th></tr></thead>
+    <thead><tr>{{ sel.head() }}<th>Name</th><th>To</th><th>Every</th><th>Assets</th><th>Last</th><th>Next</th><th>Enabled</th><th></th></tr></thead>
     <tbody>
     {% for row in reports %}
       <tr{% if editing_report and editing_report.id == row.id %} class="selected"{% endif %}>
+        {{ sel.cell(row.id, row.name) }}
         <td>{{ row.name }}</td>
         <td>{{ row.to_email }}</td>
         <td>{{ row.interval_hours }}h</td>
@@ -227,9 +230,9 @@
             {% if editing_report and editing_report.id == row.id %}
             <a class="button" href="/ops#reports">Cancel</a>
             {% else %}
-            <a class="button" href="/ops?edit={{ row.id }}{% if reports_pager.page > 1 %}&amp;reports_page={{ reports_pager.page }}{% endif %}#reports">Edit</a>
+            <a class="button" href="/ops?edit={{ row.id }}{{ pager_keep(reports_pager) }}#reports">Edit</a>
             {% endif %}
-            <a class="button" href="/ops?clone={{ row.id }}{% if reports_pager.page > 1 %}&amp;reports_page={{ reports_pager.page }}{% endif %}#reports">Clone</a>
+            <a class="button" href="/ops?clone={{ row.id }}{{ pager_keep(reports_pager) }}#reports">Clone</a>
             <form method="post" action="/ops/reports/{{ row.id }}/run"><button type="submit">Run now</button></form>
             <form method="post" action="/ops/reports/{{ row.id }}/toggle">
               <button type="submit" class="secondary" title="Enabled: fire at Next. Off: stored, scheduler skips.">{% if row.enabled %}Disable{% else %}Enable{% endif %}</button>
@@ -242,7 +245,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">No scheduled reports.</td></tr>
+      <tr><td colspan="9" class="muted">No scheduled reports.</td></tr>
     {% endfor %}
     </tbody>
   </table>

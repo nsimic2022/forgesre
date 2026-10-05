@@ -32,56 +32,113 @@ document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
 });
 applyTheme(currentTheme());
 
-(function bindNavClock() {
-  const el = document.querySelector("[data-nav-clock]");
-  if (!el) return;
+(function bindClock() {
+  const clocks = document.querySelectorAll("[data-clock]");
+  if (!clocks.length) return;
   const tick = () => {
+    let text;
     try {
-      el.textContent = new Date().toLocaleTimeString(undefined, {
+      text = new Date().toLocaleTimeString(undefined, {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
         hour12: false,
       });
     } catch (err) {
-      el.textContent = new Date().toTimeString().slice(0, 8);
+      text = new Date().toTimeString().slice(0, 8);
     }
+    clocks.forEach((el) => {
+      el.textContent = text;
+    });
   };
   tick();
   window.setInterval(tick, 1000);
 })();
 
-(function bindNavResources() {
-  const box = document.querySelector("[data-nav-resources]");
+(function bindApplianceResources() {
+  const box = document.querySelector("[data-appliance-resources]");
   if (!box) return;
-  const cpuEl = box.querySelector("[data-nav-cpu]");
-  const ramEl = box.querySelector("[data-nav-ram]");
-  const hddEl = box.querySelector("[data-nav-hdd]");
+  const row = (key) => box.querySelector('[data-metric="' + key + '"]');
   const gib = (n) => {
     const v = Number(n) / 1073741824;
     if (!isFinite(v) || v < 0) return "—";
     return (v >= 10 ? v.toFixed(0) : v.toFixed(1)) + " GB";
   };
+  const pct = (n) => (n != null && isFinite(Number(n)) ? Math.round(Number(n)) + "%" : "");
+  const set = (key, level, text) => {
+    const el = row(key);
+    if (!el) return;
+    el.setAttribute("data-level", level || "crit");
+    const value = el.querySelector("[data-metric-value]");
+    if (value) value.textContent = text;
+  };
+  const blocked = () => {
+    ["cpu", "ram", "hdd"].forEach((key) => set(key, "crit", "no reading"));
+  };
   const paint = (data) => {
-    if (!data) return;
-    if (cpuEl && data.cpu_percent != null && isFinite(Number(data.cpu_percent))) {
-      cpuEl.textContent = "CPU " + Math.round(Number(data.cpu_percent)) + "%";
+    if (!data) {
+      blocked();
+      return;
     }
-    if (ramEl && data.ram_total_bytes) {
-      ramEl.textContent = "RAM " + gib(data.ram_used_bytes) + " / " + gib(data.ram_total_bytes);
-    }
-    if (hddEl && data.hdd_total_bytes) {
-      hddEl.textContent = "HDD " + gib(data.hdd_used_bytes) + " / " + gib(data.hdd_total_bytes);
-    }
+    const levels = data.levels || {};
+    set("cpu", levels.cpu, data.cpu_percent != null ? pct(data.cpu_percent) : "no reading");
+    set(
+      "ram",
+      levels.ram,
+      data.ram_total_bytes
+        ? gib(data.ram_used_bytes) + " / " + gib(data.ram_total_bytes) + " · " + pct(data.ram_percent)
+        : "no reading"
+    );
+    set(
+      "hdd",
+      levels.hdd,
+      data.hdd_total_bytes
+        ? gib(data.hdd_used_bytes) + " / " + gib(data.hdd_total_bytes) + " · " + pct(data.hdd_percent)
+        : "no reading"
+    );
   };
   const load = () => {
     fetch("/api/v1/system/resources", { headers: { Accept: "application/json" } })
       .then((response) => (response.ok ? response.json() : null))
       .then(paint)
-      .catch(() => {});
+      .catch(blocked);
   };
   load();
   window.setInterval(load, 8000);
+})();
+
+(function bindPagerSize() {
+  document.querySelectorAll("[data-pager-size]").forEach((select) => {
+    select.addEventListener("change", () => {
+      if (select.form) select.form.submit();
+    });
+  });
+})();
+
+(function bindRowSelect() {
+  const scopeOf = (el) => el.closest("[data-select-scope]") || el.closest("table");
+  const rowsIn = (scope) => (scope ? scope.querySelectorAll("[data-select-row]") : []);
+  const sync = (scope) => {
+    if (!scope) return;
+    const head = scope.querySelector("[data-select-page]");
+    if (!head) return;
+    const rows = Array.from(rowsIn(scope));
+    const on = rows.filter((box) => box.checked).length;
+    head.checked = rows.length > 0 && on === rows.length;
+    head.indeterminate = on > 0 && on < rows.length;
+  };
+  document.addEventListener("change", (event) => {
+    const el = event.target;
+    if (!(el instanceof HTMLInputElement)) return;
+    if (el.hasAttribute("data-select-page")) {
+      rowsIn(scopeOf(el)).forEach((box) => {
+        box.checked = el.checked;
+      });
+      el.indeterminate = false;
+    } else if (el.hasAttribute("data-select-row")) {
+      sync(scopeOf(el));
+    }
+  });
 })();
 
 (function bindDemoPanel() {

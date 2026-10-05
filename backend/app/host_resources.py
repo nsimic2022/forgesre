@@ -18,7 +18,27 @@ _SAMPLE_RE = re.compile(
 )
 _LABEL_RE = re.compile(r'([a-zA-Z_][a-zA-Z0-9_]*)="((?:\\.|[^"\\])*)"')
 
+RESOURCE_WARN_PERCENT = 80
+RESOURCE_CRIT_PERCENT = 95
+
 _cpu_sample: tuple[float, float] | None = None  # idle, total
+
+
+def resource_level(percent: float | None) -> str:
+    """ok / warn / crit for one appliance gauge. No reading counts as crit (blocked)."""
+    if percent is None:
+        return "crit"
+    if percent >= RESOURCE_CRIT_PERCENT:
+        return "crit"
+    if percent >= RESOURCE_WARN_PERCENT:
+        return "warn"
+    return "ok"
+
+
+def _percent(used: int | None, total: int | None) -> float | None:
+    if not total or used is None:
+        return None
+    return round(max(0.0, min(100.0, 100.0 * used / total)), 1)
 
 
 def reset_cpu_sample() -> None:
@@ -41,6 +61,8 @@ def appliance_resources(*, node_text: str | None = None, probe_node: bool = True
         "mixed" if "node_exporter" in sources else "proc"
     )
     ok = ram_total is not None or hdd_total is not None or cpu is not None
+    ram_percent = _percent(ram_used, ram_total)
+    hdd_percent = _percent(hdd_used, hdd_total)
     return {
         "ok": bool(ok),
         "source": source,
@@ -50,6 +72,14 @@ def appliance_resources(*, node_text: str | None = None, probe_node: bool = True
         "hdd_used_bytes": hdd_used,
         "hdd_total_bytes": hdd_total,
         "hdd_mount": hdd_mount,
+        "ram_percent": ram_percent,
+        "hdd_percent": hdd_percent,
+        "levels": {
+            "cpu": resource_level(cpu),
+            "ram": resource_level(ram_percent),
+            "hdd": resource_level(hdd_percent),
+        },
+        "thresholds": {"warn": RESOURCE_WARN_PERCENT, "crit": RESOURCE_CRIT_PERCENT},
     }
 
 

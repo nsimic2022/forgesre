@@ -1,24 +1,45 @@
-{% if pager and pager.pages > 1 %}
-<p class="pager-meta muted">Showing {{ pager.start }}–{{ pager.end }} of {{ pager.total }}</p>
-<nav class="pager" aria-label="Pagination">
-  {% if pager.has_prev %}
-  <a href="{{ pager_href(request, pager.prev, pager.param, pager.hash) }}">Previous</a>
-  {% else %}
-  <span class="pager-disabled">Previous</span>
-  {% endif %}
-  {% for n in pager.numbers %}
-    {% if n is none %}
-    <span class="pager-ellipsis">…</span>
-    {% elif n == pager.page %}
-    <span class="pager-current" aria-current="page">{{ n }}</span>
+{% if pager and (pager.pages > 1 or pager.show_size) %}
+<div class="pager-bar">
+  <div class="pager-left">
+  {% if pager.pages > 1 %}
+  <p class="pager-meta muted">Showing {{ pager.start }}–{{ pager.end }} of {{ pager.total }}</p>
+  <nav class="pager" aria-label="Pagination">
+    {% if pager.has_prev %}
+    <a href="{{ pager_href(request, pager.prev, pager.param, pager.hash) }}">Previous</a>
     {% else %}
-    <a href="{{ pager_href(request, n, pager.param, pager.hash) }}">{{ n }}</a>
+    <span class="pager-disabled">Previous</span>
     {% endif %}
-  {% endfor %}
-  {% if pager.has_next %}
-  <a href="{{ pager_href(request, pager.next, pager.param, pager.hash) }}">Next</a>
+    {% for n in pager.numbers %}
+      {% if n is none %}
+      <span class="pager-ellipsis">…</span>
+      {% elif n == pager.page %}
+      <span class="pager-current" aria-current="page">{{ n }}</span>
+      {% else %}
+      <a href="{{ pager_href(request, n, pager.param, pager.hash) }}">{{ n }}</a>
+      {% endif %}
+    {% endfor %}
+    {% if pager.has_next %}
+    <a href="{{ pager_href(request, pager.next, pager.param, pager.hash) }}">Next</a>
+    {% else %}
+    <span class="pager-disabled">Next</span>
+    {% endif %}
+  </nav>
   {% else %}
-  <span class="pager-disabled">Next</span>
+  <p class="pager-meta muted">Showing all {{ pager.total }}</p>
   {% endif %}
-</nav>
+  </div>
+  <form method="get" action="{{ request.url.path }}{{ pager.hash }}" class="pager-size" data-pager-size-form>
+    {% for key, value in request.query_params.multi_items() if key not in [pager.param, pager.size_param] %}
+    <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endfor %}
+    <label>Rows
+      <select name="{{ pager.size_param }}" data-pager-size aria-label="Rows per page">
+        {% for n in pager.choices %}
+        <option value="{{ n }}"{% if n == pager.size %} selected{% endif %}>{{ n }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <noscript><button type="submit" class="secondary">Apply</button></noscript>
+  </form>
+</div>
 {% endif %}

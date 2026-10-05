@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_select.html" as sel %}
 {% block title %}Incidents · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Incidents {% with %}{% set tip %}Live incident list (default: all statuses, newest first). Left bar and #N color: red = critical, yellow = warning in progress, green = resolved or closed. RESOLVED means the alert cleared (or a person resolved it) — it is not Closed. If the same alert fires again after RESOLVED, a new incident opens. Closed archive is History.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
@@ -20,22 +21,24 @@
     </select>
   </label>
   <label>Last days <input name="days" type="number" min="1" max="3660" value="{{ days }}" placeholder="any age"></label>
+  {% include "_pager_keep.html" %}
   <button type="submit">Filter</button>
   <a class="muted list-reset" href="/incidents">Reset</a>
   <span class="muted list-count">{{ pager.total }} incident{% if pager.total != 1 %}s{% endif %} · older rows in <a href="/history">History</a></span>
 </form>
 <table class="scan-list incidents-table">
-  <thead><tr><th>Incident</th><th>Severity</th><th>Status</th><th>When</th></tr></thead>
+  <thead><tr>{{ sel.head() }}<th>Incident</th><th>Severity</th><th>Status</th><th>When</th></tr></thead>
   <tbody>
   {% for item in incidents %}
     <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}">
+      {{ sel.cell(item.number) }}
       {% include "_incident_cell.html" %}
       <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
       <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
       {% include "_incident_when.html" %}
     </tr>
   {% else %}
-    <tr><td colspan="4" class="muted">No incidents match this filter.{% if status_group != "all" or severity_group %} Try All or <a href="/history">History</a>.{% endif %}</td></tr>
+    <tr><td colspan="5" class="muted">No incidents match this filter.{% if status_group != "all" or severity_group %} Try All or <a href="/history">History</a>.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>
