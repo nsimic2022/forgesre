@@ -73,7 +73,7 @@ applyTheme(currentTheme());
     if (value) value.textContent = text;
   };
   const blocked = () => {
-    ["cpu", "ram", "hdd"].forEach((key) => set(key, "crit", "no reading"));
+    ["cpu", "ram", "hdd", "net"].forEach((key) => set(key, "crit", "no reading"));
   };
   const paint = (data) => {
     if (!data) {
@@ -96,6 +96,8 @@ applyTheme(currentTheme());
         ? gib(data.hdd_used_bytes) + " / " + gib(data.hdd_total_bytes) + " · " + pct(data.hdd_percent)
         : "no reading"
     );
+    const net = data.net || {};
+    set("net", levels.net, net.reading || "no reading");
   };
   const load = () => {
     fetch("/api/v1/system/resources", { headers: { Accept: "application/json" } })

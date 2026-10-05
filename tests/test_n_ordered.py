@@ -1,4 +1,4 @@
-"""N's ordered V0.7 GUI/platform simplifications."""
+"""N's ordered V0.8 GUI/platform simplifications."""
 
 from pathlib import Path
 
@@ -131,7 +131,7 @@ def test_readme_does_not_claim_dashboard_doctor_or_incidents_200():
 
 def test_architecture_doc_is_proposal_not_runtime():
     text = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
-    assert "Not the V0.7 appliance runtime" in text
+    assert "Not the V0.8 appliance runtime" in text
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "map `alertname`" in handbook or "maps `alertname`" in handbook
     play = (ROOT / "frontend" / "templates" / "playrules.html").read_text(encoding="utf-8")

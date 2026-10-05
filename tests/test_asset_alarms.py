@@ -69,7 +69,7 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     assert "<legend>Alarms</legend>" not in page.text
     assert '<fieldset class="alarm-families"' not in page.text
     assert "alarm-heading" in page.text
-    assert "Alarms" in page.text
+    assert "Standard alarms" in page.text
     assert 'class="info-tip"' in page.text
     assert "Bundled alarms for this asset" not in page.text
     assert "asset-form-grid" in page.text
@@ -80,7 +80,9 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     ip_at = page.text.find('name="ip"')
     alarm_at = page.text.find("alarm-families")
     type_at = page.text.find('name="type"')
-    assert 0 < id_at < host_at < ip_at < alarm_at < type_at
+    left_at = page.text.find("asset-form-left")
+    right_at = page.text.find("asset-form-right")
+    assert 0 < left_at < id_at < host_at < ip_at < type_at < right_at < alarm_at
     assert 'placeholder="win10-gp"' in page.text
     assert "Set at add; cannot change" not in page.text
     table = page.text.split("<table")[1].split("</table>")[0]
@@ -89,7 +91,8 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     assert 'href="/assets">Cancel' in page.text
     css = Path("frontend/static/app.css").read_text()
     assert "asset-form-grid" in css
-    assert "minmax(0, 1fr) minmax(0, 1fr) minmax(13rem, 1.05fr)" in css
+    assert ".asset-form-split" in css
+    assert ".asset-form-right" in css
 
 
 def test_edit_form_cancel_returns_to_asset():

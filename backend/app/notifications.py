@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.asset_extras import extras_rows
 from app.email_html import DASH, esc, prose_to_html, render_email
 from app.models import Incident
 
@@ -43,6 +44,7 @@ def build_escalation_body(incident: Incident, step_key: str, policy_role: str) -
                 f"Phone: {asset.owner_phone or '—'}",
             ]
         )
+        lines.extend(f"{label}: {value}" for _key, label, value in extras_rows(asset))
         if asset.notes:
             lines.append(f"Notes: {asset.notes}")
     return "\n".join(lines) + "\n"
@@ -72,6 +74,10 @@ def build_escalation_html(incident: Incident, step_key: str, policy_role: str) -
                 ("IP", esc(asset.ip or DASH)),
             ]
         )
+        meta.extend((label, esc(value)) for key, label, value in extras_rows(asset) if key != "runbook_note")
+        for key, label, value in extras_rows(asset):
+            if key == "runbook_note":
+                sections.append((label, prose_to_html(value), True))
         if asset.notes:
             sections.append(("Notes", prose_to_html(asset.notes), True))
     if incident.summary:

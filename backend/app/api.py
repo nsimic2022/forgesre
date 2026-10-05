@@ -63,6 +63,7 @@ from app.services import (
     run_demo_windows,
 )
 from app.settings import settings
+from app.asset_extras import asset_playrule_ids, normalize_extras
 from app.host_resources import appliance_resources
 from app.stack import (
     component_label,
@@ -787,6 +788,8 @@ class AssetBody(BaseModel):
     monitoring_profile: str = ""
     scrape_address: str = ""
     alarms: dict | None = None
+    extras: dict | None = None
+    playrule_ids: list[int] | None = None
 
 
 class AssetUpdateBody(BaseModel):
@@ -801,6 +804,8 @@ class AssetUpdateBody(BaseModel):
     notes: str | None = None
     scrape_address: str | None = None
     alarms: dict | None = None
+    extras: dict | None = None
+    playrule_ids: list[int] | None = None
 
 
 class AssetCloneBody(BaseModel):
@@ -816,6 +821,8 @@ class AssetCloneBody(BaseModel):
     notes: str | None = None
     scrape_address: str | None = None
     alarms: dict | None = None
+    extras: dict | None = None
+    playrule_ids: list[int] | None = None
 
 
 @router.post("/assets")
@@ -844,6 +851,8 @@ def create_asset_api(
             actor=user.email,
             snmp_prober=_snmp_answer if is_auto_asset_type(body.type) else None,
             alarms=body.alarms,
+            extras=body.extras,
+            playrule_ids=body.playrule_ids,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -876,6 +885,8 @@ def update_asset_api(
         actor=user.email,
         snmp_prober=_snmp_answer,
         alarms=body.alarms,
+        extras=body.extras,
+        playrule_ids=body.playrule_ids,
     )
     return _asset(asset)
 
@@ -917,6 +928,8 @@ def clone_asset_api(
             require_new=True,
             cloned_from=item.asset_id,
             alarms=body.alarms if body.alarms is not None else getattr(item, "alarms", None),
+            extras=body.extras if body.extras is not None else defaults["extras"],
+            playrule_ids=body.playrule_ids if body.playrule_ids is not None else defaults["playrule_ids"],
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1455,6 +1468,8 @@ def _asset(item: Asset) -> dict[str, Any]:
         "source": item.source,
         "scrape_address": item.scrape_address,
         "alarms": getattr(item, "alarms", None) or {},
+        "extras": normalize_extras(getattr(item, "extras", None)),
+        "playrule_ids": asset_playrule_ids(item),
         "snmp": is_snmp_asset(item),
         "ping": reach["ping"],
         "ping_detail": reach["ping_detail"],

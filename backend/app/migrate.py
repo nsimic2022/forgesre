@@ -106,6 +106,10 @@ def migrate(engine: Engine) -> None:
             )
         if "alarms" not in existing:
             statements.append("ALTER TABLE assets ADD COLUMN alarms JSON")
+        if "extras" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN extras JSON")
+        if "playrule_ids" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN playrule_ids JSON")
         if "number" not in existing:
             statements.append("ALTER TABLE assets ADD COLUMN number INTEGER")
     if "evidence" in tables:

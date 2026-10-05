@@ -122,12 +122,13 @@
   </div>
 </section>
 <aside class="appliance-card" data-appliance-card aria-label="This ForgeSRE appliance">
-  <h2>This appliance {% with %}{% set tip %}The ForgeSRE VM running Core — not an inventory asset. Clock is this browser's local time. CPU from the host /proc/stat; RAM and HDD from node_exporter on this VM (or /proc and statvfs). Refreshes every 8 s. Dash: green below {{ resource_warn }}%, yellow {{ resource_warn }}–{{ resource_crit - 1 }}%, red {{ resource_crit }}% or more, or no reading (blocked). Network throughput is not measured yet.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>This appliance {% with %}{% set tip %}The ForgeSRE VM running Core — not an inventory asset. Clock is this browser's local time. CPU from the host /proc/stat; RAM and HDD from node_exporter on this VM (or /proc and statvfs). Refreshes every 8 s. Dash: green below {{ resource_warn }}%, yellow {{ resource_warn }}–{{ resource_crit - 1 }}%, red {{ resource_crit }}% or more, or no reading (blocked). NET: green = this VM has a default route on a non-docker interface whose link is up; red = no usable default route, or that interface is down. No ping and no internet probe — an air-gapped lab with a LAN gateway is green. Network throughput is not measured.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="appliance-clock" data-clock>—</div>
   <ul class="appliance-metrics" data-appliance-resources>
     <li class="appliance-metric" data-metric="cpu" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">CPU</span><span class="metric-reading" data-metric-value>—</span></li>
     <li class="appliance-metric" data-metric="ram" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">RAM</span><span class="metric-reading" data-metric-value>—</span></li>
     <li class="appliance-metric" data-metric="hdd" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">HDD</span><span class="metric-reading" data-metric-value>—</span></li>
+    <li class="appliance-metric" data-metric="net" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">NET</span><span class="metric-reading" data-metric-value>—</span></li>
   </ul>
 </aside>
 </div>
@@ -153,23 +154,25 @@
   {% include "_pager.html" %}
 </section>
 {% if can('read_play') %}
-<section>
+<section id="journal">
   <h2>Recent journal reports {% with %}{% set tip %}Latest internal process reports (ok / warn / error). Not Docker/Loki logs.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <table class="console">
-    <thead><tr><th>Module</th><th>Status</th><th>Report</th></tr></thead>
+  <table class="console scan-list">
+    <thead><tr>{{ sel.head() }}<th>Module</th><th>Status</th><th>Report</th></tr></thead>
     <tbody>
     {% for row in journal_recent %}
       <tr>
+        {{ sel.cell(row.id, row.module ~ " report " ~ row.id) }}
         <td>{{ row.module }}</td>
         <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>
         <td>{{ row.summary }}{% if is_demo_journal(row) %} <span class="pill demo">DEMO</span>{% endif %}</td>
       </tr>
     {% else %}
-      <tr><td colspan="3" class="muted">No process reports yet. They appear after Core start.</td></tr>
+      <tr><td colspan="4" class="muted">No process reports yet. They appear after Core start.</td></tr>
     {% endfor %}
     </tbody>
   </table>
-  <p class="muted"><a href="/journal">Open full Journal</a></p>
+  {% with pager=journal_pager %}{% include "_pager.html" %}{% endwith %}
+  <p class="muted"><a href="/journal">Open full journal</a></p>
 </section>
 {% endif %}
 {% endblock %}

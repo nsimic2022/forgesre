@@ -58,7 +58,20 @@
     <dt>Contact</dt><dd>{{ incident.asset.contact_name or "—" }}</dd>
     <dt>Email</dt><dd>{% if incident.asset.owner_email %}{{ incident.asset.owner_email }}{% else %}<span class="pill warn">No owner email</span> <span class="muted">escalation has nobody to mail</span>{% endif %}</dd>
     <dt>Phone</dt><dd>{{ incident.asset.owner_phone or "—" }}</dd>
+    {% for key, label, value in extras_rows(incident.asset) if key != 'runbook_note' %}
+    <dt>{{ label }}</dt><dd class="extra-{{ key }}">{{ value }}</dd>
+    {% endfor %}
+    {% if client_playrules %}
+    <dt>Client playrules</dt>
+    <dd>{% for rule in client_playrules %}{{ rule.name }}{% if incident.playrule_id == rule.id %} <span class="pill ok">used</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</dd>
+    {% endif %}
   </dl>
+  {% for key, label, value in extras_rows(incident.asset) if key == 'runbook_note' %}
+  <div class="runbook-note" data-runbook-note>
+    <strong>{{ label }}</strong>
+    <p class="pre-wrap">{{ value }}</p>
+  </div>
+  {% endfor %}
   <p class="muted"><a href="/assets/{{ incident.asset.asset_id }}">Edit contacts on the asset</a>.</p>
 </section>
 {% endif %}

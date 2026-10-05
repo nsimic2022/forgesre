@@ -124,7 +124,7 @@ def test_report_markdown_table_and_fail_exit():
         checks=checks,
         root=ROOT,
         base="http://127.0.0.1:8080",
-        env={"FORGESRE_VERSION": "0.7", "COMPOSE_PROFILES": ""},
+        env={"FORGESRE_VERSION": "0.8", "COMPOSE_PROFILES": ""},
         port="8080",
     )
     md = at.render_markdown(runner)

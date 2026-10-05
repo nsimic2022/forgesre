@@ -279,17 +279,45 @@ def next_incident_number(db: Session, when: datetime | None = None) -> str:
     return format_incident_number(highest + 1, when)
 
 
-def match_playrule(db: Session, alertname: str, labels: dict[str, Any] | None = None) -> Playrule | None:
-    """Alertname only. condition.metric/operator/value are operator notes and are never evaluated."""
+def match_playrule(
+    db: Session,
+    alertname: str,
+    labels: dict[str, Any] | None = None,
+    asset: Asset | None = None,
+) -> Playrule | None:
+    """Alertname only. condition.metric/operator/value are operator notes and are never evaluated.
+
+    An asset's Client playrules (assets.playrule_ids) are tried first, in the order saved; the
+    first enabled one whose alertname matches wins. Otherwise the global first-by-id match.
+    """
     del labels
     wanted = (alertname or "").strip().lower()
     if not wanted:
         return None
-    for rule in db.query(Playrule).filter_by(enabled=True).order_by(Playrule.id).all():
+    rules = db.query(Playrule).filter_by(enabled=True).order_by(Playrule.id).all()
+
+    def _hits(rule: Playrule) -> bool:
         expected = str((rule.condition or {}).get("alertname") or "").strip().lower()
-        if expected and expected == wanted:
+        return bool(expected) and expected == wanted
+
+    from app.asset_extras import asset_playrule_ids
+
+    by_id = {rule.id: rule for rule in rules}
+    for pk in asset_playrule_ids(asset):
+        rule = by_id.get(pk)
+        if rule is not None and _hits(rule):
+            return rule
+    for rule in rules:
+        if _hits(rule):
             return rule
     return None
+
+
+def playrule_from_asset(rule: Playrule | None, asset: Asset | None) -> bool:
+    """True when the matched playrule is one the asset lists as a Client playrule."""
+    from app.asset_extras import asset_playrule_ids
+
+    return bool(rule is not None and rule.id in asset_playrule_ids(asset))
 
 
 def append_timeline(incident: Incident, node_id: str, title: str, detail: str) -> None:
@@ -399,7 +427,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
                     object_id=str(getattr(asset, "asset_id", "") or asset_name),
                 )
                 continue
-            rule = match_playrule(db, alertname, labels)
+            rule = match_playrule(db, alertname, labels, asset=asset)
             incident = Incident(
                 number=next_incident_number(db),
                 title=str(annotations.get("summary") or alertname),
@@ -431,7 +459,8 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
                     f"Fired again as {incident.number}",
                 )
             if rule:
-                append_timeline(incident, "playrule", "PLAYRULE", rule.name)
+                via = " (asset client playrule)" if playrule_from_asset(rule, asset) else ""
+                append_timeline(incident, "playrule", "PLAYRULE", f"{rule.name}{via}")
                 if rule.playbook:
                     append_timeline(incident, "playbook", "PLAYBOOK", rule.playbook.name)
             db.add(IncidentEvent(incident_id=incident.id, kind="created", data=labels))

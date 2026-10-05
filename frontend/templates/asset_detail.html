@@ -29,6 +29,11 @@
   <dt>Email</dt><dd>{% if asset.owner_email %}{{ asset.owner_email }}{% else %}<span class="pill warn">No owner email</span> <span class="muted">Escalation mail is recorded as no-recipient and not sent, unless the escalation step names an address.</span>{% endif %}</dd>
   <dt>Phone</dt><dd>{{ asset.owner_phone or "—" }}</dd>
   <dt>Notes</dt><dd>{{ asset.notes or "—" }}</dd>
+  {% for key, label, value in extras_rows(asset) %}
+  <dt>{{ label }}</dt><dd class="extra-{{ key }}">{% if key == 'runbook_note' %}<span class="pre-wrap">{{ value }}</span>{% else %}{{ value }}{% endif %}</dd>
+  {% endfor %}
+  <dt><span class="label-line">Client playrules {% with %}{% set tip %}Preferred playrule when that alertname fires on this asset. Does not create Prometheus thresholds. None = global alertname match.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt>
+  <dd>{% for rule in client_playrules %}<a href="/playrules?edit={{ rule.id }}">{{ rule.name }}</a>{% if not rule.enabled %} <span class="muted">(disabled)</span>{% endif %}{% if not loop.last %}, {% endif %}{% else %}<span class="muted">None — global alertname match</span>{% endfor %}</dd>
   <dt>Source</dt><dd>{{ asset.source }}</dd>
   <dt>NetBox ID</dt><dd>{{ asset.netbox_id or "—" }}</dd>
   <dt><span class="label-line">Scrape address {% with %}{% set tip %}Prometheus HTTP target. Linux default ip:9100 (node_exporter), Windows ip:9182 (windows_exporter). Network devices use SNMP, not this field.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt><dd>{{ asset.scrape_address or "—" }}</dd>
