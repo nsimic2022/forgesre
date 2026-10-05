@@ -1215,6 +1215,33 @@ h1.incident-head { margin-bottom: 0.1rem; }
 .incident-id { margin: 0 0 0.6rem; font-size: 0.85rem; }
 .incident-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.8rem; }
 
+/* Severity tint on the incident title (lists + detail). Heat border stays status-first. */
+.scan-list .inc-title.sev-crit,
+.incidents-table .inc-title.sev-crit,
+h1.incident-head .sev-crit { color: var(--crit); }
+.scan-list .inc-title.sev-warn,
+.incidents-table .inc-title.sev-warn,
+h1.incident-head .sev-warn { color: var(--warn); }
+.scan-list tr.inc-row-done .inc-title.sev-crit,
+.incidents-table tr.inc-row-done .inc-title.sev-crit { color: var(--muted); color: color-mix(in srgb, var(--crit) 45%, var(--muted)); }
+.scan-list tr.inc-row-done .inc-title.sev-warn,
+.incidents-table tr.inc-row-done .inc-title.sev-warn { color: var(--muted); color: color-mix(in srgb, var(--warn) 45%, var(--muted)); }
+.scan-list td.inc-when .inc-age,
+.incidents-table td.inc-when .inc-age { color: var(--text); font-weight: 600; }
+
+.incident-strip {
+  margin: 0 0 0.8rem;
+  padding: 0.15rem 0 0.15rem 0.75rem;
+  border-left: 4px solid var(--line);
+}
+.incident-strip.inc-crit { border-left-color: var(--crit); }
+.incident-strip.inc-warn { border-left-color: var(--warn); }
+.incident-strip.inc-ok { border-left-color: var(--ok); }
+.incident-strip .incident-facts { margin: 0.35rem 0 0; font-size: 0.9rem; }
+.incident-strip .incident-short { font-weight: 700; font-variant-numeric: tabular-nums; }
+.incident-strip .incident-fact { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.incident-strip .incident-id { margin: 0; font-size: 0.78rem; }
+
 /* Dashboard layout pass: big Incidents / Infrastructure tiles, appliance card on the right. */
 .dash-top {
   display: grid;
@@ -1346,13 +1373,14 @@ h1.incident-head { margin-bottom: 0.1rem; }
 }
 .stack-cube {
   overflow: hidden;
-  padding: 0.28rem 0.2rem;
+  padding: 0.28rem 0.12rem;
   border-radius: 4px;
   background: var(--line);
   color: var(--text);
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  line-height: 1.1;
+  /* Fixed line box = old 0.7rem × 1.1, so the larger label keeps the cube height. */
+  line-height: 0.77rem;
   text-align: center;
   white-space: nowrap;
   text-overflow: ellipsis;

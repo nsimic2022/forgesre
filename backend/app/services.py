@@ -264,6 +264,93 @@ def severity_pill(severity: str) -> str:
     return "warn"
 
 
+def _as_utc(value: Any) -> datetime | None:
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def duration_label(seconds: float) -> str:
+    """18m, 2h 14m, 4d 3h. Under a minute is <1m."""
+    minutes = max(0, int(seconds)) // 60
+    if minutes < 1:
+        return "<1m"
+    if minutes < 60:
+        return f"{minutes}m"
+    hours, mins = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}h {mins}m" if mins else f"{hours}h"
+    days, hrs = divmod(hours, 24)
+    return f"{days}d {hrs}h" if hrs else f"{days}d"
+
+
+def incident_is_live(status: str) -> bool:
+    return str(status or "").upper() in ACTIVE_INCIDENT_STATUSES
+
+
+def incident_end(incident: Incident) -> datetime | None:
+    """When a RESOLVED/CLOSED incident stopped: person resolve time, else alert end."""
+    return _as_utc(getattr(incident, "resolved_at", None)) or _as_utc(getattr(incident, "ended_at", None))
+
+
+def incident_duration(incident: Incident, now: datetime | None = None) -> str:
+    """Live: started_at → now. Done: started_at → resolved/ended. Empty when unknown."""
+    start = _as_utc(getattr(incident, "started_at", None))
+    if start is None:
+        return ""
+    if incident_is_live(incident.status):
+        end = _as_utc(now) or utcnow()
+    else:
+        end = incident_end(incident)
+        if end is None:
+            return ""
+    return duration_label((end - start).total_seconds())
+
+
+def incident_wall(incident: Incident, now: datetime | None = None) -> str:
+    """13:07 today, 09.09 13:07 otherwise."""
+    return (
+        incident_when_label(incident.number, now)
+        or short_when_label(incident.started_at, now)
+        or format_started_at(incident.started_at)
+    )
+
+
+def incident_when(incident: Incident, now: datetime | None = None) -> dict[str, Any]:
+    """When column: age for OPEN/INVESTIGATING/ESCALATED, wall clock for RESOLVED/CLOSED."""
+    wall = incident_wall(incident, now)
+    full = format_started_at(incident.started_at)
+    duration = incident_duration(incident, now)
+    if incident_is_live(incident.status) and duration:
+        return {"live": True, "primary": duration, "wall": wall, "duration": duration, "title": f"Started {wall} · {full}"}
+    title = f"{full} · lasted {duration}" if duration else full
+    return {"live": False, "primary": wall, "wall": wall, "duration": duration, "title": title}
+
+
+def incident_host(incident: Incident | None) -> str:
+    """Matched asset hostname, else the alert's asset/instance label (port dropped)."""
+    if incident is None:
+        return ""
+    asset = getattr(incident, "asset", None)
+    if asset is not None:
+        name = str(getattr(asset, "hostname", "") or getattr(asset, "asset_id", "") or "").strip()
+        if name:
+            return name
+    payload = incident.alert_payload if isinstance(getattr(incident, "alert_payload", None), dict) else {}
+    labels = payload.get("labels") if isinstance(payload, dict) else None
+    name = ""
+    if isinstance(labels, dict):
+        name = str(labels.get("asset") or labels.get("instance") or "").strip()
+    if name == UNLABELED_ASSET:
+        return ""
+    head, sep, port = name.rpartition(":")
+    if sep and port.isdigit() and ":" not in head:
+        name = head
+    return name
+
+
 def format_incident_number(seq: int, when: datetime | None = None) -> str:
     """INC-0134_16.08.2026_09:13 in the appliance timezone (wall clock)."""
     local = _appliance_local(when)

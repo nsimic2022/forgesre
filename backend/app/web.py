@@ -75,7 +75,9 @@ from app.asset_metrics import safe_asset_metric_panel
 from app.metrics import reset_demo_gauges
 from app.services import (
     format_started_at,
+    incident_host,
     incident_short_label,
+    incident_when,
     incident_when_label,
     is_demo_incident,
     is_demo_journal,
@@ -281,6 +283,8 @@ def ctx(request: Request, user: User | None, **extra):
         "incident_tone": incident_tone,
         "incident_short_label": incident_short_label,
         "incident_when_label": incident_when_label,
+        "incident_when": incident_when,
+        "incident_host": incident_host,
         "format_started_at": format_started_at,
         "short_when_label": short_when_label,
         "severity_pill": severity_pill,

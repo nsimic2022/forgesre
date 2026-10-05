@@ -2,8 +2,29 @@
 {% block title %}{{ incident.number }} · ForgeSRE{% endblock %}
 {% block content %}
 <p><a href="/incidents">← Incidents</a> · <a href="/history">History</a></p>
-<h1 class="incident-head">{{ incident.title or incident.number }} {% if is_demo_incident(incident) %}<span class="pill demo">DEMO</span>{% endif %}</h1>
-<p class="incident-id muted"><code>{{ incident.number }}</code></p>
+{% set when = incident_when(incident) %}
+{% set host = incident_host(incident) %}
+<header class="incident-strip {{ incident_tone(incident.status, incident.severity) }}" data-incident-strip>
+  <h1 class="incident-head"><span class="sev-{{ severity_pill(incident.severity) }}">{{ incident.title or incident.number }}</span> {% if is_demo_incident(incident) %}<span class="pill demo">DEMO</span>{% endif %}</h1>
+  <p class="incident-facts">
+    <span class="incident-short" title="{{ incident.number }}">{{ incident_short_label(incident.number) }}</span>
+    {% if incident.asset %}
+    <a href="/assets/{{ incident.asset.asset_id }}">{{ incident.asset.hostname }}</a>
+    {% elif host %}
+    <span title="From the alert labels — no asset matched">{{ host }}</span>
+    {% else %}
+    <span class="muted">No asset matched the alert labels</span>
+    {% endif %}
+    <span class="pill {{ incident.status|lower }}">{{ incident.status }}</span>
+    <span class="pill {{ severity_pill(incident.severity) }}">{{ incident.severity }}</span>
+    <span class="muted">First <span class="incident-fact" title="{{ format_started_at(incident.started_at) }}">{{ when.wall }}</span></span>
+    {% if when.duration %}<span class="muted">{% if when.live %}Open{% else %}Lasted{% endif %} <span class="incident-fact" data-incident-duration>{{ when.duration }}</span></span>{% endif %}
+    {% if not when.live and (incident.resolved_at or incident.ended_at) %}<span class="muted">Ended <span class="incident-fact" title="{{ format_started_at(incident.resolved_at or incident.ended_at) }}">{{ short_when_label(incident.resolved_at or incident.ended_at) }}</span></span>{% endif %}
+    {% if incident.ack_by %}<span class="muted">Ack {{ incident.ack_by }} · {{ short_when_label(incident.ack_at) }}</span>{% endif %}
+    {% if incident.resolved_by %}<span class="muted">{{ incident.status }} by {{ incident.resolved_by }}</span>{% endif %}
+    <code class="incident-id muted">{{ incident.number }}</code>
+  </p>
+</header>
 <div class="tool-row">
   <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
   <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
@@ -34,18 +55,6 @@
   <button type="button" class="off" disabled>Open ForgeRCA</button>
   {% endif %}
 </div>
-<p class="incident-facts">
-  <span class="pill {{ incident.status|lower }}">{{ incident.status }}</span>
-  <span class="pill {{ severity_pill(incident.severity) }}">{{ incident.severity }}</span>
-  {% if incident.asset %}
-  <span>Asset <a href="/assets/{{ incident.asset.asset_id }}">{{ incident.asset.hostname }}</a></span>
-  {% else %}
-  <span class="muted">No asset matched the alert labels</span>
-  {% endif %}
-  <span class="muted">Started <span title="{{ format_started_at(incident.started_at) }}">{{ short_when_label(incident.started_at) or format_started_at(incident.started_at) }}</span></span>
-  {% if incident.ack_by %}<span class="muted">Ack {{ incident.ack_by }} · {{ short_when_label(incident.ack_at) }}</span>{% endif %}
-  {% if incident.resolved_by %}<span class="muted">{{ incident.status }} by {{ incident.resolved_by }} · {{ short_when_label(incident.resolved_at or incident.ended_at) }}</span>{% endif %}
-</p>
 {% if incident.status|upper == "RESOLVED" %}
 <p class="muted">Resolved is not Closed. If the same alert fires again, ForgeSRE opens a new incident and links it here. Close when the work is finished.</p>
 {% endif %}
