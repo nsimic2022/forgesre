@@ -147,36 +147,29 @@
 <div class="asset-detail-side">
 <aside class="asset-detail-metrics card" data-asset-metrics="{{ asset.asset_id }}">
   <div class="metric-panel-head">
-    <h2>Machine metrics {% with %}{% set tip %}Bundled {{ metrics.class }} class — cpu / mem / disk / up only, not every exporter series. Alarm % is the per-host overlay (Edit Alarms), not a rewrite of monitoring/alerts.yml.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+    <h2>Machine metrics {% with %}{% set tip %}Live Prometheus reads for this host ({{ metrics.class }}: cpu / mem / disk / up). Green = below the alarm %, red = at or above, yellow = no reading. Verify checks this host's scrape; ./forgesre doctor checks the appliance stack; Edit Alarms off mutes that alarm for this host only. Hover a row for its alarm %.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
     {% if can('write_assets') %}
     <a class="metric-edit" href="/assets?edit={{ asset.asset_id }}#asset-form">Edit Alarms</a>
     {% endif %}
   </div>
   {% if metrics.demo %}<span class="pill demo">DEMO</span>{% endif %}
   {% if sup.warn %}
-  <div class="support-warning" data-support-warning role="status"><strong>{{ sup.label }}</strong> — {{ sup.detail }}. Warning only; no alert or incident is opened for this.</div>
+  <div class="support-warning" data-support-warning role="status" title="Reminder only — no alert or incident is opened."><strong>{{ sup.label }}</strong> · {{ sup.detail }}</div>
   {% endif %}
-  <p class="muted">{{ metrics.collecting_line }}</p>
-  <div class="metric-tiles">
+  <div class="metric-rows" data-metric-rows>
     {% for tile in metrics.tiles %}
-    <div class="metric-tile" data-metric="{{ tile.key }}">
+    {% if tile.key == "up" %}
+    {% set hint = metrics.collecting_line %}
+    {% elif tile.threshold is not none %}
+    {% set hint = "Alarm at " ~ (tile.threshold|int) ~ "%" ~ (" — off" if tile.alarm_enabled is false else "") %}
+    {% else %}
+    {% set hint = "No alarm %" %}
+    {% endif %}
+    <div class="metric-row" data-metric="{{ tile.key }}" data-tone="{{ tile.tone }}" title="{{ hint }}">
       <span class="metric-name">{{ tile.name }}</span>
-      <span class="metric-value {{ tile.tone }}">{{ tile.display }}</span>
-      <div class="metric-bar{% if tile.bar_pct is none %} empty{% endif %}" role="meter"{% if tile.bar_pct is not none %} aria-valuenow="{{ tile.bar_pct }}" aria-valuemin="0" aria-valuemax="100"{% endif %}>
-        {% if tile.bar_pct is not none %}
-        <span class="metric-bar-fill {{ tile.tone }}" style="width: {{ tile.bar_pct }}%"></span>
-        {% endif %}
-      </div>
-      <span class="metric-swatch {{ tile.tone }}" title="{{ tile.tone }}"></span>
-      <span class="metric-threshold">
-        {% if tile.threshold is not none %}
-        {{ tile.threshold|int }}%{% if tile.alarm_enabled is false %} · off{% endif %}
-        {% elif tile.alarm_enabled is false %}
-        off
-        {% else %}
-        —
-        {% endif %}
-      </span>
+      <span class="metric-cube {{ tile.tone }}" role="img" aria-label="{{ tile.tone }}"></span>
+      <span class="metric-value {{ tile.tone }}">{% if tile.value is none %}—{% else %}{{ tile.display }}{% endif %}</span>
+      {% if tile.alarm_enabled is false %}<span class="metric-threshold">off</span>{% endif %}
     </div>
     {% endfor %}
   </div>

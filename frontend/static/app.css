@@ -554,8 +554,9 @@ button.playrule-remove:hover { color: var(--crit); border-color: var(--crit); }
 }
 .support-pill { white-space: nowrap; }
 .support-warning {
-  margin: 0.4rem 0 0.7rem;
-  padding: 0.5rem 0.7rem;
+  margin: 0.2rem 0 0.45rem;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.85rem;
   border-left: 4px solid var(--warn);
   border-radius: 6px;
   background: var(--pill-warn-bg);
@@ -1026,47 +1027,38 @@ td.ops-report-actions .row-actions a.button {
   margin-bottom: 0.35rem;
 }
 .metric-panel-head h2 { margin: 0; }
-.metric-tiles { display: grid; gap: 0.35rem; }
-.metric-tile {
+.metric-rows { display: grid; max-width: 18rem; }
+.metric-row {
   display: grid;
-  grid-template-columns: 5.4rem minmax(3.4rem, auto) minmax(2.4rem, 1fr) 0.65rem auto;
+  grid-template-columns: 5.6rem 0.8rem minmax(2.6rem, auto) 1fr;
   align-items: center;
-  column-gap: 0.4rem;
+  column-gap: 0.55rem;
   min-width: 0;
-  font-size: 0.86rem;
+  padding: 0.22rem 0;
+  font-size: 0.9rem;
+  border-bottom: 1px solid var(--line);
 }
+.metric-row:last-child { border-bottom: 0; }
 .metric-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.metric-value { font-weight: 600; white-space: nowrap; }
+.metric-value { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .metric-value.ok { color: var(--ok); }
 .metric-value.warn { color: var(--warn); }
 .metric-value.crit { color: var(--crit); }
-.metric-swatch {
-  width: 0.65rem;
-  height: 0.65rem;
-  border-radius: 50%;
-  flex-shrink: 0;
+.metric-cube {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 2px;
+  background: var(--muted);
 }
-.metric-swatch.ok { background: var(--ok); }
-.metric-swatch.warn { background: var(--warn); }
-.metric-swatch.crit { background: var(--crit); }
-.metric-threshold { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+.metric-cube.ok { background: var(--ok); box-shadow: 0 0 5px var(--ok); }
+.metric-cube.warn { background: var(--warn); box-shadow: 0 0 5px var(--warn); }
+.metric-cube.crit { background: var(--crit); box-shadow: 0 0 5px var(--crit); }
+.metric-threshold { justify-self: end; color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
 .metric-edit { font-size: 0.78rem; white-space: nowrap; }
-.metric-bar {
-  height: 8px;
-  min-width: 0;
-  background: var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.metric-bar.empty { background: var(--pill-warn-bg); }
-.metric-bar-fill { display: block; height: 100%; border-radius: 999px; }
-.metric-bar-fill.ok { background: var(--ok); }
-.metric-bar-fill.warn { background: var(--warn); }
-.metric-bar-fill.crit { background: var(--crit); }
 .alarm-families { margin: 0; padding: 0; border: 0; background: none; }
 .alarm-heading { display: block; }
 .alarm-families .muted { margin: 0 0 0.35rem; }
