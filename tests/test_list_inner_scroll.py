@@ -111,7 +111,7 @@ def test_incident_lists_scroll_inside_box_and_title_still_opens(path):
 
 
 def test_assets_table_scrolls_inside_box_and_asset_id_opens():
-    html = _client().get("/assets").text
+    html = _client().get(f"/assets?q={DEMO_ASSET}").text
     boxes = _boxes(html)
     assert len(boxes) == 1
     box = boxes[0]
@@ -124,7 +124,7 @@ def test_assets_table_scrolls_inside_box_and_asset_id_opens():
 
 
 def test_edit_target_row_keeps_selected_class_inside_box():
-    html = _client().get(f"/assets?edit={DEMO_ASSET}").text
+    html = _client().get(f"/assets?edit={DEMO_ASSET}&q={DEMO_ASSET}").text
     rows = _rows(_boxes(html)[0])
     edited = next(r for r in rows if f'href="/assets/{DEMO_ASSET}"' in r)
     assert re.match(r'<tr class="selected" data-list-row>', edited)
