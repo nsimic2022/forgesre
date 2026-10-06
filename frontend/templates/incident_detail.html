@@ -161,11 +161,12 @@
 
 <section id="audit">
   <h2>Who did what {% with %}{% set tip %}Audit rows for this INC (login clicks, status, notes). Not an email read-receipt.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="table-scroll list-scroll" data-list-scroll>
   <table>
     <thead><tr><th>When</th><th>Actor</th><th>Action</th></tr></thead>
     <tbody>
     {% for row in audit_rows %}
-      <tr>
+      <tr data-list-row>
         <td>{{ row.at }}</td>
         <td>{{ row.actor }}</td>
         <td>{{ row.action }}{% if row.data %} {{ row.data }}{% endif %}</td>
@@ -175,6 +176,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 {% include "_pager.html" %}
 </section>
 

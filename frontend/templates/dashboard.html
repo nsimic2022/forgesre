@@ -151,7 +151,7 @@
     <tbody>
     {% for item in recent %}
       {% set done = item.status|upper in ['RESOLVED', 'CLOSED'] %}
-      <tr class="dash-pick {{ incident_tone(item.status, item.severity) }}{% if done %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}" data-dash-incident="{{ item.number }}" data-dash-select="graphs" data-asset="{{ item.asset.asset_id if item.asset else '' }}" data-host="{{ incident_host(item) }}" data-active="{{ 'false' if done else 'true' }}" tabindex="{{ '0' if loop.first else '-1' }}">
+      <tr class="dash-pick {{ incident_tone(item.status, item.severity) }}{% if done %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}" data-list-row data-dash-incident="{{ item.number }}" data-dash-select="graphs" data-asset="{{ item.asset.asset_id if item.asset else '' }}" data-host="{{ incident_host(item) }}" data-active="{{ 'false' if done else 'true' }}" tabindex="{{ '0' if loop.first else '-1' }}">
         {{ sel.cell(item.number) }}
         {% include "_incident_cell.html" %}
         <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
@@ -179,11 +179,12 @@
 {% if can('read_play') %}
 <section id="journal">
   <h2>Recent journal reports {% with %}{% set tip %}Latest internal process reports (ok / warn / error). Not Docker/Loki logs.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="list-scroll" data-list-scroll>
   <table class="console scan-list">
     <thead><tr>{{ sel.head() }}<th>Module</th><th>Status</th><th>Report</th></tr></thead>
     <tbody>
     {% for row in journal_recent %}
-      <tr>
+      <tr data-list-row>
         {{ sel.cell(row.id, row.module ~ " report " ~ row.id) }}
         <td>{{ row.module }}</td>
         <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>
@@ -194,6 +195,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% with pager=journal_pager %}{% include "_pager.html" %}{% endwith %}
   <p class="muted"><a href="/journal">Open full journal</a></p>
 </section>

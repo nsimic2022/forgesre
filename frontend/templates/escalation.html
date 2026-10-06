@@ -8,9 +8,10 @@
   <li><strong>Role</strong> on the step (<code>team</code>, <code>team-lead</code>, <code>engineer</code>) — mail goes to the asset owner email (demo: <code>platform@forgesre.local</code> on forge-demo-01).</li>
   <li>Role step and <strong>no owner email</strong> — recorded in the outbox as <span class="pill warn">no-recipient</span> and not sent. ForgeSRE does not invent <code>role@forgesre.local</code> addresses.</li>
 </ul>
+<div class="list-scroll list-scroll-cards" data-list-scroll>
 <div class="policy-grid">
 {% for policy in policies %}
-<section class="card policy-card">
+<section class="card policy-card" data-list-row>
   <h2>{{ policy.name }} <span class="muted policy-slug"><code>{{ policy.slug }}</code></span></h2>
   <table class="scan-list step-list">
     <thead><tr><th>After</th><th>Recipient</th></tr></thead>
@@ -27,6 +28,7 @@
 {% else %}
 <p class="muted">No policies yet. Create one below, or keep using the seeded Default warning after seed.</p>
 {% endfor %}
+</div>
 </div>
 {% include "_pager.html" %}
 {% if can('write_play') %}

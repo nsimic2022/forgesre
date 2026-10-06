@@ -26,11 +26,12 @@
   <a class="muted list-reset" href="/incidents">Reset</a>
   <span class="muted list-count">{{ pager.total }} incident{% if pager.total != 1 %}s{% endif %} · older rows in <a href="/history">History</a></span>
 </form>
+<div class="table-scroll list-scroll" data-list-scroll>
 <table class="scan-list incidents-table">
   <thead><tr>{{ sel.head() }}<th>Incident</th><th>Severity</th><th>Status</th><th>When</th></tr></thead>
   <tbody>
   {% for item in incidents %}
-    <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}">
+    <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}" data-list-row>
       {{ sel.cell(item.number) }}
       {% include "_incident_cell.html" %}
       <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
@@ -42,5 +43,6 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% include "_pager.html" %}
 {% endblock %}

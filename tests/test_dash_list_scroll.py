@@ -80,6 +80,13 @@ def _js_block(name: str) -> str:
     return head + src.split(head, 1)[1].split("\n})();", 1)[0] + "\n})();"
 
 
+def _js_fn(name: str) -> str:
+    src = JS.read_text(encoding="utf-8")
+    head = f"\nfunction {name}("
+    assert head in src, name
+    return head.lstrip() + src.split(head, 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+
+
 def test_recent_rows_select_and_title_still_links_to_detail():
     numbers = _add_many(3)
     html = _client().get("/").text
@@ -184,6 +191,7 @@ for (let i = 0; i < N; i++) {
   const td = el("td", tr);
   const link = el("a", td);
   link.classes.add("inc-title");
+  link.attrs["data-list-open"] = "";
   link.href = "http://h/incidents/INC-" + i;
   const box = el("input", td);
   tr.td = td; tr.link = link; tr.box = box;
@@ -279,7 +287,7 @@ def _run(harness: str, *args: str) -> dict:
 
 
 def test_js_keyboard_moves_selection_inside_list_only():
-    out = _run(_KEYS_HARNESS, _js_block("bindDashGraphs"), "8")
+    out = _run(_KEYS_HARNESS, _js_fn("listPicker") + _js_block("bindDashGraphs"), "8")
     assert out["initial"] == {"selected": 0, "fetched": ["/api/v1/assets/a0/metrics"]}
     assert out["held"] == [True, True, True]
     hold = out["afterHold"]
@@ -304,9 +312,9 @@ def test_js_keyboard_moves_selection_inside_list_only():
 
 
 def test_js_has_no_tab_trap():
-    graphs = _js_block("bindDashGraphs")
-    assert '"Tab"' not in graphs and "'Tab'" not in graphs
-    assert ".scrollIntoView(" not in graphs and "window.scroll" not in graphs
+    for block in (_js_block("bindDashGraphs"), _js_fn("listPicker"), _js_block("bindListPick")):
+        assert '"Tab"' not in block and "'Tab'" not in block
+        assert ".scrollIntoView(" not in block and "window.scroll" not in block
 
 
 def test_pager_links_carry_no_top_jump_and_one_shared_helper():
@@ -418,4 +426,4 @@ def test_js_pager_restores_only_matching_fresh_entry():
 
 def test_cache_bust_bumped():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-9" in base and "app.js?v=v08-9" in base
+    assert "app.css?v=v08-10" in base and "app.js?v=v08-10" in base

@@ -307,7 +307,7 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.8rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-9" in base
+    assert "app.css?v=v08-10" in base
 
 
 def _fake_doctor(**_kw):

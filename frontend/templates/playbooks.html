@@ -9,9 +9,10 @@
 {% endif %}
 <div data-select-scope>
 {% if playbooks %}<label class="select-page-bar muted"><input type="checkbox" data-select-page aria-label="Select all playbooks on this page"> Select page</label>{% endif %}
+<div class="list-scroll list-scroll-cards" data-list-scroll>
 <div class="playbook-grid">
 {% for book in playbooks %}
-<section class="card playbook-card {% if selected and selected.id == book.id %}selected{% endif %}">
+<section class="card playbook-card {% if selected and selected.id == book.id %}selected{% endif %}" data-list-row>
   <label class="card-select"><input type="checkbox" name="selected" value="{{ book.id }}" data-select-row aria-label="Select {{ book.name }}"></label>
   <h2>{{ book.name }} <span class="muted policy-slug"><code>{{ book.slug }}</code></span></h2>
   {% if book.description %}<p class="muted">{{ book.description }}</p>{% endif %}
@@ -31,6 +32,7 @@
   {% endif %}
 </section>
 {% endfor %}
+</div>
 </div>
 </div>
 {% include "_pager.html" %}

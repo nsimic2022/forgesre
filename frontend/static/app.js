@@ -503,11 +503,105 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
   setInterval(load, 20000);
 })();
 
+// One row picker for every list box. A click on a row (not on its links, buttons or inputs) only selects it;
+// Up / Down, j / k, Home / End move the selection and scroll only the box; Enter opens the row's [data-list-open]
+// link (or toggles its [data-list-open] summary). Inputs keep their keys, Tab leaves, a mousedown outside the box
+// hands keyboard scrolling back to the page. onSelect(row, options) runs when the selection changes.
+function listPicker(root, opts) {
+  const options = opts || {};
+  const box = options.box === undefined ? root : options.box;
+  const rowSel = options.rows || "[data-list-row]";
+  const rows = Array.from(root.querySelectorAll(rowSel));
+  const onSelect = options.onSelect || null;
+  let selected = null;
+  if (box) box.setAttribute("data-list-bound", "");
+  rows.forEach((r, i) => {
+    if (!r.hasAttribute("tabindex")) r.tabIndex = i === 0 ? 0 : -1;
+  });
+
+  // Scroll only the list box; scrollIntoView would also move the window when the box is partly off-screen.
+  const keepInList = (row) => {
+    if (!box || typeof row.getBoundingClientRect !== "function") return;
+    const table = "tHead" in root ? root : root.querySelector(":scope > table");
+    const head = table && table.tHead ? table.tHead.getBoundingClientRect().height : 0;
+    const frame = box.getBoundingClientRect();
+    const r = row.getBoundingClientRect();
+    if (r.top < frame.top + head) box.scrollTop -= frame.top + head - r.top;
+    else if (r.bottom > frame.bottom) box.scrollTop += r.bottom - frame.bottom;
+  };
+
+  const select = (row, how) => {
+    if (!row) return;
+    const flags = how || {};
+    rows.forEach((r) => {
+      r.classList.toggle("is-selected", r === row);
+      r.tabIndex = r === row ? 0 : -1;
+      if (r === row) {
+        r.setAttribute("aria-current", "true");
+        r.setAttribute("aria-selected", "true");
+      } else {
+        r.removeAttribute("aria-current");
+        r.setAttribute("aria-selected", "false");
+      }
+    });
+    if (flags.focus && typeof row.focus === "function") row.focus({ preventScroll: true });
+    keepInList(row);
+    if (selected === row && !flags.force) return;
+    selected = row;
+    if (onSelect) onSelect(row, flags);
+  };
+
+  root.addEventListener("click", (event) => {
+    if (event.target.closest("a, input, button, label, select, textarea, summary")) return;
+    // Dragging to copy text out of a row is not a pick.
+    if (typeof window.getSelection === "function" && String(window.getSelection() || "")) return;
+    const row = event.target.closest(rowSel);
+    if (row && rows.includes(row)) select(row, { focus: true });
+  });
+
+  const STEP = { ArrowDown: 1, j: 1, ArrowUp: -1, k: -1 };
+  root.addEventListener("keydown", (event) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target;
+    if (target.closest("input, select, textarea, [contenteditable]")) return;
+    const row = target.closest(rowSel);
+    const index = rows.indexOf(row);
+    if (index < 0) return;
+    let next = null;
+    if (event.key in STEP) next = rows[Math.max(0, Math.min(rows.length - 1, index + STEP[event.key]))];
+    else if (event.key === "Home") next = rows[0];
+    else if (event.key === "End") next = rows[rows.length - 1];
+    if (next) {
+      event.preventDefault();
+      select(next, { focus: true, defer: true });
+      return;
+    }
+    if (target !== row) return;
+    if (event.key === " ") {
+      event.preventDefault();
+      select(row);
+    } else if (event.key === "Enter") {
+      const open = row.querySelector("[data-list-open]");
+      if (!open) return;
+      event.preventDefault();
+      if (open.href) window.location.assign(open.href);
+      else if (typeof open.click === "function") open.click();
+    }
+  });
+
+  document.addEventListener("mousedown", (event) => {
+    if (!box || box.contains(event.target)) return;
+    const active = document.activeElement;
+    if (active && box.contains(active) && typeof active.blur === "function") active.blur();
+  });
+
+  return { rows, select };
+}
+
 (function bindDashGraphs() {
   const pane = document.querySelector("[data-dash-graphs]");
   const table = document.querySelector("[data-dash-incident-table]");
   if (!pane || !table) return;
-  const rows = Array.from(table.querySelectorAll("tr[data-dash-incident]"));
   const subject = pane.querySelector("[data-dash-graph-subject]");
   const empty = pane.querySelector("[data-dash-graph-empty]");
   const list = pane.querySelector("[data-dash-graph-list]");
@@ -623,36 +717,9 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
       });
   };
 
-  const scroller = table.closest("[data-dash-list]");
   let pending = 0;
 
-  // Scroll only the list box; scrollIntoView would also move the window when the box is partly off-screen.
-  const keepInList = (row) => {
-    if (!scroller || typeof row.getBoundingClientRect !== "function") return;
-    const box = scroller.getBoundingClientRect();
-    const head = table.tHead ? table.tHead.getBoundingClientRect().height : 0;
-    const r = row.getBoundingClientRect();
-    if (r.top < box.top + head) scroller.scrollTop -= box.top + head - r.top;
-    else if (r.bottom > box.bottom) scroller.scrollTop += r.bottom - box.bottom;
-  };
-
-  const select = (row, opts) => {
-    if (!row) return;
-    const options = opts || {};
-    rows.forEach((r) => {
-      r.classList.toggle("is-selected", r === row);
-      r.tabIndex = r === row ? 0 : -1;
-      if (r === row) {
-        r.setAttribute("aria-current", "true");
-        r.setAttribute("aria-selected", "true");
-      } else {
-        r.removeAttribute("aria-current");
-        r.setAttribute("aria-selected", "false");
-      }
-    });
-    if (options.focus && typeof row.focus === "function") row.focus({ preventScroll: true });
-    keepInList(row);
-    if (selected === row && !options.force) return;
+  const graph = (row, options) => {
     selected = row;
     seq++;
     if (timer) window.clearInterval(timer);
@@ -682,54 +749,57 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
     else start();
   };
 
-  table.addEventListener("click", (event) => {
-    if (event.target.closest("a, input, button, label, select, textarea")) return;
-    const row = event.target.closest("tr[data-dash-incident]");
-    if (row) select(row, { focus: true });
+  const picker = listPicker(table, {
+    box: table.closest("[data-dash-list]"),
+    rows: "tr[data-dash-incident]",
+    onSelect: graph,
   });
-
-  const STEP = { ArrowDown: 1, j: 1, ArrowUp: -1, k: -1 };
-  table.addEventListener("keydown", (event) => {
-    if (event.altKey || event.ctrlKey || event.metaKey) return;
-    const target = event.target;
-    if (target.closest("input, select, textarea, [contenteditable]")) return;
-    const row = target.closest("tr[data-dash-incident]");
-    if (!row) return;
-    const index = rows.indexOf(row);
-    let next = null;
-    if (event.key in STEP) next = rows[Math.max(0, Math.min(rows.length - 1, index + STEP[event.key]))];
-    else if (event.key === "Home") next = rows[0];
-    else if (event.key === "End") next = rows[rows.length - 1];
-    if (next) {
-      event.preventDefault();
-      select(next, { focus: true, defer: true });
-      return;
-    }
-    if (target !== row) return;
-    if (event.key === " ") {
-      event.preventDefault();
-      select(row);
-    } else if (event.key === "Enter") {
-      const link = row.querySelector("a.inc-title");
-      if (link && link.href) {
-        event.preventDefault();
-        window.location.assign(link.href);
-      }
-    }
-  });
-
-  // A click on empty page space hands keyboard scrolling (PageUp/Down, Space, arrows) back to the document.
-  document.addEventListener("mousedown", (event) => {
-    if (!scroller || scroller.contains(event.target)) return;
-    const active = document.activeElement;
-    if (active && scroller.contains(active) && typeof active.blur === "function") active.blur();
-  });
-
+  const rows = picker.rows;
   if (!rows.length) {
     showEmpty("No host to chart");
     return;
   }
-  select(rows.find((r) => r.getAttribute("data-active") === "true") || rows[0]);
+  picker.select(rows.find((r) => r.getAttribute("data-active") === "true") || rows[0]);
+})();
+
+// Every other list box: select-only rows. A box with more than ten rows is sized to about ten, so a longer page
+// (Rows 20 / 50 / 100) scrolls inside the box instead of stretching the window. The row the server marks .selected
+// (the one being edited) starts selected and is scrolled into view.
+(function bindListPick() {
+  const TEN = 10;
+  const picked = [];
+  document.querySelectorAll("[data-list-scroll]").forEach((box) => {
+    if (box.hasAttribute("data-list-bound")) return;
+    picked.push({ box, picker: listPicker(box) });
+  });
+  if (!picked.length) return;
+
+  const fit = () => {
+    picked.forEach(({ box, picker }) => {
+      if (picker.rows.length <= TEN) return;
+      box.style.maxHeight = "";
+      const top = box.getBoundingClientRect().top - box.scrollTop;
+      const tenth = picker.rows[TEN - 1].getBoundingClientRect().bottom;
+      const chrome = box.offsetHeight - box.clientHeight;
+      box.style.maxHeight = "min(" + Math.ceil(tenth - top + chrome + 1) + "px, 72vh)";
+    });
+  };
+  fit();
+  picked.forEach(({ picker }) => {
+    const start = picker.rows.find((r) => r.classList.contains("selected"));
+    if (start) picker.select(start);
+  });
+
+  let frame = 0;
+  const refit = () => {
+    if (frame) return;
+    frame = window.requestAnimationFrame(() => {
+      frame = 0;
+      fit();
+    });
+  };
+  window.addEventListener("resize", refit);
+  if (document.readyState !== "complete") window.addEventListener("load", refit, { once: true });
 })();
 
 (function bindInfoTips() {
