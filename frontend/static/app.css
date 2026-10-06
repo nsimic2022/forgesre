@@ -1437,11 +1437,23 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .dash-recent-scroll > table { margin: 0; }
 .dash-recent-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: inset 0 -1px 0 var(--line); }
 .dash-recent a.inc-title { display: inline-block; max-width: 100%; vertical-align: top; }
-.scan-list tr[data-dash-incident] { cursor: pointer; }
-.scan-list tr[data-dash-incident]:focus { outline: none; }
-.scan-list tr[data-dash-incident].is-selected td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.scan-list tr[data-dash-incident].is-selected td:last-child { box-shadow: inset -3px 0 0 var(--accent); }
-.scan-list tr[data-dash-incident]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Every other list: the same inner box (sticky header; JS sizes it to about ten rows when the page has more). */
+.list-scroll {
+  max-height: min(40rem, 72vh);
+  overflow: auto;
+  max-width: 100%;
+}
+.list-scroll > table { margin: 0; }
+.list-scroll > table > thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: inset 0 -1px 0 var(--line); }
+.list-scroll-cards { padding: 2px; margin-bottom: 1.1rem; }
+.list-scroll-cards > .playbook-grid,
+.list-scroll-cards > .policy-grid { margin-bottom: 0; }
+[data-list-row] { cursor: pointer; }
+[data-list-row]:focus { outline: none; }
+tr[data-list-row].is-selected td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+tr[data-list-row].is-selected td:last-child { box-shadow: inset -3px 0 0 var(--accent); }
+.card[data-list-row].is-selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+[data-list-row]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 @media (max-width: 1100px) {
   .dash-incidents { grid-template-columns: 1fr; }
   .dash-graphs { position: static; margin-top: 0; }

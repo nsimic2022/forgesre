@@ -1,5 +1,5 @@
 <td class="inc-cell">
-  <a class="inc-title sev-{{ severity_pill(item.severity) }}" href="/incidents/{{ item.number }}"{% if item.title %} title="{{ item.title }}"{% endif %} tabindex="-1">{{ item.title or item.number }}</a>
+  <a class="inc-title sev-{{ severity_pill(item.severity) }}" href="/incidents/{{ item.number }}"{% if item.title %} title="{{ item.title }}"{% endif %} tabindex="-1" data-list-open>{{ item.title or item.number }}</a>
   <div class="inc-meta">
     <a class="{{ incident_tone(item.status, item.severity) }}" href="/incidents/{{ item.number }}" title="{{ item.number }}">{{ incident_short_label(item.number) }}</a>
     {% set host = incident_host(item) %}

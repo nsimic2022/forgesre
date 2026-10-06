@@ -9,7 +9,7 @@
 {% elif include_demo %}
 <p class="banner">Including DEMO lab hosts. They are labeled lab and are not proof of a real scrape.</p>
 {% endif %}
-<div class="table-scroll">
+<div class="table-scroll list-scroll" data-list-scroll>
 <table class="verify-table">
   <thead>
     <tr>
@@ -30,9 +30,9 @@
   </thead>
   <tbody>
     {% for row in reports %}
-    <tr>
+    <tr data-list-row>
       <td>
-        <a href="/assets/{{ row.asset_id }}/verify">{{ row.asset_id }}</a>
+        <a href="/assets/{{ row.asset_id }}/verify" data-list-open>{{ row.asset_id }}</a>
         {% if row.lab %}<span class="pill warn">DEMO</span>{% endif %}
         <div class="muted">{{ row.ip or "—" }}</div>
       </td>

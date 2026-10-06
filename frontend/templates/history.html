@@ -21,7 +21,7 @@
     <a class="muted" href="/history">Reset</a>
   </div>
 </form>
-<div class="table-scroll">
+<div class="table-scroll list-scroll" data-list-scroll>
 <table class="scan-list">
   <thead>
     <tr>
@@ -33,7 +33,7 @@
   </thead>
   <tbody>
   {% for item in incidents %}
-    <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}">
+    <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}" data-list-row>
       {{ sel.cell(item.number) }}
       {% include "_incident_cell.html" %}
       <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>

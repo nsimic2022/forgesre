@@ -20,13 +20,14 @@
   {% include "_pager_keep.html" %}
   <button type="submit">Search</button>
 </form>
+<div class="table-scroll list-scroll" data-list-scroll>
 <table class="console">
   <thead>
     <tr><th>When</th><th>Module</th><th>Action</th><th>Status</th><th>Report</th></tr>
   </thead>
   <tbody>
   {% for row in entries %}
-    <tr>
+    <tr data-list-row>
       <td class="muted">{{ row.at }}</td>
       <td><a href="/journal?module={{ row.module|urlencode }}">{{ row.module }}</a></td>
       <td>{{ row.action }}</td>
@@ -42,5 +43,6 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% include "_pager.html" %}
 {% endblock %}

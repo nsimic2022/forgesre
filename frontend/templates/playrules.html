@@ -8,14 +8,14 @@
 {% if notice %}
 <div class="banner">{{ notice }}</div>
 {% endif %}
-<div class="table-scroll">
+<div class="table-scroll list-scroll" data-list-scroll>
 <table class="scan-list rule-list">
   <thead><tr>{{ sel.head() }}<th>Playrule</th><th>Fires when (alerts.yml)</th><th>Severity</th><th>Playbook</th><th>Enabled</th>{% if can('write_play') %}<th></th>{% endif %}</tr></thead>
   <tbody>
   {% for rule in playrules %}
     {% set cond = rule.condition or {} %}
     {% set prom = rules_for(cond.get('alertname') or '') %}
-    <tr class="{% if not rule.enabled %}rule-off{% endif %}{% if selected and selected.id == rule.id %} selected{% endif %}">
+    <tr class="{% if not rule.enabled %}rule-off{% endif %}{% if selected and selected.id == rule.id %} selected{% endif %}" data-list-row>
       {{ sel.cell(rule.id, rule.name) }}
       <td class="inc-cell">
         <div class="inc-title">{{ rule.name }}</div>

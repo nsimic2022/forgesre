@@ -109,11 +109,12 @@
 
 <section class="card" id="mail">
   <h2>Mail outbox {% with %}{% set tip %}One table for this appliance: this page, scheduled reports, and incident/escalation mail. Not an inbox. Incident and Escalation pages link here.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="table-scroll list-scroll" data-list-scroll>
   <table>
     <thead><tr>{{ sel.head() }}<th>When</th><th>To</th><th>Subject</th><th>Status</th><th>Body</th></tr></thead>
     <tbody>
     {% for note in mail %}
-      <tr>
+      <tr data-list-row>
         {{ sel.cell(note.id, note.subject) }}
         <td class="muted">{{ note.created_at }}</td>
         <td>{{ note.target }}</td>
@@ -121,7 +122,7 @@
         <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
         <td>
           <details>
-            <summary>View</summary>
+            <summary data-list-open>View</summary>
             <pre class="mail-body">{{ note.body or "—" }}</pre>
           </details>
         </td>
@@ -131,6 +132,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 {% with pager=mail_pager %}{% include "_pager.html" %}{% endwith %}
 </section>
 
@@ -209,11 +211,12 @@
   </form>
   </div>
   {% endif %}
+  <div class="table-scroll list-scroll" data-list-scroll>
   <table>
     <thead><tr>{{ sel.head() }}<th>Name</th><th>To</th><th>Every</th><th>Assets</th><th>Last</th><th>Next</th><th>Enabled</th><th></th></tr></thead>
     <tbody>
     {% for row in reports %}
-      <tr{% if editing_report and editing_report.id == row.id %} class="selected"{% endif %}>
+      <tr{% if editing_report and editing_report.id == row.id %} class="selected"{% endif %} data-list-row>
         {{ sel.cell(row.id, row.name) }}
         <td>{{ row.name }}</td>
         <td>{{ row.to_email }}</td>
@@ -249,6 +252,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 {% with pager=reports_pager %}{% include "_pager.html" %}{% endwith %}
 </section>
 {% endblock %}

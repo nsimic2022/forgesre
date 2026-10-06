@@ -118,6 +118,7 @@
 </section>
 </div>
 
+<div class="table-scroll list-scroll" data-list-scroll>
 <table>
   <thead>
     <tr>
@@ -135,7 +136,7 @@
   </thead>
   <tbody>
   {% for row in candidates %}
-    <tr class="{% if selected and selected.id == row.id %}selected{% endif %}">
+    <tr class="{% if selected and selected.id == row.id %}selected{% endif %}" data-list-row>
       {{ sel.cell(row.id, row.ip) }}
       <td>
         {{ row.ip }}
@@ -180,6 +181,7 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% include "_pager.html" %}
 {% if can('write_assets') and form_mode %}
 <section class="card" id="candidate-form">

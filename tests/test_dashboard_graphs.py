@@ -227,7 +227,8 @@ def _run_js(rows: list[dict], panel: dict) -> dict:
     if not node:
         pytest.skip("node not installed")
     src = JS.read_text(encoding="utf-8")
-    block = "(function bindDashGraphs() {" + src.split("(function bindDashGraphs() {", 1)[1].split("\n})();", 1)[0] + "\n})();"
+    picker = "function listPicker(" + src.split("\nfunction listPicker(", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+    block = picker + "(function bindDashGraphs() {" + src.split("(function bindDashGraphs() {", 1)[1].split("\n})();", 1)[0] + "\n})();"
     proc = subprocess.run(
         [node, "-e", _HARNESS, "--", block, json.dumps(rows), json.dumps(panel)],
         capture_output=True,

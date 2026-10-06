@@ -23,7 +23,7 @@
   <a class="chip{% if on %} on{% endif %}" href="/assets{% if key %}?{{ key }}={{ value }}{% endif %}{% if q %}{{ '&' if key else '?' }}q={{ q }}{% endif %}{% set size_tail = pager_keep(pager, page=False) %}{% if size_tail %}{{ size_tail if (key or q) else '?' ~ size_tail[1:] }}{% endif %}">{{ label }}</a>
   {% endfor %}
 </nav>
-<div class="table-scroll">
+<div class="table-scroll list-scroll" data-list-scroll>
 <table class="asset-table" data-asset-reachability>
   <thead>
     <tr>
@@ -44,10 +44,10 @@
   </thead>
   <tbody>
     {% for asset in assets %}
-    <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}">
+    <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}" data-list-row>
       {{ sel.cell(asset.asset_id) }}
       <td>{{ asset.number or "—" }}</td>
-      <td><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
+      <td><a href="/assets/{{ asset.asset_id }}" data-list-open>{{ asset.asset_id }}</a></td>
       <td>{{ asset.hostname }}</td>
       <td>{{ asset.ip or "—" }}</td>
       <td>

@@ -6,13 +6,13 @@
 <h2>Users {% with %}{% set tip %}Click a user on the left to edit or remove them. Login passwords are stored as bcrypt hashes in Postgres — never in git, never shown here. The install admin bootstrap copy in secrets/secrets.env is separate (see handbook §5).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 <div class="split">
   <div>
-  <div class="table-scroll">
+  <div class="table-scroll list-scroll" data-list-scroll>
   <table class="user-table">
     <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Actions</th></tr></thead>
     <tbody>
     {% for u in users %}
-      <tr class="{% if selected and selected.id == u.id %}selected{% endif %}">
-        <td><a href="/admin?selected={{ u.id }}{{ pager_keep(pager) }}">{{ u.email }}</a></td>
+      <tr class="{% if selected and selected.id == u.id %}selected{% endif %}" data-list-row>
+        <td><a href="/admin?selected={{ u.id }}{{ pager_keep(pager) }}" data-list-open>{{ u.email }}</a></td>
         <td>{{ u.name }}</td>
         <td>{{ role_label(u.role) }}</td>
         <td class="row-actions">
@@ -119,12 +119,12 @@
   </div>
 </div>
 <h2>Audit log</h2>
-<div class="table-scroll">
+<div class="table-scroll list-scroll" data-list-scroll>
 <table>
   <thead><tr>{{ sel.head() }}<th>When</th><th>Actor</th><th>Action</th><th>Object</th></tr></thead>
   <tbody>
   {% for row in audits %}
-    <tr>
+    <tr data-list-row>
       {{ sel.cell(row.id, row.action) }}
       <td>{{ row.at }}</td>
       <td>{{ row.actor }}</td>
@@ -156,12 +156,12 @@
   <button type="submit">Backup</button>
 </form>
 {% if backups %}
-<div class="table-scroll">
+<div class="table-scroll list-scroll" data-list-scroll>
 <table>
   <thead><tr>{{ sel.head() }}<th>Archive</th><th>Size</th><th></th></tr></thead>
   <tbody>
   {% for b in backups %}
-    <tr>
+    <tr data-list-row>
       {{ sel.cell(b.name) }}
       <td><code>{{ b.name }}</code></td>
       <td>{{ format_size(b.size) }}</td>

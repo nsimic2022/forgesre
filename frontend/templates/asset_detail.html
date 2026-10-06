@@ -103,17 +103,18 @@
 
 <h2>Similar incident history {% with %}{% set tip %}Same asset, grouped by alert. Use this to see whether HighCPU (or anything else) has happened here before.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% if similar %}
+<div class="table-scroll list-scroll" data-list-scroll>
 <table>
   <thead>
     <tr><th>Alert / title</th><th>Times</th><th>Open</th><th>Last</th><th>Last status</th></tr>
   </thead>
   <tbody>
   {% for group in similar %}
-    <tr>
+    <tr data-list-row>
       <td>{{ group.alertname or group.title }}</td>
       <td>{{ group.count }}</td>
       <td>{{ group.open_count }}</td>
-      <td><a href="/incidents/{{ group.last_number }}">{{ group.last_number }}</a></td>
+      <td><a href="/incidents/{{ group.last_number }}" data-list-open>{{ group.last_number }}</a></td>
       <td><span class="pill {{ group.last_status|lower }}">{{ group.last_status }}</span></td>
     </tr>
     <tr>
@@ -128,6 +129,7 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% with pager=similar_pager %}{% include "_pager.html" %}{% endwith %}
 {% else %}
 <p class="muted">No incidents for this asset yet.</p>
