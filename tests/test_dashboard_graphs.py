@@ -190,11 +190,16 @@ const rows = ROWS.map((r) => {
   return tr;
 });
 const table = el("table"); table.querySelectorAll = () => rows;
+table.closest = () => null;
+const navigated = [];
 globalThis.document = {
   querySelector: (s) => (s === "[data-dash-graphs]" ? pane : s === "[data-dash-incident-table]" ? table : null),
-  createElement: el, createElementNS: (_ns, tag) => el(tag),
+  createElement: el, createElementNS: (_ns, tag) => el(tag), addEventListener() {},
 };
-globalThis.window = { setInterval: () => 1, clearInterval: () => {} };
+globalThis.window = {
+  setInterval: () => 1, clearInterval: () => {}, setTimeout, clearTimeout,
+  location: { assign: (u) => navigated.push(u) },
+};
 const fetched = [];
 globalThis.fetch = (url) => { fetched.push(url); return Promise.resolve({ ok: true, json: () => Promise.resolve(PANEL) }); };
 eval(SRC);
@@ -204,6 +209,7 @@ const snap = () => ({
   selected: rows.findIndex((r) => r.classes.has("is-selected")),
   empty: parts["[data-dash-graph-empty]"].textContent,
   charts: parts["[data-dash-graph-list]"].children.length,
+  navigated: navigated.slice(),
 });
 const out = {};
 setTimeout(() => {
@@ -257,6 +263,7 @@ def test_js_selects_first_active_and_requests_its_metrics():
     assert out["noAsset"]["charts"] == 0
     assert out["reselect"]["selected"] == 0
     assert out["reselect"]["fetched"][-1] == "/api/v1/assets/srv-old/metrics"
+    assert out["reselect"]["navigated"] == []
 
 
 def test_js_one_point_series_says_no_samples_yet():

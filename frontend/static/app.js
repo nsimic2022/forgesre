@@ -109,11 +109,69 @@ applyTheme(currentTheme());
   window.setInterval(load, 8000);
 })();
 
-(function bindPagerSize() {
-  document.querySelectorAll("[data-pager-size]").forEach((select) => {
-    select.addEventListener("change", () => {
-      if (select.form) select.form.submit();
+// Pager tabs and Rows N reload the page with new ?page= / ?per_page=. Remember where the window was and put it
+// back after the load, so changing page never jumps to the top (or to the list's #fragment, kept for no-JS).
+(function bindPagerScroll() {
+  const KEY = "forgesre-pager-scroll";
+  const MAX_AGE_MS = 15000;
+  const target = (url) => url.pathname + url.search;
+
+  const remember = (url) => {
+    try {
+      sessionStorage.setItem(KEY, JSON.stringify({ to: target(url), y: window.scrollY, at: Date.now() }));
+    } catch (err) {
+      /* storage off: plain navigation */
+    }
+  };
+
+  const go = (url) => {
+    url.hash = "";
+    remember(url);
+    window.location.assign(url.href);
+  };
+
+  let saved = null;
+  try {
+    saved = JSON.parse(sessionStorage.getItem(KEY) || "null");
+    sessionStorage.removeItem(KEY);
+  } catch (err) {
+    saved = null;
+  }
+  if (saved && saved.to === target(window.location) && Date.now() - Number(saved.at || 0) < MAX_AGE_MS) {
+    const y = Math.max(0, Number(saved.y) || 0);
+    const put = () => {
+      const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      window.scrollTo(0, Math.min(y, max));
+    };
+    put();
+    if (document.readyState !== "complete") window.addEventListener("load", put, { once: true });
+  }
+
+  document.addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest(".pager-bar .pager a[href]");
+    if (!link) return;
+    event.preventDefault();
+    go(new URL(link.href, window.location.href));
+  });
+
+  const submitSize = (form) => {
+    const url = new URL(form.getAttribute("action") || window.location.pathname, window.location.href);
+    const params = new URLSearchParams();
+    Array.from(form.elements).forEach((field) => {
+      if (field.name && !field.disabled) params.append(field.name, field.value);
     });
+    url.search = params.toString();
+    go(url);
+  };
+  document.querySelectorAll("form[data-pager-size-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submitSize(form);
+    });
+    const select = form.querySelector("[data-pager-size]");
+    if (select) select.addEventListener("change", () => submitSize(form));
   });
 })();
 
@@ -565,17 +623,42 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
       });
   };
 
-  const select = (row) => {
+  const scroller = table.closest("[data-dash-list]");
+  let pending = 0;
+
+  // Scroll only the list box; scrollIntoView would also move the window when the box is partly off-screen.
+  const keepInList = (row) => {
+    if (!scroller || typeof row.getBoundingClientRect !== "function") return;
+    const box = scroller.getBoundingClientRect();
+    const head = table.tHead ? table.tHead.getBoundingClientRect().height : 0;
+    const r = row.getBoundingClientRect();
+    if (r.top < box.top + head) scroller.scrollTop -= box.top + head - r.top;
+    else if (r.bottom > box.bottom) scroller.scrollTop += r.bottom - box.bottom;
+  };
+
+  const select = (row, opts) => {
     if (!row) return;
+    const options = opts || {};
     rows.forEach((r) => {
       r.classList.toggle("is-selected", r === row);
-      if (r === row) r.setAttribute("aria-current", "true");
-      else r.removeAttribute("aria-current");
+      r.tabIndex = r === row ? 0 : -1;
+      if (r === row) {
+        r.setAttribute("aria-current", "true");
+        r.setAttribute("aria-selected", "true");
+      } else {
+        r.removeAttribute("aria-current");
+        r.setAttribute("aria-selected", "false");
+      }
     });
+    if (options.focus && typeof row.focus === "function") row.focus({ preventScroll: true });
+    keepInList(row);
+    if (selected === row && !options.force) return;
     selected = row;
     seq++;
     if (timer) window.clearInterval(timer);
     timer = 0;
+    if (pending) window.clearTimeout(pending);
+    pending = 0;
     const number = row.getAttribute("data-dash-incident") || "";
     const asset = row.getAttribute("data-asset") || "";
     const host = row.getAttribute("data-host") || "";
@@ -589,21 +672,57 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
       return;
     }
     showEmpty("Loading…");
-    load();
-    timer = window.setInterval(load, 30000);
+    const start = () => {
+      pending = 0;
+      load();
+      timer = window.setInterval(load, 30000);
+    };
+    // Holding an arrow key walks many rows; only the row it settles on fetches.
+    if (options.defer) pending = window.setTimeout(start, 180);
+    else start();
   };
 
   table.addEventListener("click", (event) => {
-    if (event.target.closest("a, input, button, label")) return;
+    if (event.target.closest("a, input, button, label, select, textarea")) return;
     const row = event.target.closest("tr[data-dash-incident]");
-    if (row) select(row);
+    if (row) select(row, { focus: true });
   });
+
+  const STEP = { ArrowDown: 1, j: 1, ArrowUp: -1, k: -1 };
   table.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    const row = event.target.closest("tr[data-dash-incident]");
-    if (!row || event.target !== row) return;
-    event.preventDefault();
-    select(row);
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target;
+    if (target.closest("input, select, textarea, [contenteditable]")) return;
+    const row = target.closest("tr[data-dash-incident]");
+    if (!row) return;
+    const index = rows.indexOf(row);
+    let next = null;
+    if (event.key in STEP) next = rows[Math.max(0, Math.min(rows.length - 1, index + STEP[event.key]))];
+    else if (event.key === "Home") next = rows[0];
+    else if (event.key === "End") next = rows[rows.length - 1];
+    if (next) {
+      event.preventDefault();
+      select(next, { focus: true, defer: true });
+      return;
+    }
+    if (target !== row) return;
+    if (event.key === " ") {
+      event.preventDefault();
+      select(row);
+    } else if (event.key === "Enter") {
+      const link = row.querySelector("a.inc-title");
+      if (link && link.href) {
+        event.preventDefault();
+        window.location.assign(link.href);
+      }
+    }
+  });
+
+  // A click on empty page space hands keyboard scrolling (PageUp/Down, Space, arrows) back to the document.
+  document.addEventListener("mousedown", (event) => {
+    if (!scroller || scroller.contains(event.target)) return;
+    const active = document.activeElement;
+    if (active && scroller.contains(active) && typeof active.blur === "function") active.blur();
   });
 
   if (!rows.length) {
