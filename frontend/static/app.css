@@ -1427,7 +1427,18 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .dash-chart-line.ok { stroke: var(--ok); }
 .dash-chart-line.crit { stroke: var(--crit); }
 .dash-chart-threshold { stroke: var(--crit); stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.55; vector-effect: non-scaling-stroke; }
+.dash-recent-scroll {
+  max-height: min(40rem, 72vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: 10px;
+  scrollbar-gutter: stable;
+}
+.dash-recent-scroll > table { margin: 0; }
+.dash-recent-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: inset 0 -1px 0 var(--line); }
+.dash-recent a.inc-title { display: inline-block; max-width: 100%; vertical-align: top; }
 .scan-list tr[data-dash-incident] { cursor: pointer; }
+.scan-list tr[data-dash-incident]:focus { outline: none; }
 .scan-list tr[data-dash-incident].is-selected td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .scan-list tr[data-dash-incident].is-selected td:last-child { box-shadow: inset -3px 0 0 var(--accent); }
 .scan-list tr[data-dash-incident]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }

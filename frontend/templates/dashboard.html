@@ -145,12 +145,13 @@
 <div class="dash-incidents" data-dash-incidents>
 <section class="dash-recent">
   <h2>Recent incidents</h2>
+  <div class="dash-recent-scroll" data-dash-list>
   <table class="scan-list" data-dash-incident-table>
     <thead><tr>{{ sel.head() }}<th>Incident</th><th>Severity</th><th>Status</th><th>When</th></tr></thead>
     <tbody>
     {% for item in recent %}
       {% set done = item.status|upper in ['RESOLVED', 'CLOSED'] %}
-      <tr class="{{ incident_tone(item.status, item.severity) }}{% if done %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}" data-dash-incident="{{ item.number }}" data-asset="{{ item.asset.asset_id if item.asset else '' }}" data-host="{{ incident_host(item) }}" data-active="{{ 'false' if done else 'true' }}" tabindex="0">
+      <tr class="dash-pick {{ incident_tone(item.status, item.severity) }}{% if done %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}" data-dash-incident="{{ item.number }}" data-dash-select="graphs" data-asset="{{ item.asset.asset_id if item.asset else '' }}" data-host="{{ incident_host(item) }}" data-active="{{ 'false' if done else 'true' }}" tabindex="{{ '0' if loop.first else '-1' }}">
         {{ sel.cell(item.number) }}
         {% include "_incident_cell.html" %}
         <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
@@ -162,11 +163,12 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% include "_pager.html" %}
 </section>
 <aside class="dash-graphs card" data-dash-graphs aria-live="polite" aria-label="Live metrics for the selected incident's host">
   <div class="metric-panel-head">
-    <h2>Host metrics {% with %}{% set tip %}Live Prometheus series for the host of the selected incident (click a row; the first active incident is picked on load). Last hour, 5-minute steps — same queries as the asset page tiles. Linux / Windows show CPU, Memory, Disk and Collecting (up); network devices and hosts without a CPU series show up/down only — never a guessed CPU. Refreshes every 30 s.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+    <h2>Host metrics {% with %}{% set tip %}Live Prometheus series for the host of the selected incident (click a row or move with Up / Down; the first active incident is picked on load). A row click only selects — open the incident with its title or short number link, or Enter on the selected row. Arrows move inside the list without scrolling the page; click empty page space to scroll the Dashboard again. Last hour, 5-minute steps — same queries as the asset page tiles. Linux / Windows show CPU, Memory, Disk and Collecting (up); network devices and hosts without a CPU series show up/down only — never a guessed CPU. Refreshes every 30 s.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
     <a class="metric-edit" href="#" data-dash-graph-asset hidden>Open asset</a>
   </div>
   <p class="dash-graph-subject" data-dash-graph-subject>{% if recent %}Loading…{% else %}No incident selected.{% endif %}</p>

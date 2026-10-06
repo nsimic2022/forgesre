@@ -219,7 +219,7 @@ def test_row_checkboxes_named_selected_on_list_surfaces():
     assert "sel.cell(b.name)" in backup_table
     assert 'name="selected"' in (TEMPLATES / "_select.html").read_text(encoding="utf-8")
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
-    assert "bindRowSelect" in js and "bindPagerSize" in js
+    assert "bindRowSelect" in js and "bindPagerScroll" in js
 
 
 def test_dashboard_order_banners_tiles_appliance_sections():
@@ -307,7 +307,7 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.8rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-8" in base
+    assert "app.css?v=v08-9" in base
 
 
 def _fake_doctor(**_kw):
