@@ -57,6 +57,10 @@ def _post(client: TestClient, asset_id: str, type_: str, ip: str | None = None, 
     return client.post("/assets", data=data, follow_redirects=False)
 
 
+def _form_type_select(page: str) -> str:
+    return page.split("data-detect-type>", 1)[1].split("</select>", 1)[0]
+
+
 def _row(listing: str, asset_id: str) -> str:
     return listing.split(f">{asset_id}<", 1)[1].split("</tr>", 1)[0]
 
@@ -66,8 +70,8 @@ def test_type_dropdown_lists_kept_and_new_types_grouped():
         assert name in ASSET_TYPE_CHOICES, name
     _db().close()
     page = _client().get("/assets").text
-    select = page.split('<select name="type"', 1)[1].split("</select>", 1)[0]
-    assert 'class="nice-select"' in page.split('<select name="type"', 1)[1].split(">", 1)[0]
+    select = _form_type_select(page)
+    assert '<select name="type" class="nice-select" data-detect-type>' in page
     assert "<optgroup" in select
     for name in KEPT_TYPES + NEW_TYPES:
         assert f'<option value="{name}"' in select, name
@@ -79,8 +83,7 @@ def test_saved_custom_type_still_selectable_on_edit():
     db.commit()
     db.close()
     page = _client().get("/assets?edit=ats-ups").text
-    select = page.split('<select name="type"', 1)[1].split("</select>", 1)[0]
-    assert '<option value="UPS (APC)" selected>' in select
+    assert '<option value="UPS (APC)" selected>' in _form_type_select(page)
 
 
 def test_default_scrape_only_for_linux_and_windows():
@@ -285,7 +288,7 @@ def test_runbook_note_is_labelled_human_guidance():
 
 def test_css_and_js_v08_14():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-14" in base and "app.js?v=v08-14" in base
+    assert "app.css?v=v08-15" in base and "app.js?v=v08-15" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "select.nice-select" in css and ".reach-snmp" in css
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")

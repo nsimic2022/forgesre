@@ -31,9 +31,11 @@ from app.asset_extras import (
 )
 from app.asset_types import ASSET_TYPE_GROUPS, DEFAULT_SNMP_PORT, snmp_family, snmp_port_for
 from app.inventory import (
+    ASSET_SOURCE_FILTERS,
     ASSET_TYPE_CHOICES,
     CANDIDATE_ROLE_CHOICES,
     approve_candidate,
+    asset_filter_options,
     asset_form_values,
     asset_in_zabbix,
     asset_missing_email,
@@ -540,14 +542,27 @@ def assets_page(
     flag: str = "",
     source: str = "",
     agent: str = "",
+    asset_type: str = Query("", alias="type"),
+    site: str = "",
+    customer: str = "",
     page: str = "1",
 ):
     from app.services import list_mail_addresses
 
     every = db.query(Asset).order_by(Asset.number, Asset.hostname).all()
     zabbix_assets = any(asset_in_zabbix(row) for row in every)
-    rows = assets_matching(every, q, status, flag, source, agent)
+    rows = assets_matching(every, q, status, flag, source, agent, type=asset_type, site=site, customer=customer)
     rows, pager = paginate(rows, page, size=per_page(request))
+    filters = {
+        "status": status,
+        "flag": flag,
+        "source": source,
+        "agent": agent,
+        "type": asset_type,
+        "site": site,
+        "customer": customer,
+    }
+    filter_tail = "".join(f"&{urlencode({key: value})}" for key, value in filters.items() if value)
     form_mode = "add"
     selected = None
     form = asset_form_values()
@@ -585,6 +600,12 @@ def assets_page(
         flag=flag,
         source=source,
         agent=agent,
+        asset_type=asset_type,
+        site=site,
+        customer=customer,
+        filter_tail=filter_tail,
+        source_filters=ASSET_SOURCE_FILTERS,
+        filter_options=asset_filter_options(every),
         zabbix_filters=zabbix_assets or settings.zabbix_enabled,
         zabbix_agent_state=zabbix_agent_state,
         asset_missing_email=asset_missing_email,

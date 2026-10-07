@@ -1585,3 +1585,5 @@ select.nice-select option { font-weight: 400; color: var(--text); background: va
   white-space: nowrap;
 }
 .support-note { font-size: 0.78rem; color: var(--muted); overflow-wrap: anywhere; }
+/* v08-15: Assets filter bar — compact Type / Source / Site / Customer dropdowns beside the one Search box. */
+.list-filters select.filter-select { width: auto; min-width: 8.5rem; max-width: 13rem; }
