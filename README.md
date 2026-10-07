@@ -89,7 +89,18 @@ git pull origin main
 
 To bounce the running containers without pulling, re-rendering, or touching `.env` / `secrets/`: `./forgesre restart`.
 
+`./forgesre update` is the full path after `git pull` (backup, render-monitoring, images, compose up, SNMP auths, doctor). `./forgesre restart` only restarts the containers that already exist — use it when a service is wedged, not to pick up new code.
+
 Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. Linux stays on node_exporter `:9100`. Windows uses windows_exporter `:9182` (not node_exporter).
+
+### SNMP (network devices)
+
+- **Version per asset:** Assets → Edit → *Comms / monitoring* → **SNMP version** v1 / v2c / v3. v1 / v2c use **Community** *Default* (`SNMP_COMMUNITY` in `secrets/secrets.env`) or *Custom*; v3 uses a USM user (security level, auth + privacy protocol and passwords). Secrets are never shown again after Save.
+- **`./forgesre snmp-auths`** writes Custom community / v3 auths (`forgesre_<asset id>`) into `data/generated/snmp.yml` and reloads snmp_exporter. Run it after saving a Custom / v3 asset; `update` and `render-monitoring` run it too. Until then the asset page shows *pending* and polling uses the default `public_v2` auth.
+- **VLAN** on the asset is an inventory note (filter / search). ForgeSRE never reads or changes switch VLANs, and it does not change how SNMP is polled.
+- **snmp_exporter stays up after update:** `snmp.yml` ships a valid snmp_exporter v0.26 `if_mib` module. `render-monitoring` always reloads the exporter; if it was not answering, `docker compose restart snmp-exporter`. With the exporter up, **SnmpDeviceUnreachable** means the **device** did not answer (UDP/161, ACL, community or v3 user) — not a broken exporter.
+
+Details: [handbook §7](docs/operator-handbook.md#network-device-snmp_exporter).
 
 ---
 
@@ -173,7 +184,7 @@ Roles: super admin (install user), system admin, analyst (inventory + playrules)
 
 ## CLI
 
-`./forgesre help` is the index. `./forgesre help snmp` (or any command) has examples.
+`./forgesre help` lists every command. `./forgesre help snmp` (or any command) has examples. Full list: [docs/cli.md](docs/cli.md#all-commands); the same list is on **Administration → ForgeSRE CLI**.
 
 Type `./forgesre` with no arguments for a prompt, then `journal`, `incidents`, `history` — you do not retype `./forgesre` each time. Leave with `quit`, `exit`, or Ctrl-D (`./forgesre help quit`). TAB completes command names, `logs snmp-exporter`, and incident ids. `./f` is the same CLI with a shorter name (`./f journal`). SSH to the VM first; `./forgesre login` is the ForgeSRE engineer/analyst user (not the Linux account).
 
@@ -186,14 +197,19 @@ Type `./forgesre` with no arguments for a prompt, then `journal`, `incidents`, `
 ./f journal
 ./forgesre doctor
 ./forgesre test
+./forgesre verify              # live chain for inventory: exporter → prometheus → alertmanager → core
+./forgesre ping                # ICMP + exporter /metrics (alias: probe)
 ./forgesre assets
 ./forgesre snmp
+./forgesre snmp-auths          # per-asset Custom community / v3 → snmp.yml, reload snmp_exporter
 ./forgesre sd
 ./forgesre history
 ./forgesre jobs
 ./forgesre logs core
 ./forgesre journal
-./forgesre render-monitoring   # after git pull, refresh Prometheus/SNMP/alerts
+./forgesre update              # after git pull: backup, render, images, compose up, doctor
+./forgesre restart             # bounce existing containers only (no pull / render / secrets)
+./forgesre render-monitoring   # refresh Prometheus/SNMP/alerts without the rest of update
 ./forgesre backup
 ./forgesre backup --no-secrets
 ./forgesre backup --include-models

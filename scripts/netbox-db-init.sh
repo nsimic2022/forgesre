@@ -11,6 +11,7 @@ fi
 export PGPASSWORD="${POSTGRES_PASSWORD}"
 
 echo "Waiting for Postgres on 127.0.0.1..."
+# Poll pg_isready up to 60 × 2s; the pg_isready after the loop fails the job if still down.
 i=0
 while [ "$i" -lt 60 ]; do
   if pg_isready -h 127.0.0.1 -U forgesre >/dev/null 2>&1; then

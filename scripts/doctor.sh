@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
+# ./forgesre doctor: Core liveness, then the /api/v1/system/doctor lights (same as /health-ui).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Core HTTP port from .env (last FORGESRE_HTTP_PORT=, quotes and CR stripped), default 8080.
 PORT=8080
 if [[ -f .env ]]; then
   _p="$(awk -F= '/^[[:space:]]*FORGESRE_HTTP_PORT=/ {v=$2} END {print v}' .env | tr -d '"' | tr -d "'" | tr -d '\r' | awk '{print $1}' || true)"
@@ -12,6 +14,7 @@ fi
 echo "ForgeSRE Health"
 echo
 
+# One aligned output row: ok = green check, bad = red cross plus the reason.
 ok() { printf "  %-20s ✓\n" "$1"; }
 bad() { printf "  %-20s ✗  %s\n" "$1" "$2"; }
 
@@ -29,6 +32,7 @@ else
   exit 1
 fi
 
+# Webhook bearer token for the SD and doctor endpoints (empty if secrets are unreadable).
 TOKEN=""
 if [[ -f secrets/secrets.env ]]; then
   # shellcheck disable=SC1091
@@ -60,7 +64,9 @@ python3 - <<'PY'
 import json
 from pathlib import Path
 data = json.loads(Path("/tmp/forgesre-doctor.json").read_text())
+# Statuses that print a check mark; anything else prints a cross with why / test / fix.
 ok_status = {"ok", "disabled", "paused", "warn", "warning", "starting"}
+# One row per doctor component (Core API, Prometheus, snmp, NetBox, …).
 for name, item in data.get("components", {}).items():
     status = item.get("status")
     label = item.get("label") or name

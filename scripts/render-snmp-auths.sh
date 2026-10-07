@@ -10,6 +10,8 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# Export .env and secrets (FORGESRE_HTTP_PORT, ALERTMANAGER_WEBHOOK_TOKEN, FORGESRE_DATA)
+# so render_snmp_auths.py can read them from its environment.
 set -a
 # shellcheck disable=SC1091
 source .env

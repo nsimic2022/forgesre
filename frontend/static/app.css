@@ -422,8 +422,18 @@ label.inline-check { flex-direction: row; align-items: center; gap: 0.5rem; max-
   font-size: 1rem;
   box-sizing: border-box;
 }
-.cli-cheatsheet { width: 100%; margin: 0.2rem 0 0; }
-.cli-cheatsheet td { vertical-align: top; }
+.cli-cheatsheet-scroll { max-height: 34rem; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; }
+.cli-cheatsheet-scroll .cli-cheatsheet thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: inset 0 -1px 0 var(--line); }
+.cli-cheatsheet { width: 100%; margin: 0; }
+.cli-cheatsheet td { vertical-align: top; padding: 0.4rem 0.75rem; }
+.cli-cheatsheet tr.cli-group th {
+  padding: 0.55rem 0.75rem 0.3rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--bg);
+}
 .cli-cheatsheet td:first-child {
   white-space: nowrap;
   width: 1%;

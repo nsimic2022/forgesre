@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# ./forgesre update: doctor → backup → render-monitoring → compose pull/up → snmp-auths → doctor.
+# Use after git pull on a live box. Never runs install.sh or rewrites passwords.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -33,11 +35,13 @@ echo "Ensuring bundled NetBox secrets and data dirs..."
 "$ROOT/scripts/ensure-netbox-secrets.sh"
 
 # snmp-exporter and NetBox are default services (not Compose profiles).
+# OFFLINE=1 (--offline) skips docker compose pull.
 OFFLINE=0
 if [[ "${1:-}" == "--offline" ]]; then
   OFFLINE=1
 fi
 
+# One hash over every file baked into the Core image; unchanged hash = skip --build.
 core_inputs_hash() {
   (
     cd "$ROOT"
@@ -47,6 +51,7 @@ core_inputs_hash() {
   ) | sha256sum | awk '{print $1}'
 }
 
+# Hash of the NetBox launch / token helper inputs; a change forces NetBox + Core recreate.
 netbox_launch_hash() {
   (
     cd "$ROOT"
@@ -54,6 +59,7 @@ netbox_launch_hash() {
   ) | sha256sum | awk '{print $1}'
 }
 
+# STAMP = Core input hash from the last build; cur = hash now; need_build = 1 when they differ.
 STAMP="$ROOT/data/.core-image.stamp"
 mkdir -p "$ROOT/data"
 cur="$(core_inputs_hash)"
@@ -80,6 +86,7 @@ else
   fi
 fi
 "${DC[@]}" up -d snmp-exporter netbox-redis netbox
+# Same stamp idea as Core: NB_STAMP = last NetBox launch hash, nb_cur = now, need_nb = changed.
 NB_STAMP="$ROOT/data/.netbox-launch.stamp"
 nb_cur="$(netbox_launch_hash)"
 need_nb=1
@@ -95,6 +102,7 @@ else
   "${DC[@]}" up -d --no-deps --force-recreate netbox
 fi
 echo "Waiting for health..."
+# Core and NetBox HTTP ports from .env (defaults 8080 / 8001).
 HTTP_PORT=8080
 NB_PORT=8001
 if [[ -f .env ]]; then
@@ -105,6 +113,7 @@ if [[ -f .env ]]; then
 fi
 echo "Waiting for Core on :${HTTP_PORT} (GET /api/v1/health, no token)..."
 core_ok=0
+# Poll Core liveness up to 30 × 2s.
 for _i in $(seq 1 30); do
   if curl -fsS -m 2 "http://127.0.0.1:${HTTP_PORT}/api/v1/health" >/dev/null 2>&1; then
     echo "Core is up."
@@ -122,6 +131,7 @@ if [[ "$core_ok" -ne 1 ]]; then
 fi
 echo "Waiting for NetBox on :${NB_PORT} (first boot can take several minutes)..."
 nb_ok=0
+# Poll NetBox /login/ up to 45 × 4s (first boot runs migrations).
 for _i in $(seq 1 45); do
   if curl -fsS -m 2 "http://127.0.0.1:${NB_PORT}/login/" >/dev/null 2>&1; then
     echo "NetBox is up."

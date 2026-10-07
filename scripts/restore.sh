@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# ./forgesre restore / import: numbered backup picker; applies an archive only with --yes.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -8,6 +9,7 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# Export .env and secrets so app.backup sees POSTGRES_PASSWORD, FORGESRE_DATA, etc.
 # shellcheck disable=SC1091
 set -a
 source .env
@@ -17,6 +19,7 @@ if [[ -f secrets/secrets.env ]]; then
 fi
 set +a
 
+# Point at the host-published Postgres when .env does not set DATABASE_URL.
 if [[ -z "${DATABASE_URL:-}" && -n "${POSTGRES_PASSWORD:-}" ]]; then
   export DATABASE_URL="postgresql+psycopg2://forgesre:${POSTGRES_PASSWORD}@127.0.0.1:5432/forgesre"
 fi

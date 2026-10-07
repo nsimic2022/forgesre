@@ -223,7 +223,7 @@ A browser restore can reload Postgres while Core is still running; it cannot rew
 
 Administration does **not** open a terminal in the browser. A full web PTY (xterm.js + host PTY), even if wrapped to `./forgesre` only, is still a large attack surface: XSS or a stolen admin cookie becomes a host command channel, and “restricted shells” are routinely escaped. ForgeSRE will not ship that, and will not expose root bash in the UI.
 
-The Administration page keeps **Import / restore** on the left and a scannable `./forgesre` command list on the right (`./forgesre help` is the source of truth). One line in the UI: no browser terminal — SSH, then `./forgesre` or `./forgesre shell`.
+The Administration page keeps **Import / restore** on the left and a scannable `./forgesre` command list on the right — every subcommand, grouped (update and stack, health, inventory and SNMP, incidents, backup, optional services, CLI session). `./forgesre help` is the source of truth; a test keeps the page, the help overview, and TAB completion in sync. One line in the UI: no browser terminal — SSH, then `./forgesre` or `./forgesre shell`.
 
 ```bash
 ssh you@forgesre-vm
@@ -449,6 +449,7 @@ Assets → Edit → *Comms / monitoring* has **SNMP version** (v1 / v2c / v3) un
 - A Custom community or v3 needs its own snmp_exporter auth `forgesre_<asset id>`. `./forgesre snmp-auths` reads them from Core (`GET /api/v1/sd/snmp-auths`, Bearer webhook token), rewrites only the `forgesre-asset-auths` block in `data/generated/snmp.yml` (chmod 600) and POSTs snmp_exporter `/-/reload`. `./forgesre update` and `./forgesre render-monitoring` run it too; if Core does not answer, the block already there is kept.
 - **Until that auth is in snmp.yml, SNMP HTTP SD keeps sending `public_v2`** for the host, and the asset page shows *SNMP auth … pending*. Core never points the exporter at an auth it does not have. After Save on a Custom / v3 host, run `./forgesre snmp-auths` (no restart, no install.sh).
 - Verify / Ping's quick SNMP GET still uses `SNMP_COMMUNITY` (v2c) — the per-asset auth is for snmp_exporter polling.
+- **VLAN** on the same form is an inventory note for search and filters. It does not change which auth or port is polled, and ForgeSRE never writes VLANs to the switch.
 
 If the walk fails, Prometheus `up{job="forgesre-snmp"}` is 0. Alert `SnmpDeviceUnreachable` fires after 2 minutes and matches playrule `snmp-down` (playbook `NETWORK-UNREACHABLE`). That is community/ACL/device-down — not “Prometheus is down”.
 
@@ -786,12 +787,18 @@ If the incident has no asset, the alert `asset` / `instance` label did not match
 |---|---|
 | Live box after `git pull` | `./forgesre update` — never `./install.sh` |
 | Bounce containers only (no pull / install / secrets change) | `./forgesre restart` |
+| Re-render Prometheus / Alertmanager / snmp.yml only | `./forgesre render-monitoring` |
+| Saved a Custom community / SNMPv3 asset | `./forgesre snmp-auths` |
 | Stack lights (same as `/health-ui`) | `./forgesre doctor` |
 | Appliance report → `data/reports/` | `./forgesre test` |
 | Live inventory path (exporter → Prom → AM → Core) | `./forgesre verify` / `./forgesre ping` |
 | SNMP targets JSON | `./forgesre snmp` |
 | RCA / LLM queue | `./forgesre jobs` (one worker thread, no Celery) |
 | Safety copy | `./forgesre backup` |
+
+**Update vs restart.** `update` is the after-`git pull` path: backup, render-monitoring, image pull (unless `--offline`), `docker compose up -d`, `snmp-auths`, doctor. `restart` only runs `docker compose restart` on containers that already exist (Postgres first, Core last, profile-off services skipped). It does not pull, render, back up, or write `.env` / `secrets/`. New code or templates need `update`; a wedged service needs `restart`. Neither runs `./install.sh`. Full side-by-side: [`cli.md` § Update vs restart](cli.md#update-vs-restart).
+
+Every command (`./forgesre help`, TAB completion, and the Administration CLI list show the same set): [`cli.md` § All commands](cli.md#all-commands).
 
 `./forgesre` with no extra words opens `forgesre>`. Type `journal`, `incidents`, `doctor` — not `./forgesre` again. Leave with `quit`. Host CLI must not import sqlalchemy (do not `pip install sqlalchemy` on the VM).
 

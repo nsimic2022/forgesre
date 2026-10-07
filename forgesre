@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
+# Root entry point: ./forgesre <command>. All logic lives in scripts/forgesre.
 set -euo pipefail
+# Clone directory (where this file lives); commands expect to run from here.
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 exec "$ROOT/scripts/forgesre" "$@"

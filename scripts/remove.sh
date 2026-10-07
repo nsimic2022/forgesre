@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# ./forgesre remove backup: delete one backup_* folder after a typed yes or --yes.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -8,6 +9,7 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# Export .env and secrets so app.backup resolves FORGESRE_DATA the same way as backup.
 # shellcheck disable=SC1091
 set -a
 source .env

@@ -11,14 +11,17 @@ if [[ ! -f .env || ! -f secrets/secrets.env ]]; then
   exit 1
 fi
 
+# Use plain docker when this user can reach the daemon, otherwise sudo.
 if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
 
+# ORDER = restart sequence; REQUIRED = failures that abort; SKIP = never restarted.
 # Postgres first (Core and NetBox depend on it), Core last so it reconnects to fresh deps.
 ORDER=(postgres netbox-redis prometheus alertmanager snmp-exporter loki alloy grafana llm netbox mailserver roundcube core)
 REQUIRED=" postgres core "
 # One-shot init container (restart: "no"); bouncing it would only re-run the init.
 SKIP=" netbox-db-init "
 
+# Human name for a Compose service in the progress lines.
 label() {
   case "$1" in
     core) echo "Core" ;;
@@ -44,6 +47,7 @@ if ! present_raw="$("${DC[@]}" ps --all --services 2>&1)"; then
   echo "$present_raw"
   exit 1
 fi
+# Space-padded list of services that have a container, so " name " matches are exact.
 present=" $(echo "$present_raw" | tr '\n' ' ') "
 
 if [[ "$present" != *" postgres "* || "$present" != *" core "* ]]; then
@@ -59,8 +63,10 @@ for svc in $present; do
   targets=("${targets[@]:0:${#targets[@]}-1}" "$svc" core)
 done
 
+# hard_fail = a REQUIRED service failed (exit 1 at the end); warn = an optional one failed.
 hard_fail=0
 warn=0
+# Restart each target in order; skip services without a container, wait for Postgres.
 for svc in "${targets[@]}"; do
   name="$(label "$svc")"
   if [[ "$present" != *" $svc "* ]]; then
@@ -82,6 +88,7 @@ for svc in "${targets[@]}"; do
   if [[ "$svc" == "postgres" ]]; then
     echo "Waiting for Postgres (pg_isready)..."
     pg_ok=0
+    # Poll pg_isready up to 30 × 2s.
     for _i in $(seq 1 30); do
       if "${DC[@]}" exec -T postgres pg_isready -h 127.0.0.1 -U forgesre >/dev/null 2>&1; then
         pg_ok=1
@@ -99,10 +106,12 @@ done
 
 [[ "$hard_fail" -ne 0 ]] && exit 1
 
+# Core HTTP port from .env (last FORGESRE_HTTP_PORT=, quotes and CR stripped), default 8080.
 HTTP_PORT="$(awk -F= '/^[[:space:]]*FORGESRE_HTTP_PORT=/ {v=$2} END {print v}' .env | tr -d '"' | tr -d "'" | tr -d '\r' | awk '{print $1}' || true)"
 HTTP_PORT="${HTTP_PORT:-8080}"
 echo "Waiting for Core on :${HTTP_PORT} (GET /api/v1/health, no token)..."
 core_ok=0
+# Poll Core liveness up to 30 × 2s.
 for _i in $(seq 1 30); do
   if curl -fsS -m 2 "http://127.0.0.1:${HTTP_PORT}/api/v1/health" >/dev/null 2>&1; then
     core_ok=1

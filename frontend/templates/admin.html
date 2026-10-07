@@ -207,26 +207,59 @@
 <div class="admin-cli-pane">
 <h3>ForgeSRE CLI</h3>
 <p class="muted">There is no terminal in this browser. Use SSH, then <code>./forgesre</code> or <code>./forgesre shell</code>.</p>
+<p class="muted">Every <code>./forgesre</code> subcommand. Details on the VM: <code>./forgesre help &lt;command&gt;</code>.</p>
+<div class="cli-cheatsheet-scroll">
 <table class="cli-cheatsheet">
   <thead><tr><th>Command</th><th>What it does</th></tr></thead>
   <tbody>
-    <tr><td><code>update</code></td><td>Backup, render monitoring, refresh images, restart, doctor</td></tr>
+    <tr class="cli-group"><th colspan="2">Update and stack</th></tr>
+    <tr><td><code>update</code></td><td>Backup, render monitoring, refresh images, restart, doctor (use after git pull)</td></tr>
+    <tr><td><code>restart</code></td><td>Restart running stack containers only (no git pull, install, render, or secrets)</td></tr>
+    <tr><td><code>render-monitoring</code></td><td>Rewrite Prometheus / Alertmanager / snmp.yml from templates, reload snmp_exporter</td></tr>
+    <tr><td><code>status</code></td><td>docker compose ps</td></tr>
+    <tr><td><code>logs</code></td><td>Container logs (default: last 100 lines)</td></tr>
+    <tr><td><code>config</code></td><td>Print config/forgesre.yml</td></tr>
+    <tr><td><code>version</code></td><td>Appliance version from .env</td></tr>
+    <tr><td><code>secrets-check</code></td><td>Check the session key and webhook token are not shipped defaults (Core refuses to start on them)</td></tr>
+    <tr><td><code>install</code></td><td>Guided first-time install (new VM only — never on a live box)</td></tr>
+    <tr class="cli-group"><th colspan="2">Health and verification</th></tr>
+    <tr><td><code>doctor</code></td><td>Short health lights (Core API, Core (container), Prometheus, …)</td></tr>
     <tr><td><code>test</code></td><td>Full appliance report (files, HTTP, login, APIs, email, logs)</td></tr>
     <tr><td><code>verify</code></td><td>Live chain: exporter → prometheus → alertmanager → core</td></tr>
-    <tr><td><code>ping</code></td><td>ICMP + exporter /metrics for inventory (alias: probe)</td></tr>
+    <tr><td><code>ping</code> · <code>probe</code></td><td>ICMP + exporter /metrics for inventory (probe is the same command)</td></tr>
+    <tr class="cli-group"><th colspan="2">Inventory and SNMP</th></tr>
+    <tr><td><code>assets</code> · <code>inventory</code></td><td>List inventory with # (inventory is the same command)</td></tr>
+    <tr><td><code>snmp</code></td><td>snmp_exporter health + SNMP HTTP SD targets</td></tr>
+    <tr><td><code>snmp-auths</code></td><td>Write per-asset SNMP auths (Custom community / v3) into snmp.yml, reload snmp_exporter</td></tr>
+    <tr><td><code>sd</code></td><td>Prometheus HTTP SD (Linux / Windows) and SNMP HTTP SD</td></tr>
+    <tr class="cli-group"><th colspan="2">Incidents and RCA</th></tr>
+    <tr><td><code>incidents</code></td><td>Short colored board (red/yellow/green); INC-… for one row</td></tr>
+    <tr><td><code>history</code></td><td>90-day incident history (filters; INC-… for mail/audit/notes)</td></tr>
+    <tr><td><code>jobs</code></td><td>Background RCA job queue</td></tr>
+    <tr><td><code>journal</code></td><td>Internal console reports (JSON)</td></tr>
+    <tr><td><code>demo</code></td><td>HighCPU first-hour path (owner mail, similar history)</td></tr>
+    <tr><td><code>demo-rca</code></td><td>Filesystem RCA demo gauge (read-only)</td></tr>
+    <tr><td><code>demo-reset</code></td><td>Lower demo CPU/disk gauges (stops the demo HighCPU fire)</td></tr>
+    <tr class="cli-group"><th colspan="2">Backup</th></tr>
     <tr><td><code>backup</code></td><td>One folder per run under data/backups (tar.gz + MANIFEST)</td></tr>
     <tr><td><code>restore</code></td><td>List backup folders (newest first); apply only with --yes after stopping Core</td></tr>
     <tr><td><code>import</code></td><td>Alias for restore (numbered picker; also: import backup)</td></tr>
     <tr><td><code>remove backup</code></td><td>Delete one backup folder (tar + MANIFEST); confirm with --yes</td></tr>
-    <tr><td><code>doctor</code></td><td>Short health lights (Core API, Core (container), Prometheus, …)</td></tr>
-    <tr><td><code>snmp</code></td><td>snmp_exporter health + SNMP HTTP SD targets</td></tr>
-    <tr><td><code>mailbox</code></td><td>Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)</td></tr>
+    <tr class="cli-group"><th colspan="2">Optional services</th></tr>
     <tr><td><code>fetch-llm</code></td><td>Download Qwen 14B GGUF (~9 GB, not in git) and start llama.cpp</td></tr>
-    <tr><td><code>demo</code></td><td>HighCPU first-hour path (owner mail, similar history)</td></tr>
+    <tr><td><code>mailbox</code></td><td>Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)</td></tr>
+    <tr><td><code>tls</code></td><td>How to put optional HTTPS (Caddy) in front of Core</td></tr>
+    <tr class="cli-group"><th colspan="2">CLI session and prompt</th></tr>
+    <tr><td><code>login</code></td><td>Sign in as a ForgeSRE user (engineer / analyst / …)</td></tr>
+    <tr><td><code>logout</code></td><td>Forget CLI cookie (falls back to install admin)</td></tr>
+    <tr><td><code>whoami</code></td><td>Print the CLI session user</td></tr>
+    <tr><td><code>shell</code></td><td>Same prompt as ./forgesre with no args</td></tr>
+    <tr><td><code>completion</code></td><td>Print a source line for ~/.bashrc so TAB works in your login bash</td></tr>
     <tr><td><code>help</code></td><td>This overview, or detailed help for one command</td></tr>
-    <tr><td><code>quit</code></td><td>Leave the forgesre&gt; prompt (Ctrl-D also works)</td></tr>
+    <tr><td><code>quit</code> · <code>exit</code></td><td>Leave the forgesre&gt; prompt (Ctrl-D also works)</td></tr>
   </tbody>
 </table>
+</div>
 </div>
 </div>
 {% endblock %}
