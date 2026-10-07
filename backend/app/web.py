@@ -1438,7 +1438,11 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
     similar = similar_incident_groups(db, item.asset) if item.asset else []
     pending = llm_job_pending(db, number)
     audit_rows, audit_pager = paginate(
-        audit_for(db, item.number), request.query_params.get("page", "1"), size=per_page(request)
+        audit_for(db, item.number),
+        request.query_params.get("audit_page", "1"),
+        size=per_page(request, "audit_page"),
+        param="audit_page",
+        fragment="#audit",
     )
     notes, notes_pager = paginate(
         notes_for(db, item),
@@ -1472,7 +1476,7 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
             operator_notes=notes,
             llm_pending=pending,
             tools=tool_status(investigation, pending, llm_job_error(db, number)),
-            pager=audit_pager,
+            audit_pager=audit_pager,
             notes_pager=notes_pager,
             nav=incident_neighbors(db, item, filters),
             evidence_rows=evidence,
