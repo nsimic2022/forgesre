@@ -180,7 +180,7 @@ def test_discovery_template_side_by_side_and_columns():
     assert "windows_exporter" in html
     assert "SNMP" in html
     assert html.find("Scan now") < html.find("NetBox sync")
-    assert "app.css?v=v08-11" in base
+    assert "app.css?v=v08-12" in base
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "primary IPv4" in handbook
     assert "Confirm & scan" in handbook or "Confirm &amp; scan" in handbook

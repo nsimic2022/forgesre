@@ -1,7 +1,21 @@
 {% extends "base.html" %}
 {% block title %}{{ incident.number }} · ForgeSRE{% endblock %}
 {% block content %}
-<p><a href="/incidents">← Incidents</a> · <a href="/history">History</a></p>
+<p><a href="/incidents{% if nav.qs %}?{{ nav.qs }}{% endif %}">← Incidents</a> · <a href="/history">History</a></p>
+{% set nav_tail = "?" ~ nav.qs if nav.qs else "" %}
+<nav class="incident-nav" aria-label="Older or newer incident" data-incident-nav>
+  {% if nav.older %}
+  <a class="incident-nav-step" href="/incidents/{{ nav.older }}{{ nav_tail }}" rel="next" title="Older: {{ incident_short_label(nav.older) }} · {{ nav.older }}" data-incident-older>← Older</a>
+  {% else %}
+  <span class="incident-nav-step pager-disabled" aria-disabled="true" title="Oldest in this list" data-incident-older>← Older</span>
+  {% endif %}
+  <span class="incident-nav-pos" title="{% if nav.position %}{{ nav.position }} of {{ nav.total }} in this list (newest first){% else %}Not in this filtered list{% endif %}">{{ incident_short_label(incident.number) }}</span>
+  {% if nav.newer %}
+  <a class="incident-nav-step" href="/incidents/{{ nav.newer }}{{ nav_tail }}" rel="prev" title="Newer: {{ incident_short_label(nav.newer) }} · {{ nav.newer }}" data-incident-newer>Newer →</a>
+  {% else %}
+  <span class="incident-nav-step pager-disabled" aria-disabled="true" title="Newest in this list" data-incident-newer>Newer →</span>
+  {% endif %}
+</nav>
 {% set when = incident_when(incident) %}
 {% set host = incident_host(incident) %}
 <header class="incident-strip {{ incident_tone(incident.status, incident.severity) }}" data-incident-strip>
@@ -209,15 +223,25 @@
 </section>
 
 {% if can('read_evidence') %}
-<section>
-  <h2>Engineer evidence</h2>
-  {% for ev in incident.evidence %}
-    <h3 id="{{ ev.evidence_id or ev.kind }}">{{ ev.title }} <span class="muted">{{ ev.evidence_id }}</span></h3>
-    {% if ev.query %}<p>Query: <code>{{ ev.query }}</code></p>{% endif %}
-    <pre>{{ ev.payload }}</pre>
-  {% else %}
-    <p class="muted">No evidence collected yet.</p>
-  {% endfor %}
+<section id="evidence">
+  <h2>Engineer evidence {% with %}{% set tip %}Stored evidence rows (alert, inventory, Prometheus / Loki samples) as collected — nothing is re-queried here. One line per row; double-click a row to show the full stored text, double-click again to fold it.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="table-scroll list-scroll" data-list-scroll>
+  <table class="scan-list evidence-table" data-evidence-table>
+    <thead><tr><th class="ev-when">When</th><th class="ev-actor">Source</th><th>Action</th></tr></thead>
+    <tbody>
+    {% for row in evidence_rows %}
+      <tr data-list-row data-evidence-row id="{{ row.anchor }}" aria-expanded="false">
+        <td class="ev-when" title="{{ row.when_full }}">{{ row.when }}</td>
+        <td class="ev-actor">{{ row.actor }}</td>
+        <td class="ev-action"><span class="ev-short">{{ row.action }}</span><div class="ev-full" data-evidence-full>{{ row.full }}</div></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="3" class="muted">No evidence collected yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% with pager=evidence_pager %}{% include "_pager.html" %}{% endwith %}
 </section>
 {% endif %}
 {% endblock %}

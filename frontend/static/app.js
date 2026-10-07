@@ -842,6 +842,36 @@ function graphPane(pane) {
   if (document.readyState !== "complete") window.addEventListener("load", refit, { once: true });
 })();
 
+// Engineer evidence: a single click only selects (listPicker); double-click or Enter folds the stored text open or
+// shut in place. Double-clicks inside the open text are left alone so a word can still be selected and copied.
+(function bindEvidenceRows() {
+  const table = document.querySelector("[data-evidence-table]");
+  if (!table) return;
+  const rowOf = (event) => {
+    if (event.target.closest("a, input, button, select, textarea, [data-evidence-full]")) return null;
+    return event.target.closest("[data-evidence-row]");
+  };
+  const toggle = (row) => {
+    const open = !row.classList.contains("is-expanded");
+    row.classList.toggle("is-expanded", open);
+    row.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+  table.addEventListener("mousedown", (event) => {
+    if (event.detail > 1 && rowOf(event)) event.preventDefault();
+  });
+  table.addEventListener("dblclick", (event) => {
+    const row = rowOf(event);
+    if (row) toggle(row);
+  });
+  table.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey) return;
+    const row = event.target.closest("[data-evidence-row]");
+    if (!row || event.target !== row) return;
+    event.preventDefault();
+    toggle(row);
+  });
+})();
+
 (function bindInfoTips() {
   const DELAY_MS = 400;
   const GAP = 8;

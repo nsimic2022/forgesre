@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Any
+from urllib.parse import urlencode
 
 from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session, joinedload
@@ -167,6 +168,59 @@ def incident_query(
     if status:
         query = query.filter(Incident.status == status)
     return query
+
+
+INCIDENT_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED")
+
+
+def incident_list_filters(*, status: str = "", severity: str = "", open_filter: str = "", days: str = "") -> dict[str, Any]:
+    """The /incidents filter from its query keys: incident_query kwargs, form state, and a canonical query string (empty for the default list)."""
+    status_raw = (status or "").strip()
+    status_key = status_raw.upper()
+    open_raw = (open_filter or "").strip().lower()
+    critical_only = (severity or "").strip().lower() in {"critical", "crit"}
+    open_only = False
+    exact = ""
+    status_group = "all"
+    if status_raw.lower() == "active" or (not status_raw and open_raw in {"1", "true", "yes"}):
+        open_only = True
+        status_group = "active"
+    elif status_key in INCIDENT_STATUSES:
+        exact = status_key
+        status_group = status_key
+    days_raw = (days or "").strip()
+    days_n = clamp_days(days_raw) if days_raw else None
+    keep: list[tuple[str, str]] = []
+    if status_group != "all":
+        keep.append(("status", status_group))
+    if critical_only:
+        keep.append(("severity", "critical"))
+    if days_n is not None:
+        keep.append(("days", str(days_n)))
+    return {
+        "query": {"days": days_n, "status": exact, "open_only": open_only, "critical_only": critical_only},
+        "status_group": status_group,
+        "severity_group": "critical" if critical_only else "",
+        "days": days_raw,
+        "qs": urlencode(keep),
+    }
+
+
+def incident_neighbors(db: Session, incident: Incident, filters: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Older / newer incident in the /incidents order (newest first, Incident.id desc) under the same filter."""
+    filters = filters or incident_list_filters()
+    query = incident_query(db, **filters["query"])
+    older = query.filter(Incident.id < incident.id).order_by(Incident.id.desc()).with_entities(Incident.number).first()
+    newer = query.filter(Incident.id > incident.id).order_by(Incident.id.asc()).with_entities(Incident.number).first()
+    member = query.filter(Incident.id == incident.id).count() > 0
+    position = query.filter(Incident.id > incident.id).count() + 1 if member else None
+    return {
+        "older": older[0] if older else "",
+        "newer": newer[0] if newer else "",
+        "position": position,
+        "total": query.count(),
+        "qs": filters["qs"],
+    }
 
 
 def dashboard_incident_tiles(db: Session) -> list[dict[str, Any]]:
