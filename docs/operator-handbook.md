@@ -278,6 +278,8 @@ Who: **analyst**, engineer, or admin (`write_assets`).
 
 **Edit / Clone / Verify / Remove** are on the list (and the asset page). Same permission as Add (`write_assets`: analyst, engineer, admin). Viewers only read.
 
+The Assets filter bar has **one Search** box (number, Asset ID, hostname, IP) and, on the same row, four dropdowns: **Type** (every listed type plus saved custom types), **Source** (**Forge** = added here by hand, discovery or scan; **NetBox**; **Zabbix**, which also includes rows linked to a Zabbix host), **Site** and **Customer** (the distinct *Site / DC / room* and *Customer / domain* values already saved on assets). Search and every dropdown combine — all must match (`/assets?q=sw&type=Switch&source=netbox&site=DC-East&customer=Acme`). **Reset** clears them all. There is no VLAN filter: assets do not store a VLAN.
+
 - **Edit** opens the same Add form filled in (`/assets?edit=<id>`). **Asset ID is immutable** after create (Prometheus `asset=` label and history). Hostname, type (including Auto), IP, scrape address, owner/contact, notes, environment can change. HTTP SD is live from this table — the next Prometheus scrape drops or rewrites the target. Core’s static demo job is not this list.
 - **Clone** copies into the same form with a **new** Asset ID (and a suggested hostname). Tweak before Save. Duplicate Asset ID or IP is rejected. NetBox id is not copied. If the source is `forge-demo-*`, the suggested id is `copy-…` (a real asset that **can** be scraped). Keep a `forge-demo-*` id only if you want another lab-only row.
 - **Remove** asks for confirm. The row leaves inventory and HTTP/SNMP SD. **Incidents stay** in History with the asset link cleared (not cascade-deleted). Discovery candidates for that IP go back to **new**. Lab `forge-demo-*` hosts can be removed the same way; seed will not put them back after Core start/update.
@@ -641,7 +643,9 @@ On `/incidents/<number>`:
 | Open ForgeRCA | analyst+ (`read_ai`) or engineer (`investigate`) | Primary CTA to `/ai/INC-…`. Runs builtin ForgeRCA if needed; does not change the host |
 | **Send incident report** | analyst / engineer / admin | Emails the current INC snapshot when SMTP is on (`sent`) as HTML + plain text. If SMTP is off, stores `generated` in the **mail outbox** on `/ops#mail`. Replies arrive in the real mailbox, not in ForgeSRE |
 
-The same page lists **who did what** (audit: ack, resolve, notes) and **operator notes**. Mail bodies are on `/ops#mail`, not a second table here. Notes are not a ticket thread and not RCA.
+The same page lists **who did what** (audit: ack, resolve, notes) and **operator notes**. Mail bodies are on `/ops#mail`, not a second table here. Notes are not a ticket thread and not RCA. Who did what is a list like the others: it scrolls inside its box, page tabs on the left, **Rows 10 / 20 / 50 / 100** on the right (`?audit_page=` / `?audit_per_page=`, default 10), and changing page keeps your scroll position.
+
+**Engineer evidence** (engineer / admin) is one line per stored row. A single click selects a row; **double-click anywhere on the row** — the opened text included — opens or folds it, and **Enter** does the same for the selected row. Press and drag to select text to copy; a drag never folds the row. Nothing is re-queried and the stored evidence is not changed.
 
 The **Workflow** card on the incident is the attached playbook as a plain list — guidance only; nothing is executed or ticked off.
 

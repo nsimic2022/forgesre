@@ -257,22 +257,37 @@ const fire = (type, target, extra) => {
 };
 const state = () => ({ expanded: row.classes.has("is-expanded"), aria: row.attrs["aria-expanded"] });
 const out = {};
+const press = (target, x0, x1) => {
+  fire("mousedown", target, { detail: 1, clientX: x0, clientY: 10 });
+  fire("mouseup", target, { detail: 1, clientX: x1, clientY: 10 });
+};
 out.noClickListener = !("click" in table.listeners);
 fire("dblclick", cell);
 out.afterDbl = state();
+press(full, 20, 20);
+out.secondDownPrevented = fire("mousedown", full, { detail: 2, clientX: 20, clientY: 10 });
 fire("dblclick", full);
-out.dblInsideFull = state();
-out.secondDownPrevented = fire("mousedown", cell, { detail: 2 });
+out.dblOnOpenBody = state();
+press(cell, 5, 5);
 out.firstDownPrevented = fire("mousedown", cell, { detail: 1 });
 fire("dblclick", cell);
 out.afterSecondDbl = state();
+press(full, 10, 120);
+fire("dblclick", full);
+out.afterDragDbl = state();
+press(full, 30, 31);
+fire("dblclick", full);
+out.afterStillDbl = state();
+press(full, 30, 30);
+fire("dblclick", full);
+out.afterCloseAgain = state();
 out.enterPrevented = fire("keydown", row, { key: "Enter" });
 out.afterEnter = state();
 console.log(JSON.stringify(out));
 """
 
 
-def test_double_click_toggles_expanded_class_single_click_does_not():
+def test_double_click_anywhere_toggles_including_open_body_drag_does_not():
     node = shutil.which("node")
     if not node:
         pytest.skip("node not installed")
@@ -281,13 +296,23 @@ def test_double_click_toggles_expanded_class_single_click_does_not():
     )
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout.strip().splitlines()[-1])
+    closed, opened = {"expanded": False, "aria": "false"}, {"expanded": True, "aria": "true"}
     assert out["noClickListener"] is True
-    assert out["afterDbl"] == {"expanded": True, "aria": "true"}
-    assert out["dblInsideFull"] == {"expanded": True, "aria": "true"}
+    assert out["afterDbl"] == opened
     assert out["secondDownPrevented"] is True and out["firstDownPrevented"] is False
-    assert out["afterSecondDbl"] == {"expanded": False, "aria": "false"}
+    assert out["dblOnOpenBody"] == closed
+    assert out["afterSecondDbl"] == opened
+    assert out["afterDragDbl"] == opened
+    assert out["afterStillDbl"] == closed
+    assert out["afterCloseAgain"] == opened
     assert out["enterPrevented"] is True
-    assert out["afterEnter"] == {"expanded": True, "aria": "true"}
+    assert out["afterEnter"] == closed
+
+
+def test_evidence_js_no_longer_skips_the_open_body():
+    block = _js_block("bindEvidenceRows")
+    assert "[data-evidence-full]" not in block
+    assert 'addEventListener("mouseup"' in block and "DRAG_PX" in block
 
 
 def test_evidence_view_does_not_change_stored_payload():

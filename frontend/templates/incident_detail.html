@@ -200,7 +200,7 @@
     </tbody>
   </table>
   </div>
-{% include "_pager.html" %}
+  {% with pager=audit_pager %}{% include "_pager.html" %}{% endwith %}
 </section>
 
 <section id="notes">
@@ -224,7 +224,7 @@
 
 {% if can('read_evidence') %}
 <section id="evidence">
-  <h2>Engineer evidence {% with %}{% set tip %}Stored evidence rows (alert, inventory, Prometheus / Loki samples) as collected — nothing is re-queried here. One line per row; double-click a row to show the full stored text, double-click again to fold it.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Engineer evidence {% with %}{% set tip %}Stored evidence rows (alert, inventory, Prometheus / Loki samples) as collected — nothing is re-queried here. One line per row; double-click a row to show the full stored text, double-click anywhere on it again (the open text too) to fold it. Drag to select text to copy.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="table-scroll list-scroll" data-list-scroll>
   <table class="scan-list evidence-table" data-evidence-table>
     <thead><tr><th class="ev-when">When</th><th class="ev-actor">Source</th><th>Action</th></tr></thead>

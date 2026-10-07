@@ -1358,6 +1358,33 @@ def zabbix_agent_state(asset: Asset) -> str:
     return state if state in ZABBIX_AGENT_STATES else "unknown"
 
 
+# Assets list Source dropdown. Forge = rows ForgeSRE created itself (manual, discovery, scan, demo).
+ASSET_SOURCE_FILTERS: tuple[tuple[str, str], ...] = (("forge", "Forge"), ("netbox", "NetBox"), ("zabbix", "Zabbix"))
+IMPORTED_SOURCES = frozenset({"netbox", "zabbix"})
+
+
+def asset_extra(asset: Asset, key: str) -> str:
+    extras = asset.extras if isinstance(asset.extras, dict) else {}
+    return " ".join(str(extras.get(key) or "").split())
+
+
+def asset_filter_options(rows: list[Asset]) -> dict[str, list[str]]:
+    """Values for the Assets Type / Site / Customer dropdowns: saved custom types, distinct site and customer."""
+
+    def distinct(values) -> list[str]:
+        seen: dict[str, str] = {}
+        for value in values:
+            if value and value.lower() not in seen:
+                seen[value.lower()] = value
+        return sorted(seen.values(), key=str.lower)
+
+    return {
+        "custom_types": distinct((row.type or "").strip() for row in rows if (row.type or "").strip() not in ASSET_TYPE_CHOICES),
+        "sites": distinct(asset_extra(row, "site") for row in rows),
+        "customers": distinct(asset_extra(row, "customer") for row in rows),
+    }
+
+
 def assets_matching(
     rows: list[Asset],
     q: str = "",
@@ -1365,10 +1392,15 @@ def assets_matching(
     flag: str = "",
     source: str = "",
     agent: str = "",
+    type: str = "",
+    site: str = "",
+    customer: str = "",
 ) -> list[Asset]:
-    """Filter inventory by asset number, id, hostname, or IP (substring), optional status, flag, source, Zabbix agent.
+    """Filter inventory by asset number, id, hostname, or IP (substring), optional status, flag, source, Zabbix agent,
+    Type, and extras Site / Customer (exact, case-insensitive). Every filter given must match.
 
-    ``source=zabbix`` includes assets from other sources that are linked to a Zabbix host.
+    ``source=zabbix`` includes assets from other sources that are linked to a Zabbix host; ``source=forge`` is every
+    asset not imported from NetBox or Zabbix.
     """
     needle = (q or "").strip().lower()
     wanted = (status or "").strip().lower()
@@ -1383,11 +1415,20 @@ def assets_matching(
     origin = (source or "").strip().lower()
     if origin == "zabbix":
         out = [row for row in out if asset_in_zabbix(row)]
+    elif origin == "forge":
+        out = [row for row in out if (row.source or "manual").lower() not in IMPORTED_SOURCES]
     elif origin:
         out = [row for row in out if (row.source or "").lower() == origin]
     state = (agent or "").strip().lower()
     if state in ZABBIX_AGENT_STATES:
         out = [row for row in out if zabbix_agent_state(row) == state]
+    kind = (type or "").strip().lower()
+    if kind:
+        out = [row for row in out if (row.type or "").strip().lower() == kind]
+    for key, raw in (("site", site), ("customer", customer)):
+        value = " ".join((raw or "").split()).lower()
+        if value:
+            out = [row for row in out if asset_extra(row, key).lower() == value]
     return out
 
 

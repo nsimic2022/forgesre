@@ -79,7 +79,7 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     id_at = page.text.find('name="asset_id"')
     ip_at = page.text.find('name="ip"')
     alarm_at = page.text.find("alarm-families")
-    type_at = page.text.find('name="type"')
+    type_at = page.text.find('name="type" class="nice-select" data-detect-type')
     left_at = page.text.find("asset-form-left")
     middle_at = page.text.find("asset-form-middle")
     right_at = page.text.find("asset-form-right")

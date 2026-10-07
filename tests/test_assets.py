@@ -282,7 +282,7 @@ def test_assets_table_abbreviates_type_form_keeps_full_names():
     )
     page = client.get("/assets")
     assert page.status_code == 200
-    table, rest = page.text.split("</table>", 1)
+    table, rest = page.text.split('<table class="asset-table"', 1)[1].split("</table>", 1)
     assert 'title="Linux Server">lnx</td>' in table
     assert 'title="Windows Server">win</td>' in table
     assert 'title="Network Switch">net</td>' in table
@@ -313,7 +313,7 @@ def test_asset_table_actions_cell_is_table_cell_not_flex_td():
     assert ".asset-table td.asset-actions" in css
     assert "display: table-cell" in css
     assert "td.row-actions" in css
-    assert "app.css?v=v08-14" in base
+    assert "app.css?v=v08-15" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():
