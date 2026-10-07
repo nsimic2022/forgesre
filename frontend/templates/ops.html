@@ -74,7 +74,7 @@
   {% if can_send %}
   <div class="ops-mail-cols">
     <form method="post" action="/ops/contacts" class="stack ops-add-email">
-      <h3>Add email {% with %}{% set tip %}Saves an address to this page’s book. Asset owner emails from Assets already appear in the list.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+      <h3>Add email {% with %}{% set tip %}Saves an address so it appears in the Compose To list. Asset owner emails from Assets already appear there.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
       <label>Name <input name="name" placeholder="Storage on-call"></label>
       <label>Email <input name="email" type="email" required placeholder="ops@example.local"></label>
       <button type="submit">Save address</button>
@@ -95,13 +95,6 @@
       <button type="submit">{% if smtp_on %}Send{% else %}Save to outbox{% endif %}</button>
     </form>
   </div>
-  {% if contacts %}
-  <p class="muted">Saved addresses:
-    {% for row in contacts %}
-      {{ row.email }}{% if row.name %} ({{ row.name }}){% endif %}{% if not loop.last %} · {% endif %}
-    {% endfor %}
-  </p>
-  {% endif %}
   {% else %}
   <p class="muted">Read-only. Analyst / engineer / admin can send.</p>
   {% endif %}

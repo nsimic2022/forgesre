@@ -128,8 +128,8 @@ def test_ops_add_contact_then_pick_from_list():
     row = db.query(MailContact).filter_by(email="storage@dc.local").one()
     assert row.name == "Storage on-call"
     page = client.get("/ops")
-    assert "storage@dc.local" in page.text
-    assert "Storage on-call" in page.text
+    assert '<option value="storage@dc.local">Storage on-call — storage@dc.local' in page.text
+    assert "Saved addresses" not in page.text
     db.close()
 
 

@@ -1897,7 +1897,6 @@ def ops_page(
         fragment="#reports",
     )
     assets = db.query(Asset).order_by(Asset.hostname).all()
-    contacts = db.query(MailContact).order_by(MailContact.email).all()
     report_form_mode = "add"
     report_form = scheduled_report_form_values()
     editing_report = None
@@ -1922,7 +1921,6 @@ def ops_page(
         mail=mail,
         reports=reports,
         assets=assets,
-        contacts=contacts,
         addresses=list_mail_addresses(db),
         smtp_on=settings.email_enabled and bool(settings.smtp_host),
         can_send=can_send_ops(user),
