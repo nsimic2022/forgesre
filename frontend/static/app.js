@@ -368,6 +368,73 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
   ip.addEventListener("change", run);
 })();
 
+(function bindAssetFormPicks() {
+  const form = document.getElementById("asset-form");
+  if (!form) return;
+  form.querySelectorAll("[data-email-pick]").forEach((box) => {
+    const select = box.querySelector("[data-email-select]");
+    const typed = box.querySelector("[data-email-typed]");
+    if (!select || !typed) return;
+    select.addEventListener("change", () => {
+      if (select.value) {
+        typed.value = select.value;
+        typed.hidden = true;
+        const fill = box.getAttribute("data-email-fill-name");
+        const name = fill ? form.querySelector('[name="' + fill + '"]') : null;
+        const option = select.options[select.selectedIndex];
+        const label = option ? option.getAttribute("data-label") || "" : "";
+        if (name && !name.value.trim() && label) name.value = label;
+      } else {
+        typed.value = "";
+        typed.hidden = false;
+        typed.focus();
+      }
+    });
+  });
+
+  const kind = form.querySelector("[data-support-kind]");
+  const customRow = form.querySelector("[data-support-custom-row]");
+  const customInput = form.querySelector("[data-support-custom]");
+  if (kind && customRow && customInput) {
+    const syncSupport = () => {
+      const on = kind.value === "custom";
+      customRow.hidden = !on;
+      customInput.required = on;
+    };
+    kind.addEventListener("change", syncSupport);
+    syncSupport();
+  }
+
+  const type = form.querySelector("[data-detect-type]");
+  const ip = form.querySelector("[data-detect-ip]");
+  const scrape = form.querySelector("[data-scrape-address]");
+  const snmp = form.querySelector("[data-snmp-port]");
+  if (!type) return;
+  const lower = () => String(type.value || "").toLowerCase();
+  const exporterPort = () => {
+    const t = lower();
+    if (t.includes("windows")) return "9182";
+    if (t.includes("linux")) return "9100";
+    return "";
+  };
+  const snmpFamily = () => {
+    const t = lower();
+    if (t.startsWith("auto") || t.includes("windows") || t.includes("linux") || t.includes("web")) return false;
+    return /network|switch|router|firewall|storage|qnap|printer|\bnas\b|\bsan\b/.test(t);
+  };
+  type.addEventListener("change", () => {
+    const host = ip ? (ip.value || "").trim() : "";
+    if (scrape && host && (scrape.value === host + ":9100" || scrape.value === host + ":9182")) {
+      const port = exporterPort();
+      scrape.value = port ? host + ":" + port : "";
+    }
+    if (snmp) {
+      const def = snmp.getAttribute("data-snmp-default") || "161";
+      snmp.placeholder = snmpFamily() ? def + " (default)" : "off";
+    }
+  });
+})();
+
 (function bindClientPlayrules() {
   const box = document.querySelector("[data-client-playrules]");
   if (!box) return;
@@ -438,8 +505,9 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
       const exporter = box.querySelector(".exporter");
       if (exporter) {
         exporter.className = "reach-dot exporter " + (row.exporter || "yellow");
-        exporter.textContent = row.exporter_label || "exp.";
-        exporter.title = (row.exporter_label || "exporter") + ": " + (row.exporter_detail || "");
+        const snmp = row.snmp_label || "";
+        exporter.textContent = row.exporter_label === "SNMP" && snmp ? snmp : row.exporter_label || "exp.";
+        exporter.title = (row.exporter_label || "exporter") + ": " + (row.exporter_detail || "") + (snmp ? " · " + snmp : "");
       }
     });
   };

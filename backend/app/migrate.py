@@ -86,6 +86,8 @@ def migrate(engine: Engine) -> None:
             statements.append("ALTER TABLE assets ADD COLUMN zabbix_agent VARCHAR(16) DEFAULT ''")
         if "scrape_address" not in existing:
             statements.append("ALTER TABLE assets ADD COLUMN scrape_address VARCHAR(128) DEFAULT ''")
+        if "snmp_port" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN snmp_port INTEGER DEFAULT 0")
         if "contact_name" not in existing:
             statements.append("ALTER TABLE assets ADD COLUMN contact_name VARCHAR(255) DEFAULT ''")
         if "owner_email" not in existing:

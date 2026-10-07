@@ -19,7 +19,8 @@
     {% set r = reachability_snapshot(asset) %}
     <span class="reach-badges" data-asset-reach="{{ asset.asset_id }}">
       <span class="reach-dot ping {{ r.ping }}" title="Ping: {{ r.ping_detail }}">Ping</span>
-      <span class="reach-dot exporter {{ r.exporter }}" title="{{ r.exporter_label }}: {{ r.exporter_detail }}">{{ r.exporter_label }}</span>
+      <span class="reach-dot exporter {{ r.exporter }}" title="{{ r.exporter_label }}: {{ r.exporter_detail }}{% if r.snmp_label %} · {{ r.snmp_label }}{% endif %}">{% if r.exporter_label == 'SNMP' and r.snmp_label %}{{ r.snmp_label }}{% else %}{{ r.exporter_label }}{% endif %}</span>
+      {% if r.snmp_label and r.exporter_label != 'SNMP' %}<span class="reach-snmp" data-snmp-label title="snmp_exporter polls this IP on UDP{{ r.snmp_label[5:] }}">{{ r.snmp_label }}</span>{% endif %}
     </span>
   </dd>
   <dt>Type</dt><dd>{{ asset.type or "—" }}</dd>
@@ -48,7 +49,7 @@
 {% set sup = support_status(asset) %}
 <h3 class="asset-facts-head label-line">Support coverage {% with %}{% set tip %}From the asset's Support coverage (Edit → NOC contacts). Expiring = the To date is within {{ sup.lead_days }} days. Reminder only — no alert, incident, or Playrule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
 <dl class="kv asset-facts" data-asset-facts="support">
-  <dt>Under support</dt><dd class="extra-support">{{ support_labels.get(ex.support) or "—" }}</dd>
+  <dt>Under support</dt><dd class="extra-support">{{ support_labels.get(ex.support) or "—" }}{% if ex.support == 'custom' and ex.support_custom %} <span class="support-note" data-support-note>{{ ex.support_custom }}</span>{% endif %}</dd>
   <dt>From</dt><dd class="extra-support_from">{{ ex.support_from or "—" }}</dd>
   <dt>To</dt><dd class="extra-support_to">{{ ex.support_to or "—" }}</dd>
   <dt>Lead time</dt><dd class="extra-support_lead_days">{% if ex.support_lead_days %}{{ ex.support_lead_days }} days{% else %}—{% endif %}</dd>
@@ -68,7 +69,7 @@
   <dt>SNMP</dt>
   <dd>
     {% if snmp_target %}
-      Polled by snmp_exporter on UDP/161 (module if_mib). Prometheus job <code>forgesre-snmp</code>.
+      Polled by snmp_exporter on UDP/{{ snmp_port }} (module if_mib). Prometheus job <code>forgesre-snmp</code>.
     {% elif snmp_enabled and asset.scrape_address %}
       {% if 'windows' in (asset.type or '')|lower or 'windows' in (asset.monitoring_profile or '')|lower %}
       HTTP scrape of windows_exporter (typically :9182 /metrics), not SNMP.
@@ -76,7 +77,7 @@
       No — this host is scraped as node_exporter / HTTP metrics, not SNMP.
       {% endif %}
     {% elif snmp_enabled %}
-      No — add type <code>Network device</code> and an IP to enable SNMP.
+      No — pick a network-family type (Network device, Switch, Router, Firewall, Storage, QNAP/NAS, Printer) or set an SNMP port on Edit, with an IP.
     {% else %}
       Disabled in <code>config/forgesre.yml</code> (<code>monitoring.snmp.enabled</code>).
     {% endif %}

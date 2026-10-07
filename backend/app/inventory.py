@@ -7,6 +7,7 @@ import time
 from sqlalchemy.orm import Session
 
 from app.asset_extras import asset_playrule_ids, form_extras, known_playrule_ids, normalize_extras
+from app.asset_types import ASSET_TYPE_CHOICES, ASSET_TYPE_GROUPS, parse_snmp_port, snmp_port_for, snmp_target
 from app.audit import audit
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE, detect_exporter, is_auto_asset_type
@@ -64,6 +65,16 @@ _ASSET_TYPE_ABBREV = {
     "network": "net",
     "web": "web",
 }
+_ASSET_TYPE_SHORT = {
+    "Switch": "sw",
+    "Router": "rtr",
+    "Firewall": "fw",
+    "Storage": "stor",
+    "QNAP/NAS": "nas",
+    "Printer": "prn",
+    "Hypervisor": "hv",
+    "Other": "other",
+}
 
 
 def asset_type_abbrev(type: str = "") -> str:
@@ -71,7 +82,21 @@ def asset_type_abbrev(type: str = "") -> str:
     label = (type or "").strip()
     if not label:
         return "—"
+    if label in _ASSET_TYPE_SHORT:
+        return _ASSET_TYPE_SHORT[label]
     return _ASSET_TYPE_ABBREV.get(asset_kind(label), label)
+
+
+def validate_ip_field(ip: str) -> str:
+    """IP / hostname only. ``10.0.0.5:9100`` is refused — exporter ports go in scrape_address, SNMP in snmp_port.
+    IPv6 (two or more colons) passes."""
+    value = (ip or "").strip()
+    if value.count(":") == 1:
+        raise ValueError(
+            "IP is the address only (no :port). Put exporter ports in Scrape address (host:port) "
+            "and the SNMP UDP port in SNMP port."
+        )
+    return value
 
 
 def default_scrape_address(type: str, ip: str, profile: str = "") -> str:
@@ -86,7 +111,21 @@ def default_scrape_address(type: str, ip: str, profile: str = "") -> str:
     return ""
 
 
-def default_monitoring_profile(type: str, profile: str = "") -> str:
+_OPEN_PROFILE_TYPES = frozenset({"Hypervisor", "Other"})
+
+
+def _scrape_port(address: str) -> int | None:
+    _host, sep, port = (address or "").strip().rpartition(":")
+    return int(port) if sep and port.isdigit() else None
+
+
+def default_monitoring_profile(type: str, profile: str = "", scrape_address: str = "") -> str:
+    """Prometheus job label for the HTTP SD row.
+
+    Linux / Windows types keep linux-standard / windows-standard. A non-server type (QNAP/NAS,
+    Hypervisor, Storage, ...) with an operator-typed :9100 or :9182 scrape gets the matching
+    exporter job so the node_ / windows_ rules in alerts.yml apply. Type alone never adds a scrape.
+    """
     if (profile or "").strip():
         return profile.strip()
     kind = asset_kind(type)
@@ -97,6 +136,13 @@ def default_monitoring_profile(type: str, profile: str = "") -> str:
     if kind == "web":
         return "web-standard"
     if kind == "unknown":
+        return ""
+    port = _scrape_port(scrape_address)
+    if port == LINUX_EXPORTER_PORT:
+        return "linux-standard"
+    if port == WINDOWS_EXPORTER_PORT:
+        return "windows-standard"
+    if (type or "").strip() in _OPEN_PROFILE_TYPES:
         return ""
     return "network-switch"
 
@@ -135,22 +181,20 @@ def sd_targets(db: Session, core_address: str | None = None) -> list[dict]:
 
 
 def is_snmp_asset(asset: Asset) -> bool:
-    """Network devices with an IP are polled by snmp_exporter. Linux/Windows HTTP exporters are not."""
+    """Polled by snmp_exporter: network family (Network device, Switch, Router, Firewall, Storage,
+    QNAP/NAS, Printer) on UDP/161, or any type with an explicit per-asset ``snmp_port``.
+    Linux / Windows / Web with an empty SNMP port are not."""
     if not settings.snmp_enabled:
         return False
     if is_lab_inventory_row(asset):
         return False
-    ip = (asset.ip or "").strip()
-    if not ip:
+    if not (asset.ip or "").strip():
         return False
-    kind = asset_kind(asset.type or "", asset.monitoring_profile or "")
-    if kind in {"linux", "windows", "web"}:
-        return False
-    return kind == "network"
+    return snmp_port_for(asset) > 0
 
 
 def sd_snmp_targets(db: Session) -> list[dict]:
-    """Prometheus HTTP SD for snmp_exporter. Target address is the device IP; Prometheus relabels to the exporter."""
+    """Prometheus HTTP SD for snmp_exporter. Target is the device IP (``ip:port`` off 161); Prometheus relabels to the exporter."""
     if not settings.snmp_enabled:
         return []
     targets: list[dict] = []
@@ -158,19 +202,21 @@ def sd_snmp_targets(db: Session) -> list[dict]:
     for asset in db.query(Asset).order_by(Asset.asset_id).all():
         if not is_snmp_asset(asset):
             continue
-        ip = asset.ip.strip()
-        if ip in seen:
+        port = snmp_port_for(asset)
+        target = snmp_target(asset.ip, port)
+        if target in seen:
             continue
-        seen.add(ip)
+        seen.add(target)
         targets.append(
             {
-                "targets": [ip],
+                "targets": [target],
                 "labels": {
                     "asset": asset.asset_id,
                     "monitoring_profile": asset.monitoring_profile or "network-switch",
                     "source": asset.source or "manual",
                     "snmp_module": settings.snmp_module,
                     "snmp_auth": "public_v2",
+                    "snmp_port": str(port),
                 },
             }
         )
@@ -387,9 +433,10 @@ def create_manual_asset(
     asset_id: str = "",
     extras: dict | None = None,
     playrule_ids: list | None = None,
+    snmp_port: int | str | None = None,
 ) -> Asset:
     hostname = (hostname or "").strip()
-    ip = (ip or "").strip()
+    ip = validate_ip_field(ip)
     if not hostname:
         raise ValueError("hostname is required")
     requested = (asset_id or "").strip()
@@ -442,8 +489,8 @@ def create_manual_asset(
             type = "Unknown"
             monitoring_profile = (monitoring_profile or "").strip()
             scrape_address = (scrape_address or "").strip()
-    profile = default_monitoring_profile(type, monitoring_profile)
-    address = (scrape_address or "").strip() or default_scrape_address(type, ip, profile)
+    address = (scrape_address or "").strip() or default_scrape_address(type, ip, monitoring_profile)
+    profile = default_monitoring_profile(type, monitoring_profile, address)
     stored_alarms: dict = {}
     if alarms is not None:
         from app.asset_alarms import normalize_alarms
@@ -464,6 +511,7 @@ def create_manual_asset(
         notes=(notes or "").strip(),
         source="manual",
         scrape_address=address,
+        snmp_port=parse_snmp_port(snmp_port),
         alarms=stored_alarms,
         extras=normalize_extras(extras),
         playrule_ids=known_playrule_ids(db, playrule_ids),
@@ -501,8 +549,8 @@ def create_manual_asset(
             "snmp",
             "target.add",
             "ok",
-            summary=f"{asset.hostname} queued for snmp_exporter UDP/161",
-            detail=f"ip={asset.ip} module={settings.snmp_module}",
+            summary=f"{asset.hostname} queued for snmp_exporter UDP/{snmp_port_for(asset)}",
+            detail=f"ip={asset.ip} port={snmp_port_for(asset)} module={settings.snmp_module}",
             object_type="asset",
             object_id=asset.asset_id,
         )
@@ -531,6 +579,7 @@ def update_asset(
     alarms: dict | None = None,
     extras: dict | None = None,
     playrule_ids: list | None = None,
+    snmp_port: int | str | None = None,
 ) -> Asset:
     old_ip = asset.ip or ""
     old_type = asset.type or ""
@@ -541,7 +590,7 @@ def update_asset(
         if hostname:
             asset.hostname = hostname
     if ip is not None:
-        asset.ip = ip.strip()
+        asset.ip = validate_ip_field(ip)
     if type is not None and type.strip():
         asset.type = type.strip()
     if environment is not None and environment.strip():
@@ -596,7 +645,7 @@ def update_asset(
         )
         if old_kind != new_kind and (old_scrape == old_default or old_scrape == default_scrape_address(old_type, old_ip, old_profile)):
             remapped = default_scrape_address(asset.type or "", asset.ip, asset.monitoring_profile or "")
-            if remapped or new_kind == "network":
+            if remapped or new_kind not in {"linux", "windows"}:
                 asset.scrape_address = remapped
     if new_kind == "windows" and (asset.monitoring_profile or "") in {"", "linux-standard"}:
         asset.monitoring_profile = "windows-standard"
@@ -607,6 +656,14 @@ def update_asset(
     elif new_kind == "unknown":
         if (asset.monitoring_profile or "") in {"linux-standard", "windows-standard", "network-switch"}:
             asset.monitoring_profile = ""
+    if asset_kind(asset.type or "") not in {"linux", "windows", "web", "unknown"} and (asset.monitoring_profile or "") in {
+        "",
+        "linux-standard",
+        "windows-standard",
+        "network-switch",
+    }:
+        asset.monitoring_profile = default_monitoring_profile(asset.type or "", "", asset.scrape_address or "")
+        new_kind = asset_kind(asset.type or "", asset.monitoring_profile or "")
     if alarms is not None:
         from app.asset_alarms import normalize_alarms
 
@@ -615,6 +672,8 @@ def update_asset(
         asset.extras = normalize_extras(extras)
     if playrule_ids is not None:
         asset.playrule_ids = known_playrule_ids(db, playrule_ids)
+    if snmp_port is not None:
+        asset.snmp_port = parse_snmp_port(snmp_port)
     audit(
         db,
         "asset.update",
@@ -853,8 +912,8 @@ def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset
             "snmp",
             "target.add",
             "ok",
-            summary=f"{asset.asset_id} queued for snmp_exporter UDP/161",
-            detail=f"ip={asset.ip} module={settings.snmp_module}",
+            summary=f"{asset.asset_id} queued for snmp_exporter UDP/{snmp_port_for(asset)}",
+            detail=f"ip={asset.ip} port={snmp_port_for(asset)} module={settings.snmp_module}",
             object_type="asset",
             object_id=asset.asset_id,
         )
@@ -1115,15 +1174,6 @@ def asset_id_slug(hostname: str, ip: str = "") -> str:
     return slug or _asset_id_from_ip(ip or "asset")
 
 
-ASSET_TYPE_CHOICES = [
-    AUTO_ASSET_TYPE,
-    "Linux Server",
-    "Windows Server",
-    "Network device",
-    "Web/appliance",
-]
-
-
 def suggest_clone_hostname(db: Session, asset: Asset) -> str:
     """New hostname for Clone. Lab forge-demo-* ids are stripped so the copy is a real asset."""
     from app.seed import DEMO_ASSET_PREFIX, is_demo_asset_id
@@ -1197,6 +1247,7 @@ def clone_prefill(db: Session, asset: Asset) -> dict:
         "owner_phone": asset.owner_phone or "",
         "notes": notes,
         "scrape_address": scrape,
+        "snmp_port": parse_snmp_port(asset.snmp_port) or "",
         "cloned_from": asset.asset_id,
         "lab_source": lab,
         "alarms": _form_alarms(asset),
@@ -1228,6 +1279,7 @@ def asset_form_values(asset: Asset | None = None) -> dict:
             "owner_phone": "",
             "notes": "",
             "scrape_address": "",
+            "snmp_port": "",
             "cloned_from": "",
             "lab_source": False,
             "alarms": _form_alarms(),
@@ -1246,6 +1298,7 @@ def asset_form_values(asset: Asset | None = None) -> dict:
         "owner_phone": asset.owner_phone or "",
         "notes": asset.notes or "",
         "scrape_address": asset.scrape_address or "",
+        "snmp_port": parse_snmp_port(asset.snmp_port) or "",
         "cloned_from": "",
         "lab_source": False,
         "alarms": _form_alarms(asset),

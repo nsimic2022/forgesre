@@ -65,6 +65,7 @@ from app.services import (
 )
 from app.settings import settings
 from app.asset_extras import asset_playrule_ids, normalize_extras, support_status
+from app.asset_types import snmp_port_for
 from app.host_resources import appliance_resources
 from app.stack import (
     component_label,
@@ -805,6 +806,7 @@ class AssetBody(BaseModel):
     notes: str = ""
     monitoring_profile: str = ""
     scrape_address: str = ""
+    snmp_port: int | None = None
     alarms: dict | None = None
     extras: dict | None = None
     playrule_ids: list[int] | None = None
@@ -821,6 +823,7 @@ class AssetUpdateBody(BaseModel):
     owner_phone: str | None = None
     notes: str | None = None
     scrape_address: str | None = None
+    snmp_port: int | None = None
     alarms: dict | None = None
     extras: dict | None = None
     playrule_ids: list[int] | None = None
@@ -838,6 +841,7 @@ class AssetCloneBody(BaseModel):
     owner_phone: str | None = None
     notes: str | None = None
     scrape_address: str | None = None
+    snmp_port: int | None = None
     alarms: dict | None = None
     extras: dict | None = None
     playrule_ids: list[int] | None = None
@@ -871,6 +875,7 @@ def create_asset_api(
             alarms=body.alarms,
             extras=body.extras,
             playrule_ids=body.playrule_ids,
+            snmp_port=body.snmp_port,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -887,6 +892,13 @@ def update_asset_api(
     item = db.query(Asset).filter_by(asset_id=asset_id).first()
     if item is None:
         raise HTTPException(status_code=404, detail="asset not found")
+    if body.ip is not None:
+        from app.inventory import validate_ip_field
+
+        try:
+            validate_ip_field(body.ip)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     asset = update_asset(
         db,
         item,
@@ -905,6 +917,7 @@ def update_asset_api(
         alarms=body.alarms,
         extras=body.extras,
         playrule_ids=body.playrule_ids,
+        snmp_port=body.snmp_port,
     )
     return _asset(asset)
 
@@ -948,6 +961,7 @@ def clone_asset_api(
             alarms=body.alarms if body.alarms is not None else getattr(item, "alarms", None),
             extras=body.extras if body.extras is not None else defaults["extras"],
             playrule_ids=body.playrule_ids if body.playrule_ids is not None else defaults["playrule_ids"],
+            snmp_port=body.snmp_port if body.snmp_port is not None else defaults["snmp_port"],
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1561,6 +1575,7 @@ def _asset(item: Asset) -> dict[str, Any]:
         "zabbix_hostid": item.zabbix_hostid or "",
         "zabbix_agent": item.zabbix_agent or "",
         "scrape_address": item.scrape_address,
+        "snmp_port": snmp_port_for(item) if is_snmp_asset(item) else 0,
         "alarms": getattr(item, "alarms", None) or {},
         "extras": normalize_extras(getattr(item, "extras", None)),
         "playrule_ids": asset_playrule_ids(item),
@@ -1571,6 +1586,7 @@ def _asset(item: Asset) -> dict[str, Any]:
         "exporter": reach["exporter"],
         "exporter_detail": reach["exporter_detail"],
         "exporter_label": reach["exporter_label"],
+        "snmp_label": reach["snmp_label"] if is_snmp_asset(item) else "",
         "probe_checked_at": reach["checked_at"],
     }
 

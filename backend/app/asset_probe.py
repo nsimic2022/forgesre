@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from app.asset_types import DEFAULT_SNMP_PORT, PINNED_TYPES, snmp_family, snmp_port_for
 from app.exporter_detect import detect_exporter, fetch_metrics, is_auto_asset_type
 
 LINUX_EXPORTER_PORT = 9100
@@ -261,21 +262,23 @@ def probe_snmp(
     host: str,
     timeout: float = DEFAULT_TIMEOUT,
     prober: SnmpProber | None = None,
+    port: int = DEFAULT_SNMP_PORT,
 ) -> CheckResult:
     host = (host or "").strip()
     if not host:
         return CheckResult("metrics", None, "no IP", 0)
+    port = port or DEFAULT_SNMP_PORT
     started = time.monotonic()
     if prober is not None:
-        ok = bool(prober(host, timeout))
+        ok = bool(prober(host, timeout) if port == DEFAULT_SNMP_PORT else prober(host, timeout, port=port))
     else:
         from discovery import probe_snmp_udp
 
-        ok = bool(probe_snmp_udp(host, timeout=timeout))
+        ok = bool(probe_snmp_udp(host, timeout=timeout, port=port))
     elapsed = int((time.monotonic() - started) * 1000)
     if ok:
-        return CheckResult("metrics", True, f"SNMP UDP/161 sysDescr ({elapsed}ms)", elapsed)
-    return CheckResult("metrics", False, f"SNMP UDP/161 no reply ({elapsed}ms)", elapsed)
+        return CheckResult("metrics", True, f"SNMP UDP/{port} sysDescr ({elapsed}ms)", elapsed)
+    return CheckResult("metrics", False, f"SNMP UDP/{port} no reply ({elapsed}ms)", elapsed)
 
 
 def check_color(ok: bool | None) -> str:
@@ -344,7 +347,7 @@ def exporter_badge_label(item: dict[str, Any] | Any, port: int | None = None) ->
             _host, port = parse_host_port(scrape)
             if port is None:
                 port = default_exporter_port(str(item.get("type") or ""), str(item.get("monitoring_profile") or ""))
-    if kind == "network":
+    if kind == "network" or (not scrape and port is None and snmp_port_for(item)):
         return "SNMP"
     if port == WINDOWS_EXPORTER_PORT:
         return ":9182"
@@ -398,8 +401,22 @@ def reachability_snapshot(asset: Any, probe: AssetProbe | None = None) -> dict[s
         "exporter": exporter,
         "exporter_detail": exporter_detail,
         "exporter_label": label,
+        "snmp_label": snmp_label(asset),
         "checked_at": checked.isoformat() if checked else None,
     }
+
+
+def snmp_label(asset: Any) -> str:
+    """``snmp :161`` (or the per-asset port) when the row is an SNMP target. Empty otherwise."""
+    from app.inventory import is_snmp_asset
+
+    try:
+        if not is_snmp_asset(asset):
+            return ""
+    except AttributeError:
+        return ""
+    port = snmp_port_for(asset)
+    return f"snmp :{port}" if port else ""
 
 
 def asset_as_probe_item(asset: Any) -> dict[str, Any]:
@@ -410,6 +427,7 @@ def asset_as_probe_item(asset: Any) -> dict[str, Any]:
         "type": getattr(asset, "type", "") or "",
         "monitoring_profile": getattr(asset, "monitoring_profile", "") or "",
         "scrape_address": getattr(asset, "scrape_address", "") or "",
+        "snmp_port": snmp_port_for(asset),
     }
 
 
@@ -547,10 +565,12 @@ def probe_target(
     extra: list[CheckResult] = []
     probe_both = str(item.get("_probe_both") or "") == "1"
     detect_message = ""
-    if not probe_both and kind != "network" and host and port is None:
+    snmp_port = snmp_port_for(item) if (kind == "network" or "snmp_port" in item) else 0
+    use_snmp = kind == "network" or snmp_port > 0
+    if not probe_both and not use_snmp and host and port is None:
         probe_both = True
-    if kind == "network" and not scrape and not probe_both:
-        metrics = probe_snmp(host, timeout, prober=snmp_prober)
+    if use_snmp and not scrape and not probe_both:
+        metrics = probe_snmp(host, timeout, prober=snmp_prober, port=snmp_port or DEFAULT_SNMP_PORT)
     elif probe_both and host:
         detected = detect_exporter(
             host,
@@ -641,6 +661,10 @@ def classification_patch(item: dict[str, Any], probe: AssetProbe) -> dict[str, s
         return {}
     saved_kind = asset_kind(str(item.get("type") or ""), str(item.get("monitoring_profile") or ""))
     if saved_kind == "network":
+        return {}
+    if str(item.get("type") or "").strip() in PINNED_TYPES or snmp_family(
+        str(item.get("type") or ""), str(item.get("monitoring_profile") or "")
+    ):
         return {}
     type_name, profile = LIVE_CLASS_TYPE[probe.kind]
     scrape = (probe.scrape or "").strip()
