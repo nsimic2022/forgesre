@@ -55,7 +55,7 @@ from app.inventory import (
     is_snmp_asset,
     zabbix_agent_state,
 )
-from app.journal import MODULES, count_entries, error_banner_entries, list_entries, module_counts, next_error_ack_id, report
+from app.journal import MODULES, count_entries, list_entries, module_counts, report
 from app.models import (
     Asset,
     AuditLog,
@@ -88,7 +88,6 @@ from app.services import (
     is_demo_mail,
     severity_pill,
     short_when_label,
-    list_host_down_incidents,
     parse_policy_steps,
     run_demo,
     run_demo_host,
@@ -481,16 +480,11 @@ def dashboard(
     page: str = "1",
     journal_page: str = "1",
 ):
-    from sqlalchemy import func
-
-    pending = db.query(func.count(DiscoveryCandidate.id)).filter_by(status="new").scalar() or 0
-    stats = {"pending_discovery": pending}
     asset_rows = asset_tiles(db.query(Asset).all())
     incident_rows = dashboard_incident_tiles(db)
     size = per_page(request)
     recent, total = list_history(db, days=None, open_only=False, limit=size, page=page)
     pager = pager_state(page, total=total, size=size)
-    journal_error = error_banner_entries(db, getattr(user, "journal_error_ack_id", 0), limit=5)
     journal_recent: list = []
     journal_pager = None
     if can(user, "read_play"):
@@ -502,13 +496,11 @@ def dashboard(
             fragment="#journal",
         )
         journal_recent = list_entries(db, limit=journal_pager["size"], offset=journal_pager["offset"])
-    down_incidents = list_host_down_incidents(db)
     stack = enrich_components(doctor_payload().get("components") or {}, request.headers.get("host") or "localhost")
     return render(
         request,
         "dashboard.html",
         user,
-        stats=stats,
         stack=stack,
         asset_tiles=asset_rows,
         incident_tiles=incident_rows,
@@ -516,30 +508,10 @@ def dashboard(
         resource_warn=RESOURCE_WARN_PERCENT,
         resource_crit=RESOURCE_CRIT_PERCENT,
         recent=recent,
-        journal_error=journal_error,
         journal_recent=journal_recent,
         journal_pager=journal_pager,
-        down_incidents=down_incidents,
         pager=pager,
     )
-
-
-@router.post("/dashboard/journal-ack")
-def dashboard_journal_ack(
-    db: Session = Depends(get_db),
-    user: User = Depends(login_required),
-    until_id: str = Form(""),
-):
-    if not can(user, "read_play"):
-        raise HTTPException(status_code=403, detail="forbidden")
-    shown = list_entries(db, status="error", limit=5)
-    raw = (until_id or "").strip()
-    requested = int(raw) if raw.isdigit() else None
-    new_ack = next_error_ack_id(requested, user.journal_error_ack_id, [row.id for row in shown])
-    if new_ack > int(user.journal_error_ack_id or 0):
-        user.journal_error_ack_id = new_ack
-        db.commit()
-    return RedirectResponse("/", status_code=302)
 
 
 @router.get("/assets", response_class=HTMLResponse)

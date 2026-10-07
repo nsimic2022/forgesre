@@ -1,4 +1,4 @@
-"""Dashboard layout pass: banner/section order, big tiles, appliance card, incidents heat, per-page select, row checkboxes."""
+"""Dashboard layout pass: section order (no alarm banners), big tiles, appliance card, incidents heat, per-page select, row checkboxes."""
 
 from __future__ import annotations
 
@@ -222,7 +222,7 @@ def test_row_checkboxes_named_selected_on_list_surfaces():
     assert "bindRowSelect" in js and "bindPagerScroll" in js
 
 
-def test_dashboard_order_banners_tiles_appliance_sections():
+def test_dashboard_order_tiles_appliance_sections_without_banners():
     db = _db()
     db.add(
         Incident(
@@ -240,20 +240,19 @@ def test_dashboard_order_banners_tiles_appliance_sections():
         db.add(DiscoveryCandidate(ip="10.66.250.9", proposed_role="Unknown device", status="new", source="scan"))
         db.commit()
     html = _client().get("/").text
-    host = html.index('id="host-down-banner"')
-    device = html.index("NEW DEVICE DETECTED")
-    journal = html.index('id="journal-error-banner"')
     title = html.index("<h1>Dashboard")
     top = html.index('class="dash-top"')
     incidents_tile = html.index("data-incident-tile")
     infra = html.index("dash-tiles-infra")
     appliance = html.index("data-appliance-card")
-    banners = html.index('class="dash-banners"')
     recent = html.index("<h2>Recent incidents</h2>")
+    graphs = html.index("data-dash-graphs")
     journal_list = html.index("Recent journal reports")
-    assert title < top < incidents_tile < infra < appliance < banners
-    assert banners < host < device < journal < recent < journal_list
-    assert "banner" not in html[title:top]
+    assert title < top < incidents_tile < infra < appliance < recent < graphs < journal_list
+    for gone in ('class="dash-banners"', 'id="host-down-banner"', "data-host-down-banner", "HOST DOWN",
+                 "NEW DEVICE DETECTED", 'id="journal-error-banner"', "/dashboard/journal-ack"):
+        assert gone not in html, gone
+    assert 'class="banner' not in html
     assert html.count("stat-row-big") == 2
     card = html[appliance : html.index("</aside>", appliance)]
     assert "data-clock" in card
@@ -307,7 +306,19 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.8rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-12" in base
+    assert "app.css?v=v08-13" in base
+
+
+def test_dashboard_banner_block_gone_from_template_js_css():
+    template = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
+    for gone in ("dash-banners", "host-down-banner", "journal-error-banner", "NEW DEVICE DETECTED", "down_incidents", "journal_error"):
+        assert gone not in template, gone
+    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    assert "bindHostDownBanner" not in js and "data-host-down-banner" not in js
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    for gone in (".banner-crit", ".banner-list", ".banner-short", ".banner-ack"):
+        assert gone not in css, gone
+    assert ".banner {" in css
 
 
 def _fake_doctor(**_kw):

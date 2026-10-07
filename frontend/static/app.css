@@ -367,24 +367,6 @@ a.button {
   margin-bottom: 1rem;
 }
 .banner strong { color: var(--warn); }
-.banner-ack { margin-left: 0.35rem; }
-.banner-ack button { padding: 0.22rem 0.6rem; }
-.banner-short {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem 0.55rem;
-  max-width: 22rem;
-  padding: 0.4rem 0.7rem;
-  margin-bottom: 0.75rem;
-}
-.banner.banner-crit {
-  background: var(--pill-crit-bg);
-  border-color: var(--crit);
-}
-.banner.banner-crit strong { color: var(--crit); }
-.banner-list { margin: 0.45rem 0 0; padding-left: 1.2rem; }
-.banner-list li { margin: 0.2rem 0; }
 .row-actions { display: flex; gap: 0.4rem; align-items: center; }
 .list-filters {
   display: flex;

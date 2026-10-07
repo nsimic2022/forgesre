@@ -452,57 +452,6 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
     .catch(() => {});
 })();
 
-(function bindHostDownBanner() {
-  const box = document.querySelector("[data-host-down-banner]");
-  if (!box) return;
-  const countEl = box.querySelector("[data-host-down-count]");
-  const listEl = box.querySelector("[data-host-down-list]");
-  const paint = (rows) => {
-    if (!Array.isArray(rows) || !rows.length) {
-      box.hidden = true;
-      if (listEl) listEl.replaceChildren();
-      return;
-    }
-    box.hidden = false;
-    const n = rows.length;
-    if (countEl) {
-      countEl.textContent =
-        n + " open incident" + (n === 1 ? "" : "s") + " for unreachable host / SNMP down.";
-    }
-    if (!listEl) return;
-    listEl.replaceChildren();
-    rows.forEach((row) => {
-      const li = document.createElement("li");
-      const link = document.createElement("a");
-      link.href = "/incidents/" + encodeURIComponent(row.number || "");
-      link.textContent = row.number || "";
-      li.appendChild(link);
-      if (row.demo) {
-        const demo = document.createElement("span");
-        demo.className = "pill demo";
-        demo.textContent = "DEMO";
-        li.appendChild(document.createTextNode(" "));
-        li.appendChild(demo);
-      }
-      const bits = [];
-      if (row.title) bits.push(row.title);
-      if (row.hostname) bits.push(row.hostname);
-      if (bits.length) li.appendChild(document.createTextNode(" " + bits.join(" · ")));
-      listEl.appendChild(li);
-    });
-  };
-  const load = () => {
-    fetch("/api/v1/incidents/down", { headers: { Accept: "application/json" } })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((rows) => {
-        if (Array.isArray(rows)) paint(rows);
-      })
-      .catch(() => {});
-  };
-  load();
-  setInterval(load, 20000);
-})();
-
 // One row picker for every list box. A click on a row (not on its links, buttons or inputs) only selects it;
 // Up / Down, j / k, Home / End move the selection and scroll only the box; Enter opens the row's [data-list-open]
 // link (or toggles its [data-list-open] summary). Inputs keep their keys, Tab leaves, a mousedown outside the box
