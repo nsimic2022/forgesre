@@ -278,6 +278,60 @@ class Settings:
             return _dotenv_value(secrets_path, "NETBOX_API_TOKEN")
         return (os.environ.get("NETBOX_API_TOKEN") or "").strip()
 
+    def _secret(self, key: str) -> str:
+        """Same source of truth as netbox_token: bind-mounted secrets file, then process env."""
+        secrets_path = Path(
+            os.environ.get("FORGESRE_SECRETS_FILE") or (_repo_root() / "secrets" / "secrets.env")
+        )
+        if secrets_path.is_file():
+            value = _dotenv_value(secrets_path, key)
+            if value:
+                return value
+        return (os.environ.get(key) or "").strip()
+
+    def _zabbix_yaml(self) -> dict[str, Any]:
+        raw = (self.yaml.get("inventory") or {}).get("zabbix") or {}
+        return raw if isinstance(raw, dict) else {}
+
+    @property
+    def zabbix_url(self) -> str:
+        """Zabbix frontend base (http://zbx.example/zabbix). YAML inventory.zabbix.url wins over ZABBIX_URL."""
+        yaml_url = str(self._zabbix_yaml().get("url") or "").strip()
+        return (yaml_url or self._secret("ZABBIX_URL")).rstrip("/")
+
+    @property
+    def zabbix_token(self) -> str:
+        return self._secret("ZABBIX_API_TOKEN")
+
+    @property
+    def zabbix_webhook_token(self) -> str:
+        """Bearer for POST /api/v1/webhooks/zabbix. Separate from ALERTMANAGER_WEBHOOK_TOKEN."""
+        return self._secret("ZABBIX_WEBHOOK_TOKEN")
+
+    @property
+    def zabbix_enabled(self) -> bool:
+        """On when URL and API token are both set, unless inventory.zabbix.enabled is false."""
+        if self._zabbix_yaml().get("enabled") is False:
+            return False
+        return bool(self.zabbix_url and self.zabbix_token)
+
+    @property
+    def zabbix_auto_sync(self) -> bool:
+        """inventory.zabbix.auto_sync (default false): host import with the 6 h discovery loop."""
+        value = self._zabbix_yaml().get("auto_sync", False)
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    @property
+    def zabbix_timeout(self) -> float:
+        """Seconds per Zabbix API call, clamped to 2–5 so a dead Zabbix never stalls a page."""
+        try:
+            raw = float(self._zabbix_yaml().get("timeout_seconds") or 4)
+        except (TypeError, ValueError):
+            raw = 4.0
+        return max(2.0, min(5.0, raw))
+
 
     @property
     def cookie_secure(self) -> bool:
