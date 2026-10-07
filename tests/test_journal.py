@@ -1,11 +1,9 @@
-import re
-
 from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.journal import KEEP_PER_MODULE, list_entries, next_error_ack_id, prune_module, report
 from app.main import app
-from app.models import JournalEntry, User
+from app.models import JournalEntry
 from app.seed import seed
 
 
@@ -83,75 +81,20 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
     assert login.status_code in {302, 303}
 
 
-def _banner_until_id(html: bytes) -> int:
-    match = re.search(rb'id="journal-error-banner".*?name="until_id" value="(\d+)"', html, re.S)
-    assert match, html.decode()[:2000]
-    return int(match.group(1))
-
-
-def test_dashboard_journal_error_banner_ack_until_newer():
+def test_dashboard_has_no_journal_error_banner():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     seed(db)
-    first = report(db, "notification", "smtp.send", "error", summary="SMTP send failed banner-ack-1")
-    second = report(db, "notification", "smtp.send", "error", summary="SMTP send failed banner-ack-2")
-    report(db, "notification", "smtp.send", "warn", summary="SMTP warn must not count as error report")
-    assert first and second
-    first_id = int(first.id)
-    second_id = int(second.id)
+    report(db, "notification", "smtp.send", "error", summary="SMTP send failed no-dash-banner")
     db.close()
-    assert second_id > first_id
 
     client = TestClient(app)
     _login(client)
     home = client.get("/")
     assert home.status_code == 200
-    assert b'id="journal-error-banner"' in home.content
-    assert b"banner-short" in home.content
-    banner = home.content.split(b'id="journal-error-banner"', 1)[1].split(b"</div>", 1)[0]
-    assert b"error" in banner
-    assert b">Open</a>" in home.content
-    assert b">Dismiss</button>" in home.content
-    until = _banner_until_id(home.content)
-    assert until >= second_id
-
-    ack = client.post(
-        "/dashboard/journal-ack",
-        data={"until_id": str(until)},
-        follow_redirects=False,
-    )
-    assert ack.status_code in {302, 303}
-    assert ack.headers.get("location") == "/"
-
-    hidden = client.get("/")
-    assert hidden.status_code == 200
-    assert b'id="journal-error-banner"' not in hidden.content
-
-    db = SessionLocal()
-    admin = db.query(User).filter_by(email="admin@forgesre.local").one()
-    assert int(admin.journal_error_ack_id or 0) == until
-    report(db, "notification", "smtp.send", "warn", summary="SMTP warn after ack still not an error report")
-    db.close()
-
-    still_hidden = client.get("/")
-    assert b'id="journal-error-banner"' not in still_hidden.content
-
-    other = TestClient(app)
-    _login(other)
-    assert b'id="journal-error-banner"' not in other.get("/").content
-
-    db = SessionLocal()
-    newer = report(db, "notification", "smtp.send", "error", summary="SMTP send failed banner-ack-3")
-    assert newer
-    newer_id = int(newer.id)
-    db.close()
-    assert newer_id > second_id
-
-    shown = client.get("/")
-    assert shown.status_code == 200
-    assert b'id="journal-error-banner"' in shown.content
-    banner = shown.content.split(b'id="journal-error-banner"', 1)[1].split(b"</div>", 1)[0]
-    assert b"error" in banner
-    assert _banner_until_id(shown.content) >= newer_id
-    assert b">Dismiss</button>" in shown.content
-    assert b">Open</a>" in shown.content
+    assert b'id="journal-error-banner"' not in home.content
+    assert b"banner-short" not in home.content
+    assert b"/dashboard/journal-ack" not in home.content
+    journal = home.content.split(b"Recent journal reports", 1)[1]
+    assert b"SMTP send failed no-dash-banner" in journal
+    assert client.post("/dashboard/journal-ack", data={"until_id": "1"}, follow_redirects=False).status_code in {404, 405}

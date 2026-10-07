@@ -56,32 +56,19 @@ def test_host_down_helper_matches_exporter_and_snmp_only():
     assert is_host_down_incident(None) is False
 
 
-def test_dashboard_host_down_banner_lists_open_incidents_with_demo():
+def test_dashboard_has_no_host_down_banner_but_api_lists_down_incidents():
     db = _db()
     _close_down(db)
     client = TestClient(app)
     _login(client)
     empty = client.get("/")
     assert empty.status_code == 200
-    assert b'id="host-down-banner"' in empty.content
-    html = empty.text
-    banner_at = html.find('id="host-down-banner"')
-    assert banner_at > 0
-    assert "hidden" in html[banner_at : banner_at + 80]
-    assert "HOST DOWN" in html
+    assert b'id="host-down-banner"' not in empty.content
+    assert b"HOST DOWN" not in empty.content
 
     cpu = run_demo(db)
     assert cpu is not None
-    still = client.get("/")
-    assert b"High CPU" in still.content
-    listed = still.text
-    banner_at = listed.find('id="host-down-banner"')
-    hidden_at = listed.find("hidden", banner_at, banner_at + 80) if banner_at >= 0 else -1
-    assert banner_at > 0
-    assert hidden_at > banner_at
-    api_empty = client.get("/api/v1/incidents/down")
-    assert api_empty.status_code == 200
-    assert api_empty.json() == []
+    assert client.get("/api/v1/incidents/down").json() == []
 
     host = run_demo_host(db)
     net = run_demo_network(db)
@@ -97,16 +84,11 @@ def test_dashboard_host_down_banner_lists_open_incidents_with_demo():
     home = client.get("/")
     html = home.text
     assert home.status_code == 200
-    assert 'id="host-down-banner"' in html
-    assert "HOST DOWN" in html
-    assert "2 open incidents" in html
-    assert f'href="/incidents/{host.number}"' in html
-    assert f'href="/incidents/{net.number}"' in html
-    assert html.count('id="host-down-banner"') == 1
-    banner_at = html.find('id="host-down-banner"')
-    banner = html[banner_at : html.find("</ul>", banner_at)]
-    assert "DEMO" in banner
-    assert cpu.number not in banner
+    assert 'id="host-down-banner"' not in html
+    assert "data-host-down-banner" not in html
+    assert "HOST DOWN" not in html
+    assert "open incidents for unreachable host" not in html
+    assert "data-incident-tile" in html
 
     payload = client.get("/api/v1/incidents/down").json()
     ids = {row["number"] for row in payload}
@@ -117,15 +99,11 @@ def test_dashboard_host_down_banner_lists_open_incidents_with_demo():
     close_open_incidents(db, f"NodeExporterDown:{DEMO_ASSET}", include_resolved=True)
     close_open_incidents(db, f"SnmpDeviceUnreachable:{DEMO_SW_ASSET}", include_resolved=True)
     db.commit()
-    after = client.get("/")
-    after_html = after.text
-    banner_at = after_html.find('id="host-down-banner"')
-    assert "hidden" in after_html[banner_at : banner_at + 80]
     assert client.get("/api/v1/incidents/down").json() == []
     db.close()
 
 
-def test_viewer_sees_host_down_banner_and_asset_pills():
+def test_viewer_dashboard_without_host_down_banner_and_asset_pills():
     db = _db()
     _close_down(db)
     if db.query(User).filter_by(email="view-down@forgesre.local").first() is None:
@@ -144,9 +122,8 @@ def test_viewer_sees_host_down_banner_and_asset_pills():
     _login(client, "view-down@forgesre.local")
     home = client.get("/")
     assert home.status_code == 200
-    assert b'id="host-down-banner"' in home.content
-    assert host.number.encode() in home.content
-    assert b"DEMO" in home.content
+    assert b'id="host-down-banner"' not in home.content
+    assert b"HOST DOWN" not in home.content
     assets = client.get("/assets")
     assert assets.status_code == 200
     assert b"Ping / comms" in assets.content
@@ -186,7 +163,7 @@ def test_windows_exporter_down_counts_as_host_down():
     assert is_host_down_incident(row)
     client = TestClient(app)
     _login(client)
-    home = client.get("/")
-    assert row.number.encode() in home.content
-    assert b"HOST DOWN" in home.content
+    down = client.get("/api/v1/incidents/down").json()
+    assert any(item["number"] == row.number for item in down)
+    assert b"HOST DOWN" not in client.get("/").content
     db.close()

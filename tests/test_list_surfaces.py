@@ -77,7 +77,7 @@ def test_dashboard_recent_incidents_uses_scan_columns():
     assert "Reported to" not in headers
     assert "inc-cell" in section
     assert "scan-list" in section
-    assert 'id="host-down-banner"' in home.text
+    assert 'id="host-down-banner"' not in home.text
     kpi = home.text.split("Recent incidents", 1)[0]
     assert "Open</span>" in kpi or ">Open<" in kpi
     db.close()

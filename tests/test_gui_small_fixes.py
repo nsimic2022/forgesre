@@ -27,15 +27,15 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v08-12" in base
-    assert ".banner-short" in css
+    assert "app.css?v=v08-13" in base
+    assert ".banner-short" not in css
     assert ".playbook-grid" in css
     assert ".ack-dot" in css
     assert ".list-filters" in css
     assert "grid-template-columns: 1fr 1fr" in css
 
 
-def test_dashboard_tiles_are_shortcuts_and_journal_bar_is_short():
+def test_dashboard_tiles_are_shortcuts_without_journal_banner():
     db = _db()
     client = TestClient(app)
     _login(client)
@@ -49,8 +49,8 @@ def test_dashboard_tiles_are_shortcuts_and_journal_bar_is_short():
     assert "Asset inventory counts" in home.text
     assert "Incident counts" in home.text
     dash = (ROOT / "frontend" / "templates" / "dashboard.html").read_text(encoding="utf-8")
-    assert 'id="journal-error-banner"' in dash
-    assert "banner-short" in dash
+    assert 'id="journal-error-banner"' not in dash
+    assert "banner-short" not in dash
     assert "recent error report" not in dash
     db.close()
 
