@@ -62,6 +62,9 @@
   <dt>Monitoring profile</dt><dd>{{ asset.monitoring_profile or "—" }}</dd>
   <dt>Source</dt><dd>{{ asset.source or "—" }}</dd>
   <dt>NetBox ID</dt><dd>{{ asset.netbox_id or "—" }}</dd>
+  {% if asset.zabbix_hostid %}
+  <dt>Zabbix host ID</dt><dd>{{ asset.zabbix_hostid }} <span class="pill zbx-agent {{ asset.zabbix_agent or 'unknown' }}" data-zabbix-agent="{{ asset.zabbix_agent or 'unknown' }}">Zabbix agent: {{ asset.zabbix_agent or "unknown" }}</span></dd>
+  {% endif %}
   <dt>SNMP</dt>
   <dd>
     {% if snmp_target %}

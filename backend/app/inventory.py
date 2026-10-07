@@ -1289,8 +1289,34 @@ ASSET_FLAGS = {
 }
 
 
-def assets_matching(rows: list[Asset], q: str = "", status: str = "", flag: str = "") -> list[Asset]:
-    """Filter inventory by asset number, id, hostname, or IP (substring), optional status, optional flag."""
+ZABBIX_AGENT_STATES = ("up", "down", "unknown")
+
+
+def asset_in_zabbix(asset: Asset) -> bool:
+    """Imported from Zabbix, or a NetBox / discovery / manual asset linked to a Zabbix host id."""
+    return (asset.source or "") == "zabbix" or bool((getattr(asset, "zabbix_hostid", "") or "").strip())
+
+
+def zabbix_agent_state(asset: Asset) -> str:
+    """Last-known Zabbix agent availability (from sync / 5-min poll). Empty when not in Zabbix."""
+    if not asset_in_zabbix(asset):
+        return ""
+    state = (getattr(asset, "zabbix_agent", "") or "").strip().lower()
+    return state if state in ZABBIX_AGENT_STATES else "unknown"
+
+
+def assets_matching(
+    rows: list[Asset],
+    q: str = "",
+    status: str = "",
+    flag: str = "",
+    source: str = "",
+    agent: str = "",
+) -> list[Asset]:
+    """Filter inventory by asset number, id, hostname, or IP (substring), optional status, flag, source, Zabbix agent.
+
+    ``source=zabbix`` includes assets from other sources that are linked to a Zabbix host.
+    """
     needle = (q or "").strip().lower()
     wanted = (status or "").strip().lower()
     out = list(rows)
@@ -1301,6 +1327,14 @@ def assets_matching(rows: list[Asset], q: str = "", status: str = "", flag: str 
     check = ASSET_FLAGS.get((flag or "").strip().lower())
     if check is not None:
         out = [row for row in out if check(row)]
+    origin = (source or "").strip().lower()
+    if origin == "zabbix":
+        out = [row for row in out if asset_in_zabbix(row)]
+    elif origin:
+        out = [row for row in out if (row.source or "").lower() == origin]
+    state = (agent or "").strip().lower()
+    if state in ZABBIX_AGENT_STATES:
+        out = [row for row in out if zabbix_agent_state(row) == state]
     return out
 
 

@@ -67,6 +67,10 @@ def _discovery_loop(stop: threading.Event) -> None:
                 run_scan(db)
             if settings.netbox_enabled and settings.netbox_auto_sync:
                 sync_netbox(db)
+            if settings.zabbix_enabled and settings.zabbix_auto_sync:
+                from app.zabbix_sync import sync_zabbix
+
+                sync_zabbix(db)
             mark_discovery_loop_alive()
         except Exception as exc:
             log.exception("discovery loop failed")
@@ -78,6 +82,7 @@ def _discovery_loop(stop: threading.Event) -> None:
 def _jobs_loop(stop: threading.Event) -> None:
     from app.jobs import run_pending_jobs
     from app.services import process_scheduled_reports
+    from app.zabbix_sync import maybe_poll
 
     while not stop.wait(2):
         db = SessionLocal()
@@ -85,6 +90,7 @@ def _jobs_loop(stop: threading.Event) -> None:
             # Reports first so an LLM rewrite cannot hold /ops mail for the timeout.
             process_scheduled_reports(db)
             run_pending_jobs(db)
+            maybe_poll(db)
         except Exception as exc:
             log.exception("jobs loop failed")
             report(db, "rca", "jobs", "error", summary="Job worker failed", detail=str(exc))
@@ -156,6 +162,10 @@ def create_app() -> FastAPI:
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     app.include_router(api_router)
     app.include_router(web_router)
+    from app.api import zabbix_webhook
+
+    # Short alias of POST /api/v1/webhooks/zabbix for Zabbix media types typed by hand.
+    app.add_api_route("/webhooks/zabbix", zabbix_webhook, methods=["POST"], include_in_schema=False)
 
     @app.exception_handler(NotAuthenticated)
     async def _login_redirect(request, exc):  # noqa: ARG001

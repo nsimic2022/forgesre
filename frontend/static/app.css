@@ -1494,3 +1494,28 @@ td.row-select { width: 2.2rem; padding-right: 0.15rem; text-align: center; }
   border-radius: 6px;
 }
 .runbook-note p { margin: 0.25rem 0 0; }
+
+/* Zabbix (read-only source): Discovery block, alert source pill, agent pill. */
+.discovery-sources { display: flex; flex-direction: column; gap: 0.9rem; min-width: 0; }
+.zabbix-block h2 { margin-bottom: 0.35rem; }
+.zabbix-block .zabbix-meta { margin: 0 0 0.3rem; font-size: 0.85rem; overflow-wrap: anywhere; }
+.zabbix-last-error { margin: 0.2rem 0 0; font-size: 0.85rem; color: var(--crit); overflow-wrap: anywhere; }
+.src-pill {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+.src-pill.src-zabbix { border-color: var(--accent); color: var(--text); }
+.pill.zbx-agent { font-size: 0.72rem; margin-top: 0.15rem; }
+.pill.zbx-agent.up { background: var(--pill-ok-bg); color: var(--pill-ok); }
+.pill.zbx-agent.down { background: var(--pill-crit-bg); color: var(--pill-crit); }
+.pill.zbx-agent.unknown { background: var(--pill); color: var(--muted); }
+.filter-chips .chip-sep { color: var(--muted); align-self: center; padding: 0 0.1rem; }
+.incident-graphs .dash-graph-list { grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.55rem 1rem; }

@@ -52,6 +52,7 @@ from app.demo_ids import is_lab_inventory_row
 from app.seed import seed
 from app.services import (
     host_down_public,
+    incident_source,
     ingest_alertmanager,
     is_demo_incident,
     list_host_down_incidents,
@@ -213,8 +214,18 @@ def me(user: User = Depends(require_user)) -> dict[str, Any]:
 
 
 @router.get("/assets")
-def list_assets(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> list[dict]:
-    return [_asset(item) for item in db.query(Asset).order_by(Asset.number, Asset.hostname).all()]
+def list_assets(
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_assets")),
+    source: str = "",
+    agent: str = "",
+) -> list[dict]:
+    from app.inventory import assets_matching
+
+    rows = db.query(Asset).order_by(Asset.number, Asset.hostname).all()
+    if source or agent:
+        rows = assets_matching(rows, source=source, agent=agent)
+    return [_asset(item) for item in rows]
 
 
 @router.get("/assets/reachability")
@@ -392,9 +403,9 @@ def asset_metrics_api(
     item = db.query(Asset).filter_by(asset_id=asset_id).first()
     if item is None:
         raise HTTPException(status_code=404, detail="asset not found")
-    from app.asset_metrics import safe_asset_metric_panel
+    from app.asset_metrics import metric_panel_with_zabbix, safe_asset_metric_panel
 
-    return safe_asset_metric_panel(item)
+    return metric_panel_with_zabbix(item, safe_asset_metric_panel(item))
 
 
 @router.get("/assets/{asset_id}/verify")
@@ -774,6 +785,13 @@ def discovery_netbox_sync(db: Session = Depends(get_db), user: User = Depends(re
     return sync_netbox(db)
 
 
+@router.post("/discovery/zabbix-sync")
+def discovery_zabbix_sync(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    from app.zabbix_sync import sync_zabbix
+
+    return sync_zabbix(db, force=True)
+
+
 class AssetBody(BaseModel):
     hostname: str
     asset_id: str = ""
@@ -970,6 +988,40 @@ async def alertmanager_webhook(request: Request, db: Session = Depends(get_db)) 
     payload = await request.json()
     created = ingest_alertmanager(db, payload)
     return {"accepted": True, "incidents": [item.number for item in created]}
+
+
+@router.post("/webhooks/zabbix")
+async def zabbix_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Zabbix media type (Webhook) → incidents with source=zabbix. Own Bearer: ZABBIX_WEBHOOK_TOKEN."""
+    import hmac
+
+    from app.zabbix import parse_webhook
+
+    expected = settings.zabbix_webhook_token
+    if not expected:
+        raise HTTPException(status_code=503, detail="Zabbix webhook is off: set ZABBIX_WEBHOOK_TOKEN in secrets/secrets.env")
+    auth = request.headers.get("authorization") or ""
+    token = auth[7:].strip() if auth.lower().startswith("bearer ") else auth.strip()
+    if not hmac.compare_digest(token.encode(), expected.encode()):
+        raise HTTPException(status_code=401, detail="invalid zabbix webhook token")
+    try:
+        body = await request.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="body is not JSON") from exc
+    events = body if isinstance(body, list) else [body]
+    alerts = []
+    try:
+        for item in events[:50]:
+            alerts.append(parse_webhook(item))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    created = ingest_alertmanager(db, {"alerts": alerts}, source="zabbix")
+    return {
+        "accepted": True,
+        "source": "zabbix",
+        "status": [alert["status"] for alert in alerts],
+        "incidents": [item.number for item in created],
+    }
 
 
 @router.post("/demo")
@@ -1188,6 +1240,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "snmp": _snmp_check(),
         "llm": _http((settings.llm_url or "").rstrip("/") + "/models", "GET") if settings.llm_url else _ok("disabled"),
         "netbox": _netbox_check(),
+        "zabbix": _zabbix_check(),
         "discovery": _discovery_check(),
     }
     for name, item in components.items():
@@ -1393,6 +1446,45 @@ def _netbox_check() -> dict[str, str]:
     }
 
 
+def _zabbix_check() -> dict[str, str]:
+    """Cached Zabbix API probe. Down is yellow warn (optional source), never red."""
+    from app.zabbix import api_endpoint
+    from app.zabbix_sync import current_status, note_health
+
+    if not settings.zabbix_enabled:
+        return {
+            "status": "disabled",
+            "why": "Not configured (ZABBIX_URL + ZABBIX_API_TOKEN in secrets/secrets.env).",
+            "fix": "See operator handbook §18 Zabbix. Optional — Prometheus path does not need it.",
+        }
+    try:
+        status = current_status()
+    except Exception as exc:
+        status = {"configured": True, "ok": False, "label": "API error", "why": str(exc)[:300]}
+    test = f"POST {api_endpoint(settings.zabbix_url)} apiinfo.version (read-only)"
+    try:
+        from app.db import SessionLocal
+
+        db = SessionLocal()
+        try:
+            note_health(db, status)
+        finally:
+            db.close()
+    except Exception:
+        log.debug("zabbix health journal skipped", exc_info=True)
+    if status.get("ok") and status.get("light") == "green":
+        return {"status": "ok", "why": str(status.get("why") or "Zabbix API answered."), "test": test}
+    return {
+        "status": "warn",
+        "why": f"{status.get('label') or 'Unreachable'}: {status.get('why') or ''}".strip(" :"),
+        "test": test,
+        "fix": (
+            "Check ZABBIX_URL / ZABBIX_API_TOKEN and that user forgesre-ro has Read on host groups. "
+            "Optional source — incidents, mail and the UI keep working."
+        ),
+    }
+
+
 def _candidate(item: DiscoveryCandidate) -> dict[str, Any]:
     return {
         "id": item.id,
@@ -1466,6 +1558,8 @@ def _asset(item: Asset) -> dict[str, Any]:
         "owner_phone": item.owner_phone,
         "notes": item.notes,
         "source": item.source,
+        "zabbix_hostid": item.zabbix_hostid or "",
+        "zabbix_agent": item.zabbix_agent or "",
         "scrape_address": item.scrape_address,
         "alarms": getattr(item, "alarms", None) or {},
         "extras": normalize_extras(getattr(item, "extras", None)),
@@ -1499,6 +1593,7 @@ def _incident(item: Incident, include_evidence: bool) -> dict[str, Any]:
         "playbook": item.playbook.name if item.playbook else None,
         "timeline": item.timeline or [],
         "summary": item.summary,
+        "source": incident_source(item),
         "demo": is_demo_incident(item),
         "investigation": None,
     }

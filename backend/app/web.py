@@ -34,6 +34,7 @@ from app.inventory import (
     CANDIDATE_ROLE_CHOICES,
     approve_candidate,
     asset_form_values,
+    asset_in_zabbix,
     asset_missing_email,
     asset_tiles,
     asset_type_abbrev,
@@ -52,6 +53,7 @@ from app.inventory import (
     update_asset,
     update_candidate,
     is_snmp_asset,
+    zabbix_agent_state,
 )
 from app.journal import MODULES, count_entries, error_banner_entries, list_entries, module_counts, next_error_ack_id, report
 from app.models import (
@@ -77,6 +79,8 @@ from app.services import (
     format_started_at,
     incident_host,
     incident_short_label,
+    incident_source,
+    incident_source_label,
     incident_when,
     incident_when_label,
     is_demo_incident,
@@ -289,6 +293,8 @@ def ctx(request: Request, user: User | None, **extra):
         "short_when_label": short_when_label,
         "severity_pill": severity_pill,
         "is_demo_incident": is_demo_incident,
+        "incident_source": incident_source,
+        "incident_source_label": incident_source_label,
         "is_demo_mail": is_demo_mail,
         "is_demo_journal": is_demo_journal,
         "asset_type_abbrev": asset_type_abbrev,
@@ -492,9 +498,13 @@ def assets_page(
     q: str = "",
     status: str = "",
     flag: str = "",
+    source: str = "",
+    agent: str = "",
     page: str = "1",
 ):
-    rows = assets_matching(db.query(Asset).order_by(Asset.number, Asset.hostname).all(), q, status, flag)
+    every = db.query(Asset).order_by(Asset.number, Asset.hostname).all()
+    zabbix_assets = any(asset_in_zabbix(row) for row in every)
+    rows = assets_matching(every, q, status, flag, source, agent)
     rows, pager = paginate(rows, page, size=per_page(request))
     form_mode = "add"
     selected = None
@@ -527,6 +537,10 @@ def assets_page(
         q=q,
         status=status,
         flag=flag,
+        source=source,
+        agent=agent,
+        zabbix_filters=zabbix_assets or settings.zabbix_enabled,
+        zabbix_agent_state=zabbix_agent_state,
         asset_missing_email=asset_missing_email,
         reachability_snapshot=reachability_snapshot,
         pager=pager,
@@ -783,10 +797,68 @@ def discovery_page(
         ),
         netbox_sync_count=int(netbox_sync.get("count") or 0),
         netbox_sync_why=str(netbox_sync.get("why") or ""),
+        zabbix=zabbix_discovery_ctx(db),
         demo_candidate_ip=DEMO_CANDIDATE_IP,
         scan_job=active_discovery_scan(db),
         pager=pager,
     )
+
+
+def zabbix_discovery_ctx(db: Session) -> dict:
+    """Discovery Zabbix block: cached status chip, last sync / last error. Never blocks on a dead Zabbix twice."""
+    from app.zabbix import NOT_CONFIGURED_WHY
+    from app.zabbix_sync import current_status, last_sync_entry
+
+    enabled = settings.zabbix_enabled
+    if enabled:
+        try:
+            status = current_status()
+        except Exception as exc:
+            status = {"configured": True, "ok": False, "light": "grey", "label": "API error", "why": str(exc)[:300]}
+    else:
+        status = {"configured": False, "ok": False, "light": "grey", "label": "Not configured", "why": NOT_CONFIGURED_WHY}
+    last = last_sync_entry(db) if enabled else None
+    last_error = ""
+    last_ok = ""
+    if last is not None:
+        stamp = short_when_label(last.at)
+        if last.status == "error":
+            last_error = f"{stamp} — {last.detail or last.summary}"
+        else:
+            last_ok = f"{stamp} — {last.summary}"
+    return {
+        "enabled": enabled,
+        "url": settings.zabbix_url,
+        "auto_sync": settings.zabbix_auto_sync,
+        "webhook_on": bool(settings.zabbix_webhook_token),
+        "light": str(status.get("light") or "grey"),
+        "label": str(status.get("label") or "Not configured"),
+        "why": "" if status.get("light") == "green" else str(status.get("why") or ""),
+        "hosts": int(status.get("hosts") or 0),
+        "clickable": bool(enabled),
+        "last_ok": last_ok,
+        "last_error": last_error,
+    }
+
+
+@router.post("/discovery/zabbix-sync")
+def discovery_zabbix_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
+    if not can(user, "admin"):
+        raise HTTPException(status_code=403)
+    from app.zabbix_sync import sync_zabbix
+
+    result = sync_zabbix(db, force=True) or {}
+    if result.get("error"):
+        notice = f"Zabbix sync failed: {result['error']}"
+    elif result.get("skipped"):
+        notice = "Zabbix is not configured (ZABBIX_URL + ZABBIX_API_TOKEN in secrets/secrets.env)."
+    else:
+        notice = (
+            f"Zabbix sync: {int(result.get('created') or 0)} new, {int(result.get('linked') or 0)} linked, "
+            f"{int(result.get('skipped') or 0)} skipped. New hosts are Auto type with no scrape — "
+            "set Type / owner email on Assets."
+        )
+    return RedirectResponse(f"/discovery?notice={quote(notice)}", status_code=302)
 
 
 @router.post("/discovery/scan")

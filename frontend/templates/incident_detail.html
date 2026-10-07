@@ -17,6 +17,7 @@
     {% endif %}
     <span class="pill {{ incident.status|lower }}">{{ incident.status }}</span>
     <span class="pill {{ severity_pill(incident.severity) }}">{{ incident.severity }}</span>
+    <span class="src-pill src-{{ incident_source(incident) }}" data-source="{{ incident_source(incident) }}" title="Alert source">{{ incident_source_label(incident) }}</span>
     <span class="muted">First <span class="incident-fact" title="{{ format_started_at(incident.started_at) }}">{{ when.wall }}</span></span>
     {% if when.duration %}<span class="muted">{% if when.live %}Open{% else %}Lasted{% endif %} <span class="incident-fact" data-incident-duration>{{ when.duration }}</span></span>{% endif %}
     {% if when.ended %}<span class="muted">Ended <span class="incident-fact" title="{{ when.ended_full }}">{{ when.ended }}</span></span>{% endif %}
@@ -122,6 +123,14 @@
   <p class="muted">No ForgeRCA result yet. Use <strong>Open ForgeRCA</strong> above for the full builtin page (facts, anomalies, causes). The local LLM, if enabled, rewrites text in the background.</p>
   {% endif %}
 </section>
+
+{% if incident.asset %}
+<section class="card incident-graphs" data-incident-graphs data-asset="{{ incident.asset.asset_id }}" aria-live="polite">
+  <h2>Host metrics {% with %}{% set tip %}Loaded once when this card is on screen. Prometheus series (last hour) for scraped hosts. A host imported from or linked to Zabbix with no Prometheus samples shows Zabbix trend.get hourly averages for CPU / memory / disk (last 24 h), only if those items exist. Zabbix down or slow (2–5 s timeout) shows No samples yet — the rest of this page is unaffected.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <p class="muted dash-graph-empty" data-dash-graph-empty>Loading…</p>
+  <div class="dash-graph-list" data-dash-graph-list></div>
+</section>
+{% endif %}
 
 {% if incident.playrule or incident.playbook %}
 <section class="card workflow">

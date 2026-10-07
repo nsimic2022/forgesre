@@ -483,27 +483,87 @@ def refresh_asset_status(db: Session, asset: Asset | None) -> None:
 
 ACTIVE_INCIDENT_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED")
 UNLABELED_ASSET = "unlabeled"
+INCIDENT_SOURCES = {"prometheus": "Prometheus", "zabbix": "Zabbix"}
+_RESOLVED_BY = {"prometheus": "Alertmanager", "zabbix": "Zabbix"}
 
 
-def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
-    """Alertmanager webhook → incidents.
+def incident_source(incident: Incident | None) -> str:
+    """prometheus | zabbix. Rows from before the column existed are Prometheus."""
+    value = str(getattr(incident, "source", "") or "").strip().lower()
+    return value if value in INCIDENT_SOURCES else "prometheus"
 
-    One active incident per ``alertname:asset``. A firing alert after that
-    incident went RESOLVED opens a new INC (fresh escalation ladder) and links
-    both timelines. CLOSED is final. A resolved alert marks the active incident
-    RESOLVED; it never closes it.
+
+def incident_source_label(incident: Incident | None) -> str:
+    return INCIDENT_SOURCES[incident_source(incident)]
+
+
+def _loopback(ip: str) -> bool:
+    return ip.startswith("127.") or ip in {"::1", "0.0.0.0", "localhost"}
+
+
+def match_alert_asset(
+    db: Session,
+    name: str = "",
+    *,
+    ip: str = "",
+    zabbix_hostid: str = "",
+) -> Asset | None:
+    """Asset for an alert: Zabbix host id, then asset_id / hostname, then IP.
+
+    Prometheus alerts only carry ``asset``/``instance`` so they keep the old
+    asset_id-or-hostname match. IP matching skips lab rows and loopback.
+    """
+    from app.demo_ids import is_lab_inventory_row
+
+    hostid = (zabbix_hostid or "").strip()
+    if hostid:
+        found = db.query(Asset).filter(Asset.zabbix_hostid == hostid).first()
+        if found is not None:
+            return found
+    name = (name or "").strip()
+    if name:
+        found = db.query(Asset).filter((Asset.asset_id == name) | (Asset.hostname == name)).first()
+        if found is not None:
+            return found
+        lowered = name.lower()
+        found = (
+            db.query(Asset)
+            .filter((func.lower(Asset.hostname) == lowered) | (func.lower(Asset.asset_id) == lowered))
+            .first()
+        )
+        if found is not None and (ip or hostid):
+            return found
+    ip = (ip or "").strip()
+    if ip and not _loopback(ip):
+        for row in db.query(Asset).filter(Asset.ip == ip).order_by(Asset.id).all():
+            if not is_lab_inventory_row(row):
+                return row
+    return None
+
+
+def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "prometheus") -> list[Incident]:
+    """Alertmanager (or Zabbix, normalized to the same shape) → incidents.
+
+    One active incident per fingerprint: ``alertname:asset`` for Prometheus,
+    ``zabbix:{triggerid}:{host}`` for Zabbix (``alert["forge"]["fingerprint"]``).
+    A firing alert after that incident went RESOLVED opens a new INC (fresh
+    escalation ladder) and links both timelines. CLOSED is final. A resolved
+    alert marks the active incident RESOLVED; it never closes it.
     """
     from app.jobs import enqueue
 
+    source = source if source in INCIDENT_SOURCES else "prometheus"
+    resolver = _RESOLVED_BY[source]
     created: list[Incident] = []
     group_status = (payload.get("status") or "firing").lower()
     for alert in payload.get("alerts") or []:
         labels = alert.get("labels") or {}
         annotations = alert.get("annotations") or {}
+        forge = alert.get("forge") if isinstance(alert.get("forge"), dict) else {}
         alert_status = (alert.get("status") or group_status).lower()
         alertname = str(labels.get("alertname") or "Alert")
         asset_name = str(labels.get("asset") or labels.get("instance") or "").strip()
-        fingerprint = f"{alertname}:{asset_name or UNLABELED_ASSET}"
+        fingerprint = str(forge.get("fingerprint") or "").strip()[:255] or f"{alertname}:{asset_name or UNLABELED_ASSET}"
         incident = (
             db.query(Incident)
             .filter(Incident.fingerprint == fingerprint, Incident.status.in_(ACTIVE_INCIDENT_STATUSES))
@@ -511,15 +571,18 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
             .first()
         )
         asset = None
-        if asset_name:
-            asset = (
-                db.query(Asset).filter((Asset.asset_id == asset_name) | (Asset.hostname == asset_name)).first()
+        if asset_name or labels.get("ip") or labels.get("zabbix_hostid"):
+            asset = match_alert_asset(
+                db,
+                asset_name,
+                ip=str(labels.get("ip") or ""),
+                zabbix_hostid=str(labels.get("zabbix_hostid") or ""),
             )
         if alert_status == "resolved":
             if incident:
                 incident.status = "RESOLVED"
                 incident.ended_at = utcnow()
-                append_timeline(incident, "alert", "ALERT", f"{alertname} resolved by Alertmanager")
+                append_timeline(incident, "alert", "ALERT", f"{alertname} resolved by {resolver}")
                 db.add(IncidentEvent(incident_id=incident.id, kind="resolved", data=labels))
                 refresh_asset_status(db, asset)
                 if asset and asset.asset_id == DEMO_ASSET:
@@ -556,6 +619,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
                 severity=str(labels.get("severity") or (rule.severity if rule else "warning")).upper(),
                 status="OPEN",
                 fingerprint=fingerprint,
+                source=source,
                 asset_id=asset.id if asset else None,
                 playrule_id=rule.id if rule else None,
                 playbook_id=rule.playbook_id if rule else None,
@@ -565,7 +629,8 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
             )
             db.add(incident)
             db.flush()
-            append_timeline(incident, "alert", "ALERT", f"{alertname} fired")
+            fired = f"{alertname} fired" if source == "prometheus" else f"{alertname} fired in Zabbix"
+            append_timeline(incident, "alert", "ALERT", fired)
             append_timeline(incident, "incident", "INCIDENT", f"{incident.number} created")
             if previous_resolved is not None:
                 append_timeline(
@@ -593,6 +658,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
                 object_id=incident.number,
                 data={
                     "alertname": alertname,
+                    **({"source": source} if source != "prometheus" else {}),
                     **({"refire_of": previous_resolved.number} if previous_resolved is not None else {}),
                 },
             )
@@ -611,7 +677,10 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any]) -> list[Incident]:
             "create",
             "ok",
             summary=f"{mark}{incident.number} {incident.title}",
-            detail=f"asset={incident.asset.hostname if incident.asset else 'unknown'} fingerprint={incident.fingerprint}",
+            detail=(
+                f"asset={incident.asset.hostname if incident.asset else 'unknown'} "
+                f"fingerprint={incident.fingerprint} source={source}"
+            ),
             object_type="incident",
             object_id=incident.number,
         )

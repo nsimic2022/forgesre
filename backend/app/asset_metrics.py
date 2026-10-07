@@ -416,6 +416,94 @@ def asset_metric_panel(
     }
 
 
+def prometheus_has_samples(panel: dict[str, Any]) -> bool:
+    """True when Prometheus scrapes this asset (up seen) or any metric tile has a value / series."""
+    if panel.get("collecting"):
+        return True
+    for tile in panel.get("tiles") or []:
+        if tile.get("key") == "up":
+            continue
+        if tile.get("value") is not None or len(tile.get("series") or []) >= 2:
+            return True
+    return False
+
+
+ZABBIX_TILE_KEYS = ("cpu_percent", "memory_percent", "disk_percent")
+
+
+def zabbix_metric_panel(asset: Any, *, trends_fn: Callable[[str], dict[str, Any]] | None = None) -> dict[str, Any]:
+    """CPU / memory / disk from Zabbix trend.get for one asset with zabbix_hostid. Lazy, cached in app.zabbix."""
+    from app.asset_alarms import normalize_alarms, tile_enabled, tile_threshold
+    from app.settings import settings
+
+    info = _asset_dict(asset)
+    hostid = str(getattr(asset, "zabbix_hostid", "") or (asset.get("zabbix_hostid") if isinstance(asset, dict) else "") or "")
+    klass = metric_class_for(asset)
+    threshold_class = klass if klass in {"linux", "windows"} else "linux"
+    bundled = bundled_thresholds().get(threshold_class, {})
+    alarms = normalize_alarms(info.get("alarms"), threshold_class)
+    if trends_fn is None:
+        from app.zabbix import host_trends
+
+        def trends_fn(value: str) -> dict[str, Any]:
+            return host_trends(settings.zabbix_url, settings.zabbix_token, value, timeout=settings.zabbix_timeout)
+
+    try:
+        result = trends_fn(hostid) if hostid else {"ok": False, "error": "no zabbix_hostid", "tiles": {}}
+    except Exception as exc:
+        result = {"ok": False, "error": str(exc), "tiles": {}}
+    found = result.get("tiles") or {}
+    tiles = []
+    for key in ZABBIX_TILE_KEYS:
+        row = found.get(key)
+        if not row:
+            continue
+        values = [v for v in (_finite(raw) for raw in (row.get("series") or [])) if v is not None]
+        tiles.append(
+            _tile(
+                key,
+                _finite(row.get("value")),
+                threshold=tile_threshold(alarms, key, bundled.get(key)),
+                spark=_spark_points(values),
+                series=values,
+                query=f"zabbix trend.get {row.get('key') or ''}".strip(),
+                enabled=tile_enabled(alarms, key),
+            )
+        )
+    hours = int(result.get("hours") or 24)
+    if not result.get("ok"):
+        line = f"Zabbix unavailable — {result.get('error') or 'no answer'}"
+    elif tiles:
+        line = f"Zabbix trends (hourly average, last {hours} h). No Prometheus samples for this host."
+    else:
+        line = "No Zabbix CPU / memory / disk items on this host."
+    return {
+        "asset_id": info["asset_id"],
+        "class": klass,
+        "source": "zabbix",
+        "demo": False,
+        "demo_label": "",
+        "collecting": bool(tiles),
+        "collecting_line": line,
+        "error": "",
+        "alarms": alarms,
+        "tiles": tiles,
+    }
+
+
+def metric_panel_with_zabbix(asset: Any, panel: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    """Prometheus first. Zabbix trends only for an asset with zabbix_hostid and no Prometheus samples."""
+    panel.setdefault("source", "prometheus")
+    hostid = str(getattr(asset, "zabbix_hostid", "") or "").strip()
+    if not hostid or prometheus_has_samples(panel):
+        return panel
+    from app.settings import settings
+
+    if not settings.zabbix_enabled and "trends_fn" not in kwargs:
+        return panel
+    return zabbix_metric_panel(asset, **kwargs)
+
+
 def safe_asset_metric_panel(asset: Any, **kwargs: Any) -> dict[str, Any]:
     try:
         return asset_metric_panel(asset, **kwargs)

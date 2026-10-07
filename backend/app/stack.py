@@ -28,6 +28,7 @@ COMPONENT_LABELS = {
     "grafana": "Grafana",
     "snmp": "SNMP exporter",
     "netbox": "NetBox",
+    "zabbix": "Zabbix",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -42,6 +43,7 @@ COMPONENT_SHORT = {
     "alloy": "Alloy",
     "llm": "LLM",
     "netbox": "NetBox",
+    "zabbix": "Zabbix",
     "discovery": "Discovery",
     "redis": "Redis",
     "mailpit": "Mailpit",
@@ -316,6 +318,12 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
         {
             "id": "netbox",
             "gui": netbox,
+            "gui_label": "GUI",
+            "metrics": "",
+        },
+        {
+            "id": "zabbix",
+            "gui": (settings.zabbix_url or "") if settings.zabbix_enabled else "",
             "gui_label": "GUI",
             "metrics": "",
         },
