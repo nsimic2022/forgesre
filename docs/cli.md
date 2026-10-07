@@ -74,6 +74,59 @@ Two logins:
 
 Root wrappers still work: `./install.sh`, `./doctor.sh`, `./test.sh`, `./backup.sh`, `./restore.sh`, `./update.sh`.
 
+### All commands
+
+Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bash`), and **Administration → ForgeSRE CLI**. `./forgesre help <command>` prints details and examples for any of them.
+
+| Command | What it does |
+|---|---|
+| `update` | Backup, render monitoring, refresh images, compose up, `snmp-auths`, doctor. Use after `git pull`. `--offline` skips image pull. |
+| `restart` | Restart containers that already exist (Postgres first, Core last). No git pull, install, render, or `.env` / `secrets/` writes. |
+| `render-monitoring` | Rewrite `data/generated/{prometheus,alertmanager,snmp,alerts}.yml` from templates; reload snmp_exporter and Prometheus. |
+| `snmp-auths` | Write per-asset SNMP auths (Custom community / v3) into `snmp.yml`; reload snmp_exporter. |
+| `status` | `docker compose ps` |
+| `logs [service]` | Container logs (last 100 lines). TAB completes service names. |
+| `config` | Print `config/forgesre.yml` |
+| `version` | `FORGESRE_VERSION` from `.env` |
+| `secrets-check` | Refuse-to-start defaults: `SECRET_KEY` / webhook token |
+| `install` | Guided first-time install — **new VM only** |
+| `doctor` | Short health lights (same as `/health-ui`) |
+| `test` | Full appliance report → `data/reports/` |
+| `verify [asset]` | Live chain: exporter → prometheus → alertmanager → core |
+| `ping [asset]` / `probe` | ICMP + exporter `/metrics` from this host |
+| `assets` / `inventory` | Inventory with `#` |
+| `snmp` | snmp_exporter health + SNMP HTTP SD targets |
+| `sd` | Prometheus HTTP SD (Linux / Windows) and SNMP HTTP SD |
+| `incidents [INC-…]` | Short colored board, or one incident |
+| `history` | 90-day incident history (`--days`, `--status`, `--asset`, `INC-…`) |
+| `jobs` | Background job queue (RCA, discovery scans) |
+| `journal [module]` | Internal console reports (JSON) |
+| `demo` / `demo-rca` / `demo-reset` | Demo HighCPU path / filesystem RCA demo / lower the demo gauges |
+| `backup` | One folder per run under `data/backups` (`--no-secrets`, `--include-models`) |
+| `restore` / `import` | Numbered backup picker; applies only with `--yes` after stopping Core |
+| `remove backup` | Delete one backup folder (`--yes` or typed yes) |
+| `fetch-llm` | Download the GGUF into `data/models/model.gguf` and start llama.cpp |
+| `mailbox` | Optional Postfix/Dovecot + Roundcube (Core SMTP unchanged unless `--bind-core`) |
+| `tls` | How to put optional HTTPS (Caddy) in front of Core |
+| `login` / `logout` / `whoami` | ForgeSRE user for the CLI (`data/cli.session`) |
+| `shell` | The `forgesre>` prompt (same as no arguments) |
+| `completion` | Print a `source …` line so TAB works in your login bash |
+| `help [command]` | Overview, or details for one command |
+| `quit` / `exit` | Leave the `forgesre>` prompt (Ctrl-D also works) |
+
+### Update vs restart
+
+| | `./forgesre update` | `./forgesre restart` |
+|---|---|---|
+| When | After `git pull origin main` (new code, templates, images) | A container is wedged; you want fresh processes on the same config |
+| Backup | Yes (continues if it fails) | No |
+| Render Prometheus / Alertmanager / snmp.yml | Yes, plus `snmp-auths` | No |
+| Image pull / Core rebuild | Pull unless `--offline`; Core `--build` only when sources changed | No |
+| Containers | `docker compose up -d` (creates missing ones) | `docker compose restart` of existing ones only; profile-off services skipped |
+| `.env` / `secrets/` | Only fills missing keys | Never touched |
+
+Neither runs `./install.sh`. If `restart` says Postgres or Core has no container yet, run `update`.
+
 ### Leave the prompt
 
 ```bash
@@ -144,6 +197,28 @@ Classes are universal, not SKUs: Linux, Windows, Network SNMP, Unknown. Unknown 
 `verify` accepts **all of**: asset number `#`, Asset ID, hostname, and IP. Same keys work for `./forgesre ping`. TAB completes numbers and ids (hostnames too). One key dumps what ForgeSRE already knows (inventory) plus the live checks. Same action: Assets → **Verify** (analyst / engineer / admin). Viewers are read-only.
 
 `./forgesre jobs` is the Postgres job table. There is **no Celery**. One worker thread in Core runs scheduled reports then pending jobs (`investigate` and `discovery_scan`). Discovery **Confirm & scan** / **Scan now** enqueue `discovery_scan` (`status=pending`); the worker runs `run_scan` in try/except so a probe crash becomes `job.error` + Journal, not a Core 500. An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds`. Scheduled `/ops#reports` jobs are a different table (`scheduled_reports`): **Edit / Clone / Remove** on the row, **Cancel** next to Save on the form, **Enabled** = fire at Next (off = stored, skipped). Same SMTP send path as Compose.
+
+---
+
+## SNMP
+
+```bash
+./forgesre snmp             # exporter :9116 health + SNMP HTTP SD targets
+./forgesre snmp-auths       # after saving a Custom community / v3 asset
+./forgesre logs snmp-exporter
+./forgesre help snmp
+./forgesre help snmp-auths
+```
+
+Network devices (type Network device / Switch / Router / Firewall / Storage / QNAP/NAS / Printer with an IP, or any asset with an SNMP port) are walked by the bundled snmp_exporter over **UDP/161** (or the asset's SNMP port).
+
+- **v1 / v2c** — Community *Default* = `SNMP_COMMUNITY` in `secrets/secrets.env` (snmp.yml auth `public_v2`, or `public_v1` for v1). *Custom* = a community for this host only.
+- **v3** — USM user, security level, auth / privacy protocol and passwords.
+- Custom and v3 need their own auth `forgesre_<asset id>` in `data/generated/snmp.yml`. `./forgesre snmp-auths` fetches them from Core (`GET /api/v1/sd/snmp-auths`, Bearer webhook token), rewrites only the `forgesre-asset-auths` block (mode 600), and reloads snmp_exporter. `update` and `render-monitoring` run it too. Until then SD keeps the default `public_v2` auth and the asset page shows *pending*. Secrets are never printed.
+- **VLAN** is an inventory field (search / filter). It does not change SNMP polling and ForgeSRE never writes switch config.
+- `snmp.yml` carries a valid snmp_exporter v0.26 `if_mib` module (ifDescr / ifName / ifAlias as per-metric lookups), so the exporter **stays up** after `update`. `render-monitoring` always reloads it; if it was not answering yet, `docker compose restart snmp-exporter`. With the exporter up, **SnmpDeviceUnreachable** (`up{job="forgesre-snmp"} == 0` for 2m) means the **device** did not answer — UDP/161 firewall, device ACL, community or v3 user — not a broken exporter.
+
+Testing the alert end to end needs a real SNMP agent (switch, or `snmpd` on a lab host). The seeded demo switch is not a live walk.
 
 ---
 
@@ -250,6 +325,7 @@ After `./forgesre login` or a UI login cookie:
 | GET | `/api/v1/system/doctor` | login or Bearer webhook token |
 | GET | `/api/v1/sd/prometheus` | Bearer webhook token |
 | GET | `/api/v1/sd/snmp` | Bearer webhook token |
+| GET | `/api/v1/sd/snmp-auths` | Bearer webhook token (per-asset auths for `./forgesre snmp-auths`) |
 | POST | `/api/v1/webhooks/alertmanager` | Bearer webhook token |
 
 Install and file layout: [`install-config.md`](install-config.md). Verification report: [`verify.md`](verify.md). Local LLM: [`llm.md`](llm.md).
