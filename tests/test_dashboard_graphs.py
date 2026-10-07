@@ -104,6 +104,7 @@ def test_rows_carry_asset_id_or_empty_for_no_host():
     assert c["data-active"] == "false"
     js = JS.read_text(encoding="utf-8")
     graphs = js.split("(function bindDashGraphs() {", 1)[1].split("\n})();", 1)[0]
+    graphs += js.split("\nfunction graphPane(", 1)[1].split("\n}\n", 1)[0]
     assert '"/api/v1/assets/" + encodeURIComponent(asset) + "/metrics"' in graphs
     assert "No host to chart" in graphs
     assert "No samples yet" in graphs
@@ -118,7 +119,9 @@ def test_dashboard_html_has_no_grafana_embed():
     assert "<iframe" not in html.lower()
     pane = html[html.index("data-dash-graphs") : html.index("</aside>", html.index("data-dash-graphs"))]
     assert "grafana" not in pane.lower()
-    graphs = JS.read_text(encoding="utf-8").split("(function bindDashGraphs() {", 1)[1].split("\n})();", 1)[0]
+    js = JS.read_text(encoding="utf-8")
+    graphs = js.split("(function bindDashGraphs() {", 1)[1].split("\n})();", 1)[0]
+    graphs += js.split("\nfunction graphPane(", 1)[1].split("\n}\n", 1)[0]
     assert "grafana" not in graphs.lower() and "iframe" not in graphs.lower()
 
 
@@ -228,6 +231,7 @@ def _run_js(rows: list[dict], panel: dict) -> dict:
         pytest.skip("node not installed")
     src = JS.read_text(encoding="utf-8")
     picker = "function listPicker(" + src.split("\nfunction listPicker(", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+    picker += "function graphPane(" + src.split("\nfunction graphPane(", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
     block = picker + "(function bindDashGraphs() {" + src.split("(function bindDashGraphs() {", 1)[1].split("\n})();", 1)[0] + "\n})();"
     proc = subprocess.run(
         [node, "-e", _HARNESS, "--", block, json.dumps(rows), json.dumps(panel)],
