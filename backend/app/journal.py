@@ -27,6 +27,7 @@ MODULES = [
     "notification",
     "demo",
     "netbox",
+    "zabbix",
     "snmp",
     "jobs",
     "backup",

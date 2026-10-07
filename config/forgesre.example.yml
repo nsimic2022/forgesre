@@ -13,6 +13,12 @@ inventory:
     mode: bundled # bundled | external | disabled
     url: "http://127.0.0.1:8001" # override with --netbox-url / an external instance
     auto_sync: true # read-only sync ~30 s after Core start, then every 6 h; false = only the Sync NetBox button
+  zabbix:
+    # Read-only. On when ZABBIX_URL + ZABBIX_API_TOKEN are in secrets/secrets.env (url here overrides ZABBIX_URL).
+    # enabled: false        # force off even with secrets set
+    # url: "https://zabbix.example.local/zabbix"
+    auto_sync: false # true = host import with the 6 h discovery loop; false = only Discovery → Sync hosts
+    timeout_seconds: 4 # per API call, clamped 2–5; a dead Zabbix backs off 2 min instead of retrying
 
 discovery:
   enabled: true

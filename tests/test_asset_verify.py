@@ -442,6 +442,7 @@ def test_host_verify_modules_do_not_import_seed_or_sqlalchemy():
     _assert_no_sqlalchemy_or_seed_import("cli_view.py")
     _assert_no_sqlalchemy_or_seed_import("asset_probe.py")
     _assert_no_sqlalchemy_or_seed_import("exporter_detect.py")
+    _assert_no_sqlalchemy_or_seed_import("zabbix.py")
 
 
 def test_importing_asset_verify_and_cli_ops_does_not_import_sqlalchemy():

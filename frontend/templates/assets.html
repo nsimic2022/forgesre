@@ -10,18 +10,27 @@
   <input name="q" value="{{ q }}" placeholder="search #, id, hostname, IP">
   {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
   {% if flag %}<input type="hidden" name="flag" value="{{ flag }}">{% endif %}
+  {% if source %}<input type="hidden" name="source" value="{{ source }}">{% endif %}
+  {% if agent %}<input type="hidden" name="agent" value="{{ agent }}">{% endif %}
   {% include "_pager_keep.html" %}
   <button type="submit">Search</button>
   {% if can('write_assets') %}
   <a class="button" href="/assets/verify">Verify all</a>
   {% endif %}
-  {% if q or status or flag %}<a class="muted list-reset" href="/assets">Reset</a>{% endif %}
+  {% if q or status or flag or source or agent %}<a class="muted list-reset" href="/assets">Reset</a>{% endif %}
 </form>
 <nav class="filter-chips" aria-label="Asset filters">
   {% for key, value, label in [("", "", "All"), ("status", "critical", "Critical"), ("status", "warning", "Warning"), ("flag", "unreachable", "Offline / unreachable"), ("flag", "no-email", "No owner email")] %}
-  {% set on = (not key and not status and not flag) or (key == "status" and status == value) or (key == "flag" and flag == value) %}
+  {% set on = (not key and not status and not flag and not source and not agent) or (key == "status" and status == value) or (key == "flag" and flag == value) %}
   <a class="chip{% if on %} on{% endif %}" href="/assets{% if key %}?{{ key }}={{ value }}{% endif %}{% if q %}{{ '&' if key else '?' }}q={{ q }}{% endif %}{% set size_tail = pager_keep(pager, page=False) %}{% if size_tail %}{{ size_tail if (key or q) else '?' ~ size_tail[1:] }}{% endif %}">{{ label }}</a>
   {% endfor %}
+  {% if zabbix_filters %}
+  <span class="chip-sep" aria-hidden="true">·</span>
+  {% for value, label in [("", "Zabbix"), ("up", "agent up"), ("down", "agent down"), ("unknown", "agent unknown")] %}
+  {% set zon = source == "zabbix" and agent == value %}
+  <a class="chip zbx-chip{% if zon %} on{% endif %}" data-zabbix-filter="{{ value or 'all' }}" href="/assets?source=zabbix{% if value %}&agent={{ value }}{% endif %}{% if q %}&q={{ q }}{% endif %}{{ pager_keep(pager, page=False) }}">{{ label }}</a>
+  {% endfor %}
+  {% endif %}
 </nav>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="asset-table" data-asset-reachability>
@@ -71,7 +80,11 @@
       <td class="asset-type" title="{{ asset.type }}">{{ asset_type_abbrev(asset.type) }}</td>
       <td>{{ asset.environment }}</td>
       <td><span class="pill {{ asset.status }}">{{ asset.status }}</span></td>
-      <td>{{ asset.source }}</td>
+      <td>
+        {{ asset.source }}
+        {% set zagent = zabbix_agent_state(asset) %}
+        {% if zagent %}<div><span class="pill zbx-agent {{ zagent }}" data-zabbix-agent="{{ zagent }}" title="Zabbix agent availability from the last sync / 5-minute poll (host id {{ asset.zabbix_hostid or '—' }})">Zabbix agent: {{ zagent }}</span></div>{% endif %}
+      </td>
       {% if can('write_assets') %}
       <td class="asset-actions">
         <div class="row-actions">

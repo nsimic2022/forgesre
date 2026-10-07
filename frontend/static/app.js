@@ -598,20 +598,15 @@ function listPicker(root, opts) {
   return { rows, select };
 }
 
-(function bindDashGraphs() {
-  const pane = document.querySelector("[data-dash-graphs]");
-  const table = document.querySelector("[data-dash-incident-table]");
-  if (!pane || !table) return;
-  const subject = pane.querySelector("[data-dash-graph-subject]");
+// Host metric charts for one pane (Dashboard Host metrics, incident detail). Same JSON as
+// GET /api/v1/assets/{id}/metrics: Prometheus tiles, or Zabbix trend.get tiles (source "zabbix").
+function graphPane(pane) {
   const empty = pane.querySelector("[data-dash-graph-empty]");
   const list = pane.querySelector("[data-dash-graph-list]");
-  const assetLink = pane.querySelector("[data-dash-graph-asset]");
   const SVG = "http://www.w3.org/2000/svg";
   const W = 200;
   const H = 48;
-  let selected = null;
-  let timer = 0;
-  let seq = 0;
+  let span = "last hour";
 
   const showEmpty = (text) => {
     if (list) list.replaceChildren();
@@ -638,7 +633,7 @@ function listPicker(root, opts) {
       viewBox: "0 0 " + W + " " + H,
       preserveAspectRatio: "none",
       role: "img",
-      "aria-label": tile.name + " last hour",
+      "aria-label": tile.name + " " + span,
     });
     if (tile.kind !== "up" && tile.threshold != null && tile.alarm_enabled !== false) {
       const y = yFor(tile, Number(tile.threshold)).toFixed(1);
@@ -689,6 +684,8 @@ function listPicker(root, opts) {
       return;
     }
     const tiles = data.tiles;
+    span = data.source === "zabbix" ? "last 24 h (Zabbix trends)" : "last hour";
+    pane.setAttribute("data-graph-source", data.source || "prometheus");
     const anySeries = tiles.some((t) => Array.isArray(t.series) && t.series.length >= 2);
     if (data.collecting === null && data.error) {
       showEmpty("Prometheus is unreachable — no samples.");
@@ -701,6 +698,20 @@ function listPicker(root, opts) {
     }
     if (list) list.replaceChildren(...tiles.map((tile) => tileRow(tile, anySeries)));
   };
+
+  return { paint, showEmpty };
+}
+
+(function bindDashGraphs() {
+  const pane = document.querySelector("[data-dash-graphs]");
+  const table = document.querySelector("[data-dash-incident-table]");
+  if (!pane || !table) return;
+  const subject = pane.querySelector("[data-dash-graph-subject]");
+  const assetLink = pane.querySelector("[data-dash-graph-asset]");
+  const { paint, showEmpty } = graphPane(pane);
+  let selected = null;
+  let timer = 0;
+  let seq = 0;
 
   const load = () => {
     if (!selected) return;
@@ -760,6 +771,35 @@ function listPicker(root, opts) {
     return;
   }
   picker.select(rows.find((r) => r.getAttribute("data-active") === "true") || rows[0]);
+})();
+
+// Incident detail: fetch the host charts once, when the card scrolls into view (no background polling).
+(function bindIncidentGraphs() {
+  const pane = document.querySelector("[data-incident-graphs]");
+  if (!pane) return;
+  const asset = pane.getAttribute("data-asset") || "";
+  const { paint, showEmpty } = graphPane(pane);
+  if (!asset) {
+    showEmpty("No host to chart");
+    return;
+  }
+  const load = () => {
+    fetch("/api/v1/assets/" + encodeURIComponent(asset) + "/metrics", { headers: { Accept: "application/json" } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => (data ? paint(data) : showEmpty("No samples yet")))
+      .catch(() => showEmpty("No samples yet"));
+  };
+  if ("IntersectionObserver" in window) {
+    const seen = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        seen.disconnect();
+        load();
+      }
+    });
+    seen.observe(pane);
+  } else {
+    load();
+  }
 })();
 
 // Every other list box: select-only rows. A box with more than ten rows is sized to about ten, so a longer page

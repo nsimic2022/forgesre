@@ -169,8 +169,9 @@ def render_email(
     sections: list[tuple[str, str, bool]] | None = None,
     footer: str = "",
     kind: str = "incident-report",
+    source: str = "",
 ) -> str:
-    """Full HTML document. section tuples are (heading, html_body, card)."""
+    """Full HTML document. section tuples are (heading, html_body, card). ``source`` = Prometheus / Zabbix badge."""
     css_class, bar = severity_theme(severity, status)
     demo_banner = ""
     if is_demo:
@@ -197,6 +198,12 @@ def render_email(
             f'<span style="display:inline-block;padding:3px 8px;margin:0 6px 0 0;border-radius:3px;'
             f"background:{BG};color:{TEXT};font-size:11px;font-weight:700;border:1px solid {LINE};\">"
             f"{st_badge}</span>"
+        )
+    if str(source or "").strip():
+        badges.append(
+            f'<span class="source-badge" style="display:inline-block;padding:2px 7px;margin:0 6px 0 0;border-radius:3px;'
+            f"background:{PANEL};color:{MUTED};font-size:11px;font-weight:600;border:1px solid {LINE};\">"
+            f"{esc(source)}</span>"
         )
     badge_html = "".join(badges)
     section_html = ""

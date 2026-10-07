@@ -80,6 +80,10 @@ def migrate(engine: Engine) -> None:
             statements.append("ALTER TABLE assets ADD COLUMN source VARCHAR(32) DEFAULT 'manual'")
         if "netbox_id" not in existing:
             statements.append("ALTER TABLE assets ADD COLUMN netbox_id VARCHAR(64) DEFAULT ''")
+        if "zabbix_hostid" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN zabbix_hostid VARCHAR(64) DEFAULT ''")
+        if "zabbix_agent" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN zabbix_agent VARCHAR(16) DEFAULT ''")
         if "scrape_address" not in existing:
             statements.append("ALTER TABLE assets ADD COLUMN scrape_address VARCHAR(128) DEFAULT ''")
         if "contact_name" not in existing:
@@ -171,6 +175,7 @@ def migrate(engine: Engine) -> None:
             existing = {col["name"] for col in inspector.get_columns("incidents")}
             extras = {
                 "resolved_by": "ALTER TABLE incidents ADD COLUMN resolved_by VARCHAR(255) DEFAULT ''",
+                "source": "ALTER TABLE incidents ADD COLUMN source VARCHAR(32) DEFAULT 'prometheus'",
                 "resolved_at": "ALTER TABLE incidents ADD COLUMN resolved_at TIMESTAMPTZ"
                 if engine.dialect.name == "postgresql"
                 else "ALTER TABLE incidents ADD COLUMN resolved_at DATETIME",

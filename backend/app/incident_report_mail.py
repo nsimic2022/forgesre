@@ -105,7 +105,7 @@ def build_incident_report(db: Session, incident: Incident) -> str:
     asset = _attach_asset(db, incident)
     investigation, rca = _rca_payload(incident)
     demo, demo_line = _demo(incident)
-    from app.services import format_started_at
+    from app.services import format_started_at, incident_source_label
 
     lines = ["ForgeSRE incident report"]
     if demo:
@@ -113,6 +113,7 @@ def build_incident_report(db: Session, incident: Incident) -> str:
     lines.append(f"Title: {incident.title}")
     lines.extend(f"{label}: {value}" for label, value in incident_header_facts(incident, asset))
     lines.append(f"Severity: {incident.severity}")
+    lines.append(f"Source: {incident_source_label(incident)}")
     if incident.ack_by:
         lines.append(f"Ack: {incident.ack_by} {format_started_at(incident.ack_at)}".rstrip())
     if incident.resolved_by:
@@ -183,7 +184,7 @@ def build_incident_report_html(db: Session | None, incident: Incident) -> str:
     """HTML alternative for the same facts as build_incident_report."""
     asset = _attach_asset(db, incident)
     investigation, rca = _rca_payload(incident)
-    from app.services import format_started_at
+    from app.services import format_started_at, incident_source_label
 
     demo, demo_line = _demo(incident)
     meta = incident_header_rows(incident, asset)
@@ -257,6 +258,7 @@ def build_incident_report_html(db: Session | None, incident: Incident) -> str:
         sections=sections,
         footer=SNAPSHOT_FOOTER,
         kind="incident-report",
+        source=incident_source_label(incident),
     )
 
 

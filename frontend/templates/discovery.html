@@ -70,6 +70,7 @@
 </section>
 {% endif %}
 
+<div class="discovery-sources">
 <section class="card">
   <h2>NetBox sync {% with %}{% set tip %}Read-only. ForgeSRE never writes back. Separate from Scan now. Empty inventory is yellow (No devices), not a failure. New NetBox devices become assets with type Auto and no scrape address — ForgeSRE does not guess Linux :9100. Owner, contact, email, and notes on assets that already exist are never overwritten.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   {% if netbox_enabled %}
@@ -116,6 +117,43 @@
   <span class="muted">Admin only.</span>
   {% endif %}
 </section>
+
+<section class="card zabbix-block" data-zabbix-block>
+  <h2>Zabbix {% with %}{% set tip %}Read-only host import over the Zabbix API (host.get). ForgeSRE never creates, updates, deletes or acknowledges anything in Zabbix. New hosts become assets with type Auto, no scrape address and source zabbix — ForgeSRE does not guess Linux :9100. Matches existing assets by Zabbix host id, then IP, then hostname, so a NetBox / discovery host is linked, not cloned. Owner, contact, email, phone, notes and filled extras are never overwritten. Problems arrive through the Zabbix webhook (POST /api/v1/webhooks/zabbix).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="tool-row">
+    <span class="netbox-status {{ zabbix.light }}" role="status" data-zabbix-status>
+      <span class="netbox-status-dot" aria-hidden="true"></span>{{ zabbix.label }}
+    </span>
+    {% if can('admin') %}
+      {% if zabbix.clickable %}
+      <form method="post" action="/discovery/zabbix-sync" class="inline">
+        <button type="submit">Sync hosts</button>
+      </form>
+      {% else %}
+      <button type="button" disabled title="Set ZABBIX_URL and ZABBIX_API_TOKEN first">Sync hosts</button>
+      {% endif %}
+    {% else %}
+      <button type="button" disabled>Sync hosts</button>
+      <span class="muted">Admin only.</span>
+    {% endif %}
+  </div>
+  <p class="muted zabbix-meta">
+    {% if zabbix.enabled %}
+    URL: <code>{{ zabbix.url }}</code>
+    · {% if zabbix.auto_sync %}auto every 6 h{% else %}manual (<code>inventory.zabbix.auto_sync: false</code>){% endif %}
+    · webhook {{ "on" if zabbix.webhook_on else "off" }}
+    {% else %}
+    {{ zabbix.why }}
+    {% endif %}
+  </p>
+  {% if zabbix.enabled and zabbix.why %}<p class="muted">{{ zabbix.why }}</p>{% endif %}
+  {% if zabbix.last_error %}
+  <p class="zabbix-last-error" data-zabbix-last-error>Last error: {{ zabbix.last_error }}</p>
+  {% elif zabbix.last_ok %}
+  <p class="muted">Last sync: {{ zabbix.last_ok }}</p>
+  {% endif %}
+</section>
+</div>
 </div>
 
 <div class="table-scroll list-scroll" data-list-scroll>

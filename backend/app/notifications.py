@@ -7,6 +7,12 @@ from app.email_html import DASH, esc, meta_table, prose_to_html, render_email
 from app.incident_report_mail import incident_header_rows
 from app.models import Incident
 
+
+def _source_label(incident: Incident) -> str:
+    from app.services import incident_source_label
+
+    return incident_source_label(incident)
+
 ESCALATION_FOOTER = "This is a snapshot. ForgeSRE does not execute playbooks."
 
 
@@ -31,6 +37,7 @@ def build_escalation_body(incident: Incident, step_key: str, policy_role: str) -
             f"Title: {incident.title}",
             f"Severity: {incident.severity}",
             f"Status: {incident.status}",
+            f"Source: {_source_label(incident)}",
             f"Escalation step: {step_key} (policy role: {policy_role})",
             f"Asset: {asset.hostname if asset else 'unknown'}",
             f"Playbook: {incident.playbook.name if incident.playbook else 'n/a'}",
@@ -99,6 +106,7 @@ def build_escalation_html(incident: Incident, step_key: str, policy_role: str) -
         sections=sections,
         footer=ESCALATION_FOOTER,
         kind="escalation-notice",
+        source=_source_label(incident),
     )
 
 

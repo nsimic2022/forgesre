@@ -287,7 +287,7 @@ def _run(harness: str, *args: str) -> dict:
 
 
 def test_js_keyboard_moves_selection_inside_list_only():
-    out = _run(_KEYS_HARNESS, _js_fn("listPicker") + _js_block("bindDashGraphs"), "8")
+    out = _run(_KEYS_HARNESS, _js_fn("listPicker") + _js_fn("graphPane") + _js_block("bindDashGraphs"), "8")
     assert out["initial"] == {"selected": 0, "fetched": ["/api/v1/assets/a0/metrics"]}
     assert out["held"] == [True, True, True]
     hold = out["afterHold"]
@@ -312,7 +312,7 @@ def test_js_keyboard_moves_selection_inside_list_only():
 
 
 def test_js_has_no_tab_trap():
-    for block in (_js_block("bindDashGraphs"), _js_fn("listPicker"), _js_block("bindListPick")):
+    for block in (_js_block("bindDashGraphs"), _js_fn("graphPane"), _js_fn("listPicker"), _js_block("bindListPick")):
         assert '"Tab"' not in block and "'Tab'" not in block
         assert ".scrollIntoView(" not in block and "window.scroll" not in block
 
@@ -426,4 +426,4 @@ def test_js_pager_restores_only_matching_fresh_entry():
 
 def test_cache_bust_bumped():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-10" in base and "app.js?v=v08-10" in base
+    assert "app.css?v=v08-11" in base and "app.js?v=v08-11" in base
