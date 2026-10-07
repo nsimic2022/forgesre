@@ -282,7 +282,7 @@ def test_assets_table_abbreviates_type_form_keeps_full_names():
     )
     page = client.get("/assets")
     assert page.status_code == 200
-    table, rest = page.text.split("</table>", 1)
+    table, rest = page.text.split('<table class="asset-table"', 1)[1].split("</table>", 1)
     assert 'title="Linux Server">lnx</td>' in table
     assert 'title="Windows Server">win</td>' in table
     assert 'title="Network Switch">net</td>' in table
