@@ -202,7 +202,7 @@ def test_assets_list_shows_snmp_port_only_when_configured():
     assert "snmp :" not in _row(listing, "ats-l-lnx")
     both = _row(listing, "ats-l-both")
     assert ":9100" in both and "data-snmp-label" in both and "snmp :161" in both
-    reach = {row["asset_id"]: row for row in client.get("/api/v1/assets/reachability").json()}
+    reach = {row["asset_id"]: row for row in client.get("/api/v1/assets/reachability", params={"refresh": "false"}).json()}
     assert reach["ats-l-nas"]["snmp_label"] == "snmp :1161"
     assert reach["ats-l-lnx"]["snmp_label"] == ""
     db.close()
