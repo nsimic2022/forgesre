@@ -3,7 +3,7 @@
 Local Core data only — never written to NetBox. Playrule ids are a preference for which enabled
 playrule handles an alertname on this host; they never create or change Prometheus rules.
 
-Support coverage (support / support_from / support_to / support_lead_days) lives in the same JSON.
+Support coverage (support / support_custom / support_from / support_to / support_lead_days) lives in the same JSON.
 Its status is derived on read for the UI and mail bodies only — no alert, incident, or Playrule.
 """
 
@@ -25,7 +25,7 @@ EXTRA_FIELDS: tuple[tuple[str, str, int], ...] = (
     ("runbook_note", "Runbook note", 4000),
 )
 DISPLAY_KEYS = tuple(key for key, _label, _max in EXTRA_FIELDS)
-SUPPORT_KEYS = ("support", "support_from", "support_to", "support_lead_days")
+SUPPORT_KEYS = ("support", "support_custom", "support_from", "support_to", "support_lead_days")
 EXTRA_KEYS = DISPLAY_KEYS + SUPPORT_KEYS
 EXTRA_LABELS = {key: label for key, label, _max in EXTRA_FIELDS}
 
@@ -33,7 +33,9 @@ SUPPORT_CHOICES: tuple[tuple[str, str], ...] = (
     ("yes", "Yes — vendor / contract"),
     ("internal", "Internal — we hold it"),
     ("no", "No contract"),
+    ("custom", "Custom — describe below"),
 )
+SUPPORT_CUSTOM_MAX = 120
 SUPPORT_LEAD_CHOICES = (7, 14, 30)
 SUPPORT_LEAD_DEFAULT = 14
 
@@ -50,6 +52,10 @@ def _normalize_support(raw: dict) -> dict[str, str]:
     kind = str(raw.get("support") or "").strip().lower()
     if kind in {key for key, _label in SUPPORT_CHOICES}:
         out["support"] = kind
+    if kind == "custom":
+        note = " ".join(str(raw.get("support_custom") or "").split())[:SUPPORT_CUSTOM_MAX]
+        if note:
+            out["support_custom"] = note
     for key in ("support_from", "support_to"):
         parsed = _iso_date(raw.get(key))
         if parsed is not None:
@@ -114,23 +120,27 @@ def support_status(asset: Any, today: date | None = None) -> dict[str, Any]:
             "lead_days": lead,
             "days_left": days_left,
             "warn": state in {"expiring", "expired"},
+            "custom_note": custom,
         }
 
     out_note = "Out of support — vendor may not take a ticket"
+    custom = stored.get("support_custom", "") if kind == "custom" else ""
     if kind == "no":
         return _out("expired", "Out of support", "crit", "No support contract", out_note)
-    if start is None and end is None:
+    if start is None and end is None and kind != "custom":
         return _out("unknown", "Support unknown", "grey", "Support dates not filled", "Unknown — support dates not filled")
     if end is not None and today > end:
         return _out("expired", "Out of support", "crit", f"Support ended {end.isoformat()}", out_note)
     if start is not None and today < start:
         return _out("expired", "Out of support", "crit", f"Support starts {start.isoformat()}", out_note)
-    holder = "Internal support" if kind == "internal" else "Support"
+    holder = {"internal": "Internal support", "custom": f"Custom support ({custom or 'no note'})"}.get(kind, "Support")
     if end is not None and days_left is not None and days_left <= lead:
         left = "today" if days_left == 0 else f"in {days_left} day{'s' if days_left != 1 else ''}"
         detail = f"{holder} ends {end.isoformat()} ({left})"
         return _out("expiring", "Support expiring", "warn", detail, f"Expiring — {detail}")
     detail = f"{holder} until {end.isoformat()}" if end else f"{holder}, no end date"
+    if kind == "custom":
+        return _out("in", "Custom", "ok", detail, f"Custom support — {custom or 'no note'}" + (f" until {end.isoformat()}" if end else ""))
     return _out("in", "In support", "ok", detail, f"In support — {detail}")
 
 
@@ -170,6 +180,8 @@ def extras_from_form(present: str, **values: str) -> dict[str, str] | None:
     """Posted extra_* fields. None when the form did not carry the block (keep what is stored)."""
     if not str(present or "").strip():
         return None
+    if str(values.get("support") or "").strip().lower() == "custom" and not str(values.get("support_custom") or "").strip():
+        raise ValueError("Under support = Custom needs a short note (e.g. weekdays 8–16)")
     return normalize_extras({key: values.get(key, "") for key in EXTRA_KEYS})
 
 

@@ -1536,3 +1536,52 @@ td.row-select { width: 2.2rem; padding-right: 0.15rem; text-align: center; }
 .pill.zbx-agent.unknown { background: var(--pill); color: var(--muted); }
 .filter-chips .chip-sep { color: var(--muted); align-self: center; padding: 0 0.1rem; }
 .incident-graphs .dash-graph-list { grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.55rem 1rem; }
+/* v08-14: one select look for Type / support / lead time / email picks / playrule add. */
+select.nice-select,
+.client-playrules .playrule-add select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  min-height: 2.3rem;
+  padding: 0.42rem 2rem 0.42rem 0.7rem;
+  background-color: var(--input-bg);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 1rem) 50%, calc(100% - 0.7rem) 50%;
+  background-size: 0.3rem 0.3rem, 0.3rem 0.3rem;
+  background-repeat: no-repeat;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+select.nice-select:hover,
+.client-playrules .playrule-add select:hover { border-color: var(--muted); }
+select.nice-select:focus,
+.client-playrules .playrule-add select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+select.nice-select optgroup { font-style: normal; font-weight: 700; color: var(--muted); }
+select.nice-select option { font-weight: 400; color: var(--text); background: var(--panel); }
+.email-pick { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.email-pick [hidden],
+.asset-form-split [data-support-custom-row][hidden] { display: none; }
+.asset-comms { display: flex; flex-direction: column; gap: 0.55rem; padding-bottom: 0.4rem; }
+.asset-comms label { display: flex; flex-direction: column; gap: 0.25rem; }
+.asset-comms input { width: 100%; }
+.label-hint { font-size: 0.78rem; font-weight: 500; }
+.reach-snmp {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.support-note { font-size: 0.78rem; color: var(--muted); overflow-wrap: anywhere; }

@@ -41,10 +41,10 @@
       <th><span class="label-line">Asset ID {% with %}{% set tip %}Short unique slug set at add. Cannot change afterwards — Prometheus asset= labels and history keep matching.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th>Hostname</th>
       <th>IP</th>
-      <th><span class="label-line">Ping / comms {% with %}{% set tip %}Green / yellow / red. Ping: green ICMP ok; yellow not probed, or ICMP failed but exporter/SNMP (/metrics) answers (typical Windows: ping unused/blocked); red ICMP failed and exporter/SNMP failed or timed out. ICMP and port 22 are not required. Same colors for communication (independent of ping): :9100 (node_exporter), :9182 (windows_exporter), SNMP (UDP/161). Last-known colors on first paint.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th><span class="label-line">Ping / comms {% with %}{% set tip %}Green / yellow / red. Ping: green ICMP ok; yellow not probed, or ICMP failed but exporter/SNMP (/metrics) answers (typical Windows: ping unused/blocked); red ICMP failed and exporter/SNMP failed or timed out. ICMP and port 22 are not required. Same colors for communication (independent of ping): :9100 (node_exporter), :9182 (windows_exporter), snmp :161 (UDP, or the asset's SNMP port). A small snmp :port tag next to an HTTP exporter means the host is also polled by snmp_exporter. Last-known colors on first paint.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th>Owner</th>
       <th>Contact</th>
-      <th><span class="label-line">Type {% with %}{% set tip %}Linux Server = node_exporter :9100. Windows Server = windows_exporter :9182. Network device = snmp_exporter UDP/161. Auto detects from /metrics on this appliance.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th><span class="label-line">Type {% with %}{% set tip %}Linux Server = node_exporter :9100. Windows Server = windows_exporter :9182. Network device, Switch, Router, Firewall, Storage, QNAP/NAS, Printer = snmp_exporter UDP/161 (or the asset's SNMP port), no HTTP scrape unless you type one. Hypervisor, Web/appliance, Other = no default scrape. Auto detects from /metrics on this appliance.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th>Environment</th>
       <th>Status</th>
       <th>Source</th>
@@ -63,7 +63,8 @@
         {% set r = reachability_snapshot(asset) %}
         <span class="reach-badges" data-asset-reach="{{ asset.asset_id }}">
           <span class="reach-dot ping {{ r.ping }}" title="Ping: {{ r.ping_detail }}">Ping</span>
-          <span class="reach-dot exporter {{ r.exporter }}" title="{{ r.exporter_label }}: {{ r.exporter_detail }}">{{ r.exporter_label }}</span>
+          <span class="reach-dot exporter {{ r.exporter }}" title="{{ r.exporter_label }}: {{ r.exporter_detail }}{% if r.snmp_label %} · {{ r.snmp_label }}{% endif %}">{% if r.exporter_label == 'SNMP' and r.snmp_label %}{{ r.snmp_label }}{% else %}{{ r.exporter_label }}{% endif %}</span>
+          {% if r.snmp_label and r.exporter_label != 'SNMP' %}<span class="reach-snmp" data-snmp-label title="snmp_exporter polls this IP on UDP{{ r.snmp_label[5:] }}">{{ r.snmp_label }}</span>{% endif %}
         </span>
       </td>
       <td>{{ asset.owner or "—" }}</td>
@@ -75,7 +76,7 @@
           <div class="muted">{{ asset.owner_email }}</div>
         {% endif %}
         {% set sup = support_status(asset) %}
-        <div><span class="pill support-pill {{ sup.tone }}" data-support-state="{{ sup.state }}" title="{{ sup.detail }}">{{ sup.label }}</span></div>
+        <div><span class="pill support-pill {{ sup.tone }}" data-support-state="{{ sup.state }}" title="{{ sup.detail }}">{{ sup.label }}</span>{% if sup.custom_note %} <span class="support-note" data-support-custom>{{ sup.custom_note }}</span>{% endif %}</div>
       </td>
       <td class="asset-type" title="{{ asset.type }}">{{ asset_type_abbrev(asset.type) }}</td>
       <td>{{ asset.environment }}</td>

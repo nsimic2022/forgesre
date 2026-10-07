@@ -49,6 +49,7 @@ class Asset(Base):
     zabbix_hostid: Mapped[str] = mapped_column(String(64), default="", index=True)
     zabbix_agent: Mapped[str] = mapped_column(String(16), default="")
     scrape_address: Mapped[str] = mapped_column(String(128), default="")
+    snmp_port: Mapped[int | None] = mapped_column(Integer, default=0, nullable=True)
     alarms: Mapped[dict] = mapped_column(JSONType, default=dict)
     extras: Mapped[dict | None] = mapped_column(JSONType, default=dict, nullable=True)
     playrule_ids: Mapped[list | None] = mapped_column(JSONType, default=list, nullable=True)

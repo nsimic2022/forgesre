@@ -29,6 +29,7 @@ from app.asset_extras import (
     playrule_ids_from_form,
     support_status,
 )
+from app.asset_types import ASSET_TYPE_GROUPS, DEFAULT_SNMP_PORT, snmp_family, snmp_port_for
 from app.inventory import (
     ASSET_TYPE_CHOICES,
     CANDIDATE_ROLE_CHOICES,
@@ -53,6 +54,7 @@ from app.inventory import (
     update_asset,
     update_candidate,
     is_snmp_asset,
+    validate_ip_field,
     zabbix_agent_state,
 )
 from app.journal import MODULES, count_entries, list_entries, module_counts, report
@@ -196,6 +198,18 @@ def _snmp_answer(ip: str) -> bool:
     from discovery import probe_snmp_udp
 
     return bool(probe_snmp_udp(ip))
+
+
+def _picked_email(picked: str, typed: str) -> str:
+    """Address-book pick wins; the "type a new email" box is used when nothing is picked."""
+    return (picked or "").strip() or (typed or "").strip()
+
+
+def _posted_extras(present: str, **values: str) -> dict | None:
+    try:
+        return extras_from_form(present, **values)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def pager_href(request: Request, page: int, param: str = "page", fragment: str = "") -> str:
@@ -528,6 +542,8 @@ def assets_page(
     agent: str = "",
     page: str = "1",
 ):
+    from app.services import list_mail_addresses
+
     every = db.query(Asset).order_by(Asset.number, Asset.hostname).all()
     zabbix_assets = any(asset_in_zabbix(row) for row in every)
     rows = assets_matching(every, q, status, flag, source, agent)
@@ -558,6 +574,10 @@ def assets_page(
         selected=selected,
         clone_source=clone_source,
         type_choices=ASSET_TYPE_CHOICES,
+        type_groups=ASSET_TYPE_GROUPS,
+        snmp_family=snmp_family,
+        default_snmp_port=DEFAULT_SNMP_PORT,
+        mail_addresses=list_mail_addresses(db),
         delete_blocked=delete_blocked,
         notice=notice,
         q=q,
@@ -647,6 +667,9 @@ def asset_create(
     owner_phone: str = Form(""),
     notes: str = Form(""),
     scrape_address: str = Form(""),
+    snmp_port: str = Form(""),
+    owner_email_pick: str = Form(""),
+    extra_backup_email_pick: str = Form(""),
     clone_of: str = Form(""),
     alarms_present: str = Form(""),
     alarm_up_enabled: str = Form(""),
@@ -667,6 +690,7 @@ def asset_create(
     extra_contract: str = Form(""),
     extra_runbook_note: str = Form(""),
     extra_support: str = Form(""),
+    extra_support_custom: str = Form(""),
     extra_support_from: str = Form(""),
     extra_support_to: str = Form(""),
     extra_support_lead_days: str = Form(""),
@@ -687,18 +711,20 @@ def asset_create(
         disk_enabled=alarm_disk_enabled,
         disk_threshold=alarm_disk_threshold,
     )
-    posted_extras = extras_from_form(
+    owner_email = _picked_email(owner_email_pick, owner_email)
+    posted_extras = _posted_extras(
         extras_present,
         customer=extra_customer,
         site=extra_site,
         backup_name=extra_backup_name,
         backup_phone=extra_backup_phone,
-        backup_email=extra_backup_email,
+        backup_email=_picked_email(extra_backup_email_pick, extra_backup_email),
         support_hours=extra_support_hours,
         timezone=extra_timezone,
         contract=extra_contract,
         runbook_note=extra_runbook_note,
         support=extra_support,
+        support_custom=extra_support_custom,
         support_from=extra_support_from,
         support_to=extra_support_to,
         support_lead_days=extra_support_lead_days,
@@ -725,6 +751,7 @@ def asset_create(
             alarms=posted_alarms,
             extras=posted_extras,
             playrule_ids=posted_playrules,
+            snmp_port=snmp_port,
         )
     except ValueError as exc:
         if cloned_from:
@@ -1130,6 +1157,7 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         incidents=related,
         similar=similar,
         snmp_target=is_snmp_asset(item),
+        snmp_port=snmp_port_for(item),
         snmp_enabled=settings.snmp_enabled,
         can_remove=can(user, "write_assets") and not delete_blocked(item),
         remove_blocked=delete_blocked(item) if can(user, "write_assets") else "",
@@ -1201,6 +1229,10 @@ def asset_update(
     owner_phone: str = Form(""),
     notes: str = Form(""),
     scrape_address: str = Form(""),
+    snmp_port: str = Form(""),
+    comms_present: str = Form(""),
+    owner_email_pick: str = Form(""),
+    extra_backup_email_pick: str = Form(""),
     alarms_present: str = Form(""),
     alarm_up_enabled: str = Form(""),
     alarm_cpu_enabled: str = Form(""),
@@ -1220,6 +1252,7 @@ def asset_update(
     extra_contract: str = Form(""),
     extra_runbook_note: str = Form(""),
     extra_support: str = Form(""),
+    extra_support_custom: str = Form(""),
     extra_support_from: str = Form(""),
     extra_support_to: str = Form(""),
     extra_support_lead_days: str = Form(""),
@@ -1242,23 +1275,29 @@ def asset_update(
         disk_enabled=alarm_disk_enabled,
         disk_threshold=alarm_disk_threshold,
     )
-    posted_extras = extras_from_form(
+    owner_email = _picked_email(owner_email_pick, owner_email)
+    posted_extras = _posted_extras(
         extras_present,
         customer=extra_customer,
         site=extra_site,
         backup_name=extra_backup_name,
         backup_phone=extra_backup_phone,
-        backup_email=extra_backup_email,
+        backup_email=_picked_email(extra_backup_email_pick, extra_backup_email),
         support_hours=extra_support_hours,
         timezone=extra_timezone,
         contract=extra_contract,
         runbook_note=extra_runbook_note,
         support=extra_support,
+        support_custom=extra_support_custom,
         support_from=extra_support_from,
         support_to=extra_support_to,
         support_lead_days=extra_support_lead_days,
     )
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
+    try:
+        validate_ip_field(ip)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     update_asset(
         db,
         item,
@@ -1277,6 +1316,7 @@ def asset_update(
         alarms=posted_alarms,
         extras=posted_extras,
         playrule_ids=posted_playrules,
+        snmp_port=snmp_port if comms_present.strip() else None,
     )
     notice = getattr(item, "_detect_message", "") or ""
     suffix = f"?notice={quote(notice)}" if notice else ""

@@ -539,14 +539,14 @@ def classify(open_ports: list[int], snmp_ok: bool = False, exporter_kind: str = 
     return "No open ports"
 
 
-def probe_snmp_udp(ip: str, community: str | None = None, timeout: float = 0.4) -> bool:
-    """True if UDP/161 answers an SNMPv2c GET sysDescr. TCP/161 is not SNMP."""
+def probe_snmp_udp(ip: str, community: str | None = None, timeout: float = 0.4, port: int = 161) -> bool:
+    """True if UDP/<port> (default 161) answers an SNMPv2c GET sysDescr. TCP/161 is not SNMP."""
     community = community or os.environ.get("SNMP_COMMUNITY") or "public"
     packet = snmp_get_sysdescr_packet(community)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(timeout)
     try:
-        sock.sendto(packet, (ip, 161))
+        sock.sendto(packet, (ip, int(port or 161)))
         data, _addr = sock.recvfrom(2048)
         return bool(data)
     except OSError:

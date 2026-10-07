@@ -1,0 +1,14 @@
+{% macro email_pick(name, value, placeholder, addresses, fill_name="") -%}
+{% set current = (value or "")|lower %}
+{% set ns = namespace(found=false) %}
+{% for item in addresses %}{% if item.email|lower == current %}{% set ns.found = true %}{% endif %}{% endfor %}
+<span class="email-pick" data-email-pick{% if fill_name %} data-email-fill-name="{{ fill_name }}"{% endif %}>
+  <select name="{{ name }}_pick" class="nice-select" data-email-select aria-label="Pick a saved address">
+    <option value="" {% if not ns.found %}selected{% endif %}>{% if addresses %}Type a new email…{% else %}No saved addresses — type below{% endif %}</option>
+    {% for item in addresses %}
+    <option value="{{ item.email }}" data-label="{{ item.label }}" {% if ns.found and item.email|lower == current %}selected{% endif %}>{{ item.email }}{% if item.label %} · {{ item.label }}{% endif %}</option>
+    {% endfor %}
+  </select>
+  <input name="{{ name }}" type="email" value="{{ value }}" placeholder="{{ placeholder }}" data-email-typed{% if ns.found %} hidden{% endif %}>
+</span>
+{%- endmacro %}
