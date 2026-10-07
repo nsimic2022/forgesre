@@ -85,7 +85,7 @@ import render_snmp_auths
 old_snmp = out / "snmp.yml"
 previous_block = render_snmp_auths.asset_block(old_snmp.read_text()) if old_snmp.is_file() else None
 render("snmp.yml", {"__SNMP_COMMUNITY__": community})
-snmp_status = render_snmp_auths.apply(out / "snmp.yml", port, token, previous_block=previous_block)
+snmp_status = render_snmp_auths.apply(out / "snmp.yml", port, token, previous_block=previous_block, reload=False)
 
 base = (root / "monitoring" / "alerts.yml").read_text()
 local = root / "monitoring" / "alerts.local.yml"
@@ -100,6 +100,13 @@ PY
 
 echo "SNMP community is taken from SNMP_COMMUNITY in secrets/secrets.env (not printed)."
 echo "Prometheus job forgesre-snmp scrapes snmp_exporter at 127.0.0.1:9116."
+# Modules come from the template, so reload even when the per-asset auth block did not change.
+if curl -fsS -o /dev/null -X POST http://127.0.0.1:9116/-/reload 2>/dev/null; then
+  echo "snmp_exporter reloaded."
+else
+  echo "snmp_exporter was not reloaded (not running yet, or restarting on an old snmp.yml)."
+  echo "Apply snmp.yml with: docker compose restart snmp-exporter (./forgesre update runs docker compose up -d)."
+fi
 if curl -fsS -o /dev/null -X POST http://127.0.0.1:9090/-/reload 2>/dev/null; then
   echo "Prometheus reloaded."
 else
