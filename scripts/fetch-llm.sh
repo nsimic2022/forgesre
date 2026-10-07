@@ -6,9 +6,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Flags: DOWNLOAD_ONLY = fetch the file only; APPLY = also enable + start llama.cpp;
+# OFFLINE = never download (file must already be in data/models/).
 DOWNLOAD_ONLY=0
 APPLY=1
 OFFLINE=0
+# Parse command-line flags one at a time.
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --download-only) DOWNLOAD_ONLY=1; APPLY=0; shift ;;
@@ -44,6 +47,7 @@ EOF
   esac
 done
 
+# Data dir from .env (FORGESRE_DATA), default ./data.
 DATA_DIR="${FORGESRE_DATA:-./data}"
 if [[ -f "$ROOT/.env" ]]; then
   # shellcheck disable=SC1091
@@ -59,6 +63,7 @@ URL="${FORGESRE_LLM_URL:-$DEFAULT_URL}"
 
 mkdir -p "$MODEL_DIR"
 
+# A real GGUF is > 1 GB; smaller means a failed or partial download.
 have_model() {
   [[ -f "$MODEL_PATH" && "$(stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)" -gt 1000000000 ]]
 }
@@ -80,6 +85,7 @@ download_model() {
   echo "Downloading local LLM (~9 GB). This is not stored in git."
   echo "URL: $URL"
   echo "Dest: $MODEL_PATH"
+  # Download to .partial (curl -C - resumes it) and rename only when complete.
   local tmp="${MODEL_PATH}.partial"
   curl -fL --retry 5 --retry-delay 4 -C - \
     -A "forgesre-fetch-llm" \
@@ -94,12 +100,15 @@ download_model() {
   echo "Saved $MODEL_PATH ($(du -h "$MODEL_PATH" | awk '{print $1}'))"
 }
 
+# Turn on Compose profile "ai", pick llama.cpp threads, and set ai.llm.mode: bundled in YAML.
 enable_config() {
   if [[ -f "$ROOT/.env" ]]; then
     if grep -q '^COMPOSE_PROFILES=' "$ROOT/.env"; then
+      # current = existing profile list; next = rebuilt list with "ai" first, no duplicates.
       current="$(grep -E '^COMPOSE_PROFILES=' "$ROOT/.env" | tail -n1 | cut -d= -f2-)"
       next=""
       IFS=',' read -ra parts <<< "${current}"
+      # Copy every other profile (trimmed, empties and "ai" dropped) into next.
       for part in "${parts[@]}"; do
         part="${part#"${part%%[![:space:]]*}"}"
         part="${part%"${part##*[![:space:]]}"}"
@@ -115,6 +124,7 @@ enable_config() {
     if grep -q '^FORGESRE_LLM_THREADS=' "$ROOT/.env"; then
       true
     else
+      # Threads = CPU count minus 2 (leave room for Core / Postgres), at least 2.
       local n
       n="$(nproc 2>/dev/null || echo 8)"
       if [[ "$n" -gt 2 ]]; then n=$((n - 2)); fi
@@ -130,8 +140,10 @@ import sys
 path = Path(sys.argv[1])
 lines = path.read_text().splitlines()
 out = []
+# in_ai / in_llm track whether the current line is inside the top-level ai: / ai.llm: block.
 in_ai = False
 in_llm = False
+# Copy the YAML line by line, rewriting ai.enabled and ai.llm.mode in place.
 for line in lines:
     stripped = line.strip()
     if stripped.startswith("ai:") and not line.startswith(" "):
@@ -159,6 +171,7 @@ PY
   fi
 }
 
+# Start the llm container and recreate Core so it picks up the bundled LLM setting.
 start_llm() {
   local dc=(docker compose)
   if ! docker info >/dev/null 2>&1; then

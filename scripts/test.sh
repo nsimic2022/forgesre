@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Live appliance test. Writes a detailed Markdown + JSON report.
+# ./forgesre test: live appliance test. Writes a detailed Markdown + JSON report
+# to data/reports/ (logic in appliance_test.py).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"

@@ -25,6 +25,7 @@
 # UI token create (v2) still needs API_TOKEN_PEPPERS (≥50 chars). Compose sets
 # API_TOKEN_PEPPER_1 from NETBOX_API_TOKEN_PEPPER in secrets/secrets.env.
 set -euo pipefail
+# Granian listen address (host network; Core already has :8080).
 PORT="${NETBOX_HTTP_PORT:-8001}"
 HOST="${NETBOX_BIND_HOST:-0.0.0.0}"
 # shellcheck disable=SC1091
@@ -34,6 +35,7 @@ source /opt/netbox/venv/bin/activate
 _dotenv_value() {
   local file="$1" key="$2" found="" line name value
   [[ -f "$file" ]] || return 0
+  # Scan every line (last match wins); skip blanks, comments and non KEY=value lines, strip quotes.
   while IFS= read -r line || [[ -n "$line" ]]; do
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%"${line##*[![:space:]]}"}"
@@ -53,7 +55,9 @@ _dotenv_value() {
   printf '%s' "$found"
 }
 
+# Upsert Core's NETBOX_API_TOKEN into the NetBox DB; never blocks the UI start.
 ensure_core_api_token() {
+  # Token from env first, then the mounted ForgeSRE secrets file.
   local token="${NETBOX_API_TOKEN:-${SUPERUSER_API_TOKEN:-}}"
   if [[ -z "${token}" && -f /run/secrets/forgesre-secrets.env ]]; then
     token="$(_dotenv_value /run/secrets/forgesre-secrets.env NETBOX_API_TOKEN)"

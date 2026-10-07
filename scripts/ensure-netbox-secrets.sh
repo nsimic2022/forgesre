@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Make sure bundled NetBox has its passwords / token / pepper in secrets.env and .env.
+# Only fills missing or empty keys; existing values are never rotated.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -15,6 +17,7 @@ mkdir -p secrets "${DATA_DIR}/netbox/media" "${DATA_DIR}/netbox/reports" "${DATA
 chmod 700 secrets 2>/dev/null || true
 touch secrets/secrets.env
 chmod 600 secrets/secrets.env 2>/dev/null || true
+# Set KEY=value when KEY is missing or empty; a non-empty KEY is left alone.
 ensure_nonempty() {
   local file="$1" key="$2" value="$3"
   if [[ ! -f "$file" ]]; then
@@ -30,6 +33,7 @@ ensure_nonempty() {
   fi
   printf '%s=%s\n' "$key" "$value" >> "$file"
 }
+# Fresh random candidates; ensure_nonempty uses them only for keys that are still empty.
 nb_db="$(openssl rand -hex 16)"
 nb_redis="$(openssl rand -hex 16)"
 nb_secret="$(openssl rand -hex 32)"
@@ -37,6 +41,7 @@ nb_admin="$(openssl rand -hex 8)"
 nb_token="$(openssl rand -hex 20)"
 # NetBox v4.5+ API_TOKEN_PEPPERS: pepper must be ≥50 chars (hex-32 = 64).
 nb_pepper="$(openssl rand -hex 32)"
+# Last value of KEY in secrets.env (value may itself contain '=').
 secret_val() {
   awk -F= -v k="$1" '$0 ~ "^"k"=" {print substr($0, index($0,"=")+1)}' "$ROOT/secrets/secrets.env" | tail -1
 }

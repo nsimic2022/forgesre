@@ -7,6 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
+# Pinned docker-mailserver image, also used for one-off `setup` runs before the container exists.
 DMS_IMAGE="ghcr.io/docker-mailserver/docker-mailserver:15.1.0"
 
 usage() {
@@ -24,8 +25,10 @@ ForgeSRE still only sends. Roundcube on :8081 is the email client (read/reply).
 EOF
 }
 
+# Flags: RESET = new mailbox password; BIND_CORE = point Core SMTP at this mailbox.
 RESET=0
 BIND_CORE=0
+# Parse command-line flags.
 for arg in "$@"; do
   case "${arg}" in
     -h|--help) usage; exit 0 ;;
@@ -39,6 +42,7 @@ done
 log() { echo ">> $*"; }
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
+# DOCKER = plain docker CLI, DC = compose bound to this clone's .env and compose file (sudo if needed).
 if docker info >/dev/null 2>&1; then
   DOCKER=(docker)
   DC=(docker compose --env-file "${ROOT}/.env" -f "${ROOT}/docker-compose.yml")
@@ -61,6 +65,7 @@ set -a
 source "${ENV_FILE}"
 set +a
 
+# Mail domain, the forgesre@ account, and its password (saved one, or a new one on first run / --reset).
 MAIL_DOMAIN="${MAIL_DOMAIN:-${FORGESRE_DOMAIN:-forgesre.local}}"
 MAIL_ACCOUNT="forgesre@${MAIL_DOMAIN}"
 MAIL_PASSWORD="${MAIL_PASSWORD:-}"
@@ -71,6 +76,7 @@ if [[ -z "${MAIL_PASSWORD}" || "${RESET}" == "1" ]]; then
   MAIL_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')"
 fi
 
+# Roundcube web port and session DES key (kept once written to .env).
 ROUNDCUBE_PORT="${ROUNDCUBE_PORT:-8081}"
 DES_KEY="${ROUNDCUBEMAIL_DES_KEY:-}"
 if [[ -z "${DES_KEY}" ]]; then
@@ -81,6 +87,7 @@ mkdir -p "${ROOT}/data/dms/mail-data" "${ROOT}/data/dms/mail-state" \
   "${ROOT}/data/dms/mail-logs" "${ROOT}/data/dms/config" \
   "${ROOT}/data/roundcube/db" "${ROOT}/secrets"
 
+# Set KEY=value in .env, replacing an existing KEY line.
 set_env_key() {
   local key="$1" value="$2"
   if grep -qE "^${key}=" "${ENV_FILE}"; then
@@ -90,6 +97,7 @@ set_env_key() {
   fi
 }
 
+# Rewrite COMPOSE_PROFILES: keep the other profiles, remove $2, append $1 once.
 merge_compose_profiles() {
   local current add drop next part
   current="$(grep -E '^COMPOSE_PROFILES=' "${ENV_FILE}" | tail -n1 | cut -d= -f2- || true)"
@@ -97,6 +105,7 @@ merge_compose_profiles() {
   drop="$2"
   next=""
   IFS=',' read -ra parts <<< "${current}"
+  # Copy each existing profile (trimmed) into next, skipping empties, $drop, and $add.
   for part in "${parts[@]}"; do
     part="${part#"${part%%[![:space:]]*}"}"
     part="${part%"${part##*[![:space:]]}"}"
@@ -123,11 +132,13 @@ set -a
 source "${ENV_FILE}"
 set +a
 
+# docker-mailserver account list on the volume; used to tell "create" from "update password".
 ACCOUNTS_FILE="${ROOT}/data/dms/config/postfix-accounts.cf"
 account_in_config() {
   [[ -f "${ACCOUNTS_FILE}" ]] && grep -qE "^${MAIL_ACCOUNT}\\|" "${ACCOUNTS_FILE}"
 }
 
+# Run docker-mailserver `setup …` in a throwaway container against the config volume.
 dms_setup_volume() {
   "${DOCKER[@]}" run --rm \
     -e OVERRIDE_HOSTNAME="mail.${MAIL_DOMAIN}" \
@@ -142,6 +153,7 @@ mailserver_running() {
   [[ -n "${id}" ]]
 }
 
+# Create forgesre@ (or update its password on --reset), via the running container if there is one.
 ensure_account() {
   if account_in_config && [[ "${RESET}" != "1" ]]; then
     log "Mailbox ${MAIL_ACCOUNT} already exists (password unchanged)."
@@ -166,6 +178,7 @@ ensure_account() {
   fi
 }
 
+# Catch-all alias @domain → forgesre@ so any address on the domain lands in one inbox.
 ensure_catchall() {
   local aliases="${ROOT}/data/dms/config/postfix-virtual.cf"
   if [[ -f "${aliases}" ]] && grep -qE "^@${MAIL_DOMAIN}[[:space:]]" "${aliases}"; then
@@ -189,6 +202,7 @@ log "Starting mailserver + Roundcube for ${MAIL_DOMAIN}…"
 
 log "Waiting for mailserver SMTP…"
 ready=0
+# Poll up to 90 × 2s until Postfix listens on :25 or :587 inside the container.
 for _ in $(seq 1 90); do
   if "${DC[@]}" exec -T mailserver sh -c "ss -lnt 2>/dev/null | grep -qE ':25|:587'" 2>/dev/null; then
     ready=1
@@ -206,6 +220,7 @@ if mailserver_running && ! "${DC[@]}" exec -T mailserver setup email list 2>/dev
   ensure_catchall
 fi
 
+# Write MAILBOX_* (and SMTP_* with --bind-core) into secrets.env, mode 600 via umask.
 umask 077
 touch "${SECRETS}"
 python3 - "${SECRETS}" "${MAIL_ACCOUNT}" "${MAIL_PASSWORD}" "${MAIL_DOMAIN}" "${BIND_CORE}" <<'PY'
@@ -234,6 +249,7 @@ text = path.read_text(encoding="utf-8") if path.exists() else ""
 lines = text.splitlines()
 out = []
 seen = set()
+# Replace existing KEY= lines in place; keys not seen are appended afterwards.
 for line in lines:
     key = line.split("=", 1)[0] if "=" in line and not line.strip().startswith("#") else ""
     if key in keys:
@@ -241,6 +257,7 @@ for line in lines:
         seen.add(key)
     else:
         out.append(line)
+# Append keys that were not already in the file.
 for key, value in keys.items():
     if key not in seen:
         out.append(f"{key}={value}")
@@ -264,14 +281,17 @@ wanted = {
 text = path.read_text(encoding="utf-8") if path.exists() else ""
 lines = text.splitlines()
 out: list[str] = []
+# in_email = inside the email: block; seen = wanted keys already rewritten there.
 in_email = False
 seen: set[str] = set()
 
+# Add wanted keys the email: block did not have yet.
 def flush_missing() -> None:
     for key, value in wanted.items():
         if key not in seen:
             out.append(f"    {key}: {value}")
 
+# Copy the YAML, rewriting the 4-space keys under email: and closing the block at the next top-level key.
 for line in lines:
     stripped = line.strip()
     if in_email:

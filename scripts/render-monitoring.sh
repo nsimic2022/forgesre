@@ -19,12 +19,14 @@ if [[ -f secrets/secrets.env ]]; then
 fi
 set +a
 
+# Inputs for the templates: output dir, Core port, SD bearer token, default SNMP community.
 DATA_DIR="${FORGESRE_DATA:-./data}"
 HTTP_PORT="${FORGESRE_HTTP_PORT:-8080}"
 WEBHOOK="${ALERTMANAGER_WEBHOOK_TOKEN:-}"
 COMMUNITY="${SNMP_COMMUNITY:-public}"
 mkdir -p "$DATA_DIR/generated" secrets
 
+# Append KEY=value to a dotenv file only when KEY is missing (never overwrites).
 ensure_kv() {
   local file="$1" key="$2" value="$3"
   if [[ ! -f "$file" ]]; then
@@ -53,10 +55,12 @@ if [[ -z "$WEBHOOK" ]]; then
   echo "ALERTMANAGER_WEBHOOK_TOKEN is empty. HTTP SD will 401 until secrets/secrets.env has the token."
 fi
 
+# Fill monitoring/*.tpl placeholders and write data/generated/*.yml (stdlib Python only).
 python3 - "$ROOT" "$DATA_DIR" "$HTTP_PORT" "$WEBHOOK" "$COMMUNITY" <<'PY'
 import sys
 from pathlib import Path
 
+# argv: clone root, data dir, Core port, webhook token, SNMP community (newlines stripped).
 root = Path(sys.argv[1])
 data = Path(sys.argv[2])
 port = sys.argv[3]
@@ -67,6 +71,7 @@ out.mkdir(parents=True, exist_ok=True)
 
 def render(name: str, mapping: dict[str, str]) -> None:
     text = (root / "monitoring" / f"{name}.tpl").read_text()
+    # Replace each __PLACEHOLDER__ with its value.
     for key, value in mapping.items():
         text = text.replace(key, value)
     (out / name).write_text(text)
@@ -82,11 +87,13 @@ render(
 sys.path.insert(0, str(root / "scripts"))
 import render_snmp_auths
 
+# Keep the per-asset auth block from the previous snmp.yml in case Core is down right now.
 old_snmp = out / "snmp.yml"
 previous_block = render_snmp_auths.asset_block(old_snmp.read_text()) if old_snmp.is_file() else None
 render("snmp.yml", {"__SNMP_COMMUNITY__": community})
 snmp_status = render_snmp_auths.apply(out / "snmp.yml", port, token, previous_block=previous_block, reload=False)
 
+# alerts.yml = bundled rules + optional monitoring/alerts.local.yml appended.
 base = (root / "monitoring" / "alerts.yml").read_text()
 local = root / "monitoring" / "alerts.local.yml"
 extra = local.read_text() if local.exists() else ""
