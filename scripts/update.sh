@@ -113,6 +113,9 @@ for _i in $(seq 1 30); do
   fi
   sleep 2
 done
+if [[ "$core_ok" -eq 1 ]]; then
+  "$ROOT/scripts/render-snmp-auths.sh" || echo "Per-asset SNMP auths not refreshed. Retry: ./forgesre snmp-auths"
+fi
 if [[ "$core_ok" -ne 1 ]]; then
   echo "Core is not answering GET /api/v1/health on :${HTTP_PORT}."
   echo "Logs: docker compose logs core --tail=80"

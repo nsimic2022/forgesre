@@ -236,7 +236,7 @@ def test_assets_list_shows_edit_clone_remove():
     assert b">Verify<" in page.content
     assert b">Remove<" in page.content
     assert b">#</" in page.content or b"Asset number" in page.content or b">#</th>" in page.content
-    assert b'placeholder="search #, id, hostname, IP"' in page.content
+    assert b'placeholder="search #, id, hostname, IP, VLAN"' in page.content
     assert b'name="scrape_address"' in page.content
     assert b"?edit=" in page.content
     assert b"reach-dot" in page.content
@@ -313,7 +313,7 @@ def test_asset_table_actions_cell_is_table_cell_not_flex_td():
     assert ".asset-table td.asset-actions" in css
     assert "display: table-cell" in css
     assert "td.row-actions" in css
-    assert "app.css?v=v08-15" in base
+    assert "app.css?v=v08-16" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():

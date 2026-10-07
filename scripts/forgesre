@@ -65,6 +65,7 @@ Commands:
   assets             List inventory with # (alias: inventory)
   snmp               snmp_exporter health + SNMP HTTP SD targets
   render-monitoring  Rewrite Prometheus / Alertmanager / snmp.yml from templates
+  snmp-auths         Write per-asset SNMP auths (Custom community / v3) into snmp.yml
   journal [module]   Internal console reports (JSON)
   demo               HighCPU first-hour path (owner mail, similar history)
   demo-rca           Filesystem RCA demo gauge (read-only)
@@ -384,6 +385,24 @@ Change community, then re-render (do not re-install):
   # edit SNMP_COMMUNITY in secrets/secrets.env
   ./forgesre render-monitoring
   docker compose up -d snmp-exporter
+EOF
+      ;;
+    snmp-auths)
+      cat <<'EOF'
+snmp-auths — write per-asset snmp_exporter auths into data/generated/snmp.yml.
+
+Assets → Edit → Comms / monitoring stores SNMP version (v1 / v2c / v3),
+Default or Custom community, and v3 USM user / auth / privacy. v2c Default
+uses public_v2 and v1 Default uses public_v1 (both SNMP_COMMUNITY). A Custom
+community or v3 needs its own auth (forgesre_<asset id>) in snmp.yml:
+
+  ./forgesre snmp-auths
+
+Reads them from Core (GET /api/v1/sd/snmp-auths, Bearer webhook token),
+rewrites only the forgesre-asset-auths block, chmod 600, and POSTs
+snmp_exporter /-/reload. Until the auth is in snmp.yml, SNMP HTTP SD keeps
+sending public_v2 and the asset page shows "pending". Secrets are never
+printed. ./forgesre update and render-monitoring run this too.
 EOF
       ;;
     render-monitoring)
@@ -846,6 +865,10 @@ case "$cmd" in
     ;;
   render-monitoring)
     exec "$ROOT/scripts/render-monitoring.sh" "$@"
+    ;;
+  snmp-auths)
+    need_env
+    exec "$ROOT/scripts/render-snmp-auths.sh" "$@"
     ;;
   demo)
     need_env

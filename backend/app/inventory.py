@@ -6,7 +6,8 @@ import time
 
 from sqlalchemy.orm import Session
 
-from app.asset_extras import asset_playrule_ids, form_extras, known_playrule_ids, normalize_extras
+from app.asset_extras import asset_playrule_ids, form_extras, known_playrule_ids, merge_extras
+from app.asset_snmp import auth_spec, desired_auth, effective_auth, rendered_auth_names
 from app.asset_types import ASSET_TYPE_CHOICES, ASSET_TYPE_GROUPS, parse_snmp_port, snmp_port_for, snmp_target
 from app.audit import audit
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory, is_lab_inventory_row
@@ -199,6 +200,7 @@ def sd_snmp_targets(db: Session) -> list[dict]:
         return []
     targets: list[dict] = []
     seen: set[str] = set()
+    rendered = rendered_auth_names()
     for asset in db.query(Asset).order_by(Asset.asset_id).all():
         if not is_snmp_asset(asset):
             continue
@@ -215,12 +217,27 @@ def sd_snmp_targets(db: Session) -> list[dict]:
                     "monitoring_profile": asset.monitoring_profile or "network-switch",
                     "source": asset.source or "manual",
                     "snmp_module": settings.snmp_module,
-                    "snmp_auth": "public_v2",
+                    "snmp_auth": effective_auth(asset, rendered),
                     "snmp_port": str(port),
                 },
             }
         )
     return targets
+
+
+def snmp_auths(db: Session) -> dict[str, dict]:
+    """Per-asset snmp_exporter auths (Custom community or v3) for SNMP targets. Holds secrets —
+    only the bearer-protected render endpoint returns this; never journal or log it."""
+    if not settings.snmp_enabled:
+        return {}
+    out: dict[str, dict] = {}
+    for asset in db.query(Asset).order_by(Asset.asset_id).all():
+        if not is_snmp_asset(asset):
+            continue
+        spec = auth_spec(asset)
+        if spec is not None:
+            out[desired_auth(asset)] = spec
+    return out
 
 
 def upsert_candidate(
@@ -434,6 +451,7 @@ def create_manual_asset(
     extras: dict | None = None,
     playrule_ids: list | None = None,
     snmp_port: int | str | None = None,
+    snmp: dict | None = None,
 ) -> Asset:
     hostname = (hostname or "").strip()
     ip = validate_ip_field(ip)
@@ -513,7 +531,7 @@ def create_manual_asset(
         scrape_address=address,
         snmp_port=parse_snmp_port(snmp_port),
         alarms=stored_alarms,
-        extras=normalize_extras(extras),
+        extras=merge_extras(None, extras, snmp),
         playrule_ids=known_playrule_ids(db, playrule_ids),
     )
     db.add(asset)
@@ -580,6 +598,7 @@ def update_asset(
     extras: dict | None = None,
     playrule_ids: list | None = None,
     snmp_port: int | str | None = None,
+    snmp: dict | None = None,
 ) -> Asset:
     old_ip = asset.ip or ""
     old_type = asset.type or ""
@@ -668,8 +687,8 @@ def update_asset(
         from app.asset_alarms import normalize_alarms
 
         asset.alarms = normalize_alarms(alarms, new_kind)
-    if extras is not None:
-        asset.extras = normalize_extras(extras)
+    if extras is not None or snmp is not None:
+        asset.extras = merge_extras(asset.extras, extras, snmp)
     if playrule_ids is not None:
         asset.playrule_ids = known_playrule_ids(db, playrule_ids)
     if snmp_port is not None:
@@ -1314,6 +1333,7 @@ def asset_search_blob(asset: Asset) -> str:
             asset.asset_id or "",
             asset.hostname or "",
             asset.ip or "",
+            asset_extra(asset, "vlan"),
         ]
     ).lower()
 
@@ -1368,8 +1388,13 @@ def asset_extra(asset: Asset, key: str) -> str:
     return " ".join(str(extras.get(key) or "").split())
 
 
+def _vlan_sort_key(value: str) -> tuple:
+    parts = value.replace(",", ".").split(".")
+    return tuple((0, int(part), "") if part.strip().isdigit() else (1, 0, part.lower()) for part in parts)
+
+
 def asset_filter_options(rows: list[Asset]) -> dict[str, list[str]]:
-    """Values for the Assets Type / Site / Customer dropdowns: saved custom types, distinct site and customer."""
+    """Values for the Assets Type / Site / VLAN / Customer dropdowns: saved custom types, distinct site, VLAN, customer."""
 
     def distinct(values) -> list[str]:
         seen: dict[str, str] = {}
@@ -1381,6 +1406,7 @@ def asset_filter_options(rows: list[Asset]) -> dict[str, list[str]]:
     return {
         "custom_types": distinct((row.type or "").strip() for row in rows if (row.type or "").strip() not in ASSET_TYPE_CHOICES),
         "sites": distinct(asset_extra(row, "site") for row in rows),
+        "vlans": sorted(distinct(asset_extra(row, "vlan") for row in rows), key=_vlan_sort_key),
         "customers": distinct(asset_extra(row, "customer") for row in rows),
     }
 
@@ -1395,9 +1421,11 @@ def assets_matching(
     type: str = "",
     site: str = "",
     customer: str = "",
+    vlan: str = "",
 ) -> list[Asset]:
     """Filter inventory by asset number, id, hostname, or IP (substring), optional status, flag, source, Zabbix agent,
-    Type, and extras Site / Customer (exact, case-insensitive). Every filter given must match.
+    Type, and extras Site / VLAN / Customer (exact, case-insensitive). Every filter given must match.
+    Search also matches the VLAN text.
 
     ``source=zabbix`` includes assets from other sources that are linked to a Zabbix host; ``source=forge`` is every
     asset not imported from NetBox or Zabbix.
@@ -1425,7 +1453,7 @@ def assets_matching(
     kind = (type or "").strip().lower()
     if kind:
         out = [row for row in out if (row.type or "").strip().lower() == kind]
-    for key, raw in (("site", site), ("customer", customer)):
+    for key, raw in (("site", site), ("vlan", vlan), ("customer", customer)):
         value = " ".join((raw or "").split()).lower()
         if value:
             out = [row for row in out if asset_extra(row, key).lower() == value]

@@ -29,6 +29,7 @@ from app.asset_extras import (
     playrule_ids_from_form,
     support_status,
 )
+from app.asset_snmp import AUTH_PROTOCOLS, PRIV_PROTOCOLS, SNMP_VERSIONS, V3_LEVELS, auth_status, snmp_from_form
 from app.asset_types import ASSET_TYPE_GROUPS, DEFAULT_SNMP_PORT, snmp_family, snmp_port_for
 from app.inventory import (
     ASSET_SOURCE_FILTERS,
@@ -210,6 +211,13 @@ def _picked_email(picked: str, typed: str) -> str:
 def _posted_extras(present: str, **values: str) -> dict | None:
     try:
         return extras_from_form(present, **values)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _posted_snmp(present: str, previous=None, **values: str) -> dict | None:
+    try:
+        return snmp_from_form(present, previous, **values)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -545,13 +553,14 @@ def assets_page(
     asset_type: str = Query("", alias="type"),
     site: str = "",
     customer: str = "",
+    vlan: str = "",
     page: str = "1",
 ):
     from app.services import list_mail_addresses
 
     every = db.query(Asset).order_by(Asset.number, Asset.hostname).all()
     zabbix_assets = any(asset_in_zabbix(row) for row in every)
-    rows = assets_matching(every, q, status, flag, source, agent, type=asset_type, site=site, customer=customer)
+    rows = assets_matching(every, q, status, flag, source, agent, type=asset_type, site=site, customer=customer, vlan=vlan)
     rows, pager = paginate(rows, page, size=per_page(request))
     filters = {
         "status": status,
@@ -560,6 +569,7 @@ def assets_page(
         "agent": agent,
         "type": asset_type,
         "site": site,
+        "vlan": vlan,
         "customer": customer,
     }
     filter_tail = "".join(f"&{urlencode({key: value})}" for key, value in filters.items() if value)
@@ -602,6 +612,7 @@ def assets_page(
         agent=agent,
         asset_type=asset_type,
         site=site,
+        vlan=vlan,
         customer=customer,
         filter_tail=filter_tail,
         source_filters=ASSET_SOURCE_FILTERS,
@@ -616,6 +627,10 @@ def assets_page(
         support_choices=SUPPORT_CHOICES,
         support_lead_choices=SUPPORT_LEAD_CHOICES,
         support_lead_default=SUPPORT_LEAD_DEFAULT,
+        snmp_versions=SNMP_VERSIONS,
+        snmp_v3_levels=V3_LEVELS,
+        snmp_auth_protocols=AUTH_PROTOCOLS,
+        snmp_priv_protocols=PRIV_PROTOCOLS,
     )
 
 
@@ -689,6 +704,16 @@ def asset_create(
     notes: str = Form(""),
     scrape_address: str = Form(""),
     snmp_port: str = Form(""),
+    comms_present: str = Form(""),
+    snmp_version: str = Form(""),
+    snmp_community_mode: str = Form(""),
+    snmp_community: str = Form(""),
+    snmp_v3_user: str = Form(""),
+    snmp_v3_level: str = Form(""),
+    snmp_v3_auth_proto: str = Form(""),
+    snmp_v3_auth_pass: str = Form(""),
+    snmp_v3_priv_proto: str = Form(""),
+    snmp_v3_priv_pass: str = Form(""),
     owner_email_pick: str = Form(""),
     extra_backup_email_pick: str = Form(""),
     clone_of: str = Form(""),
@@ -703,6 +728,7 @@ def asset_create(
     extras_present: str = Form(""),
     extra_customer: str = Form(""),
     extra_site: str = Form(""),
+    extra_vlan: str = Form(""),
     extra_backup_name: str = Form(""),
     extra_backup_phone: str = Form(""),
     extra_backup_email: str = Form(""),
@@ -737,6 +763,7 @@ def asset_create(
         extras_present,
         customer=extra_customer,
         site=extra_site,
+        vlan=extra_vlan,
         backup_name=extra_backup_name,
         backup_phone=extra_backup_phone,
         backup_email=_picked_email(extra_backup_email_pick, extra_backup_email),
@@ -751,7 +778,21 @@ def asset_create(
         support_lead_days=extra_support_lead_days,
     )
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
+    clone_row = db.query(Asset).filter_by(asset_id=cloned_from).first() if cloned_from else None
     try:
+        posted_snmp = snmp_from_form(
+            comms_present,
+            clone_row.extras if clone_row is not None else None,
+            version=snmp_version,
+            community_mode=snmp_community_mode,
+            community=snmp_community,
+            v3_user=snmp_v3_user,
+            v3_level=snmp_v3_level,
+            v3_auth_proto=snmp_v3_auth_proto,
+            v3_auth_pass=snmp_v3_auth_pass,
+            v3_priv_proto=snmp_v3_priv_proto,
+            v3_priv_pass=snmp_v3_priv_pass,
+        )
         asset = create_manual_asset(
             db,
             hostname=hostname,
@@ -773,6 +814,7 @@ def asset_create(
             extras=posted_extras,
             playrule_ids=posted_playrules,
             snmp_port=snmp_port,
+            snmp=posted_snmp,
         )
     except ValueError as exc:
         if cloned_from:
@@ -1190,6 +1232,7 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         picked_playrules=asset_playrule_ids(item),
         ex=form_extras(item),
         support_labels=dict(SUPPORT_CHOICES),
+        snmp_auth=auth_status(item),
     )
 
 
@@ -1252,6 +1295,15 @@ def asset_update(
     scrape_address: str = Form(""),
     snmp_port: str = Form(""),
     comms_present: str = Form(""),
+    snmp_version: str = Form(""),
+    snmp_community_mode: str = Form(""),
+    snmp_community: str = Form(""),
+    snmp_v3_user: str = Form(""),
+    snmp_v3_level: str = Form(""),
+    snmp_v3_auth_proto: str = Form(""),
+    snmp_v3_auth_pass: str = Form(""),
+    snmp_v3_priv_proto: str = Form(""),
+    snmp_v3_priv_pass: str = Form(""),
     owner_email_pick: str = Form(""),
     extra_backup_email_pick: str = Form(""),
     alarms_present: str = Form(""),
@@ -1265,6 +1317,7 @@ def asset_update(
     extras_present: str = Form(""),
     extra_customer: str = Form(""),
     extra_site: str = Form(""),
+    extra_vlan: str = Form(""),
     extra_backup_name: str = Form(""),
     extra_backup_phone: str = Form(""),
     extra_backup_email: str = Form(""),
@@ -1301,6 +1354,7 @@ def asset_update(
         extras_present,
         customer=extra_customer,
         site=extra_site,
+        vlan=extra_vlan,
         backup_name=extra_backup_name,
         backup_phone=extra_backup_phone,
         backup_email=_picked_email(extra_backup_email_pick, extra_backup_email),
@@ -1315,6 +1369,19 @@ def asset_update(
         support_lead_days=extra_support_lead_days,
     )
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
+    posted_snmp = _posted_snmp(
+        comms_present,
+        item.extras,
+        version=snmp_version,
+        community_mode=snmp_community_mode,
+        community=snmp_community,
+        v3_user=snmp_v3_user,
+        v3_level=snmp_v3_level,
+        v3_auth_proto=snmp_v3_auth_proto,
+        v3_auth_pass=snmp_v3_auth_pass,
+        v3_priv_proto=snmp_v3_priv_proto,
+        v3_priv_pass=snmp_v3_priv_pass,
+    )
     try:
         validate_ip_field(ip)
     except ValueError as exc:
@@ -1338,6 +1405,7 @@ def asset_update(
         extras=posted_extras,
         playrule_ids=posted_playrules,
         snmp_port=snmp_port if comms_present.strip() else None,
+        snmp=posted_snmp,
     )
     notice = getattr(item, "_detect_message", "") or ""
     suffix = f"?notice={quote(notice)}" if notice else ""

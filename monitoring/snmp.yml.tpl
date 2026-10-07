@@ -2,6 +2,11 @@ auths:
   public_v2:
     version: 2
     community: __SNMP_COMMUNITY__
+  public_v1:
+    version: 1
+    community: __SNMP_COMMUNITY__
+  # forgesre-asset-auths begin (Custom community / SNMPv3 per asset — written by ./forgesre snmp-auths, do not edit)
+  # forgesre-asset-auths end
 
 modules:
   if_mib:

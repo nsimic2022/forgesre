@@ -46,6 +46,8 @@
   <label>Environment <input name="environment" value="{{ form.environment or 'Production' }}"></label>
   <label>Customer / domain <input name="extra_customer" value="{{ ex.customer }}" placeholder="acme.local"></label>
   <label>Site / DC / room <input name="extra_site" value="{{ ex.site }}" placeholder="BG-DC1 · room 2 · rack 14"></label>
+  <label><span class="label-line">VLAN {% with %}{% set tip %}Free text, e.g. 10 or 10.20. Shown on the asset page and as a filter on Assets. Inventory note only — ForgeSRE does not read or change switch VLANs.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="extra_vlan" value="{{ ex.vlan }}" maxlength="64" placeholder="10 or 10.20"></label>
   <label class="wide">Notes <input name="notes" value="{{ form.notes }}" placeholder="Anything else the next operator should know"></label>
   </div>
   </div>
@@ -96,14 +98,66 @@
   </div>
   <div class="asset-form-col asset-form-middle">
   {% set snmp_default = snmp_family(form.type or '') %}
+  {% set snmp_version = ex.snmp_version or 'v2c' %}
+  {% set v3_level = ex.snmp_v3_level or 'noAuthNoPriv' %}
   <div class="asset-form-block asset-comms" data-asset-comms>
     <input type="hidden" name="comms_present" value="1">
-    <h3 class="asset-form-block-head label-line">Comms / monitoring {% with %}{% set tip %}How this appliance talks to the host. Scrape address = Prometheus HTTP exporter host:port (any port, e.g. 10.0.0.5:9101). SNMP port = UDP port snmp_exporter polls on the IP (community from config — monitoring.snmp). Both can be set; both can be empty (agentless — ping only).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h3 class="asset-form-block-head label-line">Comms / monitoring {% with %}{% set tip %}How this appliance talks to the host. Scrape address = Prometheus HTTP exporter host:port (any port, e.g. 10.0.0.5:9101). SNMP port = UDP port snmp_exporter polls on the IP. SNMP version and community / v3 user pick the snmp_exporter auth for this host. Both scrape and SNMP can be set; both can be empty (agentless — ping only).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     <label><span class="label-line">Scrape address {% with %}{% set tip %}Prometheus HTTP target as host:port (e.g. 10.10.10.21:9100, 10.10.10.21:9182, or an odd port like 1.2.3.4:9101). Blank: Linux Server defaults to ip:9100, Windows Server to ip:9182, every other type stays empty — Type never invents a scrape. SNMP is not this field.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
       <input name="scrape_address" value="{{ form.scrape_address }}" placeholder="host:port — e.g. 10.10.10.21:9100" data-scrape-address></label>
-    <label><span class="label-line">SNMP port <span class="muted label-hint">UDP</span> {% with %}{% set tip %}Network family types (Network device, Switch, Router, Firewall, Storage, QNAP/NAS, Printer) are polled on UDP/161 when this is blank. Type a port (e.g. 1161) to use another one, or to turn SNMP on for any other type. Blank on Linux / Windows / Hypervisor / Web / Other = no SNMP. Community / auth stay the config default.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <label><span class="label-line">SNMP port <span class="muted label-hint">UDP</span> {% with %}{% set tip %}Network family types (Network device, Switch, Router, Firewall, Storage, QNAP/NAS, Printer) are polled on UDP/161 when this is blank. Type a port (e.g. 1161) to use another one, or to turn SNMP on for any other type. Blank on Linux / Windows / Hypervisor / Web / Other = no SNMP.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
       <input name="snmp_port" type="number" min="1" max="65535" step="1" inputmode="numeric" value="{{ form.snmp_port }}" placeholder="{% if snmp_default %}{{ default_snmp_port }} (default){% else %}off{% endif %}" data-snmp-port data-snmp-default="{{ default_snmp_port }}"></label>
+    <div class="snmp-auth" data-snmp-auth>
+    <label><span class="label-line">SNMP version {% with %}{% set tip %}v2c with the Default community is the shared public_v2 auth in snmp.yml. v1 Default uses public_v1 (same community). A Custom community or v3 gets its own snmp_exporter auth for this host, written by ./forgesre snmp-auths (also run by ./forgesre update). Until that runs, this host is still polled with public_v2 — the asset page says “pending”.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+      <select name="snmp_version" class="nice-select" data-snmp-version>
+        {% for value, label in snmp_versions %}
+        <option value="{{ value }}"{% if snmp_version == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select></label>
+    <div class="snmp-v12" data-snmp-v12{% if snmp_version == 'v3' %} hidden{% endif %}>
+    <label><span class="label-line">Community {% with %}{% set tip %}Default = the config community (SNMP_COMMUNITY in secrets/secrets.env, public_v2 in snmp.yml). Custom = a community for this host only. The saved value is never shown again — leave the box blank to keep it.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+      <select name="snmp_community_mode" class="nice-select" data-snmp-community-mode>
+        <option value="default"{% if ex.snmp_community_mode != 'custom' %} selected{% endif %}>Default — config community</option>
+        <option value="custom"{% if ex.snmp_community_mode == 'custom' %} selected{% endif %}>Custom</option>
+      </select></label>
+    <label data-snmp-community-row{% if ex.snmp_community_mode != 'custom' %} hidden{% endif %}><span class="label-line">Custom community</span>
+      <input name="snmp_community" type="password" autocomplete="new-password" maxlength="128" value="" placeholder="{% if ex.snmp_community_set %}saved — leave blank to keep{% else %}community string{% endif %}" data-snmp-community></label>
+    </div>
+    <div class="snmp-v3" data-snmp-v3{% if snmp_version != 'v3' %} hidden{% endif %}>
+    <label><span class="label-line">v3 username {% with %}{% set tip %}SNMPv3 USM user (securityName). Passwords are never shown again after Save — leave a password box blank to keep the saved one. USM passwords are at least 8 characters.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+      <input name="snmp_v3_user" value="{{ ex.snmp_v3_user }}" maxlength="64" autocomplete="off" placeholder="monitor"></label>
+    <label>Security level
+      <select name="snmp_v3_level" class="nice-select" data-snmp-v3-level>
+        {% for value, label in snmp_v3_levels %}
+        <option value="{{ value }}"{% if v3_level == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select></label>
+    <div class="snmp-v3-pair" data-snmp-v3-auth{% if v3_level == 'noAuthNoPriv' %} hidden{% endif %}>
+    <label>Auth protocol
+      <select name="snmp_v3_auth_proto" class="nice-select">
+        {% for proto in snmp_auth_protocols %}
+        <option value="{{ proto }}"{% if (ex.snmp_v3_auth_proto or 'SHA') == proto %} selected{% endif %}>{{ proto }}</option>
+        {% endfor %}
+      </select></label>
+    <label>Auth password
+      <input name="snmp_v3_auth_pass" type="password" autocomplete="new-password" maxlength="128" value="" placeholder="{% if ex.snmp_v3_auth_pass_set %}saved — leave blank to keep{% else %}min 8 characters{% endif %}"></label>
+    </div>
+    <div class="snmp-v3-pair" data-snmp-v3-priv{% if v3_level != 'authPriv' %} hidden{% endif %}>
+    <label>Privacy protocol
+      <select name="snmp_v3_priv_proto" class="nice-select">
+        {% for proto in snmp_priv_protocols %}
+        <option value="{{ proto }}"{% if (ex.snmp_v3_priv_proto or 'AES') == proto %} selected{% endif %}>{{ proto }}</option>
+        {% endfor %}
+      </select></label>
+    <label>Privacy password
+      <input name="snmp_v3_priv_pass" type="password" autocomplete="new-password" maxlength="128" value="" placeholder="{% if ex.snmp_v3_priv_pass_set %}saved — leave blank to keep{% else %}min 8 characters{% endif %}"></label>
+    </div>
+    </div>
+    </div>
   </div>
+  <div class="asset-form-reserved" data-asset-form-reserved aria-hidden="true"></div>
+  </div>
+  <div class="asset-form-col asset-form-right">
   <input type="hidden" name="alarms_present" value="1">
   <div class="asset-form-block alarm-families" data-alarm-families>
     <h3 class="asset-form-block-head alarm-heading label-line">Standard alarms {% with %}{% set tip %}Per-host enable and % overlay on the Alertmanager webhook. PromQL still lives in monitoring/alerts.yml. Not a second alerting engine and not a Playrule. cpu / mem / disk / up only — not every exporter series. Auto-detect still picks Linux / Windows / Network.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
@@ -121,8 +175,7 @@
     <label class="alarm-row"><input type="checkbox" name="alarm_disk_enabled" value="1" data-alarm-disk {% if disk_a.get('enabled', True) %}checked{% endif %}> Disk
       <input type="number" name="alarm_disk_threshold" min="1" max="100" step="1" value="{{ disk_a.get('threshold') or 90 }}" data-alarm-disk-th> %</label>
   </div>
-  </div>
-  <div class="asset-form-col asset-form-right">
+  <hr class="asset-form-rule" data-asset-form-rule>
   <div class="asset-form-block client-playrules" data-client-playrules>
     <h3 class="asset-form-block-head label-line">Client playrules {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first playrule in this list (enabled, same alertname) and its playbook / escalation instead of the first global playrule with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = the global playrule match, unchanged. Disabled playrules are skipped.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     <input type="hidden" name="playrules_present" value="1">

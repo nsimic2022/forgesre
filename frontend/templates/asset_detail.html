@@ -28,6 +28,7 @@
   <dt><span class="label-line">Scrape address {% with %}{% set tip %}Prometheus HTTP target. Linux default ip:9100 (node_exporter), Windows ip:9182 (windows_exporter). Network devices use SNMP, not this field.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt><dd>{{ asset.scrape_address or "—" }}</dd>
   <dt>Customer / domain</dt><dd class="extra-customer">{{ ex.customer or "—" }}</dd>
   <dt>Site / DC / room</dt><dd class="extra-site">{{ ex.site or "—" }}</dd>
+  <dt>VLAN</dt><dd class="extra-vlan">{{ ex.vlan or "—" }}</dd>
   <dt>Notes</dt><dd>{% if asset.notes %}<span class="pre-wrap">{{ asset.notes }}</span>{% else %}—{% endif %}</dd>
 </dl>
 
@@ -82,6 +83,21 @@
       Disabled in <code>config/forgesre.yml</code> (<code>monitoring.snmp.enabled</code>).
     {% endif %}
   </dd>
+  {% if snmp_target %}
+  <dt><span class="label-line">SNMP auth {% with %}{% set tip %}Version and community / v3 user saved on Edit → Comms / monitoring. Community strings and v3 passwords are never shown. A Custom community or v3 needs its own snmp_exporter auth in data/generated/snmp.yml — ./forgesre snmp-auths writes it (./forgesre update runs it too). Until then this host is polled with public_v2.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt>
+  <dd data-snmp-auth-status>
+    {{ snmp_auth.snmp_version }}
+    {% if snmp_auth.snmp_version == 'v3' %}
+      · user {{ snmp_auth.snmp_v3_user or "—" }} · {{ snmp_auth.snmp_v3_level }}{% if snmp_auth.snmp_v3_auth_proto %} · auth {{ snmp_auth.snmp_v3_auth_proto }}{% endif %}{% if snmp_auth.snmp_v3_priv_proto %} · priv {{ snmp_auth.snmp_v3_priv_proto }}{% endif %}
+    {% elif snmp_auth.snmp_community_mode == 'custom' %}
+      · Custom community (saved, hidden)
+    {% else %}
+      · Default community (config)
+    {% endif %}
+    · exporter auth <code>{{ snmp_auth.effective }}</code>
+    {% if snmp_auth.pending %}<span class="pill warn" data-snmp-auth-pending title="snmp.yml does not have {{ snmp_auth.desired }} yet">pending</span> <span class="muted">run <code>./forgesre snmp-auths</code> to write <code>{{ snmp_auth.desired }}</code></span>{% endif %}
+  </dd>
+  {% endif %}
 </dl>
 
 {% if can('write_assets') %}

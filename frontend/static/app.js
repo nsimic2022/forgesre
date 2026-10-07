@@ -405,6 +405,28 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
     syncSupport();
   }
 
+  const snmpVersion = form.querySelector("[data-snmp-version]");
+  if (snmpVersion) {
+    const v12 = form.querySelector("[data-snmp-v12]");
+    const v3 = form.querySelector("[data-snmp-v3]");
+    const mode = form.querySelector("[data-snmp-community-mode]");
+    const communityRow = form.querySelector("[data-snmp-community-row]");
+    const level = form.querySelector("[data-snmp-v3-level]");
+    const authPair = form.querySelector("[data-snmp-v3-auth]");
+    const privPair = form.querySelector("[data-snmp-v3-priv]");
+    const syncSnmp = () => {
+      const isV3 = snmpVersion.value === "v3";
+      if (v12) v12.hidden = isV3;
+      if (v3) v3.hidden = !isV3;
+      if (communityRow && mode) communityRow.hidden = mode.value !== "custom";
+      const lvl = level ? level.value : "noAuthNoPriv";
+      if (authPair) authPair.hidden = lvl === "noAuthNoPriv";
+      if (privPair) privPair.hidden = lvl !== "authPriv";
+    };
+    [snmpVersion, mode, level].forEach((el) => el && el.addEventListener("change", syncSnmp));
+    syncSnmp();
+  }
+
   const type = form.querySelector("[data-detect-type]");
   const ip = form.querySelector("[data-detect-ip]");
   const scrape = form.querySelector("[data-scrape-address]");
