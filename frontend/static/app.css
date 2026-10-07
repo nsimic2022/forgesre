@@ -1245,6 +1245,41 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .incident-strip .incident-short { font-weight: 700; font-variant-numeric: tabular-nums; }
 .incident-strip .incident-fact { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .incident-strip .incident-id { margin: 0; font-size: 0.78rem; }
+/* Older / newer incident, same order as /incidents (newest first). Sits right above the strip. */
+.incident-nav { display: flex; align-items: center; gap: 0.45rem; margin: 0.2rem 0 0.4rem; font-size: 0.85rem; }
+.incident-nav .incident-nav-step {
+  display: inline-flex;
+  padding: 0.18rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+.incident-nav a.incident-nav-step:hover { border-color: var(--accent); color: var(--accent); }
+.incident-nav .incident-nav-pos { color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Engineer evidence: the Who did what table language, one line per row; double-click shows the stored text. */
+.evidence-table { table-layout: fixed; }
+.evidence-table th.ev-when { width: 7.5rem; }
+.evidence-table th.ev-actor { width: 8.5rem; }
+.evidence-table td { vertical-align: top; }
+.evidence-table td.ev-when { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+.evidence-table td.ev-actor,
+.evidence-table td.ev-action .ev-short { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evidence-table td.ev-action .ev-short { display: block; }
+.evidence-table .ev-full {
+  display: none;
+  margin-top: 0.4rem;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  cursor: text;
+}
+.evidence-table tr.is-expanded .ev-full { display: block; }
+.evidence-table tr.is-expanded .ev-short { white-space: normal; }
 
 /* Dashboard layout pass: big Incidents / Infrastructure tiles, appliance card on the right. */
 .dash-top {

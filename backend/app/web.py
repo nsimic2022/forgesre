@@ -107,6 +107,8 @@ from app.history import (
     clamp_days,
     dashboard_incident_tiles,
     incident_heat,
+    incident_list_filters,
+    incident_neighbors,
     list_history,
     notes_for,
     notifications_for,
@@ -223,6 +225,58 @@ def pager_keep(pager: dict | None, *, page: bool = True) -> str:
     if pager.get("size") and pager["size"] != pager.get("default_size"):
         items.append((pager["size_param"], str(pager["size"])))
     return "&" + urlencode(items) if items else ""
+
+
+EVIDENCE_SOURCE_LABELS = {
+    "alertmanager": "Alertmanager",
+    "forgesre": "ForgeSRE",
+    "prometheus": "Prometheus",
+    "loki": "Loki",
+    "zabbix": "Zabbix",
+}
+EVIDENCE_SUMMARY_MAX = 240
+
+
+def _evidence_brief(value) -> str:
+    if isinstance(value, dict):
+        parts = []
+        for key, item in value.items():
+            if isinstance(item, dict):
+                item = "{…}" if item else "{}"
+            elif isinstance(item, list):
+                item = f"[{len(item)}]"
+            parts.append(f"{key}={item}")
+        return ", ".join(parts)
+    if isinstance(value, list):
+        return f"{len(value)} item{'' if len(value) == 1 else 's'}"
+    text = str(value if value is not None else "").strip()
+    return text.splitlines()[0] if text else ""
+
+
+def evidence_row(ev) -> dict:
+    """One Engineer evidence row: When / Source / short Action, plus the full stored payload for the expanded view. Display only."""
+    payload = ev.payload if ev.payload is not None else {}
+    body = payload.get("content", payload) if isinstance(payload, dict) and "evidence_id" in payload else payload
+    brief = _evidence_brief(body)
+    action = f"{ev.title} · {brief}" if brief else (ev.title or ev.kind or "")
+    if len(action) > EVIDENCE_SUMMARY_MAX:
+        action = action[: EVIDENCE_SUMMARY_MAX - 1].rstrip() + "…"
+    source = (ev.source or "").strip()
+    lines = []
+    if ev.evidence_id:
+        lines.append(f"ID: {ev.evidence_id}")
+    if ev.query:
+        lines.append(f"Query: {ev.query}")
+    dump = payload if isinstance(payload, str) else json.dumps(payload, indent=2, ensure_ascii=False, default=str)
+    lines.append(dump)
+    return {
+        "anchor": ev.evidence_id or ev.kind or "",
+        "when": short_when_label(ev.captured_at),
+        "when_full": format_started_at(ev.captured_at),
+        "actor": EVIDENCE_SOURCE_LABELS.get(source.lower(), source) or "ForgeRCA",
+        "action": action,
+        "full": "\n".join(lines),
+    }
 
 
 def smtp_provider_id() -> str:
@@ -1306,34 +1360,9 @@ def incidents_page(
     days: str = "",
     page: str = "1",
 ):
-    real_status = {"OPEN", "INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED"}
-    critical_only = (severity or "").strip().lower() in {"critical", "crit"}
-    status_raw = (status or "").strip()
-    status_key = status_raw.upper()
-    open_raw = (open_filter or "").strip().lower()
-    open_only = False
-    closed_only = False
-    exact = ""
-    status_group = "all"
-    if status_raw.lower() == "active" or (not status_raw and open_raw in {"1", "true", "yes"}):
-        open_only = True
-        status_group = "active"
-    elif status_key in real_status:
-        exact = status_key
-        status_group = status_key
-    days_raw = (days or "").strip()
-    days_n = clamp_days(days_raw) if days_raw else None
+    filters = incident_list_filters(status=status, severity=severity, open_filter=open_filter, days=days)
     size = per_page(request)
-    rows, total = list_history(
-        db,
-        days=days_n,
-        status=exact,
-        open_only=open_only,
-        closed_only=closed_only,
-        critical_only=critical_only,
-        limit=size,
-        page=page,
-    )
+    rows, total = list_history(db, **filters["query"], limit=size, page=page)
     pager = pager_state(page, total=total, size=size)
     return render(
         request,
@@ -1341,11 +1370,12 @@ def incidents_page(
         user,
         incidents=rows,
         reported_to=reported_to_for(db, rows),
-        open_only=open_only,
-        status_group=status_group,
-        severity_group="critical" if critical_only else "",
-        days=days_raw,
+        open_only=filters["query"]["open_only"],
+        status_group=filters["status_group"],
+        severity_group=filters["severity_group"],
+        days=filters["days"],
         pager=pager,
+        nav_qs=filters["qs"],
     )
 
 
@@ -1404,6 +1434,17 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
         size=per_page(request, "notes_page"),
         param="notes_page",
     )
+    q = request.query_params
+    filters = incident_list_filters(
+        status=q.get("status", ""), severity=q.get("severity", ""), open_filter=q.get("open", ""), days=q.get("days", "")
+    )
+    evidence, evidence_pager = paginate(
+        [evidence_row(ev) for ev in sorted(item.evidence, key=lambda ev: ev.id or 0)] if can(user, "read_evidence") else [],
+        q.get("ev_page", "1"),
+        size=per_page(request, "ev_page"),
+        param="ev_page",
+        fragment="#evidence",
+    )
     return render(
             request,
             "incident_detail.html",
@@ -1421,6 +1462,9 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
             tools=tool_status(investigation, pending, llm_job_error(db, number)),
             pager=audit_pager,
             notes_pager=notes_pager,
+            nav=incident_neighbors(db, item, filters),
+            evidence_rows=evidence,
+            evidence_pager=evidence_pager,
             client_playrules=asset_playrules(db, item.asset),
             **ops_mail_ctx(db, user, item),
         )
