@@ -79,7 +79,13 @@ render(
     "alertmanager.yml",
     {"__WEBHOOK_TOKEN__": token, "__CORE_PORT__": port},
 )
+sys.path.insert(0, str(root / "scripts"))
+import render_snmp_auths
+
+old_snmp = out / "snmp.yml"
+previous_block = render_snmp_auths.asset_block(old_snmp.read_text()) if old_snmp.is_file() else None
 render("snmp.yml", {"__SNMP_COMMUNITY__": community})
+snmp_status = render_snmp_auths.apply(out / "snmp.yml", port, token, previous_block=previous_block)
 
 base = (root / "monitoring" / "alerts.yml").read_text()
 local = root / "monitoring" / "alerts.local.yml"
@@ -88,6 +94,7 @@ extra = local.read_text() if local.exists() else ""
 print(f"Wrote {out}/prometheus.yml")
 print(f"Wrote {out}/alertmanager.yml")
 print(f"Wrote {out}/snmp.yml")
+print(snmp_status)
 print(f"Wrote {out}/alerts.yml")
 PY
 

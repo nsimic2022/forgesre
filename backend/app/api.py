@@ -40,6 +40,7 @@ from app.inventory import (
     sd_targets,
     sd_snmp_targets,
     seed_demo_candidate,
+    snmp_auths,
     similar_incident_groups,
     sync_netbox,
     update_asset,
@@ -64,7 +65,7 @@ from app.services import (
     run_demo_windows,
 )
 from app.settings import settings
-from app.asset_extras import asset_playrule_ids, normalize_extras, support_status
+from app.asset_extras import asset_playrule_ids, public_extras, support_status
 from app.asset_types import snmp_port_for
 from app.host_resources import appliance_resources
 from app.stack import (
@@ -674,6 +675,17 @@ def snmp_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
     if token != settings.webhook_token:
         raise HTTPException(status_code=401, detail="invalid sd token")
     return sd_snmp_targets(db)
+
+
+@router.get("/sd/snmp-auths")
+def snmp_sd_auths(request: Request, db: Session = Depends(get_db)) -> dict:
+    """Per-asset snmp_exporter auths for scripts/render_snmp_auths.py. Holds community strings and
+    v3 passwords: same bearer as SD, never logged, never shown in the GUI."""
+    auth = request.headers.get("authorization") or ""
+    token = auth.replace("Bearer ", "").strip()
+    if not settings.webhook_token or token != settings.webhook_token:
+        raise HTTPException(status_code=401, detail="invalid sd token")
+    return {"auths": snmp_auths(db)}
 
 
 @router.get("/discovery/candidates")
@@ -1577,7 +1589,7 @@ def _asset(item: Asset) -> dict[str, Any]:
         "scrape_address": item.scrape_address,
         "snmp_port": snmp_port_for(item) if is_snmp_asset(item) else 0,
         "alarms": getattr(item, "alarms", None) or {},
-        "extras": normalize_extras(getattr(item, "extras", None)),
+        "extras": public_extras(getattr(item, "extras", None)),
         "playrule_ids": asset_playrule_ids(item),
         "support_status": {key: value for key, value in support_status(item).items() if key in {"state", "label", "detail"}},
         "snmp": is_snmp_asset(item),

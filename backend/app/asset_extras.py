@@ -5,6 +5,9 @@ playrule handles an alertname on this host; they never create or change Promethe
 
 Support coverage (support / support_custom / support_from / support_to / support_lead_days) lives in the same JSON.
 Its status is derived on read for the UI and mail bodies only — no alert, incident, or Playrule.
+
+SNMP version / community / v3 USM (``snmp_*``) also live here; see app.asset_snmp. Their secrets are
+dropped by form_extras and public_extras, so templates and the asset API never see them.
 """
 
 from __future__ import annotations
@@ -12,10 +15,14 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Iterable
 
+from app.asset_snmp import SECRET_KEYS as SNMP_SECRET_KEYS
+from app.asset_snmp import SNMP_KEYS, normalize_snmp, public_snmp
+
 # key, English label, max length
 EXTRA_FIELDS: tuple[tuple[str, str, int], ...] = (
     ("customer", "Customer / domain", 255),
     ("site", "Site / DC / room", 255),
+    ("vlan", "VLAN", 64),
     ("backup_name", "Backup on-call name", 255),
     ("backup_phone", "Backup on-call phone", 64),
     ("backup_email", "Backup on-call email", 255),
@@ -82,13 +89,41 @@ def normalize_extras(raw: Any) -> dict[str, str]:
         if text:
             out[key] = text
     out.update(_normalize_support(raw))
+    out.update(normalize_snmp(raw))
     return out
 
 
-def form_extras(asset: Any = None) -> dict[str, str]:
+def public_extras(raw: Any) -> dict[str, Any]:
+    """normalize_extras without SNMP secrets; ``snmp_*_set`` flags say whether one is saved."""
+    stored = normalize_extras(raw)
+    out: dict[str, Any] = {key: value for key, value in stored.items() if key not in SNMP_SECRET_KEYS}
+    for key in SNMP_SECRET_KEYS:
+        if stored.get(key):
+            out[f"{key}_set"] = True
+    return out
+
+
+def merge_extras(current: Any, extras: dict | None, snmp: dict | None) -> dict[str, str]:
+    """New extras for an update. A posted extras block without ``snmp_*`` keys keeps the saved SNMP
+    settings; a posted SNMP block (already validated by snmp_from_form) replaces them."""
+    before = normalize_extras(current)
+    saved_snmp = {key: value for key, value in before.items() if key in SNMP_KEYS}
+    if extras is None:
+        out = {key: value for key, value in before.items() if key not in SNMP_KEYS}
+    else:
+        out = {key: value for key, value in normalize_extras(extras).items() if key not in SNMP_KEYS}
+        if snmp is None and any(key in extras for key in SNMP_KEYS):
+            snmp = normalize_snmp({**{key: value for key, value in saved_snmp.items() if key in SNMP_SECRET_KEYS}, **extras})
+    out.update(saved_snmp if snmp is None else normalize_snmp(snmp))
+    return out
+
+
+def form_extras(asset: Any = None) -> dict[str, Any]:
     """Every key present (empty string when unset) so templates can read form.extras.site directly."""
     stored = normalize_extras(getattr(asset, "extras", None)) if asset is not None else {}
-    return {key: stored.get(key, "") for key in EXTRA_KEYS}
+    out: dict[str, Any] = {key: stored.get(key, "") for key in EXTRA_KEYS}
+    out.update(public_snmp(stored))
+    return out
 
 
 def extras_rows(asset: Any) -> list[tuple[str, str, str]]:

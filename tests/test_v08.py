@@ -120,8 +120,8 @@ def test_version_is_0_8_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v0.8</span>" in base
     assert "v0.7" not in base
-    assert "app.css?v=v08-15" in base
-    assert "app.js?v=v08-15" in base
+    assert "app.css?v=v08-16" in base
+    assert "app.js?v=v08-16" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.8.0" in text
@@ -277,7 +277,7 @@ def test_extras_normalize_and_form_helpers():
     assert playrule_ids_from_form("1", ["3", "x", "3", "-1", "5"]) == [3, 5]
     assert len(normalize_extras({"runbook_note": "a" * 9000})["runbook_note"]) == 4000
     assert set(DISPLAY_KEYS) == {
-        "customer", "site", "backup_name", "backup_phone", "backup_email",
+        "customer", "site", "vlan", "backup_name", "backup_phone", "backup_email",
         "support_hours", "timezone", "contract", "runbook_note",
     }
     assert SUPPORT_KEYS == ("support", "support_custom", "support_from", "support_to", "support_lead_days")
@@ -315,8 +315,8 @@ def test_asset_form_is_three_columns_with_dropdown_playrules():
         assert left < at < middle, name
     assert text.index("data-asset-contacts") < text.index("data-asset-support") < middle
     comms = text.index("data-asset-comms")
-    assert middle < comms < text.index('name="scrape_address"') < text.index('name="snmp_port"') < text.index("alarm-families")
-    assert middle < text.index("alarm-families") < right < text.index("data-client-playrules")
+    assert middle < comms < text.index('name="scrape_address"') < text.index('name="snmp_port"') < text.index('name="snmp_version"') < right
+    assert right < text.index("alarm-families") < text.index("data-asset-form-rule") < text.index("data-client-playrules")
     assert "Standard alarms" in text
     assert "It cannot fire earlier than the Prometheus rule in alerts.yml." in text
     assert '<textarea name="extra_runbook_note"' in text

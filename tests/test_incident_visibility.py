@@ -290,4 +290,4 @@ def test_stack_cube_font_bumped_box_unchanged():
     assert "padding: 0.28rem" in block
     assert "line-height: 0.77rem" in block
     assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v08-15" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "app.css?v=v08-16" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

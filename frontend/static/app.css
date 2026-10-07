@@ -462,7 +462,7 @@ button.danger { background: var(--crit); color: var(--btn-danger-text); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; max-width: 720px; }
 .form-grid label, .form-grid .wide { display: flex; flex-direction: column; gap: 0.25rem; }
 .form-grid .wide { grid-column: 1 / -1; }
-/* Add / Edit asset: three columns — identity + NOC contacts, Standard alarms, Client playrules. */
+/* Add / Edit asset: three columns — identity + NOC contacts, Comms / monitoring only, Standard alarms + Client playrules. */
 .asset-form-split {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr) minmax(16rem, 1.1fr);
@@ -1573,6 +1573,15 @@ select.nice-select option { font-weight: 400; color: var(--text); background: va
 .asset-comms { display: flex; flex-direction: column; gap: 0.55rem; padding-bottom: 0.4rem; }
 .asset-comms label { display: flex; flex-direction: column; gap: 0.25rem; }
 .asset-comms input { width: 100%; }
+/* v08-16: SNMP version / community / v3 USM under SNMP port; empty room below Comms for later fields. */
+.asset-comms .snmp-auth,
+.asset-comms .snmp-v12,
+.asset-comms .snmp-v3,
+.asset-comms .snmp-v3-pair { display: flex; flex-direction: column; gap: 0.55rem; }
+.asset-comms [hidden] { display: none; }
+.asset-comms select { width: 100%; }
+.asset-form-reserved { flex: 1 1 auto; min-height: 12rem; }
+hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2rem 0; width: 100%; }
 .label-hint { font-size: 0.78rem; font-weight: 500; }
 .reach-snmp {
   display: inline-block;

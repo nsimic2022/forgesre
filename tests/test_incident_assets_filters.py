@@ -213,7 +213,7 @@ def test_search_combines_with_filters_and_reset_clears(seeded):
     assert _ids(_get(client, "q=nomatch-xyz&type=Switch")) == set()
     form = page.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
     assert form.count('<input name="q"') == 1
-    assert form.count("<select") == 4
+    assert form.count("<select") == 5
     assert 'type="hidden" name="source"' not in form
     assert '<a class="muted list-reset" href="/assets">Reset</a>' in form
     def filter_form(query: str) -> str:
@@ -224,17 +224,16 @@ def test_search_combines_with_filters_and_reset_clears(seeded):
         assert "list-reset" in filter_form(query), query
 
 
-def test_edit_link_keeps_filters_and_no_vlan_filter(seeded):
+def test_edit_link_keeps_filters(seeded):
     page = _get(_client(), "type=Switch&site=DC-East")
     assert "/assets?edit=iaf-sw1&amp;type=Switch&amp;site=DC-East" in page
     form = page.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
-    assert "vlan" not in form.lower()
     filters = form.split('<input name="q"', 1)[1]
     assert "Ping" not in filters
 
 
 def test_v08_15_cache_bump_and_compact_select_css():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-15" in base and "app.js?v=v08-15" in base
+    assert "app.css?v=v08-16" in base and "app.js?v=v08-16" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".list-filters select.filter-select { width: auto;" in css
