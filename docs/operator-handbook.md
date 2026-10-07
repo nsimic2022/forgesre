@@ -437,6 +437,8 @@ From the ForgeSRE VM the exporter speaks **UDP/161** to the device. Allow that o
 docker compose up -d snmp-exporter
 ```
 
+**After `git pull origin main && ./forgesre update`** the `snmp-exporter` container should stay **up**: `snmp.yml` now carries a valid snmp_exporter v0.26 `if_mib` module (ifDescr / ifName / ifAlias as per-metric lookup labels; ifAdminStatus, ifOperStatus, ifHCInOctets, ifHCOutOctets, sysUpTime as metrics) instead of the old module-level `lookups`, which v0.26 rejects at start-up. `./forgesre render-monitoring` always POSTs `127.0.0.1:9116/-/reload` after writing `snmp.yml`; if the exporter is not answering yet, run `docker compose restart snmp-exporter` (no install.sh). From then on **SnmpDeviceUnreachable** (`up{job="forgesre-snmp"} == 0`) means the device itself did not answer the walk (UDP/161, ACL, community or v3 user), not a broken exporter config. Testing it end to end needs a real SNMP agent (a switch, or `snmpd` on a lab host) as a Network device asset with an IP — the seeded demo switch is not a live SNMP walk.
+
 #### Per-asset SNMP version and auth
 
 Assets → Edit → *Comms / monitoring* has **SNMP version** (v1 / v2c / v3) under SNMP port.
