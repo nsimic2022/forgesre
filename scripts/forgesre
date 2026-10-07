@@ -4,11 +4,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# First word is the subcommand; the rest ("$@") is passed on to it.
 cmd="${1:-}"
 shift || true
 
+# Use plain docker when this user can reach the daemon, otherwise sudo.
 if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
 
+# Core HTTP port from .env (FORGESRE_HTTP_PORT), default 8080.
 port_from_env() {
   local port="8080"
   if [[ -f .env ]]; then
@@ -63,6 +66,7 @@ Commands:
   logs [service]     Container logs (default: last 100 lines)
   config             Print config/forgesre.yml
   assets             List inventory with # (alias: inventory)
+  inventory          Same as assets
   snmp               snmp_exporter health + SNMP HTTP SD targets
   render-monitoring  Rewrite Prometheus / Alertmanager / snmp.yml from templates
   snmp-auths         Write per-asset SNMP auths (Custom community / v3) into snmp.yml
@@ -87,6 +91,7 @@ Commands:
   update             Backup, render monitoring, refresh images, restart, doctor
   restart            Restart running stack containers only (no git pull, install, or secrets)
   mailbox            Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)
+  tls                How to put optional HTTPS (Caddy) in front of Core
   completion         Print a `source …completion.bash` line for ~/.bashrc
 
 Examples:
@@ -114,6 +119,8 @@ Examples:
   ./forgesre secrets-check
   ./forgesre journal snmp
   ./forgesre logs snmp-exporter
+  ./forgesre snmp-auths       # after saving a Custom community / v3 asset
+  ./forgesre restart          # bounce containers, no pull / render / secrets
   ./forgesre render-monitoring && docker compose up -d
 EOF
 }
@@ -385,6 +392,14 @@ Change community, then re-render (do not re-install):
   # edit SNMP_COMMUNITY in secrets/secrets.env
   ./forgesre render-monitoring
   docker compose up -d snmp-exporter
+
+Per asset (Assets → Edit → Comms / monitoring): SNMP v1 / v2c / v3, Default or
+Custom community, v3 USM user. Custom and v3 need ./forgesre snmp-auths
+(see ./forgesre help snmp-auths).
+
+snmp.yml ships a valid snmp_exporter v0.26 if_mib module, so the exporter stays
+up after update. SnmpDeviceUnreachable then means the device did not answer
+(UDP/161, ACL, community or v3 user), not a broken exporter config.
 EOF
       ;;
     snmp-auths)
@@ -753,6 +768,7 @@ EOF
 
 cmd_snmp() {
   need_env
+  # port = Core HTTP port; code = HTTP status from snmp_exporter /metrics.
   local port code
   port="$(port_from_env)"
   # shellcheck disable=SC1091
@@ -795,6 +811,7 @@ cmd_shell() {
   source "$ROOT/scripts/forgesre-completion.bash"
   COMP_WORDBREAKS="${COMP_WORDBREAKS//:}"
   local _c
+  # Register TAB completion for every bare command name typed at forgesre>.
   for _c in ${_forgesre_cmds} quit exit logs journal help; do
     complete -F _forgesre_complete "$_c" 2>/dev/null || true
   done
@@ -802,14 +819,17 @@ cmd_shell() {
   complete -F _forgesre_complete -E 2>/dev/null || true
   bind "set completion-ignore-case on" 2>/dev/null || true
   bind "set show-all-if-ambiguous on" 2>/dev/null || true
+  # line = raw input; args = that line split into words.
   local line
   local -a args
+  # Read one command per prompt and run it as ./forgesre <args> until quit / exit / EOF.
   while true; do
     if [[ -t 0 && -t 1 ]]; then
       IFS= read -e -r -p "forgesre> " line || break
     else
       IFS= read -r line || break
     fi
+    # Trim leading and trailing whitespace.
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%"${line##*[![:space:]]}"}"
     [[ -z "$line" ]] && continue
@@ -835,6 +855,8 @@ if [[ -z "$cmd" ]]; then
   cmd="help"
 fi
 
+# Dispatch: every subcommand listed here must also be in print_overview,
+# print_help_command, forgesre-completion.bash and the Administration CLI table.
 case "$cmd" in
   help)
     print_help_command "${1:-}"
@@ -930,6 +952,7 @@ case "$cmd" in
     need_env
     # shellcheck disable=SC1091
     source secrets/secrets.env
+    # Becomes 1 if any secret is still a shipped default; used as the exit code.
     fail=0
     if [[ "${SECRET_KEY:-}" == "forgesre-dev-secret-change-me" || -z "${SECRET_KEY:-}" ]]; then
       echo "SECRET_KEY is the shipped default — Core will refuse to start without FORGESRE_DEV=1."
@@ -956,6 +979,7 @@ case "$cmd" in
     PORT="$(port_from_env)"
     # shellcheck disable=SC1091
     source secrets/secrets.env
+    # module = optional Journal filter (snmp, rca, …); jar = temp cookie file for the admin login.
     module="${1:-}"
     jar="$(mktemp)"
     curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \

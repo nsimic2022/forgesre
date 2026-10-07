@@ -5,6 +5,9 @@
 # Do not `complete -I` here — that would steal TAB for every command in the
 # operator's shell. The interactive forgesre> prompt enables -I itself.
 
+# Clone directory, then the word lists TAB offers: every ./forgesre subcommand
+# (keep in sync with the dispatcher in scripts/forgesre), Compose services for
+# `logs`, Journal modules for `journal`, and incident statuses for `history`.
 _forgesre_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 _forgesre_cmds="help shell quit exit install doctor test ping probe verify status logs config assets inventory snmp snmp-auths render-monitoring journal demo demo-rca demo-reset jobs incidents history login logout whoami sd version secrets-check fetch-llm backup restore import remove update restart mailbox tls completion"
 _forgesre_services="core postgres prometheus alertmanager snmp-exporter loki alloy grafana netbox netbox-redis netbox-db-init llm mailserver roundcube"
@@ -16,7 +19,9 @@ _forgesre_is_wrapper() {
   [[ "$name" == "forgesre" || "$name" == "f" ]]
 }
 
+# Incident ids from Core, cached for 30s so TAB does not hit the API each keypress.
 _forgesre_incident_ids() {
+  # port = Core HTTP port; cache = id list file; now / age = cache freshness in seconds.
   local port="8080" cache now age
   cache="${_forgesre_root}/data/.cli-complete-incidents"
   mkdir -p "${_forgesre_root}/data" 2>/dev/null || true
@@ -35,7 +40,9 @@ _forgesre_incident_ids() {
   PYTHONPATH="${_forgesre_root}/backend" python3 -m app.cli_ops "$port" numbers 2>/dev/null | tee "$cache" || true
 }
 
+# Asset numbers / ids / hostnames from Core, cached for 30s like incident ids.
 _forgesre_asset_refs() {
+  # port = Core HTTP port; cache = ref list file; now / age = cache freshness in seconds.
   local port="8080" cache now age
   cache="${_forgesre_root}/data/.cli-complete-assets"
   mkdir -p "${_forgesre_root}/data" 2>/dev/null || true
@@ -55,10 +62,12 @@ _forgesre_asset_refs() {
 }
 
 _forgesre_complete() {
+  # cur = word being completed; first = ./forgesre, ./f, or (inside forgesre>) the command itself.
   local cur="${COMP_WORDS[COMP_CWORD]-}"
   local first="${COMP_WORDS[0]-}"
   local cmd=""
 
+  # Work out which subcommand is being completed, or offer command names for the first word.
   if _forgesre_is_wrapper "$first"; then
     if [[ ${COMP_CWORD} -eq 1 ]]; then
       COMPREPLY=($(compgen -W "${_forgesre_cmds}" -- "$cur"))
@@ -73,6 +82,7 @@ _forgesre_complete() {
     cmd="${COMP_WORDS[0]-}"
   fi
 
+  # Per-command arguments: flags, services, journal modules, incident ids, asset refs.
   case "$cmd" in
     help)
       COMPREPLY=($(compgen -W "${_forgesre_cmds}" -- "$cur"))
