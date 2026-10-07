@@ -49,7 +49,7 @@
 {% set sup = support_status(asset) %}
 <h3 class="asset-facts-head label-line">Support coverage {% with %}{% set tip %}From the asset's Support coverage (Edit → NOC contacts). Expiring = the To date is within {{ sup.lead_days }} days. Reminder only — no alert, incident, or Playrule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
 <dl class="kv asset-facts" data-asset-facts="support">
-  <dt>Under support</dt><dd class="extra-support">{{ support_labels.get(ex.support) or "—" }}{% if ex.support == 'custom' and ex.support_custom %} <span class="support-note" data-support-custom>{{ ex.support_custom }}</span>{% endif %}</dd>
+  <dt>Under support</dt><dd class="extra-support">{{ support_labels.get(ex.support) or "—" }}{% if ex.support == 'custom' and ex.support_custom %} <span class="support-note" data-support-note>{{ ex.support_custom }}</span>{% endif %}</dd>
   <dt>From</dt><dd class="extra-support_from">{{ ex.support_from or "—" }}</dd>
   <dt>To</dt><dd class="extra-support_to">{{ ex.support_to or "—" }}</dd>
   <dt>Lead time</dt><dd class="extra-support_lead_days">{% if ex.support_lead_days %}{{ ex.support_lead_days }} days{% else %}—{% endif %}</dd>
