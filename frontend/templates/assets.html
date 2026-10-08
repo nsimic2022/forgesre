@@ -70,6 +70,7 @@
   {% endfor %}
   {% endif %}
 </nav>
+<div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="asset-table" data-asset-reachability>
   <thead>
@@ -143,7 +144,10 @@
   </tbody>
 </table>
 </div>
+{% with list_actions={"delete": "/assets/bulk-delete" if can('write_assets') else "", "export": "/assets/export", "next": "/assets", "confirm": "Delete the selected assets? Incidents stay, without that host."} %}
 {% include "_pager.html" %}
+{% endwith %}
+</div>
 {% if can('write_assets') %}
 {% include "_asset_form.html" %}
 {% endif %}

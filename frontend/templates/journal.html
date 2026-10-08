@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_select.html" as sel %}
 {% block title %}Journal · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Journal {% with %}{% set tip %}Internal process journal. Each module writes a short ok / warn / error report when it finishes a job. Old rows are dropped automatically (about 200 per module) so search stays small. Raw Docker/Loki logs are separate — this is the operator view, not a bash shell.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
@@ -20,14 +21,16 @@
   {% include "_pager_keep.html" %}
   <button type="submit">Search</button>
 </form>
+<div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="console">
   <thead>
-    <tr><th>When</th><th>Module</th><th>Action</th><th>Status</th><th>Report</th></tr>
+    <tr>{{ sel.head() }}<th>When</th><th>Module</th><th>Action</th><th>Status</th><th>Report</th></tr>
   </thead>
   <tbody>
   {% for row in entries %}
     <tr data-list-row>
+      {{ sel.cell(row.id, row.module ~ " " ~ row.action) }}
       <td class="muted">{{ row.at }}</td>
       <td><a href="/journal?module={{ row.module|urlencode }}">{{ row.module }}</a></td>
       <td>{{ row.action }}</td>
@@ -39,10 +42,13 @@
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="5" class="muted">No journal rows yet. They appear after Core start, install, adding an asset, or running the demo.</td></tr>
+    <tr><td colspan="6" class="muted">No journal rows yet. They appear after Core start, install, adding an asset, or running the demo.</td></tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
+{% with list_actions={"delete": "/journal/bulk-delete", "export": "/journal/export", "next": "/journal", "confirm": "Delete the selected journal rows?"} %}
 {% include "_pager.html" %}
+{% endwith %}
+</div>
 {% endblock %}

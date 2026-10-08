@@ -289,7 +289,7 @@ def test_ops_console_on_off_nav_and_ai_anchor():
     client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
     playrules = client.get("/playrules")
     assert playrules.status_code == 200
-    assert "On" in playrules.text
+    assert ">ON<" in playrules.text
     assert "class=\"active\"" in playrules.text
     assert ">True<" not in playrules.text and ">False<" not in playrules.text
     assert 'class="secondary"' in client.get("/").text

@@ -161,6 +161,13 @@ ACTIVE_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED")
 UNACKED_GROUP = "unacked"
 
 
+def asset_pks_by_extras(db: Session, *, site: str = "", customer: str = "") -> list[int]:
+    """Assets whose Site / Customer extras match exactly (case-insensitive), the same rule as the Assets filters."""
+    from app.inventory import assets_matching
+
+    return [row.id for row in assets_matching(db.query(Asset).all(), site=site, customer=customer)]
+
+
 def incident_query(
     db: Session,
     *,
@@ -170,9 +177,13 @@ def incident_query(
     closed_only: bool = False,
     critical_only: bool = False,
     unacked_only: bool = False,
+    site: str = "",
+    customer: str = "",
 ):
     """Single filter used by the Incidents list and the Dashboard tiles (tile count = rows behind the click)."""
     query = db.query(Incident)
+    if (site or "").strip() or (customer or "").strip():
+        query = query.filter(Incident.asset_id.in_(asset_pks_by_extras(db, site=site, customer=customer)))
     if days is not None:
         query = query.filter(Incident.started_at >= cutoff_since(clamp_days(days)))
     if unacked_only:
@@ -192,8 +203,19 @@ def incident_query(
 INCIDENT_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED")
 
 
-def incident_list_filters(*, status: str = "", severity: str = "", open_filter: str = "", days: str = "") -> dict[str, Any]:
-    """The /incidents filter from its query keys: incident_query kwargs, form state, and a canonical query string (empty for the default list)."""
+def incident_list_filters(
+    *,
+    status: str = "",
+    severity: str = "",
+    open_filter: str = "",
+    days: str = "",
+    site: str = "",
+    customer: str = "",
+) -> dict[str, Any]:
+    """The /incidents filter from its query keys: incident_query kwargs, form state, and a canonical query string (empty for the default list).
+
+    Site / Customer are the asset extras (Site / DC / room, Customer / domain) of the incident's host.
+    """
     status_raw = (status or "").strip()
     status_key = status_raw.upper()
     open_raw = (open_filter or "").strip().lower()
@@ -213,6 +235,8 @@ def incident_list_filters(*, status: str = "", severity: str = "", open_filter: 
         status_group = status_key
     days_raw = (days or "").strip()
     days_n = clamp_days(days_raw) if days_raw else None
+    site_value = " ".join((site or "").split())
+    customer_value = " ".join((customer or "").split())
     keep: list[tuple[str, str]] = []
     if status_group != "all":
         keep.append(("status", status_group))
@@ -220,6 +244,10 @@ def incident_list_filters(*, status: str = "", severity: str = "", open_filter: 
         keep.append(("severity", "critical"))
     if days_n is not None:
         keep.append(("days", str(days_n)))
+    if site_value:
+        keep.append(("site", site_value))
+    if customer_value:
+        keep.append(("customer", customer_value))
     return {
         "query": {
             "days": days_n,
@@ -227,10 +255,14 @@ def incident_list_filters(*, status: str = "", severity: str = "", open_filter: 
             "open_only": open_only,
             "critical_only": critical_only,
             "unacked_only": unacked_only,
+            "site": site_value,
+            "customer": customer_value,
         },
         "status_group": status_group,
         "severity_group": "critical" if critical_only else "",
         "days": days_raw,
+        "site": site_value,
+        "customer": customer_value,
         "qs": urlencode(keep),
     }
 
@@ -299,6 +331,8 @@ def list_history(
     critical_only: bool = False,
     unacked_only: bool = False,
     page: Any | None = None,
+    site: str = "",
+    customer: str = "",
 ) -> tuple[list[Incident], int]:
     limit = max(1, min(int(limit or LIST_LIMIT), 500))
     query = incident_query(
@@ -309,6 +343,8 @@ def list_history(
         closed_only=closed_only,
         critical_only=critical_only,
         unacked_only=unacked_only,
+        site=site,
+        customer=customer,
     )
     number = (number or "").strip()
     if number:

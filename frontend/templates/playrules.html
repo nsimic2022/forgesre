@@ -8,6 +8,7 @@
 {% if notice %}
 <div class="banner">{{ notice }}</div>
 {% endif %}
+<div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="scan-list rule-list">
   <thead><tr>{{ sel.head() }}<th>Playrule</th><th>Fires when (alerts.yml)</th><th>Severity</th><th>Playbook</th><th>Enabled</th>{% if can('write_play') %}<th></th>{% endif %}</tr></thead>
@@ -36,9 +37,12 @@
       <td><span class="pill {{ severity_pill(rule.severity) }}">{{ rule.severity }}</span></td>
       <td>{{ rule.playbook.name if rule.playbook else "—" }}{% if rule.escalation_policy %}<div class="muted">{{ rule.escalation_policy.name }}</div>{% endif %}</td>
       <td>
-        <span class="pill {{ 'ok' if rule.enabled else 'off' }}">{{ "On" if rule.enabled else "Off" }}</span>
         {% if can('write_play') %}
-        <form method="post" action="/playrules/{{ rule.id }}/toggle" class="inline"><button class="secondary">Toggle</button></form>
+        <form method="post" action="/playrules/{{ rule.id }}/toggle" class="onoff-form">
+          <button type="submit" class="onoff {{ 'is-on' if rule.enabled else 'is-off' }}" aria-pressed="{{ 'true' if rule.enabled else 'false' }}" title="ON: this playrule can match an alert. OFF: stored, skipped. This does not change alerts.yml.">{% if rule.enabled %}ON{% else %}OFF{% endif %}</button>
+        </form>
+        {% else %}
+        <span class="onoff {{ 'is-on' if rule.enabled else 'is-off' }}">{% if rule.enabled %}ON{% else %}OFF{% endif %}</span>
         {% endif %}
       </td>
       {% if can('write_play') %}
@@ -54,7 +58,10 @@
   </tbody>
 </table>
 </div>
+{% with list_actions={"delete": "/playrules/bulk-delete" if can('write_play') else "", "export": "/playrules/export", "next": "/playrules", "confirm": "Delete the selected playrules? Existing incidents keep their playbook."} %}
 {% include "_pager.html" %}
+{% endwith %}
+</div>
 {% if can('write_play') %}
 {% if form_mode == "edit" %}
 <h2 id="playrule-form-title">Edit playrule <span class="muted">{{ selected.name }}</span></h2>

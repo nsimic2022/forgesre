@@ -21,6 +21,7 @@ from app.migrate import migrate
 from app.models import Asset
 from app.seed import DEMO_ASSET, seed, seed_summary
 from app.settings import assert_runtime_secrets, settings
+from app.bulk import router as bulk_router
 from app.web import NotAuthenticated, router as web_router
 
 log = logging.getLogger("forgesre")
@@ -165,6 +166,7 @@ def create_app() -> FastAPI:
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     app.include_router(api_router)
     app.include_router(web_router)
+    app.include_router(bulk_router)
     from app.api import zabbix_webhook
 
     # Short alias of POST /api/v1/webhooks/zabbix for Zabbix media types typed by hand.

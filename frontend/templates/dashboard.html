@@ -77,7 +77,7 @@
 </section>
 <section class="dash-tiles-infra">
   <div class="tile-group">
-  <h2>Infrastructure {% with %}{% set tip %}Asset inventory counts — each number is the row count of the Assets list behind the click. No open incident / Warning / Critical come from open incidents on that asset — not from a liveness check. Offline / unreachable = last Assets-page probe failed both ICMP and the exporter/SNMP check, or NetBox marks the device non-active. Probes refresh when someone opens Assets; Prometheus up alerts (NodeExporterDown, WindowsExporterDown, SnmpDeviceUnreachable) are the real-time signal. No owner email = escalation has nobody to mail for role steps.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Infrastructure {% with %}{% set tip %}Asset inventory counts — each number is the row count of the Assets list behind the click, never an incident count. Assets without incident / Warning / Critical come from active incidents on that asset — not from a liveness check — and update when an incident opens, resolves or closes. Offline / unreachable = last Assets-page probe failed both ICMP and the exporter/SNMP check, or NetBox marks the device non-active. Probes refresh when someone opens Assets; Prometheus up alerts (NodeExporterDown, WindowsExporterDown, SnmpDeviceUnreachable) are the real-time signal. No owner email = escalation has nobody to mail for role steps.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="grid stat-row stat-row-big">
     {% for tile in asset_tiles %}
     <a class="stat {{ tile.tone }}{% if not tile.count %} stat-zero{% endif %}" href="{{ tile.href }}"><span>{{ tile.label }}</span><strong>{{ tile.count }}</strong></a>
@@ -107,6 +107,7 @@
 <div class="dash-incidents" data-dash-incidents>
 <section class="dash-recent">
   <h2>Recent incidents</h2>
+  <div data-select-scope>
   <div class="dash-recent-scroll" data-dash-list>
   <table class="scan-list" data-dash-incident-table>
     <thead><tr>{{ sel.head() }}<th>Incident</th><th>Severity</th><th>Status</th><th>When</th></tr></thead>
@@ -126,7 +127,10 @@
     </tbody>
   </table>
   </div>
+  {% with list_actions={"delete": "/incidents/bulk-delete" if can('write_incidents') else "", "export": "/incidents/export", "next": "/", "confirm": "Delete the selected incidents? Mail already sent stays in the outbox."} %}
   {% include "_pager.html" %}
+  {% endwith %}
+  </div>
 </section>
 <aside class="dash-graphs card" data-dash-graphs aria-live="polite" aria-label="Live metrics for the selected incident's host">
   <div class="metric-panel-head">
@@ -141,6 +145,7 @@
 {% if can('read_play') %}
 <section id="journal">
   <h2>Recent journal reports {% with %}{% set tip %}Latest internal process reports (ok / warn / error). Not Docker/Loki logs.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div data-select-scope>
   <div class="list-scroll" data-list-scroll>
   <table class="console scan-list">
     <thead><tr>{{ sel.head() }}<th>Module</th><th>Status</th><th>Report</th></tr></thead>
@@ -158,7 +163,10 @@
     </tbody>
   </table>
   </div>
-  {% with pager=journal_pager %}{% include "_pager.html" %}{% endwith %}
+  {% with pager=journal_pager, list_actions={"delete": "/journal/bulk-delete", "export": "/journal/export", "next": "/#journal", "confirm": "Delete the selected journal rows?"} %}
+  {% include "_pager.html" %}
+  {% endwith %}
+  </div>
   <p class="muted"><a href="/journal">Open full journal</a></p>
 </section>
 {% endif %}

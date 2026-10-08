@@ -119,6 +119,7 @@
   </div>
 </div>
 <h2>Audit log</h2>
+<div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table>
   <thead><tr>{{ sel.head() }}<th>When</th><th>Actor</th><th>Action</th><th>Object</th></tr></thead>
@@ -135,7 +136,10 @@
   </tbody>
 </table>
 </div>
-{% with pager=audit_pager %}{% include "_pager.html" %}{% endwith %}
+{% with pager=audit_pager, list_actions={"delete": "", "export": "/admin/audit/export", "next": "/admin", "confirm": ""} %}
+{% include "_pager.html" %}
+{% endwith %}
+</div>
 <h2>Platform backup {% with %}{% set tip %}Full-system archive for crash recovery or VM migration. Each run is a folder data/backups/backup_YYYYMMDDTHHMMSSZ/ (gitignored, directory mode 700) with one forgesre.tar.gz (mode 600) plus a short MANIFEST.txt. Import that tar — do not unpack it into loose files. Includes config/forgesre.yml, .env, secrets/secrets.env, a logical Postgres dump (users, incidents, playbooks, playrules, journal), compressed logs, monitoring/alerts.local.yml, and data/generated/. Not in the backup: container images, Prometheus/Loki/Grafana volumes, nested backups, optional mailbox mail. LLM GGUF weights are skipped unless you tick the checkbox (they are often multi-GB). Download requires this admin session — there is no unauthenticated URL.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% if request.query_params.get('backup') %}
 <p class="banner"><strong>Backup written</strong> {{ request.query_params.get('backup') }} under <code>data/backups/</code> (mode 600, gitignored).</p>
@@ -165,12 +169,14 @@
       {{ sel.cell(b.name) }}
       <td><code>{{ b.name }}</code></td>
       <td>{{ format_size(b.size) }}</td>
-      <td class="row-actions">
-        <a href="/admin/backups/{{ b.name }}">Download</a>
-        <form method="post" action="/admin/backups/remove" class="inline" onsubmit="return confirm('Remove {{ b.name }}? This deletes only that backup folder (tar + MANIFEST). data/backups/ stays.');">
-          <input type="hidden" name="name" value="{{ b.name }}">
-          <button type="submit" class="danger">Remove</button>
-        </form>
+      <td>
+        <div class="row-actions backup-row-actions">
+          <a class="button" href="/admin/backups/{{ b.name }}">Download</a>
+          <form method="post" action="/admin/backups/remove" onsubmit="return confirm('Remove {{ b.name }}? This deletes only that backup folder (tar + MANIFEST). data/backups/ stays.');">
+            <input type="hidden" name="name" value="{{ b.name }}">
+            <button type="submit" class="danger">Remove</button>
+          </form>
+        </div>
       </td>
     </tr>
   {% endfor %}

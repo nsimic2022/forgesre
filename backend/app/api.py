@@ -578,8 +578,12 @@ def set_status(
     status = body.status.upper()
     if status not in allowed:
         raise HTTPException(status_code=400, detail="invalid status")
+    from app.services import refresh_asset_status
+
     item.status = status
     apply_status_fields(item, status, user.email)
+    db.flush()
+    refresh_asset_status(db, item.asset)
     audit(db, "incident.status", actor=user.email, object_type="incident", object_id=number, data={"status": status})
     db.commit()
     return _incident(item, include_evidence=True)

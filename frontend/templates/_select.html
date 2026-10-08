@@ -1,4 +1,4 @@
-{#- Row checkboxes. No bulk action reads them yet; keep name="selected" so a later pass can wrap them in a form. -#}
+{#- Row checkboxes. Bulk Delete / Export posts name="selected" from the checked rows on this page. -#}
 {% macro head() -%}
 <th class="row-select"><input type="checkbox" data-select-page aria-label="Select all rows on this page"></th>
 {%- endmacro %}

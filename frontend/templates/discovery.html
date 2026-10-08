@@ -156,6 +156,8 @@
 </div>
 </div>
 
+<h2>Found assets</h2>
+<div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table>
   <thead>
@@ -215,12 +217,15 @@
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="10" class="muted">No candidates yet. Confirm a management CIDR and scan, or use the demo workflow.</td></tr>
+    <tr><td colspan="10" class="muted">No found assets yet. Confirm a management CIDR and scan, or use the demo workflow.</td></tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
+{% with list_actions={"delete": "/discovery/bulk-delete" if can('write_assets') else "", "export": "/discovery/export", "next": "/discovery", "confirm": "Delete the selected found assets? An approved asset stays in Assets."} %}
 {% include "_pager.html" %}
+{% endwith %}
+</div>
 {% if can('write_assets') and form_mode %}
 <section class="card" id="candidate-form">
   {% if form_mode == "edit" %}

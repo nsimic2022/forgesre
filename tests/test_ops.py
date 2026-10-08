@@ -123,9 +123,11 @@ def test_ops_compose_column_is_forced_wider_than_add_email():
     assert ">Edit<" in ops
     assert ">Clone<" in ops
     assert ">Remove<" in ops
-    assert "Disable" in ops
+    assert 'class="onoff' in ops
+    assert ">ON<" in ops or "ON{% else %}OFF" in ops
     assert "Enable" in ops
     assert "Toggle" not in ops
+    assert "Disable" not in ops
     assert "td.ops-report-actions" in css
     assert "confirm(" in ops
 
@@ -328,7 +330,8 @@ def test_ops_scheduled_report_edit_clone_disable_remove():
     assert f"/ops?edit={row.id}" in reports
     assert f"/ops?clone={row.id}" in reports
     assert f"/ops/reports/{row.id}/delete" in reports
-    assert ">Disable<" in reports
+    assert 'class="onoff is-on"' in reports
+    assert ">ON<" in reports
     assert ">Remove<" in reports
     assert ">Edit<" in reports
     assert ">Clone<" in reports
@@ -437,7 +440,8 @@ def test_ops_report_actions_reject_viewer():
     assert ">Edit<" not in reports
     assert ">Clone<" not in reports
     assert ">Remove<" not in reports
-    assert ">Disable<" not in reports
+    assert ">ON<" in reports
+    assert "/toggle" not in reports
     assert client.post(f"/ops/reports/{row.id}/update", data={"name": "nope", "to_email": "x@example.local"}, follow_redirects=False).status_code == 403
     assert client.post(f"/ops/reports/{row.id}/delete", follow_redirects=False).status_code == 403
     assert client.post(f"/ops/reports/{row.id}/toggle", follow_redirects=False).status_code == 403

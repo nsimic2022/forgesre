@@ -77,7 +77,16 @@ from app.models import (
     User,
 )
 from app.netbox import is_local_netbox_url, status_label, sync_cta, token_presence
-from app.security import CREATABLE_ROLES, can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
+from app.security import (
+    CREATABLE_ROLES,
+    can,
+    can_send_ops,
+    distinct_who_name,
+    make_session_token,
+    role_label,
+    user_from_session,
+    verify_password,
+)
 from app.api import doctor_payload, run_asset_verify, verify_assets
 from app.asset_metrics import safe_asset_metric_panel
 from app.metrics import reset_demo_gauges
@@ -153,10 +162,6 @@ def incident_tone(status: str, severity: str = "") -> str:
     return "inc-warn"
 
 
-def can_send_ops(user: User) -> bool:
-    return can(user, "write_play") or can(user, "write_incidents") or can(user, "admin")
-
-
 def _parse_id_query(raw: str) -> int | None:
     text = (raw or "").strip()
     if not text.isdigit():
@@ -185,6 +190,22 @@ def parse_scheduled_report_form(
     if contact is None:
         raise HTTPException(status_code=400, detail="Pick a saved address or enter a new email")
     return (name.strip() or "performance", contact.email, hours, ids)
+
+
+def _enabled_report_twin(db: Session, name: str, to_email: str, hours: int, asset_ids: list[str]) -> ScheduledReport | None:
+    """An enabled report that would send the same mail. A double-click on Save must not leave a second copy firing after Remove."""
+    wanted = sorted(asset_ids)
+    rows = (
+        db.query(ScheduledReport)
+        .filter(
+            ScheduledReport.enabled.is_(True),
+            ScheduledReport.name == name,
+            func.lower(ScheduledReport.to_email) == to_email.lower(),
+            ScheduledReport.interval_hours == hours,
+        )
+        .all()
+    )
+    return next((row for row in rows if sorted(str(x) for x in (row.asset_ids or [])) == wanted), None)
 
 
 def scheduled_report_form_values(row: ScheduledReport | None = None, *, clone: bool = False) -> dict:
@@ -1461,9 +1482,13 @@ def incidents_page(
     status: str = "",
     severity: str = "",
     days: str = "",
+    site: str = "",
+    customer: str = "",
     page: str = "1",
 ):
-    filters = incident_list_filters(status=status, severity=severity, open_filter=open_filter, days=days)
+    filters = incident_list_filters(
+        status=status, severity=severity, open_filter=open_filter, days=days, site=site, customer=customer
+    )
     size = per_page(request)
     rows, total = list_history(db, **filters["query"], limit=size, page=page)
     pager = pager_state(page, total=total, size=size)
@@ -1477,6 +1502,9 @@ def incidents_page(
         status_group=filters["status_group"],
         severity_group=filters["severity_group"],
         days=filters["days"],
+        site=filters["site"],
+        customer=filters["customer"],
+        filter_options=asset_filter_options(db.query(Asset).all()),
         pager=pager,
         nav_qs=filters["qs"],
     )
@@ -1543,7 +1571,12 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
     )
     q = request.query_params
     filters = incident_list_filters(
-        status=q.get("status", ""), severity=q.get("severity", ""), open_filter=q.get("open", ""), days=q.get("days", "")
+        status=q.get("status", ""),
+        severity=q.get("severity", ""),
+        open_filter=q.get("open", ""),
+        days=q.get("days", ""),
+        site=q.get("site", ""),
+        customer=q.get("customer", ""),
     )
     evidence, evidence_pager = paginate(
         [evidence_row(ev) for ev in sorted(item.evidence, key=lambda ev: ev.id or 0)] if can(user, "read_evidence") else [],
@@ -1602,6 +1635,10 @@ def incident_status(
             from app.metrics import reset_demo_gauges
 
             reset_demo_gauges()
+    from app.services import refresh_asset_status
+
+    db.flush()
+    refresh_asset_status(db, item.asset)
     audit(db, "incident.status", actor=user.email, object_type="incident", object_id=number, data=data)
     db.commit()
     return RedirectResponse(f"/incidents/{number}", status_code=302)
@@ -2368,6 +2405,8 @@ def ops_create_report(
         asset_id=asset_id,
         actor=user.email,
     )
+    if _enabled_report_twin(db, label, email, hours, ids) is not None:
+        return RedirectResponse("/ops#reports", status_code=303)
     row = ScheduledReport(
         name=label,
         to_email=email,

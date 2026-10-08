@@ -1464,7 +1464,7 @@ def asset_tiles(rows: list[Asset]) -> list[dict]:
     """Dashboard infrastructure tiles. Each count is the length of the /assets list behind its link."""
     specs = [
         ("Total assets", "", {}, "/assets"),
-        ("No open incident", "ok", {"status": "healthy"}, "/assets?status=healthy"),
+        ("Assets without incident", "ok", {"status": "healthy"}, "/assets?status=healthy"),
         ("Warning", "warn", {"status": "warning"}, "/assets?status=warning"),
         ("Critical", "crit", {"status": "critical"}, "/assets?status=critical"),
         ("Offline / unreachable", "crit", {"flag": "unreachable"}, "/assets?flag=unreachable"),
@@ -1511,10 +1511,15 @@ def delete_asset(db: Session, asset: Asset, actor: str = "system") -> dict:
             row.status = "new"
             row.decided_by = ""
             row.decided_at = None
+    reports_off: list[str] = []
     for sched in db.query(ScheduledReport).all():
         ids = [str(x) for x in (sched.asset_ids or [])]
         if asset_id in ids:
             sched.asset_ids = [x for x in ids if x != asset_id]
+            # An empty list means "every asset"; a report about this host must not start mailing the whole inventory.
+            if not sched.asset_ids and sched.enabled:
+                sched.enabled = False
+                reports_off.append(sched.name or str(sched.id))
     db.flush()
     db.delete(asset)
     audit(
@@ -1523,16 +1528,17 @@ def delete_asset(db: Session, asset: Asset, actor: str = "system") -> dict:
         actor=actor,
         object_type="asset",
         object_id=asset_id,
-        data={"unlinked_incidents": unlinked, "scrape": scrape, "number": number},
+        data={"unlinked_incidents": unlinked, "scrape": scrape, "number": number, "reports_off": reports_off},
     )
     db.commit()
+    off_note = f" scheduled_reports_off={', '.join(reports_off)}" if reports_off else ""
     report(
         db,
         "inventory",
         "asset.delete",
         "ok",
         summary=f"Removed {hostname} ({asset_id})",
-        detail=f"actor={actor} unlinked_incidents={unlinked} scrape={scrape or '—'}",
+        detail=f"actor={actor} unlinked_incidents={unlinked} scrape={scrape or '—'}{off_note}",
         object_type="asset",
         object_id=asset_id,
     )
