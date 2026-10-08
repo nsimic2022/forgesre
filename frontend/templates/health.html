@@ -2,7 +2,7 @@
 {% block title %}System Health · ForgeSRE{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>System Health {% with %}{% set tip %}Alarm path is Prometheus → Alertmanager → Core (webhook). Grafana is graphs only — Open Grafana on this page, not in the left nav, not on incidents. Grafana down is yellow (optional graphs), not a Prometheus outage and not a journal error. A real Prom/Alertmanager failure names the hop (:9090, Alertmanager :9093) — never a vague Prometheus Stack. Jobs: one worker thread in Core (not Celery). An LLM rewrite can occupy it up to ai.llm.timeout_seconds ({{ llm_timeout|int }}s). Green = running. Yellow = warn / paused / starting / disabled. Red = down. NetBox UI up with API 403 is warn, not paused. SNMP with no Network device + IP is paused (no SNMP targets), not down — do not add devices just to un-pause it. Open goes to that service’s GUI or metrics. Prometheus Open is Targets (/targets?search= scrape jobs), Alerts, Graph — not Prometheus process /metrics. Prometheus/Alertmanager listen on the appliance; use the VM host if the UI rewrote 127.0.0.1.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+  <h1>System Health {% with %}{% set tip %}Alarm path is Prometheus → Alertmanager → Core (webhook). Grafana is graphs only — Open Grafana on this page, not in the left nav, not on incidents. Grafana down is yellow (optional graphs), not a Prometheus outage and not a journal error. A real Prom/Alertmanager failure names the hop (:9090, Alertmanager :9093) — never a vague Prometheus Stack. Jobs: one worker thread in Core (not Celery). An LLM rewrite can occupy it up to ai.llm.timeout_seconds ({{ llm_timeout|int }}s). Green = running. Yellow = warn / paused / starting / disabled. Red = down. NetBox UI up with API 403 is warn, not paused. SNMP with no Network device + IP is paused (no SNMP targets), not down — do not add devices just to un-pause it. Open goes to that service’s GUI or metrics. Prometheus, Alertmanager, SNMP exporter, Loki, Alloy and LLM listen on 127.0.0.1 only, so from a NOC browser Open shows appliance-local and the address, not a link — use them on the appliance or over ssh -L. On the appliance, Prometheus Open is /targets?search= (scrape jobs), /alerts, /graph — not Prometheus process /metrics.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
   <div class="row-actions">
     {% if grafana_enabled %}
     <a class="button-link" href="{{ grafana_open }}" target="_blank" rel="noreferrer">Open Grafana</a>
@@ -56,7 +56,8 @@
         {% if item.gui %}<a href="{{ item.gui }}" target="_blank" rel="noreferrer">{{ item.gui_label }}</a>{% endif %}
         {% if item.metrics %}<a href="{{ item.metrics }}" target="_blank" rel="noreferrer">{{ item.metrics_label }}</a>{% endif %}
         {% if item.extra %}<a href="{{ item.extra }}" target="_blank" rel="noreferrer">{{ item.extra_label }}</a>{% endif %}
-        {% if not item.gui and not item.metrics and not item.extra %}<span class="muted">—</span>{% endif %}
+        {% if item.local_only %}<span class="muted" data-appliance-local title="{{ item.local_hint }}">appliance-local <code>{{ item.local_addr }}</code></span>
+        {% elif not item.gui and not item.metrics and not item.extra %}<span class="muted">—</span>{% endif %}
       </td>
     </tr>
   {% endfor %}

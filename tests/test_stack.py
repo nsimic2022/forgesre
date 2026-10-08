@@ -182,20 +182,43 @@ def test_enrich_components_keeps_stack_order_and_open_links():
     assert core["metrics"] == "/metrics"
     prom = next(row for row in rows if row["id"] == "prometheus")
     assert prom["state"] == "down"
-    assert prom["gui"].startswith("http://lab.local:")
-    assert prom["gui"].endswith("/targets?search=")
-    assert prom["gui_label"] == "Targets"
-    assert prom["metrics"].endswith("/alerts")
-    assert prom["metrics_label"] == "Alerts"
-    assert prom["extra"].endswith("/graph")
-    assert prom["extra_label"] == "Graph"
-    assert not prom["metrics"].endswith("/metrics")
+    assert prom["local_only"] is True
+    assert prom["gui"] == prom["metrics"] == prom["extra"] == ""
+    assert prom["local_addr"].startswith("127.0.0.1:")
+    assert "ssh -L" in prom["local_hint"]
+    for cid in ("alertmanager", "snmp", "loki", "alloy", "llm"):
+        row = next(item for item in rows if item["id"] == cid)
+        assert row["local_only"] is True, cid
+        assert "lab.local" not in row["gui"] + row["metrics"] + row["extra"], cid
     grafana = next(row for row in rows if row["id"] == "grafana")
-    assert grafana["gui"]
+    assert grafana["gui"].startswith("http://lab.local:")
+    assert grafana["local_only"] is False
     assert grafana["label"] == "Grafana"
+    netbox = next(row for row in rows if row["id"] == "netbox")
+    assert netbox["gui"].startswith("http://lab.local:")
+    assert netbox["local_only"] is False
+    on_box = enrich_components({"prometheus": {"status": "ok"}}, "localhost:8080")
+    prom_local = next(row for row in on_box if row["id"] == "prometheus")
+    assert prom_local["local_only"] is False
+    assert prom_local["gui"].startswith("http://localhost:")
+    assert prom_local["gui"].endswith("/targets?search=")
+    assert prom_local["gui_label"] == "Targets"
+    assert prom_local["metrics"].endswith("/alerts")
+    assert prom_local["metrics_label"] == "Alerts"
+    assert prom_local["extra"].endswith("/graph")
+    assert prom_local["extra_label"] == "Graph"
+    assert not prom_local["metrics"].endswith("/metrics")
     prom_labeled = next(row for row in rows if row["id"] == "prometheus")
     assert prom_labeled["label"] == "Prometheus"
     assert "Stack" not in prom_labeled["label"]
+
+
+def test_enrich_components_keeps_link_for_non_loopback_prometheus(monkeypatch):
+    monkeypatch.setattr("app.stack.settings.prometheus_url", "http://prom.corp:9090")
+    rows = enrich_components({"prometheus": {"status": "ok"}}, "lab.local")
+    prom = next(row for row in rows if row["id"] == "prometheus")
+    assert prom["local_only"] is False
+    assert prom["gui"] == "http://prom.corp:9090/targets?search="
 
 
 def test_doctor_grafana_down_is_warn_not_prometheus_fail(monkeypatch):
