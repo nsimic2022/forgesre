@@ -458,6 +458,15 @@ def cmd_verify(port: str, args: list[str]) -> None:
         i += 1
 
     jar, _me = ensure_jar(port)
+    # The same cookie saves live-detected types after probing, so keep a temp jar until the end.
+    try:
+        _verify_with_jar(port, jar, selector=selector, timeout=timeout, include_demo=include_demo)
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
+def _verify_with_jar(port: str, jar: Path, *, selector: str, timeout: float, include_demo: bool) -> None:
     try:
         rows = get_json(port, jar, "/api/v1/assets")
         try:
@@ -466,9 +475,6 @@ def cmd_verify(port: str, args: list[str]) -> None:
             support = {"assets": {}, "ai_enabled": False, "prometheus_url": "http://127.0.0.1:9090"}
     except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as exc:
         raise SystemExit(f"could not list assets: {exc}") from exc
-    finally:
-        if jar != SESSION_PATH and jar.exists():
-            jar.unlink(missing_ok=True)
 
     if not isinstance(rows, list):
         rows = []
@@ -500,8 +506,12 @@ def cmd_verify(port: str, args: list[str]) -> None:
     def query_fn(expr: str) -> Any:
         return urllib_prom_query(expr, prom_url)
 
+    fetched: dict[str, Any] = {}
+
     def targets_fn() -> Any:
-        return urllib_prom_targets(prom_url)
+        if "targets" not in fetched:
+            fetched["targets"] = urllib_prom_targets(prom_url)
+        return fetched["targets"]
 
     results = []
     for item in chosen:
