@@ -35,7 +35,7 @@ Find or enter a host
 | **Discovery** | Light probe: TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, then HTTP `/metrics` on :9182/:9100 to default Windows vs Linux. Approve or Ignore. Optional read-sync from bundled NetBox (`:8001`) or `--netbox-url`. |
 | **Inventory** | Hostname, IP, type (default **Auto (detect exporter)**), owner email/phone. Analysts can add and edit. |
 | **Monitoring** | Prometheus HTTP SD for Linux (`node_exporter` :9100) and Windows (`windows_exporter` :9182). Bundled snmp_exporter for network devices. Grafana for graphs. |
-| **Zabbix (optional)** | Read-only: **Discovery → Sync hosts** imports hosts (Auto, empty scrape), the Zabbix webhook opens incidents with a **Zabbix** pill, and `trend.get` graphs cover hosts Prometheus does not scrape. Forge never writes to Zabbix. Setup: [handbook §18](docs/operator-handbook.md#18-zabbix-read-only-source). |
+| **Zabbix (optional)** | Read-only: **Discovery → Sync hosts** imports hosts (Auto, empty scrape), the Zabbix webhook opens incidents with a **Zabbix** pill, and `trend.get` graphs cover hosts Prometheus does not scrape. Forge never writes to Zabbix. Step-by-step setup: [docs/zabbix.md](docs/zabbix.md) (summary in [handbook §18](docs/operator-handbook.md#18-zabbix-read-only-source)). |
 | **Incidents** | Alertmanager webhook opens `INC-0134_16.08.2026_09:13`. Fingerprint is alert + asset. A resolved alert sets `RESOLVED` (not `CLOSED`); the same alert firing again opens a new incident. |
 | **History** | `/history` — last 90 days in Postgres, plus mail/audit/notes on the incident. |
 | **Playrules / playbooks** | Deterministic mapping by `alertname`: this alert → this checklist. Thresholds live in Prometheus `alerts.yml`, not in playrules. Nothing is executed. |
@@ -230,6 +230,6 @@ Config: `config/forgesre.yml` (behavior), `.env` (ports/paths), `secrets/secrets
 
 ## Docs
 
-Install / config (including optional LLM) is in this README above. Longer Ubuntu manual: [docs/install-config.md](docs/install-config.md). Learning path: [docs/README.md](docs/README.md). Why/when: [handbook](docs/operator-handbook.md). Commands: [cli.md](docs/cli.md). LLM details: [docs/llm.md](docs/llm.md).
+Install / config (including optional LLM) is in this README above. Longer Ubuntu manual: [docs/install-config.md](docs/install-config.md). Learning path: [docs/README.md](docs/README.md). Why/when: [handbook](docs/operator-handbook.md). Commands: [cli.md](docs/cli.md). LLM details: [docs/llm.md](docs/llm.md). Zabbix: [docs/zabbix.md](docs/zabbix.md).
 
 Longer-term design notes (not a runtime guide): [architecture.md](docs/architecture.md). Security notes: [SECURITY.md](SECURITY.md). License: [Apache-2.0](LICENSE).

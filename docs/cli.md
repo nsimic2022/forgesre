@@ -145,6 +145,10 @@ quit                       # or: exit    or Ctrl-D
 
 ---
 
+**Zabbix has no CLI command.** There is no `./forgesre zabbix`. Connect it with `ZABBIX_URL`, `ZABBIX_API_TOKEN`, `ZABBIX_WEBHOOK_TOKEN` in `secrets/secrets.env`, then `./forgesre update`; import hosts with **Discovery → Sync hosts** in the UI; the Zabbix status shows in `./forgesre doctor` (component `zabbix`) and as the **Zabbix** cube on System Health. `./forgesre snmp-auths` is for ForgeSRE's own snmp_exporter and is not needed for Zabbix. Step by step: [zabbix.md](zabbix.md).
+
+---
+
 ## Ping vs scrape
 
 ICMP ping from the appliance only proves **L3** (the host answers ping). ForgeSRE **sees** a host when Prometheus scrapes exporter `/metrics`. `./forgesre ping` (alias `./forgesre probe`) checks both **from the Ubuntu host**, using inventory already in ForgeSRE — no extra flags for the common case. Do not `pip install sqlalchemy` on the host.
