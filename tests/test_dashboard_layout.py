@@ -170,7 +170,6 @@ def test_pager_select_bottom_right_on_every_listed_surface():
     for path, key in [
         ("/", "per_page"),
         ("/incidents", "per_page"),
-        ("/history", "per_page"),
         ("/discovery", "per_page"),
         ("/journal", "per_page"),
         ("/admin", "audit_per_page"),
@@ -204,7 +203,7 @@ def test_row_checkboxes_named_selected_on_list_surfaces():
     db.add(ScheduledReport(name=f"layout-sel-{uuid4().hex[:6]}", to_email="ops@example.local", interval_hours=6))
     db.commit()
     client = _client()
-    for path in ["/", "/incidents", "/history", "/assets", "/discovery", "/playrules", "/playbooks", "/ops", "/admin"]:
+    for path in ["/", "/incidents", "/assets", "/discovery", "/playrules", "/playbooks", "/ops", "/admin"]:
         page = client.get(path)
         assert page.status_code == 200, path
         assert 'name="selected"' in page.text, path
@@ -212,7 +211,8 @@ def test_row_checkboxes_named_selected_on_list_surfaces():
         assert "data-select-row" in page.text, path
     incidents = client.get("/incidents").text
     head = incidents.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert head.index("data-select-page") < head.index(">Incident<")
+    assert head.index("data-select-page") < head.index(">Hostname<") < head.index(">Name<")
+    assert "Ack" in head and "Resolved by" in head
     assert "delete-selected" not in incidents
     admin = (TEMPLATES / "admin.html").read_text(encoding="utf-8")
     backup_table = admin.split("{% for b in backups %}", 1)[1].split("</tr>", 1)[0]
@@ -306,7 +306,7 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.8rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-21" in base
+    assert "app.css?v=v08-22" in base
 
 
 def test_dashboard_banner_block_gone_from_template_js_css():

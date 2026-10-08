@@ -27,7 +27,7 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v08-21" in base
+    assert "app.css?v=v08-22" in base
     assert ".banner-short" not in css
     assert ".banner-x" in css
     assert "top: 0.35rem" in css.split(".banner-x {", 1)[1].split("}", 1)[0]
@@ -103,16 +103,17 @@ def test_incidents_default_is_all_and_filter_is_spaced():
     db.close()
 
 
-def test_history_ack_column_is_a_status_circle():
+def test_incidents_ack_column_is_a_status_circle():
     db = _db()
     client = TestClient(app)
     _login(client)
-    page = client.get("/history")
+    page = client.get("/incidents")
     assert page.status_code == 200
     assert "ack-dot" in page.text
     assert 'title="Acknowledged"' in page.text or 'title="Not acknowledged"' in page.text
-    html = (ROOT / "frontend" / "templates" / "history.html").read_text(encoding="utf-8")
+    html = (ROOT / "frontend" / "templates" / "incidents.html").read_text(encoding="utf-8")
     assert "{% if item.ack_by %}" not in html
+    assert "Resolved by" in html
     db.close()
 
 

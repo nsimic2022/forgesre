@@ -133,9 +133,14 @@ def test_incidents_page_two_is_ten_rows():
     db.close()
 
 
-def test_history_aligns_to_ten_per_page():
+def test_history_redirects_and_incidents_stay_ten_per_page():
     db, client = _login()
-    page = client.get("/history?days=90")
+    bounced = client.get("/history?days=90&page=2", follow_redirects=False)
+    assert bounced.status_code == 302
+    location = bounced.headers["location"]
+    assert location.startswith("/incidents?")
+    assert "days=90" in location and "page=2" in location
+    page = client.get("/incidents?days=90")
     assert page.status_code == 200
     ids = _tbody_incidents(page.text)
     assert len(ids) == 10
@@ -143,10 +148,12 @@ def test_history_aligns_to_ten_per_page():
     assert "Showing " in page.text
     assert " of " in page.text
     assert PAGE_SIZE == 10
-    two = client.get("/history?days=90&page=2")
+    two = client.get(location)
     assert two.status_code == 200
     assert "days=90" in two.text
     assert "name=\"page\"" not in two.text.split("<form", 1)[1].split("</form>", 1)[0]
+    nav = two.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    assert ">History<" not in nav
     db.close()
 
 

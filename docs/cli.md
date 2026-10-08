@@ -98,7 +98,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `snmp` | snmp_exporter health + SNMP HTTP SD targets |
 | `sd` | Prometheus HTTP SD (Linux / Windows) and SNMP HTTP SD |
 | `incidents [INC-…]` | Short colored board, or one incident |
-| `history` | 90-day incident history (`--days`, `--status`, `--asset`, `INC-…`) |
+| `history` | 90-day CLI lookback (`--days`, `--status`, `--asset`, `INC-…`). The GUI list is Incidents; `/history` redirects there. |
 | `jobs` | Background job queue (RCA, discovery scans) |
 | `journal [module]` | Internal console reports (JSON) |
 | `demo` / `demo-rca` / `demo-reset` | Demo HighCPU path / filesystem RCA demo / lower the demo gauges |

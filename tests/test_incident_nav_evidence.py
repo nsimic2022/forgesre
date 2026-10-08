@@ -108,7 +108,7 @@ def test_older_newer_walk_the_list_order_and_land_on_the_neighbour():
 def test_nav_sits_right_above_the_header_strip_and_back_links_stay_on_top():
     _, number = _add(["OPEN", "OPEN"])
     html = _client().get(f"/incidents/{number}").text
-    back = html.index('">← Incidents</a> · <a href="/history">History</a></p>')
+    back = html.index('">← Incidents</a></p>')
     nav_start = html.rindex("<nav", 0, html.index("data-incident-nav"))
     nav_end = html.index("</nav>", nav_start) + len("</nav>")
     assert back < nav_start

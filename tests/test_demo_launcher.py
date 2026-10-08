@@ -165,10 +165,12 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
     assert 'class="pill demo"' in detail.text
     assert "DEMO" in detail.text
 
-    history = client.get("/history")
-    assert history.status_code == 200
-    assert 'class="inc-demo"' in history.text
-    assert "· DEMO" in history.text
+    history = client.get("/history", follow_redirects=False)
+    assert history.status_code == 302
+    assert history.headers["location"] == "/incidents"
+    landed = client.get("/history")
+    assert 'class="inc-demo"' in landed.text
+    assert "· DEMO" in landed.text
 
     esc = client.get("/escalation")
     assert esc.status_code == 200

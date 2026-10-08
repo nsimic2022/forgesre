@@ -2,7 +2,7 @@
 {% import "_select.html" as sel %}
 {% block title %}Incidents · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Incidents {% with %}{% set tip %}Live incident list (default: all statuses, newest first). Left bar and #N color: red = critical, yellow = warning in progress, green = resolved or closed. Title color follows severity. When shows how long the incident has been open (Open / Investigating / Escalated) or how long it lasted (Resolved / Closed) — 18m, 2h 14m, 4d 3h — with the start clock underneath; hover for the full start time. RESOLVED means the alert cleared (or a person resolved it) — it is not Closed. If the same alert fires again after RESOLVED, a new incident opens. Closed archive is History.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Incidents {% with %}{% set tip %}The incident list (default: all statuses, newest first — not a separate 90-day archive). Columns: Hostname, Name, severity, status, When, Ack, Resolved by. Left bar and #N color: red = critical, yellow = warning in progress, green = resolved or closed. Title color follows severity. When is the start date and time (08 Oct 2026, 21:57) — hover for how long it has been open or how long it lasted. Ack: green = acknowledged, yellow = in progress without ack, red = not acknowledged. RESOLVED means the alert cleared (or a person resolved it) — it is not Closed. If the same alert fires again after RESOLVED, a new incident opens. Closed rows stay in this list. Filter by status (including Not acknowledged), site, customer, time window, or search.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <form method="get" action="/incidents" class="list-filters incidents-filters">
   <label>Status
     <select name="status">
@@ -43,26 +43,43 @@
   </label>
   <label>From <input name="from" type="date" value="{{ date_from }}" aria-label="From date"></label>
   <label>To <input name="to" type="date" value="{{ date_to }}" aria-label="To date"></label>
+  <label>Search <input name="q" value="{{ q }}" placeholder="host, problem, INC" aria-label="Search"></label>
   {% include "_pager_keep.html" %}
   <button type="submit">Filter</button>
   <a class="muted list-reset" href="/incidents">Reset</a>
-  <span class="muted list-count">{{ pager.total }} incident{% if pager.total != 1 %}s{% endif %} · older rows in <a href="/history">History</a></span>
+  <span class="muted list-count">{{ pager.total }} incident{% if pager.total != 1 %}s{% endif %}</span>
 </form>
 <div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="scan-list incidents-table">
-  <thead><tr>{{ sel.head() }}<th>Incident</th><th>Severity</th><th>Status</th><th>When</th></tr></thead>
+  <thead>
+    <tr>
+      {{ sel.head() }}
+      <th class="col-host">Hostname</th>
+      <th class="col-name">Name</th>
+      <th>Severity</th>
+      <th>Status</th>
+      <th>When</th>
+      <th class="col-ack"><span class="label-line">Ack {% with %}{% set tip %}Green = acknowledged. Yellow = in progress without ack. Red = not acknowledged.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th class="col-resolved">Resolved by</th>
+    </tr>
+  </thead>
   <tbody>
   {% for item in incidents %}
     <tr class="{{ incident_tone(item.status, item.severity) }}{% if item.status|upper in ['RESOLVED', 'CLOSED'] %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}" data-list-row>
       {{ sel.cell(item.number) }}
+      <td class="col-host">{% set host = incident_host(item) %}<span class="inc-host">{{ host or "—" }}</span></td>
       {% include "_incident_cell.html" %}
       <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
       <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
-      {% include "_incident_when.html" %}
+      {% set when = incident_when(item) %}
+      {% set stamp = compact_stamp(item.started_at) %}
+      <td class="inc-when" title="{{ when.title }}" data-when="stamp">{% if stamp.date %}<span class="stamp"><span class="stamp-date">{{ stamp.date }}</span><span class="stamp-time">{{ stamp.time }}</span></span>{% else %}—{% endif %}</td>
+      <td class="col-ack">{% set ack = ack_circle(item) %}<span class="ack-dot {{ ack.css }}" title="{{ ack.label }}" aria-label="{{ ack.label }}"></span></td>
+      <td class="col-resolved">{% if item.resolved_by %}{{ item.resolved_by }}{% else %}—{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="5" class="muted">No incidents match this filter.{% if status_group != "all" or severity_group or site or customer or window %} Try All or <a href="/history">History</a>.{% endif %}</td></tr>
+    <tr><td colspan="8" class="muted">No incidents match this filter.{% if status_group != "all" or severity_group or site or customer or window or q %} Try Reset.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>

@@ -36,8 +36,7 @@ Find or enter a host
 | **Inventory** | Hostname, IP, type (default **Auto (detect exporter)**), owner email/phone. Analysts can add and edit. |
 | **Monitoring** | Prometheus HTTP SD for Linux (`node_exporter` :9100) and Windows (`windows_exporter` :9182). Bundled snmp_exporter for network devices. Grafana for graphs. |
 | **Zabbix (optional)** | Read-only: **Discovery → Sync hosts** imports hosts (Auto, empty scrape), the Zabbix webhook opens incidents with a **Zabbix** pill, and `trend.get` graphs cover hosts Prometheus does not scrape. Forge never writes to Zabbix. Operator cookbook (both machines, checklist): [docs/zabbix.md](docs/zabbix.md) (summary in [handbook §18](docs/operator-handbook.md#18-zabbix-read-only-source)). |
-| **Incidents** | Alertmanager webhook opens `INC-0134_16.08.2026_09:13`. Fingerprint is alert + asset. A resolved alert sets `RESOLVED` (not `CLOSED`); the same alert firing again opens a new incident. |
-| **History** | `/history` — last 90 days in Postgres, plus mail/audit/notes on the incident. |
+| **Incidents** | `/incidents` — all incidents, newest first, with Ack and Resolved by. Alertmanager opens `INC-0134_16.08.2026_09:13`. Fingerprint is alert + asset. A resolved alert sets `RESOLVED` (not `CLOSED`); the same alert firing again opens a new incident. Mail, audit, and notes stay on the incident. `/history` redirects here. |
 | **Playrules / playbooks** | Deterministic mapping by `alertname`: this alert → this checklist. Thresholds live in Prometheus `alerts.yml`, not in playrules. Nothing is executed. |
 | **Escalation** | Generated mail to the **asset owner** (or an address written on the policy step; no owner email = `no-recipient`, nothing sent). SMTP optional: Gmail, Outlook, or later the off-by-default mailbox profile. |
 | **ForgeRCA / ForgeAI** | Read-only investigation. ForgeRCA (Python builtin) always first; ForgeAI is the optional local LLM rewrite. |
@@ -169,8 +168,7 @@ wget -O data/models/model.gguf \
 | `/` | Dashboard: incident / infrastructure counts, ForgeSRE card, **Run demo** (admin). Full doctor grid is **System Health**. |
 | `/assets` | Inventory and owner contacts |
 | `/discovery` | Prefills primary IPv4 `/24`; **Confirm & scan** writes `discovery.cidrs` and queues a background probe; **Scan now** after confirm (empty = no scan) / Approve / Ignore; **Sync NetBox** beside it (read-only, admin). Empty NetBox = yellow. **Sync hosts** for Zabbix when `ZABBIX_URL` + `ZABBIX_API_TOKEN` are set. |
-| `/incidents` | All incidents by default, newest first (**10 per page**); filter **Active (not resolved)** for live work. Archive is History. |
-| `/history` | 90-day lookback, filters, closed rows |
+| `/incidents` | All incidents by default, newest first (**10 per page**). Filters: status (including **Not acknowledged**), site, customer, time window, search. Columns include Ack and Resolved by. `/history` redirects here. |
 | `/ai/INC-…` | Read-only RCA (ForgeRCA first, ForgeAI rewrite-only) |
 | `/playrules` `/playbooks` `/escalation` | Workflow |
 | `/health-ui` | System Health (`./forgesre doctor`) and the journal list below it. `/journal` redirects to `#journal`. Open Grafana / Prometheus Targets / … |

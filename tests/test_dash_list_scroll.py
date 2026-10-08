@@ -320,7 +320,7 @@ def test_js_has_no_tab_trap():
 def test_pager_links_carry_no_top_jump_and_one_shared_helper():
     _add_many(12)
     client = _client()
-    for path in ("/", "/incidents", "/history?days=90", "/assets", "/journal", "/ops", "/admin"):
+    for path in ("/", "/incidents", "/assets", "/journal", "/ops", "/admin"):
         html = client.get(path).text
         for nav in re.findall(r'<nav class="pager".*?</nav>', html, flags=re.S):
             for href in re.findall(r'href="([^"]*)"', nav):
@@ -426,4 +426,4 @@ def test_js_pager_restores_only_matching_fresh_entry():
 
 def test_cache_bust_bumped():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-21" in base and "app.js?v=v08-21" in base
+    assert "app.css?v=v08-22" in base and "app.js?v=v08-22" in base

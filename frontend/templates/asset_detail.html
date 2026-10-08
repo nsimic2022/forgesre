@@ -109,7 +109,7 @@
       <button type="submit" class="secondary">Detect OS / scrape port</button>
     </form>
     {% if can_remove %}
-    <form method="post" action="/assets/{{ asset.asset_id }}/delete" class="inline" onsubmit="return confirm('Remove {{ asset.hostname }}? Prometheus will stop scraping it. Incidents stay in History without this host. Core is unchanged.');">
+    <form method="post" action="/assets/{{ asset.asset_id }}/delete" class="inline" onsubmit="return confirm('Remove {{ asset.hostname }}? Prometheus will stop scraping it. Incidents stay on the Incidents list without this host. Core is unchanged.');">
       <button type="submit" class="danger">Remove</button>
     </form>
     {% elif remove_blocked %}

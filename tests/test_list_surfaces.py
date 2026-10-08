@@ -1,4 +1,4 @@
-"""Scan-friendly list language on Dashboard, History, and Incidents."""
+"""Scan-friendly list language on Dashboard and Incidents."""
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -84,24 +84,28 @@ def test_dashboard_recent_incidents_uses_scan_columns():
     db.close()
 
 
-def test_history_keeps_ack_and_drops_reported_to():
+def test_incidents_keeps_ack_resolved_by_and_drops_reported_to():
     db = _db()
     client = TestClient(app)
     _login(client)
-    page = client.get("/history")
+    page = client.get("/incidents")
     assert page.status_code == 200
     headers = _headers(page.text)
-    assert ">Incident<" in headers
+    assert headers.index(">Hostname<") < headers.index(">Name<")
     assert ">When<" in headers
     assert "Ack" in headers
-    assert "Resolved" in headers
+    assert "Resolved by" in headers
     assert "Reported to" not in headers
     assert ">Asset<" not in headers
     assert "ack-dot" in page.text
     assert "inc-cell" in page.text
-    html = (ROOT / "frontend" / "templates" / "history.html").read_text(encoding="utf-8")
+    assert 'class="stamp"' in page.text
+    html = (ROOT / "frontend" / "templates" / "incidents.html").read_text(encoding="utf-8")
     assert "ack-dot" in html
     assert "Reported to" not in html
+    assert "history.html" not in html
+    nav = page.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    assert ">History<" not in nav
     db.close()
 
 
