@@ -45,7 +45,7 @@
   <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
 </div>
 {% set st = incident.status|upper %}
-{% set acked = st in ["INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED"] %}
+{% set acked = incident.ack_at is not none %}
 {% set resolved = st in ["RESOLVED", "CLOSED"] %}
 {% set closed = st == "CLOSED" %}
 <div class="incident-actions">

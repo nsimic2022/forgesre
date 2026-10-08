@@ -143,6 +143,8 @@ def cutoff_since(days: int) -> datetime:
 
 CRITICAL_SEVERITIES = ("CRITICAL", "CRIT", "FATAL", "EMERGENCY")
 DONE_STATUSES = ("RESOLVED", "CLOSED")
+ACTIVE_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED")
+UNACKED_GROUP = "unacked"
 
 
 def incident_query(
@@ -153,11 +155,14 @@ def incident_query(
     open_only: bool = False,
     closed_only: bool = False,
     critical_only: bool = False,
+    unacked_only: bool = False,
 ):
     """Single filter used by the Incidents list and the Dashboard tiles (tile count = rows behind the click)."""
     query = db.query(Incident)
     if days is not None:
         query = query.filter(Incident.started_at >= cutoff_since(clamp_days(days)))
+    if unacked_only:
+        query = query.filter(Incident.status.in_(ACTIVE_STATUSES), Incident.ack_at.is_(None))
     if open_only:
         query = query.filter(Incident.status.notin_(DONE_STATUSES))
     if closed_only:
@@ -180,11 +185,15 @@ def incident_list_filters(*, status: str = "", severity: str = "", open_filter: 
     open_raw = (open_filter or "").strip().lower()
     critical_only = (severity or "").strip().lower() in {"critical", "crit"}
     open_only = False
+    unacked_only = False
     exact = ""
     status_group = "all"
     if status_raw.lower() == "active" or (not status_raw and open_raw in {"1", "true", "yes"}):
         open_only = True
         status_group = "active"
+    elif status_raw.lower() == UNACKED_GROUP:
+        unacked_only = True
+        status_group = UNACKED_GROUP
     elif status_key in INCIDENT_STATUSES:
         exact = status_key
         status_group = status_key
@@ -198,7 +207,13 @@ def incident_list_filters(*, status: str = "", severity: str = "", open_filter: 
     if days_n is not None:
         keep.append(("days", str(days_n)))
     return {
-        "query": {"days": days_n, "status": exact, "open_only": open_only, "critical_only": critical_only},
+        "query": {
+            "days": days_n,
+            "status": exact,
+            "open_only": open_only,
+            "critical_only": critical_only,
+            "unacked_only": unacked_only,
+        },
         "status_group": status_group,
         "severity_group": "critical" if critical_only else "",
         "days": days_raw,
@@ -226,7 +241,7 @@ def incident_neighbors(db: Session, incident: Incident, filters: dict[str, Any] 
 def dashboard_incident_tiles(db: Session) -> list[dict[str, Any]]:
     """Tile label, count, CSS tone, and the exact /incidents link whose list has that many rows."""
     specs = [
-        ("Open", "crit", {"status": "OPEN"}, "/incidents?status=OPEN"),
+        ("Open", "crit", {"unacked_only": True}, f"/incidents?status={UNACKED_GROUP}"),
         ("Critical", "crit", {"open_only": True, "critical_only": True}, "/incidents?status=active&severity=critical"),
         ("Investigating", "warn", {"status": "INVESTIGATING"}, "/incidents?status=INVESTIGATING"),
         ("Escalated", "warn", {"status": "ESCALATED"}, "/incidents?status=ESCALATED"),
@@ -268,6 +283,7 @@ def list_history(
     open_only: bool = False,
     closed_only: bool = False,
     critical_only: bool = False,
+    unacked_only: bool = False,
     page: Any | None = None,
 ) -> tuple[list[Incident], int]:
     limit = max(1, min(int(limit or LIST_LIMIT), 500))
@@ -278,6 +294,7 @@ def list_history(
         open_only=open_only,
         closed_only=closed_only,
         critical_only=critical_only,
+        unacked_only=unacked_only,
     )
     number = (number or "").strip()
     if number:
@@ -379,6 +396,13 @@ def ack_circle(incident: Incident) -> dict[str, str]:
     if (incident.status or "").upper() in {"INVESTIGATING", "ESCALATED"}:
         return {"css": "yellow", "label": "Not acknowledged"}
     return {"css": "red", "label": "Not acknowledged"}
+
+
+def acknowledge(incident: Incident, actor: str) -> None:
+    """Acknowledge button: record ack_at (stops the mail ladder). OPEN → INVESTIGATING; other statuses stay."""
+    if (incident.status or "").upper() == "OPEN":
+        incident.status = "INVESTIGATING"
+    apply_status_fields(incident, "INVESTIGATING", actor)
 
 
 def apply_status_fields(incident: Incident, status: str, actor: str) -> None:

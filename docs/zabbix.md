@@ -733,7 +733,7 @@ On the incident page (`/incidents/INC-…`):
 
 | Button | ForgeSRE status | What happens in Zabbix |
 |---|---|---|
-| **Acknowledge** | `INVESTIGATING` | Nothing. ForgeSRE does not call `event.acknowledge`. |
+| **Acknowledge** | `INVESTIGATING` (an `ESCALATED` incident stays `ESCALATED`; ack time is recorded) | Nothing. ForgeSRE does not call `event.acknowledge`. |
 | **Resolve** | `RESOLVED` (human) | Nothing. The Zabbix problem stays PROBLEM until Zabbix recovers it. |
 | **Close** | `CLOSED` (human archive) | Nothing. Close is ForgeSRE-only. `CLOSED` is final — a later fire opens a **new** INC. |
 

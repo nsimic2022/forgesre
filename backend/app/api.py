@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -1005,6 +1006,10 @@ def detect_exporter_api(
     return detect_exporter(ip, hint_type=hint_type, snmp_prober=_snmp_answer).as_dict()
 
 
+def _ingest_numbers(db: Session, payload: dict[str, Any], source: str = "prometheus") -> list[str]:
+    return [item.number for item in ingest_alertmanager(db, payload, source=source)]
+
+
 @router.post("/webhooks/alertmanager")
 async def alertmanager_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
     auth = request.headers.get("authorization") or ""
@@ -1012,8 +1017,9 @@ async def alertmanager_webhook(request: Request, db: Session = Depends(get_db)) 
     if token != settings.webhook_token:
         raise HTTPException(status_code=401, detail="invalid webhook token")
     payload = await request.json()
-    created = ingest_alertmanager(db, payload)
-    return {"accepted": True, "incidents": [item.number for item in created]}
+    # Ingest blocks on Prometheus/Loki queries and SMTP; keep it off the event loop.
+    numbers = await run_in_threadpool(_ingest_numbers, db, payload)
+    return {"accepted": True, "incidents": numbers}
 
 
 @router.post("/webhooks/zabbix")
@@ -1041,12 +1047,12 @@ async def zabbix_webhook(request: Request, db: Session = Depends(get_db)) -> dic
             alerts.append(parse_webhook(item))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    created = ingest_alertmanager(db, {"alerts": alerts}, source="zabbix")
+    numbers = await run_in_threadpool(_ingest_numbers, db, {"alerts": alerts}, "zabbix")
     return {
         "accepted": True,
         "source": "zabbix",
         "status": [alert["status"] for alert in alerts],
-        "incidents": [item.number for item in created],
+        "incidents": numbers,
     }
 
 

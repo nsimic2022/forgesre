@@ -15,6 +15,7 @@ from app.api import router as api_router
 from app.db import Base, SessionLocal, engine
 from app.journal import report
 from app.inventory import run_scan, seed_demo_candidate, sync_netbox
+from app.jobs import recover_interrupted_jobs
 from app.metrics import metrics_response
 from app.migrate import migrate
 from app.seed import seed
@@ -126,6 +127,7 @@ def create_app() -> FastAPI:
         try:
             seed(db)
             seed_demo_candidate(db)
+            recover_interrupted_jobs(db)
             report(
                 db,
                 "core",

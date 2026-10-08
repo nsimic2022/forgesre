@@ -174,7 +174,7 @@ def test_dashboard_incident_tiles_match_the_list_behind_the_click():
     tiles = _tile_counts(home.text)
     assert set(tiles) == {"open", "critical", "investigating", "escalated", "resolved"}
     assert tiles["critical"][0] == "/incidents?status=active&amp;severity=critical"
-    assert tiles["open"][0] == "/incidents?status=OPEN"
+    assert tiles["open"][0] == "/incidents?status=unacked"
     assert tiles["escalated"][0] == "/incidents?status=ESCALATED"
     for key, (href, count) in tiles.items():
         listed = client.get(href.replace("&amp;", "&"))

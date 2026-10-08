@@ -13,6 +13,11 @@ log = logging.getLogger("forgesre")
 
 DISCOVERY_SCAN_KIND = "discovery_scan"
 DISCOVERY_SCAN_OBJECT_ID = "scan"
+# Re-running these is safe: builtin RCA returns the existing result, an LLM rewrite only adds
+# a new Investigation row, a discovery scan upserts candidates. None of them sends mail.
+RESTART_RETRY_KINDS = ("investigate", DISCOVERY_SCAN_KIND)
+RESTART_MAX_ATTEMPTS = 3
+INTERRUPTED_NOTE = "interrupted by Core restart"
 
 
 def enqueue(db: Session, kind: str, object_id: str, object_type: str = "incident", payload: dict | None = None) -> Job | None:
@@ -72,6 +77,39 @@ def enqueue_discovery_scan(
         object_type="discovery",
         payload=payload,
     )
+
+
+def recover_interrupted_jobs(db: Session) -> dict[str, int]:
+    """Core startup, before the jobs loop: a `running` row belonged to the old process and nobody will finish it.
+
+    Retryable kinds go back to pending (until RESTART_MAX_ATTEMPTS); the rest become error so a new
+    job can queue. Either way the row stops blocking enqueue() and the "LLM pending" pill.
+    """
+    rows = db.query(Job).filter(Job.status == "running").order_by(Job.id).all()
+    requeued = failed = 0
+    for row in rows:
+        if row.kind in RESTART_RETRY_KINDS and int(row.attempts or 0) < RESTART_MAX_ATTEMPTS:
+            row.status = "pending"
+            row.started_at = None
+            row.error = f"{INTERRUPTED_NOTE}; queued again"
+            requeued += 1
+        else:
+            row.status = "error"
+            row.finished_at = utcnow()
+            row.error = f"{INTERRUPTED_NOTE}; not retried (attempt {int(row.attempts or 0)})"
+            failed += 1
+    if rows:
+        db.commit()
+        log.warning("jobs: %d requeued, %d marked error after restart", requeued, failed)
+        report(
+            db,
+            "jobs",
+            "recover",
+            "error" if failed else "ok",
+            summary=f"{len(rows)} job(s) were running when Core stopped: {requeued} queued again, {failed} marked error",
+            detail=", ".join(f"#{row.id} {row.kind} {row.object_id} → {row.status}" for row in rows)[:2000],
+        )
+    return {"requeued": requeued, "failed": failed}
 
 
 def job_is_llm(row: Job) -> bool:
