@@ -9,7 +9,6 @@ from app.stack import (
     component_label,
     doctor_soft_status,
     enrich_components,
-    ensure_snmp_exporter,
     journal_doctor_alarm_path,
     rewrite_host,
     runtime_state,
@@ -39,10 +38,6 @@ def test_runtime_state_maps_green_yellow_red():
     assert doctor_soft_status("error") is False
 
 
-def test_ensure_snmp_exporter_skipped_in_dev():
-    assert ensure_snmp_exporter() is False
-
-
 def test_doctor_snmp_paused_when_no_targets(monkeypatch):
     def _http(url, method):
         if "9116" in url:
@@ -51,7 +46,6 @@ def test_doctor_snmp_paused_when_no_targets(monkeypatch):
 
     monkeypatch.setattr("app.api._http", _http)
     monkeypatch.setattr("app.api.snmp_target_count", lambda: 0)
-    monkeypatch.setattr("app.api.ensure_snmp_exporter", lambda: False)
     payload = doctor_payload(force=True)
     snmp = payload["components"]["snmp"]
     assert snmp["status"] == "paused"
@@ -68,7 +62,6 @@ def test_doctor_snmp_paused_when_no_targets(monkeypatch):
 def test_doctor_snmp_stays_paused_when_exporter_up_but_no_targets(monkeypatch):
     monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
     monkeypatch.setattr("app.api.snmp_target_count", lambda: 0)
-    monkeypatch.setattr("app.api.ensure_snmp_exporter", lambda: True)
     payload = doctor_payload(force=True)
     assert payload["components"]["snmp"]["status"] == "paused"
     assert "snmp" not in payload["failed"]
@@ -82,34 +75,33 @@ def test_doctor_snmp_down_when_network_targets_and_exporter_dark(monkeypatch):
 
     monkeypatch.setattr("app.api._http", _http)
     monkeypatch.setattr("app.api.snmp_target_count", lambda: 1)
-    monkeypatch.setattr("app.api.ensure_snmp_exporter", lambda: False)
     payload = doctor_payload(force=True)
     assert payload["components"]["snmp"]["status"] == "error"
     assert "snmp" in payload["failed"]
     assert payload["overall"] == "DEGRADED"
 
 
-def test_doctor_snmp_running_after_compose_start(monkeypatch):
+def test_doctor_snmp_down_probes_once_without_compose_or_sleep(monkeypatch):
+    """Core has no docker CLI: one probe, then the fix line. ./forgesre doctor starts it on the host."""
     hits = {"n": 0}
 
     def _http(url, method):
         if "9116" in url:
             hits["n"] += 1
-            if hits["n"] >= 2:
-                return {"status": "ok"}
             return {"status": "error", "why": "connection refused"}
         return {"status": "ok"}
 
+    def _no_sleep(_s):
+        raise AssertionError("doctor must not sleep waiting for snmp-exporter")
+
     monkeypatch.setattr("app.api._http", _http)
     monkeypatch.setattr("app.api.snmp_target_count", lambda: 1)
-    monkeypatch.setattr("app.api.ensure_snmp_exporter", lambda: True)
-    monkeypatch.setattr("app.api.time.sleep", lambda _s: None)
+    monkeypatch.setattr("app.api.time.sleep", _no_sleep)
     payload = doctor_payload(force=True)
-    assert payload["components"]["snmp"]["status"] == "ok"
-    assert "snmp" not in payload["failed"]
-    rows = enrich_components(payload["components"], "lab.local")
-    row = next(item for item in rows if item["id"] == "snmp")
-    assert row["state"] == "running"
+    snmp = payload["components"]["snmp"]
+    assert hits["n"] == 1
+    assert snmp["status"] == "error"
+    assert snmp["fix"] == "docker compose up -d snmp-exporter"
 
 
 def test_doctor_script_treats_paused_as_ok_and_starts_compose():

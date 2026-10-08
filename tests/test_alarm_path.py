@@ -630,6 +630,27 @@ def test_webhook_auth_still_checked_before_ingest(monkeypatch):
     assert calls == []
 
 
+def test_alertmanager_token_is_compared_in_constant_time(monkeypatch):
+    seen: list[tuple[bytes, bytes]] = []
+    real = api_mod.hmac.compare_digest
+
+    def recording(a, b):
+        seen.append((a, b))
+        return real(a, b)
+
+    monkeypatch.setattr(api_mod.hmac, "compare_digest", recording)
+    monkeypatch.setattr(api_mod, "ingest_alertmanager", lambda *a, **k: [])
+    client = TestClient(app)
+    good = {"Authorization": f"Bearer {settings.webhook_token}"}
+    bad = {"Authorization": "Bearer nope"}
+    assert client.post(WEBHOOK, json={"alerts": []}, headers=bad).status_code == 401
+    assert client.post(WEBHOOK, json={"alerts": []}, headers=good).status_code == 200
+    assert client.get("/api/v1/sd/prometheus", headers=bad).status_code == 401
+    assert client.get("/api/v1/sd/prometheus", headers=good).status_code == 200
+    assert (b"nope", settings.webhook_token.encode()) in seen
+    assert (settings.webhook_token.encode(), settings.webhook_token.encode()) in seen
+
+
 def test_slow_webhook_ingest_does_not_stall_health(monkeypatch):
     def slow_ingest(db, payload, *, source="prometheus"):
         time.sleep(1.5)

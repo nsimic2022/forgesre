@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import time
@@ -73,7 +74,6 @@ from app.host_resources import appliance_resources
 from app.stack import (
     component_label,
     doctor_soft_status,
-    ensure_snmp_exporter,
     journal_doctor_alarm_path,
     snmp_target_count,
 )
@@ -84,6 +84,13 @@ router = APIRouter(prefix="/api/v1")
 
 def current_user(request: Request, db: Session = Depends(get_db)) -> User | None:
     return user_from_session(db, request.cookies.get("forgesre_session"))
+
+
+def _webhook_token_ok(request: Request) -> bool:
+    """Bearer == ALERTMANAGER_WEBHOOK_TOKEN (webhook, SD, doctor). Constant-time compare."""
+    auth = request.headers.get("authorization") or ""
+    token = auth.replace("Bearer ", "").strip()
+    return hmac.compare_digest(token.encode(), (settings.webhook_token or "").encode())
 
 
 def require_user(user: User | None = Depends(current_user)) -> User:
@@ -636,18 +643,13 @@ def get_investigation_evidence(
     if row is None:
         raise HTTPException(status_code=404, detail="investigation not found")
     include_queries = can(user, "read_evidence")
-    ids = set((row.result or {}).get("supporting_evidence") or [])
-    ids.update((row.result or {}).get("contradicting_evidence") or [])
     rows = db.query(Evidence).filter(Evidence.incident_id == row.incident_id).all()
-    out = []
-    for item in rows:
-        if item.evidence_id.startswith("ROLLUP-"):
-            continue
-        if ids and item.evidence_id not in ids and item.kind in {"METRIC", "LOG", "ALERT"}:
-            # still return all immutable RCA items; IDs filter is a hint not a hide
-            pass
-        out.append(_evidence_item(item, include_queries=include_queries))
-    return out
+    # Every immutable RCA item for the incident; supporting/contradicting ids are a hint, not a filter.
+    return [
+        _evidence_item(item, include_queries=include_queries)
+        for item in rows
+        if not item.evidence_id.startswith("ROLLUP-")
+    ]
 
 
 @router.get("/playrules")
@@ -694,18 +696,14 @@ def create_playbook(
 
 @router.get("/sd/prometheus")
 def prometheus_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
-    auth = request.headers.get("authorization") or ""
-    token = auth.replace("Bearer ", "").strip()
-    if token != settings.webhook_token:
+    if not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid sd token")
     return sd_targets(db)
 
 
 @router.get("/sd/snmp")
 def snmp_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
-    auth = request.headers.get("authorization") or ""
-    token = auth.replace("Bearer ", "").strip()
-    if token != settings.webhook_token:
+    if not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid sd token")
     return sd_snmp_targets(db)
 
@@ -714,9 +712,7 @@ def snmp_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
 def snmp_sd_auths(request: Request, db: Session = Depends(get_db)) -> dict:
     """Per-asset snmp_exporter auths for scripts/render_snmp_auths.py. Holds community strings and
     v3 passwords: same bearer as SD, never logged, never shown in the GUI."""
-    auth = request.headers.get("authorization") or ""
-    token = auth.replace("Bearer ", "").strip()
-    if not settings.webhook_token or token != settings.webhook_token:
+    if not settings.webhook_token or not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid sd token")
     return {"auths": snmp_auths(db)}
 
@@ -1044,9 +1040,7 @@ def _ingest_numbers(db: Session, payload: dict[str, Any], source: str = "prometh
 
 @router.post("/webhooks/alertmanager")
 async def alertmanager_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
-    auth = request.headers.get("authorization") or ""
-    token = auth.replace("Bearer ", "").strip()
-    if token != settings.webhook_token:
+    if not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid webhook token")
     payload = await request.json()
     # Ingest blocks on Prometheus/Loki queries and SMTP; keep it off the event loop.
@@ -1057,8 +1051,6 @@ async def alertmanager_webhook(request: Request, db: Session = Depends(get_db)) 
 @router.post("/webhooks/zabbix")
 async def zabbix_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
     """Zabbix media type (Webhook) → incidents with source=zabbix. Own Bearer: ZABBIX_WEBHOOK_TOKEN."""
-    import hmac
-
     from app.zabbix import parse_webhook
 
     expected = settings.zabbix_webhook_token
@@ -1168,9 +1160,7 @@ def system_status(db: Session = Depends(get_db), user: User = Depends(require("r
 
 @router.get("/system/doctor")
 def doctor(request: Request, user: User | None = Depends(current_user)) -> dict:
-    auth = request.headers.get("authorization") or ""
-    token = auth.replace("Bearer ", "").strip()
-    if user is None and token != settings.webhook_token:
+    if user is None and not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="authentication required")
     return doctor_payload()
 
@@ -1461,11 +1451,6 @@ def _snmp_check() -> dict[str, str]:
     result = _http(url, "GET")
     if result.get("status") == "ok":
         return result
-    if ensure_snmp_exporter():
-        time.sleep(1.5)
-        result = _http(url, "GET")
-        if result.get("status") == "ok":
-            return result
     result["fix"] = "docker compose up -d snmp-exporter"
     result["test"] = f"curl -fsS {url}"
     return result

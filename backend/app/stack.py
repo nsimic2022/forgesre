@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
-import subprocess
-import time
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
@@ -15,8 +12,6 @@ from app.settings import settings
 log = logging.getLogger("forgesre")
 
 SOFT_STATUSES = frozenset({"ok", "disabled", "paused", "warn", "warning", "starting"})
-_SNMP_ENSURE_AT = 0.0
-_SNMP_ENSURE_COOLDOWN = 45.0
 
 # Machine keys stay compose service ids (dashboard Open links, failed[], JSON).
 # "core" is the stack row; it probes /api/v1/health (same URL as doctor.sh Core API).
@@ -213,45 +208,6 @@ def snmp_target_count() -> int:
     except Exception:
         log.debug("snmp target count skipped", exc_info=True)
         return 0
-
-
-def ensure_snmp_exporter() -> bool:
-    """Start bundled snmp-exporter via compose when it should run.
-
-    Skipped under FORGESRE_DEV (pytest) unless FORGESRE_START_SNMP=1.
-    Core-in-container usually has no docker CLI; ``./forgesre doctor`` on the
-    host does the same ``docker compose up -d snmp-exporter`` when SD has
-    network targets. Does not require Zabbix.
-    """
-    global _SNMP_ENSURE_AT
-    dev = os.environ.get("FORGESRE_DEV", "").strip().lower() in {"1", "true", "yes", "on"}
-    force = os.environ.get("FORGESRE_START_SNMP", "").strip().lower() in {"1", "true", "yes", "on"}
-    if dev and not force:
-        return False
-    now = time.monotonic()
-    if now - _SNMP_ENSURE_AT < _SNMP_ENSURE_COOLDOWN:
-        return False
-    _SNMP_ENSURE_AT = now
-    try:
-        from app.backup import _compose_argv, _repo_root
-
-        root = _repo_root()
-        argv = [*_compose_argv(root), "up", "-d", "snmp-exporter"]
-        result = subprocess.run(
-            argv,
-            cwd=str(root),
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=25,
-        )
-        if result.returncode != 0:
-            log.warning("snmp-exporter compose up failed: %s", (result.stderr or result.stdout or "")[:400])
-            return False
-        return True
-    except Exception as exc:
-        log.debug("snmp-exporter compose up skipped: %s", exc)
-        return False
 
 
 ALLOY_URL = "http://127.0.0.1:12345"
