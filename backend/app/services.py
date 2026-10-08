@@ -1502,40 +1502,97 @@ def send_incident_report(db: Session, incident: Incident, target: str, actor: st
     )
 
 
-def run_scheduled_report(db: Session, row: ScheduledReport, actor: str = "system") -> Notification:
-    mail = send_performance_report(
+def _report_job(row: ScheduledReport) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "name": row.name or "performance",
+        "to_email": row.to_email,
+        "asset_ids": list(row.asset_ids or []),
+        "hours": max(1, int(row.interval_hours or 6)),
+    }
+
+
+def _send_report_job(db: Session, job: dict[str, Any], actor: str) -> Notification:
+    return send_performance_report(
         db,
-        asset_ids=list(row.asset_ids or []),
-        to_email=row.to_email,
+        asset_ids=job["asset_ids"],
+        to_email=job["to_email"],
         actor=actor,
-        name=row.name or "performance",
+        name=job["name"],
     )
+
+
+def run_scheduled_report(db: Session, row: ScheduledReport, actor: str = "system") -> Notification:
+    """Run now (operator button). Next moves before the mail is sent, so an error after SMTP cannot repeat it."""
+    job = _report_job(row)
     now = utcnow()
-    hours = max(1, int(row.interval_hours or 6))
     row.last_run_at = now
-    row.next_run_at = now + timedelta(hours=hours)
+    row.next_run_at = now + timedelta(hours=job["hours"])
     db.add(row)
     db.commit()
-    return mail
+    return _send_report_job(db, job, actor)
+
+
+def _claim_due_report(db: Session, job: dict[str, Any], now: datetime) -> bool:
+    """Push Next in the same UPDATE that checks the row still exists and is enabled. False = deleted / Off since the pass started."""
+    claimed = (
+        db.query(ScheduledReport)
+        .filter(ScheduledReport.id == job["id"], ScheduledReport.enabled.is_(True))
+        .update(
+            {
+                ScheduledReport.last_run_at: now,
+                ScheduledReport.next_run_at: now + timedelta(hours=job["hours"]),
+            },
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+    return bool(claimed)
 
 
 def process_scheduled_reports(db: Session) -> int:
+    """Send every enabled report whose Next has passed. A removed or Off report is never sent, even mid-pass.
+
+    One broken report (bad address, SMTP error) is journaled once per interval and does not stop the
+    others or the RCA / Zabbix work that shares the jobs loop.
+    """
     now = utcnow()
-    due = (
-        db.query(ScheduledReport)
+    ids = [
+        pk
+        for (pk,) in db.query(ScheduledReport.id)
         .filter(ScheduledReport.enabled.is_(True))
         .order_by(ScheduledReport.id)
         .all()
-    )
+    ]
     ran = 0
-    for row in due:
+    for pk in ids:
+        row = db.get(ScheduledReport, pk, populate_existing=True)
+        if row is None or not row.enabled:
+            continue
         nxt = row.next_run_at
         if nxt is not None and nxt.tzinfo is None:
             nxt = nxt.replace(tzinfo=timezone.utc)
         if nxt is not None and nxt > now:
             continue
-        run_scheduled_report(db, row, actor="scheduler")
-        ran += 1
+        job = _report_job(row)
+        try:
+            if not _claim_due_report(db, job, now):
+                continue
+            _send_report_job(db, job, "scheduler")
+            ran += 1
+        except Exception as exc:
+            db.rollback()
+            log.exception("scheduled report %s failed", pk)
+            report(
+                db,
+                "notification",
+                "report",
+                "error",
+                summary=f"Scheduled report {job['name']} → {job['to_email']} failed; next try in {job['hours']}h",
+                detail=str(exc)[:400],
+                object_type="report",
+                object_id=str(pk),
+            )
     return ran
 
 
