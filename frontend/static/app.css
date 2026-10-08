@@ -314,6 +314,44 @@ a.button {
 .reach-legend { margin: 0 0 0.75rem; }
 .reach-badges { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; margin-left: 0.4rem; vertical-align: middle; }
 .asset-table .reach-badges { margin-left: 0; }
+/* v08-19: ICMP / port / SNMP are small squares stacked with a gap, not pills. */
+.reach-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.28rem;
+  min-width: 2.7rem;
+  vertical-align: middle;
+}
+.asset-table .reach-stack { margin: 0.12rem 0; }
+.reach-sq {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.7rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid var(--warn);
+  background: var(--pill-warn-bg);
+  color: var(--pill-warn);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1;
+}
+.reach-sq.green { background: var(--pill-ok-bg); color: var(--pill-ok); border-color: var(--ok); }
+.reach-sq.yellow { background: var(--pill-warn-bg); color: var(--pill-warn); border-color: var(--warn); }
+.reach-sq.red { background: var(--pill-crit-bg); color: var(--pill-crit); border-color: var(--crit); }
+.reach-sq.snmp:not(.green):not(.yellow):not(.red) {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--muted);
+}
+.reach-stack [hidden] { display: none !important; }
+.incidents-filters input[type="date"] { width: 11rem; padding: 0.35rem 0.5rem; }
+.incidents-filters select[name="window"] { width: auto; min-width: 10rem; }
 .reach-dot {
   display: inline-block;
   min-width: 2.6rem;

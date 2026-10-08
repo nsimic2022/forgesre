@@ -142,12 +142,12 @@ def test_layout_comms_alone_in_middle_alarms_then_playrules_right():
     assert 'name="alarms_present"' in right
     for version in ("v1", "v2c", "v3"):
         assert f'<option value="{version}"' in middle
-    assert "Ping / comms" in text and ">Port<" not in text
+    assert "ICMP / port / SNMP" in text and ">Port<" not in text
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".asset-form-reserved { flex: 1 1 auto; min-height: 12rem; }" in css
     assert "hr.asset-form-rule" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-18" in base and "app.js?v=v08-18" in base
+    assert "app.css?v=v08-19" in base and "app.js?v=v08-19" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "[data-snmp-version]" in js and "[data-snmp-v3-level]" in js
 

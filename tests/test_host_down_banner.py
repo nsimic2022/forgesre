@@ -126,12 +126,12 @@ def test_viewer_dashboard_without_host_down_banner_and_asset_pills():
     assert b"HOST DOWN" not in home.content
     assets = client.get("/assets")
     assert assets.status_code == 200
-    assert b"Ping / comms" in assets.content
-    assert b"reach-dot ping" in assets.content
-    assert b">Ping<" in assets.content
+    assert b"ICMP / port / SNMP" in assets.content
+    assert b"reach-sq icmp ping" in assets.content
+    assert b">ICMP<" in assets.content
     detail = client.get(f"/assets/{DEMO_ASSET}")
     assert detail.status_code == 200
-    assert b"reach-dot ping" in detail.content
+    assert b"reach-sq icmp ping" in detail.content
     down = client.get("/api/v1/incidents/down")
     assert down.status_code == 200
     assert any(row["number"] == host.number for row in down.json())

@@ -13,9 +13,6 @@ def _source_label(incident: Incident) -> str:
 
     return incident_source_label(incident)
 
-ESCALATION_FOOTER = "This is a snapshot. ForgeSRE does not execute playbooks."
-
-
 def _demo(incident: Incident) -> tuple[bool, str]:
     from app.services import demo_body_line, is_demo_incident
 
@@ -95,16 +92,18 @@ def build_escalation_html(incident: Incident, step_key: str, policy_role: str) -
             sections.append(("Notes", prose_to_html(asset.notes), True))
     if incident.summary:
         sections.append(("Alert summary", prose_to_html(incident.summary), True))
+    from app.services import incident_mail_heading
+
     return render_email(
         kicker="Escalation notification",
-        heading=str(incident.title or incident.number or "Incident"),
+        heading=incident_mail_heading(incident),
         severity=str(incident.severity or ""),
         status=str(incident.status or ""),
         is_demo=demo,
         demo_line=demo_line,
         meta_rows=meta,
         sections=sections,
-        footer=ESCALATION_FOOTER,
+        footer="",
         kind="escalation-notice",
         source=_source_label(incident),
     )

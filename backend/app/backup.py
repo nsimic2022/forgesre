@@ -288,6 +288,16 @@ def pretty_backup_stamp(stamp: str) -> str:
         return ""
 
 
+def backup_compact(row: dict[str, Any]) -> dict[str, str]:
+    """Date + HH:MM for a backup row, same stamp as dashboard incidents. Folder name stays a tooltip."""
+    from app.services import compact_stamp
+
+    when = _row_when(row)
+    if when.year < 2000:
+        return {"date": "", "time": ""}
+    return compact_stamp(when)
+
+
 def backup_label(name: str, size: int) -> str:
     """Dropdown/CLI line: timestamp + folder name + size. Never archive contents."""
     pretty = pretty_backup_stamp(stamp_from_backup_name(name))

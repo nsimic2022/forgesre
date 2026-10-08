@@ -1589,12 +1589,23 @@ def incidents_page(
     status: str = "",
     severity: str = "",
     days: str = "",
+    window: str = "",
+    started_from: str = Query("", alias="from"),
+    started_to: str = Query("", alias="to"),
     site: str = "",
     customer: str = "",
     page: str = "1",
 ):
     filters = incident_list_filters(
-        status=status, severity=severity, open_filter=open_filter, days=days, site=site, customer=customer
+        status=status,
+        severity=severity,
+        open_filter=open_filter,
+        days=days,
+        window=window,
+        started_from=started_from,
+        started_to=started_to,
+        site=site,
+        customer=customer,
     )
     size = per_page(request)
     rows, total = list_history(db, **filters["query"], limit=size, page=page)
@@ -1609,6 +1620,9 @@ def incidents_page(
         status_group=filters["status_group"],
         severity_group=filters["severity_group"],
         days=filters["days"],
+        window=filters["window"],
+        date_from=filters["date_from"],
+        date_to=filters["date_to"],
         site=filters["site"],
         customer=filters["customer"],
         filter_options=asset_filter_options(db.query(Asset).all()),
@@ -1682,6 +1696,9 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
         severity=q.get("severity", ""),
         open_filter=q.get("open", ""),
         days=q.get("days", ""),
+        window=q.get("window", ""),
+        started_from=q.get("from", ""),
+        started_to=q.get("to", ""),
         site=q.get("site", ""),
         customer=q.get("customer", ""),
     )
@@ -2722,7 +2739,7 @@ def admin_page(
     )
     chosen = db.get(User, selected) if selected else None
     clone_of = db.get(User, clone) if clone else None
-    from app.backup import format_size, list_archives, layout_from_env
+    from app.backup import backup_compact, format_size, list_archives, layout_from_env
     from app.users import delete_blocked, edit_blocked
 
     lay = layout_from_env()
@@ -2744,6 +2761,7 @@ def admin_page(
         backup_choices=backup_choices,
         backup_files_writable=lay.files_writable,
         format_size=format_size,
+        backup_compact=backup_compact,
         pager=users_pager,
         audit_pager=audit_pager,
         backup_pager=backup_pager,
@@ -2918,6 +2936,51 @@ def admin_remove_backup(
     report(db, "backup", "remove", "ok", summary=f"Removed {ident}", object_type="backup", object_id=ident)
     db.commit()
     return RedirectResponse(f"/admin?removed={quote(ident)}", status_code=303)
+
+
+@router.post("/admin/backups/bulk-delete")
+def admin_bulk_delete_backups(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    selected: Annotated[list[str], Form()] = [],
+):
+    """Delete the checkbox-selected backup folders. Admin only. Per-row Remove is unchanged."""
+    _require_admin(user)
+    from app.backup import delete_backup
+    from app.journal import report
+
+    names: list[str] = []
+    for item in selected:
+        text = str(item or "").strip()
+        if text and text not in names and len(text) <= 80:
+            names.append(text)
+        if len(names) >= 100:
+            break
+    removed: list[str] = []
+    ip = request.client.host if request.client else ""
+    for name in names:
+        try:
+            deleted = delete_backup(name)
+        except (ValueError, FileNotFoundError):
+            continue
+        ident = deleted.name
+        audit(db, "backup.remove", actor=user.email, object_type="backup", object_id=ident, ip=ip)
+        removed.append(ident)
+    if removed:
+        report(
+            db,
+            "backup",
+            "remove",
+            "ok",
+            summary=f"Removed {len(removed)} backup(s)",
+            detail=" ".join(removed)[:400],
+            object_type="backup",
+        )
+        db.commit()
+    notice = quote(removed[-1]) if len(removed) == 1 else quote(f"{len(removed)} backups")
+    target = f"/admin?removed={notice}" if removed else "/admin"
+    return RedirectResponse(target, status_code=303)
 
 
 @router.post("/admin/backups/restore")

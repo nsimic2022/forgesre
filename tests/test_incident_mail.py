@@ -160,7 +160,8 @@ def test_demo_incident_html_has_lab_banner_and_severity_color():
     assert "Disk full" in html
     assert "Alert summary" in html
     assert "ForgeRCA has not been run yet." in html
-    assert "This is a snapshot. ForgeSRE does not execute playbooks." in html
+    assert "This is a snapshot. ForgeSRE does not execute playbooks." not in html
+    assert "does not execute playbooks" not in html
     assert "Owner" in html
     assert "Contact" in html
 

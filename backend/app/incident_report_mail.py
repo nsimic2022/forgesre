@@ -9,9 +9,6 @@ from sqlalchemy.orm import Session
 from app.email_html import DASH, esc, html_list, meta_table, prose_to_html, render_email
 from app.models import Asset, Incident
 
-SNAPSHOT_FOOTER = "This is a snapshot. ForgeSRE does not execute playbooks."
-
-
 def who_to_call(asset: Asset | None) -> str:
     """Contact (or owner) · email · phone — only the parts the asset actually has."""
     if asset is None:
@@ -175,8 +172,6 @@ def build_incident_report(db: Session, incident: Incident) -> str:
         lines.append("Operator notes:")
         for note in notes:
             lines.append(f"- {note.at} {note.actor}: {note.body}")
-    lines.append("")
-    lines.append(SNAPSHOT_FOOTER)
     return "\n".join(lines) + "\n"
 
 
@@ -247,16 +242,18 @@ def build_incident_report_html(db: Session | None, incident: Incident) -> str:
         note_lines = [f"{note.at} {note.actor}: {note.body}" for note in notes]
         sections.append(("Operator notes", html_list(note_lines), False))
 
+    from app.services import incident_mail_heading
+
     return render_email(
         kicker="Incident report",
-        heading=str(incident.title or incident.number or "Incident"),
+        heading=incident_mail_heading(incident),
         severity=str(incident.severity or ""),
         status=str(incident.status or ""),
         is_demo=demo,
         demo_line=demo_line,
         meta_rows=meta,
         sections=sections,
-        footer=SNAPSHOT_FOOTER,
+        footer="",
         kind="incident-report",
         source=incident_source_label(incident),
     )

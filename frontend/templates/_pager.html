@@ -34,7 +34,7 @@
     {% if actions.delete %}
     <form method="post" action="{{ actions.delete }}" data-bulk-delete onsubmit='return confirm({{ actions.confirm|tojson }});'>
       <input type="hidden" name="next" value="{{ actions.next }}">
-      <button type="submit" class="danger">Delete</button>
+      <button type="submit" class="danger">{{ actions.get("delete_label") or "Delete" }}</button>
     </form>
     {% endif %}
     {% if actions.export %}

@@ -378,6 +378,15 @@ def apply_probe_to_asset(asset: Any, probe: AssetProbe) -> None:
     asset.probe_checked_at = utcnow()
 
 
+def _digits(label: str) -> str:
+    text = (label or "").strip()
+    if text.lower().startswith("snmp"):
+        text = text[4:].strip()
+    if text.startswith(":"):
+        text = text[1:].strip()
+    return text if text.isdigit() else ""
+
+
 def reachability_snapshot(asset: Any, probe: AssetProbe | None = None) -> dict[str, Any]:
     if probe is not None:
         ping = probe.ping_color
@@ -393,6 +402,8 @@ def reachability_snapshot(asset: Any, probe: AssetProbe | None = None) -> dict[s
         exporter_detail = getattr(asset, "exporter_detail", None) or "not probed yet"
         label = exporter_badge_label(asset)
         checked = getattr(asset, "probe_checked_at", None)
+    snmp = snmp_label(asset)
+    port_text = _digits(label)
     return {
         "asset_id": getattr(asset, "asset_id", ""),
         "ip": getattr(asset, "ip", "") or "",
@@ -401,7 +412,12 @@ def reachability_snapshot(asset: Any, probe: AssetProbe | None = None) -> dict[s
         "exporter": exporter,
         "exporter_detail": exporter_detail,
         "exporter_label": label,
-        "snmp_label": snmp_label(asset),
+        "snmp_label": snmp,
+        "port_text": port_text,
+        "show_port": bool(port_text),
+        "snmp_port_text": _digits(snmp),
+        "show_snmp": bool(snmp) or label == "SNMP",
+        "snmp_primary": label == "SNMP",
         "checked_at": checked.isoformat() if checked else None,
     }
 

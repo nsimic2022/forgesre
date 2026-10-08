@@ -1,0 +1,9 @@
+<span class="reach-stack" data-asset-reach="{{ reach_id }}">
+  <span class="reach-sq icmp ping {{ r.ping }}" title="ICMP: {{ r.ping_detail }}">ICMP</span>
+  {% if r.show_port %}
+  <span class="reach-sq port exporter {{ r.exporter }}" title="Port {{ r.port_text }} — {{ r.exporter_detail }}">{{ r.port_text }}</span>
+  {% endif %}
+  {% if r.show_snmp %}
+  <span class="reach-sq snmp{% if r.snmp_primary %} {{ r.exporter }}{% endif %}" data-snmp-label title="SNMP{% if r.snmp_port_text %} UDP {{ r.snmp_port_text }}{% endif %}">SNMP</span>
+  {% endif %}
+</span>

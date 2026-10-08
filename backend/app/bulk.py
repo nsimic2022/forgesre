@@ -15,9 +15,12 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
 from sqlalchemy.orm import Session, joinedload
 
+from app.asset_extras import extras_rows, support_status
 from app.audit import audit
 from app.db import get_db
-from app.inventory import delete_asset, delete_candidate
+from app.history import audit_for, notes_for
+from app.asset_types import snmp_port_for
+from app.inventory import delete_asset, delete_candidate, is_snmp_asset, similar_incident_groups
 from app.journal import report
 from app.models import (
     Asset,
@@ -37,8 +40,17 @@ from app.models import (
     utcnow,
 )
 from app.security import can, can_send_ops, user_from_session
-from app.services import compact_when_text, incident_host, refresh_asset_status
-from app.web import NotAuthenticated
+from app.services import (
+    compact_when_text,
+    format_started_at,
+    incident_host,
+    incident_short_label,
+    incident_source_label,
+    incident_when,
+    is_demo_incident,
+    refresh_asset_status,
+)
+from app.web import NotAuthenticated, asset_playrules, evidence_row
 
 router = APIRouter()
 
@@ -117,11 +129,60 @@ def _need(raw: list[str]) -> list[str]:
     return values
 
 
-def _cell(value: object) -> str:
+_LABEL_W = 18
+
+
+def _plain(value: object, *, keep_lines: bool = False) -> str:
     if isinstance(value, datetime):
         return compact_when_text(value) or "—"
-    text = " ".join(str(value if value is not None else "").split())
+    if value is None:
+        return "—"
+    text = str(value).replace("\r\n", "\n").replace("\r", "\n").replace("\t", " ")
+    if keep_lines:
+        lines = [line.rstrip() for line in text.split("\n")]
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        while lines and not lines[-1].strip():
+            lines.pop()
+        return "\n".join(lines) if any(line.strip() for line in lines) else "—"
+    text = " ".join(text.split())
     return text or "—"
+
+
+def _field(label: str, value: object) -> str:
+    """One labeled line. Values stay on the right; nothing is joined with tabs or commas."""
+    text = _plain(value)
+    if len(label) >= _LABEL_W:
+        return f"{label}  {text}"
+    return f"{label:<{_LABEL_W}}{text}"
+
+
+def _block(label: str, value: object) -> list[str]:
+    raw = _plain(value, keep_lines=True)
+    if raw == "—":
+        return [_field(label, "—")]
+    parts = raw.split("\n")
+    if len(parts) == 1:
+        return [_field(label, parts[0])]
+    indent = " " * _LABEL_W
+    return [_field(label, parts[0])] + [f"{indent}{line}" if line else "" for line in parts[1:]]
+
+
+def _join_docs(title: str, records: list[list[str]]) -> list[str]:
+    """Title, then each record as labeled lines, with a blank line between records."""
+    lines = [title, ""]
+    started = False
+    for record in records:
+        body = list(record)
+        while body and body[-1] == "":
+            body.pop()
+        if not body:
+            continue
+        if started:
+            lines.append("")
+        started = True
+        lines.extend(body)
+    return lines
 
 
 def _alertname(row: Incident) -> str:
@@ -190,35 +251,191 @@ def delete_incidents(db: Session, numbers: list[str], actor: str) -> int:
     return len(rows)
 
 
+def _step_title(step: object) -> str:
+    if isinstance(step, dict):
+        return str(step.get("title") or step.get("name") or step)
+    return str(step)
+
+
+def _rca_lines(items: object, *keys: str) -> list[str]:
+    lines: list[str] = []
+    for item in items or []:
+        if isinstance(item, dict):
+            text = ""
+            for key in keys:
+                if item.get(key):
+                    text = str(item.get(key))
+                    break
+            if not text:
+                text = str(item)
+        else:
+            text = str(item)
+        text = " ".join(text.split())
+        if text:
+            lines.append(f"    - {text}")
+    return lines
+
+
+def _incident_record(db: Session, row: Incident) -> list[str]:
+    """Vertical snapshot of the incident page, through engineer evidence."""
+    asset = row.asset
+    when = incident_when(row)
+    lines = [
+        _field("id", row.number),
+        _field("hostname", incident_host(row) or "—"),
+        _field("incident", row.title or row.number),
+        _field("short", incident_short_label(row.number)),
+        _field("status", row.status),
+        _field("severity", row.severity),
+        _field("source", incident_source_label(row)),
+        _field("first", format_started_at(row.started_at) or compact_when_text(row.started_at)),
+    ]
+    if when.get("duration"):
+        if when.get("live"):
+            lines.append(_field("duration", f"{when['duration']} (still open)"))
+        else:
+            ended = when.get("ended_full") or ""
+            lines.append(_field("duration", f"{when['duration']} (ended {ended})".rstrip()))
+    if when.get("ended"):
+        lines.append(_field("ended", when.get("ended_full") or when.get("ended")))
+    if row.ack_by:
+        lines.append(_field("ack", f"{row.ack_by} {compact_when_text(row.ack_at)}".strip()))
+    if row.resolved_by:
+        lines.append(
+            _field(
+                "resolved by",
+                f"{row.resolved_by} {compact_when_text(row.resolved_at or row.ended_at)}".strip(),
+            )
+        )
+    lines.append(_field("alertname", _alertname(row)))
+    lines.append(_field("demo", "yes" if is_demo_incident(row) else "no"))
+
+    if asset is not None:
+        lines.extend(["", "Who to call"])
+        lines.append(_field("owner", asset.owner))
+        lines.append(_field("contact", asset.contact_name))
+        lines.append(_field("email", asset.owner_email or "No owner email"))
+        lines.append(_field("phone", asset.owner_phone))
+        support = support_status(asset)
+        lines.append(_field("support", f"{support['label']} — {support['call_note']}"))
+        for key, label, value in extras_rows(asset):
+            if key == "runbook_note":
+                continue
+            lines.extend(_block(label, value))
+        rules = asset_playrules(db, asset)
+        if rules:
+            shown = []
+            for rule in rules:
+                mark = " (used)" if row.playrule_id == rule.id else ""
+                shown.append(f"{rule.name}{mark}")
+            lines.append(_field("playrules", ", ".join(shown)))
+        for key, label, value in extras_rows(asset):
+            if key == "runbook_note":
+                lines.extend(["", label])
+                lines.extend(_block("note", value))
+
+    lines.extend(["", "What happened"])
+    lines.extend(_block("summary", row.summary or "Awaiting evidence."))
+    investigations = list(row.investigations or [])
+    investigation = investigations[-1] if investigations else None
+    if investigation is not None:
+        lines.extend(_block("rca", investigation.summary))
+        if investigation.disclaimer:
+            lines.extend(_block("disclaimer", investigation.disclaimer))
+        engine = f"{investigation.engine or 'forgerca'} {investigation.engine_version or ''}".strip()
+        lines.append(_field("engine", engine))
+        lines.extend(_block("likely cause", investigation.likely_cause))
+        lines.append(_field("confidence", f"{int(investigation.confidence or 0)}%"))
+        lines.extend(_block("recommendation", investigation.recommended_action))
+        rca = investigation.result if isinstance(investigation.result, dict) else {}
+        for heading, key, sub in (
+            ("Facts", "facts", "text"),
+            ("Anomalies", "anomalies", "summary"),
+            ("Candidate causes", "hypotheses", "summary"),
+            ("Limitations", "limitations", "text"),
+        ):
+            bullets = _rca_lines(rca.get(key) or [], sub, "text")
+            if bullets:
+                lines.append(heading)
+                lines.extend(bullets)
+    else:
+        lines.append(_field("rca", "ForgeRCA has not been run yet."))
+
+    if row.playrule or row.playbook:
+        lines.extend(["", "Workflow"])
+        lines.append(_field("playrule", row.playrule.name if row.playrule else "—"))
+        lines.append(_field("playbook", row.playbook.name if row.playbook else "—"))
+        steps = list(row.playbook.steps or []) if row.playbook is not None else []
+        if steps:
+            lines.append("steps")
+            for step in steps:
+                lines.append(f"    - {_plain(_step_title(step))}")
+
+    if asset is not None:
+        groups = similar_incident_groups(db, asset)
+        if groups:
+            lines.extend(["", "Similar on this asset"])
+            for group in groups:
+                name = group.get("alertname") or group.get("title") or "Incident"
+                lines.append(
+                    _field(
+                        "alert",
+                        f"{name} — {group.get('count')} times ({group.get('open_count')} open), "
+                        f"last {group.get('last_number')} {group.get('last_status')}",
+                    )
+                )
+
+    lines.extend(["", "Who did what"])
+    audits = audit_for(db, row.number)
+    if not audits:
+        lines.append(_field("audit", "No audit rows yet."))
+    for entry in audits:
+        lines.append(_field("when", entry.at))
+        lines.append(_field("who", entry.actor))
+        lines.append(_field("action", entry.action))
+        detail = _audit_detail(entry)
+        if detail:
+            lines.extend(_block("detail", detail))
+        lines.append("")
+
+    lines.append("Operator notes")
+    notes = notes_for(db, row)
+    if not notes:
+        lines.append(_field("notes", "No notes yet."))
+    for note in notes:
+        lines.append(_field("when", note.at))
+        lines.append(_field("who", note.actor))
+        lines.extend(_block("note", note.body))
+        lines.append("")
+
+    lines.append("Engineer evidence")
+    evidence = sorted(row.evidence or [], key=lambda item: item.id or 0)
+    if not evidence:
+        lines.append(_field("evidence", "No evidence collected yet."))
+    for item in evidence:
+        view = evidence_row(item)
+        lines.append(_field("when", f"{view['when']} {view['when_time']}".strip()))
+        lines.append(_field("source", view["actor"]))
+        lines.extend(_block("action", view["action"]))
+        lines.extend(_block("full", view["full"]))
+        lines.append("")
+    return lines
+
+
 def incidents_text(db: Session, numbers: list[str]) -> list[str]:
     rows = (
         db.query(Incident)
-        .options(joinedload(Incident.asset))
+        .options(
+            joinedload(Incident.asset),
+            joinedload(Incident.playbook),
+            joinedload(Incident.playrule),
+        )
         .filter(Incident.number.in_(numbers))
         .all()
     )
     by = {row.number: row for row in rows}
-    lines = [f"ForgeSRE incidents ({len(by)})", "id\thost\talertname\ttitle\tstatus\twhen\tack_by\tresolved_by\tsummary"]
-    for number in numbers:
-        row = by.get(number)
-        if row is None:
-            continue
-        lines.append(
-            "\t".join(
-                [
-                    _cell(row.number),
-                    _cell(incident_host(row)),
-                    _cell(_alertname(row)),
-                    _cell(row.title),
-                    _cell(row.status),
-                    _cell(row.started_at),
-                    _cell(row.ack_by),
-                    _cell(row.resolved_by),
-                    _cell(row.summary),
-                ]
-            )
-        )
-    return lines
+    records = [_incident_record(db, by[number]) for number in numbers if number in by]
+    return _join_docs(f"ForgeSRE incidents ({len(records)})", records)
 
 
 def delete_assets(db: Session, asset_ids: list[str], actor: str) -> int:
@@ -235,31 +452,42 @@ def delete_assets(db: Session, asset_ids: list[str], actor: str) -> int:
     return removed
 
 
+def _asset_record(row: Asset) -> list[str]:
+    lines = [
+        _field("number", row.number),
+        _field("id", row.asset_id),
+        _field("hostname", row.hostname),
+        _field("ip", row.ip),
+        _field("type", row.type),
+        _field("environment", row.environment),
+        _field("status", row.status),
+        _field("source", row.source),
+        _field("owner", row.owner),
+        _field("contact", row.contact_name),
+        _field("email", row.owner_email),
+        _field("phone", row.owner_phone),
+        _field("scrape", row.scrape_address),
+    ]
+    try:
+        snmp = is_snmp_asset(row)
+    except AttributeError:
+        snmp = False
+    if snmp:
+        lines.append(_field("snmp port", snmp_port_for(row) or "—"))
+    lines.extend(_block("notes", row.notes))
+    for key, label, value in extras_rows(row):
+        lines.extend(_block(label, value))
+    support = support_status(row)
+    if support["state"] != "unknown":
+        lines.append(_field("support", f"{support['label']} — {support['call_note']}"))
+    return lines
+
+
 def assets_text(db: Session, asset_ids: list[str]) -> list[str]:
     rows = db.query(Asset).filter(Asset.asset_id.in_(asset_ids)).all()
     by = {row.asset_id: row for row in rows}
-    lines = [f"ForgeSRE assets ({len(by)})"]
-    for asset_id in asset_ids:
-        row = by.get(asset_id)
-        if row is None:
-            continue
-        extras = row.extras if isinstance(row.extras, dict) else {}
-        lines.append(
-            "\t".join(
-                [
-                    _cell(row.number),
-                    _cell(row.asset_id),
-                    _cell(row.hostname),
-                    _cell(row.ip),
-                    _cell(row.type),
-                    _cell(row.status),
-                    _cell(row.owner_email),
-                    _cell(extras.get("site")),
-                    _cell(extras.get("customer")),
-                ]
-            )
-        )
-    return lines
+    records = [_asset_record(by[asset_id]) for asset_id in asset_ids if asset_id in by]
+    return _join_docs(f"ForgeSRE assets ({len(records)})", records)
 
 
 def delete_found(db: Session, ids: list[int], actor: str) -> int:
@@ -276,25 +504,23 @@ def delete_found(db: Session, ids: list[int], actor: str) -> int:
 def found_text(db: Session, ids: list[int]) -> list[str]:
     rows = db.query(DiscoveryCandidate).filter(DiscoveryCandidate.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
-    lines = [f"ForgeSRE found assets ({len(by)})"]
+    records = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
             continue
         ports = ", ".join(str(port) for port in (row.open_ports or [])) or "—"
-        lines.append(
-            "\t".join(
-                [
-                    _cell(row.ip),
-                    _cell(row.hostname),
-                    _cell(row.proposed_role),
-                    _cell(ports),
-                    _cell(row.status),
-                    _cell(row.source),
-                ]
-            )
+        records.append(
+            [
+                _field("ip", row.ip),
+                _field("hostname", row.hostname),
+                _field("role", row.proposed_role),
+                _field("ports", ports),
+                _field("status", row.status),
+                _field("source", row.source),
+            ]
         )
-    return lines
+    return _join_docs(f"ForgeSRE found assets ({len(records)})", records)
 
 
 def delete_playrules(db: Session, ids: list[int], actor: str) -> int:
@@ -321,10 +547,7 @@ def playrules_text(db: Session, ids: list[int]) -> list[str]:
 
     rows = db.query(Playrule).filter(Playrule.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
-    lines = [
-        f"ForgeSRE playrules ({len(by)})",
-        "name\talertname\tformula\tseverity\tescalation\tenabled\tplaybook",
-    ]
+    records = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
@@ -346,20 +569,18 @@ def playrules_text(db: Session, ids: list[int]) -> list[str]:
             )
             if note:
                 parts.append(f"stored note (not executed): {note}")
-        lines.append(
-            "\t".join(
-                [
-                    _cell(row.name),
-                    _cell(alertname),
-                    _cell(" | ".join(parts)),
-                    _cell(row.severity),
-                    _cell(policy),
-                    "ON" if row.enabled else "OFF",
-                    _cell(book),
-                ]
-            )
+        records.append(
+            [
+                _field("name", row.name),
+                _field("alertname", alertname),
+                *_block("formula", " | ".join(parts)),
+                _field("severity", row.severity),
+                _field("escalation", policy),
+                _field("enabled", "ON" if row.enabled else "OFF"),
+                _field("playbook", book),
+            ]
         )
-    return lines
+    return _join_docs(f"ForgeSRE playrules ({len(records)})", records)
 
 
 def delete_journal_rows(db: Session, ids: list[int], actor: str) -> int:
@@ -385,25 +606,24 @@ def delete_journal_rows(db: Session, ids: list[int], actor: str) -> int:
 def journal_text(db: Session, ids: list[int]) -> list[str]:
     rows = db.query(JournalEntry).filter(JournalEntry.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
-    lines = [f"ForgeSRE journal ({len(by)})"]
+    records = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
             continue
-        lines.append(
-            "\t".join(
-                [
-                    _cell(row.at),
-                    _cell(row.module),
-                    _cell(row.action),
-                    _cell(row.status),
-                    _cell(row.summary),
-                    _cell(row.object_type),
-                    _cell(row.object_id),
-                ]
-            )
+        records.append(
+            [
+                _field("when", row.at),
+                _field("module", row.module),
+                _field("action", row.action),
+                _field("status", row.status),
+                *_block("summary", row.summary),
+                *_block("detail", row.detail),
+                _field("object", f"{row.object_type} {row.object_id}".strip()),
+                _field("duration", f"{row.duration_ms} ms" if row.duration_ms else "—"),
+            ]
         )
-    return lines
+    return _join_docs(f"ForgeSRE journal ({len(records)})", records)
 
 
 def delete_mail(db: Session, ids: list[int], actor: str) -> int:
@@ -430,27 +650,22 @@ def delete_mail(db: Session, ids: list[int], actor: str) -> int:
 def mail_text(db: Session, ids: list[int]) -> list[str]:
     rows = db.query(Notification).filter(Notification.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
-    lines = [f"ForgeSRE mail ({len(by)})"]
+    records = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
             continue
-        lines.append(
-            "\t".join(
-                [
-                    _cell(row.created_at),
-                    _cell(row.target),
-                    _cell(row.status),
-                    _cell(row.step_key),
-                    _cell(row.subject),
-                ]
-            )
-        )
-        body = (row.body or "").strip()
-        if body:
-            lines.append(body[:4000])
-            lines.append("")
-    return lines
+        body = [
+            _field("when", row.created_at),
+            _field("to", row.target),
+            _field("status", row.status),
+            _field("step", row.step_key),
+            _field("subject", row.subject),
+        ]
+        if (row.body or "").strip():
+            body.extend(_block("body", (row.body or "")[:4000]))
+        records.append(body)
+    return _join_docs(f"ForgeSRE mail ({len(records)})", records)
 
 
 def delete_reports(db: Session, ids: list[int], actor: str) -> int:
@@ -475,25 +690,23 @@ def reports_text(db: Session, ids: list[int]) -> list[str]:
 
     rows = db.query(ScheduledReport).filter(ScheduledReport.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
-    lines = [f"ForgeSRE scheduled reports ({len(by)})"]
+    records = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
             continue
         assets = ", ".join(str(item) for item in (row.asset_ids or [])) or "all"
-        lines.append(
-            "\t".join(
-                [
-                    _cell(row.name),
-                    _cell(", ".join(report_recipients(row))),
-                    _cell(schedule_label(row)),
-                    "ON" if row.enabled else "OFF",
-                    _cell(assets),
-                    _cell(row.next_run_at),
-                ]
-            )
+        records.append(
+            [
+                _field("name", row.name),
+                _field("to", ", ".join(report_recipients(row))),
+                _field("schedule", schedule_label(row)),
+                _field("enabled", "ON" if row.enabled else "OFF"),
+                _field("assets", assets),
+                _field("next", row.next_run_at),
+            ]
         )
-    return lines
+    return _join_docs(f"ForgeSRE scheduled reports ({len(records)})", records)
 
 
 def _audit_detail(row: AuditLog) -> str:
@@ -509,23 +722,21 @@ def _audit_detail(row: AuditLog) -> str:
 def audit_text(db: Session, ids: list[int]) -> list[str]:
     rows = db.query(AuditLog).filter(AuditLog.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
-    lines = [f"ForgeSRE audit ({len(by)})", "when\twho\taction\tobject\tdetail"]
+    records = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
             continue
-        lines.append(
-            "\t".join(
-                [
-                    _cell(row.at),
-                    _cell(row.actor),
-                    _cell(row.action),
-                    _cell(f"{row.object_type} {row.object_id}".strip()),
-                    _cell(_audit_detail(row)),
-                ]
-            )
+        records.append(
+            [
+                _field("when", row.at),
+                _field("who", row.actor),
+                _field("action", row.action),
+                _field("object", f"{row.object_type} {row.object_id}".strip()),
+                *_block("detail", _audit_detail(row)),
+            ]
         )
-    return lines
+    return _join_docs(f"ForgeSRE audit ({len(records)})", records)
 
 
 def incident_audit_text(db: Session, number: str, ids: list[int]) -> list[str]:
@@ -538,22 +749,20 @@ def incident_audit_text(db: Session, number: str, ids: list[int]) -> list[str]:
         else []
     )
     by = {row.id: row for row in rows}
-    lines = [f"ForgeSRE who did what {number} ({len(by)})", "when\twho\taction\tdetail"]
+    records = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
             continue
-        lines.append(
-            "\t".join(
-                [
-                    _cell(row.at),
-                    _cell(row.actor),
-                    _cell(row.action),
-                    _cell(_audit_detail(row)),
-                ]
-            )
+        records.append(
+            [
+                _field("when", row.at),
+                _field("who", row.actor),
+                _field("action", row.action),
+                *_block("detail", _audit_detail(row)),
+            ]
         )
-    return lines
+    return _join_docs(f"ForgeSRE who did what {number} ({len(records)})", records)
 
 
 @router.post("/incidents/bulk-delete")
