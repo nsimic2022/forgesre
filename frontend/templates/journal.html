@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "_select.html" as sel %}
+{% import "_stamp.html" as stamp with context %}
 {% block title %}Journal · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Journal {% with %}{% set tip %}Internal process journal. Each module writes a short ok / warn / error report when it finishes a job. Old rows are dropped automatically (about 200 per module) so search stays small. Raw Docker/Loki logs are separate — this is the operator view, not a bash shell.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
@@ -31,7 +32,7 @@
   {% for row in entries %}
     <tr data-list-row>
       {{ sel.cell(row.id, row.module ~ " " ~ row.action) }}
-      <td class="muted">{{ row.at }}</td>
+      <td class="muted">{{ stamp.show(row.at) }}</td>
       <td><a href="/journal?module={{ row.module|urlencode }}">{{ row.module }}</a></td>
       <td>{{ row.action }}</td>
       <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>

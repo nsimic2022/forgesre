@@ -113,7 +113,13 @@ def test_every_row_when_leads_with_duration_then_clock():
         assert re.search(r'title="Open for 2h 1[45]m · started [^"]+"', live_when)
         assert re.search(r'<span class="inc-age inc-age-live"[^>]*>2h 1[45]m</span><span class="inc-wall">' + WALL_RE + "</span>", live_when)
         assert 'class="inc-title sev-crit"' in live_row
-        assert '<span class="inc-host">· 10.20.30.40</span>' in live_row
+        assert 'class="inc-host"' in live_row and "10.20.30.40" in live_row
+        if path == "/":
+            head = html.split("</thead>", 1)[0]
+            assert head.index(">Hostname<") < head.index(">Name<")
+            assert ">Problem<" not in head
+        else:
+            assert '<span class="inc-host">· 10.20.30.40</span>' in live_row
 
         done_when = _when_cell(_row(html, done.number))
         assert re.search(r'title="Lasted 1h · started [^"]+ · ended [^"]+"', done_when)
@@ -290,4 +296,4 @@ def test_stack_cube_font_bumped_box_unchanged():
     assert "padding: 0.28rem" in block
     assert "line-height: 0.77rem" in block
     assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v08-17" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "app.css?v=v08-18" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

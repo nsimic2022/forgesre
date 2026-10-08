@@ -83,7 +83,7 @@ def test_who_did_what_has_its_own_pager_and_rows_select():
     audit = _audit(client.get(f"/incidents/{number}").text)
     assert re.search(r'<div class="table-scroll list-scroll" data-list-scroll>\s*<table>', audit)
     assert audit.count("iaf.step") == 10
-    assert '<div class="pager-bar">' in audit and '<div class="pager-left">' in audit
+    assert 'class="pager-bar"' in audit and '<div class="pager-left">' in audit
     assert "Showing 1–10 of 14" in audit
     assert f"/incidents/{number}?audit_page=2#audit" in audit
     assert 'name="audit_per_page"' in audit and "data-pager-size" in audit
@@ -101,7 +101,8 @@ def test_short_who_did_what_shows_rows_without_pager():
     number = _incident_with_audit(3)
     audit = _audit(_client().get(f"/incidents/{number}").text)
     assert audit.count("iaf.step") == 3
-    assert "pager-bar" not in audit
+    assert "Previous" not in audit
+    assert f"/incidents/{number}/audit/export" in audit
 
 
 def _asset(asset_id: str, type_: str, source: str, site: str = "", customer: str = "", **extra) -> Asset:
@@ -234,6 +235,6 @@ def test_edit_link_keeps_filters(seeded):
 
 def test_v08_15_cache_bump_and_compact_select_css():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-17" in base and "app.js?v=v08-17" in base
+    assert "app.css?v=v08-18" in base and "app.js?v=v08-18" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".list-filters select.filter-select { width: auto;" in css

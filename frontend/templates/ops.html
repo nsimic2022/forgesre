@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "_select.html" as sel %}
+{% import "_stamp.html" as stamp with context %}
 {% block title %}Email & reports · ForgeSRE{% endblock %}
 {% block extra_head %}
 <style>
@@ -110,7 +111,7 @@
     {% for note in mail %}
       <tr data-list-row>
         {{ sel.cell(note.id, note.subject) }}
-        <td class="muted">{{ note.created_at }}</td>
+        <td class="muted">{{ stamp.show(note.created_at) }}</td>
         <td>{{ note.target }}</td>
         <td>{% if is_demo_mail(note) %}<span class="pill demo">DEMO</span> {% endif %}{{ note.subject }}</td>
         <td><span class="pill {{ note.status }}">{{ note.status }}</span></td>
@@ -154,24 +155,56 @@
     <p class="muted">Copy of <strong>{{ clone_source_name }}</strong>. Tweak fields, then Save to create a new job. Cancel discards the draft.</p>
     {% endif %}
     <label>Name <input name="name" value="{{ rf.name or 'storage-6h' }}" required></label>
-    <label>Send to
-      <select name="to_email">
-        <option value="">Select an address</option>
+    {% set picked = rf.recipients or [] %}
+    {% set picked_l = picked|map('lower')|list %}
+    <fieldset class="report-recipients">
+      <legend>Recipients</legend>
+      <div class="recipient-picks">
         {% for item in addresses %}
-        <option value="{{ item.email }}" {% if item.email == rf.to_email %}selected{% endif %}>{% if item.label %}{{ item.label }} — {% endif %}{{ item.email }} ({{ item.source }})</option>
+        <label class="check"><input type="checkbox" name="to_email" value="{{ item.email }}" {% if item.email|lower in picked_l %}checked{% endif %}> {{ item.email }}{% if item.label %} · {{ item.label }}{% endif %} <span class="muted">({{ item.source }})</span></label>
+        {% else %}
+        <p class="muted">No saved addresses yet. Type them below.</p>
         {% endfor %}
-      </select>
-    </label>
-    <label>Or new email <input name="new_email" type="email" placeholder="only if it is not in the list yet"></label>
-    <label>Every
-      <select name="interval_hours">
-        {% set hours = rf.interval_hours if rf.interval_hours else 6 %}
-        <option value="1" {% if hours == 1 %}selected{% endif %}>1 hour</option>
-        <option value="6" {% if hours == 6 %}selected{% endif %}>6 hours</option>
-        <option value="12" {% if hours == 12 %}selected{% endif %}>12 hours</option>
-        <option value="24" {% if hours == 24 %}selected{% endif %}>24 hours</option>
-      </select>
-    </label>
+        {% for email in picked %}
+        {% if email|lower not in addresses|map(attribute='email')|map('lower')|list %}
+        <label class="check"><input type="checkbox" name="to_email" value="{{ email }}" checked> {{ email }}</label>
+        {% endif %}
+        {% endfor %}
+      </div>
+      <label>Additional emails <textarea name="extra_emails" rows="2" placeholder="one per line, or comma-separated"></textarea></label>
+    </fieldset>
+    <fieldset class="report-schedule">
+      <legend>Schedule</legend>
+      {% set preset = rf.preset or '6h' %}
+      <label>Every
+        <select name="schedule" data-schedule>
+          <option value="15m" {% if preset == '15m' %}selected{% endif %}>15 minutes</option>
+          <option value="30m" {% if preset == '30m' %}selected{% endif %}>30 minutes</option>
+          <option value="60m" {% if preset == '60m' %}selected{% endif %}>60 minutes</option>
+          <option value="1h" {% if preset == '1h' %}selected{% endif %}>1 hour</option>
+          <option value="6h" {% if preset == '6h' %}selected{% endif %}>6 hours</option>
+          <option value="12h" {% if preset == '12h' %}selected{% endif %}>12 hours</option>
+          <option value="24h" {% if preset == '24h' %}selected{% endif %}>24 hours</option>
+          <option value="custom" {% if preset == 'custom' %}selected{% endif %}>Custom interval</option>
+          <option value="once" {% if preset == 'once' %}selected{% endif %}>Once (no repeat)</option>
+        </select>
+      </label>
+      <div class="custom-interval" data-custom-interval {% if preset != 'custom' %}hidden{% endif %}>
+        <label>Amount <input name="every_n" type="number" min="1" max="10080" value="{{ rf.every_n or '' }}" placeholder="90"></label>
+        <label>Unit
+          <select name="every_unit">
+            <option value="minutes" {% if (rf.every_unit or 'minutes') != 'hours' %}selected{% endif %}>minutes</option>
+            <option value="hours" {% if rf.every_unit == 'hours' %}selected{% endif %}>hours</option>
+          </select>
+        </label>
+      </div>
+      <div class="weekday-picks" data-weekdays {% if preset == 'once' %}hidden{% endif %}>
+        <span class="muted">Only these days</span>
+        {% for value, label in [(0, 'Mon'), (1, 'Tue'), (2, 'Wed'), (3, 'Thu'), (4, 'Fri'), (5, 'Sat'), (6, 'Sun')] %}
+        <label class="check"><input type="checkbox" name="weekday" value="{{ value }}" {% if value in (rf.weekdays if rf.weekdays is not none else [0,1,2,3,4,5,6]) %}checked{% endif %}> {{ label }}</label>
+        {% endfor %}
+      </div>
+    </fieldset>
     <fieldset>
       <legend>Assets</legend>
       {% for asset in assets %}
@@ -208,7 +241,8 @@
   </form>
   </div>
   {% endif %}
-  <div data-select-scope>
+  <h3 class="report-active-head">Active scheduled reports</h3>
+  <div data-select-scope class="report-active-list">
   <div class="table-scroll list-scroll" data-list-scroll>
   <table>
     <thead><tr>{{ sel.head() }}<th>Name</th><th>To</th><th>Every</th><th>Assets</th><th>Last</th><th>Next</th><th>Enabled</th><th></th></tr></thead>
@@ -217,11 +251,11 @@
       <tr{% if editing_report and editing_report.id == row.id %} class="selected"{% endif %} data-list-row>
         {{ sel.cell(row.id, row.name) }}
         <td>{{ row.name }}</td>
-        <td>{{ row.to_email }}</td>
-        <td>{{ row.interval_hours }}h</td>
+        <td>{{ report_recipients(row)|join(", ") or row.to_email }}</td>
+        <td>{{ schedule_label(row) }}</td>
         <td>{{ (row.asset_ids or [])|join(", ") or "all" }}</td>
-        <td class="muted">{{ row.last_run_at or "—" }}</td>
-        <td class="muted">{{ row.next_run_at or "—" }}</td>
+        <td class="muted">{{ stamp.show(row.last_run_at) if row.last_run_at else "—" }}</td>
+        <td class="muted">{{ stamp.show(row.next_run_at) if row.next_run_at else "—" }}</td>
         <td>
           {% if can_send %}
           <form method="post" action="/ops/reports/{{ row.id }}/toggle" class="onoff-form">

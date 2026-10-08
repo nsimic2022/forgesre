@@ -7,7 +7,9 @@
 <div class="banner">{{ notice }}</div>
 {% endif %}
 <form method="get" action="/assets" class="row-actions list-filters">
-  <input name="q" value="{{ q }}" placeholder="search #, id, hostname, IP, VLAN">
+  <input name="q" value="{{ q }}" placeholder="search #, id, hostname, IP, VLAN" aria-label="Search">
+  <input name="hostname" value="{{ hostname }}" placeholder="Hostname" aria-label="Hostname">
+  <input name="ip" value="{{ ip }}" placeholder="IP" aria-label="IP">
   {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
   {% if flag %}<input type="hidden" name="flag" value="{{ flag }}">{% endif %}
   {% if agent %}<input type="hidden" name="agent" value="{{ agent }}">{% endif %}
@@ -55,11 +57,11 @@
   {% if can('write_assets') %}
   <a class="button" href="/assets/verify">Verify all</a>
   {% endif %}
-  {% if q or status or flag or source or agent or asset_type or site or vlan or customer %}<a class="muted list-reset" href="/assets">Reset</a>{% endif %}
+  {% if q or hostname or ip or status or flag or source or agent or asset_type or site or vlan or customer %}<a class="muted list-reset" href="/assets">Reset</a>{% endif %}
 </form>
 <nav class="filter-chips" aria-label="Asset filters">
   {% for key, value, label in [("", "", "All"), ("status", "critical", "Critical"), ("status", "warning", "Warning"), ("flag", "unreachable", "Offline / unreachable"), ("flag", "no-email", "No owner email")] %}
-  {% set on = (not key and not status and not flag and not source and not agent and not asset_type and not site and not vlan and not customer) or (key == "status" and status == value) or (key == "flag" and flag == value) %}
+  {% set on = (not key and not status and not flag and not source and not agent and not asset_type and not site and not vlan and not customer and not hostname and not ip) or (key == "status" and status == value) or (key == "flag" and flag == value) %}
   <a class="chip{% if on %} on{% endif %}" href="/assets{% if key %}?{{ key }}={{ value }}{% endif %}{% if q %}{{ '&' if key else '?' }}q={{ q }}{% endif %}{% set size_tail = pager_keep(pager, page=False) %}{% if size_tail %}{{ size_tail if (key or q) else '?' ~ size_tail[1:] }}{% endif %}">{{ label }}</a>
   {% endfor %}
   {% if zabbix_filters %}

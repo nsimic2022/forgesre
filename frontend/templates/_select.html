@@ -1,7 +1,8 @@
-{#- Row checkboxes. Bulk Delete / Export posts name="selected" from the checked rows on this page. -#}
+{#- Row checkboxes. Bulk Delete / Export posts name="selected" from the checked rows on this page.
+   The label is the hit target; the box itself stays a normal checkbox. -#}
 {% macro head() -%}
-<th class="row-select"><input type="checkbox" data-select-page aria-label="Select all rows on this page"></th>
+<th class="row-select"><label class="row-check"><input type="checkbox" data-select-page aria-label="Select all rows on this page"></label></th>
 {%- endmacro %}
 {% macro cell(value, label="") -%}
-<td class="row-select"><input type="checkbox" name="selected" value="{{ value }}" data-select-row aria-label="Select {{ label or value }}"></td>
+<td class="row-select"><label class="row-check"><input type="checkbox" name="selected" value="{{ value }}" data-select-row aria-label="Select {{ label or value }}"></label></td>
 {%- endmacro %}

@@ -1422,9 +1422,12 @@ def assets_matching(
     site: str = "",
     customer: str = "",
     vlan: str = "",
+    hostname: str = "",
+    ip: str = "",
 ) -> list[Asset]:
     """Filter inventory by asset number, id, hostname, or IP (substring), optional status, flag, source, Zabbix agent,
-    Type, and extras Site / VLAN / Customer (exact, case-insensitive). Every filter given must match.
+    Type, and extras Site / VLAN / Customer (exact, case-insensitive). Hostname and IP are their own substring
+    filters (same field names as Add asset). Every filter given must match.
     Search also matches the VLAN text.
 
     ``source=zabbix`` includes assets from other sources that are linked to a Zabbix host; ``source=forge`` is every
@@ -1457,6 +1460,12 @@ def assets_matching(
         value = " ".join((raw or "").split()).lower()
         if value:
             out = [row for row in out if asset_extra(row, key).lower() == value]
+    host = (hostname or "").strip().lower()
+    if host:
+        out = [row for row in out if host in (row.hostname or "").lower()]
+    addr = (ip or "").strip().lower()
+    if addr:
+        out = [row for row in out if addr in (row.ip or "").lower()]
     return out
 
 

@@ -32,6 +32,21 @@ document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
 });
 applyTheme(currentTheme());
 
+(function bindReportSchedule() {
+  const form = document.getElementById("report-schedule-form");
+  if (!form) return;
+  const pick = form.querySelector("[data-schedule]");
+  const custom = form.querySelector("[data-custom-interval]");
+  const days = form.querySelector("[data-weekdays]");
+  const sync = () => {
+    const value = pick ? pick.value : "";
+    if (custom) custom.hidden = value !== "custom";
+    if (days) days.hidden = value === "once";
+  };
+  if (pick) pick.addEventListener("change", sync);
+  sync();
+})();
+
 (function bindClock() {
   const clocks = document.querySelectorAll("[data-clock]");
   if (!clocks.length) return;

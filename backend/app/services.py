@@ -243,6 +243,54 @@ def format_started_at(value: Any) -> str:
     return text
 
 
+_STAMP_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _stamp_local(value: Any) -> datetime | None:
+    """Datetime for list chrome. Drops microseconds, ISO T/Z, offsets, and epoch seconds."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return _appliance_local(value)
+    if isinstance(value, (int, float)) and 1_000_000_000 <= float(value) <= 10_000_000_000:
+        return _appliance_local(datetime.fromtimestamp(float(value), timezone.utc))
+    text = str(value).strip()
+    if not text or text in {"—", "-"}:
+        return None
+    if text.isdigit() and len(text) in {10, 13}:
+        raw = int(text)
+        if len(text) == 13:
+            raw = raw / 1000
+        if 1_000_000_000 <= raw <= 10_000_000_000:
+            return _appliance_local(datetime.fromtimestamp(raw, timezone.utc))
+    iso = text.replace("Z", "+00:00")
+    if " " in iso and "T" not in iso:
+        iso = iso.replace(" ", "T", 1)
+    try:
+        parsed = datetime.fromisoformat(iso)
+    except ValueError:
+        return None
+    return _appliance_local(parsed)
+
+
+def compact_stamp(value: Any) -> dict[str, str]:
+    """List datetime: date month year, and HH:MM. No microseconds, epoch, or T/Z."""
+    local = _stamp_local(value)
+    if local is None:
+        return {"date": "", "time": ""}
+    return {
+        "date": f"{local.day:02d} {_STAMP_MONTHS[local.month - 1]} {local.year}",
+        "time": local.strftime("%H:%M"),
+    }
+
+
+def compact_when_text(value: Any) -> str:
+    parts = compact_stamp(value)
+    if not parts["date"]:
+        return ""
+    return f"{parts['date']} {parts['time']}".strip()
+
+
 def short_when_label(value: Any, now: datetime | None = None) -> str:
     """Same calendar day → HH:MM; older → DD.MM HH:MM from an appliance-local datetime."""
     if value is None:
@@ -1350,7 +1398,9 @@ def remember_mail_contact(db: Session, email: str, name: str = "", actor: str = 
 
 
 def list_mail_addresses(db: Session) -> list[dict[str, str]]:
-    """Saved book first, then asset owners, previous outbox, UI users."""
+    """Known addresses: saved book, asset owners and backup contacts, report recipients, outbox, escalation targets, users."""
+    from app.models import EscalationPolicy
+
     seen: dict[str, dict[str, str]] = {}
 
     def add(email: str, label: str, source: str) -> None:
@@ -1368,8 +1418,18 @@ def list_mail_addresses(db: Session) -> list[dict[str, str]]:
         add(row.email, row.name, "saved")
     for asset in db.query(Asset).order_by(Asset.hostname):
         add(asset.owner_email, asset.contact_name or asset.hostname, "asset")
+        extras = asset.extras if isinstance(asset.extras, dict) else {}
+        add(str(extras.get("backup_email") or ""), str(extras.get("backup_name") or asset.hostname or ""), "asset")
+    for row in db.query(ScheduledReport).order_by(ScheduledReport.id):
+        add(row.to_email, row.name, "report")
+        for email in row.recipients or []:
+            add(str(email or ""), row.name, "report")
     for (target,) in db.query(Notification.target).distinct():
         add(str(target or ""), "", "outbox")
+    for policy in db.query(EscalationPolicy).order_by(EscalationPolicy.id):
+        for step in policy.steps or []:
+            target = step.get("target") if isinstance(step, dict) else ""
+            add(str(target or ""), policy.name, "escalation")
     for user in db.query(User).order_by(User.email):
         add(user.email, user.name, "user")
     return sorted(seen.values(), key=lambda item: item["email"].lower())
@@ -1449,7 +1509,7 @@ def build_performance_report(db: Session, asset_ids: list[str]) -> str:
     assets = q.order_by(Asset.hostname).all()
     lines = [
         "ForgeSRE performance report",
-        f"Generated at {utcnow().isoformat()}",
+        f"Generated at {compact_when_text(utcnow())}",
         "Not an incident. Read-only snapshot from Prometheus / demo gauges.",
         "",
     ]
@@ -1510,59 +1570,318 @@ def send_incident_report(db: Session, incident: Incident, target: str, actor: st
     )
 
 
-def _report_job(row: ScheduledReport) -> dict[str, Any]:
+WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+SCHEDULE_PRESETS = {
+    "15m": 15,
+    "30m": 30,
+    "60m": 60,
+    "1h": 60,
+    "6h": 360,
+    "12h": 720,
+    "24h": 1440,
+}
+_LEGACY_PRESET = {60: "1h", 360: "6h", 720: "12h", 1440: "24h", 15: "15m", 30: "30m"}
+
+
+def _weekday_list(raw: Any) -> list[int]:
+    if not isinstance(raw, list) or not raw:
+        return list(range(7))
+    days: list[int] = []
+    for item in raw:
+        try:
+            number = int(item)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= number <= 6 and number not in days:
+            days.append(number)
+    return days or list(range(7))
+
+
+def report_recipients(row: ScheduledReport) -> list[str]:
+    """Every address this job mails. Legacy rows only stored to_email."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in list(getattr(row, "recipients", None) or []):
+        text = str(item or "").strip()
+        if text and text.lower() not in seen:
+            seen.add(text.lower())
+            out.append(text)
+    primary = str(getattr(row, "to_email", "") or "").strip()
+    if primary and primary.lower() not in seen:
+        out.insert(0, primary)
+    return out
+
+
+def report_schedule(row: ScheduledReport) -> dict[str, Any]:
+    """repeat / every_minutes / weekdays / preset. Missing JSON keeps the old hour interval, every day."""
+    raw = getattr(row, "schedule", None)
+    raw = raw if isinstance(raw, dict) else {}
+    repeat = bool(raw.get("repeat", True))
+    preset = str(raw.get("preset") or "")
+    try:
+        every = int(raw.get("every_minutes") or 0)
+    except (TypeError, ValueError):
+        every = 0
+    if every <= 0:
+        every = max(1, int(getattr(row, "interval_hours", None) or 6)) * 60
+    days = _weekday_list(raw.get("weekdays"))
+    if not repeat:
+        preset = "once"
+        every = 0
+    elif preset not in SCHEDULE_PRESETS and preset != "custom":
+        preset = _LEGACY_PRESET.get(every, "custom")
+    return {"repeat": repeat, "every_minutes": every, "weekdays": days, "preset": preset}
+
+
+def schedule_label(row: ScheduledReport) -> str:
+    sch = report_schedule(row)
+    if not sch["repeat"]:
+        return "Once"
+    minutes = int(sch["every_minutes"] or 0)
+    preset = sch["preset"]
+    if preset == "custom":
+        text = f"every {minutes // 60}h" if minutes % 60 == 0 else f"every {minutes}m"
+    elif preset == "60m":
+        text = "60m"
+    elif minutes % 60 == 0:
+        text = f"{minutes // 60}h"
+    else:
+        text = f"{minutes}m"
+    days = sch["weekdays"]
+    if len(days) >= 7:
+        return text
+    return text + " · " + " ".join(WEEKDAY_NAMES[day] for day in days)
+
+
+def build_schedule(
+    *,
+    schedule: str = "",
+    every_n: str = "",
+    every_unit: str = "minutes",
+    weekdays: list[str] | None = None,
+    interval_hours: int = 0,
+) -> dict[str, Any]:
+    """One schedule control: presets, a custom interval, or once. Weekdays apply only when it repeats."""
+    choice = (schedule or "").strip().lower()
+    if not choice:
+        hours = int(interval_hours or 6)
+        if hours < 1:
+            hours = 6
+        hours = min(168, hours)
+        minutes = hours * 60
+        preset = _LEGACY_PRESET.get(minutes, "custom")
+        return {
+            "repeat": True,
+            "every_minutes": minutes,
+            "weekdays": list(range(7)),
+            "preset": preset,
+            "interval_hours": hours,
+        }
+    if choice == "once":
+        return {
+            "repeat": False,
+            "every_minutes": 0,
+            "weekdays": list(range(7)),
+            "preset": "once",
+            "interval_hours": 1,
+        }
+    if choice == "custom":
+        try:
+            amount = int(str(every_n).strip() or "0")
+        except ValueError:
+            amount = 0
+        unit = (every_unit or "minutes").strip().lower()
+        minutes = amount * 60 if unit.startswith("hour") else amount
+        if minutes < 1 or minutes > 10080:
+            raise ValueError("Custom interval must be between 1 minute and 7 days")
+        preset = "custom"
+    elif choice in SCHEDULE_PRESETS:
+        minutes = SCHEDULE_PRESETS[choice]
+        preset = choice
+    else:
+        raise ValueError("Pick a schedule")
+    days = _weekday_list([item for item in (weekdays or [])])
+    # _weekday_list turns an empty list into every day. An explicit empty post means the same.
+    if weekdays:
+        parsed: list[int] = []
+        for item in weekdays:
+            try:
+                number = int(item)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= number <= 6 and number not in parsed:
+                parsed.append(number)
+        days = parsed or list(range(7))
+    hours = minutes // 60 if minutes % 60 == 0 else 1
+    hours = max(1, min(168, hours))
     return {
-        "id": row.id,
-        "name": row.name or "performance",
-        "to_email": row.to_email,
-        "asset_ids": list(row.asset_ids or []),
-        "hours": max(1, int(row.interval_hours or 6)),
+        "repeat": True,
+        "every_minutes": minutes,
+        "weekdays": days,
+        "preset": preset,
+        "interval_hours": hours,
     }
 
 
-def _send_report_job(db: Session, job: dict[str, Any], actor: str) -> Notification:
-    return send_performance_report(
-        db,
-        asset_ids=job["asset_ids"],
-        to_email=job["to_email"],
-        actor=actor,
-        name=job["name"],
-    )
+def initial_next_run(now: datetime, schedule: dict[str, Any]) -> datetime | None:
+    """Once is due on the next scheduler pass. A repeat waits one interval, then the next allowed weekday."""
+    if not schedule.get("repeat", True):
+        return now
+    return advance_next_run(now, schedule)
 
 
-def run_scheduled_report(db: Session, row: ScheduledReport, actor: str = "system") -> Notification:
-    """Run now (operator button). Next moves before the mail is sent, so an error after SMTP cannot repeat it."""
+def weekday_allowed(when: datetime, schedule: dict[str, Any]) -> bool:
+    if not schedule.get("repeat", True):
+        return True
+    days = schedule.get("weekdays") or list(range(7))
+    if len(days) >= 7:
+        return True
+    return _appliance_local(when).weekday() in {int(day) for day in days}
+
+
+def advance_next_run(after: datetime, schedule: dict[str, Any]) -> datetime | None:
+    """Next fire after a send. Once does not reschedule."""
+    if not schedule.get("repeat", True):
+        return None
+    minutes = max(1, int(schedule.get("every_minutes") or 60))
+    return _align_weekday(after + timedelta(minutes=minutes), schedule, after=after)
+
+
+def defer_next_run(slot: datetime, schedule: dict[str, Any], *, after: datetime) -> datetime:
+    """Skip a disallowed weekday without sending. Keeps the slot's local clock."""
+    days = {int(day) for day in (schedule.get("weekdays") or [])}
+    cursor_local = _appliance_local(slot)
+    for _ in range(10):
+        cursor = cursor_local.astimezone(timezone.utc)
+        if cursor_local.weekday() in days and cursor > after:
+            return cursor
+        cursor_local = cursor_local + timedelta(days=1)
+    return cursor_local.astimezone(timezone.utc)
+
+
+def _align_weekday(slot: datetime, schedule: dict[str, Any], *, after: datetime) -> datetime:
+    days = {int(day) for day in (schedule.get("weekdays") or list(range(7)))}
+    if len(days) >= 7:
+        return slot if slot > after else after + timedelta(minutes=max(1, int(schedule.get("every_minutes") or 1)))
+    cursor = slot
+    for _ in range(10):
+        if _appliance_local(cursor).weekday() in days and cursor > after:
+            return cursor
+        local = _appliance_local(cursor)
+        cursor = (local + timedelta(days=1)).astimezone(timezone.utc)
+    return cursor
+
+
+def stored_schedule(schedule: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "repeat": bool(schedule.get("repeat", True)),
+        "every_minutes": int(schedule.get("every_minutes") or 0),
+        "weekdays": [int(day) for day in (schedule.get("weekdays") or list(range(7)))],
+        "preset": str(schedule.get("preset") or ""),
+    }
+
+
+def _report_job(row: ScheduledReport) -> dict[str, Any]:
+    sch = report_schedule(row)
+    recipients = report_recipients(row)
+    minutes = int(sch["every_minutes"] or 0)
+    hours = max(1, minutes // 60) if minutes >= 60 else 1
+    return {
+        "id": row.id,
+        "name": row.name or "performance",
+        "to_email": recipients[0] if recipients else (row.to_email or ""),
+        "recipients": recipients,
+        "asset_ids": list(row.asset_ids or []),
+        "hours": 0 if not sch["repeat"] else hours,
+        "schedule": sch,
+        "label": schedule_label(row),
+    }
+
+
+def _send_report_job(db: Session, job: dict[str, Any], actor: str) -> Notification | None:
+    recipients = list(job.get("recipients") or [])
+    if not recipients and job.get("to_email"):
+        recipients = [job["to_email"]]
+    if not recipients:
+        raise ValueError("Need a valid email address")
+    last: Notification | None = None
+    problems: list[str] = []
+    for email in recipients:
+        try:
+            last = send_performance_report(
+                db,
+                asset_ids=job["asset_ids"],
+                to_email=email,
+                actor=actor,
+                name=job["name"],
+            )
+        except Exception as exc:
+            problems.append(f"{email}: {exc}")
+    if problems:
+        raise RuntimeError("; ".join(problems)[:400])
+    return last
+
+
+def _apply_next_run(row: ScheduledReport, job: dict[str, Any], now: datetime) -> None:
+    sch = job["schedule"]
+    row.last_run_at = now
+    if sch["repeat"]:
+        row.next_run_at = advance_next_run(now, sch)
+    else:
+        row.next_run_at = None
+        row.enabled = False
+
+
+def run_scheduled_report(db: Session, row: ScheduledReport, actor: str = "system") -> Notification | None:
+    """Run now (operator button). Next moves before the mail is sent, so an error after SMTP cannot repeat it.
+
+    Once does not reschedule: the row switches off and Next is cleared.
+    """
     job = _report_job(row)
     now = utcnow()
-    row.last_run_at = now
-    row.next_run_at = now + timedelta(hours=job["hours"])
+    _apply_next_run(row, job, now)
     db.add(row)
     db.commit()
     return _send_report_job(db, job, actor)
 
 
 def _claim_due_report(db: Session, job: dict[str, Any], now: datetime) -> bool:
-    """Push Next in the same UPDATE that checks the row still exists and is enabled. False = deleted / Off since the pass started."""
+    """Push Next in the same UPDATE that checks the row still exists and is enabled. False = deleted / Off since the pass started.
+
+    Once claims by switching the row off and clearing Next, so a later pass cannot send it again.
+    """
+    sch = job["schedule"]
+    values: dict[Any, Any] = {ScheduledReport.last_run_at: now}
+    if sch["repeat"]:
+        values[ScheduledReport.next_run_at] = advance_next_run(now, sch)
+    else:
+        values[ScheduledReport.next_run_at] = None
+        values[ScheduledReport.enabled] = False
     claimed = (
         db.query(ScheduledReport)
         .filter(ScheduledReport.id == job["id"], ScheduledReport.enabled.is_(True))
-        .update(
-            {
-                ScheduledReport.last_run_at: now,
-                ScheduledReport.next_run_at: now + timedelta(hours=job["hours"]),
-            },
-            synchronize_session=False,
-        )
+        .update(values, synchronize_session=False)
     )
     db.commit()
     return bool(claimed)
 
 
+def _defer_report(db: Session, report_id: int, nxt: datetime) -> bool:
+    """Move Next to an allowed weekday without sending. A deleted or Off row is left alone."""
+    moved = (
+        db.query(ScheduledReport)
+        .filter(ScheduledReport.id == report_id, ScheduledReport.enabled.is_(True))
+        .update({ScheduledReport.next_run_at: nxt}, synchronize_session=False)
+    )
+    db.commit()
+    return bool(moved)
+
+
 def process_scheduled_reports(db: Session) -> int:
     """Send every enabled report whose Next has passed. A removed or Off report is never sent, even mid-pass.
 
-    One broken report (bad address, SMTP error) is journaled once per interval and does not stop the
-    others or the RCA / Zabbix work that shares the jobs loop.
+    Once does not reschedule. A repeat whose due day is not a selected weekday is skipped and moved
+    to the next allowed day. One broken report is journaled and does not stop the others.
     """
     now = utcnow()
     ids = [
@@ -1583,6 +1902,14 @@ def process_scheduled_reports(db: Session) -> int:
         if nxt is not None and nxt > now:
             continue
         job = _report_job(row)
+        sch = job["schedule"]
+        if sch["repeat"] and not weekday_allowed(now, sch):
+            try:
+                _defer_report(db, pk, defer_next_run(nxt or now, sch, after=now))
+            except Exception:
+                db.rollback()
+                log.exception("scheduled report %s weekday skip failed", pk)
+            continue
         try:
             if not _claim_due_report(db, job, now):
                 continue
@@ -1591,12 +1918,13 @@ def process_scheduled_reports(db: Session) -> int:
         except Exception as exc:
             db.rollback()
             log.exception("scheduled report %s failed", pk)
+            nxt_txt = "not rescheduled" if not sch["repeat"] else f"next {job['label']}"
             report(
                 db,
                 "notification",
                 "report",
                 "error",
-                summary=f"Scheduled report {job['name']} → {job['to_email']} failed; next try in {job['hours']}h",
+                summary=f"Scheduled report {job['name']} → {', '.join(job['recipients']) or job['to_email']} failed; {nxt_txt}",
                 detail=str(exc)[:400],
                 object_type="report",
                 object_id=str(pk),

@@ -91,7 +91,10 @@ from app.api import doctor_payload, run_asset_verify, verify_assets
 from app.asset_metrics import safe_asset_metric_panel
 from app.metrics import reset_demo_gauges
 from app.services import (
+    compact_stamp,
     format_started_at,
+    report_recipients,
+    schedule_label,
     incident_host,
     incident_short_label,
     incident_source,
@@ -170,55 +173,135 @@ def _parse_id_query(raw: str) -> int | None:
     return value if value > 0 else None
 
 
+def _collect_report_emails(db: Session, picked: list[str] | str, extra: str, actor: str) -> list[str]:
+    from app.services import remember_mail_contact
+
+    raw: list[str] = []
+    if isinstance(picked, str):
+        raw.append(picked)
+    else:
+        raw.extend(picked or [])
+    blob = (extra or "").replace(";", ",").replace("\n", ",")
+    raw.extend(part.strip() for part in blob.split(","))
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        contact = remember_mail_contact(db, item, actor=actor)
+        if contact is None:
+            continue
+        key = contact.email.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(contact.email)
+    return out
+
+
 def parse_scheduled_report_form(
     db: Session,
     *,
     name: str,
-    to_email: str,
+    to_email: list[str] | str,
     new_email: str,
     interval_hours: int,
     asset_id: list[str],
     actor: str,
-) -> tuple[str, str, int, list[str]]:
-    """Name, recipient, interval, asset ids for a scheduled report. SMTP path unchanged."""
-    from app.services import remember_mail_contact
+    extra_emails: str = "",
+    schedule: str = "",
+    every_n: str = "",
+    every_unit: str = "minutes",
+    weekday: list[str] | None = None,
+) -> dict:
+    """Name, recipients, schedule, asset ids. SMTP path unchanged. Legacy interval_hours still works."""
+    from app.services import build_schedule
 
-    hours = max(1, min(168, int(interval_hours or 6)))
-    ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
-    chosen = (new_email or "").strip() or (to_email or "").strip()
-    contact = remember_mail_contact(db, chosen, actor=actor)
-    if contact is None:
-        raise HTTPException(status_code=400, detail="Pick a saved address or enter a new email")
-    return (name.strip() or "performance", contact.email, hours, ids)
-
-
-def _enabled_report_twin(db: Session, name: str, to_email: str, hours: int, asset_ids: list[str]) -> ScheduledReport | None:
-    """An enabled report that would send the same mail. A double-click on Save must not leave a second copy firing after Remove."""
-    wanted = sorted(asset_ids)
-    rows = (
-        db.query(ScheduledReport)
-        .filter(
-            ScheduledReport.enabled.is_(True),
-            ScheduledReport.name == name,
-            func.lower(ScheduledReport.to_email) == to_email.lower(),
-            ScheduledReport.interval_hours == hours,
+    try:
+        built = build_schedule(
+            schedule=schedule,
+            every_n=every_n,
+            every_unit=every_unit,
+            weekdays=list(weekday or []),
+            interval_hours=int(interval_hours or 0),
         )
-        .all()
-    )
-    return next((row for row in rows if sorted(str(x) for x in (row.asset_ids or [])) == wanted), None)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
+    emails = _collect_report_emails(db, to_email, (extra_emails or "").strip() or (new_email or "").strip(), actor)
+    if not emails:
+        raise HTTPException(status_code=400, detail="Pick a saved address or enter a new email")
+    return {
+        "name": (name or "").strip() or "performance",
+        "emails": emails,
+        "email": emails[0],
+        "hours": int(built["interval_hours"]),
+        "ids": ids,
+        "schedule": {
+            "repeat": bool(built["repeat"]),
+            "every_minutes": int(built["every_minutes"]),
+            "weekdays": list(built["weekdays"]),
+            "preset": str(built["preset"]),
+        },
+    }
+
+
+def _enabled_report_twin(db: Session, name: str, emails: list[str], schedule: dict, asset_ids: list[str]) -> ScheduledReport | None:
+    """An enabled report that would send the same mail. A double-click on Save must not leave a second copy firing after Remove."""
+    from app.services import report_recipients, report_schedule
+
+    wanted = sorted(asset_ids)
+    wanted_mail = sorted(item.lower() for item in emails)
+    wanted_days = sorted(int(day) for day in (schedule.get("weekdays") or []))
+    rows = db.query(ScheduledReport).filter(ScheduledReport.enabled.is_(True), ScheduledReport.name == name).all()
+    for row in rows:
+        sch = report_schedule(row)
+        if sorted(item.lower() for item in report_recipients(row)) != wanted_mail:
+            continue
+        if bool(sch["repeat"]) != bool(schedule.get("repeat", True)):
+            continue
+        if int(sch["every_minutes"] or 0) != int(schedule.get("every_minutes") or 0):
+            continue
+        if sorted(int(day) for day in sch["weekdays"]) != wanted_days:
+            continue
+        if sorted(str(item) for item in (row.asset_ids or [])) != wanted:
+            continue
+        return row
+    return None
 
 
 def scheduled_report_form_values(row: ScheduledReport | None = None, *, clone: bool = False) -> dict:
     """Prefill the /ops create form for edit or clone. Clone is a draft until Save."""
+    from app.services import report_recipients, report_schedule
+
     if row is None:
-        return {"name": "storage-6h", "to_email": "", "interval_hours": 6, "asset_ids": []}
+        return {
+            "name": "storage-6h",
+            "recipients": [],
+            "preset": "6h",
+            "every_n": "",
+            "every_unit": "minutes",
+            "weekdays": list(range(7)),
+            "asset_ids": [],
+        }
     name = (row.name or "performance").strip() or "performance"
     if clone:
         name = f"{name}-copy"
+    sch = report_schedule(row)
+    minutes = int(sch["every_minutes"] or 0)
+    every_unit = "minutes"
+    every_n = ""
+    if sch["preset"] == "custom" and minutes:
+        if minutes % 60 == 0:
+            every_unit = "hours"
+            every_n = str(minutes // 60)
+        else:
+            every_n = str(minutes)
     return {
         "name": name,
-        "to_email": row.to_email or "",
-        "interval_hours": max(1, int(row.interval_hours or 6)),
+        "recipients": report_recipients(row),
+        "preset": sch["preset"],
+        "every_n": every_n,
+        "every_unit": every_unit,
+        "weekdays": list(sch["weekdays"]),
         "asset_ids": list(row.asset_ids or []),
     }
 
@@ -318,10 +401,12 @@ def evidence_row(ev) -> dict:
         lines.append(f"Query: {ev.query}")
     dump = payload if isinstance(payload, str) else json.dumps(payload, indent=2, ensure_ascii=False, default=str)
     lines.append(dump)
+    stamp = compact_stamp(ev.captured_at)
     return {
         "anchor": ev.evidence_id or ev.kind or "",
-        "when": short_when_label(ev.captured_at),
-        "when_full": format_started_at(ev.captured_at),
+        "when": stamp["date"],
+        "when_time": stamp["time"],
+        "when_full": f"{stamp['date']} {stamp['time']}".strip(),
         "actor": EVIDENCE_SOURCE_LABELS.get(source.lower(), source) or "ForgeRCA",
         "action": action,
         "full": "\n".join(lines),
@@ -393,6 +478,9 @@ def ctx(request: Request, user: User | None, **extra):
         "incident_when": incident_when,
         "incident_host": incident_host,
         "format_started_at": format_started_at,
+        "compact_stamp": compact_stamp,
+        "report_recipients": report_recipients,
+        "schedule_label": schedule_label,
         "short_when_label": short_when_label,
         "severity_pill": severity_pill,
         "is_demo_incident": is_demo_incident,
@@ -580,13 +668,28 @@ def assets_page(
     site: str = "",
     customer: str = "",
     vlan: str = "",
+    hostname: str = "",
+    ip: str = "",
     page: str = "1",
 ):
     from app.services import list_mail_addresses
 
     every = db.query(Asset).order_by(Asset.number, Asset.hostname).all()
     zabbix_assets = any(asset_in_zabbix(row) for row in every)
-    rows = assets_matching(every, q, status, flag, source, agent, type=asset_type, site=site, customer=customer, vlan=vlan)
+    rows = assets_matching(
+        every,
+        q,
+        status,
+        flag,
+        source,
+        agent,
+        type=asset_type,
+        site=site,
+        customer=customer,
+        vlan=vlan,
+        hostname=hostname,
+        ip=ip,
+    )
     rows, pager = paginate(rows, page, size=per_page(request))
     filters = {
         "status": status,
@@ -597,6 +700,8 @@ def assets_page(
         "site": site,
         "vlan": vlan,
         "customer": customer,
+        "hostname": hostname,
+        "ip": ip,
     }
     filter_tail = "".join(f"&{urlencode({key: value})}" for key, value in filters.items() if value)
     form_mode = "add"
@@ -640,6 +745,8 @@ def assets_page(
         site=site,
         vlan=vlan,
         customer=customer,
+        hostname=hostname,
+        ip=ip,
         filter_tail=filter_tail,
         source_filters=ASSET_SOURCE_FILTERS,
         filter_options=asset_filter_options(every),
@@ -2385,39 +2492,58 @@ def ops_create_report(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     name: str = Form(...),
-    to_email: str = Form(""),
+    to_email: Annotated[list[str], Form()] = [],
     new_email: str = Form(""),
-    interval_hours: int = Form(6),
+    extra_emails: str = Form(""),
+    schedule: str = Form(""),
+    every_n: str = Form(""),
+    every_unit: str = Form("minutes"),
+    weekday: Annotated[list[str], Form()] = [],
+    interval_hours: int = Form(0),
     asset_id: Annotated[list[str], Form()] = [],
 ):
     if not can_send_ops(user):
         raise HTTPException(status_code=403)
-    from datetime import timedelta
-
     from app.services import utcnow
 
-    label, email, hours, ids = parse_scheduled_report_form(
+    parsed = parse_scheduled_report_form(
         db,
         name=name,
         to_email=to_email,
         new_email=new_email,
+        extra_emails=extra_emails,
+        schedule=schedule,
+        every_n=every_n,
+        every_unit=every_unit,
+        weekday=list(weekday or []),
         interval_hours=interval_hours,
         asset_id=asset_id,
         actor=user.email,
     )
-    if _enabled_report_twin(db, label, email, hours, ids) is not None:
+    if _enabled_report_twin(db, parsed["name"], parsed["emails"], parsed["schedule"], parsed["ids"]) is not None:
         return RedirectResponse("/ops#reports", status_code=303)
+    from app.services import initial_next_run
+
     row = ScheduledReport(
-        name=label,
-        to_email=email,
-        interval_hours=hours,
-        asset_ids=ids,
+        name=parsed["name"],
+        to_email=parsed["email"],
+        recipients=parsed["emails"],
+        interval_hours=parsed["hours"],
+        schedule=parsed["schedule"],
+        asset_ids=parsed["ids"],
         enabled=True,
         created_by=user.email,
-        next_run_at=utcnow() + timedelta(hours=hours),
+        next_run_at=initial_next_run(utcnow(), parsed["schedule"]),
     )
     db.add(row)
-    audit(db, "report.create", actor=user.email, object_type="report", object_id=row.name, data={"to": row.to_email, "hours": hours})
+    audit(
+        db,
+        "report.create",
+        actor=user.email,
+        object_type="report",
+        object_id=row.name,
+        data={"to": parsed["emails"], "schedule": parsed["schedule"]},
+    )
     db.commit()
     return RedirectResponse("/ops#reports", status_code=303)
 
@@ -2472,43 +2598,54 @@ def ops_update_report(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     name: str = Form(...),
-    to_email: str = Form(""),
+    to_email: Annotated[list[str], Form()] = [],
     new_email: str = Form(""),
-    interval_hours: int = Form(6),
+    extra_emails: str = Form(""),
+    schedule: str = Form(""),
+    every_n: str = Form(""),
+    every_unit: str = Form("minutes"),
+    weekday: Annotated[list[str], Form()] = [],
+    interval_hours: int = Form(0),
     asset_id: Annotated[list[str], Form()] = [],
 ):
     if not can_send_ops(user):
         raise HTTPException(status_code=403)
-    from datetime import timedelta
-
-    from app.services import utcnow
+    from app.services import initial_next_run, report_schedule, utcnow
 
     row = db.get(ScheduledReport, report_id)
     if row is None:
         raise HTTPException(status_code=404)
-    label, email, hours, ids = parse_scheduled_report_form(
+    parsed = parse_scheduled_report_form(
         db,
         name=name,
         to_email=to_email,
         new_email=new_email,
+        extra_emails=extra_emails,
+        schedule=schedule,
+        every_n=every_n,
+        every_unit=every_unit,
+        weekday=list(weekday or []),
         interval_hours=interval_hours,
         asset_id=asset_id,
         actor=user.email,
     )
-    interval_changed = int(row.interval_hours or 0) != hours
-    row.name = label
-    row.to_email = email
-    row.interval_hours = hours
-    row.asset_ids = ids
-    if interval_changed:
-        row.next_run_at = utcnow() + timedelta(hours=hours)
+    previous = report_schedule(row)
+    row.name = parsed["name"]
+    row.to_email = parsed["email"]
+    row.recipients = parsed["emails"]
+    row.interval_hours = parsed["hours"]
+    row.schedule = parsed["schedule"]
+    row.asset_ids = parsed["ids"]
+    changed = previous != parsed["schedule"]
+    if changed:
+        row.next_run_at = initial_next_run(utcnow(), parsed["schedule"])
     audit(
         db,
         "report.update",
         actor=user.email,
         object_type="report",
         object_id=str(row.id),
-        data={"name": row.name, "to": row.to_email, "hours": hours},
+        data={"name": row.name, "to": parsed["emails"], "schedule": parsed["schedule"]},
     )
     db.commit()
     return RedirectResponse("/ops#reports", status_code=303)

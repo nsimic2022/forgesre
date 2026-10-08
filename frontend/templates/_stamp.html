@@ -1,0 +1,4 @@
+{% macro show(value) -%}
+{% set s = compact_stamp(value) %}
+{% if s.date %}<span class="stamp"><span class="stamp-date">{{ s.date }}</span>{% if s.time %}<span class="stamp-time">{{ s.time }}</span>{% endif %}</span>{% else %}—{% endif %}
+{%- endmacro %}

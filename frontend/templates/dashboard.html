@@ -110,19 +110,27 @@
   <div data-select-scope>
   <div class="dash-recent-scroll" data-dash-list>
   <table class="scan-list" data-dash-incident-table>
-    <thead><tr>{{ sel.head() }}<th>Incident</th><th>Severity</th><th>Status</th><th>When</th></tr></thead>
+    <thead><tr>{{ sel.head() }}<th class="col-host">Hostname</th><th class="col-name">Name</th><th>Severity</th><th>Status</th><th>When</th></tr></thead>
     <tbody>
     {% for item in recent %}
       {% set done = item.status|upper in ['RESOLVED', 'CLOSED'] %}
       <tr class="dash-pick {{ incident_tone(item.status, item.severity) }}{% if done %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}" data-list-row data-dash-incident="{{ item.number }}" data-dash-select="graphs" data-asset="{{ item.asset.asset_id if item.asset else '' }}" data-host="{{ incident_host(item) }}" data-active="{{ 'false' if done else 'true' }}" tabindex="{{ '0' if loop.first else '-1' }}">
         {{ sel.cell(item.number) }}
-        {% include "_incident_cell.html" %}
+        <td class="col-host">{% set host = incident_host(item) %}<span class="inc-host">{{ host or "—" }}</span></td>
+        <td class="inc-cell col-name">
+          <a class="inc-title sev-{{ severity_pill(item.severity) }}" href="/incidents/{{ item.number }}"{% if item.title %} title="{{ item.title }}"{% endif %} tabindex="-1" data-list-open>{{ item.title or item.number }}</a>
+          <div class="inc-meta">
+            <a class="{{ incident_tone(item.status, item.severity) }}" href="/incidents/{{ item.number }}" title="{{ item.number }}">{{ incident_short_label(item.number) }}</a>
+            <span class="src-pill src-{{ incident_source(item) }}" data-source="{{ incident_source(item) }}" title="Alert source">{{ incident_source_label(item) }}</span>
+            {% if is_demo_incident(item) %}<span class="inc-demo" title="Lab demo incident">· DEMO</span>{% endif %}
+          </div>
+        </td>
         <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
         <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
         {% include "_incident_when.html" %}
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">No incidents yet. Use Run demo (top right) or wait for an alert.</td></tr>
+      <tr><td colspan="6" class="muted">No incidents yet. Use Run demo (top right) or wait for an alert.</td></tr>
     {% endfor %}
     </tbody>
   </table>
