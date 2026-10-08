@@ -129,6 +129,20 @@ def paginate(
     return items[state["offset"] : state["offset"] + state["size"]], state
 
 
+def paginate_query(
+    query: Any,
+    raw: Any,
+    *,
+    size: Any = PAGE_SIZE,
+    param: str = "page",
+    fragment: str = "",
+) -> tuple[list, dict[str, Any]]:
+    """Same pager as paginate(), but COUNT + LIMIT/OFFSET in SQL so off-page rows are never loaded."""
+    total = query.order_by(None).count()
+    state = pager_state(raw, total=total, size=size, param=param, fragment=fragment)
+    return query.offset(state["offset"]).limit(state["size"]).all(), state
+
+
 def clamp_days(raw: Any, default: int = DEFAULT_DAYS) -> int:
     try:
         days = int(raw)

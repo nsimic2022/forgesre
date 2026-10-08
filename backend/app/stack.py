@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
-import subprocess
-import time
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
@@ -15,8 +12,6 @@ from app.settings import settings
 log = logging.getLogger("forgesre")
 
 SOFT_STATUSES = frozenset({"ok", "disabled", "paused", "warn", "warning", "starting"})
-_SNMP_ENSURE_AT = 0.0
-_SNMP_ENSURE_COOLDOWN = 45.0
 
 # Machine keys stay compose service ids (dashboard Open links, failed[], JSON).
 # "core" is the stack row; it probes /api/v1/health (same URL as doctor.sh Core API).
@@ -52,6 +47,16 @@ COMPONENT_SHORT = {
 # Alarm path is Prometheus → Alertmanager → Core. Grafana / Loki graphs are not this list.
 ALARM_PATH_IDS = ("prometheus", "alertmanager")
 _PORT_RE = re.compile(r":(\d{2,5})\b")
+
+# Bound to 127.0.0.1 by docker-compose.yml (and logging/loki.yml). A rewritten
+# http://<browser-host>:9090 link is dead from a NOC browser, so Health shows the
+# loopback address as text. Core, Grafana, NetBox and Zabbix listen on the LAN.
+APPLIANCE_LOCAL_IDS = frozenset({"prometheus", "alertmanager", "snmp", "loki", "alloy", "llm"})
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+APPLIANCE_LOCAL_HINT = (
+    "Listens on 127.0.0.1 on the appliance only. Open it there, or tunnel: "
+    "ssh -L {port}:127.0.0.1:{port} <appliance> then http://localhost:{port}"
+)
 
 
 def component_label(cid: str) -> str:
@@ -205,59 +210,41 @@ def snmp_target_count() -> int:
         return 0
 
 
-def ensure_snmp_exporter() -> bool:
-    """Start bundled snmp-exporter via compose when it should run.
-
-    Skipped under FORGESRE_DEV (pytest) unless FORGESRE_START_SNMP=1.
-    Core-in-container usually has no docker CLI; ``./forgesre doctor`` on the
-    host does the same ``docker compose up -d snmp-exporter`` when SD has
-    network targets. Does not require Zabbix.
-    """
-    global _SNMP_ENSURE_AT
-    dev = os.environ.get("FORGESRE_DEV", "").strip().lower() in {"1", "true", "yes", "on"}
-    force = os.environ.get("FORGESRE_START_SNMP", "").strip().lower() in {"1", "true", "yes", "on"}
-    if dev and not force:
-        return False
-    now = time.monotonic()
-    if now - _SNMP_ENSURE_AT < _SNMP_ENSURE_COOLDOWN:
-        return False
-    _SNMP_ENSURE_AT = now
-    try:
-        from app.backup import _compose_argv, _repo_root
-
-        root = _repo_root()
-        argv = [*_compose_argv(root), "up", "-d", "snmp-exporter"]
-        result = subprocess.run(
-            argv,
-            cwd=str(root),
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=25,
-        )
-        if result.returncode != 0:
-            log.warning("snmp-exporter compose up failed: %s", (result.stderr or result.stdout or "")[:400])
-            return False
-        return True
-    except Exception as exc:
-        log.debug("snmp-exporter compose up skipped: %s", exc)
-        return False
+ALLOY_URL = "http://127.0.0.1:12345"
 
 
-def _port_url(hostname: str, port: int, path: str = "/") -> str:
-    path = path if path.startswith("/") else f"/{path}"
-    return f"http://{hostname}:{port}{path}"
+def appliance_local_address(cid: str, url: str, browser_host: str) -> str:
+    """``127.0.0.1:9090`` when this service only listens on loopback and the browser is remote; else ""."""
+    if cid not in APPLIANCE_LOCAL_IDS or browser_host in LOOPBACK_HOSTS:
+        return ""
+    parsed = urlparse(url or "")
+    if not parsed.hostname or parsed.hostname not in LOOPBACK_HOSTS:
+        return ""
+    return f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
 
 
 def enrich_components(components: dict[str, Any], host_header: str) -> list[dict[str, Any]]:
-    """Doctor components in stack order, each with Open GUI / metrics links."""
+    """Doctor components in stack order, each with Open GUI / metrics links.
+
+    Loopback-only services (APPLIANCE_LOCAL_IDS) get ``local_only`` plus the
+    ``local_addr`` text instead of links when the browser is not on the appliance.
+    """
     hostname = request_hostname(host_header)
     grafana = rewrite_host(settings.grafana_public_url, hostname)
-    prometheus = rewrite_host((settings.prometheus_url or "http://127.0.0.1:9090").rstrip("/"), hostname)
-    alertmanager = rewrite_host((settings.alertmanager_url or "http://127.0.0.1:9093").rstrip("/"), hostname)
-    loki = rewrite_host((settings.loki_url or "http://127.0.0.1:3100").rstrip("/"), hostname)
-    snmp = rewrite_host((settings.snmp_exporter_url or "http://127.0.0.1:9116").rstrip("/"), hostname)
-    llm = rewrite_host((settings.llm_url or "http://127.0.0.1:8088/v1").rstrip("/"), hostname)
+    raw = {
+        "prometheus": (settings.prometheus_url or "http://127.0.0.1:9090").rstrip("/"),
+        "alertmanager": (settings.alertmanager_url or "http://127.0.0.1:9093").rstrip("/"),
+        "loki": (settings.loki_url or "http://127.0.0.1:3100").rstrip("/"),
+        "snmp": (settings.snmp_exporter_url or "http://127.0.0.1:9116").rstrip("/"),
+        "alloy": ALLOY_URL,
+        "llm": (settings.llm_url or "http://127.0.0.1:8088/v1").rstrip("/"),
+    }
+    prometheus = rewrite_host(raw["prometheus"], hostname)
+    alertmanager = rewrite_host(raw["alertmanager"], hostname)
+    loki = rewrite_host(raw["loki"], hostname)
+    snmp = rewrite_host(raw["snmp"], hostname)
+    alloy = rewrite_host(raw["alloy"], hostname)
+    llm = rewrite_host(raw["llm"], hostname)
     netbox = rewrite_host((settings.netbox_url or "http://127.0.0.1:8001").rstrip("/"), hostname)
     catalog = [
         {
@@ -299,7 +286,7 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
         },
         {
             "id": "alloy",
-            "gui": _port_url(hostname, 12345, "/metrics"),
+            "gui": alloy + "/metrics",
             "gui_label": "Metrics",
             "metrics": "",
         },
@@ -343,8 +330,10 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
         state, css = runtime_state(item)
         gui = spec.get("gui") or ""
         metrics = spec.get("metrics") or ""
-        if cid == "netbox" and not gui:
-            gui = ""
+        extra = spec.get("extra") or ""
+        local_addr = appliance_local_address(cid, raw.get(cid, ""), hostname)
+        if local_addr:
+            gui = metrics = extra = ""
         if cid == "snmp" and str(item.get("status") or "") == "paused":
             state = "paused (no SNMP targets)"
         why = str(item.get("why") or "")
@@ -365,8 +354,11 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
                 "gui_label": spec.get("gui_label") or "Open",
                 "metrics": metrics,
                 "metrics_label": spec.get("metrics_label") or "Metrics",
-                "extra": spec.get("extra") or "",
+                "extra": extra,
                 "extra_label": spec.get("extra_label") or "Open",
+                "local_only": bool(local_addr),
+                "local_addr": local_addr,
+                "local_hint": APPLIANCE_LOCAL_HINT.format(port=local_addr.rsplit(":", 1)[-1]) if local_addr else "",
             }
         )
     for cid, item in components.items():
@@ -391,6 +383,9 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
                 "metrics_label": "Metrics",
                 "extra": "",
                 "extra_label": "Open",
+                "local_only": False,
+                "local_addr": "",
+                "local_hint": "",
             }
         )
     return rows

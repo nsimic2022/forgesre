@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -72,7 +74,6 @@ from app.host_resources import appliance_resources
 from app.stack import (
     component_label,
     doctor_soft_status,
-    ensure_snmp_exporter,
     journal_doctor_alarm_path,
     snmp_target_count,
 )
@@ -83,6 +84,13 @@ router = APIRouter(prefix="/api/v1")
 
 def current_user(request: Request, db: Session = Depends(get_db)) -> User | None:
     return user_from_session(db, request.cookies.get("forgesre_session"))
+
+
+def _webhook_token_ok(request: Request) -> bool:
+    """Bearer == ALERTMANAGER_WEBHOOK_TOKEN (webhook, SD, doctor). Constant-time compare."""
+    auth = request.headers.get("authorization") or ""
+    token = auth.replace("Bearer ", "").strip()
+    return hmac.compare_digest(token.encode(), (settings.webhook_token or "").encode())
 
 
 def require_user(user: User | None = Depends(current_user)) -> User:
@@ -309,34 +317,69 @@ def _live_metric_values(asset: Asset) -> dict[str, Any]:
     }
 
 
-def run_asset_verify(db: Session, asset: Asset, *, timeout: float = 2.0) -> dict[str, Any]:
+VERIFY_PROBE_WORKERS = 8
+
+
+class VerifyContext:
+    """SD membership, Prometheus /targets and Alertmanager health: fetched once per verify request."""
+
+    def __init__(self, db: Session) -> None:
+        self.http_ids, self.snmp_ids = _sd_membership(db)
+        self.prom_url = settings.prometheus_url or "http://127.0.0.1:9090"
+        self.am_health = urllib_am_health(settings.alertmanager_url or "http://127.0.0.1:9093")
+        self._targets: dict[str, Any] | None = None
+
+    def targets(self) -> dict[str, Any]:
+        if self._targets is None:
+            self._targets = urllib_prom_targets(self.prom_url)
+        return self._targets
+
+
+def _probe_assets(assets: list[Asset], *, timeout: float) -> list[Any]:
+    items = [_asset(asset) for asset in assets]
+    workers = max(1, min(VERIFY_PROBE_WORKERS, len(items)))
+    if workers == 1:
+        return [probe_target(item, timeout=timeout) for item in items]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(lambda item: probe_target(item, timeout=timeout), items))
+
+
+def verify_assets(db: Session, assets: list[Asset], *, timeout: float = 2.0) -> list[dict[str, Any]]:
+    """Probe in a bounded pool; classify, compose and save on this thread (the session is not thread-safe)."""
     from app.services import query_prometheus_expr
 
-    item = _asset(asset)
-    probe = probe_target(item, timeout=timeout)
-    if persist_live_classification(db, asset, probe):
-        db.commit()
-        db.refresh(asset)
-        item = _asset(asset)
-    http_ids, snmp_ids = _sd_membership(db)
-    prom_url = settings.prometheus_url or "http://127.0.0.1:9090"
-    am_url = settings.alertmanager_url or "http://127.0.0.1:9093"
-    report = compose_verify(
-        item,
-        probe,
-        in_http_sd=asset.asset_id in http_ids,
-        in_snmp_sd=asset.asset_id in snmp_ids,
-        query_fn=query_prometheus_expr,
-        rca=_latest_rca(db, asset),
-        live_metrics=_live_metric_values(asset),
-        ai_enabled=bool(settings.ai_enabled and settings.llm_url),
-        targets_fn=lambda: urllib_prom_targets(prom_url),
-        am_health=urllib_am_health(am_url),
-        incident=_latest_incident(db, asset),
-    )
-    apply_probe_to_asset(asset, probe)
+    if not assets:
+        return []
+    probes = _probe_assets(assets, timeout=timeout)
+    for asset, probe in zip(assets, probes):
+        if persist_live_classification(db, asset, probe):
+            db.commit()
+            db.refresh(asset)
+    ctx = VerifyContext(db)
+    ai_enabled = bool(settings.ai_enabled and settings.llm_url)
+    reports: list[dict[str, Any]] = []
+    for asset, probe in zip(assets, probes):
+        report = compose_verify(
+            _asset(asset),
+            probe,
+            in_http_sd=asset.asset_id in ctx.http_ids,
+            in_snmp_sd=asset.asset_id in ctx.snmp_ids,
+            query_fn=query_prometheus_expr,
+            rca=_latest_rca(db, asset),
+            live_metrics=_live_metric_values(asset),
+            ai_enabled=ai_enabled,
+            targets_fn=ctx.targets,
+            am_health=ctx.am_health,
+            incident=_latest_incident(db, asset),
+        )
+        apply_probe_to_asset(asset, probe)
+        reports.append(report.as_dict())
     db.commit()
-    return report.as_dict()
+    return reports
+
+
+def run_asset_verify(db: Session, asset: Asset, *, timeout: float = 2.0) -> dict[str, Any]:
+    return verify_assets(db, [asset], timeout=timeout)[0]
 
 
 @router.get("/verify")
@@ -357,13 +400,9 @@ def verify_assets_api(
         include_demo=include_demo,
         is_demo=lambda row: is_lab_inventory_row(row),
     )
-    results: list[dict[str, Any]] = []
     models = {item.asset_id: item for item in db.query(Asset).all()}
-    for row in chosen:
-        asset = models.get(str(row.get("asset_id") or ""))
-        if asset is None:
-            continue
-        results.append(run_asset_verify(db, asset, timeout=timeout))
+    assets = [models[key] for key in (str(row.get("asset_id") or "") for row in chosen) if key in models]
+    results = verify_assets(db, assets, timeout=timeout)
     return {"results": results, "skipped_demo": skipped_demo, "selector": selector}
 
 
@@ -604,18 +643,13 @@ def get_investigation_evidence(
     if row is None:
         raise HTTPException(status_code=404, detail="investigation not found")
     include_queries = can(user, "read_evidence")
-    ids = set((row.result or {}).get("supporting_evidence") or [])
-    ids.update((row.result or {}).get("contradicting_evidence") or [])
     rows = db.query(Evidence).filter(Evidence.incident_id == row.incident_id).all()
-    out = []
-    for item in rows:
-        if item.evidence_id.startswith("ROLLUP-"):
-            continue
-        if ids and item.evidence_id not in ids and item.kind in {"METRIC", "LOG", "ALERT"}:
-            # still return all immutable RCA items; IDs filter is a hint not a hide
-            pass
-        out.append(_evidence_item(item, include_queries=include_queries))
-    return out
+    # Every immutable RCA item for the incident; supporting/contradicting ids are a hint, not a filter.
+    return [
+        _evidence_item(item, include_queries=include_queries)
+        for item in rows
+        if not item.evidence_id.startswith("ROLLUP-")
+    ]
 
 
 @router.get("/playrules")
@@ -662,18 +696,14 @@ def create_playbook(
 
 @router.get("/sd/prometheus")
 def prometheus_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
-    auth = request.headers.get("authorization") or ""
-    token = auth.replace("Bearer ", "").strip()
-    if token != settings.webhook_token:
+    if not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid sd token")
     return sd_targets(db)
 
 
 @router.get("/sd/snmp")
 def snmp_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
-    auth = request.headers.get("authorization") or ""
-    token = auth.replace("Bearer ", "").strip()
-    if token != settings.webhook_token:
+    if not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid sd token")
     return sd_snmp_targets(db)
 
@@ -682,9 +712,7 @@ def snmp_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
 def snmp_sd_auths(request: Request, db: Session = Depends(get_db)) -> dict:
     """Per-asset snmp_exporter auths for scripts/render_snmp_auths.py. Holds community strings and
     v3 passwords: same bearer as SD, never logged, never shown in the GUI."""
-    auth = request.headers.get("authorization") or ""
-    token = auth.replace("Bearer ", "").strip()
-    if not settings.webhook_token or token != settings.webhook_token:
+    if not settings.webhook_token or not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid sd token")
     return {"auths": snmp_auths(db)}
 
@@ -1012,9 +1040,7 @@ def _ingest_numbers(db: Session, payload: dict[str, Any], source: str = "prometh
 
 @router.post("/webhooks/alertmanager")
 async def alertmanager_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
-    auth = request.headers.get("authorization") or ""
-    token = auth.replace("Bearer ", "").strip()
-    if token != settings.webhook_token:
+    if not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid webhook token")
     payload = await request.json()
     # Ingest blocks on Prometheus/Loki queries and SMTP; keep it off the event loop.
@@ -1025,8 +1051,6 @@ async def alertmanager_webhook(request: Request, db: Session = Depends(get_db)) 
 @router.post("/webhooks/zabbix")
 async def zabbix_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
     """Zabbix media type (Webhook) → incidents with source=zabbix. Own Bearer: ZABBIX_WEBHOOK_TOKEN."""
-    import hmac
-
     from app.zabbix import parse_webhook
 
     expected = settings.zabbix_webhook_token
@@ -1136,9 +1160,7 @@ def system_status(db: Session = Depends(get_db), user: User = Depends(require("r
 
 @router.get("/system/doctor")
 def doctor(request: Request, user: User | None = Depends(current_user)) -> dict:
-    auth = request.headers.get("authorization") or ""
-    token = auth.replace("Bearer ", "").strip()
-    if user is None and token != settings.webhook_token:
+    if user is None and not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="authentication required")
     return doctor_payload()
 
@@ -1303,11 +1325,24 @@ def _maybe_journal_doctor(components: dict[str, Any]) -> None:
         log.debug("doctor journal skipped", exc_info=True)
 
 
+def grafana_health_url() -> str:
+    """Grafana listens on GRAFANA_PORT (compose GF_SERVER_HTTP_PORT); else the GRAFANA_PUBLIC_URL port; else 3000."""
+    from urllib.parse import urlparse
+
+    port = str(os.environ.get("GRAFANA_PORT") or "").strip()
+    if not port.isdigit():
+        try:
+            port = str(urlparse(settings.grafana_public_url or "").port or 3000)
+        except ValueError:
+            port = "3000"
+    return f"http://127.0.0.1:{port}/api/health"
+
+
 def _grafana_check() -> dict[str, str]:
     """Grafana is graphs only. Down is yellow warn — not a Prometheus / alarm-path FAIL."""
     if not settings.grafana_enabled:
         return _ok("disabled")
-    url = "http://127.0.0.1:3000/api/health"
+    url = grafana_health_url()
     result = _http(url, "GET")
     if result.get("status") == "ok":
         return result
@@ -1416,11 +1451,6 @@ def _snmp_check() -> dict[str, str]:
     result = _http(url, "GET")
     if result.get("status") == "ok":
         return result
-    if ensure_snmp_exporter():
-        time.sleep(1.5)
-        result = _http(url, "GET")
-        if result.get("status") == "ok":
-            return result
     result["fix"] = "docker compose up -d snmp-exporter"
     result["test"] = f"curl -fsS {url}"
     return result

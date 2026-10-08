@@ -266,9 +266,10 @@ curl -fsS -X POST http://127.0.0.1:9090/-/reload
 
 ## 9. `config/forgesre.yml`
 
+Only keys Core reads are listed. Prometheus / Alertmanager / Loki URLs, `GRAFANA_PORT` and `FORGESRE_HTTP_PORT` come from `docker-compose.yml` + `.env`, not this file.
+
 ```yaml
 system:
-  mode: online          # online | offline
   timezone: Europe/Belgrade
   log_level: info
   cookie_secure: false  # true when Core is behind HTTPS (or FORGESRE_COOKIE_SECURE=1)
@@ -277,7 +278,7 @@ inventory:
   provider: local       # local | netbox
   netbox:
     enabled: true
-    mode: bundled          # bundled | external | disabled
+    mode: bundled          # only "disabled" is read (turns NetBox sync off)
     url: "http://127.0.0.1:8001"
 
 discovery:
@@ -286,10 +287,6 @@ discovery:
   cidrs: []   # empty = no scan; Confirm & scan writes suggested primary IPv4 /24 here
 
 monitoring:
-  prometheus:
-    url: http://127.0.0.1:9090
-  alertmanager:
-    url: http://127.0.0.1:9093
   snmp:
     enabled: true
     exporter_url: http://127.0.0.1:9116
@@ -298,11 +295,9 @@ monitoring:
 logging:
   loki:
     enabled: true
-    url: http://127.0.0.1:3100
 
 grafana:
   enabled: true
-  url: http://127.0.0.1:3000
 
 ai:
   enabled: false
@@ -311,10 +306,8 @@ ai:
     url: http://127.0.0.1:8088/v1
     model: local
   rca:
-    engine: forgerca
     window_minutes: 30
     max_log_lines: 20
-    max_evidence: 40
 
 notifications:
   email:

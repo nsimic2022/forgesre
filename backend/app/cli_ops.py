@@ -50,12 +50,13 @@ def _secrets() -> dict[str, str]:
     return env
 
 
-def _curl(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(args, check=check, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def _curl(args: list[str], *, check: bool = True, stdin: bytes | None = None) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(args, check=check, input=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
 def _login(port: str, jar: Path, email: str, password: str) -> None:
     jar.parent.mkdir(parents=True, exist_ok=True)
+    # Password goes in on stdin: curl's argv is world-readable in ps.
     result = _curl(
         [
             "curl",
@@ -71,9 +72,12 @@ def _login(port: str, jar: Path, email: str, password: str) -> None:
             "-X",
             "POST",
             f"http://127.0.0.1:{port}/login",
-            "-d",
-            f"email={email}&password={password}",
-        ]
+            "--data-urlencode",
+            f"email={email}",
+            "--data-urlencode",
+            "password@-",
+        ],
+        stdin=password.encode(),
     )
     code = result.stdout.decode().strip()
     if code not in {"200", "302"}:
@@ -458,6 +462,15 @@ def cmd_verify(port: str, args: list[str]) -> None:
         i += 1
 
     jar, _me = ensure_jar(port)
+    # The same cookie saves live-detected types after probing, so keep a temp jar until the end.
+    try:
+        _verify_with_jar(port, jar, selector=selector, timeout=timeout, include_demo=include_demo)
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
+def _verify_with_jar(port: str, jar: Path, *, selector: str, timeout: float, include_demo: bool) -> None:
     try:
         rows = get_json(port, jar, "/api/v1/assets")
         try:
@@ -466,9 +479,6 @@ def cmd_verify(port: str, args: list[str]) -> None:
             support = {"assets": {}, "ai_enabled": False, "prometheus_url": "http://127.0.0.1:9090"}
     except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as exc:
         raise SystemExit(f"could not list assets: {exc}") from exc
-    finally:
-        if jar != SESSION_PATH and jar.exists():
-            jar.unlink(missing_ok=True)
 
     if not isinstance(rows, list):
         rows = []
@@ -500,8 +510,12 @@ def cmd_verify(port: str, args: list[str]) -> None:
     def query_fn(expr: str) -> Any:
         return urllib_prom_query(expr, prom_url)
 
+    fetched: dict[str, Any] = {}
+
     def targets_fn() -> Any:
-        return urllib_prom_targets(prom_url)
+        if "targets" not in fetched:
+            fetched["targets"] = urllib_prom_targets(prom_url)
+        return fetched["targets"]
 
     results = []
     for item in chosen:
@@ -574,9 +588,10 @@ def main(argv: list[str] | None = None) -> None:
     elif command == "logout":
         cmd_logout()
     elif command == "login":
-        if len(rest) < 2:
-            raise SystemExit("usage: cli_ops <port> login <email> <password>")
-        cmd_login(port, rest[0], rest[1])
+        password = rest[1] if len(rest) >= 2 else os.environ.get("FORGESRE_CLI_PASSWORD", "")
+        if not rest or not password:
+            raise SystemExit("usage: cli_ops <port> login <email>  (password in FORGESRE_CLI_PASSWORD)")
+        cmd_login(port, rest[0], password)
     else:
         raise SystemExit(f"unknown cli_ops command: {command}")
 

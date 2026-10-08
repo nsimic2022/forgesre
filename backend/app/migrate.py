@@ -56,6 +56,30 @@ def _ensure_asset_number_seq(conn: Connection) -> None:
     )
 
 
+# Postgres does not index foreign keys. create_all() only adds these on new tables,
+# so existing appliances get them here. Names match SQLAlchemy's index=True (ix_<table>_<col>).
+LOOKUP_INDEXES = (
+    ("evidence", "incident_id"),
+    ("investigations", "incident_id"),
+    ("incident_events", "incident_id"),
+    ("incident_notes", "incident_id"),
+    ("notifications", "incident_id"),
+    ("incidents", "asset_id"),
+    ("incidents", "started_at"),
+)
+
+
+def _ensure_lookup_indexes(conn: Connection) -> None:
+    inspector = inspect(conn)
+    tables = set(inspector.get_table_names())
+    for table, column in LOOKUP_INDEXES:
+        if table not in tables:
+            continue
+        if column not in {col["name"] for col in inspector.get_columns(table)}:
+            continue
+        conn.execute(text(f"CREATE INDEX IF NOT EXISTS ix_{table}_{column} ON {table} ({column})"))
+
+
 def migrate(engine: Engine) -> None:
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -191,6 +215,7 @@ def migrate(engine: Engine) -> None:
         for sql in statements:
             conn.execute(text(sql))
         _backfill_asset_numbers(conn)
+        _ensure_lookup_indexes(conn)
         if "evidence" in tables:
             conn.execute(
                 text("UPDATE evidence SET evidence_id = 'EV-LEGACY-' || id WHERE evidence_id IS NULL OR evidence_id = ''")

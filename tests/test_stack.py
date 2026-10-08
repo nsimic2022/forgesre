@@ -9,7 +9,6 @@ from app.stack import (
     component_label,
     doctor_soft_status,
     enrich_components,
-    ensure_snmp_exporter,
     journal_doctor_alarm_path,
     rewrite_host,
     runtime_state,
@@ -39,10 +38,6 @@ def test_runtime_state_maps_green_yellow_red():
     assert doctor_soft_status("error") is False
 
 
-def test_ensure_snmp_exporter_skipped_in_dev():
-    assert ensure_snmp_exporter() is False
-
-
 def test_doctor_snmp_paused_when_no_targets(monkeypatch):
     def _http(url, method):
         if "9116" in url:
@@ -51,7 +46,6 @@ def test_doctor_snmp_paused_when_no_targets(monkeypatch):
 
     monkeypatch.setattr("app.api._http", _http)
     monkeypatch.setattr("app.api.snmp_target_count", lambda: 0)
-    monkeypatch.setattr("app.api.ensure_snmp_exporter", lambda: False)
     payload = doctor_payload(force=True)
     snmp = payload["components"]["snmp"]
     assert snmp["status"] == "paused"
@@ -68,7 +62,6 @@ def test_doctor_snmp_paused_when_no_targets(monkeypatch):
 def test_doctor_snmp_stays_paused_when_exporter_up_but_no_targets(monkeypatch):
     monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
     monkeypatch.setattr("app.api.snmp_target_count", lambda: 0)
-    monkeypatch.setattr("app.api.ensure_snmp_exporter", lambda: True)
     payload = doctor_payload(force=True)
     assert payload["components"]["snmp"]["status"] == "paused"
     assert "snmp" not in payload["failed"]
@@ -82,34 +75,33 @@ def test_doctor_snmp_down_when_network_targets_and_exporter_dark(monkeypatch):
 
     monkeypatch.setattr("app.api._http", _http)
     monkeypatch.setattr("app.api.snmp_target_count", lambda: 1)
-    monkeypatch.setattr("app.api.ensure_snmp_exporter", lambda: False)
     payload = doctor_payload(force=True)
     assert payload["components"]["snmp"]["status"] == "error"
     assert "snmp" in payload["failed"]
     assert payload["overall"] == "DEGRADED"
 
 
-def test_doctor_snmp_running_after_compose_start(monkeypatch):
+def test_doctor_snmp_down_probes_once_without_compose_or_sleep(monkeypatch):
+    """Core has no docker CLI: one probe, then the fix line. ./forgesre doctor starts it on the host."""
     hits = {"n": 0}
 
     def _http(url, method):
         if "9116" in url:
             hits["n"] += 1
-            if hits["n"] >= 2:
-                return {"status": "ok"}
             return {"status": "error", "why": "connection refused"}
         return {"status": "ok"}
 
+    def _no_sleep(_s):
+        raise AssertionError("doctor must not sleep waiting for snmp-exporter")
+
     monkeypatch.setattr("app.api._http", _http)
     monkeypatch.setattr("app.api.snmp_target_count", lambda: 1)
-    monkeypatch.setattr("app.api.ensure_snmp_exporter", lambda: True)
-    monkeypatch.setattr("app.api.time.sleep", lambda _s: None)
+    monkeypatch.setattr("app.api.time.sleep", _no_sleep)
     payload = doctor_payload(force=True)
-    assert payload["components"]["snmp"]["status"] == "ok"
-    assert "snmp" not in payload["failed"]
-    rows = enrich_components(payload["components"], "lab.local")
-    row = next(item for item in rows if item["id"] == "snmp")
-    assert row["state"] == "running"
+    snmp = payload["components"]["snmp"]
+    assert hits["n"] == 1
+    assert snmp["status"] == "error"
+    assert snmp["fix"] == "docker compose up -d snmp-exporter"
 
 
 def test_doctor_script_treats_paused_as_ok_and_starts_compose():
@@ -182,20 +174,92 @@ def test_enrich_components_keeps_stack_order_and_open_links():
     assert core["metrics"] == "/metrics"
     prom = next(row for row in rows if row["id"] == "prometheus")
     assert prom["state"] == "down"
-    assert prom["gui"].startswith("http://lab.local:")
-    assert prom["gui"].endswith("/targets?search=")
-    assert prom["gui_label"] == "Targets"
-    assert prom["metrics"].endswith("/alerts")
-    assert prom["metrics_label"] == "Alerts"
-    assert prom["extra"].endswith("/graph")
-    assert prom["extra_label"] == "Graph"
-    assert not prom["metrics"].endswith("/metrics")
+    assert prom["local_only"] is True
+    assert prom["gui"] == prom["metrics"] == prom["extra"] == ""
+    assert prom["local_addr"].startswith("127.0.0.1:")
+    assert "ssh -L" in prom["local_hint"]
+    for cid in ("alertmanager", "snmp", "loki", "alloy", "llm"):
+        row = next(item for item in rows if item["id"] == cid)
+        assert row["local_only"] is True, cid
+        assert "lab.local" not in row["gui"] + row["metrics"] + row["extra"], cid
     grafana = next(row for row in rows if row["id"] == "grafana")
-    assert grafana["gui"]
+    assert grafana["gui"].startswith("http://lab.local:")
+    assert grafana["local_only"] is False
     assert grafana["label"] == "Grafana"
+    netbox = next(row for row in rows if row["id"] == "netbox")
+    assert netbox["gui"].startswith("http://lab.local:")
+    assert netbox["local_only"] is False
+    on_box = enrich_components({"prometheus": {"status": "ok"}}, "localhost:8080")
+    prom_local = next(row for row in on_box if row["id"] == "prometheus")
+    assert prom_local["local_only"] is False
+    assert prom_local["gui"].startswith("http://localhost:")
+    assert prom_local["gui"].endswith("/targets?search=")
+    assert prom_local["gui_label"] == "Targets"
+    assert prom_local["metrics"].endswith("/alerts")
+    assert prom_local["metrics_label"] == "Alerts"
+    assert prom_local["extra"].endswith("/graph")
+    assert prom_local["extra_label"] == "Graph"
+    assert not prom_local["metrics"].endswith("/metrics")
     prom_labeled = next(row for row in rows if row["id"] == "prometheus")
     assert prom_labeled["label"] == "Prometheus"
     assert "Stack" not in prom_labeled["label"]
+
+
+def test_enrich_components_keeps_link_for_non_loopback_prometheus(monkeypatch):
+    monkeypatch.setattr("app.stack.settings.prometheus_url", "http://prom.corp:9090")
+    rows = enrich_components({"prometheus": {"status": "ok"}}, "lab.local")
+    prom = next(row for row in rows if row["id"] == "prometheus")
+    assert prom["local_only"] is False
+    assert prom["gui"] == "http://prom.corp:9090/targets?search="
+
+
+def test_doctor_grafana_probe_uses_grafana_port(monkeypatch):
+    from app.api import grafana_health_url
+
+    seen: list[str] = []
+
+    def _http(url, method):
+        seen.append(url)
+        return {"status": "ok"}
+
+    monkeypatch.setattr("app.api._http", _http)
+    monkeypatch.setenv("GRAFANA_PORT", "3300")
+    assert grafana_health_url() == "http://127.0.0.1:3300/api/health"
+    doctor_payload(force=True)
+    assert "http://127.0.0.1:3300/api/health" in seen
+    assert not any(":3000/" in url for url in seen)
+    monkeypatch.delenv("GRAFANA_PORT")
+    monkeypatch.setattr("app.api.settings.grafana_public_url", "http://localhost:3400")
+    assert grafana_health_url() == "http://127.0.0.1:3400/api/health"
+
+
+def test_config_examples_only_list_keys_core_reads():
+    import yaml
+
+    dead = [
+        ("system", "mode"),
+        ("monitoring", "prometheus"),
+        ("monitoring", "alertmanager"),
+        ("logging", "alloy"),
+        ("ai", "provider"),
+        ("notifications", "webhook"),
+    ]
+    nested_dead = [("logging", "loki", "mode"), ("logging", "loki", "url"), ("ai", "rca", "engine"), ("ai", "rca", "max_evidence")]
+    for path in (ROOT / "config" / "forgesre.example.yml", ROOT / "tests" / "forgesre.test.yml"):
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert "features" not in data, path
+        assert set(data["grafana"]) == {"enabled"}, path
+        for section, key in dead:
+            assert key not in (data.get(section) or {}), (path, section, key)
+        for section, sub, key in nested_dead:
+            assert key not in ((data.get(section) or {}).get(sub) or {}), (path, section, sub, key)
+        assert data["ai"]["rca"]["window_minutes"] == 30
+        assert data["monitoring"]["snmp"]["module"] == "if_mib"
+    install = (ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
+    heredoc = install.split('cat > "$ROOT/config/forgesre.yml" <<EOF', 1)[1].split("\nEOF", 1)[0]
+    for token in ("features:", "max_evidence", "engine: forgerca", "provider: local\n  llm", "alloy:", "prometheus:", "mode: online"):
+        assert token not in heredoc, token
+    assert "window_minutes: 30" in heredoc
 
 
 def test_doctor_grafana_down_is_warn_not_prometheus_fail(monkeypatch):

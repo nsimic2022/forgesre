@@ -18,7 +18,8 @@ from app.inventory import run_scan, seed_demo_candidate, sync_netbox
 from app.jobs import recover_interrupted_jobs
 from app.metrics import metrics_response
 from app.migrate import migrate
-from app.seed import seed
+from app.models import Asset
+from app.seed import DEMO_ASSET, seed, seed_summary
 from app.settings import assert_runtime_secrets, settings
 from app.web import NotAuthenticated, router as web_router
 
@@ -140,9 +141,9 @@ def create_app() -> FastAPI:
                 "seed",
                 "seed",
                 "ok",
-                summary="DEMO assets (Linux, Windows, network), playrules, and closed HighCPU history are ready",
+                summary=seed_summary(db),
                 object_type="asset",
-                object_id="forge-demo-01",
+                object_id=DEMO_ASSET if db.query(Asset.id).filter_by(asset_id=DEMO_ASSET).first() else "",
             )
         except Exception as exc:
             log.exception("startup failed")

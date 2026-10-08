@@ -1,8 +1,10 @@
 schema_version: 1
+# Only keys Core reads are listed. Service URLs and ports (PROMETHEUS_URL,
+# ALERTMANAGER_URL, LOKI_URL, GRAFANA_PORT, FORGESRE_HTTP_PORT, NETBOX_URL) come
+# from docker-compose.yml + .env. Passwords and tokens: secrets/secrets.env.
 
 system:
-  mode: online # online | offline
-  timezone: Europe/Belgrade
+  timezone: Europe/Belgrade # FORGESRE_TIMEZONE in .env wins
   log_level: info
   cookie_secure: false # true when Core is served over HTTPS (or set FORGESRE_COOKIE_SECURE=1)
 
@@ -10,7 +12,7 @@ inventory:
   provider: local # local inventory is SoT; NetBox is read-sync
   netbox:
     enabled: true
-    mode: bundled # bundled | external | disabled
+    mode: bundled # only "disabled" is read: it turns NetBox sync off
     url: "http://127.0.0.1:8001" # override with --netbox-url / an external instance
     auto_sync: true # read-only sync ~30 s after Core start, then every 6 h; false = only the Sync NetBox button
   zabbix:
@@ -26,14 +28,6 @@ discovery:
   cidrs: []
 
 monitoring:
-  prometheus:
-    enabled: true
-    mode: bundled
-    url: http://127.0.0.1:9090
-  alertmanager:
-    enabled: true
-    mode: bundled
-    url: http://127.0.0.1:9093
   snmp:
     enabled: true
     exporter_url: http://127.0.0.1:9116
@@ -41,30 +35,21 @@ monitoring:
 
 logging:
   loki:
-    enabled: true
-    mode: bundled
-    url: http://127.0.0.1:3100
-  alloy:
-    enabled: true
+    enabled: true # false = no Loki evidence in RCA and Loki / Alloy doctor rows show disabled
 
 grafana:
-  enabled: true
-  mode: bundled
-  url: http://127.0.0.1:3000
+  enabled: true # Health "Open Grafana" + doctor row; port is GRAFANA_PORT in .env
 
 ai:
   enabled: false
-  provider: local
   llm:
     mode: disabled # bundled | external | disabled — fetch-llm sets bundled
     url: http://127.0.0.1:8088/v1
     model: local
     timeout_seconds: 90 # lab 4B; raise toward 600 only for slow 14B CPU rewrites
   rca:
-    engine: forgerca
     window_minutes: 30
     max_log_lines: 20
-    max_evidence: 40
 
 notifications:
   email:
@@ -77,10 +62,3 @@ notifications:
     # Outlook / M365:   host smtp.office365.com port 587 tls true + SMTP_* secrets
     # Own domain later: Compose profile mailbox (./forgesre mailbox) — does not rewrite this block
     # Host postfix:     host 127.0.0.1 (optional; Core can submit to local Postfix)
-  webhook:
-    enabled: false
-
-features:
-  playrules: true
-  playbooks: true
-  escalation: true

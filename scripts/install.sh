@@ -347,10 +347,10 @@ write_files() {
   [[ "$BUNDLED_GRAFANA" == "yes" ]] || grafana_enabled="false"
   [[ "$ENABLE_LOKI" == "yes" ]] || loki_enabled="false"
 
+  # Only keys Core reads. Service URLs/ports come from docker-compose.yml + .env.
   cat > "$ROOT/config/forgesre.yml" <<EOF
 schema_version: 1
 system:
-  mode: $([[ $OFFLINE -eq 1 ]] && echo offline || echo online)
   timezone: ${TIMEZONE}
   log_level: info
   cookie_secure: false
@@ -365,14 +365,6 @@ discovery:
   mode: semi-automatic
   cidrs: ${cidrs_yaml}
 monitoring:
-  prometheus:
-    enabled: true
-    mode: $([[ $BUNDLED_PROM == yes ]] && echo bundled || echo external)
-    url: http://127.0.0.1:9090
-  alertmanager:
-    enabled: true
-    mode: bundled
-    url: http://127.0.0.1:9093
   snmp:
     enabled: true
     exporter_url: http://127.0.0.1:9116
@@ -380,26 +372,17 @@ monitoring:
 logging:
   loki:
     enabled: ${loki_enabled}
-    mode: bundled
-    url: http://127.0.0.1:3100
-  alloy:
-    enabled: ${loki_enabled}
 grafana:
   enabled: ${grafana_enabled}
-  mode: bundled
-  url: http://127.0.0.1:3000
 ai:
   enabled: ${ai_enabled}
-  provider: local
   llm:
     mode: ${llm_mode}
     url: http://127.0.0.1:8088/v1
     model: local
   rca:
-    engine: forgerca
     window_minutes: 30
     max_log_lines: 20
-    max_evidence: 40
 notifications:
   email:
     enabled: false
@@ -407,10 +390,6 @@ notifications:
     port: 587
     from: forgesre@example.local
     tls: true
-features:
-  playrules: true
-  playbooks: true
-  escalation: true
 EOF
 
   "$ROOT/scripts/render-monitoring.sh"
@@ -485,8 +464,8 @@ post_install_journal() {
   source "$ROOT/secrets/secrets.env"
   local jar
   jar="$(mktemp)"
-  curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${HTTP_PORT}/login" \
-    -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null || { rm -f "$jar"; return 0; }
+  printf '%s' "$FORGESRE_ADMIN_PASSWORD" | curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${HTTP_PORT}/login" \
+    --data-urlencode "email=${FORGESRE_ADMIN_EMAIL}" --data-urlencode "password@-" >/dev/null || { rm -f "$jar"; return 0; }
   curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${HTTP_PORT}/api/v1/journal" \
     -H "Content-Type: application/json" \
     -d "{\"module\":\"install\",\"action\":\"install\",\"status\":\"ok\",\"summary\":\"Install finished profile=${PROFILE} port=${HTTP_PORT}\",\"detail\":\"See installation-report.md. Open Dashboard, then Console.\"}" >/dev/null || true

@@ -33,6 +33,12 @@ run_cli_ops() {
   PYTHONPATH="$ROOT/backend" python3 -m app.cli_ops "$(port_from_env)" "$@"
 }
 
+# Install admin from secrets.env into cookie jar $1. Password via stdin, not curl argv (ps).
+admin_login() {
+  printf '%s' "$FORGESRE_ADMIN_PASSWORD" | curl -fsS -c "$1" -b "$1" -X POST "http://127.0.0.1:${PORT}/login" \
+    --data-urlencode "email=${FORGESRE_ADMIN_EMAIL}" --data-urlencode "password@-" >/dev/null
+}
+
 print_overview() {
   cat <<'EOF'
 ForgeSRE CLI — operate the appliance from the clone directory.
@@ -343,7 +349,7 @@ EOF
       ;;
     config)
       cat <<'EOF'
-config — print the first 160 lines of config/forgesre.yml.
+config — print config/forgesre.yml.
 
   ./forgesre config
 
@@ -899,8 +905,7 @@ case "$cmd" in
     source secrets/secrets.env
     echo "Generating demo incident workflow..."
     jar="$(mktemp)"
-    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \
-      -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
+    admin_login "$jar"
     curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/api/v1/demo"
     echo
     echo "Open the UI dashboard, then:"
@@ -917,8 +922,7 @@ case "$cmd" in
     source secrets/secrets.env
     echo "Generating filesystem RCA demo..."
     jar="$(mktemp)"
-    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \
-      -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
+    admin_login "$jar"
     curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/api/v1/demo-rca"
     echo
     rm -f "$jar"
@@ -929,8 +933,7 @@ case "$cmd" in
     # shellcheck disable=SC1091
     source secrets/secrets.env
     jar="$(mktemp)"
-    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \
-      -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
+    admin_login "$jar"
     curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/api/v1/demo-reset"
     echo
     echo "Demo gauges reset to 12% CPU / 35% disk."
@@ -942,8 +945,7 @@ case "$cmd" in
     # shellcheck disable=SC1091
     source secrets/secrets.env
     jar="$(mktemp)"
-    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \
-      -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
+    admin_login "$jar"
     curl -fsS -c "$jar" -b "$jar" "http://127.0.0.1:${PORT}/api/v1/jobs"
     echo
     rm -f "$jar"
@@ -982,8 +984,7 @@ case "$cmd" in
     # module = optional Journal filter (snmp, rca, …); jar = temp cookie file for the admin login.
     module="${1:-}"
     jar="$(mktemp)"
-    curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/login" \
-      -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null
+    admin_login "$jar"
     if [[ -n "$module" ]]; then
       curl -fsS -c "$jar" -b "$jar" "http://127.0.0.1:${PORT}/api/v1/journal?module=${module}&limit=50"
     else
@@ -993,7 +994,7 @@ case "$cmd" in
     rm -f "$jar"
     ;;
   config)
-    sed -n '1,160p' config/forgesre.yml
+    cat config/forgesre.yml
     ;;
   assets|inventory)
     need_env
@@ -1021,9 +1022,9 @@ case "$cmd" in
   login)
     need_env
     if [[ $# -ge 2 ]]; then
-      run_cli_ops login "$1" "$2"
+      FORGESRE_CLI_PASSWORD="$2" run_cli_ops login "$1"
     elif [[ -n "${FORGESRE_CLI_EMAIL:-}" && -n "${FORGESRE_CLI_PASSWORD:-}" ]]; then
-      run_cli_ops login "$FORGESRE_CLI_EMAIL" "$FORGESRE_CLI_PASSWORD"
+      FORGESRE_CLI_PASSWORD="$FORGESRE_CLI_PASSWORD" run_cli_ops login "$FORGESRE_CLI_EMAIL"
     else
       if [[ ! -t 0 ]]; then
         echo "usage: ./forgesre login EMAIL PASSWORD"
@@ -1032,7 +1033,7 @@ case "$cmd" in
       read -r -p "ForgeSRE email: " email
       read -r -s -p "Password: " password
       echo
-      run_cli_ops login "$email" "$password"
+      FORGESRE_CLI_PASSWORD="$password" run_cli_ops login "$email"
     fi
     ;;
   logout)

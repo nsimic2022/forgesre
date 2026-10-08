@@ -45,14 +45,29 @@ def test_system_health_has_open_column_and_grafana():
     assert "warn" in page.text.lower()
     assert "API 403 is" in page.text
     assert "GUI" in page.text
-    assert "Metrics" in page.text
+    assert "/targets?search=" in page.text
+    # Prometheus binds 127.0.0.1: a rewritten testserver:9 link would be dead from a NOC browser.
+    assert 'href="http://testserver:9/' not in page.text
+    assert 'href="http://testserver:9093' not in page.text
+    assert 'href="http://testserver:12345' not in page.text
+    assert "appliance-local <code>127.0.0.1:9</code>" in page.text
+    assert "appliance-local <code>127.0.0.1:9093</code>" in page.text
+    assert "ssh -L 9093:127.0.0.1:9093" in page.text
+    db.close()
+
+
+def test_system_health_keeps_loopback_links_when_browsing_on_the_appliance():
+    db = _db()
+    client = TestClient(app, base_url="http://localhost:8080")
+    _login(client)
+    page = client.get("/health-ui")
+    assert page.status_code == 200
     assert ">Targets<" in page.text
     assert ">Alerts<" in page.text
     assert ">Graph<" in page.text
-    assert "/targets?search=" in page.text
-    assert 'href="http://testserver:9/targets?search="' in page.text
-    assert 'href="http://testserver:9/alerts"' in page.text
-    assert 'href="http://testserver:9/graph"' in page.text
+    assert 'href="http://localhost:9/targets?search="' in page.text
+    assert 'href="http://localhost:9093/#/alerts"' in page.text
+    assert "data-appliance-local" not in page.text
     db.close()
 
 
