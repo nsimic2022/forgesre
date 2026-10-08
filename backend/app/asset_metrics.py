@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
+from app.alert_rules import load_alert_rules
 from app.demo_ids import is_lab_inventory_row
 from app.inventory import asset_kind
 from rca.catalog import PLAYRULE_PRESETS
@@ -69,10 +70,6 @@ _CLASS_TILES = {
 }
 
 
-def _alerts_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "monitoring" / "alerts.yml"
-
-
 def _playrule_thresholds() -> dict[str, dict[str, float]]:
     out: dict[str, dict[str, float]] = {}
     for group in PLAYRULE_PRESETS:
@@ -88,33 +85,28 @@ def _playrule_thresholds() -> dict[str, dict[str, float]]:
     return out
 
 
-def _alerts_yml_thresholds() -> dict[str, dict[str, float]]:
-    path = _alerts_path()
-    if not path.is_file():
-        return {}
+def _alerts_yml_thresholds(base: Path | None = None) -> dict[str, dict[str, float]]:
+    """``> N`` from each rule's expr. Prometheus loads every copy of a rule, so the lowest N fires first."""
     out: dict[str, dict[str, float]] = {}
-    current = ""
-    for line in path.read_text(encoding="utf-8").splitlines():
-        named = re.match(r"\s+- alert:\s+(\S+)", line)
-        if named:
-            current = named.group(1)
+    for alertname, rules in load_alert_rules(base).items():
+        tile = _ALERT_TILE.get(alertname)
+        klass = _ALERT_CLASS.get(alertname)
+        if not tile or not klass:
             continue
-        if not current or "expr:" not in line:
-            continue
-        tile = _ALERT_TILE.get(current)
-        klass = _ALERT_CLASS.get(current)
-        if tile and klass:
-            match = re.search(r">\s*(\d+(?:\.\d+)?)", line)
-            if match:
-                out.setdefault(klass, {})[tile] = float(match.group(1))
-        current = ""
+        for rule in rules:
+            found = re.findall(r">=?\s*(\d+(?:\.\d+)?)", rule.get("expr") or "")
+            if not found:
+                continue
+            value = float(found[-1])
+            current = out.setdefault(klass, {}).get(tile)
+            out[klass][tile] = value if current is None else min(current, value)
     return out
 
 
-def bundled_thresholds() -> dict[str, dict[str, float]]:
-    """Percent thresholds from playrule presets, overlaid by monitoring/alerts.yml."""
+def bundled_thresholds(base: Path | None = None) -> dict[str, dict[str, float]]:
+    """Percent thresholds from playrule presets, overlaid by alerts.yml + alerts.local.yml (FORGESRE_MONITORING_DIR)."""
     merged = _playrule_thresholds()
-    for klass, tiles in _alerts_yml_thresholds().items():
+    for klass, tiles in _alerts_yml_thresholds(base).items():
         merged.setdefault(klass, {}).update(tiles)
     return merged
 

@@ -84,6 +84,34 @@ def test_bundled_thresholds_match_alerts_yml_not_guessed_80():
     assert "windows_memory_available_bytes" not in alerts
 
 
+def test_bundled_thresholds_read_the_mounted_monitoring_dir_and_local_rules(tmp_path, monkeypatch):
+    bundled = open("monitoring/alerts.yml", encoding="utf-8").read()
+    (tmp_path / "alerts.yml").write_text(bundled.replace("[5m]))) > 95", "[5m]))) > 85"), encoding="utf-8")
+    (tmp_path / "alerts.local.yml").write_text(
+        "groups:\n"
+        "  - name: local\n"
+        "    rules:\n"
+        "      - alert: NodeMemoryHigh\n"
+        "        expr: >\n"
+        "          100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))\n"
+        "          > 75\n"
+        "        for: 5m\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FORGESRE_MONITORING_DIR", str(tmp_path))
+    values = bundled_thresholds()
+    assert values["linux"]["cpu_percent"] == 85
+    assert values["linux"]["memory_percent"] == 75
+    assert values["linux"]["disk_percent"] == 90
+    assert values["windows"]["cpu_percent"] == 90
+
+
+def test_bundled_thresholds_fall_back_to_presets_without_rule_files(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGESRE_MONITORING_DIR", str(tmp_path))
+    values = bundled_thresholds()
+    assert values["demo"]["cpu_percent"] == 80
+
+
 def test_alerts_yml_memory_rules_use_tile_promql_and_five_minutes():
     from pathlib import Path
 
