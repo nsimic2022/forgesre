@@ -9,6 +9,7 @@ from urllib.parse import quote, urlencode
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.audit import audit
@@ -94,6 +95,8 @@ from app.services import (
     severity_pill,
     short_when_label,
     parse_policy_steps,
+    policy_step_problems,
+    policy_steps_text,
     run_demo,
     run_demo_host,
     run_demo_network,
@@ -2017,15 +2020,76 @@ def playbook_delete(
     return RedirectResponse("/playbooks", status_code=302)
 
 
-@router.get("/escalation", response_class=HTMLResponse)
-def escalation_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_page("read_play")), page: str = "1"):
+DEFAULT_POLICY_SLUG = "default-warning"
+ESCALATION_FORM_DEFAULT = {"name": "", "slug": "", "steps": "0 team\n15 team-lead\n30 engineer"}
+
+
+def _escalation_view(
+    request: Request,
+    db: Session,
+    user: User,
+    *,
+    page: str = "1",
+    form_mode: str = "create",
+    selected: EscalationPolicy | None = None,
+    form: dict | None = None,
+    error: str = "",
+    status_code: int = 200,
+):
     policies = db.query(EscalationPolicy).order_by(EscalationPolicy.name).all()
     policies, pager = paginate(policies, page, size=per_page(request))
-    return render(request, "escalation.html", user, policies=policies, pager=pager)
+    usage = dict(
+        db.query(Playrule.escalation_policy_id, func.count(Playrule.id))
+        .filter(Playrule.escalation_policy_id.isnot(None))
+        .group_by(Playrule.escalation_policy_id)
+        .all()
+    )
+    response = render(
+        request,
+        "escalation.html",
+        user,
+        policies=policies,
+        pager=pager,
+        form_mode=form_mode,
+        selected=selected,
+        form=form or dict(ESCALATION_FORM_DEFAULT),
+        error=error,
+        usage=usage,
+        default_slug=DEFAULT_POLICY_SLUG,
+    )
+    response.status_code = status_code
+    return response
+
+
+@router.get("/escalation", response_class=HTMLResponse)
+def escalation_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("read_play")),
+    page: str = "1",
+    edit: str = "",
+):
+    selected = None
+    form = None
+    edit_id = _parse_id_query(edit)
+    if edit_id is not None and can(user, "write_play"):
+        selected = db.get(EscalationPolicy, edit_id)
+    if selected is not None:
+        form = {"name": selected.name, "slug": selected.slug, "steps": policy_steps_text(selected.steps)}
+    return _escalation_view(
+        request,
+        db,
+        user,
+        page=page,
+        form_mode="edit" if selected is not None else "create",
+        selected=selected,
+        form=form,
+    )
 
 
 @router.post("/escalation")
 def escalation_create(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     name: str = Form(...),
@@ -2035,13 +2099,88 @@ def escalation_create(
     if not can(user, "write_play"):
         raise HTTPException(status_code=403)
     clean_slug = (slug or "").strip().lower().replace(" ", "-")
+    form = {"name": name, "slug": slug, "steps": steps}
+    error = ""
     if not clean_slug:
-        raise HTTPException(status_code=400, detail="slug required")
-    if db.query(EscalationPolicy).filter_by(slug=clean_slug).first():
-        raise HTTPException(status_code=400, detail="slug already exists")
+        error = "Slug is required."
+    elif db.query(EscalationPolicy).filter_by(slug=clean_slug).first():
+        error = f"Slug {clean_slug} already exists. Edit that policy instead, or pick another slug."
+    else:
+        error = " ".join(policy_step_problems(steps))
+    if error:
+        return _escalation_view(request, db, user, form=form, error=error, status_code=400)
     row = EscalationPolicy(name=name.strip(), slug=clean_slug, steps=parse_policy_steps(steps))
     db.add(row)
     audit(db, "escalation.create", actor=user.email, object_type="escalation_policy", object_id=clean_slug)
+    db.commit()
+    return RedirectResponse("/escalation", status_code=302)
+
+
+@router.post("/escalation/{policy_id}/update")
+def escalation_update(
+    policy_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    name: str = Form(...),
+    steps: str = Form(""),
+):
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    row = db.get(EscalationPolicy, policy_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    problems = policy_step_problems(steps)
+    if problems or not name.strip():
+        return _escalation_view(
+            request,
+            db,
+            user,
+            form_mode="edit",
+            selected=row,
+            form={"name": name, "slug": row.slug, "steps": steps},
+            error=" ".join(problems) or "Name is required.",
+            status_code=400,
+        )
+    row.name = name.strip()
+    row.steps = parse_policy_steps(steps)
+    audit(db, "escalation.update", actor=user.email, object_type="escalation_policy", object_id=row.slug)
+    db.commit()
+    return RedirectResponse("/escalation", status_code=302)
+
+
+@router.post("/escalation/{policy_id}/delete")
+def escalation_delete(
+    policy_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    row = db.get(EscalationPolicy, policy_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    if row.slug == DEFAULT_POLICY_SLUG:
+        raise HTTPException(
+            status_code=400,
+            detail="Default warning is the ladder new playrules attach (Core start re-creates it). Edit its steps instead.",
+        )
+    fallback = db.query(EscalationPolicy).filter_by(slug=DEFAULT_POLICY_SLUG).first()
+    moved = (
+        db.query(Playrule)
+        .filter(Playrule.escalation_policy_id == row.id)
+        .update({Playrule.escalation_policy_id: fallback.id if fallback else None}, synchronize_session=False)
+    )
+    slug = row.slug
+    db.delete(row)
+    audit(
+        db,
+        "escalation.remove",
+        actor=user.email,
+        object_type="escalation_policy",
+        object_id=slug,
+        data={"playrules_moved": int(moved or 0), "to": fallback.slug if fallback else ""},
+    )
     db.commit()
     return RedirectResponse("/escalation", status_code=302)
 

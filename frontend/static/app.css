@@ -667,7 +667,8 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
   margin-bottom: 1.1rem;
 }
 .playbook-grid .card { margin-bottom: 0; }
-.playbook-card.selected { border-color: var(--accent); }
+.playbook-card.selected,
+.policy-card.selected { border-color: var(--accent); }
 .discovery-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Escalation · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Escalation {% with %}{% set tip %}This page is the email ladder — same 30s loop as before, not a ticket system. Seeded Default warning (0 / 15 / 30 min) is what new playrules attach unless you pick another policy on Playrules. Acknowledge stops the ladder. SMTP off means the row stays generated — that is the lab outbox. Ops scheduled reports are a different mail path.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
-<p class="page-lede">Each step is <em>minutes after the incident opened</em> and a recipient. Acknowledge stops further steps.</p>
+<h1>Escalation {% with %}{% set tip %}This page is the email ladder — same 30s loop as before, not a ticket system. Email is the only channel: there is no webhook, SMS or chat step. Seeded Default warning (0 / 15 / 30 min) is what new playrules attach unless you pick another policy on Playrules. Edit changes the ladder for incidents that open after Save. Remove moves its playrules to Default warning. Acknowledge stops the ladder. SMTP off means the row stays generated — that is the lab outbox. Ops scheduled reports are a different mail path.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<p class="page-lede">Each step is <em>minutes after the incident opened</em> and an email recipient. Acknowledge stops further steps.</p>
 <ul class="compact recipient-rules">
   <li><strong>Email address</strong> on the step (e.g. <code>30 oncall@dc.local</code>) — mail goes to that address.</li>
   <li><strong>Role</strong> on the step (<code>team</code>, <code>team-lead</code>, <code>engineer</code>) — mail goes to the asset owner email (demo: <code>platform@forgesre.local</code> on forge-demo-01).</li>
@@ -12,7 +12,7 @@
 <div class="list-scroll list-scroll-cards" data-list-scroll>
 <div class="policy-grid">
 {% for policy in policies %}
-<section class="card policy-card" data-list-row>
+<section class="card policy-card {% if selected and selected.id == policy.id %}selected{% endif %}" data-list-row>
   <h2>{{ policy.name }} <span class="muted policy-slug"><code>{{ policy.slug }}</code></span></h2>
   <table class="scan-list step-list">
     <thead><tr><th>After</th><th>Recipient</th></tr></thead>
@@ -20,11 +20,21 @@
     {% for step in policy.steps %}
       <tr>
         <td class="inc-when">{{ step.after_minutes }} min</td>
-        <td>{% if '@' in (step.target or '') %}<code>{{ step.target }}</code>{% else %}{{ step.target }} <span class="muted">→ owner email</span>{% endif %}</td>
+        <td>{% if '@' in (step.target or '') %}<code>{{ step.target }}</code>{% else %}{{ step.target }} <span class="muted">→ owner email</span>{% endif %}{% if step.channel and step.channel != 'email' %} <span class="pill warn" title="Escalation has no {{ step.channel }} channel. This step is mailed. Edit and Save to clear it.">{{ step.channel }}: sent as email</span>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
+  {% if can('write_play') %}
+  <div class="row-actions asset-form-actions">
+    <a class="button" href="/escalation?edit={{ policy.id }}{{ pager_keep(pager) }}#escalation-form">Edit</a>
+    {% if policy.slug != default_slug %}
+    <form method="post" action="/escalation/{{ policy.id }}/delete" onsubmit="return confirm('Remove this escalation policy? {{ usage.get(policy.id, 0) }} playrule(s) using it move to Default warning.');">
+      <button type="submit" class="danger">Remove</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
 </section>
 {% else %}
 <p class="muted">No policies yet. Create one below, or keep using the seeded Default warning after seed.</p>
@@ -33,14 +43,18 @@
 </div>
 {% include "_pager.html" %}
 {% if can('write_play') %}
+{% if form_mode == "edit" %}
+<h2>Edit escalation policy</h2>
+<form method="post" action="/escalation/{{ selected.id }}/update" class="stack" id="escalation-form">
+{% else %}
 <h2>Create escalation policy</h2>
 <form method="post" action="/escalation" class="stack" id="escalation-form">
-  <label>Name <input name="name" placeholder="Default warning" required></label>
-  <label>Slug <input name="slug" placeholder="default-warning" required></label>
-  <label><span class="label-line">Steps (one per line: minutes then role or email) {% with %}{% set tip %}Each line is minutes then a role (team, team-lead, engineer) or an email address. Roles mail the asset owner email; an address is used as written.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
-    <textarea name="steps" rows="6">0 team
-15 team-lead
-30 engineer</textarea>
+{% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <label>Name <input name="name" placeholder="Default warning" required value="{{ form.name }}"></label>
+  <label>Slug <input name="slug" placeholder="default-warning" required value="{{ form.slug }}" {% if form_mode == "edit" %}readonly{% endif %}></label>
+  <label><span class="label-line">Steps (one per line: minutes then role or email) {% with %}{% set tip %}Each line is minutes then a role (team, team-lead, engineer) or an email address. Roles mail the asset owner email; an address is used as written. Email only — webhook, SMS or a URL is refused.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <textarea name="steps" rows="6">{{ form.steps }}</textarea>
   </label>
   <div class="row-actions">
     <button type="submit">Save</button>

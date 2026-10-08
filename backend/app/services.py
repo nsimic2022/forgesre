@@ -1556,8 +1556,43 @@ def process_escalations(db: Session) -> None:
                 ensure_notification(db, incident, step["step_key"], target=step["target"])
 
 
+# Escalation only sends email (ensure_notification). These words look like a channel
+# choice; accepting them would store a step that claims a channel and then mails anyway.
+NON_EMAIL_CHANNELS = frozenset({"webhook", "sms", "slack", "pagerduty", "telegram"})
+EMAIL_ONLY_HINT = "Escalation sends email only: write minutes then a role (team, team-lead, engineer) or an email address."
+
+
+def policy_step_problems(text: str) -> list[str]:
+    """Lines that ask for something escalation cannot do (webhook, SMS, a URL). Empty = OK to save."""
+    problems: list[str] = []
+    for number, raw in enumerate((text or "").splitlines(), start=1):
+        line = raw.replace("→", " ").replace("->", " ").strip()
+        if not line:
+            continue
+        tokens = line.replace(",", " ").split()
+        channel = next((tok for tok in tokens if tok.lower() in NON_EMAIL_CHANNELS), "")
+        url = next((tok for tok in tokens if tok.lower().startswith(("http://", "https://"))), "")
+        if channel:
+            problems.append(f"Line {number} ({line}): {channel.lower()} is not supported. {EMAIL_ONLY_HINT}")
+        elif url:
+            problems.append(f"Line {number} ({line}): a URL is not a recipient. {EMAIL_ONLY_HINT}")
+    return problems
+
+
+def policy_steps_text(steps: list[dict[str, Any]] | None) -> str:
+    """EscalationPolicy.steps back to the 'minutes role-or-email' lines the form accepts."""
+    lines = []
+    for step in steps or []:
+        try:
+            after = int(step.get("after_minutes") or 0)
+        except (TypeError, ValueError):
+            after = 0
+        lines.append(f"{after} {str(step.get('target') or 'team').strip() or 'team'}")
+    return "\n".join(lines)
+
+
 def parse_policy_steps(text: str) -> list[dict[str, Any]]:
-    """Parse 'minutes role' lines into EscalationPolicy.steps."""
+    """Parse 'minutes role' lines into EscalationPolicy.steps. Channel is always email."""
     skip = {"min", "mins", "minute", "minutes", "email", "→", "->"}
     rows: list[dict[str, Any]] = []
     for raw in (text or "").splitlines():
@@ -1573,11 +1608,7 @@ def parse_policy_steps(text: str) -> list[dict[str, Any]]:
         except ValueError:
             continue
         target = tokens[1] if len(tokens) > 1 else "team"
-        channel = "email"
-        extra = tokens[2].lower() if len(tokens) > 2 else ""
-        if extra in {"email", "webhook"}:
-            channel = extra
-        rows.append({"after_minutes": after, "target": target, "channel": channel})
+        rows.append({"after_minutes": after, "target": target, "channel": "email"})
     return rows or [
         {"after_minutes": 0, "target": "team", "channel": "email"},
         {"after_minutes": 15, "target": "team-lead", "channel": "email"},
@@ -1605,7 +1636,7 @@ def escalation_steps(incident: Incident) -> list[dict[str, Any]]:
             {
                 "after_minutes": after,
                 "target": str(step.get("target") or "team"),
-                "channel": str(step.get("channel") or "email"),
+                "channel": "email",
                 "step_key": key,
             }
         )
