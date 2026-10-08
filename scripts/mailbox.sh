@@ -72,8 +72,10 @@ MAIL_PASSWORD="${MAIL_PASSWORD:-}"
 if [[ -z "${MAIL_PASSWORD}" && -f "${SECRETS}" ]]; then
   MAIL_PASSWORD="$(grep -E '^MAILBOX_PASSWORD=' "${SECRETS}" | tail -n1 | cut -d= -f2- || true)"
 fi
+MAIL_PASSWORD_NEW=0
 if [[ -z "${MAIL_PASSWORD}" || "${RESET}" == "1" ]]; then
   MAIL_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')"
+  MAIL_PASSWORD_NEW=1
 fi
 
 # Roundcube web port and session DES key (kept once written to .env).
@@ -223,12 +225,15 @@ fi
 # Write MAILBOX_* (and SMTP_* with --bind-core) into secrets.env, mode 600 via umask.
 umask 077
 touch "${SECRETS}"
-python3 - "${SECRETS}" "${MAIL_ACCOUNT}" "${MAIL_PASSWORD}" "${MAIL_DOMAIN}" "${BIND_CORE}" <<'PY'
+# Password via env, not argv (ps shows argv to every local user).
+MAILBOX_SECRET="${MAIL_PASSWORD}" python3 - "${SECRETS}" "${MAIL_ACCOUNT}" "${MAIL_DOMAIN}" "${BIND_CORE}" <<'PY'
 from pathlib import Path
+import os
 import sys
 
 path = Path(sys.argv[1])
-account, password, domain, bind_core = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+account, domain, bind_core = sys.argv[2], sys.argv[3], sys.argv[4]
+password = os.environ["MAILBOX_SECRET"]
 keys = {
     "MAILBOX_DOMAIN": domain,
     "MAILBOX_USERNAME": account,
@@ -335,7 +340,11 @@ else
 fi
 echo "  Domain:     ${MAIL_DOMAIN}"
 echo "  Account:    ${MAIL_ACCOUNT}"
-echo "  Password:   ${MAIL_PASSWORD}"
+if [[ "${MAIL_PASSWORD_NEW}" == "1" ]]; then
+  echo "  Password:   ${MAIL_PASSWORD}   (new — shown once)"
+else
+  echo "  Password:   unchanged (MAILBOX_PASSWORD in secrets/secrets.env)"
+fi
 echo "  Webmail:    http://<this-host>:${ROUNDCUBE_PORT}   (Roundcube)"
 echo "  IMAP:       <this-host>:993"
 echo "  Inbound MX: port 25 on this host (needs a real domain later)"

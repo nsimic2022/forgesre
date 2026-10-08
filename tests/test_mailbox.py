@@ -59,3 +59,14 @@ def test_forgesre_help_documents_mailbox():
     assert "BIND_CORE" in script
     assert "MAILBOX_PASSWORD" in script
     assert script.splitlines()[0].startswith("#!/")
+
+
+def test_mailbox_script_shows_the_password_only_when_it_is_new():
+    script = (ROOT / "scripts/mailbox.sh").read_text()
+    shown = [line for line in script.splitlines() if "echo" in line and "${MAIL_PASSWORD}" in line]
+    assert len(shown) == 1 and "new" in shown[0]
+    guard = script.index('if [[ "${MAIL_PASSWORD_NEW}" == "1" ]]; then')
+    assert script.index(shown[0]) > guard
+    assert "unchanged (MAILBOX_PASSWORD in secrets/secrets.env)" in script
+    writer = next(line for line in script.splitlines() if "python3 - " in line and "SECRETS" in line)
+    assert "${MAIL_PASSWORD}" not in writer.split("python3 - ", 1)[1]

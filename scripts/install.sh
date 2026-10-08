@@ -464,8 +464,8 @@ post_install_journal() {
   source "$ROOT/secrets/secrets.env"
   local jar
   jar="$(mktemp)"
-  curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${HTTP_PORT}/login" \
-    -d "email=${FORGESRE_ADMIN_EMAIL}&password=${FORGESRE_ADMIN_PASSWORD}" >/dev/null || { rm -f "$jar"; return 0; }
+  printf '%s' "$FORGESRE_ADMIN_PASSWORD" | curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${HTTP_PORT}/login" \
+    --data-urlencode "email=${FORGESRE_ADMIN_EMAIL}" --data-urlencode "password@-" >/dev/null || { rm -f "$jar"; return 0; }
   curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${HTTP_PORT}/api/v1/journal" \
     -H "Content-Type: application/json" \
     -d "{\"module\":\"install\",\"action\":\"install\",\"status\":\"ok\",\"summary\":\"Install finished profile=${PROFILE} port=${HTTP_PORT}\",\"detail\":\"See installation-report.md. Open Dashboard, then Console.\"}" >/dev/null || true
