@@ -1690,7 +1690,7 @@ def _run_lab_incident(
     if incident:
         run_investigation(db, incident, actor=actor, use_llm=False)
         queue_llm_rewrite(db, incident, actor=actor)
-        ensure_notification(db, incident, "immediate")
+        notify_first_step(db, incident)
         report(
             db,
             "demo",
