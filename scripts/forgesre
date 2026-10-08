@@ -656,6 +656,7 @@ EOF
     history)
       cat <<'EOF'
 history — 90-day lookback of incidents (Postgres, not Loki).
+The GUI list is Incidents (/history redirects there). This command stays the CLI lookback.
 
   ./forgesre history
   ./forgesre history --days 90

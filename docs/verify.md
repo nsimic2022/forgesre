@@ -40,7 +40,7 @@ The script **does not send email**, **does not run `./install.sh`**, and **does 
 4. Compose: `docker compose ps`, Core running
 5. HTTP: Core `/health`, Prometheus, Alertmanager, snmp_exporter, Loki, Alloy, Grafana, NetBox `:8001/login/` (**WARN** while first-boot migrations run, not FAIL), optional llama.cpp `:8088` (`/v1/models` + container health), optional Roundcube. LLM implementation: [`llm.md`](llm.md).
 6. Doctor API (Bearer webhook token)
-7. Login as install admin, then assets / incidents / history / jobs / journal / Administration / Email & reports
+7. Login as install admin, then assets / incidents / jobs / journal / Administration / Email & reports
 8. Prometheus HTTP SD and SNMP HTTP SD
 9. Email YAML (Gmail / Outlook / local) without sending
 10. `./forgesre version` and `help`

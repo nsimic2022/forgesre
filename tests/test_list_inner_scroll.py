@@ -89,7 +89,7 @@ def _rows(box: str) -> list[str]:
     return re.findall(r"<tr [^>]*data-list-row[^>]*>.*?</tr>", box, flags=re.S)
 
 
-@pytest.mark.parametrize("path", ["/incidents", "/history?days=90"])
+@pytest.mark.parametrize("path", ["/incidents"])
 def test_incident_lists_scroll_inside_box_and_title_still_opens(path):
     numbers = _add_many(3)
     html = _client().get(path).text

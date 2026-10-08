@@ -23,23 +23,37 @@ def _client(db, email="admin@forgesre.local", password="testpass"):
     return client
 
 
-def test_history_page_lists_seeded_closed_incident():
+def test_history_page_redirects_and_incidents_lists_closed():
     db = _db()
     client = _client(db)
-    page = client.get("/history")
+    bounced = client.get("/history?status=CLOSED&asset=forge-demo-01", follow_redirects=False)
+    assert bounced.status_code == 302
+    assert bounced.headers["location"] == "/incidents?status=CLOSED&q=forge-demo-01"
+    bare = client.get("/history", follow_redirects=False)
+    assert bare.status_code == 302
+    assert bare.headers["location"] == "/incidents"
+    page = client.get("/incidents")
     assert page.status_code == 200
-    assert "History" in page.text
     assert "INC-" in page.text
-    closed = client.get("/history?status=CLOSED")
+    nav = page.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    assert ">History<" not in nav
+    assert 'href="/history"' not in nav
+    assert 'href="/incidents"' in nav
+    closed = client.get("/incidents?status=CLOSED")
     assert closed.status_code == 200
     assert "INC-" in closed.text
-    by_asset = client.get("/history?asset=forge-demo-01")
+    headers = closed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
+    assert headers.index(">Hostname<") < headers.index(">Name<")
+    assert "Ack" in headers
+    assert "Resolved by" in headers
+    assert "ack-dot" in closed.text
+    by_asset = client.get("/incidents?q=forge-demo-01")
     assert by_asset.status_code == 200
     assert "forge-demo-01" in by_asset.text
     db.close()
 
 
-def test_history_default_window_excludes_old_rows():
+def test_incidents_default_is_not_a_forced_90_day_archive():
     db = _db()
     old = Incident(
         number=next_incident_number(db),
@@ -49,20 +63,33 @@ def test_history_default_window_excludes_old_rows():
         fingerprint="old-disk:forge-demo-01",
         started_at=datetime.now(timezone.utc) - timedelta(days=120),
         ended_at=datetime.now(timezone.utc) - timedelta(days=119),
-        summary="Outside the 90-day default.",
+        summary="Outside a 90-day window.",
+        resolved_by="ops@forgesre.local",
     )
     db.add(old)
     db.commit()
     number = old.number
     client = _client(db)
-    default = client.get("/history")
-    assert number not in default.text
-    wide = client.get("/history?days=200")
-    assert number in wide.text
+    bare = client.get("/history", follow_redirects=False)
+    assert bare.headers["location"] == "/incidents"
+    default = client.get("/incidents?q=Ancient+disk")
+    assert number in default.text
+    assert "ops@forgesre.local" in default.text
+    form = default.text.split('class="list-filters incidents-filters"', 1)[1].split("</form>", 1)[0]
+    assert 'name="days"' not in form
+    assert 'name="window"' in form and 'name="q"' in form
+    narrow = client.get("/history?days=90", follow_redirects=False)
+    assert narrow.headers["location"] == "/incidents?days=90"
+    hidden = client.get("/incidents?q=Ancient+disk&days=90")
+    assert number not in hidden.text
+    wide = client.get("/history?days=200&q=Ancient+disk", follow_redirects=False)
+    assert "days=200" in wide.headers["location"] and "q=Ancient" in wide.headers["location"]
+    shown = client.get(wide.headers["location"])
+    assert number in shown.text
     db.close()
 
 
-def test_viewer_can_open_history():
+def test_viewer_can_open_incidents_and_history_redirects():
     db = _db()
     email = "history-viewer@forgesre.local"
     if db.query(User).filter_by(email=email).first() is None:
@@ -76,9 +103,15 @@ def test_viewer_can_open_history():
         )
         db.commit()
     client = _client(db, email=email)
-    page = client.get("/history")
+    bounced = client.get("/history?page=2", follow_redirects=False)
+    assert bounced.status_code == 302
+    assert bounced.headers["location"] == "/incidents?page=2"
+    page = client.get("/incidents")
     assert page.status_code == 200
-    assert "History" in page.text
+    nav = page.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    assert ">History<" not in nav
+    assert "Last 1 hour" in page.text
+    assert "Not acknowledged" in page.text
     db.close()
 
 
@@ -282,10 +315,12 @@ def test_send_incident_report_to_address_book_email():
     assert "Closed" in listed.text
     assert "Open/firing" not in listed.text
     headers = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert "Incident" in headers
+    assert headers.index(">Hostname<") < headers.index(">Name<")
     assert "Severity" in headers
     assert "Status" in headers
     assert "When" in headers
+    assert "Ack" in headers
+    assert "Resolved by" in headers
     assert "Reported to" not in headers
     tbody = listed.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
     assert "ops@dc.local" not in tbody

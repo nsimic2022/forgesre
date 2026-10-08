@@ -52,13 +52,20 @@ def test_incidents_list_columns_short_id_and_full_href():
     listed = client.get("/incidents")
     assert listed.status_code == 200
     headers = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert ">Incident<" in headers
+    assert headers.index(">Hostname<") < headers.index(">Name<")
+    assert ">Problem<" not in headers
     assert ">Severity<" in headers
     assert ">Status<" in headers
     assert ">When<" in headers
+    assert "Ack" in headers
+    assert "Resolved by" in headers
     assert "Reported to" not in headers
     assert ">Asset<" not in headers
     assert ">Started<" not in headers
+    assert "ack-dot" in listed.text
+    assert 'data-when="stamp"' in listed.text
+    assert 'name="q"' in listed.text
+    assert "Last 24 hours" in listed.text
     assert f'href="/incidents/{number}"' in listed.text
     assert f'title="{number}"' in listed.text
     assert f">#{seq}<" in listed.text
@@ -74,10 +81,14 @@ def test_incidents_list_columns_short_id_and_full_href():
     recent = home.text.split("Recent incidents", 1)[1]
     assert f'href="/incidents/{number}"' in recent
     assert f">#{seq}<" in recent
-    history = client.get("/history")
-    assert history.status_code == 200
-    assert f'href="/incidents/{number}"' in history.text
-    assert f">#{seq}<" in history.text
+    history = client.get("/history", follow_redirects=False)
+    assert history.status_code == 302
+    assert history.headers["location"] == "/incidents"
+    landed = client.get("/history")
+    assert f'href="/incidents/{number}"' in landed.text
+    assert f">#{seq}<" in landed.text
+    nav = landed.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    assert ">History<" not in nav
     db.close()
 
 

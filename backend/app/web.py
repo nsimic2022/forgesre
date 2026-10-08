@@ -124,7 +124,6 @@ from app.history import (
     add_note,
     apply_status_fields,
     audit_for,
-    clamp_days,
     dashboard_incident_tiles,
     incident_heat,
     incident_list_filters,
@@ -1582,7 +1581,7 @@ def asset_delete(
     unlinked = result.get("unlinked_incidents") or 0
     notice = f"Removed {result['deleted']}."
     if unlinked:
-        notice += f" {unlinked} incident(s) stay in History without this host."
+        notice += f" {unlinked} incident(s) stay on Incidents without this host."
     return RedirectResponse(f"/assets?notice={quote(notice)}", status_code=302)
 
 
@@ -1600,6 +1599,7 @@ def incidents_page(
     started_to: str = Query("", alias="to"),
     site: str = "",
     customer: str = "",
+    q: str = "",
     page: str = "1",
 ):
     filters = incident_list_filters(
@@ -1612,6 +1612,7 @@ def incidents_page(
         started_to=started_to,
         site=site,
         customer=customer,
+        q=q,
     )
     size = per_page(request)
     rows, total = list_history(db, **filters["query"], limit=size, page=page)
@@ -1631,47 +1632,61 @@ def incidents_page(
         date_to=filters["date_to"],
         site=filters["site"],
         customer=filters["customer"],
+        q=filters["q"],
         filter_options=asset_filter_options(db.query(Asset).all()),
         pager=pager,
         nav_qs=filters["qs"],
     )
 
 
-@router.get("/history", response_class=HTMLResponse)
-def history_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(login_required),
-    days: str = "90",
-    status: str = "",
-    asset: str = "",
-    number: str = "",
-    page: str = "1",
-):
-    days_n = clamp_days(days)
-    size = per_page(request)
-    rows, total = list_history(
-        db,
-        days=days_n,
-        status=status,
-        asset=asset,
-        number=number,
-        limit=size,
-        page=page,
-    )
-    pager = pager_state(page, total=total, size=size)
-    return render(
-        request,
-        "history.html",
-        user,
-        incidents=rows,
-        days=days_n,
-        status=status,
-        asset=asset,
-        number=number,
-        pager=pager,
-        reported_to=reported_to_for(db, rows),
-    )
+_HISTORY_QUERY_KEYS = (
+    "status",
+    "severity",
+    "open",
+    "days",
+    "window",
+    "from",
+    "to",
+    "site",
+    "customer",
+    "page",
+    "per_page",
+    "q",
+)
+
+
+def history_redirect_target(request: Request) -> str:
+    """Old History URL. The list is Incidents; keep filters that page understands.
+
+    History's asset / number search becomes Incidents ``q`` when ``q`` is empty.
+    A bare ``/history`` does not force the old 90-day window.
+    """
+    kept: list[tuple[str, str]] = []
+    asset = ""
+    number = ""
+    for key, value in request.query_params.multi_items():
+        text = str(value or "")
+        if key == "asset":
+            asset = text.strip()
+            continue
+        if key == "number":
+            number = text.strip()
+            continue
+        if key in _HISTORY_QUERY_KEYS and text.strip():
+            kept.append((key, text))
+    if not any(key == "q" for key, _value in kept):
+        synthesized = number or asset
+        if synthesized:
+            kept.append(("q", synthesized))
+    qs = urlencode(kept)
+    return f"/incidents?{qs}" if qs else "/incidents"
+
+
+@router.get("/history")
+def history_page(request: Request, user: User = Depends(login_required)):
+    """Old History page. The incident list is Incidents."""
+    del user
+    return RedirectResponse(history_redirect_target(request), status_code=302)
 
 
 @router.get("/incidents/{number}", response_class=HTMLResponse)
@@ -1707,6 +1722,7 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
         started_to=q.get("to", ""),
         site=q.get("site", ""),
         customer=q.get("customer", ""),
+        q=q.get("q", ""),
     )
     evidence, evidence_pager = paginate(
         [evidence_row(ev) for ev in sorted(item.evidence, key=lambda ev: ev.id or 0)] if can(user, "read_evidence") else [],

@@ -215,10 +215,12 @@ def incident_query(
     unacked_only: bool = False,
     site: str = "",
     customer: str = "",
+    q: str = "",
 ):
     """Single filter used by the Incidents list and the Dashboard tiles (tile count = rows behind the click).
 
     ``since`` / ``until`` (until is exclusive) win over ``days``. Presets and custom ranges set those.
+    ``q`` matches the incident number, title, or the host's id / hostname / IP.
     """
     query = db.query(Incident)
     if (site or "").strip() or (customer or "").strip():
@@ -240,6 +242,23 @@ def incident_query(
     status = (status or "").strip().upper()
     if status:
         query = query.filter(Incident.status == status)
+    needle_text = " ".join((q or "").split())
+    if needle_text:
+        needle = f"%{needle_text}%"
+        query = query.filter(
+            or_(
+                Incident.number.ilike(needle),
+                Incident.title.ilike(needle),
+                exists().where(
+                    Asset.id == Incident.asset_id,
+                    or_(
+                        Asset.asset_id.ilike(needle),
+                        Asset.hostname.ilike(needle),
+                        Asset.ip.ilike(needle),
+                    ),
+                ),
+            )
+        )
     return query
 
 
@@ -257,10 +276,12 @@ def incident_list_filters(
     started_to: str = "",
     site: str = "",
     customer: str = "",
+    q: str = "",
 ) -> dict[str, Any]:
     """The /incidents filter from its query keys: incident_query kwargs, form state, and a canonical query string (empty for the default list).
 
     Site / Customer are the asset extras (Site / DC / room, Customer / domain) of the incident's host.
+    ``q`` is the free-text search (host, problem title, or incident number).
     """
     status_raw = (status or "").strip()
     status_key = status_raw.upper()
@@ -304,6 +325,7 @@ def incident_list_filters(
             until = local_day_start(to_date + timedelta(days=1))
     site_value = " ".join((site or "").split())
     customer_value = " ".join((customer or "").split())
+    q_value = " ".join((q or "").split())
     keep: list[tuple[str, str]] = []
     if status_group != "all":
         keep.append(("status", status_group))
@@ -323,6 +345,8 @@ def incident_list_filters(
         keep.append(("site", site_value))
     if customer_value:
         keep.append(("customer", customer_value))
+    if q_value:
+        keep.append(("q", q_value))
     return {
         "query": {
             "days": days_n,
@@ -334,6 +358,7 @@ def incident_list_filters(
             "unacked_only": unacked_only,
             "site": site_value,
             "customer": customer_value,
+            "q": q_value,
         },
         "status_group": status_group,
         "severity_group": "critical" if critical_only else "",
@@ -343,6 +368,7 @@ def incident_list_filters(
         "date_to": to_date.isoformat() if active_window == "custom" and to_date else "",
         "site": site_value,
         "customer": customer_value,
+        "q": q_value,
         "qs": urlencode(keep),
     }
 
@@ -415,6 +441,7 @@ def list_history(
     customer: str = "",
     since: datetime | None = None,
     until: datetime | None = None,
+    q: str = "",
 ) -> tuple[list[Incident], int]:
     limit = max(1, min(int(limit or LIST_LIMIT), 500))
     query = incident_query(
@@ -429,6 +456,7 @@ def list_history(
         unacked_only=unacked_only,
         site=site,
         customer=customer,
+        q=q,
     )
     number = (number or "").strip()
     if number:

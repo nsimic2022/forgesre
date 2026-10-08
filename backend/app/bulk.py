@@ -61,7 +61,6 @@ _NEXT = {
     "/",
     "/#journal",
     "/incidents",
-    "/history",
     "/assets",
     "/discovery",
     "/playrules",

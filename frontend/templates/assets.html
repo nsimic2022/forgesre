@@ -129,7 +129,7 @@
         <a class="button" href="/assets?clone={{ asset.asset_id }}{% if q %}&q={{ q }}{% endif %}{{ filter_tail }}{{ pager_keep(pager) }}">Clone</a>
         <a class="button" href="/assets/{{ asset.asset_id }}/verify">Verify</a>
         {% if not delete_blocked(asset) %}
-        <form method="post" action="/assets/{{ asset.asset_id }}/delete" onsubmit="return confirm('Remove {{ asset.hostname }}? Prometheus will stop scraping it. Incidents stay in History without this host. Core is unchanged.');">
+        <form method="post" action="/assets/{{ asset.asset_id }}/delete" onsubmit="return confirm('Remove {{ asset.hostname }}? Prometheus will stop scraping it. Incidents stay on the Incidents list without this host. Core is unchanged.');">
           <button type="submit" class="danger">Remove</button>
         </form>
         {% endif %}

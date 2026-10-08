@@ -1,10 +1,8 @@
 {% set detail_href = "/incidents/" ~ item.number ~ ("?" ~ nav_qs if nav_qs else "") %}
-<td class="inc-cell">
+<td class="inc-cell col-name">
   <a class="inc-title sev-{{ severity_pill(item.severity) }}" href="{{ detail_href }}"{% if item.title %} title="{{ item.title }}"{% endif %} tabindex="-1" data-list-open>{{ item.title or item.number }}</a>
   <div class="inc-meta">
     <a class="{{ incident_tone(item.status, item.severity) }}" href="{{ detail_href }}" title="{{ item.number }}">{{ incident_short_label(item.number) }}</a>
-    {% set host = incident_host(item) %}
-    {% if host %}<span class="inc-host">· {{ host }}</span>{% endif %}
     <span class="src-pill src-{{ incident_source(item) }}" data-source="{{ incident_source(item) }}" title="Alert source">{{ incident_source_label(item) }}</span>
     {% if is_demo_incident(item) %}<span class="inc-demo" title="Lab demo incident">· DEMO</span>{% endif %}
   </div>

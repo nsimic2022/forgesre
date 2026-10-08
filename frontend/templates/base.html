@@ -15,7 +15,7 @@
       document.documentElement.setAttribute("data-theme", theme);
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v08-21">
+  <link rel="stylesheet" href="/static/app.css?v=v08-22">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -35,7 +35,6 @@
     <a href="/discovery" class="{% if request.url.path.startswith('/discovery') %}active{% endif %}">Discovery</a>
     {% endif %}
     <a href="/incidents" class="{% if request.url.path.startswith('/incidents') %}active{% endif %}">Incidents</a>
-    <a href="/history" class="{% if request.url.path.startswith('/history') %}active{% endif %}">History</a>
     {% if can('read_play') %}
     <a href="/playrules" class="{% if request.url.path.startswith('/playrules') %}active{% endif %}">Playrules</a>
     <a href="/playbooks" class="{% if request.url.path.startswith('/playbooks') %}active{% endif %}">Playbooks</a>
@@ -76,6 +75,6 @@
     </div>
   </main>
   {% endif %}
-  <script src="/static/app.js?v=v08-21"></script>
+  <script src="/static/app.js?v=v08-22"></script>
 </body>
 </html>
