@@ -12,6 +12,8 @@ Short version for people who have done this before:
 4. Zabbix: media type **ForgeSRE** (Webhook, script below) → media on `forgesre-ro` → trigger action with problem + recovery operations.
 5. Test the webhook (HTTP 200), then add playrules whose **alertname** is the exact Zabbix trigger name.
 
+Never done this? Follow the numbered [end-to-end checklist](#18-end-to-end-operator-checklist) after the click-paths below.
+
 ---
 
 ## Contents
@@ -30,6 +32,11 @@ Short version for people who have done this before:
 12. [Optional: automatic host import](#12-optional-automatic-host-import)
 13. [Troubleshooting](#13-troubleshooting)
 14. [Reference: payload and mapping](#14-reference-payload-and-mapping)
+15. [Standard alarms vs Zabbix incidents](#15-standard-alarms-vs-zabbix-incidents)
+16. [Acknowledge, resolve, close — no write-back](#16-acknowledge-resolve-close--no-write-back)
+17. [CLI commands that matter](#17-cli-commands-that-matter)
+18. [End-to-end operator checklist](#18-end-to-end-operator-checklist)
+19. [After git pull](#19-after-git-pull)
 
 ---
 
@@ -48,7 +55,7 @@ Short version for people who have done this before:
 
 **Does not:**
 
-- **No write-back.** ForgeSRE only calls `apiinfo.version`, `host.get`, `problem.get`, `item.get`, `trend.get`. The client refuses any other method (`*.create`, `*.update`, `*.delete`, `event.acknowledge`) before a request is built.
+- **No write-back.** ForgeSRE never writes back to Zabbix. It only calls `apiinfo.version`, `host.get`, `problem.get`, `item.get`, `trend.get`. The client refuses any other method (`*.create`, `*.update`, `*.delete`, `event.acknowledge`) before a request is built.
 - **No acknowledge, close, comment, or severity change in Zabbix.** Acknowledging or resolving an incident in ForgeSRE stays in ForgeSRE. The Zabbix problem stays as it is until Zabbix itself recovers it.
 - No host, group, template, item, trigger, user, media type, or action is created or changed in Zabbix. You create those by hand (sections 3, 7, 8).
 - No Zabbix iframe or embedded Zabbix UI. The Health page only links to `ZABBIX_URL`.
@@ -56,12 +63,62 @@ Short version for people who have done this before:
 - No `./forgesre zabbix` CLI command. Everything is the secrets file, `./forgesre update`, and the web UI.
 - No SNMP settings are needed for Zabbix. `./forgesre snmp-auths` and the asset SNMP fields are for ForgeSRE's own snmp_exporter, not for Zabbix.
 - Problems are not pulled. Incidents are opened **only** by the webhook. The 3-minute `problem.get` poll can only resolve an incident whose recovery webhook was lost.
+- **Grafana is not in the alarm path.** Zabbix problems never go through Grafana. Alarm path for Prometheus stays exporter → Prometheus → Alertmanager webhook → Core. Zabbix is a **second ingest path** (JSON-RPC read + webhook). Open Grafana from System Health for extra graphs only.
+- Asset **Standard alarms** (CPU / memory / disk / up checkboxes) only mute bundled **Prometheus** alerts. They do not mute Zabbix triggers ([section 15](#15-standard-alarms-vs-zabbix-incidents)).
+- There is **no Administration form** to paste the Zabbix URL or tokens. `/admin` is users, backup, and CLI cheat sheet. Tokens go in `secrets/secrets.env` ([section 4](#4-forgesre-secrets-and-update)).
 
 If Zabbix is down: each API call gives up after 2–5 s, the **Zabbix** Health cube turns **yellow** (never red), Console gets **one** `zabbix` / `health` line, and ForgeSRE stops calling Zabbix for 2 minutes instead of retrying. Dashboard, incidents, Prometheus alerts, and mail keep working.
 
 ---
 
 ## 2. Prerequisites
+
+Two machines: the **Zabbix server you already run**, and the **ForgeSRE appliance** (one Ubuntu VM, Docker Compose, **host networking**).
+
+### 2.1 Appliance is up
+
+On the Forge VM, before touching Zabbix:
+
+```bash
+cd ~/forgesre   # or wherever the clone lives
+./forgesre doctor
+./forgesre status
+```
+
+| Check | What “ready” looks like |
+|---|---|
+| `./forgesre doctor` / **System Health** (`/health-ui`) | **Core** green. Postgres, Prometheus, Alertmanager green (or at least not red). Grafana yellow is graphs-only — **not** the alarm path. The **Zabbix** cube is **grey Not configured** until section 4. |
+| `curl -fsS http://127.0.0.1:8080/api/v1/health` | HTTP 200 (use the port in `.env` `FORGESRE_HTTP_PORT` if you changed it). |
+| Login | `http://<FORGE-IP>:8080` with the admin from `installation-report.md` / `secrets/secrets.env`. |
+
+Day-2 on a live VM is `git pull origin main && ./forgesre update`. **Never** `./install.sh` again — it regenerates secrets.
+
+### 2.2 Ports and host networking
+
+Core runs with `network_mode: host` and listens on **`0.0.0.0:${FORGESRE_HTTP_PORT:-8080}`** (see `.env` and `docker-compose.yml`). There is no Docker-published port and no container IP to aim at. The Zabbix **server process** (the one that runs media-type webhooks — `zabbix_server`, not the nginx/Apache frontend) must reach **the Forge VM's management IP** on that TCP port.
+
+| Direction | Port | Why |
+|---|---|---|
+| Browser / operator → Forge | TCP **8080** (`FORGESRE_HTTP_PORT` in `.env`) | UI + API, including `POST /api/v1/webhooks/zabbix` |
+| Zabbix **server** → Forge | same TCP **8080** | Webhook. `localhost` in the media type is the Zabbix box, not Forge. |
+| Forge → Zabbix **frontend** | TCP **443** (or 80) | JSON-RPC `host.get` / `item.get` / `trend.get` / `problem.get` at `…/api_jsonrpc.php` |
+| Grafana `:3000` | not used | Not in the Zabbix or Prometheus alarm path |
+
+If you put HTTPS in front of Core (`./forgesre tls`), the media-type URL is that HTTPS URL, not `:8080`. If `FORGESRE_HTTP_PORT` is not `8080`, every `8080` in this guide is that value.
+
+Firewall on the Forge VM (example): `sudo ufw allow 8080/tcp` from the Zabbix server's address. Prometheus (`:9090`) and Alertmanager (`:9093`) stay on `127.0.0.1` — Zabbix does not call them.
+
+### 2.3 Two files on the Forge VM (do not mix them)
+
+| File | What belongs there | Zabbix keys |
+|---|---|---|
+| **`secrets/secrets.env`** | Tokens, passwords, `SECRET_KEY`. Template: `secrets/secrets.example.env` under `# --- Zabbix ---`. Core reads this via `FORGESRE_SECRETS_FILE`. | `ZABBIX_URL`, `ZABBIX_API_TOKEN`, `ZABBIX_WEBHOOK_TOKEN` |
+| **`.env`** (repo root) | Ports, paths, compose. Template: `.env.example`. | **None.** `FORGESRE_HTTP_PORT=8080` is the Core listen port the webhook hits. Do not put `ZABBIX_*` here. |
+| **`config/forgesre.yml`** | Non-secret YAML. Template: `config/forgesre.example.yml` → `inventory.zabbix`. | Optional `url` (overrides `ZABBIX_URL`), `auto_sync`, `timeout_seconds`, `enabled: false`. **Never** the API token or webhook token. |
+
+Do not merge the two env files. Do not commit the live copies.
+
+### 2.4 Other requirements
 
 | Item | Requirement |
 |---|---|
@@ -142,9 +199,48 @@ The host groups chosen here are the only thing that decides **which hosts are im
 6. Click **Add**.
 7. Copy the **Auth token** now. Zabbix shows it **once**. Click **Close**.
 
+### 3.4 Hosts with the management IPs ForgeSRE will match
+
+ForgeSRE links a Zabbix host to an asset by **Zabbix host ID**, then **IP**, then **hostname / asset ID**. The IP it uses is the **main interface** (Zabbix agent first, then any other interface). Loopback (`127.x`, `::1`) is ignored for matching.
+
+On the Zabbix server:
+
+1. **Data collection → Hosts** (Zabbix 6.4 / 7.0) or **Configuration → Hosts** (6.0 / 5.4).
+2. Every host you want in ForgeSRE must exist, be **Enabled**, and sit in a host group that `ForgeSRE read-only` can **Read** (step 3.1).
+3. Open the host → **Interfaces**:
+   - Prefer an **Agent** interface whose **IP address** is the same management IP you already have (or will type) on the ForgeSRE asset.
+   - **Connect to:** IP. If the host is DNS-only (`Connect to: DNS` and IP empty), import still works but the asset **IP** stays empty until you edit it; the webhook can still match by `{HOST.HOST}` / `{HOST.ID}` after a sync.
+   - Do not use `127.0.0.1` unless this really is the Zabbix server itself — and then leave `Zabbix servers` off the read-only group ([troubleshooting](#duplicate-or-odd-hosts)).
+4. **Templates** tab: attach the OS template you already use (next step) if you want Dashboard graphs from Zabbix trends.
+
+Existing ForgeSRE assets (NetBox, Discovery, manual) are **linked**, not cloned, when the IP or hostname matches. Put the same IP on both sides **before** the first **Sync hosts**.
+
+### 3.5 Templates / items ForgeSRE graphs actually read
+
+Dashboard **Host metrics** and the graphs on an incident / asset page use Zabbix **only when Prometheus has no samples** for that asset ([section 11](#111-dashboard-and-incident-graphs)). The API calls are `item.get` then `trend.get` (hourly average, last 24 h). ForgeSRE looks for these item keys (first match wins):
+
+| Graph | Item key (Zabbix) |
+|---|---|
+| CPU | `system.cpu.util` (or `system.cpu.util[…]` except keys containing `idle`) |
+| Memory | `vm.memory.utilization` or `vm.memory.util`, else `vm.memory.size[pused…]` |
+| Disk | `vfs.fs…pused` preferring `/` or `C:` |
+
+Those keys ship with Zabbix’s stock agent templates. Names vary by version:
+
+| Typical template | Zabbix 6.4 / 7.x name examples |
+|---|---|
+| Linux | **Linux by Zabbix agent** / **Linux by Zabbix agent active** (older: *Template OS Linux by Zabbix agent*) |
+| Windows | **Windows by Zabbix agent** / **Windows by Zabbix agent active** |
+
+Click path: host → **Templates** → **Select** → attach the OS template → **Update**. Confirm under **Data collection → Items** (6.0: **Configuration → Hosts → Items**) that the keys above exist, are **Enabled**, numeric, and that **Trends** are stored (Zabbix default). Trends are hourly — a brand-new host needs **about an hour** before the graph has points.
+
+SNMP-only / agentless hosts without those keys get **no** Zabbix CPU/memory/disk graphs. That is expected. You can still get incidents from their triggers.
+
 ---
 
 ## 4. ForgeSRE: secrets and update
+
+**There is no Admin UI field for the Zabbix URL or tokens.** Do not look under **Administration** (`/admin`) — that page is users, platform backup, and a CLI cheat sheet. Paste the three keys in **`secrets/secrets.env`** (plaintext). Optional non-secret URL override goes in **`config/forgesre.yml`**. Core picks them up at process start, so you must run `./forgesre update` (not `./forgesre restart`) the first time.
 
 On the ForgeSRE VM, in the repo directory:
 
@@ -170,6 +266,8 @@ On the ForgeSRE VM, in the repo directory:
 
    `ZABBIX_URL` + `ZABBIX_API_TOKEN` without `ZABBIX_WEBHOOK_TOKEN` gives you host import and graphs but no incidents.
 
+   Do **not** put these keys in `.env`. `.env` already has `FORGESRE_HTTP_PORT` (Core listen port, default `8080`) — that is the port in the webhook URL, not a Zabbix setting. `ALERTMANAGER_WEBHOOK_TOKEN` (Prometheus path) is a **different** secret; the Zabbix media type must not send it.
+
 3. Apply:
 
    ```bash
@@ -188,7 +286,9 @@ On the ForgeSRE VM, in the repo directory:
    | yellow | **API error** | Zabbix answered with an error: wrong / expired token, wrong URL, no permission. |
    | grey | **Not configured** | `ZABBIX_URL` or `ZABBIX_API_TOKEN` is empty (or `inventory.zabbix.enabled: false`). |
 
-   The cube's **GUI** link opens `ZABBIX_URL` in a new tab.
+   The cube's **GUI** link opens `ZABBIX_URL` in a new tab. A Zabbix timeout or outage is **yellow, never red** — Core keeps serving the UI.
+
+   The **Discovery** Zabbix chip uses the same probe but a slightly different colour for failures: **grey** on that card for Unreachable / API error, **yellow** for No hosts visible. Trust the **Health** cube for “is Zabbix hurting us?” (it is not: yellow = optional source). **Sync hosts** always talks to Zabbix immediately and prints the real error — use it when the cube still shows a cached failure.
 
 ---
 
@@ -287,6 +387,18 @@ The Dashboard tile **No owner email** and the Assets pill **No owner email** lis
 
      The short alias `http://<FORGE-IP>:8080/webhooks/zabbix` also works. If you renamed severities in Zabbix (Administration → General → Trigger displaying options), use `{EVENT.NSEVERITY}` for `event_severity` — ForgeSRE maps the numbers 0–5 as well as the default names.
 
+     **Which macros must be non-empty** (after Zabbix expands them). ForgeSRE treats a leftover `{MACRO}` as empty, same as a blank:
+
+     | Must be non-empty | Macros | Else |
+     |---|---|---|
+     | Trigger / event **name** | `{TRIGGER.NAME}` **or** `{EVENT.NAME}` | HTTP **422** `missing trigger_name ({TRIGGER.NAME}) or event_name ({EVENT.NAME})` |
+     | Host | `{HOST.HOST}` **or** `{HOST.IP}` | HTTP **422** `missing host ({HOST.HOST}) or host_ip ({HOST.IP})` |
+     | Problem vs recovery | `{EVENT.VALUE}` (`1` / `0`) | Without it, `{EVENT.STATUS}` `RESOLVED` / `OK` still recovers; a missing both defaults to a **problem** |
+     | Stable incident key | `{TRIGGER.ID}` + `{HOST.HOST}` | Recovery may open a second incident instead of closing the first. Fingerprint is `zabbix:{TRIGGER.ID}:{HOST.HOST}` |
+     | Asset link | `{HOST.ID}` (then host, then IP) | Incident opens with **asset unknown** until you sync |
+
+     The **Test** button in Zabbix does **not** expand macros. Leaving the values as `{TRIGGER.NAME}` is the usual **422** (token is fine — a bad token is **401** first). Overwrite those four fields for a 200; see [section 9.2](#92-from-the-zabbix-ui-media-type-test).
+
    - **Script:** click the pencil, paste exactly this, **Apply**:
 
      ```javascript
@@ -337,10 +449,12 @@ The Dashboard tile **No owner email** and the Assets pill **No owner email** lis
    - **Conditions:** optional. Examples: *Host group equals Production*, *Trigger severity is greater than or equals Warning*. No condition = every problem on hosts `forgesre-ro` can read.
    - **Enabled:** checked.
 3. **Operations** tab:
-   - **Operations → Add:** **Send to users** → `forgesre-ro`; **Send only to** → `ForgeSRE`. Step `1 - 1`. **Add**.
-   - **Recovery operations → Add:** **Send to users** → `forgesre-ro`, **Send only to** → `ForgeSRE` (or operation *Notify all involved*). **Add**.
-   - **Update operations:** leave empty. ForgeSRE ignores acknowledges and comments made in Zabbix.
+   - **Operations → Add:** **Send to users** → `forgesre-ro`; **Send only to** → `ForgeSRE`. Step duration **1 – 1** (first step only, immediately). **Add**.
+   - **Recovery operations → Add:** **Send to users** → `forgesre-ro`, **Send only to** → `ForgeSRE` (or operation *Notify all involved*). **Add**. Recovery is what sets the ForgeSRE incident to **RESOLVED**.
+   - **Update operations:** leave empty. ForgeSRE ignores acknowledges and comments made in Zabbix (no write-back the other way either).
 4. Click **Add**.
+
+Zabbix 7.x labels the same tabs **Operations** / **Recovery operations** / **Update operations**. 6.0 uses **Configuration → Actions**. The operation type is **Send message** / **Send to users** depending on version — pick the ForgeSRE media, not Email.
 
 Without the **Recovery operation**, incidents are still resolved by the backup `problem.get` poll (every 3 minutes, incidents older than 2 minutes), but later and less reliably. Always add it.
 
@@ -408,9 +522,21 @@ A playrule attaches a playbook, severity, and escalation policy to an incident b
 4. **Alertname:** paste the exact trigger name, e.g. `High CPU utilization (over 90% for 5m)`. Matching is exact and case-insensitive; no wildcards.
 5. Severity, **Playbook**, **Escalation policy** as you like → **Save**.
 
-The playrule list shows **No Prometheus rule** next to Zabbix alertnames. That pill only says that `monitoring/alerts.yml` has no rule with that name; the playrule still matches Zabbix incidents. A trigger name that contains a host name (`Load on app-01`) needs one playrule per host — prefer trigger names without host macros if you want one rule for all hosts.
+The playrule list shows **No Prometheus rule** next to Zabbix alertnames, and the form preview says *none in alerts.yml for this alertname* / *Never matches until alerts.yml has this alertname*. That pill is leftover Prometheus wording. **It is wrong for Zabbix:** matching is **Alertname after ingest**, not PromQL, and Grafana is not involved. A Zabbix playrule with no row in `monitoring/alerts.yml` still attaches its playbook and escalation to Zabbix incidents.
 
-Severity of the incident comes from Zabbix (section 14), not from the playrule, when Zabbix sends one.
+A trigger name that contains a host name (`Load on app-01`) needs one playrule per host — prefer trigger names without host macros if you want one rule for all hosts.
+
+**Name** vs **Alertname** on the form:
+
+| Field | What it is | What it is not |
+|---|---|---|
+| **Name** | Unique label in the list (`zbx-high-cpu`) | Not matched on ingest |
+| **Alertname** | The only match key. Must equal the Zabbix trigger/event name the webhook sent | Not PromQL. Not Grafana. Not the playrule Name |
+| Metric / operator / value | Operator note, stored, **never evaluated** | Not a Zabbix trigger expression |
+
+**Client playrules** on the asset (Add/Edit, right column, or the asset page card) are tried first, in saved order. The first enabled one whose Alertname equals this trigger wins. Empty list → the global Playrules list (first enabled by id).
+
+Severity of the incident comes from Zabbix (section 14), not from the playrule, when Zabbix sends one. The playrule severity is the fallback only when `event_severity` is missing.
 
 ---
 
@@ -423,9 +549,29 @@ Severity of the incident comes from Zabbix (section 14), not from the playrule, 
 | **Discovery** (`/discovery`) | Zabbix card: status, URL, auto / manual, webhook on / off, last sync or last error, **Sync hosts**. |
 | **Incidents** (`/incidents`) and the incident page | **Zabbix** pill next to the incident (Prometheus incidents show **Prometheus**). Same lifecycle: playrule, playbook, Who to call, escalation, ForgeRCA. |
 | Escalation / incident mail | **Zabbix** source in the mail header. |
-| **Host metrics** (incident page, Dashboard) | For an asset with a Zabbix host ID and **no Prometheus samples**: CPU / memory / disk for the last 24 h from `trend.get` (items `system.cpu.util`, `vm.memory.utilization`, `vfs.fs…pused`), caption *Zabbix trends (hourly average, last 24 h). No Prometheus samples for this host.* Scraped assets keep their Prometheus graphs. |
-| **System Health** (`/health-ui`) | Cube **Zabbix**: green / yellow / grey, GUI link to `ZABBIX_URL`. |
-| **Console** (`/journal`) | Module `zabbix`: `sync`, `health` (down / back), `poll` (incident resolved by the backup poll). Incidents: `incident` / `create` with `source=zabbix`. |
+| **Host metrics** (incident page, Dashboard) | See [§11.1](#111-dashboard-and-incident-graphs). |
+| **System Health** (`/health-ui`) | Cube **Zabbix**: green / yellow / grey, GUI link to `ZABBIX_URL`. Timeout / outage = **yellow**, never red. |
+| **Console** (`/journal`) | Module `zabbix`: `sync`, `health` (down / back), `poll` (incident resolved by the backup poll). Incidents: `incident` / `create` with `source=zabbix`. Same filter from the CLI: `./forgesre journal zabbix`. |
+
+### 11.1 Dashboard and incident graphs
+
+ForgeSRE draws CPU / memory / disk on **Dashboard → Host metrics** (click a recent-incident row) and on the incident / asset page. Grafana is **not** this path.
+
+Order of sources (per asset, every ~30 s refresh, Zabbix trends cached 5 minutes):
+
+1. **Prometheus `query_range`** — used when the asset has a scrape address and Prometheus already has samples (`up` or a CPU/memory/disk series). This is the bundled exporter path (node_exporter `:9100`, windows_exporter `:9182`, snmp_exporter).
+2. **Zabbix `item.get` + `trend.get` fallback** — used only when the asset has a **Zabbix host ID** **and** Prometheus has **no** samples. Caption: *Zabbix trends (hourly average, last 24 h). No Prometheus samples for this host.*
+3. Empty / *No Zabbix CPU / memory / disk items on this host.* — no matching keys (section 3.5), items disabled, or trends not stored yet.
+4. *Zabbix unavailable — …* — API call failed; see the Health cube.
+
+What you must have for Zabbix graphs to appear:
+
+- `ZABBIX_URL` + `ZABBIX_API_TOKEN` set, Health cube not “Not configured”.
+- The asset linked (`zabbix_hostid` on the asset page). Run **Sync hosts** if the pill is missing.
+- **Scrape address empty** (or Prometheus not yet collecting). The moment Prometheus has samples, graphs **switch to Prometheus** and stay there.
+- Stock agent items from section 3.5, with at least an hour of trends.
+
+Zabbix-only assets (import default) use (2). Dual-homed assets (exporter + Zabbix) use (1). You do not configure PromQL for Zabbix graphs.
 
 ---
 
@@ -496,7 +642,22 @@ The host has no Zabbix agent interface (SNMP-only, or agentless), or Zabbix has 
 
 ### Playrule does not match
 
-The **Alertname** must equal the trigger name exactly as it arrives (expanded macros, same spaces and punctuation; case does not matter). Open the incident → the title and timeline show the name ForgeSRE received.
+The **Alertname** must equal the trigger name exactly as it arrives (expanded macros, same spaces and punctuation; case does not matter). Open the incident → the title and timeline show the name ForgeSRE received. The list pill **No Prometheus rule** does **not** mean the playrule is dead — it only means `alerts.yml` has no PromQL with that name.
+
+### TLS / wrong path / connection reset
+
+- `ZABBIX_URL` with a private CA: Core (host network) uses the VM's trust store. Install the CA on Ubuntu (`/usr/local/share/ca-certificates` + `update-ca-certificates`) or use HTTP on the management LAN.
+- Certificate hostname must match the URL. A `https://10.x` URL with a name-only cert fails — use the name in `ZABBIX_URL`.
+- Media type `forge_url` must be the Forge **Core** URL (`/api/v1/webhooks/zabbix` or `/webhooks/zabbix`), not Grafana `:3000`, not Prometheus `:9090`, not `/api/v1/webhooks/alertmanager`.
+- HTTPS on Core: `./forgesre tls` then put that origin in `forge_url`. HTTP `:8080` will fail if you redirected everything to TLS.
+
+### Host IP mismatch so the asset is not linked
+
+Sync matches **Zabbix host ID**, then **IP** (not loopback), then hostname / asset ID. Webhook matches **host_id**, then `host_host` as asset ID / hostname, then `host_ip`. If Zabbix has `10.20.1.15` and the ForgeSRE asset has `10.20.1.16`, you get a second asset on sync (or an incident with **asset unknown**). Fix the IP on one side, remove the duplicate, **Sync hosts** again. Keep `{HOST.ID}` in the media type.
+
+### Standard alarms “muted” but Zabbix incidents still open
+
+Expected. Standard alarms only overlay bundled Prometheus alertnames. Unchecking CPU does not mute a Zabbix trigger unless that trigger's **name** is exactly `HighCPU` / `NodeCPUHigh` / `WindowsCPUHigh` ([section 15](#15-standard-alarms-vs-zabbix-incidents)).
 
 ---
 
@@ -542,4 +703,99 @@ Required: `trigger_name` (or `event_name`) **and** `host_host` (or `host_ip`). E
 
 The same problem firing again after its incident was **RESOLVED** opens a new incident (fresh escalation) linked to the previous one, exactly like Prometheus alerts.
 
-See also: [operator handbook §18](operator-handbook.md#18-zabbix-read-only-source) (summary), [§8 Alerts become incidents](operator-handbook.md#8-alerts-become-incidents), [§9 Playrules](operator-handbook.md#9-playrules), [§11 Escalation and email](operator-handbook.md#11-escalation-and-email).
+Incident IDs look like `INC-0141_08.10.2026_07:52` (sequence + local date/time). Older `INC-000012` rows stay valid.
+
+See also: [operator handbook §18](operator-handbook.md#18-zabbix-read-only-source) (summary), [§8 Alerts become incidents](operator-handbook.md#8-alerts-become-incidents), [§9 Playrules](operator-handbook.md#9-playrules), [§11 Escalation and email](operator-handbook.md#11-escalation-and-email), [§12 Incident workflow](operator-handbook.md#12-incident-workflow).
+
+---
+
+## 15. Standard alarms vs Zabbix incidents
+
+ForgeSRE has two alarm paths. Do not mix the mute switches.
+
+| | Bundled / “standard” alarms | Zabbix-originated incidents |
+|---|---|---|
+| Origin | Prometheus rules in `monitoring/alerts.yml` (`HighCPU`, `NodeCPUHigh`, `NodeExporterDown`, `WindowsCPUHigh`, `SnmpDeviceUnreachable`, …) → Alertmanager → `POST /api/v1/webhooks/alertmanager` | Zabbix trigger → media type → `POST /api/v1/webhooks/zabbix` |
+| Pill on the incident | **Prometheus** | **Zabbix** |
+| Playrule **Alertname** | Exact Prometheus `alertname` | Exact Zabbix `{TRIGGER.NAME}` (or `{EVENT.NAME}`) |
+| Asset **Standard alarms** (Add/Edit, right column: Collecting / CPU / Memory / Disk enable + %) | **Mute-only overlay.** Unchecking CPU skips opening an incident for `HighCPU` / `NodeCPUHigh` / `WindowsCPUHigh` on that host. It cannot fire earlier than `alerts.yml`. | **Does not mute Zabbix triggers.** A Zabbix “CPU > 90%” problem still opens an incident. |
+| Grafana | Not in the path | Not in the path |
+
+**Exception:** `bundled_alert_skip_reason` keys off the **alertname string**. If you name a Zabbix trigger exactly `HighCPU`, `NodeCPUHigh`, `FilesystemUsageHigh`, `NodeExporterDown`, and so on, unchecking the matching Standard alarm **will** skip that Zabbix incident. Do not reuse those Prometheus names for Zabbix triggers.
+
+Mute in Zabbix (maintenance, disabled trigger, severity filter on the action) is the only way to stop Zabbix problems reaching ForgeSRE. ForgeSRE never disables a Zabbix trigger.
+
+---
+
+## 16. Acknowledge, resolve, close — no write-back
+
+On the incident page (`/incidents/INC-…`):
+
+| Button | ForgeSRE status | What happens in Zabbix |
+|---|---|---|
+| **Acknowledge** | `INVESTIGATING` | Nothing. ForgeSRE does not call `event.acknowledge`. |
+| **Resolve** | `RESOLVED` (human) | Nothing. The Zabbix problem stays PROBLEM until Zabbix recovers it. |
+| **Close** | `CLOSED` (human archive) | Nothing. Close is ForgeSRE-only. `CLOSED` is final — a later fire opens a **new** INC. |
+
+When Zabbix recovers the problem (recovery operation webhook, or the 3-minute `problem.get` backup poll):
+
+- Active incident (`OPEN` / `INVESTIGATING` / `ESCALATED`) becomes **RESOLVED**.
+- Timeline: `<trigger name> resolved by Zabbix`.
+- ForgeSRE does **not** set `CLOSED`. Close is still a person.
+
+The other direction is also one-way:
+
+- An acknowledge or comment **in Zabbix** is ignored (leave **Update operations** empty on the action).
+- Resolving or closing in ForgeSRE does **not** recover the Zabbix problem. If the trigger is still PROBLEM, Zabbix will not send a new problem webhook until it recovers and fires again. The ForgeSRE incident you resolved stays resolved; a later fire after Zabbix recovery opens a new INC (RE-FIRED link).
+
+Escalation mail still goes to the asset **Owner email**. Mute of Standard alarms never applies here.
+
+---
+
+## 17. CLI commands that matter
+
+There is **no** `./forgesre zabbix`. Use the real wrapper commands from [cli.md](cli.md):
+
+```bash
+./forgesre doctor              # Health lights, including component zabbix (yellow = optional source)
+./forgesre status              # docker compose ps — confirm core is up
+./forgesre journal zabbix      # Console lines: sync / health / poll
+./forgesre incidents           # Board; open one with ./forgesre incidents INC-0141_08.10.2026_07:52
+./forgesre config              # prints config/forgesre.yml (inventory.zabbix)
+./forgesre update              # after secrets or YAML change; also after git pull of code
+./forgesre restart             # bounce containers; NOT enough the first time you add ZABBIX_* keys
+./forgesre tls                 # only if Core is behind HTTPS — then the media-type URL is that URL
+./forgesre secrets-check       # SECRET_KEY / Alertmanager webhook defaults; not a Zabbix checker
+```
+
+`./forgesre verify` is the **Prometheus** chain (exporter → Prometheus → Alertmanager → Core). It does not test the Zabbix webhook. `./forgesre jobs` is the RCA / discovery **queue**, not the in-process Zabbix poll (that poll is inside Core every 3 / 5 minutes). `./forgesre snmp-auths` is snmp_exporter, not Zabbix.
+
+---
+
+## 18. End-to-end operator checklist
+
+Do these in order the first time. After that, the short version at the top of this page is enough.
+
+1. **ForgeSRE is up.** `./forgesre doctor` — Core green. Login `http://<FORGE-IP>:8080`. Note `FORGESRE_HTTP_PORT` in `.env` (default 8080). Never `./install.sh`.
+2. **Zabbix API user.** User group `ForgeSRE read-only` with **Read** on the host groups → user `forgesre-ro` with **User role** → API token (section 3). Hosts exist with the **same management IPs** you will match; OS templates attached if you want graphs (3.4–3.5).
+3. **Paste secrets.** On the Forge VM, `ZABBIX_URL`, `ZABBIX_API_TOKEN`, `ZABBIX_WEBHOOK_TOKEN` in `secrets/secrets.env` only. `./forgesre update`. Health cube **Zabbix** green **Connected** (yellow = timeout / 0 hosts / API error, never red).
+4. **First sync.** **Discovery → Zabbix → Sync hosts** (admin). Notice `N new, M linked, K skipped`. **Assets → Zabbix** shows the hosts. Fill **Owner email** (and NOC fields) on new assets.
+5. **Webhook + action.** Zabbix media type **ForgeSRE** posting to `http://<FORGE-IP>:8080/api/v1/webhooks/zabbix` with Bearer = `ZABBIX_WEBHOOK_TOKEN`, macros from section 7. Media on `forgesre-ro`. Trigger action with **problem + recovery** operations (section 8). Firewall: Zabbix **server** → Forge TCP 8080.
+6. **Fire a test problem.** Media-type **Test** with overwritten macros (422 with raw `{TRIGGER.NAME}` means token+URL are OK; 401 is the token). Then curl from the Zabbix server, then a real trigger. Success: HTTP 200 `"accepted": true`, Zabbix **Reports → Action log** *Sent*, ForgeSRE **Incidents** a new row with the **Zabbix** pill, id `INC-NNNN_DD.MM.YYYY_HH:MM`, title = event name, asset = the imported host.
+7. **Playrule.** **Playrules → Create playrule**. **Alertname** = the exact trigger name as it arrived (not the playrule Name, not PromQL). Ignore **No Prometheus rule**. Open the incident — playbook / escalation attached.
+8. **Graphs.** Open the asset or click the incident on the Dashboard. Zabbix-only host: caption *Zabbix trends (hourly average, last 24 h)* once items+trends exist. Scraped host: Prometheus graphs instead.
+9. **Mute / ack / resolve.** Uncheck Standard alarms CPU — a **Prometheus** `HighCPU` is skipped; a **Zabbix** CPU trigger is not. **Acknowledge** / **Resolve** / **Close** on the ForgeSRE incident do **not** change Zabbix. Recover the problem in Zabbix → incident **RESOLVED** by Zabbix. Close is human, in ForgeSRE only.
+
+---
+
+## 19. After git pull
+
+Docs live in `docs/` in git. The running UI does not serve them.
+
+| What changed | What to run on the live VM |
+|---|---|
+| Markdown only (`docs/zabbix.md`, handbook, …) | `git pull origin main` — read the files; no `./forgesre update` required |
+| Code, templates, compose, or you edited `secrets/secrets.env` / `config/forgesre.yml` | `git pull origin main && ./forgesre update` |
+| Container wedged, same config | `./forgesre restart` (does not reload new secrets on first add) |
+
+**Never** `./install.sh` on a box that already runs ForgeSRE.

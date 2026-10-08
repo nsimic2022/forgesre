@@ -145,7 +145,7 @@ quit                       # or: exit    or Ctrl-D
 
 ---
 
-**Zabbix has no CLI command.** There is no `./forgesre zabbix`. Connect it with `ZABBIX_URL`, `ZABBIX_API_TOKEN`, `ZABBIX_WEBHOOK_TOKEN` in `secrets/secrets.env`, then `./forgesre update`; import hosts with **Discovery → Sync hosts** in the UI; the Zabbix status shows in `./forgesre doctor` (component `zabbix`) and as the **Zabbix** cube on System Health. `./forgesre snmp-auths` is for ForgeSRE's own snmp_exporter and is not needed for Zabbix. Step by step: [zabbix.md](zabbix.md).
+**Zabbix has no CLI command.** There is no `./forgesre zabbix`. Connect it with `ZABBIX_URL`, `ZABBIX_API_TOKEN`, `ZABBIX_WEBHOOK_TOKEN` in `secrets/secrets.env` (not `.env`, not Administration), then `./forgesre update`; import hosts with **Discovery → Sync hosts** in the UI. Status: `./forgesre doctor` (component `zabbix`, yellow = optional source / timeout) and the **Zabbix** cube on System Health. Console: `./forgesre journal zabbix`. Incidents: `./forgesre incidents`. `./forgesre verify` is the Prometheus chain, not the Zabbix webhook. `./forgesre snmp-auths` is for ForgeSRE's own snmp_exporter and is not needed for Zabbix. Full cookbook (Zabbix server clicks + ForgeSRE + checklist): [zabbix.md](zabbix.md).
 
 ---
 

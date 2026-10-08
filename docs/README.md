@@ -30,7 +30,7 @@ UI: `http://<VM-IP>:8080`. NetBox UI: `:8001`. Grafana: `:3000` (open from Syste
 ## Manuals (after the path above)
 
 - [Operator handbook](operator-handbook.md) — users, assets, discovery, incidents, email, RCA
-- [Connecting Zabbix (optional, read-only)](zabbix.md) — step-by-step: read-only user + API token, secrets + `./forgesre update`, Sync hosts, owner email, webhook media type + Action, test, playrules, troubleshooting (summary: [handbook §18](operator-handbook.md#18-zabbix-read-only-source))
+- [Connecting Zabbix (optional, read-only)](zabbix.md) — operator cookbook, both machines: secrets (not Admin UI), Sync hosts, Zabbix user/token, hosts + templates, webhook media type + Action, test (401 vs 422), playrules by Alertname, Prometheus graphs vs `trend.get`, mute vs real triggers, ack/resolve with no write-back, CLI, numbered checklist (summary: [handbook §18](operator-handbook.md#18-zabbix-read-only-source))
 - [Install and config (Ubuntu / vCenter)](install-config.md)
 - [Verify the appliance](verify.md)
 - [Operator CLI](cli.md)
