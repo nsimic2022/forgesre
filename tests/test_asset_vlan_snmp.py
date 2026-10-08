@@ -119,7 +119,8 @@ def test_vlan_persists_on_add_edit_detail_and_filters():
     bar = [form.index(f'data-asset-filter="{key}"') for key in ("type", "source", "site", "vlan", "customer")]
     assert bar == sorted(bar)
     vlan = form.split('data-asset-filter="vlan">', 1)[1].split("</select>", 1)[0]
-    assert '<option value="">All VLANs</option>' in vlan
+    assert '<option value="">VLAN</option>' in vlan
+    assert "All VLANs" not in vlan
     assert '<option value="10.20" selected>' in vlan and '<option value="30">' in vlan
     assert '<a class="muted list-reset" href="/assets">Reset</a>' in form
     assert "&amp;vlan=10.20" in page.split('<table class="asset-table"', 1)[1]
