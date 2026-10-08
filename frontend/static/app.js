@@ -598,19 +598,42 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
 (function bindAssetReachability() {
   const boxes = document.querySelectorAll("[data-asset-reach]");
   if (!boxes.length) return;
+  const digits = (value) => {
+    let text = String(value || "").trim();
+    text = text.replace(/^snmp\s*/i, "");
+    if (text.charAt(0) === ":") text = text.slice(1);
+    return /^\d+$/.test(text) ? text : "";
+  };
   const paint = (row) => {
     document.querySelectorAll('[data-asset-reach="' + row.asset_id + '"]').forEach((box) => {
       const ping = box.querySelector(".ping");
       if (ping) {
-        ping.className = "reach-dot ping " + (row.ping || "yellow");
-        ping.title = "Ping: " + (row.ping_detail || "");
+        ping.className = "reach-sq icmp ping " + (row.ping || "yellow");
+        ping.textContent = "ICMP";
+        ping.title = "ICMP: " + (row.ping_detail || "");
       }
       const exporter = box.querySelector(".exporter");
       if (exporter) {
-        exporter.className = "reach-dot exporter " + (row.exporter || "yellow");
-        const snmp = row.snmp_label || "";
-        exporter.textContent = row.exporter_label === "SNMP" && snmp ? snmp : row.exporter_label || "exp.";
-        exporter.title = (row.exporter_label || "exporter") + ": " + (row.exporter_detail || "") + (snmp ? " · " + snmp : "");
+        const port = row.port_text != null && row.port_text !== "" ? String(row.port_text) : digits(row.exporter_label);
+        const show = row.show_port != null ? !!row.show_port : !!port;
+        exporter.hidden = !show;
+        if (show) {
+          exporter.className = "reach-sq port exporter " + (row.exporter || "yellow");
+          exporter.textContent = port;
+          exporter.title = "Port " + port + " — " + (row.exporter_detail || "");
+        }
+      }
+      const snmpEl = box.querySelector("[data-snmp-label]");
+      if (snmpEl) {
+        const show = row.show_snmp != null ? !!row.show_snmp : !!(row.snmp_label || row.exporter_label === "SNMP");
+        snmpEl.hidden = !show;
+        if (show) {
+          const primary = row.snmp_primary != null ? !!row.snmp_primary : row.exporter_label === "SNMP";
+          const port = row.snmp_port_text != null && row.snmp_port_text !== "" ? String(row.snmp_port_text) : digits(row.snmp_label);
+          snmpEl.className = "reach-sq snmp" + (primary ? " " + (row.exporter || "yellow") : "");
+          snmpEl.textContent = "SNMP";
+          snmpEl.title = port ? "SNMP UDP " + port : "SNMP";
+        }
       }
     });
   };

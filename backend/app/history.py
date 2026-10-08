@@ -5,9 +5,10 @@ Reads existing Postgres tables. Does not replace Incidents / Escalation / Journa
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session, joinedload
@@ -155,6 +156,39 @@ def cutoff_since(days: int) -> datetime:
     return utcnow() - timedelta(days=days)
 
 
+# Incidents list presets. Custom from/to dates are calendar days in the appliance timezone.
+INCIDENT_WINDOWS: dict[str, timedelta] = {
+    "1h": timedelta(hours=1),
+    "6h": timedelta(hours=6),
+    "24h": timedelta(hours=24),
+    "7d": timedelta(days=7),
+    "30d": timedelta(days=30),
+}
+
+
+def _filter_zone() -> ZoneInfo | timezone:
+    from app.settings import settings
+
+    try:
+        return ZoneInfo(settings.timezone or "UTC")
+    except Exception:
+        return timezone.utc
+
+
+def parse_filter_date(raw: str) -> date | None:
+    text = (raw or "").strip()[:10]
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def local_day_start(value: date) -> datetime:
+    return datetime(value.year, value.month, value.day, tzinfo=_filter_zone()).astimezone(timezone.utc)
+
+
 CRITICAL_SEVERITIES = ("CRITICAL", "CRIT", "FATAL", "EMERGENCY")
 DONE_STATUSES = ("RESOLVED", "CLOSED")
 ACTIVE_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED")
@@ -172,6 +206,8 @@ def incident_query(
     db: Session,
     *,
     days: int | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
     status: str = "",
     open_only: bool = False,
     closed_only: bool = False,
@@ -180,12 +216,19 @@ def incident_query(
     site: str = "",
     customer: str = "",
 ):
-    """Single filter used by the Incidents list and the Dashboard tiles (tile count = rows behind the click)."""
+    """Single filter used by the Incidents list and the Dashboard tiles (tile count = rows behind the click).
+
+    ``since`` / ``until`` (until is exclusive) win over ``days``. Presets and custom ranges set those.
+    """
     query = db.query(Incident)
     if (site or "").strip() or (customer or "").strip():
         query = query.filter(Incident.asset_id.in_(asset_pks_by_extras(db, site=site, customer=customer)))
-    if days is not None:
+    if since is not None:
+        query = query.filter(Incident.started_at >= since)
+    elif days is not None:
         query = query.filter(Incident.started_at >= cutoff_since(clamp_days(days)))
+    if until is not None:
+        query = query.filter(Incident.started_at < until)
     if unacked_only:
         query = query.filter(Incident.status.in_(ACTIVE_STATUSES), Incident.ack_at.is_(None))
     if open_only:
@@ -209,6 +252,9 @@ def incident_list_filters(
     severity: str = "",
     open_filter: str = "",
     days: str = "",
+    window: str = "",
+    started_from: str = "",
+    started_to: str = "",
     site: str = "",
     customer: str = "",
 ) -> dict[str, Any]:
@@ -235,6 +281,27 @@ def incident_list_filters(
         status_group = status_key
     days_raw = (days or "").strip()
     days_n = clamp_days(days_raw) if days_raw else None
+    window_key = (window or "").strip().lower()
+    if window_key not in INCIDENT_WINDOWS and window_key != "custom":
+        window_key = ""
+    from_date = parse_filter_date(started_from)
+    to_date = parse_filter_date(started_to)
+    if from_date and to_date and from_date > to_date:
+        from_date, to_date = to_date, from_date
+    since: datetime | None = None
+    until: datetime | None = None
+    active_window = ""
+    if window_key in INCIDENT_WINDOWS:
+        since = utcnow() - INCIDENT_WINDOWS[window_key]
+        active_window = window_key
+        days_n = None
+    elif window_key == "custom" or from_date or to_date:
+        active_window = "custom"
+        days_n = None
+        if from_date:
+            since = local_day_start(from_date)
+        if to_date:
+            until = local_day_start(to_date + timedelta(days=1))
     site_value = " ".join((site or "").split())
     customer_value = " ".join((customer or "").split())
     keep: list[tuple[str, str]] = []
@@ -242,7 +309,15 @@ def incident_list_filters(
         keep.append(("status", status_group))
     if critical_only:
         keep.append(("severity", "critical"))
-    if days_n is not None:
+    if active_window in INCIDENT_WINDOWS:
+        keep.append(("window", active_window))
+    elif active_window == "custom":
+        keep.append(("window", "custom"))
+        if from_date:
+            keep.append(("from", from_date.isoformat()))
+        if to_date:
+            keep.append(("to", to_date.isoformat()))
+    elif days_n is not None:
         keep.append(("days", str(days_n)))
     if site_value:
         keep.append(("site", site_value))
@@ -251,6 +326,8 @@ def incident_list_filters(
     return {
         "query": {
             "days": days_n,
+            "since": since,
+            "until": until,
             "status": exact,
             "open_only": open_only,
             "critical_only": critical_only,
@@ -260,7 +337,10 @@ def incident_list_filters(
         },
         "status_group": status_group,
         "severity_group": "critical" if critical_only else "",
-        "days": days_raw,
+        "days": "" if active_window else days_raw,
+        "window": active_window,
+        "date_from": from_date.isoformat() if active_window == "custom" and from_date else "",
+        "date_to": to_date.isoformat() if active_window == "custom" and to_date else "",
         "site": site_value,
         "customer": customer_value,
         "qs": urlencode(keep),
@@ -333,11 +413,15 @@ def list_history(
     page: Any | None = None,
     site: str = "",
     customer: str = "",
+    since: datetime | None = None,
+    until: datetime | None = None,
 ) -> tuple[list[Incident], int]:
     limit = max(1, min(int(limit or LIST_LIMIT), 500))
     query = incident_query(
         db,
         days=days,
+        since=since,
+        until=until,
         status=status,
         open_only=open_only,
         closed_only=closed_only,

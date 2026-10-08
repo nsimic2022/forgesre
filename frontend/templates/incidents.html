@@ -34,7 +34,15 @@
   </label>
   {% endif %}
   {% endfor %}
-  <label>Last days <input name="days" type="number" min="1" max="3660" value="{{ days }}" placeholder="any age"></label>
+  <label>Time
+    <select name="window" data-incident-window>
+      {% for value, label in [("", "Any time"), ("1h", "Last 1 hour"), ("6h", "Last 6 hours"), ("24h", "Last 24 hours"), ("7d", "Last 7 days"), ("30d", "Last 30 days"), ("custom", "Custom range")] %}
+      <option value="{{ value }}" {% if window == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>From <input name="from" type="date" value="{{ date_from }}" aria-label="From date"></label>
+  <label>To <input name="to" type="date" value="{{ date_to }}" aria-label="To date"></label>
   {% include "_pager_keep.html" %}
   <button type="submit">Filter</button>
   <a class="muted list-reset" href="/incidents">Reset</a>
@@ -54,7 +62,7 @@
       {% include "_incident_when.html" %}
     </tr>
   {% else %}
-    <tr><td colspan="5" class="muted">No incidents match this filter.{% if status_group != "all" or severity_group or site or customer %} Try All or <a href="/history">History</a>.{% endif %}</td></tr>
+    <tr><td colspan="5" class="muted">No incidents match this filter.{% if status_group != "all" or severity_group or site or customer or window %} Try All or <a href="/history">History</a>.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>

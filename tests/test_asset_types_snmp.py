@@ -200,11 +200,16 @@ def test_assets_list_shows_snmp_port_only_when_configured():
     assert _post(client, "ats-l-lnx", "Linux Server", lnx_ip).status_code in {302, 303}
     assert _post(client, "ats-l-both", "Linux Server", _ip(), snmp_port="161").status_code in {302, 303}
     listing = client.get("/assets?per_page=100&q=ats-l-").text
-    assert "snmp :161" in _row(listing, "ats-l-sw")
-    assert "snmp :1161" in _row(listing, "ats-l-nas")
-    assert "snmp :" not in _row(listing, "ats-l-lnx")
+    sw = _row(listing, "ats-l-sw")
+    nas = _row(listing, "ats-l-nas")
+    linux = _row(listing, "ats-l-lnx")
+    assert "reach-sq" in sw and ">ICMP<" in sw and ">SNMP<" in sw and "UDP 161" in sw
+    assert "snmp :" not in sw and ":161" not in sw
+    assert ">SNMP<" in nas and "UDP 1161" in nas and "snmp :" not in nas
+    assert ">ICMP<" in linux and ">9100<" in linux and "snmp :" not in linux and ">SNMP<" not in linux
     both = _row(listing, "ats-l-both")
-    assert ":9100" in both and "data-snmp-label" in both and "snmp :161" in both
+    assert ">9100<" in both and "data-snmp-label" in both and ">SNMP<" in both and "UDP 161" in both
+    assert ":9100" not in both and "snmp :" not in both
     reach = {row["asset_id"]: row for row in client.get("/api/v1/assets/reachability", params={"refresh": "false"}).json()}
     assert reach["ats-l-nas"]["snmp_label"] == "snmp :1161"
     assert reach["ats-l-lnx"]["snmp_label"] == ""
@@ -288,7 +293,7 @@ def test_runbook_note_is_labelled_human_guidance():
 
 def test_css_and_js_v08_14():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-18" in base and "app.js?v=v08-18" in base
+    assert "app.css?v=v08-19" in base and "app.js?v=v08-19" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "select.nice-select" in css and ".reach-snmp" in css
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")

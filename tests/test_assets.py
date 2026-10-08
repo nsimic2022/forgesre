@@ -239,9 +239,9 @@ def test_assets_list_shows_edit_clone_remove():
     assert b'placeholder="search #, id, hostname, IP, VLAN"' in page.content
     assert b'name="scrape_address"' in page.content
     assert b"?edit=" in page.content
-    assert b"reach-dot" in page.content
-    assert b">Ping<" in page.content
-    assert b"Ping / comms" in page.content
+    assert b"reach-sq" in page.content
+    assert b">ICMP<" in page.content
+    assert b"ICMP / port / SNMP" in page.content
     listed = client.get("/assets?edit=forge-demo-01")
     assert listed.status_code == 200
     assert b"Edit asset" in listed.content
@@ -313,7 +313,7 @@ def test_asset_table_actions_cell_is_table_cell_not_flex_td():
     assert ".asset-table td.asset-actions" in css
     assert "display: table-cell" in css
     assert "td.row-actions" in css
-    assert "app.css?v=v08-18" in base
+    assert "app.css?v=v08-19" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():
@@ -338,9 +338,9 @@ def test_viewer_cannot_see_asset_write_actions():
     assert b">Remove<" not in page.content
     assert b">Remove<" not in page.content
     assert b">Verify<" not in page.content
-    assert b"Ping / comms" in page.content
-    assert b"reach-dot ping" in page.content
-    assert b">Ping<" in page.content
+    assert b"ICMP / port / SNMP" in page.content
+    assert b"reach-sq icmp ping" in page.content
+    assert b">ICMP<" in page.content
     blocked = client.post("/assets/forge-demo-01/delete", follow_redirects=False)
     assert blocked.status_code == 403
     verify_blocked = client.get("/assets/forge-demo-01/verify", follow_redirects=False)
@@ -559,7 +559,7 @@ def test_reachability_api_refreshes_without_blocking_list(monkeypatch):
     )
     listed = client.get("/assets")
     assert listed.status_code == 200
-    assert b"reach-dot ping yellow" in listed.content
+    assert b"reach-sq icmp ping yellow" in listed.content
     rows = client.get("/api/v1/assets/reachability").json()
     demo = next(item for item in rows if item["asset_id"] == "forge-demo-01")
     assert demo["ping"] == "green"
@@ -636,7 +636,7 @@ def test_reachability_windows_icmp_blocked_exporter_up_is_yellow(monkeypatch):
     assert listed.status_code == 200
     detail = client.get(f"/assets/{host.asset_id}")
     assert detail.status_code == 200
-    assert b"reach-dot ping yellow" in listed.content or b"reach-dot ping yellow" in detail.content
+    assert b"reach-sq icmp ping yellow" in listed.content or b"reach-sq icmp ping yellow" in detail.content
     db.close()
 
 

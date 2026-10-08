@@ -172,6 +172,16 @@ def demo_mail_subject(incident: Incident | None, subject: str) -> str:
     return text
 
 
+def incident_mail_heading(incident: Incident | None) -> str:
+    """Email subject and HTML title: hostname, then the problem name. Same order as the dashboard list."""
+    if incident is None:
+        return "Incident"
+    host = (incident_host(incident) or "").strip()
+    name = (getattr(incident, "title", None) or getattr(incident, "number", None) or "Incident").strip()
+    text = f"{host} — {name}" if host else name
+    return text[:220]
+
+
 def incident_seq(number: str) -> int | None:
     """Running counter from INC-000012, dash-dated, or INC-0134_16.08.2026_09:13."""
     text = str(number or "")
@@ -1317,7 +1327,7 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
         incident.asset = db.get(Asset, incident.asset_id)
     recipient = escalation_recipient(incident, policy_role)
     stored_target = recipient or policy_role
-    subject = demo_mail_subject(incident, f"{incident.number} {incident.title}")
+    subject = demo_mail_subject(incident, incident_mail_heading(incident))
     body = build_escalation_body(incident, step_key, policy_role)
     html_body = build_escalation_html(incident, step_key, policy_role)
     row = Notification(
@@ -1561,7 +1571,7 @@ def send_incident_report(db: Session, incident: Incident, target: str, actor: st
     return send_outbound_mail(
         db,
         target=contact.email,
-        subject=demo_mail_subject(incident, f"[ForgeSRE] {incident.number} {incident.title}"),
+        subject=demo_mail_subject(incident, incident_mail_heading(incident)),
         body=body,
         actor=actor,
         step_key="incident-report",

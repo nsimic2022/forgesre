@@ -161,14 +161,16 @@
   <button type="submit">Backup</button>
 </form>
 {% if backups %}
+<div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table>
-  <thead><tr>{{ sel.head() }}<th>Archive</th><th>Size</th><th></th></tr></thead>
+  <thead><tr>{{ sel.head() }}<th>When</th><th>Size</th><th></th></tr></thead>
   <tbody>
   {% for b in backups %}
+    {% set when = backup_compact(b) %}
     <tr data-list-row>
       {{ sel.cell(b.name) }}
-      <td><code>{{ b.name }}</code></td>
+      <td class="backup-when">{% if when.date %}<span class="stamp" title="{{ b.name }}"><span class="stamp-date">{{ when.date }}</span><span class="stamp-time">{{ when.time }}</span></span>{% else %}<span class="muted" title="{{ b.name }}">{{ b.name }}</span>{% endif %}</td>
       <td>{{ format_size(b.size) }}</td>
       <td>
         <div class="row-actions backup-row-actions">
@@ -184,7 +186,10 @@
   </tbody>
 </table>
 </div>
-{% with pager=backup_pager %}{% include "_pager.html" %}{% endwith %}
+{% with pager=backup_pager, list_actions={"delete": "/admin/backups/bulk-delete", "delete_label": "Delete selected", "export": "", "next": "/admin", "confirm": "Delete the selected backups? Each selected folder (tar + MANIFEST) is removed. data/backups/ stays."} %}
+{% include "_pager.html" %}
+{% endwith %}
+</div>
 {% else %}
 <p class="muted">No archives yet. Create one, or import a <code>forgesre.tar.gz</code> (or legacy <code>forgesre-YYYYMMDDTHHMMSSZ.tar.gz</code>).</p>
 {% endif %}
