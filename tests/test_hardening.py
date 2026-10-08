@@ -96,19 +96,21 @@ def test_new_incident_number_increments_legacy_six_digit():
     from app.models import Incident
     from app.services import incident_seq
 
+    # The pytest sqlite is shared: earlier modules may already have opened 20+ incidents.
+    legacy = max(20, incident_seq(next_incident_number(db)))
     db.add(
         Incident(
-            number="INC-000020",
+            number=f"INC-{legacy:06d}",
             title="legacy",
             severity="WARNING",
             status="CLOSED",
-            fingerprint="legacy-seq-20",
+            fingerprint=f"legacy-seq-{legacy}",
         )
     )
     db.commit()
     nxt = next_incident_number(db)
-    assert incident_seq(nxt) == 21
-    assert nxt.startswith("INC-0021_")
+    assert incident_seq(nxt) == legacy + 1
+    assert nxt.startswith(f"INC-{legacy + 1:04d}_")
     db.close()
 
 

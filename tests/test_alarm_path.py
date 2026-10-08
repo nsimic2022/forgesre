@@ -8,7 +8,9 @@ from datetime import timedelta
 from uuid import uuid4
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import func
 
 import app.api as api_mod
 import app.main as main_mod
@@ -34,6 +36,20 @@ from app.services import escalation_steps, ingest_alertmanager, process_escalati
 from app.settings import settings
 
 WEBHOOK = "/api/v1/webhooks/alertmanager"
+
+
+@pytest.fixture(autouse=True)
+def _drop_queued_jobs():
+    """Ingest queues an RCA job per incident; later modules run run_pending_jobs(limit=8) on the shared queue."""
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    start = db.query(func.max(Job.id)).scalar() or 0
+    db.close()
+    yield
+    db = SessionLocal()
+    db.query(Job).filter(Job.id > start, Job.status == "pending").delete(synchronize_session=False)
+    db.commit()
+    db.close()
 
 
 def _db():
