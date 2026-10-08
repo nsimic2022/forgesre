@@ -541,6 +541,14 @@ def match_alert_asset(
     return None
 
 
+def alert_fingerprint(alert: dict[str, Any]) -> str:
+    labels = alert.get("labels") or {}
+    forge = alert.get("forge") if isinstance(alert.get("forge"), dict) else {}
+    alertname = str(labels.get("alertname") or "Alert")
+    asset_name = str(labels.get("asset") or labels.get("instance") or "").strip()
+    return str(forge.get("fingerprint") or "").strip()[:255] or f"{alertname}:{asset_name or UNLABELED_ASSET}"
+
+
 def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "prometheus") -> list[Incident]:
     """Alertmanager (or Zabbix, normalized to the same shape) → incidents.
 
@@ -549,6 +557,11 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
     A firing alert after that incident went RESOLVED opens a new INC (fresh
     escalation ladder) and links both timelines. CLOSED is final. A resolved
     alert marks the active incident RESOLVED; it never closes it.
+
+    Prometheus: Alertmanager groups by [alertname, asset] and resends the whole
+    group, so one fingerprint can carry several series (interfaces, mountpoints).
+    The incident resolves only when every series of that fingerprint in the
+    payload is resolved, whatever their order. Zabbix events stay one-by-one.
     """
     from app.jobs import enqueue
 
@@ -556,14 +569,25 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
     resolver = _RESOLVED_BY[source]
     created: list[Incident] = []
     group_status = (payload.get("status") or "firing").lower()
-    for alert in payload.get("alerts") or []:
+    alerts = list(payload.get("alerts") or [])
+    grouped = source == "prometheus"
+    still_firing: set[str] = set()
+    if grouped:
+        still_firing = {
+            alert_fingerprint(alert)
+            for alert in alerts
+            if (alert.get("status") or group_status).lower() != "resolved"
+        }
+    resolved_here: set[str] = set()
+    for alert in alerts:
         labels = alert.get("labels") or {}
         annotations = alert.get("annotations") or {}
-        forge = alert.get("forge") if isinstance(alert.get("forge"), dict) else {}
         alert_status = (alert.get("status") or group_status).lower()
         alertname = str(labels.get("alertname") or "Alert")
         asset_name = str(labels.get("asset") or labels.get("instance") or "").strip()
-        fingerprint = str(forge.get("fingerprint") or "").strip()[:255] or f"{alertname}:{asset_name or UNLABELED_ASSET}"
+        fingerprint = alert_fingerprint(alert)
+        if grouped and alert_status == "resolved" and (fingerprint in still_firing or fingerprint in resolved_here):
+            continue
         incident = (
             db.query(Incident)
             .filter(Incident.fingerprint == fingerprint, Incident.status.in_(ACTIVE_INCIDENT_STATUSES))
@@ -579,6 +603,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
                 zabbix_hostid=str(labels.get("zabbix_hostid") or ""),
             )
         if alert_status == "resolved":
+            resolved_here.add(fingerprint)
             if incident:
                 incident.status = "RESOLVED"
                 incident.ended_at = utcnow()
