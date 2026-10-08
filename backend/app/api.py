@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -309,34 +310,69 @@ def _live_metric_values(asset: Asset) -> dict[str, Any]:
     }
 
 
-def run_asset_verify(db: Session, asset: Asset, *, timeout: float = 2.0) -> dict[str, Any]:
+VERIFY_PROBE_WORKERS = 8
+
+
+class VerifyContext:
+    """SD membership, Prometheus /targets and Alertmanager health: fetched once per verify request."""
+
+    def __init__(self, db: Session) -> None:
+        self.http_ids, self.snmp_ids = _sd_membership(db)
+        self.prom_url = settings.prometheus_url or "http://127.0.0.1:9090"
+        self.am_health = urllib_am_health(settings.alertmanager_url or "http://127.0.0.1:9093")
+        self._targets: dict[str, Any] | None = None
+
+    def targets(self) -> dict[str, Any]:
+        if self._targets is None:
+            self._targets = urllib_prom_targets(self.prom_url)
+        return self._targets
+
+
+def _probe_assets(assets: list[Asset], *, timeout: float) -> list[Any]:
+    items = [_asset(asset) for asset in assets]
+    workers = max(1, min(VERIFY_PROBE_WORKERS, len(items)))
+    if workers == 1:
+        return [probe_target(item, timeout=timeout) for item in items]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(lambda item: probe_target(item, timeout=timeout), items))
+
+
+def verify_assets(db: Session, assets: list[Asset], *, timeout: float = 2.0) -> list[dict[str, Any]]:
+    """Probe in a bounded pool; classify, compose and save on this thread (the session is not thread-safe)."""
     from app.services import query_prometheus_expr
 
-    item = _asset(asset)
-    probe = probe_target(item, timeout=timeout)
-    if persist_live_classification(db, asset, probe):
-        db.commit()
-        db.refresh(asset)
-        item = _asset(asset)
-    http_ids, snmp_ids = _sd_membership(db)
-    prom_url = settings.prometheus_url or "http://127.0.0.1:9090"
-    am_url = settings.alertmanager_url or "http://127.0.0.1:9093"
-    report = compose_verify(
-        item,
-        probe,
-        in_http_sd=asset.asset_id in http_ids,
-        in_snmp_sd=asset.asset_id in snmp_ids,
-        query_fn=query_prometheus_expr,
-        rca=_latest_rca(db, asset),
-        live_metrics=_live_metric_values(asset),
-        ai_enabled=bool(settings.ai_enabled and settings.llm_url),
-        targets_fn=lambda: urllib_prom_targets(prom_url),
-        am_health=urllib_am_health(am_url),
-        incident=_latest_incident(db, asset),
-    )
-    apply_probe_to_asset(asset, probe)
+    if not assets:
+        return []
+    probes = _probe_assets(assets, timeout=timeout)
+    for asset, probe in zip(assets, probes):
+        if persist_live_classification(db, asset, probe):
+            db.commit()
+            db.refresh(asset)
+    ctx = VerifyContext(db)
+    ai_enabled = bool(settings.ai_enabled and settings.llm_url)
+    reports: list[dict[str, Any]] = []
+    for asset, probe in zip(assets, probes):
+        report = compose_verify(
+            _asset(asset),
+            probe,
+            in_http_sd=asset.asset_id in ctx.http_ids,
+            in_snmp_sd=asset.asset_id in ctx.snmp_ids,
+            query_fn=query_prometheus_expr,
+            rca=_latest_rca(db, asset),
+            live_metrics=_live_metric_values(asset),
+            ai_enabled=ai_enabled,
+            targets_fn=ctx.targets,
+            am_health=ctx.am_health,
+            incident=_latest_incident(db, asset),
+        )
+        apply_probe_to_asset(asset, probe)
+        reports.append(report.as_dict())
     db.commit()
-    return report.as_dict()
+    return reports
+
+
+def run_asset_verify(db: Session, asset: Asset, *, timeout: float = 2.0) -> dict[str, Any]:
+    return verify_assets(db, [asset], timeout=timeout)[0]
 
 
 @router.get("/verify")
@@ -357,13 +393,9 @@ def verify_assets_api(
         include_demo=include_demo,
         is_demo=lambda row: is_lab_inventory_row(row),
     )
-    results: list[dict[str, Any]] = []
     models = {item.asset_id: item for item in db.query(Asset).all()}
-    for row in chosen:
-        asset = models.get(str(row.get("asset_id") or ""))
-        if asset is None:
-            continue
-        results.append(run_asset_verify(db, asset, timeout=timeout))
+    assets = [models[key] for key in (str(row.get("asset_id") or "") for row in chosen) if key in models]
+    results = verify_assets(db, assets, timeout=timeout)
     return {"results": results, "skipped_demo": skipped_demo, "selector": selector}
 
 

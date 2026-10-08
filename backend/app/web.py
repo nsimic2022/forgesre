@@ -78,7 +78,7 @@ from app.models import (
 )
 from app.netbox import is_local_netbox_url, status_label, sync_cta, token_presence
 from app.security import CREATABLE_ROLES, can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
-from app.api import doctor_payload, run_asset_verify
+from app.api import doctor_payload, run_asset_verify, verify_assets
 from app.asset_metrics import safe_asset_metric_panel
 from app.metrics import reset_demo_gauges
 from app.services import (
@@ -674,14 +674,11 @@ def assets_verify_all(
     page: str = "1",
 ):
     include_demo = demo.strip().lower() in {"1", "true", "yes", "demo"}
-    reports: list[dict] = []
-    skipped_demo = 0
-    for asset in db.query(Asset).order_by(Asset.hostname).all():
-        if is_lab_inventory_row(asset) and not include_demo:
-            skipped_demo += 1
-            continue
-        reports.append(run_asset_verify(db, asset))
-    reports, pager = paginate(reports, page, size=per_page(request))
+    assets = db.query(Asset).order_by(Asset.hostname).all()
+    chosen = [asset for asset in assets if include_demo or not is_lab_inventory_row(asset)]
+    skipped_demo = len(assets) - len(chosen)
+    chosen, pager = paginate(chosen, page, size=per_page(request))
+    reports = verify_assets(db, chosen)
     return render(
         request,
         "assets_verify.html",
