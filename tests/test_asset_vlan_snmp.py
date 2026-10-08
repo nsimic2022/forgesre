@@ -147,7 +147,7 @@ def test_layout_comms_alone_in_middle_alarms_then_playrules_right():
     assert ".asset-form-reserved { flex: 1 1 auto; min-height: 12rem; }" in css
     assert "hr.asset-form-rule" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-16" in base and "app.js?v=v08-16" in base
+    assert "app.css?v=v08-17" in base and "app.js?v=v08-17" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "[data-snmp-version]" in js and "[data-snmp-v3-level]" in js
 

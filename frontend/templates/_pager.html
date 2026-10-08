@@ -1,5 +1,6 @@
-{% if pager and (pager.pages > 1 or pager.show_size) %}
-<div class="pager-bar">
+{% set actions = list_actions if list_actions is defined else none %}
+{% if pager and (pager.pages > 1 or pager.show_size or actions) %}
+<div class="pager-bar"{% if actions %} data-list-pager{% endif %}>
   <div class="pager-left">
   {% if pager.pages > 1 %}
   <p class="pager-meta muted">Showing {{ pager.start }}–{{ pager.end }} of {{ pager.total }}</p>
@@ -28,6 +29,21 @@
   <p class="pager-meta muted">Showing all {{ pager.total }}</p>
   {% endif %}
   </div>
+  {% if actions %}
+  <div class="list-actions" data-list-actions>
+    {% if actions.delete %}
+    <form method="post" action="{{ actions.delete }}" data-bulk-delete onsubmit='return confirm({{ actions.confirm|tojson }});'>
+      <input type="hidden" name="next" value="{{ actions.next }}">
+      <button type="submit" class="danger">Delete</button>
+    </form>
+    {% endif %}
+    {% if actions.export %}
+    <form method="post" action="{{ actions.export }}" data-bulk-export>
+      <button type="submit">Export</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
   <form method="get" action="{{ request.url.path }}{{ pager.hash }}" class="pager-size" data-pager-size-form>
     {% for key, value in request.query_params.multi_items() if key not in [pager.param, pager.size_param] %}
     <input type="hidden" name="{{ key }}" value="{{ value }}">

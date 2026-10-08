@@ -21,6 +21,7 @@
     <a class="muted" href="/history">Reset</a>
   </div>
 </form>
+<div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="scan-list">
   <thead>
@@ -48,5 +49,8 @@
   </tbody>
 </table>
 </div>
+{% with list_actions={"delete": "/incidents/bulk-delete" if can('write_incidents') else "", "export": "/incidents/export", "next": "/history", "confirm": "Delete the selected incidents? Mail already sent stays in the outbox."} %}
 {% include "_pager.html" %}
+{% endwith %}
+</div>
 {% endblock %}

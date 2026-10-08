@@ -102,6 +102,7 @@
 
 <section class="card" id="mail">
   <h2>Mail outbox {% with %}{% set tip %}One table for this appliance: this page, scheduled reports, and incident/escalation mail. Not an inbox. Incident and Escalation pages link here.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div data-select-scope>
   <div class="table-scroll list-scroll" data-list-scroll>
   <table>
     <thead><tr>{{ sel.head() }}<th>When</th><th>To</th><th>Subject</th><th>Status</th><th>Body</th></tr></thead>
@@ -126,7 +127,10 @@
     </tbody>
   </table>
   </div>
-{% with pager=mail_pager %}{% include "_pager.html" %}{% endwith %}
+{% with pager=mail_pager, list_actions={"delete": "/ops/mail/bulk-delete" if can_send else "", "export": "/ops/mail/export", "next": "/ops#mail", "confirm": "Delete the selected outbox rows? Escalation alarm mail is kept so it is not sent again."} %}
+{% include "_pager.html" %}
+{% endwith %}
+  </div>
 </section>
 
 <section class="card" id="reports">
@@ -204,6 +208,7 @@
   </form>
   </div>
   {% endif %}
+  <div data-select-scope>
   <div class="table-scroll list-scroll" data-list-scroll>
   <table>
     <thead><tr>{{ sel.head() }}<th>Name</th><th>To</th><th>Every</th><th>Assets</th><th>Last</th><th>Next</th><th>Enabled</th><th></th></tr></thead>
@@ -218,7 +223,13 @@
         <td class="muted">{{ row.last_run_at or "—" }}</td>
         <td class="muted">{{ row.next_run_at or "—" }}</td>
         <td>
-          <span class="pill {{ 'ok' if row.enabled else 'ignored' }}">{{ "Enabled" if row.enabled else "Off" }}</span>
+          {% if can_send %}
+          <form method="post" action="/ops/reports/{{ row.id }}/toggle" class="onoff-form">
+            <button type="submit" class="onoff {{ 'is-on' if row.enabled else 'is-off' }}" aria-pressed="{{ 'true' if row.enabled else 'false' }}" title="ON: fire at Next. OFF: stored, the scheduler skips it. That is not Remove.">{% if row.enabled %}ON{% else %}OFF{% endif %}</button>
+          </form>
+          {% else %}
+          <span class="onoff {{ 'is-on' if row.enabled else 'is-off' }}">{% if row.enabled %}ON{% else %}OFF{% endif %}</span>
+          {% endif %}
         </td>
         <td class="ops-report-actions">
           {% if can_send %}
@@ -230,9 +241,6 @@
             {% endif %}
             <a class="button" href="/ops?clone={{ row.id }}{{ pager_keep(reports_pager) }}#reports">Clone</a>
             <form method="post" action="/ops/reports/{{ row.id }}/run"><button type="submit">Run now</button></form>
-            <form method="post" action="/ops/reports/{{ row.id }}/toggle">
-              <button type="submit" class="secondary" title="Enabled: fire at Next. Off: stored, scheduler skips.">{% if row.enabled %}Disable{% else %}Enable{% endif %}</button>
-            </form>
             <form method="post" action="/ops/reports/{{ row.id }}/delete" onsubmit="return confirm('Remove this scheduled report? The job is deleted. Outbox mail already generated stays.');">
               <button type="submit" class="danger">Remove</button>
             </form>
@@ -246,6 +254,9 @@
     </tbody>
   </table>
   </div>
-{% with pager=reports_pager %}{% include "_pager.html" %}{% endwith %}
+{% with pager=reports_pager, list_actions={"delete": "/ops/reports/bulk-delete" if can_send else "", "export": "/ops/reports/export" if can_send else "", "next": "/ops#reports", "confirm": "Delete the selected scheduled reports? They stop sending. Mail already in the outbox stays."} %}
+{% include "_pager.html" %}
+{% endwith %}
+  </div>
 </section>
 {% endblock %}

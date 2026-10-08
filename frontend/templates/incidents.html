@@ -40,6 +40,7 @@
   <a class="muted list-reset" href="/incidents">Reset</a>
   <span class="muted list-count">{{ pager.total }} incident{% if pager.total != 1 %}s{% endif %} · older rows in <a href="/history">History</a></span>
 </form>
+<div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="scan-list incidents-table">
   <thead><tr>{{ sel.head() }}<th>Incident</th><th>Severity</th><th>Status</th><th>When</th></tr></thead>
@@ -58,5 +59,8 @@
   </tbody>
 </table>
 </div>
+{% with list_actions={"delete": "/incidents/bulk-delete" if can('write_incidents') else "", "export": "/incidents/export", "next": "/incidents", "confirm": "Delete the selected incidents? Mail already sent stays in the outbox."} %}
 {% include "_pager.html" %}
+{% endwith %}
+</div>
 {% endblock %}

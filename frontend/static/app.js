@@ -178,14 +178,23 @@ applyTheme(currentTheme());
 (function bindRowSelect() {
   const scopeOf = (el) => el.closest("[data-select-scope]") || el.closest("table");
   const rowsIn = (scope) => (scope ? scope.querySelectorAll("[data-select-row]") : []);
+  const syncBulk = (scope) => {
+    if (!scope) return;
+    const bar = scope.querySelector("[data-list-actions]");
+    if (!bar) return;
+    const on = Array.from(rowsIn(scope)).some((box) => box.checked);
+    bar.classList.toggle("is-live", on);
+  };
   const sync = (scope) => {
     if (!scope) return;
     const head = scope.querySelector("[data-select-page]");
-    if (!head) return;
-    const rows = Array.from(rowsIn(scope));
-    const on = rows.filter((box) => box.checked).length;
-    head.checked = rows.length > 0 && on === rows.length;
-    head.indeterminate = on > 0 && on < rows.length;
+    if (head) {
+      const rows = Array.from(rowsIn(scope));
+      const on = rows.filter((box) => box.checked).length;
+      head.checked = rows.length > 0 && on === rows.length;
+      head.indeterminate = on > 0 && on < rows.length;
+    }
+    syncBulk(scope);
   };
   document.addEventListener("change", (event) => {
     const el = event.target;
@@ -195,9 +204,34 @@ applyTheme(currentTheme());
         box.checked = el.checked;
       });
       el.indeterminate = false;
+      syncBulk(scopeOf(el));
     } else if (el.hasAttribute("data-select-row")) {
       sync(scopeOf(el));
     }
+  });
+  document.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    if (!form.hasAttribute("data-bulk-delete") && !form.hasAttribute("data-bulk-export")) return;
+    const scope = form.closest("[data-select-scope]");
+    if (!scope) return;
+    const ids = Array.from(rowsIn(scope))
+      .filter((box) => box.checked)
+      .map((box) => box.value)
+      .filter(Boolean);
+    if (!ids.length) {
+      event.preventDefault();
+      return;
+    }
+    form.querySelectorAll("input[data-bulk-id]").forEach((node) => node.remove());
+    ids.forEach((id) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "selected";
+      input.value = id;
+      input.setAttribute("data-bulk-id", "");
+      form.appendChild(input);
+    });
   });
 })();
 
@@ -353,7 +387,9 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
         const fam = data.families || {};
         const mark = (sel, on) => {
           const box = document.querySelector(sel);
-          if (box) box.checked = !!on;
+          if (!box) return;
+          box.checked = !!on;
+          box.dispatchEvent(new Event("change", { bubbles: true }));
         };
         if (Object.keys(fam).length) {
           mark("[data-alarm-up]", fam.up !== false);
@@ -511,6 +547,36 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
     list.appendChild(row);
     option.disabled = true;
     sync();
+  });
+})();
+
+// Standard-alarm enable is an ON/OFF button. The checkbox stays in the form so an OFF
+// still means "mute this host" — it does not change the Prometheus rule.
+(function bindAlarmOnOff() {
+  const sync = (box) => {
+    const row = box.closest(".alarm-row");
+    const button = row && row.querySelector("[data-onoff]");
+    if (!button) return;
+    const on = !!box.checked;
+    button.classList.toggle("is-on", on);
+    button.classList.toggle("is-off", !on);
+    button.textContent = on ? "ON" : "OFF";
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+  };
+  document.querySelectorAll(".onoff-check").forEach(sync);
+  document.addEventListener("change", (event) => {
+    const el = event.target;
+    if (el instanceof HTMLInputElement && el.classList.contains("onoff-check")) sync(el);
+  });
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-onoff]");
+    if (!button || button.tagName !== "BUTTON") return;
+    const row = button.closest(".alarm-row");
+    const box = row && row.querySelector(".onoff-check");
+    if (!box) return;
+    event.preventDefault();
+    box.checked = !box.checked;
+    sync(box);
   });
 })();
 

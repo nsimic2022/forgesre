@@ -14,6 +14,7 @@ from app.journal import report
 from app.metrics import reset_demo_gauges, set_demo_cpu, set_demo_disk
 from app.models import (
     Asset,
+    AuditLog,
     Evidence,
     Incident,
     IncidentEvent,
@@ -393,11 +394,18 @@ def format_incident_number(seq: int, when: datetime | None = None) -> str:
 
 
 def next_incident_number(db: Session, when: datetime | None = None) -> str:
+    """Highest running counter + 1. A removed incident's audit row keeps the number, so #N is never reused.
+
+    The id shape stays INC-NNNN_DD.MM.YYYY_HH:MM. Only the counter moves forward.
+    """
     highest = 0
-    for (number,) in db.query(Incident.number).all():
-        seq = incident_seq(str(number or ""))
-        if seq is not None:
-            highest = max(highest, seq)
+    live = db.query(Incident.number).all()
+    removed = db.query(AuditLog.object_id).filter(AuditLog.action == "incident.delete").all()
+    for batch in (live, removed):
+        for (number,) in batch:
+            seq = incident_seq(str(number or ""))
+            if seq is not None:
+                highest = max(highest, seq)
     return format_incident_number(highest + 1, when)
 
 

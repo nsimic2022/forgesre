@@ -77,7 +77,16 @@ from app.models import (
     User,
 )
 from app.netbox import is_local_netbox_url, status_label, sync_cta, token_presence
-from app.security import CREATABLE_ROLES, can, distinct_who_name, make_session_token, role_label, user_from_session, verify_password
+from app.security import (
+    CREATABLE_ROLES,
+    can,
+    can_send_ops,
+    distinct_who_name,
+    make_session_token,
+    role_label,
+    user_from_session,
+    verify_password,
+)
 from app.api import doctor_payload, run_asset_verify, verify_assets
 from app.asset_metrics import safe_asset_metric_panel
 from app.metrics import reset_demo_gauges
@@ -151,10 +160,6 @@ def incident_tone(status: str, severity: str = "") -> str:
     if sev in {"CRITICAL", "CRIT", "FATAL", "EMERGENCY"}:
         return "inc-crit"
     return "inc-warn"
-
-
-def can_send_ops(user: User) -> bool:
-    return can(user, "write_play") or can(user, "write_incidents") or can(user, "admin")
 
 
 def _parse_id_query(raw: str) -> int | None:

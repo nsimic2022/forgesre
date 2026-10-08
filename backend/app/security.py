@@ -133,3 +133,7 @@ def can(user: User | None, permission: str) -> bool:
     if user is None:
         return False
     return permission in PERMISSIONS.get(user.role, set())
+
+
+def can_send_ops(user: User | None) -> bool:
+    return can(user, "write_play") or can(user, "write_incidents") or can(user, "admin")
