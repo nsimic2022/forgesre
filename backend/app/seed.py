@@ -503,3 +503,30 @@ def seed(db: Session) -> None:
 
     seed_demo_candidate(db)
     db.commit()
+
+
+DEMO_LAB_KINDS = ((DEMO_ASSET, "Linux"), (DEMO_WIN_ASSET, "Windows"), (DEMO_SW_ASSET, "network"))
+
+
+def seed_summary(db: Session) -> str:
+    """Startup journal line naming only the DEMO rows that exist. An operator Remove keeps them out."""
+    ids = [asset_id for asset_id, _ in DEMO_LAB_KINDS]
+    present = {row[0] for row in db.query(Asset.asset_id).filter(Asset.asset_id.in_(ids)).all()}
+    kinds = [kind for asset_id, kind in DEMO_LAB_KINDS if asset_id in present]
+    history = (
+        db.query(Incident.id)
+        .filter(Incident.fingerprint == f"HighCPU:{DEMO_ASSET}", Incident.status == "CLOSED")
+        .first()
+        is not None
+    )
+    ready = ([f"DEMO assets ({', '.join(kinds)})"] if kinds else []) + ["playrules"]
+    if history and DEMO_ASSET in present:
+        ready.append("closed HighCPU history")
+    if len(ready) == 1:
+        text = "Playrules are ready"
+    else:
+        text = ", ".join(ready[:-1]) + (", and " if len(ready) > 2 else " and ") + ready[-1] + " are ready"
+    missing = [asset_id for asset_id in ids if asset_id not in present]
+    if missing:
+        text += f"; not re-seeded (removed by an operator): {', '.join(missing)}"
+    return text
