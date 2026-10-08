@@ -170,6 +170,29 @@ def journal_doctor_alarm_path(db, components: dict[str, Any] | None) -> None:
     )
 
 
+def appliance_cube(payload: dict[str, Any] | None) -> dict[str, str]:
+    """Nav ForgeSRE square from the doctor aggregate (same overall as System Health).
+
+    HEALTHY — no hard failures; disabled / paused / warn stay soft — is green.
+    DEGRADED is yellow. Not a second monitor and not a new port.
+    """
+    packed = payload or {}
+    overall = str(packed.get("overall") or "").strip().upper()
+    failed = [str(name) for name in (packed.get("failed") or []) if str(name or "").strip()]
+    if overall == "HEALTHY":
+        return {
+            "css": "ok",
+            "state": "healthy",
+            "title": "ForgeSRE is healthy. Same aggregate as System Health.",
+        }
+    detail = ", ".join(failed[:8]) if failed else "see System Health"
+    return {
+        "css": "warn",
+        "state": "degraded",
+        "title": f"ForgeSRE is degraded ({detail}). Open System Health.",
+    }
+
+
 def runtime_state(item: dict[str, Any] | None) -> tuple[str, str]:
     """running (green), warn/paused/starting (yellow), down (red).
 

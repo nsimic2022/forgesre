@@ -174,10 +174,13 @@ def test_notification_uses_asset_owner_email_and_demo_history():
     assert b'id="demo-panel"' in home.content
     assert b"First-hour walkthrough" not in home.content
     asset_page = client.get(f"/assets/{DEMO_ASSET}")
-    assert b"Similar incident" in asset_page.content
+    assert b"Similar incident history" in asset_page.content
+    assert b"<h2>Incidents</h2>" not in asset_page.content
     assert b"High CPU" in asset_page.content or b"HighCPU" in asset_page.content
     incident_page = client.get(f"/incidents/{incident.number}")
     assert b"Who to call" in incident_page.content
+    assert b"Similar on this asset" in incident_page.content
+    assert b"<h2>Incidents</h2>" not in incident_page.content
     assert b"payments@dc.local" in incident_page.content
     db.close()
 
@@ -198,7 +201,8 @@ def test_run_demo_keeps_similar_history_and_notifies_owner():
     )
     assert note is not None
     assert note.target == DEMO_OWNER_EMAIL
-    assert note.subject.startswith("[DEMO]")
+    assert note.subject == f"Alarm {DEMO_ASSET}"
+    assert not note.subject.startswith("[DEMO]")
     db.close()
 
 
@@ -313,7 +317,7 @@ def test_asset_table_actions_cell_is_table_cell_not_flex_td():
     assert ".asset-table td.asset-actions" in css
     assert "display: table-cell" in css
     assert "td.row-actions" in css
-    assert "app.css?v=v08-19" in base
+    assert "app.css?v=v08-20" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():

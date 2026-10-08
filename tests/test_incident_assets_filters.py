@@ -174,7 +174,8 @@ def test_assets_page_type_filter(seeded):
     assert _ids(page) == {"iaf-sw1", "iaf-sw2"}
     select = page.split('data-asset-filter="type">', 1)[1].split("</select>", 1)[0]
     assert '<option value="Switch" selected>' in select
-    assert '<option value="">All types</option>' in select
+    assert '<option value="">Type</option>' in select
+    assert "All types" not in select
     for name in ASSET_TYPE_CHOICES:
         assert f'<option value="{name}"' in select, name
     assert '<optgroup label="Custom">' in select and '<option value="UPS (APC)"' in select
@@ -187,7 +188,8 @@ def test_assets_page_source_filter(seeded):
     assert _ids(_get(client, "source=forge")) == {"iaf-lin", "iaf-ups"}
     select = _get(client, "source=zabbix").split('data-asset-filter="source">', 1)[1].split("</select>", 1)[0]
     labels = re.findall(r'<option value="([^"]*)"[^>]*>([^<]+)</option>', select)
-    assert labels == [("", "All sources"), ("forge", "Forge"), ("netbox", "NetBox"), ("zabbix", "Zabbix")]
+    assert labels == [("", "Source"), ("forge", "Forge"), ("netbox", "NetBox"), ("zabbix", "Zabbix")]
+    assert "All sources" not in select
     assert '<option value="zabbix" selected>' in select
 
 
@@ -199,9 +201,11 @@ def test_assets_page_site_and_customer_filters(seeded):
     page = _get(client, "site=DC-West&customer=Acme")
     assert _ids(page) == {"iaf-ups"}
     site = page.split('data-asset-filter="site">', 1)[1].split("</select>", 1)[0]
-    assert '<option value="">All sites</option>' in site
+    assert '<option value="">Site</option>' in site
+    assert "All sites" not in site
     assert '<option value="DC-West" selected>' in site and '<option value="DC-East">' in site
     customer = page.split('data-asset-filter="customer">', 1)[1].split("</select>", 1)[0]
+    assert '<option value="">Customer</option>' in customer
     assert '<option value="Acme" selected>' in customer and '<option value="Globex">' in customer
 
 
@@ -235,6 +239,6 @@ def test_edit_link_keeps_filters(seeded):
 
 def test_v08_15_cache_bump_and_compact_select_css():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-19" in base and "app.js?v=v08-19" in base
+    assert "app.css?v=v08-20" in base and "app.js?v=v08-20" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".list-filters select.filter-select { width: auto;" in css

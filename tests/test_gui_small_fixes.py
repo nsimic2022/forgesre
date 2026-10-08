@@ -27,8 +27,15 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v08-19" in base
+    assert "app.css?v=v08-20" in base
     assert ".banner-short" not in css
+    assert ".banner-x" in css
+    assert "top: 0.35rem" in css.split(".banner-x {", 1)[1].split("}", 1)[0]
+    assert "right: 0.4rem" in css.split(".banner-x {", 1)[1].split("}", 1)[0]
+    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    assert "bindFlashDismiss" in js
+    assert "forgesre-flash-dismiss" in js
+    assert "sessionStorage" in js
     assert ".playbook-grid" in css
     assert ".ack-dot" in css
     assert ".list-filters" in css

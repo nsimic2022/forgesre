@@ -1,55 +1,6 @@
 {% extends "base.html" %}
-{% import "_select.html" as sel %}
-{% import "_stamp.html" as stamp with context %}
 {% block title %}Journal · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Journal {% with %}{% set tip %}Internal process journal. Each module writes a short ok / warn / error report when it finishes a job. Old rows are dropped automatically (about 200 per module) so search stays small. Raw Docker/Loki logs are separate — this is the operator view, not a bash shell.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
-<nav class="pills">
-  <a class="pill {% if not filter_module %}ok{% endif %}" href="/journal?status={{ filter_status|urlencode }}&amp;q={{ filter_q|urlencode }}">All</a>
-  {% for item in counts %}
-  <a class="pill {% if filter_module == item.module %}ok{% endif %}" href="/journal?module={{ item.module|urlencode }}&amp;status={{ filter_status|urlencode }}&amp;q={{ filter_q|urlencode }}">{{ item.module }} ({{ item.count }})</a>
-  {% endfor %}
-</nav>
-<form method="get" action="/journal" class="row-actions" style="margin: 0.8rem 0;">
-  <input type="hidden" name="module" value="{{ filter_module }}">
-  <select name="status">
-    <option value="">any status</option>
-    <option value="ok" {% if filter_status == "ok" %}selected{% endif %}>ok</option>
-    <option value="warn" {% if filter_status == "warn" %}selected{% endif %}>warn</option>
-    <option value="error" {% if filter_status == "error" %}selected{% endif %}>error</option>
-  </select>
-  <input name="q" value="{{ filter_q }}" placeholder="search summary, detail, id">
-  {% include "_pager_keep.html" %}
-  <button type="submit">Search</button>
-</form>
-<div data-select-scope>
-<div class="table-scroll list-scroll" data-list-scroll>
-<table class="console">
-  <thead>
-    <tr>{{ sel.head() }}<th>When</th><th>Module</th><th>Action</th><th>Status</th><th>Report</th></tr>
-  </thead>
-  <tbody>
-  {% for row in entries %}
-    <tr data-list-row>
-      {{ sel.cell(row.id, row.module ~ " " ~ row.action) }}
-      <td class="muted">{{ stamp.show(row.at) }}</td>
-      <td><a href="/journal?module={{ row.module|urlencode }}">{{ row.module }}</a></td>
-      <td>{{ row.action }}</td>
-      <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>
-      <td>
-        <strong>{% if is_demo_journal(row) %}<span class="pill demo">DEMO</span> {% endif %}{{ row.summary }}</strong>
-        {% if row.object_id %}<span class="muted"> · {{ row.object_type }} {{ row.object_id }}</span>{% endif %}
-        {% if row.detail %}<pre class="journal-detail">{{ row.detail }}</pre>{% endif %}
-      </td>
-    </tr>
-  {% else %}
-    <tr><td colspan="6" class="muted">No journal rows yet. They appear after Core start, install, adding an asset, or running the demo.</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% with list_actions={"delete": "/journal/bulk-delete", "export": "/journal/export", "next": "/journal", "confirm": "Delete the selected journal rows?"} %}
-{% include "_pager.html" %}
-{% endwith %}
-</div>
+{# Standalone page is not served. GET /journal redirects to System Health#journal. #}
+<p class="muted">Journal is on <a href="/health-ui#journal">System Health</a>.</p>
 {% endblock %}

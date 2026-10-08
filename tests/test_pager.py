@@ -180,14 +180,16 @@ def test_journal_pages_ten_and_keeps_filters():
         report(db, "jobs", "page-test", "ok", summary=f"Pager journal {token} {i:02d}")
     first = client.get("/journal")
     assert first.status_code == 200
-    assert _row_count(first.text) == 10
-    _assert_bottom_pager(first.text)
+    section = first.text.split('id="journal"', 1)[1]
+    assert _row_count(section) == 10
+    _assert_bottom_pager(section)
     filtered = client.get(f"/journal?status=ok&q={token}&page=2")
     assert filtered.status_code == 200
-    assert 1 <= _row_count(filtered.text) <= 10
-    assert "status=ok" in filtered.text
-    assert token in filtered.text
-    form = filtered.text.split("<form", 1)[1].split("</form>", 1)[0]
+    filtered_journal = filtered.text.split('id="journal"', 1)[1]
+    assert 1 <= _row_count(filtered_journal) <= 10
+    assert "status=ok" in filtered_journal
+    assert token in filtered_journal
+    form = filtered_journal.split("<form", 1)[1].split("</form>", 1)[0]
     assert 'name="page"' not in form
     assert db.query(JournalEntry).filter(JournalEntry.summary.like(f"%{token}%")).count() >= 25
     db.close()

@@ -18,7 +18,13 @@ from app.models import AuditLog, Evidence, Incident, IncidentNote, Investigation
 from app.notifications import build_escalation_html
 from app.seed import seed
 from app.security import hash_password
-from app.services import ensure_notification, incident_mail_heading, next_incident_number, send_incident_report
+from app.services import (
+    ensure_notification,
+    incident_alarm_subject,
+    incident_mail_heading,
+    next_incident_number,
+    send_incident_report,
+)
 from app.settings import settings
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -264,7 +270,7 @@ def test_incidents_time_window_and_custom_range_keep_site_filter():
     db.close()
 
 
-def test_email_subject_is_hostname_then_problem_and_footer_is_gone():
+def test_email_subject_is_alarm_hostname_and_footer_is_gone():
     db = _db()
     token = uuid4().hex[:6]
     asset = create_manual_asset(
@@ -291,11 +297,14 @@ def test_email_subject_is_hostname_then_problem_and_footer_is_gone():
     assert heading.startswith(f"mail-{token} — ")
     assert f"CPU hot {token}" in heading
     assert incident.number not in heading
+    subject = incident_alarm_subject(incident)
+    assert subject == f"Alarm mail-{token}"
+    assert f"CPU hot {token}" not in subject
     note = ensure_notification(db, incident, "immediate")
-    assert note.subject == heading
-    assert note.subject.index(f"mail-{token}") < note.subject.index(f"CPU hot {token}")
+    assert note.subject == subject
     html = build_escalation_html(incident, "immediate", "team")
     assert heading in html
+    assert f"mail-{token}" in html and f"CPU hot {token}" in html
     assert "does not execute playbooks" not in html
     assert "This is a snapshot" not in html
     plain = build_incident_report(db, incident)
@@ -303,8 +312,9 @@ def test_email_subject_is_hostname_then_problem_and_footer_is_gone():
     assert "does not execute playbooks" not in plain
     assert "This is a snapshot" not in plain
     assert heading in report_html
+    assert f"CPU hot {token}" in report_html
     sent = send_incident_report(db, incident, "ops@dc.local", actor="admin@forgesre.local")
-    assert sent.subject == heading
+    assert sent.subject == subject
 
     from sqlalchemy.orm import joinedload
 
@@ -321,11 +331,13 @@ def test_email_subject_is_hostname_then_problem_and_footer_is_gone():
     assert demo_row is not None and demo_row.asset is not None
     demo_heading = incident_mail_heading(demo_row)
     demo_note = ensure_notification(db, demo_row, "15m")
-    assert demo_note.subject.startswith("[DEMO] ")
-    assert demo_heading in demo_note.subject
-    assert demo_row.asset.hostname in demo_note.subject
-    assert demo_row.title in demo_note.subject
-    assert demo_note.subject.index(demo_row.asset.hostname) < demo_note.subject.index(demo_row.title)
+    assert demo_note.subject == f"Alarm {demo_row.asset.hostname}"
+    assert not demo_note.subject.startswith("[DEMO]")
+    assert demo_row.title not in demo_note.subject
+    demo_html = build_escalation_html(demo_row, "15m", "team")
+    assert demo_heading in demo_html
+    assert "[DEMO] lab only" in demo_html
+    assert "DEMO incident" in (demo_note.body or "")
     db.close()
 
 

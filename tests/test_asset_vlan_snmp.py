@@ -119,7 +119,8 @@ def test_vlan_persists_on_add_edit_detail_and_filters():
     bar = [form.index(f'data-asset-filter="{key}"') for key in ("type", "source", "site", "vlan", "customer")]
     assert bar == sorted(bar)
     vlan = form.split('data-asset-filter="vlan">', 1)[1].split("</select>", 1)[0]
-    assert '<option value="">All VLANs</option>' in vlan
+    assert '<option value="">VLAN</option>' in vlan
+    assert "All VLANs" not in vlan
     assert '<option value="10.20" selected>' in vlan and '<option value="30">' in vlan
     assert '<a class="muted list-reset" href="/assets">Reset</a>' in form
     assert "&amp;vlan=10.20" in page.split('<table class="asset-table"', 1)[1]
@@ -147,7 +148,7 @@ def test_layout_comms_alone_in_middle_alarms_then_playrules_right():
     assert ".asset-form-reserved { flex: 1 1 auto; min-height: 12rem; }" in css
     assert "hr.asset-form-rule" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-19" in base and "app.js?v=v08-19" in base
+    assert "app.css?v=v08-20" in base and "app.js?v=v08-20" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "[data-snmp-version]" in js and "[data-snmp-v3-level]" in js
 

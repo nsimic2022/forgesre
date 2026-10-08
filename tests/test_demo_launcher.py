@@ -143,7 +143,8 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
         .first()
     )
     assert note is not None
-    assert note.subject.startswith("[DEMO]")
+    assert note.subject == f"Alarm {DEMO_ASSET}"
+    assert not note.subject.startswith("[DEMO]")
     assert "DEMO incident on forge-demo-01" in (note.body or "")
     journal = list_entries(db, module="demo")
     assert any("DEMO" in (row.summary or "") and is_demo_journal(row) for row in journal)
@@ -230,8 +231,10 @@ def test_windows_and_network_demo_incidents_are_demo_tagged():
     assert "NodeCPUHigh" in (cpu.fingerprint or "")
     win_note = db.query(Notification).filter_by(incident_id=win.id, step_key="immediate").one()
     net_note = db.query(Notification).filter_by(incident_id=net.id, step_key="immediate").one()
-    assert win_note.subject.startswith("[DEMO]")
-    assert net_note.subject.startswith("[DEMO]")
+    assert win_note.subject == f"Alarm {DEMO_WIN_ASSET}"
+    assert net_note.subject == f"Alarm {DEMO_SW_ASSET}"
+    assert not win_note.subject.startswith("[DEMO]")
+    assert not net_note.subject.startswith("[DEMO]")
     assert "DEMO incident on forge-demo-win-01" in (win_note.body or "")
     assert "DEMO incident on forge-demo-sw-01" in (net_note.body or "")
     assert "windows_exporter is scraping" not in (win.summary or "").lower()

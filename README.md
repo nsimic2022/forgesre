@@ -41,7 +41,7 @@ Find or enter a host
 | **Playrules / playbooks** | Deterministic mapping by `alertname`: this alert → this checklist. Thresholds live in Prometheus `alerts.yml`, not in playrules. Nothing is executed. |
 | **Escalation** | Generated mail to the **asset owner** (or an address written on the policy step; no owner email = `no-recipient`, nothing sent). SMTP optional: Gmail, Outlook, or later the off-by-default mailbox profile. |
 | **ForgeRCA / ForgeAI** | Read-only investigation. ForgeRCA (Python builtin) always first; ForgeAI is the optional local LLM rewrite. |
-| **Journal** | `/journal` — per-module ok/warn/error, not Docker logs and not a bash shell. |
+| **Journal** | On **System Health** (`/health-ui#journal`) — per-module ok/warn/error, not Docker logs and not a bash shell. `/journal` redirects there. |
 
 Demo asset `forge-demo-01` is seeded so the first hour is visible without a real customer VM.
 
@@ -173,8 +173,7 @@ wget -O data/models/model.gguf \
 | `/history` | 90-day lookback, filters, closed rows |
 | `/ai/INC-…` | Read-only RCA (ForgeRCA first, ForgeAI rewrite-only) |
 | `/playrules` `/playbooks` `/escalation` | Workflow |
-| `/journal` | Internal console |
-| `/health-ui` | Same checks as `./forgesre doctor`; Open Grafana / Prometheus Targets / … |
+| `/health-ui` | System Health (`./forgesre doctor`) and the journal list below it. `/journal` redirects to `#journal`. Open Grafana / Prometheus Targets / … |
 | `/ops` | Email & reports: address book, send, outbox, scheduled reports (Edit / Clone / Remove / Enable) |
 | `/admin` | Users: click a row to edit or remove; platform backup / import; audit |
 

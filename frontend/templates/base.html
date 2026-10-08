@@ -15,7 +15,7 @@
       document.documentElement.setAttribute("data-theme", theme);
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v08-19">
+  <link rel="stylesheet" href="/static/app.css?v=v08-20">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -40,13 +40,18 @@
     <a href="/playrules" class="{% if request.url.path.startswith('/playrules') %}active{% endif %}">Playrules</a>
     <a href="/playbooks" class="{% if request.url.path.startswith('/playbooks') %}active{% endif %}">Playbooks</a>
     <a href="/escalation" class="{% if request.url.path.startswith('/escalation') %}active{% endif %}">Escalation</a>
-    <a href="/journal" class="{% if request.url.path.startswith('/journal') %}active{% endif %}">Journal</a>
     {% endif %}
     <a href="/health-ui" class="{% if request.url.path.startswith('/health-ui') %}active{% endif %}">System Health</a>
     <a href="/ops" class="{% if request.url.path.startswith('/ops') %}active{% endif %}">Email &amp; reports</a>
     {% if can('admin') %}<a href="/admin" class="{% if request.url.path.startswith('/admin') %}active{% endif %}">Administration</a>{% endif %}
     <div class="nav-foot">
       <div class="nav-glance">
+        {% if appliance_cube is defined %}
+        <div class="nav-status" aria-label="ForgeSRE and ForgeAI">
+          <a class="nav-cube {{ appliance_cube.css }}" href="/health-ui" data-nav-cube="forgesre" title="{{ appliance_cube.title }}">ForgeSRE</a>
+          <span class="nav-cube idle" data-nav-cube="forgeai" title="ForgeAI is inactive. Coming later.">ForgeAI</span>
+        </div>
+        {% endif %}
         <a class="nav-clock" href="/" data-clock title="Appliance CPU / RAM / HDD are on the Dashboard">—</a>
       </div>
       <div class="who">
@@ -71,6 +76,6 @@
     </div>
   </main>
   {% endif %}
-  <script src="/static/app.js?v=v08-19"></script>
+  <script src="/static/app.js?v=v08-20"></script>
 </body>
 </html>

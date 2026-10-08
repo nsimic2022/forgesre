@@ -136,6 +136,34 @@ a { color: var(--accent); }
   padding-top: 0.7rem;
   border-top: 1px solid var(--shell-line);
 }
+.nav-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.28rem;
+  margin: 0 0 0.85rem;
+}
+.nav a.nav-cube,
+.nav span.nav-cube {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 5.6rem;
+  height: 1.25rem;
+  padding: 0 0.4rem;
+  border-radius: 2px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  text-decoration: none;
+}
+.nav a.nav-cube.ok { background: var(--ok); color: #fff; }
+.nav a.nav-cube.warn { background: var(--warn); color: #1a1408; }
+.nav span.nav-cube.idle { background: #4e5358; color: #e4e6e8; cursor: default; }
+.nav a.nav-cube.ok:hover { background: var(--ok); color: #fff; }
+.nav a.nav-cube.warn:hover { background: var(--warn); color: #1a1408; }
 .nav a.nav-clock {
   display: inline-block;
   padding: 0;
@@ -398,13 +426,32 @@ a.button {
   color: var(--pill-warn);
 }
 .banner {
+  position: relative;
   background: var(--pill-warn-bg);
   border: 1px solid var(--warn);
   border-radius: 10px;
-  padding: 0.9rem 1rem;
+  padding: 0.9rem 2.2rem 0.9rem 1rem;
   margin-bottom: 1rem;
 }
 .banner strong { color: var(--warn); }
+.banner-x {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.4rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.banner-x:hover { background: rgba(0, 0, 0, 0.08); }
 .row-actions { display: flex; gap: 0.4rem; align-items: center; }
 .list-filters {
   display: flex;
@@ -1774,5 +1821,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
   white-space: nowrap;
 }
 .support-note { font-size: 0.78rem; color: var(--muted); overflow-wrap: anywhere; }
-/* v08-15: Assets filter bar — compact Type / Source / Site / Customer dropdowns beside the one Search box. */
+/* v08-20: Assets filter bar — one search box, compact Type / Source / Site / VLAN / Customer dropdowns. */
 .list-filters select.filter-select { width: auto; min-width: 8.5rem; max-width: 13rem; }
+.health-journal { margin-top: 2.75rem; }
+.journal-filters { margin: 0.8rem 0; }
