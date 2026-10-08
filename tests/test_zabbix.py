@@ -843,6 +843,8 @@ def test_handbook_and_secrets_example_document_zabbix():
     for needle in ("forgesre-ro", "Sync hosts", "ZABBIX_WEBHOOK_TOKEN", "HttpRequest", "{TRIGGER.ID}", "never writes back"):
         assert needle.lower() in handbook.lower(), needle
     assert "](zabbix.md)" in handbook
+    assert "zabbix.md#18-end-to-end-operator-checklist" in handbook
+    assert "Standard alarms" in handbook
     example = (ROOT / "secrets" / "secrets.example.env").read_text(encoding="utf-8")
     assert "# --- Zabbix ---" in example
     for key in ("ZABBIX_URL=", "ZABBIX_API_TOKEN=", "ZABBIX_WEBHOOK_TOKEN="):
@@ -868,14 +870,33 @@ def test_zabbix_guide_webhook_matches_handler():
         "Owner email",
         "source=zabbix",
         "Recovery operations",
+        "FORGESRE_HTTP_PORT",
+        "secrets/secrets.env",
+        "system.cpu.util",
+        "vm.memory.utilization",
+        "Standard alarms",
+        "Acknowledge",
+        "query_range",
+        "trend.get",
+        "git pull origin main && ./forgesre update",
+        "invalid zabbix webhook token",
+        "missing trigger_name ({TRIGGER.NAME}) or event_name ({EVENT.NAME})",
+        "INC-NNNN_DD.MM.YYYY_HH:MM",
+        "There is no Admin UI field",
+        "never writes back",
     ):
         assert needle in guide, needle
+    assert "network_mode: host" in guide or "host networking" in guide
+    assert "./forgesre journal zabbix" in guide
+    assert "No Prometheus rule" in guide
     script = guide[guide.index("var p = JSON.parse(value);") : guide.index("return 'OK';")]
     assert "req.addHeader('Authorization: Bearer ' + p.forge_token);" in script
     assert "key !== 'forge_url' && key !== 'forge_token'" in script
     rows = dict(re.findall(r"^\s*\| `(\w+)` \| `(\{[A-Z.]+\})` \|$", guide, re.M))
     assert rows["trigger_name"] == "{TRIGGER.NAME}"
     assert rows["host_host"] == "{HOST.HOST}"
+    assert rows["event_value"] == "{EVENT.VALUE}"
+    assert rows["host_id"] == "{HOST.ID}"
     sample = {name: f"x-{name}" for name in rows}
     sample.update({"event_value": "1", "event_severity": "High", "trigger_id": "23456", "host_id": "10584"})
     alert = parse_webhook(sample)
