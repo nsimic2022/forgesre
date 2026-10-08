@@ -66,6 +66,8 @@ _NEXT = {
     "/discovery",
     "/playrules",
     "/journal",
+    "/health-ui",
+    "/health-ui#journal",
     "/ops",
     "/ops#mail",
     "/ops#reports",
@@ -877,7 +879,7 @@ def journal_bulk_delete(
 ):
     _forbid(user, can(user, "read_play"))
     delete_journal_rows(db, _ints(selected_values(selected)), user.email)
-    return _back(nxt, "/journal")
+    return _back(nxt, "/health-ui#journal")
 
 
 @router.post("/journal/export")

@@ -61,7 +61,7 @@ from app.inventory import (
     validate_ip_field,
     zabbix_agent_state,
 )
-from app.journal import MODULES, count_entries, list_entries, module_counts, report
+from app.journal import count_entries, list_entries, module_counts, report
 from app.models import (
     Asset,
     AuditLog,
@@ -117,7 +117,7 @@ from app.services import (
     run_demo_windows,
     run_investigation,
 )
-from app.stack import enrich_components, rewrite_host
+from app.stack import appliance_cube, enrich_components, rewrite_host
 from app.history import (
     ack_circle,
     acknowledge,
@@ -497,6 +497,16 @@ def ctx(request: Request, user: User | None, **extra):
         "extras_rows": extras_rows,
         "support_status": support_status,
     }
+    if user is not None:
+        try:
+            data["appliance_cube"] = appliance_cube(doctor_payload())
+        except Exception:
+            log.debug("appliance cube skipped", exc_info=True)
+            data["appliance_cube"] = {
+                "css": "warn",
+                "state": "unknown",
+                "title": "System Health did not answer.",
+            }
     data.update(extra)
     return data
 
@@ -1333,9 +1343,7 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
     item = db.query(Asset).filter_by(asset_id=asset_id).first()
     if item is None:
         raise HTTPException(status_code=404)
-    related = db.query(Incident).filter_by(asset_id=item.id).order_by(Incident.id.desc()).all()
     similar = similar_incident_groups(db, item)
-    related, pager = paginate(related, request.query_params.get("page", "1"), size=per_page(request))
     similar, similar_pager = paginate(
         similar,
         request.query_params.get("similar_page", "1"),
@@ -1347,7 +1355,6 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         "asset_detail.html",
         user,
         asset=item,
-        incidents=related,
         similar=similar,
         snmp_target=is_snmp_asset(item),
         snmp_port=snmp_port_for(item),
@@ -1356,7 +1363,6 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         remove_blocked=delete_blocked(item) if can(user, "write_assets") else "",
         reachability_snapshot=reachability_snapshot,
         metrics=safe_asset_metric_panel(item),
-        pager=pager,
         similar_pager=similar_pager,
         playrule_choices=playrule_choices(db),
         picked_playrules=asset_playrule_ids(item),
@@ -2344,18 +2350,9 @@ def escalation_delete(
     return RedirectResponse("/escalation", status_code=302)
 
 
-@router.get("/journal", response_class=HTMLResponse)
-def journal_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_page("read_play")),
-    module: str = "",
-    status: str = "",
-    q: str = "",
-    page: str = "1",
-):
+def _journal_panel(request: Request, db: Session, *, module: str, status: str, q: str, page: str) -> dict:
     total = count_entries(db, module=module or None, status=status or None, q=q or None)
-    pager = pager_state(page, total=total, size=per_page(request))
+    pager = pager_state(page, total=total, size=per_page(request), fragment="#journal")
     rows = list_entries(
         db,
         module=module or None,
@@ -2364,25 +2361,43 @@ def journal_page(
         limit=pager["size"],
         offset=pager["offset"],
     )
-    counts = module_counts(db)
-    return render(
-        request,
-        "journal.html",
-        user,
-        entries=rows,
-        counts=counts,
-        modules=MODULES,
-        filter_module=module,
-        filter_status=status,
-        filter_q=q,
-        pager=pager,
-    )
+    return {
+        "entries": rows,
+        "counts": module_counts(db),
+        "filter_module": module,
+        "filter_status": status,
+        "filter_q": q,
+        "pager": pager,
+        "journal_base": "/health-ui",
+    }
+
+
+@router.get("/journal")
+def journal_page(request: Request, user: User = Depends(require_page("read_play"))):
+    """Old Journal URL. The list lives on System Health."""
+    del user
+    qs = request.url.query
+    target = f"/health-ui?{qs}#journal" if qs else "/health-ui#journal"
+    return RedirectResponse(target, status_code=302)
 
 
 @router.get("/health-ui", response_class=HTMLResponse)
-def health_page(request: Request, user: User = Depends(login_required)):
+def health_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    module: str = "",
+    status: str = "",
+    q: str = "",
+    page: str = "1",
+):
     payload = doctor_payload()
     host = request.headers.get("host") or "localhost"
+    journal = (
+        _journal_panel(request, db, module=module, status=status, q=q, page=page)
+        if can(user, "read_play")
+        else None
+    )
     return render(
         request,
         "health.html",
@@ -2390,6 +2405,7 @@ def health_page(request: Request, user: User = Depends(login_required)):
         doctor=payload,
         stack=enrich_components(payload.get("components") or {}, host),
         grafana_open=rewrite_host(settings.grafana_public_url, host.split(":")[0]),
+        journal=journal,
     )
 
 

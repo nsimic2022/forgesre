@@ -88,6 +88,12 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     nav = home.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
     assert "nav-clock" in nav and "data-clock" in nav
     assert ">CPU<" not in nav and "data-metric" not in nav
+    assert 'data-nav-cube="forgesre"' in nav and ">ForgeSRE<" in nav
+    assert 'data-nav-cube="forgeai"' in nav and ">ForgeAI<" in nav
+    assert nav.index('class="nav-status"') < nav.index("data-clock")
+    assert "Coming later" in nav
+    css_nav = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".nav-status" in css_nav and "margin: 0 0 0.85rem" in css_nav.split(".nav-status {", 1)[1].split("}", 1)[0]
     assert 'class="nav-logout"' in home.text
     assert ">Logout<" in home.text
     other = client.get("/incidents")
@@ -103,8 +109,8 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "form.nav-logout" in css
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-19" in base
-    assert "app.js?v=v08-19" in base
+    assert "app.css?v=v08-20" in base
+    assert "app.js?v=v08-20" in base
     assert "bindInfoTips" in js
     assert "ops-report-actions" in css
 

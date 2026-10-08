@@ -63,4 +63,12 @@
   {% endfor %}
   </tbody>
 </table>
+{% if journal %}
+<section class="health-journal" id="journal">
+  <h2>Journal {% with %}{% set tip %}Internal process journal. Each module writes a short ok / warn / error report when it finishes a job. Old rows are dropped automatically (about 200 per module) so search stays small. Raw Docker/Loki logs are separate — this is the operator view, not a bash shell.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  {% with entries=journal.entries, counts=journal.counts, filter_module=journal.filter_module, filter_status=journal.filter_status, filter_q=journal.filter_q, pager=journal.pager, journal_base=journal.journal_base %}
+  {% include "_journal_list.html" %}
+  {% endwith %}
+</section>
+{% endif %}
 {% endblock %}

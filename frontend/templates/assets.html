@@ -8,14 +8,12 @@
 {% endif %}
 <form method="get" action="/assets" class="row-actions list-filters">
   <input name="q" value="{{ q }}" placeholder="search #, id, hostname, IP, VLAN" aria-label="Search">
-  <input name="hostname" value="{{ hostname }}" placeholder="Hostname" aria-label="Hostname">
-  <input name="ip" value="{{ ip }}" placeholder="IP" aria-label="IP">
   {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
   {% if flag %}<input type="hidden" name="flag" value="{{ flag }}">{% endif %}
   {% if agent %}<input type="hidden" name="agent" value="{{ agent }}">{% endif %}
   {% set type_on = asset_type|lower %}
   <select name="type" class="nice-select filter-select" aria-label="Type" title="Type" data-asset-filter="type">
-    <option value=""{% if not type_on %} selected{% endif %}>All types</option>
+    <option value=""{% if not type_on %} selected{% endif %}>Type</option>
     {% set listed = namespace(hit=false) %}
     {% for group, names in type_groups %}
     <optgroup label="{{ group }}">
@@ -36,16 +34,16 @@
     {% if type_on and not listed.hit %}<option value="{{ asset_type }}" selected>{{ asset_type }}</option>{% endif %}
   </select>
   <select name="source" class="nice-select filter-select" aria-label="Source" title="Source" data-asset-filter="source">
-    <option value=""{% if not source %} selected{% endif %}>All sources</option>
+    <option value=""{% if not source %} selected{% endif %}>Source</option>
     {% for value, label in source_filters %}
     <option value="{{ value }}"{% if source|lower == value %} selected{% endif %}>{{ label }}</option>
     {% endfor %}
     {% if source and source|lower not in source_filters|map('first') %}<option value="{{ source }}" selected>{{ source }}</option>{% endif %}
   </select>
-  {% for key, current, values, all_label in [("site", site, filter_options.sites, "All sites"), ("vlan", vlan, filter_options.vlans, "All VLANs"), ("customer", customer, filter_options.customers, "All customers")] %}
+  {% for key, current, values, empty_label in [("site", site, filter_options.sites, "Site"), ("vlan", vlan, filter_options.vlans, "VLAN"), ("customer", customer, filter_options.customers, "Customer")] %}
   {% set picked = current|lower %}
   <select name="{{ key }}" class="nice-select filter-select" aria-label="{{ 'VLAN' if key == 'vlan' else key|capitalize }}" title="{{ 'VLAN' if key == 'vlan' else key|capitalize }}" data-asset-filter="{{ key }}">
-    <option value=""{% if not picked %} selected{% endif %}>{{ all_label }}</option>
+    <option value=""{% if not picked %} selected{% endif %}>{{ empty_label }}</option>
     {% for value in values %}
     <option value="{{ value }}"{% if picked == value|lower %} selected{% endif %}>{{ value }}</option>
     {% endfor %}

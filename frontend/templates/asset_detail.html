@@ -152,16 +152,6 @@
 {% else %}
 <p class="muted">No incidents for this asset yet.</p>
 {% endif %}
-
-<h2>Incidents</h2>
-<ul>
-  {% for item in incidents %}
-    <li><a href="/incidents/{{ item.number }}">{{ item.number }}</a> {{ item.title }} ({{ item.status }})</li>
-  {% else %}
-    <li class="muted">No incidents for this asset.</li>
-  {% endfor %}
-</ul>
-{% include "_pager.html" %}
 </div>
 
 <div class="asset-detail-side">

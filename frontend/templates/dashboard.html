@@ -103,7 +103,7 @@
   {% endif %}
 </aside>
 </div>
-<p class="muted">Full stack diagnostics live on <a href="/health-ui">System Health</a>.{% if can('read_play') %} Journal is <a href="/journal">here</a>.{% endif %}</p>
+<p class="muted">Full stack diagnostics live on <a href="/health-ui">System Health</a>.{% if can('read_play') %} The journal is on <a href="/health-ui#journal">System Health</a>.{% endif %}</p>
 <div class="dash-incidents" data-dash-incidents>
 <section class="dash-recent">
   <h2>Recent incidents</h2>
@@ -175,7 +175,7 @@
   {% include "_pager.html" %}
   {% endwith %}
   </div>
-  <p class="muted"><a href="/journal">Open full journal</a></p>
+  <p class="muted"><a href="/health-ui#journal">Open full journal</a></p>
 </section>
 {% endif %}
 {% endblock %}

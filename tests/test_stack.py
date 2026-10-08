@@ -6,6 +6,7 @@ from app.journal import list_entries
 from app.seed import seed
 from app.stack import (
     alarm_path_failure_lines,
+    appliance_cube,
     component_label,
     doctor_soft_status,
     enrich_components,
@@ -36,6 +37,15 @@ def test_runtime_state_maps_green_yellow_red():
     assert doctor_soft_status("warn") is True
     assert doctor_soft_status("starting") is True
     assert doctor_soft_status("error") is False
+
+
+def test_appliance_cube_is_green_when_healthy_and_yellow_when_degraded():
+    healthy = appliance_cube({"overall": "HEALTHY", "failed": []})
+    assert healthy["css"] == "ok"
+    degraded = appliance_cube({"overall": "DEGRADED", "failed": ["prometheus"]})
+    assert degraded["css"] == "warn"
+    assert "prometheus" in degraded["title"]
+    assert appliance_cube({"overall": "DEGRADED", "failed": []})["css"] == "warn"
 
 
 def test_doctor_snmp_paused_when_no_targets(monkeypatch):

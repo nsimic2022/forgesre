@@ -34,6 +34,32 @@ def test_journal_prunes_old_rows_per_module():
     db.close()
 
 
+def test_journal_redirects_to_health_and_nav_has_no_journal_item():
+    client = TestClient(app)
+    login = client.post(
+        "/login",
+        data={"email": "admin@forgesre.local", "password": "testpass"},
+        follow_redirects=False,
+    )
+    assert login.status_code in {302, 303}
+    bounced = client.get("/journal?status=error&q=smtp", follow_redirects=False)
+    assert bounced.status_code == 302
+    assert bounced.headers["location"] == "/health-ui?status=error&q=smtp#journal"
+    health = client.get("/health-ui")
+    assert health.status_code == 200
+    assert 'id="journal"' in health.text
+    section = health.text.split('id="journal"', 1)[1]
+    assert 'placeholder="search summary, detail, id"' in section
+    assert 'name="selected"' in section
+    assert 'action="/journal/export"' in section
+    assert 'action="/journal/bulk-delete"' in section
+    assert 'class="pager-bar"' in section
+    nav = health.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    assert ">Journal<" not in nav
+    assert 'href="/journal"' not in nav
+    assert 'href="/health-ui"' in nav
+
+
 def test_console_page_and_api():
     client = TestClient(app)
     login = client.post(

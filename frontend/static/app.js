@@ -47,6 +47,52 @@ applyTheme(currentTheme());
   sync();
 })();
 
+(function bindFlashDismiss() {
+  const keyName = "forgesre-flash-dismiss";
+  let saved = [];
+  try {
+    saved = JSON.parse(sessionStorage.getItem(keyName) || "[]");
+  } catch (err) {
+    saved = [];
+  }
+  if (!Array.isArray(saved)) saved = [];
+  const seen = new Set(saved.map(String));
+  const keyOf = (el) => {
+    const text = (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 400);
+    let hash = 5381;
+    for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) >>> 0;
+    return String(hash);
+  };
+  const remember = (id) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    try {
+      sessionStorage.setItem(keyName, JSON.stringify(Array.from(seen)));
+    } catch (err) {
+      /* private mode */
+    }
+  };
+  document.querySelectorAll(".banner").forEach((el) => {
+    const id = keyOf(el);
+    if (seen.has(id)) {
+      el.hidden = true;
+      return;
+    }
+    if (el.querySelector("[data-flash-dismiss]")) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "banner-x";
+    button.setAttribute("data-flash-dismiss", "");
+    button.setAttribute("aria-label", "Dismiss");
+    button.textContent = "\u00d7";
+    button.addEventListener("click", () => {
+      el.hidden = true;
+      remember(id);
+    });
+    el.appendChild(button);
+  });
+})();
+
 (function bindClock() {
   const clocks = document.querySelectorAll("[data-clock]");
   if (!clocks.length) return;

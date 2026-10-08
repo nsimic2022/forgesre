@@ -1333,6 +1333,10 @@ def asset_search_blob(asset: Asset) -> str:
             asset.asset_id or "",
             asset.hostname or "",
             asset.ip or "",
+            asset.owner or "",
+            asset.contact_name or "",
+            asset_extra(asset, "site"),
+            asset_extra(asset, "customer"),
             asset_extra(asset, "vlan"),
         ]
     ).lower()

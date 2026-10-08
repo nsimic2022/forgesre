@@ -143,13 +143,16 @@ def host_down_public(incident: Incident) -> dict[str, Any]:
 
 
 def is_demo_mail(note: Notification | None) -> bool:
-    """Escalation/outbox rows: DEMO prefix on the subject, or the linked incident."""
+    """Outbox row for a lab incident. Demo is in the body (and the pill), not required in the subject."""
     if note is None:
         return False
     subject = str(getattr(note, "subject", "") or "")
     if subject.upper().startswith(DEMO_MAIL_MARK):
         return True
-    return is_demo_incident(getattr(note, "incident", None))
+    if is_demo_incident(getattr(note, "incident", None)):
+        return True
+    body = str(getattr(note, "body", "") or "").lstrip().upper()
+    return body.startswith("DEMO INCIDENT")
 
 
 def is_demo_journal(row: Any) -> bool:
@@ -166,14 +169,19 @@ def is_demo_journal(row: Any) -> bool:
 
 
 def demo_mail_subject(incident: Incident | None, subject: str) -> str:
-    text = (subject or "").strip()
-    if is_demo_incident(incident) and not text.upper().startswith(DEMO_MAIL_MARK):
-        return f"{DEMO_MAIL_MARK} {text}"
-    return text
+    """Subject line as written. Demo stays in the body (banner and DEMO line), not the subject."""
+    del incident
+    return (subject or "").strip()
+
+
+def incident_alarm_subject(incident: Incident | None) -> str:
+    """Escalation and incident-report subject. Digest reports are not alarms."""
+    host = (incident_host(incident) or "").strip() or "unknown"
+    return f"Alarm {host}"[:255]
 
 
 def incident_mail_heading(incident: Incident | None) -> str:
-    """Email subject and HTML title: hostname, then the problem name. Same order as the dashboard list."""
+    """HTML title inside the mail body: hostname, then the problem name."""
     if incident is None:
         return "Incident"
     host = (incident_host(incident) or "").strip()
@@ -1327,7 +1335,7 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
         incident.asset = db.get(Asset, incident.asset_id)
     recipient = escalation_recipient(incident, policy_role)
     stored_target = recipient or policy_role
-    subject = demo_mail_subject(incident, incident_mail_heading(incident))
+    subject = incident_alarm_subject(incident)
     body = build_escalation_body(incident, step_key, policy_role)
     html_body = build_escalation_html(incident, step_key, policy_role)
     row = Notification(
@@ -1571,7 +1579,7 @@ def send_incident_report(db: Session, incident: Incident, target: str, actor: st
     return send_outbound_mail(
         db,
         target=contact.email,
-        subject=demo_mail_subject(incident, incident_mail_heading(incident)),
+        subject=incident_alarm_subject(incident),
         body=body,
         actor=actor,
         step_key="incident-report",
