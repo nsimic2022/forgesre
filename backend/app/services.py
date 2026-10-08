@@ -691,7 +691,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
         if incident.id and not db.query(Evidence.id).filter_by(incident_id=incident.id).first():
             collect_evidence(db, incident, alert)
         refresh_asset_status(db, asset)
-        ensure_notification(db, incident, step_key="immediate")
+        notify_first_step(db, incident)
     db.commit()
     for incident in created:
         db.refresh(incident)
@@ -1586,6 +1586,7 @@ def parse_policy_steps(text: str) -> list[dict[str, Any]]:
 
 
 def escalation_steps(incident: Incident) -> list[dict[str, Any]]:
+    """Policy ladder with one outbox key per step. Two steps at the same minute get ``5m`` and ``5m-2``."""
     policy = incident.playrule.escalation_policy if incident.playrule else None
     raw = list(policy.steps) if policy and policy.steps else [
         {"after_minutes": 0, "target": "team", "channel": "email"},
@@ -1593,9 +1594,13 @@ def escalation_steps(incident: Incident) -> list[dict[str, Any]]:
         {"after_minutes": 30, "target": "engineer", "channel": "email"},
     ]
     steps: list[dict[str, Any]] = []
+    seen: dict[str, int] = {}
     for index, step in enumerate(raw):
         after = int(step.get("after_minutes") or 0)
         key = str(step.get("step_key") or ("immediate" if after == 0 and index == 0 else f"{after}m"))
+        seen[key] = seen.get(key, 0) + 1
+        if seen[key] > 1:
+            key = f"{key}-{seen[key]}"
         steps.append(
             {
                 "after_minutes": after,
@@ -1605,6 +1610,16 @@ def escalation_steps(incident: Incident) -> list[dict[str, Any]]:
             }
         )
     return steps
+
+
+def notify_first_step(db: Session, incident: Incident) -> Notification | None:
+    """Mail at open = the policy's first 0-minute step (its address or role). No 0-minute step → nothing yet."""
+    if incident.playrule is None and incident.playrule_id:
+        incident.playrule = db.get(Playrule, incident.playrule_id)
+    first = next((step for step in escalation_steps(incident) if step["after_minutes"] == 0), None)
+    if first is None:
+        return None
+    return ensure_notification(db, incident, first["step_key"], target=first["target"])
 
 
 def close_open_incidents(db: Session, fingerprint: str, *, include_resolved: bool = False) -> None:

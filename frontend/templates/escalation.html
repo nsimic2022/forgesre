@@ -7,6 +7,7 @@
   <li><strong>Email address</strong> on the step (e.g. <code>30 oncall@dc.local</code>) — mail goes to that address.</li>
   <li><strong>Role</strong> on the step (<code>team</code>, <code>team-lead</code>, <code>engineer</code>) — mail goes to the asset owner email (demo: <code>platform@forgesre.local</code> on forge-demo-01).</li>
   <li>Role step and <strong>no owner email</strong> — recorded in the outbox as <span class="pill warn">no-recipient</span> and not sent. ForgeSRE does not invent <code>role@forgesre.local</code> addresses.</li>
+  <li>The <strong>0 min</strong> step is the mail sent when the incident opens. No 0 min step = no mail at open.</li>
 </ul>
 <div class="list-scroll list-scroll-cards" data-list-scroll>
 <div class="policy-grid">
