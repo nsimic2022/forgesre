@@ -90,10 +90,16 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert ">CPU<" not in nav and "data-metric" not in nav
     assert 'data-nav-cube="forgesre"' in nav and ">ForgeSRE<" in nav
     assert 'data-nav-cube="forgeai"' in nav and ">ForgeAI<" in nav
-    assert nav.index('class="nav-status"') < nav.index("data-clock")
+    assert nav.index(">Administration<") < nav.index('class="nav-status"')
+    assert nav.index('class="nav-status"') < nav.index('class="nav-glance"') < nav.index("data-clock")
+    glance = nav.split('class="nav-glance"', 1)[1].split('class="who"', 1)[0]
+    assert "data-nav-cube" not in glance and "data-clock" in glance
     assert "Coming later" in nav
     css_nav = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".nav-status" in css_nav and "margin: 0 0 0.85rem" in css_nav.split(".nav-status {", 1)[1].split("}", 1)[0]
+    status_css = css_nav.split(".nav-status {", 1)[1].split("}", 1)[0]
+    assert "margin: 0.85rem 0" in status_css
+    glance_css = css_nav.split(".nav-glance {", 1)[1].split("}", 1)[0]
+    assert "border-top:" in glance_css
     assert 'class="nav-logout"' in home.text
     assert ">Logout<" in home.text
     other = client.get("/incidents")
@@ -109,10 +115,43 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "form.nav-logout" in css
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-20" in base
-    assert "app.js?v=v08-20" in base
+    assert "app.css?v=v08-21" in base
+    assert "app.js?v=v08-21" in base
     assert "bindInfoTips" in js
     assert "ops-report-actions" in css
+
+
+def test_nav_cubes_precede_clock_separator():
+    """Stacked ForgeSRE / ForgeAI cubes sit above the clock rule, then the clock."""
+    base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    nav = base.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    admin = nav.index(">Administration<")
+    status = nav.index('class="nav-status"')
+    forgesre = nav.index('data-nav-cube="forgesre"')
+    forgeai = nav.index('data-nav-cube="forgeai"')
+    glance = nav.index('class="nav-glance"')
+    clock = nav.index("nav-clock")
+    assert admin < status < forgesre < forgeai < glance < clock
+    glance_html = nav.split('class="nav-glance"', 1)[1].split('class="who"', 1)[0]
+    assert "data-nav-cube" not in glance_html
+    assert "data-clock" in glance_html
+    assert 'class="nav-cube idle"' in nav and "Coming later" in nav
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    status_css = css.split(".nav-status {", 1)[1].split("}", 1)[0]
+    assert "flex-direction: column" in status_css
+    assert "margin: 0.85rem 0" in status_css
+    glance_css = css.split(".nav-glance {", 1)[1].split("}", 1)[0]
+    assert "border-top: 1px solid var(--shell-line)" in glance_css
+    cube = css.split(".nav span.nav-cube {", 1)[1].split("}", 1)[0]
+    assert "min-width: 6.72rem" in cube
+    assert "height: 1.5rem" in cube
+    assert "font-size: 0.82rem" in cube
+    clock_css = css.split(".nav a.nav-clock {", 1)[1].split("}", 1)[0]
+    assert "font-size: 2.4rem" in clock_css
+    assert ".nav a.nav-cube.ok { background: var(--ok)" in css
+    assert ".nav a.nav-cube.warn { background: var(--warn)" in css
+    assert ".nav span.nav-cube.idle { background: #4e5358" in css
+    assert 'href="/health-ui"' in nav and ">Journal<" not in nav
 
 
 def test_resource_levels_thresholds():
