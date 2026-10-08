@@ -479,7 +479,9 @@ Prometheus rule fires
 
 Incident is tied to an asset when `labels.asset` or `labels.instance` equals `asset_id` or hostname. Demo alerts use `asset: forge-demo-01`. An alert with neither label is **not** attached to the demo host; it opens with no asset (fingerprint `alertname:unlabeled`).
 
-Statuses: `OPEN` → `INVESTIGATING` (Acknowledge) → `RESOLVED` → `CLOSED`. Unacked time past the first policy step moves `OPEN` / `INVESTIGATING` to `ESCALATED`.
+Statuses: `OPEN` → `INVESTIGATING` (Acknowledge) → `RESOLVED` → `CLOSED`. Automatic ForgeRCA does not change the status and is not an ack — only the Acknowledge click sets the ack time. Unacked time past a later policy step moves `OPEN` / `INVESTIGATING` to `ESCALATED`; Acknowledge on `ESCALATED` keeps it `ESCALATED`. The Dashboard **Open** tile counts active incidents with no ack (`/incidents?status=unacked`).
+
+Alertmanager sends the whole `[alertname, asset]` group in each webhook, so one incident can stand for several series (for example `NetworkInterfaceDown` on two ports of one switch, or `NodeFilesystemUsageHigh` on two mountpoints). The incident stays active while any series in that group still fires and becomes `RESOLVED` only when all of them are resolved. One port recovering does not resolve it and does not open a RE-FIRED incident.
 
 Fingerprint is `alertname:asset`. While an incident with that fingerprint is **active** (`OPEN` / `INVESTIGATING` / `ESCALATED`), another fire updates it — no duplicate.
 
@@ -558,6 +560,8 @@ YAML examples in `config/examples/playbook-*.yml` are documentation for a later 
 - 30 min → `engineer`
 
 A background loop every 30 seconds generates (and optionally sends) those steps, counted from the incident start, until someone **Acknowledges** (status `OPEN` / `INVESTIGATING` / `ESCALATED` with no ack). Each step is written once per incident. The outbox is `/ops#mail`.
+
+The mail sent when the incident opens is the policy's **0-minute step**, to that step's recipient (`0 noc@dc.local` mails `noc@dc.local`; `0 team` mails the owner email). A policy with no 0-minute step sends nothing at open — its first mail goes out at that step's minute. Two steps at the same minute (`15 a@dc.local` and `15 b@dc.local`) each get their own mail.
 
 Recipient per step, in order:
 
@@ -652,7 +656,7 @@ On `/incidents/<number>`:
 
 | Button | Who | Effect |
 |---|---|---|
-| Acknowledge | analyst+ | Status `INVESTIGATING`, records ack user/time |
+| Acknowledge | analyst+ | Records ack user/time and stops the escalation mail ladder. `OPEN` → `INVESTIGATING`; `ESCALATED` stays `ESCALATED`; `RESOLVED` / `CLOSED` do not reopen. Green once acked (ack time, not status) |
 | Resolve | analyst+ (`write_incidents`) | Status `RESOLVED` (the problem is gone; Alertmanager `resolved` does the same). A later fire of the same alert opens a new incident |
 | Close | analyst+ (`write_incidents`) | Status `CLOSED` — final; the human says the work is done. Records who closed |
 | Open ForgeRCA | analyst+ (`read_ai`) or engineer (`investigate`) | Primary CTA to `/ai/INC-…`. Runs builtin ForgeRCA if needed; does not change the host |
