@@ -1149,7 +1149,7 @@ def run_investigation(
         requested_by=actor,
     )
     db.add(row)
-    incident.status = "INVESTIGATING" if incident.status == "OPEN" else incident.status
+    # Status stays as is: INVESTIGATING means a human acknowledged (ack_at), not that RCA ran.
     append_timeline(incident, "ai", "AI ANALYSIS", row.summary)
     append_timeline(incident, "rca", "RCA", row.likely_cause)
     db.add(

@@ -105,6 +105,7 @@ from app.services import (
 from app.stack import enrich_components, rewrite_host
 from app.history import (
     ack_circle,
+    acknowledge,
     add_note,
     apply_status_fields,
     audit_for,
@@ -1589,13 +1590,18 @@ def incident_status(
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
         raise HTTPException(status_code=404)
-    item.status = status.upper()
-    apply_status_fields(item, item.status, user.email)
-    if item.status in {"RESOLVED", "CLOSED"} and item.asset and item.asset.asset_id == "forge-demo-01":
-        from app.metrics import reset_demo_gauges
+    if status.upper() == "INVESTIGATING":
+        acknowledge(item, user.email)
+        data = {"status": item.status, "ack": True}
+    else:
+        item.status = status.upper()
+        apply_status_fields(item, item.status, user.email)
+        data = {"status": item.status}
+        if item.status in {"RESOLVED", "CLOSED"} and item.asset and item.asset.asset_id == "forge-demo-01":
+            from app.metrics import reset_demo_gauges
 
-        reset_demo_gauges()
-    audit(db, "incident.status", actor=user.email, object_type="incident", object_id=number, data={"status": item.status})
+            reset_demo_gauges()
+    audit(db, "incident.status", actor=user.email, object_type="incident", object_id=number, data=data)
     db.commit()
     return RedirectResponse(f"/incidents/{number}", status_code=302)
 
