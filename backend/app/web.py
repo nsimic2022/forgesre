@@ -1477,9 +1477,13 @@ def incidents_page(
     status: str = "",
     severity: str = "",
     days: str = "",
+    site: str = "",
+    customer: str = "",
     page: str = "1",
 ):
-    filters = incident_list_filters(status=status, severity=severity, open_filter=open_filter, days=days)
+    filters = incident_list_filters(
+        status=status, severity=severity, open_filter=open_filter, days=days, site=site, customer=customer
+    )
     size = per_page(request)
     rows, total = list_history(db, **filters["query"], limit=size, page=page)
     pager = pager_state(page, total=total, size=size)
@@ -1493,6 +1497,9 @@ def incidents_page(
         status_group=filters["status_group"],
         severity_group=filters["severity_group"],
         days=filters["days"],
+        site=filters["site"],
+        customer=filters["customer"],
+        filter_options=asset_filter_options(db.query(Asset).all()),
         pager=pager,
         nav_qs=filters["qs"],
     )
@@ -1559,7 +1566,12 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
     )
     q = request.query_params
     filters = incident_list_filters(
-        status=q.get("status", ""), severity=q.get("severity", ""), open_filter=q.get("open", ""), days=q.get("days", "")
+        status=q.get("status", ""),
+        severity=q.get("severity", ""),
+        open_filter=q.get("open", ""),
+        days=q.get("days", ""),
+        site=q.get("site", ""),
+        customer=q.get("customer", ""),
     )
     evidence, evidence_pager = paginate(
         [evidence_row(ev) for ev in sorted(item.evidence, key=lambda ev: ev.id or 0)] if can(user, "read_evidence") else [],
@@ -1618,6 +1630,10 @@ def incident_status(
             from app.metrics import reset_demo_gauges
 
             reset_demo_gauges()
+    from app.services import refresh_asset_status
+
+    db.flush()
+    refresh_asset_status(db, item.asset)
     audit(db, "incident.status", actor=user.email, object_type="incident", object_id=number, data=data)
     db.commit()
     return RedirectResponse(f"/incidents/{number}", status_code=302)

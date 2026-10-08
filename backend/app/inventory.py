@@ -1464,7 +1464,7 @@ def asset_tiles(rows: list[Asset]) -> list[dict]:
     """Dashboard infrastructure tiles. Each count is the length of the /assets list behind its link."""
     specs = [
         ("Total assets", "", {}, "/assets"),
-        ("No open incident", "ok", {"status": "healthy"}, "/assets?status=healthy"),
+        ("Assets without incident", "ok", {"status": "healthy"}, "/assets?status=healthy"),
         ("Warning", "warn", {"status": "warning"}, "/assets?status=warning"),
         ("Critical", "crit", {"status": "critical"}, "/assets?status=critical"),
         ("Offline / unreachable", "crit", {"flag": "unreachable"}, "/assets?flag=unreachable"),

@@ -77,7 +77,7 @@
 </section>
 <section class="dash-tiles-infra">
   <div class="tile-group">
-  <h2>Infrastructure {% with %}{% set tip %}Asset inventory counts — each number is the row count of the Assets list behind the click. No open incident / Warning / Critical come from open incidents on that asset — not from a liveness check. Offline / unreachable = last Assets-page probe failed both ICMP and the exporter/SNMP check, or NetBox marks the device non-active. Probes refresh when someone opens Assets; Prometheus up alerts (NodeExporterDown, WindowsExporterDown, SnmpDeviceUnreachable) are the real-time signal. No owner email = escalation has nobody to mail for role steps.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Infrastructure {% with %}{% set tip %}Asset inventory counts — each number is the row count of the Assets list behind the click, never an incident count. Assets without incident / Warning / Critical come from active incidents on that asset — not from a liveness check — and update when an incident opens, resolves or closes. Offline / unreachable = last Assets-page probe failed both ICMP and the exporter/SNMP check, or NetBox marks the device non-active. Probes refresh when someone opens Assets; Prometheus up alerts (NodeExporterDown, WindowsExporterDown, SnmpDeviceUnreachable) are the real-time signal. No owner email = escalation has nobody to mail for role steps.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="grid stat-row stat-row-big">
     {% for tile in asset_tiles %}
     <a class="stat {{ tile.tone }}{% if not tile.count %} stat-zero{% endif %}" href="{{ tile.href }}"><span>{{ tile.label }}</span><strong>{{ tile.count }}</strong></a>

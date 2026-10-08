@@ -20,6 +20,20 @@
       <option value="critical" {% if severity_group == "critical" %}selected{% endif %}>Critical</option>
     </select>
   </label>
+  {% for key, label, current, values, all_label in [("site", "Site", site, filter_options.sites, "All sites"), ("customer", "Customer", customer, filter_options.customers, "All customers")] %}
+  {% if values or current %}
+  {% set picked = current|lower %}
+  <label>{{ label }}
+    <select name="{{ key }}" data-incident-filter="{{ key }}">
+      <option value=""{% if not picked %} selected{% endif %}>{{ all_label }}</option>
+      {% for value in values %}
+      <option value="{{ value }}"{% if picked == value|lower %} selected{% endif %}>{{ value }}</option>
+      {% endfor %}
+      {% if picked and picked not in values|map('lower') %}<option value="{{ current }}" selected>{{ current }}</option>{% endif %}
+    </select>
+  </label>
+  {% endif %}
+  {% endfor %}
   <label>Last days <input name="days" type="number" min="1" max="3660" value="{{ days }}" placeholder="any age"></label>
   {% include "_pager_keep.html" %}
   <button type="submit">Filter</button>
@@ -39,7 +53,7 @@
       {% include "_incident_when.html" %}
     </tr>
   {% else %}
-    <tr><td colspan="5" class="muted">No incidents match this filter.{% if status_group != "all" or severity_group %} Try All or <a href="/history">History</a>.{% endif %}</td></tr>
+    <tr><td colspan="5" class="muted">No incidents match this filter.{% if status_group != "all" or severity_group or site or customer %} Try All or <a href="/history">History</a>.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>
