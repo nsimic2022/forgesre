@@ -311,7 +311,7 @@ def test_asset_form_is_three_columns_with_dropdown_playrules():
         "extra_support", "extra_support_from", "extra_support_to", "extra_support_lead_days",
         "asset_id", "hostname", "owner_email", "owner_phone", "notes",
     ):
-        at = text.index(f'name="{name}"')
+        at = text.index(f'name="{name}"', left)
         assert left < at < middle, name
     assert text.index("data-asset-contacts") < text.index("data-asset-support") < middle
     comms = text.index("data-asset-comms")
