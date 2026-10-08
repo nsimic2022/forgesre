@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_stamp.html" as stamp with context %}
 {% block title %}{{ asset.hostname }} · ForgeSRE{% endblock %}
 {% block content %}
 <p><a href="/assets">← Assets</a></p>
@@ -141,7 +142,7 @@
       <td colspan="5">
         <ul class="compact">
           {% for item in group.incidents %}
-          <li><a href="/incidents/{{ item.number }}">{{ item.number }}</a> {{ item.title }} ({{ item.status }}) · {{ item.started_at }}</li>
+          <li><a href="/incidents/{{ item.number }}">{{ item.number }}</a> {{ item.title }} ({{ item.status }}) · {{ stamp.show(item.started_at) }}</li>
           {% endfor %}
         </ul>
       </td>

@@ -46,11 +46,13 @@
         {% endif %}
       </td>
       {% if can('write_play') %}
-      <td class="row-actions">
-        <a class="button" href="/playrules?edit={{ rule.id }}{{ pager_keep(pager) }}#playrule-form">Edit</a>
-        <form method="post" action="/playrules/{{ rule.id }}/delete" class="inline" onsubmit="return confirm('Remove playrule {{ rule.name }}? Existing incidents keep their playbook. New {{ cond.get('alertname') or rule.name }} alerts will open without a playbook.');">
-          <button type="submit" class="danger">Remove</button>
-        </form>
+      <td>
+        <div class="row-actions backup-row-actions">
+          <a class="button" href="/playrules?edit={{ rule.id }}{{ pager_keep(pager) }}#playrule-form">Edit</a>
+          <form method="post" action="/playrules/{{ rule.id }}/delete" onsubmit="return confirm('Remove playrule {{ rule.name }}? Existing incidents keep their playbook. New {{ cond.get('alertname') or rule.name }} alerts will open without a playbook.');">
+            <button type="submit" class="danger">Remove</button>
+          </form>
+        </div>
       </td>
       {% endif %}
     </tr>

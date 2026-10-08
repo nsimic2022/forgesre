@@ -313,7 +313,7 @@ def test_asset_table_actions_cell_is_table_cell_not_flex_td():
     assert ".asset-table td.asset-actions" in css
     assert "display: table-cell" in css
     assert "td.row-actions" in css
-    assert "app.css?v=v08-17" in base
+    assert "app.css?v=v08-18" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():
@@ -764,9 +764,10 @@ def test_html_add_posts_asset_id_edit_keeps_it():
     )
     add = client.get("/assets")
     assert add.status_code == 200
-    id_at = add.text.find('name="asset_id"')
-    host_at = add.text.find('name="hostname"')
-    ip_at = add.text.find('name="ip"')
+    form_at = add.text.find('id="asset-form"')
+    id_at = add.text.find('name="asset_id"', form_at)
+    host_at = add.text.find('name="hostname"', form_at)
+    ip_at = add.text.find('name="ip"', form_at)
     assert 0 < id_at < host_at < ip_at
     created = client.post(
         "/assets",

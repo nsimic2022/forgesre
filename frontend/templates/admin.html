@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% import "_select.html" as sel %}
+{% import "_stamp.html" as stamp with context %}
 {% block title %}Administration · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Administration</h1>
 <h2>Users {% with %}{% set tip %}Click a user on the left to edit or remove them. Login passwords are stored as bcrypt hashes in Postgres — never in git, never shown here. The install admin bootstrap copy in secrets/secrets.env is separate (see handbook §5).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-<div class="split">
-  <div>
+<div class="split admin-user-split">
+  <div class="card admin-user-pane">
   <div class="table-scroll list-scroll" data-list-scroll>
   <table class="user-table">
     <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Actions</th></tr></thead>
@@ -33,7 +34,7 @@
   </div>
   {% include "_pager.html" %}
   </div>
-  <div>
+  <div class="card admin-user-pane">
     {% if selected %}
     <form method="post" action="/admin/users/{{ selected.id }}" class="stack" id="edit-user-form">
       <h3>Edit user</h3>
@@ -127,7 +128,7 @@
   {% for row in audits %}
     <tr data-list-row>
       {{ sel.cell(row.id, row.action) }}
-      <td>{{ row.at }}</td>
+      <td>{{ stamp.show(row.at) }}</td>
       <td>{{ row.actor }}</td>
       <td>{{ row.action }}</td>
       <td>{{ row.object_type }} {{ row.object_id }}</td>

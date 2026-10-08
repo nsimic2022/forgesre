@@ -139,12 +139,12 @@ a { color: var(--accent); }
 .nav a.nav-clock {
   display: inline-block;
   padding: 0;
-  font-size: 1.05rem;
-  font-weight: 600;
+  font-size: 1.9rem;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
   color: var(--shell-muted);
-  line-height: 1.2;
+  line-height: 1.1;
 }
 .nav a.nav-clock:hover { background: none; color: var(--shell-text); }
 .who { color: var(--shell-muted); font-size: 0.8rem; margin-bottom: 0.5rem; }
@@ -760,7 +760,13 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 .ack-dot.green { background: var(--ok); border-color: var(--ok); }
 .ack-dot.yellow { background: var(--warn); border-color: var(--warn); }
 .ack-dot.red { background: var(--crit); border-color: var(--crit); }
-.split { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1.5rem; }
+.split { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1.5rem; align-items: stretch; }
+.admin-user-split > .admin-user-pane {
+  margin: 0;
+  height: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+}
 .flow { list-style: none; padding: 0; }
 .flow .node { width: 100%; text-align: left; background: var(--nav-hover); color: var(--text); margin: 0.2rem 0; }
 .arrow { color: var(--muted); padding-left: 0.6rem; }
@@ -974,8 +980,29 @@ form.ops-compose {
   align-items: flex-start;
   gap: 1.5rem;
   width: 100%;
-  margin-bottom: 1rem;
+  margin-bottom: 0.25rem;
 }
+.report-active-head { margin: 2.25rem 0 0.7rem; }
+.report-recipients .recipient-picks {
+  max-height: 11rem;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  margin-bottom: 0.55rem;
+  padding: 0.35rem 0.15rem;
+}
+.report-schedule .custom-interval { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.report-schedule .custom-interval label { min-width: 8rem; }
+.report-schedule [hidden] { display: none !important; }
+.weekday-picks { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.75rem; margin-top: 0.35rem; }
+.stamp { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0.05rem; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stamp-time { color: var(--muted); font-size: 0.82rem; }
+.dash-recent th.col-host,
+.dash-recent td.col-host { width: 16%; max-width: 12rem; }
+.dash-recent th.col-name,
+.dash-recent td.col-name { width: 30%; }
+.dash-recent td.col-host { overflow-wrap: anywhere; font-weight: 600; }
 .ops-report-cols > form {
   flex: 1 1 18rem;
   min-width: 16rem;
@@ -1402,7 +1429,7 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .appliance-card h2 { margin: 0 0 0.2rem; }
 .appliance-clock {
   margin: 0.35rem 0 0.9rem;
-  font-size: clamp(2rem, 2.7vw, 3.2rem);
+  font-size: clamp(3.1rem, 4.6vw, 5.4rem);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
@@ -1575,14 +1602,46 @@ form.pager-size button { padding: 0.22rem 0.6rem; font-size: 0.85rem; }
   overflow: visible;
 }
 
-/* Row checkboxes. The pager's middle Delete / Export reads name="selected" on this page. */
+/* Row checkboxes. The pager's middle Delete / Export reads name="selected" on this page.
+   The label is the hit target. The box stays a normal 1rem control. */
 th.row-select,
-td.row-select { width: 2.2rem; padding-right: 0.15rem; text-align: center; }
-.row-select input[type="checkbox"] { width: auto; margin: 0; padding: 0; cursor: pointer; }
-.select-page-bar { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.5rem; font-size: 0.85rem; }
+td.row-select { width: 2.75rem; padding: 0; text-align: center; vertical-align: middle; }
+label.row-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.6rem;
+  min-height: 2.5rem;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.row-select input[type="checkbox"],
 .select-page-bar input[type="checkbox"],
-.card-select input[type="checkbox"] { width: auto; margin: 0; padding: 0; cursor: pointer; }
-.card-select { float: right; margin: 0.15rem 0 0 0.5rem; }
+.card-select input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  min-width: 1rem;
+  max-width: 1rem;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 1rem;
+  cursor: pointer;
+}
+.select-page-bar { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.5rem; font-size: 0.85rem; min-height: 2.5rem; padding: 0.2rem 0.35rem; cursor: pointer; }
+.card-select {
+  float: right;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  margin: 0 0 0 0.5rem;
+  padding: 0.45rem;
+  cursor: pointer;
+  box-sizing: border-box;
+}
 
 /* V0.8 asset NOC fields on Who to call. */
 .pre-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }

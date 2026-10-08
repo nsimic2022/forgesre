@@ -75,9 +75,10 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     assert "asset-form-grid" in page.text
     assert 'name="alarm_disk_threshold"' in page.text
     assert "Auto (detect exporter)" in page.text
-    host_at = page.text.find('name="hostname"')
-    id_at = page.text.find('name="asset_id"')
-    ip_at = page.text.find('name="ip"')
+    form_at = page.text.find('id="asset-form"')
+    host_at = page.text.find('name="hostname"', form_at)
+    id_at = page.text.find('name="asset_id"', form_at)
+    ip_at = page.text.find('name="ip"', form_at)
     alarm_at = page.text.find("alarm-families")
     type_at = page.text.find('name="type" class="nice-select" data-detect-type')
     left_at = page.text.find("asset-form-left")

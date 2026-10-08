@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% import "_select.html" as sel %}
+{% import "_stamp.html" as stamp with context %}
 {% block title %}{{ incident.number }} · ForgeSRE{% endblock %}
 {% block content %}
 <p><a href="/incidents{% if nav.qs %}?{{ nav.qs }}{% endif %}">← Incidents</a> · <a href="/history">History</a></p>
@@ -183,31 +185,34 @@
 <p class="muted" id="mail">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>
 
 <section id="audit">
-  <h2>Who did what {% with %}{% set tip %}Audit rows for this INC (login clicks, status, notes). Not an email read-receipt.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Who did what {% with %}{% set tip %}Audit rows for this INC (login clicks, status, notes). Not an email read-receipt. Export includes when, who, action, and the extra fields on the row.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div data-select-scope>
   <div class="table-scroll list-scroll" data-list-scroll>
   <table>
-    <thead><tr><th>When</th><th>Actor</th><th>Action</th></tr></thead>
+    <thead><tr>{{ sel.head() }}<th>When</th><th>Actor</th><th>Action</th></tr></thead>
     <tbody>
     {% for row in audit_rows %}
       <tr data-list-row>
-        <td>{{ row.at }}</td>
+        {{ sel.cell(row.id) }}
+        <td>{{ stamp.show(row.at) }}</td>
         <td>{{ row.actor }}</td>
         <td>{{ row.action }}{% if row.data %} {{ row.data }}{% endif %}</td>
       </tr>
     {% else %}
-      <tr><td colspan="3" class="muted">No audit rows yet.</td></tr>
+      <tr><td colspan="4" class="muted">No audit rows yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
-  {% with pager=audit_pager %}{% include "_pager.html" %}{% endwith %}
+  {% with pager=audit_pager, list_actions={"delete": "", "export": "/incidents/" ~ incident.number ~ "/audit/export", "next": "/incidents/" ~ incident.number ~ "#audit", "confirm": ""} %}{% include "_pager.html" %}{% endwith %}
+  </div>
 </section>
 
 <section id="notes">
   <h2>Operator notes {% with %}{% set tip %}What a person actually did (e.g. cleaned WAL). Not the playbook and not RCA.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   {% for row in operator_notes %}
     <div class="card">
-      <p class="muted">{{ row.at }} · {{ row.actor }}</p>
+      <p class="muted">{{ stamp.show(row.at) }} · {{ row.actor }}</p>
       <p>{{ row.body }}</p>
     </div>
   {% else %}
@@ -231,7 +236,7 @@
     <tbody>
     {% for row in evidence_rows %}
       <tr data-list-row data-evidence-row id="{{ row.anchor }}" aria-expanded="false">
-        <td class="ev-when" title="{{ row.when_full }}">{{ row.when }}</td>
+        <td class="ev-when" title="{{ row.when_full }}"><span class="stamp"><span class="stamp-date">{{ row.when or "—" }}</span>{% if row.when_time %}<span class="stamp-time">{{ row.when_time }}</span>{% endif %}</span></td>
         <td class="ev-actor">{{ row.actor }}</td>
         <td class="ev-action"><span class="ev-short">{{ row.action }}</span><div class="ev-full" data-evidence-full>{{ row.full }}</div></td>
       </tr>

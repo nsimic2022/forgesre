@@ -69,7 +69,8 @@ def test_dashboard_recent_incidents_uses_scan_columns():
     assert home.status_code == 200
     section = home.text.split("Recent incidents", 1)[1]
     headers = _headers(section)
-    assert ">Incident<" in headers
+    assert headers.index(">Hostname<") < headers.index(">Name<")
+    assert ">Problem<" not in headers
     assert ">Severity<" in headers
     assert ">Status<" in headers
     assert ">When<" in headers

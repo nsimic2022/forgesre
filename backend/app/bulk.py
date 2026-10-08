@@ -8,6 +8,7 @@ Audit has no prune, so it exports only.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -36,7 +37,7 @@ from app.models import (
     utcnow,
 )
 from app.security import can, can_send_ops, user_from_session
-from app.services import incident_host, refresh_asset_status
+from app.services import compact_when_text, incident_host, refresh_asset_status
 from app.web import NotAuthenticated
 
 router = APIRouter()
@@ -117,8 +118,18 @@ def _need(raw: list[str]) -> list[str]:
 
 
 def _cell(value: object) -> str:
+    if isinstance(value, datetime):
+        return compact_when_text(value) or "—"
     text = " ".join(str(value if value is not None else "").split())
     return text or "—"
+
+
+def _alertname(row: Incident) -> str:
+    payload = row.alert_payload if isinstance(row.alert_payload, dict) else {}
+    labels = payload.get("labels") if isinstance(payload, dict) else None
+    if isinstance(labels, dict) and labels.get("alertname"):
+        return str(labels.get("alertname") or "")
+    return ""
 
 
 def mail_row_deletable(row: Notification) -> bool:
@@ -187,7 +198,7 @@ def incidents_text(db: Session, numbers: list[str]) -> list[str]:
         .all()
     )
     by = {row.number: row for row in rows}
-    lines = [f"ForgeSRE incidents ({len(by)})"]
+    lines = [f"ForgeSRE incidents ({len(by)})", "id\thost\talertname\ttitle\tstatus\twhen\tack_by\tresolved_by\tsummary"]
     for number in numbers:
         row = by.get(number)
         if row is None:
@@ -196,10 +207,14 @@ def incidents_text(db: Session, numbers: list[str]) -> list[str]:
             "\t".join(
                 [
                     _cell(row.number),
-                    _cell(row.severity),
-                    _cell(row.status),
                     _cell(incident_host(row)),
+                    _cell(_alertname(row)),
                     _cell(row.title),
+                    _cell(row.status),
+                    _cell(row.started_at),
+                    _cell(row.ack_by),
+                    _cell(row.resolved_by),
+                    _cell(row.summary),
                 ]
             )
         )
@@ -298,21 +313,47 @@ def delete_playrules(db: Session, ids: list[int], actor: str) -> int:
 
 
 def playrules_text(db: Session, ids: list[int]) -> list[str]:
+    """Name, alertname, stored rule text, and the alerts.yml expr when one exists.
+
+    Playrules match alertname after ingest. The PromQL is the file text, not something this row runs.
+    """
+    from app.alert_rules import rules_for
+
     rows = db.query(Playrule).filter(Playrule.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
-    lines = [f"ForgeSRE playrules ({len(by)})"]
+    lines = [
+        f"ForgeSRE playrules ({len(by)})",
+        "name\talertname\tformula\tseverity\tescalation\tenabled\tplaybook",
+    ]
     for pk in ids:
         row = by.get(pk)
         if row is None:
             continue
         cond = row.condition if isinstance(row.condition, dict) else {}
+        alertname = str(cond.get("alertname") or "")
         book = row.playbook.name if row.playbook else ""
+        policy = row.escalation_policy.name if row.escalation_policy else ""
+        exprs = [str(item.get("expr") or "").strip() for item in rules_for(alertname)]
+        exprs = [item for item in exprs if item]
+        parts: list[str] = []
+        if exprs:
+            parts.append("alerts.yml (not executed by the playrule): " + " | ".join(exprs))
+        if cond.get("metric") or cond.get("operator") or cond.get("value") not in (None, ""):
+            note = " ".join(
+                str(part)
+                for part in (cond.get("metric") or "", cond.get("operator") or "", cond.get("value") if cond.get("value") is not None else "")
+                if str(part).strip()
+            )
+            if note:
+                parts.append(f"stored note (not executed): {note}")
         lines.append(
             "\t".join(
                 [
                     _cell(row.name),
-                    _cell(cond.get("alertname")),
+                    _cell(alertname),
+                    _cell(" | ".join(parts)),
                     _cell(row.severity),
+                    _cell(policy),
                     "ON" if row.enabled else "OFF",
                     _cell(book),
                 ]
@@ -430,6 +471,8 @@ def delete_reports(db: Session, ids: list[int], actor: str) -> int:
 
 
 def reports_text(db: Session, ids: list[int]) -> list[str]:
+    from app.services import report_recipients, schedule_label
+
     rows = db.query(ScheduledReport).filter(ScheduledReport.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
     lines = [f"ForgeSRE scheduled reports ({len(by)})"]
@@ -442,8 +485,8 @@ def reports_text(db: Session, ids: list[int]) -> list[str]:
             "\t".join(
                 [
                     _cell(row.name),
-                    _cell(row.to_email),
-                    f"{int(row.interval_hours or 0)}h",
+                    _cell(", ".join(report_recipients(row))),
+                    _cell(schedule_label(row)),
                     "ON" if row.enabled else "OFF",
                     _cell(assets),
                     _cell(row.next_run_at),
@@ -453,10 +496,20 @@ def reports_text(db: Session, ids: list[int]) -> list[str]:
     return lines
 
 
+def _audit_detail(row: AuditLog) -> str:
+    data = row.data if isinstance(row.data, dict) else {}
+    if not data:
+        return ""
+    parts = []
+    for key, value in data.items():
+        parts.append(f"{key}={value}")
+    return ", ".join(parts)
+
+
 def audit_text(db: Session, ids: list[int]) -> list[str]:
     rows = db.query(AuditLog).filter(AuditLog.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
-    lines = [f"ForgeSRE audit ({len(by)})"]
+    lines = [f"ForgeSRE audit ({len(by)})", "when\twho\taction\tobject\tdetail"]
     for pk in ids:
         row = by.get(pk)
         if row is None:
@@ -467,8 +520,36 @@ def audit_text(db: Session, ids: list[int]) -> list[str]:
                     _cell(row.at),
                     _cell(row.actor),
                     _cell(row.action),
-                    _cell(row.object_type),
-                    _cell(row.object_id),
+                    _cell(f"{row.object_type} {row.object_id}".strip()),
+                    _cell(_audit_detail(row)),
+                ]
+            )
+        )
+    return lines
+
+
+def incident_audit_text(db: Session, number: str, ids: list[int]) -> list[str]:
+    """Who did what for one incident: when, who, action, and the extra audit fields."""
+    rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.object_type == "incident", AuditLog.object_id == number, AuditLog.id.in_(ids))
+        .all()
+        if ids
+        else []
+    )
+    by = {row.id: row for row in rows}
+    lines = [f"ForgeSRE who did what {number} ({len(by)})", "when\twho\taction\tdetail"]
+    for pk in ids:
+        row = by.get(pk)
+        if row is None:
+            continue
+        lines.append(
+            "\t".join(
+                [
+                    _cell(row.at),
+                    _cell(row.actor),
+                    _cell(row.action),
+                    _cell(_audit_detail(row)),
                 ]
             )
         )
@@ -485,6 +566,21 @@ def incidents_bulk_delete(
     _forbid(user, can(user, "write_incidents"))
     delete_incidents(db, selected_values(selected), user.email)
     return _back(nxt, "/incidents")
+
+
+@router.post("/incidents/{number}/audit/export")
+def incident_audit_export(
+    number: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+):
+    _forbid(user, can(user, "read_incidents"))
+    row = db.query(Incident).filter_by(number=number).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    safe = number.replace(":", "-")
+    return _download(f"{safe}-who-did-what.txt", incident_audit_text(db, number, _ints(_need(selected))))
 
 
 @router.post("/incidents/export")

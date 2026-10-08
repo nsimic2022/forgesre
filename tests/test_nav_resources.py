@@ -86,8 +86,8 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "data-appliance-resources" in home.text
     assert 'data-metric="cpu"' in home.text
     nav = home.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
-    assert "data-clock" not in nav
-    assert "CPU" not in nav
+    assert "nav-clock" in nav and "data-clock" in nav
+    assert ">CPU<" not in nav and "data-metric" not in nav
     assert 'class="nav-logout"' in home.text
     assert ">Logout<" in home.text
     other = client.get("/incidents")
@@ -103,8 +103,8 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "form.nav-logout" in css
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-17" in base
-    assert "app.js?v=v08-17" in base
+    assert "app.css?v=v08-18" in base
+    assert "app.js?v=v08-18" in base
     assert "bindInfoTips" in js
     assert "ops-report-actions" in css
 

@@ -120,8 +120,8 @@ def test_version_is_0_8_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v0.8</span>" in base
     assert "v0.7" not in base
-    assert "app.css?v=v08-17" in base
-    assert "app.js?v=v08-17" in base
+    assert "app.css?v=v08-18" in base
+    assert "app.js?v=v08-18" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.8.0" in text
@@ -311,7 +311,7 @@ def test_asset_form_is_three_columns_with_dropdown_playrules():
         "extra_support", "extra_support_from", "extra_support_to", "extra_support_lead_days",
         "asset_id", "hostname", "owner_email", "owner_phone", "notes",
     ):
-        at = text.index(f'name="{name}"')
+        at = text.index(f'name="{name}"', left)
         assert left < at < middle, name
     assert text.index("data-asset-contacts") < text.index("data-asset-support") < middle
     comms = text.index("data-asset-comms")
