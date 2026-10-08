@@ -131,17 +131,18 @@ a { color: var(--accent); }
 }
 .nav a.active:hover { background: var(--shell-hover); }
 .nav-foot { margin-top: auto; }
-.nav-glance {
-  margin: 0 0 0.85rem;
-  padding-top: 0.7rem;
-  border-top: 1px solid var(--shell-line);
-}
+/* v08-21: Administration → gap → stacked cubes → gap → rule → clock. */
 .nav-status {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.28rem;
+  margin: 0.85rem 0;
+}
+.nav-glance {
   margin: 0 0 0.85rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--shell-line);
 }
 .nav a.nav-cube,
 .nav span.nav-cube {
@@ -149,11 +150,11 @@ a { color: var(--accent); }
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  min-width: 5.6rem;
-  height: 1.25rem;
-  padding: 0 0.4rem;
+  min-width: 6.72rem;
+  height: 1.5rem;
+  padding: 0 0.48rem;
   border-radius: 2px;
-  font-size: 0.68rem;
+  font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   line-height: 1;
@@ -167,7 +168,7 @@ a { color: var(--accent); }
 .nav a.nav-clock {
   display: inline-block;
   padding: 0;
-  font-size: 1.9rem;
+  font-size: 2.4rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
