@@ -842,8 +842,47 @@ def test_handbook_and_secrets_example_document_zabbix():
     assert "## 18. Zabbix (read-only source)" in handbook
     for needle in ("forgesre-ro", "Sync hosts", "ZABBIX_WEBHOOK_TOKEN", "HttpRequest", "{TRIGGER.ID}", "never writes back"):
         assert needle.lower() in handbook.lower(), needle
+    assert "](zabbix.md)" in handbook
     example = (ROOT / "secrets" / "secrets.example.env").read_text(encoding="utf-8")
     assert "# --- Zabbix ---" in example
     for key in ("ZABBIX_URL=", "ZABBIX_API_TOKEN=", "ZABBIX_WEBHOOK_TOKEN="):
         assert re.search(rf"^{key}$", example, re.M), key
-    assert "operator-handbook.md#18-zabbix-read-only-source" in (ROOT / "README.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "operator-handbook.md#18-zabbix-read-only-source" in readme
+    assert "docs/zabbix.md" in readme
+    assert "](zabbix.md)" in (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
+    assert "./forgesre zabbix" in (ROOT / "docs" / "cli.md").read_text(encoding="utf-8")
+
+
+def test_zabbix_guide_webhook_matches_handler():
+    guide = (ROOT / "docs" / "zabbix.md").read_text(encoding="utf-8")
+    for needle in (
+        "/api/v1/webhooks/zabbix",
+        "ZABBIX_URL",
+        "ZABBIX_API_TOKEN",
+        "ZABBIX_WEBHOOK_TOKEN",
+        "./forgesre update",
+        "forgesre-ro",
+        "User role",
+        "Sync hosts",
+        "Owner email",
+        "source=zabbix",
+        "Recovery operations",
+    ):
+        assert needle in guide, needle
+    script = guide[guide.index("var p = JSON.parse(value);") : guide.index("return 'OK';")]
+    assert "req.addHeader('Authorization: Bearer ' + p.forge_token);" in script
+    assert "key !== 'forge_url' && key !== 'forge_token'" in script
+    rows = dict(re.findall(r"^\s*\| `(\w+)` \| `(\{[A-Z.]+\})` \|$", guide, re.M))
+    assert rows["trigger_name"] == "{TRIGGER.NAME}"
+    assert rows["host_host"] == "{HOST.HOST}"
+    sample = {name: f"x-{name}" for name in rows}
+    sample.update({"event_value": "1", "event_severity": "High", "trigger_id": "23456", "host_id": "10584"})
+    alert = parse_webhook(sample)
+    assert alert["status"] == "firing"
+    assert alert["labels"]["alertname"] == "x-trigger_name"
+    assert alert["labels"]["asset"] == "x-host_host"
+    assert alert["labels"]["zabbix_hostid"] == "10584"
+    assert alert["labels"]["severity"] == "CRITICAL"
+    assert alert["forge"]["fingerprint"] == "zabbix:23456:x-host_host"
+    assert parse_webhook({**sample, "event_value": "0"})["status"] == "resolved"
