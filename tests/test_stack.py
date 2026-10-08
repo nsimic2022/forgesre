@@ -221,6 +221,55 @@ def test_enrich_components_keeps_link_for_non_loopback_prometheus(monkeypatch):
     assert prom["gui"] == "http://prom.corp:9090/targets?search="
 
 
+def test_doctor_grafana_probe_uses_grafana_port(monkeypatch):
+    from app.api import grafana_health_url
+
+    seen: list[str] = []
+
+    def _http(url, method):
+        seen.append(url)
+        return {"status": "ok"}
+
+    monkeypatch.setattr("app.api._http", _http)
+    monkeypatch.setenv("GRAFANA_PORT", "3300")
+    assert grafana_health_url() == "http://127.0.0.1:3300/api/health"
+    doctor_payload(force=True)
+    assert "http://127.0.0.1:3300/api/health" in seen
+    assert not any(":3000/" in url for url in seen)
+    monkeypatch.delenv("GRAFANA_PORT")
+    monkeypatch.setattr("app.api.settings.grafana_public_url", "http://localhost:3400")
+    assert grafana_health_url() == "http://127.0.0.1:3400/api/health"
+
+
+def test_config_examples_only_list_keys_core_reads():
+    import yaml
+
+    dead = [
+        ("system", "mode"),
+        ("monitoring", "prometheus"),
+        ("monitoring", "alertmanager"),
+        ("logging", "alloy"),
+        ("ai", "provider"),
+        ("notifications", "webhook"),
+    ]
+    nested_dead = [("logging", "loki", "mode"), ("logging", "loki", "url"), ("ai", "rca", "engine"), ("ai", "rca", "max_evidence")]
+    for path in (ROOT / "config" / "forgesre.example.yml", ROOT / "tests" / "forgesre.test.yml"):
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert "features" not in data, path
+        assert set(data["grafana"]) == {"enabled"}, path
+        for section, key in dead:
+            assert key not in (data.get(section) or {}), (path, section, key)
+        for section, sub, key in nested_dead:
+            assert key not in ((data.get(section) or {}).get(sub) or {}), (path, section, sub, key)
+        assert data["ai"]["rca"]["window_minutes"] == 30
+        assert data["monitoring"]["snmp"]["module"] == "if_mib"
+    install = (ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
+    heredoc = install.split('cat > "$ROOT/config/forgesre.yml" <<EOF', 1)[1].split("\nEOF", 1)[0]
+    for token in ("features:", "max_evidence", "engine: forgerca", "provider: local\n  llm", "alloy:", "prometheus:", "mode: online"):
+        assert token not in heredoc, token
+    assert "window_minutes: 30" in heredoc
+
+
 def test_doctor_grafana_down_is_warn_not_prometheus_fail(monkeypatch):
     def _http(url, method):
         if ":3000" in url or "3000" in url:

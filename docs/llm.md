@@ -195,17 +195,14 @@ YAML that Core actually loads:
 ```yaml
 ai:
   enabled: true
-  provider: local
   llm:
     mode: bundled          # bundled | external | disabled
     url: http://127.0.0.1:8088/v1
     model: local
     timeout_seconds: 90
   rca:
-    engine: forgerca
     window_minutes: 30
     max_log_lines: 20
-    max_evidence: 40
 ```
 
 - `mode: disabled` or `ai.enabled: false` → Core does not call the model. ForgeRCA still runs.

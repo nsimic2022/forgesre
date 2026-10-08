@@ -347,10 +347,10 @@ write_files() {
   [[ "$BUNDLED_GRAFANA" == "yes" ]] || grafana_enabled="false"
   [[ "$ENABLE_LOKI" == "yes" ]] || loki_enabled="false"
 
+  # Only keys Core reads. Service URLs/ports come from docker-compose.yml + .env.
   cat > "$ROOT/config/forgesre.yml" <<EOF
 schema_version: 1
 system:
-  mode: $([[ $OFFLINE -eq 1 ]] && echo offline || echo online)
   timezone: ${TIMEZONE}
   log_level: info
   cookie_secure: false
@@ -365,14 +365,6 @@ discovery:
   mode: semi-automatic
   cidrs: ${cidrs_yaml}
 monitoring:
-  prometheus:
-    enabled: true
-    mode: $([[ $BUNDLED_PROM == yes ]] && echo bundled || echo external)
-    url: http://127.0.0.1:9090
-  alertmanager:
-    enabled: true
-    mode: bundled
-    url: http://127.0.0.1:9093
   snmp:
     enabled: true
     exporter_url: http://127.0.0.1:9116
@@ -380,26 +372,17 @@ monitoring:
 logging:
   loki:
     enabled: ${loki_enabled}
-    mode: bundled
-    url: http://127.0.0.1:3100
-  alloy:
-    enabled: ${loki_enabled}
 grafana:
   enabled: ${grafana_enabled}
-  mode: bundled
-  url: http://127.0.0.1:3000
 ai:
   enabled: ${ai_enabled}
-  provider: local
   llm:
     mode: ${llm_mode}
     url: http://127.0.0.1:8088/v1
     model: local
   rca:
-    engine: forgerca
     window_minutes: 30
     max_log_lines: 20
-    max_evidence: 40
 notifications:
   email:
     enabled: false
@@ -407,10 +390,6 @@ notifications:
     port: 587
     from: forgesre@example.local
     tls: true
-features:
-  playrules: true
-  playbooks: true
-  escalation: true
 EOF
 
   "$ROOT/scripts/render-monitoring.sh"

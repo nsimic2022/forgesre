@@ -1303,11 +1303,24 @@ def _maybe_journal_doctor(components: dict[str, Any]) -> None:
         log.debug("doctor journal skipped", exc_info=True)
 
 
+def grafana_health_url() -> str:
+    """Grafana listens on GRAFANA_PORT (compose GF_SERVER_HTTP_PORT); else the GRAFANA_PUBLIC_URL port; else 3000."""
+    from urllib.parse import urlparse
+
+    port = str(os.environ.get("GRAFANA_PORT") or "").strip()
+    if not port.isdigit():
+        try:
+            port = str(urlparse(settings.grafana_public_url or "").port or 3000)
+        except ValueError:
+            port = "3000"
+    return f"http://127.0.0.1:{port}/api/health"
+
+
 def _grafana_check() -> dict[str, str]:
     """Grafana is graphs only. Down is yellow warn — not a Prometheus / alarm-path FAIL."""
     if not settings.grafana_enabled:
         return _ok("disabled")
-    url = "http://127.0.0.1:3000/api/health"
+    url = grafana_health_url()
     result = _http(url, "GET")
     if result.get("status") == "ok":
         return result
