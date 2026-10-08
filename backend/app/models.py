@@ -150,10 +150,10 @@ class Incident(Base):
     status: Mapped[str] = mapped_column(String(32), default="OPEN", index=True)
     fingerprint: Mapped[str] = mapped_column(String(255), index=True)
     source: Mapped[str] = mapped_column(String(32), default="prometheus")
-    asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
+    asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True, index=True)
     playrule_id: Mapped[int | None] = mapped_column(ForeignKey("playrules.id"), nullable=True)
     playbook_id: Mapped[int | None] = mapped_column(ForeignKey("playbooks.id"), nullable=True)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ack_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ack_by: Mapped[str] = mapped_column(String(255), default="")
@@ -180,7 +180,7 @@ class Evidence(Base):
     __tablename__ = "evidence"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    incident_id: Mapped[int] = mapped_column(ForeignKey("incidents.id"))
+    incident_id: Mapped[int] = mapped_column(ForeignKey("incidents.id"), index=True)
     kind: Mapped[str] = mapped_column(String(32))
     title: Mapped[str] = mapped_column(String(255))
     payload: Mapped[dict] = mapped_column(JSONType, default=dict)
@@ -199,7 +199,7 @@ class Investigation(Base):
     __tablename__ = "investigations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    incident_id: Mapped[int] = mapped_column(ForeignKey("incidents.id"))
+    incident_id: Mapped[int] = mapped_column(ForeignKey("incidents.id"), index=True)
     summary: Mapped[str] = mapped_column(Text, default="")
     likely_cause: Mapped[str] = mapped_column(Text, default="")
     confidence: Mapped[float] = mapped_column(Float, default=0)
@@ -221,7 +221,7 @@ class IncidentEvent(Base):
     __tablename__ = "incident_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    incident_id: Mapped[int] = mapped_column(ForeignKey("incidents.id"))
+    incident_id: Mapped[int] = mapped_column(ForeignKey("incidents.id"), index=True)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     actor: Mapped[str] = mapped_column(String(64), default="system")
     kind: Mapped[str] = mapped_column(String(64))
@@ -248,7 +248,7 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    incident_id: Mapped[int | None] = mapped_column(ForeignKey("incidents.id"), nullable=True)
+    incident_id: Mapped[int | None] = mapped_column(ForeignKey("incidents.id"), nullable=True, index=True)
     channel: Mapped[str] = mapped_column(String(32), default="email")
     target: Mapped[str] = mapped_column(String(255))
     subject: Mapped[str] = mapped_column(String(255), default="")

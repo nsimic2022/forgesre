@@ -121,6 +121,7 @@ from app.history import (
     notes_for,
     notifications_for,
     paginate,
+    paginate_query,
     pager_state,
     parse_per_page,
     per_page_param,
@@ -2252,9 +2253,13 @@ def ops_page(
 ):
     from app.services import list_mail_addresses
 
-    mail = db.query(Notification).order_by(Notification.id.desc()).all()
+    mail, mail_pager = paginate_query(
+        db.query(Notification).order_by(Notification.id.desc()),
+        page,
+        size=per_page(request),
+        fragment="#mail",
+    )
     reports = db.query(ScheduledReport).order_by(ScheduledReport.id.desc()).all()
-    mail, mail_pager = paginate(mail, page, size=per_page(request), fragment="#mail")
     reports, reports_pager = paginate(
         reports,
         reports_page,
@@ -2536,8 +2541,12 @@ def admin_page(
         raise HTTPException(status_code=403)
     users = db.query(User).order_by(User.email).all()
     users, users_pager = paginate(users, page, size=per_page(request))
-    audits = db.query(AuditLog).order_by(AuditLog.id.desc()).all()
-    audits, audit_pager = paginate(audits, audit_page, size=per_page(request, "audit_page"), param="audit_page")
+    audits, audit_pager = paginate_query(
+        db.query(AuditLog).order_by(AuditLog.id.desc()),
+        audit_page,
+        size=per_page(request, "audit_page"),
+        param="audit_page",
+    )
     chosen = db.get(User, selected) if selected else None
     clone_of = db.get(User, clone) if clone else None
     from app.backup import format_size, list_archives, layout_from_env
