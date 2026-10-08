@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy.orm import Session
 
@@ -31,13 +32,8 @@ CANDIDATE_ROLE_CHOICES = [
     "Possible web/appliance",
     "Unknown device",
 ]
-CANDIDATE_ROLE_CHOICES = [
-    "Possible Linux server",
-    "Possible Windows server",
-    "Possible network device",
-    "Possible web/appliance",
-    "Unknown device",
-]
+# Probes are socket waits (TCP connect, SNMP UDP, /metrics). DB writes stay on the scan thread.
+DISCOVERY_PROBE_WORKERS = 32
 
 
 def asset_kind(type: str = "", profile: str = "") -> str:
@@ -374,18 +370,22 @@ def run_scan(
             "truncated": False,
         }
     found = 0
-    skipped = 0
     known_ips = {item.ip for item in db.query(Asset).all() if item.ip}
-    for ip in hosts:
-        if ip in known_ips:
-            skipped += 1
-            continue
+    pending = [ip for ip in hosts if ip not in known_ips]
+    skipped = len(hosts) - len(pending)
+
+    def _probe(ip: str) -> dict | None:
         try:
-            result = probe_host(ip)
+            return probe_host(ip)
         except Exception:
             log.exception("discovery probe_host failed ip=%s", ip)
-            continue
-        if not result["alive"]:
+            return None
+
+    workers = max(1, min(DISCOVERY_PROBE_WORKERS, len(pending)))
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="discovery-probe") as pool:
+        results = list(pool.map(_probe, pending))
+    for ip, result in zip(pending, results):
+        if not result or not result["alive"]:
             continue
         kind = str(result.get("exporter_kind") or "")
         upsert_candidate(
