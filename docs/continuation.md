@@ -59,7 +59,7 @@ git pull origin main && ./forgesre update
 
 SHA: **`872bd41`**. Open **Discovery**. Review suggested `/24`, **Confirm & scan**, wait for the background job (`./forgesre jobs`). **Sync NetBox** sits beside Scan now (read-only). Approve / Ignore as before; manual Assets stay SoT.
 
-`./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: **no host logs shipped**. [architecture.md](architecture.md) is a long-term **architecture proposal**, not the V0.8 appliance runtime.
+`./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: device syslog on UDP/TCP 514, labeled by hostname and sender IP; demo Core logs stay `forge-demo-01`. [architecture.md](architecture.md) is a long-term **architecture proposal**, not the V0.8 appliance runtime.
 
 NetBox: keep the **full v2 token** (shown once at create, not the 12-character key) in `NETBOX_API_TOKEN`. Recreate **core** only if secrets changed. Never print the token.
 

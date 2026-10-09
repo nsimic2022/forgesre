@@ -74,7 +74,7 @@ Commands:
   assets             List inventory with # (alias: inventory)
   inventory          Same as assets
   snmp               snmp_exporter health + SNMP HTTP SD targets
-  render-monitoring  Rewrite Prometheus / Alertmanager / snmp.yml from templates
+  render-monitoring  Rewrite Prometheus / Alertmanager / snmp.yml / Alloy / Loki config
   snmp-auths         Write per-asset SNMP auths (Custom community / v3) into snmp.yml
   journal [module]   Internal console reports (JSON)
   demo               HighCPU first-hour path (owner mail, similar history)
@@ -428,10 +428,11 @@ EOF
       ;;
     render-monitoring)
       cat <<'EOF'
-render-monitoring — regenerate generated Prometheus / Alertmanager / snmp.yml.
+render-monitoring — regenerate generated Prometheus / Alertmanager / snmp.yml,
+Alloy config.alloy, and Loki loki.yml.
 
-Use this on an existing VM after git pull so the new forgesre-snmp job appears
-without running ./install.sh.
+Use this on an existing VM after git pull so monitoring config is current
+without running ./install.sh. ./forgesre update runs it too.
 
   ./forgesre render-monitoring
   docker compose up -d
@@ -439,7 +440,10 @@ without running ./install.sh.
 
 Reads ALERTMANAGER_WEBHOOK_TOKEN and SNMP_COMMUNITY from secrets/secrets.env.
 Writes $FORGESRE_DATA/generated/{prometheus,alertmanager,snmp,alerts}.yml
-and sets SNMP_EXPORTER_CONFIG / PROMETHEUS_ALERTS in .env if missing.
+plus config.alloy and loki.yml (copied from logging/, no secrets).
+Sets SNMP_EXPORTER_CONFIG / PROMETHEUS_ALERTS / ALLOY_CONFIG / LOKI_CONFIG
+in .env if those keys are missing. Reloads snmp_exporter and Prometheus.
+Recreates loki and alloy when those files changed (Alloy may POST /-/reload).
 
 Optional extra Prometheus rules: copy monitoring/alerts.local.yml.example
 to monitoring/alerts.local.yml (gitignored). It is concatenated after the

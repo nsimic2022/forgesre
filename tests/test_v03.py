@@ -198,7 +198,7 @@ def test_collector_preserves_queries_and_degrades():
     assert any(item.hash for item in items)
     items_down, limits_down = collect_evidence_set(
         incident={"number": "INC-1", "title": "x"},
-        asset={},
+        asset={"asset_id": "db-01", "hostname": "db-01", "ip": "10.1.1.8"},
         alert={"alertname": "HighCPU"},
         history=[],
         playrules=[],
@@ -208,6 +208,7 @@ def test_collector_preserves_queries_and_degrades():
     )
     assert "Metrics unavailable." in limits_down
     assert "Logs unavailable." in limits_down
+    assert all('job="forgesre"' not in (item.query or "") for item in items_down)
 
 
 def test_anomaly_hypothesis_and_scoring():

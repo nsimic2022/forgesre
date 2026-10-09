@@ -16,22 +16,32 @@ from app.models import Job
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_loki_query_skips_real_inventory_hosts():
+def test_loki_query_uses_hostname_then_ip_for_real_assets():
     assert loki_query_for({"asset_id": "forge-demo-01"}) == '{job="forgesre"}'
     assert loki_query_for({"asset_id": "win10-gp"}) is None
     assert loki_query_for({"asset_id": "db-01"}) is None
+    assert loki_query_for({}) is None
+    assert loki_query_for(None) is None
+    query = loki_query_for({"asset_id": "db-01", "hostname": "db-01", "ip": "10.10.10.50"})
+    assert query is not None
+    assert 'job="syslog"' in query
+    assert 'hostname="db-01"' in query
+    assert 'ip="10.10.10.50"' in query
+    assert query.index("hostname=") < query.index("ip=")
+    assert 'job="forgesre"' not in query
 
 
-def test_collector_does_not_present_empty_loki_as_host_logs():
+def test_collector_omits_loki_when_real_asset_has_no_lines():
     called = {"n": 0}
 
     def log_fetcher(query, start, end):
         called["n"] += 1
-        return {"lines": [f"should-not-count {query}"]}
+        assert 'job="forgesre"' not in query
+        return {"lines": []}
 
     items, limits = collect_evidence_set(
         incident={"number": "INC-1", "title": "High CPU"},
-        asset={"asset_id": "win10-gp", "hostname": "DESKTOP-X", "type": "Windows Server"},
+        asset={"asset_id": "win10-gp", "hostname": "DESKTOP-X", "ip": "10.10.10.60", "type": "Windows Server"},
         alert={"alertname": "WindowsCPUHigh"},
         history=[],
         playrules=[],
@@ -41,9 +51,12 @@ def test_collector_does_not_present_empty_loki_as_host_logs():
         window_minutes=30,
         max_log_lines=5,
     )
-    assert called["n"] == 0
-    assert HOST_LOGS_LIMITATION in limits
+    assert called["n"] == 1
+    assert HOST_LOGS_LIMITATION not in limits
     assert not any(item.type == "LOG" for item in items)
+    blob = " ".join(str(item.content) + item.query for item in items)
+    assert "forge-demo-01" not in blob
+    assert 'job="forgesre"' not in blob
 
 
 def test_collector_demo_loki_is_appliance_logs_labeled_demo():

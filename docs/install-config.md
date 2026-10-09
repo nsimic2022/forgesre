@@ -40,7 +40,8 @@ CLI index: [`cli.md`](cli.md).
 | Prometheus | Metrics | `127.0.0.1:9090` |
 | snmp_exporter | SNMP walks | `127.0.0.1:9116` |
 | Alertmanager | Alert webhook → incidents | `127.0.0.1:9093` |
-| Loki + Alloy | Logs as evidence | `127.0.0.1:3100` / `12345` |
+| Loki | Log store (localhost only) | `127.0.0.1:3100` (`/ready`) |
+| Alloy | Demo Core logs + device syslog | UI `127.0.0.1:12345`; syslog **UDP/TCP 514** on the host |
 | llama.cpp (optional) | Local LLM | `127.0.0.1:8088` |
 | NetBox (default on) | DCIM/IPAM; Core read-sync | host port `8001` |
 
@@ -181,8 +182,12 @@ sudo ufw allow OpenSSH
 sudo ufw allow 8080/tcp
 sudo ufw allow 3000/tcp
 sudo ufw allow 8001/tcp
+sudo ufw allow 514/udp
+sudo ufw allow 514/tcp
 sudo ufw enable
 ```
+
+514 is device syslog into Alloy (BSD / RFC3164). Do not open Prometheus `:9090`, Alertmanager `:9093`, Loki `:3100`, or Alloy's own UI `:12345` — those stay on `127.0.0.1`.
 
 Also allow those ports on the vCenter / NSX / physical firewall toward the management network only.
 

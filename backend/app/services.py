@@ -816,26 +816,30 @@ def collect_evidence(db: Session, incident: Incident, alert: dict[str, Any] | No
     if not labels and isinstance(alert, dict):
         labels = alert
     metrics = query_prometheus(incident.asset)
-    from rca.collector import DEMO_LOGS_LIMITATION, HOST_LOGS_LIMITATION, loki_query_for
+    from rca.collector import DEMO_LOGS_LIMITATION, asset_log_identity, is_demo_loki_query, loki_query_for
 
-    asset_dict = {}
-    if incident.asset:
-        asset_dict = {
-            "asset_id": incident.asset.asset_id,
-            "type": incident.asset.type,
-            "hostname": incident.asset.hostname,
-        }
+    asset_dict = asset_log_identity(incident.asset)
     loki_query = loki_query_for(asset_dict)
+    if is_demo_loki_query(loki_query) and str(asset_dict.get("asset_id") or "") != DEMO_ASSET:
+        loki_query = None
+    logs: list[str] = []
+    log_payload: dict[str, Any] | None = None
     if loki_query:
-        logs = query_loki(query=loki_query)
-        log_payload: dict[str, Any] = {"lines": logs, "query": loki_query}
-        if str(asset_dict.get("asset_id") or "") == "forge-demo-01":
-            log_payload["scope"] = "appliance-demo"
-            log_payload["label"] = "DEMO"
-            log_payload["note"] = DEMO_LOGS_LIMITATION
-    else:
-        logs = []
-        log_payload = {"skipped": True, "reason": HOST_LOGS_LIMITATION, "lines": []}
+        window_end = utcnow()
+        window_start = window_end - timedelta(minutes=settings.rca_window_minutes)
+        logs = query_loki(
+            limit=settings.rca_max_log_lines,
+            query=loki_query,
+            start=window_start,
+            end=window_end,
+        )
+        demo_logs = str(asset_dict.get("asset_id") or "") == DEMO_ASSET
+        if demo_logs or logs:
+            log_payload = {"lines": logs, "query": loki_query}
+            if demo_logs:
+                log_payload["scope"] = "appliance-demo"
+                log_payload["label"] = "DEMO"
+                log_payload["note"] = DEMO_LOGS_LIMITATION
     history_rows = (
         db.query(Incident)
         .filter(Incident.asset_id == incident.asset_id, Incident.id != incident.id)
@@ -847,9 +851,10 @@ def collect_evidence(db: Session, incident: Incident, alert: dict[str, Any] | No
     items = [
         ("alert", "Alert", alert),
         ("metrics", "Metrics", metrics),
-        ("logs", "Logs", log_payload),
         ("history", "Previous incidents", {"incidents": history}),
     ]
+    if log_payload is not None:
+        items.insert(2, ("logs", "Logs", log_payload))
     if incident.asset:
         items.insert(
             1,
@@ -908,17 +913,11 @@ def persist_rca_evidence(
                 "condition": incident.playrule.condition,
             }
         )
-    asset = {}
+    from rca.collector import asset_log_identity
+
+    asset = asset_log_identity(incident.asset)
     if incident.asset:
-        asset = {
-            "asset_id": incident.asset.asset_id,
-            "hostname": incident.asset.hostname,
-            "ip": incident.asset.ip,
-            "type": incident.asset.type,
-            "monitoring_profile": incident.asset.monitoring_profile,
-            "scrape_address": incident.asset.scrape_address,
-            "status": incident.asset.status,
-        }
+        asset["status"] = incident.asset.status
     maintenance = overlapping_maintenance(db, asset.get("asset_id") or "", incident.started_at or utcnow())
 
     query_map = (metrics or {}).get("queries") or {}
@@ -938,7 +937,11 @@ def persist_rca_evidence(
         return {"value": None, "query": expr}
 
     def log_fetcher(query: str, start, end) -> dict[str, Any]:
-        del query, start, end
+        del start, end
+        from rca.collector import is_demo_loki_query
+
+        if str(asset.get("asset_id") or "") != DEMO_ASSET and is_demo_loki_query(query):
+            return {"lines": []}
         return {"lines": list(logs or [])}
 
     bundle, _limitations = collect_evidence_set(
@@ -1083,14 +1086,23 @@ def query_prometheus_range(expr: str, hours: float = 1.0, step: str = "5m", time
         return {"error": str(exc), "query": expr}
 
 
-def query_loki(limit: int = 20, query: str = '{job="forgesre"}', start=None, end=None) -> list[str]:
-    if not settings.loki_enabled:
-        return []
-    params: dict[str, Any] = {"query": query, "limit": str(limit)}
+def _loki_bound(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return str(int(value.timestamp() * 1_000_000_000))
+    return str(value)
+
+
+def _query_loki_selector(query: str, limit: int, start: Any, end: Any) -> list[str] | None:
+    """One LogQL selector. None means the request failed (caller may retry unbounded)."""
+    params: dict[str, Any] = {"query": query, "limit": str(limit), "direction": "backward"}
     if start is not None:
-        params["start"] = start.isoformat()
+        params["start"] = _loki_bound(start)
     if end is not None:
-        params["end"] = end.isoformat()
+        params["end"] = _loki_bound(end)
     try:
         with httpx.Client(timeout=5.0) as client:
             response = client.get(f"{settings.loki_url}/loki/api/v1/query_range", params=params)
@@ -1102,9 +1114,29 @@ def query_loki(limit: int = 20, query: str = '{job="forgesre"}', start=None, end
                     lines.append(line)
             return lines[:limit]
     except Exception:
-        if start is not None:
-            return query_loki(limit=limit, query=query)
+        return None
+
+
+def query_loki(limit: int = 20, query: str = "", start=None, end=None) -> list[str]:
+    """Run LogQL. A hostname `` or `` IP join is queried selector by selector, hostname first."""
+    if not settings.loki_enabled or not str(query or "").strip():
         return []
+    from rca.collector import logql_selectors
+
+    lines: list[str] = []
+    seen: set[str] = set()
+    for selector in logql_selectors(query):
+        got = _query_loki_selector(selector, limit, start, end)
+        if got is None and start is not None:
+            got = _query_loki_selector(selector, limit, None, None)
+        for line in got or []:
+            if line in seen:
+                continue
+            seen.add(line)
+            lines.append(line)
+            if len(lines) >= limit:
+                return lines
+    return lines
 
 
 def investigation_context(db: Session, incident: Incident) -> dict[str, Any]:
@@ -1122,12 +1154,28 @@ def investigation_context(db: Session, incident: Incident) -> dict[str, Any]:
             queries.update((item.payload or {}).get("queries") or {})
         if item.kind == "logs":
             packed = dict(item.payload or {})
-            logs = packed.get("lines") or []
-            skipped_logs = bool(packed.get("skipped"))
-            demo_logs = packed.get("label") == "DEMO" or packed.get("scope") == "appliance-demo"
+            packed_lines = list(packed.get("lines") or [])
+            packed_query = str(packed.get("query") or "")
+            asset_key = incident.asset.asset_id if incident.asset else ""
+            demo_logs = (
+                packed.get("label") == "DEMO"
+                or packed.get("scope") == "appliance-demo"
+                or asset_key == "forge-demo-01"
+            )
+            from rca.collector import is_demo_loki_query
+
+            if not demo_logs and is_demo_loki_query(packed_query):
+                packed_lines = []
+                packed_query = ""
+            logs = packed_lines
+            skipped_logs = bool(packed.get("skipped")) and not packed_lines
+            if packed_query and packed_lines:
+                queries["logs"] = packed_query
+            elif packed_query and demo_logs:
+                queries["logs"] = packed_query
             if skipped_logs:
                 limitations.append(str(packed.get("reason") or HOST_LOGS_LIMITATION))
-            elif demo_logs:
+            elif demo_logs and (packed_lines or packed.get("label") == "DEMO" or packed.get("scope") == "appliance-demo"):
                 limitations.append(DEMO_LOGS_LIMITATION)
         if item.query:
             queries.setdefault(item.kind, item.query)

@@ -342,6 +342,8 @@ write_files() {
   set_kv "$ROOT/.env" PROMETHEUS_CONFIG "${DATA_DIR}/generated/prometheus.yml"
   set_kv "$ROOT/.env" PROMETHEUS_ALERTS "${DATA_DIR}/generated/alerts.yml"
   set_kv "$ROOT/.env" SNMP_EXPORTER_CONFIG "${DATA_DIR}/generated/snmp.yml"
+  set_kv "$ROOT/.env" ALLOY_CONFIG "${DATA_DIR}/generated/config.alloy"
+  set_kv "$ROOT/.env" LOKI_CONFIG "${DATA_DIR}/generated/loki.yml"
 
   local grafana_enabled="true" loki_enabled="true"
   [[ "$BUNDLED_GRAFANA" == "yes" ]] || grafana_enabled="false"

@@ -152,9 +152,18 @@ class RCAContext:
                 {"type": "metric", "name": key, "value": value, "unit": unit, "timestamp": ts},
                 query=str((context.get("queries") or {}).get(key) or key),
             )
-        for line in logs[:20]:
-            text = line if isinstance(line, str) else str(line)
-            add("LOG", "loki", normalize_log(text, ts), query='{job="forgesre"}')
+        log_query = str((context.get("queries") or {}).get("logs") or "")
+        if not log_query or (asset_id != "forge-demo-01" and 'job="forgesre"' in log_query and 'job="syslog"' not in log_query):
+            from rca.collector import loki_query_for
+
+            merged = dict(asset)
+            if asset_id and not merged.get("asset_id"):
+                merged["asset_id"] = asset_id
+            log_query = loki_query_for(merged) or ""
+        if logs and log_query and not (asset_id != "forge-demo-01" and 'job="forgesre"' in log_query and 'job="syslog"' not in log_query):
+            for line in logs[:20]:
+                text = line if isinstance(line, str) else str(line)
+                add("LOG", "loki", normalize_log(text, ts), query=log_query)
         if history:
             add("INCIDENT_HISTORY", "forgesre", history)
         for rule in playrules:

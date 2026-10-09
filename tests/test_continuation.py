@@ -13,7 +13,8 @@ def test_continuation_handoff_exists_and_points_at_test_and_llm():
     assert "./forgesre ping" in text
     assert "./forgesre verify" in text
     assert "docs/llm.md" in text
-    assert "no host logs shipped" in text.lower() or "No host logs shipped" in text
+    assert "514" in text
+    assert "syslog" in text.lower()
     assert "architecture proposal" in text.lower() or "not the V0.8 appliance runtime" in text
     assert "one worker thread" in text.lower()
     contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")

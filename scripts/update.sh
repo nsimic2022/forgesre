@@ -29,7 +29,7 @@ else
   echo "Backup failed (see above). Continuing with render-monitoring and compose up."
   echo "Run ./forgesre backup later if you need an archive from before this update."
 fi
-echo "Rendering Prometheus / Alertmanager / snmp_exporter config..."
+echo "Rendering Prometheus / Alertmanager / snmp_exporter / Alloy / Loki config..."
 "$ROOT/scripts/render-monitoring.sh"
 echo "Ensuring bundled NetBox secrets and data dirs..."
 "$ROOT/scripts/ensure-netbox-secrets.sh"
