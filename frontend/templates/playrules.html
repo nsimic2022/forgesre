@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% import "_select.html" as sel %}
-{% block title %}Playrules · ForgeSRE{% endblock %}
+{% block title %}Rules · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Playrules {% with %}{% set tip %}Seeded rules are the default warning. Playrules map Prometheus alertname → playbook. They do not create Prom rules. monitoring/alerts.yml is the PromQL source. Asset Alarms on Add/Edit (assets.alarms enable/%) are a per-host overlay on the same Alertmanager webhook — not a second alerting engine.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
-<p class="page-lede">A playrule fires nothing. Prometheus evaluates <code>monitoring/alerts.yml</code>; when an alert arrives, ForgeSRE matches its <strong>alertname</strong> here and attaches the playbook and escalation ladder.</p>
+<h1>Rules {% with %}{% set tip %}Seeded rules are the default warning. Rules match alertname after ingest and attach a Playbook plus the default ladder. They do not create Prom rules. monitoring/alerts.yml is the PromQL source. Standard alarms on Add/Edit (assets.alarms enable/%) are a per-host overlay on the same Alertmanager webhook — not a second alerting engine.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<p class="page-lede">A rule fires nothing. Prometheus evaluates <code>monitoring/alerts.yml</code>; when an alert arrives, ForgeSRE matches its <strong>alertname</strong> here and attaches the Playbook. Mail uses the asset Ladder when a level is filled; otherwise the default ladder on this rule.</p>
 <p class="muted">Asset Alarms (Edit on an asset) can only mute a bundled alert on that host — they cannot fire earlier than the Prometheus rule.{% if asset_alarm_hosts %} Saved on {{ asset_alarm_hosts|length }} host{% if asset_alarm_hosts|length != 1 %}s{% endif %} ({{ asset_alarm_hosts[:8]|join(", ") }}{% if asset_alarm_hosts|length > 8 %}, …{% endif %}).{% endif %}</p>
 {% if notice %}
 <div class="banner">{{ notice }}</div>
@@ -11,7 +11,7 @@
 <div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="scan-list rule-list">
-  <thead><tr>{{ sel.head() }}<th>Playrule</th><th>Fires when (alerts.yml)</th><th>Severity</th><th>Playbook</th><th>Enabled</th>{% if can('write_play') %}<th></th>{% endif %}</tr></thead>
+  <thead><tr>{{ sel.head() }}<th>Rule</th><th>Fires when (alerts.yml)</th><th>Severity</th><th>Playbook</th><th>Enabled</th>{% if can('write_play') %}<th></th>{% endif %}</tr></thead>
   <tbody>
   {% for rule in playrules %}
     {% set cond = rule.condition or {} %}
@@ -39,7 +39,7 @@
       <td>
         {% if can('write_play') %}
         <form method="post" action="/playrules/{{ rule.id }}/toggle" class="onoff-form">
-          <button type="submit" class="onoff {{ 'is-on' if rule.enabled else 'is-off' }}" aria-pressed="{{ 'true' if rule.enabled else 'false' }}" title="ON: this playrule can match an alert. OFF: stored, skipped. This does not change alerts.yml.">{% if rule.enabled %}ON{% else %}OFF{% endif %}</button>
+          <button type="submit" class="onoff {{ 'is-on' if rule.enabled else 'is-off' }}" aria-pressed="{{ 'true' if rule.enabled else 'false' }}" title="ON: this rule can match an alert. OFF: stored, skipped. This does not change alerts.yml.">{% if rule.enabled %}ON{% else %}OFF{% endif %}</button>
         </form>
         {% else %}
         <span class="onoff {{ 'is-on' if rule.enabled else 'is-off' }}">{% if rule.enabled %}ON{% else %}OFF{% endif %}</span>
@@ -49,7 +49,7 @@
       <td>
         <div class="row-actions backup-row-actions">
           <a class="button" href="/playrules?edit={{ rule.id }}{{ pager_keep(pager) }}#playrule-form">Edit</a>
-          <form method="post" action="/playrules/{{ rule.id }}/delete" onsubmit="return confirm('Remove playrule {{ rule.name }}? Existing incidents keep their playbook. New {{ cond.get('alertname') or rule.name }} alerts will open without a playbook.');">
+          <form method="post" action="/playrules/{{ rule.id }}/delete" onsubmit="return confirm('Remove rule {{ rule.name }}? Existing incidents keep their Playbook. New {{ cond.get('alertname') or rule.name }} alerts will open without a Playbook.');">
             <button type="submit" class="danger">Remove</button>
           </form>
         </div>
@@ -60,16 +60,16 @@
   </tbody>
 </table>
 </div>
-{% with list_actions={"delete": "/playrules/bulk-delete" if can('write_play') else "", "export": "/playrules/export", "next": "/playrules", "confirm": "Delete the selected playrules? Existing incidents keep their playbook."} %}
+{% with list_actions={"delete": "/playrules/bulk-delete" if can('write_play') else "", "export": "/playrules/export", "next": "/playrules", "confirm": "Delete the selected rules? Existing incidents keep their Playbook."} %}
 {% include "_pager.html" %}
 {% endwith %}
 </div>
 {% if can('write_play') %}
 {% if form_mode == "edit" %}
-<h2 id="playrule-form-title">Edit playrule <span class="muted">{{ selected.name }}</span></h2>
+<h2 id="playrule-form-title">Edit rule <span class="muted">{{ selected.name }}</span></h2>
 <form method="post" action="/playrules/{{ selected.id }}/update" class="stack" id="playrule-form">
 {% else %}
-<h2 id="playrule-form-title">Create playrule</h2>
+<h2 id="playrule-form-title">Create rule</h2>
 <form method="post" action="/playrules" class="stack" id="playrule-form">
   <label><span class="label-line">Preset {% with %}{% set tip %}Fills the fields below from bundled examples. Does not write monitoring/alerts.yml.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <select id="playrule-preset">
@@ -93,7 +93,7 @@
   </label>
 {% endif %}
   <label>Name <input name="name" value="{{ form.name }}" placeholder="high-disk" required></label>
-  <label><span class="label-line">Alertname {% with %}{% set tip %}The only thing ForgeSRE matches. Must equal the Prometheus alertname in monitoring/alerts.yml (e.g. FilesystemUsageHigh). This playrule does not create a Prom rule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+  <label><span class="label-line">Alertname {% with %}{% set tip %}The only thing ForgeSRE matches. Must equal the Prometheus alertname in monitoring/alerts.yml (e.g. FilesystemUsageHigh). This rule does not create a Prom rule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <input name="alertname" value="{{ form.alertname }}" placeholder="FilesystemUsageHigh" list="alertnames" data-alertname-input autocomplete="off"></label>
   <datalist id="alertnames">
     {% for name in alert_rules.keys()|sort %}<option value="{{ name }}">{% endfor %}
@@ -120,7 +120,7 @@
       {% endfor %}
     </select>
   </label>
-  <label><span class="label-line">Escalation {% with %}{% set tip %}Email ladder for this alert. Seeded Default warning is 0 / 15 / 30 min. A step with an email address mails that address; a role step mails the asset owner email; no address at all is recorded as no-recipient and not sent.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+  <label><span class="label-line">Default ladder {% with %}{% set tip %}Used only when that asset's Ladder column is empty. Seeded Default warning is 0 / 15 / 30 min. A step with an email address mails that address; a role step mails the asset owner email; no address at all is recorded as no-recipient and not sent. A filled asset Ladder does not also use this.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <select name="escalation_policy_id">
       {% for policy in policies %}
       <option value="{{ policy.id }}" {% if (form.escalation_policy_id and form.escalation_policy_id == policy.id) or (not form.escalation_policy_id and policy.slug == 'default-warning') %}selected{% endif %}>{{ policy.name }}</option>

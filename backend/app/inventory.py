@@ -15,7 +15,7 @@ from app.audit import audit
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE, detect_exporter, is_auto_asset_type
 from app.journal import report
-from app.models import Asset, DiscoveryCandidate, Incident, ScheduledReport, utcnow
+from app.models import Asset, AssetLadderStep, DiscoveryCandidate, Incident, ScheduledReport, utcnow
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
@@ -453,6 +453,7 @@ def create_manual_asset(
     playrule_ids: list | None = None,
     snmp_port: int | str | None = None,
     snmp: dict | None = None,
+    ladder: list | None = None,
 ) -> Asset:
     hostname = (hostname or "").strip()
     ip = validate_ip_field(ip)
@@ -536,6 +537,10 @@ def create_manual_asset(
         playrule_ids=known_playrule_ids(db, playrule_ids),
     )
     db.add(asset)
+    db.flush()
+    from app.asset_ladder import replace_asset_ladder
+
+    replace_asset_ladder(db, asset, ladder)
     audit(
         db,
         "asset.create",
@@ -600,6 +605,7 @@ def update_asset(
     playrule_ids: list | None = None,
     snmp_port: int | str | None = None,
     snmp: dict | None = None,
+    ladder: list | None = None,
 ) -> Asset:
     old_ip = asset.ip or ""
     old_type = asset.type or ""
@@ -694,6 +700,9 @@ def update_asset(
         asset.playrule_ids = known_playrule_ids(db, playrule_ids)
     if snmp_port is not None:
         asset.snmp_port = parse_snmp_port(snmp_port)
+    from app.asset_ladder import replace_asset_ladder
+
+    replace_asset_ladder(db, asset, ladder)
     audit(
         db,
         "asset.update",
@@ -720,7 +729,7 @@ def update_asset(
 
 
 def set_asset_playrules(db: Session, asset: Asset, playrule_ids: list | None, *, actor: str = "system") -> Asset:
-    """Save only the Client playrule list (asset detail card). No detect, scrape, or SD change."""
+    """Save only Custom alarms (asset detail card). No detect, scrape, or SD change."""
     before = asset_playrule_ids(asset)
     asset.playrule_ids = known_playrule_ids(db, playrule_ids)
     after = list(asset.playrule_ids or [])
@@ -739,7 +748,7 @@ def set_asset_playrules(db: Session, asset: Asset, playrule_ids: list | None, *,
         "inventory",
         "asset.playrules",
         "ok",
-        summary=f"Client playrules for {asset.hostname}: {len(after)}",
+        summary=f"Custom alarms for {asset.hostname}: {len(after)}",
         detail=f"actor={actor} before={before} after={after}",
         object_type="asset",
         object_id=asset.asset_id,
@@ -1273,6 +1282,7 @@ def clone_prefill(db: Session, asset: Asset) -> dict:
         "alarms": _form_alarms(asset),
         "extras": form_extras(asset),
         "playrule_ids": asset_playrule_ids(asset),
+        "ladder": _form_ladder(asset),
     }
 
 
@@ -1305,6 +1315,7 @@ def asset_form_values(asset: Asset | None = None) -> dict:
             "alarms": _form_alarms(),
             "extras": form_extras(),
             "playrule_ids": [],
+            "ladder": _form_ladder(None),
         }
     return {
         "asset_id": asset.asset_id or "",
@@ -1324,7 +1335,14 @@ def asset_form_values(asset: Asset | None = None) -> dict:
         "alarms": _form_alarms(asset),
         "extras": form_extras(asset),
         "playrule_ids": asset_playrule_ids(asset),
+        "ladder": _form_ladder(asset),
     }
+
+
+def _form_ladder(asset: Asset | None) -> list:
+    from app.asset_ladder import ladder_form_slots
+
+    return ladder_form_slots(asset)
 
 
 def asset_search_blob(asset: Asset) -> str:
@@ -1578,6 +1596,7 @@ def delete_asset(db: Session, asset: Asset, actor: str = "system") -> dict:
             if not sched.asset_ids and sched.enabled:
                 sched.enabled = False
                 reports_off.append(sched.name or str(sched.id))
+    db.query(AssetLadderStep).filter(AssetLadderStep.asset_id == pk).delete(synchronize_session=False)
     db.flush()
     db.delete(asset)
     audit(

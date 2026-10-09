@@ -78,7 +78,7 @@
 
 {% if incident.asset %}
 <section class="card">
-  <h2>Who to call {% with %}{% set tip %}Escalation role steps mail the owner email below. A step that names an address mails that address instead. With no owner email, role steps are recorded as no-recipient and nothing is sent.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Who to call {% with %}{% set tip %}Default ladder role steps mail the owner email below. A step that names an address mails that address instead. With no owner email, role steps are recorded as no-recipient and nothing is sent. A filled asset Ladder mails those addresses only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <dl class="kv">
     <dt>Owner / team</dt><dd>{{ incident.asset.owner or "—" }}</dd>
     <dt>Contact</dt><dd>{{ incident.asset.contact_name or "—" }}</dd>
@@ -90,7 +90,7 @@
     <dt>{{ label }}</dt><dd class="extra-{{ key }}">{{ value }}</dd>
     {% endfor %}
     {% if client_playrules %}
-    <dt>Client playrules</dt>
+    <dt>Custom alarms</dt>
     <dd>{% for rule in client_playrules %}{{ rule.name }}{% if incident.playrule_id == rule.id %} <span class="pill ok">used</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</dd>
     {% endif %}
   </dl>

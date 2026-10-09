@@ -52,22 +52,22 @@
   </div>
   </div>
   <div class="asset-form-block" data-asset-contacts>
-  <h3 class="asset-form-block-head">NOC contacts {% with %}{% set tip %}Shown on the incident page under Who to call and in the escalation mail. Escalation role steps still mail Owner email only — the backup contact is for the human on shift, not an automatic second recipient.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+  <h3 class="asset-form-block-head">NOC contacts {% with %}{% set tip %}Shown on the incident page under Who to call and in the mail. Default ladder role steps still mail Owner email only — the backup contact is for the human on shift. A filled Ladder on this asset mails those addresses instead.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
   <div class="form-grid asset-form-grid">
   <input type="hidden" name="extras_present" value="1">
   <label>Owner / team <input name="owner" value="{{ form.owner or 'platform' }}" placeholder="platform"></label>
   <label>Contact name <input name="contact_name" value="{{ form.contact_name }}" placeholder="Who to call"></label>
-  <label><span class="label-line">Owner email {% with %}{% set tip %}Pick from the same address book as Ops → Compose To, or choose “Type a new email…”. Escalation role steps (team, team-lead, engineer) mail this address only. Empty = the mail is recorded as no-recipient and not sent.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+  <label><span class="label-line">Owner email {% with %}{% set tip %}Pick from the same address book as scheduled reports, or choose “Type a new email…”. Default ladder role steps (team, team-lead, engineer) mail this address only. Empty = the mail is recorded as no-recipient and not sent. A filled Ladder does not also mail this address.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     {{ email_pick("owner_email", form.owner_email, "oncall@dc.local", mail_addresses or [], fill_name="contact_name") }}</label>
   <label>Owner phone <input name="owner_phone" value="{{ form.owner_phone }}" placeholder="+381-11-000-0000"></label>
   <label>Backup on-call name <input name="extra_backup_name" value="{{ ex.backup_name }}" placeholder="Second person to call"></label>
   <label>Backup on-call phone <input name="extra_backup_phone" value="{{ ex.backup_phone }}" placeholder="+381-11-000-0001"></label>
-  <label><span class="label-line">Backup on-call email {% with %}{% set tip %}For the human on shift. Escalation never mails this address automatically.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+  <label><span class="label-line">Backup on-call email {% with %}{% set tip %}For the human on shift. The Ladder does not mail this address unless you add it on a level.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     {{ email_pick("extra_backup_email", ex.backup_email, "backup@dc.local", mail_addresses or [], fill_name="extra_backup_name") }}</label>
   <label>Support hours <input name="extra_support_hours" value="{{ ex.support_hours }}" placeholder="24/7 or Mon–Fri 08–17"></label>
   <label>Timezone <input name="extra_timezone" value="{{ ex.timezone }}" placeholder="Europe/Belgrade"></label>
   <label>License / contract / SLA <input name="extra_contract" value="{{ ex.contract }}" placeholder="SLA gold · 4h response"></label>
-  <label class="wide"><span class="label-line">Runbook note <span class="muted label-hint">for humans</span> {% with %}{% set tip %}Guidance for whoever is woken up at 3am: what to check, who to call, what not to touch. Shown on the incident page (Who to call) and in the escalation mail. Never executed — it is not a Playrule, not a playbook step, and it does not change any threshold or alert.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <label class="wide"><span class="label-line">Runbook note <span class="muted label-hint">for humans</span> {% with %}{% set tip %}Guidance for whoever is woken up at 3am: what to check, who to call, what not to touch. Shown on the incident page (Who to call) and in the mail. Never executed — it is not a rule, not a Playbook step, and it does not change any threshold or alert.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <textarea name="extra_runbook_note" rows="3" placeholder="Ignore disk until 95%; then call the backup on-call.">{{ ex.runbook_note }}</textarea></label>
   </div>
   <div class="asset-support" data-asset-support>
@@ -155,12 +155,11 @@
     </div>
     </div>
   </div>
-  <div class="asset-form-reserved" data-asset-form-reserved aria-hidden="true"></div>
   </div>
   <div class="asset-form-col asset-form-right">
   <input type="hidden" name="alarms_present" value="1">
   <div class="asset-form-block alarm-families" data-alarm-families>
-    <h3 class="asset-form-block-head alarm-heading label-line">Standard alarms {% with %}{% set tip %}Per-host enable and % overlay on the Alertmanager webhook. PromQL still lives in monitoring/alerts.yml. Not a second alerting engine and not a Playrule. cpu / mem / disk / up only — not every exporter series. Auto-detect still picks Linux / Windows / Network.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h3 class="asset-form-block-head alarm-heading label-line">Standard alarms {% with %}{% set tip %}Bundled mute-only thresholds on the Alertmanager webhook. PromQL still lives in monitoring/alerts.yml. Not a second alerting engine and not a rule. cpu / mem / disk / up only — not every exporter series. Auto-detect still picks Linux / Windows / Network.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     {% set alarms = form.alarms or {} %}
     {% set up_a = alarms.get('up') or {} %}
     {% set cpu_a = alarms.get('cpu_percent') or {} %}
@@ -191,12 +190,43 @@
       <input type="number" name="alarm_disk_threshold" min="1" max="100" step="1" value="{{ disk_a.get('threshold') or 90 }}" data-alarm-disk-th> %
     </div>
   </div>
-  <hr class="asset-form-rule" data-asset-form-rule>
+  </div>
+  <div class="asset-form-col asset-form-custom">
   <div class="asset-form-block client-playrules" data-client-playrules>
-    <h3 class="asset-form-block-head label-line">Client playrules {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first playrule in this list (enabled, same alertname) and its playbook / escalation instead of the first global playrule with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = the global playrule match, unchanged. Disabled playrules are skipped.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h3 class="asset-form-block-head label-line">Custom alarms {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = Rules. Disabled rules are skipped. Mail follows Ladder when a level is filled; otherwise that rule's default ladder. It does not send both.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     <input type="hidden" name="playrules_present" value="1">
-    <p class="muted alarm-limit">This does not create Prometheus thresholds. It records which playrule / playbook this asset prefers when that alertname arrives. Matching is still by alertname only.</p>
+    <p class="muted alarm-limit">This does not create Prometheus thresholds. It records which rule this asset prefers when that alertname arrives. Matching is still by alertname only.</p>
     {% with picked=form.playrule_ids %}{% include "_playrule_picker.html" %}{% endwith %}
+  </div>
+  </div>
+  <div class="asset-form-col asset-form-ladder">
+  <div class="asset-form-block asset-ladder" data-asset-ladder>
+    <h3 class="asset-form-block-head label-line">Ladder {% with %}{% set tip %}Mail steps for incidents on this host, counted from incident start, until Acknowledged. Each level is minutes and one or more emails. Empty (every level off) uses the Default ladder. Any filled level is the only mail for this host — Rules still match the Playbook and do not add a second mail policy. Email only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <input type="hidden" name="ladder_present" value="1">
+    <p class="muted alarm-limit">Off or blank is not mailed. Fast and slow are just different minutes.</p>
+    <p class="ladder-default"><a href="/escalation">Default ladder</a></p>
+    {% set minute_hint = {1: "0", 2: "15", 3: "30", 4: "60"} %}
+    {% for slot in form.ladder %}
+    <div class="ladder-level" data-ladder-level="{{ slot.level }}">
+      <div class="alarm-row">
+        <button type="button" class="onoff {{ 'is-on' if slot.on else 'is-off' }}" data-onoff aria-pressed="{{ 'true' if slot.on else 'false' }}">{% if slot.on %}ON{% else %}OFF{% endif %}</button>
+        <input type="checkbox" class="onoff-check" name="ladder_on_{{ slot.level }}" value="1" {% if slot.on %}checked{% endif %} tabindex="-1">
+        <span class="ladder-label">{{ slot.label }}</span>
+      </div>
+      <label>Minutes
+        <input type="number" name="ladder_minutes_{{ slot.level }}" min="0" max="10080" step="1" inputmode="numeric" value="{{ slot.minutes }}" placeholder="{{ minute_hint[slot.level] }}">
+      </label>
+      <div data-ladder-emails>
+        {% for email in slot.emails %}
+        <div class="ladder-email" data-ladder-email>
+          {{ email_pick("ladder_email_" ~ slot.level, email, "noc@dc.local", mail_addresses or []) }}
+          <button type="button" class="secondary ladder-email-remove" data-ladder-remove-email {% if slot.emails|length < 2 %}hidden{% endif %}>Remove</button>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="secondary ladder-add" data-ladder-add-email>Add email</button>
+    </div>
+    {% endfor %}
   </div>
   </div>
   {% if form_mode == "clone" %}

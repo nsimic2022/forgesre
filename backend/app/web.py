@@ -316,6 +316,29 @@ def _picked_email(picked: str, typed: str) -> str:
     return (picked or "").strip() or (typed or "").strip()
 
 
+def _posted_ladder(
+    present: str,
+    *,
+    on: list[str],
+    minutes: list[str],
+    emails: list[list[str]],
+    picks: list[list[str]],
+) -> list | None:
+    from app.asset_ladder import ladder_steps_from_form
+
+    levels = []
+    for index in range(4):
+        levels.append(
+            {
+                "on": on[index] if index < len(on) else "",
+                "minutes": minutes[index] if index < len(minutes) else "",
+                "emails": emails[index] if index < len(emails) else [],
+                "picks": picks[index] if index < len(picks) else [],
+            }
+        )
+    return ladder_steps_from_form(present, levels)
+
+
 def _posted_extras(present: str, **values: str) -> dict | None:
     try:
         return extras_from_form(present, **values)
@@ -763,7 +786,7 @@ def assets_page(
 
 
 def playrule_choices(db: Session) -> list[dict]:
-    """Client playrule picker rows: every playrule with its alertname and playbook. Read-only."""
+    """Custom alarm picker rows: every rule with its alertname and playbook. Read-only."""
     rows = db.query(Playrule).order_by(Playrule.name).all()
     return [
         {
@@ -778,7 +801,7 @@ def playrule_choices(db: Session) -> list[dict]:
 
 
 def asset_playrules(db: Session, asset: Asset | None) -> list[Playrule]:
-    """Client playrules saved on this asset, in saved order. Missing ids are skipped."""
+    """Custom alarms saved on this asset, in saved order. Missing ids are skipped."""
     from app.asset_extras import asset_playrule_ids
 
     ids = asset_playrule_ids(asset)
@@ -869,6 +892,23 @@ def asset_create(
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
     playrule_add: str = Form(""),
+    ladder_present: str = Form(""),
+    ladder_on_1: str = Form(""),
+    ladder_minutes_1: str = Form(""),
+    ladder_email_1: list[str] = Form([]),
+    ladder_email_1_pick: list[str] = Form([]),
+    ladder_on_2: str = Form(""),
+    ladder_minutes_2: str = Form(""),
+    ladder_email_2: list[str] = Form([]),
+    ladder_email_2_pick: list[str] = Form([]),
+    ladder_on_3: str = Form(""),
+    ladder_minutes_3: str = Form(""),
+    ladder_email_3: list[str] = Form([]),
+    ladder_email_3_pick: list[str] = Form([]),
+    ladder_on_4: str = Form(""),
+    ladder_minutes_4: str = Form(""),
+    ladder_email_4: list[str] = Form([]),
+    ladder_email_4_pick: list[str] = Form([]),
 ):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
@@ -903,6 +943,13 @@ def asset_create(
         support_lead_days=extra_support_lead_days,
     )
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
+    posted_ladder = _posted_ladder(
+        ladder_present,
+        on=[ladder_on_1, ladder_on_2, ladder_on_3, ladder_on_4],
+        minutes=[ladder_minutes_1, ladder_minutes_2, ladder_minutes_3, ladder_minutes_4],
+        emails=[ladder_email_1, ladder_email_2, ladder_email_3, ladder_email_4],
+        picks=[ladder_email_1_pick, ladder_email_2_pick, ladder_email_3_pick, ladder_email_4_pick],
+    )
     clone_row = db.query(Asset).filter_by(asset_id=cloned_from).first() if cloned_from else None
     try:
         posted_snmp = snmp_from_form(
@@ -940,6 +987,7 @@ def asset_create(
             playrule_ids=posted_playrules,
             snmp_port=snmp_port,
             snmp=posted_snmp,
+            ladder=posted_ladder,
         )
     except ValueError as exc:
         if cloned_from:
@@ -1374,7 +1422,7 @@ def asset_playrules_update(
     posted = playrule_ids_from_form(playrules_present or "1", playrule_ids, playrule_add)
     set_asset_playrules(db, item, posted, actor=user.email)
     count = len(item.playrule_ids or [])
-    notice = f"Client playrules saved ({count})." if count else "Client playrules cleared — global Playrules apply."
+    notice = f"Custom alarms saved ({count})." if count else "Custom alarms cleared — Rules apply."
     return RedirectResponse(f"/assets/{asset_id}?notice={quote(notice)}#client-playrules", status_code=302)
 
 
@@ -1454,6 +1502,23 @@ def asset_update(
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
     playrule_add: str = Form(""),
+    ladder_present: str = Form(""),
+    ladder_on_1: str = Form(""),
+    ladder_minutes_1: str = Form(""),
+    ladder_email_1: list[str] = Form([]),
+    ladder_email_1_pick: list[str] = Form([]),
+    ladder_on_2: str = Form(""),
+    ladder_minutes_2: str = Form(""),
+    ladder_email_2: list[str] = Form([]),
+    ladder_email_2_pick: list[str] = Form([]),
+    ladder_on_3: str = Form(""),
+    ladder_minutes_3: str = Form(""),
+    ladder_email_3: list[str] = Form([]),
+    ladder_email_3_pick: list[str] = Form([]),
+    ladder_on_4: str = Form(""),
+    ladder_minutes_4: str = Form(""),
+    ladder_email_4: list[str] = Form([]),
+    ladder_email_4_pick: list[str] = Form([]),
 ):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
@@ -1490,6 +1555,13 @@ def asset_update(
         support_lead_days=extra_support_lead_days,
     )
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
+    posted_ladder = _posted_ladder(
+        ladder_present,
+        on=[ladder_on_1, ladder_on_2, ladder_on_3, ladder_on_4],
+        minutes=[ladder_minutes_1, ladder_minutes_2, ladder_minutes_3, ladder_minutes_4],
+        emails=[ladder_email_1, ladder_email_2, ladder_email_3, ladder_email_4],
+        picks=[ladder_email_1_pick, ladder_email_2_pick, ladder_email_3_pick, ladder_email_4_pick],
+    )
     posted_snmp = _posted_snmp(
         comms_present,
         item.extras,
@@ -1527,6 +1599,7 @@ def asset_update(
         playrule_ids=posted_playrules,
         snmp_port=snmp_port if comms_present.strip() else None,
         snmp=posted_snmp,
+        ladder=posted_ladder,
     )
     notice = getattr(item, "_detect_message", "") or ""
     suffix = f"?notice={quote(notice)}" if notice else ""

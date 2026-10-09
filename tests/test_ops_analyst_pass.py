@@ -173,13 +173,14 @@ def test_dashboard_incident_tiles_match_the_list_behind_the_click():
     assert home.status_code == 200
     alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
     tiles = _tile_counts(alarms)
-    assert set(tiles) == {"critical", "warning", "investigating", "resolved"}
+    assert set(tiles) == {"critical", "warning", "investigating", "escalated", "resolved"}
     assert tiles["critical"][0] == "/incidents?status=active&amp;severity=critical"
     assert tiles["warning"][0] == "/incidents?status=active&amp;severity=warning"
     assert tiles["investigating"][0] == "/incidents?status=INVESTIGATING"
+    assert tiles["escalated"][0] == "/incidents?status=ESCALATED"
     assert tiles["resolved"][0] == "/incidents?status=RESOLVED"
     assert 'class="stat crit' in alarms and 'class="stat warn' in alarms and 'class="stat cold' in alarms
-    for gone in ('data-tile="open"', 'data-tile="escalated"', ">Open<", ">Escalated<", "No owner email", "Assets without incident"):
+    for gone in ('data-tile="open"', ">Open<", "No owner email", "Assets without incident"):
         assert gone not in alarms, gone
     assert "No owner email" not in home.text
     assert 'href="/assets?flag=no-email"' not in home.text
@@ -471,7 +472,7 @@ def test_analyst_templates_say_the_honest_thing(monkeypatch):
         assert "Guidance only" in page.text
         assert "playbook-guide" in page.text
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-23" in base
+    assert "app.css?v=v08-24" in base
     for name in ["incident_detail.html", "asset_detail.html", "_asset_form.html", "escalation.html"]:
         text = (ROOT / "frontend" / "templates" / name).read_text(encoding="utf-8")
         assert "falls back to policy role@forgesre.local" not in text

@@ -25,7 +25,7 @@
   <div class="row-actions asset-form-actions">
     <a class="button" href="/playbooks?edit={{ book.id }}{{ pager_keep(pager) }}">Edit</a>
     <a class="button" href="/playbooks?clone={{ book.id }}{{ pager_keep(pager) }}">Clone</a>
-    <form method="post" action="/playbooks/{{ book.id }}/delete" onsubmit="return confirm('Remove {{ book.name }}? Playrules keep working without this playbook.');">
+    <form method="post" action="/playbooks/{{ book.id }}/delete" onsubmit="return confirm('Remove {{ book.name }}? Rules keep working without this Playbook.');">
       <button type="submit" class="danger">Remove</button>
     </form>
   </div>
