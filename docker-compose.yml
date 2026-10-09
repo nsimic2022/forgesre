@@ -123,11 +123,13 @@ services:
     network_mode: host
     command: ["-config.file=/etc/loki/loki.yml"]
     volumes:
-      - ./logging/loki.yml:/etc/loki/loki.yml:ro
+      - ${LOKI_CONFIG:-./logging/loki.yml}:/etc/loki/loki.yml:ro
       - ${FORGESRE_DATA:-./data}/loki:/loki
     restart: unless-stopped
 
   alloy:
+    # Host network so syslog can bind UDP/TCP 514. Alloy's own UI stays on 127.0.0.1:12345.
+    # Root (user 0) is required to bind port 514. Loki push target stays 127.0.0.1:3100.
     image: grafana/alloy:v1.7.5
     user: "0"
     network_mode: host
@@ -137,7 +139,7 @@ services:
       - --storage.path=/var/lib/alloy/data
       - --server.http.listen-addr=127.0.0.1:12345
     volumes:
-      - ./logging/config.alloy:/etc/alloy/config.alloy:ro
+      - ${ALLOY_CONFIG:-./logging/config.alloy}:/etc/alloy/config.alloy:ro
       - ${FORGESRE_DATA:-./data}/logs:/var/log/forgesre:ro
       - ${FORGESRE_DATA:-./data}/alloy:/var/lib/alloy/data
     depends_on:

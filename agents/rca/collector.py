@@ -174,21 +174,94 @@ def promql_queries_for(
     }
 
 
-def loki_query_for(asset: dict[str, Any] | None) -> str | None:
-    """LogQL for this asset, or None when Alloy does not ship that host.
+DEMO_LOKI_QUERY = '{job="forgesre"}'
 
-    Alloy labels appliance Core logs ``asset=forge-demo-01`` / ``job=forgesre``.
-    Querying ``{asset="<real-id>"}`` returns empty and must not look like host logs.
+
+def asset_log_identity(asset: Any) -> dict[str, Any]:
+    """Fields Loki matching needs. Empty dict when the incident has no asset."""
+    if not asset:
+        return {}
+    if isinstance(asset, dict):
+        def get(key: str, default: Any = "") -> Any:
+            return asset.get(key, default)
+    else:
+        def get(key: str, default: Any = "") -> Any:
+            return getattr(asset, key, default)
+
+    return {
+        "asset_id": str(get("asset_id") or ""),
+        "hostname": str(get("hostname") or ""),
+        "ip": str(get("ip") or ""),
+        "type": str(get("type") or ""),
+        "monitoring_profile": str(get("monitoring_profile") or ""),
+        "scrape_address": str(get("scrape_address") or ""),
+    }
+
+
+def is_demo_loki_query(query: str | None) -> bool:
+    """True when the selector is the appliance Core stream, not device syslog."""
+    text = query or ""
+    return 'job="forgesre"' in text and 'job="syslog"' not in text
+
+
+def logql_selectors(query: str) -> list[str]:
+    """Split a top-level `` or `` join of ``{...}`` selectors. Quoted text stays intact."""
+    parts: list[str] = []
+    buf: list[str] = []
+    quote = False
+    index = 0
+    text = (query or "").strip()
+    while index < len(text):
+        char = text[index]
+        if char == '"' and (index == 0 or text[index - 1] != "\\"):
+            quote = not quote
+            buf.append(char)
+            index += 1
+            continue
+        if not quote and text.startswith(" or ", index):
+            part = "".join(buf).strip()
+            if part:
+                parts.append(part)
+            buf = []
+            index += 4
+            continue
+        buf.append(char)
+        index += 1
+    tail = "".join(buf).strip()
+    if tail:
+        parts.append(tail)
+    return parts or ([text] if text else [])
+
+
+def loki_query_for(asset: dict[str, Any] | None) -> str | None:
+    """LogQL for this asset.
+
+    ``forge-demo-01`` uses appliance Core logs (``job=forgesre``).
+    A real asset queries syslog by hostname, then sender IP.
+    No asset, or a real asset with neither hostname nor IP, returns None
+    so Core logs are not attached as that host's evidence.
     """
-    asset_id = str((asset or {}).get("asset_id") or "")
-    if not asset_id or asset_id == DEMO_ASSET:
-        return '{job="forgesre"}'
-    return None
+    asset = asset or {}
+    asset_id = str(asset.get("asset_id") or "").strip()
+    if asset_id == DEMO_ASSET:
+        return DEMO_LOKI_QUERY
+    if not asset_id:
+        return None
+    hostname = str(asset.get("hostname") or "").strip()
+    ip = str(asset.get("ip") or "").strip()
+    parts: list[str] = []
+    if hostname:
+        parts.append('{job="syslog",hostname="%s"}' % _escape(hostname))
+    if ip:
+        parts.append('{job="syslog",ip="%s"}' % _escape(ip))
+    if not parts:
+        return None
+    return " or ".join(parts)
 
 
 HOST_LOGS_LIMITATION = (
-    "No host logs shipped. Alloy labels appliance Core logs as asset=forge-demo-01; "
-    "empty Loki is not evidence from this VM."
+    "No syslog lines matched this asset (hostname, then IP). "
+    "Appliance Core logs are not evidence for this host."
 )
 DEMO_LOGS_LIMITATION = (
     "DEMO: Loki lines are appliance/Core logs (job=forgesre), not a customer host."
@@ -217,7 +290,12 @@ def collect_evidence_set(
     limitations: list[str] = []
     seq = 1
     queries = promql_queries_for(asset, alert)
-    loki_query = loki_query_for(asset)
+    identity = dict(asset or {})
+    if asset_id and not str(identity.get("asset_id") or "").strip():
+        identity["asset_id"] = asset_id
+    loki_query = loki_query_for(identity)
+    if asset_id != DEMO_ASSET and is_demo_loki_query(loki_query):
+        loki_query = None
     if asset_id == DEMO_ASSET:
         limitations.append(DEMO_LOGS_LIMITATION)
 
@@ -277,14 +355,17 @@ def collect_evidence_set(
             )
 
     if loki_query is None:
-        limitations.append(HOST_LOGS_LIMITATION)
+        # Real asset with nothing to match, or no asset: do not attach demo Core logs.
+        pass
     elif log_fetcher is None:
-        limitations.append("Logs unavailable.")
-        add("LOG", "loki", {"error": "no fetcher"}, query=loki_query, extra={"unavailable": True}, confidence=0.2)
+        if asset_id == DEMO_ASSET:
+            limitations.append("Logs unavailable.")
+            add("LOG", "loki", {"error": "no fetcher"}, query=loki_query, extra={"unavailable": True}, confidence=0.2)
     else:
         result = log_fetcher(loki_query, started, now)
         if result.get("skipped"):
-            limitations.append(str(result.get("reason") or HOST_LOGS_LIMITATION))
+            if asset_id == DEMO_ASSET:
+                limitations.append(str(result.get("reason") or DEMO_LOGS_LIMITATION))
         elif result.get("error"):
             limitations.append("Logs unavailable.")
             add(
@@ -296,12 +377,17 @@ def collect_evidence_set(
                 confidence=0.2,
             )
         else:
-            extra = {"window_minutes": window_minutes}
+            lines = [str(line) for line in (result.get("lines") or [])]
+            if asset_id != DEMO_ASSET and is_demo_loki_query(loki_query):
+                lines = []
             if asset_id == DEMO_ASSET:
-                extra["scope"] = "appliance-demo"
-                extra["label"] = "DEMO"
-            for line in (result.get("lines") or [])[:max_log_lines]:
-                add("LOG", "loki", normalize_log(str(line), utc_now()), query=loki_query, extra=extra)
+                extra = {"window_minutes": window_minutes, "scope": "appliance-demo", "label": "DEMO"}
+                for line in lines[:max_log_lines]:
+                    add("LOG", "loki", normalize_log(line, utc_now()), query=loki_query, extra=extra)
+            elif lines:
+                extra = {"window_minutes": window_minutes, "scope": "syslog"}
+                for line in lines[:max_log_lines]:
+                    add("LOG", "loki", normalize_log(line, utc_now()), query=loki_query, extra=extra)
 
     limitations = list(dict.fromkeys(limitations))
     return items, limitations

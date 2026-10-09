@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Render Prometheus, Alertmanager, and snmp_exporter config from templates.
+# Render Prometheus, Alertmanager, snmp_exporter, Alloy, and Loki config.
 # Safe on an existing VM: does not regenerate passwords. Do not run ./install.sh for this.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -45,6 +45,8 @@ ensure_kv "$ROOT/.env" SNMP_EXPORTER_CONFIG "${DATA_DIR}/generated/snmp.yml"
 ensure_kv "$ROOT/.env" PROMETHEUS_CONFIG "${DATA_DIR}/generated/prometheus.yml"
 ensure_kv "$ROOT/.env" ALERTMANAGER_CONFIG "${DATA_DIR}/generated/alertmanager.yml"
 ensure_kv "$ROOT/.env" PROMETHEUS_ALERTS "${DATA_DIR}/generated/alerts.yml"
+ensure_kv "$ROOT/.env" ALLOY_CONFIG "${DATA_DIR}/generated/config.alloy"
+ensure_kv "$ROOT/.env" LOKI_CONFIG "${DATA_DIR}/generated/loki.yml"
 if grep -q '^FORGESRE_VERSION=' "$ROOT/.env"; then
   sed -i 's/^FORGESRE_VERSION=.*/FORGESRE_VERSION=0.8.0/' "$ROOT/.env"
 else
@@ -104,6 +106,49 @@ print(f"Wrote {out}/snmp.yml")
 print(snmp_status)
 print(f"Wrote {out}/alerts.yml")
 PY
+
+cp "$ROOT/logging/config.alloy" "$DATA_DIR/generated/config.alloy"
+cp "$ROOT/logging/loki.yml" "$DATA_DIR/generated/loki.yml"
+echo "Wrote $DATA_DIR/generated/config.alloy"
+echo "Wrote $DATA_DIR/generated/loki.yml"
+
+# Recreate Alloy or Loki only when the rendered file changed. Alloy may honor POST /-/reload.
+apply_logging() {
+  local service="$1" file="$2"
+  local stamp="$DATA_DIR/generated/.${service}.sha"
+  local sum prev=""
+  sum="$(sha256sum "$file" | awk '{print $1}')"
+  if [[ -f "$stamp" ]]; then
+    prev="$(tr -d '[:space:]' < "$stamp" || true)"
+  fi
+  if [[ "$sum" == "$prev" ]]; then
+    echo "$service config unchanged."
+    return 0
+  fi
+  if [[ "$service" == "alloy" ]] && curl -fsS -o /dev/null -X POST http://127.0.0.1:12345/-/reload 2>/dev/null; then
+    printf '%s\n' "$sum" > "$stamp"
+    echo "Alloy reloaded."
+    return 0
+  fi
+  local -a DC
+  if docker info >/dev/null 2>&1; then
+    DC=(docker compose)
+  elif sudo -n docker info >/dev/null 2>&1; then
+    DC=(sudo docker compose)
+  else
+    echo "$service config changed. Docker is not available yet; ./forgesre update will apply it."
+    return 0
+  fi
+  echo "Recreating $service so the rendered config is loaded."
+  if "${DC[@]}" up -d --force-recreate --no-deps "$service"; then
+    printf '%s\n' "$sum" > "$stamp"
+  else
+    echo "$service was not recreated (image missing or stack not up yet)."
+  fi
+}
+
+apply_logging loki "$DATA_DIR/generated/loki.yml"
+apply_logging alloy "$DATA_DIR/generated/config.alloy"
 
 echo "SNMP community is taken from SNMP_COMMUNITY in secrets/secrets.env (not printed)."
 echo "Prometheus job forgesre-snmp scrapes snmp_exporter at 127.0.0.1:9116."

@@ -1,3 +1,19 @@
+// ForgeSRE Alloy. Receiver only — it does not poll exporters or agents.
+// 0 syslog senders → only the demo Core file stream below.
+// 1 sender → one stream. 1000 senders → 1000 streams. Silence when nobody sends.
+// Metrics exporters are not log sources. Do not scrape them into Loki.
+//
+// render-monitoring copies this file to $FORGESRE_DATA/generated/config.alloy.
+// Day-2: git pull origin main && ./forgesre update. Do not run ./install.sh.
+
+loki.write "default" {
+  endpoint {
+    url = "http://127.0.0.1:3100/loki/api/v1/push"
+  }
+}
+
+// docker/core pipeline: the Core container writes data/logs/forgesre.log.
+// Compose bind-mounts that directory at /var/log/forgesre. Demo asset only.
 local.file_match "forgesre_logs" {
   path_targets = [{
     __path__ = "/var/log/forgesre/*.log",
@@ -6,13 +22,87 @@ local.file_match "forgesre_logs" {
   }]
 }
 
-loki.source.file "forgesre" {
+loki.source.file "core" {
   targets    = local.file_match.forgesre_logs.targets
   forward_to = [loki.write.default.receiver]
 }
 
-loki.write "default" {
-  endpoint {
-    url = "http://127.0.0.1:3100/loki/api/v1/push"
+// Copy syslog header fields onto stable labels before __ labels are dropped.
+// Nothing is forwarded through this component; loki.source.syslog applies .rules.
+// hostname / host = syslog header hostname, or "unknown" when the header is empty.
+// ip = sender address (IPv4-mapped IPv6 stripped). ForgeSRE does not invent an Asset.
+loki.relabel "syslog_labels" {
+  forward_to = [loki.write.default.receiver]
+
+  rule {
+    source_labels = ["__syslog_message_hostname"]
+    regex         = ".+"
+    target_label  = "hostname"
   }
+
+  rule {
+    source_labels = ["__syslog_message_hostname"]
+    regex         = ".+"
+    target_label  = "host"
+  }
+
+  rule {
+    source_labels = ["__syslog_message_hostname"]
+    regex         = "^$"
+    replacement   = "unknown"
+    target_label  = "hostname"
+  }
+
+  rule {
+    source_labels = ["__syslog_message_hostname"]
+    regex         = "^$"
+    replacement   = "unknown"
+    target_label  = "host"
+  }
+
+  rule {
+    source_labels = ["__syslog_connection_ip_address"]
+    regex         = `^(?:::ffff:)?(\d+\.\d+\.\d+\.\d+)$`
+    replacement   = "$1"
+    target_label  = "ip"
+  }
+
+  rule {
+    source_labels = ["__syslog_connection_ip_address"]
+    regex         = `^([0-9a-fA-F:]+:[0-9a-fA-F:]+)$`
+    target_label  = "ip"
+  }
+
+  rule {
+    source_labels = ["__syslog_connection_ip_address"]
+    regex         = "^$"
+    replacement   = "unknown"
+    target_label  = "ip"
+  }
+}
+
+// BSD syslog (RFC3164) on the host: UDP/514 and TCP/514.
+// Switches and rsyslog `*.* @appliance:514` use this format.
+// Do not use an RFC5424 template; those lines are dropped as parse errors.
+loki.source.syslog "devices" {
+  listener {
+    address                = "0.0.0.0:514"
+    protocol               = "udp"
+    syslog_format          = "rfc3164"
+    labels                 = { job = "syslog" }
+    use_incoming_timestamp = false
+    max_message_length     = 65536
+  }
+
+  listener {
+    address                = "0.0.0.0:514"
+    protocol               = "tcp"
+    syslog_format          = "rfc3164"
+    labels                 = { job = "syslog" }
+    use_incoming_timestamp = false
+    max_message_length     = 65536
+  }
+
+  relabel_rules = loki.relabel.syslog_labels.rules
+  forward_to    = [loki.write.default.receiver]
 }

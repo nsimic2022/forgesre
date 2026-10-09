@@ -73,6 +73,8 @@ Discovery / manual form / NetBox
    ForgeRCA (facts / hypotheses / evidence)
 ```
 
+Logs are a side path, not the alarm path. Devices send syslog to this appliance (UDP/TCP 514). That does not open an incident. Alarms stay exporter → Prometheus → Alertmanager → Core. Grafana is graphs only.
+
 Seeded on first start:
 
 | Object | What it is |
@@ -148,10 +150,10 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 | Discovery | `/discovery` | Prefills primary IPv4 `/24`; **Confirm & scan** / **Scan now** (disabled until confirmed) side-by-side; queue Postgres `discovery_scan` (no Celery; not nmap). Empty `discovery.cidrs` = no scan. **Sync NetBox** beside Scan now (read-only, admin). Columns: open ports, node_exporter, windows_exporter, SNMP. Demo IP `10.20.30.41` is a DEMO lab seed. |
 | Incidents | `/incidents` | The only incident list. Default **All** statuses, newest first (10 per page) — not a forced 90-day archive. Filters: status (**All**, **Active (not resolved)** = Open + Investigating + Escalated, **Not acknowledged**, or one exact status), severity (**Critical**, **Warning**), site, customer, time window (**1h / 6h / 24h / 7d / 30d** or from/to), and search (host, problem, or INC). Columns: Hostname, Name, Severity, Status, Ladder (2×2 climb squares), When (date and time), Acknowledged, Resolved by. Title is the primary link; `#N` is colored green (resolved/closed), yellow (in progress), red (critical, not done). Closed rows stay here. `/history` redirects here. |
 | Incident | `/incidents/INC-…` | **Acknowledge / Resolve / Close**, Who to call, **Open ForgeRCA** (primary CTA → `/ai/INC-…`), **Send incident report**. Mail outbox is `/ops#mail`. ForgeRCA/ForgeAI pills stay. |
-| AI Investigation | `/ai/INC-…` | ForgeRCA (green) then ForgeAI (green/yellow/red). Facts, anomalies, hypotheses. Empty host logs: honest limitation (Alloy ships appliance/Core logs only). |
+| AI Investigation | `/ai/INC-…` | ForgeRCA (green) then ForgeAI (green/yellow/red). Facts, anomalies, hypotheses. Device syslog is evidence only when Loki has lines for that asset hostname or IP. Demo Core logs stay on `forge-demo-01`. |
 | Rules | `/playrules` | Match `alertname` after ingest and attach a Playbook plus the default ladder. Do **not** create Prom rules. `alerts.yml` is PromQL (shown read-only as **Fires when**); Standard alarms are the mute-only overlay. Create / **Edit** / Toggle / **Remove** (analyst). |
 | Playbooks | `/playbooks` | Human checklist. Guidance only — nothing is executed. |
-| System Health | `/health-ui` | Same checks as `./forgesre doctor`, then the full **Journal** list (search, pager, export / delete) under a gap. `/journal` redirects here (`#journal`). Not in the left nav. **Open Grafana** lives **only here** (not left nav, not the alarm path). Alarm path: Prometheus → Alertmanager → Core. Grafana down is yellow (graphs only), not a Prometheus FAIL. Prom/AM errors name `:9090` / `:9093`, not “Prometheus Stack”. One Core worker thread (not Celery). **NetBox** UI up with API 403 is **warn** (yellow), not paused — Core is a token on the NetBox superuser, not a UI login. **SNMP exporter** with no Network device + IP is **paused (no SNMP targets)** (yellow, not down). Do not add devices just to un-pause SNMP. |
+| System Health | `/health-ui` | Same checks as `./forgesre doctor`, then the full **Journal** list (search, pager, export / delete) under a gap. `/journal` redirects here (`#journal`). Not in the left nav. **Open Grafana** lives **only here** (not left nav, not the alarm path). Alarm path: Prometheus → Alertmanager → Core. Grafana down is yellow (graphs only), not a Prometheus FAIL. Prom/AM errors name `:9090` / `:9093`, not “Prometheus Stack”. Loki green means `/ready`. Alloy green means the process is up and syslog is listening on UDP/TCP 514; Alloy up but 514 closed is yellow (logs only, not a Prometheus FAIL). One Core worker thread (not Celery). **NetBox** UI up with API 403 is **warn** (yellow), not paused — Core is a token on the NetBox superuser, not a UI login. **SNMP exporter** with no Network device + IP is **paused (no SNMP targets)** (yellow, not down). Do not add devices just to un-pause SNMP. |
 | Email & reports | `/ops` | Address book, send, **the** mail outbox (`#mail`), scheduled reports with **Edit / Clone / Remove / Enable**. Grafana is on System Health. |
 | Administration | `/admin` | Users: click a row to **edit** or **remove**. **Backup**, then **Import / restore** (left) beside a **ForgeSRE CLI** command list (right). Audit log. No browser PTY — SSH or `./forgesre` / `./forgesre shell` |
 
@@ -699,7 +701,17 @@ Alertmanager ingest **enqueues** an investigate job. The webhook does not wait o
 
 Queries are **per asset**. `forge-demo-01` uses Core demo gauges. A real Linux host uses `node_cpu_seconds_total` / `node_filesystem_*` with `asset="<id>"`. A real Windows host uses `windows_cpu_time_total` / `windows_logical_disk_*`. A network device uses `up{job="forgesre-snmp",asset="<id>"}`. Demo CPU/disk numbers are never overlaid on another host.
 
-Loki: Alloy still only ships **appliance Core logs** labeled `asset=forge-demo-01` / `job=forgesre` as a demo. RCA may use those for the DEMO host, labeled DEMO. **Real inventory hosts have no Loki until later** — limitation is “no host logs shipped”. Empty Loki is not evidence from that VM. There is no second log stack in V0.8. The RCA page shows that one-liner when the limitation is present.
+### Device logs (syslog)
+
+Graphs stay Prometheus `query_range`, or `trend.get` when the host is Zabbix-only. Loki is **logs**, not graphs. There is no per-asset Grafana log dashboard. Node exporter and the SNMP exporter are not log sources, and Alloy does not scrape them.
+
+Alloy **listens** on the appliance. It does not poll agents. With no senders, Loki only has the demo Core stream (`asset=forge-demo-01`, `job=forgesre`). Each device that sends is its own stream. A quiet device adds nothing.
+
+Point the device at the appliance on **UDP/514** and **TCP/514**. The format is BSD syslog (RFC3164): switches, and Linux `rsyslog` with `*.* @<appliance-ip>:514` (TCP is `@@`). Do not use an RFC5424 template; Alloy drops those lines. Allow both ports on the host firewall. If something else already owns 514 on the appliance (a local syslog daemon), stop it or Alloy cannot receive. Loki (`127.0.0.1:3100`) and Alloy's own page (`127.0.0.1:12345`) stay on localhost.
+
+The hostname in the syslog header should be the Asset **hostname**. Alloy stores it as `hostname` and `host`, and the sender address as `ip`. If the header has no hostname, those labels are `unknown`. ForgeSRE does not invent an Asset for an unknown sender; the lines are still stored. An incident on a real asset queries Loki by that hostname, then by IP. Matching lines are evidence. No lines means Loki is omitted (Core demo logs are not filled in). An incident with no asset does not get `forge-demo-01` logs. The demo asset still uses the Core stream, labeled DEMO.
+
+After a git pull, `./forgesre update` renders `data/generated/config.alloy` and `loki.yml` and restarts Alloy and Loki when those files changed. Do not run `./install.sh`.
 
 The optional LLM **rewrites prose only**. It receives a compact context (incident title/severity, top facts, CPU/mem/disk snapshots, short log lines already capped by `max_log_lines`) — not Prometheus `values: [[timestamp, x], …]` matrices. Builtin ForgeRCA still stores the full facts, evidence IDs, and PromQL. A CPU 4B `cancel task` at `timeout_seconds: 300` was prefill of a multi-thousand-token dump, not Node Exporter talking to the model. After `git pull origin main && ./forgesre update`, Investigate again and watch `docker compose logs -f llm` — prompt tokens should drop a lot.
 
@@ -716,6 +728,7 @@ Goal: host `app-01` at `10.10.10.50` appears under Assets and is scraped on `:91
 3. Asset page should show scrape address `10.10.10.50:9100` and the contacts. Edit them later if the owner changes.
 4. Wait up to 30s, then check SD JSON (command in §7) contains that target.
 5. On the VM: open Grafana (`:3000`) or Prometheus UI (`http://127.0.0.1:9090` from the host) and query `{asset="app-01"}` or `up{instance="10.10.10.50:9100"}`.
+6. Optional logs: on `app-01`, send BSD syslog to the appliance (`*.* @<appliance-ip>:514`). The host’s syslog hostname should be `app-01`, the same as the Asset hostname. Graphs stay Prometheus; Loki is only the log lines on the incident.
 
 Optional discovery path: put `10.10.10.0/24` on Discovery (or put it in `discovery.cidrs`), Scan now, Approve the `10.10.10.50` candidate instead of the manual form.
 

@@ -1272,6 +1272,81 @@ def _ok(status: str) -> dict[str, str]:
     return {"status": status}
 
 
+def _proc_port_listening(port: int, proto: str) -> bool:
+    """True when /proc/net shows this host port bound. TCP requires state LISTEN (0A)."""
+    needle = f":{port:04X}"
+    paths = ("/proc/net/udp", "/proc/net/udp6") if proto == "udp" else ("/proc/net/tcp", "/proc/net/tcp6")
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                text = handle.read()
+        except OSError:
+            continue
+        for line in text.splitlines()[1:]:
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            local = parts[1].upper()
+            state = parts[3].upper()
+            if not local.endswith(needle):
+                continue
+            if proto == "tcp" and state != "0A":
+                continue
+            return True
+    return False
+
+
+def syslog_listen_ports(port: int = 514) -> dict[str, bool]:
+    """Whether Alloy's syslog sockets are bound. Does not open the port."""
+    return {"udp": _proc_port_listening(port, "udp"), "tcp": _proc_port_listening(port, "tcp")}
+
+
+def _loki_check() -> dict[str, str]:
+    """Loki /ready. Graphs are not this hop; a down Loki is logs only."""
+    if not settings.loki_enabled:
+        return _ok("disabled")
+    url = f"{settings.loki_url.rstrip('/')}/ready"
+    result = _http(url, "GET")
+    result.setdefault("test", f"curl -fsS {url}")
+    if result.get("status") == "ok":
+        result["why"] = "Loki ready."
+        return result
+    result.setdefault("fix", "docker compose logs loki && docker compose up -d loki")
+    return result
+
+
+def _alloy_check() -> dict[str, str]:
+    """Alloy process (metrics) plus syslog UDP/TCP 514. A closed 514 is yellow, not an alarm-path failure."""
+    if not settings.loki_enabled:
+        return _ok("disabled")
+    result = _http("http://127.0.0.1:12345/metrics", "GET")
+    result.setdefault("test", "curl -fsS http://127.0.0.1:12345/metrics")
+    if result.get("status") != "ok":
+        result.setdefault("fix", "docker compose up -d alloy")
+        return result
+    ports = syslog_listen_ports()
+    if ports["udp"] and ports["tcp"]:
+        result["why"] = "Alloy up. Syslog listening on UDP/514 and TCP/514."
+        return result
+    missing = []
+    if not ports["udp"]:
+        missing.append("UDP/514")
+    if not ports["tcp"]:
+        missing.append("TCP/514")
+    result["status"] = "warn"
+    result["why"] = (
+        "Alloy is up, but syslog is not listening on "
+        + " and ".join(missing)
+        + ". Devices cannot ship logs until the port is bound. This is not the alarm path."
+    )
+    result["test"] = "ss -ulpn | grep ':514'; ss -tlpn | grep ':514'"
+    result["fix"] = (
+        "docker compose up -d --force-recreate --no-deps alloy"
+        "  (host UDP/TCP 514; Loki and Prometheus stay on 127.0.0.1)"
+    )
+    return result
+
+
 _DOCTOR_TTL = 8.0
 _doctor_cache: dict[str, Any] = {"at": 0.0, "payload": None}
 
@@ -1299,8 +1374,8 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "postgres": _probe_sql(),
         "prometheus": _http(f"{settings.prometheus_url}/-/ready", "GET"),
         "alertmanager": _http(f"{settings.alertmanager_url}/-/ready", "GET"),
-        "loki": _http(f"{settings.loki_url}/loki/api/v1/status/buildinfo", "GET") if settings.loki_enabled else _ok("disabled"),
-        "alloy": _http("http://127.0.0.1:12345/metrics", "GET") if settings.loki_enabled else _ok("disabled"),
+        "loki": _loki_check(),
+        "alloy": _alloy_check(),
         "grafana": _grafana_check(),
         "snmp": _snmp_check(),
         "llm": _http((settings.llm_url or "").rstrip("/") + "/models", "GET") if settings.llm_url else _ok("disabled"),
