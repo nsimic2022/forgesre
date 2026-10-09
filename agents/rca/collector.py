@@ -42,35 +42,69 @@ def _kind_flags(asset: dict[str, Any], alert: dict[str, Any] | None = None) -> t
     return snmpish, windowsish
 
 
+def _snmp_scrape_instance(ip: str, port: Any) -> str:
+    """SNMP HTTP SD target: bare IP on UDP/161, ``ip:port`` otherwise."""
+    ip = (ip or "").strip()
+    if not ip:
+        return ""
+    try:
+        number = int(str(port).strip()) if str(port or "").strip() else 0
+    except (TypeError, ValueError):
+        number = 0
+    if number <= 0 or number == 161:
+        return ip
+    return f"{ip}:{number}"
+
+
+def sd_scrape_identity(asset: dict[str, Any] | None, alert: dict[str, Any] | None = None) -> tuple[str, str]:
+    """``(job, instance)`` Prometheus stores for this asset's HTTP SD row.
+
+    Linux/Windows SD sets ``job`` to the monitoring profile and ``instance`` to
+    ``scrape_address``. SNMP SD does not set ``job``; the scrape job_name is
+    ``forgesre-snmp`` and ``instance`` is the device address (bare IP on 161).
+    An empty scrape address is not in exporter SD — no guessed ``ip:9100``.
+    """
+    asset = asset or {}
+    scrape = str(asset.get("scrape_address") or "").strip()
+    ip = str(asset.get("ip") or "").strip()
+    profile = str(asset.get("monitoring_profile") or "").strip()
+    snmpish, windowsish = _kind_flags(asset, alert)
+    if snmpish:
+        return "forgesre-snmp", _snmp_scrape_instance(ip, asset.get("snmp_port"))
+    if not scrape:
+        return "", ""
+    if windowsish or scrape.endswith(f":{WINDOWS_EXPORTER_PORT}"):
+        return profile or "windows-standard", scrape
+    kind = str(asset.get("type") or "").lower()
+    if "linux" in kind or scrape.endswith(f":{LINUX_EXPORTER_PORT}"):
+        return profile or "linux-standard", scrape
+    return profile, scrape
+
+
 def promql_selectors_for(asset: dict[str, Any] | None, alert: dict[str, Any] | None = None) -> list[str]:
-    """Label matchers. First is verify's asset=<id>, then hostname, then instance scrape."""
+    """Label matchers. First is the SD job+instance (or SNMP instance), then asset=<id>."""
     asset = asset or {}
     asset_id = str(asset.get("asset_id") or "").strip()
     hostname = str(asset.get("hostname") or "").strip()
-    scrape = str(asset.get("scrape_address") or "").strip()
-    ip = str(asset.get("ip") or "").strip()
-    snmpish, windowsish = _kind_flags(asset, alert)
+    job, instance = sd_scrape_identity(asset, alert)
+    snmpish, _windowsish = _kind_flags(asset, alert)
     seen: list[str] = []
 
     def add(selector: str) -> None:
         if selector and selector not in seen:
             seen.append(selector)
 
+    # Exporter series carry both labels. SNMP queries add job=forgesre-snmp around the selector.
+    if job and instance and not snmpish:
+        add(f'job="{_escape(job)}",instance="{_escape(instance)}"')
+    elif instance and snmpish:
+        add(f'instance="{_escape(instance)}"')
     if asset_id:
         add(f'asset="{_escape(asset_id)}"')
     if hostname and hostname != asset_id:
         add(f'asset="{_escape(hostname)}"')
-    if scrape:
-        add(f'instance="{_escape(scrape)}"')
-    if snmpish:
-        if ip:
-            add(f'instance="{_escape(ip)}"')
-        return seen
-    port = WINDOWS_EXPORTER_PORT if windowsish else LINUX_EXPORTER_PORT
-    if ip:
-        derived = f"{ip}:{port}"
-        if derived != scrape:
-            add(f'instance="{_escape(derived)}"')
+    if instance:
+        add(f'instance="{_escape(instance)}"')
     return seen
 
 
@@ -96,9 +130,9 @@ def promql_queries_for(
 ) -> dict[str, tuple[str, str]]:
     """PromQL for this asset. Demo gauges only for forge-demo-01.
 
-    Default matcher is verify's ``asset="<id>"``. When scrape/hostname/IP are on
-    the asset dict, also OR ``instance="<ip>:<port>"`` so tiles find series labeled
-    only by the scrape address (windows_exporter ``IP:9182``).
+    The first matcher is the HTTP SD scrape identity (``job`` + ``instance`` for
+    node/windows, ``instance`` = the SNMP target for switches). ``asset="<id>"``
+    is the next try. No guessed ``ip:9100`` when scrape address is empty.
     """
     asset = asset or {}
     alert = alert or {}

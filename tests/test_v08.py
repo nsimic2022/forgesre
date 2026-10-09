@@ -111,31 +111,37 @@ def _alert(alertname: str, asset_id: str) -> dict:
 # --- version ---------------------------------------------------------------
 
 
-def test_version_is_0_8_on_product_surfaces():
+def test_version_is_0_9_on_product_surfaces():
     from app.main import app as fastapi_app
 
-    assert fastapi_app.version == "0.8.0"
+    assert fastapi_app.version == "0.9.0"
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "<span>v0.8</span>" in base
-    assert "v0.7" not in base
-    assert "app.css?v=v08-28" in base
-    assert "app.js?v=v08-28" in base
+    assert "<span>v0.9</span>" in base
+    assert "v0.8" not in base
+    assert "app.css?v=v09-1" in base
+    assert "app.js?v=v09-1" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
-        assert "0.8.0" in text
-        assert "0.7.0" not in text
-    assert "Current product: V0.8" in (ROOT / "README.md").read_text(encoding="utf-8")
+        assert "0.9.0" in text
+        assert "0.8.0" not in text
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Current product: V0.9" in readme
     assert (ROOT / "docs" / "v0.8.md").exists()
-    assert "[V0.8](v0.8.md)" in (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
+    assert (ROOT / "docs" / "v0.9.md").exists()
+    index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
+    assert "[V0.8](v0.8.md)" in index
+    assert "[V0.9](v0.9.md)" in index
+    env = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert "FORGESRE_VERSION=0.9.0" in env
     help_text = subprocess.check_output(["bash", str(ROOT / "scripts/forgesre"), "help", "version"], text=True)
-    assert "0.8.0" in help_text
+    assert "0.9.0" in help_text
 
 
-def test_dashboard_footer_shows_v08():
+def test_dashboard_footer_shows_v09():
     _db().close()
     home = _client().get("/")
     assert home.status_code == 200
-    assert "ForgeSRE <span>v0.8</span>" in home.text
+    assert "ForgeSRE <span>v0.9</span>" in home.text
 
 
 # --- appliance NET ------------------------------------------------------------

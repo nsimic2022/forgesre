@@ -15,7 +15,7 @@
       document.documentElement.setAttribute("data-theme", theme);
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v08-28">
+  <link rel="stylesheet" href="/static/app.css?v=v09-1">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -28,7 +28,7 @@
   {%- endmacro %}
   {% if user %}
   <aside class="nav">
-    <div class="brand">ForgeSRE <span>v0.8</span></div>
+    <div class="brand">ForgeSRE <span>v0.9</span></div>
     <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
     <a href="/assets" class="{% if request.url.path.startswith('/assets') %}active{% endif %}">Assets</a>
     {% if can('write_assets') %}
@@ -74,6 +74,6 @@
     </div>
   </main>
   {% endif %}
-  <script src="/static/app.js?v=v08-28"></script>
+  <script src="/static/app.js?v=v09-1"></script>
 </body>
 </html>

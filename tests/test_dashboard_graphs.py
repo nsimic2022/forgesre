@@ -212,6 +212,12 @@ const snap = () => ({
   selected: rows.findIndex((r) => r.classes.has("is-selected")),
   empty: parts["[data-dash-graph-empty]"].textContent,
   charts: parts["[data-dash-graph-list]"].children.length,
+  points: parts["[data-dash-graph-list]"].children.map((box) => {
+    const svg = (box.children || []).find((child) => child.tagName === "svg");
+    if (!svg) return "";
+    const poly = (svg.children || []).find((child) => child.attrs && child.attrs.points);
+    return poly ? poly.attrs.points : "";
+  }),
   navigated: navigated.slice(),
 });
 const out = {};
@@ -280,4 +286,228 @@ def test_js_one_point_series_says_no_samples_yet():
         "tiles": [{"key": "up", "name": "Collecting", "kind": "up", "tone": "warn", "value": None, "display": "not collecting", "series": [1]}],
     }
     out = _run_js(rows, panel)
-    assert out["initial"]["empty"].startswith("No samples yet")
+    assert out["initial"]["empty"] == "Not scraped."
+    assert out["initial"]["points"] == [""]
+
+
+def _ys(points: str) -> list[float]:
+    return [float(pair.split(",")[1]) for pair in points.split() if "," in pair]
+
+
+def test_js_small_cpu_swing_is_not_a_flat_line():
+    rows = [{"number": "INC-1", "asset": "app-01", "active": "true"}]
+    panel = {
+        "collecting": True,
+        "collecting_line": "Prometheus sees this target (up=1).",
+        "source": "prometheus",
+        "tiles": [
+            {
+                "key": "cpu_percent",
+                "name": "CPU",
+                "kind": "percent",
+                "tone": "ok",
+                "value": 14,
+                "display": "14%",
+                "threshold": 95,
+                "alarm_enabled": True,
+                "series": [10, 14, 11],
+            }
+        ],
+    }
+    out = _run_js(rows, panel)
+    ys = _ys(out["initial"]["points"][0])
+    assert max(ys) - min(ys) > 10
+
+
+def test_graph_query_uses_sd_scrape_identity():
+    from app.inventory import create_manual_asset, sd_targets
+
+    db = _db()
+    token = uuid4().hex[:8]
+    host = f"lnx-g-{token}"
+    n = int(token[:4], 16)
+    ip = f"10.{200 + (n % 40)}.{(n // 40) % 250}.{1 + (n % 200)}"
+    asset = create_manual_asset(db, hostname=host, ip=ip, type="Linux Server", actor="tester")
+    asset_id = asset.asset_id
+    try:
+        row = next(item for item in sd_targets(db) if item["labels"]["asset"] == asset_id)
+        target = row["targets"][0]
+        job = row["labels"]["job"]
+        assert target == asset.scrape_address
+        assert job == "linux-standard"
+
+        def query(expr: str) -> dict:
+            matched = f'job="{job}"' in expr and f'instance="{target}"' in expr
+            if not matched:
+                return {"value": None, "query": expr}
+            if "node_cpu" in expr:
+                return {"value": 22.0, "query": expr}
+            if "node_memory" in expr:
+                return {"value": 33.0, "query": expr}
+            if "node_filesystem" in expr:
+                return {"value": 44.0, "query": expr}
+            if "up{" in expr:
+                return {"value": 1.0, "query": expr}
+            return {"value": None, "query": expr}
+
+        def ranged(expr: str) -> dict:
+            if "node_cpu" in expr and f'instance="{target}"' in expr:
+                return {"values": [10.0, 18.0, 14.0]}
+            if "up{" in expr and f'instance="{target}"' in expr:
+                return {"values": [1.0, 1.0, 1.0]}
+            return {"values": []}
+
+        panel = asset_metric_panel(asset, query_fn=query, range_fn=ranged)
+    finally:
+        db.query(Asset).filter_by(asset_id=asset_id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+    cpu = next(tile for tile in panel["tiles"] if tile["key"] == "cpu_percent")
+    assert cpu["series"] == [10.0, 18.0, 14.0]
+    assert f'job="{job}"' in cpu["query"]
+    assert f'instance="{target}"' in cpu["query"]
+
+
+def test_snmp_graph_instance_is_the_sd_target():
+    from app.inventory import create_manual_asset, sd_snmp_targets
+    from rca.collector import promql_selectors_for
+
+    db = _db()
+    token = uuid4().hex[:8]
+    n = int(token[:4], 16)
+    ip = f"10.{80 + (n % 40)}.{(n // 40) % 250}.{1 + (n % 200)}"
+    asset = create_manual_asset(
+        db, hostname=f"sw-g-{token}", ip=ip, type="Network device", actor="tester", snmp_port=1161
+    )
+    asset_id = asset.asset_id
+    try:
+        row = next(item for item in sd_snmp_targets(db) if item["labels"]["asset"] == asset_id)
+        target = row["targets"][0]
+        assert target == f"{ip}:1161"
+        selectors = promql_selectors_for(
+            {
+                "asset_id": asset_id,
+                "ip": ip,
+                "type": "Network device",
+                "monitoring_profile": asset.monitoring_profile,
+                "snmp_port": 1161,
+            }
+        )
+    finally:
+        db.query(Asset).filter_by(asset_id=asset_id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+    assert selectors[0] == f'instance="{target}"'
+    panel = asset_metric_panel(
+        {
+            "asset_id": asset_id,
+            "ip": ip,
+            "type": "Network device",
+            "monitoring_profile": "network-switch",
+            "snmp_port": 1161,
+        },
+        query_fn=lambda expr: {"value": 1.0, "query": expr} if f'instance="{target}"' in expr else {"value": None, "query": expr},
+        range_fn=lambda expr: {"values": [1.0, 0.0, 1.0]} if f'instance="{target}"' in expr else {"values": []},
+    )
+    up = panel["tiles"][0]
+    assert f'job="forgesre-snmp"' in up["query"]
+    assert f'instance="{target}"' in up["query"]
+    assert up["series"] == [1.0, 0.0, 1.0]
+
+
+def test_range_is_kept_when_the_instant_sample_is_missing():
+    def query(expr: str) -> dict:
+        if "up{" in expr:
+            return {"value": 0.0, "query": expr}
+        return {"value": None, "query": expr}
+
+    def ranged(expr: str) -> dict:
+        if "node_cpu" in expr:
+            return {"values": [10.0, 40.0, 70.0]}
+        if "up{" in expr:
+            return {"values": [1.0, 1.0, 0.0]}
+        return {"values": []}
+
+    panel = asset_metric_panel(
+        {
+            "asset_id": "app-down-01",
+            "type": "Linux Server",
+            "monitoring_profile": "linux-standard",
+            "scrape_address": "10.51.2.9:9100",
+        },
+        query_fn=query,
+        range_fn=ranged,
+    )
+    cpu = next(tile for tile in panel["tiles"] if tile["key"] == "cpu_percent")
+    assert cpu["series"] == [10.0, 40.0, 70.0]
+    assert cpu["value"] == 70.0
+
+
+def test_disabled_alarm_does_not_drop_the_graph_series():
+    assert "bundled_alert_skip_reason" not in (ROOT / "backend" / "app" / "asset_metrics.py").read_text(encoding="utf-8")
+    panel = asset_metric_panel(
+        {
+            "asset_id": "app-mute-01",
+            "type": "Linux Server",
+            "monitoring_profile": "linux-standard",
+            "scrape_address": "10.51.2.10:9100",
+            "alarms": {"cpu_percent": {"enabled": False, "threshold": 50}},
+        },
+        query_fn=lambda expr: {"value": 22.0, "query": expr} if ("node_cpu" in expr or "up{" in expr) else {"value": 10.0, "query": expr},
+        range_fn=lambda expr: {"values": [10.0, 22.0, 18.0]} if "node_cpu" in expr else {"values": [1.0, 1.0, 1.0]},
+    )
+    cpu = next(tile for tile in panel["tiles"] if tile["key"] == "cpu_percent")
+    assert cpu["alarm_enabled"] is False
+    assert cpu["series"] == [10.0, 22.0, 18.0]
+
+
+def test_query_range_prefers_the_series_that_moves_and_reads_demo_history(monkeypatch):
+    from app.metrics import set_demo_cpu
+    from app.services import query_prometheus_range
+
+    set_demo_cpu(12)
+    seen: dict[str, str] = {}
+
+    class _Resp:
+        def __init__(self, payload: dict):
+            self.payload = payload
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return self.payload
+
+    class _Client:
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, params=None):
+            del url
+            query = (params or {}).get("query") or ""
+            seen["query"] = query
+            if query == "forgesre_demo_cpu_percent":
+                payload = {"data": {"result": [{"values": [[1, "12"], [2, "40"], [3, "94"]]}]}}
+            else:
+                payload = {
+                    "data": {
+                        "result": [
+                            {"values": [[1, "1"], [2, "1"], [3, "1"]]},
+                            {"values": [[1, "10"], [2, "55"], [3, "12"]]},
+                        ]
+                    }
+                }
+            return _Resp(payload)
+
+    monkeypatch.setattr("app.services.httpx.Client", _Client)
+    history = query_prometheus_range("forgesre_demo_cpu_percent")
+    assert seen["query"] == "forgesre_demo_cpu_percent"
+    assert history["values"] == [12.0, 40.0, 94.0]
+    picked = query_prometheus_range('node_cpu_seconds_total{job="linux-standard",instance="10.1.1.1:9100"}')
+    assert picked["values"] == [10.0, 55.0, 12.0]

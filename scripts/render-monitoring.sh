@@ -48,9 +48,9 @@ ensure_kv "$ROOT/.env" PROMETHEUS_ALERTS "${DATA_DIR}/generated/alerts.yml"
 ensure_kv "$ROOT/.env" ALLOY_CONFIG "${DATA_DIR}/generated/config.alloy"
 ensure_kv "$ROOT/.env" LOKI_CONFIG "${DATA_DIR}/generated/loki.yml"
 if grep -q '^FORGESRE_VERSION=' "$ROOT/.env"; then
-  sed -i 's/^FORGESRE_VERSION=.*/FORGESRE_VERSION=0.8.0/' "$ROOT/.env"
+  sed -i 's/^FORGESRE_VERSION=.*/FORGESRE_VERSION=0.9.0/' "$ROOT/.env"
 else
-  echo "FORGESRE_VERSION=0.8.0" >> "$ROOT/.env"
+  echo "FORGESRE_VERSION=0.9.0" >> "$ROOT/.env"
 fi
 
 if [[ -z "$WEBHOOK" ]]; then
