@@ -426,4 +426,4 @@ def test_js_pager_restores_only_matching_fresh_entry():
 
 def test_cache_bust_bumped():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-27" in base and "app.js?v=v08-27" in base
+    assert "app.css?v=v08-28" in base and "app.js?v=v08-28" in base

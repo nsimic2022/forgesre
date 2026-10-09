@@ -378,6 +378,6 @@ def test_multi_record_exports_have_titled_breaks():
 
 def test_cache_bust_is_v08_26():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-27" in base
-    assert "app.js?v=v08-27" in base
+    assert "app.css?v=v08-28" in base
+    assert "app.js?v=v08-28" in base
     assert "v08-25" not in base
