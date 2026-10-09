@@ -1787,16 +1787,21 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .dash-incidents > section { margin: 0; min-width: 0; }
 .dash-graphs { position: sticky; top: 1rem; margin: 2.35rem 0 0; min-width: 0; }
 .dash-graph-subject { margin: 0 0 0.25rem; font-weight: 600; overflow-wrap: anywhere; }
+.dash-graph-caption { margin: 0 0 0.35rem; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .dash-graph-empty { margin: 0 0 0.5rem; font-size: 0.85rem; }
 .dash-graph-list { display: grid; gap: 0.55rem; }
 .dash-graph { border-top: 1px solid var(--line); padding-top: 0.45rem; }
 .dash-graph-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 0.9rem; }
 .dash-graph-none { margin: 0.2rem 0 0; font-size: 0.8rem; }
-.dash-chart { display: block; width: 100%; height: 3rem; margin-top: 0.2rem; background: var(--bg); border-radius: 6px; }
+.dash-chart { display: block; width: 100%; height: 3rem; margin-top: 0.2rem; background: var(--bg); border-radius: 6px; overflow: hidden; }
 .dash-chart-line { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke: var(--warn); }
 .dash-chart-line.ok { stroke: var(--ok); }
 .dash-chart-line.crit { stroke: var(--crit); }
 .dash-chart-threshold { stroke: var(--crit); stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.55; vector-effect: non-scaling-stroke; }
+.dash-chart-marker { stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.asset-detail-metrics .dash-graph-caption,
+.asset-detail-metrics .dash-graph-empty { margin-top: 0.65rem; }
+.asset-detail-metrics .dash-graph-list { margin-top: 0.35rem; }
 .dash-recent-scroll {
   max-height: min(40rem, 72vh);
   overflow-y: auto;

@@ -74,12 +74,15 @@ The chart uses the scrape identity Prometheus actually stored:
 
 | What you see | Meaning |
 |---|---|
-| A line that moves | Prometheus (or Zabbix trends) returned that hour. |
+| A line that moves | Prometheus (or Zabbix trends) returned samples in the chart window. |
+| Vertical line | Incident start (When), when that time is known. |
 | **Steady** | Samples exist and did not move. Not a placeholder. |
 | **Not scraped.** | This host is not in Prometheus. |
-| **No samples yet.** | The query is honest and the hour is empty. |
+| **No samples yet.** | The query is honest and that window is empty. |
 
-Standard alarms **mute** only skips ingest of a bundled alert. Mute does not flatten or hide the chart. Core does not draw a sine wave when the hour is empty.
+The asset page charts the last hour. Dashboard and the incident page start one hour before the incident and run through now, or through the end if it is resolved. A series that ran and then dropped to 0, or pegged, stays in that window — the line is not only the minutes after the scrape died.
+
+Standard alarms **mute** only skips ingest of a bundled alert. Mute does not flatten or hide the chart. Core does not draw a sine wave when the window is empty.
 
 ---
 

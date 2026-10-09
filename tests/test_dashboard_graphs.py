@@ -184,6 +184,7 @@ function el(tag) {
 }
 const parts = {
   "[data-dash-graph-subject]": el("p"), "[data-dash-graph-empty]": el("p"),
+  "[data-dash-graph-caption]": el("p"),
   "[data-dash-graph-list]": el("div"), "[data-dash-graph-asset]": el("a"),
 };
 const pane = el("aside"); pane.querySelector = (s) => parts[s] || null;
@@ -218,6 +219,13 @@ const snap = () => ({
     const poly = (svg.children || []).find((child) => child.attrs && child.attrs.points);
     return poly ? poly.attrs.points : "";
   }),
+  markerX: parts["[data-dash-graph-list]"].children.map((box) => {
+    const svg = (box.children || []).find((child) => child.tagName === "svg");
+    if (!svg) return null;
+    const line = (svg.children || []).find((child) => child.attrs && String(child.attrs.class || "").indexOf("dash-chart-marker") >= 0);
+    return line ? Number(line.attrs.x1) : null;
+  }),
+  caption: parts["[data-dash-graph-caption]"].textContent,
   navigated: navigated.slice(),
 });
 const out = {};
@@ -266,14 +274,14 @@ def test_js_selects_first_active_and_requests_its_metrics():
     }
     out = _run_js(rows, panel)
     assert out["initial"]["selected"] == 1
-    assert out["initial"]["fetched"] == [f"/api/v1/assets/{DEMO_ASSET}/metrics"]
+    assert out["initial"]["fetched"] == [f"/api/v1/assets/{DEMO_ASSET}/metrics?incident=INC-8"]
     assert out["initial"]["charts"] == 2
     assert out["noAsset"]["selected"] == 2
     assert out["noAsset"]["fetched"] == out["initial"]["fetched"]
     assert out["noAsset"]["empty"] == "No host to chart"
     assert out["noAsset"]["charts"] == 0
     assert out["reselect"]["selected"] == 0
-    assert out["reselect"]["fetched"][-1] == "/api/v1/assets/srv-old/metrics"
+    assert out["reselect"]["fetched"][-1] == "/api/v1/assets/srv-old/metrics?incident=INC-9"
     assert out["reselect"]["navigated"] == []
 
 
@@ -511,3 +519,78 @@ def test_query_range_prefers_the_series_that_moves_and_reads_demo_history(monkey
     assert history["values"] == [12.0, 40.0, 94.0]
     picked = query_prometheus_range('node_cpu_seconds_total{job="linux-standard",instance="10.1.1.1:9100"}')
     assert picked["values"] == [10.0, 55.0, 12.0]
+    assert picked["times"] == [1.0, 2.0, 3.0]
+    assert history["times"] == [1.0, 2.0, 3.0]
+
+
+def test_js_empty_window_says_no_samples_yet():
+    rows = [{"number": "INC-1", "asset": DEMO_ASSET, "active": "true"}]
+    panel = {
+        "collecting": True,
+        "collecting_line": "Prometheus sees this target (up=1).",
+        "source": "prometheus",
+        "window": {"start": 0, "end": 100, "marker": 40, "label": "10:00–11:00"},
+        "tiles": [
+            {"key": "cpu_percent", "name": "CPU", "kind": "percent", "tone": "ok", "value": 12, "display": "12%", "series": [12]},
+        ],
+    }
+    out = _run_js(rows, panel)
+    assert out["initial"]["empty"] == "No samples yet."
+    assert out["initial"]["charts"] == 1
+    assert out["initial"]["points"] == [""]
+    assert out["initial"]["markerX"] == [None]
+    assert out["initial"]["caption"] == "10:00–11:00"
+
+
+def test_js_marker_and_drop_stay_on_the_incident_clock():
+    """A series that dies at the marker must not be stretched to 'now'."""
+    rows = [{"number": "INC-1", "asset": "app-01", "active": "true"}]
+    panel = {
+        "collecting": False,
+        "collecting_line": "Prometheus is not collecting this target (up=0).",
+        "source": "prometheus",
+        "window": {"start": 0, "end": 100, "marker": 50, "label": "11:15–13:15"},
+        "tiles": [
+            {
+                "key": "cpu_percent",
+                "name": "CPU",
+                "kind": "percent",
+                "tone": "crit",
+                "value": 0,
+                "display": "0%",
+                "threshold": 95,
+                "alarm_enabled": True,
+                "series": [40, 40, 0],
+                "times": [0, 40, 70],
+            },
+            {
+                "key": "memory_percent",
+                "name": "Memory",
+                "kind": "percent",
+                "tone": "crit",
+                "value": 100,
+                "display": "100%",
+                "threshold": 90,
+                "alarm_enabled": True,
+                "series": [20, 20, 100],
+                "times": [0, 30, 100],
+            },
+        ],
+    }
+    out = _run_js(rows, panel)
+    assert out["initial"]["caption"] == "11:15–13:15"
+    assert out["initial"]["markerX"] == [100.0, 100.0]
+    cpu_pts = out["initial"]["points"][0].split()
+    xs = [float(pair.split(",")[0]) for pair in cpu_pts]
+    ys = [float(pair.split(",")[1]) for pair in cpu_pts]
+    assert xs[0] == pytest.approx(0.0, abs=0.2)
+    assert xs[-1] == pytest.approx(140.0, abs=0.6)
+    assert xs[-1] < 190
+    assert ys[-1] - ys[0] > 15
+    mem_ys = _ys(out["initial"]["points"][1])
+    assert mem_ys[0] - mem_ys[-1] > 15
+
+    quiet = dict(panel)
+    quiet["window"] = {"start": 0, "end": 100, "marker": None, "label": "10:00–11:00"}
+    unmarked = _run_js(rows, quiet)
+    assert unmarked["initial"]["markerX"] == [None, None]

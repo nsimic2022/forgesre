@@ -582,11 +582,18 @@ def host_trends(
                     continue
                 by_item.setdefault(str(row.get("itemid") or ""), []).append((int(row.get("clock") or 0), value))
             for tile, item in picked.items():
-                points = [value for _clock, value in sorted(by_item.get(str(item.get("itemid")), []))]
+                ordered = sorted(by_item.get(str(item.get("itemid")), []))
+                points = [value for _clock, value in ordered]
+                clocks = [clock for clock, _value in ordered]
                 last = _finite(item.get("lastvalue")) if str(item.get("lastclock") or "0") != "0" else None
                 if last is None and points:
                     last = points[-1]
-                tiles[tile] = {"value": last, "series": points, "key": str(item.get("key_") or "")}
+                tiles[tile] = {
+                    "value": last,
+                    "series": points,
+                    "times": clocks,
+                    "key": str(item.get("key_") or ""),
+                }
         result: dict[str, Any] = {"ok": True, "error": "", "tiles": tiles, "hours": hours}
     except ZabbixError as exc:
         result = {"ok": False, "error": str(exc), "tiles": {}}

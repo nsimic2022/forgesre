@@ -7,6 +7,8 @@ and does not invent SNMP walks. Missing series stay yellow — never a fake 0%.
 from __future__ import annotations
 
 import re
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -225,10 +227,18 @@ def _default_query(expr: str) -> dict[str, Any]:
     return query_prometheus_expr(expr, timeout=2.0)
 
 
-def _default_range(expr: str) -> dict[str, Any]:
-    from app.services import query_prometheus_range
+def _window_range(expr: str, start: float, end: float) -> dict[str, Any]:
+    from app.services import query_prometheus_range, range_step, range_timeout
 
-    return query_prometheus_range(expr, hours=1.0, step="5m", timeout=2.0)
+    span = max(60.0, float(end) - float(start))
+    return query_prometheus_range(
+        expr,
+        hours=span / 3600.0,
+        step=range_step(span),
+        timeout=range_timeout(span),
+        start=start,
+        end=end,
+    )
 
 
 def _tile(
@@ -238,6 +248,7 @@ def _tile(
     threshold: float | None,
     spark: str = "",
     series: list[float] | None = None,
+    times: list[float] | None = None,
     query: str = "",
     enabled: bool = True,
 ) -> dict[str, Any]:
@@ -245,6 +256,10 @@ def _tile(
     kind = str(meta["kind"])
     tone = _tone_for(kind, value, threshold, enabled=enabled)
     bar = _bar_pct(kind, value, tone)
+    stamps = [round(float(t), 3) for t in (times or [])]
+    values = [round(float(v), 3) for v in (series or [])]
+    if len(stamps) != len(values):
+        stamps = []
     return {
         "key": key,
         "name": meta["name"],
@@ -256,8 +271,44 @@ def _tile(
         "alarm_enabled": enabled,
         "bar_pct": bar,
         "spark": spark,
-        "series": [round(float(v), 3) for v in (series or [])],
+        "series": values,
+        "times": stamps,
         "query": query,
+    }
+
+
+def incident_graph_bounds(incident: Any, now: datetime | None = None) -> dict[str, Any]:
+    """Unix window for an incident chart: 1h before start, through now or the resolve time.
+
+    ``marker`` is ``started_at``. It stays inside the window so the vertical line has a place to sit.
+    """
+    from app.services import graph_window_label, incident_end, incident_is_live, utcnow
+
+    now_dt = now or utcnow()
+    if now_dt.tzinfo is None:
+        now_dt = now_dt.replace(tzinfo=timezone.utc)
+    end_dt = now_dt
+    started = getattr(incident, "started_at", None)
+    marker: float | None = None
+    if isinstance(started, datetime):
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        marker = float(started.timestamp())
+        if not incident_is_live(str(getattr(incident, "status", "") or "")):
+            ended = incident_end(incident)
+            if isinstance(ended, datetime):
+                end_dt = ended
+    end = float(end_dt.timestamp())
+    start = (marker - 3600.0) if marker is not None else (end - 3600.0)
+    if marker is not None and end < marker:
+        end = marker
+    if end <= start:
+        end = start + 60.0
+    return {
+        "start": start,
+        "end": end,
+        "marker": marker,
+        "label": graph_window_label(start, end),
     }
 
 
@@ -287,11 +338,33 @@ def _query_up(
     return selectors[0], None, "", last_expr
 
 
+def _aligned_series(ranged: dict[str, Any]) -> tuple[list[float], list[float]]:
+    raw_values = list(ranged.get("values") or [])
+    raw_times = list(ranged.get("times") or [])
+    values: list[float] = []
+    stamps: list[float] = []
+    for index, raw in enumerate(raw_values):
+        value = _finite(raw)
+        if value is None:
+            continue
+        values.append(value)
+        if index < len(raw_times):
+            stamp = _finite(raw_times[index])
+            if stamp is not None:
+                stamps.append(stamp)
+    if len(stamps) != len(values):
+        stamps = []
+    return values, stamps
+
+
 def asset_metric_panel(
     asset: Any,
     *,
     query_fn: QueryFn | None = None,
     range_fn: RangeFn | None = None,
+    range_start: float | None = None,
+    range_end: float | None = None,
+    marker: float | None = None,
 ) -> dict[str, Any]:
     """JSON for GET /api/v1/assets/{id}/metrics and the detail-page first paint."""
     from app.asset_alarms import normalize_alarms, tile_enabled, tile_threshold
@@ -304,11 +377,16 @@ def asset_metric_panel(
     alarms = normalize_alarms(info.get("alarms"), "demo" if klass == "demo" else klass)
     keys = _CLASS_TILES.get(klass, _CLASS_TILES["unknown"])
     fetch = query_fn or _default_query
+    queried_end = time.time() if range_end is None else float(range_end)
+    queried_start = queried_end - 3600.0 if range_start is None else float(range_start)
+    if queried_end <= queried_start:
+        queried_end = queried_start + 60.0
     spark_fetch = range_fn
     samples: dict[str, float | None] = {}
     queries: dict[str, str] = {}
     sparks: dict[str, str] = {}
     series: dict[str, list[float]] = {}
+    times: dict[str, list[float]] = {}
     prom_error = ""
     prom_down = False
     selectors = promql_selectors_for(info)
@@ -358,9 +436,11 @@ def asset_metric_panel(
         queries["disk_percent"] = "forgesre_demo_disk_percent"
 
     if spark_fetch is None and not prom_down:
-        spark_fetch = _default_range
+        def spark_fetch(expr: str, _start: float = queried_start, _end: float = queried_end) -> dict[str, Any]:
+            return _window_range(expr, _start, _end)
+
     # The instant query only sees the last ~5 minutes. A down exporter still has
-    # query_range history in the hour — skipping it left the chart as a flat `up`.
+    # query_range history across the chart window — skipping it left a flat `up`.
     if spark_fetch and not prom_down:
         for key in keys:
             expr = queries.get(key) or ""
@@ -369,12 +449,13 @@ def asset_metric_panel(
             ranged = spark_fetch(expr)
             if ranged.get("error"):
                 continue
-            values = [v for v in (_finite(raw) for raw in (ranged.get("values") or [])) if v is not None]
+            values, stamps = _aligned_series(ranged)
             if not values:
                 continue
             if samples.get(key) is None:
                 samples[key] = values[-1]
             series[key] = values
+            times[key] = stamps
             sparks[key] = _spark_points(values)
 
     collecting: bool | None
@@ -398,11 +479,14 @@ def asset_metric_panel(
             threshold=tile_threshold(alarms, key, bundled.get(key)) if key != "up" else None,
             spark=sparks.get(key) or "",
             series=series.get(key),
+            times=times.get(key),
             query=queries.get(key) or "",
             enabled=tile_enabled(alarms, key),
         )
         for key in keys
     ]
+    from app.services import graph_window_label
+
     return {
         "asset_id": asset_id,
         "class": klass,
@@ -413,6 +497,12 @@ def asset_metric_panel(
         "error": prom_error,
         "alarms": alarms,
         "tiles": tiles,
+        "window": {
+            "start": queried_start,
+            "end": queried_end,
+            "marker": None if marker is None else float(marker),
+            "label": graph_window_label(queried_start, queried_end),
+        },
     }
 
 
@@ -458,7 +548,7 @@ def zabbix_metric_panel(asset: Any, *, trends_fn: Callable[[str], dict[str, Any]
         row = found.get(key)
         if not row:
             continue
-        values = [v for v in (_finite(raw) for raw in (row.get("series") or [])) if v is not None]
+        values, stamps = _aligned_series({"values": row.get("series") or [], "times": row.get("times") or []})
         tiles.append(
             _tile(
                 key,
@@ -466,6 +556,7 @@ def zabbix_metric_panel(asset: Any, *, trends_fn: Callable[[str], dict[str, Any]
                 threshold=tile_threshold(alarms, key, bundled.get(key)),
                 spark=_spark_points(values),
                 series=values,
+                times=stamps,
                 query=f"zabbix trend.get {row.get('key') or ''}".strip(),
                 enabled=tile_enabled(alarms, key),
             )
@@ -491,6 +582,30 @@ def zabbix_metric_panel(asset: Any, *, trends_fn: Callable[[str], dict[str, Any]
     }
 
 
+def _zabbix_window(panel: dict[str, Any], previous: dict[str, Any]) -> dict[str, Any]:
+    """Zabbix trends keep their own clock. The incident marker is drawn only when it falls inside them."""
+    stamps: list[float] = []
+    for tile in panel.get("tiles") or []:
+        for raw in tile.get("times") or []:
+            stamp = _finite(raw)
+            if stamp is not None:
+                stamps.append(stamp)
+    marker = _finite(previous.get("marker"))
+    if len(stamps) >= 2:
+        start, end = min(stamps), max(stamps)
+        if end <= start:
+            end = start + 3600.0
+        if marker is None or marker < start - 1 or marker > end + 1:
+            marker = None
+        return {"start": start, "end": end, "marker": marker, "label": "last 24 h"}
+    return {
+        "start": previous.get("start"),
+        "end": previous.get("end"),
+        "marker": None,
+        "label": "last 24 h",
+    }
+
+
 def metric_panel_with_zabbix(asset: Any, panel: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
     """Prometheus first. Zabbix trends only for an asset with zabbix_hostid and no Prometheus samples."""
     panel.setdefault("source", "prometheus")
@@ -501,7 +616,9 @@ def metric_panel_with_zabbix(asset: Any, panel: dict[str, Any], **kwargs: Any) -
 
     if not settings.zabbix_enabled and "trends_fn" not in kwargs:
         return panel
-    return zabbix_metric_panel(asset, **kwargs)
+    zpanel = zabbix_metric_panel(asset, **kwargs)
+    zpanel["window"] = _zabbix_window(zpanel, panel.get("window") or {})
+    return zpanel
 
 
 def safe_asset_metric_panel(asset: Any, **kwargs: Any) -> dict[str, Any]:

@@ -961,18 +961,29 @@ function listPicker(root, opts) {
   return { rows, select };
 }
 
-// Host metric charts for one pane (Dashboard Host metrics, incident detail). Same JSON as
-// GET /api/v1/assets/{id}/metrics: Prometheus tiles, or Zabbix trend.get tiles (source "zabbix").
+// Host metric charts (asset detail, Dashboard Host metrics, incident detail). Same JSON as
+// GET /api/v1/assets/{id}/metrics. An incident id widens the range to an hour before start.
+// Prometheus tiles, or Zabbix trend.get tiles (source "zabbix"). No placeholder wave.
 function graphPane(pane) {
   const empty = pane.querySelector("[data-dash-graph-empty]");
   const list = pane.querySelector("[data-dash-graph-list]");
+  const caption = pane.querySelector("[data-dash-graph-caption]");
   const SVG = "http://www.w3.org/2000/svg";
   const W = 200;
   const H = 48;
   let span = "last hour";
+  let windowInfo = null;
+
+  const showCaption = (text) => {
+    if (!caption) return;
+    caption.textContent = text || "";
+    caption.hidden = !caption.textContent;
+  };
 
   const showEmpty = (text) => {
     if (list) list.replaceChildren();
+    showCaption("");
+    windowInfo = null;
     if (!empty) return;
     empty.textContent = text || "";
     empty.hidden = !text;
@@ -1003,19 +1014,45 @@ function graphPane(pane) {
 
   const yFor = (tile, v, scale) => {
     if (tile.kind === "up") return v >= 1 ? 4 : H - 4;
-    const span = scale.hi - scale.lo || 1;
+    const axis = scale.hi - scale.lo || 1;
     const clamped = Math.max(scale.lo, Math.min(scale.hi, v));
-    return H - 2 - ((clamped - scale.lo) / span) * (H - 4);
+    return H - 2 - ((clamped - scale.lo) / axis) * (H - 4);
   };
 
-  const chart = (tile, values) => {
+  // Time on the x-axis when the samples carry timestamps, so a series that
+  // stops at the drop is not stretched across the rest of the window.
+  const xFor = (index, count, times) => {
+    const win = windowInfo;
+    const start = win ? Number(win.start) : NaN;
+    const end = win ? Number(win.end) : NaN;
+    const timed = times && times.length === count && isFinite(start) && isFinite(end) && end > start;
+    if (!timed) return (index * W) / (count - 1);
+    const raw = ((Number(times[index]) - start) / (end - start)) * W;
+    if (!isFinite(raw)) return (index * W) / (count - 1);
+    return Math.max(0, Math.min(W, raw));
+  };
+
+  const markerX = () => {
+    const win = windowInfo;
+    if (!win || win.marker == null || win.marker === "") return null;
+    const marker = Number(win.marker);
+    const start = Number(win.start);
+    const end = Number(win.end);
+    if (!isFinite(marker) || !isFinite(start) || !isFinite(end) || end <= start) return null;
+    if (marker < start - 1 || marker > end + 1) return null;
+    return Math.max(1, Math.min(W - 1, ((marker - start) / (end - start)) * W));
+  };
+
+  const chart = (tile, values, times) => {
     const scale = yScale(tile, values);
+    const label = windowInfo && windowInfo.label ? windowInfo.label : span;
+    const mark = markerX();
     const svg = svgEl("svg", {
       class: "dash-chart",
       viewBox: "0 0 " + W + " " + H,
       preserveAspectRatio: "none",
       role: "img",
-      "aria-label": tile.name + " " + span,
+      "aria-label": tile.name + " " + label,
     });
     if (tile.kind !== "up" && tile.threshold != null && tile.alarm_enabled !== false) {
       const threshold = Number(tile.threshold);
@@ -1024,15 +1061,18 @@ function graphPane(pane) {
         svg.appendChild(svgEl("line", { class: "dash-chart-threshold", x1: 0, x2: W, y1: y, y2: y }));
       }
     }
-    const last = values.length - 1;
     const pts = [];
     values.forEach((v, i) => {
-      const x = (i * W) / last;
+      const x = xFor(i, values.length, times);
       const y = yFor(tile, v, scale);
       if (tile.kind === "up" && pts.length) pts.push(x.toFixed(1) + "," + pts[pts.length - 1].split(",")[1]);
       pts.push(x.toFixed(1) + "," + y.toFixed(1));
     });
     svg.appendChild(svgEl("polyline", { class: "dash-chart-line " + (tile.tone || "warn"), points: pts.join(" ") }));
+    if (mark != null) {
+      const x = mark.toFixed(1);
+      svg.appendChild(svgEl("line", { class: "dash-chart-marker", x1: x, x2: x, y1: 0, y2: H }));
+    }
     return svg;
   };
 
@@ -1051,9 +1091,19 @@ function graphPane(pane) {
     value.textContent = tile.value == null ? "—" : tile.display;
     head.append(name, value);
     box.appendChild(head);
-    const values = (Array.isArray(tile.series) ? tile.series : []).map(Number).filter((v) => isFinite(v));
+    const raw = Array.isArray(tile.series) ? tile.series : [];
+    const rawTimes = Array.isArray(tile.times) ? tile.times : [];
+    const values = [];
+    const times = [];
+    raw.forEach((v, i) => {
+      const n = Number(v);
+      if (!isFinite(n)) return;
+      values.push(n);
+      if (rawTimes.length === raw.length && isFinite(Number(rawTimes[i]))) times.push(Number(rawTimes[i]));
+    });
+    const aligned = times.length === values.length ? times : null;
     if (values.length >= 2) {
-      box.appendChild(chart(tile, values));
+      box.appendChild(chart(tile, values, aligned));
       const steady = tile.kind !== "up" && Math.max.apply(null, values) - Math.min.apply(null, values) < 0.05;
       if (steady) {
         const note = document.createElement("p");
@@ -1064,7 +1114,7 @@ function graphPane(pane) {
     } else if (labelEmpty) {
       const none = document.createElement("p");
       none.className = "muted dash-graph-none";
-      none.textContent = "No samples yet";
+      none.textContent = "No samples yet.";
       box.appendChild(none);
     }
     return box;
@@ -1076,19 +1126,27 @@ function graphPane(pane) {
       return;
     }
     const tiles = data.tiles;
+    windowInfo = data.window || null;
     span = data.source === "zabbix" ? "last 24 h (Zabbix trends)" : "last hour";
     pane.setAttribute("data-graph-source", data.source || "prometheus");
     const anySeries = tiles.some((t) => Array.isArray(t.series) && t.series.length >= 2);
+    showCaption(windowInfo && windowInfo.label ? String(windowInfo.label) : "");
     if (data.collecting === null && data.error) {
-      showEmpty("Prometheus unreachable.");
+      if (list) list.replaceChildren();
+      if (empty) {
+        empty.textContent = "Prometheus unreachable.";
+        empty.hidden = false;
+      }
       return;
     }
     if (empty) {
       if (!anySeries) {
         if (data.source === "zabbix") empty.textContent = data.collecting_line || "No samples yet.";
         else empty.textContent = data.collecting === false ? "Not scraped." : "No samples yet.";
-      } else {
+      } else if (data.source === "zabbix") {
         empty.textContent = data.collecting_line || "";
+      } else {
+        empty.textContent = "";
       }
       empty.hidden = !empty.textContent;
     }
@@ -1113,8 +1171,11 @@ function graphPane(pane) {
     if (!selected) return;
     const asset = selected.getAttribute("data-asset") || "";
     if (!asset) return;
+    const incident = selected.getAttribute("data-dash-incident") || "";
+    let url = "/api/v1/assets/" + encodeURIComponent(asset) + "/metrics";
+    if (incident) url += "?incident=" + encodeURIComponent(incident);
     const mine = ++seq;
-    fetch("/api/v1/assets/" + encodeURIComponent(asset) + "/metrics", { headers: { Accept: "application/json" } })
+    fetch(url, { headers: { Accept: "application/json" } })
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (mine === seq) paint(data);
@@ -1174,16 +1235,19 @@ function graphPane(pane) {
   const pane = document.querySelector("[data-incident-graphs]");
   if (!pane) return;
   const asset = pane.getAttribute("data-asset") || "";
+  const incident = pane.getAttribute("data-incident") || "";
   const { paint, showEmpty } = graphPane(pane);
   if (!asset) {
     showEmpty("No host to chart");
     return;
   }
   const load = () => {
-    fetch("/api/v1/assets/" + encodeURIComponent(asset) + "/metrics", { headers: { Accept: "application/json" } })
+    let url = "/api/v1/assets/" + encodeURIComponent(asset) + "/metrics";
+    if (incident) url += "?incident=" + encodeURIComponent(incident);
+    fetch(url, { headers: { Accept: "application/json" } })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data) => (data ? paint(data) : showEmpty("No samples yet")))
-      .catch(() => showEmpty("No samples yet"));
+      .then((data) => (data ? paint(data) : showEmpty("No samples yet.")))
+      .catch(() => showEmpty("No samples yet."));
   };
   if ("IntersectionObserver" in window) {
     const seen = new IntersectionObserver((entries) => {
@@ -1196,6 +1260,26 @@ function graphPane(pane) {
   } else {
     load();
   }
+})();
+
+// Asset detail: last hour for this host, in problem or not. Same metrics URL as Dashboard, no incident window.
+(function bindAssetGraphs() {
+  const pane = document.querySelector("[data-asset-graphs]");
+  if (!pane) return;
+  const asset = pane.getAttribute("data-asset") || pane.getAttribute("data-asset-metrics") || "";
+  const { paint, showEmpty } = graphPane(pane);
+  if (!asset) {
+    showEmpty("No host to chart");
+    return;
+  }
+  const load = () => {
+    fetch("/api/v1/assets/" + encodeURIComponent(asset) + "/metrics", { headers: { Accept: "application/json" } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => (data ? paint(data) : showEmpty("No samples yet.")))
+      .catch(() => showEmpty("No samples yet."));
+  };
+  load();
+  window.setInterval(load, 30000);
 })();
 
 // Every other list box: select-only rows. A box with more than ten rows is sized to about ten, so a longer page
