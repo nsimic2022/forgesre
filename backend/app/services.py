@@ -483,7 +483,7 @@ def match_playrule(
 ) -> Playrule | None:
     """Alertname only. condition.metric/operator/value are operator notes and are never evaluated.
 
-    An asset's Client playrules (assets.playrule_ids) are tried first, in the order saved; the
+    An asset's Custom alarms (assets.playrule_ids) are tried first, in the order saved; the
     first enabled one whose alertname matches wins. Otherwise the global first-by-id match.
     """
     del labels
@@ -510,7 +510,7 @@ def match_playrule(
 
 
 def playrule_from_asset(rule: Playrule | None, asset: Asset | None) -> bool:
-    """True when the matched playrule is one the asset lists as a Client playrule."""
+    """True when the matched rule is one the asset lists under Custom alarms."""
     from app.asset_extras import asset_playrule_ids
 
     return bool(rule is not None and rule.id in asset_playrule_ids(asset))
@@ -745,7 +745,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
                     f"Fired again as {incident.number}",
                 )
             if rule:
-                via = " (asset client playrule)" if playrule_from_asset(rule, asset) else ""
+                via = " (custom alarm)" if playrule_from_asset(rule, asset) else ""
                 append_timeline(incident, "playrule", "PLAYRULE", f"{rule.name}{via}")
                 if rule.playbook:
                     append_timeline(incident, "playbook", "PLAYBOOK", rule.playbook.name)
@@ -1317,7 +1317,13 @@ def escalation_recipient(incident: Incident, step_target: str) -> str:
     return _valid_email((getattr(asset, "owner_email", "") or "") if asset is not None else "")
 
 
-def ensure_notification(db: Session, incident: Incident, step_key: str, target: str | None = None) -> Notification:
+def ensure_notification(
+    db: Session,
+    incident: Incident,
+    step_key: str,
+    target: str | None = None,
+    after_minutes: int | None = None,
+) -> Notification:
     existing = (
         db.query(Notification)
         .filter(Notification.incident_id == incident.id, Notification.step_key == step_key)
@@ -1368,7 +1374,8 @@ def ensure_notification(db: Session, incident: Incident, step_key: str, target: 
         object_id=incident.number,
         data={"target": stored_target, "policy_role": policy_role, "status": row.status},
     )
-    if step_key != "immediate" and incident.status in {"OPEN", "INVESTIGATING"}:
+    climbed = int(after_minutes) > 0 if after_minutes is not None else step_key != "immediate"
+    if climbed and incident.status in {"OPEN", "INVESTIGATING"}:
         incident.status = "ESCALATED"
         detail = f"Escalated to {stored_target}" if recipient else f"Escalation step {step_key}: no recipient ({policy_role})"
         append_timeline(incident, "playbook", "PLAYBOOK", detail)
@@ -1417,7 +1424,7 @@ def remember_mail_contact(db: Session, email: str, name: str = "", actor: str = 
 
 def list_mail_addresses(db: Session) -> list[dict[str, str]]:
     """Known addresses: saved book, asset owners and backup contacts, report recipients, outbox, escalation targets, users."""
-    from app.models import EscalationPolicy
+    from app.models import AssetLadderStep, EscalationPolicy
 
     seen: dict[str, dict[str, str]] = {}
 
@@ -1448,6 +1455,9 @@ def list_mail_addresses(db: Session) -> list[dict[str, str]]:
         for step in policy.steps or []:
             target = step.get("target") if isinstance(step, dict) else ""
             add(str(target or ""), policy.name, "escalation")
+    for row in db.query(AssetLadderStep).order_by(AssetLadderStep.id):
+        for email in row.emails or []:
+            add(str(email or ""), f"L{row.level}", "ladder")
     for user in db.query(User).order_by(User.email):
         add(user.email, user.name, "user")
     return sorted(seen.values(), key=lambda item: item["email"].lower())
@@ -1962,9 +1972,15 @@ def process_escalations(db: Session) -> None:
         if started.tzinfo is None:
             started = started.replace(tzinfo=timezone.utc)
         elapsed = (now - started).total_seconds() / 60
-        for step in escalation_steps(incident):
+        for step in escalation_steps(incident, db):
             if elapsed >= float(step["after_minutes"]):
-                ensure_notification(db, incident, step["step_key"], target=step["target"])
+                ensure_notification(
+                    db,
+                    incident,
+                    step["step_key"],
+                    target=step["target"],
+                    after_minutes=int(step["after_minutes"]),
+                )
 
 
 # Escalation only sends email (ensure_notification). These words look like a channel
@@ -2027,14 +2043,8 @@ def parse_policy_steps(text: str) -> list[dict[str, Any]]:
     ]
 
 
-def escalation_steps(incident: Incident) -> list[dict[str, Any]]:
-    """Policy ladder with one outbox key per step. Two steps at the same minute get ``5m`` and ``5m-2``."""
-    policy = incident.playrule.escalation_policy if incident.playrule else None
-    raw = list(policy.steps) if policy and policy.steps else [
-        {"after_minutes": 0, "target": "team", "channel": "email"},
-        {"after_minutes": 15, "target": "team-lead", "channel": "email"},
-        {"after_minutes": 30, "target": "engineer", "channel": "email"},
-    ]
+def _keyed_steps(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One outbox key per step. Two steps at the same minute get ``5m`` and ``5m-2``."""
     steps: list[dict[str, Any]] = []
     seen: dict[str, int] = {}
     for index, step in enumerate(raw):
@@ -2054,14 +2064,57 @@ def escalation_steps(incident: Incident) -> list[dict[str, Any]]:
     return steps
 
 
+def escalation_steps(incident: Incident, db: Session | None = None) -> list[dict[str, Any]]:
+    """Asset Ladder when any level is filled; otherwise the rule's ladder (Default warning when none).
+
+    The two are never combined. Mail stays email-only.
+    """
+    session = db
+    if session is None:
+        from sqlalchemy.orm import object_session
+        from sqlalchemy.orm.exc import UnmappedInstanceError
+
+        try:
+            session = object_session(incident)
+        except UnmappedInstanceError:
+            session = None
+    if session is not None:
+        if incident.asset is None and incident.asset_id:
+            incident.asset = session.get(Asset, incident.asset_id)
+        if incident.playrule is None and incident.playrule_id:
+            incident.playrule = session.get(Playrule, incident.playrule_id)
+        from app.asset_ladder import active_mail_steps
+
+        custom = active_mail_steps(session, incident.asset)
+        if custom is not None:
+            return _keyed_steps(custom)
+    policy = incident.playrule.escalation_policy if incident.playrule else None
+    raw = list(policy.steps) if policy and policy.steps else [
+        {"after_minutes": 0, "target": "team", "channel": "email"},
+        {"after_minutes": 15, "target": "team-lead", "channel": "email"},
+        {"after_minutes": 30, "target": "engineer", "channel": "email"},
+    ]
+    return _keyed_steps(raw)
+
+
 def notify_first_step(db: Session, incident: Incident) -> Notification | None:
-    """Mail at open = the policy's first 0-minute step (its address or role). No 0-minute step → nothing yet."""
+    """Mail every 0-minute step at open. No 0-minute step → nothing yet. Later minutes wait for the loop."""
     if incident.playrule is None and incident.playrule_id:
         incident.playrule = db.get(Playrule, incident.playrule_id)
-    first = next((step for step in escalation_steps(incident) if step["after_minutes"] == 0), None)
-    if first is None:
-        return None
-    return ensure_notification(db, incident, first["step_key"], target=first["target"])
+    if incident.asset is None and incident.asset_id:
+        incident.asset = db.get(Asset, incident.asset_id)
+    sent: Notification | None = None
+    for step in escalation_steps(incident, db):
+        if int(step["after_minutes"]) != 0:
+            continue
+        sent = ensure_notification(
+            db,
+            incident,
+            step["step_key"],
+            target=step["target"],
+            after_minutes=0,
+        )
+    return sent
 
 
 def close_open_incidents(db: Session, fingerprint: str, *, include_resolved: bool = False) -> None:

@@ -288,12 +288,12 @@ def test_runbook_note_is_labelled_human_guidance():
     page = _client().get("/assets").text
     runbook = page.split('name="extra_runbook_note"', 1)[0].rsplit("<label", 1)[1]
     assert "for humans" in runbook
-    assert "3am" in runbook and "Never executed" in runbook and "not a Playrule" in runbook
+    assert "3am" in runbook and "Never executed" in runbook and "not a rule" in runbook
 
 
 def test_css_and_js_v08_14():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-23" in base and "app.js?v=v08-23" in base
+    assert "app.css?v=v08-24" in base and "app.js?v=v08-24" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "select.nice-select" in css and ".reach-snmp" in css
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")

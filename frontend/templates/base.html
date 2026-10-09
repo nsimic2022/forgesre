@@ -15,7 +15,7 @@
       document.documentElement.setAttribute("data-theme", theme);
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v08-23">
+  <link rel="stylesheet" href="/static/app.css?v=v08-24">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -36,9 +36,8 @@
     {% endif %}
     <a href="/incidents" class="{% if request.url.path.startswith('/incidents') %}active{% endif %}">Incidents</a>
     {% if can('read_play') %}
-    <a href="/playrules" class="{% if request.url.path.startswith('/playrules') %}active{% endif %}">Playrules</a>
+    <a href="/playrules" class="{% if request.url.path.startswith('/playrules') %}active{% endif %}">Rules</a>
     <a href="/playbooks" class="{% if request.url.path.startswith('/playbooks') %}active{% endif %}">Playbooks</a>
-    <a href="/escalation" class="{% if request.url.path.startswith('/escalation') %}active{% endif %}">Escalation</a>
     {% endif %}
     <a href="/health-ui" class="{% if request.url.path.startswith('/health-ui') %}active{% endif %}">System Health</a>
     <a href="/ops" class="{% if request.url.path.startswith('/ops') %}active{% endif %}">Email &amp; reports</a>
@@ -75,6 +74,6 @@
     </div>
   </main>
   {% endif %}
-  <script src="/static/app.js?v=v08-23"></script>
+  <script src="/static/app.js?v=v08-24"></script>
 </body>
 </html>

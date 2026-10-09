@@ -402,13 +402,15 @@ def incident_neighbors(db: Session, incident: Incident, filters: dict[str, Any] 
 def dashboard_incident_tiles(db: Session) -> list[dict[str, Any]]:
     """Alarm cubes. Each count is the Incidents list behind the click.
 
-    Critical / Warning are active (not RESOLVED or CLOSED). Investigating and Resolved are exact statuses.
-    Open (unacked) and Escalated are filters on Incidents, not cubes.
+    Critical / Warning are active (not RESOLVED or CLOSED). Investigating, Escalated, and Resolved
+    are exact statuses. Escalated counts incidents that already climbed a ladder.
+    Open (unacked) is a filter on Incidents, not a cube.
     """
     specs = [
         ("Critical", "crit", {"open_only": True, "critical_only": True}, "/incidents?status=active&severity=critical"),
         ("Warning", "warn", {"open_only": True, "warning_only": True}, "/incidents?status=active&severity=warning"),
         ("Investigating", "warn", {"status": "INVESTIGATING"}, "/incidents?status=INVESTIGATING"),
+        ("Escalated", "warn", {"status": "ESCALATED"}, "/incidents?status=ESCALATED"),
         ("Resolved", "cold", {"status": "RESOLVED"}, "/incidents?status=RESOLVED"),
     ]
     tiles = []

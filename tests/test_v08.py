@@ -118,8 +118,8 @@ def test_version_is_0_8_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v0.8</span>" in base
     assert "v0.7" not in base
-    assert "app.css?v=v08-23" in base
-    assert "app.js?v=v08-23" in base
+    assert "app.css?v=v08-24" in base
+    assert "app.js?v=v08-24" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.8.0" in text
@@ -304,7 +304,10 @@ def test_asset_form_is_three_columns_with_dropdown_playrules():
     assert text.index("data-asset-contacts") < text.index("data-asset-support") < middle
     comms = text.index("data-asset-comms")
     assert middle < comms < text.index('name="scrape_address"') < text.index('name="snmp_port"') < text.index('name="snmp_version"') < right
-    assert right < text.index("alarm-families") < text.index("data-asset-form-rule") < text.index("data-client-playrules")
+    custom = text.index("asset-form-custom")
+    ladder = text.index("asset-form-ladder")
+    assert left < middle < right < custom < ladder
+    assert right < text.index("alarm-families") < custom < text.index("data-client-playrules") < ladder
     assert "Standard alarms" in text
     assert "It cannot fire earlier than the Prometheus rule in alerts.yml." in text
     assert '<textarea name="extra_runbook_note"' in text
@@ -316,8 +319,9 @@ def test_asset_form_is_three_columns_with_dropdown_playrules():
     assert '<option value="14" selected>14 days</option>' in support
     assert '<option value="7"' in support and '<option value="30"' in support
 
-    playrules = _between(text, "data-client-playrules", "</form>")
-    assert "Client playrules" in playrules
+    playrules = _between(text, "data-client-playrules", "asset-form-ladder")
+    assert "Custom alarms" in playrules
+    assert "Client playrules" not in text
     assert "This does not create Prometheus thresholds." in playrules
     assert 'type="checkbox"' not in playrules
     assert '<select name="playrule_add" data-playrule-add' in playrules
@@ -327,13 +331,18 @@ def test_asset_form_is_three_columns_with_dropdown_playrules():
     assert 'name="playrule_ids"' not in playrules
     empty = _between(playrules, "data-playrule-empty", "</p>")
     assert "hidden" not in empty
-    assert "No client playrules — global Playrules apply." in empty
+    assert "No custom alarms — Rules apply." in empty
+    ladder_html = _between(text, "data-asset-ladder", "</form>")
+    assert 'href="/escalation">Default ladder</a>' in ladder_html
+    for label in ("L1 NOC", "L2 Shift", "L3 Engineer", "L4 Manager"):
+        assert label in ladder_html
 
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    block = css.split("/* Add / Edit asset: three columns", 1)[1].split(".asset-form-block {", 1)[0]
-    assert "grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr) minmax(16rem, 1.1fr);" in block
-    rules = block.split(".asset-form-middle,\n.asset-form-right {", 1)[1].split("}", 1)[0]
+    block = css.split("/* Add / Edit asset: five columns", 1)[1].split(".asset-form-block {", 1)[0]
+    assert "grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.05fr);" in block
+    rules = block.split(".asset-form-middle,", 1)[1].split("}", 1)[0]
     assert "border-left: 1px solid var(--line);" in rules
+    assert ".asset-form-ladder" in rules
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "bindClientPlayrules" in js and "[data-playrule-remove]" in js
 
@@ -353,7 +362,7 @@ def test_asset_extras_persist_edit_clone_and_show_on_incident():
     detail = client.get(f"/assets/{asset_id}")
     assert "Backup on-call phone" in detail.text and "+381-11-555-0102" in detail.text
     card = _between(detail.text, "data-asset-playrules", "</section>")
-    assert "No client playrules — global Playrules apply." in card
+    assert "No custom alarms — Rules apply." in card
 
     edit = client.get(f"/assets?edit={asset_id}")
     assert 'value="Europe/Belgrade"' in edit.text
@@ -451,7 +460,7 @@ def test_playrule_picker_does_not_change_match_for_unlinked_assets():
     assert plain_inc.playrule_id == global_rule.id
     assert linked_inc.playrule_id == client_rule.id
     timeline = {item["id"]: item["detail"] for item in linked_inc.timeline}
-    assert timeline["playrule"].endswith("(asset client playrule)")
+    assert timeline["playrule"].endswith("(custom alarm)")
     plain_timeline = {item["id"]: item["detail"] for item in plain_inc.timeline}
     assert plain_timeline["playrule"] == global_rule.name
 
@@ -471,7 +480,7 @@ def test_playrule_picker_does_not_change_match_for_unlinked_assets():
     assert "data-playrule-remove" in rows
     assert f'<option value="{client_rule.id}"' not in picker
     assert f'<option value="{other_rule.id}" data-name="{other_rule.name}"' in picker
-    assert "hidden>No client playrules" in picker
+    assert "hidden>No custom alarms" in picker
 
     added = client.post(
         f"/assets/{linked_id}/update",
@@ -738,7 +747,7 @@ def test_asset_detail_without_stored_extras_still_renders():
     assert _dd(facts, "Customer / domain") == "—"
     assert _dd(facts, "Under support") == "—"
     card = _between(page.text, "data-asset-playrules", "</section>")
-    assert "No client playrules — global Playrules apply." in card
+    assert "No custom alarms — Rules apply." in card
     db.close()
 
 
@@ -757,10 +766,10 @@ def test_asset_detail_client_playrules_card_sits_under_machine_metrics():
     side = text.split('class="asset-detail-side"', 1)[1]
     assert side.index("asset-detail-metrics card") < side.index("asset-detail-playrules card")
     assert "Machine metrics" in side.split("asset-detail-playrules", 1)[0]
-    assert "Client playrules" not in _facts(text)
+    assert "Custom alarms" not in _facts(text)
 
     card = _between(text, "data-asset-playrules", "</section>")
-    assert '<div class="metric-panel-head">' in card and "<h2>Client playrules" in card
+    assert '<div class="metric-panel-head">' in card and "<h2>Custom alarms" in card
     assert "Does not create Prometheus thresholds" in card
     assert f'action="/assets/{asset_id}/playrules"' in card
     assert '<input type="hidden" name="playrules_present" value="1">' in card
@@ -770,10 +779,10 @@ def test_asset_detail_client_playrules_card_sits_under_machine_metrics():
     assert "data-playrule-list" in card
     empty = _between(card, "data-playrule-empty", "</p>")
     assert "hidden" not in empty
-    assert "No client playrules — global Playrules apply." in empty
+    assert "No custom alarms — Rules apply." in empty
 
     viewer = _between(_viewer_client().get(f"/assets/{asset_id}").text, "data-asset-playrules", "</section>")
-    assert "No client playrules — global Playrules apply." in viewer
+    assert "No custom alarms — Rules apply." in viewer
     assert "<form" not in viewer and "playrule_add" not in viewer
 
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
@@ -813,7 +822,7 @@ def test_asset_detail_playrules_post_adds_and_removes_without_touching_other_fie
     assert f"{second_name} <span class=\"muted\">· PB{token}" in rows
     assert "data-playrule-remove" in rows
     assert f'<option value="{first_id}" data-name="{first_name}" data-meta="PA{token}" disabled>' in card
-    assert "hidden>No client playrules" in card
+    assert "hidden>No custom alarms" in card
 
     assert post(playrule_ids=[str(second_id), "999999"]).playrule_ids == [second_id]
     assert post().playrule_ids == []

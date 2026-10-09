@@ -34,7 +34,7 @@
 <dl class="kv asset-facts" data-asset-facts="contacts">
   <dt>Owner / team</dt><dd>{{ asset.owner or "—" }}</dd>
   <dt>Contact</dt><dd>{{ asset.contact_name or "—" }}</dd>
-  <dt>Email</dt><dd>{% if asset.owner_email %}{{ asset.owner_email }}{% else %}— <span class="pill warn">No owner email</span> <span class="muted">Escalation mail is recorded as no-recipient and not sent, unless the escalation step names an address.</span>{% endif %}</dd>
+  <dt>Email</dt><dd>{% if asset.owner_email %}{{ asset.owner_email }}{% else %}— <span class="pill warn">No owner email</span> <span class="muted">Default ladder role steps are recorded as no-recipient and not sent, unless the step names an address.</span>{% endif %}</dd>
   <dt>Phone</dt><dd>{{ asset.owner_phone or "—" }}</dd>
   <dt>Backup on-call name</dt><dd class="extra-backup_name">{{ ex.backup_name or "—" }}</dd>
   <dt>Backup on-call phone</dt><dd class="extra-backup_phone">{{ ex.backup_phone or "—" }}</dd>
@@ -187,15 +187,15 @@
 
 <section class="asset-detail-playrules card client-playrules" id="client-playrules" data-client-playrules data-asset-playrules="{{ asset.asset_id }}">
   <div class="metric-panel-head">
-    <h2>Client playrules {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first playrule in this list (enabled, same alertname) and its playbook / escalation instead of the first global playrule with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = the global playrule match, unchanged. Disabled playrules are skipped.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+    <h2>Custom alarms {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = Rules. Disabled rules are skipped. Mail follows the asset Ladder when a level is filled.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   </div>
-  <p class="muted">Does not create Prometheus thresholds — only which playrule / playbook this asset prefers when that alertname arrives.</p>
+  <p class="muted">Does not create Prometheus thresholds — only which rule / Playbook this asset prefers when that alertname arrives.</p>
   {% if can('write_assets') %}
   <form method="post" action="/assets/{{ asset.asset_id }}/playrules" class="playrule-detail-form">
     <input type="hidden" name="playrules_present" value="1">
     {% with picked=picked_playrules %}{% include "_playrule_picker.html" %}{% endwith %}
     <div class="row-actions playrule-detail-actions">
-      <button type="submit">Save playrules</button>
+      <button type="submit">Save</button>
       <span class="muted" data-playrule-unsaved hidden>Unsaved changes</span>
     </div>
   </form>
@@ -209,7 +209,7 @@
     </li>
     {% endfor %}
   </ol>
-  <p class="muted playrule-empty"{% if shown %} hidden{% endif %}>No client playrules — global Playrules apply.</p>
+  <p class="muted playrule-empty"{% if shown %} hidden{% endif %}>No custom alarms — Rules apply.</p>
   {% endif %}
 </section>
 </div>

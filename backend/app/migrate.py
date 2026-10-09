@@ -275,3 +275,40 @@ def migrate(engine: Engine) -> None:
                         "created_by VARCHAR(255) DEFAULT '', created_at TIMESTAMPTZ)"
                     )
                 )
+        if "asset_ladder_steps" not in set(inspect(conn).get_table_names()):
+            if engine.dialect.name == "sqlite":
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS asset_ladder_steps ("
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                        "asset_id INTEGER NOT NULL, "
+                        "level INTEGER NOT NULL, "
+                        "after_minutes INTEGER DEFAULT 0, "
+                        "emails JSON, "
+                        "enabled BOOLEAN DEFAULT 1)"
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS asset_ladder_steps ("
+                        "id SERIAL PRIMARY KEY, "
+                        "asset_id INTEGER REFERENCES assets(id), "
+                        "level INTEGER NOT NULL, "
+                        "after_minutes INTEGER DEFAULT 0, "
+                        "emails JSON, "
+                        "enabled BOOLEAN DEFAULT TRUE)"
+                    )
+                )
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_asset_ladder_level "
+                "ON asset_ladder_steps (asset_id, level)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_asset_ladder_steps_asset_id "
+                "ON asset_ladder_steps (asset_id)"
+            )
+        )

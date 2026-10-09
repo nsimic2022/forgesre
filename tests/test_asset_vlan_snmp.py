@@ -1,5 +1,5 @@
-"""Asset VLAN field + filter, per-asset SNMP version / community / v3 USM, the three-column Add/Edit
-layout (Comms only in the middle; Standard alarms then Client playrules on the right), and the
+"""Asset VLAN field + filter, per-asset SNMP version / community / v3 USM, the five-column Add/Edit
+layout (Comms, then Standard alarms, Custom alarms, Ladder), and the
 snmp_exporter auth render path. Secrets never reach GET HTML, the asset API, journal, or audit."""
 
 from __future__ import annotations
@@ -127,28 +127,31 @@ def test_vlan_persists_on_add_edit_detail_and_filters():
     db.close()
 
 
-def test_layout_comms_alone_in_middle_alarms_then_playrules_right():
+def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     _db().close()
     text = _client().get("/assets").text
     middle = text.split("asset-form-middle", 1)[1].split("asset-form-right", 1)[0]
-    right = text.split("asset-form-right", 1)[1].split("</form>", 1)[0]
+    right = text.split("asset-form-right", 1)[1].split("asset-form-custom", 1)[0]
+    custom = text.split("asset-form-custom", 1)[1].split("asset-form-ladder", 1)[0]
+    ladder = text.split("data-asset-ladder", 1)[1].split("</form>", 1)[0]
     for name in ("scrape_address", "snmp_port", "snmp_version", "snmp_community_mode", "snmp_community",
                  "snmp_v3_user", "snmp_v3_level", "snmp_v3_auth_proto", "snmp_v3_auth_pass",
                  "snmp_v3_priv_proto", "snmp_v3_priv_pass"):
         assert f'name="{name}"' in middle, name
     assert middle.index('name="snmp_port"') < middle.index('name="snmp_version"') < middle.index('name="snmp_community_mode"')
-    assert "alarm-families" not in middle and "data-client-playrules" not in middle
-    assert "data-asset-form-reserved" in middle
-    assert right.index("data-alarm-families") < right.index("data-asset-form-rule") < right.index("data-client-playrules")
+    assert "alarm-families" not in middle and "data-client-playrules" not in middle and "data-asset-ladder" not in middle
+    assert "data-asset-form-reserved" not in text
+    assert "data-alarm-families" in right and "data-client-playrules" not in right
+    assert "Custom alarms" in custom and "data-client-playrules" in custom
+    assert "L1 NOC" in ladder and 'href="/escalation">Default ladder</a>' in ladder
     assert 'name="alarms_present"' in right
     for version in ("v1", "v2c", "v3"):
         assert f'<option value="{version}"' in middle
     assert "ICMP / port / SNMP" in text and ">Port<" not in text
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".asset-form-reserved { flex: 1 1 auto; min-height: 12rem; }" in css
-    assert "hr.asset-form-rule" in css
+    assert ".asset-ladder .ladder-level {" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-23" in base and "app.js?v=v08-23" in base
+    assert "app.css?v=v08-24" in base and "app.js?v=v08-24" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "[data-snmp-version]" in js and "[data-snmp-v3-level]" in js
 

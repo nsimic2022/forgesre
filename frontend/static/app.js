@@ -468,25 +468,25 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
 (function bindAssetFormPicks() {
   const form = document.getElementById("asset-form");
   if (!form) return;
-  form.querySelectorAll("[data-email-pick]").forEach((box) => {
-    const select = box.querySelector("[data-email-select]");
-    const typed = box.querySelector("[data-email-typed]");
-    if (!select || !typed) return;
-    select.addEventListener("change", () => {
-      if (select.value) {
-        typed.value = select.value;
-        typed.hidden = true;
-        const fill = box.getAttribute("data-email-fill-name");
-        const name = fill ? form.querySelector('[name="' + fill + '"]') : null;
-        const option = select.options[select.selectedIndex];
-        const label = option ? option.getAttribute("data-label") || "" : "";
-        if (name && !name.value.trim() && label) name.value = label;
-      } else {
-        typed.value = "";
-        typed.hidden = false;
-        typed.focus();
-      }
-    });
+  form.addEventListener("change", (event) => {
+    const select = event.target.closest("[data-email-select]");
+    if (!select || !form.contains(select)) return;
+    const box = select.closest("[data-email-pick]");
+    const typed = box && box.querySelector("[data-email-typed]");
+    if (!typed) return;
+    if (select.value) {
+      typed.value = select.value;
+      typed.hidden = true;
+      const fill = box.getAttribute("data-email-fill-name");
+      const name = fill ? form.querySelector('[name="' + fill + '"]') : null;
+      const option = select.options[select.selectedIndex];
+      const label = option ? option.getAttribute("data-label") || "" : "";
+      if (name && !name.value.trim() && label) name.value = label;
+    } else {
+      typed.value = "";
+      typed.hidden = false;
+      typed.focus();
+    }
   });
 
   const kind = form.querySelector("[data-support-kind]");
@@ -550,6 +550,55 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
     if (snmp) {
       const def = snmp.getAttribute("data-snmp-default") || "161";
       snmp.placeholder = snmpFamily() ? def + " (default)" : "off";
+    }
+  });
+})();
+
+(function bindAssetLadder() {
+  const column = document.querySelector("[data-asset-ladder]");
+  if (!column) return;
+  const clearRow = (row) => {
+    const select = row.querySelector("[data-email-select]");
+    const typed = row.querySelector("[data-email-typed]");
+    if (select) select.value = "";
+    if (typed) {
+      typed.value = "";
+      typed.hidden = false;
+    }
+  };
+  column.addEventListener("click", (event) => {
+    const add = event.target.closest("[data-ladder-add-email]");
+    if (add) {
+      const level = add.closest("[data-ladder-level]");
+      const list = level && level.querySelector("[data-ladder-emails]");
+      const sample = list && list.querySelector("[data-ladder-email]");
+      if (!list || !sample) return;
+      const row = sample.cloneNode(true);
+      clearRow(row);
+      const remove = row.querySelector("[data-ladder-remove-email]");
+      if (remove) remove.hidden = false;
+      list.appendChild(row);
+      list.querySelectorAll("[data-ladder-remove-email]").forEach((button) => {
+        button.hidden = false;
+      });
+      return;
+    }
+    const remove = event.target.closest("[data-ladder-remove-email]");
+    if (!remove) return;
+    const row = remove.closest("[data-ladder-email]");
+    const list = row && row.parentElement;
+    if (!row || !list) return;
+    const rows = list.querySelectorAll("[data-ladder-email]");
+    if (rows.length <= 1) {
+      clearRow(row);
+      remove.hidden = true;
+      return;
+    }
+    row.remove();
+    const left = list.querySelectorAll("[data-ladder-email]");
+    if (left.length === 1) {
+      const only = left[0].querySelector("[data-ladder-remove-email]");
+      if (only) only.hidden = true;
     }
   });
 })();

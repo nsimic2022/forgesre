@@ -84,9 +84,9 @@ def test_dashboard_recent_incidents_uses_scan_columns():
     assert 'id="host-down-banner"' not in home.text
     assert "Recent journal" not in home.text
     kpi = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
-    for label in (">Critical<", ">Warning<", ">Investigating<", ">Resolved<"):
+    for label in (">Critical<", ">Warning<", ">Investigating<", ">Escalated<", ">Resolved<"):
         assert label in kpi
-    assert ">Open<" not in kpi and ">Escalated<" not in kpi
+    assert ">Open<" not in kpi and 'href="/incidents?status=ESCALATED"' in kpi
     db.close()
 
 

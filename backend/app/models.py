@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, event, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, event, func
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from app.db import Base
@@ -61,6 +61,27 @@ class Asset(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     incidents: Mapped[list[Incident]] = relationship(back_populates="asset")
+    ladder_steps: Mapped[list["AssetLadderStep"]] = relationship(
+        back_populates="asset",
+        cascade="all, delete-orphan",
+        order_by="AssetLadderStep.level",
+    )
+
+
+class AssetLadderStep(Base):
+    """One mail level on an asset. Empty table for that asset means the global Default ladder."""
+
+    __tablename__ = "asset_ladder_steps"
+    __table_args__ = (UniqueConstraint("asset_id", "level", name="uq_asset_ladder_level"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    level: Mapped[int] = mapped_column(Integer)
+    after_minutes: Mapped[int] = mapped_column(Integer, default=0)
+    emails: Mapped[list] = mapped_column(JSONType, default=list)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    asset: Mapped[Asset] = relationship(back_populates="ladder_steps")
 
 
 class AssetNumberSeq(Base):

@@ -2,9 +2,9 @@
     {% set picked_rules = [] %}
     {% for pk in picked %}{% for rule in playrule_choices or [] if rule.id == pk %}{% set _ = picked_rules.append(rule) %}{% endfor %}{% endfor %}
     {% set enabled_rules = (playrule_choices or [])|selectattr("enabled")|list %}
-    <label class="playrule-add"><span class="label-line">Add a playrule</span>
+    <label class="playrule-add"><span class="label-line">Add a rule</span>
       <select name="playrule_add" data-playrule-add{% if not enabled_rules %} disabled{% endif %}>
-        <option value="">{% if enabled_rules %}Choose a playrule…{% else %}No enabled playrules{% endif %}</option>
+        <option value="">{% if enabled_rules %}Choose a rule…{% else %}No enabled rules{% endif %}</option>
         {% for rule in enabled_rules %}
         <option value="{{ rule.id }}" data-name="{{ rule.name }}" data-meta="{{ rule.alertname or 'no alertname' }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}"{% if rule.id in picked %} disabled{% endif %}>{{ rule.name }} · {{ rule.alertname or "no alertname" }}</option>
         {% endfor %}
@@ -19,7 +19,7 @@
       </li>
       {% endfor %}
     </ol>
-    <p class="muted playrule-empty" data-playrule-empty{% if picked_rules %} hidden{% endif %}>No client playrules — global Playrules apply.</p>
+    <p class="muted playrule-empty" data-playrule-empty{% if picked_rules %} hidden{% endif %}>No custom alarms — Rules apply.</p>
     {% if not playrule_choices %}
-    <p class="muted">No playrules yet. Create one on <a href="/playrules">Playrules</a>.</p>
+    <p class="muted">No rules yet. Create one on <a href="/playrules">Rules</a>.</p>
     {% endif %}

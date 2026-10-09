@@ -476,8 +476,9 @@ def test_unacked_filter_counts_every_active_status_without_an_open_cube():
     home = client.get("/")
     alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
     assert 'data-tile="open"' not in home.text
-    assert 'data-tile="escalated"' not in alarms
-    assert ">Open<" not in alarms and ">Escalated<" not in alarms
+    assert 'data-tile="escalated"' in alarms
+    assert 'href="/incidents?status=ESCALATED"' in alarms
+    assert ">Open<" not in alarms and ">Escalated<" in alarms
     listed = client.get("/incidents?status=unacked&per_page=100").text
     assert f"ap tile inv {token}" in listed
     assert f"ap tile inv-acked {token}" not in listed

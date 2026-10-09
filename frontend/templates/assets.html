@@ -107,7 +107,7 @@
       <td>
         {% if asset.contact_name %}{{ asset.contact_name }}{% endif %}
         {% if asset_missing_email(asset) %}
-          <div><span class="pill warn" title="Escalation role steps have nobody to mail. Edit the asset and add an owner email.">No owner email</span></div>
+          <div><span class="pill warn" title="Default ladder role steps have nobody to mail. Edit the asset and add an owner email, or fill Ladder.">No owner email</span></div>
         {% else %}
           <div class="muted">{{ asset.owner_email }}</div>
         {% endif %}
