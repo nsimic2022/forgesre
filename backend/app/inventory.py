@@ -15,7 +15,7 @@ from app.audit import audit
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE, detect_exporter, is_auto_asset_type
 from app.journal import report
-from app.models import Asset, AssetLadderStep, DiscoveryCandidate, Incident, ScheduledReport, utcnow
+from app.models import Asset, AssetLadderStep, AssetPlayruleMute, DiscoveryCandidate, Incident, ScheduledReport, utcnow
 from app.settings import settings
 
 log = logging.getLogger("forgesre")
@@ -451,6 +451,7 @@ def create_manual_asset(
     asset_id: str = "",
     extras: dict | None = None,
     playrule_ids: list | None = None,
+    playrule_off: list | None = None,
     snmp_port: int | str | None = None,
     snmp: dict | None = None,
     ladder: list | None = None,
@@ -539,8 +540,10 @@ def create_manual_asset(
     db.add(asset)
     db.flush()
     from app.asset_ladder import replace_asset_ladder
+    from app.playrule_mute import store_playrule_mutes
 
     replace_asset_ladder(db, asset, ladder)
+    store_playrule_mutes(db, asset, playrule_off, cloned_from=cloned_from)
     audit(
         db,
         "asset.create",
@@ -603,6 +606,7 @@ def update_asset(
     alarms: dict | None = None,
     extras: dict | None = None,
     playrule_ids: list | None = None,
+    playrule_off: list | None = None,
     snmp_port: int | str | None = None,
     snmp: dict | None = None,
     ladder: list | None = None,
@@ -698,6 +702,9 @@ def update_asset(
         asset.extras = merge_extras(asset.extras, extras, snmp)
     if playrule_ids is not None:
         asset.playrule_ids = known_playrule_ids(db, playrule_ids)
+    from app.playrule_mute import store_playrule_mutes
+
+    store_playrule_mutes(db, asset, playrule_off, prune=playrule_ids is not None)
     if snmp_port is not None:
         asset.snmp_port = parse_snmp_port(snmp_port)
     from app.asset_ladder import replace_asset_ladder
@@ -728,10 +735,20 @@ def update_asset(
     return asset
 
 
-def set_asset_playrules(db: Session, asset: Asset, playrule_ids: list | None, *, actor: str = "system") -> Asset:
+def set_asset_playrules(
+    db: Session,
+    asset: Asset,
+    playrule_ids: list | None,
+    *,
+    actor: str = "system",
+    playrule_off: list | None = None,
+) -> Asset:
     """Save only Custom alarms (asset detail card). No detect, scrape, or SD change."""
     before = asset_playrule_ids(asset)
     asset.playrule_ids = known_playrule_ids(db, playrule_ids)
+    from app.playrule_mute import store_playrule_mutes
+
+    store_playrule_mutes(db, asset, playrule_off, prune=True)
     after = list(asset.playrule_ids or [])
     audit(
         db,
@@ -1282,6 +1299,7 @@ def clone_prefill(db: Session, asset: Asset) -> dict:
         "alarms": _form_alarms(asset),
         "extras": form_extras(asset),
         "playrule_ids": asset_playrule_ids(asset),
+        "playrule_off": _form_playrule_off(asset),
         "ladder": _form_ladder(asset),
     }
 
@@ -1315,6 +1333,7 @@ def asset_form_values(asset: Asset | None = None) -> dict:
             "alarms": _form_alarms(),
             "extras": form_extras(),
             "playrule_ids": [],
+            "playrule_off": [],
             "ladder": _form_ladder(None),
         }
     return {
@@ -1335,8 +1354,15 @@ def asset_form_values(asset: Asset | None = None) -> dict:
         "alarms": _form_alarms(asset),
         "extras": form_extras(asset),
         "playrule_ids": asset_playrule_ids(asset),
+        "playrule_off": _form_playrule_off(asset),
         "ladder": _form_ladder(asset),
     }
+
+
+def _form_playrule_off(asset: Asset | None) -> list[int]:
+    from app.playrule_mute import muted_playrule_ids
+
+    return muted_playrule_ids(asset)
 
 
 def _form_ladder(asset: Asset | None) -> list:
@@ -1610,6 +1636,7 @@ def delete_asset(db: Session, asset: Asset, actor: str = "system") -> dict:
                 sched.enabled = False
                 reports_off.append(sched.name or str(sched.id))
     db.query(AssetLadderStep).filter(AssetLadderStep.asset_id == pk).delete(synchronize_session=False)
+    db.query(AssetPlayruleMute).filter(AssetPlayruleMute.asset_id == pk).delete(synchronize_session=False)
     db.flush()
     db.delete(asset)
     audit(

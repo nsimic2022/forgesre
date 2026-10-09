@@ -1,0 +1,5 @@
+<span class="ladder-cubes" data-ladder-cubes>
+  {% for cube in cubes %}
+  <span class="reach-sq ladder-sq {{ cube.tone }}" data-ladder-level="{{ cube.level }}" data-ladder-tone="{{ cube.tone }}" title="{{ cube.title }}">L{{ cube.level }}</span>
+  {% endfor %}
+</span>

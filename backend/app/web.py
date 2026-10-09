@@ -30,6 +30,8 @@ from app.asset_extras import (
     playrule_ids_from_form,
     support_status,
 )
+from app.ladder_cubes import asset_ladder_cubes, incident_ladder_cubes
+from app.playrule_mute import muted_playrule_ids, playrule_off_from_form
 from app.asset_snmp import AUTH_PROTOCOLS, PRIV_PROTOCOLS, SNMP_VERSIONS, V3_LEVELS, auth_status, snmp_from_form
 from app.asset_types import ASSET_TYPE_GROUPS, DEFAULT_SNMP_PORT, snmp_family, snmp_port_for
 from app.inventory import (
@@ -523,6 +525,8 @@ def ctx(request: Request, user: User | None, **extra):
         "extras_rows": extras_rows,
         "support_status": support_status,
         "incident_notes_snippet": incident_notes_snippet,
+        "asset_ladder_cubes": asset_ladder_cubes,
+        "incident_ladder_cubes": incident_ladder_cubes,
     }
     if user is not None:
         try:
@@ -897,6 +901,8 @@ def asset_create(
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
     playrule_add: str = Form(""),
+    playrule_switches: str = Form(""),
+    playrule_on: list[str] = Form([]),
     ladder_present: str = Form(""),
     ladder_on_1: str = Form(""),
     ladder_minutes_1: str = Form(""),
@@ -948,6 +954,7 @@ def asset_create(
         support_lead_days=extra_support_lead_days,
     )
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
+    posted_off = playrule_off_from_form(playrule_switches, playrule_ids, playrule_on)
     posted_ladder = _posted_ladder(
         ladder_present,
         on=[ladder_on_1, ladder_on_2, ladder_on_3, ladder_on_4],
@@ -990,6 +997,7 @@ def asset_create(
             alarms=posted_alarms,
             extras=posted_extras,
             playrule_ids=posted_playrules,
+            playrule_off=posted_off,
             snmp_port=snmp_port,
             snmp=posted_snmp,
             ladder=posted_ladder,
@@ -1404,6 +1412,7 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         similar_pager=similar_pager,
         playrule_choices=playrule_choices(db),
         picked_playrules=asset_playrule_ids(item),
+        playrule_off=muted_playrule_ids(item),
         ex=form_extras(item),
         support_labels=dict(SUPPORT_CHOICES),
         snmp_auth=auth_status(item),
@@ -1418,6 +1427,8 @@ def asset_playrules_update(
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
     playrule_add: str = Form(""),
+    playrule_switches: str = Form(""),
+    playrule_on: list[str] = Form([]),
 ):
     if not can(user, "write_assets"):
         raise HTTPException(status_code=403)
@@ -1425,7 +1436,8 @@ def asset_playrules_update(
     if item is None:
         raise HTTPException(status_code=404)
     posted = playrule_ids_from_form(playrules_present or "1", playrule_ids, playrule_add)
-    set_asset_playrules(db, item, posted, actor=user.email)
+    posted_off = playrule_off_from_form(playrule_switches, playrule_ids, playrule_on)
+    set_asset_playrules(db, item, posted, actor=user.email, playrule_off=posted_off)
     count = len(item.playrule_ids or [])
     notice = f"Custom alarms saved ({count})." if count else "Custom alarms cleared — Rules apply."
     return RedirectResponse(f"/assets/{asset_id}?notice={quote(notice)}#client-playrules", status_code=302)
@@ -1507,6 +1519,8 @@ def asset_update(
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
     playrule_add: str = Form(""),
+    playrule_switches: str = Form(""),
+    playrule_on: list[str] = Form([]),
     ladder_present: str = Form(""),
     ladder_on_1: str = Form(""),
     ladder_minutes_1: str = Form(""),
@@ -1560,6 +1574,7 @@ def asset_update(
         support_lead_days=extra_support_lead_days,
     )
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
+    posted_off = playrule_off_from_form(playrule_switches, playrule_ids, playrule_on)
     posted_ladder = _posted_ladder(
         ladder_present,
         on=[ladder_on_1, ladder_on_2, ladder_on_3, ladder_on_4],
@@ -1602,6 +1617,7 @@ def asset_update(
         alarms=posted_alarms,
         extras=posted_extras,
         playrule_ids=posted_playrules,
+        playrule_off=posted_off,
         snmp_port=snmp_port if comms_present.strip() else None,
         snmp=posted_snmp,
         ladder=posted_ladder,

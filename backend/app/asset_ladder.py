@@ -136,21 +136,45 @@ def replace_asset_ladder(db: Session, asset: Asset, steps: list[dict[str, Any]] 
         )
 
 
-def active_mail_steps(db: Session, asset: Asset | None) -> list[dict[str, Any]] | None:
-    """Email steps for this asset, or None when the ladder is empty (use Default)."""
+def filled_ladder_levels(db: Session, asset: Asset | None) -> list[dict[str, Any]]:
+    """Enabled levels that have at least one email, in level order.
+
+    Empty means this asset uses the Default ladder (or the matched rule's ladder).
+    Mail steps are one entry per address, in this same order.
+    """
     if asset is None or not getattr(asset, "id", None):
-        return None
+        return []
     rows = (
         db.query(AssetLadderStep)
         .filter(AssetLadderStep.asset_id == asset.id, AssetLadderStep.enabled.is_(True))
         .order_by(AssetLadderStep.level.asc(), AssetLadderStep.id.asc())
         .all()
     )
-    steps: list[dict[str, Any]] = []
+    levels: list[dict[str, Any]] = []
     for row in rows:
-        minutes = int(row.after_minutes or 0)
-        for email in row.emails or []:
-            address = _valid_email(str(email))
+        emails: list[str] = []
+        for raw in row.emails or []:
+            address = _valid_email(str(raw))
             if address:
-                steps.append({"after_minutes": minutes, "target": address, "channel": "email"})
+                emails.append(address)
+        if not emails:
+            continue
+        levels.append(
+            {
+                "level": int(row.level),
+                "label": ladder_label(int(row.level)),
+                "after_minutes": int(row.after_minutes or 0),
+                "emails": emails,
+            }
+        )
+    return levels
+
+
+def active_mail_steps(db: Session, asset: Asset | None) -> list[dict[str, Any]] | None:
+    """Email steps for this asset, or None when the ladder is empty (use Default)."""
+    steps: list[dict[str, Any]] = []
+    for level in filled_ladder_levels(db, asset):
+        minutes = int(level["after_minutes"])
+        for email in level["emails"]:
+            steps.append({"after_minutes": minutes, "target": email, "channel": "email"})
     return steps or None

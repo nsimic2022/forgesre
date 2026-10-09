@@ -495,8 +495,10 @@ def match_playrule(
 ) -> Playrule | None:
     """Alertname only. condition.metric/operator/value are operator notes and are never evaluated.
 
-    An asset's Custom alarms (assets.playrule_ids) are tried first, in the order saved; the
-    first enabled one whose alertname matches wins. Otherwise the global first-by-id match.
+    An asset's Custom alarms (assets.playrule_ids) are tried first, in the order saved,
+    skipping ids in asset_playrule_mutes (OFF on this host). The first enabled ON rule
+    whose alertname matches wins. Otherwise the global first-by-id match, also skipping
+    muted ids, so an OFF rule is not used for this host at all.
     """
     del labels
     wanted = (alertname or "").strip().lower()
@@ -509,23 +511,32 @@ def match_playrule(
         return bool(expected) and expected == wanted
 
     from app.asset_extras import asset_playrule_ids
+    from app.playrule_mute import muted_playrule_ids
 
+    muted = set(muted_playrule_ids(asset, db))
     by_id = {rule.id: rule for rule in rules}
+
+    def _usable(rule: Playrule | None) -> bool:
+        return rule is not None and rule.id not in muted and _hits(rule)
+
     for pk in asset_playrule_ids(asset):
         rule = by_id.get(pk)
-        if rule is not None and _hits(rule):
+        if _usable(rule):
             return rule
     for rule in rules:
-        if _hits(rule):
+        if _usable(rule):
             return rule
     return None
 
 
 def playrule_from_asset(rule: Playrule | None, asset: Asset | None) -> bool:
-    """True when the matched rule is one the asset lists under Custom alarms."""
+    """True when the matched rule is one this asset has switched ON under Custom alarms."""
     from app.asset_extras import asset_playrule_ids
+    from app.playrule_mute import is_playrule_muted
 
-    return bool(rule is not None and rule.id in asset_playrule_ids(asset))
+    if rule is None or rule.id not in asset_playrule_ids(asset):
+        return False
+    return not is_playrule_muted(asset, rule.id)
 
 
 def append_timeline(incident: Incident, node_id: str, title: str, detail: str) -> None:

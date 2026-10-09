@@ -196,10 +196,10 @@
   </div>
   <div class="asset-form-col asset-form-custom">
   <div class="asset-form-block client-playrules" data-client-playrules>
-    <h3 class="asset-form-block-head label-line">Custom alarms {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = Rules. Disabled rules are skipped. Mail follows Ladder when a level is filled; otherwise that rule's default ladder. It does not send both.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h3 class="asset-form-block-head label-line">Custom alarms {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first ON rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = Rules. OFF skips that rule on this host only — it stays in the list, and Save keeps it off. ON is the behavior above. Disabled rules on Rules are skipped. Mail follows Ladder when a level is filled; otherwise that rule's default ladder. It does not send both.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     <input type="hidden" name="playrules_present" value="1">
-    <p class="muted alarm-limit">This does not create Prometheus thresholds. It records which rule this asset prefers when that alertname arrives. Matching is still by alertname only.</p>
-    {% with picked=form.playrule_ids %}{% include "_playrule_picker.html" %}{% endwith %}
+    <p class="muted alarm-limit">This does not create Prometheus thresholds. It records which rule this asset prefers when that alertname arrives. Matching is still by alertname only. OFF skips that rule for this host.</p>
+    {% with picked=form.playrule_ids, off_ids=form.playrule_off %}{% include "_playrule_picker.html" %}{% endwith %}
   </div>
   </div>
   <div class="asset-form-col asset-form-ladder">

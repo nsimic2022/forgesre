@@ -120,6 +120,7 @@
         <th class="col-name">Name</th>
         <th>Severity</th>
         <th>Status</th>
+        <th class="col-ladder"><span class="label-line">Ladder {% with %}{% set tip %}How far this incident climbed. Same 2×2 squares as Assets (L1 L2 / L3 L4). Red = this incident already mailed that level. Green = the level is on the asset and this incident has not mailed it yet. Gray = no such level. When the asset Ladder is empty, Default warning (or the rule's ladder) steps map in order onto L1–L4. A three-step Default warning fills L1–L3 and leaves L4 gray.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
         <th>When</th>
         <th class="col-ack">Acknowledged</th>
         <th class="col-resolved">Resolved by</th>
@@ -135,10 +136,11 @@
         {% include "_incident_cell.html" %}
         <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
         <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
+        <td class="col-ladder">{% with cubes=incident_ladder_cubes(item) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
         {% include "_incident_scan_tail.html" %}
       </tr>
     {% else %}
-      <tr><td colspan="9" class="muted">No incidents yet. Use Run demo (top right) or wait for an alert.</td></tr>
+      <tr><td colspan="10" class="muted">No incidents yet. Use Run demo (top right) or wait for an alert.</td></tr>
     {% endfor %}
     </tbody>
   </table>

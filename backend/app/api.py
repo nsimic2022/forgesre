@@ -69,6 +69,7 @@ from app.services import (
 )
 from app.settings import settings
 from app.asset_extras import asset_playrule_ids, public_extras, support_status
+from app.playrule_mute import muted_playrule_ids
 from app.asset_types import snmp_port_for
 from app.host_resources import appliance_resources
 from app.stack import (
@@ -855,6 +856,7 @@ class AssetBody(BaseModel):
     alarms: dict | None = None
     extras: dict | None = None
     playrule_ids: list[int] | None = None
+    playrule_off: list[int] | None = None
 
 
 class AssetUpdateBody(BaseModel):
@@ -872,6 +874,7 @@ class AssetUpdateBody(BaseModel):
     alarms: dict | None = None
     extras: dict | None = None
     playrule_ids: list[int] | None = None
+    playrule_off: list[int] | None = None
 
 
 class AssetCloneBody(BaseModel):
@@ -890,6 +893,7 @@ class AssetCloneBody(BaseModel):
     alarms: dict | None = None
     extras: dict | None = None
     playrule_ids: list[int] | None = None
+    playrule_off: list[int] | None = None
 
 
 @router.post("/assets")
@@ -920,6 +924,7 @@ def create_asset_api(
             alarms=body.alarms,
             extras=body.extras,
             playrule_ids=body.playrule_ids,
+            playrule_off=body.playrule_off,
             snmp_port=body.snmp_port,
         )
     except ValueError as exc:
@@ -962,6 +967,7 @@ def update_asset_api(
         alarms=body.alarms,
         extras=body.extras,
         playrule_ids=body.playrule_ids,
+        playrule_off=body.playrule_off,
         snmp_port=body.snmp_port,
     )
     return _asset(asset)
@@ -1006,6 +1012,7 @@ def clone_asset_api(
             alarms=body.alarms if body.alarms is not None else getattr(item, "alarms", None),
             extras=body.extras if body.extras is not None else defaults["extras"],
             playrule_ids=body.playrule_ids if body.playrule_ids is not None else defaults["playrule_ids"],
+            playrule_off=body.playrule_off,
             snmp_port=body.snmp_port if body.snmp_port is not None else defaults["snmp_port"],
         )
     except ValueError as exc:
@@ -1631,6 +1638,7 @@ def _asset(item: Asset) -> dict[str, Any]:
         "alarms": getattr(item, "alarms", None) or {},
         "extras": public_extras(getattr(item, "extras", None)),
         "playrule_ids": asset_playrule_ids(item),
+        "playrule_off": muted_playrule_ids(item),
         "support_status": {key: value for key, value in support_status(item).items() if key in {"state", "label", "detail"}},
         "snmp": is_snmp_asset(item),
         "ping": reach["ping"],

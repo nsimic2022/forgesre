@@ -81,6 +81,7 @@
       <th>Hostname</th>
       <th>IP</th>
       <th><span class="label-line">ICMP / port / SNMP {% with %}{% set tip %}Stacked squares, green / yellow / red. ICMP: green reply; yellow not probed, or ICMP failed but exporter/SNMP (/metrics) answers (typical Windows: ICMP unused/blocked); red ICMP failed and exporter/SNMP failed or timed out. ICMP and port 22 are not required. Port is the TCP scrape (9100 node_exporter, 9182 windows_exporter, or the asset's port) with no colon. SNMP is its own square (UDP 161, or the asset's SNMP port) when snmp_exporter polls the host. Last-known colors on first paint.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th class="col-ladder"><span class="label-line">Ladder {% with %}{% set tip %}2×2 squares, same size as ICMP / port / SNMP. Row 1 is L1 L2, row 2 is L3 L4. Green = that level is on this asset (enabled and has an email). Red = an active incident already mailed that level, or the incident is ESCALATED and enough minutes have passed for that rung. Red wins over green. Gray = the level is not on this asset. An empty Ladder (Default ladder) stays gray here — the climb shows on the incident.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th>Owner</th>
       <th>Contact</th>
       <th><span class="label-line">Type {% with %}{% set tip %}Linux Server = node_exporter :9100. Windows Server = windows_exporter :9182. Network device, Switch, Router, Firewall, Storage, QNAP/NAS, Printer = snmp_exporter UDP/161 (or the asset's SNMP port), no HTTP scrape unless you type one. Hypervisor, Web/appliance, Other = no default scrape. Auto detects from /metrics on this appliance.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
@@ -103,6 +104,7 @@
         {% set reach_id = asset.asset_id %}
         {% include "_reach_stack.html" %}
       </td>
+      <td class="col-ladder">{% with cubes=asset_ladder_cubes(asset) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
       <td>{{ asset.owner or "—" }}</td>
       <td>
         {% if asset.contact_name %}{{ asset.contact_name }}{% endif %}

@@ -1,7 +1,9 @@
     {% set picked = picked or [] %}
+    {% set off_ids = off_ids|default([], true) %}
     {% set picked_rules = [] %}
     {% for pk in picked %}{% for rule in playrule_choices or [] if rule.id == pk %}{% set _ = picked_rules.append(rule) %}{% endfor %}{% endfor %}
     {% set enabled_rules = (playrule_choices or [])|selectattr("enabled")|list %}
+    <input type="hidden" name="playrule_switches" value="1">
     <label class="playrule-add"><span class="label-line">Add a rule</span>
       <select name="playrule_add" data-playrule-add{% if not enabled_rules %} disabled{% endif %}>
         <option value="">{% if enabled_rules %}Choose a rule…{% else %}No enabled rules{% endif %}</option>
@@ -12,7 +14,12 @@
     </label>
     <ol class="playrule-list" data-playrule-list>
       {% for rule in picked_rules %}
+      {% set rule_on = rule.id not in off_ids %}
       <li class="playrule-chip" data-playrule-id="{{ rule.id }}">
+        <div class="alarm-row playrule-onoff">
+          <button type="button" class="onoff {{ 'is-on' if rule_on else 'is-off' }}" data-onoff aria-pressed="{{ 'true' if rule_on else 'false' }}">{% if rule_on %}ON{% else %}OFF{% endif %}</button>
+          <input type="checkbox" class="onoff-check" name="playrule_on" value="{{ rule.id }}" {% if rule_on %}checked{% endif %} tabindex="-1">
+        </div>
         <input type="hidden" name="playrule_ids" value="{{ rule.id }}">
         <span class="playrule-chip-text">{{ rule.name }} <span class="muted">· {{ rule.alertname or "no alertname" }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}{% if not rule.enabled %} · disabled{% endif %}</span></span>
         <button type="button" class="playrule-remove" data-playrule-remove aria-label="Remove {{ rule.name }}" title="Remove">×</button>
