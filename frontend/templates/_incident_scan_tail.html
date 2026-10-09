@@ -1,0 +1,5 @@
+{% set when = incident_when(item) %}
+{% set stamp = compact_stamp(item.started_at) %}
+<td class="inc-when" title="{{ when.title }}" data-when="stamp">{% if stamp.date %}<span class="stamp"><span class="stamp-date">{{ stamp.date }}</span><span class="stamp-time">{{ stamp.time }}</span></span>{% else %}—{% endif %}</td>
+<td class="col-ack">{% set ack = ack_circle(item) %}<span class="ack-dot {{ ack.css }}" title="{{ ack.label }}" aria-label="{{ ack.label }}"></span></td>
+<td class="col-resolved">{% if item.resolved_by %}{{ item.resolved_by }}{% else %}—{% endif %}</td>

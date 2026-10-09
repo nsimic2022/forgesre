@@ -83,7 +83,7 @@ def test_dashboard_has_graph_pane_right_of_recent_incidents():
     assert 'class="pager-bar"' in html[recent:pane] or "data-select-page" in html[recent:pane]
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     block = css.split(".dash-incidents {", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)" in block
+    assert "grid-template-columns: minmax(0, 3fr) minmax(0, 1fr)" in block
     assert ".is-selected td" in css
 
 

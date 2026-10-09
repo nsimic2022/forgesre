@@ -44,7 +44,8 @@ def test_history_page_redirects_and_incidents_lists_closed():
     assert "INC-" in closed.text
     headers = closed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
     assert headers.index(">Hostname<") < headers.index(">Name<")
-    assert "Ack" in headers
+    assert ">Acknowledged<" in headers
+    assert ">Ack<" not in headers and "info-tip" not in headers
     assert "Resolved by" in headers
     assert "ack-dot" in closed.text
     by_asset = client.get("/incidents?q=forge-demo-01")
@@ -319,7 +320,8 @@ def test_send_incident_report_to_address_book_email():
     assert "Severity" in headers
     assert "Status" in headers
     assert "When" in headers
-    assert "Ack" in headers
+    assert ">Acknowledged<" in headers
+    assert ">Ack<" not in headers and "info-tip" not in headers
     assert "Resolved by" in headers
     assert "Reported to" not in headers
     tbody = listed.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]

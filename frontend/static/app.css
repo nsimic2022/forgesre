@@ -1086,15 +1086,15 @@ form.ops-compose {
 .stamp { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0.05rem; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stamp-time { color: var(--muted); font-size: 0.82rem; }
 .dash-recent th.col-host,
-.dash-recent td.col-host { width: 16%; max-width: 12rem; }
+.dash-recent td.col-host { width: 12%; max-width: 9.5rem; }
 .dash-recent th.col-name,
-.dash-recent td.col-name { width: 30%; }
+.dash-recent td.col-name { width: 22%; }
 .dash-recent td.col-host { overflow-wrap: anywhere; font-weight: 600; }
 .incidents-table { width: 100%; }
 .incidents-table th.col-host,
-.incidents-table td.col-host { width: 14%; max-width: 11rem; }
+.incidents-table td.col-host { width: 13%; max-width: 10rem; }
 .incidents-table th.col-name,
-.incidents-table td.col-name { width: 26%; }
+.incidents-table td.col-name { width: 22%; }
 .incidents-table td.col-host { overflow-wrap: anywhere; vertical-align: middle; }
 .incidents-table td.col-host .inc-host {
   color: var(--text);
@@ -1102,12 +1102,26 @@ form.ops-compose {
   font-weight: 600;
   margin-top: 0;
 }
+/* v08-23: full word Acknowledged, with a gap before Resolved by (not one mashed pair). */
 .incidents-table th.col-ack,
-.incidents-table td.col-ack { width: 3rem; text-align: center; white-space: nowrap; }
+.incidents-table td.col-ack,
+.dash-recent th.col-ack,
+.dash-recent td.col-ack {
+  width: 8.5rem;
+  min-width: 7.6rem;
+  padding-left: 0.95rem;
+  padding-right: 1.45rem;
+  text-align: center;
+  white-space: nowrap;
+}
 .incidents-table th.col-resolved,
-.incidents-table td.col-resolved {
-  width: 14%;
-  max-width: 13rem;
+.incidents-table td.col-resolved,
+.dash-recent th.col-resolved,
+.dash-recent td.col-resolved {
+  width: 12%;
+  min-width: 6.75rem;
+  padding-left: 1.25rem;
+  max-width: 14rem;
   overflow-wrap: anywhere;
   font-size: 0.82rem;
 }
@@ -1473,11 +1487,8 @@ h1.incident-head .sev-warn { color: var(--warn); }
 }
 .tile-group h2 { margin: 0 0 0.55rem; }
 .stat-row.stat-row-big { grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 0.7rem; }
-.dash-tiles-incidents .stat-row.stat-row-big { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.dash-tiles-infra .stat-row.stat-row-big { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-@media (min-width: 1101px) and (max-width: 1300px) {
-  .dash-tiles-infra .stat-row.stat-row-big { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
+.dash-tiles-incidents .stat-row.stat-row-big { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dash-tiles-infra .stat-row.stat-row-big { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 720px) {
   .dash-tiles-incidents .stat-row.stat-row-big,
   .dash-tiles-infra .stat-row.stat-row-big { grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); }
@@ -1498,9 +1509,14 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .stat-row-big .stat.ok { background: var(--pill-ok-bg); border-color: var(--ok); }
 .stat-row-big .stat.warn { background: var(--pill-warn-bg); border-color: var(--warn); }
 .stat-row-big .stat.crit { background: var(--pill-crit-bg); border-color: var(--crit); }
+.stat-row-big .stat.cold {
+  background: color-mix(in srgb, var(--pill-ok-bg) 42%, var(--panel));
+  border-color: color-mix(in srgb, var(--ok) 38%, var(--muted));
+}
 .stat-row-big .stat.ok strong { color: var(--pill-ok); }
 .stat-row-big .stat.warn strong { color: var(--pill-warn); }
 .stat-row-big .stat.crit strong { color: var(--pill-crit); }
+.stat-row-big .stat.cold strong { color: color-mix(in srgb, var(--ok) 48%, var(--muted)); }
 .stat-row-big .stat.stat-zero { background: var(--panel); border-color: var(--line); }
 .stat-row-big .stat.stat-zero span { color: var(--muted); font-weight: 500; }
 .stat-row-big .stat.stat-zero strong { color: var(--muted); font-weight: 600; }
@@ -1612,10 +1628,10 @@ h1.incident-head .sev-warn { color: var(--warn); }
   .dash-top { grid-template-columns: 1fr; grid-template-areas: "inc" "infra" "app"; }
 }
 
-/* Dashboard: Recent incidents left, Prometheus graphs for the selected incident's host right. */
+/* Dashboard: Recent incidents ~3/4, Host metrics ~1/4. */
 .dash-incidents {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
 }
@@ -1635,7 +1651,7 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .dash-recent-scroll {
   max-height: min(40rem, 72vh);
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   border-radius: 10px;
   scrollbar-gutter: stable;
 }

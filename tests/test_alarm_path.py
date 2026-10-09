@@ -15,7 +15,7 @@ from sqlalchemy import func
 import app.api as api_mod
 import app.main as main_mod
 from app.db import Base, SessionLocal, engine
-from app.history import dashboard_incident_tiles, incident_query
+from app.history import incident_query
 from app.inventory import create_manual_asset
 from app.jobs import active_discovery_scan, enqueue, recover_interrupted_jobs, run_pending_jobs
 from app.main import app
@@ -342,8 +342,8 @@ def _unacked_ids(db) -> set[int]:
     return {row.id for row in incident_query(db, unacked_only=True).all()}
 
 
-def _open_tile(db) -> int:
-    return next(tile["count"] for tile in dashboard_incident_tiles(db) if tile["key"] == "open")
+def _unacked_count(db) -> int:
+    return incident_query(db, unacked_only=True).count()
 
 
 def test_automatic_rca_is_not_an_ack_and_escalation_keeps_going():
@@ -352,7 +352,7 @@ def test_automatic_rca_is_not_an_ack_and_escalation_keeps_going():
     incident = ingest_alertmanager(db, _group(_series(f"ApRca{uuid4().hex[:6]}", host.asset_id, "firing")))[0]
     job = db.query(Job).filter_by(kind="investigate", object_id=incident.number).one()
     assert job.status == "pending" and (job.payload or {}).get("actor") == "system"
-    tile_before = _open_tile(db)
+    tile_before = _unacked_count(db)
     run_investigation(db, incident, actor="system", use_llm=False)
     db.expire_all()
     incident = db.get(Incident, incident.id)
@@ -360,7 +360,7 @@ def test_automatic_rca_is_not_an_ack_and_escalation_keeps_going():
     assert incident.status == "OPEN"
     assert incident.ack_at is None and not incident.ack_by
     assert incident.id in _unacked_ids(db)
-    assert _open_tile(db) == tile_before
+    assert _unacked_count(db) == tile_before
 
     client = _login()
     page = client.get(f"/incidents/{incident.number}")
@@ -385,7 +385,7 @@ def test_human_acknowledge_sets_ack_at_and_stops_the_ladder():
     host = _host(db, "ap-ack", owner_email="ack@dc.local")
     incident = ingest_alertmanager(db, _group(_series(f"ApAck{uuid4().hex[:6]}", host.asset_id, "firing")))[0]
     run_investigation(db, incident, actor="system", use_llm=False)
-    tile_before = _open_tile(db)
+    tile_before = _unacked_count(db)
     client = _login()
     posted = client.post(f"/incidents/{incident.number}/status", data={"status": "INVESTIGATING"}, follow_redirects=False)
     assert posted.status_code == 302
@@ -394,7 +394,7 @@ def test_human_acknowledge_sets_ack_at_and_stops_the_ladder():
     assert incident.status == "INVESTIGATING"
     assert incident.ack_at is not None and incident.ack_by == "admin@forgesre.local"
     assert incident.id not in _unacked_ids(db)
-    assert _open_tile(db) == tile_before - 1
+    assert _unacked_count(db) == tile_before - 1
     page = client.get(f"/incidents/{incident.number}")
     assert 'value="INVESTIGATING" class="done">Acknowledge' in page.text
 
@@ -442,7 +442,7 @@ def test_acknowledge_on_resolved_does_not_reopen():
     db.close()
 
 
-def test_open_tile_counts_every_unacked_active_status():
+def test_unacked_filter_counts_every_active_status_without_an_open_cube():
     db = _db()
     from app.services import next_incident_number
 
@@ -471,10 +471,13 @@ def test_open_tile_counts_every_unacked_active_status():
     unacked = _unacked_ids(db)
     assert {rows["open"], rows["inv"], rows["esc"]} <= unacked
     assert rows["inv-acked"] not in unacked and rows["res"] not in unacked
-    assert _open_tile(db) == len(unacked)
+    assert _unacked_count(db) == len(unacked)
     client = _login()
     home = client.get("/")
-    assert 'href="/incidents?status=unacked" data-tile="open"' in home.text
+    alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
+    assert 'data-tile="open"' not in home.text
+    assert 'data-tile="escalated"' not in alarms
+    assert ">Open<" not in alarms and ">Escalated<" not in alarms
     listed = client.get("/incidents?status=unacked&per_page=100").text
     assert f"ap tile inv {token}" in listed
     assert f"ap tile inv-acked {token}" not in listed

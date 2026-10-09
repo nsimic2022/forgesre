@@ -57,7 +57,8 @@ def test_incidents_list_columns_short_id_and_full_href():
     assert ">Severity<" in headers
     assert ">Status<" in headers
     assert ">When<" in headers
-    assert "Ack" in headers
+    assert ">Acknowledged<" in headers
+    assert ">Ack<" not in headers and "info-tip" not in headers
     assert "Resolved by" in headers
     assert "Reported to" not in headers
     assert ">Asset<" not in headers
