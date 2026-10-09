@@ -9,6 +9,7 @@
 {% from "_email_pick.html" import email_pick %}
 <form method="post" action="{% if form_mode == 'edit' %}/assets/{{ selected.asset_id }}/update{% else %}/assets{% endif %}" class="asset-form-split" id="asset-form">
   {% set ex = form.extras or {} %}
+  <div class="asset-form-half asset-form-half-left">
   <div class="asset-form-col asset-form-left">
   <div class="asset-form-block" data-asset-identity>
   <h3 class="asset-form-block-head">Identity</h3>
@@ -156,6 +157,8 @@
     </div>
   </div>
   </div>
+  </div>
+  <div class="asset-form-half asset-form-half-right">
   <div class="asset-form-col asset-form-right">
   <input type="hidden" name="alarms_present" value="1">
   <div class="asset-form-block alarm-families" data-alarm-families>
@@ -227,6 +230,7 @@
       <button type="button" class="secondary ladder-add" data-ladder-add-email>Add email</button>
     </div>
     {% endfor %}
+  </div>
   </div>
   </div>
   {% if form_mode == "clone" %}
