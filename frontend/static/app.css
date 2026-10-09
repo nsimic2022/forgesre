@@ -1307,31 +1307,100 @@ td.ops-report-actions .row-actions a.button {
 }
 .mail-providers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .mail-providers h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+/* v09-N: facts stay at most a quarter of the content; charts fill the rest. */
 .asset-detail-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.5rem;
-  align-items: start;
+  grid-template-columns: minmax(0, 25%) minmax(0, 1fr);
+  gap: 1.1rem;
+  align-items: stretch;
+  min-height: calc(100vh - 8.2rem);
 }
 .asset-detail-main,
-.asset-detail-metrics {
+.asset-detail-metrics,
+.asset-detail-col-1-4,
+.asset-detail-col-2-3 {
   min-width: 0;
   max-width: 100%;
 }
-.asset-detail-main .kv {
-  grid-template-columns: minmax(6.5rem, 9rem) minmax(0, 1fr);
+.asset-detail-col-1-4 {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  max-height: calc(100vh - 8.2rem);
 }
+.asset-detail-col-1-4 h1 {
+  margin-bottom: 0.45rem;
+  font-size: 1.35rem;
+  overflow-wrap: anywhere;
+}
+.asset-detail-sections {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.1rem;
+}
+.asset-detail-section {
+  padding: 0.55rem 0 0.65rem;
+  border-top: 1px solid var(--line);
+}
+.asset-detail-section:first-child {
+  border-top: 0;
+  padding-top: 0.1rem;
+}
+.asset-detail-section .asset-facts-head { margin-top: 0; }
+.asset-detail-main .kv {
+  grid-template-columns: minmax(5.4rem, 7.4rem) minmax(0, 1fr);
+  gap: 0.28rem 0.45rem;
+  font-size: 0.84rem;
+}
+.asset-detail-main .kv dt,
+.asset-detail-main .kv dd { overflow-wrap: anywhere; }
+.asset-detail-col-1-4 table { font-size: 0.78rem; }
+.asset-detail-col-1-4 .playrule-add select,
+.asset-detail-col-1-4 .playrule-detail-form { max-width: 100%; }
 .asset-detail-actions {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-top: auto;
+  padding-top: 0.65rem;
   max-width: 100%;
 }
-.asset-detail-actions .row-actions {
-  flex-wrap: wrap;
+.asset-detail-actions form {
+  margin: 0;
+  min-width: 0;
+  display: flex;
 }
-.asset-detail-side {
+.asset-detail-actions a.button,
+.asset-detail-actions button {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0.34rem 0.12rem;
+  font-size: 0.74rem;
+  line-height: 1.15;
+  text-align: center;
+  border-radius: 8px;
+}
+.asset-detail-actions a.button,
+.asset-detail-actions button.secondary {
+  background: var(--secondary);
+  color: var(--text);
+}
+.asset-detail-actions button.danger {
+  background: var(--crit);
+  color: var(--btn-danger-text);
+}
+.asset-detail-actions button.danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.asset-detail-side,
+.asset-detail-col-2-3 {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  max-width: 100%;
+  min-height: 100%;
 }
 .asset-facts-head {
   margin: 1rem 0 0.4rem;
@@ -1451,7 +1520,11 @@ td.ops-report-actions .row-actions a.button {
     min-width: 0;
   }
   .ops-report-cols { flex-direction: column; }
-  .asset-detail-split { grid-template-columns: 1fr; }
+  .asset-detail-split { grid-template-columns: minmax(0, 1fr); }
+  .asset-detail-col-1-4 { max-height: none; }
+  .asset-chart-grid,
+  .asset-chart-grid.is-sparse { grid-template-columns: minmax(0, 1fr); }
+  .asset-chart-panel[data-graph="up"] { grid-column: auto; }
   .asset-form-split,
   .asset-form-half-left,
   .asset-form-half-right { grid-template-columns: minmax(0, 1fr); }
@@ -1900,8 +1973,65 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .dash-chart-tip-value { display: block; }
 .dash-chart-tip-time { color: #93a0b8; }
 .asset-detail-metrics .dash-graph-caption,
-.asset-detail-metrics .dash-graph-empty { margin-top: 0.65rem; }
-.asset-detail-metrics .dash-graph-list { margin-top: 0.35rem; }
+.asset-detail-metrics .dash-graph-empty { margin-top: 0; }
+.asset-chart-caption { margin: 0 0 0.45rem; font-size: 0.8rem; }
+.asset-chart-grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(11.5rem, 1fr);
+  gap: 0.6rem;
+  min-height: 0;
+}
+.asset-chart-grid.is-sparse { grid-template-columns: minmax(0, 1fr); }
+.asset-chart-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.5rem 0.65rem 0.45rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.asset-chart-panel[data-graph="up"] { grid-column: 1 / -1; }
+.asset-chart-grid.is-sparse .asset-chart-panel[data-graph="up"],
+.asset-chart-grid.is-sparse .asset-chart-panel[data-graph="network"] { grid-column: auto; }
+.asset-chart-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.asset-chart-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  flex: 1 1 auto;
+}
+.asset-chart-legend { display: inline-flex; gap: 0.5rem; font-size: 0.72rem; font-weight: 700; }
+.asset-chart-legend i { font-style: normal; }
+.asset-chart-legend .rx { color: var(--ok); }
+.asset-chart-legend .tx { color: var(--accent); }
+.asset-chart-slot {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 8.5rem;
+}
+.asset-chart-slot .dash-chart-frame {
+  flex: 1 1 auto;
+  height: 100%;
+  margin-top: 0.2rem;
+}
+.asset-chart-slot .dash-chart-plot,
+.asset-chart-slot .dash-chart,
+.asset-chart-slot .dash-chart-yticks { min-height: 8.5rem; height: 100%; }
+.asset-chart-panel[data-tone="ok"] .dash-chart-dot { background: var(--ok); }
+.asset-chart-panel[data-tone="crit"] .dash-chart-dot { background: var(--crit); }
+.dash-chart-line.rx { stroke: var(--ok); }
+.dash-chart-line.tx { stroke: var(--accent); }
 .dash-recent-scroll {
   max-height: min(40rem, 72vh);
   overflow-y: auto;
@@ -1918,6 +2048,7 @@ h1.incident-head .sev-warn { color: var(--warn); }
   overflow: auto;
   max-width: 100%;
 }
+.asset-detail-sections .list-scroll { max-height: 12rem; }
 .list-scroll > table { margin: 0; }
 .list-scroll > table > thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: inset 0 -1px 0 var(--line); }
 .list-scroll-cards { padding: 2px; margin-bottom: 1.1rem; }

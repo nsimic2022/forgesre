@@ -1131,7 +1131,27 @@ function graphPane(pane) {
     caption.hidden = !caption.textContent;
   };
 
+  const assetGrid = () => pane.hasAttribute && pane.hasAttribute("data-asset-graph-grid");
+
   const showEmpty = (text) => {
+    if (assetGrid()) {
+      showCaption("");
+      windowInfo = null;
+      if (empty) {
+        empty.textContent = "";
+        empty.hidden = true;
+      }
+      const slots = typeof pane.querySelectorAll === "function" ? pane.querySelectorAll("[data-chart-slot]") : [];
+      Array.prototype.forEach.call(slots, (slot) => {
+        if (!slot.replaceChildren) return;
+        slot.replaceChildren();
+        const none = document.createElement("span");
+        none.className = "muted dash-graph-none";
+        none.textContent = text || "Not scraped.";
+        slot.appendChild(none);
+      });
+      return;
+    }
     if (list) list.replaceChildren();
     showCaption("");
     windowInfo = null;
@@ -1200,8 +1220,41 @@ function graphPane(pane) {
     return Math.max(1, Math.min(W - 1, ((marker - start) / (end - start)) * W));
   };
 
+  const finiteSeries = (raw, rawTimes) => {
+    const vals = [];
+    const stamps = [];
+    (raw || []).forEach((v, i) => {
+      const n = Number(v);
+      if (!isFinite(n)) return;
+      vals.push(n);
+      if (rawTimes && rawTimes.length === raw.length && isFinite(Number(rawTimes[i]))) stamps.push(Number(rawTimes[i]));
+    });
+    return { values: vals, times: stamps.length === vals.length ? stamps : null };
+  };
+
+  const chartTracks = (tile, values, times) => {
+    if (tile && Array.isArray(tile.lines) && tile.lines.length) {
+      const tracks = [];
+      tile.lines.forEach((line) => {
+        const parsed = finiteSeries(line.series, line.times);
+        if (parsed.values.length < 2) return;
+        tracks.push({
+          name: line.name ? String(line.name) : tile.name,
+          className: line.className ? String(line.className) : (tile.tone || "warn"),
+          values: parsed.values,
+          times: parsed.times,
+        });
+      });
+      if (tracks.length) return tracks;
+    }
+    return [{ name: tile.name, className: tile.tone || "warn", values: values, times: times }];
+  };
+
   const chart = (tile, values, times) => {
-    const scale = chartYScale(tile.kind, values);
+    const tracks = chartTracks(tile, values, times);
+    const scaleValues = [];
+    tracks.forEach((track) => (track.values || []).forEach((v) => scaleValues.push(v)));
+    const scale = chartYScale(tile.kind, scaleValues.length ? scaleValues : values);
     const unit = chartUnit(tile);
     const label = windowInfo && windowInfo.label ? windowInfo.label : span;
     const mark = markerX();
@@ -1234,18 +1287,26 @@ function graphPane(pane) {
         svg.appendChild(svgEl("line", { class: "dash-chart-threshold", x1: 0, x2: W, y1: y, y2: y }));
       }
     }
-    const pts = [];
-    const xs = [];
-    const ys = [];
-    values.forEach((v, i) => {
-      const x = xFor(i, values.length, times);
-      const y = yFor(tile, v, scale);
-      xs.push(x);
-      ys.push(y);
-      if (tile.kind === "up" && pts.length) pts.push(x.toFixed(1) + "," + pts[pts.length - 1].split(",")[1]);
-      pts.push(x.toFixed(1) + "," + y.toFixed(1));
+    const drawn = [];
+    tracks.forEach((track) => {
+      if (!track.values || track.values.length < 2) return;
+      const pts = [];
+      const xs = [];
+      const ys = [];
+      track.values.forEach((v, i) => {
+        const x = xFor(i, track.values.length, track.times);
+        const y = yFor(tile, v, scale);
+        xs.push(x);
+        ys.push(y);
+        if (tile.kind === "up" && pts.length) pts.push(x.toFixed(1) + "," + pts[pts.length - 1].split(",")[1]);
+        pts.push(x.toFixed(1) + "," + y.toFixed(1));
+      });
+      svg.appendChild(svgEl("polyline", { class: "dash-chart-line " + (track.className || "warn"), points: pts.join(" ") }));
+      drawn.push({ track: track, xs: xs, ys: ys });
     });
-    svg.appendChild(svgEl("polyline", { class: "dash-chart-line " + (tile.tone || "warn"), points: pts.join(" ") }));
+    const hit = drawn[0] || { xs: [], ys: [], track: { values: values, times: times, name: tile.name } };
+    const xs = hit.xs;
+    const ys = hit.ys;
     if (mark != null) {
       const x = mark.toFixed(1);
       svg.appendChild(svgEl("line", { class: "dash-chart-marker", x1: x, x2: x, y1: 0, y2: H }));
@@ -1291,17 +1352,38 @@ function graphPane(pane) {
       node.style.left = x;
       node.style.top = y;
     };
+    const stampAt = (item, index) => {
+      const stamps = item.track.times;
+      const count = item.track.values.length;
+      return stamps && isFinite(Number(stamps[index]))
+        ? Number(stamps[index])
+        : win && count > 1
+          ? win.start + ((win.end - win.start) * index) / (count - 1)
+          : NaN;
+    };
     const showAt = (index) => {
-      const stamp =
-        times && isFinite(Number(times[index]))
-          ? Number(times[index])
-          : win && values.length > 1
-            ? win.start + ((win.end - win.start) * index) / (values.length - 1)
-            : NaN;
-      const lines = chartTipLines(hostName(), stamp, tile.name, tile.kind, values[index], unit);
+      const stamp = stampAt(hit, index);
+      let tipText = "";
+      if (drawn.length > 1) {
+        const parts = drawn.map((item) => {
+          let idx = 0;
+          let dist = Infinity;
+          const x = xs[index];
+          item.xs.forEach((px, i) => {
+            const d = Math.abs(px - x);
+            if (d < dist) {
+              dist = d;
+              idx = i;
+            }
+          });
+          return chartTipLines(hostName(), stampAt(item, idx), item.track.name, tile.kind, item.track.values[idx], unit).value;
+        });
+        tipText = parts.join(" · ");
+      }
+      const lines = chartTipLines(hostName(), stamp, tile.name, tile.kind, hit.track.values[index], unit);
       tipHost.textContent = lines.host;
       tipTime.textContent = lines.time;
-      tipValue.textContent = lines.value;
+      tipValue.textContent = drawn.length > 1 ? tipText : lines.value;
       tip.hidden = false;
       dot.hidden = false;
       const left = ((xs[index] / W) * 100).toFixed(2) + "%";
@@ -1381,14 +1463,65 @@ function graphPane(pane) {
     return box;
   };
 
+  const hasPlot = (tile) => {
+    if (!tile) return false;
+    const parsed = finiteSeries(tile.series, tile.times);
+    return chartTracks(tile, parsed.values, parsed.times).some((track) => track.values && track.values.length >= 2);
+  };
+
+  // Asset detail: charts sit in the server-rendered panels. Dashboard and incident keep the list.
+  const paintAssetGrid = (data) => {
+    const named = data.hostname ? String(data.hostname) : "";
+    pane.setAttribute("data-chart-host", named || pane.getAttribute("data-host") || "");
+    windowInfo = data.window || null;
+    span = data.source === "zabbix" ? "last 24 h (Zabbix trends)" : "last hour";
+    pane.setAttribute("data-graph-source", data.source || "prometheus");
+    showCaption(windowInfo && windowInfo.label ? String(windowInfo.label) : "");
+    if (empty) {
+      const down = data.collecting === null && data.error;
+      empty.textContent = down ? "Prometheus unreachable." : "";
+      empty.hidden = !empty.textContent;
+    }
+    const byKey = {};
+    data.tiles.forEach((tile) => {
+      byKey[tile.key] = tile;
+    });
+    const slots = typeof pane.querySelectorAll === "function" ? pane.querySelectorAll("[data-chart-slot]") : [];
+    Array.prototype.forEach.call(slots, (slot) => {
+      const key = slot.getAttribute("data-chart-slot");
+      const tile = byKey[key];
+      const panel = typeof slot.closest === "function" ? slot.closest("[data-graph]") : null;
+      if (panel && tile) {
+        panel.setAttribute("data-tone", tile.tone || "warn");
+        const value = typeof panel.querySelector === "function" ? panel.querySelector("[data-chart-value]") : null;
+        if (value) {
+          value.textContent = tile.value == null ? "—" : String(tile.display == null ? "" : tile.display);
+          value.setAttribute("class", "metric-value " + (tile.tone || "warn"));
+        }
+      }
+      if (!slot.replaceChildren) return;
+      slot.replaceChildren();
+      if (!hasPlot(tile)) {
+        slot.appendChild(hEl("span", "muted dash-graph-none", "Not scraped."));
+        return;
+      }
+      const parsed = finiteSeries(tile.series, tile.times);
+      slot.appendChild(chart(tile, parsed.values, parsed.times));
+    });
+  };
+
   const paint = (data) => {
     if (!data || !Array.isArray(data.tiles)) {
       showEmpty("Metrics unavailable.");
       return;
     }
+    if (assetGrid()) {
+      paintAssetGrid(data);
+      return;
+    }
     const named = data.hostname ? String(data.hostname) : "";
     pane.setAttribute("data-chart-host", named || pane.getAttribute("data-host") || "");
-    const tiles = data.tiles;
+    const tiles = data.tiles.filter((tile) => tile.key !== "network");
     windowInfo = data.window || null;
     span = data.source === "zabbix" ? "last 24 h (Zabbix trends)" : "last hour";
     pane.setAttribute("data-graph-source", data.source || "prometheus");
@@ -1539,8 +1672,8 @@ function graphPane(pane) {
   const load = () => {
     fetch("/api/v1/assets/" + encodeURIComponent(asset) + "/metrics", { headers: { Accept: "application/json" } })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data) => (data ? paint(data) : showEmpty("No samples yet.")))
-      .catch(() => showEmpty("No samples yet."));
+      .then((data) => (data ? paint(data) : showEmpty("Not scraped.")))
+      .catch(() => showEmpty("Not scraped."));
   };
   load();
   window.setInterval(load, 30000);
