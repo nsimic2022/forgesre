@@ -625,24 +625,12 @@ def dashboard(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     page: str = "1",
-    journal_page: str = "1",
 ):
     asset_rows = asset_tiles(db.query(Asset).all())
     incident_rows = dashboard_incident_tiles(db)
     size = per_page(request)
     recent, total = list_history(db, days=None, open_only=False, limit=size, page=page)
     pager = pager_state(page, total=total, size=size)
-    journal_recent: list = []
-    journal_pager = None
-    if can(user, "read_play"):
-        journal_pager = pager_state(
-            journal_page,
-            total=count_entries(db),
-            size=per_page(request, "journal_page"),
-            param="journal_page",
-            fragment="#journal",
-        )
-        journal_recent = list_entries(db, limit=journal_pager["size"], offset=journal_pager["offset"])
     stack = enrich_components(doctor_payload().get("components") or {}, request.headers.get("host") or "localhost")
     return render(
         request,
@@ -655,8 +643,6 @@ def dashboard(
         resource_warn=RESOURCE_WARN_PERCENT,
         resource_crit=RESOURCE_CRIT_PERCENT,
         recent=recent,
-        journal_recent=journal_recent,
-        journal_pager=journal_pager,
         pager=pager,
     )
 

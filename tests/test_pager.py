@@ -170,11 +170,9 @@ def test_dashboard_recent_incidents_pages_ten():
     ids_two = _tbody_incidents(two.text.split("Recent incidents", 1)[1])
     assert 1 <= len(ids_two) <= 10
     assert set(ids_one).isdisjoint(ids_two)
-    assert home.text.index("Recent incidents") < home.text.index("Recent journal reports")
-    preview = home.text.split("Recent journal reports", 1)[1]
-    if 'class="pager"' in preview:
-        assert "journal_page=" in preview
-        assert "?page=" not in preview.split('class="pager"', 1)[1].split("</nav>", 1)[0]
+    assert "<h2>Recent incidents</h2>" in home.text
+    assert "Recent journal" not in home.text
+    assert "journal_page=" not in home.text
     twenty = client.get("/?per_page=20")
     assert len(_tbody_incidents(twenty.text.split("Recent incidents", 1)[1])) == 20
     db.close()

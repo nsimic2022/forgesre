@@ -137,7 +137,6 @@ def test_every_paginated_page_has_a_list_box_with_pickable_rows():
     db.close()
     client = _client()
     pages = {
-        "/": (1, True),
         "/journal": (1, True),
         "/discovery": (1, True),
         "/playrules": (1, True),
@@ -158,8 +157,11 @@ def test_every_paginated_page_has_a_list_box_with_pickable_rows():
     admin = _boxes(client.get("/admin").text)[0]
     assert re.search(r'<a href="/admin\?selected=\d+[^"]*" data-list-open>', admin)
     dash = client.get("/").text
-    journal = dash[dash.index('<section id="journal">') :]
-    assert _boxes(journal) and "data-dash-list" not in journal
+    assert "<h2>Recent incidents</h2>" in dash
+    assert "Recent journal" not in dash
+    assert '<section id="journal">' not in dash
+    assert "data-dash-list" in dash
+    assert _boxes(dash) == []
 
 
 def test_card_lists_select_cards_inside_a_box():
@@ -185,7 +187,7 @@ def test_every_template_with_a_pager_wraps_its_list():
         assert "data-list-scroll" in text, tpl.name
         assert "data-list-row" in text, tpl.name
     dash = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
-    assert dash.count("data-list-scroll") == 1 and "data-dash-list" in dash
+    assert "data-list-scroll" not in dash and "data-dash-list" in dash
 
 
 def test_css_box_scrolls_with_sticky_header_and_selection_style():

@@ -255,8 +255,13 @@ def test_asset_discovery_playrule_and_journal_bulk_are_role_safe():
     assert db.get(JournalEntry, entry_id) is None
     assert _client(_user(db, "viewer")).post("/journal/bulk-delete", data={"selected": "1"}, follow_redirects=False).status_code == 403
     home = admin.get("/").text
-    assert 'action="/journal/export"' in home
-    assert 'action="/journal/bulk-delete"' in home.split('id="journal"', 1)[1]
+    assert "<h2>Recent incidents</h2>" in home
+    assert "Recent journal" not in home
+    assert 'action="/journal/export"' not in home
+    assert 'action="/journal/bulk-delete"' not in home
+    health = admin.get("/health-ui").text
+    assert 'action="/journal/export"' in health.split('id="journal"', 1)[1]
+    assert 'action="/journal/bulk-delete"' in health.split('id="journal"', 1)[1]
     db.close()
 
 

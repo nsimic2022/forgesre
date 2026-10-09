@@ -1,4 +1,4 @@
-"""V0.8: version string, appliance NET dash, Dashboard journal pager, asset NOC extras, Client playrules,
+"""V0.8: version string, appliance NET dash, asset NOC extras, Client playrules,
 support coverage."""
 
 from __future__ import annotations
@@ -24,9 +24,8 @@ from app.asset_extras import (
 )
 from app.db import Base, SessionLocal, engine
 from app.host_resources import network_status
-from app.journal import report
 from app.main import app
-from app.models import Asset, Incident, JournalEntry, Notification, Playrule
+from app.models import Asset, Incident, Notification, Playrule
 from app.notifications import build_escalation_body
 from app.seed import seed
 from app.services import ingest_alertmanager, match_playrule
@@ -64,7 +63,6 @@ def _cleanup():
         for asset in assets:
             db.delete(asset)
     db.query(Playrule).filter(Playrule.name.like("v08-%")).delete(synchronize_session=False)
-    db.query(JournalEntry).filter(JournalEntry.action == "v08-pager").delete(synchronize_session=False)
     db.commit()
     db.close()
 
@@ -219,48 +217,38 @@ def test_dashboard_has_net_dash_and_api_level():
     assert 'set("net", levels.net' in js
 
 
-# --- Dashboard journal pager ---------------------------------------------------
+# --- Dashboard has incidents, not a journal preview ---------------------------
 
 
-def _journal_section(html: str) -> str:
-    return html.split('id="journal"', 1)[1].split("</section>", 1)[0]
-
-
-def test_dashboard_journal_has_list_chrome_and_pages():
-    db = _db()
-    token = uuid4().hex[:8]
-    for i in range(25):
-        report(db, "jobs", "v08-pager", "ok", summary=f"V08 journal {token} {i:02d}")
-    total = db.query(JournalEntry).count()
-    db.close()
+def test_dashboard_has_recent_incidents_without_journal_block():
+    _db().close()
     client = _client()
     home = client.get("/")
-    section = _journal_section(home.text)
-    assert "data-select-page" in section
-    assert section.count('name="selected"') == 10
-    assert f"Showing 1–10 of {total}" in section
-    assert 'name="journal_per_page"' in section
-    for n in (10, 20, 50, 100):
-        assert f'<option value="{n}"' in section
-    assert "journal_page=2" in section
-    assert ">Open full journal</a>" in section
-    assert section.index("pager-bar") < section.index("Open full journal")
-
-    twenty = _journal_section(client.get("/?journal_per_page=20").text)
-    assert twenty.count('name="selected"') == 20
-    assert f"Showing 1–20 of {total}" in twenty
-
-    clamped = _journal_section(client.get("/?journal_per_page=7").text)
-    assert clamped.count('name="selected"') == 10
-    huge = _journal_section(client.get("/?journal_per_page=9999").text)
-    assert huge.count('name="selected"') == min(100, total)
-    junk = _journal_section(client.get("/?journal_per_page=abc&journal_page=zzz").text)
-    assert junk.count('name="selected"') == 10
-
-    page_two = _journal_section(client.get("/?journal_page=2").text)
-    first_ids = set(re.findall(r'name="selected" value="(\d+)"', section))
-    second_ids = set(re.findall(r'name="selected" value="(\d+)"', page_two))
-    assert first_ids and second_ids and first_ids.isdisjoint(second_ids)
+    assert home.status_code == 200
+    html = home.text
+    assert "<h2>Recent incidents</h2>" in html
+    assert "Recent journal" not in html
+    assert 'id="journal"' not in html
+    assert "journal_page=" not in html
+    assert 'name="journal_per_page"' not in html
+    assert 'action="/journal/export"' not in html
+    assert 'action="/journal/bulk-delete"' not in html
+    assert "Open full journal" not in html
+    # Old journal query keys are ignored. The shared pager may keep them as
+    # hidden fields; they do not bring the journal list back.
+    stale = client.get("/?journal_page=2&journal_per_page=20")
+    assert stale.status_code == 200
+    assert "<h2>Recent incidents</h2>" in stale.text
+    assert "Recent journal" not in stale.text
+    assert 'id="journal"' not in stale.text
+    assert "<th>Module</th>" not in stale.text
+    assert 'action="/journal/export"' not in stale.text
+    assert 'action="/journal/bulk-delete"' not in stale.text
+    health = client.get("/health-ui").text
+    section = health.split('id="journal"', 1)[1]
+    assert "<h2>Journal" in section
+    assert 'action="/journal/export"' in section
+    assert 'action="/journal/bulk-delete"' in section
 
 
 
