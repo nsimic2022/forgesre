@@ -429,6 +429,7 @@ First-hour demo (nothing here is a real server):
 6. Console (/journal) lists ok/error reports per module (install, seed, inventory, snmp, demo, …).
 7. Network devices: Assets → type Network device + IP. Then ./forgesre snmp (UDP/161 via bundled snmp_exporter).
 EOF
+  chmod 600 "$ROOT/installation-report.md"
 }
 
 start_stack() {

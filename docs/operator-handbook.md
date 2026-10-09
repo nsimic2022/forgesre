@@ -481,7 +481,7 @@ Prometheus rule fires
 
 Incident is tied to an asset when `labels.asset` or `labels.instance` equals `asset_id` or hostname. Demo alerts use `asset: forge-demo-01`. An alert with neither label is **not** attached to the demo host; it opens with no asset (fingerprint `alertname:unlabeled`).
 
-Statuses: `OPEN` → `INVESTIGATING` (Acknowledge) → `RESOLVED` → `CLOSED`. Automatic ForgeRCA does not change the status and is not an ack — only the Acknowledge click sets the ack time. Unacked time past a later policy step moves `OPEN` / `INVESTIGATING` to `ESCALATED`; Acknowledge on `ESCALATED` keeps it `ESCALATED`. The Incidents filter **Not acknowledged** (`/incidents?status=unacked`) lists active incidents with no ack. Dashboard tiles do not show an Open or Escalated cube.
+Statuses: `OPEN` → `INVESTIGATING` (Acknowledge) → `RESOLVED` → `CLOSED`. Automatic ForgeRCA does not change the status and is not an ack — only the Acknowledge click sets the ack time. Unacked time past a later policy step moves `OPEN` / `INVESTIGATING` to `ESCALATED`; Acknowledge on `ESCALATED` keeps it `ESCALATED`. The Incidents filter **Not acknowledged** (`/incidents?status=unacked`) lists active incidents with no ack. Dashboard tiles show an **Escalated** cube and do not show an Open cube.
 
 Alertmanager sends the whole `[alertname, asset]` group in each webhook, so one incident can stand for several series (for example `NetworkInterfaceDown` on two ports of one switch, or `NodeFilesystemUsageHigh` on two mountpoints). The incident stays active while any series in that group still fires and becomes `RESOLVED` only when all of them are resolved. One port recovering does not resolve it and does not open a RE-FIRED incident.
 

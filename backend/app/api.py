@@ -20,6 +20,7 @@ from app.db import get_db
 from app.metrics import reset_demo_gauges, set_demo_cpu, set_demo_disk
 from app.models import Asset, DiscoveryCandidate, EscalationPolicy, Evidence, Incident, Investigation, Playbook, Playrule, User
 from app.history import (
+    acknowledge,
     add_note,
     apply_status_fields,
     audit_as_dict,
@@ -581,11 +582,22 @@ def set_status(
         raise HTTPException(status_code=400, detail="invalid status")
     from app.services import refresh_asset_status
 
-    item.status = status
-    apply_status_fields(item, status, user.email)
+    # Same as the incident page: INVESTIGATING is Acknowledge (OPEN → INVESTIGATING,
+    # anything else stays, including ESCALATED). Never demote ESCALATED to OPEN.
+    current = (item.status or "").upper()
+    if status == "INVESTIGATING":
+        acknowledge(item, user.email)
+    elif status == "OPEN" and current == "ESCALATED":
+        pass
+    else:
+        item.status = status
+        apply_status_fields(item, status, user.email)
     db.flush()
     refresh_asset_status(db, item.asset)
-    audit(db, "incident.status", actor=user.email, object_type="incident", object_id=number, data={"status": status})
+    data = {"status": (item.status or "").upper()}
+    if status == "INVESTIGATING":
+        data["ack"] = True
+    audit(db, "incident.status", actor=user.email, object_type="incident", object_id=number, data=data)
     db.commit()
     return _incident(item, include_evidence=True)
 
@@ -1163,6 +1175,7 @@ def system_status(db: Session = Depends(get_db), user: User = Depends(require("r
             "open": int(incident_counts.get("OPEN") or 0),
             "critical": int(critical_open),
             "investigating": int(incident_counts.get("INVESTIGATING") or 0),
+            "escalated": int(incident_counts.get("ESCALATED") or 0),
             "resolved": int(incident_counts.get("RESOLVED") or 0),
         },
         "monitoring": doctor_payload()["components"],
