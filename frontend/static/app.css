@@ -1790,15 +1790,115 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .dash-graph-caption { margin: 0 0 0.35rem; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .dash-graph-empty { margin: 0 0 0.5rem; font-size: 0.85rem; }
 .dash-graph-list { display: grid; gap: 0.55rem; }
-.dash-graph { border-top: 1px solid var(--line); padding-top: 0.45rem; }
+.dash-graph { border-top: 1px solid var(--line); padding-top: 0.45rem; min-width: 0; }
 .dash-graph-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 0.9rem; }
 .dash-graph-none { margin: 0.2rem 0 0; font-size: 0.8rem; }
-.dash-chart { display: block; width: 100%; height: 3rem; margin-top: 0.2rem; background: var(--bg); border-radius: 6px; overflow: hidden; }
-.dash-chart-line { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke: var(--warn); }
+/* Dark performance plot (axes, light grid, hover). Page theme stays on the labels. */
+.dash-chart-frame {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "y plot" ". x";
+  column-gap: 0.28rem;
+  row-gap: 0.12rem;
+  margin-top: 0.28rem;
+  min-width: 0;
+}
+.dash-chart-y {
+  grid-area: y;
+  display: flex;
+  align-items: stretch;
+  gap: 0.15rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.dash-chart-unit { align-self: center; font-weight: 700; color: var(--text); }
+.dash-chart-yticks {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  box-sizing: border-box;
+  height: 6.75rem;
+  min-width: 1.7rem;
+  padding: 0.28rem 0;
+}
+.dash-chart-plot {
+  grid-area: plot;
+  position: relative;
+  background: #12151c;
+  border: 1px solid #2e3a52;
+  border-radius: 6px;
+  min-width: 0;
+}
+.dash-chart {
+  display: block;
+  width: 100%;
+  height: 6.75rem;
+  margin: 0;
+  background: transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: crosshair;
+}
+.dash-chart-x {
+  grid-area: x;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.2rem;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.dash-chart-xtick { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.dash-chart-xtick:first-child { align-items: flex-start; }
+.dash-chart-xtick:last-child { align-items: flex-end; }
+.dash-chart-xtick b { font-weight: 600; color: var(--text); }
+.dash-chart-xtick i { font-style: normal; font-size: 0.62rem; }
+.dash-chart-grid { stroke: rgba(232, 237, 247, 0.16); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.dash-chart-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; stroke: var(--warn); }
 .dash-chart-line.ok { stroke: var(--ok); }
 .dash-chart-line.crit { stroke: var(--crit); }
-.dash-chart-threshold { stroke: var(--crit); stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.55; vector-effect: non-scaling-stroke; }
+.dash-chart-threshold { stroke: var(--crit); stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.7; vector-effect: non-scaling-stroke; }
 .dash-chart-marker { stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.dash-chart-dot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 0 2px #12151c;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.dash-graph[data-tone="ok"] .dash-chart-dot { background: var(--ok); }
+.dash-graph[data-tone="crit"] .dash-chart-dot { background: var(--crit); }
+.dash-chart-dot[hidden] { display: none; }
+.dash-chart-tip {
+  position: absolute;
+  z-index: 4;
+  min-width: 8.5rem;
+  max-width: 14rem;
+  padding: 0.32rem 0.48rem 0.38rem;
+  background: #1b2030;
+  color: #e8edf7;
+  border: 1px solid #3a4660;
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  pointer-events: none;
+}
+.dash-chart-tip[data-side="right"] { transform: translate(10px, -115%); }
+.dash-chart-tip[data-side="left"] { transform: translate(calc(-100% - 10px), -115%); }
+.dash-chart-tip[hidden] { display: none; }
+.dash-chart-tip-host { display: block; font-size: 0.8rem; }
+.dash-chart-tip-time,
+.dash-chart-tip-value { display: block; }
+.dash-chart-tip-time { color: #93a0b8; }
 .asset-detail-metrics .dash-graph-caption,
 .asset-detail-metrics .dash-graph-empty { margin-top: 0.65rem; }
 .asset-detail-metrics .dash-graph-list { margin-top: 0.35rem; }

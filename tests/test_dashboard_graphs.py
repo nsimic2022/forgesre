@@ -168,7 +168,7 @@ const ROWS = JSON.parse(process.argv[2]);
 const PANEL = JSON.parse(process.argv[3]);
 function el(tag) {
   const e = {
-    tagName: tag, attrs: {}, children: [], hidden: false, textContent: "", listeners: {}, classes: new Set(),
+    tagName: tag, attrs: {}, children: [], hidden: false, textContent: "", listeners: {}, classes: new Set(), style: {},
     getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; },
     setAttribute(k, v) { this.attrs[k] = String(v); },
     removeAttribute(k) { delete this.attrs[k]; },
@@ -178,9 +178,31 @@ function el(tag) {
     replaceChildren(...c) { this.children = c; },
     addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); },
     closest(sel) { return sel.startsWith("tr") && this.attrs["data-dash-incident"] != null ? this : null; },
+    getBoundingClientRect() { return { left: 0, top: 0, width: 200, height: 48, right: 200, bottom: 48 }; },
   };
   e.classList = { toggle(c, on) { on ? e.classes.add(c) : e.classes.delete(c); }, add(c) { e.classes.add(c); } };
   return e;
+}
+function walk(node, fn) {
+  if (!node) return;
+  fn(node);
+  (node.children || []).forEach((child) => walk(child, fn));
+}
+function clsOf(node) {
+  return node && node.attrs && node.attrs.class ? String(node.attrs.class) : "";
+}
+function findSvg(box) {
+  let svg = null;
+  walk(box, (node) => { if (!svg && node.tagName === "svg") svg = node; });
+  return svg;
+}
+function findClass(box, name) {
+  let found = null;
+  walk(box, (node) => {
+    const cls = clsOf(node);
+    if (!found && cls.split(" ").indexOf(name) >= 0) found = node;
+  });
+  return found;
 }
 const parts = {
   "[data-dash-graph-subject]": el("p"), "[data-dash-graph-empty]": el("p"),
@@ -214,17 +236,51 @@ const snap = () => ({
   empty: parts["[data-dash-graph-empty]"].textContent,
   charts: parts["[data-dash-graph-list]"].children.length,
   points: parts["[data-dash-graph-list]"].children.map((box) => {
-    const svg = (box.children || []).find((child) => child.tagName === "svg");
+    const svg = findSvg(box);
     if (!svg) return "";
     const poly = (svg.children || []).find((child) => child.attrs && child.attrs.points);
     return poly ? poly.attrs.points : "";
   }),
   markerX: parts["[data-dash-graph-list]"].children.map((box) => {
-    const svg = (box.children || []).find((child) => child.tagName === "svg");
+    const svg = findSvg(box);
     if (!svg) return null;
     const line = (svg.children || []).find((child) => child.attrs && String(child.attrs.class || "").indexOf("dash-chart-marker") >= 0);
     return line ? Number(line.attrs.x1) : null;
   }),
+  axes: parts["[data-dash-graph-list]"].children.map((box) => {
+    const svg = findSvg(box);
+    const yTicks = findClass(box, "dash-chart-yticks");
+    const xAxis = findClass(box, "dash-chart-x");
+    const unit = findClass(box, "dash-chart-unit");
+    const tip = findClass(box, "dash-chart-tip");
+    let grids = 0;
+    if (svg) (svg.children || []).forEach((child) => { if (clsOf(child).indexOf("dash-chart-grid") >= 0) grids += 1; });
+    return {
+      scale: svg ? svg.attrs["data-scale"] : null,
+      ymin: svg && svg.attrs["data-ymin"] != null ? Number(svg.attrs["data-ymin"]) : null,
+      ymax: svg && svg.attrs["data-ymax"] != null ? Number(svg.attrs["data-ymax"]) : null,
+      y: yTicks ? (yTicks.children || []).map((child) => child.textContent) : [],
+      x: xAxis ? (xAxis.children || []).map((child) => (child.children || []).map((part) => part.textContent).join(" ")) : [],
+      unit: unit ? unit.textContent : "",
+      grids: grids,
+      tip: !!tip,
+    };
+  }),
+  hoverTip: (() => {
+    const box = parts["[data-dash-graph-list]"].children[0];
+    if (!box) return null;
+    const svg = findSvg(box);
+    const fns = svg && svg.listeners && svg.listeners.mousemove;
+    if (!fns || !fns.length) return null;
+    fns[0]({ clientX: 0, clientY: 0 });
+    const tip = findClass(box, "dash-chart-tip");
+    if (!tip) return null;
+    const field = (name) => {
+      const node = findClass(tip, name);
+      return node ? node.textContent : "";
+    };
+    return { hidden: tip.hidden, host: field("dash-chart-tip-host"), time: field("dash-chart-tip-time"), value: field("dash-chart-tip-value") };
+  })(),
   caption: parts["[data-dash-graph-caption]"].textContent,
   navigated: navigated.slice(),
 });
@@ -245,6 +301,10 @@ def _run_js(rows: list[dict], panel: dict) -> dict:
         pytest.skip("node not installed")
     src = JS.read_text(encoding="utf-8")
     picker = "function listPicker(" + src.split("\nfunction listPicker(", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+    helpers = src.split("\nfunction chartExtent(", 1)[1].split("\nfunction graphPane(", 1)[0]
+    picker += "function chartExtent(" + helpers
+    if not picker.endswith("\n"):
+        picker += "\n"
     picker += "function graphPane(" + src.split("\nfunction graphPane(", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
     block = picker + "(function bindDashGraphs() {" + src.split("(function bindDashGraphs() {", 1)[1].split("\n})();", 1)[0] + "\n})();"
     proc = subprocess.run(

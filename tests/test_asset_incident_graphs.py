@@ -163,6 +163,7 @@ def test_asset_detail_graphs_use_the_host_metrics_api(monkeypatch):
     db = _db()
     asset = _linux(db)
     asset_id = asset.asset_id
+    host = asset.hostname
     db.close()
 
     def fake_query(expr: str, timeout: float = 5.0) -> dict:
@@ -190,6 +191,7 @@ def test_asset_detail_graphs_use_the_host_metrics_api(monkeypatch):
     text = page.text
     card = text.split("data-asset-metrics", 1)[1].split("</aside>", 1)[0]
     assert f'data-asset="{asset_id}"' in card
+    assert f'data-host="{host}"' in card
     assert "data-asset-graphs" in card
     assert "data-dash-graph-list" in card
     assert "data-dash-graph-empty" in card
@@ -200,6 +202,7 @@ def test_asset_detail_graphs_use_the_host_metrics_api(monkeypatch):
     assert api.status_code == 200
     body = api.json()
     assert body["asset_id"] == asset_id
+    assert body["hostname"] == host
     cpu = next(tile for tile in body["tiles"] if tile["key"] == "cpu_percent")
     assert cpu["series"] == [10.0, 22.0, 18.0]
     assert body["window"]["marker"] is None
