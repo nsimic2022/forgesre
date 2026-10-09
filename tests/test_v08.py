@@ -118,8 +118,8 @@ def test_version_is_0_8_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v0.8</span>" in base
     assert "v0.7" not in base
-    assert "app.css?v=v08-24" in base
-    assert "app.js?v=v08-24" in base
+    assert "app.css?v=v08-25" in base
+    assert "app.js?v=v08-25" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.8.0" in text
@@ -289,10 +289,12 @@ def test_asset_form_is_three_columns_with_dropdown_playrules():
     page = _client().get("/assets")
     assert page.status_code == 200
     text = page.text
+    left_half = text.index("asset-form-half-left")
+    right_half = text.index("asset-form-half-right")
     left = text.index("asset-form-left")
     middle = text.index("asset-form-middle")
     right = text.index("asset-form-right")
-    assert left < middle < right
+    assert left_half < left < middle < right_half < right
     for name in (
         "extra_customer", "extra_site", "extra_backup_name", "extra_backup_phone", "extra_backup_email",
         "extra_support_hours", "extra_timezone", "extra_contract", "extra_runbook_note",
@@ -338,8 +340,13 @@ def test_asset_form_is_three_columns_with_dropdown_playrules():
         assert label in ladder_html
 
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    block = css.split("/* Add / Edit asset: five columns", 1)[1].split(".asset-form-block {", 1)[0]
-    assert "grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.05fr);" in block
+    block = css.split("/* Add / Edit asset:", 1)[1].split(".asset-form-block {", 1)[0]
+    split_rule = block.split(".asset-form-split {", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);" in split_rule
+    assert "max-width: none;" in split_rule
+    assert "118rem" not in block
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);" in block.split(".asset-form-half-left", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in block.split(".asset-form-half-right", 1)[1].split("}", 1)[0]
     rules = block.split(".asset-form-middle,", 1)[1].split("}", 1)[0]
     assert "border-left: 1px solid var(--line);" in rules
     assert ".asset-form-ladder" in rules

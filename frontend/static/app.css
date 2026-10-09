@@ -599,15 +599,26 @@ button.danger { background: var(--crit); color: var(--btn-danger-text); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; max-width: 720px; }
 .form-grid label, .form-grid .wide { display: flex; flex-direction: column; gap: 0.25rem; }
 .form-grid .wide { grid-column: 1 / -1; }
-/* Add / Edit asset: five columns — Identity, Comms / monitoring, Standard alarms, Custom alarms, Ladder. */
+/* Add / Edit asset: two halves that fill the page (v08-25).
+   Left 50%: Identity beside Comms / monitoring.
+   Right 50%: Standard alarms, Custom alarms, Ladder — three equal columns, no void after Ladder. */
 .asset-form-split {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.05fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1.15rem;
-  max-width: 118rem;
+  width: 100%;
+  max-width: none;
   align-items: start;
 }
 .asset-form-split > .wide { grid-column: 1 / -1; }
+.asset-form-half {
+  display: grid;
+  gap: 1.15rem;
+  min-width: 0;
+  align-items: start;
+}
+.asset-form-half-left { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.asset-form-half-right { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .asset-form-col { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
 .asset-form-middle,
 .asset-form-right,
@@ -667,14 +678,8 @@ button.playrule-remove {
 button.playrule-remove:hover { color: var(--crit); border-color: var(--crit); }
 .playrule-empty { margin: 0.45rem 0 0; }
 @media (max-width: 1100px) {
-  .asset-form-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .asset-form-left { grid-column: 1 / -1; }
-  .asset-form-middle,
-  .asset-form-right,
-  .asset-form-custom,
-  .asset-form-ladder {
-    border-left: 0;
-    padding-left: 0;
+  .asset-form-split { grid-template-columns: minmax(0, 1fr); }
+  .asset-form-half-right {
     border-top: 1px solid var(--line);
     padding-top: 1rem;
   }
@@ -1348,7 +1353,9 @@ td.ops-report-actions .row-actions a.button {
   }
   .ops-report-cols { flex-direction: column; }
   .asset-detail-split { grid-template-columns: 1fr; }
-  .asset-form-split { grid-template-columns: 1fr; }
+  .asset-form-split,
+  .asset-form-half-left,
+  .asset-form-half-right { grid-template-columns: minmax(0, 1fr); }
   .asset-form-middle,
   .asset-form-right,
   .asset-form-custom,
