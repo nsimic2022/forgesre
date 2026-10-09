@@ -42,7 +42,8 @@ def _ip() -> str:
 
 
 def _rule(db, name: str, alertname: str) -> Playrule:
-    rule = Playrule(name=name, enabled=True, severity="warning", condition={"alertname": alertname})
+    # Sort after the seeded rules so /playrules page 1 still shows high-cpu.
+    rule = Playrule(name=f"zzz-{name}", enabled=True, severity="warning", condition={"alertname": alertname})
     db.add(rule)
     db.commit()
     db.refresh(rule)
