@@ -187,13 +187,13 @@
 
 <section class="asset-detail-playrules card client-playrules" id="client-playrules" data-client-playrules data-asset-playrules="{{ asset.asset_id }}">
   <div class="metric-panel-head">
-    <h2>Custom alarms {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = Rules. Disabled rules are skipped. Mail follows the asset Ladder when a level is filled.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+    <h2>Custom alarms {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first ON rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = Rules. OFF skips that rule on this host only — it stays in the list, and Save keeps it off. ON is the behavior above. Disabled rules on Rules are skipped. Mail follows the asset Ladder when a level is filled.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   </div>
   <p class="muted">Does not create Prometheus thresholds — only which rule / Playbook this asset prefers when that alertname arrives.</p>
   {% if can('write_assets') %}
   <form method="post" action="/assets/{{ asset.asset_id }}/playrules" class="playrule-detail-form">
     <input type="hidden" name="playrules_present" value="1">
-    {% with picked=picked_playrules %}{% include "_playrule_picker.html" %}{% endwith %}
+    {% with picked=picked_playrules, off_ids=playrule_off %}{% include "_playrule_picker.html" %}{% endwith %}
     <div class="row-actions playrule-detail-actions">
       <button type="submit">Save</button>
       <span class="muted" data-playrule-unsaved hidden>Unsaved changes</span>
@@ -204,7 +204,9 @@
   {% for pk in picked_playrules %}{% for rule in playrule_choices if rule.id == pk %}{% set _ = shown.append(rule) %}{% endfor %}{% endfor %}
   <ol class="playrule-list">
     {% for rule in shown %}
+    {% set rule_on = rule.id not in (playrule_off or []) %}
     <li class="playrule-chip" data-playrule-id="{{ rule.id }}">
+      <span class="onoff {{ 'is-on' if rule_on else 'is-off' }}">{% if rule_on %}ON{% else %}OFF{% endif %}</span>
       <span class="playrule-chip-text">{{ rule.name }} <span class="muted">· {{ rule.alertname or "no alertname" }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}{% if not rule.enabled %} · disabled{% endif %}</span></span>
     </li>
     {% endfor %}

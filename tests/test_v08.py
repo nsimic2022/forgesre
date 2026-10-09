@@ -118,8 +118,8 @@ def test_version_is_0_8_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v0.8</span>" in base
     assert "v0.7" not in base
-    assert "app.css?v=v08-26" in base
-    assert "app.js?v=v08-26" in base
+    assert "app.css?v=v08-27" in base
+    assert "app.js?v=v08-27" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.8.0" in text
@@ -345,8 +345,8 @@ def test_asset_form_is_three_columns_with_dropdown_playrules():
     assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);" in split_rule
     assert "max-width: none;" in split_rule
     assert "118rem" not in block
-    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);" in block.split(".asset-form-half-left", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in block.split(".asset-form-half-right", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);" in block.split(".asset-form-half-left", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.65fr);" in block.split(".asset-form-half-right", 1)[1].split("}", 1)[0]
     rules = block.split(".asset-form-middle,", 1)[1].split("}", 1)[0]
     assert "border-left: 1px solid var(--line);" in rules
     assert ".asset-form-ladder" in rules

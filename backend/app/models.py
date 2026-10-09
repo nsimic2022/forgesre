@@ -66,6 +66,10 @@ class Asset(Base):
         cascade="all, delete-orphan",
         order_by="AssetLadderStep.level",
     )
+    playrule_mutes: Mapped[list["AssetPlayruleMute"]] = relationship(
+        back_populates="asset",
+        cascade="all, delete-orphan",
+    )
 
 
 class AssetLadderStep(Base):
@@ -82,6 +86,24 @@ class AssetLadderStep(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     asset: Mapped[Asset] = relationship(back_populates="ladder_steps")
+
+
+class AssetPlayruleMute(Base):
+    """Custom alarm OFF for one asset and one playrule.
+
+    A row means this host skips that playrule on ingest. No row means ON
+    (the asset's custom alarms are tried first, as before). The id stays in
+    assets.playrule_ids so the operator can turn it back ON.
+    """
+
+    __tablename__ = "asset_playrule_mutes"
+    __table_args__ = (UniqueConstraint("asset_id", "playrule_id", name="uq_asset_playrule_mute"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    playrule_id: Mapped[int] = mapped_column(Integer, index=True)
+
+    asset: Mapped[Asset] = relationship(back_populates="playrule_mutes")
 
 
 class AssetNumberSeq(Base):

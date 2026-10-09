@@ -312,3 +312,34 @@ def migrate(engine: Engine) -> None:
                 "ON asset_ladder_steps (asset_id)"
             )
         )
+        if "asset_playrule_mutes" not in set(inspect(conn).get_table_names()):
+            if engine.dialect.name == "sqlite":
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS asset_playrule_mutes ("
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                        "asset_id INTEGER NOT NULL, "
+                        "playrule_id INTEGER NOT NULL)"
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS asset_playrule_mutes ("
+                        "id SERIAL PRIMARY KEY, "
+                        "asset_id INTEGER REFERENCES assets(id), "
+                        "playrule_id INTEGER NOT NULL)"
+                    )
+                )
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_asset_playrule_mute "
+                "ON asset_playrule_mutes (asset_id, playrule_id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_asset_playrule_mutes_asset_id "
+                "ON asset_playrule_mutes (asset_id)"
+            )
+        )
