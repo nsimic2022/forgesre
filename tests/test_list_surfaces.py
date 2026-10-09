@@ -109,7 +109,8 @@ def test_incidents_keeps_ack_resolved_by_and_drops_reported_to():
     assert "inc-cell" in page.text
     assert 'class="stamp"' in page.text
     html = (ROOT / "frontend" / "templates" / "incidents.html").read_text(encoding="utf-8")
-    assert "ack-dot" in html
+    tail = (ROOT / "frontend" / "templates" / "_incident_scan_tail.html").read_text(encoding="utf-8")
+    assert "ack-dot" in tail and "_incident_scan_tail.html" in html
     assert "Reported to" not in html
     assert "history.html" not in html
     nav = page.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]

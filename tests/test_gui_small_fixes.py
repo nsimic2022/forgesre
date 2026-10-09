@@ -49,12 +49,15 @@ def test_dashboard_tiles_are_shortcuts_without_journal_banner():
     home = client.get("/")
     assert home.status_code == 200
     assert 'href="/assets"' in home.text
-    assert 'href="/assets?status=healthy"' in home.text
-    assert 'href="/incidents"' in home.text
+    assert 'href="/assets?flag=in-problem"' in home.text
+    assert 'href="/assets?flag=unreachable"' in home.text
+    assert 'href="/assets?status=healthy"' not in home.text
+    assert 'href="/incidents?status=active&amp;severity=critical"' in home.text
+    assert 'href="/incidents?status=active&amp;severity=warning"' in home.text
     assert 'class="stat' in home.text
     assert "<a class=\"stat" in home.text or "<a class='stat" in home.text
-    assert "Asset inventory counts" in home.text
-    assert "Incident counts" in home.text
+    assert "Inventory counts" in home.text
+    assert "Alarm counts" in home.text
     dash = (ROOT / "frontend" / "templates" / "dashboard.html").read_text(encoding="utf-8")
     assert 'id="journal-error-banner"' not in dash
     assert "banner-short" not in dash
