@@ -118,8 +118,8 @@ def test_version_is_0_9_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v0.9</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-3" in base
-    assert "app.js?v=v09-3" in base
+    assert "app.css?v=v09-N" in base
+    assert "app.js?v=v09-N" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.9.0" in text
@@ -624,12 +624,12 @@ def test_support_shows_on_list_detail_incident_and_never_opens_an_incident():
     for state, asset_id in ids.items():
         detail = client.get(f"/assets/{asset_id}").text
         assert f'data-support-state="{state}">{labels[state]}</span>' in detail, state
-        panel = detail.split("data-asset-metrics", 1)[1]
+        support = detail.split('data-asset-section="support"', 1)[1].split('data-asset-section="monitoring"', 1)[0]
         if state in {"expiring", "expired"}:
-            assert "data-support-warning" in panel
-            assert "no alert or incident is opened" in panel
+            assert "data-support-warning" in support
+            assert "no alert or incident is opened" in support
         else:
-            assert "data-support-warning" not in panel
+            assert "data-support-warning" not in detail
 
     edit = client.get(f"/assets?edit={ids['expiring']}").text
     support = edit.split("data-asset-support", 1)[1].split("asset-form-middle", 1)[0]
@@ -678,7 +678,7 @@ def _dd(html: str, label: str) -> str:
 
 
 def _facts(html: str) -> str:
-    return _between(html, 'class="asset-detail-main"', 'class="asset-detail-side"')
+    return _between(html, 'class="asset-detail-main', 'class="asset-detail-side')
 
 
 def _viewer_client() -> TestClient:
@@ -776,13 +776,16 @@ def test_asset_detail_client_playrules_card_sits_under_machine_metrics():
     _post_asset(client, asset_id, f"10.213.1.{int(token[:2], 16) % 250 + 1}")
     text = client.get(f"/assets/{asset_id}").text
 
-    side = text.split('class="asset-detail-side"', 1)[1]
-    assert side.index("asset-detail-metrics card") < side.index("asset-detail-playrules card")
-    assert "Machine metrics" in side.split("asset-detail-playrules", 1)[0]
-    assert "Custom alarms" not in _facts(text)
+    facts = _facts(text)
+    assert "Custom alarms" in facts
+    assert facts.index('data-asset-section="similar"') < facts.index('data-asset-section="alarms"')
+    side = text.split('class="asset-detail-side', 1)[1].split("</aside>", 1)[0]
+    assert "data-asset-graph-grid" in side
+    assert "data-asset-playrules" not in side
+    assert "Custom alarms" not in side
 
     card = _between(text, "data-asset-playrules", "</section>")
-    assert '<div class="metric-panel-head">' in card and "<h2>Custom alarms" in card
+    assert "<h3" in card and "Custom alarms" in card
     assert "Does not create Prometheus thresholds" in card
     assert f'action="/assets/{asset_id}/playrules"' in card
     assert '<input type="hidden" name="playrules_present" value="1">' in card
@@ -799,7 +802,8 @@ def test_asset_detail_client_playrules_card_sits_under_machine_metrics():
     assert "<form" not in viewer and "playrule_add" not in viewer
 
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".asset-detail-side {" in css and ".asset-detail-playrules {" in css
+    assert ".asset-detail-side," in css and ".asset-detail-playrules {" in css
+    assert "minmax(0, 25%)" in css and "asset-detail-col-2-3" in css
 
 
 def test_asset_detail_playrules_post_adds_and_removes_without_touching_other_fields():

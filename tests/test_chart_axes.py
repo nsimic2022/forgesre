@@ -220,7 +220,7 @@ def test_empty_copy_and_no_chart_chrome():
     assert "dash-chart-tip-host" in js and "dash-chart-grid" in js and "dash-chart-marker" in js
     assert "#12151c" in css and ".dash-chart-grid" in css and ".dash-chart-tip" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-3" in base and "app.js?v=v09-3" in base
+    assert "app.css?v=v09-N" in base and "app.js?v=v09-N" in base
     for name in ("dashboard.html", "incident_detail.html", "asset_detail.html"):
         text = (ROOT / "frontend" / "templates" / name).read_text(encoding="utf-8")
         assert "Chart Options" not in text and "Real-time" not in text

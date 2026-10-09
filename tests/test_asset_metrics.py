@@ -137,6 +137,8 @@ def test_metric_class_linux_windows_network_demo_unknown():
     assert metric_class_for({"asset_id": "app-01", "type": "Linux Server"}) == "linux"
     assert metric_class_for({"asset_id": "win-01", "type": "Windows Server"}) == "windows"
     assert metric_class_for({"asset_id": "sw-01", "type": "Network Switch"}) == "network"
+    assert metric_class_for({"asset_id": "prn-01", "type": "Printer"}) == "network"
+    assert metric_class_for({"asset_id": "nas-01", "type": "QNAP/NAS"}) == "network"
     assert metric_class_for({"asset_id": "box-01", "type": "Auto (detect exporter)"}) == "unknown"
 
 
@@ -154,7 +156,7 @@ def test_linux_tiles_cpu_below_95_is_green():
         range_fn=_no_spark,
     )
     by_key = {tile["key"]: tile for tile in panel["tiles"]}
-    assert list(by_key) == ["up", "cpu_percent", "memory_percent", "disk_percent"]
+    assert list(by_key) == ["up", "cpu_percent", "memory_percent", "disk_percent", "network"]
     assert by_key["cpu_percent"]["threshold"] == 95
     assert by_key["cpu_percent"]["tone"] == "ok"
     assert by_key["cpu_percent"]["display"] == "90%"
@@ -305,16 +307,23 @@ def test_windows_memory_red_at_bundled_90():
     assert "windows_cs_physical_memory_bytes" in blob
 
 
-def test_network_tile_is_up_only():
+def test_network_tile_is_up_and_interfaces_not_linux_cpu():
     panel = asset_metric_panel(
         {"asset_id": "edge-sw-01", "type": "Network Switch", "monitoring_profile": "network-switch"},
         query_fn=_query({'up{': 0.0}),
         range_fn=_no_spark,
     )
-    assert [tile["key"] for tile in panel["tiles"]] == ["up"]
+    assert [tile["key"] for tile in panel["tiles"]] == ["up", "network"]
+    assert "cpu_percent" not in {tile["key"] for tile in panel["tiles"]}
     assert panel["tiles"][0]["tone"] == "crit"
     assert panel["tiles"][0]["display"] == "down"
-    assert "forgesre-snmp" in str(promql_queries_for({"asset_id": "edge-sw-01", "type": "Network Switch"}))
+    net = panel["tiles"][1]
+    assert net["value"] is None
+    assert net["lines"] == []
+    blob = str(promql_queries_for({"asset_id": "edge-sw-01", "type": "Network Switch"}))
+    assert "forgesre-snmp" in blob
+    assert "ifHCInOctets" in blob and "ifHCOutOctets" in blob
+    assert "node_cpu_seconds_total" not in blob
 
 
 def test_unknown_class_is_yellow_not_collecting():
@@ -518,36 +527,34 @@ def test_metrics_api_and_detail_html(monkeypatch):
     assert page.status_code == 200
     text = page.text
     assert "asset-detail-split" in text
-    assert "Machine metrics" in text
-    assert "Edit, clone, or remove" in text
+    assert "asset-detail-col-1-4" in text
+    assert "asset-detail-col-2-3" in text
+    assert "data-asset-graph-grid" in text
     assert "asset-detail-actions" in text
     main_at = text.find("asset-detail-main")
-    actions_at = text.find("asset-detail-actions")
+    actions_at = text.find("data-asset-actions")
     metrics_at = text.find("asset-detail-metrics")
     assert 0 <= main_at < actions_at < metrics_at
-    assert "CPU" in text
     assert "22%" in text
-    assert 'href="/assets?edit=app-lab-metrics#asset-form"' in text
-    assert "Edit Alarms" in text
-    assert text.count("metric-edit") == 1
+    assert 'href="/assets?edit=app-lab-metrics"' in text
+    actions = text.split("data-asset-actions", 1)[1].split("</div>", 1)[0]
+    for label in ("Edit", "Clone", "Verify", "Export", "Remove"):
+        assert f">{label}<" in actions
+    assert actions.count('class="danger"') == 1
+    assert "Detect OS" not in actions
 
     card = text.split("data-asset-metrics", 1)[1].split("</aside>", 1)[0]
-    rows = re.findall(r'<div class="metric-row" data-metric="([^"]+)" data-tone="([^"]+)" title="([^"]*)">(.*?)</div>', card, re.S)
-    assert [key for key, *_ in rows] == ["up", "cpu_percent", "memory_percent", "disk_percent"]
-    by_key = {key: (tone, title, body) for key, tone, title, body in rows}
-    tone, title, body = by_key["up"]
-    assert tone == "ok" and title == "Prometheus sees this target (up=1)."
-    assert '<span class="metric-name">Collecting</span>' in body
-    assert '<span class="metric-cube ok" role="img" aria-label="ok"></span>' in body
-    assert '<span class="metric-value ok">up</span>' in body
-    tone, title, body = by_key["cpu_percent"]
-    assert tone == "ok" and title.startswith("Alarm at ") and title.endswith("%")
-    assert '<span class="metric-cube ok"' in body and '<span class="metric-value ok">22%</span>' in body
-    assert by_key["memory_percent"][0] == "warn"
-    assert '<span class="metric-value warn">—</span>' in by_key["memory_percent"][2]
-    assert by_key["disk_percent"][0] == "crit"
-    assert '<span class="metric-cube crit"' in by_key["disk_percent"][2]
-    assert '<span class="metric-value crit">97%</span>' in by_key["disk_percent"][2]
+    for key in ("cpu_percent", "memory_percent", "disk_percent", "network", "up"):
+        assert f'data-chart-slot="{key}"' in card
+    cpu = card.split('data-graph="cpu_percent"', 1)[1].split("</section>", 1)[0]
+    mem = card.split('data-graph="memory_percent"', 1)[1].split("</section>", 1)[0]
+    disk = card.split('data-graph="disk_percent"', 1)[1].split("</section>", 1)[0]
+    up = card.split('data-graph="up"', 1)[1].split("</section>", 1)[0]
+    assert 'class="metric-value ok"' in cpu and "22%" in cpu
+    assert 'class="metric-value warn"' in mem and ">—</span>" in mem
+    assert 'class="metric-value crit"' in disk and "97%" in disk
+    assert 'class="metric-value ok"' in up and ">up</span>" in up
+    assert "Not scraped." in card
     for gone in ("metric-tile", "metric-bar", "metric-swatch", "collecting_line", "Prometheus sees this target (up=1).</p>"):
         assert gone not in card
     assert "<p" not in card
@@ -566,11 +573,15 @@ def test_asset_detail_compact_metric_row_css():
     assert ".metric-bar" not in css and ".metric-swatch" not in css
 
 
-def test_asset_detail_css_equal_columns():
+def test_asset_detail_css_quarter_column():
     from pathlib import Path
 
     css = Path("frontend/static/app.css").read_text()
-    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)" in css
+    rule = css.split(".asset-detail-split {", 1)[1].split("}", 1)[0]
+    assert "minmax(0, 25%)" in rule
+    assert "minmax(0, 1fr)" in rule
+    assert "asset-detail-col-1-4" in css and "asset-detail-col-2-3" in css
+    assert "repeat(5, minmax(0, 1fr))" in css
     assert "minmax(0, 1.35fr)" not in css
 
 
@@ -580,7 +591,8 @@ def test_demo_detail_page_has_demo_label_when_prom_down():
     page = client.get(f"/assets/{DEMO_ASSET}")
     assert page.status_code == 200
     assert "DEMO" in page.text
-    assert "Machine metrics" in page.text
+    assert "data-asset-graph-grid" in page.text
+    assert 'data-chart-slot="cpu_percent"' in page.text
     assert "asset-detail-metrics" in page.text
     win = client.get(f"/assets/{DEMO_WIN_ASSET}")
     assert win.status_code == 200
@@ -628,4 +640,4 @@ def test_viewer_can_read_metrics_api():
     assert api.status_code == 200
     page = client.get(f"/assets/{DEMO_ASSET}")
     assert page.status_code == 200
-    assert "Machine metrics" in page.text
+    assert "data-asset-graph-grid" in page.text

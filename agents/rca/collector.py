@@ -34,10 +34,14 @@ def _kind_flags(asset: dict[str, Any], alert: dict[str, Any] | None = None) -> t
     profile = str(asset.get("monitoring_profile") or "").lower()
     alertname = str((alert or {}).get("alertname") or "").lower()
     scrape = str(asset.get("scrape_address") or "").lower()
-    snmpish = any(
-        token in kind or token in profile or token in alertname
-        for token in ("network", "switch", "router", "firewall", "snmp")
-    ) or "network-switch" in profile
+    # Storage / QNAP / Printer are if_mib hosts. Those words on an alertname
+    # (StorageVolumeUsageHigh) must not turn a Linux host into an SNMP query.
+    family = f"{kind} {profile}"
+    snmpish = (
+        any(token in family for token in ("network", "switch", "router", "firewall", "storage", "qnap", "nas", "printer", "snmp"))
+        or any(token in alertname for token in ("network", "switch", "router", "firewall", "snmp"))
+        or "network-switch" in profile
+    )
     windowsish = "windows" in kind or "win32" in kind or "windows" in profile or scrape.endswith(":9182")
     return snmpish, windowsish
 
@@ -152,9 +156,25 @@ def promql_queries_for(
     if snmpish:
         return {
             "up": (_or_fill('up{job="forgesre-snmp",__SEL__}', selectors), ""),
+            "net_rx": (
+                _or_fill('sum(rate(ifHCInOctets{job="forgesre-snmp",__SEL__}[5m]))', selectors),
+                "bytes",
+            ),
+            "net_tx": (
+                _or_fill('sum(rate(ifHCOutOctets{job="forgesre-snmp",__SEL__}[5m]))', selectors),
+                "bytes",
+            ),
         }
     if windowsish:
         return {
+            "net_rx": (
+                _or_fill("sum(rate(windows_net_bytes_received_total{__SEL__}[5m]))", selectors),
+                "bytes",
+            ),
+            "net_tx": (
+                _or_fill("sum(rate(windows_net_bytes_sent_total{__SEL__}[5m]))", selectors),
+                "bytes",
+            ),
             "cpu_percent": (
                 _or_fill(
                     '100 - (avg(rate(windows_cpu_time_total{mode="idle",__SEL__}[5m])) * 100)',
@@ -181,6 +201,20 @@ def promql_queries_for(
             "up": (_or_fill("up{__SEL__}", selectors), ""),
         }
     return {
+        "net_rx": (
+            _or_fill(
+                'sum(rate(node_network_receive_bytes_total{device!~"lo|veth.*|docker.*|br-.*|cni.*|flannel.*|cali.*",__SEL__}[5m]))',
+                selectors,
+            ),
+            "bytes",
+        ),
+        "net_tx": (
+            _or_fill(
+                'sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*|docker.*|br-.*|cni.*|flannel.*|cali.*",__SEL__}[5m]))',
+                selectors,
+            ),
+            "bytes",
+        ),
         "cpu_percent": (
             _or_fill(
                 '100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle",__SEL__}[5m])))',
