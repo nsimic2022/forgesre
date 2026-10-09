@@ -234,13 +234,15 @@ def test_dashboard_has_recent_incidents_without_journal_block():
     assert 'action="/journal/export"' not in html
     assert 'action="/journal/bulk-delete"' not in html
     assert "Open full journal" not in html
-    # Old journal query keys are ignored; they do not bring the list back.
+    # Old journal query keys are ignored. The shared pager may keep them as
+    # hidden fields; they do not bring the journal list back.
     stale = client.get("/?journal_page=2&journal_per_page=20")
     assert stale.status_code == 200
     assert "<h2>Recent incidents</h2>" in stale.text
     assert "Recent journal" not in stale.text
     assert 'id="journal"' not in stale.text
-    assert 'name="journal_per_page"' not in stale.text
+    assert "<th>Module</th>" not in stale.text
+    assert 'action="/journal/export"' not in stale.text
     assert 'action="/journal/bulk-delete"' not in stale.text
     health = client.get("/health-ui").text
     section = health.split('id="journal"', 1)[1]
