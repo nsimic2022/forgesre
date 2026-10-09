@@ -223,7 +223,7 @@ def test_dashboard_has_net_dash_and_api_level():
 def test_dashboard_has_recent_incidents_without_journal_block():
     _db().close()
     client = _client()
-    home = client.get("/?journal_page=2&journal_per_page=20")
+    home = client.get("/")
     assert home.status_code == 200
     html = home.text
     assert "<h2>Recent incidents</h2>" in html
@@ -234,6 +234,14 @@ def test_dashboard_has_recent_incidents_without_journal_block():
     assert 'action="/journal/export"' not in html
     assert 'action="/journal/bulk-delete"' not in html
     assert "Open full journal" not in html
+    # Old journal query keys are ignored; they do not bring the list back.
+    stale = client.get("/?journal_page=2&journal_per_page=20")
+    assert stale.status_code == 200
+    assert "<h2>Recent incidents</h2>" in stale.text
+    assert "Recent journal" not in stale.text
+    assert 'id="journal"' not in stale.text
+    assert 'name="journal_per_page"' not in stale.text
+    assert 'action="/journal/bulk-delete"' not in stale.text
     health = client.get("/health-ui").text
     section = health.split('id="journal"', 1)[1]
     assert "<h2>Journal" in section
