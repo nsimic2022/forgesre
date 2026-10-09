@@ -2,7 +2,7 @@
 {% import "_select.html" as sel %}
 {% block title %}Incidents · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Incidents {% with %}{% set tip %}The incident list (default: all statuses, newest first — not a separate 90-day archive). Columns: Hostname, Name, severity, status, When, Ack, Resolved by. Left bar and #N color: red = critical, yellow = warning in progress, green = resolved or closed. Title color follows severity. When is the start date and time (08 Oct 2026, 21:57) — hover for how long it has been open or how long it lasted. Ack: green = acknowledged, yellow = in progress without ack, red = not acknowledged. RESOLVED means the alert cleared (or a person resolved it) — it is not Closed. If the same alert fires again after RESOLVED, a new incident opens. Closed rows stay in this list. Filter by status (including Not acknowledged), site, customer, time window, or search.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Incidents {% with %}{% set tip %}The incident list (default: all statuses, newest first — not a separate 90-day archive). Columns: Hostname, Name, severity, status, When, Acknowledged, Resolved by. Left bar and #N color: red = critical, yellow = warning in progress, green = resolved or closed. Title color follows severity. When is the start date and time (08 Oct 2026, 21:57) — hover for how long it has been open or how long it lasted. The Acknowledged dot is green when acknowledged, yellow when in progress without an ack, and red when not acknowledged. RESOLVED means the alert cleared (or a person resolved it) — it is not Closed. If the same alert fires again after RESOLVED, a new incident opens. Closed rows stay in this list. Filter by status (including Not acknowledged), severity (Critical or Warning), site, customer, time window, or search.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <form method="get" action="/incidents" class="list-filters incidents-filters">
   <label>Status
     <select name="status">
@@ -18,6 +18,7 @@
     <select name="severity">
       <option value="" {% if not severity_group %}selected{% endif %}>Any</option>
       <option value="critical" {% if severity_group == "critical" %}selected{% endif %}>Critical</option>
+      <option value="warning" {% if severity_group == "warning" %}selected{% endif %}>Warning</option>
     </select>
   </label>
   {% for key, label, current, values, all_label in [("site", "Site", site, filter_options.sites, "All sites"), ("customer", "Customer", customer, filter_options.customers, "All customers")] %}
@@ -60,7 +61,7 @@
       <th>Severity</th>
       <th>Status</th>
       <th>When</th>
-      <th class="col-ack"><span class="label-line">Ack {% with %}{% set tip %}Green = acknowledged. Yellow = in progress without ack. Red = not acknowledged.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th class="col-ack">Acknowledged</th>
       <th class="col-resolved">Resolved by</th>
     </tr>
   </thead>
@@ -72,11 +73,7 @@
       {% include "_incident_cell.html" %}
       <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
       <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
-      {% set when = incident_when(item) %}
-      {% set stamp = compact_stamp(item.started_at) %}
-      <td class="inc-when" title="{{ when.title }}" data-when="stamp">{% if stamp.date %}<span class="stamp"><span class="stamp-date">{{ stamp.date }}</span><span class="stamp-time">{{ stamp.time }}</span></span>{% else %}—{% endif %}</td>
-      <td class="col-ack">{% set ack = ack_circle(item) %}<span class="ack-dot {{ ack.css }}" title="{{ ack.label }}" aria-label="{{ ack.label }}"></span></td>
-      <td class="col-resolved">{% if item.resolved_by %}{{ item.resolved_by }}{% else %}—{% endif %}</td>
+      {% include "_incident_scan_tail.html" %}
     </tr>
   {% else %}
     <tr><td colspan="8" class="muted">No incidents match this filter.{% if status_group != "all" or severity_group or site or customer or window or q %} Try Reset.{% endif %}</td></tr>

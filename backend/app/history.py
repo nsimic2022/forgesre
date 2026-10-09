@@ -190,6 +190,7 @@ def local_day_start(value: date) -> datetime:
 
 
 CRITICAL_SEVERITIES = ("CRITICAL", "CRIT", "FATAL", "EMERGENCY")
+WARNING_SEVERITIES = ("WARNING", "WARN")
 DONE_STATUSES = ("RESOLVED", "CLOSED")
 ACTIVE_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED")
 UNACKED_GROUP = "unacked"
@@ -212,6 +213,7 @@ def incident_query(
     open_only: bool = False,
     closed_only: bool = False,
     critical_only: bool = False,
+    warning_only: bool = False,
     unacked_only: bool = False,
     site: str = "",
     customer: str = "",
@@ -239,6 +241,8 @@ def incident_query(
         query = query.filter(Incident.status.in_(DONE_STATUSES))
     if critical_only:
         query = query.filter(func.upper(Incident.severity).in_(CRITICAL_SEVERITIES))
+    if warning_only:
+        query = query.filter(func.upper(Incident.severity).in_(WARNING_SEVERITIES))
     status = (status or "").strip().upper()
     if status:
         query = query.filter(Incident.status == status)
@@ -286,7 +290,9 @@ def incident_list_filters(
     status_raw = (status or "").strip()
     status_key = status_raw.upper()
     open_raw = (open_filter or "").strip().lower()
-    critical_only = (severity or "").strip().lower() in {"critical", "crit"}
+    severity_raw = (severity or "").strip().lower()
+    critical_only = severity_raw in {"critical", "crit"}
+    warning_only = severity_raw in {"warning", "warn"}
     open_only = False
     unacked_only = False
     exact = ""
@@ -331,6 +337,8 @@ def incident_list_filters(
         keep.append(("status", status_group))
     if critical_only:
         keep.append(("severity", "critical"))
+    elif warning_only:
+        keep.append(("severity", "warning"))
     if active_window in INCIDENT_WINDOWS:
         keep.append(("window", active_window))
     elif active_window == "custom":
@@ -355,13 +363,14 @@ def incident_list_filters(
             "status": exact,
             "open_only": open_only,
             "critical_only": critical_only,
+            "warning_only": warning_only,
             "unacked_only": unacked_only,
             "site": site_value,
             "customer": customer_value,
             "q": q_value,
         },
         "status_group": status_group,
-        "severity_group": "critical" if critical_only else "",
+        "severity_group": "critical" if critical_only else ("warning" if warning_only else ""),
         "days": "" if active_window else days_raw,
         "window": active_window,
         "date_from": from_date.isoformat() if active_window == "custom" and from_date else "",
@@ -391,13 +400,16 @@ def incident_neighbors(db: Session, incident: Incident, filters: dict[str, Any] 
 
 
 def dashboard_incident_tiles(db: Session) -> list[dict[str, Any]]:
-    """Tile label, count, CSS tone, and the exact /incidents link whose list has that many rows."""
+    """Alarm cubes. Each count is the Incidents list behind the click.
+
+    Critical / Warning are active (not RESOLVED or CLOSED). Investigating and Resolved are exact statuses.
+    Open (unacked) and Escalated are filters on Incidents, not cubes.
+    """
     specs = [
-        ("Open", "crit", {"unacked_only": True}, f"/incidents?status={UNACKED_GROUP}"),
         ("Critical", "crit", {"open_only": True, "critical_only": True}, "/incidents?status=active&severity=critical"),
+        ("Warning", "warn", {"open_only": True, "warning_only": True}, "/incidents?status=active&severity=warning"),
         ("Investigating", "warn", {"status": "INVESTIGATING"}, "/incidents?status=INVESTIGATING"),
-        ("Escalated", "warn", {"status": "ESCALATED"}, "/incidents?status=ESCALATED"),
-        ("Resolved", "ok", {"status": "RESOLVED"}, "/incidents?status=RESOLVED"),
+        ("Resolved", "cold", {"status": "RESOLVED"}, "/incidents?status=RESOLVED"),
     ]
     tiles = []
     for label, tone, filters, href in specs:
@@ -418,7 +430,7 @@ def incident_heat(tiles: list[dict[str, Any]]) -> str:
     counts = {tile.get("key"): int(tile.get("count") or 0) for tile in tiles}
     if counts.get("critical"):
         return "crit"
-    if counts.get("open") or counts.get("investigating") or counts.get("escalated"):
+    if counts.get("warning") or counts.get("investigating"):
         return "warn"
     return ""
 
@@ -435,6 +447,7 @@ def list_history(
     open_only: bool = False,
     closed_only: bool = False,
     critical_only: bool = False,
+    warning_only: bool = False,
     unacked_only: bool = False,
     page: Any | None = None,
     site: str = "",
@@ -453,6 +466,7 @@ def list_history(
         open_only=open_only,
         closed_only=closed_only,
         critical_only=critical_only,
+        warning_only=warning_only,
         unacked_only=unacked_only,
         site=site,
         customer=customer,
@@ -552,7 +566,7 @@ def add_note(db: Session, incident: Incident, actor: str, body: str) -> Incident
 
 
 def ack_circle(incident: Incident) -> dict[str, str]:
-    """History Ack column: green acked, yellow in-progress without ack, red not acked."""
+    """Acknowledged column: green acked, yellow in-progress without ack, red not acked."""
     if incident.ack_at or (incident.ack_by or "").strip():
         return {"css": "green", "label": "Acknowledged"}
     if (incident.status or "").upper() in {"INVESTIGATING", "ESCALATED"}:

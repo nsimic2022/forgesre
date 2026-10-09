@@ -27,7 +27,7 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v08-22" in base
+    assert "app.css?v=v08-23" in base
     assert ".banner-short" not in css
     assert ".banner-x" in css
     assert "top: 0.35rem" in css.split(".banner-x {", 1)[1].split("}", 1)[0]
@@ -49,12 +49,15 @@ def test_dashboard_tiles_are_shortcuts_without_journal_banner():
     home = client.get("/")
     assert home.status_code == 200
     assert 'href="/assets"' in home.text
-    assert 'href="/assets?status=healthy"' in home.text
-    assert 'href="/incidents"' in home.text
+    assert 'href="/assets?flag=in-problem"' in home.text
+    assert 'href="/assets?flag=unreachable"' in home.text
+    assert 'href="/assets?status=healthy"' not in home.text
+    assert 'href="/incidents?status=active&amp;severity=critical"' in home.text
+    assert 'href="/incidents?status=active&amp;severity=warning"' in home.text
     assert 'class="stat' in home.text
     assert "<a class=\"stat" in home.text or "<a class='stat" in home.text
-    assert "Asset inventory counts" in home.text
-    assert "Incident counts" in home.text
+    assert "Inventory counts" in home.text
+    assert "Alarm counts" in home.text
     dash = (ROOT / "frontend" / "templates" / "dashboard.html").read_text(encoding="utf-8")
     assert 'id="journal-error-banner"' not in dash
     assert "banner-short" not in dash
@@ -111,9 +114,18 @@ def test_incidents_ack_column_is_a_status_circle():
     assert page.status_code == 200
     assert "ack-dot" in page.text
     assert 'title="Acknowledged"' in page.text or 'title="Not acknowledged"' in page.text
+    head = page.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
+    assert ">Acknowledged<" in head and ">Ack<" not in head and "info-tip" not in head
     html = (ROOT / "frontend" / "templates" / "incidents.html").read_text(encoding="utf-8")
     assert "{% if item.ack_by %}" not in html
     assert "Resolved by" in html
+    assert 'class="col-ack">Acknowledged</th>' in html
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    ack = css.split(".incidents-table th.col-ack,", 1)[1].split("}", 1)[0]
+    assert "padding-right: 1.45rem" in ack
+    resolved = css.split(".incidents-table th.col-resolved,", 1)[1].split("}", 1)[0]
+    assert "padding-left: 1.35rem" in resolved
+    assert "white-space: nowrap" in resolved
     db.close()
 
 

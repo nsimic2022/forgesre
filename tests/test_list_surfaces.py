@@ -74,13 +74,19 @@ def test_dashboard_recent_incidents_uses_scan_columns():
     assert ">Severity<" in headers
     assert ">Status<" in headers
     assert ">When<" in headers
+    assert headers.index(">When<") < headers.index(">Acknowledged<") < headers.index(">Resolved by<")
+    assert ">Ack<" not in headers and "info-tip" not in headers
     assert ">Asset<" not in headers
     assert "Reported to" not in headers
     assert "inc-cell" in section
+    assert "ack-dot" in section
     assert "scan-list" in section
     assert 'id="host-down-banner"' not in home.text
-    kpi = home.text.split("Recent incidents", 1)[0]
-    assert "Open</span>" in kpi or ">Open<" in kpi
+    assert "Recent journal" not in home.text
+    kpi = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
+    for label in (">Critical<", ">Warning<", ">Investigating<", ">Resolved<"):
+        assert label in kpi
+    assert ">Open<" not in kpi and ">Escalated<" not in kpi
     db.close()
 
 
@@ -93,7 +99,9 @@ def test_incidents_keeps_ack_resolved_by_and_drops_reported_to():
     headers = _headers(page.text)
     assert headers.index(">Hostname<") < headers.index(">Name<")
     assert ">When<" in headers
-    assert "Ack" in headers
+    assert ">Acknowledged<" in headers
+    assert ">Ack<" not in headers and "info-tip" not in headers
+    assert headers.index(">Acknowledged<") < headers.index(">Resolved by<")
     assert "Resolved by" in headers
     assert "Reported to" not in headers
     assert ">Asset<" not in headers
@@ -101,7 +109,8 @@ def test_incidents_keeps_ack_resolved_by_and_drops_reported_to():
     assert "inc-cell" in page.text
     assert 'class="stamp"' in page.text
     html = (ROOT / "frontend" / "templates" / "incidents.html").read_text(encoding="utf-8")
-    assert "ack-dot" in html
+    tail = (ROOT / "frontend" / "templates" / "_incident_scan_tail.html").read_text(encoding="utf-8")
+    assert "ack-dot" in tail and "_incident_scan_tail.html" in html
     assert "Reported to" not in html
     assert "history.html" not in html
     nav = page.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]

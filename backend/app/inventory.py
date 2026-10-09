@@ -5,7 +5,8 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session, object_session
 
 from app.asset_extras import asset_playrule_ids, form_extras, known_playrule_ids, merge_extras
 from app.asset_snmp import auth_spec, desired_auth, effective_auth, rendered_auth_names
@@ -1365,6 +1366,38 @@ ASSET_FLAGS = {
     "no-email": asset_missing_email,
 }
 
+# Assets with an incident still in OPEN / INVESTIGATING / ESCALATED. Not a liveness check.
+PROBLEM_FLAG = "in-problem"
+_PROBLEM_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED")
+
+
+def asset_ids_in_problem(rows: list[Asset]) -> set[int]:
+    """Primary keys of assets that currently have an active incident.
+
+    One query when the rows are attached to a session — the same set the In problem tile and
+    ``/assets?flag=in-problem`` both use.
+    """
+    if not rows:
+        return set()
+    ids = [row.id for row in rows if getattr(row, "id", None)]
+    session = object_session(rows[0])
+    if session is not None and ids:
+        found = (
+            session.query(Incident.asset_id)
+            .filter(Incident.asset_id.in_(ids), func.upper(Incident.status).in_(_PROBLEM_STATUSES))
+            .distinct()
+            .all()
+        )
+        return {pk for (pk,) in found if pk}
+    out: set[int] = set()
+    for row in rows:
+        for item in getattr(row, "incidents", None) or []:
+            if (getattr(item, "status", "") or "").upper() in _PROBLEM_STATUSES:
+                if row.id is not None:
+                    out.add(row.id)
+                break
+    return out
+
 
 ZABBIX_AGENT_STATES = ("up", "down", "unknown")
 
@@ -1444,9 +1477,14 @@ def assets_matching(
         out = [row for row in out if needle in asset_search_blob(row)]
     if wanted:
         out = [row for row in out if (row.status or "").lower() == wanted]
-    check = ASSET_FLAGS.get((flag or "").strip().lower())
-    if check is not None:
-        out = [row for row in out if check(row)]
+    flag_key = (flag or "").strip().lower()
+    if flag_key == PROBLEM_FLAG:
+        problem = asset_ids_in_problem(out)
+        out = [row for row in out if row.id in problem]
+    else:
+        check = ASSET_FLAGS.get(flag_key)
+        if check is not None:
+            out = [row for row in out if check(row)]
     origin = (source or "").strip().lower()
     if origin == "zabbix":
         out = [row for row in out if asset_in_zabbix(row)]
@@ -1474,18 +1512,25 @@ def assets_matching(
 
 
 def asset_tiles(rows: list[Asset]) -> list[dict]:
-    """Dashboard infrastructure tiles. Each count is the length of the /assets list behind its link."""
+    """Dashboard inventory tiles. Each count is the length of the /assets list behind its link.
+
+    In problem = an OPEN / INVESTIGATING / ESCALATED incident on that asset (``flag=in-problem``).
+    Unreachable = the existing ICMP / probe-down flag, not an incident count.
+    """
     specs = [
-        ("Total assets", "", {}, "/assets"),
-        ("Assets without incident", "ok", {"status": "healthy"}, "/assets?status=healthy"),
-        ("Warning", "warn", {"status": "warning"}, "/assets?status=warning"),
-        ("Critical", "crit", {"status": "critical"}, "/assets?status=critical"),
-        ("Offline / unreachable", "crit", {"flag": "unreachable"}, "/assets?flag=unreachable"),
-        ("No owner email", "warn", {"flag": "no-email"}, "/assets?flag=no-email"),
+        ("Assets", "", {}, "/assets", "assets"),
+        ("In problem", "warn", {"flag": PROBLEM_FLAG}, f"/assets?flag={PROBLEM_FLAG}", "problem"),
+        ("Unreachable", "crit", {"flag": "unreachable"}, "/assets?flag=unreachable", "unreachable"),
     ]
     return [
-        {"label": label, "tone": tone, "href": href, "count": len(assets_matching(rows, **filters))}
-        for label, tone, filters, href in specs
+        {
+            "label": label,
+            "tone": tone,
+            "href": href,
+            "count": len(assets_matching(rows, **filters)),
+            "key": key,
+        }
+        for label, tone, filters, href, key in specs
     ]
 
 

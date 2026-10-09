@@ -110,27 +110,32 @@ def test_every_row_when_leads_with_duration_then_clock():
     live_row = _row(dash, live.number)
     live_when = _when_cell(live_row)
     assert re.search(r'title="Open for 2h 1[45]m · started [^"]+"', live_when)
-    assert re.search(r'<span class="inc-age inc-age-live"[^>]*>2h 1[45]m</span><span class="inc-wall">' + WALL_RE + "</span>", live_when)
+    assert 'data-when="stamp"' in live_when
+    assert "inc-age" not in live_when
+    assert re.search(r'<span class="stamp-date">\d{2} \w{3} \d{4}</span><span class="stamp-time">' + WALL_RE + "</span>", live_when)
     assert 'class="inc-title sev-crit"' in live_row
     assert 'class="inc-host"' in live_row and "10.20.30.40" in live_row
+    assert "ack-dot" in live_row
     head = dash.split("</thead>", 1)[0]
-    assert head.index(">Hostname<") < head.index(">Name<")
-    assert ">Problem<" not in head
-    done_when = _when_cell(_row(dash, done.number))
+    assert head.index(">Hostname<") < head.index(">Name<") < head.index(">Severity<") < head.index(">Status<")
+    assert head.index(">When<") < head.index(">Acknowledged<") < head.index(">Resolved by<")
+    assert ">Problem<" not in head and ">Ack<" not in head and "info-tip" not in head
+    done_row = _row(dash, done.number)
+    done_when = _when_cell(done_row)
     assert re.search(r'title="Lasted 1h · started [^"]+ · ended [^"]+"', done_when)
-    assert re.search(r'<span class="inc-age"[^>]*>1h</span><span class="inc-wall">' + WALL_RE + "</span>", done_when)
-    assert "inc-age-live" not in done_when
+    assert 'data-when="stamp"' in done_when
+    assert "inc-age" not in done_when
+    assert "admin@forgesre.local" in done_row
     res_row = _row(dash, resolved.number)
-    res_when = _when_cell(res_row)
-    assert re.search(r'<span class="inc-age"[^>]*>2h 1[34]m</span>', res_when)
-    assert re.search(r'<span class="inc-wall">' + WALL_RE + "</span>", res_when)
     assert "inc-row-done" in res_row
+    assert re.search(r'<span class="stamp-time">' + WALL_RE + "</span>", _when_cell(res_row))
 
     listed = client.get("/incidents")
     assert listed.status_code == 200
     inc_head = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
     assert inc_head.index(">Hostname<") < inc_head.index(">Name<")
-    assert "Ack" in inc_head and "Resolved by" in inc_head
+    assert ">Acknowledged<" in inc_head and "Resolved by" in inc_head
+    assert ">Ack<" not in inc_head and "info-tip" not in inc_head
     live_row = _row(listed.text, live.number)
     live_when = _when_cell(live_row)
     assert re.search(r'title="Open for 2h 1[45]m · started [^"]+"', live_when)
@@ -316,4 +321,4 @@ def test_stack_cube_font_bumped_box_unchanged():
     assert "padding: 0.28rem" in block
     assert "line-height: 0.77rem" in block
     assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v08-22" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "app.css?v=v08-23" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

@@ -212,7 +212,9 @@ def test_row_checkboxes_named_selected_on_list_surfaces():
     incidents = client.get("/incidents").text
     head = incidents.split("<thead>", 1)[1].split("</thead>", 1)[0]
     assert head.index("data-select-page") < head.index(">Hostname<") < head.index(">Name<")
-    assert "Ack" in head and "Resolved by" in head
+    assert ">Acknowledged<" in head and "Resolved by" in head
+    assert ">Ack<" not in head and "info-tip" not in head
+    assert head.index(">Acknowledged<") < head.index(">Resolved by<")
     assert "delete-selected" not in incidents
     admin = (TEMPLATES / "admin.html").read_text(encoding="utf-8")
     backup_table = admin.split("{% for b in backups %}", 1)[1].split("</tr>", 1)[0]
@@ -267,14 +269,14 @@ def test_dashboard_order_tiles_appliance_sections_without_banners():
 
 def test_incident_heat_levels():
     def tiles(**counts):
-        return [{"key": key, "count": counts.get(key, 0)} for key in ("open", "critical", "investigating", "escalated", "resolved")]
+        return [{"key": key, "count": counts.get(key, 0)} for key in ("critical", "warning", "investigating", "resolved")]
 
     assert incident_heat(tiles()) == ""
     assert incident_heat(tiles(resolved=4)) == ""
-    assert incident_heat(tiles(open=1)) == "warn"
+    assert incident_heat(tiles(warning=1)) == "warn"
     assert incident_heat(tiles(investigating=2, resolved=1)) == "warn"
-    assert incident_heat(tiles(escalated=1)) == "warn"
-    assert incident_heat(tiles(open=1, critical=1)) == "crit"
+    assert incident_heat(tiles(critical=1)) == "crit"
+    assert incident_heat(tiles(warning=3, critical=1)) == "crit"
 
 
 def test_dashboard_heat_class_only_on_incidents_tile():
@@ -307,7 +309,7 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.8rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-22" in base
+    assert "app.css?v=v08-23" in base
 
 
 def test_dashboard_banner_block_gone_from_template_js_css():

@@ -304,8 +304,9 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert "nav-clock" in nav and "data-clock" in nav
     assert "appliance-clock" in home.text and "data-clock" in home.text
     recent = home.text.split("Recent incidents", 1)[1].split("</table>", 1)[0]
-    assert recent.index(">Hostname<") < recent.index(">Name<")
-    assert ">Problem<" not in recent
+    assert recent.index(">Hostname<") < recent.index(">Name<") < recent.index(">Severity<") < recent.index(">Status<")
+    assert recent.index(">When<") < recent.index(">Acknowledged<") < recent.index(">Resolved by<")
+    assert ">Problem<" not in recent and ">Ack<" not in recent and "info-tip" not in recent.split("</thead>", 1)[0]
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     clock = css.split(".nav a.nav-clock {", 1)[1].split("}", 1)[0]
     assert "font-size: 2.4rem" in clock
@@ -323,5 +324,5 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert "height: 100%" in css.split(".admin-user-split > .admin-user-pane", 1)[1].split("}", 1)[0]
     assert "margin: 2.25rem 0 0.7rem" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-22" in base and "app.js?v=v08-22" in base
+    assert "app.css?v=v08-23" in base and "app.js?v=v08-23" in base
     db.close()

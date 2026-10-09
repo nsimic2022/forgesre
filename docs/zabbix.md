@@ -354,7 +354,7 @@ Escalation mail goes to the asset's **Owner email**. Imported assets have none, 
 5. Optional: **Type** (Linux Server, Windows Server, Network device…) if you plan to add a Prometheus exporter later. Leave **Scrape address** empty until an exporter really answers.
 6. **Save**.
 
-The Dashboard tile **No owner email** and the Assets pill **No owner email** list what is still missing.
+The Assets pill **No owner email** and the filter `flag=no-email` list what is still missing.
 
 ---
 

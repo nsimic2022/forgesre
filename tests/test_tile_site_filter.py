@@ -55,25 +55,33 @@ def _tile(db, label: str) -> int:
     return next(tile["count"] for tile in asset_tiles(db.query(Asset).all()) if tile["label"] == label)
 
 
-def test_asset_tile_is_labelled_as_assets_and_follows_a_gui_resolve():
+def test_in_problem_tile_follows_a_gui_resolve():
     db = _db()
     client = _client()
     asset = _asset(db)
-    calm = _tile(db, "Assets without incident")
+    calm = _tile(db, "In problem")
     incident = _fire(db, asset)
     db.expire_all()
     assert db.get(Asset, asset.id).status == "critical"
-    assert _tile(db, "Assets without incident") == calm - 1
+    assert _tile(db, "In problem") == calm + 1
+    fired = client.get(f"/assets?flag=in-problem&q={asset.asset_id}").text
+    assert asset.asset_id in fired.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
 
     posted = client.post(f"/incidents/{incident.number}/status", data={"status": "RESOLVED"}, follow_redirects=False)
     assert posted.status_code == 302
     db.expire_all()
     assert db.get(Asset, asset.id).status == "healthy"
-    assert _tile(db, "Assets without incident") == calm
+    assert _tile(db, "In problem") == calm
+    cleared = client.get(f"/assets?flag=in-problem&q={asset.asset_id}").text
+    assert asset.asset_id not in cleared.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
 
     home = client.get("/").text
-    assert ">Assets without incident<" in home
+    infra = home.split("dash-tiles-infra", 1)[1].split("</section>", 1)[0]
+    assert ">In problem<" in infra
+    assert ">Assets<" in infra and ">Unreachable<" in infra
+    assert ">Assets without incident<" not in home
     assert ">No open incident<" not in home
+    assert "No owner email" not in infra
     db.close()
 
 

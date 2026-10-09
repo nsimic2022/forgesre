@@ -171,27 +171,45 @@ def test_dashboard_incident_tiles_match_the_list_behind_the_click():
     _login(client)
     home = client.get("/")
     assert home.status_code == 200
-    tiles = _tile_counts(home.text)
-    assert set(tiles) == {"open", "critical", "investigating", "escalated", "resolved"}
+    alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
+    tiles = _tile_counts(alarms)
+    assert set(tiles) == {"critical", "warning", "investigating", "resolved"}
     assert tiles["critical"][0] == "/incidents?status=active&amp;severity=critical"
-    assert tiles["open"][0] == "/incidents?status=unacked"
-    assert tiles["escalated"][0] == "/incidents?status=ESCALATED"
+    assert tiles["warning"][0] == "/incidents?status=active&amp;severity=warning"
+    assert tiles["investigating"][0] == "/incidents?status=INVESTIGATING"
+    assert tiles["resolved"][0] == "/incidents?status=RESOLVED"
+    assert 'class="stat crit' in alarms and 'class="stat warn' in alarms and 'class="stat cold' in alarms
+    for gone in ('data-tile="open"', 'data-tile="escalated"', ">Open<", ">Escalated<", "No owner email", "Assets without incident"):
+        assert gone not in alarms, gone
+    assert "No owner email" not in home.text
+    assert 'href="/assets?flag=no-email"' not in home.text
     for key, (href, count) in tiles.items():
         listed = client.get(href.replace("&amp;", "&"))
         assert listed.status_code == 200
         shown = re.search(r'class="muted list-count">(\d+) incident', listed.text)
         assert shown is not None, key
         assert int(shown.group(1)) == count, key
-    assert tiles["escalated"][1] >= 1
     critical = client.get("/incidents?status=active&severity=critical")
     body = critical.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
     assert f"tile OPEN {token}" in body
     assert f"tile ESCALATED {token}" in body
     assert f"tile RESOLVED {token}" not in body
     assert f"tile INVESTIGATING {token}" not in body
+    warning = client.get("/incidents?status=active&severity=warning")
+    warn_body = warning.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+    assert f"tile INVESTIGATING {token}" in warn_body
+    assert f"tile CLOSED {token}" not in warn_body
+    assert f"tile OPEN {token}" not in warn_body
+    assert '<option value="warning" selected>Warning</option>' in warning.text
     default = client.get("/incidents")
     assert f"tile CLOSED {token}" in default.text
     db.close()
+
+
+def _asset_total(html: str) -> int:
+    shown = re.search(r"Showing (?:all |\d+–\d+ of )(\d+)", html)
+    assert shown is not None, html[html.find("pager-meta") : html.find("pager-meta") + 80]
+    return int(shown.group(1))
 
 
 def test_dashboard_asset_tiles_match_assets_filters():
@@ -201,17 +219,33 @@ def test_dashboard_asset_tiles_match_assets_filters():
     host.ping_status = "red"
     host.exporter_status = "red"
     db.commit()
+    from app.services import ingest_alertmanager
+
+    ingest_alertmanager(db, _alert(f"Prob{uuid4().hex[:6]}", host.asset_id, severity="warning"))
     client = TestClient(app)
     _login(client)
     home = client.get("/")
-    assert 'href="/assets?flag=no-email"' in home.text
-    assert 'href="/assets?flag=unreachable"' in home.text
-    listed = client.get(f"/assets?flag=no-email&q={host.asset_id}")
-    assert listed.status_code == 200
-    assert host.asset_id in listed.text
-    assert "No owner email" in listed.text
+    infra = home.text.split("dash-tiles-infra", 1)[1].split("</section>", 1)[0]
+    tiles = _tile_counts(infra)
+    assert set(tiles) == {"assets", "problem", "unreachable"}
+    assert tiles["assets"][0] == "/assets"
+    assert tiles["problem"][0] == "/assets?flag=in-problem"
+    assert tiles["unreachable"][0] == "/assets?flag=unreachable"
+    assert ">Assets<" in infra and ">In problem<" in infra and ">Unreachable<" in infra
+    for gone in ("No owner email", "Assets without incident", "No open incident", 'href="/assets?flag=no-email"', ">Open<"):
+        assert gone not in infra, gone
+    for key, (href, count) in tiles.items():
+        listed = client.get(href)
+        assert listed.status_code == 200, key
+        assert _asset_total(listed.text) == count, key
+    problem = client.get(f"/assets?flag=in-problem&q={host.asset_id}")
+    assert host.asset_id in problem.text
     down = client.get(f"/assets?flag=unreachable&q={host.asset_id}")
     assert host.asset_id in down.text
+    # The Assets chip still names hosts with no owner email. The dashboard cube does not.
+    emailed = client.get(f"/assets?flag=no-email&q={host.asset_id}")
+    assert host.asset_id in emailed.text
+    assert "No owner email" in emailed.text
     db.close()
 
 
@@ -437,7 +471,7 @@ def test_analyst_templates_say_the_honest_thing(monkeypatch):
         assert "Guidance only" in page.text
         assert "playbook-guide" in page.text
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-22" in base
+    assert "app.css?v=v08-23" in base
     for name in ["incident_detail.html", "asset_detail.html", "_asset_form.html", "escalation.html"]:
         text = (ROOT / "frontend" / "templates" / name).read_text(encoding="utf-8")
         assert "falls back to policy role@forgesre.local" not in text
