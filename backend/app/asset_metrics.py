@@ -489,6 +489,7 @@ def asset_metric_panel(
 
     return {
         "asset_id": asset_id,
+        "hostname": info["hostname"],
         "class": klass,
         "demo": demo,
         "demo_label": "DEMO" if demo else "",
@@ -570,6 +571,7 @@ def zabbix_metric_panel(asset: Any, *, trends_fn: Callable[[str], dict[str, Any]
         line = "No Zabbix CPU / memory / disk items on this host."
     return {
         "asset_id": info["asset_id"],
+        "hostname": info["hostname"],
         "class": klass,
         "source": "zabbix",
         "demo": False,
@@ -629,6 +631,7 @@ def safe_asset_metric_panel(asset: Any, **kwargs: Any) -> dict[str, Any]:
         demo = is_lab_inventory_row(asset)
         return {
             "asset_id": info["asset_id"],
+            "hostname": info["hostname"],
             "class": "unknown",
             "demo": demo,
             "demo_label": "DEMO" if demo else "",

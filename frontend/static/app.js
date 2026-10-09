@@ -961,6 +961,157 @@ function listPicker(root, opts) {
   return { rows, select };
 }
 
+// Host metric chart scale. Samples stay the metrics API series (Prometheus query_range
+// or Zabbix trend.get). No placeholder wave.
+function chartExtent(values) {
+  let min = Infinity;
+  let max = -Infinity;
+  let n = 0;
+  (values || []).forEach((raw) => {
+    const v = Number(raw);
+    if (!isFinite(v)) return;
+    n += 1;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  });
+  return n ? { min: min, max: max, n: n } : null;
+}
+
+// Percent: a tight band (CPU near 0.1%, or a 10–14 swing) is padded so the wiggle fills
+// the plot. A series that reaches the upper half, swings by 25 points, or drops to ~0
+// from 15 or higher stays on 0–100, widened if a sample sits outside that. A smaller
+// crash to zero uses 0–max so the drop fills the plot. Every sample stays inside the
+// axis. Other units use 0–max when the swing is wide or hits zero from a peak.
+function chartYScale(kind, values) {
+  if (kind === "up") return { lo: 0, hi: 1, mode: "full" };
+  const extent = chartExtent(values);
+  if (!extent) return { lo: 0, hi: kind === "percent" ? 100 : 1, mode: "full" };
+  const min = extent.min;
+  const max = extent.max;
+  const span = max - min;
+  if (kind === "percent") {
+    const dropsHard = min <= 0.5 && max >= 15;
+    const towardTop = max >= 50 || span >= 25;
+    if (dropsHard || towardTop) return { lo: Math.min(0, min), hi: Math.max(100, max), mode: "full" };
+    if (min <= 0.5 && max > 0.5) {
+      const lo = Math.min(0, min);
+      return { lo: lo, hi: Math.max(max, lo + 1), mode: "full" };
+    }
+  } else {
+    const peak = Math.max(Math.abs(max), Math.abs(min), 0);
+    const wide = peak > 0 && span >= peak * 0.45 && max > 0;
+    const drops = min <= Math.max(peak * 0.02, 0) && max >= 1 && span >= peak * 0.2;
+    if (wide || drops) {
+      const lo = Math.min(0, min);
+      return { lo: lo, hi: Math.max(max, lo + 1), mode: "full" };
+    }
+  }
+  const pad = Math.max(
+    span * 0.25,
+    Math.max(Math.abs(max), Math.abs(min), kind === "percent" ? 1 : 0) * 0.02,
+    kind === "percent" ? 0.05 : 1e-4
+  );
+  let lo = min - pad;
+  let hi = max + pad;
+  if (!(hi > lo)) {
+    lo = min - 0.5;
+    hi = max + 0.5;
+  }
+  return { lo: lo, hi: hi, mode: "auto" };
+}
+
+function chartTicks(lo, hi) {
+  if (!(hi > lo)) return [lo];
+  if (Math.abs(lo) < 1e-6 && Math.abs(hi - 100) < 1e-6) return [0, 25, 50, 75, 100];
+  const span = hi - lo;
+  const raw = span / 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  if (!isFinite(mag) || mag === 0) return [lo, hi];
+  const err = raw / mag;
+  let step = mag;
+  if (err >= 5) step = 10 * mag;
+  else if (err >= 2.5) step = 5 * mag;
+  else if (err >= 2) step = 2.5 * mag;
+  else if (err >= 1) step = 2 * mag;
+  if (!(step > 0) || !isFinite(step)) return [lo, hi];
+  const start = Math.ceil((lo - step * 1e-8) / step) * step;
+  const ticks = [];
+  let guard = 0;
+  for (let v = start; v <= hi + step * 1e-6 && ticks.length < 8 && guard < 20; v += step) {
+    guard += 1;
+    const rounded = Number(v.toFixed(8));
+    if (rounded < lo - step * 0.01 || rounded > hi + step * 0.01) continue;
+    ticks.push(rounded);
+  }
+  if (ticks.length < 2) return [lo, hi];
+  return ticks;
+}
+
+function chartNumber(value) {
+  const n = Number(value);
+  if (!isFinite(n)) return "";
+  const abs = Math.abs(n);
+  const digits = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
+  return String(Number(n.toFixed(digits)));
+}
+
+function chartClockParts(ts) {
+  const d = new Date(Number(ts) * 1000);
+  if (!isFinite(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, "0");
+  return {
+    date: pad(d.getDate()) + "." + pad(d.getMonth() + 1),
+    yearDate: pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "." + d.getFullYear(),
+    time: pad(d.getHours()) + ":" + pad(d.getMinutes()),
+    second: pad(d.getSeconds()),
+    dayKey: d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(),
+  };
+}
+
+function chartClockTicks(start, end) {
+  const a = Number(start);
+  const b = Number(end);
+  if (!isFinite(a) || !isFinite(b) || !(b > a)) return [];
+  const stamps = [];
+  for (let i = 0; i < 4; i++) stamps.push(a + ((b - a) * i) / 3);
+  const parts = stamps.map(chartClockParts);
+  if (parts.some((part) => !part)) return [];
+  const multi = parts[0].dayKey !== parts[parts.length - 1].dayKey;
+  return stamps.map((t, i) => {
+    const dayChanged = i > 0 && parts[i].dayKey !== parts[i - 1].dayKey;
+    return { t: t, time: parts[i].time, date: multi && (i === 0 || dayChanged) ? parts[i].date : "" };
+  });
+}
+
+function chartTipLines(host, ts, name, kind, value, unit) {
+  const parts = chartClockParts(ts);
+  const time = parts ? parts.yearDate + " " + parts.time + ":" + parts.second : "";
+  const unitText = unit || (kind === "percent" ? "%" : "");
+  let reading = chartNumber(value);
+  if (kind === "up") reading = Number(value) >= 1 ? "up" : "down";
+  else if (kind === "percent" || unitText === "%") reading = chartNumber(value) + "%";
+  else if (unitText) reading = chartNumber(value) + " " + unitText;
+  const label = name ? String(name) + " " + reading : reading;
+  return { host: host ? String(host) : "", time: time, value: label };
+}
+
+function chartUnit(tile) {
+  if (!tile) return "";
+  if (tile.unit) return String(tile.unit);
+  if (tile.kind === "percent") return "%";
+  return "";
+}
+
+const ForgeChart = {
+  yScale: chartYScale,
+  ticks: chartTicks,
+  number: chartNumber,
+  clockTicks: chartClockTicks,
+  tip: chartTipLines,
+  unit: chartUnit,
+};
+if (typeof globalThis !== "undefined") globalThis.ForgeChart = ForgeChart;
+
 // Host metric charts (asset detail, Dashboard Host metrics, incident detail). Same JSON as
 // GET /api/v1/assets/{id}/metrics. An incident id widens the range to an hour before start.
 // Prometheus tiles, or Zabbix trend.get tiles (source "zabbix"). No placeholder wave.
@@ -995,21 +1146,27 @@ function graphPane(pane) {
     return el;
   };
 
-  // Percent tiles scale to the hour (with a small floor) so a 10–20% CPU swing is
-  // visible. A fixed 0–100 axis in this 48px box draws that swing as a flat line.
-  const yScale = (tile, values) => {
-    if (tile.kind === "up") return { lo: 0, hi: 1 };
-    const min = Math.min.apply(null, values);
-    const max = Math.max.apply(null, values);
-    const pad = Math.max(2, (max - min) * 0.15);
-    let lo = min - pad;
-    let hi = max + pad;
-    if (hi - lo < 8) {
-      const mid = (min + max) / 2;
-      lo = mid - 4;
-      hi = mid + 4;
+  const hEl = (name, className, text) => {
+    const node = document.createElement(name);
+    if (className) node.setAttribute("class", className);
+    if (text != null && text !== "") node.textContent = text;
+    return node;
+  };
+
+  const hostName = () =>
+    pane.getAttribute("data-chart-host") || pane.getAttribute("data-host") || pane.getAttribute("data-asset") || "";
+
+  const axisWindow = (times) => {
+    const win = windowInfo;
+    const start = win ? Number(win.start) : NaN;
+    const end = win ? Number(win.end) : NaN;
+    if (isFinite(start) && isFinite(end) && end > start) return { start: start, end: end };
+    if (times && times.length >= 2) {
+      const a = Number(times[0]);
+      const b = Number(times[times.length - 1]);
+      if (isFinite(a) && isFinite(b) && b > a) return { start: a, end: b };
     }
-    return { lo: lo, hi: hi };
+    return null;
   };
 
   const yFor = (tile, v, scale) => {
@@ -1044,15 +1201,31 @@ function graphPane(pane) {
   };
 
   const chart = (tile, values, times) => {
-    const scale = yScale(tile, values);
+    const scale = chartYScale(tile.kind, values);
+    const unit = chartUnit(tile);
     const label = windowInfo && windowInfo.label ? windowInfo.label : span;
     const mark = markerX();
+    const win = axisWindow(times);
+    const yTickVals = tile.kind === "up" ? [1, 0] : chartTicks(scale.lo, scale.hi).slice().reverse();
+    const xTicks = win ? chartClockTicks(win.start, win.end) : [];
     const svg = svgEl("svg", {
       class: "dash-chart",
       viewBox: "0 0 " + W + " " + H,
       preserveAspectRatio: "none",
       role: "img",
-      "aria-label": tile.name + " " + label,
+      "aria-label": (hostName() ? hostName() + " " : "") + tile.name + " " + label,
+      "data-scale": scale.mode,
+      "data-ymin": String(Math.round(scale.lo * 1000) / 1000),
+      "data-ymax": String(Math.round(scale.hi * 1000) / 1000),
+    });
+    yTickVals.forEach((tick) => {
+      const y = yFor(tile, Number(tick), scale).toFixed(1);
+      svg.appendChild(svgEl("line", { class: "dash-chart-grid", x1: 0, x2: W, y1: y, y2: y }));
+    });
+    const slots = Math.max(xTicks.length, 2);
+    xTicks.forEach((tick, i) => {
+      const x = ((i * W) / (slots - 1)).toFixed(1);
+      svg.appendChild(svgEl("line", { class: "dash-chart-grid dash-chart-grid-v", x1: x, x2: x, y1: 0, y2: H }));
     });
     if (tile.kind !== "up" && tile.threshold != null && tile.alarm_enabled !== false) {
       const threshold = Number(tile.threshold);
@@ -1062,9 +1235,13 @@ function graphPane(pane) {
       }
     }
     const pts = [];
+    const xs = [];
+    const ys = [];
     values.forEach((v, i) => {
       const x = xFor(i, values.length, times);
       const y = yFor(tile, v, scale);
+      xs.push(x);
+      ys.push(y);
       if (tile.kind === "up" && pts.length) pts.push(x.toFixed(1) + "," + pts[pts.length - 1].split(",")[1]);
       pts.push(x.toFixed(1) + "," + y.toFixed(1));
     });
@@ -1073,7 +1250,91 @@ function graphPane(pane) {
       const x = mark.toFixed(1);
       svg.appendChild(svgEl("line", { class: "dash-chart-marker", x1: x, x2: x, y1: 0, y2: H }));
     }
-    return svg;
+
+    const frame = hEl("div", "dash-chart-frame");
+    frame.setAttribute("data-unit", unit);
+    const yAxis = hEl("div", "dash-chart-y");
+    if (unit) yAxis.appendChild(hEl("span", "dash-chart-unit", unit));
+    const yList = hEl("div", "dash-chart-yticks");
+    yTickVals.forEach((tick) => {
+      const text = tile.kind === "up" ? (Number(tick) >= 1 ? "up" : "down") : chartNumber(tick);
+      yList.appendChild(hEl("span", "dash-chart-ytick", text));
+    });
+    yAxis.appendChild(yList);
+
+    const plot = hEl("div", "dash-chart-plot");
+    plot.appendChild(svg);
+    const dot = hEl("span", "dash-chart-dot");
+    dot.hidden = true;
+    const tip = hEl("div", "dash-chart-tip");
+    tip.setAttribute("role", "tooltip");
+    tip.hidden = true;
+    const tipHost = hEl("strong", "dash-chart-tip-host");
+    const tipTime = hEl("span", "dash-chart-tip-time");
+    const tipValue = hEl("span", "dash-chart-tip-value");
+    tip.appendChild(tipHost);
+    tip.appendChild(tipTime);
+    tip.appendChild(tipValue);
+    plot.appendChild(dot);
+    plot.appendChild(tip);
+
+    const xAxis = hEl("div", "dash-chart-x");
+    xTicks.forEach((tick) => {
+      const cell = hEl("span", "dash-chart-xtick");
+      cell.appendChild(hEl("b", "", tick.time));
+      if (tick.date) cell.appendChild(hEl("i", "", tick.date));
+      xAxis.appendChild(cell);
+    });
+
+    const place = (node, x, y) => {
+      if (!node || !node.style) return;
+      node.style.left = x;
+      node.style.top = y;
+    };
+    const showAt = (index) => {
+      const stamp =
+        times && isFinite(Number(times[index]))
+          ? Number(times[index])
+          : win && values.length > 1
+            ? win.start + ((win.end - win.start) * index) / (values.length - 1)
+            : NaN;
+      const lines = chartTipLines(hostName(), stamp, tile.name, tile.kind, values[index], unit);
+      tipHost.textContent = lines.host;
+      tipTime.textContent = lines.time;
+      tipValue.textContent = lines.value;
+      tip.hidden = false;
+      dot.hidden = false;
+      const left = ((xs[index] / W) * 100).toFixed(2) + "%";
+      const top = ((ys[index] / H) * 100).toFixed(2) + "%";
+      place(dot, left, top);
+      place(tip, left, top);
+      tip.setAttribute("data-side", xs[index] > W * 0.62 ? "left" : "right");
+    };
+    svg.addEventListener("mousemove", (event) => {
+      if (!xs.length || typeof svg.getBoundingClientRect !== "function") return;
+      const rect = svg.getBoundingClientRect();
+      if (!rect || !rect.width) return;
+      const x = ((event.clientX - rect.left) / rect.width) * W;
+      let best = 0;
+      let dist = Infinity;
+      xs.forEach((px, i) => {
+        const d = Math.abs(px - x);
+        if (d < dist) {
+          dist = d;
+          best = i;
+        }
+      });
+      showAt(best);
+    });
+    svg.addEventListener("mouseleave", () => {
+      tip.hidden = true;
+      dot.hidden = true;
+    });
+
+    frame.appendChild(yAxis);
+    frame.appendChild(plot);
+    frame.appendChild(xAxis);
+    return frame;
   };
 
   const tileRow = (tile, labelEmpty) => {
@@ -1125,6 +1386,8 @@ function graphPane(pane) {
       showEmpty("Metrics unavailable.");
       return;
     }
+    const named = data.hostname ? String(data.hostname) : "";
+    pane.setAttribute("data-chart-host", named || pane.getAttribute("data-host") || "");
     const tiles = data.tiles;
     windowInfo = data.window || null;
     span = data.source === "zabbix" ? "last 24 h (Zabbix trends)" : "last hour";
@@ -1197,6 +1460,7 @@ function graphPane(pane) {
     const number = row.getAttribute("data-dash-incident") || "";
     const asset = row.getAttribute("data-asset") || "";
     const host = row.getAttribute("data-host") || "";
+    pane.setAttribute("data-host", host);
     if (subject) subject.textContent = number + (asset || host ? " · " + (asset || host) : "");
     if (assetLink) {
       assetLink.hidden = !asset;
