@@ -75,8 +75,8 @@ def test_dashboard_has_graph_pane_right_of_recent_incidents():
     recent = html.index("<h2>Recent incidents</h2>")
     table = html.index("data-dash-incident-table")
     pane = html.index("data-dash-graphs")
-    journal = html.index("Recent journal reports")
-    assert wrap < recent < table < pane < journal
+    assert wrap < recent < table < pane
+    assert "Recent journal" not in html
     aside = html[pane : html.index("</aside>", pane)]
     assert "Host metrics" in aside
     assert "data-dash-graph-list" in aside and "data-dash-graph-empty" in aside

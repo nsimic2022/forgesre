@@ -150,32 +150,4 @@
   <div class="dash-graph-list" data-dash-graph-list></div>
 </aside>
 </div>
-{% if can('read_play') %}
-<section id="journal">
-  <h2>Recent journal reports {% with %}{% set tip %}Latest internal process reports (ok / warn / error). Not Docker/Loki logs.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <div data-select-scope>
-  <div class="list-scroll" data-list-scroll>
-  <table class="console scan-list">
-    <thead><tr>{{ sel.head() }}<th>Module</th><th>Status</th><th>Report</th></tr></thead>
-    <tbody>
-    {% for row in journal_recent %}
-      <tr data-list-row>
-        {{ sel.cell(row.id, row.module ~ " report " ~ row.id) }}
-        <td>{{ row.module }}</td>
-        <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>
-        <td>{{ row.summary }}{% if is_demo_journal(row) %} <span class="pill demo">DEMO</span>{% endif %}</td>
-      </tr>
-    {% else %}
-      <tr><td colspan="4" class="muted">No process reports yet. They appear after Core start.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-  {% with pager=journal_pager, list_actions={"delete": "/journal/bulk-delete", "export": "/journal/export", "next": "/#journal", "confirm": "Delete the selected journal rows?"} %}
-  {% include "_pager.html" %}
-  {% endwith %}
-  </div>
-  <p class="muted"><a href="/health-ui#journal">Open full journal</a></p>
-</section>
-{% endif %}
 {% endblock %}

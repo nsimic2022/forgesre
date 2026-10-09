@@ -72,7 +72,8 @@ def test_console_page_and_api():
     assert page.status_code == 200
     assert b"Journal" in page.content
     home = client.get("/")
-    assert b"Recent journal reports" in home.content
+    assert b"Recent incidents" in home.content
+    assert b"Recent journal" not in home.content
     data = client.get("/api/v1/journal").json()
     assert "entries" in data
     assert "modules" in data
@@ -121,6 +122,10 @@ def test_dashboard_has_no_journal_error_banner():
     assert b'id="journal-error-banner"' not in home.content
     assert b"banner-short" not in home.content
     assert b"/dashboard/journal-ack" not in home.content
-    journal = home.content.split(b"Recent journal reports", 1)[1]
-    assert b"SMTP send failed no-dash-banner" in journal
+    assert b"Recent incidents" in home.content
+    assert b"Recent journal" not in home.content
+    assert b"SMTP send failed no-dash-banner" not in home.content
+    health = client.get("/health-ui")
+    assert health.status_code == 200
+    assert b'SMTP send failed no-dash-banner' in health.content.split(b'id="journal"', 1)[1]
     assert client.post("/dashboard/journal-ack", data={"until_id": "1"}, follow_redirects=False).status_code in {404, 405}

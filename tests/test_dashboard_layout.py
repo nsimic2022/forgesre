@@ -247,8 +247,9 @@ def test_dashboard_order_tiles_appliance_sections_without_banners():
     appliance = html.index("data-appliance-card")
     recent = html.index("<h2>Recent incidents</h2>")
     graphs = html.index("data-dash-graphs")
-    journal_list = html.index("Recent journal reports")
-    assert title < top < incidents_tile < infra < appliance < recent < graphs < journal_list
+    assert title < top < incidents_tile < infra < appliance < recent < graphs
+    assert "Recent journal" not in html
+    assert "Layout journal error" not in html
     for gone in ('class="dash-banners"', 'id="host-down-banner"', "data-host-down-banner", "HOST DOWN",
                  "NEW DEVICE DETECTED", 'id="journal-error-banner"', "/dashboard/journal-ack"):
         assert gone not in html, gone
