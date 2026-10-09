@@ -239,12 +239,31 @@ applyTheme(currentTheme());
 (function bindRowSelect() {
   const scopeOf = (el) => el.closest("[data-select-scope]") || el.closest("table");
   const rowsIn = (scope) => (scope ? scope.querySelectorAll("[data-select-row]") : []);
+  const flashSelectOne = (form) => {
+    const scope = form.closest("[data-list-actions]") || form.parentElement;
+    if (!scope) return;
+    let note = scope.querySelector("[data-select-one]");
+    if (!note) {
+      note = document.createElement("span");
+      note.className = "select-one-flash";
+      note.setAttribute("data-select-one", "");
+      note.setAttribute("role", "status");
+      form.insertAdjacentElement("afterend", note);
+    }
+    note.textContent = "Select one";
+  };
   const syncBulk = (scope) => {
     if (!scope) return;
     const bar = scope.querySelector("[data-list-actions]");
     if (!bar) return;
-    const on = Array.from(rowsIn(scope)).some((box) => box.checked);
-    bar.classList.toggle("is-live", on);
+    const on = Array.from(rowsIn(scope)).filter((box) => box.checked);
+    bar.classList.toggle("is-live", on.length > 0);
+    const edit = bar.querySelector("[data-bulk-edit] button");
+    if (edit) {
+      const one = on.length === 1;
+      edit.classList.toggle("is-muted", !one);
+      edit.title = one ? "Edit notes on this incident" : "Select one";
+    }
   };
   const sync = (scope) => {
     if (!scope) return;
@@ -273,13 +292,18 @@ applyTheme(currentTheme());
   document.addEventListener("submit", (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement)) return;
-    if (!form.hasAttribute("data-bulk-delete") && !form.hasAttribute("data-bulk-export")) return;
+    if (!form.hasAttribute("data-bulk-delete") && !form.hasAttribute("data-bulk-export") && !form.hasAttribute("data-bulk-edit")) return;
     const scope = form.closest("[data-select-scope]");
     if (!scope) return;
     const ids = Array.from(rowsIn(scope))
       .filter((box) => box.checked)
       .map((box) => box.value)
       .filter(Boolean);
+    if (form.hasAttribute("data-bulk-edit") && ids.length !== 1) {
+      event.preventDefault();
+      flashSelectOne(form);
+      return;
+    }
     if (!ids.length) {
       event.preventDefault();
       return;
@@ -294,6 +318,91 @@ applyTheme(currentTheme());
       form.appendChild(input);
     });
   });
+})();
+
+(function bindAssetPickers() {
+  const norm = (value) => (value || "").trim().toLowerCase();
+  document.querySelectorAll("[data-asset-picker]").forEach((picker) => {
+    const rows = () => Array.from(picker.querySelectorAll("[data-asset-row]"));
+    const chips = picker.querySelector("[data-asset-chips]");
+    const empty = picker.querySelector("[data-asset-empty]");
+    const field = (name) => picker.querySelector("[data-asset-" + name + "]");
+    const apply = () => {
+      const needle = norm(field("q") && field("q").value);
+      const type = norm(field("type") && field("type").value);
+      const source = norm(field("source") && field("source").value);
+      const site = norm(field("site") && field("site").value);
+      const vlan = norm(field("vlan") && field("vlan").value);
+      const customer = norm(field("customer") && field("customer").value);
+      let shown = 0;
+      rows().forEach((row) => {
+        const blob = norm(row.getAttribute("data-search"));
+        const sources = norm(row.getAttribute("data-sources")).split(/\s+/).filter(Boolean);
+        const match =
+          (!needle || blob.includes(needle)) &&
+          (!type || norm(row.getAttribute("data-type")) === type) &&
+          (!source || sources.includes(source)) &&
+          (!site || norm(row.getAttribute("data-site")) === site) &&
+          (!vlan || norm(row.getAttribute("data-vlan")) === vlan) &&
+          (!customer || norm(row.getAttribute("data-customer")) === customer);
+        row.hidden = !match;
+        if (match) shown += 1;
+      });
+      if (empty) empty.hidden = shown !== 0 || rows().length === 0;
+    };
+    const paintChips = () => {
+      if (!chips) return;
+      chips.replaceChildren();
+      rows().forEach((row) => {
+        const box = row.querySelector('input[name="asset_id"]');
+        if (!box || !box.checked) return;
+        const chip = document.createElement("span");
+        chip.className = "asset-chip";
+        chip.setAttribute("data-asset-chip", box.value);
+        const text = document.createElement("span");
+        text.textContent = row.getAttribute("data-label") || box.value;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "asset-chip-x";
+        remove.setAttribute("aria-label", "Remove " + text.textContent);
+        remove.textContent = "×";
+        remove.addEventListener("click", () => {
+          box.checked = false;
+          paintChips();
+        });
+        chip.append(text, remove);
+        chips.append(chip);
+      });
+    };
+    const filterBtn = picker.querySelector("[data-asset-filter]");
+    if (filterBtn) filterBtn.addEventListener("click", apply);
+    picker.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !target.closest("[data-asset-filters]")) return;
+      event.preventDefault();
+      apply();
+    });
+    picker.addEventListener("change", (event) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.name === "asset_id") paintChips();
+    });
+    paintChips();
+  });
+})();
+
+(function focusIncidentNotes() {
+  let focus = window.location.hash === "#notes";
+  try {
+    focus = focus || new URLSearchParams(window.location.search).get("focus") === "notes";
+  } catch (err) {
+    /* ignore */
+  }
+  if (!focus) return;
+  const box = document.querySelector("#notes textarea[name=body], #notes [data-note-body]");
+  const section = document.getElementById("notes");
+  if (section && section.scrollIntoView) section.scrollIntoView({ block: "start" });
+  if (box) box.focus();
 })();
 
 (function bindDemoPanel() {

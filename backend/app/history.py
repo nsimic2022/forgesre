@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import exists, func, or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.audit import audit
 from app.models import Asset, AuditLog, Incident, IncidentNote, Notification, utcnow
@@ -495,7 +495,13 @@ def list_history(
         _, _, offset = parse_page(page, total=total, size=limit)
     else:
         offset = max(0, int(offset or 0))
-    rows = query.options(joinedload(Incident.asset)).order_by(Incident.id.desc()).offset(offset).limit(limit).all()
+    rows = (
+        query.options(joinedload(Incident.asset), selectinload(Incident.operator_notes))
+        .order_by(Incident.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return rows, total
 
 
@@ -546,6 +552,28 @@ def notes_for(db: Session, incident: Incident) -> list[IncidentNote]:
         .order_by(IncidentNote.id.asc())
         .all()
     )
+
+
+def incident_notes_snippet(incident: Incident, limit: int = 160) -> str:
+    """Analyst/engineer write-up for the list column.
+
+    Notes are ``incident_notes`` rows (not a single field). One note shows that body.
+    Several notes show a short join of the latest ones, newest first.
+    """
+    rows = list(getattr(incident, "operator_notes", None) or [])
+    rows.sort(key=lambda note: int(getattr(note, "id", None) or 0))
+    texts: list[str] = []
+    for note in rows:
+        body = " ".join(str(getattr(note, "body", "") or "").split())
+        if body:
+            texts.append(body)
+    if not texts:
+        return ""
+    newest_first = list(reversed(texts))
+    snippet = newest_first[0] if len(newest_first) == 1 else " · ".join(newest_first[:2])
+    if len(snippet) > limit:
+        return snippet[: limit - 1].rstrip() + "…"
+    return snippet
 
 
 def add_note(db: Session, incident: Incident, actor: str, body: str) -> IncidentNote:

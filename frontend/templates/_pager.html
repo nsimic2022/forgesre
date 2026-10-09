@@ -37,6 +37,12 @@
       <button type="submit" class="danger">{{ actions.get("delete_label") or "Delete" }}</button>
     </form>
     {% endif %}
+    {% if actions.edit %}
+    <form method="post" action="{{ actions.edit }}" data-bulk-edit>
+      <input type="hidden" name="next" value="{{ actions.next }}">
+      <button type="submit" title="Select one">Edit</button>
+    </form>
+    {% endif %}
     {% if actions.export %}
     <form method="post" action="{{ actions.export }}" data-bulk-export>
       <button type="submit">Export</button>

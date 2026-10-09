@@ -282,7 +282,8 @@ def test_ops_send_now_creates_outbox_without_waiting_or_schedule():
     assert mail is not None
     assert mail.status == "generated"
     assert mail.incident_id is None
-    assert mail.subject == "[ForgeSRE] send-now"
+    assert mail.subject == "Report send-now"
+    assert not mail.subject.startswith("Alarm")
     assert "forge-demo-01" in mail.body
     assert "Not an incident" in mail.body
     assert "SMTP disabled" in (mail.error or "") or "not sent" in (mail.error or "").lower()

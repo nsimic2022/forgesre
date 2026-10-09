@@ -221,7 +221,7 @@
   {% with pager=notes_pager %}{% include "_pager.html" %}{% endwith %}
   {% if can('write_incidents') %}
   <form method="post" action="/incidents/{{ incident.number }}/notes" class="stack">
-    <label>Add note <textarea name="body" rows="3" required placeholder="What you did on the host"></textarea></label>
+    <label>Add note <textarea name="body" rows="3" required placeholder="What you did on the host" data-note-body{% if request.query_params.get('focus') == 'notes' %} autofocus{% endif %}></textarea></label>
     <button type="submit">Save note</button>
   </form>
   {% endif %}

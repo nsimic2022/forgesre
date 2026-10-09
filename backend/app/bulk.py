@@ -109,6 +109,17 @@ def _back(raw: str, default: str) -> RedirectResponse:
     return RedirectResponse(target, status_code=303)
 
 
+def _select_one_target(raw: str, default: str) -> str:
+    """Stay on the list. Nothing is written when Edit does not have exactly one row."""
+    target = raw if raw in _NEXT else default
+    base, _, frag = target.partition("#")
+    sep = "&" if "?" in base else "?"
+    url = f"{base}{sep}edit_note=select-one"
+    if frag:
+        url += "#" + frag
+    return url
+
+
 def _download(filename: str, lines: list[str]) -> PlainTextResponse:
     body = "\n".join(lines)
     if not body.endswith("\n"):
@@ -169,20 +180,41 @@ def _block(label: str, value: object) -> list[str]:
     return [_field(label, parts[0])] + [f"{indent}{line}" if line else "" for line in parts[1:]]
 
 
-def _join_docs(title: str, records: list[list[str]]) -> list[str]:
-    """Title, then each record as labeled lines, with a blank line between records."""
+def _break_label(value: object, limit: int = 72) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) > limit:
+        return text[: limit - 1].rstrip() + "…"
+    return text or "record"
+
+
+def _join_docs(title: str, records: list[list[str]], labels: list[str] | None = None) -> list[str]:
+    """Title, then each record as labeled lines.
+
+    Two or more records get a titled break so the file is not one mashed blob.
+    One record stays a single block. Values stay on vertical labeled lines.
+    """
     lines = [title, ""]
-    started = False
-    for record in records:
+    bodies: list[list[str]] = []
+    names: list[str] = []
+    for index, record in enumerate(records):
         body = list(record)
         while body and body[-1] == "":
             body.pop()
         if not body:
             continue
-        if started:
+        bodies.append(body)
+        raw = labels[index] if labels and index < len(labels) else ""
+        names.append(_break_label(raw))
+    total = len(bodies)
+    for index, body in enumerate(bodies):
+        if total >= 2:
+            lines.append(f"======== {index + 1} of {total}  {names[index]} ========")
             lines.append("")
-        started = True
+        elif index:
+            lines.append("")
         lines.extend(body)
+        if index < total - 1:
+            lines.append("")
     return lines
 
 
@@ -435,8 +467,15 @@ def incidents_text(db: Session, numbers: list[str]) -> list[str]:
         .all()
     )
     by = {row.number: row for row in rows}
-    records = [_incident_record(db, by[number]) for number in numbers if number in by]
-    return _join_docs(f"ForgeSRE incidents ({len(records)})", records)
+    records = []
+    labels = []
+    for number in numbers:
+        row = by.get(number)
+        if row is None:
+            continue
+        records.append(_incident_record(db, row))
+        labels.append(number)
+    return _join_docs(f"ForgeSRE incidents ({len(records)})", records, labels)
 
 
 def delete_assets(db: Session, asset_ids: list[str], actor: str) -> int:
@@ -487,8 +526,15 @@ def _asset_record(row: Asset) -> list[str]:
 def assets_text(db: Session, asset_ids: list[str]) -> list[str]:
     rows = db.query(Asset).filter(Asset.asset_id.in_(asset_ids)).all()
     by = {row.asset_id: row for row in rows}
-    records = [_asset_record(by[asset_id]) for asset_id in asset_ids if asset_id in by]
-    return _join_docs(f"ForgeSRE assets ({len(records)})", records)
+    records = []
+    labels = []
+    for asset_id in asset_ids:
+        row = by.get(asset_id)
+        if row is None:
+            continue
+        records.append(_asset_record(row))
+        labels.append(row.hostname or asset_id)
+    return _join_docs(f"ForgeSRE assets ({len(records)})", records, labels)
 
 
 def delete_found(db: Session, ids: list[int], actor: str) -> int:
@@ -506,6 +552,7 @@ def found_text(db: Session, ids: list[int]) -> list[str]:
     rows = db.query(DiscoveryCandidate).filter(DiscoveryCandidate.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
     records = []
+    labels = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
@@ -521,7 +568,8 @@ def found_text(db: Session, ids: list[int]) -> list[str]:
                 _field("source", row.source),
             ]
         )
-    return _join_docs(f"ForgeSRE found assets ({len(records)})", records)
+        labels.append(row.hostname or row.ip or str(pk))
+    return _join_docs(f"ForgeSRE found assets ({len(records)})", records, labels)
 
 
 def delete_playrules(db: Session, ids: list[int], actor: str) -> int:
@@ -549,10 +597,12 @@ def playrules_text(db: Session, ids: list[int]) -> list[str]:
     rows = db.query(Playrule).filter(Playrule.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
     records = []
+    labels = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
             continue
+        labels.append(row.name or str(pk))
         cond = row.condition if isinstance(row.condition, dict) else {}
         alertname = str(cond.get("alertname") or "")
         book = row.playbook.name if row.playbook else ""
@@ -581,7 +631,7 @@ def playrules_text(db: Session, ids: list[int]) -> list[str]:
                 _field("playbook", book),
             ]
         )
-    return _join_docs(f"ForgeSRE playrules ({len(records)})", records)
+    return _join_docs(f"ForgeSRE playrules ({len(records)})", records, labels)
 
 
 def delete_journal_rows(db: Session, ids: list[int], actor: str) -> int:
@@ -608,6 +658,7 @@ def journal_text(db: Session, ids: list[int]) -> list[str]:
     rows = db.query(JournalEntry).filter(JournalEntry.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
     records = []
+    labels = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
@@ -624,7 +675,8 @@ def journal_text(db: Session, ids: list[int]) -> list[str]:
                 _field("duration", f"{row.duration_ms} ms" if row.duration_ms else "—"),
             ]
         )
-    return _join_docs(f"ForgeSRE journal ({len(records)})", records)
+        labels.append(row.summary or f"{row.module} {row.action}".strip())
+    return _join_docs(f"ForgeSRE journal ({len(records)})", records, labels)
 
 
 def delete_mail(db: Session, ids: list[int], actor: str) -> int:
@@ -652,6 +704,7 @@ def mail_text(db: Session, ids: list[int]) -> list[str]:
     rows = db.query(Notification).filter(Notification.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
     records = []
+    labels = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
@@ -666,7 +719,8 @@ def mail_text(db: Session, ids: list[int]) -> list[str]:
         if (row.body or "").strip():
             body.extend(_block("body", (row.body or "")[:4000]))
         records.append(body)
-    return _join_docs(f"ForgeSRE mail ({len(records)})", records)
+        labels.append(row.subject or row.target)
+    return _join_docs(f"ForgeSRE mail ({len(records)})", records, labels)
 
 
 def delete_reports(db: Session, ids: list[int], actor: str) -> int:
@@ -692,10 +746,12 @@ def reports_text(db: Session, ids: list[int]) -> list[str]:
     rows = db.query(ScheduledReport).filter(ScheduledReport.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
     records = []
+    labels = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
             continue
+        labels.append(row.name or str(pk))
         assets = ", ".join(str(item) for item in (row.asset_ids or [])) or "all"
         records.append(
             [
@@ -707,7 +763,7 @@ def reports_text(db: Session, ids: list[int]) -> list[str]:
                 _field("next", row.next_run_at),
             ]
         )
-    return _join_docs(f"ForgeSRE scheduled reports ({len(records)})", records)
+    return _join_docs(f"ForgeSRE scheduled reports ({len(records)})", records, labels)
 
 
 def _audit_detail(row: AuditLog) -> str:
@@ -724,6 +780,7 @@ def audit_text(db: Session, ids: list[int]) -> list[str]:
     rows = db.query(AuditLog).filter(AuditLog.id.in_(ids)).all() if ids else []
     by = {row.id: row for row in rows}
     records = []
+    labels = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
@@ -737,7 +794,8 @@ def audit_text(db: Session, ids: list[int]) -> list[str]:
                 *_block("detail", _audit_detail(row)),
             ]
         )
-    return _join_docs(f"ForgeSRE audit ({len(records)})", records)
+        labels.append(row.action or str(pk))
+    return _join_docs(f"ForgeSRE audit ({len(records)})", records, labels)
 
 
 def incident_audit_text(db: Session, number: str, ids: list[int]) -> list[str]:
@@ -751,6 +809,7 @@ def incident_audit_text(db: Session, number: str, ids: list[int]) -> list[str]:
     )
     by = {row.id: row for row in rows}
     records = []
+    labels = []
     for pk in ids:
         row = by.get(pk)
         if row is None:
@@ -763,7 +822,26 @@ def incident_audit_text(db: Session, number: str, ids: list[int]) -> list[str]:
                 *_block("detail", _audit_detail(row)),
             ]
         )
-    return _join_docs(f"ForgeSRE who did what {number} ({len(records)})", records)
+        labels.append(row.action or str(pk))
+    return _join_docs(f"ForgeSRE who did what {number} ({len(records)})", records, labels)
+
+
+@router.post("/incidents/edit")
+def incidents_edit(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    nxt: Annotated[str, Form(alias="next")] = "",
+):
+    """Open one incident's notes. Zero or many rows do not write anything."""
+    _forbid(user, can(user, "write_incidents"))
+    ids = selected_values(selected)
+    if len(ids) != 1:
+        return RedirectResponse(_select_one_target(nxt, "/incidents"), status_code=303)
+    row = db.query(Incident).filter(Incident.number == ids[0]).first()
+    if row is None:
+        return RedirectResponse(_select_one_target(nxt, "/incidents"), status_code=303)
+    return RedirectResponse(f"/incidents/{row.number}?focus=notes#notes", status_code=303)
 
 
 @router.post("/incidents/bulk-delete")

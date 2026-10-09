@@ -2,7 +2,10 @@
 {% import "_select.html" as sel %}
 {% block title %}Incidents · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Incidents {% with %}{% set tip %}The incident list (default: all statuses, newest first — not a separate 90-day archive). Columns: Hostname, Name, severity, status, When, Acknowledged, Resolved by. Left bar and #N color: red = critical, yellow = warning in progress, green = resolved or closed. Title color follows severity. When is the start date and time (08 Oct 2026, 21:57) — hover for how long it has been open or how long it lasted. The Acknowledged dot is green when acknowledged, yellow when in progress without an ack, and red when not acknowledged. RESOLVED means the alert cleared (or a person resolved it) — it is not Closed. If the same alert fires again after RESOLVED, a new incident opens. Closed rows stay in this list. Filter by status (including Not acknowledged), severity (Critical or Warning), site, customer, time window, or search.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+{% if request.query_params.get('edit_note') == 'select-one' %}
+<div class="banner" role="status">Select one</div>
+{% endif %}
+<h1>Incidents {% with %}{% set tip %}The incident list (default: all statuses, newest first — not a separate 90-day archive). Columns: Hostname, Name, severity, status, When, Acknowledged, Resolved by, Notes. Left bar and #N color: red = critical, yellow = warning in progress, green = resolved or closed. Title color follows severity. When is the start date and time (08 Oct 2026, 21:57) — hover for how long it has been open or how long it lasted. The Acknowledged dot is green when acknowledged, yellow when in progress without an ack, and red when not acknowledged. RESOLVED means the alert cleared (or a person resolved it) — it is not Closed. If the same alert fires again after RESOLVED, a new incident opens. Closed rows stay in this list. Notes is the operator write-up (latest note). Filter by status (including Not acknowledged), severity (Critical or Warning), site, customer, time window, or search. Edit in the pager opens one selected incident so you can add or change that write-up.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <form method="get" action="/incidents" class="list-filters incidents-filters">
   <label>Status
     <select name="status">
@@ -63,6 +66,7 @@
       <th>When</th>
       <th class="col-ack">Acknowledged</th>
       <th class="col-resolved">Resolved by</th>
+      <th class="col-notes">Notes</th>
     </tr>
   </thead>
   <tbody>
@@ -76,12 +80,12 @@
       {% include "_incident_scan_tail.html" %}
     </tr>
   {% else %}
-    <tr><td colspan="8" class="muted">No incidents match this filter.{% if status_group != "all" or severity_group or site or customer or window or q %} Try Reset.{% endif %}</td></tr>
+    <tr><td colspan="9" class="muted">No incidents match this filter.{% if status_group != "all" or severity_group or site or customer or window or q %} Try Reset.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
-{% with list_actions={"delete": "/incidents/bulk-delete" if can('write_incidents') else "", "export": "/incidents/export", "next": "/incidents", "confirm": "Delete the selected incidents? Mail already sent stays in the outbox."} %}
+{% with list_actions={"delete": "/incidents/bulk-delete" if can('write_incidents') else "", "edit": "/incidents/edit" if can('write_incidents') else "", "export": "/incidents/export", "next": "/incidents", "confirm": "Delete the selected incidents? Mail already sent stays in the outbox."} %}
 {% include "_pager.html" %}
 {% endwith %}
 </div>
