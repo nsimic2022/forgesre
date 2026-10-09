@@ -106,6 +106,9 @@
 <p class="muted">Full stack diagnostics live on <a href="/health-ui">System Health</a>.{% if can('read_play') %} The journal is on <a href="/health-ui#journal">System Health</a>.{% endif %}</p>
 <div class="dash-incidents" data-dash-incidents>
 <section class="dash-recent">
+  {% if request.query_params.get('edit_note') == 'select-one' %}
+  <div class="banner" role="status">Select one</div>
+  {% endif %}
   <h2>Recent incidents</h2>
   <div data-select-scope>
   <div class="dash-recent-scroll" data-dash-list>
@@ -120,6 +123,7 @@
         <th>When</th>
         <th class="col-ack">Acknowledged</th>
         <th class="col-resolved">Resolved by</th>
+        <th class="col-notes">Notes</th>
       </tr>
     </thead>
     <tbody>
@@ -134,12 +138,12 @@
         {% include "_incident_scan_tail.html" %}
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">No incidents yet. Use Run demo (top right) or wait for an alert.</td></tr>
+      <tr><td colspan="9" class="muted">No incidents yet. Use Run demo (top right) or wait for an alert.</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
-  {% with list_actions={"delete": "/incidents/bulk-delete" if can('write_incidents') else "", "export": "/incidents/export", "next": "/", "confirm": "Delete the selected incidents? Mail already sent stays in the outbox."} %}
+  {% with list_actions={"delete": "/incidents/bulk-delete" if can('write_incidents') else "", "edit": "/incidents/edit" if can('write_incidents') else "", "export": "/incidents/export", "next": "/", "confirm": "Delete the selected incidents? Mail already sent stays in the outbox."} %}
   {% include "_pager.html" %}
   {% endwith %}
   </div>

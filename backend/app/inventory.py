@@ -1425,6 +1425,19 @@ def asset_in_zabbix(asset: Asset) -> bool:
     return (asset.source or "") == "zabbix" or bool((getattr(asset, "zabbix_hostid", "") or "").strip())
 
 
+def asset_source_tokens(asset: Asset) -> list[str]:
+    """Source dropdown values this asset matches on /assets (forge, its raw source, zabbix when linked)."""
+    source = (asset.source or "manual").strip().lower() or "manual"
+    tokens: list[str] = []
+    if source not in IMPORTED_SOURCES:
+        tokens.append("forge")
+    if asset_in_zabbix(asset) and "zabbix" not in tokens:
+        tokens.append("zabbix")
+    if source not in tokens:
+        tokens.append(source)
+    return tokens
+
+
 def zabbix_agent_state(asset: Asset) -> str:
     """Last-known Zabbix agent availability (from sync / 5-min poll). Empty when not in Zabbix."""
     if not asset_in_zabbix(asset):

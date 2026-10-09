@@ -205,14 +205,7 @@
         {% endfor %}
       </div>
     </fieldset>
-    <fieldset>
-      <legend>Assets</legend>
-      {% for asset in assets %}
-      <label class="check"><input type="checkbox" name="asset_id" value="{{ asset.asset_id }}" {% if asset.asset_id in (rf.asset_ids or []) %}checked{% endif %}> {{ asset.hostname }} ({{ asset.asset_id }})</label>
-      {% else %}
-      <p class="muted">No assets in inventory.</p>
-      {% endfor %}
-    </fieldset>
+    {% with selected=rf.asset_ids or [] %}{% include "_asset_picker.html" %}{% endwith %}
     <div class="row-actions ops-report-form-actions">
       <button type="submit">{% if report_mode == "clone" %}Save copy{% else %}Save schedule{% endif %}</button>
       <a href="/ops#reports">Cancel</a>
@@ -220,23 +213,19 @@
   </form>
   <form method="post" action="/ops/reports/send-now" class="stack ops-report-now">
     <h3>Send now {% with %}{% set tip %}One snapshot, immediately. Does not create a 6-hour schedule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-    <label>Send to
-      <select name="to_email">
-        <option value="">Select an address</option>
+    <fieldset class="report-recipients">
+      <legend>Recipients</legend>
+      <div class="recipient-picks">
         {% for item in addresses %}
-        <option value="{{ item.email }}">{% if item.label %}{{ item.label }} — {% endif %}{{ item.email }} ({{ item.source }})</option>
+        <label class="check"><input type="checkbox" name="to_email" value="{{ item.email }}"> {{ item.email }}{% if item.label %} · {{ item.label }}{% endif %} <span class="muted">({{ item.source }})</span></label>
+        {% else %}
+        <p class="muted">No saved addresses yet. Type them below.</p>
         {% endfor %}
-      </select>
-    </label>
-    <label>Or destination email <input name="new_email" type="email" placeholder="ops@example.local"></label>
-    <fieldset>
-      <legend>Assets</legend>
-      {% for asset in assets %}
-      <label class="check"><input type="checkbox" name="asset_id" value="{{ asset.asset_id }}"> {{ asset.hostname }} ({{ asset.asset_id }})</label>
-      {% else %}
-      <p class="muted">No assets in inventory.</p>
-      {% endfor %}
+      </div>
+      <label>Additional emails <textarea name="extra_emails" rows="2" placeholder="one per line, or comma-separated"></textarea></label>
+      <label>Or destination email <input name="new_email" type="email" placeholder="ops@example.local"></label>
     </fieldset>
+    {% with selected=[] %}{% include "_asset_picker.html" %}{% endwith %}
     <button type="submit">{% if smtp_on %}Send now{% else %}Save to outbox{% endif %}</button>
   </form>
   </div>

@@ -180,6 +180,18 @@ def incident_alarm_subject(incident: Incident | None) -> str:
     return f"Alarm {host}"[:255]
 
 
+def report_mail_subject(name: str) -> str:
+    """Send-now and scheduled report subject. Never an Alarm line."""
+    label = " ".join(str(name or "").split()) or "report"
+    if label.lower().startswith("alarm"):
+        label = label.split(" ", 1)[-1].strip() or "report"
+    if label.lower().startswith("report"):
+        text = label[:1].upper() + label[1:]
+    else:
+        text = f"Report {label}"
+    return text[:255]
+
+
 def incident_mail_heading(incident: Incident | None) -> str:
     """HTML title inside the mail body: hostname, then the problem name."""
     if incident is None:
@@ -1529,33 +1541,109 @@ def send_outbound_mail(
     return row
 
 
-def build_performance_report(db: Session, asset_ids: list[str]) -> str:
-    wanted = [str(item).strip() for item in (asset_ids or []) if str(item).strip()]
-    q = db.query(Asset)
-    if wanted:
-        q = q.filter(Asset.asset_id.in_(wanted))
-    assets = q.order_by(Asset.hostname).all()
+_REPORT_METRICS = (
+    ("cpu_percent", "CPU"),
+    ("memory_percent", "Memory"),
+    ("disk_percent", "Disk"),
+    ("up", "Up"),
+)
+
+
+def _performance_assets(db: Session, asset_ids: list[str]) -> list[Asset]:
+    """Selected assets in the order asked. An empty list is the whole inventory, by hostname."""
+    wanted: list[str] = []
+    seen: set[str] = set()
+    for item in asset_ids or []:
+        text = str(item or "").strip()
+        if text and text not in seen:
+            seen.add(text)
+            wanted.append(text)
+    if not wanted:
+        return db.query(Asset).order_by(Asset.hostname).all()
+    rows = db.query(Asset).filter(Asset.asset_id.in_(wanted)).all()
+    by = {row.asset_id: row for row in rows}
+    return [by[item] for item in wanted if item in by]
+
+
+def _performance_pairs(db: Session, asset_ids: list[str]) -> list[tuple[Asset, dict[str, Any]]]:
+    return [(asset, query_prometheus(asset)) for asset in _performance_assets(db, asset_ids)]
+
+
+def _performance_plain(pairs: list[tuple[Asset, dict[str, Any]]]) -> str:
     lines = [
         "ForgeSRE performance report",
         f"Generated at {compact_when_text(utcnow())}",
         "Not an incident. Read-only snapshot from Prometheus / demo gauges.",
         "",
     ]
-    if not assets:
+    if not pairs:
         lines.append("No assets selected.")
         return "\n".join(lines) + "\n"
-    for asset in assets:
-        sample = query_prometheus(asset)
+    total = len(pairs)
+    for index, (asset, sample) in enumerate(pairs, start=1):
+        if total >= 2:
+            lines.append(f"======== {index} of {total}  {asset.hostname} ========")
+            lines.append("")
         lines.append(f"## {asset.hostname} ({asset.asset_id})")
         lines.append(f"type={asset.type or '—'} status={asset.status or '—'} ip={asset.ip or '—'}")
         if sample.get("error"):
             lines.append(f"metrics error: {sample['error']}")
         else:
-            for key in ("cpu_percent", "disk_percent", "memory_percent", "up"):
+            for key, _label in _REPORT_METRICS:
                 if key in sample and sample[key] is not None:
                     lines.append(f"{key}={sample[key]}")
         lines.append("")
     return "\n".join(lines) + "\n"
+
+
+def _performance_html(pairs: list[tuple[Asset, dict[str, Any]]], name: str) -> str:
+    """Gmail-style HTML: one section per asset, same shell as incident mail."""
+    from app.email_html import DASH, esc, meta_table, render_email
+
+    sections: list[tuple[str, str, bool]] = []
+    total = len(pairs)
+    for index, (asset, sample) in enumerate(pairs, start=1):
+        rows = [
+            ("Hostname", esc(asset.hostname or DASH)),
+            ("Asset ID", esc(asset.asset_id or DASH)),
+            ("Type", esc(asset.type or DASH)),
+            ("Status", esc(asset.status or DASH)),
+            ("IP", esc(asset.ip or DASH)),
+        ]
+        if sample.get("error"):
+            rows.append(("Metrics", esc(sample["error"])))
+        else:
+            for key, label in _REPORT_METRICS:
+                if key in sample and sample[key] is not None:
+                    rows.append((label, esc(sample[key])))
+        if total >= 2:
+            heading = f"{index} of {total} · {asset.hostname}"
+        else:
+            heading = str(asset.hostname or asset.asset_id or "Asset")
+        sections.append((heading, meta_table(rows), True))
+    if not sections:
+        sections.append(("Assets", esc("No assets selected."), False))
+    return render_email(
+        kicker="Report",
+        heading=report_mail_subject(name),
+        sections=sections,
+        footer="",
+        kind="performance-report",
+    )
+
+
+def performance_report_message(db: Session, asset_ids: list[str], name: str) -> tuple[str, str, str]:
+    """Subject, plain body, and HTML alternative. Built once so every recipient gets the same mail."""
+    pairs = _performance_pairs(db, asset_ids)
+    return report_mail_subject(name), _performance_plain(pairs), _performance_html(pairs, name)
+
+
+def build_performance_report(db: Session, asset_ids: list[str]) -> str:
+    return _performance_plain(_performance_pairs(db, asset_ids))
+
+
+def build_performance_report_html(db: Session, asset_ids: list[str], name: str = "report") -> str:
+    return _performance_html(_performance_pairs(db, asset_ids), name)
 
 
 def send_performance_report(
@@ -1565,19 +1653,27 @@ def send_performance_report(
     to_email: str,
     actor: str = "system",
     name: str = "performance",
+    subject: str | None = None,
+    body: str | None = None,
+    html: str | None = None,
 ) -> Notification:
-    """Build the scheduled-report snapshot and send (or store generated) now."""
+    """Build the scheduled-report snapshot and send (or store generated) now.
+
+    Pass subject/body/html to reuse one snapshot across several recipients.
+    """
     contact = remember_mail_contact(db, to_email, actor=actor)
     if contact is None:
         raise ValueError("Need a valid email address")
-    body = build_performance_report(db, list(asset_ids or []))
+    if subject is None or body is None or html is None:
+        subject, body, html = performance_report_message(db, list(asset_ids or []), name)
     return send_outbound_mail(
         db,
         target=contact.email,
-        subject=f"[ForgeSRE] {name}",
+        subject=subject,
         body=body,
         actor=actor,
         step_key="report",
+        html=html,
     )
 
 
@@ -1832,6 +1928,7 @@ def _send_report_job(db: Session, job: dict[str, Any], actor: str) -> Notificati
         recipients = [job["to_email"]]
     if not recipients:
         raise ValueError("Need a valid email address")
+    subject, body, html = performance_report_message(db, list(job.get("asset_ids") or []), str(job.get("name") or "report"))
     last: Notification | None = None
     problems: list[str] = []
     for email in recipients:
@@ -1842,6 +1939,9 @@ def _send_report_job(db: Session, job: dict[str, Any], actor: str) -> Notificati
                 to_email=email,
                 actor=actor,
                 name=job["name"],
+                subject=subject,
+                body=body,
+                html=html,
             )
         except Exception as exc:
             problems.append(f"{email}: {exc}")

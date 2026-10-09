@@ -1,0 +1,61 @@
+<fieldset class="asset-picker" data-asset-picker>
+  <legend>Assets</legend>
+  <div class="asset-picker-filters" data-asset-filters>
+    <input type="search" data-asset-q placeholder="name, hostname, IP" aria-label="Search assets" autocomplete="off">
+    <select data-asset-type aria-label="Type" title="Type">
+      <option value="">Type</option>
+      {% for group, names in type_groups %}
+      <optgroup label="{{ group }}">
+        {% for name in names %}
+        <option value="{{ name }}">{{ name }}</option>
+        {% endfor %}
+      </optgroup>
+      {% endfor %}
+      {% if filter_options.custom_types %}
+      <optgroup label="Custom">
+        {% for name in filter_options.custom_types %}
+        <option value="{{ name }}">{{ name }}</option>
+        {% endfor %}
+      </optgroup>
+      {% endif %}
+    </select>
+    <select data-asset-source aria-label="Source" title="Source">
+      <option value="">Source</option>
+      {% for value, label in source_filters %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    {% for key, values, empty_label in [("site", filter_options.sites, "Site"), ("vlan", filter_options.vlans, "VLAN"), ("customer", filter_options.customers, "Customer")] %}
+    <select data-asset-{{ key }} aria-label="{{ empty_label }}" title="{{ empty_label }}">
+      <option value="">{{ empty_label }}</option>
+      {% for value in values %}
+      <option value="{{ value }}">{{ value }}</option>
+      {% endfor %}
+    </select>
+    {% endfor %}
+    <button type="button" data-asset-filter>Filter</button>
+  </div>
+  <div class="asset-picker-chips" data-asset-chips>
+    {% for asset in assets if asset.asset_id in (selected or []) %}
+    <span class="asset-chip">{{ asset.hostname }}</span>
+    {% endfor %}
+  </div>
+  <div class="asset-picker-list" data-asset-list>
+    {% for asset in assets %}
+    <label class="check" data-asset-row
+      data-search="{{ asset_search_blob(asset) }} {{ asset.type or '' }} {{ asset.source or '' }} {{ asset.notes or '' }}"
+      data-type="{{ asset.type or '' }}"
+      data-sources="{{ asset_source_tokens(asset)|join(' ') }}"
+      data-site="{{ asset_extra(asset, 'site') }}"
+      data-vlan="{{ asset_extra(asset, 'vlan') }}"
+      data-customer="{{ asset_extra(asset, 'customer') }}"
+      data-label="{{ asset.hostname }}">
+      <input type="checkbox" name="asset_id" value="{{ asset.asset_id }}" {% if asset.asset_id in (selected or []) %}checked{% endif %}>
+      {{ asset.hostname }} ({{ asset.asset_id }})
+    </label>
+    {% else %}
+    <p class="muted">No assets in inventory.</p>
+    {% endfor %}
+  </div>
+  <p class="muted" data-asset-empty hidden>No assets match this filter.</p>
+</fieldset>

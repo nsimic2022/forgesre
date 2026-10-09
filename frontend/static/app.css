@@ -599,7 +599,7 @@ button.danger { background: var(--crit); color: var(--btn-danger-text); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; max-width: 720px; }
 .form-grid label, .form-grid .wide { display: flex; flex-direction: column; gap: 0.25rem; }
 .form-grid .wide { grid-column: 1 / -1; }
-/* Add / Edit asset: two halves that fill the page (v08-25).
+/* Add / Edit asset: two halves that fill the page (v08-26).
    Left 50%: Identity beside Comms / monitoring.
    Right 50%: Standard alarms, Custom alarms, Ladder — three equal columns, no void after Ladder. */
 .asset-form-split {
@@ -1143,6 +1143,19 @@ form.ops-compose {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+.incidents-table th.col-notes,
+.incidents-table td.col-notes,
+.dash-recent th.col-notes,
+.dash-recent td.col-notes {
+  width: 14rem;
+  max-width: 18rem;
+  font-size: 0.82rem;
+}
+.incidents-table td.col-notes,
+.dash-recent td.col-notes {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 /* Recent incidents is the narrow 3/4 pane: fixed columns so Acknowledged fits without a sideways scroll. */
 .dash-recent .incidents-table { table-layout: fixed; width: 100%; }
 .dash-recent .incidents-table th:nth-child(1),
@@ -1150,7 +1163,7 @@ form.ops-compose {
 .dash-recent .incidents-table th.col-host,
 .dash-recent .incidents-table td.col-host { width: 14%; max-width: none; }
 .dash-recent .incidents-table th.col-name,
-.dash-recent .incidents-table td.col-name { width: 22%; }
+.dash-recent .incidents-table td.col-name { width: 16%; }
 .dash-recent .incidents-table th:nth-child(4),
 .dash-recent .incidents-table td:nth-child(4) { width: 10%; }
 .dash-recent .incidents-table th:nth-child(5),
@@ -1166,10 +1179,16 @@ form.ops-compose {
 }
 .dash-recent .incidents-table th.col-resolved,
 .dash-recent .incidents-table td.col-resolved {
-  width: 13%;
+  width: 11%;
   min-width: 0;
   max-width: none;
   padding-left: 0.75rem;
+}
+.dash-recent .incidents-table th.col-notes,
+.dash-recent .incidents-table td.col-notes {
+  width: 14%;
+  max-width: none;
+  min-width: 0;
 }
 .incidents-table td.inc-when .stamp-date { color: var(--text); font-weight: 600; }
 .incidents-table tr.inc-row-done td.inc-when .stamp-date { font-weight: 500; }
@@ -1179,6 +1198,38 @@ form.ops-compose {
   max-width: none;
 }
 .ops-report-cols fieldset { max-width: none; }
+.asset-picker-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin: 0.2rem 0 0.45rem;
+}
+.asset-picker-filters input,
+.asset-picker-filters select { width: auto; min-width: 7.5rem; max-width: 14rem; }
+.asset-picker-filters button { width: auto; padding: 0.35rem 0.75rem; }
+.asset-picker-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.15rem 0 0.45rem; }
+.asset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  font-size: 0.82rem;
+}
+.asset-chip-x { width: auto; padding: 0 0.25rem; line-height: 1.2; }
+.asset-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  max-height: 16rem;
+  overflow: auto;
+}
+/* label.check is display:flex, which would otherwise beat the hidden attribute. */
+.asset-picker-list label.check[hidden] {
+  display: none;
+}
 .ops-report-form-actions { margin-top: 0.35rem; flex-wrap: wrap; }
 .ops-report-form-actions button { width: auto; }
 td.ops-report-actions {
@@ -1768,6 +1819,8 @@ form.pager-size button { padding: 0.22rem 0.6rem; font-size: 0.85rem; }
 }
 .list-actions form { margin: 0; display: inline-flex; }
 .list-actions button { width: auto; flex: 0 0 auto; padding: 0.28rem 0.7rem; font-size: 0.85rem; }
+.list-actions button.is-muted { opacity: 0.55; }
+.select-one-flash { color: var(--warn); font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
 [data-select-scope]:has([data-select-row]:checked) .list-actions,
 .list-actions.is-live {
   visibility: visible;

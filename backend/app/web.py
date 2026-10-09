@@ -37,10 +37,13 @@ from app.inventory import (
     ASSET_TYPE_CHOICES,
     CANDIDATE_ROLE_CHOICES,
     approve_candidate,
+    asset_extra,
     asset_filter_options,
     asset_form_values,
     asset_in_zabbix,
     asset_missing_email,
+    asset_search_blob,
+    asset_source_tokens,
     asset_tiles,
     asset_type_abbrev,
     assets_matching,
@@ -128,6 +131,7 @@ from app.history import (
     incident_heat,
     incident_list_filters,
     incident_neighbors,
+    incident_notes_snippet,
     list_history,
     notes_for,
     notifications_for,
@@ -518,6 +522,7 @@ def ctx(request: Request, user: User | None, **extra):
         "ack_circle": ack_circle,
         "extras_rows": extras_rows,
         "support_status": support_status,
+        "incident_notes_snippet": incident_notes_snippet,
     }
     if user is not None:
         try:
@@ -2552,6 +2557,12 @@ def ops_page(
         report_form=report_form,
         editing_report=editing_report,
         clone_source_name=clone_source_name,
+        type_groups=ASSET_TYPE_GROUPS,
+        source_filters=ASSET_SOURCE_FILTERS,
+        filter_options=asset_filter_options(assets),
+        asset_search_blob=asset_search_blob,
+        asset_source_tokens=asset_source_tokens,
+        asset_extra=asset_extra,
     )
 
 
@@ -2660,24 +2671,33 @@ def ops_create_report(
 def ops_send_report_now(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
-    to_email: str = Form(""),
+    to_email: Annotated[list[str], Form()] = [],
     new_email: str = Form(""),
+    extra_emails: str = Form(""),
     asset_id: Annotated[list[str], Form()] = [],
 ):
     if not can_send_ops(user):
         raise HTTPException(status_code=403)
-    from app.services import send_performance_report
+    from app.services import performance_report_message, send_performance_report
 
     ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
-    chosen = (new_email or "").strip() or (to_email or "").strip()
+    typed = "\n".join(part for part in ((extra_emails or "").strip(), (new_email or "").strip()) if part)
+    emails = _collect_report_emails(db, to_email, typed, user.email)
+    if not emails:
+        raise HTTPException(status_code=400, detail="Pick a saved address or enter a new email")
+    subject, body, html = performance_report_message(db, ids, "send-now")
     try:
-        send_performance_report(
-            db,
-            asset_ids=ids,
-            to_email=chosen,
-            actor=user.email,
-            name="send-now",
-        )
+        for email in emails:
+            send_performance_report(
+                db,
+                asset_ids=ids,
+                to_email=email,
+                actor=user.email,
+                name="send-now",
+                subject=subject,
+                body=body,
+                html=html,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return RedirectResponse("/ops#mail", status_code=303)
