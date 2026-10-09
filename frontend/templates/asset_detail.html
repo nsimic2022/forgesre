@@ -155,9 +155,9 @@
 </div>
 
 <div class="asset-detail-side">
-<aside class="asset-detail-metrics card" data-asset-metrics="{{ asset.asset_id }}">
+<aside class="asset-detail-metrics card" data-asset-metrics="{{ asset.asset_id }}" data-asset-graphs data-asset="{{ asset.asset_id }}">
   <div class="metric-panel-head">
-    <h2>Machine metrics {% with %}{% set tip %}Live Prometheus reads for this host ({{ metrics.class }}: cpu / mem / disk / up). Green = below the alarm %, red = at or above, yellow = no reading. Verify checks this host's scrape; ./forgesre doctor checks the appliance stack; Edit Alarms off mutes that alarm for this host only. Hover a row for its alarm %.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+    <h2>Machine metrics {% with %}{% set tip %}Live Prometheus reads for this host ({{ metrics.class }}: cpu / mem / disk / up). Green = below the alarm %, red = at or above, yellow = no reading. Verify checks this host's scrape; ./forgesre doctor checks the appliance stack; Edit Alarms off mutes that alarm for this host only. Hover a row for its alarm %. Charts under the rows are the last hour for this host, healthy or in problem. Not scraped = not in Prometheus. No samples yet = the hour is empty. No placeholder wave.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
     {% if can('write_assets') %}
     <a class="metric-edit" href="/assets?edit={{ asset.asset_id }}#asset-form">Edit Alarms</a>
     {% endif %}
@@ -183,6 +183,9 @@
     </div>
     {% endfor %}
   </div>
+  <div class="muted dash-graph-caption" data-dash-graph-caption hidden></div>
+  <div class="muted dash-graph-empty" data-dash-graph-empty hidden></div>
+  <div class="dash-graph-list" data-dash-graph-list></div>
 </aside>
 
 <section class="asset-detail-playrules card client-playrules" id="client-playrules" data-client-playrules data-asset-playrules="{{ asset.asset_id }}">

@@ -321,6 +321,15 @@ def compact_when_text(value: Any) -> str:
     return f"{parts['date']} {parts['time']}".strip()
 
 
+def graph_window_label(start: float, end: float) -> str:
+    """Chart caption: clocks only. Same local day is HH:MM–HH:MM."""
+    begin = _appliance_local(datetime.fromtimestamp(float(start), timezone.utc))
+    finish = _appliance_local(datetime.fromtimestamp(float(end), timezone.utc))
+    if begin.date() == finish.date():
+        return f"{begin.strftime('%H:%M')}–{finish.strftime('%H:%M')}"
+    return f"{begin.strftime('%d.%m %H:%M')}–{finish.strftime('%d.%m %H:%M')}"
+
+
 def short_when_label(value: Any, now: datetime | None = None) -> str:
     """Same calendar day → HH:MM; older → DD.MM HH:MM from an appliance-local datetime."""
     if value is None:
@@ -1054,55 +1063,89 @@ def query_prometheus_expr(expr: str, timeout: float = 5.0) -> dict[str, Any]:
         return {"error": str(exc), "query": expr}
 
 
-def _range_points(series: dict[str, Any]) -> list[float]:
+def range_step(span_seconds: float) -> str:
+    """5-minute steps while a drop stays sharp; coarser once the window is many hours."""
+    span = max(0.0, float(span_seconds))
+    if span <= 6 * 3600:
+        return "5m"
+    if span <= 24 * 3600:
+        return "15m"
+    if span <= 3 * 24 * 3600:
+        return "30m"
+    return "1h"
+
+
+def range_timeout(span_seconds: float) -> float:
+    hours = max(0.0, float(span_seconds)) / 3600.0
+    return min(8.0, max(2.0, 2.0 + hours * 0.15))
+
+
+def _range_samples(series: dict[str, Any]) -> tuple[list[float], list[float]]:
+    times: list[float] = []
     points: list[float] = []
     for pair in series.get("values") or []:
         try:
+            ts = float(pair[0])
             value = float(pair[1])
         except (TypeError, ValueError, IndexError):
             continue
         if value != value or value in {float("inf"), float("-inf")}:
             continue
+        if ts != ts or ts in {float("inf"), float("-inf")}:
+            continue
+        times.append(ts)
         points.append(value)
-    return points
+    return times, points
 
 
-def query_prometheus_range(expr: str, hours: float = 1.0, step: str = "5m", timeout: float = 2.0) -> dict[str, Any]:
-    """Last-hour samples. Empty or error → no line (never a repeated gauge or a sine).
+def query_prometheus_range(
+    expr: str,
+    hours: float = 1.0,
+    step: str = "5m",
+    timeout: float = 2.0,
+    start: float | None = None,
+    end: float | None = None,
+) -> dict[str, Any]:
+    """Samples from ``start`` to ``end`` (unix seconds). Default is the last ``hours``.
 
-    When several series match, keep the one that actually moves. The first series
-    is often a flat ``up`` companion and would draw a flat line over the real host.
+    Empty or error → no line (never a repeated gauge or a sine).
+    When several series match, keep the one that actually moves, with its timestamps.
+    The first series is often a flat ``up`` companion and would hide a drop to 0.
     Demo gauge names are queried here too — the live in-process value is not a history.
     """
     import time
 
-    end = time.time()
-    start = end - max(0.1, float(hours)) * 3600
+    end_ts = time.time() if end is None else float(end)
+    start_ts = end_ts - max(0.1, float(hours)) * 3600.0 if start is None else float(start)
+    if end_ts <= start_ts:
+        end_ts = start_ts + 60.0
     try:
         with httpx.Client(timeout=timeout) as client:
             response = client.get(
                 f"{settings.prometheus_url}/api/v1/query_range",
-                params={"query": expr, "start": start, "end": end, "step": step},
+                params={"query": expr, "start": start_ts, "end": end_ts, "step": step},
             )
             response.raise_for_status()
             data = response.json()
             result = (data.get("data") or {}).get("result") or []
             best: list[float] = []
+            best_times: list[float] = []
             best_key = (-1.0, -1)
             for series in result:
                 if not isinstance(series, dict):
                     continue
-                points = _range_points(series)
+                times, points = _range_samples(series)
                 if not points:
                     continue
                 span = (max(points) - min(points)) if len(points) > 1 else 0.0
                 key = (span, len(points))
                 if key > best_key:
                     best = points
+                    best_times = times
                     best_key = key
-            return {"values": best, "query": expr}
+            return {"values": best, "times": best_times, "query": expr, "start": start_ts, "end": end_ts}
     except Exception as exc:
-        return {"error": str(exc), "query": expr}
+        return {"error": str(exc), "query": expr, "start": start_ts, "end": end_ts}
 
 
 def _loki_bound(value: Any) -> str | None:

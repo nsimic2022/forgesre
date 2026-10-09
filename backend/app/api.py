@@ -441,15 +441,32 @@ def asset_metrics_api(
     asset_id: str,
     db: Session = Depends(get_db),
     user: User = Depends(require("read_assets")),
+    incident: str = "",
 ) -> dict[str, Any]:
-    """Class-based glance tiles (CPU/mem/disk/up) from Prometheus. Viewers can read."""
+    """Class-based glance tiles (CPU/mem/disk/up). Viewers can read.
+
+    No ``incident`` → last hour (asset page). With the incident number for this
+    asset, the range starts one hour before ``started_at`` and runs through now,
+    or through the resolve time.
+    """
     del user
     item = db.query(Asset).filter_by(asset_id=asset_id).first()
     if item is None:
         raise HTTPException(status_code=404, detail="asset not found")
-    from app.asset_metrics import metric_panel_with_zabbix, safe_asset_metric_panel
+    from app.asset_metrics import incident_graph_bounds, metric_panel_with_zabbix, safe_asset_metric_panel
 
-    return metric_panel_with_zabbix(item, safe_asset_metric_panel(item))
+    bounds: dict[str, Any] = {}
+    number = (incident or "").strip()
+    if number:
+        row = db.query(Incident).filter_by(number=number).first()
+        if row is not None and row.asset is not None and row.asset.asset_id == item.asset_id:
+            window = incident_graph_bounds(row)
+            bounds = {
+                "range_start": window["start"],
+                "range_end": window["end"],
+                "marker": window["marker"],
+            }
+    return metric_panel_with_zabbix(item, safe_asset_metric_panel(item, **bounds))
 
 
 @router.get("/assets/{asset_id}/verify")

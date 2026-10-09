@@ -288,13 +288,13 @@ def _run(harness: str, *args: str) -> dict:
 
 def test_js_keyboard_moves_selection_inside_list_only():
     out = _run(_KEYS_HARNESS, _js_fn("listPicker") + _js_fn("graphPane") + _js_block("bindDashGraphs"), "8")
-    assert out["initial"] == {"selected": 0, "fetched": ["/api/v1/assets/a0/metrics"]}
+    assert out["initial"] == {"selected": 0, "fetched": ["/api/v1/assets/a0/metrics?incident=INC-0"]}
     assert out["held"] == [True, True, True]
     hold = out["afterHold"]
     assert hold["selected"] == 3 and hold["focused"] == 3 and hold["preventScroll"] is True
     assert hold["tabs"] == [-1, -1, -1, 0, -1, -1, -1, -1]
     assert hold["fetchedNow"] == 1
-    assert hold["fetched"] == ["/api/v1/assets/a0/metrics", "/api/v1/assets/a3/metrics"]
+    assert hold["fetched"] == ["/api/v1/assets/a0/metrics?incident=INC-0", "/api/v1/assets/a3/metrics?incident=INC-3"]
     assert out["j"] == 4 and out["k"] == 3
     assert out["end"] is True
     assert out["afterEnd"]["selected"] == 7
@@ -426,4 +426,4 @@ def test_js_pager_restores_only_matching_fresh_entry():
 
 def test_cache_bust_bumped():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-1" in base and "app.js?v=v09-1" in base
+    assert "app.css?v=v09-2" in base and "app.js?v=v09-2" in base

@@ -324,5 +324,5 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert "height: 100%" in css.split(".admin-user-split > .admin-user-pane", 1)[1].split("}", 1)[0]
     assert "margin: 2.25rem 0 0.7rem" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-1" in base and "app.js?v=v09-1" in base
+    assert "app.css?v=v09-2" in base and "app.js?v=v09-2" in base
     db.close()

@@ -559,7 +559,7 @@ ForgeSRE draws CPU / memory / disk on **Dashboard → Host metrics** (click a re
 
 Order of sources (per asset, every ~30 s refresh, Zabbix trends cached 5 minutes):
 
-1. **Prometheus `query_range`** — used when the asset has a scrape address and Prometheus already has samples (`up` or a CPU/memory/disk series). This is the bundled exporter path (node_exporter `:9100`, windows_exporter `:9182`, snmp_exporter).
+1. **Prometheus `query_range`** — used when the asset has a scrape address and Prometheus already has samples (`up` or a CPU/memory/disk series). This is the bundled exporter path (node_exporter `:9100`, windows_exporter `:9182`, snmp_exporter). On an incident (Dashboard selection or the incident page) the range starts one hour before the incident and runs through now, or through the resolve time, with a vertical line at When. The asset page stays on the last hour.
 2. **Zabbix `item.get` + `trend.get` fallback** — used only when the asset has a **Zabbix host ID** **and** Prometheus has **no** samples. Caption: *Zabbix trends (hourly average, last 24 h). No Prometheus samples for this host.*
 3. Empty / *No Zabbix CPU / memory / disk items on this host.* — no matching keys (section 3.5), items disabled, or trends not stored yet.
 4. *Zabbix unavailable — …* — API call failed; see the Health cube.
