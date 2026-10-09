@@ -620,6 +620,27 @@ button.secondary { background: var(--secondary); color: var(--text); }
 button.danger { background: var(--crit); color: var(--btn-danger-text); }
 .stack { display: flex; flex-direction: column; gap: 0.6rem; max-width: 420px; }
 .stack label, form label { display: flex; flex-direction: column; gap: 0.25rem; }
+/* v08-28: confirm checkbox sits in front of its sentence. Later than .stack label. */
+form label.inline-check,
+.stack label.inline-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  max-width: none;
+  text-align: left;
+}
+form label.inline-check input[type="checkbox"],
+.stack label.inline-check input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  min-width: 1rem;
+  max-width: 1rem;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 1rem;
+}
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; max-width: 720px; }
 .form-grid label, .form-grid .wide { display: flex; flex-direction: column; gap: 0.25rem; }
 .form-grid .wide { grid-column: 1 / -1; }

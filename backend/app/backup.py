@@ -298,8 +298,31 @@ def backup_compact(row: dict[str, Any]) -> dict[str, str]:
     return compact_stamp(when)
 
 
+def backup_picker_label(row: dict[str, Any]) -> str:
+    """Restore dropdown text: compact date and time, same stamp as the backup list.
+
+    The option value stays the folder id. Size is appended only when the line stays a
+    short stamp and does not turn back into the old ``UTC — backup_…`` title.
+    """
+    when = backup_compact(row)
+    name = str(row.get("name") or "")
+    if not when.get("date"):
+        return name
+    text = f"{when['date']} {when['time']}".strip()
+    try:
+        size = int(row.get("size") or 0)
+    except (TypeError, ValueError):
+        size = 0
+    if size <= 0:
+        return text
+    sized = f"{text} ({format_size(size)})"
+    if (name and name in sized) or "UTC" in sized or "—" in sized or len(sized) > 40:
+        return text
+    return sized
+
+
 def backup_label(name: str, size: int) -> str:
-    """Dropdown/CLI line: timestamp + folder name + size. Never archive contents."""
+    """CLI picker line: timestamp + folder name + size. Never archive contents."""
     pretty = pretty_backup_stamp(stamp_from_backup_name(name))
     sized = format_size(size)
     if pretty:

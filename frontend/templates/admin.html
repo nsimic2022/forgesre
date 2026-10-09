@@ -206,11 +206,11 @@
   <label>Backup folder (newest first)
     <select name="name" required>
       {% for b in backup_choices %}
-      <option value="{{ b.name }}">{{ b.label }}</option>
+      <option value="{{ b.name }}" title="{{ b.name }}"{% if loop.first %} selected{% endif %}>{{ backup_picker_label(b) }}</option>
       {% endfor %}
     </select>
   </label>
-  <label class="inline-check"><input type="checkbox" name="acknowledged" value="1" required> I understand this overwrites users, incidents, and playbooks on this live box</label>
+  <label class="inline-check"><input type="checkbox" name="acknowledged" value="1" required><span>I understand this overwrites users, incidents, and playbooks on this live box</span></label>
   <label>Type RESTORE <input name="confirm" required placeholder="RESTORE" autocomplete="off"></label>
   <button type="submit" class="danger">Restore</button>
 </form>

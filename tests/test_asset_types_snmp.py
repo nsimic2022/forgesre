@@ -293,7 +293,7 @@ def test_runbook_note_is_labelled_human_guidance():
 
 def test_css_and_js_v08_14():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v08-27" in base and "app.js?v=v08-27" in base
+    assert "app.css?v=v08-28" in base and "app.js?v=v08-28" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "select.nice-select" in css and ".reach-snmp" in css
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")

@@ -2866,7 +2866,7 @@ def admin_page(
     )
     chosen = db.get(User, selected) if selected else None
     clone_of = db.get(User, clone) if clone else None
-    from app.backup import backup_compact, format_size, list_archives, layout_from_env
+    from app.backup import backup_compact, backup_picker_label, format_size, list_archives, layout_from_env
     from app.users import delete_blocked, edit_blocked
 
     lay = layout_from_env()
@@ -2889,6 +2889,7 @@ def admin_page(
         backup_files_writable=lay.files_writable,
         format_size=format_size,
         backup_compact=backup_compact,
+        backup_picker_label=backup_picker_label,
         pager=users_pager,
         audit_pager=audit_pager,
         backup_pager=backup_pager,
