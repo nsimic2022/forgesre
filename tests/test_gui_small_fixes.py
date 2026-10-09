@@ -124,7 +124,8 @@ def test_incidents_ack_column_is_a_status_circle():
     ack = css.split(".incidents-table th.col-ack,", 1)[1].split("}", 1)[0]
     assert "padding-right: 1.45rem" in ack
     resolved = css.split(".incidents-table th.col-resolved,", 1)[1].split("}", 1)[0]
-    assert "padding-left: 1.25rem" in resolved
+    assert "padding-left: 1.35rem" in resolved
+    assert "white-space: nowrap" in resolved
     db.close()
 
 

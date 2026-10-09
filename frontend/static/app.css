@@ -1118,12 +1118,45 @@ form.ops-compose {
 .incidents-table td.col-resolved,
 .dash-recent th.col-resolved,
 .dash-recent td.col-resolved {
-  width: 12%;
-  min-width: 6.75rem;
-  padding-left: 1.25rem;
+  width: 9.5rem;
+  min-width: 8.4rem;
+  padding-left: 1.35rem;
   max-width: 14rem;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
   font-size: 0.82rem;
+}
+.incidents-table td.col-resolved,
+.dash-recent td.col-resolved {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* Recent incidents is the narrow 3/4 pane: fixed columns so Acknowledged fits without a sideways scroll. */
+.dash-recent .incidents-table { table-layout: fixed; width: 100%; }
+.dash-recent .incidents-table th:nth-child(1),
+.dash-recent .incidents-table td:nth-child(1) { width: 4%; }
+.dash-recent .incidents-table th.col-host,
+.dash-recent .incidents-table td.col-host { width: 14%; max-width: none; }
+.dash-recent .incidents-table th.col-name,
+.dash-recent .incidents-table td.col-name { width: 22%; }
+.dash-recent .incidents-table th:nth-child(4),
+.dash-recent .incidents-table td:nth-child(4) { width: 10%; }
+.dash-recent .incidents-table th:nth-child(5),
+.dash-recent .incidents-table td:nth-child(5) { width: 12%; }
+.dash-recent .incidents-table th:nth-child(6),
+.dash-recent .incidents-table td:nth-child(6) { width: 10%; }
+.dash-recent .incidents-table th.col-ack,
+.dash-recent .incidents-table td.col-ack {
+  width: 15%;
+  min-width: 0;
+  padding-left: 0.45rem;
+  padding-right: 0.7rem;
+}
+.dash-recent .incidents-table th.col-resolved,
+.dash-recent .incidents-table td.col-resolved {
+  width: 13%;
+  min-width: 0;
+  max-width: none;
+  padding-left: 0.75rem;
 }
 .incidents-table td.inc-when .stamp-date { color: var(--text); font-weight: 600; }
 .incidents-table tr.inc-row-done td.inc-when .stamp-date { font-weight: 500; }
