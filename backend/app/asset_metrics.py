@@ -144,6 +144,7 @@ def _asset_dict(asset: Any) -> dict[str, Any]:
             "type": str(asset.get("type") or ""),
             "monitoring_profile": str(asset.get("monitoring_profile") or ""),
             "scrape_address": str(asset.get("scrape_address") or ""),
+            "snmp_port": asset.get("snmp_port"),
             "alarms": asset.get("alarms"),
         }
     return {
@@ -153,6 +154,7 @@ def _asset_dict(asset: Any) -> dict[str, Any]:
         "type": str(getattr(asset, "type", "") or ""),
         "monitoring_profile": str(getattr(asset, "monitoring_profile", "") or ""),
         "scrape_address": str(getattr(asset, "scrape_address", "") or ""),
+        "snmp_port": getattr(asset, "snmp_port", None),
         "alarms": getattr(asset, "alarms", None),
     }
 
@@ -357,15 +359,21 @@ def asset_metric_panel(
 
     if spark_fetch is None and not prom_down:
         spark_fetch = _default_range
+    # The instant query only sees the last ~5 minutes. A down exporter still has
+    # query_range history in the hour — skipping it left the chart as a flat `up`.
     if spark_fetch and not prom_down:
         for key in keys:
             expr = queries.get(key) or ""
-            if not expr or samples.get(key) is None:
+            if not expr:
                 continue
             ranged = spark_fetch(expr)
             if ranged.get("error"):
-                break
+                continue
             values = [v for v in (_finite(raw) for raw in (ranged.get("values") or [])) if v is not None]
+            if not values:
+                continue
+            if samples.get(key) is None:
+                samples[key] = values[-1]
             series[key] = values
             sparks[key] = _spark_points(values)
 

@@ -30,6 +30,7 @@ UI: `http://<VM-IP>:8080`. NetBox UI: `:8001`. Grafana: `:3000` (open from Syste
 ## Manuals (after the path above)
 
 - [Operator handbook](operator-handbook.md) — users, assets, discovery, incidents, email, RCA
+- [Architecture](architecture.md) — how the V0.9 appliance is put together (Compose, one Core, alarm path)
 - [Connecting Zabbix (optional, read-only)](zabbix.md) — operator cookbook, both machines: secrets (not Admin UI), Sync hosts, Zabbix user/token, hosts + templates, webhook media type + Action, test (401 vs 422), playrules by Alertname, Prometheus graphs vs `trend.get`, mute vs real triggers, ack/resolve with no write-back, CLI, numbered checklist (summary: [handbook §18](operator-handbook.md#18-zabbix-read-only-source))
 - [Install and config (Ubuntu / vCenter)](install-config.md)
 - [Verify the appliance](verify.md)
@@ -38,13 +39,10 @@ UI: `http://<VM-IP>:8080`. NetBox UI: `:8001`. Grafana: `:3000` (open from Syste
 
 What each release shipped (optional “why it exists”, not required to operate):
 
-- [V0.1](v0.1.md) · [V0.2](v0.2.md) · [V0.3](v0.3.md) · [V0.4](v0.4.md) · [V0.5](v0.5.md) · [V0.6](v0.6.md) · [V0.7](v0.7.md) · [V0.8](v0.8.md)
+- [V0.1](v0.1.md) · [V0.2](v0.2.md) · [V0.3](v0.3.md) · [V0.4](v0.4.md) · [V0.5](v0.5.md) · [V0.6](v0.6.md) · [V0.7](v0.7.md) · [V0.8](v0.8.md) · [V0.9](v0.9.md) (current)
 
 ## For developers (not used in production)
 
-These are design notes. You do **not** install or enable them on the VM.
-
-- [Architecture proposal (not the V0.8 appliance runtime)](architecture.md)
-- [V0.3 implementation plan](V03_IMPLEMENTATION_PLAN.md)
+[V0.3 implementation plan](V03_IMPLEMENTATION_PLAN.md) is a design note. You do **not** install or enable it on the VM. [Architecture](architecture.md) is the running V0.9 appliance, not that plan.
 
 **Session handoff** (next coding agent / contributor, not an operator start page): [continuation.md](continuation.md).

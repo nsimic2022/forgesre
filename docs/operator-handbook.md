@@ -8,7 +8,7 @@ Verification report: [`verify.md`](verify.md).
 Local LLM (ForgeAI): [`llm.md`](llm.md).  
 Connecting Zabbix (optional, read-only): [`zabbix.md`](zabbix.md).
 
-Version notes (`v0.1.md` … `v0.8.md`) explain *what shipped*. This document explains *how you run the product*. Commands live in [`cli.md`](cli.md). Learning order: [`docs/README.md`](README.md).
+Version notes (`v0.1.md` … `v0.9.md`) explain *what shipped*. This document explains *how you run the product*. Commands live in [`cli.md`](cli.md). Learning order: [`docs/README.md`](README.md).
 
 Code: https://github.com/nsimic2022/forgesre (`main`). UI: `http://<VM-IP>:8080`.
 
@@ -102,7 +102,7 @@ Three places. Do not mix them.
 | **`config/forgesre.yml`** | Discovery CIDRs, NetBox URL, AI/LLM, SMTP on/off, Loki/Grafana | File on the VM |
 | **Repo / generated files** | Prometheus *alert expressions*, scrape jobs, Alertmanager webhook | `monitoring/alerts.yml`, `.env`, `secrets/secrets.env` |
 
-YAML under `config/examples/` is the **future spec** (Playrule/Playbook/Escalation as files). V0.8 does **not** import those files. Live playrules and playbooks are created in the UI (or API) and stored in Postgres.
+YAML under `config/examples/` is the **future spec** (Playrule/Playbook/Escalation as files). V0.9 does **not** import those files. Live playrules and playbooks are created in the UI (or API) and stored in Postgres.
 
 After editing `config/forgesre.yml`, recreate Core:
 

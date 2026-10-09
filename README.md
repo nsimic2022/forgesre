@@ -6,7 +6,7 @@ One Ubuntu VM (a vCenter guest is the usual lab). Docker Compose, host networkin
 
 It is not a Kubernetes platform, not APM, and not auto-remediation. Playbooks are checklists. AI never SSH-es, never runs commands, never writes NetBox.
 
-**Code lives on [`main`](https://github.com/nsimic2022/forgesre).** Current product: V0.8.
+**Code lives on [`main`](https://github.com/nsimic2022/forgesre).** Current product: V0.9.
 
 ---
 

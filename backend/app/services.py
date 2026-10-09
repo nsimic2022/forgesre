@@ -1008,6 +1008,7 @@ def query_prometheus(asset: Asset | None = None) -> dict[str, Any]:
             "type": asset.type,
             "monitoring_profile": asset.monitoring_profile,
             "scrape_address": asset.scrape_address,
+            "snmp_port": getattr(asset, "snmp_port", None),
         }
     demo = bool(asset and asset.asset_id == DEMO_ASSET)
     packed = promql_queries_for(asset_dict)
@@ -1053,15 +1054,28 @@ def query_prometheus_expr(expr: str, timeout: float = 5.0) -> dict[str, Any]:
         return {"error": str(exc), "query": expr}
 
 
+def _range_points(series: dict[str, Any]) -> list[float]:
+    points: list[float] = []
+    for pair in series.get("values") or []:
+        try:
+            value = float(pair[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if value != value or value in {float("inf"), float("-inf")}:
+            continue
+        points.append(value)
+    return points
+
+
 def query_prometheus_range(expr: str, hours: float = 1.0, step: str = "5m", timeout: float = 2.0) -> dict[str, Any]:
-    """Last-hour samples for a tiny SVG sparkline. Empty/error → no sparkline (never fake zeros)."""
+    """Last-hour samples. Empty or error → no line (never a repeated gauge or a sine).
+
+    When several series match, keep the one that actually moves. The first series
+    is often a flat ``up`` companion and would draw a flat line over the real host.
+    Demo gauge names are queried here too — the live in-process value is not a history.
+    """
     import time
 
-    from app.metrics import demo_metric_values
-
-    live = demo_metric_values()
-    if expr in live:
-        return {"values": [live[expr]], "query": expr}
     end = time.time()
     start = end - max(0.1, float(hours)) * 3600
     try:
@@ -1073,15 +1087,20 @@ def query_prometheus_range(expr: str, hours: float = 1.0, step: str = "5m", time
             response.raise_for_status()
             data = response.json()
             result = (data.get("data") or {}).get("result") or []
-            if not result:
-                return {"values": [], "query": expr}
-            points = []
-            for pair in result[0].get("values") or []:
-                try:
-                    points.append(float(pair[1]))
-                except (TypeError, ValueError, IndexError):
+            best: list[float] = []
+            best_key = (-1.0, -1)
+            for series in result:
+                if not isinstance(series, dict):
                     continue
-            return {"values": points, "query": expr}
+                points = _range_points(series)
+                if not points:
+                    continue
+                span = (max(points) - min(points)) if len(points) > 1 else 0.0
+                key = (span, len(points))
+                if key > best_key:
+                    best = points
+                    best_key = key
+            return {"values": best, "query": expr}
     except Exception as exc:
         return {"error": str(exc), "query": expr}
 

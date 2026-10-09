@@ -984,13 +984,32 @@ function graphPane(pane) {
     return el;
   };
 
-  const yFor = (tile, v) => {
+  // Percent tiles scale to the hour (with a small floor) so a 10–20% CPU swing is
+  // visible. A fixed 0–100 axis in this 48px box draws that swing as a flat line.
+  const yScale = (tile, values) => {
+    if (tile.kind === "up") return { lo: 0, hi: 1 };
+    const min = Math.min.apply(null, values);
+    const max = Math.max.apply(null, values);
+    const pad = Math.max(2, (max - min) * 0.15);
+    let lo = min - pad;
+    let hi = max + pad;
+    if (hi - lo < 8) {
+      const mid = (min + max) / 2;
+      lo = mid - 4;
+      hi = mid + 4;
+    }
+    return { lo: lo, hi: hi };
+  };
+
+  const yFor = (tile, v, scale) => {
     if (tile.kind === "up") return v >= 1 ? 4 : H - 4;
-    const clamped = Math.max(0, Math.min(100, v));
-    return H - 2 - (clamped / 100) * (H - 4);
+    const span = scale.hi - scale.lo || 1;
+    const clamped = Math.max(scale.lo, Math.min(scale.hi, v));
+    return H - 2 - ((clamped - scale.lo) / span) * (H - 4);
   };
 
   const chart = (tile, values) => {
+    const scale = yScale(tile, values);
     const svg = svgEl("svg", {
       class: "dash-chart",
       viewBox: "0 0 " + W + " " + H,
@@ -999,14 +1018,17 @@ function graphPane(pane) {
       "aria-label": tile.name + " " + span,
     });
     if (tile.kind !== "up" && tile.threshold != null && tile.alarm_enabled !== false) {
-      const y = yFor(tile, Number(tile.threshold)).toFixed(1);
-      svg.appendChild(svgEl("line", { class: "dash-chart-threshold", x1: 0, x2: W, y1: y, y2: y }));
+      const threshold = Number(tile.threshold);
+      if (threshold >= scale.lo && threshold <= scale.hi) {
+        const y = yFor(tile, threshold, scale).toFixed(1);
+        svg.appendChild(svgEl("line", { class: "dash-chart-threshold", x1: 0, x2: W, y1: y, y2: y }));
+      }
     }
     const last = values.length - 1;
     const pts = [];
     values.forEach((v, i) => {
       const x = (i * W) / last;
-      const y = yFor(tile, v);
+      const y = yFor(tile, v, scale);
       if (tile.kind === "up" && pts.length) pts.push(x.toFixed(1) + "," + pts[pts.length - 1].split(",")[1]);
       pts.push(x.toFixed(1) + "," + y.toFixed(1));
     });
@@ -1032,6 +1054,13 @@ function graphPane(pane) {
     const values = (Array.isArray(tile.series) ? tile.series : []).map(Number).filter((v) => isFinite(v));
     if (values.length >= 2) {
       box.appendChild(chart(tile, values));
+      const steady = tile.kind !== "up" && Math.max.apply(null, values) - Math.min.apply(null, values) < 0.05;
+      if (steady) {
+        const note = document.createElement("p");
+        note.className = "muted dash-graph-none";
+        note.textContent = "Steady";
+        box.appendChild(note);
+      }
     } else if (labelEmpty) {
       const none = document.createElement("p");
       none.className = "muted dash-graph-none";
@@ -1051,13 +1080,17 @@ function graphPane(pane) {
     pane.setAttribute("data-graph-source", data.source || "prometheus");
     const anySeries = tiles.some((t) => Array.isArray(t.series) && t.series.length >= 2);
     if (data.collecting === null && data.error) {
-      showEmpty("Prometheus is unreachable — no samples.");
+      showEmpty("Prometheus unreachable.");
       return;
     }
     if (empty) {
-      const line = data.collecting_line || "";
-      empty.textContent = anySeries ? line : "No samples yet" + (line ? " — " + line : "");
-      empty.hidden = false;
+      if (!anySeries) {
+        if (data.source === "zabbix") empty.textContent = data.collecting_line || "No samples yet.";
+        else empty.textContent = data.collecting === false ? "Not scraped." : "No samples yet.";
+      } else {
+        empty.textContent = data.collecting_line || "";
+      }
+      empty.hidden = !empty.textContent;
     }
     if (list) list.replaceChildren(...tiles.map((tile) => tileRow(tile, anySeries)));
   };

@@ -129,9 +129,11 @@ def test_readme_does_not_claim_dashboard_doctor_or_incidents_200():
     assert "System Health" in text
 
 
-def test_architecture_doc_is_proposal_not_runtime():
+def test_architecture_doc_describes_the_running_appliance():
     text = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
-    assert "Not the V0.8 appliance runtime" in text
+    assert "V0.9" in text
+    assert "not shipped" in text.lower()
+    assert "host network" in text.lower()
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "map `alertname`" in handbook or "maps `alertname`" in handbook
     play = (ROOT / "frontend" / "templates" / "playrules.html").read_text(encoding="utf-8")

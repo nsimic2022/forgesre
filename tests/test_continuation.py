@@ -15,16 +15,19 @@ def test_continuation_handoff_exists_and_points_at_test_and_llm():
     assert "docs/llm.md" in text
     assert "514" in text
     assert "syslog" in text.lower()
-    assert "architecture proposal" in text.lower() or "not the V0.8 appliance runtime" in text
+    assert "V0.9" in text
+    assert "not shipped" in text.lower()
     assert "one worker thread" in text.lower()
     contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
-    assert "V0.8" in contributing
+    assert "V0.9" in contributing
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "memory 90%" in handbook
     assert "Grafana is not the alarm path" in handbook
     arch = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
-    assert "Not the V0.8 appliance runtime" in arch
-    assert "Do **not** implement the Go / Kubernetes" in arch
+    assert "V0.9" in arch
+    assert "not shipped" in arch.lower()
+    assert "Alertmanager" in arch
+    assert "Celery" in arch
     dockerfile = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
     assert "iputils-ping" in dockerfile
     assert "celery" not in dockerfile.lower()

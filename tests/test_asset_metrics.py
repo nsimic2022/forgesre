@@ -341,7 +341,8 @@ def test_windows_tiles_match_asset_label_or_instance_scrape():
         "scrape_address": "38.242.217.52:9182",
     }
     selectors = promql_selectors_for(asset)
-    assert selectors[0] == 'asset="blachole"'
+    assert selectors[0] == 'job="windows-standard",instance="38.242.217.52:9182"'
+    assert 'asset="blachole"' in selectors
     assert 'instance="38.242.217.52:9182"' in selectors
     packed = promql_queries_for(asset)
     assert 'asset="blachole"' in packed["up"][0]

@@ -2,7 +2,7 @@
 
 This file is a **session handoff for the next coding agent or contributor**. It is not an operator manual. Operators start at [install and config](install-config.md) and the [operator handbook](operator-handbook.md).
 
-Product on `main`: **V0.8**. Repository: https://github.com/nsimic2022/forgesre.
+Product on `main`: **V0.9**. Repository: https://github.com/nsimic2022/forgesre.
 
 1. [Who and when](#1-who-and-when)
 2. [Checked twice (pytest)](#2-checked-twice-pytest)
@@ -59,7 +59,7 @@ git pull origin main && ./forgesre update
 
 SHA: **`872bd41`**. Open **Discovery**. Review suggested `/24`, **Confirm & scan**, wait for the background job (`./forgesre jobs`). **Sync NetBox** sits beside Scan now (read-only). Approve / Ignore as before; manual Assets stay SoT.
 
-`./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: device syslog on UDP/TCP 514, labeled by hostname and sender IP; demo Core logs stay `forge-demo-01`. [architecture.md](architecture.md) is a long-term **architecture proposal**, not the V0.8 appliance runtime.
+`./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: device syslog on UDP/TCP 514, labeled by hostname and sender IP; demo Core logs stay `forge-demo-01`. [architecture.md](architecture.md) describes the **V0.9 appliance** (Compose, one Core worker, alarm path). Celery and a Go/Kubernetes rewrite are **not shipped**.
 
 NetBox: keep the **full v2 token** (shown once at create, not the 12-character key) in `NETBOX_API_TOKEN`. Recreate **core** only if secrets changed. Never print the token.
 
