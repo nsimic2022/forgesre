@@ -136,24 +136,16 @@
 
 <section class="card" id="reports">
   <h2>Scheduled reports {% with %}{% set tip %}Cron-like, inside Core. Pick assets and an interval, or use Send now for a one-shot mail (does not wait 6 hours). ForgeSRE snapshots CPU/disk/up from Prometheus (or demo gauges) even when there is no incident, then emails the text. Choose the recipient from the address book, or type a destination email. SMTP off stores the row as generated (not sent). This is not incident Escalation. Enabled means the job fires at Next. Off keeps the row stored; the scheduler skips it. That is not Remove.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <p class="muted">
-    <strong>Enabled</strong> means the job fires at <strong>Next</strong>. Off keeps the row stored; the scheduler skips it. That is not Remove.
-  </p>
   {% if can_send %}
   {% set report_mode = report_form_mode or "add" %}
   {% set rf = report_form or {} %}
   <div class="ops-report-cols">
   <form method="post" action="{% if report_mode == 'edit' %}/ops/reports/{{ editing_report.id }}/update{% else %}/ops/reports{% endif %}" class="stack" id="report-schedule-form">
     <h3>
-      {% if report_mode == "edit" %}Edit report
-      {% elif report_mode == "clone" %}Clone report
+      {% if report_mode == "edit" %}Edit report {% with %}{% set tip %}Same fields as create. Save updates this row. Cancel discards the edits and returns to the list.{% endset %}{% include "_info_tip.html" %}{% endwith %}
+      {% elif report_mode == "clone" %}Clone report {% with %}{% set tip %}Copy of {{ clone_source_name }}. Tweak the fields, then Save to create a new job. Cancel discards the draft.{% endset %}{% include "_info_tip.html" %}{% endwith %}
       {% else %}New report{% endif %}
     </h3>
-    {% if report_mode == "edit" %}
-    <p class="muted">Same fields as create. Save updates this row. Cancel discards the edits and returns to the list.</p>
-    {% elif report_mode == "clone" %}
-    <p class="muted">Copy of <strong>{{ clone_source_name }}</strong>. Tweak fields, then Save to create a new job. Cancel discards the draft.</p>
-    {% endif %}
     <label>Name <input name="name" value="{{ rf.name or 'storage-6h' }}" required></label>
     {% set picked = rf.recipients or [] %}
     {% set picked_l = picked|map('lower')|list %}

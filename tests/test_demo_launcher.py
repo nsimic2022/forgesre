@@ -182,7 +182,7 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
     assert 'class="pill demo"' in ops.text or "[DEMO]" in ops.text
 
     dash = client.get("/")
-    assert 'class="pill demo"' in dash.text
+    assert "DEMO incident on a seeded lab asset" in dash.text
 
     journal_page = client.get("/journal")
     assert journal_page.status_code == 200

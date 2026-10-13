@@ -79,8 +79,7 @@
     <p class="muted"><a href="/admin">Create another user</a></p>
     {% elif clone_of %}
     <form method="post" action="/admin/users" class="stack">
-      <h3>Clone user</h3>
-      <p class="muted">Copy of <strong>{{ clone_of.email }}</strong> — type a new email and password.</p>
+      <h3>Clone user {% with %}{% set tip %}Copy of {{ clone_of.email }}. Type a new email and password.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
       <label>Email <input name="email" type="email" required value="{{ clone_of.email }}"></label>
       <label>Name <input name="name" required value="{{ clone_of.name }}"></label>
       <label>Password <input name="password" type="password" required></label>
@@ -195,8 +194,7 @@
 {% endif %}
 <div class="admin-backup-cli">
 <div class="admin-restore-pane">
-<h3>Import / restore {% with %}{% set tip %}Import only stores a tar.gz under data/backups/backup_…/. Preferred after a crash or when migrating: SSH, stop Core, ./forgesre restore (pick a number) or ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes, then ./forgesre update. Config / .env / secrets on disk are not rewritten from this browser (Core mounts them read-only).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-<p class="muted">Restore overwrites the live database (users, incidents, playbooks). It does <strong>not</strong> run unless you tick the box and type <code>RESTORE</code>.</p>
+<h3>Import / restore {% with %}{% set tip %}Import only stores a tar.gz under data/backups/backup_…/. Restore overwrites the live database (users, incidents, playbooks) and does not run unless you tick the box and type RESTORE. Preferred after a crash or when migrating: SSH, stop Core, ./forgesre restore (pick a number) or ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes, then ./forgesre update. Config / .env / secrets on disk are not rewritten from this browser (Core mounts them read-only).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
 <form method="post" action="/admin/backups/import" enctype="multipart/form-data" class="row-actions backup-actions">
   <input type="file" name="archive" accept=".tar.gz,application/gzip" required>
   <button type="submit">Import</button>
@@ -217,9 +215,7 @@
 {% endif %}
 </div>
 <div class="admin-cli-pane">
-<h3>ForgeSRE CLI</h3>
-<p class="muted">There is no terminal in this browser. Use SSH, then <code>./forgesre</code> or <code>./forgesre shell</code>.</p>
-<p class="muted">Every <code>./forgesre</code> subcommand. Details on the VM: <code>./forgesre help &lt;command&gt;</code>.</p>
+<h3>ForgeSRE CLI {% with %}{% set tip %}There is no terminal in this browser. Use SSH, then ./forgesre or ./forgesre shell. The table lists every ./forgesre subcommand. Details on the VM: ./forgesre help &lt;command&gt;.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
 <div class="cli-cheatsheet-scroll">
 <table class="cli-cheatsheet">
   <thead><tr><th>Command</th><th>What it does</th></tr></thead>

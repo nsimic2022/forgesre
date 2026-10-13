@@ -1,8 +1,7 @@
 {% if form_mode == "edit" %}
 <h2>Edit asset {% with %}{% set tip %}Same fields as Add. Asset ID is set at add and cannot change — Prometheus asset= labels and history keep matching. Hostname and IP can change. Saving rewrites HTTP SD from inventory — Prometheus picks it up on the next scrape. Core’s static demo job is not this list.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% elif form_mode == "clone" %}
-<h2>Clone asset {% with %}{% set tip %}Copy with a new Asset ID. Duplicate Asset ID or IP is rejected. NetBox id is not copied. Lab hosts (forge-demo-*) are not scraped — keep a forge-demo-* id only if you want another lab-only copy.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-<p class="muted">Copy of <strong>{{ clone_source }}</strong> — type a new Asset ID.</p>
+<h2>Clone asset {% with %}{% set tip %}Copy of {{ clone_source }} with a new Asset ID. Duplicate Asset ID or IP is rejected. NetBox id is not copied. Lab hosts (forge-demo-*) are not scraped — keep a forge-demo-* id only if you want another lab-only copy.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% else %}
 <h2>Add asset {% with %}{% set tip %}Analysts, engineers, and admins can add hosts. Asset ID is a short unique slug you type (e.g. win10-gp) — it is not taken from hostname. Hostname can be the OS name (e.g. DESKTOP-CG81N3J). Fill who to call — escalation uses that email instead of a generic team inbox. Default type Auto (detect exporter): ForgeSRE GETs http://IP:9182/metrics and :9100/metrics from this appliance (reads enough to see node_ / windows_, then drains the body). windows_exporter / windows_ → Windows Server :9182. node_exporter / node_ → Linux Server :9100. Both: keep a saved type if set, else prefer Windows :9182. SNMP UDP/161 (the same path as snmp_exporter after Approve) → Network device, empty scrape. HTTP silence is not a network guess. ICMP ping is not a scrape. You can override the type.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% endif %}
@@ -163,13 +162,12 @@
   <div class="asset-form-col asset-form-right">
   <input type="hidden" name="alarms_present" value="1">
   <div class="asset-form-block alarm-families" data-alarm-families>
-    <h3 class="asset-form-block-head alarm-heading label-line">Standard alarms {% with %}{% set tip %}Bundled mute-only thresholds on the Alertmanager webhook. PromQL still lives in monitoring/alerts.yml. Not a second alerting engine and not a rule. cpu / mem / disk / up only — not every exporter series. Auto-detect still picks Linux / Windows / Network.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h3 class="asset-form-block-head alarm-heading label-line">Standard alarms {% with %}{% set tip %}Bundled mute-only thresholds on the Alertmanager webhook. This overlay can only mute an alert on this host or ignore it below your %. It cannot fire earlier than the Prometheus rule in alerts.yml. PromQL still lives in monitoring/alerts.yml. Not a second alerting engine and not a rule. cpu / mem / disk / up only — not every exporter series. Auto-detect still picks Linux / Windows / Network.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     {% set alarms = form.alarms or {} %}
     {% set up_a = alarms.get('up') or {} %}
     {% set cpu_a = alarms.get('cpu_percent') or {} %}
     {% set mem_a = alarms.get('memory_percent') or {} %}
     {% set disk_a = alarms.get('disk_percent') or {} %}
-    <p class="muted alarm-limit">This overlay can only mute an alert on this host or ignore it below your %. It cannot fire earlier than the Prometheus rule in alerts.yml.</p>
     <div class="alarm-row">
       <button type="button" class="onoff {{ 'is-on' if up_a.get('enabled', True) else 'is-off' }}" data-onoff aria-pressed="{{ 'true' if up_a.get('enabled', True) else 'false' }}">{% if up_a.get('enabled', True) %}ON{% else %}OFF{% endif %}</button>
       <input type="checkbox" class="onoff-check" name="alarm_up_enabled" value="1" data-alarm-up {% if up_a.get('enabled', True) %}checked{% endif %} tabindex="-1">
@@ -197,9 +195,8 @@
   </div>
   <div class="asset-form-col asset-form-custom">
   <div class="asset-form-block client-playrules" data-client-playrules>
-    <h3 class="asset-form-block-head label-line">Custom alarms {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first ON rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = Rules. OFF skips that rule on this host only — it stays in the list, and Save keeps it off. ON is the behavior above. Disabled rules on Rules are skipped. Mail follows Escalation when a level is filled; otherwise that rule's default escalation. It does not send both.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h3 class="asset-form-block-head label-line">Custom alarms {% with %}{% set tip %}This does not create Prometheus thresholds. When that alertname arrives, Core uses the first ON rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = Rules. OFF skips that rule for this host only — it stays in the list, and Save keeps it off. Disabled rules on Rules are skipped. Mail follows Escalation when a level is filled; otherwise that rule's default escalation. It does not send both.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     <input type="hidden" name="playrules_present" value="1">
-    <p class="muted alarm-limit">This does not create Prometheus thresholds. It records which rule this asset prefers when that alertname arrives. Matching is still by alertname only. OFF skips that rule for this host.</p>
     {% with picked=form.playrule_ids, off_ids=form.playrule_off %}{% include "_playrule_picker.html" %}{% endwith %}
   </div>
   </div>
@@ -213,9 +210,8 @@
   <div class="asset-form-band asset-form-row-3">
   <div class="asset-form-col asset-form-ladder">
   <div class="asset-form-block asset-ladder" data-asset-ladder>
-    <h3 class="asset-form-block-head label-line">Escalation {% with %}{% set tip %}Mail steps for incidents on this host, counted from incident start, until Acknowledged. Each level is minutes and one or more emails. Empty (every level off) uses the Default escalation. Any filled level is the only mail for this host — Rules still match the Playbook and do not add a second mail policy. Email only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h3 class="asset-form-block-head label-line">Escalation {% with %}{% set tip %}Mail steps for incidents on this host, counted from incident start, until Acknowledged. Each level is minutes and one or more emails. Off or blank is not mailed. Fast and slow are just different minutes. Empty (every level off) uses the Default escalation. Any filled level is the only mail for this host — Rules still match the Playbook and do not add a second mail policy. Email only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     <input type="hidden" name="ladder_present" value="1">
-    <p class="muted alarm-limit">Off or blank is not mailed. Fast and slow are just different minutes.</p>
     <p class="ladder-default"><a href="/escalation">Default escalation</a></p>
     <div class="ladder-levels">
     {% set minute_hint = {1: "0", 2: "15", 3: "30", 4: "60"} %}
