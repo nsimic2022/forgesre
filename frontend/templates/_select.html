@@ -3,6 +3,6 @@
 {% macro head() -%}
 <th class="row-select"><label class="row-check"><input type="checkbox" data-select-page aria-label="Select all rows on this page"></label></th>
 {%- endmacro %}
-{% macro cell(value, label="") -%}
-<td class="row-select"><label class="row-check"><input type="checkbox" name="selected" value="{{ value }}" data-select-row aria-label="Select {{ label or value }}"></label></td>
+{% macro cell(value, label="", locked=false) -%}
+<td class="row-select"><label class="row-check"><input type="checkbox" name="selected" value="{{ value }}" data-select-row{% if locked %} data-undeletable{% endif %} aria-label="Select {{ label or value }}"></label></td>
 {%- endmacro %}

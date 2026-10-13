@@ -258,6 +258,10 @@ applyTheme(currentTheme());
     if (!bar) return;
     const on = Array.from(rowsIn(scope)).filter((box) => box.checked);
     bar.classList.toggle("is-live", on.length > 0);
+    bar.querySelectorAll("form[data-delete-gated]").forEach((form) => {
+      const deletable = on.some((box) => !box.hasAttribute("data-undeletable"));
+      form.hidden = on.length > 0 && !deletable;
+    });
     const one = on.length === 1;
     bar.querySelectorAll("[data-bulk-edit] button").forEach((edit) => {
       edit.classList.toggle("is-muted", !one);
@@ -297,6 +301,7 @@ applyTheme(currentTheme());
     if (!scope) return;
     const ids = Array.from(rowsIn(scope))
       .filter((box) => box.checked)
+      .filter((box) => !(form.hasAttribute("data-delete-gated") && box.hasAttribute("data-undeletable")))
       .map((box) => box.value)
       .filter(Boolean);
     if (form.hasAttribute("data-bulk-edit") && ids.length !== 1) {

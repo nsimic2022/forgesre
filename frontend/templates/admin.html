@@ -186,7 +186,7 @@
   </tbody>
 </table>
 </div>
-{% with pager=backup_pager, list_actions={"delete": "/admin/backups/bulk-delete", "delete_label": "Delete selected", "export": "", "next": "/admin", "confirm": "Delete the selected backups? Each selected folder (tar + MANIFEST) is removed. data/backups/ stays."} %}
+{% with pager=backup_pager, list_actions={"delete": "/admin/backups/bulk-delete", "delete_label": "Delete selected", "delete_last": True, "export": "/admin/backups/export", "next": "/admin", "confirm": "Delete the selected backups? Each selected folder (tar + MANIFEST) is removed. data/backups/ stays."} %}
 {% include "_pager.html" %}
 {% endwith %}
 </div>

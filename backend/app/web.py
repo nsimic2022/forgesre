@@ -2521,6 +2521,7 @@ def ops_page(
     edit: str = "",
     clone: str = "",
 ):
+    from app.bulk import mail_row_deletable
     from app.services import list_mail_addresses
 
     mail, mail_pager = paginate_query(
@@ -2560,6 +2561,7 @@ def ops_page(
         "ops.html",
         user,
         mail=mail,
+        mail_row_deletable=mail_row_deletable,
         reports=reports,
         assets=assets,
         addresses=list_mail_addresses(db),
