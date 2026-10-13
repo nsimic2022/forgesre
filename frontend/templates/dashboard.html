@@ -119,10 +119,9 @@
         <th class="col-host">Hostname</th>
         <th class="col-name">Name</th>
         <th>Severity</th>
-        <th>Status</th>
+        <th class="col-status">Status</th>
         <th class="col-ladder" title="How far this incident climbed. Red means this incident already mailed that level. Green means the asset has that level and this incident has not mailed it yet. Gray means no such level. An empty asset Escalation maps Default warning steps onto L1, L2, L3, and L4 in order. A three-step Default warning fills L1 to L3 and leaves L4 gray.">Escalation</th>
         <th class="col-when">When</th>
-        <th class="col-ack">Acknowledged</th>
         <th class="col-resolved">Resolved by</th>
       </tr>
     </thead>
@@ -134,12 +133,12 @@
         <td class="col-host">{% set host = incident_host(item) %}<span class="inc-host">{{ host or "—" }}</span></td>
         {% include "_incident_cell.html" %}
         <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
-        <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
+        <td class="col-status"><span class="status-cell"><span class="pill {{ item.status|lower }}">{{ item.status }}</span>{% if item.ack_at %}<span class="status-ack">Acknowledged</span>{% endif %}</span></td>
         <td class="col-ladder">{% with cubes=incident_ladder_cubes(item) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
-        {% with show_notes=false %}{% include "_incident_scan_tail.html" %}{% endwith %}
+        {% with show_notes=false, show_ack=false %}{% include "_incident_scan_tail.html" %}{% endwith %}
       </tr>
     {% else %}
-      <tr><td colspan="9" class="muted">No incidents yet. Use Run demo (top right) or wait for an alert.</td></tr>
+      <tr><td colspan="8" class="muted">No incidents yet. Use Run demo (top right) or wait for an alert.</td></tr>
     {% endfor %}
     </tbody>
   </table>
