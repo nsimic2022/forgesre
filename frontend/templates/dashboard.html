@@ -67,7 +67,7 @@
 <div class="dash-top">
 <section class="dash-tiles-incidents">
   <div class="tile-group{% if incident_heat %} heat-{{ incident_heat }}{% endif %}" data-incident-tile data-incident-heat="{{ incident_heat or 'calm' }}">
-  <h2>Incidents {% with %}{% set tip %}Alarm counts — each number is the row count of the Incidents list behind the click. Critical = active critical incidents (not resolved or closed). Warning = active warning incidents. Investigating = status INVESTIGATING (only Acknowledge sets this; an escalated incident stays ESCALATED). RCA does not set INVESTIGATING. Escalated = status ESCALATED (already climbed a ladder). Resolved = status RESOLVED — it is not Closed. Closed rows stay on Incidents. This box pulses softly red while an active critical incident exists, slower yellow while a warning or investigating incident is active, and stays still when nothing is active (no pulse if your system asks for reduced motion).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Incidents {% with %}{% set tip %}Alarm counts — each number is the row count of the Incidents list behind the click. Critical = active critical incidents (not resolved or closed). Warning = active warning incidents. Investigating = status INVESTIGATING (only Acknowledge sets this; an escalated incident stays ESCALATED). RCA does not set INVESTIGATING. Escalated = status ESCALATED (already climbed Escalation). Resolved = status RESOLVED — it is not Closed. Closed rows stay on Incidents. This box pulses softly red while an active critical incident exists, slower yellow while a warning or investigating incident is active, and stays still when nothing is active (no pulse if your system asks for reduced motion).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="grid stat-row stat-row-big">
     {% for tile in incident_tiles %}
     <a class="stat {{ tile.tone }}{% if not tile.count %} stat-zero{% endif %}" href="{{ tile.href }}" data-tile="{{ tile.key }}"><span>{{ tile.label }}</span><strong>{{ tile.count }}</strong></a>
@@ -120,11 +120,10 @@
         <th class="col-name">Name</th>
         <th>Severity</th>
         <th>Status</th>
-        <th class="col-ladder" title="How far this incident climbed. Red means this incident already mailed that level. Green means the asset has that level and this incident has not mailed it yet. Gray means no such level. An empty asset Ladder maps Default warning steps onto L1, L2, L3, and L4 in order. A three-step Default warning fills L1 to L3 and leaves L4 gray.">Ladder</th>
-        <th>When</th>
+        <th class="col-ladder" title="How far this incident climbed. Red means this incident already mailed that level. Green means the asset has that level and this incident has not mailed it yet. Gray means no such level. An empty asset Escalation maps Default warning steps onto L1, L2, L3, and L4 in order. A three-step Default warning fills L1 to L3 and leaves L4 gray.">Escalation</th>
+        <th class="col-when">When</th>
         <th class="col-ack">Acknowledged</th>
         <th class="col-resolved">Resolved by</th>
-        <th class="col-notes">Notes</th>
       </tr>
     </thead>
     <tbody>
@@ -137,10 +136,10 @@
         <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
         <td><span class="pill {{ item.status|lower }}">{{ item.status }}</span></td>
         <td class="col-ladder">{% with cubes=incident_ladder_cubes(item) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
-        {% include "_incident_scan_tail.html" %}
+        {% with show_notes=false %}{% include "_incident_scan_tail.html" %}{% endwith %}
       </tr>
     {% else %}
-      <tr><td colspan="10" class="muted">No incidents yet. Use Run demo (top right) or wait for an alert.</td></tr>
+      <tr><td colspan="9" class="muted">No incidents yet. Use Run demo (top right) or wait for an alert.</td></tr>
     {% endfor %}
     </tbody>
   </table>

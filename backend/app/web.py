@@ -525,6 +525,7 @@ def ctx(request: Request, user: User | None, **extra):
         "extras_rows": extras_rows,
         "support_status": support_status,
         "incident_notes_snippet": incident_notes_snippet,
+        "asset_extra": asset_extra,
         "asset_ladder_cubes": asset_ladder_cubes,
         "incident_ladder_cubes": incident_ladder_cubes,
     }
@@ -1477,7 +1478,7 @@ def asset_update(
     contact_name: str = Form(""),
     owner_email: str = Form(""),
     owner_phone: str = Form(""),
-    notes: str = Form(""),
+    notes: str | None = Form(None),
     scrape_address: str = Form(""),
     snmp_port: str = Form(""),
     comms_present: str = Form(""),

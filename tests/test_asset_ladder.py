@@ -115,7 +115,7 @@ def test_add_asset_columns_nav_rules_and_escalated_cube():
     assert ">Escalation " in text.split("data-asset-ladder", 1)[1]
     assert "ladder-levels" in text.split("data-asset-ladder", 1)[1]
     assert "Client playrules" not in text
-    assert 'href="/escalation">Default ladder</a>' in text
+    assert 'href="/escalation">Default escalation</a>' in text
     nav = text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
     assert ">Rules<" in nav and ">Playbooks<" in nav
     assert ">Playrules<" not in nav and ">Escalation<" not in nav
@@ -128,7 +128,7 @@ def test_add_asset_columns_nav_rules_and_escalated_cube():
     default = client.get("/escalation")
     assert default.status_code == 200
     assert "Default warning" in default.text
-    assert "<h1>Default ladder" in default.text
+    assert "<h1>Default escalation" in default.text
     home = client.get("/")
     alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
     assert 'data-tile="escalated"' in alarms

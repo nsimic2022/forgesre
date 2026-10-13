@@ -118,8 +118,8 @@ def test_version_is_0_9_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v0.9</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-O" in base
-    assert "app.js?v=v09-O" in base
+    assert "app.css?v=v09-P" in base
+    assert "app.js?v=v09-P" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.9.0" in text
@@ -306,10 +306,11 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     custom = text.index("asset-form-custom")
     notes = text.index("asset-form-notes")
     ladder = text.index("asset-form-ladder")
-    assert row1 < left < contacts < support_at < middle < row2 < right < custom < notes < row3 < ladder
-    identity = _between(text, "asset-form-left", "data-asset-contacts")
-    for name in ("asset_id", "hostname", "ip", "extra_customer", "extra_site", "extra_vlan", "notes"):
+    assert row1 < left < middle < contacts < support_at < row2 < right < custom < notes < row3 < ladder
+    identity = _between(text, "asset-form-left", "asset-form-middle")
+    for name in ("asset_id", "hostname", "ip", "extra_customer", "extra_site", "extra_vlan"):
         assert f'name="{name}"' in identity, name
+    assert 'name="notes"' not in identity
     assert "identity-lg" in identity
     contact = _between(text, "data-asset-contacts", "data-asset-support")
     assert ">Contacts " in contact
@@ -332,7 +333,7 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     assert '<textarea name="extra_runbook_note"' in notes_html
     assert "Runbook note" not in text.split('id="asset-form"', 1)[1].split("</form>", 1)[0]
 
-    support = _between(text, "data-asset-support", "asset-form-middle")
+    support = _between(text, "data-asset-support", "asset-form-row-2")
     assert ">Support " in support
     for value in ("yes", "no", "internal"):
         assert f'<option value="{value}"' in support
@@ -356,7 +357,7 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     ladder_html = _between(text, "data-asset-ladder", "</form>")
     assert ">Escalation " in ladder_html
     assert "ladder-levels" in ladder_html
-    assert 'href="/escalation">Default ladder</a>' in ladder_html
+    assert 'href="/escalation">Default escalation</a>' in ladder_html
     for label in ("L1 NOC", "L2 Shift", "L3 Engineer", "L4 Manager"):
         assert label in ladder_html
 

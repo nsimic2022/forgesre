@@ -305,11 +305,11 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     big = css.split(".stat-row-big .stat {", 1)[1].split("}", 1)[0]
     assert "border-left-width: 8px" in big
-    assert "min-height: 7.4rem" in big
-    assert "font-size: 2.8rem" in css
+    assert "aspect-ratio: 1" in big
+    assert "font-size: 2.15rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-O" in base
+    assert "app.css?v=v09-P" in base
 
 
 def test_dashboard_banner_block_gone_from_template_js_css():
