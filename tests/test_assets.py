@@ -391,7 +391,7 @@ def test_asset_table_actions_live_in_the_pager():
     assert '"delete_last": True' in pager
     assert "vertical-align: middle" in css
     assert "table-layout: fixed" in css
-    assert "app.css?v=v09-R" in base
+    assert "app.css?v=v09-S" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():
