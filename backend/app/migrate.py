@@ -142,6 +142,8 @@ def migrate(engine: Engine) -> None:
             statements.append("ALTER TABLE assets ADD COLUMN playrule_ids JSON")
         if "number" not in existing:
             statements.append("ALTER TABLE assets ADD COLUMN number INTEGER")
+        if "parent_id" not in existing:
+            statements.append("ALTER TABLE assets ADD COLUMN parent_id INTEGER")
     if "evidence" in tables:
         existing = {col["name"] for col in inspector.get_columns("evidence")}
         mapping = {

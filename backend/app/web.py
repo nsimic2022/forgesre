@@ -796,6 +796,11 @@ def assets_page(
         support_choices=SUPPORT_CHOICES,
         support_lead_choices=SUPPORT_LEAD_CHOICES,
         support_lead_default=SUPPORT_LEAD_DEFAULT,
+        parent_choices=[
+            {"asset_id": row.asset_id, "hostname": row.hostname}
+            for row in every
+            if form_mode != "edit" or selected is None or row.id != selected.id
+        ],
         snmp_versions=SNMP_VERSIONS,
         snmp_v3_levels=V3_LEVELS,
         snmp_auth_protocols=AUTH_PROTOCOLS,
@@ -909,6 +914,7 @@ def asset_create(
     extra_support_lead_days: str = Form(""),
     extra_maint_from: str = Form(""),
     extra_maint_until: str = Form(""),
+    parent_asset_id: str = Form(""),
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
     playrule_add: str = Form(""),
@@ -1014,6 +1020,7 @@ def asset_create(
             snmp_port=snmp_port,
             snmp=posted_snmp,
             ladder=posted_ladder,
+            parent_asset_id=parent_asset_id,
         )
     except ValueError as exc:
         if cloned_from:
@@ -1531,6 +1538,7 @@ def asset_update(
     extra_support_lead_days: str = Form(""),
     extra_maint_from: str = Form(""),
     extra_maint_until: str = Form(""),
+    parent_asset_id: str = Form(""),
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
     playrule_add: str = Form(""),
@@ -1616,29 +1624,33 @@ def asset_update(
         validate_ip_field(ip)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    update_asset(
-        db,
-        item,
-        hostname=hostname,
-        ip=ip,
-        type=type,
-        environment=environment,
-        owner=owner,
-        contact_name=contact_name,
-        owner_email=owner_email,
-        owner_phone=owner_phone,
-        notes=notes,
-        scrape_address=scrape_address,
-        actor=user.email,
-        snmp_prober=_snmp_answer,
-        alarms=posted_alarms,
-        extras=posted_extras,
-        playrule_ids=posted_playrules,
-        playrule_off=posted_off,
-        snmp_port=snmp_port if comms_present.strip() else None,
-        snmp=posted_snmp,
-        ladder=posted_ladder,
-    )
+    try:
+        update_asset(
+            db,
+            item,
+            hostname=hostname,
+            ip=ip,
+            type=type,
+            environment=environment,
+            owner=owner,
+            contact_name=contact_name,
+            owner_email=owner_email,
+            owner_phone=owner_phone,
+            notes=notes,
+            scrape_address=scrape_address,
+            actor=user.email,
+            snmp_prober=_snmp_answer,
+            alarms=posted_alarms,
+            extras=posted_extras,
+            playrule_ids=posted_playrules,
+            playrule_off=posted_off,
+            snmp_port=snmp_port if comms_present.strip() else None,
+            snmp=posted_snmp,
+            ladder=posted_ladder,
+            parent_asset_id=parent_asset_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     notice = getattr(item, "_detect_message", "") or ""
     suffix = f"?notice={quote(notice)}" if notice else ""
     return RedirectResponse(f"/assets/{asset_id}{suffix}", status_code=302)

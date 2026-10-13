@@ -455,6 +455,7 @@ def create_manual_asset(
     snmp_port: int | str | None = None,
     snmp: dict | None = None,
     ladder: list | None = None,
+    parent_asset_id: str | None = None,
 ) -> Asset:
     hostname = (hostname or "").strip()
     ip = validate_ip_field(ip)
@@ -544,8 +545,10 @@ def create_manual_asset(
 
     replace_asset_ladder(db, asset, ladder)
     store_playrule_mutes(db, asset, playrule_off, cloned_from=cloned_from)
-    from app.dc_noc import sync_asset_maintenance
+    from app.dc_noc import set_asset_parent, sync_asset_maintenance
 
+    if parent_asset_id is not None:
+        set_asset_parent(db, asset, parent_asset_id)
     sync_asset_maintenance(db, asset)
     audit(
         db,
@@ -613,6 +616,7 @@ def update_asset(
     snmp_port: int | str | None = None,
     snmp: dict | None = None,
     ladder: list | None = None,
+    parent_asset_id: str | None = None,
 ) -> Asset:
     old_ip = asset.ip or ""
     old_type = asset.type or ""
@@ -713,8 +717,10 @@ def update_asset(
     from app.asset_ladder import replace_asset_ladder
 
     replace_asset_ladder(db, asset, ladder)
-    from app.dc_noc import sync_asset_maintenance
+    from app.dc_noc import set_asset_parent, sync_asset_maintenance
 
+    if parent_asset_id is not None:
+        set_asset_parent(db, asset, parent_asset_id)
     sync_asset_maintenance(db, asset)
     audit(
         db,
@@ -1307,6 +1313,7 @@ def clone_prefill(db: Session, asset: Asset) -> dict:
         "playrule_ids": asset_playrule_ids(asset),
         "playrule_off": _form_playrule_off(asset),
         "ladder": _form_ladder(asset),
+        "parent_asset_id": asset.parent.asset_id if getattr(asset, "parent", None) is not None else "",
     }
 
 
@@ -1341,6 +1348,7 @@ def asset_form_values(asset: Asset | None = None) -> dict:
             "playrule_ids": [],
             "playrule_off": [],
             "ladder": _form_ladder(None),
+            "parent_asset_id": "",
         }
     return {
         "asset_id": asset.asset_id or "",
@@ -1362,6 +1370,7 @@ def asset_form_values(asset: Asset | None = None) -> dict:
         "playrule_ids": asset_playrule_ids(asset),
         "playrule_off": _form_playrule_off(asset),
         "ladder": _form_ladder(asset),
+        "parent_asset_id": asset.parent.asset_id if getattr(asset, "parent", None) is not None else "",
     }
 
 
@@ -1641,6 +1650,7 @@ def delete_asset(db: Session, asset: Asset, actor: str = "system") -> dict:
             if not sched.asset_ids and sched.enabled:
                 sched.enabled = False
                 reports_off.append(sched.name or str(sched.id))
+    db.query(Asset).filter(Asset.parent_id == pk).update({Asset.parent_id: None}, synchronize_session=False)
     db.query(AssetLadderStep).filter(AssetLadderStep.asset_id == pk).delete(synchronize_session=False)
     db.query(AssetPlayruleMute).filter(AssetPlayruleMute.asset_id == pk).delete(synchronize_session=False)
     db.flush()

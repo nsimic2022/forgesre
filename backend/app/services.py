@@ -1040,42 +1040,63 @@ def overlapping_maintenance(db: Session, asset_ref: str, at: datetime) -> list[d
 
 
 def _quiet_mail(db: Session, incident: Incident, asset: Asset | None, alertname: str, *, opened: bool) -> bool:
-    """Skip the mail ladder for a new incident inside a maintenance window.
+    """Skip the mail ladder for a new quiet incident. Return True when mail must not start.
 
-    The incident stays on the list as MAINT. A later firing after the window
-    promotes it to OPEN and the ladder starts. Standard-alarm mute is separate:
-    that path never opens an incident.
+    Maintenance (MAINT) wins over parent suppression (SUPPRESSED). A later firing
+    after the window, or after the parent down incident clears, promotes the row
+    to OPEN and the ladder starts. An incident that already paged is left alone.
+    Standard-alarm mute never opens an incident; this path still records one.
     """
-    del alertname
-    from app.dc_noc import QUIET_INCIDENT_STATUSES, in_maintenance, maintenance_quiet_detail
+    from app.dc_noc import (
+        QUIET_INCIDENT_STATUSES,
+        in_maintenance,
+        is_down_style,
+        maintenance_quiet_detail,
+        parent_down_incident,
+        parent_suppress_detail,
+    )
     from app.journal import report
 
     status = (incident.status or "").upper()
     if status in {"RESOLVED", "CLOSED"}:
         return True
-    if status == "MAINT" or (opened and asset is not None and in_maintenance(asset, incident.started_at or utcnow())):
-        if asset is not None and in_maintenance(asset, utcnow()):
-            incident.status = "MAINT"
-            append_timeline(incident, "maintenance", "MAINT", maintenance_quiet_detail(asset))
-            db.flush()
-            report(
-                db,
-                "incident",
-                "maintenance",
-                "ok",
-                summary=f"{incident.number} maintenance — mail suppressed",
-                detail=maintenance_quiet_detail(asset),
-                object_type="incident",
-                object_id=incident.number,
-                commit=False,
+    reason: tuple[str, str, Incident | None] | None = None
+    if asset is not None and in_maintenance(asset, utcnow()):
+        reason = ("MAINT", maintenance_quiet_detail(asset), None)
+    elif asset is not None and is_down_style(alertname):
+        parent_inc = parent_down_incident(db, asset)
+        if parent_inc is not None:
+            reason = ("SUPPRESSED", parent_suppress_detail(asset, parent_inc), parent_inc)
+    if reason is not None and (opened or status in QUIET_INCIDENT_STATUSES):
+        code, detail, parent_inc = reason
+        incident.status = code
+        node = "maintenance" if code == "MAINT" else "parent"
+        append_timeline(incident, node, code, detail)
+        if parent_inc is not None:
+            host = asset.hostname if asset is not None else "child"
+            append_timeline(
+                parent_inc,
+                f"child-{incident.number}",
+                "CHILD",
+                f"{host} {alertname} linked here — child mail ladder not started",
             )
-            return True
-        if status == "MAINT":
-            incident.status = "OPEN"
-            append_timeline(incident, "maintenance-clear", "MAINT", "Maintenance window ended — mail ladder can start")
-            db.flush()
-            return False
-    if status in QUIET_INCIDENT_STATUSES and status != "MAINT":
+        db.flush()
+        report(
+            db,
+            "incident",
+            "maintenance" if code == "MAINT" else "parent",
+            "ok",
+            summary=f"{incident.number} {'maintenance' if code == 'MAINT' else 'parent'} — mail suppressed",
+            detail=detail,
+            object_type="incident",
+            object_id=incident.number,
+            commit=False,
+        )
+        return True
+    if status in QUIET_INCIDENT_STATUSES and reason is None:
+        incident.status = "OPEN"
+        append_timeline(incident, "quiet-clear", "OPEN", "Quiet period ended — mail ladder can start")
+        db.flush()
         return False
     return False
 

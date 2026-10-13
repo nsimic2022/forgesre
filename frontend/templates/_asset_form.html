@@ -48,6 +48,13 @@
   <label>Site / DC / room <input name="extra_site" value="{{ ex.site }}" placeholder="BG-DC1 · room 2 · rack 14"></label>
   <label><span class="label-line">VLAN {% with %}{% set tip %}Free text, e.g. 10 or 10.20. Shown on the asset page and as a filter on Assets. Inventory note only — ForgeSRE does not read or change switch VLANs.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <input name="extra_vlan" value="{{ ex.vlan }}" maxlength="64" placeholder="10 or 10.20"></label>
+  <label><span class="label-line">Parent {% with %}{% set tip %}One upstream device, for example the switch this server hangs off. When that parent has an active down or unreachable incident, a new host-down or interface-down alert on this asset is recorded and linked to the parent. It does not start its own mail ladder. The parent still pages. CPU, disk, and memory alerts are not suppressed. Empty = no parent.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <select name="parent_asset_id" class="nice-select" data-parent-asset>
+      <option value=""{% if not form.parent_asset_id %} selected{% endif %}>None</option>
+      {% for choice in parent_choices or [] %}
+      <option value="{{ choice.asset_id }}"{% if form.parent_asset_id == choice.asset_id %} selected{% endif %}>{{ choice.hostname }} ({{ choice.asset_id }})</option>
+      {% endfor %}
+    </select></label>
   </div>
   </div>
   </div>

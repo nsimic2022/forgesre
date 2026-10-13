@@ -100,7 +100,7 @@
       {{ sel.cell(asset.asset_id) }}
       <td class="col-num">{{ asset.number or "—" }}</td>
       <td class="col-id"><a href="/assets/{{ asset.asset_id }}" data-list-open>{{ asset.asset_id }}</a></td>
-      <td class="col-host">{{ asset.hostname }}</td>
+      <td class="col-host">{{ asset.hostname }}{% if asset.parent %}<div class="muted" data-parent-host>parent {{ asset.parent.hostname }}</div>{% endif %}</td>
       <td class="col-ip">{{ asset.ip or "—" }}</td>
       <td class="col-port">
         {% set r = reachability_snapshot(asset) %}

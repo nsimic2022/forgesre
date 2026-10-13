@@ -59,8 +59,10 @@ class Asset(Base):
     exporter_detail: Mapped[str] = mapped_column(String(255), default="")
     probe_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True, index=True)
 
     incidents: Mapped[list[Incident]] = relationship(back_populates="asset")
+    parent: Mapped["Asset | None"] = relationship("Asset", remote_side="Asset.id", foreign_keys="Asset.parent_id")
     ladder_steps: Mapped[list["AssetLadderStep"]] = relationship(
         back_populates="asset",
         cascade="all, delete-orphan",

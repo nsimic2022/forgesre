@@ -153,3 +153,88 @@ def maintenance_quiet_detail(asset: Any) -> str:
     label = maintenance_label(asset)
     when = f" ({label})" if label else ""
     return f"Maintenance window{when} — incident recorded, mail not started."
+
+
+# Host-down / interface-down style names. CPU, disk, and memory stay on their own ladder.
+_DOWN_EXEMPT = ("cpu", "memory", "mem", "disk", "filesystem", "volume", "temperature", "temp", "inode", "load")
+_DOWN_MARKERS = (
+    "interfacedown",
+    "exporterdown",
+    "hostdown",
+    "nodedown",
+    "devicedown",
+    "pingdown",
+    "unreachable",
+    "unreach",
+    "snmpdown",
+)
+
+
+def is_down_style(alertname: str) -> bool:
+    folded = "".join(ch for ch in (alertname or "").lower() if ch.isalnum())
+    if not folded or any(word in folded for word in _DOWN_EXEMPT):
+        return False
+    if any(mark in folded for mark in _DOWN_MARKERS):
+        return True
+    return folded.endswith("down")
+
+
+def incident_alertname(incident: Incident) -> str:
+    payload = incident.alert_payload if isinstance(incident.alert_payload, dict) else {}
+    labels = payload.get("labels") if isinstance(payload.get("labels"), dict) else {}
+    name = str((labels or {}).get("alertname") or "").strip()
+    return name or str(incident.title or "")
+
+
+def set_asset_parent(db: Session, asset: Asset, parent_asset_id: str) -> None:
+    """One parent pointer. Empty clears it. Self and short loops are rejected."""
+    text = " ".join(str(parent_asset_id or "").split())
+    if not text:
+        asset.parent_id = None
+        return
+    parent = db.query(Asset).filter(Asset.asset_id == text).first()
+    if parent is None:
+        raise ValueError("Parent asset was not found")
+    if asset.id is not None and parent.id == asset.id:
+        raise ValueError("An asset cannot be its own parent")
+    seen: set[int] = set()
+    if asset.id is not None:
+        seen.add(asset.id)
+    cursor: Asset | None = parent
+    for _ in range(12):
+        if cursor is None:
+            break
+        if cursor.id in seen:
+            raise ValueError("That parent would make a loop")
+        seen.add(cursor.id)
+        if not cursor.parent_id:
+            break
+        cursor = db.get(Asset, cursor.parent_id)
+    asset.parent_id = parent.id
+
+
+def parent_down_incident(db: Session, asset: Asset | None) -> Incident | None:
+    """Active down/unreachable incident on the parent, if this asset has one parent."""
+    if asset is None or not getattr(asset, "parent_id", None):
+        return None
+    from app.services import ACTIVE_INCIDENT_STATUSES
+
+    rows = (
+        db.query(Incident)
+        .filter(Incident.asset_id == asset.parent_id, Incident.status.in_(ACTIVE_INCIDENT_STATUSES))
+        .order_by(Incident.id.desc())
+        .all()
+    )
+    for row in rows:
+        if is_down_style(incident_alertname(row)):
+            return row
+    return None
+
+
+def parent_suppress_detail(asset: Asset, parent_incident: Incident) -> str:
+    parent = asset.parent
+    host = parent.hostname if parent is not None else "parent"
+    return (
+        f"Suppressed by parent {host} incident {parent_incident.number} — "
+        "parent is down, so this host-down alert did not start its own mail ladder."
+    )
