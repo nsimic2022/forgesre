@@ -544,6 +544,9 @@ def create_manual_asset(
 
     replace_asset_ladder(db, asset, ladder)
     store_playrule_mutes(db, asset, playrule_off, cloned_from=cloned_from)
+    from app.dc_noc import sync_asset_maintenance
+
+    sync_asset_maintenance(db, asset)
     audit(
         db,
         "asset.create",
@@ -710,6 +713,9 @@ def update_asset(
     from app.asset_ladder import replace_asset_ladder
 
     replace_asset_ladder(db, asset, ladder)
+    from app.dc_noc import sync_asset_maintenance
+
+    sync_asset_maintenance(db, asset)
     audit(
         db,
         "asset.update",

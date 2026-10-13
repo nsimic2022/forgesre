@@ -266,7 +266,7 @@ def incident_query(
     return query
 
 
-INCIDENT_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED")
+INCIDENT_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED", "MAINT", "SUPPRESSED", "RESOLVED", "CLOSED")
 
 
 def incident_list_filters(

@@ -154,6 +154,10 @@
   <label>From <input name="extra_support_from" type="date" value="{{ ex.support_from }}"></label>
   <label><span class="label-line">To {% with %}{% set tip %}Empty = no end date.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <input name="extra_support_to" type="date" value="{{ ex.support_to }}"></label>
+  <label><span class="label-line">Maintenance from {% with %}{% set tip %}Appliance timezone. Both from and until, or leave both empty. During the window a new alert is still recorded (status MAINT) but the mail ladder does not start. This is not Standard-alarm mute — mute drops the alert; maintenance keeps a quiet incident you can see.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="extra_maint_from" type="datetime-local" value="{{ ex.maint_from }}" data-maint-from></label>
+  <label><span class="label-line">Maintenance until {% with %}{% set tip %}Empty together with Maintenance from = not in maintenance. After until, a new firing starts mail again.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="extra_maint_until" type="datetime-local" value="{{ ex.maint_until }}" data-maint-until></label>
   </div>
   </div>
   </div>

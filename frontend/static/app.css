@@ -105,7 +105,7 @@ html[data-theme="dark"] {
     color-scheme: dark;
   }
 }
-/* v09-S: darker NOC, higher contrast. Light palette is unchanged.
+/* v09-T: darker NOC, higher contrast. Light palette is unchanged.
    --heading / --tip / --check-* / --ink-on-* exist only on the dark tokens, so system+light falls back. */
 html[data-theme="dark"] h1,
 html[data-theme="dark"] h2,
@@ -530,7 +530,7 @@ a.button {
 .verify-table td .muted { font-size: 0.8rem; }
 .pill { display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px; background: var(--pill); font-size: 0.8rem; }
 .pill.healthy, .pill.ok { background: var(--pill-ok-bg); color: var(--pill-ok); }
-.pill.warning, .pill.warn { background: var(--pill-warn-bg); color: var(--pill-warn); }
+.pill.warning, .pill.warn, .pill.maint, .pill.suppressed { background: var(--pill-warn-bg); color: var(--pill-warn); }
 .pill.critical, .pill.crit, .pill.open { background: var(--pill-crit-bg); color: var(--pill-crit); }
 .pill.new { background: var(--pill-warn-bg); color: var(--pill-warn); }
 .pill.approved { background: var(--pill-ok-bg); color: var(--pill-ok); }

@@ -266,11 +266,11 @@ def current_status(*, force: bool = False) -> dict[str, Any]:
 
 
 def _open_zabbix_incidents(db: Session) -> list[Incident]:
-    from app.services import ACTIVE_INCIDENT_STATUSES
+    from app.services import tracked_incident_statuses
 
     return (
         db.query(Incident)
-        .filter(Incident.source == "zabbix", Incident.status.in_(ACTIVE_INCIDENT_STATUSES))
+        .filter(Incident.source == "zabbix", Incident.status.in_(tracked_incident_statuses()))
         .order_by(Incident.id)
         .limit(500)
         .all()

@@ -18,6 +18,7 @@ from app.asset_probe import reachability_snapshot
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.asset_alarms import alarms_from_form, saved_alarm_hostnames
+from app.dc_noc import in_maintenance, maintenance_label
 from app.asset_extras import (
     EXTRA_FIELDS,
     SUPPORT_CHOICES,
@@ -160,11 +161,16 @@ def health_class(status: str) -> str:
 
 
 def incident_tone(status: str, severity: str = "") -> str:
-    """INC link color: green resolved, yellow in progress, red critical."""
+    """INC link color: green resolved, yellow in progress, red critical.
+
+    MAINT and SUPPRESSED stay yellow — they are visible and not paging.
+    """
     st = str(status or "").upper()
     sev = str(severity or "").upper()
     if st in {"RESOLVED", "CLOSED"}:
         return "inc-ok"
+    if st in {"MAINT", "SUPPRESSED"}:
+        return "inc-warn"
     if sev in {"CRITICAL", "CRIT", "FATAL", "EMERGENCY"}:
         return "inc-crit"
     return "inc-warn"
@@ -528,6 +534,8 @@ def ctx(request: Request, user: User | None, **extra):
         "asset_extra": asset_extra,
         "asset_ladder_cubes": asset_ladder_cubes,
         "incident_ladder_cubes": incident_ladder_cubes,
+        "in_maintenance": in_maintenance,
+        "maintenance_label": maintenance_label,
     }
     if user is not None:
         try:
@@ -899,6 +907,8 @@ def asset_create(
     extra_support_from: str = Form(""),
     extra_support_to: str = Form(""),
     extra_support_lead_days: str = Form(""),
+    extra_maint_from: str = Form(""),
+    extra_maint_until: str = Form(""),
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
     playrule_add: str = Form(""),
@@ -953,6 +963,8 @@ def asset_create(
         support_from=extra_support_from,
         support_to=extra_support_to,
         support_lead_days=extra_support_lead_days,
+        maint_from=extra_maint_from,
+        maint_until=extra_maint_until,
     )
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
     posted_off = playrule_off_from_form(playrule_switches, playrule_ids, playrule_on)
@@ -1517,6 +1529,8 @@ def asset_update(
     extra_support_from: str = Form(""),
     extra_support_to: str = Form(""),
     extra_support_lead_days: str = Form(""),
+    extra_maint_from: str = Form(""),
+    extra_maint_until: str = Form(""),
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
     playrule_add: str = Form(""),
@@ -1573,6 +1587,8 @@ def asset_update(
         support_from=extra_support_from,
         support_to=extra_support_to,
         support_lead_days=extra_support_lead_days,
+        maint_from=extra_maint_from,
+        maint_until=extra_maint_until,
     )
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
     posted_off = playrule_off_from_form(playrule_switches, playrule_ids, playrule_on)

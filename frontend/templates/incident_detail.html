@@ -74,6 +74,8 @@
 </div>
 {% if incident.status|upper == "RESOLVED" %}
 <p class="muted">Resolved is not Closed. If the same alert fires again, ForgeSRE opens a new incident and links it here. Close when the work is finished.</p>
+{% elif incident.status|upper == "MAINT" %}
+<p class="banner" data-maint-incident>Maintenance — this incident is on the list and the mail ladder did not start. Standard-alarm mute is a different switch (it drops the alert). After the window, a new firing can email.</p>
 {% endif %}
 
 {% if incident.asset %}

@@ -375,7 +375,10 @@ def duration_label(seconds: float) -> str:
 
 
 def incident_is_live(status: str) -> bool:
-    return str(status or "").upper() in ACTIVE_INCIDENT_STATUSES
+    """Still on the clock: paging statuses plus maintenance / parent-suppressed (visible, not closed)."""
+    from app.dc_noc import QUIET_INCIDENT_STATUSES
+
+    return str(status or "").upper() in ACTIVE_INCIDENT_STATUSES + QUIET_INCIDENT_STATUSES
 
 
 def _last_timeline_at(incident: Incident) -> datetime | None:
@@ -588,6 +591,13 @@ def refresh_asset_status(db: Session, asset: Asset | None) -> None:
 
 
 ACTIVE_INCIDENT_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED")
+
+
+def tracked_incident_statuses() -> tuple[str, ...]:
+    """Fingerprints that must not open a second incident: paging rows plus quiet MAINT / SUPPRESSED."""
+    from app.dc_noc import QUIET_INCIDENT_STATUSES
+
+    return ACTIVE_INCIDENT_STATUSES + QUIET_INCIDENT_STATUSES
 UNLABELED_ASSET = "unlabeled"
 INCIDENT_SOURCES = {"prometheus": "Prometheus", "zabbix": "Zabbix"}
 _RESOLVED_BY = {"prometheus": "Alertmanager", "zabbix": "Zabbix"}
@@ -696,7 +706,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
             continue
         incident = (
             db.query(Incident)
-            .filter(Incident.fingerprint == fingerprint, Incident.status.in_(ACTIVE_INCIDENT_STATUSES))
+            .filter(Incident.fingerprint == fingerprint, Incident.status.in_(tracked_incident_statuses()))
             .order_by(Incident.id.desc())
             .first()
         )
@@ -794,10 +804,13 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
                 },
             )
             created.append(incident)
+        opened = incident in created
+        skip_mail = _quiet_mail(db, incident, asset, alertname, opened=opened)
         if incident.id and not db.query(Evidence.id).filter_by(incident_id=incident.id).first():
             collect_evidence(db, incident, alert)
         refresh_asset_status(db, asset)
-        notify_first_step(db, incident)
+        if not skip_mail:
+            notify_first_step(db, incident)
     db.commit()
     for incident in created:
         db.refresh(incident)
@@ -994,7 +1007,7 @@ def overlapping_maintenance(db: Session, asset_ref: str, at: datetime) -> list[d
         .filter(MaintenanceWindow.asset_ref == asset_ref, MaintenanceWindow.starts_at <= at, MaintenanceWindow.ends_at >= at)
         .all()
     )
-    return [
+    found = [
         {
             "asset_ref": row.asset_ref,
             "summary": row.summary,
@@ -1003,6 +1016,68 @@ def overlapping_maintenance(db: Session, asset_ref: str, at: datetime) -> list[d
         }
         for row in rows
     ]
+    if found:
+        return found
+    asset = db.query(Asset).filter(Asset.asset_id == asset_ref).first()
+    if asset is None:
+        return []
+    from app.dc_noc import in_maintenance, maintenance_bounds, maintenance_label
+
+    if not in_maintenance(asset, at):
+        return []
+    bounds = maintenance_bounds(asset)
+    if bounds is None:
+        return []
+    start, end = bounds
+    return [
+        {
+            "asset_ref": asset_ref,
+            "summary": maintenance_label(asset) or "Asset maintenance window",
+            "starts_at": start.isoformat(),
+            "ends_at": end.isoformat(),
+        }
+    ]
+
+
+def _quiet_mail(db: Session, incident: Incident, asset: Asset | None, alertname: str, *, opened: bool) -> bool:
+    """Skip the mail ladder for a new incident inside a maintenance window.
+
+    The incident stays on the list as MAINT. A later firing after the window
+    promotes it to OPEN and the ladder starts. Standard-alarm mute is separate:
+    that path never opens an incident.
+    """
+    del alertname
+    from app.dc_noc import QUIET_INCIDENT_STATUSES, in_maintenance, maintenance_quiet_detail
+    from app.journal import report
+
+    status = (incident.status or "").upper()
+    if status in {"RESOLVED", "CLOSED"}:
+        return True
+    if status == "MAINT" or (opened and asset is not None and in_maintenance(asset, incident.started_at or utcnow())):
+        if asset is not None and in_maintenance(asset, utcnow()):
+            incident.status = "MAINT"
+            append_timeline(incident, "maintenance", "MAINT", maintenance_quiet_detail(asset))
+            db.flush()
+            report(
+                db,
+                "incident",
+                "maintenance",
+                "ok",
+                summary=f"{incident.number} maintenance — mail suppressed",
+                detail=maintenance_quiet_detail(asset),
+                object_type="incident",
+                object_id=incident.number,
+                commit=False,
+            )
+            return True
+        if status == "MAINT":
+            incident.status = "OPEN"
+            append_timeline(incident, "maintenance-clear", "MAINT", "Maintenance window ended — mail ladder can start")
+            db.flush()
+            return False
+    if status in QUIET_INCIDENT_STATUSES and status != "MAINT":
+        return False
+    return False
 
 
 def query_prometheus(asset: Asset | None = None) -> dict[str, Any]:

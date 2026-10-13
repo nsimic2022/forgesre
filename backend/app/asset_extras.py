@@ -17,6 +17,7 @@ from typing import Any, Iterable
 
 from app.asset_snmp import SECRET_KEYS as SNMP_SECRET_KEYS
 from app.asset_snmp import SNMP_KEYS, normalize_snmp, public_snmp
+from app.dc_noc import MAINT_KEYS, maint_input_value, maint_pair_error, normalize_maint_fields
 
 # key, English label, max length
 EXTRA_FIELDS: tuple[tuple[str, str, int], ...] = (
@@ -89,6 +90,7 @@ def normalize_extras(raw: Any) -> dict[str, str]:
         if text:
             out[key] = text
     out.update(_normalize_support(raw))
+    out.update(normalize_maint_fields(raw))
     out.update(normalize_snmp(raw))
     return out
 
@@ -122,6 +124,8 @@ def form_extras(asset: Any = None) -> dict[str, Any]:
     """Every key present (empty string when unset) so templates can read form.extras.site directly."""
     stored = normalize_extras(getattr(asset, "extras", None)) if asset is not None else {}
     out: dict[str, Any] = {key: stored.get(key, "") for key in EXTRA_KEYS}
+    for key in MAINT_KEYS:
+        out[key] = maint_input_value(stored.get(key, ""))
     out.update(public_snmp(stored))
     return out
 
@@ -217,7 +221,13 @@ def extras_from_form(present: str, **values: str) -> dict[str, str] | None:
         return None
     if str(values.get("support") or "").strip().lower() == "custom" and not str(values.get("support_custom") or "").strip():
         raise ValueError("Under support = Custom needs a short note (e.g. weekdays 8–16)")
-    return normalize_extras({key: values.get(key, "") for key in EXTRA_KEYS})
+    problem = maint_pair_error(str(values.get("maint_from") or ""), str(values.get("maint_until") or ""))
+    if problem:
+        raise ValueError(problem)
+    raw = {key: values.get(key, "") for key in EXTRA_KEYS}
+    for key in MAINT_KEYS:
+        raw[key] = values.get(key, "")
+    return normalize_extras(raw)
 
 
 def playrule_ids_from_form(present: str, posted: list[str] | None, add: str = "") -> list[int] | None:

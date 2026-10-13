@@ -69,6 +69,8 @@
   <dt>Lead time</dt><dd class="extra-support_lead_days">{% if ex.support_lead_days %}{{ ex.support_lead_days }} days{% else %}—{% endif %}</dd>
   <dt>Status</dt>
   <dd><span class="pill support-pill {{ sup.tone }}" data-support-state="{{ sup.state }}">{{ sup.label }}</span> <span class="muted">{{ sup.detail }}</span></dd>
+  <dt>Maintenance</dt>
+  <dd data-maintenance>{% if in_maintenance(asset) %}<span class="pill warn" data-maint-badge>Maintenance</span> {{ maintenance_label(asset) }}{% elif maintenance_label(asset) %}{{ maintenance_label(asset) }} <span class="muted">not active now</span>{% else %}—{% endif %}</dd>
 </dl>
 {% if sup.warn %}
 <div class="support-warning" data-support-warning role="status" title="Reminder only — no alert or incident is opened."><strong>{{ sup.label }}</strong> · {{ sup.detail }}</div>
