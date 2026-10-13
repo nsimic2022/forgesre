@@ -151,11 +151,10 @@
 
 {% if incident.playrule or incident.playbook %}
 <section class="card workflow">
-  <h2>Workflow {% with %}{% set tip %}The playbook is a checklist for the person on call. ForgeSRE does not run these steps and does not track which ones were done — write what you did in Operator notes.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Workflow {% with %}{% set tip %}The playbook is a checklist for the person on call. Guidance only — nothing here is executed or ticked off. Write what you did in Operator notes.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <p class="muted">
     Matched playrule <strong>{{ incident.playrule.name if incident.playrule else "—" }}</strong>
     → playbook <strong>{{ incident.playbook.name if incident.playbook else "—" }}</strong>.
-    Guidance only — nothing here is executed or ticked off.
   </p>
   {% if incident.playbook and incident.playbook.steps %}
   <ul class="playbook-guide">

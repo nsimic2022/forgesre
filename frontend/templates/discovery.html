@@ -51,7 +51,6 @@
       {% else %}
       Could not detect a primary IPv4. Type a management /24 (or comma-separated CIDRs), then Confirm &amp; scan.
       {% endif %}
-      Limits: 256 hosts per CIDR, 1024 total. Ports: TCP 22, 80, 443, 9100, 9182 + SNMP UDP/161.
     </p>
     <div class="discovery-scan-actions">
       <button type="submit" name="confirm" value="1">Confirm &amp; scan</button>
@@ -80,7 +79,6 @@
     {% else %}
     Manual only: <code>inventory.netbox.auto_sync: false</code>. Use Sync NetBox below.
     {% endif %}
-    New devices arrive as <strong>Auto</strong> type, no scrape, no owner email.
   </p>
   {% endif %}
   {% if can('admin') %}
@@ -232,8 +230,7 @@
   <h2>Edit candidate</h2>
   <form method="post" action="/discovery/{{ selected.id }}/update" class="form-grid">
   {% else %}
-  <h2>Clone candidate</h2>
-  <p class="muted wide">Copy of <strong>{{ selected.ip }}</strong> — type a new IP. DEMO source stays a lab row.</p>
+  <h2>Clone candidate {% with %}{% set tip %}Copy of {{ selected.ip }}. Type a new IP. A DEMO source stays a lab row.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <form method="post" action="/discovery/{{ selected.id }}/clone" class="form-grid">
   {% endif %}
     <label>IP <input name="ip" value="{{ form.ip }}" required></label>

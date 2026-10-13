@@ -2,8 +2,7 @@
 {% block title %}Verify assets · ForgeSRE{% endblock %}
 {% block content %}
 <p><a href="/assets">← Assets</a></p>
-<h1>Verify assets {% with %}{% set tip %}Live communication for inventory. ICMP is from the Core container (iputils-ping). Chain: exporter → prometheus → alertmanager → core. Classes: Linux :9100 node_, Windows :9182 windows_, Network SNMP, Unknown SKIP. Demo forge-demo-* rows and discovery seed 10.20.30.41 are lab-only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
-<p class="muted">This is not <code>./forgesre test</code> and not <code>./forgesre doctor</code> (System Health).</p>
+<h1>Verify assets {% with %}{% set tip %}Live communication for inventory. This is not ./forgesre test and not ./forgesre doctor (System Health). ICMP is from the Core container (iputils-ping). Chain: exporter → prometheus → alertmanager → core. Classes: Linux :9100 node_, Windows :9182 windows_, Network SNMP, Unknown SKIP. Demo forge-demo-* rows and discovery seed 10.20.30.41 are lab-only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 {% if skipped_demo %}
 <p class="muted">Skipped {{ skipped_demo }} demo lab asset(s). <a href="/assets/verify?demo=1">Include labeled DEMO</a>.</p>
 {% elif include_demo %}

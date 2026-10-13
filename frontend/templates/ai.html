@@ -29,9 +29,8 @@
   <p>{{ investigation.likely_cause }}</p>
   <p>Confidence: <strong>{{ investigation.confidence|int }}%</strong>
     {% with %}{% set tip %}Calculated by ForgeSRE from evidence/anomalies/history, not taken from the LLM.{% endset %}{% include "_info_tip.html" %}{% endwith %}</p>
-  <h2>Recommended actions</h2>
+  <h2>Recommended actions {% with %}{% set tip %}Recommended only. Nothing was executed.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <p>{{ investigation.recommended_action }}</p>
-  <p class="muted">Recommended only. Nothing was executed.</p>
 </section>
 {% if can_send %}
 <section class="card" id="send-report">

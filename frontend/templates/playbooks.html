@@ -2,8 +2,7 @@
 {% import "_select.html" as sel %}
 {% block title %}Playbooks · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Playbooks {% with %}{% set tip %}V0.1 playbooks are instructions and workflow. They do not execute commands on the host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
-<p class="page-lede">A playbook is a checklist shown on the incident page. ForgeSRE never runs these steps and does not tick them off.</p>
+<h1>Playbooks {% with %}{% set tip %}A playbook is a checklist shown on the incident page. ForgeSRE never runs these steps, does not tick them off, and does not execute commands on the host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 {% if request.query_params.get('edit_note') == 'select-one' %}
 <div class="banner" role="status">Select one</div>
 {% endif %}
@@ -47,8 +46,7 @@
 <h2>Edit playbook</h2>
 <form method="post" action="/playbooks/{{ selected.id }}/update" class="stack" id="playbook-form">
 {% elif form_mode == "clone" %}
-<h2>Clone playbook</h2>
-<p class="muted">Copy of <strong>{{ selected.name }}</strong> — slug must be unique.</p>
+<h2>Clone playbook {% with %}{% set tip %}Copy of {{ selected.name }}. The slug must be unique.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 <form method="post" action="/playbooks" class="stack" id="playbook-form">
 {% else %}
 <h2>Create playbook</h2>
