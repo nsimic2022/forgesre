@@ -35,6 +35,7 @@ from app.models import (
     Job,
     JournalEntry,
     Notification,
+    Playbook,
     Playrule,
     ScheduledReport,
     User,
@@ -65,6 +66,7 @@ _NEXT = {
     "/assets",
     "/discovery",
     "/playrules",
+    "/playbooks",
     "/journal",
     "/health-ui",
     "/health-ui#journal",
@@ -142,6 +144,41 @@ def _assets_query(raw: str, **put: str) -> str:
             pairs.append((key, value))
     encoded = urlencode(pairs)
     return "/assets" + (("?" + encoded) if encoded else "")
+
+
+_LIST_PATHS = frozenset({"/playrules", "/playbooks"})
+
+
+def _safe_list_url(raw: str, path: str) -> str:
+    """List URL only. Query is kept when it is a normal filter string."""
+    if path not in _LIST_PATHS:
+        return "/playbooks" if path == "/playbooks" else "/playrules"
+    text = (raw or "").replace("\n", "").replace("\r", "").strip().split("#", 1)[0]
+    base, sep, query = text.partition("?")
+    if base != path:
+        return path
+    if any(ch in query for ch in " <>\"'\\"):
+        return path
+    return text if sep else path
+
+
+def _list_query(raw: str, path: str, **put: str) -> str:
+    base = _safe_list_url(raw, path)
+    _, _, query = base.partition("?")
+    drop = {"edit", "clone", "edit_note", "notice"}
+    pairs = [(key, value) for key, value in parse_qsl(query, keep_blank_values=True) if key not in drop and key not in put]
+    for key, value in put.items():
+        if value:
+            pairs.append((key, value))
+    encoded = urlencode(pairs)
+    return path + (("?" + encoded) if encoded else "")
+
+
+def _one_pk(db: Session, model: type, selected: list[str]):
+    ids = _ints(selected_values(selected))
+    if len(ids) != 1:
+        return None
+    return db.get(model, ids[0])
 
 
 def _one_asset(db: Session, selected: list[str]) -> Asset | None:
@@ -665,6 +702,42 @@ def playrules_text(db: Session, ids: list[int]) -> list[str]:
     return _join_docs(f"ForgeSRE playrules ({len(records)})", records, labels)
 
 
+def delete_playbooks(db: Session, ids: list[int], actor: str) -> int:
+    """Same unlink as the per-card Remove: rules and incidents keep working without the book."""
+    rows = db.query(Playbook).filter(Playbook.id.in_(ids)).all() if ids else []
+    for row in rows:
+        db.query(Playrule).filter(Playrule.playbook_id == row.id).update({Playrule.playbook_id: None})
+        db.query(Incident).filter(Incident.playbook_id == row.id).update({Incident.playbook_id: None})
+        slug = row.slug
+        audit(db, "playbook.remove", actor=actor, object_type="playbook", object_id=slug)
+        db.delete(row)
+    if rows:
+        db.commit()
+    return len(rows)
+
+
+def playbooks_text(db: Session, ids: list[int]) -> list[str]:
+    rows = db.query(Playbook).filter(Playbook.id.in_(ids)).all() if ids else []
+    by = {row.id: row for row in rows}
+    records = []
+    labels = []
+    for pk in ids:
+        row = by.get(pk)
+        if row is None:
+            continue
+        labels.append(row.name or row.slug or str(pk))
+        steps = "\n".join(_step_title(step).strip() for step in (row.steps or []) if _step_title(step).strip())
+        body = [
+            _field("name", row.name),
+            _field("slug", row.slug),
+        ]
+        if (row.description or "").strip():
+            body.extend(_block("description", row.description))
+        body.extend(_block("steps", steps))
+        records.append(body)
+    return _join_docs(f"ForgeSRE playbooks ({len(records)})", records, labels)
+
+
 def delete_journal_rows(db: Session, ids: list[int], actor: str) -> int:
     rows = db.query(JournalEntry).filter(JournalEntry.id.in_(ids)).all() if ids else []
     if not rows:
@@ -827,6 +900,29 @@ def audit_text(db: Session, ids: list[int]) -> list[str]:
         )
         labels.append(row.action or str(pk))
     return _join_docs(f"ForgeSRE audit ({len(records)})", records, labels)
+
+
+def backups_text(names: list[str]) -> list[str]:
+    """Selected backup folder names and compact times. Not the archive contents."""
+    from app.backup import backup_compact, list_archives
+
+    rows = {str(row.get("name") or ""): row for row in list_archives()}
+    records = []
+    labels = []
+    for name in names:
+        row = rows.get(name)
+        if row is None:
+            continue
+        when = backup_compact(row)
+        stamp = " ".join(part for part in (when.get("date"), when.get("time")) if part)
+        labels.append(name)
+        records.append(
+            [
+                _field("name", name),
+                _field("when", stamp or None),
+            ]
+        )
+    return _join_docs(f"ForgeSRE backups ({len(records)})", records, labels)
 
 
 def incident_audit_text(db: Session, number: str, ids: list[int]) -> list[str]:
@@ -999,6 +1095,21 @@ def discovery_export(
     return _download("found-assets.txt", found_text(db, _ints(_need(selected))))
 
 
+@router.post("/playrules/open-edit")
+def playrules_open_edit(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    stay: Annotated[str, Form()] = "",
+):
+    """Open the existing rule form for exactly one row. Zero or many do not write."""
+    _forbid(user, can(user, "write_play"))
+    row = _one_pk(db, Playrule, selected)
+    if row is None:
+        return RedirectResponse(_list_query(stay, "/playrules", edit_note="select-one"), status_code=303)
+    return RedirectResponse(_list_query(stay, "/playrules", edit=str(row.id)) + "#playrule-form", status_code=303)
+
+
 @router.post("/playrules/bulk-delete")
 def playrules_bulk_delete(
     db: Session = Depends(get_db),
@@ -1019,6 +1130,43 @@ def playrules_export(
 ):
     _forbid(user, can(user, "read_play"))
     return _download("playrules.txt", playrules_text(db, _ints(_need(selected))))
+
+
+@router.post("/playbooks/open-edit")
+def playbooks_open_edit(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    stay: Annotated[str, Form()] = "",
+):
+    """Open the existing playbook form for exactly one row. Zero or many do not write."""
+    _forbid(user, can(user, "write_play"))
+    row = _one_pk(db, Playbook, selected)
+    if row is None:
+        return RedirectResponse(_list_query(stay, "/playbooks", edit_note="select-one"), status_code=303)
+    return RedirectResponse(_list_query(stay, "/playbooks", edit=str(row.id)) + "#playbook-form", status_code=303)
+
+
+@router.post("/playbooks/bulk-delete")
+def playbooks_bulk_delete(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    nxt: Annotated[str, Form(alias="next")] = "",
+):
+    _forbid(user, can(user, "write_play"))
+    delete_playbooks(db, _ints(selected_values(selected)), user.email)
+    return _back(nxt, "/playbooks")
+
+
+@router.post("/playbooks/export")
+def playbooks_export(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+):
+    _forbid(user, can(user, "read_play"))
+    return _download("playbooks.txt", playbooks_text(db, _ints(_need(selected))))
 
 
 @router.post("/journal/bulk-delete")
@@ -1094,3 +1242,13 @@ def audit_export(
 ):
     _forbid(user, can(user, "admin"))
     return _download("audit.txt", audit_text(db, _ints(_need(selected))))
+
+
+@router.post("/admin/backups/export")
+def backups_export(
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+):
+    """Names and times of the selected backup folders. Archive bytes stay on Download."""
+    _forbid(user, can(user, "admin"))
+    return _download("backups.txt", backups_text(_need(selected)))

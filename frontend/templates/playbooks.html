@@ -4,6 +4,9 @@
 {% block content %}
 <h1>Playbooks {% with %}{% set tip %}V0.1 playbooks are instructions and workflow. They do not execute commands on the host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <p class="page-lede">A playbook is a checklist shown on the incident page. ForgeSRE never runs these steps and does not tick them off.</p>
+{% if request.query_params.get('edit_note') == 'select-one' %}
+<div class="banner" role="status">Select one</div>
+{% endif %}
 {% if notice %}
 <div class="banner">{{ notice }}</div>
 {% endif %}
@@ -23,30 +26,33 @@
   </ul>
   {% if can('write_play') %}
   <div class="row-actions asset-form-actions">
-    <a class="button" href="/playbooks?edit={{ book.id }}{{ pager_keep(pager) }}">Edit</a>
     <a class="button" href="/playbooks?clone={{ book.id }}{{ pager_keep(pager) }}">Clone</a>
-    <form method="post" action="/playbooks/{{ book.id }}/delete" onsubmit="return confirm('Remove {{ book.name }}? Rules keep working without this Playbook.');">
-      <button type="submit" class="danger">Remove</button>
-    </form>
   </div>
   {% endif %}
 </section>
 {% endfor %}
 </div>
 </div>
-</div>
+{% set stay_parts = [] %}
+{% for key, value in request.query_params.multi_items() if key not in ["edit", "clone", "notice", "edit_note"] %}
+{% set _ = stay_parts.append(key ~ "=" ~ (value|urlencode)) %}
+{% endfor %}
+{% set list_stay = "/playbooks" ~ ("?" ~ stay_parts|join("&") if stay_parts else "") %}
+{% with list_actions={"delete": "/playbooks/bulk-delete" if can('write_play') else "", "delete_label": "Remove", "delete_last": True, "open_edit": "/playbooks/open-edit" if can('write_play') else "", "open_edit_title": "Edit this playbook", "export": "/playbooks/export", "next": "/playbooks", "stay": list_stay, "confirm": "Remove the selected playbooks? Rules and incidents keep working without them."} %}
 {% include "_pager.html" %}
+{% endwith %}
+</div>
 {% if can('write_play') %}
 {% if form_mode == "edit" %}
 <h2>Edit playbook</h2>
-<form method="post" action="/playbooks/{{ selected.id }}/update" class="stack">
+<form method="post" action="/playbooks/{{ selected.id }}/update" class="stack" id="playbook-form">
 {% elif form_mode == "clone" %}
 <h2>Clone playbook</h2>
 <p class="muted">Copy of <strong>{{ selected.name }}</strong> — slug must be unique.</p>
-<form method="post" action="/playbooks" class="stack">
+<form method="post" action="/playbooks" class="stack" id="playbook-form">
 {% else %}
 <h2>Create playbook</h2>
-<form method="post" action="/playbooks" class="stack">
+<form method="post" action="/playbooks" class="stack" id="playbook-form">
 {% endif %}
   <label>Name <input name="name" placeholder="DISK-FULL" required value="{{ form.name }}"></label>
   <label>Slug <input name="slug" placeholder="disk-full" required value="{{ form.slug }}" {% if form_mode == "edit" %}readonly{% endif %}></label>

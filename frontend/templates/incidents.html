@@ -87,7 +87,7 @@
   </tbody>
 </table>
 </div>
-{% with list_actions={"delete": "/incidents/bulk-delete" if can('write_incidents') else "", "edit": "/incidents/edit" if can('write_incidents') else "", "export": "/incidents/export", "next": "/incidents", "confirm": "Delete the selected incidents? Mail already sent stays in the outbox."} %}
+{% with list_actions={"delete": "/incidents/bulk-delete" if can('write_incidents') else "", "edit": "/incidents/edit" if can('write_incidents') else "", "delete_last": True, "export": "/incidents/export", "next": "/incidents", "confirm": "Delete the selected incidents? Mail already sent stays in the outbox."} %}
 {% include "_pager.html" %}
 {% endwith %}
 </div>

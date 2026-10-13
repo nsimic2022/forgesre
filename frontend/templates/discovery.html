@@ -222,7 +222,7 @@
   </tbody>
 </table>
 </div>
-{% with list_actions={"delete": "/discovery/bulk-delete" if can('write_assets') else "", "export": "/discovery/export", "next": "/discovery", "confirm": "Delete the selected found assets? An approved asset stays in Assets."} %}
+{% with list_actions={"delete": "/discovery/bulk-delete" if can('write_assets') else "", "delete_last": True, "export": "/discovery/export", "next": "/discovery", "confirm": "Delete the selected found assets? An approved asset stays in Assets."} %}
 {% include "_pager.html" %}
 {% endwith %}
 </div>

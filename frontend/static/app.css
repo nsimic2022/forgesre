@@ -2137,6 +2137,7 @@ form.pager-size button { padding: 0.22rem 0.6rem; font-size: 0.85rem; }
   overflow: hidden;
 }
 .list-actions form { margin: 0; display: inline-flex; }
+.list-actions form[hidden] { display: none; }
 .list-actions button { width: auto; flex: 0 0 auto; padding: 0.28rem 0.7rem; font-size: 0.85rem; }
 .list-actions button.is-muted { opacity: 0.55; }
 .select-one-flash { color: var(--warn); font-size: 0.82rem; font-weight: 700; white-space: nowrap; }

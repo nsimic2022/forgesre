@@ -316,13 +316,16 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert "width: 1rem" in css
     assert 'class="row-check"' in home.text
     play = client.get("/playrules").text
-    actions = play.split("backup-row-actions", 1)[1].split("</div>", 1)[0]
+    actions = play.split("data-list-actions", 1)[1].split('class="pager-size"', 1)[0]
     assert ">Edit<" in actions and ">Remove<" in actions
+    table = play.split("<table", 1)[1].split("</table>", 1)[0]
+    assert ">Edit<" not in table and ">Remove<" not in table
+    assert 'class="onoff' in table
     admin = client.get("/admin").text
     assert "admin-user-split" in admin
     assert admin.count("admin-user-pane") >= 2
     assert "height: 100%" in css.split(".admin-user-split > .admin-user-pane", 1)[1].split("}", 1)[0]
     assert "margin: 2.25rem 0 0.7rem" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-N" in base and "app.js?v=v09-N" in base
+    assert "app.css?v=v09-O" in base and "app.js?v=v09-O" in base
     db.close()

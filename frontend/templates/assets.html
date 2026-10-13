@@ -136,7 +136,7 @@
 {% set _ = stay_parts.append(key ~ "=" ~ (value|urlencode)) %}
 {% endfor %}
 {% set list_stay = "/assets" ~ ("?" ~ stay_parts|join("&") if stay_parts else "") %}
-{% with list_actions={"delete": "/assets/bulk-delete" if can('write_assets') else "", "delete_label": "Remove", "delete_last": True, "open_edit": "/assets/open-edit" if can('write_assets') else "", "clone": "/assets/open-clone" if can('write_assets') else "", "verify": "/assets/open-verify" if can('write_assets') else "", "export": "/assets/export", "next": "/assets", "stay": list_stay, "confirm": "Delete the selected assets? Incidents stay, without that host."} %}
+{% with list_actions={"delete": "/assets/bulk-delete" if can('write_assets') else "", "delete_label": "Remove", "delete_last": True, "open_edit": "/assets/open-edit" if can('write_assets') else "", "open_edit_title": "Edit this asset", "clone": "/assets/open-clone" if can('write_assets') else "", "verify": "/assets/open-verify" if can('write_assets') else "", "export": "/assets/export", "next": "/assets", "stay": list_stay, "confirm": "Delete the selected assets? Incidents stay, without that host."} %}
 {% include "_pager.html" %}
 {% endwith %}
 </div>

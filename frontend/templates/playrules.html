@@ -5,13 +5,16 @@
 <h1>Rules {% with %}{% set tip %}Seeded rules are the default warning. Rules match alertname after ingest and attach a Playbook plus the default ladder. They do not create Prom rules. monitoring/alerts.yml is the PromQL source. Standard alarms on Add/Edit (assets.alarms enable/%) are a per-host overlay on the same Alertmanager webhook — not a second alerting engine.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <p class="page-lede">A rule fires nothing. Prometheus evaluates <code>monitoring/alerts.yml</code>; when an alert arrives, ForgeSRE matches its <strong>alertname</strong> here and attaches the Playbook. Mail uses the asset Ladder when a level is filled; otherwise the default ladder on this rule.</p>
 <p class="muted">Asset Alarms (Edit on an asset) can only mute a bundled alert on that host — they cannot fire earlier than the Prometheus rule.{% if asset_alarm_hosts %} Saved on {{ asset_alarm_hosts|length }} host{% if asset_alarm_hosts|length != 1 %}s{% endif %} ({{ asset_alarm_hosts[:8]|join(", ") }}{% if asset_alarm_hosts|length > 8 %}, …{% endif %}).{% endif %}</p>
+{% if request.query_params.get('edit_note') == 'select-one' %}
+<div class="banner" role="status">Select one</div>
+{% endif %}
 {% if notice %}
 <div class="banner">{{ notice }}</div>
 {% endif %}
 <div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="scan-list rule-list">
-  <thead><tr>{{ sel.head() }}<th>Rule</th><th>Fires when (alerts.yml)</th><th>Severity</th><th>Playbook</th><th>Enabled</th>{% if can('write_play') %}<th></th>{% endif %}</tr></thead>
+  <thead><tr>{{ sel.head() }}<th>Rule</th><th>Fires when (alerts.yml)</th><th>Severity</th><th>Playbook</th><th>Enabled</th></tr></thead>
   <tbody>
   {% for rule in playrules %}
     {% set cond = rule.condition or {} %}
@@ -45,22 +48,17 @@
         <span class="onoff {{ 'is-on' if rule.enabled else 'is-off' }}">{% if rule.enabled %}ON{% else %}OFF{% endif %}</span>
         {% endif %}
       </td>
-      {% if can('write_play') %}
-      <td>
-        <div class="row-actions backup-row-actions">
-          <a class="button" href="/playrules?edit={{ rule.id }}{{ pager_keep(pager) }}#playrule-form">Edit</a>
-          <form method="post" action="/playrules/{{ rule.id }}/delete" onsubmit="return confirm('Remove rule {{ rule.name }}? Existing incidents keep their Playbook. New {{ cond.get('alertname') or rule.name }} alerts will open without a Playbook.');">
-            <button type="submit" class="danger">Remove</button>
-          </form>
-        </div>
-      </td>
-      {% endif %}
     </tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
-{% with list_actions={"delete": "/playrules/bulk-delete" if can('write_play') else "", "export": "/playrules/export", "next": "/playrules", "confirm": "Delete the selected rules? Existing incidents keep their Playbook."} %}
+{% set stay_parts = [] %}
+{% for key, value in request.query_params.multi_items() if key not in ["edit", "clone", "notice", "edit_note"] %}
+{% set _ = stay_parts.append(key ~ "=" ~ (value|urlencode)) %}
+{% endfor %}
+{% set list_stay = "/playrules" ~ ("?" ~ stay_parts|join("&") if stay_parts else "") %}
+{% with list_actions={"delete": "/playrules/bulk-delete" if can('write_play') else "", "delete_label": "Remove", "delete_last": True, "open_edit": "/playrules/open-edit" if can('write_play') else "", "open_edit_title": "Edit this rule", "export": "/playrules/export", "next": "/playrules", "stay": list_stay, "confirm": "Remove the selected rules? Existing incidents keep their Playbook."} %}
 {% include "_pager.html" %}
 {% endwith %}
 </div>

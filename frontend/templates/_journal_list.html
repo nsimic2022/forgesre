@@ -45,7 +45,7 @@
   </tbody>
 </table>
 </div>
-{% with list_actions={"delete": "/journal/bulk-delete", "export": "/journal/export", "next": journal_base ~ "#journal", "confirm": "Delete the selected journal rows?"} %}
+{% with list_actions={"delete": "/journal/bulk-delete", "delete_last": True, "export": "/journal/export", "next": journal_base ~ "#journal", "confirm": "Delete the selected journal rows?"} %}
 {% include "_pager.html" %}
 {% endwith %}
 </div>
