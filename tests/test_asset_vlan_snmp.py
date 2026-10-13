@@ -123,7 +123,7 @@ def test_vlan_persists_on_add_edit_detail_and_filters():
     assert "All VLANs" not in vlan
     assert '<option value="10.20" selected>' in vlan and '<option value="30">' in vlan
     assert '<a class="muted list-reset" href="/assets">Reset</a>' in form
-    assert "&amp;vlan=10.20" in page.split('<table class="asset-table"', 1)[1]
+    assert 'name="stay" value="/assets?vlan=10.20"' in page.split('<table class="asset-table"', 1)[1]
     db.close()
 
 
@@ -147,7 +147,9 @@ def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     assert 'name="alarms_present"' in right
     for version in ("v1", "v2c", "v3"):
         assert f'<option value="{version}"' in middle
-    assert "ICMP / port / SNMP" in text and ">Port<" not in text
+    thead = text.split('<table class="asset-table"', 1)[1].split("</thead>", 1)[0]
+    assert 'class="col-port"' in thead and ">Port " in thead and "ICMP / port / SNMP" not in thead
+    assert thead.index('class="col-port"') < thead.index(">Status<") < thead.index(">Escalation ")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".asset-ladder .ladder-level {" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

@@ -258,12 +258,12 @@ applyTheme(currentTheme());
     if (!bar) return;
     const on = Array.from(rowsIn(scope)).filter((box) => box.checked);
     bar.classList.toggle("is-live", on.length > 0);
-    const edit = bar.querySelector("[data-bulk-edit] button");
-    if (edit) {
-      const one = on.length === 1;
+    const one = on.length === 1;
+    bar.querySelectorAll("[data-bulk-edit] button").forEach((edit) => {
       edit.classList.toggle("is-muted", !one);
-      edit.title = one ? "Edit notes on this incident" : "Select one";
-    }
+      const ready = edit.getAttribute("data-one-title");
+      edit.title = one ? (ready || "Edit notes on this incident") : "Select one";
+    });
   };
   const sync = (scope) => {
     if (!scope) return;

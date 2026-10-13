@@ -304,7 +304,26 @@ table tbody tr.selected td { background: var(--selected); }
 .user-table tr.selected:hover td,
 .asset-table tr.selected:hover td { background: var(--selected-hover); }
 .user-table td a { color: inherit; }
+.asset-table { table-layout: fixed; width: 100%; }
 .asset-table td.asset-type { white-space: nowrap; }
+.asset-table th.row-select,
+.asset-table td.row-select { width: 2.75rem; }
+.asset-table th.col-num,
+.asset-table td.col-num { width: 3.2rem; }
+.asset-table th.col-id,
+.asset-table td.col-id { width: 8.5rem; }
+.asset-table th.col-host,
+.asset-table td.col-host { width: 10rem; }
+.asset-table th.col-ip,
+.asset-table td.col-ip { width: 8rem; }
+.asset-table th.col-port,
+.asset-table td.col-port { width: 4.8rem; }
+.asset-table th.col-status,
+.asset-table td.col-status { width: 6.6rem; white-space: nowrap; }
+.asset-table th.col-escalation,
+.asset-table td.col-escalation { width: 6.4rem; white-space: nowrap; }
+.asset-table th.col-stretch,
+.asset-table td.col-stretch { overflow-wrap: anywhere; }
 .asset-table td.asset-actions {
   display: table-cell;
   vertical-align: middle;
@@ -395,8 +414,6 @@ a.button {
   min-width: 2.7rem;
   height: 1.15rem;
 }
-.asset-table th.col-ladder,
-.asset-table td.col-ladder,
 .incidents-table th.col-ladder,
 .incidents-table td.col-ladder {
   width: 6.2rem;
@@ -644,35 +661,57 @@ form label.inline-check input[type="checkbox"],
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; max-width: 720px; }
 .form-grid label, .form-grid .wide { display: flex; flex-direction: column; gap: 0.25rem; }
 .form-grid .wide { grid-column: 1 / -1; }
-/* Add / Edit asset: two halves that fill the page (v08-27). No void after Ladder.
-   Left 50%: Identity 1.7fr | Comms 1fr (Identity wider).
-   Right 50%: Standard 1fr | Custom 2fr | Ladder 1.65fr (Custom is twice Standard).
-   Page share ≈ Identity 31.5%, Comms 18.5%, Standard 10.8%, Custom 21.5%, Ladder 17.7%. */
+/* Add / Edit asset: three full-width bands. Thin 1px rules between bands,
+   same language as .asset-detail-section. Row 1 is four equal quarters.
+   Row 2 is Standard 1fr | Custom 1fr | Notes 2fr. Row 3 is Escalation L1–L4. */
 .asset-form-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
   width: 100%;
   max-width: none;
-  align-items: start;
+  align-items: stretch;
 }
-.asset-form-split > .wide { grid-column: 1 / -1; }
-.asset-form-half {
-  display: grid;
-  gap: 1.15rem;
+.asset-form-split > .wide { width: 100%; }
+.asset-form-band {
+  width: 100%;
   min-width: 0;
-  align-items: start;
 }
-.asset-form-half-left { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
-.asset-form-half-right { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.65fr); }
+.asset-form-band + .asset-form-band {
+  border-top: 1px solid var(--line);
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+}
+.asset-form-row-1 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+}
+.asset-form-row-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
+}
 .asset-form-col { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
 .asset-form-middle,
 .asset-form-right,
 .asset-form-custom,
-.asset-form-ladder {
-  border-left: 1px solid var(--line);
-  padding-left: 1rem;
+.asset-form-ladder { min-width: 0; }
+.asset-ladder .ladder-levels {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+  min-width: 0;
 }
+.asset-form-grid .identity-lg { grid-column: 1 / -1; }
+.asset-form-notes { min-height: 100%; }
+.asset-form-notes .asset-form-block { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 16rem; }
+.asset-form-notes textarea { flex: 1 1 auto; width: 100%; min-height: 16rem; resize: vertical; }
 .asset-form-block { min-width: 0; }
 .asset-form-block-head {
   margin: 0 0 0.5rem;
@@ -687,6 +726,7 @@ form label.inline-check input[type="checkbox"],
   align-items: start;
 }
 .form-grid.asset-form-grid textarea { width: 100%; min-height: 4.2rem; resize: vertical; font: inherit; }
+.asset-form-row-1 .asset-support { margin-top: 0; }
 .asset-support { margin-top: 0.9rem; }
 .asset-support-head { margin: 0 0 0.45rem; font-size: 0.88rem; font-weight: 700; }
 .asset-form-split .alarm-families,
@@ -726,11 +766,10 @@ button.playrule-remove {
 button.playrule-remove:hover { color: var(--crit); border-color: var(--crit); }
 .playrule-empty { margin: 0.45rem 0 0; }
 @media (max-width: 1100px) {
-  .asset-form-split { grid-template-columns: minmax(0, 1fr); }
-  .asset-form-half-right {
-    border-top: 1px solid var(--line);
-    padding-top: 1rem;
-  }
+  .asset-form-row-1,
+  .asset-form-row-2,
+  .asset-ladder .ladder-levels { grid-template-columns: minmax(0, 1fr); }
+  .asset-ladder .ladder-level { border-left: 0; border-top: 1px solid var(--line); padding-left: 0; }
 }
 .support-pill { white-space: nowrap; }
 .support-warning {
@@ -1525,13 +1564,9 @@ td.ops-report-actions .row-actions a.button {
   .asset-chart-grid,
   .asset-chart-grid.is-sparse { grid-template-columns: minmax(0, 1fr); }
   .asset-chart-panel[data-graph="up"] { grid-column: auto; }
-  .asset-form-split,
-  .asset-form-half-left,
-  .asset-form-half-right { grid-template-columns: minmax(0, 1fr); }
-  .asset-form-middle,
-  .asset-form-right,
-  .asset-form-custom,
-  .asset-form-ladder { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 1rem; }
+  .asset-form-row-1,
+  .asset-form-row-2,
+  .asset-ladder .ladder-levels { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Analyst pass: one scan language across Dashboard, Incidents, Assets, Playrules, Escalation. */
@@ -2235,15 +2270,20 @@ select.nice-select option { font-weight: 400; color: var(--text); background: va
 .asset-comms .snmp-v3-pair { display: flex; flex-direction: column; gap: 0.55rem; }
 .asset-comms [hidden] { display: none; }
 .asset-comms select { width: 100%; }
-.asset-ladder .ladder-level {
-  margin: 0.55rem 0 0.7rem;
-  padding-bottom: 0.55rem;
-  border-bottom: 1px solid var(--line);
+.asset-ladder .ladder-levels {
+  gap: 0;
+  align-items: start;
 }
-.asset-ladder .ladder-level:last-of-type { border-bottom: 0; padding-bottom: 0; }
+.asset-ladder .ladder-level {
+  min-width: 0;
+  margin: 0;
+  padding: 0 0.75rem;
+  border-left: 1px solid var(--line);
+}
+.asset-ladder .ladder-level:first-child { border-left: 0; padding-left: 0; }
 .asset-ladder .ladder-label { font-weight: 700; }
-.asset-ladder label { display: flex; flex-direction: column; gap: 0.2rem; margin: 0.35rem 0; }
-.asset-ladder input[type="number"] { width: 6rem; }
+.asset-ladder label { display: flex; flex-direction: column; gap: 0.2rem; margin: 0.35rem 0; min-width: 0; }
+.asset-ladder input[type="number"] { width: 100%; max-width: 8rem; }
 .ladder-default { margin: 0.2rem 0 0.6rem; }
 .ladder-email { display: flex; gap: 0.35rem; align-items: flex-start; margin: 0.3rem 0; }
 .ladder-email .email-pick { flex: 1 1 auto; min-width: 0; }

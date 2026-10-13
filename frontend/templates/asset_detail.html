@@ -61,7 +61,7 @@
 
 {% set sup = support_status(asset) %}
 <section class="asset-detail-section" data-asset-section="support">
-<h3 class="asset-facts-head label-line">Support coverage {% with %}{% set tip %}From the asset's Support coverage (Edit → NOC contacts). Expiring = the To date is within {{ sup.lead_days }} days. Reminder only — no alert, incident, or Playrule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+<h3 class="asset-facts-head label-line">Support coverage {% with %}{% set tip %}From the asset's Support (Edit → Support). Expiring = the To date is within {{ sup.lead_days }} days. Reminder only — no alert, incident, or Playrule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
 <dl class="kv asset-facts" data-asset-facts="support">
   <dt>Under support</dt><dd class="extra-support">{{ support_labels.get(ex.support) or "—" }}{% if ex.support == 'custom' and ex.support_custom %} <span class="support-note" data-support-note>{{ ex.support_custom }}</span>{% endif %}</dd>
   <dt>From</dt><dd class="extra-support_from">{{ ex.support_from or "—" }}</dd>
@@ -109,7 +109,7 @@
     {% endif %}
   </dd>
   {% if snmp_target %}
-  <dt><span class="label-line">SNMP auth {% with %}{% set tip %}Version and community / v3 user saved on Edit → Comms / monitoring. Community strings and v3 passwords are never shown. A Custom community or v3 needs its own snmp_exporter auth in data/generated/snmp.yml — ./forgesre snmp-auths writes it (./forgesre update runs it too). Until then this host is polled with public_v2.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt>
+  <dt><span class="label-line">SNMP auth {% with %}{% set tip %}Version and community / v3 user saved on Edit → Ports. Community strings and v3 passwords are never shown. A Custom community or v3 needs its own snmp_exporter auth in data/generated/snmp.yml — ./forgesre snmp-auths writes it (./forgesre update runs it too). Until then this host is polled with public_v2.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt>
   <dd data-snmp-auth-status>
     {{ snmp_auth.snmp_version }}
     {% if snmp_auth.snmp_version == 'v3' %}

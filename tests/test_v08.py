@@ -285,7 +285,7 @@ def _between(text: str, start: str, end: str) -> str:
     return text.split(start, 1)[1].split(end, 1)[0]
 
 
-def test_asset_form_is_three_columns_with_dropdown_playrules():
+def test_asset_form_is_three_bands_with_dropdown_playrules():
     db = _db()
     token = uuid4().hex[:6]
     enabled = _rule(db, f"v08-drop-{token}", f"Drop{token}")
@@ -295,39 +295,52 @@ def test_asset_form_is_three_columns_with_dropdown_playrules():
     page = _client().get("/assets")
     assert page.status_code == 200
     text = page.text
-    left_half = text.index("asset-form-half-left")
-    right_half = text.index("asset-form-half-right")
+    row1 = text.index("asset-form-row-1")
+    row2 = text.index("asset-form-row-2")
+    row3 = text.index("asset-form-row-3")
     left = text.index("asset-form-left")
+    contacts = text.index("data-asset-contacts")
+    support_at = text.index("data-asset-support")
     middle = text.index("asset-form-middle")
     right = text.index("asset-form-right")
-    assert left_half < left < middle < right_half < right
-    for name in (
-        "extra_customer", "extra_site", "extra_backup_name", "extra_backup_phone", "extra_backup_email",
-        "extra_support_hours", "extra_timezone", "extra_contract", "extra_runbook_note",
-        "extra_support", "extra_support_from", "extra_support_to", "extra_support_lead_days",
-        "asset_id", "hostname", "owner_email", "owner_phone", "notes",
-    ):
-        at = text.index(f'name="{name}"', left)
-        assert left < at < middle, name
-    assert text.index("data-asset-contacts") < text.index("data-asset-support") < middle
-    comms = text.index("data-asset-comms")
-    assert middle < comms < text.index('name="scrape_address"') < text.index('name="snmp_port"') < text.index('name="snmp_version"') < right
     custom = text.index("asset-form-custom")
+    notes = text.index("asset-form-notes")
     ladder = text.index("asset-form-ladder")
-    assert left < middle < right < custom < ladder
-    assert right < text.index("alarm-families") < custom < text.index("data-client-playrules") < ladder
+    assert row1 < left < contacts < support_at < middle < row2 < right < custom < notes < row3 < ladder
+    identity = _between(text, "asset-form-left", "data-asset-contacts")
+    for name in ("asset_id", "hostname", "ip", "extra_customer", "extra_site", "extra_vlan", "notes"):
+        assert f'name="{name}"' in identity, name
+    assert "identity-lg" in identity
+    contact = _between(text, "data-asset-contacts", "data-asset-support")
+    assert ">Contacts " in contact
+    for name in (
+        "owner", "contact_name", "owner_email", "owner_phone", "extra_backup_name",
+        "extra_backup_phone", "extra_backup_email", "extra_support_hours", "extra_timezone", "extra_contract",
+    ):
+        assert f'name="{name}"' in contact, name
+    assert "extra_runbook_note" not in contact
+    assert "NOC contacts" not in text
+    assert "Comms / monitoring" not in text
+    comms = text.index("data-asset-comms")
+    assert middle < comms < text.index('name="scrape_address"') < text.index('name="snmp_port"') < text.index('name="snmp_version"') < row2
+    assert ">Ports " in _between(text, "asset-form-middle", "asset-form-row-2")
+    assert right < text.index("alarm-families") < custom < text.index("data-client-playrules") < notes
     assert "Standard alarms" in text
     assert "It cannot fire earlier than the Prometheus rule in alerts.yml." in text
-    assert '<textarea name="extra_runbook_note"' in text
+    notes_html = _between(text, "asset-form-notes", "asset-form-row-3")
+    assert ">Notes " in notes_html
+    assert '<textarea name="extra_runbook_note"' in notes_html
+    assert "Runbook note" not in text.split('id="asset-form"', 1)[1].split("</form>", 1)[0]
 
     support = _between(text, "data-asset-support", "asset-form-middle")
+    assert ">Support " in support
     for value in ("yes", "no", "internal"):
         assert f'<option value="{value}"' in support
     assert 'type="date"' in support
     assert '<option value="14" selected>14 days</option>' in support
     assert '<option value="7"' in support and '<option value="30"' in support
 
-    playrules = _between(text, "data-client-playrules", "asset-form-ladder")
+    playrules = _between(text, "data-client-playrules", "asset-form-notes")
     assert "Custom alarms" in playrules
     assert "Client playrules" not in text
     assert "This does not create Prometheus thresholds." in playrules
@@ -341,6 +354,8 @@ def test_asset_form_is_three_columns_with_dropdown_playrules():
     assert "hidden" not in empty
     assert "No custom alarms — Rules apply." in empty
     ladder_html = _between(text, "data-asset-ladder", "</form>")
+    assert ">Escalation " in ladder_html
+    assert "ladder-levels" in ladder_html
     assert 'href="/escalation">Default ladder</a>' in ladder_html
     for label in ("L1 NOC", "L2 Shift", "L3 Engineer", "L4 Manager"):
         assert label in ladder_html
@@ -348,14 +363,14 @@ def test_asset_form_is_three_columns_with_dropdown_playrules():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     block = css.split("/* Add / Edit asset:", 1)[1].split(".asset-form-block {", 1)[0]
     split_rule = block.split(".asset-form-split {", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);" in split_rule
+    assert "width: 100%;" in split_rule
     assert "max-width: none;" in split_rule
     assert "118rem" not in block
-    assert "grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);" in block.split(".asset-form-half-left", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.65fr);" in block.split(".asset-form-half-right", 1)[1].split("}", 1)[0]
-    rules = block.split(".asset-form-middle,", 1)[1].split("}", 1)[0]
-    assert "border-left: 1px solid var(--line);" in rules
-    assert ".asset-form-ladder" in rules
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in block.split(".asset-form-row-1", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);" in block.split(".asset-form-row-2", 1)[1].split("}", 1)[0]
+    rules = block.split(".asset-form-band + .asset-form-band", 1)[1].split("}", 1)[0]
+    assert "border-top: 1px solid var(--line);" in rules
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in css.split(".ladder-levels", 1)[1].split("}", 1)[0]
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "bindClientPlayrules" in js and "[data-playrule-remove]" in js
 

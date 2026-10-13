@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated
+from urllib.parse import parse_qsl, urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
@@ -118,6 +119,36 @@ def _select_one_target(raw: str, default: str) -> str:
     if frag:
         url += "#" + frag
     return url
+
+
+def _safe_assets_url(raw: str) -> str:
+    """List URL only. Query is kept when it is a normal Assets filter string."""
+    text = (raw or "").replace("\n", "").replace("\r", "").strip().split("#", 1)[0]
+    path, sep, query = text.partition("?")
+    if path != "/assets":
+        return "/assets"
+    if any(ch in query for ch in " <>\"'\\"):
+        return "/assets"
+    return text if sep else "/assets"
+
+
+def _assets_query(raw: str, **put: str) -> str:
+    base = _safe_assets_url(raw)
+    _, _, query = base.partition("?")
+    drop = {"edit", "clone", "edit_note", "notice"}
+    pairs = [(key, value) for key, value in parse_qsl(query, keep_blank_values=True) if key not in drop and key not in put]
+    for key, value in put.items():
+        if value:
+            pairs.append((key, value))
+    encoded = urlencode(pairs)
+    return "/assets" + (("?" + encoded) if encoded else "")
+
+
+def _one_asset(db: Session, selected: list[str]) -> Asset | None:
+    ids = selected_values(selected)
+    if len(ids) != 1:
+        return None
+    return db.query(Asset).filter(Asset.asset_id == ids[0]).first()
 
 
 def _download(filename: str, lines: list[str]) -> PlainTextResponse:
@@ -891,6 +922,49 @@ def assets_bulk_delete(
     _forbid(user, can(user, "write_assets"))
     delete_assets(db, selected_values(selected), user.email)
     return _back(nxt, "/assets")
+
+
+@router.post("/assets/open-edit")
+def assets_open_edit(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    stay: Annotated[str, Form()] = "",
+):
+    """Open Add/Edit for exactly one selected asset. Zero or many do not write."""
+    _forbid(user, can(user, "write_assets"))
+    row = _one_asset(db, selected)
+    if row is None:
+        return RedirectResponse(_assets_query(stay, edit_note="select-one"), status_code=303)
+    return RedirectResponse(_assets_query(stay, edit=row.asset_id), status_code=303)
+
+
+@router.post("/assets/open-clone")
+def assets_open_clone(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    stay: Annotated[str, Form()] = "",
+):
+    _forbid(user, can(user, "write_assets"))
+    row = _one_asset(db, selected)
+    if row is None:
+        return RedirectResponse(_assets_query(stay, edit_note="select-one"), status_code=303)
+    return RedirectResponse(_assets_query(stay, clone=row.asset_id), status_code=303)
+
+
+@router.post("/assets/open-verify")
+def assets_open_verify(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    stay: Annotated[str, Form()] = "",
+):
+    _forbid(user, can(user, "write_assets"))
+    row = _one_asset(db, selected)
+    if row is None:
+        return RedirectResponse(_assets_query(stay, edit_note="select-one"), status_code=303)
+    return RedirectResponse(f"/assets/{row.asset_id}/verify", status_code=303)
 
 
 @router.post("/assets/export")

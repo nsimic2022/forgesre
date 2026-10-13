@@ -242,10 +242,21 @@ def test_assets_list_shows_edit_clone_remove():
     assert b">#</" in page.content or b"Asset number" in page.content or b">#</th>" in page.content
     assert b'placeholder="search #, id, hostname, IP, VLAN"' in page.content
     assert b'name="scrape_address"' in page.content
-    assert b"?edit=" in page.content
+    assert b'action="/assets/open-edit"' in page.content
     assert b"reach-sq" in page.content
     assert b">ICMP<" in page.content
-    assert b"ICMP / port / SNMP" in page.content
+    assert b'class="col-port"' in page.content
+    assert b">Escalation " in page.content
+    chips = page.text.split('aria-label="Asset filters"', 1)[1].split("</nav>", 1)[0]
+    for label in (">All<", ">Critical<", ">Warning<", ">Offline<"):
+        assert label in chips
+    assert "Offline / unreachable" not in chips
+    assert "No owner email" not in chips
+    assert "flag=no-email" not in chips
+    assert "flag=unreachable" in chips
+    table = page.text.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
+    assert 'class="asset-actions"' not in table
+    assert "?edit=" not in table
     listed = client.get("/assets?edit=forge-demo-01")
     assert listed.status_code == 200
     assert b"Edit asset" in listed.content
@@ -262,6 +273,64 @@ def test_assets_list_shows_edit_clone_remove():
     assert b"Clone asset" in clone_page.content
     assert b"copy-01" in clone_page.content
     assert b"forge-demo-" in clone_page.content
+    db.close()
+
+
+def test_assets_pager_opens_one_row_and_flashes_otherwise():
+    db = _db()
+    client = TestClient(app)
+    client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
+    one = client.post(
+        "/assets/open-edit",
+        data={"selected": DEMO_ASSET, "stay": "/assets?q=forge"},
+        follow_redirects=False,
+    )
+    assert one.status_code == 303
+    assert one.headers["location"].startswith("/assets?")
+    assert f"edit={DEMO_ASSET}" in one.headers["location"]
+    assert "q=forge" in one.headers["location"]
+    cloned = client.post(
+        "/assets/open-clone",
+        data={"selected": DEMO_ASSET, "stay": "/assets?status=warning"},
+        follow_redirects=False,
+    )
+    assert cloned.status_code == 303
+    assert f"clone={DEMO_ASSET}" in cloned.headers["location"]
+    assert "status=warning" in cloned.headers["location"]
+    verified = client.post("/assets/open-verify", data={"selected": DEMO_ASSET}, follow_redirects=False)
+    assert verified.status_code == 303
+    assert verified.headers["location"] == f"/assets/{DEMO_ASSET}/verify"
+    many = client.post(
+        "/assets/open-edit",
+        data={"selected": [DEMO_ASSET, "forge-demo-02"], "stay": "/assets?flag=unreachable"},
+        follow_redirects=False,
+    )
+    assert many.status_code == 303
+    assert "edit_note=select-one" in many.headers["location"]
+    assert "flag=unreachable" in many.headers["location"]
+    assert "edit=" not in many.headers["location"].split("edit_note", 1)[0]
+    flashed = client.get(many.headers["location"])
+    assert 'role="status">Select one' in flashed.text
+    none = client.post("/assets/open-clone", data={"stay": "https://evil.example/assets"}, follow_redirects=False)
+    assert none.status_code == 303
+    assert none.headers["location"] == "/assets?edit_note=select-one"
+    db.add(
+        User(
+            email="view-pager@forgesre.local",
+            name="View",
+            password_hash=hash_password("testpass"),
+            role="viewer",
+        )
+    )
+    db.commit()
+    viewer = TestClient(app)
+    viewer.post("/login", data={"email": "view-pager@forgesre.local", "password": "testpass"}, follow_redirects=False)
+    for path in ("/assets/open-edit", "/assets/open-clone", "/assets/open-verify", "/assets/bulk-delete"):
+        assert viewer.post(path, data={"selected": DEMO_ASSET}, follow_redirects=False).status_code == 403
+    listed = viewer.get("/assets")
+    assert 'action="/assets/open-edit"' not in listed.text
+    assert 'action="/assets/bulk-delete"' not in listed.text
+    assert 'action="/assets/export"' in listed.text
     db.close()
 
 
@@ -304,19 +373,24 @@ def test_assets_table_abbreviates_type_form_keeps_full_names():
     db.close()
 
 
-def test_asset_table_actions_cell_is_table_cell_not_flex_td():
+def test_asset_table_actions_live_in_the_pager():
     html = Path("frontend/templates/assets.html").read_text(encoding="utf-8")
     css = Path("frontend/static/app.css").read_text(encoding="utf-8")
     base = Path("frontend/templates/base.html").read_text(encoding="utf-8")
     table = html.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
     assert 'td class="row-actions"' not in table
-    assert 'class="asset-actions"' in table
-    assert 'class="row-actions"' in table
+    assert 'class="asset-actions"' not in table
     assert "asset_type_abbrev" in table
+    assert 'class="col-stretch"' in table
+    pager = html.split("list_actions=", 1)[1]
+    assert '"/assets/open-edit"' in pager
+    assert '"/assets/open-clone"' in pager
+    assert '"/assets/open-verify"' in pager
+    assert '"/assets/export"' in pager
+    assert '"/assets/bulk-delete"' in pager
+    assert '"delete_last": True' in pager
     assert "vertical-align: middle" in css
-    assert ".asset-table td.asset-actions" in css
-    assert "display: table-cell" in css
-    assert "td.row-actions" in css
+    assert "table-layout: fixed" in css
     assert "app.css?v=v09-N" in base
 
 
@@ -342,7 +416,7 @@ def test_viewer_cannot_see_asset_write_actions():
     assert b">Remove<" not in page.content
     assert b">Remove<" not in page.content
     assert b">Verify<" not in page.content
-    assert b"ICMP / port / SNMP" in page.content
+    assert b'class="col-port"' in page.content
     assert b"reach-sq icmp ping" in page.content
     assert b">ICMP<" in page.content
     blocked = client.post("/assets/forge-demo-01/delete", follow_redirects=False)
@@ -513,8 +587,10 @@ def test_remove_demo_asset_and_seed_does_not_restore():
         follow_redirects=False,
     )
     page = client.get("/assets")
-    assert b'action="/assets/forge-demo-01/delete"' in page.content
+    assert b'action="/assets/bulk-delete"' in page.content
     assert b">Remove<" in page.content
+    edit = client.get("/assets?edit=forge-demo-01")
+    assert b'action="/assets/forge-demo-01/delete"' in edit.content
     demo = client.post("/assets/forge-demo-01/delete", follow_redirects=False)
     assert demo.status_code in {302, 303}
     db.expire_all()
