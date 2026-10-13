@@ -149,6 +149,14 @@
 </section>
 {% endif %}
 
+{% if syslog_lines %}
+<section class="card" data-syslog>
+  <h2>Syslog {% with %}{% set tip %}Up to 20 Loki lines for this asset from 30 minutes before the incident started until 30 minutes after. A real host is job=syslog, hostname then IP. The demo asset may use job=forgesre. No asset or no lines: this block is omitted. Appliance demo logs are not attached to a real host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <pre class="pre-wrap syslog-lines" data-syslog-lines>{% for line in syslog_lines %}{{ line }}
+{% endfor %}</pre>
+</section>
+{% endif %}
+
 <section class="card" id="ai">
   <h2>What happened? {% with %}{% set tip %}ForgeRCA is the builtin facts/anomalies/causes page. The local LLM, if enabled, only rewrites text in the background.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <p>{{ incident.summary or "Awaiting evidence." }}</p>

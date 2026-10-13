@@ -18,7 +18,7 @@ from app.asset_probe import reachability_snapshot
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.asset_alarms import alarms_from_form, saved_alarm_hostnames
-from app.dc_noc import in_maintenance, interface_facts, maintenance_label, snmp_surface
+from app.dc_noc import in_maintenance, incident_syslog_lines, interface_facts, maintenance_label, snmp_surface
 from app.asset_extras import (
     EXTRA_FIELDS,
     SUPPORT_CHOICES,
@@ -1863,6 +1863,7 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
             evidence_rows=evidence,
             evidence_pager=evidence_pager,
             client_playrules=asset_playrules(db, item.asset),
+            syslog_lines=incident_syslog_lines(item),
             **ops_mail_ctx(db, user, item),
         )
 

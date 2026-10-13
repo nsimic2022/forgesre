@@ -347,6 +347,71 @@ def snmp_surface(asset: Any, *, vector_fn: Callable[[str], dict[str, Any]] | Non
     return {"show": True, "state": "ok", "interfaces": rows, "uptime": uptime, "note": ""}
 
 
+SYSLOG_LIMIT = 20
+SYSLOG_PAD_MINUTES = 30
+
+
+def incident_syslog_lines(incident: Any, *, fetch: Callable[..., list[str]] | None = None) -> list[str] | None:
+    """Last ~20 Loki syslog lines for this asset around started_at.
+
+    Hostname, then IP, job=syslog. The demo asset may use job=forgesre.
+    No asset, no query, or no lines → None (the page omits the block).
+    A real host never keeps a forge-demo-01 line.
+    """
+    asset = getattr(incident, "asset", None)
+    if asset is None:
+        return None
+    from rca.collector import DEMO_ASSET, asset_log_identity, is_demo_loki_query, loki_query_for
+
+    identity = asset_log_identity(asset)
+    query = loki_query_for(identity)
+    if not query:
+        return None
+    demo = str(identity.get("asset_id") or "") == DEMO_ASSET
+    if not demo and is_demo_loki_query(query):
+        return None
+    started = getattr(incident, "started_at", None) or utcnow()
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    pad = timedelta(minutes=SYSLOG_PAD_MINUTES)
+    if fetch is None:
+        fetch = _bounded_syslog
+    try:
+        raw = fetch(limit=SYSLOG_LIMIT, query=query, start=started - pad, end=started + pad) or []
+    except Exception:
+        return None
+    lines: list[str] = []
+    for line in raw:
+        text = str(line or "")
+        if not text:
+            continue
+        if not demo and ("forge-demo-01" in text or 'job="forgesre"' in text):
+            continue
+        lines.append(text)
+        if len(lines) >= SYSLOG_LIMIT:
+            break
+    return lines or None
+
+
+def _bounded_syslog(*, limit: int, query: str, start: datetime, end: datetime) -> list[str]:
+    """LogQL around the incident only. A failed selector is skipped — no unbounded retry."""
+    from app.services import _query_loki_selector
+    from rca.collector import logql_selectors
+
+    lines: list[str] = []
+    seen: set[str] = set()
+    for selector in logql_selectors(query):
+        got = _query_loki_selector(selector, limit, start, end) or []
+        for line in got:
+            if line in seen:
+                continue
+            seen.add(line)
+            lines.append(line)
+            if len(lines) >= limit:
+                return lines
+    return lines
+
+
 def parent_suppress_detail(asset: Asset, parent_incident: Incident) -> str:
     parent = asset.parent
     host = parent.hostname if parent is not None else "parent"
