@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
@@ -229,6 +229,122 @@ def parent_down_incident(db: Session, asset: Asset | None) -> Incident | None:
         if is_down_style(incident_alertname(row)):
             return row
     return None
+
+
+_IFACE_ALIASES = {
+    "ifName": ("ifName", "ifname", "if_name"),
+    "ifIndex": ("ifIndex", "ifindex", "if_index"),
+    "ifAlias": ("ifAlias", "ifalias", "if_alias"),
+    "ifDescr": ("ifDescr", "ifdescr", "if_descr"),
+}
+_OPER_STATE = {
+    1: "up",
+    2: "down",
+    3: "testing",
+    4: "unknown",
+    5: "dormant",
+    6: "notPresent",
+    7: "lowerLayerDown",
+}
+
+
+def interface_facts(source: Any) -> dict[str, str]:
+    """ifName / ifIndex / ifAlias / ifDescr from an incident or an alert label dict."""
+    labels: dict[str, Any] = {}
+    if isinstance(source, dict):
+        raw = source.get("labels") if isinstance(source.get("labels"), dict) else source
+        labels = raw if isinstance(raw, dict) else {}
+    else:
+        payload = getattr(source, "alert_payload", None)
+        if isinstance(payload, dict) and isinstance(payload.get("labels"), dict):
+            labels = payload["labels"]
+    out: dict[str, str] = {}
+    for key, names in _IFACE_ALIASES.items():
+        for name in names:
+            text = str(labels.get(name) or "").strip()
+            if text:
+                out[key] = text
+                break
+    return out
+
+
+def query_prometheus_vector(expr: str, timeout: float = 2.0) -> dict[str, Any]:
+    """All series for one instant query. Error or empty is not a fake sample."""
+    import httpx
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.get(f"{settings.prometheus_url}/api/v1/query", params={"query": expr})
+            response.raise_for_status()
+            data = response.json()
+    except Exception as exc:
+        return {"error": str(exc), "series": [], "query": expr}
+    series = []
+    for row in (data.get("data") or {}).get("result") or []:
+        if not isinstance(row, dict):
+            continue
+        metric = row.get("metric") if isinstance(row.get("metric"), dict) else {}
+        raw = row.get("value") or [None, None]
+        try:
+            value = float(raw[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if value != value or value in {float("inf"), float("-inf")}:
+            continue
+        series.append({"labels": metric, "value": value})
+    return {"series": series, "query": expr}
+
+
+def format_snmp_uptime(hundredths: float) -> str:
+    """sysUpTime is hundredths of a second in the if_mib gauge."""
+    total = max(0, int(float(hundredths) / 100.0))
+    days, rem = divmod(total, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes = rem // 60
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
+def snmp_surface(asset: Any, *, vector_fn: Callable[[str], dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Compact if_mib view: ifName / ifIndex / ifAlias plus sysUpTime. Empty scrape stays Not scraped."""
+    from app.inventory import is_snmp_asset
+
+    if asset is None or not is_snmp_asset(asset):
+        return {"show": False, "state": "", "interfaces": [], "uptime": "", "note": ""}
+    asset_id = str(getattr(asset, "asset_id", "") or "").replace("\\", "\\\\").replace('"', '\\"')
+    fetch = vector_fn or query_prometheus_vector
+    oper = fetch(f'ifOperStatus{{job="forgesre-snmp",asset="{asset_id}"}}')
+    uptime_q = fetch(f'sysUpTime{{job="forgesre-snmp",asset="{asset_id}"}}')
+    rows = []
+    for series in oper.get("series") or []:
+        facts = interface_facts({"labels": series.get("labels") or {}})
+        try:
+            code = int(float(series.get("value")))
+        except (TypeError, ValueError):
+            code = None
+        rows.append(
+            {
+                "ifName": facts.get("ifName") or facts.get("ifDescr") or "",
+                "ifIndex": facts.get("ifIndex") or "",
+                "ifAlias": facts.get("ifAlias") or "",
+                "state": _OPER_STATE.get(code, "") if code is not None else "",
+            }
+        )
+    rows.sort(key=lambda row: (int(row["ifIndex"]) if str(row["ifIndex"]).isdigit() else 10**9, row["ifName"]))
+    uptime = ""
+    for series in uptime_q.get("series") or []:
+        try:
+            uptime = format_snmp_uptime(float(series["value"]))
+        except (TypeError, ValueError, KeyError):
+            continue
+        if uptime:
+            break
+    if not rows and not uptime:
+        return {"show": True, "state": "not_scraped", "interfaces": [], "uptime": "", "note": "Not scraped."}
+    return {"show": True, "state": "ok", "interfaces": rows, "uptime": uptime, "note": ""}
 
 
 def parent_suppress_detail(asset: Asset, parent_incident: Incident) -> str:

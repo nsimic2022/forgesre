@@ -126,6 +126,26 @@
     {% if snmp_auth.pending %}<span class="pill warn" data-snmp-auth-pending title="snmp.yml does not have {{ snmp_auth.desired }} yet">pending</span> <span class="muted">run <code>./forgesre snmp-auths</code> to write <code>{{ snmp_auth.desired }}</code></span>{% endif %}
   </dd>
   {% endif %}
+  {% if snmp_view.show %}
+  <dt>Interfaces</dt>
+  <dd data-snmp-interfaces data-snmp-state="{{ snmp_view.state }}">
+    {% if snmp_view.state == 'not_scraped' %}
+    <span class="muted">Not scraped.</span>
+    {% else %}
+    {% if snmp_view.uptime %}<div data-sys-uptime>Up {{ snmp_view.uptime }} <span class="muted">sysUpTime</span></div>{% endif %}
+    {% if snmp_view.interfaces %}
+    <table class="scan-list iface-table">
+      <thead><tr><th>ifName</th><th>ifIndex</th><th>ifAlias</th><th>State</th></tr></thead>
+      <tbody>
+      {% for row in snmp_view.interfaces %}
+        <tr><td>{{ row.ifName or "—" }}</td><td>{{ row.ifIndex or "—" }}</td><td>{{ row.ifAlias or "—" }}</td><td>{{ row.state or "—" }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% endif %}
+  </dd>
+  {% endif %}
 </dl>
 </section>
 

@@ -18,7 +18,7 @@ from app.asset_probe import reachability_snapshot
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.asset_alarms import alarms_from_form, saved_alarm_hostnames
-from app.dc_noc import in_maintenance, maintenance_label
+from app.dc_noc import in_maintenance, interface_facts, maintenance_label, snmp_surface
 from app.asset_extras import (
     EXTRA_FIELDS,
     SUPPORT_CHOICES,
@@ -536,6 +536,7 @@ def ctx(request: Request, user: User | None, **extra):
         "incident_ladder_cubes": incident_ladder_cubes,
         "in_maintenance": in_maintenance,
         "maintenance_label": maintenance_label,
+        "interface_facts": interface_facts,
     }
     if user is not None:
         try:
@@ -1436,6 +1437,7 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         ex=form_extras(item),
         support_labels=dict(SUPPORT_CHOICES),
         snmp_auth=auth_status(item),
+        snmp_view=snmp_surface(item),
     )
 
 

@@ -83,6 +83,19 @@
 {% endfor %}
 {% endif %}
 
+{% set iface = interface_facts(incident) %}
+{% if iface.ifName or iface.ifIndex or iface.ifAlias or iface.ifDescr %}
+<section class="card" data-interface>
+  <h2>Interface {% with %}{% set tip %}From the alert labels (if_mib lookup: ifName, ifIndex, ifAlias). The hostname is still the asset. Empty labels mean this alert was not about one interface.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <dl class="kv">
+    {% if iface.ifName %}<dt>ifName</dt><dd data-if-name>{{ iface.ifName }}</dd>{% endif %}
+    {% if iface.ifIndex %}<dt>ifIndex</dt><dd data-if-index>{{ iface.ifIndex }}</dd>{% endif %}
+    {% if iface.ifAlias %}<dt>ifAlias</dt><dd data-if-alias>{{ iface.ifAlias }}</dd>{% endif %}
+    {% if iface.ifDescr %}<dt>ifDescr</dt><dd>{{ iface.ifDescr }}</dd>{% endif %}
+  </dl>
+</section>
+{% endif %}
+
 {% if incident.asset %}
 <section class="card">
   <h2>Who to call {% with %}{% set tip %}Default escalation role steps mail the owner email below. A step that names an address mails that address instead. With no owner email, role steps are recorded as no-recipient and nothing is sent. A filled asset Escalation mails those addresses only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
