@@ -27,7 +27,7 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-Q" in base
+    assert "app.css?v=v09-R" in base
     assert ".banner-short" not in css
     assert ".banner-x" in css
     assert "top: 0.35rem" in css.split(".banner-x {", 1)[1].split("}", 1)[0]
@@ -115,20 +115,24 @@ def test_incidents_ack_column_is_a_status_circle():
     _login(client)
     page = client.get("/incidents")
     assert page.status_code == 200
-    assert "ack-dot" in page.text
-    assert 'title="Acknowledged"' in page.text or 'title="Not acknowledged"' in page.text
+    assert "ack-dot" not in page.text
     head = page.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert ">Acknowledged<" in head and ">Ack<" not in head and "info-tip" not in head
+    assert ">Acknowledged<" not in head and "col-ack" not in head
+    assert ">Ack<" not in head and "info-tip" not in head
+    assert 'class="col-status">Status</th>' in head
     html = (ROOT / "frontend" / "templates" / "incidents.html").read_text(encoding="utf-8")
-    assert "{% if item.ack_by %}" not in html
-    assert "Resolved by" in html
-    assert 'class="col-ack">Acknowledged</th>' in html
+    status = (ROOT / "frontend" / "templates" / "_incident_status_cell.html").read_text(encoding="utf-8")
+    assert "{% if item.ack_by %}" not in html and "{% if item.ack_by %}" not in status
+    assert "Resolved by" in html and "col-ack" not in html
+    assert 'class="status-ack">Acknowledged</span>' in status
+    assert "{% if item.ack_at %}" in status
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    ack = css.split(".incidents-table th.col-ack,", 1)[1].split("}", 1)[0]
-    assert "padding-right: 1.45rem" in ack
-    resolved = css.split(".incidents-table th.col-resolved,", 1)[1].split("}", 1)[0]
-    assert "padding-left: 1.35rem" in resolved
-    assert "white-space: nowrap" in resolved
+    ack = css.split(".list-scroll .status-ack {", 1)[1].split("}", 1)[0]
+    assert "color: var(--ok)" in ack
+    resolved = css.split(".list-scroll .incidents-table th.col-resolved,", 1)[1].split("}", 1)[0]
+    assert "max-width: none" in resolved
+    assert "white-space: normal" in resolved
+    assert "width: 26%" in resolved
     db.close()
 
 

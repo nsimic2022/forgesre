@@ -118,8 +118,8 @@ def test_version_is_0_9_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v0.9</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-Q" in base
-    assert "app.js?v=v09-Q" in base
+    assert "app.css?v=v09-R" in base
+    assert "app.js?v=v09-R" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.9.0" in text
@@ -316,9 +316,12 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     assert ">Contacts " in contact
     for name in (
         "owner", "contact_name", "owner_email", "owner_phone", "extra_backup_name",
-        "extra_backup_phone", "extra_backup_email", "extra_support_hours", "extra_timezone", "extra_contract",
+        "extra_backup_phone", "extra_backup_email",
     ):
         assert f'name="{name}"' in contact, name
+    for name in ("extra_support_hours", "extra_timezone", "extra_contract"):
+        assert f'name="{name}"' not in contact, name
+        assert "License" not in contact and "SLA" not in contact
     assert "extra_runbook_note" not in contact
     assert "NOC contacts" not in text
     assert "Comms / monitoring" not in text
@@ -335,6 +338,12 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
 
     support = _between(text, "data-asset-support", "asset-form-row-2")
     assert ">Support " in support
+    form = text.split('id="asset-form"', 1)[1].split("</form>", 1)[0]
+    for name in ("extra_support_hours", "extra_timezone", "extra_contract"):
+        assert support.count(f'name="{name}"') == 1, name
+        assert form.count(f'name="{name}"') == 1, name
+    assert "License / contract / SLA" in support
+    assert "Support hours" in support and "Timezone" in support
     for value in ("yes", "no", "internal"):
         assert f'<option value="{value}"' in support
     assert 'type="date"' in support

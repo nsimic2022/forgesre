@@ -56,6 +56,42 @@ def test_system_health_has_open_column_and_grafana():
     db.close()
 
 
+def test_health_service_cubes_share_one_size_and_split_even_counts():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    page = client.get("/health-ui")
+    assert page.status_code == 200
+    start = page.text.index('class="grid health-grid"')
+    grid = page.text[start:page.text.index("<table", start)]
+    count = grid.count('class="stat ')
+    count_attr = page.text.split('data-health-count="', 1)[1].split('"', 1)[0]
+    cols_attr = page.text.split('data-health-cols="', 1)[1].split('"', 1)[0]
+    style_cols = page.text.split('style="--health-cols: ', 1)[1].split('"', 1)[0]
+    assert count_attr == str(count)
+    assert int(count_attr) % 2 == 0
+    assert cols_attr == style_cols == str(int(count_attr) // 2)
+    assert count == 12 and cols_attr == "6"
+    assert ">discovery</span>" in grid
+    discovery = grid.split(">discovery</span>", 1)[0]
+    assert 'class="stat ' in discovery[-180:]
+    assert "health-cube-last" not in grid
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    rule = css.split(".grid.health-grid {", 1)[1].split("}", 1)[0]
+    assert "repeat(var(--health-cols)" in rule
+    assert "minmax(7.4rem, 8.75rem)" in rule
+    assert "gap: 1.35rem 1.5rem" in rule
+    assert "justify-content: start" in rule
+    assert "auto-fill" not in rule and "auto-fit" not in rule and "1fr" not in rule
+    generic = css.split(".grid {", 1)[1].split("}", 1)[0]
+    assert "gap: 0.75rem" in generic
+    # Open links and Alloy / Loki labels are unchanged.
+    assert ">Alloy<" in page.text or ">alloy<" in page.text.lower()
+    assert "Loki" in page.text
+    assert "<th>Open</th>" in page.text
+    db.close()
+
+
 def test_system_health_keeps_loopback_links_when_browsing_on_the_appliance():
     db = _db()
     client = TestClient(app, base_url="http://localhost:8080")

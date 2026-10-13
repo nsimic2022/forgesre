@@ -57,13 +57,19 @@ def test_incidents_list_columns_short_id_and_full_href():
     assert ">Severity<" in headers
     assert ">Status<" in headers
     assert ">When<" in headers
-    assert ">Acknowledged<" in headers
+    assert ">Acknowledged<" not in headers and "col-ack" not in headers
     assert ">Ack<" not in headers and "info-tip" not in headers
+    assert 'class="col-status">Status</th>' in headers
+    assert headers.index(">When<") < headers.index(">Resolved by<") < headers.index(">Notes<")
     assert "Resolved by" in headers
     assert "Reported to" not in headers
     assert ">Asset<" not in headers
     assert ">Started<" not in headers
-    assert "ack-dot" in listed.text
+    assert "ack-dot" not in listed.text
+    assert 'class="status-cell"' in listed.text
+    open_row = listed.text.split("Very long disk-full title", 1)[1].split("</tr>", 1)[0]
+    open_status = open_row.split('class="col-status"', 1)[1].split("</td>", 1)[0]
+    assert ">OPEN<" in open_status and "status-ack" not in open_status
     assert 'data-when="stamp"' in listed.text
     assert 'name="q"' in listed.text
     assert "Last 24 hours" in listed.text

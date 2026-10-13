@@ -74,8 +74,9 @@ def test_dashboard_recent_drops_notes_and_ack_column():
         assert "col-notes" not in row
     incidents = _client().get("/incidents")
     inc_head = incidents.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert inc_head.index(">When<") < inc_head.index(">Acknowledged<") < inc_head.index(">Resolved by<") < inc_head.index(">Notes<")
-    assert 'class="col-ack">Acknowledged</th>' in inc_head
+    assert ">Acknowledged<" not in inc_head and "col-ack" not in inc_head
+    assert 'class="col-status">Status</th>' in inc_head
+    assert inc_head.index(">When<") < inc_head.index(">Resolved by<") < inc_head.index(">Notes<")
     assert ">Ladder<" not in inc_head and ">Escalation<" in inc_head
 
 
@@ -144,11 +145,25 @@ def test_dashboard_status_cell_shows_acknowledged_in_green():
         listed = _client().get(f"/incidents?q={token}")
         assert listed.status_code == 200
         inc_head = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
-        assert 'class="col-ack">Acknowledged</th>' in inc_head
+        assert ">Acknowledged<" not in inc_head and "col-ack" not in inc_head
+        assert 'class="col-status">Status</th>' in inc_head
+        assert inc_head.index(">Escalation<") < inc_head.index(">When<") < inc_head.index(">Resolved by<") < inc_head.index(">Notes<")
         inc_row = listed.text.split(f"Acked closed {token}", 1)[1].split("</tr>", 1)[0]
-        assert "ack-dot" in inc_row and "col-ack" in inc_row
-        assert "status-ack" not in inc_row
+        assert "ack-dot" not in inc_row and "col-ack" not in inc_row
+        inc_status = inc_row.split('class="col-status"', 1)[1].split("</td>", 1)[0]
+        assert 'class="pill closed"' in inc_status and ">CLOSED<" in inc_status
+        assert 'class="status-ack">Acknowledged</span>' in inc_status
+        open_row = listed.text.split(f"Open unacked {token}", 1)[1].split("</tr>", 1)[0]
+        open_status = open_row.split('class="col-status"', 1)[1].split("</td>", 1)[0]
+        assert ">OPEN<" in open_status and "status-ack" not in open_status and "Acknowledged" not in open_status
         assert f"closer-{token}@forgesre.local" in inc_row
+        inc_css = css.split(".list-scroll .status-ack {", 1)[1].split("}", 1)[0]
+        assert "color: var(--ok)" in inc_css
+        inc_resolved = css.split(".list-scroll .incidents-table th.col-resolved,", 1)[1].split("}", 1)[0]
+        assert "white-space: normal" in inc_resolved
+        assert "max-width: none" in inc_resolved
+        assert "min-width: 11rem" in inc_resolved
+        assert "width: 26%" in inc_resolved
     finally:
         db.query(Incident).filter(Incident.fingerprint.like(f"dash-ack:{token}:%")).delete(synchronize_session=False)
         db.commit()
@@ -245,6 +260,17 @@ def test_asset_form_has_one_notes_and_row1_order():
     assert order == sorted(order)
     assert "L1 NOC" in form and "L4 Manager" in form
     assert row1.index("asset-form-left") < row1.index("asset-form-middle") < row1.index("data-asset-contacts") < row1.index("data-asset-support")
+    contacts = row1.split("data-asset-contacts", 1)[1].split("data-asset-support", 1)[0]
+    support = row1.split("data-asset-support", 1)[1]
+    for label in ("Support hours", "Timezone", "License / contract / SLA"):
+        assert label not in contacts
+        assert label in support
+    for name in ("extra_support_hours", "extra_timezone", "extra_contract"):
+        assert contacts.count(f'name="{name}"') == 0
+        assert support.count(f'name="{name}"') == 1
+        assert form.count(f'name="{name}"') == 1
+    for name in ("owner", "contact_name", "owner_email", "owner_phone", "extra_backup_name", "extra_backup_phone", "extra_backup_email"):
+        assert f'name="{name}"' in contacts
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     rules = css.split(".asset-form-band + .asset-form-band", 1)[1].split("}", 1)[0]
     assert "border-top: 1px solid var(--line);" in rules

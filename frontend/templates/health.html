@@ -18,7 +18,15 @@
   <span class="pill {{ health_class(doctor.overall) }}">{{ doctor.overall }}</span>
 </p>
 
-<div class="grid health-grid">
+{% set health_n = stack|length %}
+{% if not health_n %}
+  {% set health_cols = 1 %}
+{% elif health_n % 2 == 0 %}
+  {% set health_cols = health_n // 2 %}
+{% else %}
+  {% set health_cols = health_n // 2 + 1 %}
+{% endif %}
+<div class="grid health-grid" style="--health-cols: {{ health_cols }}" data-health-count="{{ health_n }}" data-health-cols="{{ health_cols }}">
   {% for item in stack %}
   {% if item.gui %}
   <a class="stat {{ item.css }}" href="{{ item.gui }}" target="_blank" rel="noreferrer">
