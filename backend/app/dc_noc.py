@@ -525,3 +525,212 @@ def parent_suppress_detail(asset: Asset, parent_incident: Incident) -> str:
         f"Suppressed by parent {host} incident {parent_incident.number} — "
         "parent is down, so this host-down alert did not start its own mail ladder."
     )
+
+
+CAPACITY_SECONDS = 30 * 24 * 3600
+
+
+def forecast_days_to_full(times: list[float], values: list[float], *, full: float = 100.0) -> int | None:
+    """Linear days until `full`. None when there are fewer than 2 points or the slope is not climbing."""
+    pairs: list[tuple[float, float]] = []
+    for raw_t, raw_v in zip(times, values):
+        try:
+            stamp = float(raw_t)
+            value = float(raw_v)
+        except (TypeError, ValueError):
+            continue
+        if stamp != stamp or value != value:
+            continue
+        pairs.append((stamp, value))
+    if len(pairs) < 2:
+        return None
+    origin = pairs[0][0]
+    xs = [(stamp - origin) / 86400.0 for stamp, _value in pairs]
+    ys = [value for _stamp, value in pairs]
+    count = len(xs)
+    mean_x = sum(xs) / count
+    mean_y = sum(ys) / count
+    var = sum((x - mean_x) ** 2 for x in xs)
+    if var <= 1e-9:
+        return None
+    slope = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys)) / var
+    if slope <= 0.05:
+        return None
+    last = ys[-1]
+    if last >= full:
+        return 0
+    days = (full - last) / slope
+    if days <= 0 or days > 3650:
+        return None
+    return max(1, int(round(days)))
+
+
+def _spark(values: list[float]) -> str:
+    if len(values) < 2:
+        return ""
+    width, height = 80.0, 22.0
+    lo, hi = min(values), max(values)
+    span = hi - lo or 1.0
+    last = len(values) - 1
+    coords = []
+    for index, raw in enumerate(values):
+        x = 0.0 if last == 0 else index * (width / last)
+        y = height - 1.0 - ((raw - lo) / span) * (height - 2.0)
+        coords.append(f"{x:.1f},{y:.1f}")
+    return " ".join(coords)
+
+
+def _capacity_row(label: str, result: Any, *, unit: str, allow_forecast: bool, window: float) -> dict[str, Any]:
+    base = {
+        "label": label,
+        "state": "not_scraped",
+        "note": "Not scraped.",
+        "spark": "",
+        "forecast_days": None,
+        "window_seconds": window,
+        "points": 0,
+    }
+    if not isinstance(result, dict) or result.get("error"):
+        return base
+    raw_values = list(result.get("values") or [])
+    raw_times = list(result.get("times") or [])
+    values: list[float] = []
+    times: list[float] = []
+    for index, raw in enumerate(raw_values):
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if value != value or value in {float("inf"), float("-inf")}:
+            continue
+        values.append(value)
+        if index < len(raw_times):
+            try:
+                times.append(float(raw_times[index]))
+            except (TypeError, ValueError):
+                pass
+    if len(times) != len(values):
+        times = []
+    if not values:
+        return base
+    if len(values) < 2:
+        base.update(state="thin", note="Not enough history for a forecast.", points=len(values))
+        return base
+    forecast = None
+    if allow_forecast and unit == "percent" and len(times) >= 2:
+        forecast = forecast_days_to_full(times, values)
+    if forecast is None:
+        note = "30-day history"
+        state = "spark"
+    elif forecast == 0:
+        note = "Full now"
+        state = "forecast"
+    else:
+        note = f"~{forecast} days to full"
+        state = "forecast"
+    return {
+        "label": label,
+        "state": state,
+        "note": note,
+        "spark": _spark(values),
+        "forecast_days": forecast,
+        "window_seconds": window,
+        "points": len(values),
+    }
+
+
+def _asset_query_dict(asset: Any) -> dict[str, Any]:
+    return {
+        "asset_id": str(getattr(asset, "asset_id", "") or ""),
+        "hostname": str(getattr(asset, "hostname", "") or ""),
+        "ip": str(getattr(asset, "ip", "") or ""),
+        "type": str(getattr(asset, "type", "") or ""),
+        "monitoring_profile": str(getattr(asset, "monitoring_profile", "") or ""),
+        "scrape_address": str(getattr(asset, "scrape_address", "") or ""),
+        "snmp_port": getattr(asset, "snmp_port", None),
+    }
+
+
+def capacity_panel(
+    asset: Any,
+    *,
+    range_fn: Callable[[str, float, float], dict[str, Any]] | None = None,
+    now: float | None = None,
+) -> dict[str, Any]:
+    """~30 days of disk % and/or interface receive. No forecast without two climbing points."""
+    from rca.collector import promql_queries_for
+
+    end = float(time.time() if now is None else now)
+    start = end - CAPACITY_SECONDS
+    window = end - start
+    packed = promql_queries_for(_asset_query_dict(asset))
+
+    def live(expr: str, span_start: float, span_end: float) -> dict[str, Any]:
+        from app.services import query_prometheus_range
+
+        return query_prometheus_range(expr, start=span_start, end=span_end, step="1h", timeout=3.0)
+
+    fetch = range_fn or live
+    specs = (
+        ("disk_percent", "Disk", True),
+        ("net_rx", "Interface receive", False),
+    )
+    rows: list[dict[str, Any]] = []
+    for key, label, allow_forecast in specs:
+        expr, unit = packed.get(key, ("", ""))
+        if not expr:
+            continue
+        try:
+            sampled = fetch(expr, start, end)
+        except Exception as exc:
+            sampled = {"error": str(exc), "values": []}
+        rows.append(_capacity_row(label, sampled, unit=unit, allow_forecast=allow_forecast, window=window))
+    if range_fn is None:
+        rows = _fill_disk_from_zabbix(asset, rows, window=window, now=end)
+    if not rows:
+        rows.append(
+            {
+                "label": "Capacity",
+                "state": "not_scraped",
+                "note": "Not scraped.",
+                "spark": "",
+                "forecast_days": None,
+                "window_seconds": window,
+                "points": 0,
+            }
+        )
+    return {"rows": rows, "window_seconds": window, "start": start, "end": end}
+
+
+def _fill_disk_from_zabbix(asset: Any, rows: list[dict[str, Any]], *, window: float, now: float) -> list[dict[str, Any]]:
+    """Prometheus first. Zabbix disk trends (~30 days) only when that row was not scraped and Zabbix is on."""
+    disk = next((row for row in rows if row.get("label") == "Disk"), None)
+    hostid = str(getattr(asset, "zabbix_hostid", "") or "").strip()
+    if disk is None or disk.get("state") != "not_scraped" or not hostid or not settings.zabbix_enabled:
+        return rows
+    try:
+        from app.zabbix import host_trends
+
+        result = host_trends(
+            settings.zabbix_url,
+            settings.zabbix_token,
+            hostid,
+            timeout=settings.zabbix_timeout,
+            hours=30 * 24,
+            now=now,
+        )
+    except Exception:
+        return rows
+    tile = (result.get("tiles") or {}).get("disk_percent") or {}
+    series = list(tile.get("series") or [])
+    times = list(tile.get("times") or [])
+    if not series:
+        return rows
+    replacement = _capacity_row(
+        "Disk",
+        {"values": series, "times": times},
+        unit="percent",
+        allow_forecast=True,
+        window=window,
+    )
+    return [replacement if row.get("label") == "Disk" else row for row in rows]

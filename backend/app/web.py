@@ -21,6 +21,7 @@ from app.asset_alarms import alarms_from_form, saved_alarm_hostnames
 from app.dc_noc import (
     WEEKDAYS,
     add_oncall_slot,
+    capacity_panel,
     current_oncall,
     in_maintenance,
     incident_syslog_lines,
@@ -1449,6 +1450,7 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         support_labels=dict(SUPPORT_CHOICES),
         snmp_auth=auth_status(item),
         snmp_view=snmp_surface(item),
+        capacity=capacity_panel(item),
     )
 
 

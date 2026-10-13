@@ -233,7 +233,7 @@
 </div>
 
 <aside class="asset-detail-side asset-detail-metrics asset-detail-graphs asset-detail-col-2-3" data-asset-metrics="{{ asset.asset_id }}" data-asset-graphs data-asset-graph-grid data-asset="{{ asset.asset_id }}" data-host="{{ asset.hostname }}">
-  <div class="muted dash-graph-caption asset-chart-caption" data-dash-graph-caption><span class="label-line">Last hour {% with %}{% set tip %}This asset, not the incident window. Hover a point for the host, time, and value. Not scraped = not in Prometheus. No samples yet = the hour is empty. No placeholder wave.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></div>
+  <div class="muted dash-graph-caption asset-chart-caption" data-dash-graph-caption><span class="label-line">Last hour {% with %}{% set tip %}This asset, not the incident window. Hover a point for the host, time, and value. Not scraped = not in Prometheus. No samples yet = the hour is empty. No placeholder wave. The 30-day note under the charts is disk % and interface receive when those series exist — a “days to full” line only when the disk slope is usable.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></div>
   <div class="muted dash-graph-empty" data-dash-graph-empty hidden></div>
   <div class="asset-chart-grid{% if metrics.class in ['network', 'unknown'] %} is-sparse{% endif %}" data-dash-graph-list>
     {% if metrics.class in ['network', 'unknown'] %}
@@ -247,6 +247,16 @@
       {{ host_chart('up', 'Uptime', metrics.tiles) }}
     {% endif %}
   </div>
+  <section class="capacity-panel" data-capacity data-capacity-window="{{ capacity.window_seconds }}">
+    <h2>30-day capacity</h2>
+    {% for row in capacity.rows %}
+    <p data-capacity-row="{{ row.label }}" data-capacity-state="{{ row.state }}" data-capacity-points="{{ row.points }}">
+      <strong>{{ row.label }}</strong>
+      {% if row.spark %}<svg class="capacity-spark" viewBox="0 0 80 22" aria-hidden="true"><polyline points="{{ row.spark }}"></polyline></svg>{% endif %}
+      <span class="muted">{{ row.note }}</span>
+    </p>
+    {% endfor %}
+  </section>
 </aside>
 </div>
 {% endblock %}
