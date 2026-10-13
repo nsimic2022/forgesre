@@ -24,6 +24,8 @@ EXTRA_FIELDS: tuple[tuple[str, str, int], ...] = (
     ("customer", "Customer / domain", 255),
     ("site", "Site / DC / room", 255),
     ("vlan", "VLAN", 64),
+    ("row", "Row", 64),
+    ("rack", "Rack", 64),
     ("backup_name", "Backup on-call name", 255),
     ("backup_phone", "Backup on-call phone", 64),
     ("backup_email", "Backup on-call email", 255),

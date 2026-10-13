@@ -1398,6 +1398,8 @@ def asset_search_blob(asset: Asset) -> str:
             asset_extra(asset, "site"),
             asset_extra(asset, "customer"),
             asset_extra(asset, "vlan"),
+            asset_extra(asset, "row"),
+            asset_extra(asset, "rack"),
         ]
     ).lower()
 
@@ -1517,6 +1519,8 @@ def asset_filter_options(rows: list[Asset]) -> dict[str, list[str]]:
         "sites": distinct(asset_extra(row, "site") for row in rows),
         "vlans": sorted(distinct(asset_extra(row, "vlan") for row in rows), key=_vlan_sort_key),
         "customers": distinct(asset_extra(row, "customer") for row in rows),
+        "rows": distinct(asset_extra(row, "row") for row in rows),
+        "racks": distinct(asset_extra(row, "rack") for row in rows),
     }
 
 
@@ -1533,6 +1537,8 @@ def assets_matching(
     vlan: str = "",
     hostname: str = "",
     ip: str = "",
+    row: str = "",
+    rack: str = "",
 ) -> list[Asset]:
     """Filter inventory by asset number, id, hostname, or IP (substring), optional status, flag, source, Zabbix agent,
     Type, and extras Site / VLAN / Customer (exact, case-insensitive). Hostname and IP are their own substring
@@ -1570,7 +1576,7 @@ def assets_matching(
     kind = (type or "").strip().lower()
     if kind:
         out = [row for row in out if (row.type or "").strip().lower() == kind]
-    for key, raw in (("site", site), ("vlan", vlan), ("customer", customer)):
+    for key, raw in (("site", site), ("vlan", vlan), ("customer", customer), ("row", row), ("rack", rack)):
         value = " ".join((raw or "").split()).lower()
         if value:
             out = [row for row in out if asset_extra(row, key).lower() == value]

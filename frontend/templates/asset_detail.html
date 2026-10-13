@@ -38,6 +38,8 @@
   <dt>Customer / domain</dt><dd class="extra-customer">{{ ex.customer or "—" }}</dd>
   <dt>Site / DC / room</dt><dd class="extra-site">{{ ex.site or "—" }}</dd>
   <dt>VLAN</dt><dd class="extra-vlan">{{ ex.vlan or "—" }}</dd>
+  <dt>Row</dt><dd class="extra-row">{{ ex.row or "—" }}</dd>
+  <dt>Rack</dt><dd class="extra-rack">{{ ex.rack or "—" }}</dd>
   <dt>Parent</dt><dd data-parent>{% if asset.parent %}<a href="/assets/{{ asset.parent.asset_id }}">{{ asset.parent.hostname }}</a>{% else %}—{% endif %}</dd>
   <dt>Notes</dt><dd>{% if asset.notes %}<span class="pre-wrap">{{ asset.notes }}</span>{% else %}—{% endif %}</dd>
 </dl>

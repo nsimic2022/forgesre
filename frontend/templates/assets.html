@@ -43,7 +43,7 @@
     {% endfor %}
     {% if source and source|lower not in source_filters|map('first') %}<option value="{{ source }}" selected>{{ source }}</option>{% endif %}
   </select>
-  {% for key, current, values, empty_label in [("site", site, filter_options.sites, "Site"), ("vlan", vlan, filter_options.vlans, "VLAN"), ("customer", customer, filter_options.customers, "Customer")] %}
+  {% for key, current, values, empty_label in [("site", site, filter_options.sites, "Site"), ("vlan", vlan, filter_options.vlans, "VLAN"), ("customer", customer, filter_options.customers, "Customer"), ("row", row, filter_options.rows, "Row"), ("rack", rack, filter_options.racks, "Rack")] %}
   {% set picked = current|lower %}
   <select name="{{ key }}" class="nice-select filter-select" aria-label="{{ 'VLAN' if key == 'vlan' else key|capitalize }}" title="{{ 'VLAN' if key == 'vlan' else key|capitalize }}" data-asset-filter="{{ key }}">
     <option value=""{% if not picked %} selected{% endif %}>{{ empty_label }}</option>
@@ -58,11 +58,11 @@
   {% if can('write_assets') %}
   <a class="button" href="/assets/verify">Verify all</a>
   {% endif %}
-  {% if q or hostname or ip or status or flag or source or agent or asset_type or site or vlan or customer %}<a class="muted list-reset" href="/assets">Reset</a>{% endif %}
+  {% if q or hostname or ip or status or flag or source or agent or asset_type or site or vlan or customer or row or rack %}<a class="muted list-reset" href="/assets">Reset</a>{% endif %}
 </form>
 <nav class="filter-chips" aria-label="Asset filters">
   {% for key, value, label in [("", "", "All"), ("status", "critical", "Critical"), ("status", "warning", "Warning"), ("flag", "unreachable", "Offline")] %}
-  {% set on = (not key and not status and not flag and not source and not agent and not asset_type and not site and not vlan and not customer and not hostname and not ip) or (key == "status" and status == value) or (key == "flag" and flag == value) %}
+  {% set on = (not key and not status and not flag and not source and not agent and not asset_type and not site and not vlan and not customer and not row and not rack and not hostname and not ip) or (key == "status" and status == value) or (key == "flag" and flag == value) %}
   <a class="chip{% if on %} on{% endif %}" href="/assets{% if key %}?{{ key }}={{ value }}{% endif %}{% if q %}{{ '&' if key else '?' }}q={{ q }}{% endif %}{% set size_tail = pager_keep(pager, page=False) %}{% if size_tail %}{{ size_tail if (key or q) else '?' ~ size_tail[1:] }}{% endif %}">{{ label }}</a>
   {% endfor %}
   {% if zabbix_filters %}

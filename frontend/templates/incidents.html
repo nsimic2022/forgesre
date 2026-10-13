@@ -24,7 +24,7 @@
       <option value="warning" {% if severity_group == "warning" %}selected{% endif %}>Warning</option>
     </select>
   </label>
-  {% for key, label, current, values, all_label in [("site", "Site", site, filter_options.sites, "All sites"), ("customer", "Customer", customer, filter_options.customers, "All customers")] %}
+  {% for key, label, current, values, all_label in [("site", "Site", site, filter_options.sites, "All sites"), ("customer", "Customer", customer, filter_options.customers, "All customers"), ("row", "Row", row, filter_options.rows, "All rows"), ("rack", "Rack", rack, filter_options.racks, "All racks")] %}
   {% if values or current %}
   {% set picked = current|lower %}
   <label>{{ label }}
