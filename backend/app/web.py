@@ -18,7 +18,17 @@ from app.asset_probe import reachability_snapshot
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.asset_alarms import alarms_from_form, saved_alarm_hostnames
-from app.dc_noc import in_maintenance, incident_syslog_lines, interface_facts, maintenance_label, snmp_surface
+from app.dc_noc import (
+    WEEKDAYS,
+    add_oncall_slot,
+    current_oncall,
+    in_maintenance,
+    incident_syslog_lines,
+    interface_facts,
+    list_oncall_slots,
+    maintenance_label,
+    snmp_surface,
+)
 from app.asset_extras import (
     EXTRA_FIELDS,
     SUPPORT_CHOICES,
@@ -686,6 +696,7 @@ def dashboard(
         resource_crit=RESOURCE_CRIT_PERCENT,
         recent=recent,
         pager=pager,
+        oncall=current_oncall(db),
     )
 
 
@@ -2349,6 +2360,9 @@ def _escalation_view(
         error=error,
         usage=usage,
         default_slug=DEFAULT_POLICY_SLUG,
+        oncall_slots=list_oncall_slots(db),
+        oncall=current_oncall(db),
+        weekdays=WEEKDAYS,
     )
     response.status_code = status_code
     return response
@@ -2474,6 +2488,47 @@ def escalation_delete(
         object_id=slug,
         data={"playrules_moved": int(moved or 0), "to": fallback.slug if fallback else ""},
     )
+    db.commit()
+    return RedirectResponse("/escalation", status_code=302)
+
+
+@router.post("/escalation/oncall")
+def escalation_oncall_add(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    weekday: str = Form("0"),
+    start: str = Form(""),
+    end: str = Form(""),
+    name: str = Form(""),
+    email: str = Form(""),
+    phone: str = Form(""),
+):
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    try:
+        add_oncall_slot(db, weekday=weekday, start=start, end=end, name=name, email=email, phone=phone)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "oncall.add", actor=user.email, object_type="oncall", object_id=email, data={"weekday": weekday, "name": name})
+    db.commit()
+    return RedirectResponse("/escalation", status_code=302)
+
+
+@router.post("/escalation/oncall/{slot_id}/delete")
+def escalation_oncall_delete(
+    slot_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    from app.models import OncallSlot
+
+    row = db.get(OncallSlot, slot_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    db.delete(row)
+    audit(db, "oncall.remove", actor=user.email, object_type="oncall", object_id=str(slot_id))
     db.commit()
     return RedirectResponse("/escalation", status_code=302)
 

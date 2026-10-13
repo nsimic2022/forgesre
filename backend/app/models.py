@@ -402,6 +402,21 @@ class Job(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class OncallSlot(Base):
+    """Weekly on-call window. weekday is Monday=0 … Sunday=6, minutes are local to the appliance timezone."""
+
+    __tablename__ = "oncall_slots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    weekday: Mapped[int] = mapped_column(Integer, index=True)
+    start_minute: Mapped[int] = mapped_column(Integer, default=0)
+    end_minute: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(String(255), default="")
+    email: Mapped[str] = mapped_column(String(255), default="")
+    phone: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class MaintenanceWindow(Base):
     __tablename__ = "maintenance_windows"
 

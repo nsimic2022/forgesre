@@ -14,7 +14,9 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from app.models import Asset, Incident, MaintenanceWindow, utcnow
+from app.models import Asset, Incident, MaintenanceWindow, OncallSlot, utcnow
+
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 from app.settings import settings
 
 MAINT_FROM = "maint_from"
@@ -345,6 +347,110 @@ def snmp_surface(asset: Any, *, vector_fn: Callable[[str], dict[str, Any]] | Non
     if not rows and not uptime:
         return {"show": True, "state": "not_scraped", "interfaces": [], "uptime": "", "note": "Not scraped."}
     return {"show": True, "state": "ok", "interfaces": rows, "uptime": uptime, "note": ""}
+
+
+def _clock_minutes(text: str) -> int | None:
+    raw = str(text or "").strip()
+    if not raw or ":" not in raw:
+        return None
+    hour_text, minute_text = raw.split(":", 1)
+    try:
+        hour = int(hour_text)
+        minute = int(minute_text[:2])
+    except ValueError:
+        return None
+    if hour == 24 and minute == 0:
+        return 24 * 60
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        return None
+    return hour * 60 + minute
+
+
+def _hhmm(minute: int) -> str:
+    minute = max(0, min(int(minute), 24 * 60))
+    return f"{minute // 60:02d}:{minute % 60:02d}"
+
+
+def add_oncall_slot(
+    db: Session,
+    *,
+    weekday: str | int,
+    start: str,
+    end: str,
+    name: str,
+    email: str,
+    phone: str = "",
+) -> OncallSlot:
+    """One weekday window. Times are appliance-local. Until is inclusive and must be after from."""
+    try:
+        day = int(weekday)
+    except (TypeError, ValueError):
+        day = -1
+    if day not in range(7):
+        raise ValueError("On-call needs a weekday.")
+    start_minute = _clock_minutes(start)
+    end_minute = _clock_minutes(end)
+    if start_minute is None or end_minute is None:
+        raise ValueError("On-call from and until must be times like 08:00.")
+    if end_minute <= start_minute:
+        raise ValueError("On-call until must be after from, on the same weekday.")
+    person = " ".join(str(name or "").split())
+    if not person:
+        raise ValueError("On-call needs a name.")
+    address = str(email or "").strip()
+    local, _, domain = address.partition("@")
+    if not local or "." not in domain:
+        raise ValueError("On-call needs an email address.")
+    row = OncallSlot(
+        weekday=day,
+        start_minute=start_minute,
+        end_minute=end_minute,
+        name=person[:255],
+        email=address[:255],
+        phone=" ".join(str(phone or "").split())[:64],
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def oncall_slot_view(row: OncallSlot) -> dict[str, Any]:
+    day = WEEKDAYS[row.weekday] if row.weekday in range(7) else "?"
+    return {
+        "id": row.id,
+        "weekday": row.weekday,
+        "day": day,
+        "start": _hhmm(row.start_minute),
+        "end": _hhmm(row.end_minute),
+        "name": row.name,
+        "email": row.email,
+        "phone": row.phone or "",
+        "window": f"{day} {_hhmm(row.start_minute)}–{_hhmm(row.end_minute)}",
+    }
+
+
+def list_oncall_slots(db: Session) -> list[dict[str, Any]]:
+    rows = db.query(OncallSlot).order_by(OncallSlot.weekday, OncallSlot.start_minute, OncallSlot.id).all()
+    return [oncall_slot_view(row) for row in rows]
+
+
+def current_oncall(db: Session, at: datetime | None = None) -> dict[str, Any] | None:
+    """Whoever covers `at` in the appliance timezone. Inclusive from and until. No roster → None."""
+    moment = at or utcnow()
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    local = moment.astimezone(_zone())
+    minute = local.hour * 60 + local.minute
+    rows = (
+        db.query(OncallSlot)
+        .filter(OncallSlot.weekday == local.weekday())
+        .order_by(OncallSlot.start_minute, OncallSlot.id)
+        .all()
+    )
+    for row in rows:
+        if int(row.start_minute) <= minute <= int(row.end_minute):
+            return oncall_slot_view(row)
+    return None
 
 
 SYSLOG_LIMIT = 20

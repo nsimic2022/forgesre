@@ -69,6 +69,31 @@ LOOKUP_INDEXES = (
 )
 
 
+def _ensure_oncall_slots(conn: Connection) -> None:
+    dialect = conn.engine.dialect.name
+    if dialect == "sqlite":
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS oncall_slots ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "weekday INTEGER, start_minute INTEGER DEFAULT 0, end_minute INTEGER DEFAULT 0, "
+                "name VARCHAR(255) DEFAULT '', email VARCHAR(255) DEFAULT '', "
+                "phone VARCHAR(64) DEFAULT '', created_at DATETIME)"
+            )
+        )
+    else:
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS oncall_slots ("
+                "id SERIAL PRIMARY KEY, "
+                "weekday INTEGER, start_minute INTEGER DEFAULT 0, end_minute INTEGER DEFAULT 0, "
+                "name VARCHAR(255) DEFAULT '', email VARCHAR(255) DEFAULT '', "
+                "phone VARCHAR(64) DEFAULT '', created_at TIMESTAMPTZ)"
+            )
+        )
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_oncall_slots_weekday ON oncall_slots (weekday)"))
+
+
 def _ensure_lookup_indexes(conn: Connection) -> None:
     inspector = inspect(conn)
     tables = set(inspector.get_table_names())
@@ -216,6 +241,7 @@ def migrate(engine: Engine) -> None:
                 conn.execute(text("ALTER TABLE incidents ALTER COLUMN number TYPE VARCHAR(64)"))
         for sql in statements:
             conn.execute(text(sql))
+        _ensure_oncall_slots(conn)
         _backfill_asset_numbers(conn)
         _ensure_lookup_indexes(conn)
         if "evidence" in tables:

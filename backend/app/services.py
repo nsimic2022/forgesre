@@ -23,6 +23,7 @@ from app.models import (
     MaintenanceWindow,
     MailContact,
     Notification,
+    OncallSlot,
     Playbook,
     Playrule,
     ScheduledReport,
@@ -1537,11 +1538,18 @@ NO_RECIPIENT_STATUS = "no-recipient"
 NO_RECIPIENT_ERROR = "No recipient: asset has no owner email and the escalation step names a role, not an address. Not sent."
 
 
-def escalation_recipient(incident: Incident, step_target: str) -> str:
-    """Explicit address on the step wins; else the asset owner email; else empty (do not invent role@…)."""
+def escalation_recipient(incident: Incident, step_target: str, db: Session | None = None, at: datetime | None = None) -> str:
+    """Explicit address on the step wins. Role oncall is whoever is on the roster now. Other roles use the asset owner email."""
     explicit = _valid_email(step_target) if "@" in (step_target or "") else ""
     if explicit:
         return explicit
+    if (step_target or "").strip().lower() == "oncall":
+        if db is None:
+            return ""
+        from app.dc_noc import current_oncall
+
+        person = current_oncall(db, at or utcnow())
+        return _valid_email(str((person or {}).get("email") or ""))
     asset = getattr(incident, "asset", None)
     return _valid_email((getattr(asset, "owner_email", "") or "") if asset is not None else "")
 
@@ -1568,7 +1576,7 @@ def ensure_notification(
     policy_role = (target or mapped.get(step_key, "team")).strip() or "team"
     if incident.asset is None and incident.asset_id:
         incident.asset = db.get(Asset, incident.asset_id)
-    recipient = escalation_recipient(incident, policy_role)
+    recipient = escalation_recipient(incident, policy_role, db=db)
     stored_target = recipient or policy_role
     subject = incident_alarm_subject(incident)
     body = build_escalation_body(incident, step_key, policy_role)
@@ -1687,6 +1695,8 @@ def list_mail_addresses(db: Session) -> list[dict[str, str]]:
     for row in db.query(AssetLadderStep).order_by(AssetLadderStep.id):
         for email in row.emails or []:
             add(str(email or ""), f"L{row.level}", "ladder")
+    for row in db.query(OncallSlot).order_by(OncallSlot.id):
+        add(row.email, row.name, "oncall")
     for user in db.query(User).order_by(User.email):
         add(user.email, user.name, "user")
     return sorted(seen.values(), key=lambda item: item["email"].lower())
@@ -2303,7 +2313,7 @@ def process_escalations(db: Session) -> None:
 # Escalation only sends email (ensure_notification). These words look like a channel
 # choice; accepting them would store a step that claims a channel and then mails anyway.
 NON_EMAIL_CHANNELS = frozenset({"webhook", "sms", "slack", "pagerduty", "telegram"})
-EMAIL_ONLY_HINT = "Escalation sends email only: write minutes then a role (team, team-lead, engineer) or an email address."
+EMAIL_ONLY_HINT = "Escalation sends email only: write minutes then a role (team, team-lead, engineer, oncall) or an email address. oncall is whoever is on the roster now."
 
 
 def policy_step_problems(text: str) -> list[str]:

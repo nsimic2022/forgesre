@@ -48,6 +48,7 @@
   </div>
 </dialog>
 {% endif %}
+<p class="oncall-now" data-oncall>{% if oncall %}On call <strong>{{ oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}On call <span class="muted">no one scheduled</span>{% endif %}</p>
 <div class="dash-top">
 <section class="dash-tiles-incidents">
   <div class="tile-group{% if incident_heat %} heat-{{ incident_heat }}{% endif %}" data-incident-tile data-incident-heat="{{ incident_heat or 'calm' }}">
