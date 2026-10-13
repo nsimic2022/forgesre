@@ -135,7 +135,7 @@
 </section>
 
 <section class="card" id="reports">
-  <h2>Scheduled reports {% with %}{% set tip %}Cron-like, inside Core. Pick assets and an interval, or use Send now for a one-shot mail (does not wait 6 hours). ForgeSRE snapshots CPU/disk/up from Prometheus (or demo gauges) even when there is no incident, then emails the text. Choose the recipient from the address book, or type a destination email. SMTP off stores the row as generated (not sent). This is not the incident escalation ladder. Enabled means the job fires at Next. Off keeps the row stored; the scheduler skips it. That is not Remove.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Scheduled reports {% with %}{% set tip %}Cron-like, inside Core. Pick assets and an interval, or use Send now for a one-shot mail (does not wait 6 hours). ForgeSRE snapshots CPU/disk/up from Prometheus (or demo gauges) even when there is no incident, then emails the text. Choose the recipient from the address book, or type a destination email. SMTP off stores the row as generated (not sent). This is not incident Escalation. Enabled means the job fires at Next. Off keeps the row stored; the scheduler skips it. That is not Remove.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <p class="muted">
     <strong>Enabled</strong> means the job fires at <strong>Next</strong>. Off keeps the row stored; the scheduler skips it. That is not Remove.
   </p>

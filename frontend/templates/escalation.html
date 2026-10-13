@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Default ladder · ForgeSRE{% endblock %}
+{% block title %}Default escalation · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Default ladder {% with %}{% set tip %}Global mail ladder used when an asset Ladder is empty. Same 30s loop as before, not a ticket system. Email is the only channel: there is no webhook, SMS or chat step. Seeded Default warning (0 / 15 / 30 min) is what new rules attach unless you pick another policy here. An asset with any Ladder level filled does not also use this page. Edit changes the ladder for incidents that open after Save. Remove moves its rules to Default warning. Acknowledge stops the ladder. SMTP off means the row stays generated — that is the lab outbox. Scheduled reports are a different mail path.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Default escalation {% with %}{% set tip %}Global escalation used when an asset Escalation is empty. Same 30s loop as before, not a ticket system. Email is the only channel: there is no webhook, SMS or chat step. Seeded Default warning (0 / 15 / 30 min) is what new rules attach unless you pick another policy here. An asset with any Escalation level filled does not also use this page. Edit changes escalation for incidents that open after Save. Remove moves its rules to Default warning. Acknowledge stops escalation. SMTP off means the row stays generated — that is the lab outbox. Scheduled reports are a different mail path.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <p class="page-lede">Each step is <em>minutes after the incident opened</em> and an email recipient. Acknowledge stops further steps.</p>
 <ul class="compact recipient-rules">
   <li><strong>Email address</strong> on the step (e.g. <code>30 oncall@dc.local</code>) — mail goes to that address.</li>
@@ -63,5 +63,5 @@
 </form>
 {% endif %}
 <h2>Generated notifications</h2>
-<p class="muted">The outbox is one table on <a href="/ops#mail">Email &amp; reports</a>. This page is the ladder only.</p>
+<p class="muted">The outbox is one table on <a href="/ops#mail">Email &amp; reports</a>. This page is escalation only.</p>
 {% endblock %}

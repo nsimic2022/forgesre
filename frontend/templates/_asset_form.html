@@ -49,53 +49,6 @@
   <label>Site / DC / room <input name="extra_site" value="{{ ex.site }}" placeholder="BG-DC1 · room 2 · rack 14"></label>
   <label><span class="label-line">VLAN {% with %}{% set tip %}Free text, e.g. 10 or 10.20. Shown on the asset page and as a filter on Assets. Inventory note only — ForgeSRE does not read or change switch VLANs.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <input name="extra_vlan" value="{{ ex.vlan }}" maxlength="64" placeholder="10 or 10.20"></label>
-  <label class="wide">Notes <input name="notes" value="{{ form.notes }}" placeholder="Anything else the next operator should know"></label>
-  </div>
-  </div>
-  </div>
-  <div class="asset-form-col" data-asset-contacts>
-  <div class="asset-form-block">
-  <h3 class="asset-form-block-head">Contacts {% with %}{% set tip %}Shown on the incident page under Who to call and in the mail. Default ladder role steps still mail Owner email only — the backup contact is for the human on shift. A filled Escalation on this asset mails those addresses instead.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-  <div class="form-grid asset-form-grid">
-  <input type="hidden" name="extras_present" value="1">
-  <label>Owner / team <input name="owner" value="{{ form.owner or 'platform' }}" placeholder="platform"></label>
-  <label>Contact name <input name="contact_name" value="{{ form.contact_name }}" placeholder="Who to call"></label>
-  <label><span class="label-line">Owner email {% with %}{% set tip %}Pick from the same address book as scheduled reports, or choose “Type a new email…”. Default ladder role steps (team, team-lead, engineer) mail this address only. Empty = the mail is recorded as no-recipient and not sent. A filled Escalation does not also mail this address.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
-    {{ email_pick("owner_email", form.owner_email, "oncall@dc.local", mail_addresses or [], fill_name="contact_name") }}</label>
-  <label>Owner phone <input name="owner_phone" value="{{ form.owner_phone }}" placeholder="+381-11-000-0000"></label>
-  <label>Backup on-call name <input name="extra_backup_name" value="{{ ex.backup_name }}" placeholder="Second person to call"></label>
-  <label>Backup on-call phone <input name="extra_backup_phone" value="{{ ex.backup_phone }}" placeholder="+381-11-000-0001"></label>
-  <label><span class="label-line">Backup on-call email {% with %}{% set tip %}For the human on shift. Escalation does not mail this address unless you add it on a level.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
-    {{ email_pick("extra_backup_email", ex.backup_email, "backup@dc.local", mail_addresses or [], fill_name="extra_backup_name") }}</label>
-  <label>Support hours <input name="extra_support_hours" value="{{ ex.support_hours }}" placeholder="24/7 or Mon–Fri 08–17"></label>
-  <label>Timezone <input name="extra_timezone" value="{{ ex.timezone }}" placeholder="Europe/Belgrade"></label>
-  <label class="wide">License / contract / SLA <input name="extra_contract" value="{{ ex.contract }}" placeholder="SLA gold · 4h response"></label>
-  </div>
-  </div>
-  </div>
-  <div class="asset-form-col" data-asset-support>
-  <div class="asset-form-block asset-support">
-  <h3 class="asset-form-block-head label-line">Support {% with %}{% set tip %}Whether a vendor or your own team will take a ticket for this host, and until when. Shown as a pill on Assets and on the incident Who to call. Expiring = the To date is within the lead time. This is a reminder only — it does not create an alert, incident, or Playrule, and nothing is written to NetBox.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-  <div class="form-grid asset-form-grid">
-  <label>Under support
-    <select name="extra_support" class="nice-select" data-support-kind>
-      <option value="" {% if not ex.support %}selected{% endif %}>Not set</option>
-      {% for value, label in support_choices %}
-      <option value="{{ value }}" {% if ex.support == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select></label>
-  <label>Lead time
-    <select name="extra_support_lead_days" class="nice-select">
-      {% set lead = (ex.support_lead_days or support_lead_default)|int %}
-      {% for days in support_lead_choices %}
-      <option value="{{ days }}" {% if lead == days %}selected{% endif %}>{{ days }} days</option>
-      {% endfor %}
-    </select></label>
-  <label class="wide" data-support-custom-row{% if ex.support != 'custom' %} hidden{% endif %}><span class="label-line">Custom support {% with %}{% set tip %}Required when Under support = Custom. Short text, e.g. “weekdays 8–16” or “best effort, vendor NBD”. Status shows Custom with this note unless the dates say Expiring / Out of support. Reminder only — no incident.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
-    <input name="extra_support_custom" value="{{ ex.support_custom }}" maxlength="120" placeholder="weekdays 8–16" data-support-custom{% if ex.support == 'custom' %} required{% endif %}></label>
-  <label>From <input name="extra_support_from" type="date" value="{{ ex.support_from }}"></label>
-  <label><span class="label-line">To {% with %}{% set tip %}Empty = no end date.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
-    <input name="extra_support_to" type="date" value="{{ ex.support_to }}"></label>
   </div>
   </div>
   </div>
@@ -159,6 +112,52 @@
     </div>
   </div>
   </div>
+  <div class="asset-form-col" data-asset-contacts>
+  <div class="asset-form-block">
+  <h3 class="asset-form-block-head">Contacts {% with %}{% set tip %}Shown on the incident page under Who to call and in the mail. Default escalation role steps still mail Owner email only — the backup contact is for the human on shift. A filled Escalation on this asset mails those addresses instead.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+  <div class="form-grid asset-form-grid">
+  <input type="hidden" name="extras_present" value="1">
+  <label>Owner / team <input name="owner" value="{{ form.owner or 'platform' }}" placeholder="platform"></label>
+  <label>Contact name <input name="contact_name" value="{{ form.contact_name }}" placeholder="Who to call"></label>
+  <label><span class="label-line">Owner email {% with %}{% set tip %}Pick from the same address book as scheduled reports, or choose “Type a new email…”. Default escalation role steps (team, team-lead, engineer) mail this address only. Empty = the mail is recorded as no-recipient and not sent. A filled Escalation does not also mail this address.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    {{ email_pick("owner_email", form.owner_email, "oncall@dc.local", mail_addresses or [], fill_name="contact_name") }}</label>
+  <label>Owner phone <input name="owner_phone" value="{{ form.owner_phone }}" placeholder="+381-11-000-0000"></label>
+  <label>Backup on-call name <input name="extra_backup_name" value="{{ ex.backup_name }}" placeholder="Second person to call"></label>
+  <label>Backup on-call phone <input name="extra_backup_phone" value="{{ ex.backup_phone }}" placeholder="+381-11-000-0001"></label>
+  <label><span class="label-line">Backup on-call email {% with %}{% set tip %}For the human on shift. Escalation does not mail this address unless you add it on a level.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    {{ email_pick("extra_backup_email", ex.backup_email, "backup@dc.local", mail_addresses or [], fill_name="extra_backup_name") }}</label>
+  <label>Support hours <input name="extra_support_hours" value="{{ ex.support_hours }}" placeholder="24/7 or Mon–Fri 08–17"></label>
+  <label>Timezone <input name="extra_timezone" value="{{ ex.timezone }}" placeholder="Europe/Belgrade"></label>
+  <label class="wide">License / contract / SLA <input name="extra_contract" value="{{ ex.contract }}" placeholder="SLA gold · 4h response"></label>
+  </div>
+  </div>
+  </div>
+  <div class="asset-form-col" data-asset-support>
+  <div class="asset-form-block asset-support">
+  <h3 class="asset-form-block-head label-line">Support {% with %}{% set tip %}Whether a vendor or your own team will take a ticket for this host, and until when. Shown as a pill on Assets and on the incident Who to call. Expiring = the To date is within the lead time. This is a reminder only — it does not create an alert, incident, or Playrule, and nothing is written to NetBox.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+  <div class="form-grid asset-form-grid">
+  <label>Under support
+    <select name="extra_support" class="nice-select" data-support-kind>
+      <option value="" {% if not ex.support %}selected{% endif %}>Not set</option>
+      {% for value, label in support_choices %}
+      <option value="{{ value }}" {% if ex.support == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select></label>
+  <label>Lead time
+    <select name="extra_support_lead_days" class="nice-select">
+      {% set lead = (ex.support_lead_days or support_lead_default)|int %}
+      {% for days in support_lead_choices %}
+      <option value="{{ days }}" {% if lead == days %}selected{% endif %}>{{ days }} days</option>
+      {% endfor %}
+    </select></label>
+  <label class="wide" data-support-custom-row{% if ex.support != 'custom' %} hidden{% endif %}><span class="label-line">Custom support {% with %}{% set tip %}Required when Under support = Custom. Short text, e.g. “weekdays 8–16” or “best effort, vendor NBD”. Status shows Custom with this note unless the dates say Expiring / Out of support. Reminder only — no incident.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="extra_support_custom" value="{{ ex.support_custom }}" maxlength="120" placeholder="weekdays 8–16" data-support-custom{% if ex.support == 'custom' %} required{% endif %}></label>
+  <label>From <input name="extra_support_from" type="date" value="{{ ex.support_from }}"></label>
+  <label><span class="label-line">To {% with %}{% set tip %}Empty = no end date.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="extra_support_to" type="date" value="{{ ex.support_to }}"></label>
+  </div>
+  </div>
+  </div>
   </div>
   <div class="asset-form-band asset-form-row-2">
   <div class="asset-form-col asset-form-right">
@@ -198,7 +197,7 @@
   </div>
   <div class="asset-form-col asset-form-custom">
   <div class="asset-form-block client-playrules" data-client-playrules>
-    <h3 class="asset-form-block-head label-line">Custom alarms {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first ON rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = Rules. OFF skips that rule on this host only — it stays in the list, and Save keeps it off. ON is the behavior above. Disabled rules on Rules are skipped. Mail follows Escalation when a level is filled; otherwise that rule's default ladder. It does not send both.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h3 class="asset-form-block-head label-line">Custom alarms {% with %}{% set tip %}When an alert with this alertname arrives for this asset, Core uses the first ON rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = Rules. OFF skips that rule on this host only — it stays in the list, and Save keeps it off. ON is the behavior above. Disabled rules on Rules are skipped. Mail follows Escalation when a level is filled; otherwise that rule's default escalation. It does not send both.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     <input type="hidden" name="playrules_present" value="1">
     <p class="muted alarm-limit">This does not create Prometheus thresholds. It records which rule this asset prefers when that alertname arrives. Matching is still by alertname only. OFF skips that rule for this host.</p>
     {% with picked=form.playrule_ids, off_ids=form.playrule_off %}{% include "_playrule_picker.html" %}{% endwith %}
@@ -214,10 +213,10 @@
   <div class="asset-form-band asset-form-row-3">
   <div class="asset-form-col asset-form-ladder">
   <div class="asset-form-block asset-ladder" data-asset-ladder>
-    <h3 class="asset-form-block-head label-line">Escalation {% with %}{% set tip %}Mail steps for incidents on this host, counted from incident start, until Acknowledged. Each level is minutes and one or more emails. Empty (every level off) uses the Default ladder. Any filled level is the only mail for this host — Rules still match the Playbook and do not add a second mail policy. Email only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h3 class="asset-form-block-head label-line">Escalation {% with %}{% set tip %}Mail steps for incidents on this host, counted from incident start, until Acknowledged. Each level is minutes and one or more emails. Empty (every level off) uses the Default escalation. Any filled level is the only mail for this host — Rules still match the Playbook and do not add a second mail policy. Email only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     <input type="hidden" name="ladder_present" value="1">
     <p class="muted alarm-limit">Off or blank is not mailed. Fast and slow are just different minutes.</p>
-    <p class="ladder-default"><a href="/escalation">Default ladder</a></p>
+    <p class="ladder-default"><a href="/escalation">Default escalation</a></p>
     <div class="ladder-levels">
     {% set minute_hint = {1: "0", 2: "15", 3: "30", 4: "60"} %}
     {% for slot in form.ladder %}

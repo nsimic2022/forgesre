@@ -311,7 +311,8 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     clock = css.split(".nav a.nav-clock {", 1)[1].split("}", 1)[0]
     assert "font-size: 2.4rem" in clock
     appliance = css.split(".appliance-clock {", 1)[1].split("}", 1)[0]
-    assert "5.4rem" in appliance
+    assert "padding:" in appliance and "14cqi" in appliance and "2.55rem" in appliance
+    assert "5.4rem" not in appliance
     assert "label.row-check" in css and "min-height: 2.5rem" in css
     assert "width: 1rem" in css
     assert 'class="row-check"' in home.text
@@ -327,5 +328,5 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert "height: 100%" in css.split(".admin-user-split > .admin-user-pane", 1)[1].split("}", 1)[0]
     assert "margin: 2.25rem 0 0.7rem" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-O" in base and "app.js?v=v09-O" in base
+    assert "app.css?v=v09-P" in base and "app.js?v=v09-P" in base
     db.close()
