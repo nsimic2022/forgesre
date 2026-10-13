@@ -3,7 +3,7 @@
 {% block title %}Dashboard · ForgeSRE{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Dashboard {% with %}{% set tip %}Infrastructure and incident counts for this appliance. The cubes on the ForgeSRE card mirror System Health (same checks as ./forgesre doctor); details and Fix live there. Journal is the internal process log, not Loki.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+  <h1>Dashboard {% with %}{% set tip %}Infrastructure and incident counts for this appliance. Full stack diagnostics live on System Health. The cubes on the ForgeSRE card mirror those checks (same as ./forgesre doctor); details and Fix live there. {% if can('read_play') %}The journal is on System Health — the internal process log, not Loki.{% else %}Journal is the internal process log, not Loki.{% endif %}{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
   {% if can('admin') %}
   <button type="button" id="demo-open" data-demo-open>Run demo</button>
   {% endif %}
@@ -87,7 +87,6 @@
   {% endif %}
 </aside>
 </div>
-<p class="muted">Full stack diagnostics live on <a href="/health-ui">System Health</a>.{% if can('read_play') %} The journal is on <a href="/health-ui#journal">System Health</a>.{% endif %}</p>
 <div class="dash-incidents" data-dash-incidents>
 <section class="dash-recent">
   {% if request.query_params.get('edit_note') == 'select-one' %}

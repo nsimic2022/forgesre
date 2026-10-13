@@ -113,6 +113,14 @@ def test_title_subtitles_live_only_in_info_tips():
     assert "Overall:" in _outside_tips(health)
 
     dash = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
+    dash_h1 = dash.split("</h1>", 1)[0]
+    assert dash_h1.count('include "_info_tip.html"') == 1
+    assert "Full stack diagnostics live on System Health" in dash_h1
+    assert "The journal is on System Health" in dash_h1
+    assert "the internal process log, not Loki" in dash_h1
+    assert "Full stack diagnostics live on" not in _outside_tips(dash)
+    assert "The journal is on System Health" not in _outside_tips(dash)
+    assert '<p class="muted">Full stack diagnostics' not in dash
     assert "Raises the demo CPU gauge to 94%" not in _outside_tips(dash)
     assert "Lab only. Every scenario opens a DEMO incident" not in _outside_tips(dash)
     assert "Does not stop a real scrape" not in _outside_tips(dash)
@@ -194,3 +202,15 @@ def test_rules_playbooks_and_escalation_render_one_title_tip():
     assert "does not invent" not in esc_after
     assert "recipient-rules" not in esc.text
     assert "/ops#mail" in esc.text
+
+    home = client.get("/")
+    assert home.status_code == 200
+    home_h1 = home.text.split("<h1>", 1)[1].split("</h1>", 1)[0]
+    assert home_h1.count('class="info-tip"') == 1
+    assert "Full stack diagnostics live on System Health" in home_h1
+    assert "The journal is on System Health" in home_h1
+    assert "the internal process log, not Loki" in home_h1
+    under_cubes = home.text.split("data-appliance-card", 1)[1].split("</aside>", 1)[1].split("data-dash-incidents", 1)[0]
+    assert "Full stack diagnostics" not in under_cubes
+    assert "The journal is on" not in under_cubes
+    assert "<p" not in under_cubes
