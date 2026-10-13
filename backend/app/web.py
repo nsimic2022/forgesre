@@ -18,6 +18,18 @@ from app.asset_probe import reachability_snapshot
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.asset_alarms import alarms_from_form, saved_alarm_hostnames
+from app.dc_noc import (
+    WEEKDAYS,
+    add_oncall_slot,
+    capacity_panel,
+    current_oncall,
+    in_maintenance,
+    incident_syslog_lines,
+    interface_facts,
+    list_oncall_slots,
+    maintenance_label,
+    snmp_surface,
+)
 from app.asset_extras import (
     EXTRA_FIELDS,
     SUPPORT_CHOICES,
@@ -160,11 +172,16 @@ def health_class(status: str) -> str:
 
 
 def incident_tone(status: str, severity: str = "") -> str:
-    """INC link color: green resolved, yellow in progress, red critical."""
+    """INC link color: green resolved, yellow in progress, red critical.
+
+    MAINT and SUPPRESSED stay yellow — they are visible and not paging.
+    """
     st = str(status or "").upper()
     sev = str(severity or "").upper()
     if st in {"RESOLVED", "CLOSED"}:
         return "inc-ok"
+    if st in {"MAINT", "SUPPRESSED"}:
+        return "inc-warn"
     if sev in {"CRITICAL", "CRIT", "FATAL", "EMERGENCY"}:
         return "inc-crit"
     return "inc-warn"
@@ -528,6 +545,9 @@ def ctx(request: Request, user: User | None, **extra):
         "asset_extra": asset_extra,
         "asset_ladder_cubes": asset_ladder_cubes,
         "incident_ladder_cubes": incident_ladder_cubes,
+        "in_maintenance": in_maintenance,
+        "maintenance_label": maintenance_label,
+        "interface_facts": interface_facts,
     }
     if user is not None:
         try:
@@ -677,6 +697,7 @@ def dashboard(
         resource_crit=RESOURCE_CRIT_PERCENT,
         recent=recent,
         pager=pager,
+        oncall=current_oncall(db),
     )
 
 
@@ -696,6 +717,8 @@ def assets_page(
     site: str = "",
     customer: str = "",
     vlan: str = "",
+    row: str = "",
+    rack: str = "",
     hostname: str = "",
     ip: str = "",
     page: str = "1",
@@ -717,6 +740,8 @@ def assets_page(
         vlan=vlan,
         hostname=hostname,
         ip=ip,
+        row=row,
+        rack=rack,
     )
     rows, pager = paginate(rows, page, size=per_page(request))
     filters = {
@@ -728,6 +753,8 @@ def assets_page(
         "site": site,
         "vlan": vlan,
         "customer": customer,
+        "row": row,
+        "rack": rack,
         "hostname": hostname,
         "ip": ip,
     }
@@ -773,6 +800,8 @@ def assets_page(
         site=site,
         vlan=vlan,
         customer=customer,
+        row=row,
+        rack=rack,
         hostname=hostname,
         ip=ip,
         filter_tail=filter_tail,
@@ -788,6 +817,11 @@ def assets_page(
         support_choices=SUPPORT_CHOICES,
         support_lead_choices=SUPPORT_LEAD_CHOICES,
         support_lead_default=SUPPORT_LEAD_DEFAULT,
+        parent_choices=[
+            {"asset_id": row.asset_id, "hostname": row.hostname}
+            for row in every
+            if form_mode != "edit" or selected is None or row.id != selected.id
+        ],
         snmp_versions=SNMP_VERSIONS,
         snmp_v3_levels=V3_LEVELS,
         snmp_auth_protocols=AUTH_PROTOCOLS,
@@ -887,6 +921,8 @@ def asset_create(
     extra_customer: str = Form(""),
     extra_site: str = Form(""),
     extra_vlan: str = Form(""),
+    extra_row: str = Form(""),
+    extra_rack: str = Form(""),
     extra_backup_name: str = Form(""),
     extra_backup_phone: str = Form(""),
     extra_backup_email: str = Form(""),
@@ -899,6 +935,9 @@ def asset_create(
     extra_support_from: str = Form(""),
     extra_support_to: str = Form(""),
     extra_support_lead_days: str = Form(""),
+    extra_maint_from: str = Form(""),
+    extra_maint_until: str = Form(""),
+    parent_asset_id: str = Form(""),
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
     playrule_add: str = Form(""),
@@ -941,6 +980,8 @@ def asset_create(
         customer=extra_customer,
         site=extra_site,
         vlan=extra_vlan,
+        row=extra_row,
+        rack=extra_rack,
         backup_name=extra_backup_name,
         backup_phone=extra_backup_phone,
         backup_email=_picked_email(extra_backup_email_pick, extra_backup_email),
@@ -953,6 +994,8 @@ def asset_create(
         support_from=extra_support_from,
         support_to=extra_support_to,
         support_lead_days=extra_support_lead_days,
+        maint_from=extra_maint_from,
+        maint_until=extra_maint_until,
     )
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
     posted_off = playrule_off_from_form(playrule_switches, playrule_ids, playrule_on)
@@ -1002,6 +1045,7 @@ def asset_create(
             snmp_port=snmp_port,
             snmp=posted_snmp,
             ladder=posted_ladder,
+            parent_asset_id=parent_asset_id,
         )
     except ValueError as exc:
         if cloned_from:
@@ -1417,6 +1461,8 @@ def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db),
         ex=form_extras(item),
         support_labels=dict(SUPPORT_CHOICES),
         snmp_auth=auth_status(item),
+        snmp_view=snmp_surface(item),
+        capacity=capacity_panel(item),
     )
 
 
@@ -1505,6 +1551,8 @@ def asset_update(
     extra_customer: str = Form(""),
     extra_site: str = Form(""),
     extra_vlan: str = Form(""),
+    extra_row: str = Form(""),
+    extra_rack: str = Form(""),
     extra_backup_name: str = Form(""),
     extra_backup_phone: str = Form(""),
     extra_backup_email: str = Form(""),
@@ -1517,6 +1565,9 @@ def asset_update(
     extra_support_from: str = Form(""),
     extra_support_to: str = Form(""),
     extra_support_lead_days: str = Form(""),
+    extra_maint_from: str = Form(""),
+    extra_maint_until: str = Form(""),
+    parent_asset_id: str = Form(""),
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
     playrule_add: str = Form(""),
@@ -1561,6 +1612,8 @@ def asset_update(
         customer=extra_customer,
         site=extra_site,
         vlan=extra_vlan,
+        row=extra_row,
+        rack=extra_rack,
         backup_name=extra_backup_name,
         backup_phone=extra_backup_phone,
         backup_email=_picked_email(extra_backup_email_pick, extra_backup_email),
@@ -1573,6 +1626,8 @@ def asset_update(
         support_from=extra_support_from,
         support_to=extra_support_to,
         support_lead_days=extra_support_lead_days,
+        maint_from=extra_maint_from,
+        maint_until=extra_maint_until,
     )
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
     posted_off = playrule_off_from_form(playrule_switches, playrule_ids, playrule_on)
@@ -1600,29 +1655,33 @@ def asset_update(
         validate_ip_field(ip)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    update_asset(
-        db,
-        item,
-        hostname=hostname,
-        ip=ip,
-        type=type,
-        environment=environment,
-        owner=owner,
-        contact_name=contact_name,
-        owner_email=owner_email,
-        owner_phone=owner_phone,
-        notes=notes,
-        scrape_address=scrape_address,
-        actor=user.email,
-        snmp_prober=_snmp_answer,
-        alarms=posted_alarms,
-        extras=posted_extras,
-        playrule_ids=posted_playrules,
-        playrule_off=posted_off,
-        snmp_port=snmp_port if comms_present.strip() else None,
-        snmp=posted_snmp,
-        ladder=posted_ladder,
-    )
+    try:
+        update_asset(
+            db,
+            item,
+            hostname=hostname,
+            ip=ip,
+            type=type,
+            environment=environment,
+            owner=owner,
+            contact_name=contact_name,
+            owner_email=owner_email,
+            owner_phone=owner_phone,
+            notes=notes,
+            scrape_address=scrape_address,
+            actor=user.email,
+            snmp_prober=_snmp_answer,
+            alarms=posted_alarms,
+            extras=posted_extras,
+            playrule_ids=posted_playrules,
+            playrule_off=posted_off,
+            snmp_port=snmp_port if comms_present.strip() else None,
+            snmp=posted_snmp,
+            ladder=posted_ladder,
+            parent_asset_id=parent_asset_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     notice = getattr(item, "_detect_message", "") or ""
     suffix = f"?notice={quote(notice)}" if notice else ""
     return RedirectResponse(f"/assets/{asset_id}{suffix}", status_code=302)
@@ -1680,6 +1739,8 @@ def incidents_page(
     started_to: str = Query("", alias="to"),
     site: str = "",
     customer: str = "",
+    row: str = "",
+    rack: str = "",
     q: str = "",
     page: str = "1",
 ):
@@ -1693,6 +1754,8 @@ def incidents_page(
         started_to=started_to,
         site=site,
         customer=customer,
+        dc_row=row,
+        rack=rack,
         q=q,
     )
     size = per_page(request)
@@ -1713,6 +1776,8 @@ def incidents_page(
         date_to=filters["date_to"],
         site=filters["site"],
         customer=filters["customer"],
+        row=filters["row"],
+        rack=filters["rack"],
         q=filters["q"],
         filter_options=asset_filter_options(db.query(Asset).all()),
         pager=pager,
@@ -1730,6 +1795,8 @@ _HISTORY_QUERY_KEYS = (
     "to",
     "site",
     "customer",
+    "row",
+    "rack",
     "page",
     "per_page",
     "q",
@@ -1803,6 +1870,8 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
         started_to=q.get("to", ""),
         site=q.get("site", ""),
         customer=q.get("customer", ""),
+        dc_row=q.get("row", ""),
+        rack=q.get("rack", ""),
         q=q.get("q", ""),
     )
     evidence, evidence_pager = paginate(
@@ -1833,6 +1902,7 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
             evidence_rows=evidence,
             evidence_pager=evidence_pager,
             client_playrules=asset_playrules(db, item.asset),
+            syslog_lines=incident_syslog_lines(item),
             **ops_mail_ctx(db, user, item),
         )
 
@@ -2318,6 +2388,9 @@ def _escalation_view(
         error=error,
         usage=usage,
         default_slug=DEFAULT_POLICY_SLUG,
+        oncall_slots=list_oncall_slots(db),
+        oncall=current_oncall(db),
+        weekdays=WEEKDAYS,
     )
     response.status_code = status_code
     return response
@@ -2443,6 +2516,47 @@ def escalation_delete(
         object_id=slug,
         data={"playrules_moved": int(moved or 0), "to": fallback.slug if fallback else ""},
     )
+    db.commit()
+    return RedirectResponse("/escalation", status_code=302)
+
+
+@router.post("/escalation/oncall")
+def escalation_oncall_add(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    weekday: str = Form("0"),
+    start: str = Form(""),
+    end: str = Form(""),
+    name: str = Form(""),
+    email: str = Form(""),
+    phone: str = Form(""),
+):
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    try:
+        add_oncall_slot(db, weekday=weekday, start=start, end=end, name=name, email=email, phone=phone)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "oncall.add", actor=user.email, object_type="oncall", object_id=email, data={"weekday": weekday, "name": name})
+    db.commit()
+    return RedirectResponse("/escalation", status_code=302)
+
+
+@router.post("/escalation/oncall/{slot_id}/delete")
+def escalation_oncall_delete(
+    slot_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    from app.models import OncallSlot
+
+    row = db.get(OncallSlot, slot_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    db.delete(row)
+    audit(db, "oncall.remove", actor=user.email, object_type="oncall", object_id=str(slot_id))
     db.commit()
     return RedirectResponse("/escalation", status_code=302)
 

@@ -218,7 +218,7 @@ def test_search_combines_with_filters_and_reset_clears(seeded):
     assert _ids(_get(client, "q=nomatch-xyz&type=Switch")) == set()
     form = page.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
     assert form.count('<input name="q"') == 1
-    assert form.count("<select") == 5
+    assert form.count("<select") == 7
     assert 'type="hidden" name="source"' not in form
     assert '<a class="muted list-reset" href="/assets">Reset</a>' in form
     def filter_form(query: str) -> str:
@@ -249,6 +249,6 @@ def test_edit_link_keeps_filters(seeded):
 
 def test_v08_15_cache_bump_and_compact_select_css():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-S" in base and "app.js?v=v09-R" in base
+    assert "app.css?v=v09-U" in base and "app.js?v=v09-R" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".list-filters select.filter-select { width: auto;" in css

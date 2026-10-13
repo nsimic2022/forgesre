@@ -1744,6 +1744,7 @@ def _asset(item: Asset) -> dict[str, Any]:
         "extras": public_extras(getattr(item, "extras", None)),
         "playrule_ids": asset_playrule_ids(item),
         "playrule_off": muted_playrule_ids(item),
+        "parent_asset_id": item.parent.asset_id if getattr(item, "parent", None) is not None else "",
         "support_status": {key: value for key, value in support_status(item).items() if key in {"state", "label", "detail"}},
         "snmp": is_snmp_asset(item),
         "ping": reach["ping"],

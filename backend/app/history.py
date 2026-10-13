@@ -196,11 +196,27 @@ ACTIVE_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED")
 UNACKED_GROUP = "unacked"
 
 
-def asset_pks_by_extras(db: Session, *, site: str = "", customer: str = "") -> list[int]:
-    """Assets whose Site / Customer extras match exactly (case-insensitive), the same rule as the Assets filters."""
+def asset_pks_by_extras(
+    db: Session,
+    *,
+    site: str = "",
+    customer: str = "",
+    dc_row: str = "",
+    rack: str = "",
+) -> list[int]:
+    """Assets whose Site / Customer / Row / Rack extras match exactly (case-insensitive), the same rule as the Assets filters."""
     from app.inventory import assets_matching
 
-    return [row.id for row in assets_matching(db.query(Asset).all(), site=site, customer=customer)]
+    return [
+        item.id
+        for item in assets_matching(
+            db.query(Asset).all(),
+            site=site,
+            customer=customer,
+            row=dc_row,
+            rack=rack,
+        )
+    ]
 
 
 def incident_query(
@@ -217,6 +233,8 @@ def incident_query(
     unacked_only: bool = False,
     site: str = "",
     customer: str = "",
+    dc_row: str = "",
+    rack: str = "",
     q: str = "",
 ):
     """Single filter used by the Incidents list and the Dashboard tiles (tile count = rows behind the click).
@@ -225,8 +243,12 @@ def incident_query(
     ``q`` matches the incident number, title, or the host's id / hostname / IP.
     """
     query = db.query(Incident)
-    if (site or "").strip() or (customer or "").strip():
-        query = query.filter(Incident.asset_id.in_(asset_pks_by_extras(db, site=site, customer=customer)))
+    if (site or "").strip() or (customer or "").strip() or (dc_row or "").strip() or (rack or "").strip():
+        query = query.filter(
+            Incident.asset_id.in_(
+                asset_pks_by_extras(db, site=site, customer=customer, dc_row=dc_row, rack=rack)
+            )
+        )
     if since is not None:
         query = query.filter(Incident.started_at >= since)
     elif days is not None:
@@ -266,7 +288,7 @@ def incident_query(
     return query
 
 
-INCIDENT_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED", "RESOLVED", "CLOSED")
+INCIDENT_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED", "MAINT", "SUPPRESSED", "RESOLVED", "CLOSED")
 
 
 def incident_list_filters(
@@ -280,11 +302,13 @@ def incident_list_filters(
     started_to: str = "",
     site: str = "",
     customer: str = "",
+    dc_row: str = "",
+    rack: str = "",
     q: str = "",
 ) -> dict[str, Any]:
     """The /incidents filter from its query keys: incident_query kwargs, form state, and a canonical query string (empty for the default list).
 
-    Site / Customer are the asset extras (Site / DC / room, Customer / domain) of the incident's host.
+    Site / Customer / Row / Rack are the asset extras of the incident's host.
     ``q`` is the free-text search (host, problem title, or incident number).
     """
     status_raw = (status or "").strip()
@@ -331,6 +355,8 @@ def incident_list_filters(
             until = local_day_start(to_date + timedelta(days=1))
     site_value = " ".join((site or "").split())
     customer_value = " ".join((customer or "").split())
+    row_value = " ".join((dc_row or "").split())
+    rack_value = " ".join((rack or "").split())
     q_value = " ".join((q or "").split())
     keep: list[tuple[str, str]] = []
     if status_group != "all":
@@ -353,6 +379,10 @@ def incident_list_filters(
         keep.append(("site", site_value))
     if customer_value:
         keep.append(("customer", customer_value))
+    if row_value:
+        keep.append(("row", row_value))
+    if rack_value:
+        keep.append(("rack", rack_value))
     if q_value:
         keep.append(("q", q_value))
     return {
@@ -367,6 +397,8 @@ def incident_list_filters(
             "unacked_only": unacked_only,
             "site": site_value,
             "customer": customer_value,
+            "dc_row": row_value,
+            "rack": rack_value,
             "q": q_value,
         },
         "status_group": status_group,
@@ -377,6 +409,8 @@ def incident_list_filters(
         "date_to": to_date.isoformat() if active_window == "custom" and to_date else "",
         "site": site_value,
         "customer": customer_value,
+        "row": row_value,
+        "rack": rack_value,
         "q": q_value,
         "qs": urlencode(keep),
     }
@@ -454,6 +488,8 @@ def list_history(
     page: Any | None = None,
     site: str = "",
     customer: str = "",
+    dc_row: str = "",
+    rack: str = "",
     since: datetime | None = None,
     until: datetime | None = None,
     q: str = "",
@@ -472,6 +508,8 @@ def list_history(
         unacked_only=unacked_only,
         site=site,
         customer=customer,
+        dc_row=dc_row,
+        rack=rack,
         q=q,
     )
     number = (number or "").strip()

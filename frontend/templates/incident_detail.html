@@ -74,6 +74,26 @@
 </div>
 {% if incident.status|upper == "RESOLVED" %}
 <p class="muted">Resolved is not Closed. If the same alert fires again, ForgeSRE opens a new incident and links it here. Close when the work is finished.</p>
+{% elif incident.status|upper == "MAINT" %}
+<p class="banner" data-maint-incident>Maintenance — this incident is on the list and the mail ladder did not start. Standard-alarm mute is a different switch (it drops the alert). After the window, a new firing can email.</p>
+{% elif incident.status|upper == "SUPPRESSED" %}
+<p class="banner" data-parent-suppress>Suppressed by parent — this down alert is linked to the parent incident and did not start its own mail ladder. The parent still pages. After the parent clears, a new firing can email.</p>
+{% for step in incident.timeline or [] if step.id == 'parent' %}
+<p class="muted" data-parent-link>{{ step.detail }}</p>
+{% endfor %}
+{% endif %}
+
+{% set iface = interface_facts(incident) %}
+{% if iface.ifName or iface.ifIndex or iface.ifAlias or iface.ifDescr %}
+<section class="card" data-interface>
+  <h2>Interface {% with %}{% set tip %}From the alert labels (if_mib lookup: ifName, ifIndex, ifAlias). The hostname is still the asset. Empty labels mean this alert was not about one interface.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <dl class="kv">
+    {% if iface.ifName %}<dt>ifName</dt><dd data-if-name>{{ iface.ifName }}</dd>{% endif %}
+    {% if iface.ifIndex %}<dt>ifIndex</dt><dd data-if-index>{{ iface.ifIndex }}</dd>{% endif %}
+    {% if iface.ifAlias %}<dt>ifAlias</dt><dd data-if-alias>{{ iface.ifAlias }}</dd>{% endif %}
+    {% if iface.ifDescr %}<dt>ifDescr</dt><dd>{{ iface.ifDescr }}</dd>{% endif %}
+  </dl>
+</section>
 {% endif %}
 
 {% if incident.asset %}
@@ -126,6 +146,14 @@
     <label>Or new email <input name="new_email" type="email" placeholder="ops@dc.local"></label>
     <button type="submit">Send incident report</button>
   </form>
+</section>
+{% endif %}
+
+{% if syslog_lines %}
+<section class="card" data-syslog>
+  <h2>Syslog {% with %}{% set tip %}Up to 20 Loki lines for this asset from 30 minutes before the incident started until 30 minutes after. A real host is job=syslog, hostname then IP. The demo asset may use job=forgesre. No asset or no lines: this block is omitted. Appliance demo logs are not attached to a real host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <pre class="pre-wrap syslog-lines" data-syslog-lines>{% for line in syslog_lines %}{{ line }}
+{% endfor %}</pre>
 </section>
 {% endif %}
 

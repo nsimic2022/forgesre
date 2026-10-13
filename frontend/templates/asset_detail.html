@@ -38,6 +38,9 @@
   <dt>Customer / domain</dt><dd class="extra-customer">{{ ex.customer or "—" }}</dd>
   <dt>Site / DC / room</dt><dd class="extra-site">{{ ex.site or "—" }}</dd>
   <dt>VLAN</dt><dd class="extra-vlan">{{ ex.vlan or "—" }}</dd>
+  <dt>Row</dt><dd class="extra-row">{{ ex.row or "—" }}</dd>
+  <dt>Rack</dt><dd class="extra-rack">{{ ex.rack or "—" }}</dd>
+  <dt>Parent</dt><dd data-parent>{% if asset.parent %}<a href="/assets/{{ asset.parent.asset_id }}">{{ asset.parent.hostname }}</a>{% else %}—{% endif %}</dd>
   <dt>Notes</dt><dd>{% if asset.notes %}<span class="pre-wrap">{{ asset.notes }}</span>{% else %}—{% endif %}</dd>
 </dl>
 </section>
@@ -69,6 +72,8 @@
   <dt>Lead time</dt><dd class="extra-support_lead_days">{% if ex.support_lead_days %}{{ ex.support_lead_days }} days{% else %}—{% endif %}</dd>
   <dt>Status</dt>
   <dd><span class="pill support-pill {{ sup.tone }}" data-support-state="{{ sup.state }}">{{ sup.label }}</span> <span class="muted">{{ sup.detail }}</span></dd>
+  <dt>Maintenance</dt>
+  <dd data-maintenance>{% if in_maintenance(asset) %}<span class="pill warn" data-maint-badge>Maintenance</span> {{ maintenance_label(asset) }}{% elif maintenance_label(asset) %}{{ maintenance_label(asset) }} <span class="muted">not active now</span>{% else %}—{% endif %}</dd>
 </dl>
 {% if sup.warn %}
 <div class="support-warning" data-support-warning role="status" title="Reminder only — no alert or incident is opened."><strong>{{ sup.label }}</strong> · {{ sup.detail }}</div>
@@ -96,6 +101,7 @@
   <dd>
     {% if snmp_target %}
       Polled by snmp_exporter on UDP/{{ snmp_port }} (module if_mib). Prometheus job <code>forgesre-snmp</code>.
+      ifName, ifIndex, ifAlias, and sysUpTime show in the list below when those series exist. No extra vendor MIB was added.
     {% elif snmp_enabled and asset.scrape_address %}
       {% if 'windows' in (asset.type or '')|lower or 'windows' in (asset.monitoring_profile or '')|lower %}
       HTTP scrape of windows_exporter (typically :9182 /metrics), not SNMP.
@@ -121,6 +127,26 @@
     {% endif %}
     · exporter auth <code>{{ snmp_auth.effective }}</code>
     {% if snmp_auth.pending %}<span class="pill warn" data-snmp-auth-pending title="snmp.yml does not have {{ snmp_auth.desired }} yet">pending</span> <span class="muted">run <code>./forgesre snmp-auths</code> to write <code>{{ snmp_auth.desired }}</code></span>{% endif %}
+  </dd>
+  {% endif %}
+  {% if snmp_view.show %}
+  <dt>Interfaces</dt>
+  <dd data-snmp-interfaces data-snmp-state="{{ snmp_view.state }}">
+    {% if snmp_view.state == 'not_scraped' %}
+    <span class="muted">Not scraped.</span>
+    {% else %}
+    {% if snmp_view.uptime %}<div data-sys-uptime>Up {{ snmp_view.uptime }} <span class="muted">sysUpTime</span></div>{% endif %}
+    {% if snmp_view.interfaces %}
+    <table class="scan-list iface-table">
+      <thead><tr><th>ifName</th><th>ifIndex</th><th>ifAlias</th><th>State</th></tr></thead>
+      <tbody>
+      {% for row in snmp_view.interfaces %}
+        <tr><td>{{ row.ifName or "—" }}</td><td>{{ row.ifIndex or "—" }}</td><td>{{ row.ifAlias or "—" }}</td><td>{{ row.state or "—" }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% endif %}
   </dd>
   {% endif %}
 </dl>
@@ -210,7 +236,7 @@
 </div>
 
 <aside class="asset-detail-side asset-detail-metrics asset-detail-graphs asset-detail-col-2-3" data-asset-metrics="{{ asset.asset_id }}" data-asset-graphs data-asset-graph-grid data-asset="{{ asset.asset_id }}" data-host="{{ asset.hostname }}">
-  <div class="muted dash-graph-caption asset-chart-caption" data-dash-graph-caption><span class="label-line">Last hour {% with %}{% set tip %}This asset, not the incident window. Hover a point for the host, time, and value. Not scraped = not in Prometheus. No samples yet = the hour is empty. No placeholder wave.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></div>
+  <div class="muted dash-graph-caption asset-chart-caption" data-dash-graph-caption><span class="label-line">Last hour {% with %}{% set tip %}This asset, not the incident window. Hover a point for the host, time, and value. Not scraped = not in Prometheus. No samples yet = the hour is empty. No placeholder wave. The 30-day note under the charts is disk % and interface receive when those series exist — a “days to full” line only when the disk slope is usable.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></div>
   <div class="muted dash-graph-empty" data-dash-graph-empty hidden></div>
   <div class="asset-chart-grid{% if metrics.class in ['network', 'unknown'] %} is-sparse{% endif %}" data-dash-graph-list>
     {% if metrics.class in ['network', 'unknown'] %}
@@ -224,6 +250,16 @@
       {{ host_chart('up', 'Uptime', metrics.tiles) }}
     {% endif %}
   </div>
+  <section class="capacity-panel" data-capacity data-capacity-window="{{ capacity.window_seconds }}">
+    <h2>30-day capacity</h2>
+    {% for row in capacity.rows %}
+    <div data-capacity-row="{{ row.label }}" data-capacity-state="{{ row.state }}" data-capacity-points="{{ row.points }}">
+      <strong>{{ row.label }}</strong>
+      {% if row.spark %}<svg class="capacity-spark" viewBox="0 0 80 22" aria-hidden="true"><polyline points="{{ row.spark }}"></polyline></svg>{% endif %}
+      <span class="muted">{{ row.note }}</span>
+    </div>
+    {% endfor %}
+  </section>
 </aside>
 </div>
 {% endblock %}

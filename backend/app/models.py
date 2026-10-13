@@ -59,8 +59,10 @@ class Asset(Base):
     exporter_detail: Mapped[str] = mapped_column(String(255), default="")
     probe_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True, index=True)
 
     incidents: Mapped[list[Incident]] = relationship(back_populates="asset")
+    parent: Mapped["Asset | None"] = relationship("Asset", remote_side="Asset.id", foreign_keys="Asset.parent_id")
     ladder_steps: Mapped[list["AssetLadderStep"]] = relationship(
         back_populates="asset",
         cascade="all, delete-orphan",
@@ -398,6 +400,21 @@ class Job(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OncallSlot(Base):
+    """Weekly on-call window. weekday is Monday=0 … Sunday=6, minutes are local to the appliance timezone."""
+
+    __tablename__ = "oncall_slots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    weekday: Mapped[int] = mapped_column(Integer, index=True)
+    start_minute: Mapped[int] = mapped_column(Integer, default=0)
+    end_minute: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(String(255), default="")
+    email: Mapped[str] = mapped_column(String(255), default="")
+    phone: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class MaintenanceWindow(Base):

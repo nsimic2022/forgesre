@@ -528,14 +528,15 @@ def host_trends(
 ) -> dict[str, Any]:
     """Lazy CPU / memory / disk for one host: item.get, then trend.get (hourly avg, last ``hours``).
 
-    Cached per hostid (TREND_TTL; failures FAIL_TTL) so the 30 s Dashboard refresh
-    does not hit Zabbix every time. Never iterates all hosts.
+    Cached per hostid and hour-window (TREND_TTL; failures FAIL_TTL) so the 30 s Dashboard refresh
+    does not hit Zabbix every time. A 30-day capacity read does not reuse the 24 h cache. Never iterates all hosts.
     """
     hostid = str(hostid or "").strip()
     if not hostid:
         return {"ok": False, "error": "no zabbix_hostid", "tiles": {}}
+    cache_key = f"{hostid}:{int(hours)}"
     mono = time.monotonic()
-    cached = _state["trends"].get(hostid)
+    cached = _state["trends"].get(cache_key)
     if cached is not None:
         at, result = cached
         ttl = TREND_TTL if result.get("ok") else TREND_FAIL_TTL
@@ -567,7 +568,7 @@ def host_trends(
                     "output": ["itemid", "clock", "value_avg"],
                     "itemids": ids,
                     "time_from": clock - int(hours) * 3600,
-                    "limit": 2000,
+                    "limit": max(2000, int(hours) * 4),
                 },
                 url=url,
                 token=token,
@@ -600,5 +601,5 @@ def host_trends(
     except Exception as exc:
         result = {"ok": False, "error": f"Zabbix trends failed: {_short(exc)}", "tiles": {}}
     with _lock:
-        _state["trends"][hostid] = (time.monotonic(), result)
+        _state["trends"][cache_key] = (time.monotonic(), result)
     return result

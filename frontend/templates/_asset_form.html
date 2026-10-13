@@ -48,6 +48,17 @@
   <label>Site / DC / room <input name="extra_site" value="{{ ex.site }}" placeholder="BG-DC1 · room 2 · rack 14"></label>
   <label><span class="label-line">VLAN {% with %}{% set tip %}Free text, e.g. 10 or 10.20. Shown on the asset page and as a filter on Assets. Inventory note only — ForgeSRE does not read or change switch VLANs.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <input name="extra_vlan" value="{{ ex.vlan }}" maxlength="64" placeholder="10 or 10.20"></label>
+  <label><span class="label-line">Row {% with %}{% set tip %}Text only, same idea as Site and VLAN. Filters the Assets list. Not a floor plan.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="extra_row" value="{{ ex.row }}" maxlength="64" placeholder="A"></label>
+  <label><span class="label-line">Rack {% with %}{% set tip %}Text only, for example 14 or R14. Filters the Assets list and Incidents. Not a drawing.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="extra_rack" value="{{ ex.rack }}" maxlength="64" placeholder="14"></label>
+  <label><span class="label-line">Parent {% with %}{% set tip %}One upstream device, for example the switch this server hangs off. When that parent has an active down or unreachable incident, a new host-down or interface-down alert on this asset is recorded and linked to the parent. It does not start its own mail ladder. The parent still pages. CPU, disk, and memory alerts are not suppressed. Empty = no parent.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <select name="parent_asset_id" class="nice-select" data-parent-asset>
+      <option value=""{% if not form.parent_asset_id %} selected{% endif %}>None</option>
+      {% for choice in parent_choices or [] %}
+      <option value="{{ choice.asset_id }}"{% if form.parent_asset_id == choice.asset_id %} selected{% endif %}>{{ choice.hostname }} ({{ choice.asset_id }})</option>
+      {% endfor %}
+    </select></label>
   </div>
   </div>
   </div>
@@ -154,6 +165,10 @@
   <label>From <input name="extra_support_from" type="date" value="{{ ex.support_from }}"></label>
   <label><span class="label-line">To {% with %}{% set tip %}Empty = no end date.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <input name="extra_support_to" type="date" value="{{ ex.support_to }}"></label>
+  <label><span class="label-line">Maintenance from {% with %}{% set tip %}Appliance timezone. Both from and until, or leave both empty. During the window a new alert is still recorded (status MAINT) but the mail ladder does not start. This is not Standard-alarm mute — mute drops the alert; maintenance keeps a quiet incident you can see.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="extra_maint_from" type="datetime-local" value="{{ ex.maint_from }}" data-maint-from></label>
+  <label><span class="label-line">Maintenance until {% with %}{% set tip %}Empty together with Maintenance from = not in maintenance. After until, a new firing starts mail again.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+    <input name="extra_maint_until" type="datetime-local" value="{{ ex.maint_until }}" data-maint-until></label>
   </div>
   </div>
   </div>

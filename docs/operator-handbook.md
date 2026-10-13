@@ -35,6 +35,7 @@ ForgeSRE does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on t
 16. [Operator CLI and API](#16-operator-cli-and-api)
 17. [What this version does not do yet](#17-what-this-version-does-not-do-yet)
 18. [Zabbix (read-only source)](#18-zabbix-read-only-source)
+19. [DC-NOC shortcuts](#19-dc-noc-shortcuts)
 
 ---
 
@@ -881,3 +882,18 @@ Zabbix incidents carry a **Zabbix** pill (Incidents list, incident header, mail 
 Tokens live in `secrets/secrets.env` only — there is no Administration form. Asset **Standard alarms** mute bundled Prometheus alerts, not Zabbix triggers. Acknowledge / Resolve / Close on a ForgeSRE incident never write back to Zabbix.
 
 Full click-path + CLI + numbered checklist (both machines): [zabbix.md](zabbix.md) — hosts and templates [§3.4–3.5](zabbix.md#34-hosts-with-the-management-ips-forgesre-will-match), graphs [§11.1](zabbix.md#111-dashboard-and-incident-graphs), mute [§15](zabbix.md#15-standard-alarms-vs-zabbix-incidents), ack/resolve [§16](zabbix.md#16-acknowledge-resolve-close--no-write-back), checklist [§18](zabbix.md#18-end-to-end-operator-checklist). Troubleshooting: [zabbix.md §13](zabbix.md#13-troubleshooting).
+
+---
+
+## 19. DC-NOC shortcuts
+
+Eight small tools for a data-center NOC. They do not add Celery, extra Core workers, a Grafana iframe, NetBox or Zabbix write-back, or playbook execution. Version stays 0.9.
+
+1. **Maintenance.** Edit → Support → Maintenance from / until (appliance timezone). Both empty = not in maintenance. A new alert during the window is still an incident with status **MAINT** (visible, escalation mail does not start). After until, the next firing can email. This is not Standard-alarm mute: mute drops the alert; maintenance keeps a quiet incident.
+2. **Parent.** Edit → Identity → Parent (one upstream device, for example the switch). While that parent has an active down or unreachable incident, a new host-down or interface-down alert on the child is status **SUPPRESSED** and linked to the parent. The parent still pages. CPU, disk, and memory are not suppressed. After the parent incident clears, the next firing can email.
+3. **Interface.** Network incidents show **ifName**, **ifIndex**, and **ifAlias** from the alert labels. An SNMP asset lists the same fields from `if_mib` when Prometheus has the series.
+4. **Syslog.** The incident page shows up to 20 Loki lines from 30 minutes before `started_at` until 30 minutes after (hostname, then IP, `job=syslog`). No asset or no lines: the block is omitted. The demo asset may use `job=forgesre`. A real host never gets `forge-demo-01` lines.
+5. **On call.** Escalation → On call: weekday and from/until (appliance timezone, inclusive), plus name, email, and phone. Dashboard shows who is on call now. An escalation step with the role `oncall` mails that address. Empty roster = no-recipient. Not PagerDuty.
+6. **Capacity.** Asset page, under the charts: about 30 days of disk % and interface receive when those series exist. “~N days to full” only when the disk slope is usable (at least two climbing points). Otherwise the 30-day spark, or **Not scraped.** No invented forecast.
+7. **SNMP.** `monitoring/snmp.yml` stays the working `if_mib` module (ifName / ifAlias / ifOperStatus / counters / sysUpTime). No extra vendor MIB was added. Those series are what the interface list and sysUpTime line use.
+8. **Row and Rack.** Text fields on the asset (Identity), filtered on Assets the same way as Site and VLAN. Incidents can filter by the same Row and Rack. Not a floor-plan drawing.

@@ -13,7 +13,7 @@
     {% for step in policy.steps %}
       <tr>
         <td class="inc-when">{{ step.after_minutes }} min</td>
-        <td>{% if '@' in (step.target or '') %}<code>{{ step.target }}</code>{% else %}{{ step.target }} <span class="muted">→ owner email</span>{% endif %}{% if step.channel and step.channel != 'email' %} <span class="pill warn" title="Escalation has no {{ step.channel }} channel. This step is mailed. Edit and Save to clear it.">{{ step.channel }}: sent as email</span>{% endif %}</td>
+        <td>{% if '@' in (step.target or '') %}<code>{{ step.target }}</code>{% elif (step.target or '')|lower == 'oncall' %}oncall <span class="muted">→ whoever is on call now{% if oncall %} ({{ oncall.email }}){% endif %}</span>{% else %}{{ step.target }} <span class="muted">→ owner email</span>{% endif %}{% if step.channel and step.channel != 'email' %} <span class="pill warn" title="Escalation has no {{ step.channel }} channel. This step is mailed. Edit and Save to clear it.">{{ step.channel }}: sent as email</span>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>
@@ -46,13 +46,54 @@
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <label>Name <input name="name" placeholder="Default warning" required value="{{ form.name }}"></label>
   <label>Slug <input name="slug" placeholder="default-warning" required value="{{ form.slug }}" {% if form_mode == "edit" %}readonly{% endif %}></label>
-  <label><span class="label-line">Steps (one per line: minutes then role or email) {% with %}{% set tip %}Each line is minutes then a role (team, team-lead, engineer) or an email address. Roles mail the asset owner email; an address is used as written. Email only — webhook, SMS or a URL is refused.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+  <label><span class="label-line">Steps (one per line: minutes then role or email) {% with %}{% set tip %}Each line is minutes then a role (team, team-lead, engineer, oncall) or an email address. team / team-lead / engineer mail the asset owner email. oncall mails whoever is on the roster now. An address is used as written. Email only — webhook, SMS or a URL is refused.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <textarea name="steps" rows="6">{{ form.steps }}</textarea>
   </label>
   <div class="row-actions">
     <button type="submit">Save</button>
     <a href="/escalation">Cancel</a>
   </div>
+</form>
+{% endif %}
+<h2>On call {% with %}{% set tip %}A short weekly roster. Each row is one weekday and a from/until time in the appliance timezone (inclusive). L1 (or any step) with the role oncall mails whoever matches now. Empty roster = that step is no-recipient. This is not PagerDuty.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+<p data-oncall-now>{% if oncall %}Now: <strong>{{ oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}<span class="muted">No one scheduled right now.</span>{% endif %}</p>
+{% if oncall_slots %}
+<table class="scan-list" data-oncall-roster>
+  <thead><tr><th>When</th><th>Name</th><th>Email</th><th>Phone</th>{% if can('write_play') %}<th></th>{% endif %}</tr></thead>
+  <tbody>
+  {% for slot in oncall_slots %}
+    <tr>
+      <td>{{ slot.window }}</td>
+      <td>{{ slot.name }}</td>
+      <td>{{ slot.email }}</td>
+      <td>{{ slot.phone or "—" }}</td>
+      {% if can('write_play') %}
+      <td>
+        <form method="post" action="/escalation/oncall/{{ slot.id }}/delete">
+          <button type="submit" class="secondary">Remove</button>
+        </form>
+      </td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% if can('write_play') %}
+<form method="post" action="/escalation/oncall" class="stack" data-oncall-form>
+  <label>Weekday
+    <select name="weekday">
+      {% for day in weekdays %}
+      <option value="{{ loop.index0 }}">{{ day }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>From <input name="start" type="time" value="08:00" required></label>
+  <label>Until <input name="end" type="time" value="16:00" required></label>
+  <label>Name <input name="name" required placeholder="Ana"></label>
+  <label>Email <input name="email" type="email" required placeholder="ana@dc.local"></label>
+  <label>Phone <input name="phone" placeholder="+381-11-000-0000"></label>
+  <button type="submit">Add on-call slot</button>
 </form>
 {% endif %}
 <h2>Generated notifications {% with %}{% set tip %}The outbox is one table on Email & reports (/ops#mail). This page is escalation only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>

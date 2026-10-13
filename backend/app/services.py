@@ -23,6 +23,7 @@ from app.models import (
     MaintenanceWindow,
     MailContact,
     Notification,
+    OncallSlot,
     Playbook,
     Playrule,
     ScheduledReport,
@@ -375,7 +376,10 @@ def duration_label(seconds: float) -> str:
 
 
 def incident_is_live(status: str) -> bool:
-    return str(status or "").upper() in ACTIVE_INCIDENT_STATUSES
+    """Still on the clock: paging statuses plus maintenance / parent-suppressed (visible, not closed)."""
+    from app.dc_noc import QUIET_INCIDENT_STATUSES
+
+    return str(status or "").upper() in ACTIVE_INCIDENT_STATUSES + QUIET_INCIDENT_STATUSES
 
 
 def _last_timeline_at(incident: Incident) -> datetime | None:
@@ -588,6 +592,13 @@ def refresh_asset_status(db: Session, asset: Asset | None) -> None:
 
 
 ACTIVE_INCIDENT_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED")
+
+
+def tracked_incident_statuses() -> tuple[str, ...]:
+    """Fingerprints that must not open a second incident: paging rows plus quiet MAINT / SUPPRESSED."""
+    from app.dc_noc import QUIET_INCIDENT_STATUSES
+
+    return ACTIVE_INCIDENT_STATUSES + QUIET_INCIDENT_STATUSES
 UNLABELED_ASSET = "unlabeled"
 INCIDENT_SOURCES = {"prometheus": "Prometheus", "zabbix": "Zabbix"}
 _RESOLVED_BY = {"prometheus": "Alertmanager", "zabbix": "Zabbix"}
@@ -696,7 +707,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
             continue
         incident = (
             db.query(Incident)
-            .filter(Incident.fingerprint == fingerprint, Incident.status.in_(ACTIVE_INCIDENT_STATUSES))
+            .filter(Incident.fingerprint == fingerprint, Incident.status.in_(tracked_incident_statuses()))
             .order_by(Incident.id.desc())
             .first()
         )
@@ -794,10 +805,13 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
                 },
             )
             created.append(incident)
+        opened = incident in created
+        skip_mail = _quiet_mail(db, incident, asset, alertname, opened=opened)
         if incident.id and not db.query(Evidence.id).filter_by(incident_id=incident.id).first():
             collect_evidence(db, incident, alert)
         refresh_asset_status(db, asset)
-        notify_first_step(db, incident)
+        if not skip_mail:
+            notify_first_step(db, incident)
     db.commit()
     for incident in created:
         db.refresh(incident)
@@ -994,7 +1008,7 @@ def overlapping_maintenance(db: Session, asset_ref: str, at: datetime) -> list[d
         .filter(MaintenanceWindow.asset_ref == asset_ref, MaintenanceWindow.starts_at <= at, MaintenanceWindow.ends_at >= at)
         .all()
     )
-    return [
+    found = [
         {
             "asset_ref": row.asset_ref,
             "summary": row.summary,
@@ -1003,6 +1017,89 @@ def overlapping_maintenance(db: Session, asset_ref: str, at: datetime) -> list[d
         }
         for row in rows
     ]
+    if found:
+        return found
+    asset = db.query(Asset).filter(Asset.asset_id == asset_ref).first()
+    if asset is None:
+        return []
+    from app.dc_noc import in_maintenance, maintenance_bounds, maintenance_label
+
+    if not in_maintenance(asset, at):
+        return []
+    bounds = maintenance_bounds(asset)
+    if bounds is None:
+        return []
+    start, end = bounds
+    return [
+        {
+            "asset_ref": asset_ref,
+            "summary": maintenance_label(asset) or "Asset maintenance window",
+            "starts_at": start.isoformat(),
+            "ends_at": end.isoformat(),
+        }
+    ]
+
+
+def _quiet_mail(db: Session, incident: Incident, asset: Asset | None, alertname: str, *, opened: bool) -> bool:
+    """Skip the mail ladder for a new quiet incident. Return True when mail must not start.
+
+    Maintenance (MAINT) wins over parent suppression (SUPPRESSED). A later firing
+    after the window, or after the parent down incident clears, promotes the row
+    to OPEN and the ladder starts. An incident that already paged is left alone.
+    Standard-alarm mute never opens an incident; this path still records one.
+    """
+    from app.dc_noc import (
+        QUIET_INCIDENT_STATUSES,
+        in_maintenance,
+        is_down_style,
+        maintenance_quiet_detail,
+        parent_down_incident,
+        parent_suppress_detail,
+    )
+    from app.journal import report
+
+    status = (incident.status or "").upper()
+    if status in {"RESOLVED", "CLOSED"}:
+        return True
+    reason: tuple[str, str, Incident | None] | None = None
+    if asset is not None and in_maintenance(asset, utcnow()):
+        reason = ("MAINT", maintenance_quiet_detail(asset), None)
+    elif asset is not None and is_down_style(alertname):
+        parent_inc = parent_down_incident(db, asset)
+        if parent_inc is not None:
+            reason = ("SUPPRESSED", parent_suppress_detail(asset, parent_inc), parent_inc)
+    if reason is not None and (opened or status in QUIET_INCIDENT_STATUSES):
+        code, detail, parent_inc = reason
+        incident.status = code
+        node = "maintenance" if code == "MAINT" else "parent"
+        append_timeline(incident, node, code, detail)
+        if parent_inc is not None:
+            host = asset.hostname if asset is not None else "child"
+            append_timeline(
+                parent_inc,
+                f"child-{incident.number}",
+                "CHILD",
+                f"{host} {alertname} linked here — child mail ladder not started",
+            )
+        db.flush()
+        report(
+            db,
+            "incident",
+            "maintenance" if code == "MAINT" else "parent",
+            "ok",
+            summary=f"{incident.number} {'maintenance' if code == 'MAINT' else 'parent'} — mail suppressed",
+            detail=detail,
+            object_type="incident",
+            object_id=incident.number,
+            commit=False,
+        )
+        return True
+    if status in QUIET_INCIDENT_STATUSES and reason is None:
+        incident.status = "OPEN"
+        append_timeline(incident, "quiet-clear", "OPEN", "Quiet period ended — mail ladder can start")
+        db.flush()
+        return False
+    return False
 
 
 def query_prometheus(asset: Asset | None = None) -> dict[str, Any]:
@@ -1441,11 +1538,18 @@ NO_RECIPIENT_STATUS = "no-recipient"
 NO_RECIPIENT_ERROR = "No recipient: asset has no owner email and the escalation step names a role, not an address. Not sent."
 
 
-def escalation_recipient(incident: Incident, step_target: str) -> str:
-    """Explicit address on the step wins; else the asset owner email; else empty (do not invent role@…)."""
+def escalation_recipient(incident: Incident, step_target: str, db: Session | None = None, at: datetime | None = None) -> str:
+    """Explicit address on the step wins. Role oncall is whoever is on the roster now. Other roles use the asset owner email."""
     explicit = _valid_email(step_target) if "@" in (step_target or "") else ""
     if explicit:
         return explicit
+    if (step_target or "").strip().lower() == "oncall":
+        if db is None:
+            return ""
+        from app.dc_noc import current_oncall
+
+        person = current_oncall(db, at or utcnow())
+        return _valid_email(str((person or {}).get("email") or ""))
     asset = getattr(incident, "asset", None)
     return _valid_email((getattr(asset, "owner_email", "") or "") if asset is not None else "")
 
@@ -1472,7 +1576,7 @@ def ensure_notification(
     policy_role = (target or mapped.get(step_key, "team")).strip() or "team"
     if incident.asset is None and incident.asset_id:
         incident.asset = db.get(Asset, incident.asset_id)
-    recipient = escalation_recipient(incident, policy_role)
+    recipient = escalation_recipient(incident, policy_role, db=db)
     stored_target = recipient or policy_role
     subject = incident_alarm_subject(incident)
     body = build_escalation_body(incident, step_key, policy_role)
@@ -1591,6 +1695,8 @@ def list_mail_addresses(db: Session) -> list[dict[str, str]]:
     for row in db.query(AssetLadderStep).order_by(AssetLadderStep.id):
         for email in row.emails or []:
             add(str(email or ""), f"L{row.level}", "ladder")
+    for row in db.query(OncallSlot).order_by(OncallSlot.id):
+        add(row.email, row.name, "oncall")
     for user in db.query(User).order_by(User.email):
         add(user.email, user.name, "user")
     return sorted(seen.values(), key=lambda item: item["email"].lower())
@@ -2207,7 +2313,7 @@ def process_escalations(db: Session) -> None:
 # Escalation only sends email (ensure_notification). These words look like a channel
 # choice; accepting them would store a step that claims a channel and then mails anyway.
 NON_EMAIL_CHANNELS = frozenset({"webhook", "sms", "slack", "pagerduty", "telegram"})
-EMAIL_ONLY_HINT = "Escalation sends email only: write minutes then a role (team, team-lead, engineer) or an email address."
+EMAIL_ONLY_HINT = "Escalation sends email only: write minutes then a role (team, team-lead, engineer, oncall) or an email address. oncall is whoever is on the roster now."
 
 
 def policy_step_problems(text: str) -> list[str]:
