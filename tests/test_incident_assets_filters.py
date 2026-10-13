@@ -230,8 +230,18 @@ def test_search_combines_with_filters_and_reset_clears(seeded):
 
 
 def test_edit_link_keeps_filters(seeded):
-    page = _get(_client(), "type=Switch&site=DC-East")
-    assert "/assets?edit=iaf-sw1&amp;type=Switch&amp;site=DC-East" in page
+    client = _client()
+    page = _get(client, "type=Switch&site=DC-East")
+    assert 'name="stay" value="/assets?per_page=100&amp;type=Switch&amp;site=DC-East"' in page
+    opened = client.post(
+        "/assets/open-edit",
+        data={"selected": "iaf-sw1", "stay": "/assets?per_page=100&type=Switch&site=DC-East"},
+        follow_redirects=False,
+    )
+    assert opened.status_code == 303
+    assert "edit=iaf-sw1" in opened.headers["location"]
+    assert "type=Switch" in opened.headers["location"]
+    assert "site=DC-East" in opened.headers["location"]
     form = page.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
     filters = form.split('<input name="q"', 1)[1]
     assert "Ping" not in filters

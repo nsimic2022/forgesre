@@ -31,7 +31,7 @@
   </div>
   {% if actions %}
   <div class="list-actions" data-list-actions>
-    {% if actions.delete %}
+    {% if actions.delete and not actions.get("delete_last") %}
     <form method="post" action="{{ actions.delete }}" data-bulk-delete onsubmit='return confirm({{ actions.confirm|tojson }});'>
       <input type="hidden" name="next" value="{{ actions.next }}">
       <button type="submit" class="danger">{{ actions.get("delete_label") or "Delete" }}</button>
@@ -43,9 +43,36 @@
       <button type="submit" title="Select one">Edit</button>
     </form>
     {% endif %}
+    {% if actions.open_edit %}
+    <form method="post" action="{{ actions.open_edit }}" data-bulk-edit>
+      <input type="hidden" name="next" value="{{ actions.next }}">
+      {% if actions.stay %}<input type="hidden" name="stay" value="{{ actions.stay }}">{% endif %}
+      <button type="submit" title="Select one" data-one-title="Edit this asset">Edit</button>
+    </form>
+    {% endif %}
+    {% if actions.clone %}
+    <form method="post" action="{{ actions.clone }}" data-bulk-edit>
+      <input type="hidden" name="next" value="{{ actions.next }}">
+      {% if actions.stay %}<input type="hidden" name="stay" value="{{ actions.stay }}">{% endif %}
+      <button type="submit" title="Select one" data-one-title="Clone this asset">Clone</button>
+    </form>
+    {% endif %}
+    {% if actions.verify %}
+    <form method="post" action="{{ actions.verify }}" data-bulk-edit>
+      <input type="hidden" name="next" value="{{ actions.next }}">
+      {% if actions.stay %}<input type="hidden" name="stay" value="{{ actions.stay }}">{% endif %}
+      <button type="submit" title="Select one" data-one-title="Verify this asset">Verify</button>
+    </form>
+    {% endif %}
     {% if actions.export %}
     <form method="post" action="{{ actions.export }}" data-bulk-export>
       <button type="submit">Export</button>
+    </form>
+    {% endif %}
+    {% if actions.delete and actions.get("delete_last") %}
+    <form method="post" action="{{ actions.delete }}" data-bulk-delete onsubmit='return confirm({{ actions.confirm|tojson }});'>
+      <input type="hidden" name="next" value="{{ actions.next }}">
+      <button type="submit" class="danger">{{ actions.get("delete_label") or "Delete" }}</button>
     </form>
     {% endif %}
   </div>

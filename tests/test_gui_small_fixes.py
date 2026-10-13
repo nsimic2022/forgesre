@@ -71,7 +71,9 @@ def test_assets_verify_copy_lives_in_title_tip_not_always_on_sentence():
     assert "Verify (this inventory path)" in html
     assert "./forgesre doctor" in html
     assert "./forgesre test" in html
-    assert ">Verify<" in html
+    table = html.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
+    assert ">Verify<" not in table
+    assert "/assets/open-verify" in html
     assert "/assets/verify" in html
     db = _db()
     client = TestClient(app)
@@ -79,6 +81,7 @@ def test_assets_verify_copy_lives_in_title_tip_not_always_on_sentence():
     page = client.get("/assets")
     assert page.status_code == 200
     assert "Verify all" in page.text
+    assert ">Verify<" in page.text
     assert 'class="muted reach-legend"' not in page.text
     db.close()
 

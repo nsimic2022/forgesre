@@ -110,9 +110,10 @@ def test_add_asset_columns_nav_rules_and_escalated_cube():
         text.index("asset-form-ladder"),
     ]
     assert order == sorted(order)
-    assert "Identity" in text and "Comms / monitoring" in text
+    assert "Identity" in text and ">Ports " in text
     assert "Standard alarms" in text and "Custom alarms" in text
-    assert ">Ladder " in text.split("data-asset-ladder", 1)[1]
+    assert ">Escalation " in text.split("data-asset-ladder", 1)[1]
+    assert "ladder-levels" in text.split("data-asset-ladder", 1)[1]
     assert "Client playrules" not in text
     assert 'href="/escalation">Default ladder</a>' in text
     nav = text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]

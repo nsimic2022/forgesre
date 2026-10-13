@@ -126,7 +126,8 @@ def test_viewer_dashboard_without_host_down_banner_and_asset_pills():
     assert b"HOST DOWN" not in home.content
     assets = client.get("/assets")
     assert assets.status_code == 200
-    assert b"ICMP / port / SNMP" in assets.content
+    assert b'class="col-port"' in assets.content
+    assert b">Port " in assets.content
     assert b"reach-sq icmp ping" in assets.content
     assert b">ICMP<" in assets.content
     detail = client.get(f"/assets/{DEMO_ASSET}")
