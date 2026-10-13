@@ -690,11 +690,13 @@ def test_assets_source_and_agent_filters(zbx):
         db.close()
     client = _client()
     page = client.get("/assets?source=zabbix&q=zt-").text
-    assert "zt-up-01" in page and "zt-down-01" in page and "zt-manual-01" not in page
+    table = page.split('<table class="asset-table"', 1)[1].split("</tbody>", 1)[0]
+    assert "zt-up-01" in table and "zt-down-01" in table and "zt-manual-01" not in table
     assert 'data-zabbix-filter="down"' in page
     assert 'data-zabbix-agent="up"' in page
     down = client.get("/assets?source=zabbix&agent=down&q=zt-").text
-    assert "zt-down-01" in down and "zt-up-01" not in down
+    down_table = down.split('<table class="asset-table"', 1)[1].split("</tbody>", 1)[0]
+    assert "zt-down-01" in down_table and "zt-up-01" not in down_table
     api_rows = client.get("/api/v1/assets?source=zabbix&agent=down").json()
     items = api_rows["items"] if isinstance(api_rows, dict) else api_rows
     found = [row for row in items if row["asset_id"].startswith("zt-")]

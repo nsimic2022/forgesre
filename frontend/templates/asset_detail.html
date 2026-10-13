@@ -253,11 +253,11 @@
   <section class="capacity-panel" data-capacity data-capacity-window="{{ capacity.window_seconds }}">
     <h2>30-day capacity</h2>
     {% for row in capacity.rows %}
-    <p data-capacity-row="{{ row.label }}" data-capacity-state="{{ row.state }}" data-capacity-points="{{ row.points }}">
+    <div data-capacity-row="{{ row.label }}" data-capacity-state="{{ row.state }}" data-capacity-points="{{ row.points }}">
       <strong>{{ row.label }}</strong>
       {% if row.spark %}<svg class="capacity-spark" viewBox="0 0 80 22" aria-hidden="true"><polyline points="{{ row.spark }}"></polyline></svg>{% endif %}
       <span class="muted">{{ row.note }}</span>
-    </p>
+    </div>
     {% endfor %}
   </section>
 </aside>

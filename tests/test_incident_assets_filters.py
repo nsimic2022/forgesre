@@ -218,7 +218,7 @@ def test_search_combines_with_filters_and_reset_clears(seeded):
     assert _ids(_get(client, "q=nomatch-xyz&type=Switch")) == set()
     form = page.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
     assert form.count('<input name="q"') == 1
-    assert form.count("<select") == 5
+    assert form.count("<select") == 7
     assert 'type="hidden" name="source"' not in form
     assert '<a class="muted list-reset" href="/assets">Reset</a>' in form
     def filter_form(query: str) -> str:
