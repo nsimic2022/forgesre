@@ -115,10 +115,12 @@ def test_every_row_when_leads_with_duration_then_clock():
     assert re.search(r'<span class="stamp-date">\d{2} \w{3} \d{4}</span><span class="stamp-time">' + WALL_RE + "</span>", live_when)
     assert 'class="inc-title sev-crit"' in live_row
     assert 'class="inc-host"' in live_row and "10.20.30.40" in live_row
-    assert "ack-dot" in live_row
+    assert "ack-dot" not in live_row
+    assert "status-ack" not in live_row
     head = dash.split("</thead>", 1)[0]
     assert head.index(">Hostname<") < head.index(">Name<") < head.index(">Severity<") < head.index(">Status<")
-    assert head.index(">When<") < head.index(">Acknowledged<") < head.index(">Resolved by<")
+    assert ">Acknowledged<" not in head
+    assert head.index(">When<") < head.index(">Resolved by<")
     assert ">Problem<" not in head and ">Ack<" not in head and "info-tip" not in head
     done_row = _row(dash, done.number)
     done_when = _when_cell(done_row)
@@ -321,4 +323,4 @@ def test_stack_cube_font_bumped_box_unchanged():
     assert "padding: 0.28rem" in block
     assert "line-height: 0.77rem" in block
     assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v09-P" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "app.css?v=v09-Q" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

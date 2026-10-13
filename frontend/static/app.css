@@ -1209,11 +1209,9 @@ form.ops-compose {
   font-weight: 600;
   margin-top: 0;
 }
-/* v08-23: full word Acknowledged, with a gap before Resolved by (not one mashed pair). */
+/* v08-23: Incidents list keeps a full-word Acknowledged column, with a gap before Resolved by. */
 .incidents-table th.col-ack,
-.incidents-table td.col-ack,
-.dash-recent th.col-ack,
-.dash-recent td.col-ack {
+.incidents-table td.col-ack {
   width: 8.5rem;
   min-width: 7.6rem;
   padding-left: 0.95rem;
@@ -1250,28 +1248,39 @@ form.ops-compose {
   white-space: normal;
   overflow-wrap: anywhere;
 }
-/* Recent incidents is the narrow 3/4 pane. When and Acknowledged are separate columns. */
+/* v09-Q: Recent incidents is the narrow 3/4 pane. Acknowledged lives in Status (green text). Resolved by takes the freed width and wraps. */
 .dash-recent .incidents-table { table-layout: auto; width: 100%; }
+.dash-recent .incidents-table th.col-status,
+.dash-recent .incidents-table td.col-status {
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.dash-recent .status-cell {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+.dash-recent .status-ack {
+  color: var(--ok);
+  font-weight: 700;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
 .dash-recent .incidents-table th.col-when,
 .dash-recent .incidents-table td.inc-when {
   width: 6.8rem;
   white-space: nowrap;
   padding-right: 0.95rem;
 }
-.dash-recent .incidents-table th.col-ack,
-.dash-recent .incidents-table td.col-ack {
-  width: 8.6rem;
-  min-width: 8rem;
-  padding-left: 0.9rem;
-  padding-right: 0.75rem;
-  white-space: nowrap;
-}
 .dash-recent .incidents-table th.col-resolved,
 .dash-recent .incidents-table td.col-resolved {
-  width: 8.5rem;
-  min-width: 7.2rem;
+  width: 26%;
+  min-width: 11rem;
   max-width: none;
-  padding-left: 1rem;
+  padding-left: 0.75rem;
+  white-space: normal;
 }
 .incidents-table td.inc-when .stamp-date { color: var(--text); font-weight: 600; }
 .incidents-table tr.inc-row-done td.inc-when .stamp-date { font-weight: 500; }

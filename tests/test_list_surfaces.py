@@ -74,12 +74,13 @@ def test_dashboard_recent_incidents_uses_scan_columns():
     assert ">Severity<" in headers
     assert ">Status<" in headers
     assert ">When<" in headers
-    assert headers.index(">When<") < headers.index(">Acknowledged<") < headers.index(">Resolved by<")
+    assert ">Acknowledged<" not in headers
+    assert headers.index(">When<") < headers.index(">Resolved by<")
     assert ">Ack<" not in headers and "info-tip" not in headers
     assert ">Asset<" not in headers
     assert "Reported to" not in headers
     assert "inc-cell" in section
-    assert "ack-dot" in section
+    assert "ack-dot" not in section
     assert "scan-list" in section
     assert 'id="host-down-banner"' not in home.text
     assert "Recent journal" not in home.text

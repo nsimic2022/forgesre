@@ -136,7 +136,8 @@ def test_incidents_and_dashboard_show_notes_and_edit_one_row():
     recent = home.text.split("Recent incidents", 1)[1].split("</table>", 1)[0]
     recent_head = recent.split("</thead>", 1)[0]
     assert ">Notes<" not in recent_head and "col-notes" not in recent
-    assert recent_head.index(">When<") < recent_head.index(">Acknowledged<") < recent_head.index(">Resolved by<")
+    assert ">Acknowledged<" not in recent_head
+    assert recent_head.index(">When<") < recent_head.index(">Resolved by<")
     assert "Resolved by" in recent_head.rsplit("<th", 1)[1]
     assert "Acknowledged" not in recent_head.rsplit("<th", 1)[1]
     assert 'action="/incidents/edit"' in home.text.split("Recent incidents", 1)[1]
@@ -377,6 +378,6 @@ def test_multi_record_exports_have_titled_breaks():
 
 def test_cache_bust_is_v08_26():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-P" in base
-    assert "app.js?v=v09-P" in base
+    assert "app.css?v=v09-Q" in base
+    assert "app.js?v=v09-Q" in base
     assert "v08-25" not in base

@@ -1,5 +1,6 @@
 """Dashboard squares, recent-incident columns, Escalation labels, asset Notes, form row order."""
 
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -7,8 +8,9 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.main import app
-from app.models import Asset
+from app.models import Asset, Incident
 from app.seed import seed
+from app.services import next_incident_number
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "frontend" / "templates"
@@ -51,28 +53,106 @@ def test_dashboard_tiles_are_square_and_share_one_group_width():
     assert "5.4rem" not in clock
 
 
-def test_dashboard_recent_drops_notes_and_keeps_when_apart_from_acknowledged():
+def test_dashboard_recent_drops_notes_and_ack_column():
     _db().close()
     home = _client().get("/")
     assert home.status_code == 200
     recent = home.text.split("<h2>Recent incidents</h2>", 1)[1].split("</table>", 1)[0]
     head = recent.split("</thead>", 1)[0]
     assert ">Notes<" not in head and "col-notes" not in recent
-    assert head.index(">Escalation<") < head.index(">When<") < head.index(">Acknowledged<") < head.index(">Resolved by<")
+    assert ">Acknowledged<" not in head and "col-ack" not in head
+    assert head.index(">Escalation<") < head.index(">When<") < head.index(">Resolved by<")
     assert ">Ack<" not in head and "info-tip" not in head
     assert 'class="col-when">When</th>' in head
-    assert 'class="col-ack">Acknowledged</th>' in head
+    assert 'class="col-status">Status</th>' in head
     last = head.rsplit("<th", 1)[1]
     assert "Resolved by" in last and "Acknowledged" not in last and "When" not in last
     if "<tbody>" in recent and 'class="inc-when"' in recent:
         row = recent.split('class="inc-when"', 1)[1].split("</tr>", 1)[0]
-        assert 'class="col-ack"' in row
-        assert row.index('class="col-ack"') < row.index('class="col-resolved"')
+        assert "col-ack" not in row and "ack-dot" not in row
+        assert 'class="col-resolved"' in row
         assert "col-notes" not in row
     incidents = _client().get("/incidents")
     inc_head = incidents.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
     assert inc_head.index(">When<") < inc_head.index(">Acknowledged<") < inc_head.index(">Resolved by<") < inc_head.index(">Notes<")
+    assert 'class="col-ack">Acknowledged</th>' in inc_head
     assert ">Ladder<" not in inc_head and ">Escalation<" in inc_head
+
+
+def test_dashboard_status_cell_shows_acknowledged_in_green():
+    db = _db()
+    now = datetime.now(timezone.utc)
+    token = uuid4().hex[:8]
+
+    def add(status: str, title: str, *, ack: bool, resolved_by: str = "") -> None:
+        db.add(
+            Incident(
+                number=next_incident_number(db),
+                title=title,
+                severity="CRITICAL" if status != "ESCALATED" else "WARNING",
+                status=status,
+                fingerprint=f"dash-ack:{token}:{status}",
+                started_at=now,
+                ack_at=now if ack else None,
+                ack_by="ops@forgesre.local" if ack else "",
+                resolved_by=resolved_by,
+                summary="dash ack",
+            )
+        )
+        db.flush()
+
+    add("CLOSED", f"Acked closed {token}", ack=True, resolved_by=f"closer-{token}@forgesre.local")
+    add("ESCALATED", f"Acked escalated {token}", ack=True)
+    add("OPEN", f"Open unacked {token}", ack=False)
+    db.commit()
+    try:
+        home = _client().get("/")
+        assert home.status_code == 200
+        recent = home.text.split("<h2>Recent incidents</h2>", 1)[1].split("</table>", 1)[0]
+        head = recent.split("</thead>", 1)[0]
+        assert ">Acknowledged<" not in head
+        assert "<th" in head and "Acknowledged" not in head
+        assert "Resolved by" in head.rsplit("<th", 1)[1]
+
+        def status_cell(title: str) -> str:
+            row = recent.split(title, 1)[1].split("</tr>", 1)[0]
+            assert "col-ack" not in row and "ack-dot" not in row
+            return row.split('class="col-status"', 1)[1].split("</td>", 1)[0]
+
+        closed = status_cell(f"Acked closed {token}")
+        assert 'class="pill closed"' in closed and ">CLOSED<" in closed
+        assert 'class="status-ack">Acknowledged</span>' in closed
+        escalated = status_cell(f"Acked escalated {token}")
+        assert 'class="pill escalated"' in escalated and ">ESCALATED<" in escalated
+        assert 'class="status-ack">Acknowledged</span>' in escalated
+        opened = status_cell(f"Open unacked {token}")
+        assert 'class="pill open"' in opened and ">OPEN<" in opened
+        assert "Acknowledged" not in opened and "status-ack" not in opened
+        closed_row = recent.split(f"Acked closed {token}", 1)[1].split("</tr>", 1)[0]
+        assert f"closer-{token}@forgesre.local" in closed_row.split('class="col-resolved"', 1)[1]
+
+        css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+        ack_css = css.split(".dash-recent .status-ack {", 1)[1].split("}", 1)[0]
+        assert "color: var(--ok)" in ack_css
+        resolved = css.split(".dash-recent .incidents-table th.col-resolved,", 1)[1].split("}", 1)[0]
+        assert "white-space: normal" in resolved
+        assert "nowrap" not in resolved
+        assert "max-width: none" in resolved
+        assert "min-width: 11rem" in resolved
+        assert "width: 26%" in resolved
+
+        listed = _client().get(f"/incidents?q={token}")
+        assert listed.status_code == 200
+        inc_head = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
+        assert 'class="col-ack">Acknowledged</th>' in inc_head
+        inc_row = listed.text.split(f"Acked closed {token}", 1)[1].split("</tr>", 1)[0]
+        assert "ack-dot" in inc_row and "col-ack" in inc_row
+        assert "status-ack" not in inc_row
+        assert f"closer-{token}@forgesre.local" in inc_row
+    finally:
+        db.query(Incident).filter(Incident.fingerprint.like(f"dash-ack:{token}:%")).delete(synchronize_session=False)
+        db.commit()
+        db.close()
 
 
 def test_templates_and_handbook_say_escalation_not_ladder():
