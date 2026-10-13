@@ -133,7 +133,7 @@
         <td class="col-host">{% set host = incident_host(item) %}<span class="inc-host">{{ host or "—" }}</span></td>
         {% include "_incident_cell.html" %}
         <td><span class="pill {{ severity_pill(item.severity) }}">{{ item.severity }}</span></td>
-        <td class="col-status"><span class="status-cell"><span class="pill {{ item.status|lower }}">{{ item.status }}</span>{% if item.ack_at %}<span class="status-ack">Acknowledged</span>{% endif %}</span></td>
+        {% include "_incident_status_cell.html" %}
         <td class="col-ladder">{% with cubes=incident_ladder_cubes(item) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
         {% with show_notes=false, show_ack=false %}{% include "_incident_scan_tail.html" %}{% endwith %}
       </tr>

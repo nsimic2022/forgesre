@@ -44,10 +44,11 @@ def test_history_page_redirects_and_incidents_lists_closed():
     assert "INC-" in closed.text
     headers = closed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
     assert headers.index(">Hostname<") < headers.index(">Name<")
-    assert ">Acknowledged<" in headers
+    assert ">Acknowledged<" not in headers and "col-ack" not in headers
     assert ">Ack<" not in headers and "info-tip" not in headers
     assert "Resolved by" in headers
-    assert "ack-dot" in closed.text
+    assert 'class="col-status">Status</th>' in headers
+    assert "ack-dot" not in closed.text
     by_asset = client.get("/incidents?q=forge-demo-01")
     assert by_asset.status_code == 200
     assert "forge-demo-01" in by_asset.text
@@ -320,9 +321,10 @@ def test_send_incident_report_to_address_book_email():
     assert "Severity" in headers
     assert "Status" in headers
     assert "When" in headers
-    assert ">Acknowledged<" in headers
+    assert ">Acknowledged<" not in headers and "col-ack" not in headers
     assert ">Ack<" not in headers and "info-tip" not in headers
     assert "Resolved by" in headers
+    assert 'class="col-status">Status</th>' in headers
     assert "Reported to" not in headers
     tbody = listed.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
     assert "ops@dc.local" not in tbody

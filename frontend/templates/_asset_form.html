@@ -126,16 +126,16 @@
   <label>Backup on-call phone <input name="extra_backup_phone" value="{{ ex.backup_phone }}" placeholder="+381-11-000-0001"></label>
   <label><span class="label-line">Backup on-call email {% with %}{% set tip %}For the human on shift. Escalation does not mail this address unless you add it on a level.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     {{ email_pick("extra_backup_email", ex.backup_email, "backup@dc.local", mail_addresses or [], fill_name="extra_backup_name") }}</label>
-  <label>Support hours <input name="extra_support_hours" value="{{ ex.support_hours }}" placeholder="24/7 or Mon–Fri 08–17"></label>
-  <label>Timezone <input name="extra_timezone" value="{{ ex.timezone }}" placeholder="Europe/Belgrade"></label>
-  <label class="wide">License / contract / SLA <input name="extra_contract" value="{{ ex.contract }}" placeholder="SLA gold · 4h response"></label>
   </div>
   </div>
   </div>
   <div class="asset-form-col" data-asset-support>
   <div class="asset-form-block asset-support">
-  <h3 class="asset-form-block-head label-line">Support {% with %}{% set tip %}Whether a vendor or your own team will take a ticket for this host, and until when. Shown as a pill on Assets and on the incident Who to call. Expiring = the To date is within the lead time. This is a reminder only — it does not create an alert, incident, or Playrule, and nothing is written to NetBox.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+  <h3 class="asset-form-block-head label-line">Support {% with %}{% set tip %}Hours, timezone, and license / contract / SLA live only here (one field each — Contacts is people, phones, and emails). Also whether a vendor or your own team will take a ticket for this host, and until when. Shown as a pill on Assets and on the incident Who to call. Expiring = the To date is within the lead time. This is a reminder only — it does not create an alert, incident, or Playrule, and nothing is written to NetBox.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
   <div class="form-grid asset-form-grid">
+  <label>Support hours <input name="extra_support_hours" value="{{ ex.support_hours }}" placeholder="24/7 or Mon–Fri 08–17"></label>
+  <label>Timezone <input name="extra_timezone" value="{{ ex.timezone }}" placeholder="Europe/Belgrade"></label>
+  <label class="wide">License / contract / SLA <input name="extra_contract" value="{{ ex.contract }}" placeholder="SLA gold · 4h response"></label>
   <label>Under support
     <select name="extra_support" class="nice-select" data-support-kind>
       <option value="" {% if not ex.support %}selected{% endif %}>Not set</option>

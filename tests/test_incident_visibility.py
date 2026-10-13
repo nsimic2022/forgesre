@@ -136,7 +136,9 @@ def test_every_row_when_leads_with_duration_then_clock():
     assert listed.status_code == 200
     inc_head = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
     assert inc_head.index(">Hostname<") < inc_head.index(">Name<")
-    assert ">Acknowledged<" in inc_head and "Resolved by" in inc_head
+    assert ">Acknowledged<" not in inc_head and "col-ack" not in inc_head
+    assert "Resolved by" in inc_head and ">Notes<" in inc_head
+    assert 'class="col-status">Status</th>' in inc_head
     assert ">Ack<" not in inc_head and "info-tip" not in inc_head
     live_row = _row(listed.text, live.number)
     live_when = _when_cell(live_row)
@@ -148,7 +150,9 @@ def test_every_row_when_leads_with_duration_then_clock():
     assert 'class="inc-title sev-crit"' in live_row
     assert 'class="col-host"' in live_row and "10.20.30.40" in live_row
     assert '<span class="inc-host">· 10.20.30.40</span>' not in live_row
-    assert "ack-dot" in live_row
+    assert "ack-dot" not in live_row
+    assert "status-ack" not in live_row
+    assert 'class="col-status"' in live_row and ">OPEN<" in live_row
     done_row = _row(listed.text, done.number)
     done_when = _when_cell(done_row)
     assert re.search(r'title="Lasted 1h · started [^"]+ · ended [^"]+"', done_when)
@@ -323,4 +327,4 @@ def test_stack_cube_font_bumped_box_unchanged():
     assert "padding: 0.28rem" in block
     assert "line-height: 0.77rem" in block
     assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v09-Q" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "app.css?v=v09-R" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

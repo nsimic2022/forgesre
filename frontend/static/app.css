@@ -979,7 +979,33 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
   margin-bottom: 0.6rem;
 }
 .page-head h1 { margin: 0; }
-.health-grid { margin: 0.9rem 0 1.2rem; }
+/* v09-R: System Health service cubes are smaller, with a wider gap so they are not glued.
+   An even count (12) is two equal rows: --health-cols = n/2. Every cube, including
+   Discovery, uses that same track — not a stretched or leftover last cell. */
+.grid.health-grid {
+  --health-cols: 6;
+  grid-template-columns: repeat(var(--health-cols), minmax(7.4rem, 8.75rem));
+  gap: 1.35rem 1.5rem;
+  justify-content: start;
+  justify-items: stretch;
+  align-items: stretch;
+  margin: 0.9rem 0 1.2rem;
+}
+.health-grid .stat {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 5rem;
+  padding: 0.42rem 0.55rem;
+  border-radius: 10px;
+}
+.health-grid .stat span {
+  font-size: 0.74rem;
+  line-height: 1.25;
+}
+.health-grid .stat strong {
+  font-size: 1.02rem;
+  line-height: 1.2;
+}
 .health-table tr.health-ok td:first-child { box-shadow: inset 4px 0 0 var(--ok); }
 .health-table tr.health-warn td:first-child { box-shadow: inset 4px 0 0 var(--warn); }
 .health-table tr.health-crit td:first-child { box-shadow: inset 4px 0 0 var(--crit); }
@@ -1209,15 +1235,34 @@ form.ops-compose {
   font-weight: 600;
   margin-top: 0;
 }
-/* v08-23: Incidents list keeps a full-word Acknowledged column, with a gap before Resolved by. */
-.incidents-table th.col-ack,
-.incidents-table td.col-ack {
-  width: 8.5rem;
-  min-width: 7.6rem;
-  padding-left: 0.95rem;
-  padding-right: 1.45rem;
-  text-align: center;
+/* v09-R: Incidents list matches Recent incidents. Acknowledged is green text in Status.
+   Resolved by takes the width the Acknowledged column used and wraps. Notes stays last. */
+.list-scroll .incidents-table { table-layout: auto; width: 100%; }
+.list-scroll .incidents-table th.col-status,
+.list-scroll .incidents-table td.col-status {
+  width: 1%;
   white-space: nowrap;
+  vertical-align: middle;
+}
+.list-scroll .status-cell {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+.list-scroll .status-ack {
+  color: var(--ok);
+  font-weight: 700;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+.list-scroll .incidents-table th.col-resolved,
+.list-scroll .incidents-table td.col-resolved {
+  width: 26%;
+  min-width: 11rem;
+  max-width: none;
+  padding-left: 0.75rem;
+  white-space: normal;
 }
 .incidents-table th.col-resolved,
 .incidents-table td.col-resolved,
@@ -1248,7 +1293,7 @@ form.ops-compose {
   white-space: normal;
   overflow-wrap: anywhere;
 }
-/* v09-Q: Recent incidents is the narrow 3/4 pane. Acknowledged lives in Status (green text). Resolved by takes the freed width and wraps. */
+/* v09-R: Recent incidents is the narrow 3/4 pane. Acknowledged lives in Status (green text). Resolved by takes the freed width and wraps. */
 .dash-recent .incidents-table { table-layout: auto; width: 100%; }
 .dash-recent .incidents-table th.col-status,
 .dash-recent .incidents-table td.col-status {

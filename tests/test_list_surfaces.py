@@ -100,18 +100,23 @@ def test_incidents_keeps_ack_resolved_by_and_drops_reported_to():
     headers = _headers(page.text)
     assert headers.index(">Hostname<") < headers.index(">Name<")
     assert ">When<" in headers
-    assert ">Acknowledged<" in headers
+    assert ">Acknowledged<" not in headers and "col-ack" not in headers
     assert ">Ack<" not in headers and "info-tip" not in headers
-    assert headers.index(">Acknowledged<") < headers.index(">Resolved by<")
+    assert headers.index(">Status<") < headers.index(">When<") < headers.index(">Resolved by<") < headers.index(">Notes<")
     assert "Resolved by" in headers
     assert "Reported to" not in headers
     assert ">Asset<" not in headers
-    assert "ack-dot" in page.text
+    assert "ack-dot" not in page.text
+    assert 'class="status-cell"' in page.text
     assert "inc-cell" in page.text
     assert 'class="stamp"' in page.text
     html = (ROOT / "frontend" / "templates" / "incidents.html").read_text(encoding="utf-8")
     tail = (ROOT / "frontend" / "templates" / "_incident_scan_tail.html").read_text(encoding="utf-8")
-    assert "ack-dot" in tail and "_incident_scan_tail.html" in html
+    status = (ROOT / "frontend" / "templates" / "_incident_status_cell.html").read_text(encoding="utf-8")
+    assert "show_ack=false" in html and "_incident_scan_tail.html" in html
+    assert "col-ack" not in html
+    assert 'class="status-ack">Acknowledged</span>' in status
+    assert "ack-dot" in tail
     assert "Reported to" not in html
     assert "history.html" not in html
     nav = page.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
