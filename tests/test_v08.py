@@ -118,8 +118,8 @@ def test_version_is_0_9_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v0.9</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-W" in base
-    assert "app.js?v=v09-S" in base
+    assert "app.css?v=v09-X" in base
+    assert "app.js?v=v09-T" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.9.0" in text
@@ -292,7 +292,7 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     disabled = _rule(db, f"v08-off-{token}", f"Off{token}", enabled=False)
     enabled_id, disabled_id = enabled.id, disabled.id
     db.close()
-    page = _client().get("/assets")
+    page = _client().get("/discovery")
     assert page.status_code == 200
     text = page.text
     row1 = text.index("asset-form-row-1")

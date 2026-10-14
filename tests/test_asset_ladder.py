@@ -99,7 +99,7 @@ def test_ladder_form_parser_keeps_on_levels_and_drops_off_or_blank():
 def test_add_asset_columns_nav_rules_and_escalated_cube():
     db = _db()
     client = _client()
-    page = client.get("/assets")
+    page = client.get("/discovery")
     assert page.status_code == 200
     text = page.text
     order = [

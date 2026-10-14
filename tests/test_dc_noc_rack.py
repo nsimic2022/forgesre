@@ -57,8 +57,8 @@ def test_filter_by_rack_returns_that_host():
     assert here.asset_id in body
     assert other.asset_id not in body
     assert 'data-asset-filter="rack"' in page.text
-    assert 'name="extra_row"' in client.get("/assets").text
-    assert 'name="extra_rack"' in client.get("/assets").text
+    assert 'name="extra_row"' in client.get("/discovery").text
+    assert 'name="extra_rack"' in client.get("/discovery").text
 
     opened = ingest_alertmanager(
         db,

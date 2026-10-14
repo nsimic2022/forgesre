@@ -12,6 +12,9 @@
   {% endif %}
 </p>
 
+{% if request.query_params.get('edit_note') == 'select-one' %}
+<div class="banner" role="status">Select one</div>
+{% endif %}
 {% if notice %}
 <div class="banner">{{ notice }}</div>
 {% endif %}
@@ -155,6 +158,12 @@
 </div>
 
 <h2>Found assets</h2>
+{% set stay_parts = [] %}
+{% for key, value in request.query_params.multi_items() if key not in ["edit", "clone", "import", "notice", "edit_note"] %}
+{% set _ = stay_parts.append(key ~ "=" ~ (value|urlencode)) %}
+{% endfor %}
+{% set list_stay = "/discovery" ~ ("?" ~ stay_parts|join("&") if stay_parts else "") %}
+{% set import_tail = ("&" ~ stay_parts|join("&") if stay_parts else "") %}
 <div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="found-table">
@@ -175,10 +184,16 @@
   </thead>
   <tbody>
   {% for row in candidates %}
-    <tr class="{% if selected and selected.id == row.id %}selected{% endif %}" data-list-row>
+    <tr class="{% if selected and selected.id == row.id %}selected{% endif %}" data-list-row{% if can('write_assets') and not row.asset_id %} data-list-view="/discovery?import={{ row.id }}{{ import_tail }}"{% elif row.asset_id %} data-list-view="/assets?view={{ row.asset_id }}"{% endif %}>
       {{ sel.cell(row.id, row.ip) }}
       <td class="col-host">
+        {% if can('write_assets') and not row.asset_id %}
+        <a href="/discovery?import={{ row.id }}{{ import_tail }}" data-list-open>{{ row.hostname or "—" }}</a>
+        {% elif row.asset_id %}
+        <a href="/assets?view={{ row.asset_id }}" data-list-open>{{ row.hostname or "—" }}</a>
+        {% else %}
         {{ row.hostname or "—" }}
+        {% endif %}
         {% if row.source == 'demo' or row.ip == demo_candidate_ip %}
         <div><span class="pill demo">DEMO</span> <span class="muted">lab seed — not a Scan now production hit</span></div>
         {% endif %}
@@ -220,36 +235,41 @@
   </tbody>
 </table>
 </div>
-{% with list_actions={"delete": "/discovery/bulk-delete" if can('write_assets') else "", "delete_last": True, "export": "/discovery/export", "next": "/discovery", "confirm": "Delete the selected found assets? An approved asset stays in Assets."} %}
+{% with list_actions={"delete": "/discovery/bulk-delete" if can('write_assets') else "", "delete_last": True, "open_import": "/discovery/open-import" if can('write_assets') else "", "open_import_title": "Import into Add asset", "export": "/discovery/export", "next": "/discovery", "stay": list_stay, "confirm": "Delete the selected found assets? An approved asset stays in Assets."} %}
 {% include "_pager.html" %}
 {% endwith %}
 </div>
-{% if can('write_assets') and form_mode %}
+{% if can('write_assets') and candidate_mode %}
 <section class="card" id="candidate-form">
-  {% if form_mode == "edit" %}
+  {% if candidate_mode == "edit" %}
   <h2>Edit candidate</h2>
   <form method="post" action="/discovery/{{ selected.id }}/update" class="form-grid">
   {% else %}
   <h2>Clone candidate {% with %}{% set tip %}Copy of {{ selected.ip }}. Type a new IP. A DEMO source stays a lab row.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <form method="post" action="/discovery/{{ selected.id }}/clone" class="form-grid">
   {% endif %}
-    <label>IP <input name="ip" value="{{ form.ip }}" required></label>
-    <label>Hostname <input name="hostname" value="{{ form.hostname }}" placeholder="optional"></label>
+    <label>IP <input name="ip" value="{{ candidate_form.ip }}" required></label>
+    <label>Hostname <input name="hostname" value="{{ candidate_form.hostname }}" placeholder="optional"></label>
     <label>Type
       <select name="proposed_role">
         {% for opt in role_choices %}
-        <option value="{{ opt }}" {% if form.proposed_role == opt %}selected{% endif %}>{{ opt }}</option>
+        <option value="{{ opt }}" {% if candidate_form.proposed_role == opt %}selected{% endif %}>{{ opt }}</option>
         {% endfor %}
-        {% if form.proposed_role and form.proposed_role not in role_choices %}
-        <option value="{{ form.proposed_role }}" selected>{{ form.proposed_role }}</option>
+        {% if candidate_form.proposed_role and candidate_form.proposed_role not in role_choices %}
+        <option value="{{ candidate_form.proposed_role }}" selected>{{ candidate_form.proposed_role }}</option>
         {% endif %}
       </select>
     </label>
     <div class="wide row-actions asset-form-actions">
-      <button type="submit">{% if form_mode == "clone" %}Save copy{% else %}Save{% endif %}</button>
+      <button type="submit">{% if candidate_mode == "clone" %}Save copy{% else %}Save{% endif %}</button>
       <a href="/discovery">Cancel</a>
     </div>
   </form>
+</section>
+{% endif %}
+{% if can('write_assets') %}
+<section class="asset-pane" id="asset-pane">
+{% include "_asset_form.html" %}
 </section>
 {% endif %}
 {% endblock %}

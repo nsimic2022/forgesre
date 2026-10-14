@@ -43,6 +43,20 @@
       <button type="submit" title="Select one">Edit</button>
     </form>
     {% endif %}
+    {% if actions.open_view %}
+    <form method="post" action="{{ actions.open_view }}" data-bulk-edit>
+      <input type="hidden" name="next" value="{{ actions.next }}">
+      {% if actions.stay %}<input type="hidden" name="stay" value="{{ actions.stay }}">{% endif %}
+      <button type="submit" title="Select one" data-one-title="{{ actions.get('open_view_title') or 'View this asset' }}">View</button>
+    </form>
+    {% endif %}
+    {% if actions.open_import %}
+    <form method="post" action="{{ actions.open_import }}" data-bulk-edit>
+      <input type="hidden" name="next" value="{{ actions.next }}">
+      {% if actions.stay %}<input type="hidden" name="stay" value="{{ actions.stay }}">{% endif %}
+      <button type="submit" title="Select one" data-one-title="{{ actions.get('open_import_title') or 'Import into Add asset' }}">Import</button>
+    </form>
+    {% endif %}
     {% if actions.open_edit %}
     <form method="post" action="{{ actions.open_edit }}" data-bulk-edit>
       <input type="hidden" name="next" value="{{ actions.next }}">

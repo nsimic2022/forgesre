@@ -80,7 +80,7 @@ def test_add_asset_column_widths_fill_the_page():
     assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);" in row2
     chip = css.split(".playrule-chip-text", 1)[1].split("}", 1)[0]
     assert "ellipsis" not in chip
-    page = _client().get("/assets")
+    page = _client().get("/discovery")
     assert page.status_code == 200
     text = page.text
     order = [

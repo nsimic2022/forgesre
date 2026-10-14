@@ -243,7 +243,7 @@ def test_assets_notes_column_is_the_form_runbook():
 
 def test_asset_form_has_one_notes_and_row1_order():
     _db().close()
-    page = _client().get("/assets")
+    page = _client().get("/discovery")
     assert page.status_code == 200
     form = page.text.split('id="asset-form"', 1)[1].split("</form>", 1)[0]
     assert form.count(">Notes ") == 1

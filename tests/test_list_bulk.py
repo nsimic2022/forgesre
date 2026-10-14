@@ -211,10 +211,10 @@ def test_asset_discovery_playrule_and_journal_bulk_are_role_safe():
     admin = _client()
     assets = admin.get("/assets").text
     assert 'action="/assets/bulk-delete"' in assets
-    assert 'data-onoff' in assets
-    assert 'name="alarm_cpu_enabled"' in assets
-    assert ">ON<" in assets
     discovery = admin.get("/discovery").text
+    assert 'data-onoff' in discovery
+    assert 'name="alarm_cpu_enabled"' in discovery
+    assert ">ON<" in discovery
     assert ">Found assets<" in discovery
     assert 'action="/discovery/bulk-delete"' in discovery
     assert 'action="/discovery/export"' in discovery

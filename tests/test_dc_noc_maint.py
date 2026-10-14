@@ -277,7 +277,7 @@ def test_asset_list_badge_and_form_fields():
         maint_until=(now + timedelta(hours=2)).isoformat(),
     )
     client = _client()
-    page = client.get("/assets")
+    page = client.get("/discovery")
     assert page.status_code == 200
     assert 'name="extra_maint_from"' in page.text
     assert 'name="extra_maint_until"' in page.text
