@@ -878,9 +878,10 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
 })();
 
 // One row picker for every list box. A click on a row (not on its links, buttons or inputs) only selects it;
-// Up / Down, j / k, Home / End move the selection and scroll only the box; Enter opens the row's [data-list-open]
-// link (or toggles its [data-list-open] summary). Inputs keep their keys, Tab leaves, a mousedown outside the box
-// hands keyboard scrolling back to the page. onSelect(row, options) runs when the selection changes.
+// Up / Down, j / k, Home / End move the selection and scroll only the box; Enter or double-click opens
+// data-list-view on the row, else the row's [data-list-open] link (or toggles its [data-list-open] summary).
+// Inputs keep their keys, Tab leaves, a mousedown outside the box hands keyboard scrolling back to the page.
+// onSelect(row, options) runs when the selection changes.
 function listPicker(root, opts) {
   const options = opts || {};
   const box = options.box === undefined ? root : options.box;
@@ -933,6 +934,19 @@ function listPicker(root, opts) {
     if (row && rows.includes(row)) select(row, { focus: true });
   });
 
+  const openRow = (row) => {
+    const view = row.getAttribute("data-list-view");
+    if (view) {
+      window.location.assign(view);
+      return true;
+    }
+    const open = row.querySelector("[data-list-open]");
+    if (!open) return false;
+    if (open.href) window.location.assign(open.href);
+    else if (typeof open.click === "function") open.click();
+    return true;
+  };
+
   const STEP = { ArrowDown: 1, j: 1, ArrowUp: -1, k: -1 };
   root.addEventListener("keydown", (event) => {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
@@ -955,12 +969,16 @@ function listPicker(root, opts) {
       event.preventDefault();
       select(row);
     } else if (event.key === "Enter") {
-      const open = row.querySelector("[data-list-open]");
-      if (!open) return;
+      if (!openRow(row)) return;
       event.preventDefault();
-      if (open.href) window.location.assign(open.href);
-      else if (typeof open.click === "function") open.click();
     }
+  });
+
+  root.addEventListener("dblclick", (event) => {
+    if (event.target.closest("a, input, button, label, select, textarea, summary")) return;
+    const row = event.target.closest(rowSel);
+    if (!row || !rows.includes(row)) return;
+    if (openRow(row)) event.preventDefault();
   });
 
   document.addEventListener("mousedown", (event) => {

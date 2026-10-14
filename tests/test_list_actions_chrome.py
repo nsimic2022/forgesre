@@ -35,7 +35,6 @@ from app.services import ingest_alertmanager, next_incident_number
 
 ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN = (
-    ">Import<",
     ">Check now<",
     ">Check Now<",
     ">Assign<",
@@ -45,7 +44,6 @@ FORBIDDEN = (
     ">Dependencies<",
     ">CSV<",
     ">Excel<",
-    ">View<",
     "Enable monitoring",
     "Disable monitoring",
 )
@@ -114,10 +112,11 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert "[data-select-scope]:has([data-select-row]:checked) .list-actions" in css
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-W" in base and "app.js?v=v09-S" in base
+    assert "app.css?v=v09-X" in base and "app.js?v=v09-T" in base
 
     assets = _middle(client.get("/assets").text)
-    _order(assets, ["Edit", "Clone", "Verify", "Export", "Remove"])
+    _order(assets, ["View", "Edit", "Clone", "Verify", "Export", "Remove"])
+    assert 'action="/assets/open-view"' in assets
     assert 'action="/assets/open-edit"' in assets
     assert 'action="/assets/open-clone"' in assets
     assert 'action="/assets/open-verify" data-bulk-verify' in assets
@@ -141,7 +140,8 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
 
     discovery = client.get("/discovery").text
     found = _middle(discovery.split("<h2>Found assets</h2>", 1)[1])
-    _order(found, ["Export", "Delete"])
+    _order(found, ["Import", "Export", "Delete"])
+    assert 'action="/discovery/open-import"' in found
     assert 'action="/discovery/export"' in found
     assert 'action="/discovery/bulk-delete"' in found
     assert ">Approve<" not in found

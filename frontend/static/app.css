@@ -1711,6 +1711,40 @@ td.ops-report-actions .row-actions a.button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* v09-X: Assets list pane — Collecting, CPU, RAM, HDD, NET under the table. */
+.asset-pane { margin: 0.85rem 0 1.25rem; }
+.asset-glance {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  width: min(100%, 52rem);
+}
+.asset-glance-cell {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  background: var(--panel, transparent);
+}
+.asset-glance-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.asset-glance-cell .metric-value { font-size: 1.05rem; }
+.asset-table td.col-host a { color: inherit; text-decoration: none; font-weight: 600; }
+.asset-table td.col-host a:hover { text-decoration: underline; }
+.found-table td.col-host a { color: inherit; text-decoration: none; font-weight: 600; }
+.found-table td.col-host a:hover { text-decoration: underline; }
+@media (max-width: 52rem) {
+  .asset-glance { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+}
 .metric-value { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .metric-value.ok { color: var(--ok); }
 .metric-value.warn { color: var(--warn); }

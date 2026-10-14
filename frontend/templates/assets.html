@@ -70,6 +70,12 @@
   {% endfor %}
   {% endif %}
 </nav>
+{% set stay_parts = [] %}
+{% for key, value in request.query_params.multi_items() if key not in ["edit", "clone", "view", "notice", "edit_note"] %}
+{% set _ = stay_parts.append(key ~ "=" ~ (value|urlencode)) %}
+{% endfor %}
+{% set list_stay = "/assets" ~ ("?" ~ stay_parts|join("&") if stay_parts else "") %}
+{% set view_tail = ("&" ~ stay_parts|join("&") if stay_parts else "") %}
 <div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="asset-table" data-asset-reachability>
@@ -93,9 +99,9 @@
   </thead>
   <tbody>
     {% for asset in assets %}
-    <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}" data-list-row>
+    <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}" data-list-row data-list-view="/assets?view={{ asset.asset_id }}{{ view_tail }}">
       {{ sel.cell(asset.asset_id) }}
-      <td class="col-host">{{ asset.hostname }}{% if asset.parent %}<div class="muted" data-parent-host>parent {{ asset.parent.hostname }}</div>{% endif %}</td>
+      <td class="col-host"><a href="/assets?view={{ asset.asset_id }}{{ view_tail }}" data-list-open>{{ asset.hostname }}</a>{% if asset.parent %}<div class="muted" data-parent-host>parent {{ asset.parent.hostname }}</div>{% endif %}</td>
       <td class="col-port">
         {% set r = reachability_snapshot(asset) %}
         {% set reach_id = asset.asset_id %}
@@ -104,7 +110,7 @@
       <td class="col-status"><span class="status-cell"><span class="status-line"><span class="pill {{ asset.status }}">{{ asset.status }}</span></span>{% if in_maintenance(asset) %}<span class="status-line"><span class="pill warn" data-maint-badge title="{{ maintenance_label(asset) }}">Maintenance</span></span>{% endif %}</span></td>
       <td class="col-escalation">{% with cubes=asset_ladder_cubes(asset) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
       <td class="col-num">{{ asset.number or "—" }}</td>
-      <td class="col-id"><a href="/assets/{{ asset.asset_id }}" data-list-open>{{ asset.asset_id }}</a></td>
+      <td class="col-id"><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
       <td class="col-ip">{{ asset.ip or "—" }}</td>
       <td>{{ asset.owner or "—" }}</td>
       <td>
@@ -130,16 +136,18 @@
   </tbody>
 </table>
 </div>
-{% set stay_parts = [] %}
-{% for key, value in request.query_params.multi_items() if key not in ["edit", "clone", "notice", "edit_note"] %}
-{% set _ = stay_parts.append(key ~ "=" ~ (value|urlencode)) %}
-{% endfor %}
-{% set list_stay = "/assets" ~ ("?" ~ stay_parts|join("&") if stay_parts else "") %}
-{% with list_actions={"delete": "/assets/bulk-delete" if can('write_assets') else "", "delete_label": "Remove", "delete_last": True, "open_edit": "/assets/open-edit" if can('write_assets') else "", "open_edit_title": "Edit this asset", "clone": "/assets/open-clone" if can('write_assets') else "", "verify": "/assets/open-verify" if can('write_assets') else "", "export": "/assets/export", "next": "/assets", "stay": list_stay, "confirm": "Delete the selected assets? Incidents stay, without that host."} %}
+{% with list_actions={"delete": "/assets/bulk-delete" if can('write_assets') else "", "delete_label": "Remove", "delete_last": True, "open_view": "/assets/open-view", "open_view_title": "View this asset", "open_edit": "/assets/open-edit" if can('write_assets') else "", "open_edit_title": "Edit this asset", "clone": "/assets/open-clone" if can('write_assets') else "", "verify": "/assets/open-verify" if can('write_assets') else "", "export": "/assets/export", "next": "/assets", "stay": list_stay, "confirm": "Delete the selected assets? Incidents stay, without that host."} %}
 {% include "_pager.html" %}
 {% endwith %}
 </div>
-{% if can('write_assets') %}
+{% if selected and (show_glance or form_mode) %}
+<section class="asset-pane" id="asset-pane">
+{% if show_glance %}
+{% include "_asset_glance.html" %}
+{% endif %}
+{% if can('write_assets') and form_mode %}
 {% include "_asset_form.html" %}
+{% endif %}
+</section>
 {% endif %}
 {% endblock %}

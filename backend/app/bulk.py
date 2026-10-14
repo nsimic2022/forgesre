@@ -137,13 +137,36 @@ def _safe_assets_url(raw: str) -> str:
 def _assets_query(raw: str, **put: str) -> str:
     base = _safe_assets_url(raw)
     _, _, query = base.partition("?")
-    drop = {"edit", "clone", "edit_note", "notice"}
+    drop = {"edit", "clone", "view", "edit_note", "notice"}
     pairs = [(key, value) for key, value in parse_qsl(query, keep_blank_values=True) if key not in drop and key not in put]
     for key, value in put.items():
         if value:
             pairs.append((key, value))
     encoded = urlencode(pairs)
     return "/assets" + (("?" + encoded) if encoded else "")
+
+
+def _safe_discovery_url(raw: str) -> str:
+    """List URL only. Query is kept when it is a normal Discovery filter string."""
+    text = (raw or "").replace("\n", "").replace("\r", "").strip().split("#", 1)[0]
+    path, sep, query = text.partition("?")
+    if path != "/discovery":
+        return "/discovery"
+    if any(ch in query for ch in " <>\"'\\"):
+        return "/discovery"
+    return text if sep else "/discovery"
+
+
+def _discovery_query(raw: str, **put: str) -> str:
+    base = _safe_discovery_url(raw)
+    _, _, query = base.partition("?")
+    drop = {"edit", "clone", "import", "notice", "edit_note"}
+    pairs = [(key, value) for key, value in parse_qsl(query, keep_blank_values=True) if key not in drop and key not in put]
+    for key, value in put.items():
+        if value:
+            pairs.append((key, value))
+    encoded = urlencode(pairs)
+    return "/discovery" + (("?" + encoded) if encoded else "")
 
 
 _LIST_PATHS = frozenset({"/playrules", "/playbooks"})
@@ -165,7 +188,7 @@ def _safe_list_url(raw: str, path: str) -> str:
 def _list_query(raw: str, path: str, **put: str) -> str:
     base = _safe_list_url(raw, path)
     _, _, query = base.partition("?")
-    drop = {"edit", "clone", "edit_note", "notice"}
+    drop = {"edit", "clone", "view", "edit_note", "notice"}
     pairs = [(key, value) for key, value in parse_qsl(query, keep_blank_values=True) if key not in drop and key not in put]
     for key, value in put.items():
         if value:
@@ -1020,6 +1043,21 @@ def assets_bulk_delete(
     return _back(nxt, "/assets")
 
 
+@router.post("/assets/open-view")
+def assets_open_view(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    stay: Annotated[str, Form()] = "",
+):
+    """Open the list pane (metrics + form) for exactly one selected asset. Viewers can View."""
+    _forbid(user, can(user, "read_assets"))
+    row = _one_asset(db, selected)
+    if row is None:
+        return RedirectResponse(_assets_query(stay, edit_note="select-one"), status_code=303)
+    return RedirectResponse(_assets_query(stay, view=row.asset_id), status_code=303)
+
+
 @router.post("/assets/open-edit")
 def assets_open_edit(
     db: Session = Depends(get_db),
@@ -1082,6 +1120,21 @@ def assets_export(
 ):
     _forbid(user, can(user, "read_assets"))
     return _download("assets.txt", assets_text(db, _need(selected)))
+
+
+@router.post("/discovery/open-import")
+def discovery_open_import(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    stay: Annotated[str, Form()] = "",
+):
+    """Prefill Add asset from exactly one Found-assets row. Zero or many do not write."""
+    _forbid(user, can(user, "write_assets"))
+    row = _one_pk(db, DiscoveryCandidate, selected)
+    if row is None:
+        return RedirectResponse(_discovery_query(stay, edit_note="select-one"), status_code=303)
+    return RedirectResponse(_discovery_query(stay, **{"import": str(row.id)}), status_code=303)
 
 
 @router.post("/discovery/bulk-delete")

@@ -64,7 +64,7 @@ def test_detect_windows_reports_cpu_family():
 
 def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     client = _login("analyst-alarms@forgesre.local")
-    page = client.get("/assets")
+    page = client.get("/discovery")
     assert page.status_code == 200
     assert "<legend>Alarms</legend>" not in page.text
     assert '<fieldset class="alarm-families"' not in page.text
@@ -90,7 +90,7 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     table = page.text.split("<table")[1].split("</table>")[0]
     assert "alarm_disk_threshold" not in table
     assert ">Cancel</a>" in page.text
-    assert 'href="/assets">Cancel' in page.text
+    assert 'href="/discovery">Cancel' in page.text
     css = Path("frontend/static/app.css").read_text()
     assert "asset-form-grid" in css
     assert ".asset-form-split" in css
@@ -119,7 +119,7 @@ def test_edit_form_cancel_returns_to_asset():
     assert created.status_code in {302, 303}
     page = client.get("/assets?edit=win-cancel-01")
     assert page.status_code == 200
-    assert 'href="/assets/win-cancel-01">Cancel</a>' in page.text
+    assert 'href="/assets">Cancel</a>' in page.text
     assert "<legend>Alarms</legend>" not in page.text
     assert "alarm-heading" in page.text
 

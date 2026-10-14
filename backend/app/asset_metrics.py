@@ -64,6 +64,15 @@ _TILE_META = {
     "network": {"name": "Network", "kind": "bytes"},
 }
 
+# Assets list glance: Collecting, CPU, RAM, HDD, NET left → right. Missing tiles stay —.
+GLANCE_CELLS = (
+    ("up", "Collecting"),
+    ("cpu_percent", "CPU"),
+    ("memory_percent", "RAM"),
+    ("disk_percent", "HDD"),
+    ("network", "NET"),
+)
+
 # up stays first so existing tile-order checks keep Collecting at the front.
 # The asset chart grid lays CPU / Memory / Disk / Network / Uptime out itself.
 _CLASS_TILES = {
@@ -656,6 +665,23 @@ def asset_metric_panel(
             "label": graph_window_label(queried_start, queried_end),
         },
     }
+
+
+def glance_cells(panel: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Five glance cells for the Assets list pane. Missing tiles stay — (not a fake 0%)."""
+    by_key = {tile.get("key"): tile for tile in (panel or {}).get("tiles") or []}
+    cells: list[dict[str, Any]] = []
+    for key, label in GLANCE_CELLS:
+        tile = by_key.get(key) or {}
+        cells.append(
+            {
+                "key": key,
+                "label": label,
+                "display": tile.get("display") or "—",
+                "tone": tile.get("tone") or "warn",
+            }
+        )
+    return cells
 
 
 def prometheus_has_samples(panel: dict[str, Any]) -> bool:

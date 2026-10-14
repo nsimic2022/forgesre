@@ -4,6 +4,7 @@
 <h2>Clone asset {% with %}{% set tip %}Copy of {{ clone_source }} with a new Asset ID. Duplicate Asset ID or IP is rejected. NetBox id is not copied. Lab hosts (forge-demo-*) are not scraped — keep a forge-demo-* id only if you want another lab-only copy.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% else %}
 <h2>Add asset {% with %}{% set tip %}Analysts, engineers, and admins can add hosts. Asset ID is a short unique slug you type (e.g. win10-gp) — it is not taken from hostname. Hostname can be the OS name (e.g. DESKTOP-CG81N3J). Fill who to call — escalation uses that email instead of a generic team inbox. Default type Auto (detect exporter): ForgeSRE GETs http://IP:9182/metrics and :9100/metrics from this appliance (reads enough to see node_ / windows_, then drains the body). windows_exporter / windows_ → Windows Server :9182. node_exporter / node_ → Linux Server :9100. Both: keep a saved type if set, else prefer Windows :9182. SNMP UDP/161 (the same path as snmp_exporter after Approve) → Network device, empty scrape. HTTP silence is not a network guess. ICMP ping is not a scrape. You can override the type.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+{% if import_of %}<p class="muted">From scan {{ form.ip }} — change anything, then Save to create the asset.</p>{% endif %}
 {% endif %}
 {% from "_email_pick.html" import email_pick %}
 <form method="post" action="{% if form_mode == 'edit' %}/assets/{{ selected.asset_id }}/update{% else %}/assets{% endif %}" class="asset-form-split" id="asset-form">
@@ -258,12 +259,14 @@
   {% if form_mode == "clone" %}
   <input type="hidden" name="clone_of" value="{{ clone_source }}">
   {% endif %}
+  {% if import_of %}<input type="hidden" name="import_of" value="{{ import_of }}">{% endif %}
   <p class="muted wide" data-detect-out></p>
 </form>
+{% set form_list = "/discovery" if request.url.path.startswith("/discovery") else "/assets" %}
 <div class="wide row-actions asset-form-actions">
   <button type="submit" form="asset-form">{% if form_mode == 'clone' %}Save copy{% else %}Save{% endif %}</button>
   {% if form_mode == "edit" %}
-  <a href="/assets/{{ selected.asset_id }}">Cancel</a>
+  <a href="{{ form_list }}">Cancel</a>
   <a class="button" href="/assets/{{ selected.asset_id }}/verify">Verify</a>
   <form method="post" action="/assets/{{ selected.asset_id }}/detect" class="inline">
     <button type="submit" class="secondary">Detect OS / scrape port</button>
@@ -273,9 +276,9 @@
     <button type="submit" class="danger">Remove</button>
   </form>
   {% endif %}
-  <a href="/assets">Add another</a>
+  <a href="/discovery">Add another</a>
   {% else %}
-  <a href="/assets">Cancel</a>
+  <a href="{{ form_list }}">Cancel</a>
   {% endif %}
 </div>
 {% if form_mode == "edit" and delete_blocked(selected) %}

@@ -886,39 +886,96 @@ def approve_asset_id(db: Session, row: DiscoveryCandidate) -> str:
     return slug
 
 
+def candidate_inventory_guess(row: DiscoveryCandidate) -> tuple[str, str, str]:
+    """Type, monitoring profile, scrape from scan flags. Same mapping Approve uses."""
+    role = row.proposed_role or ""
+    ports = {int(p) for p in (row.open_ports or []) if str(p).isdigit() or isinstance(p, int)}
+    has_windows = bool(getattr(row, "windows_exporter", False))
+    has_node = bool(getattr(row, "node_exporter", False))
+    if has_windows or "Windows" in role:
+        confirmed = has_windows or ("no windows_exporter" not in role and "pick OS" not in role)
+        return (
+            "Windows Server",
+            "windows-standard",
+            (f"{row.ip}:{WINDOWS_EXPORTER_PORT}" if confirmed else ""),
+        )
+    if has_node or "Linux" in role:
+        confirmed = has_node or ("no node_exporter" not in role and "pick OS" not in role)
+        scrape = (
+            f"{row.ip}:{LINUX_EXPORTER_PORT}"
+            if confirmed and (has_node or LINUX_EXPORTER_PORT in ports)
+            else ""
+        )
+        return "Linux Server", "linux-standard", scrape
+    if bool(getattr(row, "snmp_ok", False)) or "network" in role.lower():
+        return "Network device", "network-switch", ""
+    if "pick OS" in role:
+        return "Unknown", "", ""
+    return "Web/appliance", "web-standard", ""
+
+
+def candidate_form_values(db: Session, row: DiscoveryCandidate) -> dict:
+    """Add-asset form prefill from a Found-assets scan row. Does not create the asset."""
+    form = asset_form_values()
+    atype, _profile, scrape = candidate_inventory_guess(row)
+    slug = approve_asset_id(db, row)
+    form["asset_id"] = slug
+    form["hostname"] = (getattr(row, "hostname", None) or "").strip() or slug
+    form["ip"] = row.ip or ""
+    form["type"] = atype
+    form["scrape_address"] = scrape
+    return form
+
+
+def attach_imported_candidate(db: Session, row: DiscoveryCandidate, asset: Asset, actor: str) -> None:
+    """Mark a Found-assets row approved after Save from the Import-prefilled form."""
+    existing = (row.asset_id or "").strip()
+    if existing and existing != asset.asset_id:
+        return
+    row.status = "approved"
+    row.decided_by = actor
+    row.decided_at = utcnow()
+    row.asset_id = asset.asset_id
+    if (asset.source or "") in {"", "manual"}:
+        asset.source = "discovery"
+    audit(
+        db,
+        "discovery.approve",
+        actor=actor,
+        object_type="asset",
+        object_id=asset.asset_id,
+        data={"ip": row.ip, "import": True},
+    )
+    db.commit()
+    report(
+        db,
+        "discovery",
+        "approve",
+        "ok",
+        summary=f"Imported {row.ip} → {asset.asset_id}",
+        detail=f"actor={actor} scrape={asset.scrape_address}",
+        object_type="asset",
+        object_id=asset.asset_id,
+    )
+    if is_snmp_asset(asset):
+        report(
+            db,
+            "snmp",
+            "target.add",
+            "ok",
+            summary=f"{asset.asset_id} queued for snmp_exporter UDP/{snmp_port_for(asset)}",
+            detail=f"ip={asset.ip} port={snmp_port_for(asset)} module={settings.snmp_module}",
+            object_type="asset",
+            object_id=asset.asset_id,
+        )
+
+
 def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset:
     fallback = _asset_id_from_ip(row.ip)
     asset = db.query(Asset).filter((Asset.asset_id == fallback) | (Asset.ip == row.ip)).first()
     slug = asset.asset_id if asset is not None else approve_asset_id(db, row)
     if asset is None:
-        role = row.proposed_role or ""
-        ports = {int(p) for p in (row.open_ports or []) if str(p).isdigit() or isinstance(p, int)}
-        has_windows = bool(getattr(row, "windows_exporter", False))
-        has_node = bool(getattr(row, "node_exporter", False))
-        if has_windows or "Windows" in role:
-            confirmed = has_windows or ("no windows_exporter" not in role and "pick OS" not in role)
-            atype, profile, scrape = (
-                "Windows Server",
-                "windows-standard",
-                (f"{row.ip}:{WINDOWS_EXPORTER_PORT}" if confirmed else ""),
-            )
-        elif has_node or "Linux" in role:
-            confirmed = has_node or ("no node_exporter" not in role and "pick OS" not in role)
-            atype, profile, scrape = (
-                "Linux Server",
-                "linux-standard",
-                (
-                    f"{row.ip}:{LINUX_EXPORTER_PORT}"
-                    if confirmed and (has_node or LINUX_EXPORTER_PORT in ports)
-                    else ""
-                ),
-            )
-        elif bool(getattr(row, "snmp_ok", False)) or "network" in role.lower():
-            atype, profile, scrape = "Network device", "network-switch", ""
-        elif "pick OS" in role:
-            atype, profile, scrape = "Unknown", "", ""
-        else:
-            atype, profile, scrape = "Web/appliance", "web-standard", ""
+        atype, profile, scrape = candidate_inventory_guess(row)
         hostname = (getattr(row, "hostname", None) or "").strip() or slug
         notes = (
             DEMO_CANDIDATE_NOTES

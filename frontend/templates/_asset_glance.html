@@ -1,0 +1,8 @@
+<div class="asset-glance" data-asset-glance="{{ selected.asset_id }}"{% if selected %} data-host="{{ selected.hostname }}"{% endif %}>
+  {% for cell in glance %}
+  <div class="asset-glance-cell" data-glance="{{ cell.key }}" data-tone="{{ cell.tone }}">
+    <span class="asset-glance-label">{{ cell.label }}</span>
+    <span class="metric-value {{ cell.tone }}">{{ cell.display }}</span>
+  </div>
+  {% endfor %}
+</div>

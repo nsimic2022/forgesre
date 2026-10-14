@@ -51,6 +51,7 @@ from app.inventory import (
     ASSET_TYPE_CHOICES,
     CANDIDATE_ROLE_CHOICES,
     approve_candidate,
+    attach_imported_candidate,
     asset_extra,
     asset_filter_options,
     asset_form_values,
@@ -63,6 +64,7 @@ from app.inventory import (
     assets_matching,
     clone_candidate,
     clone_prefill,
+    candidate_form_values,
     create_manual_asset,
     delete_asset,
     delete_blocked,
@@ -105,7 +107,7 @@ from app.security import (
     verify_password,
 )
 from app.api import doctor_payload, run_asset_verify, verify_assets
-from app.asset_metrics import safe_asset_metric_panel
+from app.asset_metrics import glance_cells, safe_asset_metric_panel
 from app.metrics import reset_demo_gauges
 from app.services import (
     compact_stamp,
@@ -734,6 +736,48 @@ def dashboard(
     )
 
 
+def asset_form_context(
+    db: Session,
+    *,
+    every: list,
+    form_mode: str,
+    selected,
+) -> dict:
+    """Shared Add/Edit/Clone template vars for Assets and Discovery."""
+    from app.services import list_mail_addresses
+
+    return {
+        "type_choices": ASSET_TYPE_CHOICES,
+        "type_groups": ASSET_TYPE_GROUPS,
+        "snmp_family": snmp_family,
+        "default_snmp_port": DEFAULT_SNMP_PORT,
+        "mail_addresses": list_mail_addresses(db),
+        "delete_blocked": delete_blocked,
+        "extra_fields": EXTRA_FIELDS,
+        "playrule_choices": playrule_choices(db),
+        "support_choices": SUPPORT_CHOICES,
+        "support_lead_choices": SUPPORT_LEAD_CHOICES,
+        "support_lead_default": SUPPORT_LEAD_DEFAULT,
+        "parent_choices": [
+            {"asset_id": row.asset_id, "hostname": row.hostname}
+            for row in every
+            if form_mode != "edit" or selected is None or row.id != selected.id
+        ],
+        "snmp_versions": SNMP_VERSIONS,
+        "snmp_v3_levels": V3_LEVELS,
+        "snmp_auth_protocols": AUTH_PROTOCOLS,
+        "snmp_priv_protocols": PRIV_PROTOCOLS,
+    }
+
+
+def asset_saved_url(asset_id: str, notice: str = "") -> str:
+    """Stay on the Assets list with the saved row's pane open."""
+    pairs = [("view", asset_id)]
+    if notice:
+        pairs.append(("notice", notice))
+    return "/assets?" + urlencode(pairs)
+
+
 @router.get("/assets", response_class=HTMLResponse)
 def assets_page(
     request: Request,
@@ -741,6 +785,7 @@ def assets_page(
     user: User = Depends(login_required),
     edit: str = "",
     clone: str = "",
+    view: str = "",
     q: str = "",
     status: str = "",
     flag: str = "",
@@ -756,8 +801,6 @@ def assets_page(
     ip: str = "",
     page: str = "1",
 ):
-    from app.services import list_mail_addresses
-
     every = db.query(Asset).order_by(Asset.number, Asset.hostname).all()
     zabbix_assets = any(asset_in_zabbix(row) for row in every)
     rows = assets_matching(
@@ -792,22 +835,35 @@ def assets_page(
         "ip": ip,
     }
     filter_tail = "".join(f"&{urlencode({key: value})}" for key, value in filters.items() if value)
-    form_mode = "add"
+    form_mode = ""
     selected = None
     form = asset_form_values()
     clone_source = ""
+    show_glance = False
+    metrics = None
+    glance = []
     notice = request.query_params.get("notice") or ""
     if edit.strip():
         selected = db.query(Asset).filter_by(asset_id=edit.strip()).first()
         if selected is not None:
             form_mode = "edit"
             form = asset_form_values(selected)
+            show_glance = True
+    elif view.strip():
+        selected = db.query(Asset).filter_by(asset_id=view.strip()).first()
+        if selected is not None:
+            form_mode = "edit"
+            form = asset_form_values(selected)
+            show_glance = True
     elif clone.strip():
         selected = db.query(Asset).filter_by(asset_id=clone.strip()).first()
         if selected is not None:
             form_mode = "clone"
             form = clone_prefill(db, selected)
             clone_source = selected.asset_id
+    if show_glance and selected is not None:
+        metrics = safe_asset_metric_panel(selected)
+        glance = glance_cells(metrics)
     return render(
         request,
         "assets.html",
@@ -817,12 +873,10 @@ def assets_page(
         form=form,
         selected=selected,
         clone_source=clone_source,
-        type_choices=ASSET_TYPE_CHOICES,
-        type_groups=ASSET_TYPE_GROUPS,
-        snmp_family=snmp_family,
-        default_snmp_port=DEFAULT_SNMP_PORT,
-        mail_addresses=list_mail_addresses(db),
-        delete_blocked=delete_blocked,
+        show_glance=show_glance,
+        metrics=metrics,
+        glance=glance,
+        import_of="",
         notice=notice,
         q=q,
         status=status,
@@ -845,20 +899,7 @@ def assets_page(
         asset_missing_email=asset_missing_email,
         reachability_snapshot=reachability_snapshot,
         pager=pager,
-        extra_fields=EXTRA_FIELDS,
-        playrule_choices=playrule_choices(db),
-        support_choices=SUPPORT_CHOICES,
-        support_lead_choices=SUPPORT_LEAD_CHOICES,
-        support_lead_default=SUPPORT_LEAD_DEFAULT,
-        parent_choices=[
-            {"asset_id": row.asset_id, "hostname": row.hostname}
-            for row in every
-            if form_mode != "edit" or selected is None or row.id != selected.id
-        ],
-        snmp_versions=SNMP_VERSIONS,
-        snmp_v3_levels=V3_LEVELS,
-        snmp_auth_protocols=AUTH_PROTOCOLS,
-        snmp_priv_protocols=PRIV_PROTOCOLS,
+        **asset_form_context(db, every=every, form_mode=form_mode, selected=selected),
     )
 
 
@@ -960,6 +1001,7 @@ def asset_create(
     owner_email_pick: str = Form(""),
     extra_backup_email_pick: str = Form(""),
     clone_of: str = Form(""),
+    import_of: str = Form(""),
     alarms_present: str = Form(""),
     alarm_up_enabled: str = Form(""),
     alarm_cpu_enabled: str = Form(""),
@@ -1104,10 +1146,20 @@ def asset_create(
                 f"/assets?clone={quote(cloned_from)}&notice={quote(str(exc))}",
                 status_code=302,
             )
+        imported = (import_of or "").strip()
+        if imported.isdigit():
+            return RedirectResponse(
+                f"/discovery?import={quote(imported)}&notice={quote(str(exc))}",
+                status_code=302,
+            )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    imported = (import_of or "").strip()
+    if imported.isdigit():
+        candidate = db.get(DiscoveryCandidate, int(imported))
+        if candidate is not None:
+            attach_imported_candidate(db, candidate, asset, actor=user.email)
     notice = getattr(asset, "_detect_message", "") or ""
-    suffix = f"?notice={quote(notice)}" if notice else ""
-    return RedirectResponse(f"/assets/{asset.asset_id}{suffix}", status_code=302)
+    return RedirectResponse(asset_saved_url(asset.asset_id, notice), status_code=302)
 
 
 @router.get("/discovery", response_class=HTMLResponse)
@@ -1118,6 +1170,7 @@ def discovery_page(
     page: str = "1",
     edit: str = "",
     clone: str = "",
+    imported: str = Query("", alias="import"),
 ):
     from discovery import suggested_management_cidr
     from app.jobs import active_discovery_scan
@@ -1134,15 +1187,23 @@ def discovery_page(
     rows, pager = paginate(rows, page, size=per_page(request))
     token = settings.netbox_token
     netbox_sync = sync_cta(settings.netbox_url, token, settings.netbox_enabled)
-    form_mode = ""
+    candidate_mode = ""
     selected = None
-    form = {"ip": "", "hostname": "", "proposed_role": "Unknown device"}
+    candidate_form = {"ip": "", "hostname": "", "proposed_role": "Unknown device"}
+    form_mode = "add"
+    form = asset_form_values()
+    import_of = ""
     notice = request.query_params.get("notice") or ""
-    if edit.strip().isdigit():
+    if imported.strip().isdigit():
+        selected = db.get(DiscoveryCandidate, int(imported.strip()))
+        if selected is not None:
+            form = candidate_form_values(db, selected)
+            import_of = str(selected.id)
+    elif edit.strip().isdigit():
         selected = db.get(DiscoveryCandidate, int(edit.strip()))
         if selected is not None:
-            form_mode = "edit"
-            form = {
+            candidate_mode = "edit"
+            candidate_form = {
                 "ip": selected.ip,
                 "hostname": selected.hostname or "",
                 "proposed_role": selected.proposed_role or "Unknown device",
@@ -1151,8 +1212,8 @@ def discovery_page(
         source = db.get(DiscoveryCandidate, int(clone.strip()))
         if source is not None:
             selected = source
-            form_mode = "clone"
-            form = {
+            candidate_mode = "clone"
+            candidate_form = {
                 "ip": suggest_clone_candidate_ip(db, source.ip),
                 "hostname": source.hostname or "",
                 "proposed_role": source.proposed_role or "Unknown device",
@@ -1160,15 +1221,20 @@ def discovery_page(
     saved_cidrs = list(settings.discovery_cidrs)
     suggested = suggested_management_cidr()
     cidr_prefill = ", ".join(saved_cidrs) if saved_cidrs else (suggested or "")
+    inventory = db.query(Asset).order_by(Asset.number, Asset.hostname).all()
     return render(
         request,
         "discovery.html",
         user,
         candidates=rows,
         pending=pending,
+        candidate_mode=candidate_mode,
+        candidate_form=candidate_form,
         form_mode=form_mode,
-        selected=selected,
         form=form,
+        selected=selected,
+        clone_source="",
+        import_of=import_of,
         role_choices=CANDIDATE_ROLE_CHOICES,
         notice=notice,
         discovery_enabled=settings.discovery_enabled,
@@ -1199,6 +1265,7 @@ def discovery_page(
         demo_candidate_ip=DEMO_CANDIDATE_IP,
         scan_job=active_discovery_scan(db),
         pager=pager,
+        **asset_form_context(db, every=inventory, form_mode=form_mode, selected=None),
     )
 
 
@@ -1734,8 +1801,7 @@ def asset_update(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     notice = getattr(item, "_detect_message", "") or ""
-    suffix = f"?notice={quote(notice)}" if notice else ""
-    return RedirectResponse(f"/assets/{asset_id}{suffix}", status_code=302)
+    return RedirectResponse(asset_saved_url(asset_id, notice), status_code=302)
 
 
 @router.post("/assets/{asset_id}/detect")

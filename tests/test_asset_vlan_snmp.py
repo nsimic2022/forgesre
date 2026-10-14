@@ -5,6 +5,7 @@ snmp_exporter auth render path. Secrets never reach GET HTML, the asset API, jou
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 from uuid import uuid4
@@ -81,8 +82,8 @@ def _write_rendered(tmp_path: Path, names: list[str]) -> None:
 
 def _ids(page: str) -> set[str]:
     table = page.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
-    found = (cell.split("<", 1)[0] for cell in table.split("data-list-open>")[1:])
-    return {asset_id for asset_id in found if asset_id.startswith(PREFIX)}
+    found = re.findall(r'href="/assets/(' + re.escape(PREFIX) + r'[^"?]+)"', table)
+    return set(found)
 
 
 def test_vlan_persists_on_add_edit_detail_and_filters():
@@ -129,7 +130,8 @@ def test_vlan_persists_on_add_edit_detail_and_filters():
 
 def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     _db().close()
-    text = _client().get("/assets").text
+    text = _client().get("/discovery").text
+    listed = _client().get("/assets").text
     middle = text.split("asset-form-middle", 1)[1].split("asset-form-right", 1)[0]
     right = text.split("asset-form-right", 1)[1].split("asset-form-custom", 1)[0]
     custom = text.split("asset-form-custom", 1)[1].split("asset-form-ladder", 1)[0]
@@ -147,13 +149,13 @@ def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     assert 'name="alarms_present"' in right
     for version in ("v1", "v2c", "v3"):
         assert f'<option value="{version}"' in middle
-    thead = text.split('<table class="asset-table"', 1)[1].split("</thead>", 1)[0]
+    thead = listed.split('<table class="asset-table"', 1)[1].split("</thead>", 1)[0]
     assert 'class="col-port"' in thead and ">Port " in thead and "ICMP / port / SNMP" not in thead
     assert thead.index('class="col-port"') < thead.index(">Status<") < thead.index(">Escalation ")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".asset-ladder .ladder-level {" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-W" in base and "app.js?v=v09-S" in base
+    assert "app.css?v=v09-X" in base and "app.js?v=v09-T" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "[data-snmp-version]" in js and "[data-snmp-v3-level]" in js
 
