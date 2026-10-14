@@ -56,7 +56,7 @@
 </form>
 {% endif %}
 <h2 id="oncall">On call {% with %}{% set tip %}A short weekly roster. Each row is one weekday and a from/until time in the appliance timezone (inclusive). L1 (or any step) with the role oncall mails whoever matches now. Empty roster = that step is no-recipient. The Dashboard On call line shows this person. This is not PagerDuty.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-<p data-oncall-now>{% if oncall %}Now: <strong>{{ oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}<span class="muted">No one scheduled right now.</span>{% endif %}</p>
+<p data-oncall-now>{% if oncall %}Now: <strong>{{ oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}<span class="muted">No one scheduled right now.</span>{% endif %}{% if can('write_play') %} <form method="post" action="/escalation/oncall/take" class="oncall-take"><input type="hidden" name="next" value="/escalation"><button type="submit" class="secondary">I'm on duty now</button></form>{% endif %}</p>
 {% if oncall_slots %}
 <table class="scan-list" data-oncall-roster>
   <thead><tr><th>When</th><th>Name</th><th>Email</th><th>Phone</th>{% if can('write_play') %}<th></th>{% endif %}</tr></thead>

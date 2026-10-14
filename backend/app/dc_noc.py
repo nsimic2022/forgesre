@@ -447,10 +447,51 @@ def current_oncall(db: Session, at: datetime | None = None) -> dict[str, Any] | 
         .order_by(OncallSlot.start_minute, OncallSlot.id)
         .all()
     )
-    for row in rows:
-        if int(row.start_minute) <= minute <= int(row.end_minute):
-            return oncall_slot_view(row)
-    return None
+    matches = [row for row in rows if int(row.start_minute) <= minute <= int(row.end_minute)]
+    if not matches:
+        return None
+    matches.sort(key=lambda row: (int(row.start_minute), int(row.id or 0)))
+    return oncall_slot_view(matches[-1])
+
+
+def take_duty(db: Session, user: Any, at: datetime | None = None) -> dict[str, Any]:
+    """Cover the rest of today as this user. A later start wins over an earlier slot."""
+    moment = at or utcnow()
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    local = moment.astimezone(_zone())
+    start_minute = local.hour * 60 + local.minute
+    end_minute = 23 * 60 + 59
+    if start_minute >= end_minute:
+        raise ValueError("Too late today to take the rest of the day.")
+    person = current_oncall(db, moment)
+    email = str(getattr(user, "email", "") or "").strip()
+    if person and person.get("email", "").lower() == email.lower():
+        return person
+    # Close whoever still covers the rest of today so the roster does not stack.
+    overlapping = (
+        db.query(OncallSlot)
+        .filter(OncallSlot.weekday == local.weekday())
+        .all()
+    )
+    for row in overlapping:
+        if int(row.start_minute) <= start_minute <= int(row.end_minute):
+            closed = start_minute - 1
+            if closed < int(row.start_minute):
+                db.delete(row)
+            else:
+                row.end_minute = closed
+    db.flush()
+    name = " ".join(str(getattr(user, "name", "") or "").split()) or (email.split("@")[0] if email else "")
+    slot = add_oncall_slot(
+        db,
+        weekday=local.weekday(),
+        start=_hhmm(start_minute),
+        end=_hhmm(end_minute),
+        name=name,
+        email=email,
+    )
+    return oncall_slot_view(slot)
 
 
 SYSLOG_LIMIT = 20

@@ -1,8 +1,10 @@
-# Session handoff — 9 September 2026
+# Session handoff
 
 This file is a **session handoff for the next coding agent or contributor**. It is not an operator manual. Operators start at [install and config](install-config.md) and the [operator handbook](operator-handbook.md).
 
 Product on `main`: **V0.9**. Repository: https://github.com/nsimic2022/forgesre.
+
+**14 October 2026 (current).** Branch `cursor/dash-export-csv-05f8` (PR against `main`): Dashboard cube clock removed; Host metrics title above the cube; incident column **Incident**; Export **TXT + CSV UTF-8** on every list; On call links to `/escalation#oncall` plus **I'm on duty now** (later start wins; taking duty closes the previous rest-of-day window); Dashboard **ForgeAI** digest (SQL facts, optional LLM sentences, Report / Send report). Pytest **829 passed, 2 skipped** twice. Docs updated: handbook screen map §4 / §5 / §13 / §14, [llm.md](llm.md), [v0.9.md](v0.9.md), [architecture.md](architecture.md), [docs/README.md](README.md), root README. Never `./install.sh` on a live box. Replies to N in Serbian; OSS docs English.
 
 1. [Who and when](#1-who-and-when)
 2. [Checked twice (pytest)](#2-checked-twice-pytest)

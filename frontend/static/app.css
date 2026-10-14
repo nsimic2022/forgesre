@@ -594,8 +594,10 @@ a.button {
 .pill.warning, .pill.warn, .pill.maint, .pill.suppressed { background: var(--pill-warn-bg); color: var(--pill-warn); }
 .capacity-spark { width: 5.5rem; height: 1.4rem; vertical-align: middle; margin: 0 0.35rem; }
 .capacity-spark polyline { fill: none; stroke: currentColor; stroke-width: 1.5; }
-.oncall-now { margin: 0 0 0.8rem; }
+.oncall-now { margin: 0 0 0.8rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem 0.7rem; }
 .oncall-now a { color: inherit; }
+.oncall-now .oncall-take { margin: 0; display: inline-flex; }
+.oncall-now .oncall-take button { padding: 0.22rem 0.65rem; font-size: 0.85rem; }
 .pill.critical, .pill.crit, .pill.open { background: var(--pill-crit-bg); color: var(--pill-crit); }
 .pill.new { background: var(--pill-warn-bg); color: var(--pill-warn); }
 .pill.approved { background: var(--pill-ok-bg); color: var(--pill-ok); }
@@ -1714,6 +1716,7 @@ td.ops-report-actions .row-actions a.button {
 }
 /* v09-X: Assets list pane — Collecting, CPU, RAM, HDD, NET under the table. */
 /* v09-Y: Host metrics title sits above the cube; Export has TXT / CSV. */
+/* v09-Z: ForgeAI digest under Recent incidents; I'm on duty now. */
 .asset-pane { margin: 0.85rem 0 1.25rem; }
 .asset-glance {
   display: grid;
@@ -2192,6 +2195,20 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .dash-graphs-col > h2 { margin: 0 0 0.55rem; }
 .dash-graphs { margin: 0; min-width: 0; }
 .dash-graphs .metric-panel-head { justify-content: flex-end; margin-bottom: 0.15rem; }
+.dash-insights { margin: 1.1rem 0 0; padding: 0.85rem 1rem 1rem; }
+.dash-insights-head h2 { margin: 0 0 0.25rem; }
+.dash-insights-hint { margin: 0 0 0.7rem; }
+.insight-conclusions { margin: 0 0 0.85rem; padding-left: 1.2rem; }
+.insight-conclusions li { margin: 0.2rem 0; }
+.insight-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.7rem; }
+.insight-card { margin: 0; padding: 0.65rem 0.75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.insight-card h3 { margin: 0 0 0.4rem; font-size: 0.95rem; }
+.insight-card ul { margin: 0; padding-left: 1.1rem; }
+.insight-card li { margin: 0.15rem 0; overflow-wrap: anywhere; }
+.insight-card p { margin: 0 0 0.35rem; }
+.insight-actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.55rem 0.8rem; margin-top: 0.9rem; }
+.insight-actions form { margin: 0; display: inline-flex; align-items: flex-end; gap: 0.35rem; }
+.insight-actions .export-format select { width: auto; }
 .dash-graph-subject { margin: 0 0 0.25rem; font-weight: 600; overflow-wrap: anywhere; }
 .dash-graph-caption { margin: 0 0 0.35rem; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .dash-graph-empty { margin: 0 0 0.5rem; font-size: 0.85rem; }

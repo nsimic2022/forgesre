@@ -29,6 +29,7 @@ from app.dc_noc import (
     list_oncall_slots,
     maintenance_label,
     snmp_surface,
+    take_duty,
 )
 from app.asset_extras import (
     EXTRA_FIELDS,
@@ -108,6 +109,7 @@ from app.security import (
 )
 from app.api import doctor_payload, run_asset_verify, verify_assets
 from app.asset_metrics import glance_cells, safe_asset_metric_panel
+from app.insights import insight_panel, insights_csv, insights_text, rewrite_insights
 from app.metrics import reset_demo_gauges
 from app.services import (
     compact_stamp,
@@ -733,6 +735,7 @@ def dashboard(
         recent=recent,
         pager=pager,
         oncall=current_oncall(db),
+        insights=insight_panel(db),
     )
 
 
@@ -2657,6 +2660,86 @@ def escalation_oncall_add(
     audit(db, "oncall.add", actor=user.email, object_type="oncall", object_id=email, data={"weekday": weekday, "name": name})
     db.commit()
     return RedirectResponse("/escalation", status_code=302)
+
+
+def _oncall_back(raw: str) -> RedirectResponse:
+    target = raw if raw in {"/", "/escalation"} else "/escalation"
+    if target == "/escalation":
+        target = "/escalation#oncall"
+    return RedirectResponse(target, status_code=303)
+
+
+@router.post("/escalation/oncall/take")
+def escalation_oncall_take(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    nxt: Annotated[str, Form(alias="next")] = "",
+):
+    """Cover the rest of today as the logged-in user. Dashboard On call updates immediately."""
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    try:
+        slot = take_duty(db, user)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "oncall.take", actor=user.email, object_type="oncall", object_id=user.email, data={"name": slot.get("name")})
+    db.commit()
+    return _oncall_back(nxt)
+
+
+@router.post("/insights/refresh")
+def insights_refresh(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can(user, "read_ai"):
+        raise HTTPException(status_code=403)
+    from app.insights import insight_facts
+
+    rewrite_insights(db, insight_facts(db), actor=user.email)
+    return RedirectResponse("/#forgeai", status_code=303)
+
+
+@router.post("/insights/export")
+def insights_export(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    fmt: Annotated[str, Form(alias="format")] = "txt",
+):
+    from app.bulk import _download, _download_csv, _export_format
+
+    panel = insight_panel(db)
+    if _export_format(fmt) == "csv":
+        headers, rows = insights_csv(panel)
+        return _download_csv("forgeai-digest.csv", headers, rows)
+    return _download("forgeai-digest.txt", insights_text(panel))
+
+
+@router.post("/insights/mail")
+def insights_mail(
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    target: str = Form(""),
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    from app.services import send_outbound_mail
+
+    address = (target or user.email or "").strip()
+    if "@" not in address or "." not in address.partition("@")[2]:
+        raise HTTPException(status_code=400, detail="Need an email address.")
+    panel = insight_panel(db)
+    body = "\n".join(insights_text(panel))
+    send_outbound_mail(
+        db,
+        target=address,
+        subject="ForgeSRE ForgeAI digest",
+        body=body,
+        actor=user.email,
+        step_key="report",
+    )
+    db.commit()
+    return RedirectResponse("/#forgeai", status_code=303)
 
 
 @router.post("/escalation/oncall/{slot_id}/delete")

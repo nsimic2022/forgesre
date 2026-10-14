@@ -55,7 +55,7 @@ exporter (node_exporter :9100, windows_exporter :9182, or snmp_exporter)
         → incident, Rules, Ladder mail
 ```
 
-Grafana is **not** on this path. A Grafana outage does not stop alerts. Host metrics on the Dashboard and the incident page are drawn by Core from Prometheus `query_range` (or Zabbix `trend.get` when Prometheus has no samples). There is no Grafana iframe.
+Grafana is **not** on this path. A Grafana outage does not stop alerts. Host metrics on the Dashboard and the incident page are drawn by Core from Prometheus `query_range` (or Zabbix `trend.get` when Prometheus has no samples). There is no Grafana iframe. The Dashboard **ForgeAI** strip is also off this path: Core aggregates incident rows in SQL, then optionally asks the local LLM for a few sentences. It cannot open or mute an incident.
 
 **Second path (optional):** Zabbix webhook → Core. Same incident lifecycle. ForgeSRE does not write back to Zabbix. Recovery resolves the incident; a backup `problem.get` poll covers a lost recovery webhook.
 

@@ -250,7 +250,8 @@ def test_dashboard_order_tiles_appliance_sections_without_banners():
     appliance = html.index("data-appliance-card")
     recent = html.index("<h2>Recent incidents</h2>")
     graphs = html.index("data-dash-graphs")
-    assert title < top < incidents_tile < infra < appliance < recent < graphs
+    insights = html.index("data-forgeai-insights")
+    assert title < top < incidents_tile < infra < appliance < recent < graphs < insights
     assert "Recent journal" not in html
     assert "Layout journal error" not in html
     for gone in ('class="dash-banners"', 'id="host-down-banner"', "data-host-down-banner", "HOST DOWN",
@@ -311,7 +312,7 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.15rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-Y" in base
+    assert "app.css?v=v09-Z" in base
 
 
 def test_dashboard_banner_block_gone_from_template_js_css():

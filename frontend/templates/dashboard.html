@@ -48,7 +48,7 @@
   </div>
 </dialog>
 {% endif %}
-<p class="oncall-now" data-oncall>{% if oncall %}On call {% if can('read_play') %}<a href="/escalation#oncall"><strong>{{ oncall.name }}</strong></a>{% else %}<strong>{{ oncall.name }}</strong>{% endif %} · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}On call <span class="muted">no one scheduled</span>{% if can('read_play') %} · <a href="/escalation#oncall">Roster</a>{% endif %}{% endif %}</p>
+<p class="oncall-now" data-oncall>{% if oncall %}On call {% if can('read_play') %}<a href="/escalation#oncall"><strong>{{ oncall.name }}</strong></a>{% else %}<strong>{{ oncall.name }}</strong>{% endif %} · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}On call <span class="muted">no one scheduled</span>{% if can('read_play') %} · <a href="/escalation#oncall">Roster</a>{% endif %}{% endif %}{% if can('write_play') %} <form method="post" action="/escalation/oncall/take" class="oncall-take"><input type="hidden" name="next" value="/"><button type="submit" class="secondary">I'm on duty now</button></form>{% endif %}</p>
 <div class="dash-top">
 <section class="dash-tiles-incidents">
   <div class="tile-group{% if incident_heat %} heat-{{ incident_heat }}{% endif %}" data-incident-tile data-incident-heat="{{ incident_heat or 'calm' }}">
@@ -143,4 +143,99 @@
 </aside>
 </section>
 </div>
+<section class="dash-insights card" id="forgeai" data-forgeai-insights>
+  <div class="dash-insights-head">
+    <h2>ForgeAI {% with %}{% set tip %}Read-only digest under Recent incidents. Platform SQL first (repeats, hot group, parent-child, aging open, last 30 days). DEMO incidents are excluded. ForgeAI only rewrites the short sentences from those facts — it does not search the database, invent hosts, or sit on the alarm path. Ask ForgeAI needs a local LLM (ai.enabled). Report sends the same digest to the outbox (SMTP off = generated).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+    <p class="muted dash-insights-hint" data-insights-source="{{ insights.source }}">{{ insights.hint }}</p>
+  </div>
+  <ol class="insight-conclusions">
+    {% for line in insights.sentences %}
+    <li>{{ line }}</li>
+    {% endfor %}
+  </ol>
+  <div class="insight-cards">
+    <article class="insight-card" data-insight="repeats">
+      <h3>Repeats</h3>
+      {% if insights.facts.repeats %}
+      <ul>
+        {% for item in insights.facts.repeats[:5] %}
+        <li><a href="/incidents/{{ item.last }}">{{ item.hostname }}</a> · {{ item.alertname }} · {{ item.count }}× / {{ item.days }}d</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No asset repeated the same problem 3 times in 4 days.</p>
+      {% endif %}
+    </article>
+    <article class="insight-card" data-insight="hot">
+      <h3>Hot groups</h3>
+      {% if insights.facts.hot_groups %}
+      <ul>
+        {% for item in insights.facts.hot_groups[:5] %}
+        <li>{{ item.kind }} {{ item.name }} · {{ item.this_week }} this week / {{ item.last_week }} last week</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No site, row, rack, or parent spiked this week.</p>
+      {% endif %}
+    </article>
+    <article class="insight-card" data-insight="parent">
+      <h3>Parent–child</h3>
+      {% if insights.facts.parent_child %}
+      <ul>
+        {% for item in insights.facts.parent_child[:5] %}
+        <li>{{ item.child }} under {{ item.parent }} · <a href="/incidents/{{ item.number }}">{{ item.number }}</a></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No child incident while its parent is already in problem.</p>
+      {% endif %}
+    </article>
+    <article class="insight-card" data-insight="aging">
+      <h3>Aging open</h3>
+      {% if insights.facts.aging %}
+      <ul>
+        {% for item in insights.facts.aging[:5] %}
+        <li><a href="/incidents/{{ item.number }}">{{ item.number }}</a> · {{ item.hostname }} · {{ item.status }} · {{ item.hours }}h unacked</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No OPEN or ESCALATED incident older than 4 hours without an ack.</p>
+      {% endif %}
+    </article>
+    <article class="insight-card" data-insight="month">
+      <h3>Last {{ insights.facts.month.days }} days</h3>
+      <p>{{ insights.facts.month.incidents }} incidents · {{ insights.facts.month.critical }} critical · {{ insights.facts.month.warning }} warning</p>
+      <p class="muted">{{ insights.facts.month.new_problems }} new problems · {{ insights.facts.month.repeat_problems }} seen before</p>
+      {% if insights.facts.month.top_hosts %}
+      <ul>
+        {% for item in insights.facts.month.top_hosts[:5] %}
+        <li>{{ item.hostname }} · {{ item.count }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </article>
+  </div>
+  <div class="insight-actions">
+    {% if can('read_ai') %}
+    <form method="post" action="/insights/refresh">
+      <button type="submit" class="secondary">Ask ForgeAI</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/insights/export" class="insight-export">
+      <label class="export-format">
+        <select name="format" aria-label="Export format">
+          <option value="txt">TXT</option>
+          <option value="csv">CSV UTF-8</option>
+        </select>
+      </label>
+      <button type="submit">Report</button>
+    </form>
+    {% if can_send %}
+    <form method="post" action="/insights/mail" class="insight-mail">
+      <label>To <input name="target" type="email" value="{{ user.email }}" required aria-label="Report email"></label>
+      <button type="submit" class="secondary">Send report</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
 {% endblock %}
