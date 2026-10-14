@@ -387,7 +387,14 @@ table tbody tr.selected td { background: var(--selected); }
 .asset-table th.col-port,
 .asset-table td.col-port { width: 4.8rem; }
 .asset-table th.col-status,
-.asset-table td.col-status { width: 6.6rem; white-space: nowrap; }
+.asset-table td.col-status {
+  width: 9.6rem;
+  min-width: 9.6rem;
+  white-space: normal;
+  vertical-align: middle;
+  overflow: hidden;
+  overflow: clip;
+}
 .asset-table th.col-escalation,
 .asset-table td.col-escalation { width: 6.4rem; white-space: nowrap; }
 .asset-table th.col-stretch,
@@ -1315,26 +1322,44 @@ form.ops-compose {
   font-weight: 600;
   margin-top: 0;
 }
-/* v09-R: Incidents list matches Recent incidents. Acknowledged is green text in Status.
-   Resolved by takes the width the Acknowledged column used and wraps. Notes stays last. */
+/* v09-V: Status stacks inside the column. Line 1 is the status or severity word.
+   Maintenance is the next line. Acknowledged stays green here and wraps.
+   Clip so the words cannot paint over Escalation cubes. */
 .list-scroll .incidents-table { table-layout: auto; width: 100%; }
 .list-scroll .incidents-table th.col-status,
-.list-scroll .incidents-table td.col-status {
-  width: 1%;
-  white-space: nowrap;
+.list-scroll .incidents-table td.col-status,
+.list-scroll .asset-table th.col-status,
+.list-scroll .asset-table td.col-status {
+  width: 9.6rem;
+  min-width: 9.6rem;
+  white-space: normal;
   vertical-align: middle;
+  overflow: hidden;
+  overflow: clip;
 }
 .list-scroll .status-cell {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 0.45rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.16rem;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  overflow: clip;
+}
+.list-scroll .status-cell .status-line {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
 }
 .list-scroll .status-ack {
   color: var(--ok);
   font-weight: 700;
   font-size: 0.82rem;
   line-height: 1.2;
+  display: block;
+  max-width: 100%;
+  white-space: normal;
 }
 .list-scroll .incidents-table th.col-resolved,
 .list-scroll .incidents-table td.col-resolved {
@@ -1373,25 +1398,40 @@ form.ops-compose {
   white-space: normal;
   overflow-wrap: anywhere;
 }
-/* v09-R: Recent incidents is the narrow 3/4 pane. Acknowledged lives in Status (green text). Resolved by takes the freed width and wraps. */
+/* v09-V: Recent incidents uses the same Status stack as the Incidents list. */
 .dash-recent .incidents-table { table-layout: auto; width: 100%; }
 .dash-recent .incidents-table th.col-status,
 .dash-recent .incidents-table td.col-status {
-  width: 1%;
-  white-space: nowrap;
+  width: 9.6rem;
+  min-width: 9.6rem;
+  white-space: normal;
   vertical-align: middle;
+  overflow: hidden;
+  overflow: clip;
 }
 .dash-recent .status-cell {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 0.45rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.16rem;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  overflow: clip;
+}
+.dash-recent .status-cell .status-line {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
 }
 .dash-recent .status-ack {
   color: var(--ok);
   font-weight: 700;
   font-size: 0.82rem;
   line-height: 1.2;
+  display: block;
+  max-width: 100%;
+  white-space: normal;
 }
 .dash-recent .incidents-table th.col-when,
 .dash-recent .incidents-table td.inc-when {

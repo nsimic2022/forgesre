@@ -107,7 +107,7 @@
         {% set reach_id = asset.asset_id %}
         {% include "_reach_stack.html" %}
       </td>
-      <td class="col-status"><span class="pill {{ asset.status }}">{{ asset.status }}</span>{% if in_maintenance(asset) %} <span class="pill warn" data-maint-badge title="{{ maintenance_label(asset) }}">Maintenance</span>{% endif %}</td>
+      <td class="col-status"><span class="status-cell"><span class="status-line"><span class="pill {{ asset.status }}">{{ asset.status }}</span></span>{% if in_maintenance(asset) %}<span class="status-line"><span class="pill warn" data-maint-badge title="{{ maintenance_label(asset) }}">Maintenance</span></span>{% endif %}</span></td>
       <td class="col-escalation">{% with cubes=asset_ladder_cubes(asset) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
       <td class="col-stretch">{{ asset.owner or "—" }}</td>
       <td class="col-stretch">

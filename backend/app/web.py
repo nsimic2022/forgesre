@@ -187,6 +187,37 @@ def incident_tone(status: str, severity: str = "") -> str:
     return "inc-warn"
 
 
+_STATUS_CRITICAL = {"CRITICAL", "CRIT", "FATAL", "EMERGENCY"}
+_STATUS_WARNING = {"WARNING", "WARN"}
+
+
+def incident_status_primary(status: str, severity: str = "") -> dict[str, str]:
+    """First line of the incident Status cell: label and pill class.
+
+    A MAINT row shows the alarm severity (Warning or Critical) when that
+    word is available. Every other row keeps the status word already shown.
+    """
+    word = str(status or "")
+    if word.upper() == "MAINT":
+        sev = str(severity or "").strip()
+        upper = sev.upper()
+        if upper in _STATUS_CRITICAL:
+            return {"label": "Critical", "pill": "crit"}
+        if upper in _STATUS_WARNING:
+            return {"label": "Warning", "pill": "warn"}
+        if sev:
+            return {"label": sev, "pill": severity_pill(sev)}
+    return {"label": word, "pill": word.lower()}
+
+
+def incident_status_maintenance(item: object) -> bool:
+    """Second line: the row is MAINT, or the asset window matches now."""
+    if str(getattr(item, "status", "") or "").upper() == "MAINT":
+        return True
+    asset = getattr(item, "asset", None)
+    return bool(asset is not None and in_maintenance(asset))
+
+
 def _parse_id_query(raw: str) -> int | None:
     text = (raw or "").strip()
     if not text.isdigit():
@@ -528,6 +559,8 @@ def ctx(request: Request, user: User | None, **extra):
         "schedule_label": schedule_label,
         "short_when_label": short_when_label,
         "severity_pill": severity_pill,
+        "incident_status_primary": incident_status_primary,
+        "incident_status_maintenance": incident_status_maintenance,
         "is_demo_incident": is_demo_incident,
         "incident_source": incident_source,
         "incident_source_label": incident_source_label,
