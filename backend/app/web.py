@@ -895,11 +895,29 @@ def assets_verify_all(
     user: User = Depends(require_page("write_assets")),
     demo: str = "",
     page: str = "1",
+    selected: Annotated[list[str], Query()] = [],
 ):
     include_demo = demo.strip().lower() in {"1", "true", "yes", "demo"}
-    assets = db.query(Asset).order_by(Asset.hostname).all()
-    chosen = [asset for asset in assets if include_demo or not is_lab_inventory_row(asset)]
-    skipped_demo = len(assets) - len(chosen)
+    picked: list[str] = []
+    seen: set[str] = set()
+    for item in selected:
+        text = str(item or "").strip()
+        if not text or text in seen or len(text) > 80:
+            continue
+        seen.add(text)
+        picked.append(text)
+        if len(picked) >= 100:
+            break
+    if picked:
+        rows = db.query(Asset).filter(Asset.asset_id.in_(picked)).all()
+        by_id = {row.asset_id: row for row in rows}
+        chosen = [by_id[item] for item in picked if item in by_id]
+        skipped_demo = 0
+        include_demo = False
+    else:
+        assets = db.query(Asset).order_by(Asset.hostname).all()
+        chosen = [asset for asset in assets if include_demo or not is_lab_inventory_row(asset)]
+        skipped_demo = len(assets) - len(chosen)
     chosen, pager = paginate(chosen, page, size=per_page(request))
     reports = verify_assets(db, chosen)
     return render(

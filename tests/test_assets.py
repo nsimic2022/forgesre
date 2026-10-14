@@ -8,7 +8,7 @@ from app.inventory import asset_type_abbrev, similar_incident_groups
 from app.main import app
 from app.models import Asset, Notification, User
 from app.security import hash_password
-from app.seed import DEMO_ASSET, DEMO_OWNER_EMAIL, seed
+from app.seed import DEMO_ASSET, DEMO_OWNER_EMAIL, DEMO_WIN_ASSET, seed
 from app.services import ingest_alertmanager, run_demo
 
 
@@ -299,7 +299,16 @@ def test_assets_pager_opens_one_row_and_flashes_otherwise():
     assert "status=warning" in cloned.headers["location"]
     verified = client.post("/assets/open-verify", data={"selected": DEMO_ASSET}, follow_redirects=False)
     assert verified.status_code == 303
-    assert verified.headers["location"] == f"/assets/{DEMO_ASSET}/verify"
+    assert verified.headers["location"] == f"/assets/verify?selected={DEMO_ASSET}"
+    pair = client.post(
+        "/assets/open-verify",
+        data={"selected": [DEMO_ASSET, DEMO_WIN_ASSET]},
+        follow_redirects=False,
+    )
+    assert pair.status_code == 303
+    assert "edit_note=select-one" not in pair.headers["location"]
+    assert f"selected={DEMO_ASSET}" in pair.headers["location"]
+    assert f"selected={DEMO_WIN_ASSET}" in pair.headers["location"]
     many = client.post(
         "/assets/open-edit",
         data={"selected": [DEMO_ASSET, "forge-demo-02"], "stay": "/assets?flag=unreachable"},
@@ -356,9 +365,9 @@ def test_assets_table_abbreviates_type_form_keeps_full_names():
     page = client.get("/assets")
     assert page.status_code == 200
     table, rest = page.text.split('<table class="asset-table"', 1)[1].split("</table>", 1)
-    assert 'title="Linux Server">lnx</td>' in table
-    assert 'title="Windows Server">win</td>' in table
-    assert 'title="Network Switch">net</td>' in table
+    assert 'title="Linux Server">lnx</span>' in table
+    assert 'title="Windows Server">win</span>' in table
+    assert 'title="Network Switch">net</span>' in table
     assert ">Linux Server<" not in table
     assert ">Windows Server<" not in table
     assert ">Network Switch<" not in table
@@ -381,7 +390,8 @@ def test_asset_table_actions_live_in_the_pager():
     assert 'td class="row-actions"' not in table
     assert 'class="asset-actions"' not in table
     assert "asset_type_abbrev" in table
-    assert 'class="col-stretch"' in table
+    assert 'class="col-enum' in table
+    assert 'class="col-host"' in table
     pager = html.split("list_actions=", 1)[1]
     assert '"/assets/open-edit"' in pager
     assert '"/assets/open-clone"' in pager
@@ -390,8 +400,9 @@ def test_asset_table_actions_live_in_the_pager():
     assert '"/assets/bulk-delete"' in pager
     assert '"delete_last": True' in pager
     assert "vertical-align: middle" in css
-    assert "table-layout: fixed" in css
-    assert "app.css?v=v09-V" in base
+    assert ".asset-table { table-layout: auto;" in css
+    assert ".evidence-table { table-layout: fixed; }" in css
+    assert "app.css?v=v09-W" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():

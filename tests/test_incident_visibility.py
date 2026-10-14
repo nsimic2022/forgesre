@@ -118,7 +118,8 @@ def test_every_row_when_leads_with_duration_then_clock():
     assert "ack-dot" not in live_row
     assert "status-ack" not in live_row
     head = dash.split("</thead>", 1)[0]
-    assert head.index(">Hostname<") < head.index(">Name<") < head.index(">Severity<") < head.index(">Status<")
+    assert head.index(">Hostname<") < head.index(">Name<") < head.index(">Status<") < head.index(">Escalation<")
+    assert head.index(">When<") < head.index(">Severity<") < head.index(">Resolved by<")
     assert ">Acknowledged<" not in head
     assert head.index(">When<") < head.index(">Resolved by<")
     assert ">Problem<" not in head and ">Ack<" not in head and "info-tip" not in head
@@ -327,4 +328,4 @@ def test_stack_cube_font_bumped_box_unchanged():
     assert "padding: 0.28rem" in block
     assert "line-height: 0.77rem" in block
     assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v09-V" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "app.css?v=v09-W" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

@@ -55,9 +55,6 @@
   {% endfor %}
   {% include "_pager_keep.html" %}
   <button type="submit">Search</button>
-  {% if can('write_assets') %}
-  <a class="button" href="/assets/verify">Verify all</a>
-  {% endif %}
   {% if q or hostname or ip or status or flag or source or agent or asset_type or site or vlan or customer or row or rack %}<a class="muted list-reset" href="/assets">Reset</a>{% endif %}
 </form>
 <nav class="filter-chips" aria-label="Asset filters">
@@ -79,18 +76,18 @@
   <thead>
     <tr>
       {{ sel.head() }}
-      <th class="col-num" title="Asset number">#</th>
-      <th class="col-id"><span class="label-line">Asset ID {% with %}{% set tip %}Short unique slug set at add. Cannot change afterwards — Prometheus asset= labels and history keep matching.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th class="col-host">Hostname</th>
-      <th class="col-ip">IP</th>
       <th class="col-port"><span class="label-line">Port {% with %}{% set tip %}Stacked squares, green / yellow / red. ICMP: green reply; yellow not probed, or ICMP failed but exporter/SNMP (/metrics) answers (typical Windows: ICMP unused/blocked); red ICMP failed and exporter/SNMP failed or timed out. ICMP and port 22 are not required. The middle square is the TCP scrape (9100 node_exporter, 9182 windows_exporter, or the asset's port) with no colon. SNMP is its own square (UDP 161, or the asset's SNMP port) when snmp_exporter polls the host. Last-known colors on first paint.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
       <th class="col-status">Status</th>
-      <th class="col-escalation"><span class="label-line">Escalation {% with %}{% set tip %}2×2 squares, same size as the Port squares. Row 1 is L1 L2, row 2 is L3 L4. Green = that level is on this asset (enabled and has an email). Red = an active incident already mailed that level, or the incident is ESCALATED and enough minutes have passed for that rung. Red wins over green. Gray = the level is not on this asset. An empty Escalation (Default escalation) stays gray here — the climb shows on the incident.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
-      <th class="col-stretch">Owner</th>
-      <th class="col-stretch">Contact</th>
-      <th class="col-stretch"><span class="label-line">Type {% with %}{% set tip %}Linux Server = node_exporter :9100. Windows Server = windows_exporter :9182. Network device, Switch, Router, Firewall, Storage, QNAP/NAS, Printer = snmp_exporter UDP/161 (or the asset's SNMP port), no HTTP scrape unless you type one. Hypervisor, Web/appliance, Other = no default scrape. Auto detects from /metrics on this appliance.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
-      <th class="col-stretch">Environment</th>
-      <th class="col-stretch">Source</th>
+      <th class="col-escalation"><span class="label-line">Escalation {% with %}{% set tip %}Four squares stacked L1, L2, L3, L4 — same family as the Port squares, narrow so the column stays thin. Green = that level is on this asset (enabled and has an email). Red = an active incident already mailed that level, or the incident is ESCALATED and enough minutes have passed for that rung. Red wins over green. Gray = the level is not on this asset. An empty Escalation (Default escalation) stays gray here — the climb shows on the incident.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th class="col-num" title="Asset number">#</th>
+      <th class="col-id"><span class="label-line">Asset ID {% with %}{% set tip %}Short unique slug set at add. Cannot change afterwards — Prometheus asset= labels and history keep matching.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th class="col-ip">IP</th>
+      <th>Owner</th>
+      <th>Contact</th>
+      <th class="col-enum"><span class="label-line">Type {% with %}{% set tip %}Linux Server = node_exporter :9100. Windows Server = windows_exporter :9182. Network device, Switch, Router, Firewall, Storage, QNAP/NAS, Printer = snmp_exporter UDP/161 (or the asset's SNMP port), no HTTP scrape unless you type one. Hypervisor, Web/appliance, Other = no default scrape. Auto detects from /metrics on this appliance.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      <th class="col-enum">Environment</th>
+      <th class="col-enum">Source</th>
       <th class="col-asset-notes"><span class="label-line">Notes {% with %}{% set tip %}The Notes field on Add / Edit (the half-row note for the person on shift). An em dash means that field is empty. Not an incident write-up.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
     </tr>
   </thead>
@@ -98,10 +95,7 @@
     {% for asset in assets %}
     <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}" data-list-row>
       {{ sel.cell(asset.asset_id) }}
-      <td class="col-num">{{ asset.number or "—" }}</td>
-      <td class="col-id"><a href="/assets/{{ asset.asset_id }}" data-list-open>{{ asset.asset_id }}</a></td>
       <td class="col-host">{{ asset.hostname }}{% if asset.parent %}<div class="muted" data-parent-host>parent {{ asset.parent.hostname }}</div>{% endif %}</td>
-      <td class="col-ip">{{ asset.ip or "—" }}</td>
       <td class="col-port">
         {% set r = reachability_snapshot(asset) %}
         {% set reach_id = asset.asset_id %}
@@ -109,8 +103,11 @@
       </td>
       <td class="col-status"><span class="status-cell"><span class="status-line"><span class="pill {{ asset.status }}">{{ asset.status }}</span></span>{% if in_maintenance(asset) %}<span class="status-line"><span class="pill warn" data-maint-badge title="{{ maintenance_label(asset) }}">Maintenance</span></span>{% endif %}</span></td>
       <td class="col-escalation">{% with cubes=asset_ladder_cubes(asset) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
-      <td class="col-stretch">{{ asset.owner or "—" }}</td>
-      <td class="col-stretch">
+      <td class="col-num">{{ asset.number or "—" }}</td>
+      <td class="col-id"><a href="/assets/{{ asset.asset_id }}" data-list-open>{{ asset.asset_id }}</a></td>
+      <td class="col-ip">{{ asset.ip or "—" }}</td>
+      <td>{{ asset.owner or "—" }}</td>
+      <td>
         {% if asset.contact_name %}{{ asset.contact_name }}{% endif %}
         {% if asset_missing_email(asset) %}
           <div><span class="pill warn" title="Default escalation role steps have nobody to mail. Edit the asset and add an owner email, or fill Escalation.">No owner email</span></div>
@@ -120,10 +117,10 @@
         {% set sup = support_status(asset) %}
         <div><span class="pill support-pill {{ sup.tone }}" data-support-state="{{ sup.state }}" title="{{ sup.detail }}">{{ sup.label }}</span>{% if sup.custom_note %} <span class="support-note" data-support-note>{{ sup.custom_note }}</span>{% endif %}</div>
       </td>
-      <td class="col-stretch asset-type" title="{{ asset.type }}">{{ asset_type_abbrev(asset.type) }}</td>
-      <td class="col-stretch">{{ asset.environment }}</td>
-      <td class="col-stretch">
-        {{ asset.source }}
+      <td class="col-enum asset-type"><span class="enum-clip" title="{{ asset.type }}">{{ asset_type_abbrev(asset.type) }}</span></td>
+      <td class="col-enum"><span class="enum-clip" title="{{ asset.environment }}">{{ asset.environment }}</span></td>
+      <td class="col-fit">
+        <span class="enum-clip" title="{{ asset.source }}">{{ asset.source }}</span>
         {% set zagent = zabbix_agent_state(asset) %}
         {% if zagent %}<div><span class="pill zbx-agent {{ zagent }}" data-zabbix-agent="{{ zagent }}" title="Zabbix agent availability from the last sync / 5-minute poll (host id {{ asset.zabbix_hostid or '—' }})">Zabbix agent: {{ zagent }}</span></div>{% endif %}
       </td>

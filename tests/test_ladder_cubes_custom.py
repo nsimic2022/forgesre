@@ -269,7 +269,8 @@ def test_asset_list_and_incident_ladder_cubes_after_a_fired_step():
     def asset_cubes() -> list[tuple[str, str, str]]:
         page = client.get("/assets", params={"q": asset_id, "per_page": "100"}).text
         table = page.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
-        row = table.split(f"/assets/{asset_id}", 1)[1].split("</tr>", 1)[0]
+        before, after = table.split(f"/assets/{asset_id}", 1)
+        row = before.rsplit("<tr", 1)[1] + after.split("</tr>", 1)[0]
         return _cubes(row)
 
     before = asset_cubes()
@@ -334,7 +335,8 @@ def test_empty_asset_ladder_maps_default_warning_onto_incident_cubes():
     incident = ingest_alertmanager(db, _alert(alertname, asset_id))[0]
     page = client.get("/assets", params={"q": asset_id, "per_page": "100"}).text
     table = page.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
-    row = table.split(f"/assets/{asset_id}", 1)[1].split("</tr>", 1)[0]
+    before, after = table.split(f"/assets/{asset_id}", 1)
+    row = before.rsplit("<tr", 1)[1] + after.split("</tr>", 1)[0]
     assert [tone for _level, tone, _title in _cubes(row)] == ["grey", "grey", "grey", "grey"]
 
     listed = client.get("/incidents", params={"q": incident.number, "per_page": "100"}).text

@@ -58,10 +58,10 @@
     </form>
     {% endif %}
     {% if actions.verify %}
-    <form method="post" action="{{ actions.verify }}" data-bulk-edit>
+    <form method="post" action="{{ actions.verify }}" data-bulk-verify>
       <input type="hidden" name="next" value="{{ actions.next }}">
       {% if actions.stay %}<input type="hidden" name="stay" value="{{ actions.stay }}">{% endif %}
-      <button type="submit" title="Select one" data-one-title="Verify this asset">Verify</button>
+      <button type="submit" title="Select one or more" data-many-title="Verify selected assets">Verify</button>
     </form>
     {% endif %}
     {% if actions.export %}

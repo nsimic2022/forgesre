@@ -157,18 +157,19 @@
 <h2>Found assets</h2>
 <div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
-<table>
+<table class="found-table">
   <thead>
     <tr>
       {{ sel.head() }}
+      <th class="col-host">Hostname</th>
       <th>IP</th>
-      <th>Proposed role</th>
+      <th class="col-enum">Proposed role</th>
       <th>Open ports</th>
-      <th>node_exporter</th>
-      <th>windows_exporter</th>
-      <th>SNMP</th>
-      <th>Status</th>
-      <th>Source</th>
+      <th class="col-enum">node_exporter</th>
+      <th class="col-enum">windows_exporter</th>
+      <th class="col-enum">SNMP</th>
+      <th class="col-status">Status</th>
+      <th class="col-enum">Source</th>
       <th>Actions</th>
     </tr>
   </thead>
@@ -176,21 +177,20 @@
   {% for row in candidates %}
     <tr class="{% if selected and selected.id == row.id %}selected{% endif %}" data-list-row>
       {{ sel.cell(row.id, row.ip) }}
-      <td>
-        {{ row.ip }}
-        {% if row.hostname %}<div class="muted" title="Approve uses this as the asset ID when it is free">{{ row.hostname }}</div>{% endif %}
+      <td class="col-host">
+        {{ row.hostname or "—" }}
         {% if row.source == 'demo' or row.ip == demo_candidate_ip %}
-        <span class="pill demo">DEMO</span>
-        <span class="muted">lab seed — not a Scan now production hit</span>
+        <div><span class="pill demo">DEMO</span> <span class="muted">lab seed — not a Scan now production hit</span></div>
         {% endif %}
       </td>
-      <td>{{ row.proposed_role }}</td>
+      <td title="Approve uses the hostname slug as the asset ID when it is free">{{ row.ip }}</td>
+      <td class="col-enum"><span class="enum-clip" title="{{ row.proposed_role }}">{{ row.proposed_role }}</span></td>
       <td>{{ row.open_ports|join(", ") if row.open_ports else "—" }}</td>
-      <td>{{ "yes" if row.node_exporter else "no" }}</td>
-      <td>{{ "yes" if row.windows_exporter else "no" }}</td>
-      <td>{{ "yes" if row.snmp_ok else "no" }}</td>
-      <td><span class="pill {{ row.status }}">{{ row.status }}</span></td>
-      <td>{{ row.source }}</td>
+      <td class="col-enum">{{ "yes" if row.node_exporter else "no" }}</td>
+      <td class="col-enum">{{ "yes" if row.windows_exporter else "no" }}</td>
+      <td class="col-enum">{{ "yes" if row.snmp_ok else "no" }}</td>
+      <td class="col-status"><span class="pill {{ row.status }}">{{ row.status }}</span></td>
+      <td class="col-enum"><span class="enum-clip" title="{{ row.source }}">{{ row.source }}</span></td>
       <td class="row-actions">
         <div class="row-actions">
         {% if can('write_assets') %}
@@ -215,7 +215,7 @@
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="10" class="muted">No found assets yet. Confirm a management CIDR and scan, or use the demo workflow.</td></tr>
+    <tr><td colspan="11" class="muted">No found assets yet. Confirm a management CIDR and scan, or use the demo workflow.</td></tr>
   {% endfor %}
   </tbody>
 </table>
