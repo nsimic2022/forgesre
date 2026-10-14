@@ -115,8 +115,10 @@ def test_l1_oncall_mails_the_current_address_and_dashboard_shows_them():
     assert dash.status_code == 200
     assert 'data-oncall' in dash.text
     assert f"dana-{token}@dc.local" in dash.text
+    assert 'href="/escalation#oncall"' in dash.text
     page = client.get("/escalation")
     assert page.status_code == 200
+    assert 'id="oncall"' in page.text
     assert 'data-oncall-form' in page.text
     assert "Dana" in page.text
     db.close()

@@ -55,7 +55,7 @@
   </div>
 </form>
 {% endif %}
-<h2>On call {% with %}{% set tip %}A short weekly roster. Each row is one weekday and a from/until time in the appliance timezone (inclusive). L1 (or any step) with the role oncall mails whoever matches now. Empty roster = that step is no-recipient. This is not PagerDuty.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+<h2 id="oncall">On call {% with %}{% set tip %}A short weekly roster. Each row is one weekday and a from/until time in the appliance timezone (inclusive). L1 (or any step) with the role oncall mails whoever matches now. Empty roster = that step is no-recipient. The Dashboard On call line shows this person. This is not PagerDuty.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 <p data-oncall-now>{% if oncall %}Now: <strong>{{ oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}<span class="muted">No one scheduled right now.</span>{% endif %}</p>
 {% if oncall_slots %}
 <table class="scan-list" data-oncall-roster>

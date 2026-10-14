@@ -74,16 +74,20 @@ def test_dashboard_has_graph_pane_right_of_recent_incidents():
     wrap = html.index("data-dash-incidents")
     recent = html.index("<h2>Recent incidents</h2>")
     table = html.index("data-dash-incident-table")
+    title = html.index("<h2>Host metrics")
     pane = html.index("data-dash-graphs")
-    assert wrap < recent < table < pane
+    assert wrap < recent < table < title < pane
     assert "Recent journal" not in html
     aside = html[pane : html.index("</aside>", pane)]
-    assert "Host metrics" in aside
+    assert "Host metrics" not in aside
     assert "data-dash-graph-list" in aside and "data-dash-graph-empty" in aside
-    assert 'class="pager-bar"' in html[recent:pane] or "data-select-page" in html[recent:pane]
+    assert 'class="pager-bar"' in html[recent:title] or "data-select-page" in html[recent:title]
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     block = css.split(".dash-incidents {", 1)[1].split("}", 1)[0]
     assert "grid-template-columns: minmax(0, 3fr) minmax(0, 1fr)" in block
+    graphs = css.split(".dash-graphs {", 1)[1].split("}", 1)[0]
+    assert "margin: 0" in graphs
+    assert "2.35rem" not in graphs
     assert ".is-selected td" in css
 
 

@@ -118,7 +118,7 @@ def test_every_row_when_leads_with_duration_then_clock():
     assert "ack-dot" not in live_row
     assert "status-ack" not in live_row
     head = dash.split("</thead>", 1)[0]
-    assert head.index(">Hostname<") < head.index(">Name<") < head.index(">Status<") < head.index(">Escalation<")
+    assert head.index(">Hostname<") < head.index(">Incident<") < head.index(">Status<") < head.index(">Escalation<")
     assert head.index(">When<") < head.index(">Severity<") < head.index(">Resolved by<")
     assert ">Acknowledged<" not in head
     assert head.index(">When<") < head.index(">Resolved by<")
@@ -136,7 +136,7 @@ def test_every_row_when_leads_with_duration_then_clock():
     listed = client.get("/incidents")
     assert listed.status_code == 200
     inc_head = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert inc_head.index(">Hostname<") < inc_head.index(">Name<")
+    assert inc_head.index(">Hostname<") < inc_head.index(">Incident<")
     assert ">Acknowledged<" not in inc_head and "col-ack" not in inc_head
     assert "Resolved by" in inc_head and ">Notes<" in inc_head
     assert 'class="col-status">Status</th>' in inc_head
@@ -328,4 +328,4 @@ def test_stack_cube_font_bumped_box_unchanged():
     assert "padding: 0.28rem" in block
     assert "line-height: 0.77rem" in block
     assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v09-X" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "app.css?v=v09-Y" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

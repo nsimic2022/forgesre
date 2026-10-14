@@ -48,7 +48,7 @@
   </div>
 </dialog>
 {% endif %}
-<p class="oncall-now" data-oncall>{% if oncall %}On call <strong>{{ oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}On call <span class="muted">no one scheduled</span>{% endif %}</p>
+<p class="oncall-now" data-oncall>{% if oncall %}On call {% if can('read_play') %}<a href="/escalation#oncall"><strong>{{ oncall.name }}</strong></a>{% else %}<strong>{{ oncall.name }}</strong>{% endif %} · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}On call <span class="muted">no one scheduled</span>{% if can('read_play') %} · <a href="/escalation#oncall">Roster</a>{% endif %}{% endif %}</p>
 <div class="dash-top">
 <section class="dash-tiles-incidents">
   <div class="tile-group{% if incident_heat %} heat-{{ incident_heat }}{% endif %}" data-incident-tile data-incident-heat="{{ incident_heat or 'calm' }}">
@@ -71,8 +71,7 @@
   </div>
 </section>
 <aside class="appliance-card" data-appliance-card aria-label="This ForgeSRE appliance">
-  <h2>ForgeSRE {% with %}{% set tip %}The ForgeSRE VM running Core — not an inventory asset. Clock is this browser's local time. CPU from the host /proc/stat; RAM and HDD from node_exporter on this VM (or /proc and statvfs). Refreshes every 8 s. Dash: green below {{ resource_warn }}%, yellow {{ resource_warn }}–{{ resource_crit - 1 }}%, red {{ resource_crit }}% or more, or no reading (blocked). NET: green = this VM has a default route on a non-docker interface whose link is up; red = no usable default route, or that interface is down. No ping and no internet probe — an air-gapped lab with a LAN gateway is green. Network throughput is not measured. Cubes are the System Health rows (same checks as ./forgesre doctor, as of page load): green running, yellow warn / paused / starting / disabled, red down. Read-only — click to open System Health.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <div class="appliance-clock" data-clock>—</div>
+  <h2>ForgeSRE {% with %}{% set tip %}The ForgeSRE VM running Core — not an inventory asset. CPU from the host /proc/stat; RAM and HDD from node_exporter on this VM (or /proc and statvfs). Refreshes every 8 s. Dash: green below {{ resource_warn }}%, yellow {{ resource_warn }}–{{ resource_crit - 1 }}%, red {{ resource_crit }}% or more, or no reading (blocked). NET: green = this VM has a default route on a non-docker interface whose link is up; red = no usable default route, or that interface is down. No ping and no internet probe — an air-gapped lab with a LAN gateway is green. Network throughput is not measured. Cubes are the System Health rows (same checks as ./forgesre doctor, as of page load): green running, yellow warn / paused / starting / disabled, red down. Read-only — click to open System Health.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <ul class="appliance-metrics" data-appliance-resources>
     <li class="appliance-metric" data-metric="cpu" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">CPU</span><span class="metric-reading" data-metric-value>—</span></li>
     <li class="appliance-metric" data-metric="ram" data-level="unknown"><span class="metric-dash" aria-hidden="true"></span><span class="metric-name">RAM</span><span class="metric-reading" data-metric-value>—</span></li>
@@ -101,7 +100,7 @@
       <tr>
         {{ sel.head() }}
         <th class="col-host">Hostname</th>
-        <th class="col-name">Name</th>
+        <th class="col-name">Incident</th>
         <th class="col-status">Status</th>
         <th class="col-ladder" title="How far this incident climbed. Four squares stacked L1, L2, L3, L4. Red means this incident already mailed that level. Green means the asset has that level and this incident has not mailed it yet. Gray means no such level. An empty asset Escalation maps Default warning steps onto L1, L2, L3, and L4 in order. A three-step Default warning fills L1 to L3 and leaves L4 gray.">Escalation</th>
         <th class="col-when">When</th>
@@ -131,9 +130,10 @@
   {% endwith %}
   </div>
 </section>
+<section class="dash-graphs-col">
+  <h2>Host metrics {% with %}{% set tip %}Live Prometheus series for the host of the selected incident (click a row or move with Up / Down; the first active incident is picked on load). A row click only selects — open the incident with its title or short number link, or Enter on the selected row. Arrows move inside the list without scrolling the page; click empty page space to scroll the Dashboard again. From one hour before the incident started through now, or through the end if it is resolved. A vertical line marks When. Hover a point for the host, time, and value. Same queries as the asset page, which stays on the last hour. Linux / Windows show CPU, Memory, Disk and Collecting (up); network devices and hosts without a CPU series show up/down only — never a guessed CPU. Queries use the Prometheus scrape identity (SD job + instance, or the SNMP target). Standard alarms mute does not change this chart. Not scraped = this host is not in Prometheus. No samples yet = that window is empty. Steady = the samples did not move. No placeholder wave. Refreshes every 30 s.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 <aside class="dash-graphs card" data-dash-graphs aria-live="polite" aria-label="Live metrics for the selected incident's host">
   <div class="metric-panel-head">
-    <h2>Host metrics {% with %}{% set tip %}Live Prometheus series for the host of the selected incident (click a row or move with Up / Down; the first active incident is picked on load). A row click only selects — open the incident with its title or short number link, or Enter on the selected row. Arrows move inside the list without scrolling the page; click empty page space to scroll the Dashboard again. From one hour before the incident started through now, or through the end if it is resolved. A vertical line marks When. Hover a point for the host, time, and value. Same queries as the asset page, which stays on the last hour. Linux / Windows show CPU, Memory, Disk and Collecting (up); network devices and hosts without a CPU series show up/down only — never a guessed CPU. Queries use the Prometheus scrape identity (SD job + instance, or the SNMP target). Standard alarms mute does not change this chart. Not scraped = this host is not in Prometheus. No samples yet = that window is empty. Steady = the samples did not move. No placeholder wave. Refreshes every 30 s.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
     <a class="metric-edit" href="#" data-dash-graph-asset hidden>Open asset</a>
   </div>
   <p class="dash-graph-subject" data-dash-graph-subject>{% if recent %}Loading…{% else %}No incident selected.{% endif %}</p>
@@ -141,5 +141,6 @@
   <p class="muted dash-graph-empty" data-dash-graph-empty hidden></p>
   <div class="dash-graph-list" data-dash-graph-list></div>
 </aside>
+</section>
 </div>
 {% endblock %}

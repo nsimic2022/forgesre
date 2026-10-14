@@ -302,9 +302,10 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert home.status_code == 200
     nav = home.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
     assert "nav-clock" in nav and "data-clock" in nav
-    assert "appliance-clock" in home.text and "data-clock" in home.text
+    assert "appliance-clock" not in home.text
+    assert "data-clock" in nav
     recent = home.text.split("Recent incidents", 1)[1].split("</table>", 1)[0]
-    assert recent.index(">Hostname<") < recent.index(">Name<") < recent.index(">Status<") < recent.index(">Escalation<")
+    assert recent.index(">Hostname<") < recent.index(">Incident<") < recent.index(">Status<") < recent.index(">Escalation<")
     assert recent.index(">When<") < recent.index(">Severity<") < recent.index(">Resolved by<")
     head = recent.split("</thead>", 1)[0]
     assert ">Acknowledged<" not in head
@@ -331,5 +332,5 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert "height: 100%" in css.split(".admin-user-split > .admin-user-pane", 1)[1].split("}", 1)[0]
     assert "margin: 2.25rem 0 0.7rem" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-X" in base and "app.js?v=v09-T" in base
+    assert "app.css?v=v09-Y" in base and "app.js?v=v09-T" in base
     db.close()

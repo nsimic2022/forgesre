@@ -52,7 +52,7 @@ def test_incidents_list_columns_short_id_and_full_href():
     listed = client.get("/incidents")
     assert listed.status_code == 200
     headers = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert headers.index(">Hostname<") < headers.index(">Name<")
+    assert headers.index(">Hostname<") < headers.index(">Incident<")
     assert ">Problem<" not in headers
     assert ">Severity<" in headers
     assert ">Status<" in headers
