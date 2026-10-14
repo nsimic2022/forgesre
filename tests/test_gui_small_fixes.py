@@ -27,7 +27,7 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-V" in base
+    assert "app.css?v=v09-W" in base
     assert ".banner-short" not in css
     assert ".banner-x" in css
     assert "top: 0.35rem" in css.split(".banner-x {", 1)[1].split("}", 1)[0]
@@ -72,16 +72,20 @@ def test_assets_verify_copy_lives_in_title_tip_not_always_on_sentence():
     assert "./forgesre doctor" in html
     assert "./forgesre test" in html
     table = html.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
+    filters = html.split('class="row-actions list-filters"', 1)[1].split("</form>", 1)[0]
     assert ">Verify<" not in table
+    assert "Verify all" not in html
+    assert "Verify" not in filters
     assert "/assets/open-verify" in html
-    assert "/assets/verify" in html
+    assert 'data-bulk-verify' in (ROOT / "frontend" / "templates" / "_pager.html").read_text(encoding="utf-8")
     db = _db()
     client = TestClient(app)
     _login(client)
     page = client.get("/assets")
     assert page.status_code == 200
-    assert "Verify all" in page.text
+    assert "Verify all" not in page.text
     assert ">Verify<" in page.text
+    assert 'data-bulk-verify' in page.text
     assert 'class="muted reach-legend"' not in page.text
     db.close()
 
@@ -97,7 +101,9 @@ def test_incidents_default_is_all_and_filter_is_spaced():
     assert 'value="all"' in listed.text
     assert "Open/firing" not in listed.text
     form = listed.text.split('action="/incidents"', 1)[1].split("</form>", 1)[0]
-    assert "All" in form
+    assert form.index('name="q"') < form.index('name="status"')
+    assert ">Status</option>" in form
+    assert "All sites" not in form and "All customers" not in form and "All rows" not in form and "All racks" not in form
     assert "Open" in form
     assert "Closed" in form
     closed = client.get("/incidents?status=closed")

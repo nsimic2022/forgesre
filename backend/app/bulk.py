@@ -1056,11 +1056,22 @@ def assets_open_verify(
     selected: Annotated[list[str], Form()] = [],
     stay: Annotated[str, Form()] = "",
 ):
+    """Verify the checked assets (one or more) on the existing verify page.
+
+    Zero checked rows stay on the list. This does not probe the rest of inventory.
+    """
     _forbid(user, can(user, "write_assets"))
-    row = _one_asset(db, selected)
-    if row is None:
+    ids = selected_values(selected)
+    if not ids:
         return RedirectResponse(_assets_query(stay, edit_note="select-one"), status_code=303)
-    return RedirectResponse(f"/assets/{row.asset_id}/verify", status_code=303)
+    found = {
+        row.asset_id
+        for row in db.query(Asset).filter(Asset.asset_id.in_(ids)).all()
+    }
+    ordered = [item for item in ids if item in found]
+    if not ordered:
+        return RedirectResponse(_assets_query(stay, edit_note="select-one"), status_code=303)
+    return RedirectResponse("/assets/verify?" + urlencode([("selected", item) for item in ordered]), status_code=303)
 
 
 @router.post("/assets/export")

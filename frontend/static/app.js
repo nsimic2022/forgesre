@@ -263,10 +263,16 @@ applyTheme(currentTheme());
       form.hidden = on.length > 0 && !deletable;
     });
     const one = on.length === 1;
+    const some = on.length > 0;
     bar.querySelectorAll("[data-bulk-edit] button").forEach((edit) => {
       edit.classList.toggle("is-muted", !one);
       const ready = edit.getAttribute("data-one-title");
       edit.title = one ? (ready || "Edit notes on this incident") : "Select one";
+    });
+    bar.querySelectorAll("[data-bulk-verify] button").forEach((button) => {
+      button.classList.toggle("is-muted", !some);
+      const ready = button.getAttribute("data-many-title");
+      button.title = some ? (ready || "Verify selected assets") : "Select one or more";
     });
   };
   const sync = (scope) => {
@@ -296,7 +302,7 @@ applyTheme(currentTheme());
   document.addEventListener("submit", (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement)) return;
-    if (!form.hasAttribute("data-bulk-delete") && !form.hasAttribute("data-bulk-export") && !form.hasAttribute("data-bulk-edit")) return;
+    if (!form.hasAttribute("data-bulk-delete") && !form.hasAttribute("data-bulk-export") && !form.hasAttribute("data-bulk-edit") && !form.hasAttribute("data-bulk-verify")) return;
     const scope = form.closest("[data-select-scope]");
     if (!scope) return;
     const ids = Array.from(rowsIn(scope))

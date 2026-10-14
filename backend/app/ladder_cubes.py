@@ -1,7 +1,8 @@
-"""2×2 Ladder squares for the Assets list and the Incidents list.
+"""Stacked Ladder squares for the Assets list and the Incidents list.
 
-Cubes are the same size as the ICMP / port / SNMP squares (reach-sq).
-Labels are L1 L2 on the first row and L3 L4 on the second.
+Cubes are the same family as the ICMP / port / SNMP squares (reach-sq),
+drawn smaller so four levels fit in one narrow column.
+Labels are L1, L2, L3, L4 from top to bottom.
 
 Asset list — is the level on this host, and has an active incident climbed it:
 - Green: the level is added (enabled, at least one email).

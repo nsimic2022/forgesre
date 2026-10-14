@@ -143,6 +143,34 @@ def test_verify_api_shares_targets_and_alertmanager_across_assets(monkeypatch):
     assert calls.targets == 1 and calls.am == 1 and calls.sd == 1
 
 
+def test_pager_verify_probes_the_selected_assets_only(monkeypatch):
+    client, ids = _setup(4)
+    calls = _patch(monkeypatch)
+    empty = client.post("/assets/open-verify", data={}, follow_redirects=False)
+    assert empty.status_code == 303
+    assert "edit_note=select-one" in empty.headers["location"]
+    assert calls.probes == []
+
+    picked = ids[:2]
+    posted = client.post("/assets/open-verify", data={"selected": picked}, follow_redirects=False)
+    assert posted.status_code == 303
+    assert posted.headers["location"].startswith("/assets/verify?")
+    assert "edit_note" not in posted.headers["location"]
+    for asset_id in picked:
+        assert f"selected={asset_id}" in posted.headers["location"]
+    page = client.get(posted.headers["location"])
+    assert page.status_code == 200
+    assert sorted(calls.probes) == sorted(picked)
+    for asset_id in ids[2:]:
+        assert asset_id not in calls.probes
+    for asset_id in picked:
+        assert asset_id in page.text
+    assets = client.get("/assets")
+    form = assets.text.split('class="row-actions list-filters"', 1)[1].split("</form>", 1)[0]
+    assert "Verify all" not in form and "Verify all" not in assets.text
+    assert 'data-bulk-verify' in assets.text
+
+
 def test_single_asset_verify_page_still_works(monkeypatch):
     client, ids = _setup(1)
     calls = _patch(monkeypatch)
