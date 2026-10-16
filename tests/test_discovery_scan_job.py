@@ -69,7 +69,7 @@ def test_discovery_buttons_not_stacked_helper_in_tip():
     assert "background job" in html or "background probe" in html
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "discovery_scan" in handbook
-    assert "no Celery" in handbook or "not Celery" in handbook.lower() or "**no Celery**" in handbook
+    assert "jobs" in handbook.lower() and "Postgres" in handbook
     assert "Confirm & scan" in handbook or "Confirm &amp; scan" in handbook
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "./config/forgesre.yml:/config/forgesre.yml:ro" not in compose

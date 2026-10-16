@@ -2,6 +2,8 @@
 
 How to **operate** ForgeSRE after it is installed: users, servers, monitoring, playrules, playbooks, incidents, email, and RCA.
 
+ForgeSRE is the SRE console on top of Prometheus, Grafana, Loki, and NetBox. It tracks Linux (`node_exporter` `:9100`), Windows (`windows_exporter` `:9182`), and network SNMP (`UDP/161`), turns alerts into incidents with an owner, and runs ForgeRCA on those facts. Optional ForgeAI rewrites the investigation prose.
+
 Install, host packages, `./forgesre test`, and configuration files: [`install-config.md`](install-config.md).  
 CLI reference (everyday + advanced): [`cli.md`](cli.md).  
 Verification report: [`verify.md`](verify.md).  
@@ -12,7 +14,7 @@ Version notes (`v0.1.md` … `v0.9.md`) explain *what shipped*. This document ex
 
 Code: https://github.com/nsimic2022/forgesre (`main`). UI: `http://<VM-IP>:8080`.
 
-ForgeSRE does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on top of them. AI is **read-only**: it never SSH-es, never runs playbooks, never writes NetBox.
+Prometheus scrapes; Alertmanager opens incidents. Grafana (`:3000`) is extra graphs from System Health. ForgeRCA and ForgeAI are read-only on the incident.
 
 ---
 
@@ -33,7 +35,7 @@ ForgeSRE does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on t
 14. [Worked example: onboard a Linux or Windows server](#14-worked-example-onboard-a-linux-server)
 15. [Worked example: new alert + playrule + playbook](#15-worked-example-new-alert--playrule--playbook)
 16. [Operator CLI and API](#16-operator-cli-and-api)
-17. [What this version does not do yet](#17-what-this-version-does-not-do-yet)
+17. [What this version monitors](#17-what-this-version-monitors)
 18. [Zabbix (read-only source)](#18-zabbix-read-only-source)
 19. [DC-NOC shortcuts](#19-dc-noc-shortcuts)
 
@@ -43,15 +45,15 @@ ForgeSRE does **not** replace Prometheus, Grafana, Loki, or NetBox. It sits on t
 
 Follow this order on a live box. This handbook is **why and when**. Typed commands: [`cli.md`](cli.md).
 
-1. **Install or update.** New VM: [`install-config.md`](install-config.md) then `./install.sh`. Live box: `git pull origin main && ./forgesre update`. Never `./install.sh` again (it regenerates passwords).
+1. **Install or update.** New VM: [`install-config.md`](install-config.md) then `./install.sh`. Live box: `git pull origin main && ./forgesre update`. A second `./install.sh` regenerates passwords.
 2. **Login.** `http://<VM-IP>:8080` with `installation-report.md` / `secrets/secrets.env` (§5).
-3. **System Health** (`/health-ui`) = `./forgesre doctor`. Open Grafana only here. Alarm path is Prometheus → Alertmanager → Core. NetBox UI up with API 403 is yellow **warn**, not paused. SNMP with no Network device + IP is **paused (no SNMP targets)** (yellow — leave it).
+3. **System Health** (`/health-ui`) = `./forgesre doctor`. Open Grafana here. Alarm path is Prometheus → Alertmanager → Core. NetBox UI up with API 403 is yellow **warn**. SNMP with no Network device + IP is **paused (no SNMP targets)** (yellow — idle).
 4. **Assets** (`/assets`). Local inventory is the monitoring source of truth. Add / Edit / Verify.
-5. **Discovery vs NetBox** (`/discovery`). Suggests this VM’s primary IPv4 `/24`; **Confirm & scan** writes `discovery.cidrs` (empty = no scan) and queues a background `discovery_scan` job (Postgres `jobs` table, one worker, **no Celery**). **Scan now** only after a confirmed CIDR. Probe: TCP 22/80/443/9100/9182 + SNMP **UDP/161** + `/metrics` (not nmap). Candidate table: open ports, node_exporter, windows_exporter, SNMP. **Sync NetBox** sits beside Scan now (read-only from bundled `:8001`). Empty NetBox is **yellow No devices** — that is OK. Approve or Ignore; Manual Assets stay SoT.
-6. **Incidents** (`/incidents`) — the only incident list. Status stacks the status word, then **Maintenance** when the asset is in a maintenance window (a MAINT row shows **Warning** or **Critical** on top), then **Acknowledged** in green in that same cell; **Resolved by** is wider. IDs look like `INC-0134_16.08.2026_09:13`. `/history` redirects here.
-7. **ForgeRCA vs ForgeAI.** Open ForgeRCA on the incident. ForgeRCA (Python) always first. ForgeAI only rewrites prose (optional, default 90s timeout, one worker thread).
-8. **verify ≠ doctor ≠ test.** `./forgesre verify` = live inventory path. `./forgesre doctor` = Health lights. `./forgesre test` = appliance report → `data/reports/`.
-9. **Backup.** Administration or `./forgesre backup`. Restore is not silent (`--yes`).
+5. **Discovery and NetBox** (`/discovery`). Suggests this VM’s primary IPv4 `/24`; **Confirm & scan** writes `discovery.cidrs` (empty list skips the probe) and queues a background `discovery_scan` job (Postgres `jobs` table, one Core worker). **Scan now** only after a confirmed CIDR. Probe: TCP 22/80/443/9100/9182 + SNMP **UDP/161** + `/metrics`. Candidate table: open ports, node_exporter, windows_exporter, SNMP. **Sync NetBox** sits beside Scan now (read-only from bundled `:8001`). Empty NetBox is **yellow No devices**. Approve or Ignore; Manual Assets stay SoT.
+6. **Incidents** (`/incidents`) — the incident list. Status stacks the status word, then **Maintenance** when the asset is in a maintenance window (a MAINT row shows **Warning** or **Critical** on top), then **Acknowledged** in green in that same cell; **Resolved by** is wider. IDs look like `INC-0134_16.08.2026_09:13`. `/history` redirects here.
+7. **ForgeRCA and ForgeAI.** Open ForgeRCA on the incident. ForgeRCA (Python) always first. ForgeAI rewrites prose (optional, default 90s timeout, one worker thread).
+8. **verify, doctor, test.** `./forgesre verify` = live inventory path. `./forgesre doctor` = Health lights. `./forgesre test` = appliance report → `data/reports/`.
+9. **Backup.** Administration or `./forgesre backup`. Restore asks for `--yes`.
 10. **CLI cheat sheet.** [`cli.md`](cli.md). On the box: `./forgesre help`.
 
 ---
@@ -74,7 +76,7 @@ Discovery / manual form / NetBox
    ForgeRCA (facts / hypotheses / evidence)
 ```
 
-Logs are a side path, not the alarm path. Devices send syslog to this appliance (UDP/TCP 514). That does not open an incident. Alarms stay exporter → Prometheus → Alertmanager → Core. Grafana is graphs only.
+Devices send syslog to this appliance (UDP/TCP 514). Alloy labels lines by hostname and sender IP and stores them in Loki as incident evidence. Alarms stay exporter → Prometheus → Alertmanager → Core. Grafana (`:3000`) is extra graphs from System Health.
 
 Seeded on first start:
 
@@ -141,6 +143,8 @@ Login session lasts **12 hours** (httponly cookie).
 
 ## 4. Screen map
 
+![Dashboard](images/dashboard.png)
+
 Left nav is a constant dark shell (does not follow the theme). The control at the bottom cycles **Light / Dark / System**; System follows the OS for the main pane only. After a CSS change, hard-refresh so `/static/app.css` is not served from cache. Operator list tables (dashboard recent incidents, incidents, journal, mail outbox, scheduled reports, assets, discovery, playrules, playbooks, audit log, backups) show **10 rows per page** by default with Previous / 1 / 2 / 3 / Next on the left and a **Rows** select (10 / 20 / 50 / 100) bottom-right. The choice rides in the URL (`?per_page=20`; `reports_per_page`, `audit_per_page`, `backup_per_page` on pages with two lists), so refresh and filters keep it. Changing page or **Rows** keeps the window where it was (no jump to the top). Every one of these lists (and the playbook / escalation policy cards) works like Dashboard Recent incidents: it scrolls inside its own box with a sticky header, sized to about 10 rows, so Rows 50 scrolls the list and not the page. A row click only selects (highlights) the row — it never navigates; open the record with its identity link (incident title or short number, Asset ID, user email, Similar history **Last**, mail **View**), or press Enter on the selected row. Up / Down, j / k, Home / End move the selection inside the box; inputs keep their keys, Tab leaves the list, and a click on empty page space hands scrolling back to the page. Junk values fall back to 10; anything above 100 is capped at 100. Each row has a checkbox (`name="selected"`, header box = select page). When one or more rows are checked, the pager shows **Export** (dropdown: **TXT** = unchanged labeled records, **CSV UTF-8** = table columns with a BOM so Excel keeps Serbian Latin notes), plus Edit / Delete / View where that list allows them.
 
 | Menu | URL | What you do there |
@@ -148,13 +152,13 @@ Left nav is a constant dark shell (does not follow the theme). The control at th
 | Dashboard | `/` | **On call** at the top: whoever matches the weekly roster *now* (link to `/escalation#oncall`). Empty roster = *no one scheduled · Roster*. Analysts can click **I'm on duty now** to cover the rest of today as themselves (a later start wins). Large **Incidents** / **Infrastructure** tiles with the **ForgeSRE** card on the right (CPU / RAM / HDD / NET for the ForgeSRE VM itself — no clock in this cube; browser local time stays in the nav — green dash below 80 %, yellow 80–94 %, red 95 %+ or no reading; **NET** green = this VM has a default route on a non-docker interface whose link is up, red = no usable default route or that interface is down — no ping, no internet probe, so an air-gapped LAN with a gateway is green; below that, small read-only cubes for each System Health row — Core, Postgres, Prometheus, Alertmanager, Grafana, Loki, NetBox, LLM, Discovery, … — green / yellow / red from the same doctor check; click opens System Health), **Run demo** (admin, top right), then Recent incidents (columns **Hostname**, **Incident**, Status, Escalation, When, Severity, **Resolved by** — Incident is the alert title, not the hostname; Status stacks the status word, then **Maintenance** when the asset is in a maintenance window (a MAINT row shows **Warning** or **Critical** on top), then **Acknowledged** in green in that same cell when the incident has been acknowledged; no Notes column; about three quarters of the width) beside **Host metrics** (title *above* the cube so it lines up with Recent incidents; a row click only selects that incident and redraws its host's graphs from one hour before the incident started through now, or through the end if it is resolved, with a vertical line at When — open it with the title or short number link, or Enter on the selected row; the list scrolls inside its own box, Up / Down or j / k move the selection without scrolling the page, and a click on empty page space hands scrolling back to the Dashboard). Under that pair, **ForgeAI** (`#forgeai`): read-only cards for repeats (same asset + alertname ≥3 times in 4 days), hot site/row/rack/parent this week, parent–child while the parent is already in problem, aging OPEN/ESCALATED >4h unacked, and last-30-day counts. SQL facts first; **Ask ForgeAI** only rewrites the short sentences when `ai.enabled` (never dumps the incident table). **Report** is TXT or CSV UTF-8 of those facts; **Send report** goes to the mail outbox. DEMO rows are excluded. No alarm banners below the tiles — host-down, discovery and journal errors live on Incidents, Discovery and Journal. The Incidents box pulses softly red while an active critical incident exists, slower yellow while other incidents are active, and is still when nothing is active (no pulse with reduced motion). Full doctor grid is **System Health**, not here. Every count is a link, and the number equals the list behind the click (same query): alarm tiles **Critical** (red, active critical) / **Warning** (yellow, active warning) / **Investigating** (status INVESTIGATING) / **Escalated** (status ESCALATED — already climbed Escalation) / **Resolved** (cold, status RESOLVED) open `/incidents` filtered; inventory tiles **Assets** / **In problem** / **Unreachable** open `/assets` (**In problem** = the asset has an OPEN, INVESTIGATING, or ESCALATED incident; **Unreachable** = NetBox offline or last stored ping red — probes refresh when the Assets list polls). |
 | Assets | `/assets` | List inventory. Chips **All**, **Critical**, **Warning**, **Offline** (`flag=unreachable`; no No owner email chip — `flag=no-email` still works). Columns start **Hostname**, **Port** (ICMP + TCP + SNMP squares), **Status**, **Escalation** (L1–L4 stacked), then number, Asset ID, IP, owner, contact, **Type**, **Environment**, **Source**, and **Notes** (the Add/Edit Notes field, an em dash when empty). Pager middle **Edit, Clone, Verify, Export, Remove** (one row for Edit/Clone; Verify runs on one or more checked rows). Verify ≠ doctor ≠ `./forgesre test`. |
 | Asset detail | `/assets/<id>` | Contacts, scrape, similar-incident history. **One Edit Alarms** on the metrics panel (not per tile). |
-| Discovery | `/discovery` | Prefills primary IPv4 `/24`; **Confirm & scan** / **Scan now** (disabled until confirmed) side-by-side; queue Postgres `discovery_scan` (no Celery; not nmap). Empty `discovery.cidrs` = no scan. **Sync NetBox** beside Scan now (read-only, admin). Found assets start with **Hostname**, then IP, proposed role, open ports, node_exporter, windows_exporter, SNMP. Demo IP `10.20.30.41` is a DEMO lab seed. |
+| Discovery | `/discovery` | Prefills primary IPv4 `/24`; **Confirm & scan** / **Scan now** (disabled until confirmed) side-by-side; queue Postgres `discovery_scan` (one Core worker). Empty `discovery.cidrs` skips the probe. **Sync NetBox** beside Scan now (read-only, admin). Found assets start with **Hostname**, then IP, proposed role, open ports, node_exporter, windows_exporter, SNMP. Demo IP `10.20.30.41` is a DEMO lab seed. |
 | Incidents | `/incidents` | The only incident list. Default **All** statuses, newest first (10 per page) — not a forced 90-day archive. Filters: search first (host, problem, or INC), then Site / Customer / Row / Rack where those values exist, then status (**Status** = every status, **Active (not resolved)** = Open + Investigating + Escalated, **Not acknowledged**, or one exact status), severity (**Severity**, **Critical**, **Warning**), and a time window (**1h / 6h / 24h / 7d / 30d** or from/to). Site, Customer, Row, and Rack use those names (not “All sites”). Columns: Hostname, **Incident** (the alert title on that host — not the hostname), Status (the status word on the first line, **Maintenance** under it when the asset is in a maintenance window — a MAINT row shows **Warning** or **Critical** on top — plus **Acknowledged** in green in that cell when the incident has been acknowledged), Escalation (L1–L4 stacked), When (date and time), Severity, **Resolved by**, Notes. Title is the primary link; `#N` is colored green (resolved/closed), yellow (in progress), red (critical, not done). Closed rows stay here. `/history` redirects here. |
 | Incident | `/incidents/INC-…` | **Acknowledge / Resolve / Close**, Who to call, **Open ForgeRCA** (primary CTA → `/ai/INC-…`), **Send incident report**. Mail outbox is `/ops#mail`. ForgeRCA/ForgeAI pills stay. |
 | AI Investigation | `/ai/INC-…` | ForgeRCA (green) then ForgeAI (green/yellow/red). Facts, anomalies, hypotheses. Device syslog is evidence only when Loki has lines for that asset hostname or IP. Demo Core logs stay on `forge-demo-01`. |
-| Rules | `/playrules` | Match `alertname` after ingest and attach a Playbook plus the default escalation. Do **not** create Prom rules. `alerts.yml` is PromQL (shown read-only as **Fires when**); Standard alarms are the mute-only overlay. Create / **Edit** / Toggle / **Remove** (analyst). |
-| Playbooks | `/playbooks` | Human checklist. Guidance only — nothing is executed. |
-| System Health | `/health-ui` | Same checks as `./forgesre doctor`, then the full **Journal** list (search, pager, export / delete) under a gap. `/journal` redirects here (`#journal`). Not in the left nav. **Open Grafana** lives **only here** (not left nav, not the alarm path). Alarm path: Prometheus → Alertmanager → Core. Grafana down is yellow (graphs only), not a Prometheus FAIL. Prom/AM errors name `:9090` / `:9093`, not “Prometheus Stack”. Loki green means `/ready`. Alloy green means the process is up and syslog is listening on UDP/TCP 514; Alloy up but 514 closed is yellow (logs only, not a Prometheus FAIL). One Core worker thread (not Celery). **NetBox** UI up with API 403 is **warn** (yellow), not paused — Core is a token on the NetBox superuser, not a UI login. **SNMP exporter** with no Network device + IP is **paused (no SNMP targets)** (yellow, not down). Do not add devices just to un-pause SNMP. |
+| Rules | `/playrules` | Match `alertname` after ingest and attach a Playbook plus the default escalation. `alerts.yml` is PromQL (shown read-only as **Fires when**); Standard alarms are the mute-only overlay. Create / **Edit** / Toggle / **Remove** (analyst). |
+| Playbooks | `/playbooks` | Human checklist the operator follows on the incident. |
+| System Health | `/health-ui` | Same checks as `./forgesre doctor`, then the full **Journal** list (search, pager, export / delete) under a gap. `/journal` redirects here (`#journal`). **Open Grafana** lives here. Alarm path: Prometheus → Alertmanager → Core. Grafana down is yellow (graphs). Prom/AM errors name `:9090` / `:9093`. Loki green means `/ready`. Alloy green means the process is up and syslog is listening on UDP/TCP 514; Alloy up but 514 closed is yellow. One Core worker thread (Postgres `jobs` table). **NetBox** UI up with API 403 is **warn** (yellow) — Core uses `NETBOX_API_TOKEN` on the NetBox superuser. **SNMP exporter** with no Network device + IP is **paused (no SNMP targets)** (yellow — idle). |
 | Email & reports | `/ops` | Address book, send, **the** mail outbox (`#mail`), scheduled reports with **Edit / Clone / Remove / Enable**. Grafana is on System Health. |
 | Administration | `/admin` | Users: click a row to **edit** or **remove**. **Backup**, then **Import / restore** (left) beside a **ForgeSRE CLI** command list (right). Audit log. No browser PTY — SSH or `./forgesre` / `./forgesre shell` |
 
@@ -334,7 +338,7 @@ discovery:
   cidrs: ["10.20.30.0/24"]   # empty = no scan
 ```
 
-3. **Confirm & scan** / **Scan now** enqueue kind `discovery_scan` on the existing Postgres `jobs` table (`status=pending`). The HTTP handler **never** runs `run_scan` inline — it always **redirects** with a flash. `_jobs_loop` / `run_pending_jobs` executes the TCP/SNMP/`/metrics` probe in try/except. A probe exception sets `job.error` and a Journal row; Core/uvicorn stay up. **Not nmap**, and **not** NetBox. Ports: TCP **22, 80, 443, 9100, 9182** + SNMP **UDP/161**. Limits: **256 hosts per CIDR**, **1024 total**. **Sync NetBox** is a separate admin CTA (read-only), shown **side-by-side** (~50%) with Scan now. **Confirm & scan** and **Scan now** sit on one row. Long helper text is in the ⓘ tip. Background loop uses confirmed YAML cidrs only. Hosts already in Assets are skipped. Results land in the candidate table (10 per page) and in Journal module `discovery`. ICMP ping is on Assets, not Scan now. There is **no Celery**.
+3. **Confirm & scan** / **Scan now** enqueue kind `discovery_scan` on the existing Postgres `jobs` table (`status=pending`). The HTTP handler always **redirects** with a flash; `_jobs_loop` / `run_pending_jobs` executes the TCP/SNMP/`/metrics` probe in try/except. A probe exception sets `job.error` and a Journal row; Core/uvicorn stay up. Ports: TCP **22, 80, 443, 9100, 9182** + SNMP **UDP/161**. Limits: **256 hosts per CIDR**, **1024 total**. **Sync NetBox** is a separate admin CTA (read-only), shown **side-by-side** (~50%) with Scan now. **Confirm & scan** and **Scan now** sit on one row. Long helper text is in the ⓘ tip. Background loop uses confirmed YAML cidrs only. Hosts already in Assets are skipped. Results land in the candidate table (10 per page) and in Journal module `discovery`. ICMP ping is on Assets. The same Core jobs thread claims `discovery_scan`.
 4. Banner **NEW DEVICE DETECTED**. Found hosts stay on **Waiting for Approve** until you decide. They are **not** auto-added to inventory.
 5. Candidate table shows **Open ports**, **node_exporter** (yes/no: :9100 + `node_` metrics), **windows_exporter** (yes/no: :9182 + `windows_` metrics), and **SNMP** (`snmp_ok`).
 6. **Approve** (on the Discovery page) → creates an asset (`source=discovery`, id like `disc-10-20-30-41`) and sends you to the asset page. **Ignore** rejects the host (out of inventory).
@@ -344,7 +348,7 @@ discovery:
 
 `docker compose up -d` / `./forgesre update` starts NetBox with **no compose profile**. Image pin: `netboxcommunity/netbox:v4.6.9-5.0.2` (the old `v4.4-3.2.0` tag is not on Docker Hub). UI: `http://<VM-IP>:8001`. First login: user `admin`, email `admin@forgesre.local`, password `NETBOX_SUPERUSER_PASSWORD` in `secrets/secrets.env` (not an operator personal email). First boot pulls a large image then runs Django migrations and can take several minutes — **System Health** / `./forgesre doctor` stays **yellow / starting** until `http://127.0.0.1:8001/login/` answers. That is not a fake green.
 
-**Core is not a NetBox UI login.** `NETBOX_API_TOKEN` is a read-only token on the Django **superuser** (`NETBOX_SUPERUSER_NAME`, usually `admin`) with `is_superuser` and `dcim | device | Can view device`. ForgeSRE does not create a separate NetBox user named Core. A valid token on a user **without** that permission is still HTTP **403** on `GET /api/dcim/devices/`. Prefer a NetBox UI **v2** token in secrets (see below). A legacy 40-character **v1** value is still upserted on every NetBox start (`scripts/netbox-upsert-token.py`). `docker compose logs netbox | grep forgesre` shows **`v2 token` / `skipping v1 upsert`** when secrets already hold `nbt_…`, or **`v1 token ready`** for the fallback. **`could not upsert`** means a v1 secret never reached the NetBox DB (UI still starts).
+ForgeSRE operators sign in on `:8080`. Core calls NetBox with `NETBOX_API_TOKEN`, a read-only token on the Django **superuser** (`NETBOX_SUPERUSER_NAME`, usually `admin`) with `is_superuser` and `dcim | device | Can view device`. Core uses that token; it does not create a separate NetBox user named Core. A valid token on a user **without** that permission is still HTTP **403** on `GET /api/dcim/devices/`. Prefer a NetBox UI **v2** token in secrets (see below). A legacy 40-character **v1** value is still upserted on every NetBox start (`scripts/netbox-upsert-token.py`). `docker compose logs netbox | grep forgesre` shows **`v2 token` / `skipping v1 upsert`** when secrets already hold `nbt_…`, or **`v1 token ready`** for the fallback. **`could not upsert`** means a v1 secret never reached the NetBox DB (UI still starts).
 
 On **System Health** (`/health-ui`) the NetBox tile follows the Discovery traffic light, not “paused”: **starting** (yellow) while first-boot migrations run; **warn** (yellow) when the UI answers but the devices API is 403 / token empty; **running** (green) when the API is 200. A bundled NetBox UI that is up must not show **paused**. **SNMP exporter** is a different tile: with **no** Network device + IP it is **paused (no SNMP targets)** — that is idle, not broken, and you do not need to add devices to un-pause it.
 
@@ -651,7 +655,7 @@ Compose profile **`mailbox`** (Postfix + Dovecot + Roundcube `:8081`) is off at 
 
 ### Scheduled reports (`/ops#reports`)
 
-Rows are Postgres `scheduled_reports` (not Celery, not YAML). Analyst / engineer / admin can **Edit** (same create form; **Save** updates that row; **Cancel** next to Save discards and returns to the list), **Clone** (draft copy until Save), and **Remove** (confirm; outbox mail already generated stays). **Enabled** means the job fires at **Next**; **Disable** keeps the row stored and the scheduler skips it. Send now and incident **Send report** are unchanged.
+Rows are Postgres `scheduled_reports`. Analyst / engineer / admin can **Edit** (same create form; **Save** updates that row; **Cancel** next to Save discards and returns to the list), **Clone** (draft copy until Save), and **Remove** (confirm; outbox mail already generated stays). **Enabled** means the job fires at **Next**; **Disable** keeps the row stored and the scheduler skips it. Send now and incident **Send report** are unchanged.
 
 ---
 
@@ -677,7 +681,7 @@ The **Workflow** card on the incident is the attached playbook as a plain list �
 
 Asset health on the dashboard (`healthy` / `warning` / `critical`) follows open incidents on that asset.
 
-**Grafana is not the alarm path.** Incidents come from Prometheus → Alertmanager → Core. Open Grafana only from **System Health**. Grafana is not in the left nav. If Grafana is down, doctor stays **yellow** (warn) — that is not a Prometheus outage and must not write a Journal error. A real Prom or Alertmanager failure journals `core` / `doctor` **error** naming the hop (`Prometheus :9090`, `Alertmanager :9093`), never a vague “Prometheus Stack”.
+Incidents come from Prometheus → Alertmanager → Core. Open Grafana from **System Health**. If Grafana is down, doctor stays **yellow** (warn) and Journal stays quiet for that hop. A Prometheus or Alertmanager failure journals `core` / `doctor` **error** naming the hop (`Prometheus :9090`, `Alertmanager :9093`).
 
 ---
 
@@ -689,7 +693,7 @@ The button runs **builtin ForgeRCA immediately** and opens Summary → Root caus
 
 The Dashboard **ForgeAI** strip (`/#forgeai`) is a different surface: Core counts repeats / hot groups / parent–child / aging / last 30 days in SQL (DEMO excluded), then **Ask ForgeAI** may rewrite 3–5 sentences from those facts. It does not run ForgeRCA and it is not on the alarm path. See [llm.md](llm.md).
 
-Jobs: **one worker thread** in Core (Postgres `jobs` table). There is **no Celery**. Kinds: `investigate` (RCA / LLM rewrite) and `discovery_scan` (Discovery Confirm & scan / Scan now). An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds` (example.yml default 90; live yml is gitignored). Scheduled `/ops` reports run first in the same loop.
+Jobs: **one worker thread** in Core (Postgres `jobs` table). Kinds: `investigate` (RCA / LLM rewrite) and `discovery_scan` (Discovery Confirm & scan / Scan now). An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds` (example.yml default 90; live yml is gitignored). Scheduled `/ops` reports run first in the same loop.
 
 You get:
 
@@ -808,7 +812,7 @@ If the incident has no asset, the alert `asset` / `instance` label did not match
 
 | When | Command |
 |---|---|
-| Live box after `git pull` | `./forgesre update` — never `./install.sh` |
+| Live box after `git pull` | `./forgesre update` |
 | Bounce containers only (no pull / install / secrets change) | `./forgesre restart` |
 | Re-render Prometheus / Alertmanager / snmp.yml only | `./forgesre render-monitoring` |
 | Saved a Custom community / SNMPv3 asset | `./forgesre snmp-auths` |
@@ -816,7 +820,7 @@ If the incident has no asset, the alert `asset` / `instance` label did not match
 | Appliance report → `data/reports/` | `./forgesre test` |
 | Live inventory path (exporter → Prom → AM → Core) | `./forgesre verify` / `./forgesre ping` |
 | SNMP targets JSON | `./forgesre snmp` |
-| RCA / LLM queue | `./forgesre jobs` (one worker thread, no Celery) |
+| RCA / LLM queue | `./forgesre jobs` (one worker thread, Postgres `jobs` table) |
 | Safety copy | `./forgesre backup` |
 
 **Update vs restart.** `update` is the after-`git pull` path: backup, render-monitoring, image pull (unless `--offline`), `docker compose up -d`, `snmp-auths`, doctor. `restart` only runs `docker compose restart` on containers that already exist (Postgres first, Core last, profile-off services skipped). It does not pull, render, back up, or write `.env` / `secrets/`. New code or templates need `update`; a wedged service needs `restart`. Neither runs `./install.sh`. Full side-by-side: [`cli.md` § Update vs restart](cli.md#update-vs-restart).
@@ -837,23 +841,23 @@ Root wrappers `./doctor.sh`, `./test.sh`, `./backup.sh`, `./update.sh`, `./insta
 
 ---
 
-## 17. What this version does not do yet
+## 17. What this version monitors
 
-Say this out loud so lab expectations stay honest:
+V0.9 on one Ubuntu VM, Docker Compose, host networking:
 
-- No Kubernetes, no APM, no tracing, no auto-remediation.
-- Playbooks are checklists, not executed runbooks.
-- Assets can be added, edited, cloned, and removed (analyst+). Lab `forge-demo-*` rows can be removed; they do not come back on update. Users can be edited and removed on Administration (not the install super admin, not yourself). Escalation policies can be created, edited and removed in the UI (email steps only); there is no ticketing object.
-- Example YAML in `config/examples/` is not applied automatically.
-- Bundled alert rules include demo gauges, SNMP `up` / interface-down, Linux `node_exporter` (down / disk **90%** / **memory 90%** / CPU 95%), and Windows `windows_exporter` (down / volume **90%** / **memory 90%** / CPU 90%). Extra rules go in `alerts.local.yml`. **Grafana is not the alarm path** — it is graphs only. Incidents come from Prometheus → Alertmanager → ForgeSRE.
-- Discovery is TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, confirmed YAML `discovery.cidrs` only (suggested primary IPv4 `/24`; empty = no scan), **256 hosts/CIDR** and **1024 total**. It does not use TCP/161. SNMP *polling* is still snmp_exporter after Approve.
-- Viewer cannot open Playrules, Playbooks, Escalation, Console, or Discovery (403).
-- Optional TLS is an example Caddyfile, not a default container.
-- NetBox is read-only. Bundled UI is on by default; Core never writes back.
-- Zabbix is read-only and optional (§18). Forge never acknowledges, closes, or edits anything in Zabbix.
-- Re-running `./install.sh` regenerates secrets. Core will not start on shipped default `SECRET_KEY` / webhook token (`FORGESRE_DEV=1` is tests/lab only).
+- **Linux** — `node_exporter` `:9100`: exporter down, disk **90%**, **memory 90%**, CPU 95% (`monitoring/alerts.yml`). Extra rules go in `alerts.local.yml`.
+- **Windows** — `windows_exporter` `:9182`: exporter down, volume **90%**, **memory 90%**, CPU 90%.
+- **Network** — snmp_exporter `if_mib` on UDP/161: `up`, interface-down. After Approve, SNMP *polling* stays on snmp_exporter.
+- **Syslog** — Alloy UDP/TCP 514 → Loki, shown on the incident.
+- **Incidents** — Prometheus → Alertmanager → Core. Grafana (`:3000`) is extra graphs from System Health.
+- **Playbooks** — checklists the operator follows. Assets, users (except the install super admin and yourself), and escalation policies (email steps) are edited in the UI.
+- **Discovery** — TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, confirmed YAML `discovery.cidrs` only (suggested primary IPv4 `/24`; empty list skips the probe), **256 hosts/CIDR** and **1024 total**. SNMP GET uses UDP/161.
+- **Roles** — Viewer reads Dashboard, assets, incidents, System Health, Email & reports. Playrules, Playbooks, Escalation, Console, and Discovery stay at 403 for that role.
+- **NetBox** — bundled UI on `:8001`. Core reads devices with `NETBOX_API_TOKEN`.
+- **Zabbix** — optional read source (§18). Ack / Resolve / Close stay in ForgeSRE.
+- **Install** — `./install.sh` once. Live box: `git pull origin main && ./forgesre update`. A second install regenerates secrets. Core starts with a real `SECRET_KEY` / webhook token (`FORGESRE_DEV=1` is tests/lab only). Example YAML in `config/examples/` is documentation; live playrules live in Postgres. Optional TLS is an example Caddyfile.
 
-When that is enough: install ([`install-config.md`](install-config.md)), add people (§5), add servers (§6–7), then add real alerts only when you are ready for incidents (§15). First-hour lab path: Dashboard **Run demo** → HighCPU on `forge-demo-01` (DEMO pill) → Who to call / Escalation. CLI: `./forgesre demo`.
+When that is enough: install ([`install-config.md`](install-config.md)), add people (§5), add servers (§6–7), then add real alerts when you are ready for incidents (§15). First-hour lab path: Dashboard **Run demo** → HighCPU on `forge-demo-01` (DEMO pill) → Who to call / Escalation. CLI: `./forgesre demo`.
 
 ---
 
@@ -889,13 +893,13 @@ Full click-path + CLI + numbered checklist (both machines): [zabbix.md](zabbix.m
 
 ## 19. DC-NOC shortcuts
 
-Eight small tools for a data-center NOC. They do not add Celery, extra Core workers, a Grafana iframe, NetBox or Zabbix write-back, or playbook execution. Version stays 0.9.
+Eight small tools for a data-center NOC. Same V0.9 appliance: one Core, Postgres jobs, Grafana from System Health, NetBox and Zabbix as read sources.
 
 1. **Maintenance.** Edit → Support → Maintenance from / until (appliance timezone). Both empty = not in maintenance. A new alert during the window is still an incident with status **MAINT** (visible, escalation mail does not start). After until, the next firing can email. This is not Standard-alarm mute: mute drops the alert; maintenance keeps a quiet incident.
 2. **Parent.** Edit → Identity → Parent (one upstream device, for example the switch). While that parent has an active down or unreachable incident, a new host-down or interface-down alert on the child is status **SUPPRESSED** and linked to the parent. The parent still pages. CPU, disk, and memory are not suppressed. After the parent incident clears, the next firing can email.
 3. **Interface.** Network incidents show **ifName**, **ifIndex**, and **ifAlias** from the alert labels. An SNMP asset lists the same fields from `if_mib` when Prometheus has the series.
 4. **Syslog.** The incident page shows up to 20 Loki lines from 30 minutes before `started_at` until 30 minutes after (hostname, then IP, `job=syslog`). No asset or no lines: the block is omitted. The demo asset may use `job=forgesre`. A real host never gets `forge-demo-01` lines.
-5. **On call.** Escalation → On call (`/escalation#oncall`, linked from the Dashboard line): weekday and from/until (appliance timezone, inclusive), plus name, email, and phone. Dashboard shows who is on call now. **I'm on duty now** (analyst+) writes today's remaining window as the logged-in user; if two slots overlap, the later start wins. An escalation step with the role `oncall` mails that address. Empty roster = no-recipient. Not PagerDuty.
+5. **On call.** Escalation → On call (`/escalation#oncall`, linked from the Dashboard line): weekday and from/until (appliance timezone, inclusive), plus name, email, and phone. Dashboard shows who is on call now. **I'm on duty now** (analyst+) writes today's remaining window as the logged-in user; if two slots overlap, the later start wins. An escalation step with the role `oncall` mails that address. Empty roster = no-recipient.
 6. **Capacity.** Asset page, under the charts: about 30 days of disk % and interface receive when those series exist. “~N days to full” only when the disk slope is usable (at least two climbing points). Otherwise the 30-day spark, or **Not scraped.** No invented forecast.
 7. **SNMP.** `monitoring/snmp.yml` stays the working `if_mib` module (ifName / ifAlias / ifOperStatus / counters / sysUpTime). No extra vendor MIB was added. Those series are what the interface list and sysUpTime line use.
 8. **Row and Rack.** Text fields on the asset (Identity), filtered on Assets the same way as Site and VLAN. Incidents can filter by the same Row and Rack. Not a floor-plan drawing.

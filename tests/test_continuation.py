@@ -22,12 +22,12 @@ def test_continuation_handoff_exists_and_points_at_test_and_llm():
     assert "V0.9" in contributing
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "memory 90%" in handbook
-    assert "Grafana is not the alarm path" in handbook
+    assert "Prometheus → Alertmanager → Core" in handbook
     arch = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
     assert "V0.9" in arch
-    assert "not shipped" in arch.lower()
+    assert "host network" in arch.lower()
     assert "Alertmanager" in arch
-    assert "Celery" in arch
+    assert "jobs" in arch.lower()
     dockerfile = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
     assert "iputils-ping" in dockerfile
     assert "celery" not in dockerfile.lower()
