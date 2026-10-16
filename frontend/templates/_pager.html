@@ -80,6 +80,12 @@
     {% endif %}
     {% if actions.export %}
     <form method="post" action="{{ actions.export }}" data-bulk-export>
+      <label class="export-format">
+        <select name="format" aria-label="Export format">
+          <option value="txt">TXT</option>
+          <option value="csv">CSV UTF-8</option>
+        </select>
+      </label>
       <button type="submit">Export</button>
     </form>
     {% endif %}

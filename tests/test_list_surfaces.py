@@ -69,7 +69,7 @@ def test_dashboard_recent_incidents_uses_scan_columns():
     assert home.status_code == 200
     section = home.text.split("Recent incidents", 1)[1]
     headers = _headers(section)
-    assert headers.index(">Hostname<") < headers.index(">Name<")
+    assert headers.index(">Hostname<") < headers.index(">Incident<")
     assert ">Problem<" not in headers
     assert ">Severity<" in headers
     assert ">Status<" in headers
@@ -98,7 +98,7 @@ def test_incidents_keeps_ack_resolved_by_and_drops_reported_to():
     page = client.get("/incidents")
     assert page.status_code == 200
     headers = _headers(page.text)
-    assert headers.index(">Hostname<") < headers.index(">Name<")
+    assert headers.index(">Hostname<") < headers.index(">Incident<")
     assert ">When<" in headers
     assert ">Acknowledged<" not in headers and "col-ack" not in headers
     assert ">Ack<" not in headers and "info-tip" not in headers

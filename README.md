@@ -165,7 +165,7 @@ wget -O data/models/model.gguf \
 
 | URL | What you do |
 |---|---|
-| `/` | Dashboard: incident / infrastructure counts, ForgeSRE card, **Run demo** (admin). Full doctor grid is **System Health**. |
+| `/` | Dashboard: On call, incident / infrastructure counts, ForgeSRE card (no cube clock), Recent incidents + Host metrics, **ForgeAI** digest, **Run demo** (admin). Full doctor grid is **System Health**. |
 | `/assets` | Inventory and owner contacts |
 | `/discovery` | Prefills primary IPv4 `/24`; **Confirm & scan** writes `discovery.cidrs` and queues a background probe; **Scan now** after confirm (empty = no scan) / Approve / Ignore; **Sync NetBox** beside it (read-only, admin). Empty NetBox = yellow. **Sync hosts** for Zabbix when `ZABBIX_URL` + `ZABBIX_API_TOKEN` are set. |
 | `/incidents` | All incidents by default, newest first (**10 per page**). Filters: status (including **Not acknowledged**), site, customer, time window, search. Columns include Ack and Resolved by. `/history` redirects here. |

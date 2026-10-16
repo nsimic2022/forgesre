@@ -211,7 +211,7 @@ def test_row_checkboxes_named_selected_on_list_surfaces():
         assert "data-select-row" in page.text, path
     incidents = client.get("/incidents").text
     head = incidents.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert head.index("data-select-page") < head.index(">Hostname<") < head.index(">Name<")
+    assert head.index("data-select-page") < head.index(">Hostname<") < head.index(">Incident<")
     assert ">Acknowledged<" not in head and "col-ack" not in head
     assert "Resolved by" in head and ">Notes<" in head
     assert ">Ack<" not in head and "info-tip" not in head
@@ -250,7 +250,8 @@ def test_dashboard_order_tiles_appliance_sections_without_banners():
     appliance = html.index("data-appliance-card")
     recent = html.index("<h2>Recent incidents</h2>")
     graphs = html.index("data-dash-graphs")
-    assert title < top < incidents_tile < infra < appliance < recent < graphs
+    insights = html.index("data-forgeai-insights")
+    assert title < top < incidents_tile < infra < appliance < recent < graphs < insights
     assert "Recent journal" not in html
     assert "Layout journal error" not in html
     for gone in ('class="dash-banners"', 'id="host-down-banner"', "data-host-down-banner", "HOST DOWN",
@@ -259,7 +260,8 @@ def test_dashboard_order_tiles_appliance_sections_without_banners():
     assert 'class="banner' not in html
     assert html.count("stat-row-big") == 2
     card = html[appliance : html.index("</aside>", appliance)]
-    assert "data-clock" in card
+    assert "data-clock" not in card
+    assert "appliance-clock" not in card
     for key in ("cpu", "ram", "hdd"):
         assert f'data-metric="{key}"' in card
     assert "metric-dash" in card
@@ -310,7 +312,7 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.15rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-X" in base
+    assert "app.css?v=v09-Z" in base
 
 
 def test_dashboard_banner_block_gone_from_template_js_css():
@@ -360,7 +362,7 @@ def test_dashboard_card_titled_forgesre_with_health_cubes(monkeypatch):
     card = _card(html)
     assert "<h2>ForgeSRE " in card
     assert "This appliance" not in html
-    assert 'data-metric="net"' in card and "data-clock" in card
+    assert 'data-metric="net"' in card and "data-clock" not in card
     assert card.index('data-metric="net"') < card.index("data-stack-cubes")
     assert '<a class="stack-cubes" href="/health-ui"' in card
     cubes = {cid: css for css, cid in re.findall(r'<span class="stack-cube (\w+)" data-cube="(\w+)"', card)}

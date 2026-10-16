@@ -75,12 +75,12 @@ def test_shared_columns_and_enum_widths():
     inc_head = incidents.split("<thead>", 1)[1].split("</thead>", 1)[0]
     _order(
         inc_head,
-        [">Hostname<", ">Name<", ">Status<", ">Escalation<", ">When<", ">Severity<", ">Resolved by<", ">Notes<"],
+        [">Hostname<", ">Incident<", ">Status<", ">Escalation<", ">When<", ">Severity<", ">Resolved by<", ">Notes<"],
     )
 
     recent = client.get("/").text.split("<h2>Recent incidents</h2>", 1)[1].split("</table>", 1)[0]
     recent_head = recent.split("</thead>", 1)[0]
-    _order(recent_head, [">Hostname<", ">Name<", ">Status<", ">Escalation<", ">When<", ">Severity<", ">Resolved by<"])
+    _order(recent_head, [">Hostname<", ">Incident<", ">Status<", ">Escalation<", ">When<", ">Severity<", ">Resolved by<"])
     assert ">Notes<" not in recent_head
     assert "Resolved by" in recent_head.rsplit("<th", 1)[1]
 

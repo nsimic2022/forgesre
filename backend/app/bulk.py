@@ -8,13 +8,15 @@ Audit has no prune, so it exports only.
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import datetime
 from typing import Annotated
 from urllib.parse import parse_qsl, urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import PlainTextResponse, RedirectResponse
-from sqlalchemy.orm import Session, joinedload
+from fastapi.responses import PlainTextResponse, RedirectResponse, Response
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.asset_extras import extras_rows, support_status
 from app.audit import audit
@@ -223,6 +225,51 @@ def _download(filename: str, lines: list[str]) -> PlainTextResponse:
             "Cache-Control": "no-store",
         },
     )
+
+
+def _export_format(raw: str) -> str:
+    """TXT is the default. CSV is an explicit opt-in from the pager dropdown."""
+    return "csv" if str(raw or "").strip().lower() == "csv" else "txt"
+
+
+def _csv_cell(value: object) -> str:
+    if isinstance(value, datetime):
+        return compact_when_text(value) or "—"
+    if value is None:
+        return "—"
+    text = str(value).replace("\r\n", "\n").replace("\r", "\n")
+    return text if text.strip() else "—"
+
+
+def _download_csv(filename: str, headers: list[str], rows: list[list[object]]) -> Response:
+    """Table-shaped CSV. UTF-8 with BOM so Excel keeps Serbian Latin notes."""
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n", quoting=csv.QUOTE_MINIMAL)
+    writer.writerow(headers)
+    for row in rows:
+        writer.writerow([_csv_cell(cell) for cell in row])
+    return Response(
+        content=buf.getvalue().encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+def _ladder_csv(cubes: list[dict] | None) -> str:
+    words = {"red": "mailed", "green": "ready"}
+    parts = []
+    for cube in cubes or []:
+        level = f"L{cube.get('level')}"
+        word = words.get(str(cube.get("tone") or ""), "—")
+        parts.append(f"{level} {word}")
+    return " · ".join(parts) if parts else "—"
+
+
+def _yesno(flag: object) -> str:
+    return "yes" if flag else "no"
 
 
 def _need(raw: list[str]) -> list[str]:
@@ -569,6 +616,69 @@ def incidents_text(db: Session, numbers: list[str]) -> list[str]:
     return _join_docs(f"ForgeSRE incidents ({len(records)})", records, labels)
 
 
+def _incident_notes_csv(row: Incident) -> str:
+    notes = list(getattr(row, "operator_notes", None) or [])
+    notes.sort(key=lambda note: int(getattr(note, "id", None) or 0))
+    bodies = []
+    for note in notes:
+        body = str(getattr(note, "body", "") or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        if body:
+            bodies.append(body)
+    if not bodies:
+        return "—"
+    return " | ".join(reversed(bodies))
+
+
+def _incident_status_csv(row: Incident) -> str:
+    from app.dc_noc import in_maintenance
+    from app.web import incident_status_primary
+
+    label = incident_status_primary(row.status, row.severity).get("label") or row.status or "—"
+    bits = [label]
+    if str(row.status or "").upper() == "MAINT" or (row.asset is not None and in_maintenance(row.asset)):
+        bits.append("Maintenance")
+    if row.ack_at:
+        bits.append("Acknowledged")
+    return " / ".join(bits)
+
+
+def incidents_csv(db: Session, numbers: list[str]) -> tuple[list[str], list[list[object]]]:
+    """Same columns as the Incidents table, including Notes as written."""
+    from app.ladder_cubes import incident_ladder_cubes
+
+    rows = (
+        db.query(Incident)
+        .options(
+            joinedload(Incident.asset),
+            selectinload(Incident.operator_notes),
+        )
+        .filter(Incident.number.in_(numbers))
+        .all()
+    )
+    by = {row.number: row for row in rows}
+    out: list[list[object]] = []
+    for number in numbers:
+        row = by.get(number)
+        if row is None:
+            continue
+        out.append(
+            [
+                incident_host(row) or "—",
+                row.title or row.number,
+                _incident_status_csv(row),
+                _ladder_csv(incident_ladder_cubes(row, db)),
+                compact_when_text(row.started_at) or "—",
+                row.severity or "—",
+                row.resolved_by or "—",
+                _incident_notes_csv(row),
+            ]
+        )
+    return (
+        ["Hostname", "Incident", "Status", "Escalation", "When", "Severity", "Resolved by", "Notes"],
+        out,
+    )
+
+
 def delete_assets(db: Session, asset_ids: list[str], actor: str) -> int:
     removed = 0
     for asset_id in asset_ids:
@@ -628,6 +738,44 @@ def assets_text(db: Session, asset_ids: list[str]) -> list[str]:
     return _join_docs(f"ForgeSRE assets ({len(records)})", records, labels)
 
 
+def assets_csv(db: Session, asset_ids: list[str]) -> tuple[list[str], list[list[object]]]:
+    from app.dc_noc import in_maintenance
+    from app.inventory import asset_extra, asset_type_abbrev
+    from app.ladder_cubes import asset_ladder_cubes
+
+    rows = db.query(Asset).filter(Asset.asset_id.in_(asset_ids)).all()
+    by = {row.asset_id: row for row in rows}
+    out: list[list[object]] = []
+    for asset_id in asset_ids:
+        row = by.get(asset_id)
+        if row is None:
+            continue
+        status = row.status or "—"
+        if in_maintenance(row):
+            status = f"{status} / Maintenance"
+        contact = " ".join(part for part in (row.contact_name, row.owner_email) if part) or "—"
+        out.append(
+            [
+                row.hostname or "—",
+                status,
+                _ladder_csv(asset_ladder_cubes(row, db)),
+                row.number or "—",
+                row.asset_id,
+                row.ip or "—",
+                row.owner or "—",
+                contact,
+                asset_type_abbrev(row.type) or row.type or "—",
+                row.environment or "—",
+                row.source or "—",
+                asset_extra(row, "runbook_note") or "—",
+            ]
+        )
+    return (
+        ["Hostname", "Status", "Escalation", "#", "Asset ID", "IP", "Owner", "Contact", "Type", "Environment", "Source", "Notes"],
+        out,
+    )
+
+
 def delete_found(db: Session, ids: list[int], actor: str) -> int:
     removed = 0
     for pk in ids:
@@ -661,6 +809,34 @@ def found_text(db: Session, ids: list[int]) -> list[str]:
         )
         labels.append(row.hostname or row.ip or str(pk))
     return _join_docs(f"ForgeSRE found assets ({len(records)})", records, labels)
+
+
+def found_csv(db: Session, ids: list[int]) -> tuple[list[str], list[list[object]]]:
+    rows = db.query(DiscoveryCandidate).filter(DiscoveryCandidate.id.in_(ids)).all() if ids else []
+    by = {row.id: row for row in rows}
+    out: list[list[object]] = []
+    for pk in ids:
+        row = by.get(pk)
+        if row is None:
+            continue
+        ports = ", ".join(str(port) for port in (row.open_ports or [])) or "—"
+        out.append(
+            [
+                row.hostname or "—",
+                row.ip or "—",
+                row.proposed_role or "—",
+                ports,
+                _yesno(row.node_exporter),
+                _yesno(row.windows_exporter),
+                _yesno(row.snmp_ok),
+                row.status or "—",
+                row.source or "—",
+            ]
+        )
+    return (
+        ["Hostname", "IP", "Proposed role", "Open ports", "node_exporter", "windows_exporter", "SNMP", "Status", "Source"],
+        out,
+    )
 
 
 def delete_playrules(db: Session, ids: list[int], actor: str) -> int:
@@ -725,6 +901,34 @@ def playrules_text(db: Session, ids: list[int]) -> list[str]:
     return _join_docs(f"ForgeSRE playrules ({len(records)})", records, labels)
 
 
+def playrules_csv(db: Session, ids: list[int]) -> tuple[list[str], list[list[object]]]:
+    from app.alert_rules import rules_for
+
+    rows = db.query(Playrule).filter(Playrule.id.in_(ids)).all() if ids else []
+    by = {row.id: row for row in rows}
+    out: list[list[object]] = []
+    for pk in ids:
+        row = by.get(pk)
+        if row is None:
+            continue
+        cond = row.condition if isinstance(row.condition, dict) else {}
+        alertname = str(cond.get("alertname") or "")
+        exprs = [str(item.get("expr") or "").strip() for item in rules_for(alertname)]
+        fires = " | ".join(item for item in exprs if item) or "—"
+        book = row.playbook.name if row.playbook else "—"
+        out.append(
+            [
+                row.name or "—",
+                alertname or "—",
+                fires,
+                row.severity or "—",
+                book,
+                "ON" if row.enabled else "OFF",
+            ]
+        )
+    return (["Rule", "Alertname", "Fires when", "Severity", "Playbook", "Enabled"], out)
+
+
 def delete_playbooks(db: Session, ids: list[int], actor: str) -> int:
     """Same unlink as the per-card Remove: rules and incidents keep working without the book."""
     rows = db.query(Playbook).filter(Playbook.id.in_(ids)).all() if ids else []
@@ -759,6 +963,26 @@ def playbooks_text(db: Session, ids: list[int]) -> list[str]:
         body.extend(_block("steps", steps))
         records.append(body)
     return _join_docs(f"ForgeSRE playbooks ({len(records)})", records, labels)
+
+
+def playbooks_csv(db: Session, ids: list[int]) -> tuple[list[str], list[list[object]]]:
+    rows = db.query(Playbook).filter(Playbook.id.in_(ids)).all() if ids else []
+    by = {row.id: row for row in rows}
+    out: list[list[object]] = []
+    for pk in ids:
+        row = by.get(pk)
+        if row is None:
+            continue
+        steps = " | ".join(_step_title(step).strip() for step in (row.steps or []) if _step_title(step).strip())
+        out.append(
+            [
+                row.name or "—",
+                row.slug or "—",
+                row.description or "—",
+                steps or "—",
+            ]
+        )
+    return (["Name", "Slug", "Description", "Steps"], out)
 
 
 def delete_journal_rows(db: Session, ids: list[int], actor: str) -> int:
@@ -806,6 +1030,31 @@ def journal_text(db: Session, ids: list[int]) -> list[str]:
     return _join_docs(f"ForgeSRE journal ({len(records)})", records, labels)
 
 
+def journal_csv(db: Session, ids: list[int]) -> tuple[list[str], list[list[object]]]:
+    rows = db.query(JournalEntry).filter(JournalEntry.id.in_(ids)).all() if ids else []
+    by = {row.id: row for row in rows}
+    out: list[list[object]] = []
+    for pk in ids:
+        row = by.get(pk)
+        if row is None:
+            continue
+        report = row.summary or ""
+        if row.object_id:
+            report = f"{report} · {row.object_type} {row.object_id}".strip()
+        if row.detail:
+            report = f"{report}\n{row.detail}".strip()
+        out.append(
+            [
+                compact_when_text(row.at) or "—",
+                row.module or "—",
+                row.action or "—",
+                row.status or "—",
+                report or "—",
+            ]
+        )
+    return (["When", "Module", "Action", "Status", "Report"], out)
+
+
 def delete_mail(db: Session, ids: list[int], actor: str) -> int:
     rows = db.query(Notification).filter(Notification.id.in_(ids)).all() if ids else []
     removed = 0
@@ -848,6 +1097,26 @@ def mail_text(db: Session, ids: list[int]) -> list[str]:
         records.append(body)
         labels.append(row.subject or row.target)
     return _join_docs(f"ForgeSRE mail ({len(records)})", records, labels)
+
+
+def mail_csv(db: Session, ids: list[int]) -> tuple[list[str], list[list[object]]]:
+    rows = db.query(Notification).filter(Notification.id.in_(ids)).all() if ids else []
+    by = {row.id: row for row in rows}
+    out: list[list[object]] = []
+    for pk in ids:
+        row = by.get(pk)
+        if row is None:
+            continue
+        out.append(
+            [
+                compact_when_text(row.created_at) or "—",
+                row.target or "—",
+                row.subject or "—",
+                row.status or "—",
+                (row.body or "")[:4000] or "—",
+            ]
+        )
+    return (["When", "To", "Subject", "Status", "Body"], out)
 
 
 def delete_reports(db: Session, ids: list[int], actor: str) -> int:
@@ -893,6 +1162,31 @@ def reports_text(db: Session, ids: list[int]) -> list[str]:
     return _join_docs(f"ForgeSRE scheduled reports ({len(records)})", records, labels)
 
 
+def reports_csv(db: Session, ids: list[int]) -> tuple[list[str], list[list[object]]]:
+    from app.services import report_recipients, schedule_label
+
+    rows = db.query(ScheduledReport).filter(ScheduledReport.id.in_(ids)).all() if ids else []
+    by = {row.id: row for row in rows}
+    out: list[list[object]] = []
+    for pk in ids:
+        row = by.get(pk)
+        if row is None:
+            continue
+        assets = ", ".join(str(item) for item in (row.asset_ids or [])) or "all"
+        out.append(
+            [
+                row.name or "—",
+                ", ".join(report_recipients(row)) or row.to_email or "—",
+                schedule_label(row),
+                assets,
+                compact_when_text(row.last_run_at) or "—",
+                compact_when_text(row.next_run_at) or "—",
+                "ON" if row.enabled else "OFF",
+            ]
+        )
+    return (["Name", "To", "Every", "Assets", "Last", "Next", "Enabled"], out)
+
+
 def _audit_detail(row: AuditLog) -> str:
     data = row.data if isinstance(row.data, dict) else {}
     if not data:
@@ -925,6 +1219,25 @@ def audit_text(db: Session, ids: list[int]) -> list[str]:
     return _join_docs(f"ForgeSRE audit ({len(records)})", records, labels)
 
 
+def audit_csv(db: Session, ids: list[int]) -> tuple[list[str], list[list[object]]]:
+    rows = db.query(AuditLog).filter(AuditLog.id.in_(ids)).all() if ids else []
+    by = {row.id: row for row in rows}
+    out: list[list[object]] = []
+    for pk in ids:
+        row = by.get(pk)
+        if row is None:
+            continue
+        out.append(
+            [
+                compact_when_text(row.at) or "—",
+                row.actor or "—",
+                row.action or "—",
+                f"{row.object_type} {row.object_id}".strip() or "—",
+            ]
+        )
+    return (["When", "Actor", "Action", "Object"], out)
+
+
 def backups_text(names: list[str]) -> list[str]:
     """Selected backup folder names and compact times. Not the archive contents."""
     from app.backup import backup_compact, list_archives
@@ -946,6 +1259,21 @@ def backups_text(names: list[str]) -> list[str]:
             ]
         )
     return _join_docs(f"ForgeSRE backups ({len(records)})", records, labels)
+
+
+def backups_csv(names: list[str]) -> tuple[list[str], list[list[object]]]:
+    from app.backup import backup_compact, format_size, list_archives
+
+    rows = {str(row.get("name") or ""): row for row in list_archives()}
+    out: list[list[object]] = []
+    for name in names:
+        row = rows.get(name)
+        if row is None:
+            continue
+        when = backup_compact(row)
+        stamp = " ".join(part for part in (when.get("date"), when.get("time")) if part) or "—"
+        out.append([stamp, format_size(int(row.get("size") or 0)), name])
+    return (["When", "Size", "Name"], out)
 
 
 def incident_audit_text(db: Session, number: str, ids: list[int]) -> list[str]:
@@ -974,6 +1302,31 @@ def incident_audit_text(db: Session, number: str, ids: list[int]) -> list[str]:
         )
         labels.append(row.action or str(pk))
     return _join_docs(f"ForgeSRE who did what {number} ({len(records)})", records, labels)
+
+
+def incident_audit_csv(db: Session, number: str, ids: list[int]) -> tuple[list[str], list[list[object]]]:
+    rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.object_type == "incident", AuditLog.object_id == number, AuditLog.id.in_(ids))
+        .all()
+        if ids
+        else []
+    )
+    by = {row.id: row for row in rows}
+    out: list[list[object]] = []
+    for pk in ids:
+        row = by.get(pk)
+        if row is None:
+            continue
+        out.append(
+            [
+                compact_when_text(row.at) or "—",
+                row.actor or "—",
+                row.action or "—",
+                _audit_detail(row) or "—",
+            ]
+        )
+    return (["When", "Actor", "Action", "Detail"], out)
 
 
 @router.post("/incidents/edit")
@@ -1012,13 +1365,18 @@ def incident_audit_export(
     db: Session = Depends(get_db),
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
+    fmt: Annotated[str, Form(alias="format")] = "txt",
 ):
     _forbid(user, can(user, "read_incidents"))
     row = db.query(Incident).filter_by(number=number).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Incident not found")
+    ids = _ints(_need(selected))
     safe = number.replace(":", "-")
-    return _download(f"{safe}-who-did-what.txt", incident_audit_text(db, number, _ints(_need(selected))))
+    if _export_format(fmt) == "csv":
+        headers, rows = incident_audit_csv(db, number, ids)
+        return _download_csv(f"{safe}-who-did-what.csv", headers, rows)
+    return _download(f"{safe}-who-did-what.txt", incident_audit_text(db, number, ids))
 
 
 @router.post("/incidents/export")
@@ -1026,9 +1384,14 @@ def incidents_export(
     db: Session = Depends(get_db),
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
+    fmt: Annotated[str, Form(alias="format")] = "txt",
 ):
     _forbid(user, can(user, "read_incidents"))
-    return _download("incidents.txt", incidents_text(db, _need(selected)))
+    ids = _need(selected)
+    if _export_format(fmt) == "csv":
+        headers, rows = incidents_csv(db, ids)
+        return _download_csv("incidents.csv", headers, rows)
+    return _download("incidents.txt", incidents_text(db, ids))
 
 
 @router.post("/assets/bulk-delete")
@@ -1117,9 +1480,14 @@ def assets_export(
     db: Session = Depends(get_db),
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
+    fmt: Annotated[str, Form(alias="format")] = "txt",
 ):
     _forbid(user, can(user, "read_assets"))
-    return _download("assets.txt", assets_text(db, _need(selected)))
+    ids = _need(selected)
+    if _export_format(fmt) == "csv":
+        headers, rows = assets_csv(db, ids)
+        return _download_csv("assets.csv", headers, rows)
+    return _download("assets.txt", assets_text(db, ids))
 
 
 @router.post("/discovery/open-import")
@@ -1154,9 +1522,14 @@ def discovery_export(
     db: Session = Depends(get_db),
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
+    fmt: Annotated[str, Form(alias="format")] = "txt",
 ):
     _forbid(user, can(user, "write_assets"))
-    return _download("found-assets.txt", found_text(db, _ints(_need(selected))))
+    ids = _ints(_need(selected))
+    if _export_format(fmt) == "csv":
+        headers, rows = found_csv(db, ids)
+        return _download_csv("found-assets.csv", headers, rows)
+    return _download("found-assets.txt", found_text(db, ids))
 
 
 @router.post("/playrules/open-edit")
@@ -1191,9 +1564,14 @@ def playrules_export(
     db: Session = Depends(get_db),
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
+    fmt: Annotated[str, Form(alias="format")] = "txt",
 ):
     _forbid(user, can(user, "read_play"))
-    return _download("playrules.txt", playrules_text(db, _ints(_need(selected))))
+    ids = _ints(_need(selected))
+    if _export_format(fmt) == "csv":
+        headers, rows = playrules_csv(db, ids)
+        return _download_csv("playrules.csv", headers, rows)
+    return _download("playrules.txt", playrules_text(db, ids))
 
 
 @router.post("/playbooks/open-edit")
@@ -1228,9 +1606,14 @@ def playbooks_export(
     db: Session = Depends(get_db),
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
+    fmt: Annotated[str, Form(alias="format")] = "txt",
 ):
     _forbid(user, can(user, "read_play"))
-    return _download("playbooks.txt", playbooks_text(db, _ints(_need(selected))))
+    ids = _ints(_need(selected))
+    if _export_format(fmt) == "csv":
+        headers, rows = playbooks_csv(db, ids)
+        return _download_csv("playbooks.csv", headers, rows)
+    return _download("playbooks.txt", playbooks_text(db, ids))
 
 
 @router.post("/journal/bulk-delete")
@@ -1250,9 +1633,14 @@ def journal_export(
     db: Session = Depends(get_db),
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
+    fmt: Annotated[str, Form(alias="format")] = "txt",
 ):
     _forbid(user, can(user, "read_play"))
-    return _download("journal.txt", journal_text(db, _ints(_need(selected))))
+    ids = _ints(_need(selected))
+    if _export_format(fmt) == "csv":
+        headers, rows = journal_csv(db, ids)
+        return _download_csv("journal.csv", headers, rows)
+    return _download("journal.txt", journal_text(db, ids))
 
 
 @router.post("/ops/mail/bulk-delete")
@@ -1272,8 +1660,13 @@ def mail_export(
     db: Session = Depends(get_db),
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
+    fmt: Annotated[str, Form(alias="format")] = "txt",
 ):
-    return _download("mail.txt", mail_text(db, _ints(_need(selected))))
+    ids = _ints(_need(selected))
+    if _export_format(fmt) == "csv":
+        headers, rows = mail_csv(db, ids)
+        return _download_csv("mail.csv", headers, rows)
+    return _download("mail.txt", mail_text(db, ids))
 
 
 @router.post("/ops/reports/bulk-delete")
@@ -1293,9 +1686,14 @@ def reports_export(
     db: Session = Depends(get_db),
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
+    fmt: Annotated[str, Form(alias="format")] = "txt",
 ):
     _forbid(user, can_send_ops(user))
-    return _download("scheduled-reports.txt", reports_text(db, _ints(_need(selected))))
+    ids = _ints(_need(selected))
+    if _export_format(fmt) == "csv":
+        headers, rows = reports_csv(db, ids)
+        return _download_csv("scheduled-reports.csv", headers, rows)
+    return _download("scheduled-reports.txt", reports_text(db, ids))
 
 
 @router.post("/admin/audit/export")
@@ -1303,16 +1701,26 @@ def audit_export(
     db: Session = Depends(get_db),
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
+    fmt: Annotated[str, Form(alias="format")] = "txt",
 ):
     _forbid(user, can(user, "admin"))
-    return _download("audit.txt", audit_text(db, _ints(_need(selected))))
+    ids = _ints(_need(selected))
+    if _export_format(fmt) == "csv":
+        headers, rows = audit_csv(db, ids)
+        return _download_csv("audit.csv", headers, rows)
+    return _download("audit.txt", audit_text(db, ids))
 
 
 @router.post("/admin/backups/export")
 def backups_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
+    fmt: Annotated[str, Form(alias="format")] = "txt",
 ):
     """Names and times of the selected backup folders. Archive bytes stay on Download."""
     _forbid(user, can(user, "admin"))
-    return _download("backups.txt", backups_text(_need(selected)))
+    names = _need(selected)
+    if _export_format(fmt) == "csv":
+        headers, rows = backups_csv(names)
+        return _download_csv("backups.csv", headers, rows)
+    return _download("backups.txt", backups_text(names))

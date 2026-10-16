@@ -12,7 +12,7 @@ from app.db import Base, SessionLocal, engine
 from app.dc_noc import add_oncall_slot, current_oncall
 from app.inventory import create_manual_asset
 from app.main import app
-from app.models import EscalationPolicy, Notification, Playrule, utcnow
+from app.models import EscalationPolicy, Notification, OncallSlot, Playrule, utcnow
 from app.seed import seed
 from app.services import escalation_recipient, ingest_alertmanager
 from app.settings import settings
@@ -54,6 +54,8 @@ def test_l1_oncall_mails_the_current_address_and_dashboard_shows_them():
     zone = ZoneInfo(settings.timezone)
     now = utcnow().astimezone(zone)
     token = uuid4().hex[:8]
+    db.query(OncallSlot).filter(OncallSlot.weekday == now.weekday()).delete(synchronize_session=False)
+    db.commit()
     add_oncall_slot(
         db,
         weekday=now.weekday(),
@@ -115,8 +117,10 @@ def test_l1_oncall_mails_the_current_address_and_dashboard_shows_them():
     assert dash.status_code == 200
     assert 'data-oncall' in dash.text
     assert f"dana-{token}@dc.local" in dash.text
+    assert 'href="/escalation#oncall"' in dash.text
     page = client.get("/escalation")
     assert page.status_code == 200
+    assert 'id="oncall"' in page.text
     assert 'data-oncall-form' in page.text
     assert "Dana" in page.text
     db.close()
