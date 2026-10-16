@@ -953,7 +953,7 @@ def test_docs_say_bundled_netbox_default_on():
     assert "TokenVersionChoices" not in handbook
     assert "API_TOKEN_PEPPER" in handbook or "peppers" in handbook.lower()
     assert "NETBOX_SUPERUSER_NAME" in handbook
-    assert "not a NetBox UI login" in handbook
+    assert "sign in on `:8080`" in handbook
     assert "dcim" in handbook.lower()
     assert "paused (no SNMP targets)" in handbook
     assert "/health-ui" in handbook

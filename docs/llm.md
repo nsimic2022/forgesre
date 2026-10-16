@@ -1,6 +1,6 @@
 # Local LLM in ForgeSRE
 
-How to turn on the optional **on-box** language model. ForgeSRE does not need a cloud LLM. The product works without this chapter: **ForgeRCA** (Python) always investigates first.
+How to turn on the optional **on-box** language model (llama.cpp). **ForgeRCA** (Python) always investigates first; this chapter is the optional prose rewrite.
 
 Companion pages: [install and config](install-config.md) · [CLI](cli.md) · [verify](verify.md) · [operator handbook §13](operator-handbook.md#13-ai-investigation-forgerca).
 
@@ -15,19 +15,11 @@ Two names in the UI:
 | **ForgeRCA** | Deterministic Python (`agents/rca/`) | Always. Facts, anomalies, hypotheses, evidence IDs, confidence score |
 | **ForgeAI** | Local llama.cpp (or another OpenAI-compatible HTTP server) | Optional. Rewrites **prose only**: (1) incident summary / likely cause / recommended action; (2) Dashboard **ForgeAI** digest sentences from SQL facts |
 
-The model **does not**:
-
-- SSH, run playbooks, or change the host
-- Write NetBox
-- Invent a second investigation engine (it sees a **compact** sanitized rewrite context — facts, CPU/mem/disk snapshots, short logs — not Prometheus matrices or full evidence JSON)
-- Store a GGUF in git
-- Require an OpenAI / Anthropic API key
-
-Core talks HTTP to `ai.llm.url` (`POST …/chat/completions`, `GET …/models`). There is no cloud SDK in the runtime.
+ForgeAI rewrites short prose from a **compact** sanitized context (facts, CPU/mem/disk snapshots, short logs). The GGUF lives in `data/models/model.gguf`. Core talks HTTP to `ai.llm.url` (`POST …/chat/completions`, `GET …/models`).
 
 If the rewrite fails or times out, the incident keeps the ForgeRCA result and records why (`LLM unreachable; used ForgeRCA…`).
 
-**Dashboard digest.** `/` `#forgeai` is not a second investigation engine. Core runs **SQL first** (repeats, hot group, parent–child, aging open, last 30 days). DEMO incidents are excluded. **Ask ForgeAI** sends a compact JSON of those counts (capped, 20 s timeout) and asks for 3–5 sentences. The model does **not** search Postgres. Off or failed rewrite → the same cards and the canned English conclusions stay. **Report** is TXT or CSV UTF-8 of the facts. **Send report** is the mail outbox (`step_key=report`). Not on the alarm path.
+**Dashboard digest.** `/` `#forgeai`: Core runs **SQL first** (repeats, hot group, parent–child, aging open, last 30 days). DEMO incidents stay out of the digest. **Ask ForgeAI** sends a compact JSON of those counts (capped, 20 s timeout) and asks for 3–5 sentences. Off or failed rewrite keeps the same cards and the canned English conclusions. **Report** is TXT or CSV UTF-8 of the facts. **Send report** is the mail outbox (`step_key=report`). Alarms still follow Prometheus → Alertmanager → Core.
 
 **Prompt size.** llama.cpp **prompt processing (prefill)** is not generation. Qwen3-4B on CPU is often ~25–29 tok/s for prefill; a ~6000-token user message is ~4 minutes before the first output token. `timeout_seconds: 300` then leaves almost no time to generate, and llama.cpp logs `cancel task`. ForgeSRE therefore **does not dump Prom/Loki blobs** into the LLM: `prompt_context` is capped at **5000 characters** (was 12000, which is ~3–6k tokens) and keeps name/value/unit snapshots (for example CPU 92% / mem 81% / disk 74%). Builtin ForgeRCA still stores the full facts, anomalies, evidence IDs, and PromQL on the incident. Do **not** switch to a smaller GGUF to fix a cancel — shrink was the prompt, not the model. Node exporter does not talk to the LLM (Node Exporter → Prometheus → ForgeRCA evidence → compact prompt → Qwen).
 

@@ -1,6 +1,6 @@
 # ForgeSRE install and configuration
 
-Operator manual for a **single Ubuntu host**. A vCenter VM is the usual lab. ForgeSRE is an appliance: Docker Compose and **host networking**. It is not Kubernetes.
+Operator manual for a **single Ubuntu host**. A vCenter VM is the usual lab. ForgeSRE is an appliance: Docker Compose and **host networking**.
 
 Repository: https://github.com/nsimic2022/forgesre (`main`).
 

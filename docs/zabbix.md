@@ -18,7 +18,7 @@ Never done this? Follow the numbered [end-to-end checklist](#18-end-to-end-opera
 
 ## Contents
 
-1. [What ForgeSRE does and does not do with Zabbix](#1-what-forgesre-does-and-does-not-do-with-zabbix)
+1. [What ForgeSRE does with Zabbix](#1-what-forgesre-does-with-zabbix)
 2. [Prerequisites](#2-prerequisites)
 3. [Zabbix: read-only user group, user and API token](#3-zabbix-read-only-user-group-user-and-api-token)
 4. [ForgeSRE: secrets and update](#4-forgesre-secrets-and-update)
@@ -40,7 +40,7 @@ Never done this? Follow the numbered [end-to-end checklist](#18-end-to-end-opera
 
 ---
 
-## 1. What ForgeSRE does and does not do with Zabbix
+## 1. What ForgeSRE does with Zabbix
 
 **Does:**
 
@@ -53,19 +53,14 @@ Never done this? Follow the numbered [end-to-end checklist](#18-end-to-end-opera
 | CPU / memory / disk graphs | API `item.get` + `trend.get` (hourly averages, last 24 h) | Only when you open a graph for an asset that has **no Prometheus samples**; cached 5 minutes per host |
 | Status light | API `apiinfo.version` + `host.get` count | Health cube **Zabbix** and the Discovery Zabbix card (cached 1–2 minutes) |
 
-**Does not:**
+**How Core talks to Zabbix:**
 
-- **No write-back.** ForgeSRE never writes back to Zabbix. It only calls `apiinfo.version`, `host.get`, `problem.get`, `item.get`, `trend.get`. The client refuses any other method (`*.create`, `*.update`, `*.delete`, `event.acknowledge`) before a request is built.
-- **No acknowledge, close, comment, or severity change in Zabbix.** Acknowledging or resolving an incident in ForgeSRE stays in ForgeSRE. The Zabbix problem stays as it is until Zabbix itself recovers it.
-- No host, group, template, item, trigger, user, media type, or action is created or changed in Zabbix. You create those by hand (sections 3, 7, 8).
-- No Zabbix iframe or embedded Zabbix UI. The Health page only links to `ZABBIX_URL`.
-- No Zabbix database access, no extra container, no Zabbix proxy or agent on the ForgeSRE VM.
-- No `./forgesre zabbix` CLI command. Everything is the secrets file, `./forgesre update`, and the web UI.
-- No SNMP settings are needed for Zabbix. `./forgesre snmp-auths` and the asset SNMP fields are for ForgeSRE's own snmp_exporter, not for Zabbix.
-- Problems are not pulled. Incidents are opened **only** by the webhook. The 3-minute `problem.get` poll can only resolve an incident whose recovery webhook was lost.
-- **Grafana is not in the alarm path.** Zabbix problems never go through Grafana. Alarm path for Prometheus stays exporter → Prometheus → Alertmanager webhook → Core. Zabbix is a **second ingest path** (JSON-RPC read + webhook). Open Grafana from System Health for extra graphs only.
-- Asset **Standard alarms** (CPU / memory / disk / up checkboxes) only mute bundled **Prometheus** alerts. They do not mute Zabbix triggers ([section 15](#15-standard-alarms-vs-zabbix-incidents)).
-- There is **no Administration form** to paste the Zabbix URL or tokens. `/admin` is users, backup, and CLI cheat sheet. Tokens go in `secrets/secrets.env` ([section 4](#4-forgesre-secrets-and-update)).
+- JSON-RPC methods: `apiinfo.version`, `host.get`, `problem.get`, `item.get`, `trend.get`. ForgeSRE **never writes back** (`*.create`, `*.update`, `*.delete`, `event.acknowledge` are refused before a request is built).
+- Acknowledge / Resolve / Close stay in ForgeSRE. The Zabbix problem stays until Zabbix itself recovers it. Hosts, groups, templates, items, triggers, users, media types, and actions are created in Zabbix by hand (sections 3, 7, 8).
+- Health links to `ZABBIX_URL`. Tokens live in `secrets/secrets.env` ([section 4](#4-forgesre-secrets-and-update)). There is no Admin UI field for those secrets. `/admin` is users, backup, and CLI cheat sheet.
+- Incidents open from the **webhook**. The 3-minute `problem.get` poll resolves an incident whose recovery webhook was lost.
+- Prometheus alarms stay exporter → Prometheus → Alertmanager webhook → Core. Zabbix is a **second ingest path** (JSON-RPC read + webhook). Grafana (`:3000`) is extra graphs from System Health.
+- Asset **Standard alarms** mute bundled **Prometheus** alerts ([section 15](#15-standard-alarms-vs-zabbix-incidents)). `./forgesre snmp-auths` is for ForgeSRE's own snmp_exporter.
 
 If Zabbix is down: each API call gives up after 2–5 s, the **Zabbix** Health cube turns **yellow** (never red), Console gets **one** `zabbix` / `health` line, and ForgeSRE stops calling Zabbix for 2 minutes instead of retrying. Dashboard, incidents, Prometheus alerts, and mail keep working.
 
