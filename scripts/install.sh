@@ -445,6 +445,10 @@ start_stack() {
   fi
   echo "Building and starting containers..."
   dc up -d --build "${pull_flag[@]}"
+  if [[ "$OFFLINE" -ne 1 ]]; then
+    mkdir -p "$ROOT/data"
+    awk '/^[[:space:]]+image:/{print}' "$ROOT/docker-compose.yml" | sha256sum | awk '{print $1}' > "$ROOT/data/.compose-images.stamp"
+  fi
   echo "Waiting for Core..."
   local i
   for i in $(seq 1 60); do

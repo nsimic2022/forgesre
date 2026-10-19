@@ -271,7 +271,9 @@ services:
     restart: unless-stopped
 
   llm:
-    image: ghcr.io/ggml-org/llama.cpp:server
+    # CPU server, pinned bNNNN. The floating :server tag moves daily (~300MB).
+    # Bump this tag in git when llama.cpp must change; ./forgesre update then pulls.
+    image: ghcr.io/ggml-org/llama.cpp:server-b11718
     profiles: ["ai"]
     network_mode: host
     command:

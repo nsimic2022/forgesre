@@ -145,14 +145,21 @@ def test_update_script_skips_blind_pull_and_build():
     assert "--offline" in text
     assert "skipping --build" in text
     assert "skipping compose pull" in text
+    assert "Compose image pins unchanged" in text
+    assert ".compose-images.stamp" in text
+    assert "compose_images_hash" in text
     assert "backend/Dockerfile" in text
     assert ".core-image.stamp" in text
     assert "first boot can take several minutes" in text.lower() or "migrations" in text.lower()
     assert "yellow" in text.lower()
     help_txt = (ROOT / "scripts" / "forgesre").read_text(encoding="utf-8")
     assert "./forgesre update --offline" in help_txt
+    assert "image pins" in help_txt
+    install = (ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
+    assert ".compose-images.stamp" in install
     cli = (ROOT / "docs" / "cli.md").read_text(encoding="utf-8")
     assert "--offline" in cli
+    assert "server-b11718" in cli
 
 
 def test_example_yaml_ai_off_and_short_timeout():
