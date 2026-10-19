@@ -266,14 +266,20 @@ def test_detail_header_strip_has_first_and_duration():
     _login(client)
     page = client.get(f"/incidents/{row.number}")
     assert page.status_code == 200
-    strip = page.text.split("data-incident-strip", 1)[1].split("</header>", 1)[0]
-    assert '<span class="sev-crit">Strip check</span>' in strip
-    assert f'href="/assets/{asset.asset_id}"' in strip
-    assert "First <span" in strip
-    assert re.search(r"Open <span class=\"incident-fact\" data-incident-duration>1[89]m</span>", strip)
-    assert 'class="pill investigating"' in strip
-    assert 'class="pill crit"' in strip
-    assert page.text.index("data-incident-strip") < page.text.index("Who to call")
+    identity = page.text.split("data-incident-identity", 1)[1].split("</table>", 1)[0]
+    assert "Strip check" in identity
+    assert f'href="/assets/{asset.asset_id}"' in identity
+    assert ">Notes<" in identity
+    assert 'class="pill investigating"' in identity or "INVESTIGATING" in identity
+    assert 'class="pill crit"' in identity
+    assert page.text.index("data-incident-identity") < page.text.index("class=\"incident-actions\"")
+    assert page.text.index("class=\"incident-actions\"") < page.text.index("<h2>Who to call")
+    assert page.text.index("<h2>Who to call") < page.text.index("<h2>Host metrics")
+    assert page.text.index("<h2>Host metrics") < page.text.index("<h2>What happened")
+    assert page.text.index("<h2>What happened") < page.text.index("<h2>Workflow")
+    assert page.text.index("<h2>Workflow") < page.text.index("<h2>Similar on this asset")
+    assert page.text.index('id="evidence"') < page.text.index('id="audit"')
+    assert page.text.index('id="audit"') < page.text.index('id="notes"')
     db.close()
 
 
@@ -328,4 +334,4 @@ def test_stack_cube_font_bumped_box_unchanged():
     assert "padding: 0.28rem" in block
     assert "line-height: 0.77rem" in block
     assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v09-15" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "app.css?v=v09-16" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

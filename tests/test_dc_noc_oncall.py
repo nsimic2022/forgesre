@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
-from app.dc_noc import add_oncall_slot, current_oncall, oncall_person_name
+from app.dc_noc import add_oncall_slot, current_oncall, oncall_directory, oncall_person_name
 from app.inventory import create_manual_asset
 from app.main import app
 from app.models import EscalationPolicy, Notification, OncallSlot, Playrule, utcnow
@@ -36,6 +36,16 @@ def test_oncall_person_name_is_not_a_role_label():
     assert oncall_person_name("Super Admin", "admin@forgesre.local") == "Admin"
     assert oncall_person_name("Analyst", "ana@dc.local") == "Ana"
     assert oncall_person_name("super_admin", "admin@forgesre.local", "super_admin") == "Admin"
+
+
+def test_oncall_directory_lists_users_as_people():
+    db = _db()
+    people = oncall_directory(db)
+    by_email = {row["email"]: row for row in people}
+    assert "admin@forgesre.local" in by_email
+    assert by_email["admin@forgesre.local"]["name"] == "Admin"
+    assert "Super Admin" not in by_email["admin@forgesre.local"]["name"]
+    db.close()
 
 
 def test_frozen_time_selects_the_weekday_slot():
@@ -140,6 +150,10 @@ def test_l1_oncall_mails_the_current_address_and_dashboard_shows_them():
     assert 'class="card escalation-pane escalation-oncall-form"' in page.text
     assert "oncall-roster-wrap" in page.text
     assert 'data-oncall-person' not in page.text
+    assert 'data-oncall-name' in page.text
+    assert 'data-oncall-directory' in page.text
+    assert 'id="oncall-people"' in page.text
+    assert "Admin" in page.text.split('id="oncall-people"', 1)[1].split("</datalist>", 1)[0]
     assert 'action="/escalation/oncall/open-clone"' not in page.text
     assert 'action="/escalation/oncall/export"' not in page.text
     assert "oncall-contact" in page.text

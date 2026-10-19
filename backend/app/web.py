@@ -28,6 +28,7 @@ from app.dc_noc import (
     interface_facts,
     list_oncall_slots,
     maintenance_label,
+    oncall_directory,
     oncall_form_values,
     snmp_surface,
     take_duty,
@@ -2615,6 +2616,7 @@ def _escalation_view(
         oncall_error=oncall_error,
         oncall_clone_name=oncall_clone_name,
         weekdays=WEEKDAYS,
+        oncall_people=oncall_directory(db) if can(user, "write_play") else [],
     )
     response.status_code = status_code
     return response

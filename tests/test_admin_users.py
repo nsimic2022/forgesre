@@ -212,6 +212,8 @@ def test_admin_create_user_phones_and_manual_oncall():
     esc = client.get("/escalation")
     assert esc.status_code == 200
     assert 'data-oncall-person' not in esc.text
+    assert 'data-oncall-name' in esc.text
+    assert "Noc One" in esc.text.split('id="oncall-people"', 1)[1]
     slot = client.post(
         "/escalation/oncall",
         data={

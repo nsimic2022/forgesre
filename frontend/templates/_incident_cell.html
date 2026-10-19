@@ -4,8 +4,8 @@
   <div class="inc-meta">
     <a class="{{ incident_tone(item.status, item.severity) }}" href="{{ detail_href }}" title="{{ item.number }}">{{ incident_short_label(item.number) }}</a>
     <span class="src-pill src-{{ incident_source(item) }}" data-source="{{ incident_source(item) }}" title="Alert source">{{ incident_source_label(item) }}</span>
-    {% if is_demo_incident(item) %}<span class="inc-demo" title="Lab demo incident">· DEMO</span>{% endif %}
+    {% if is_demo_incident(item) %}{% if show_demo_pill|default(false) %}<span class="pill demo">DEMO</span>{% else %}<span class="inc-demo" title="Lab demo incident">· DEMO</span>{% endif %}{% endif %}
     {% set iface = interface_facts(item) %}
-    {% if iface.ifName or iface.ifIndex or iface.ifAlias %}<span class="inc-iface" data-iface>{% if iface.ifName %}{{ iface.ifName }}{% endif %}{% if iface.ifIndex %} · {{ iface.ifIndex }}{% endif %}{% if iface.ifAlias %} · {{ iface.ifAlias }}{% endif %}</span>{% endif %}
+    {% if iface.ifName or iface.ifIndex or iface.ifAlias %}<span class="inc-iface" data-iface>{% if iface.ifName %}<span data-if-name>{{ iface.ifName }}</span>{% endif %}{% if iface.ifIndex %} · <span data-if-index>{{ iface.ifIndex }}</span>{% endif %}{% if iface.ifAlias %} · <span data-if-alias>{{ iface.ifAlias }}</span>{% endif %}</span>{% endif %}
   </div>
 </td>

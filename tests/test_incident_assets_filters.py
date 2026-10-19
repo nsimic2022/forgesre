@@ -73,7 +73,8 @@ def _incident_with_audit(n: int) -> str:
 
 
 def _audit(html: str) -> str:
-    start = html.index('<section id="audit">')
+    start = html.index('id="audit"')
+    start = html.rindex("<section", 0, start)
     return html[start : html.index("</section>", start)]
 
 
@@ -249,6 +250,6 @@ def test_edit_link_keeps_filters(seeded):
 
 def test_v08_15_cache_bump_and_compact_select_css():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-15" in base and "app.js?v=v09-V" in base
+    assert "app.css?v=v09-16" in base and "app.js?v=v09-W" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".list-filters select.filter-select { width: auto;" in css

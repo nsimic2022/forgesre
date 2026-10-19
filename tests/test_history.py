@@ -289,8 +289,8 @@ def test_send_incident_report_to_address_book_email():
     assert "ForgeRCA" in page.text
     assert "ForgeAI" in page.text
     assert "platform@forgesre.local" in page.text
-    strip_end = page.text.index("</header>", page.text.index("data-incident-strip"))
-    assert page.text.find('class="pill open"') < strip_end < page.text.find("Acknowledge")
+    identity_end = page.text.index("</table>", page.text.index("data-incident-identity"))
+    assert page.text.find('class="pill open"') < identity_end < page.text.find("Acknowledge")
     posted = client.post(
         f"/incidents/{number}/mail",
         data={"target": "ops@dc.local"},
