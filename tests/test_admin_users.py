@@ -159,7 +159,7 @@ def test_api_update_and_delete_user():
     db.close()
 
 
-def test_admin_create_user_phones_feed_oncall_picker():
+def test_admin_create_user_phones_and_manual_oncall():
     db = _db()
     client = TestClient(app)
     _login(client)
@@ -211,11 +211,7 @@ def test_admin_create_user_phones_feed_oncall_picker():
     assert row.phone2 == "+381-11-555-0201"
     esc = client.get("/escalation")
     assert esc.status_code == 200
-    picker = esc.text.split("data-oncall-person", 1)[1].split("</select>", 1)[0]
-    assert "noc@dc.local" in picker
-    assert "Noc One" in picker
-    assert "+381-11-555-0200" in picker
-    assert "+381-11-555-0201" in picker
+    assert 'data-oncall-person' not in esc.text
     slot = client.post(
         "/escalation/oncall",
         data={
@@ -231,6 +227,9 @@ def test_admin_create_user_phones_feed_oncall_picker():
     )
     assert slot.status_code in {302, 303}
     roster = client.get("/escalation")
-    assert "+381-11-555-0200" in roster.text
-    assert "+381-11-555-0201" in roster.text
+    body = roster.text.split('data-oncall-roster', 1)[1].split("</table>", 1)[0]
+    assert "Noc One" in body
+    assert "analyst" not in body.lower()
+    assert "+381-11-555-0200" in body
+    assert "+381-11-555-0201" in body
     db.close()

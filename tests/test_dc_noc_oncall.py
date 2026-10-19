@@ -131,9 +131,10 @@ def test_l1_oncall_mails_the_current_address_and_dashboard_shows_them():
     assert "oncall-form-when" in page.text
     assert "oncall-form-who" in page.text
     assert page.text.index("oncall-form-when") < page.text.index("oncall-form-who")
-    assert 'class="escalation-oncall-form"' in page.text
+    assert 'class="card escalation-pane escalation-oncall-form"' in page.text
     assert "oncall-roster-wrap" in page.text
-    assert 'data-oncall-person' in page.text
+    assert 'data-oncall-person' not in page.text
+    assert ">Clone<" in page.text and ">Export<" in page.text
     db.close()
 
 

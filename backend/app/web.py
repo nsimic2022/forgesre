@@ -2593,11 +2593,6 @@ def _escalation_view(
         .group_by(Playrule.escalation_policy_id)
         .all()
     )
-    directory = (
-        db.query(User).filter(User.is_active.is_(True)).order_by(User.name, User.email).all()
-        if can(user, "write_play")
-        else []
-    )
     response = render(
         request,
         "escalation.html",
@@ -2620,7 +2615,6 @@ def _escalation_view(
         oncall_error=oncall_error,
         oncall_clone_name=oncall_clone_name,
         weekdays=WEEKDAYS,
-        directory=directory,
     )
     response.status_code = status_code
     return response
