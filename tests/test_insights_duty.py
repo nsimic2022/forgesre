@@ -83,7 +83,9 @@ def test_later_take_duty_wins_and_dashboard_shows_the_button():
     person = current_oncall(db, now)
     assert person is not None
     assert person["email"] == admin.email
-    assert person["name"]
+    assert person["name"] == "Admin"
+    assert person["person"] == "Admin"
+    assert person["name"] != "Super Admin"
     assert slot["email"] == admin.email
     earlier = db.query(OncallSlot).filter_by(email=ana_mail).one()
     assert int(earlier.end_minute) < now.hour * 60 + now.minute

@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
-from app.dc_noc import add_oncall_slot, current_oncall
+from app.dc_noc import add_oncall_slot, current_oncall, oncall_person_name
 from app.inventory import create_manual_asset
 from app.main import app
 from app.models import EscalationPolicy, Notification, OncallSlot, Playrule, utcnow
@@ -29,6 +29,13 @@ def _client() -> TestClient:
     client = TestClient(app)
     client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
     return client
+
+
+def test_oncall_person_name_is_not_a_role_label():
+    assert oncall_person_name("Ana", "ana@dc.local") == "Ana"
+    assert oncall_person_name("Super Admin", "admin@forgesre.local") == "Admin"
+    assert oncall_person_name("Analyst", "ana@dc.local") == "Ana"
+    assert oncall_person_name("super_admin", "admin@forgesre.local", "super_admin") == "Admin"
 
 
 def test_frozen_time_selects_the_weekday_slot():
@@ -124,7 +131,6 @@ def test_l1_oncall_mails_the_current_address_and_dashboard_shows_them():
     assert 'data-oncall-form' in page.text
     assert "Dana" in page.text
     assert 'action="/escalation/oncall/open-edit"' in page.text
-    assert 'action="/escalation/oncall/open-clone"' in page.text
     assert 'action="/escalation/oncall/bulk-delete"' in page.text
     assert f"/escalation/oncall/" in page.text and "/toggle" in page.text
     assert ">Remove<" in page.text and ">Edit<" in page.text
@@ -134,7 +140,38 @@ def test_l1_oncall_mails_the_current_address_and_dashboard_shows_them():
     assert 'class="card escalation-pane escalation-oncall-form"' in page.text
     assert "oncall-roster-wrap" in page.text
     assert 'data-oncall-person' not in page.text
-    assert ">Clone<" in page.text and ">Export<" in page.text
+    assert 'action="/escalation/oncall/open-clone"' not in page.text
+    assert 'action="/escalation/oncall/export"' not in page.text
+    assert "oncall-contact" in page.text
+    assert ">Clone<" not in page.text.split('id="oncall"', 1)[1]
+    roster_head = page.text.split('data-oncall-roster', 1)[1].split("</thead>", 1)[0]
+    assert ">Phone<" not in roster_head
+    assert roster_head.index(">When<") < roster_head.index(">Name<") < roster_head.index(">Email<") < roster_head.index(">Enabled<")
+    mail = f"dana-{token}@dc.local"
+    stacked = False
+    for part in page.text.split('class="oncall-contact"')[1:]:
+        cell = part.split("</td>", 1)[0]
+        if mail in cell:
+            assert "+381-11-300" in cell
+            assert cell.index("+381-11-300") < cell.index(mail)
+            stacked = True
+            break
+    assert stacked
+    role_slot = add_oncall_slot(
+        db,
+        weekday=(now.weekday() + 1) % 7,
+        start="08:00",
+        end="16:00",
+        name="Super Admin",
+        email="noc@dc.local",
+        phone="+381-11-301",
+    )
+    db.commit()
+    assert role_slot.name == "Noc"
+    named = client.get("/escalation")
+    roster = named.text.split('data-oncall-roster', 1)[1].split("</table>", 1)[0]
+    assert 'class="oncall-name">Noc</td>' in roster
+    assert 'class="oncall-name">Super Admin</td>' not in roster
     db.close()
 
 

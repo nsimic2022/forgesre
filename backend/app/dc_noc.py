@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from app.models import Asset, Incident, MaintenanceWindow, OncallSlot, utcnow
+from app.security import ROLE_LABELS, role_label
 
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 from app.settings import settings
@@ -377,6 +378,25 @@ def slot_enabled(row: OncallSlot) -> bool:
     return True if value is None else bool(value)
 
 
+def oncall_person_name(name: str | None, email: str | None = "", role: str | None = None) -> str:
+    """Roster Name is a person. Role phrases (Super Admin, Analyst, …) are not a name."""
+    text = " ".join(str(name or "").split())
+    folded = text.casefold()
+    labels = {value.casefold() for value in ROLE_LABELS.values()}
+    labels.update(key.casefold() for key in ROLE_LABELS)
+    labels.update(key.replace("_", " ").casefold() for key in ROLE_LABELS)
+    if role:
+        labels.add(role_label(str(role)).casefold())
+        labels.add(str(role).replace("_", " ").casefold())
+    if text and folded not in labels:
+        return text[:255]
+    local = str(email or "").strip().split("@", 1)[0]
+    pretty = " ".join(local.replace(".", " ").replace("_", " ").replace("-", " ").split())
+    if pretty:
+        return pretty.title()[:255]
+    return text[:255]
+
+
 def _oncall_fields(
     *,
     weekday: str | int,
@@ -399,13 +419,13 @@ def _oncall_fields(
         raise ValueError("On-call from and until must be times like 08:00.")
     if end_minute <= start_minute:
         raise ValueError("On-call until must be after from, on the same weekday.")
-    person = " ".join(str(name or "").split())
-    if not person:
-        raise ValueError("On-call needs a name.")
     address = str(email or "").strip()
     local, _, domain = address.partition("@")
     if not local or "." not in domain:
         raise ValueError("On-call needs an email address.")
+    person = oncall_person_name(name, address)
+    if not person:
+        raise ValueError("On-call needs a name.")
     return {
         "weekday": day,
         "start_minute": start_minute,
@@ -467,7 +487,7 @@ def toggle_oncall_slot(row: OncallSlot) -> OncallSlot:
 def oncall_form_values(row: OncallSlot, *, clone: bool = False) -> dict[str, Any]:
     """Prefill Add on-call. Clone is a draft until Save."""
     view = oncall_slot_view(row)
-    name = view["name"]
+    name = view["person"] or view["name"]
     if clone:
         name = f"{name} copy".strip()
     return {
@@ -490,6 +510,7 @@ def oncall_slot_view(row: OncallSlot) -> dict[str, Any]:
         "start": _hhmm(row.start_minute),
         "end": _hhmm(row.end_minute),
         "name": row.name,
+        "person": oncall_person_name(row.name, row.email),
         "email": row.email,
         "phone": row.phone or "",
         "phone2": getattr(row, "phone2", "") or "",
@@ -557,7 +578,9 @@ def take_duty(db: Session, user: Any, at: datetime | None = None) -> dict[str, A
             else:
                 row.end_minute = closed
     db.flush()
-    name = " ".join(str(getattr(user, "name", "") or "").split()) or (email.split("@")[0] if email else "")
+    name = oncall_person_name(getattr(user, "name", ""), email, getattr(user, "role", None)) or (
+        email.split("@")[0] if email else "On call"
+    )
     slot = add_oncall_slot(
         db,
         weekday=local.weekday(),

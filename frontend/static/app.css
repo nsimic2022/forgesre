@@ -280,7 +280,13 @@ html:not([data-theme]) .theme-toggle .theme-label-light { display: inline; }
 html[data-theme="dark"] .theme-toggle .theme-label-dark { display: inline; }
 html[data-theme="system"] .theme-toggle .theme-label-system { display: inline; }
 .login-theme { margin-top: 0.75rem; text-align: center; }
-.content { margin-left: 220px; padding: 1.6rem 2.1rem 3.2rem; overflow-x: auto; }
+.content {
+  margin-left: 220px;
+  padding: 1.6rem 2.1rem 3.2rem;
+  overflow-x: auto;
+  font-family: var(--font);
+  font-size: 0.82rem;
+}
 h1, h2, h3 { font-weight: 600; letter-spacing: 0.01em; }
 h1 { margin: 0 0 0.75rem; font-size: 1.55rem; }
 h2 { margin: 1.15rem 0 0.55rem; font-size: 1.12rem; }
@@ -331,7 +337,8 @@ h1 .info-tip, h2 .info-tip, h3 .info-tip,
   color: var(--text);
   border: 1px solid var(--line);
   box-shadow: 0 8px 24px rgba(16, 24, 40, 0.16);
-  font-size: 0.86rem;
+  font-family: var(--font);
+  font-size: 0.82rem;
   font-weight: 400;
   line-height: 1.4;
   white-space: normal;
@@ -362,10 +369,12 @@ th, td {
   text-align: left;
   padding: 0.65rem 0.75rem;
   border-bottom: 1px solid var(--line);
-  font-size: 0.92rem;
+  font-family: var(--font);
+  font-size: 0.82rem;
   vertical-align: middle;
 }
 table tbody tr:hover td { background: var(--row-hover); }
+/* v09-15: On-call Name is a person; phone+email stacked; platform copy matches Dashboard. */
 /* v09-14: Escalation is four same-style cards in one row; Add on-call is typed by hand. */
 /* v09-13: Escalation is three columns; Users carry phone / phone 2 for Add on-call. */
 /* v09-12: Default / Create policy is L1–L4, same rungs as incident cubes. */
@@ -405,6 +414,12 @@ table tbody tr:hover td { background: var(--row-hover); }
   border-bottom: 1px solid var(--line);
   background: var(--panel);
   padding: 0.85rem 0.9rem;
+  font-family: var(--font);
+  font-size: 0.82rem;
+}
+.content table code {
+  font-family: var(--font);
+  font-size: inherit;
 }
 .list-scroll > table > tbody > tr > td:first-child,
 .dash-recent-scroll > table > tbody > tr > td:first-child,
@@ -680,7 +695,7 @@ a.button {
 .oncall-now { margin: 0 0 0.8rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem 0.7rem; }
 .oncall-now a { color: inherit; }
 .oncall-now .oncall-take { margin: 0; display: inline-flex; }
-.oncall-now .oncall-take button { padding: 0.22rem 0.65rem; font-size: 0.85rem; }
+.oncall-now .oncall-take button { padding: 0.22rem 0.65rem; font-size: 0.82rem; }
 .pill.critical, .pill.crit, .pill.open { background: var(--pill-crit-bg); color: var(--pill-crit); }
 .pill.new { background: var(--pill-warn-bg); color: var(--pill-warn); }
 .pill.approved { background: var(--pill-ok-bg); color: var(--pill-ok); }
@@ -731,7 +746,7 @@ a.button {
 .list-filters button { margin-left: 0.15rem; }
 .list-filters a.list-reset {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 500;
   text-decoration: none;
   padding: 0.45rem 0.15rem;
@@ -792,7 +807,7 @@ label.inline-check { flex-direction: row; align-items: center; gap: 0.5rem; max-
   padding-right: 0.9rem;
 }
 .cli-cheatsheet td:last-child { color: var(--muted); }
-.cli-cheatsheet code { font-size: 0.86rem; }
+.cli-cheatsheet code { font-size: 0.82rem; }
 @media (max-width: 1100px) {
   .admin-backup-cli { grid-template-columns: 1fr; }
 }
@@ -940,7 +955,7 @@ form label.inline-check input[type="checkbox"],
 .asset-form-block { min-width: 0; }
 .asset-form-block-head {
   margin: 0 0 0.5rem;
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   font-weight: 700;
   padding-bottom: 0.3rem;
   border-bottom: 1px solid var(--line);
@@ -953,7 +968,7 @@ form label.inline-check input[type="checkbox"],
 .form-grid.asset-form-grid textarea { width: 100%; min-height: 4.2rem; resize: vertical; font: inherit; }
 .asset-form-row-1 .asset-support { margin-top: 0; }
 .asset-support { margin-top: 0.9rem; }
-.asset-support-head { margin: 0 0 0.45rem; font-size: 0.88rem; font-weight: 700; }
+.asset-support-head { margin: 0 0 0.45rem; font-size: 0.82rem; font-weight: 700; }
 .asset-form-split .alarm-families,
 .asset-form-split .client-playrules {
   margin: 0;
@@ -1000,7 +1015,7 @@ button.playrule-remove:hover { color: var(--crit); border-color: var(--crit); }
 .support-warning {
   margin: 0.2rem 0 0.45rem;
   padding: 0.28rem 0.55rem;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   border-left: 4px solid var(--warn);
   border-radius: 6px;
   background: var(--pill-warn-bg);
@@ -1067,7 +1082,7 @@ button.playrule-remove:hover { color: var(--crit); border-color: var(--crit); }
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--muted);
 }
 .incident-mail input, .incident-mail select { min-width: 12rem; }
@@ -1183,7 +1198,7 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 .flow .node { width: 100%; text-align: left; background: var(--nav-hover); color: var(--text); margin: 0.2rem 0; }
 .arrow { color: var(--muted); padding-left: 0.6rem; }
 .detail-box, pre { background: var(--code-bg); border: 1px solid var(--line); padding: 0.8rem; overflow: auto; white-space: pre-wrap; }
-.ai-box { font-size: 0.95rem; }
+.ai-box { font-size: 0.82rem; }
 .login-wrap { min-height: 100vh; display: grid; place-items: center; }
 .login-card { width: 360px; }
 .error { color: var(--crit); }
@@ -1293,7 +1308,7 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
   background: var(--accent);
   color: var(--btn-text) !important;
   font-weight: 600;
-  font-size: 0.92rem;
+  font-size: 0.82rem;
   text-decoration: none;
 }
 .open-links { display: flex; flex-wrap: wrap; gap: 0.35rem; }
@@ -1314,7 +1329,7 @@ label.check {
   flex-direction: row;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
 }
 fieldset {
   border: 1px solid var(--line);
@@ -1469,7 +1484,7 @@ form.ops-compose {
 .incidents-table td.col-host { overflow-wrap: break-word; vertical-align: middle; }
 .incidents-table td.col-host .inc-host {
   color: var(--text);
-  font-size: 0.92rem;
+  font-size: 0.82rem;
   font-weight: 600;
   margin-top: 0;
 }
@@ -1764,7 +1779,7 @@ td.ops-report-actions .row-actions a.button {
 }
 .asset-facts-head {
   margin: 1rem 0 0.4rem;
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   font-weight: 700;
   padding-bottom: 0.3rem;
   border-bottom: 1px solid var(--line);
@@ -1876,7 +1891,7 @@ td.ops-report-actions .row-actions a.button {
   border-radius: 7px;
   text-decoration: none;
   color: var(--text);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   font-weight: 600;
   background: var(--panel);
 }
@@ -1970,7 +1985,7 @@ td.ops-report-actions .row-actions a.button {
 .incidents-table tr.inc-row-demo .inc-title { font-weight: 500; }
 .scan-list tr.inc-row-demo:not(.inc-row-done) td:first-child { box-shadow: inset 3px 0 0 var(--line), inset 5px 0 0 var(--warn); }
 .scan-list tr.inc-row-demo.inc-crit:not(.inc-row-done) td:first-child { box-shadow: inset 3px 0 0 var(--line), inset 5px 0 0 var(--crit); }
-.list-filters .list-count { align-self: flex-end; padding: 0.45rem 0; font-size: 0.85rem; margin-left: auto; }
+.list-filters .list-count { align-self: flex-end; padding: 0.45rem 0; font-size: 0.82rem; margin-left: auto; }
 
 .filter-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: -0.2rem 0 0.8rem; }
 .filter-chips .chip {
@@ -1996,12 +2011,12 @@ td.ops-report-actions .row-actions a.button {
   border: 1px dashed var(--line);
   border-radius: 9px;
   padding: 0.5rem 0.7rem;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   background: var(--code-bg);
 }
 .rule-preview code { word-break: break-word; }
 details.rule-note-fields { border: 1px solid var(--line); border-radius: 9px; padding: 0.5rem 0.75rem; }
-details.rule-note-fields summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+details.rule-note-fields summary { cursor: pointer; color: var(--muted); font-size: 0.82rem; }
 .alarm-limit { font-size: 0.82rem; margin: 0.15rem 0 0.35rem; }
 
 .policy-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.8rem; margin-bottom: 0.4rem; }
@@ -2069,7 +2084,9 @@ details.rule-note-fields summary { cursor: pointer; color: var(--muted); font-si
 .oncall-form-grid select { width: 100%; box-sizing: border-box; }
 .scan-list tr.slot-off td { color: var(--muted); }
 .policy-slug { font-size: 0.8rem; font-weight: 400; }
-.step-list th, .step-list td { padding: 0.4rem 0.55rem; font-size: 0.88rem; }
+.step-list th, .step-list td { padding: 0.4rem 0.55rem; font-family: var(--font); font-size: 0.82rem; }
+.oncall-name { font-weight: 600; }
+.oncall-contact { display: flex; flex-direction: column; gap: 0.12rem; line-height: 1.3; }
 .recipient-rules { margin: 0 0 1rem; }
 .recipient-rules li { margin: 0.2rem 0; }
 
@@ -2079,7 +2096,7 @@ ul.playbook-guide li:last-child { border-bottom: 0; }
 ul.playbook-guide li::before { content: "–"; position: absolute; left: 0.2rem; color: var(--muted); }
 
 h1.incident-head { margin-bottom: 0.1rem; }
-.incident-id { margin: 0 0 0.6rem; font-size: 0.85rem; }
+.incident-id { margin: 0 0 0.6rem; font-size: 0.82rem; }
 .incident-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.8rem; }
 
 /* Severity tint on the incident title (lists + detail). Heat border stays status-first. */
@@ -2108,12 +2125,12 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .incident-strip.inc-crit { border-left-color: var(--crit); }
 .incident-strip.inc-warn { border-left-color: var(--warn); }
 .incident-strip.inc-ok { border-left-color: var(--ok); }
-.incident-strip .incident-facts { margin: 0.35rem 0 0; font-size: 0.9rem; }
+.incident-strip .incident-facts { margin: 0.35rem 0 0; font-size: 0.82rem; }
 .incident-strip .incident-short { font-weight: 700; font-variant-numeric: tabular-nums; }
 .incident-strip .incident-fact { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .incident-strip .incident-id { margin: 0; font-size: 0.78rem; }
 /* Older / newer incident, same order as /incidents (newest first). Sits right above the strip. */
-.incident-nav { display: flex; align-items: center; gap: 0.45rem; margin: 0.2rem 0 0.4rem; font-size: 0.85rem; }
+.incident-nav { display: flex; align-items: center; gap: 0.45rem; margin: 0.2rem 0 0.4rem; font-size: 0.82rem; }
 .incident-nav .incident-nav-step {
   display: inline-flex;
   padding: 0.18rem 0.5rem;
@@ -2368,10 +2385,10 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .insight-actions .export-format select { width: auto; }
 .dash-graph-subject { margin: 0 0 0.25rem; font-weight: 600; overflow-wrap: anywhere; }
 .dash-graph-caption { margin: 0 0 0.35rem; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
-.dash-graph-empty { margin: 0 0 0.5rem; font-size: 0.85rem; }
+.dash-graph-empty { margin: 0 0 0.5rem; font-size: 0.82rem; }
 .dash-graph-list { display: grid; gap: 0.55rem; }
 .dash-graph { border-top: 1px solid var(--line); padding-top: 0.45rem; min-width: 0; }
-.dash-graph-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 0.9rem; }
+.dash-graph-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 0.82rem; }
 .dash-graph-none { margin: 0.2rem 0 0; font-size: 0.8rem; }
 /* Dark performance plot (axes, light grid, hover). Page theme stays on the labels. */
 .dash-chart-frame {
@@ -2587,9 +2604,9 @@ tr[data-list-row].is-selected td:last-child { box-shadow: inset -3px 0 0 var(--a
 .pager-bar .pager { margin: 0; }
 .pager-bar .pager-meta { margin: 0.15rem 0 0.35rem; }
 form.pager-size { margin: 0 0 0 auto; display: flex; align-items: center; gap: 0.35rem; }
-form.pager-size label { flex-direction: row; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.85rem; }
-form.pager-size select { width: auto; padding: 0.22rem 0.45rem; font-size: 0.85rem; border-radius: 7px; }
-form.pager-size button { padding: 0.22rem 0.6rem; font-size: 0.85rem; }
+form.pager-size label { flex-direction: row; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.82rem; }
+form.pager-size select { width: auto; padding: 0.22rem 0.45rem; font-size: 0.82rem; border-radius: 7px; }
+form.pager-size button { padding: 0.22rem 0.6rem; font-size: 0.82rem; }
 .pager-bar[data-list-pager] {
   position: relative;
   display: grid;
@@ -2615,8 +2632,8 @@ form.pager-size button { padding: 0.22rem 0.6rem; font-size: 0.85rem; }
 .list-actions form[hidden] { display: none; }
 .list-actions form[data-bulk-export] { align-items: center; gap: 0.3rem; }
 .list-actions .export-format { margin: 0; }
-.list-actions .export-format select { width: auto; padding: 0.22rem 0.4rem; font-size: 0.85rem; border-radius: 7px; }
-.list-actions button { width: auto; flex: 0 0 auto; padding: 0.28rem 0.7rem; font-size: 0.85rem; }
+.list-actions .export-format select { width: auto; padding: 0.22rem 0.4rem; font-size: 0.82rem; border-radius: 7px; }
+.list-actions button { width: auto; flex: 0 0 auto; padding: 0.28rem 0.7rem; font-size: 0.82rem; }
 .list-actions button.is-muted { opacity: 0.55; }
 .select-one-flash { color: var(--warn); font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
 [data-select-scope]:has([data-select-row]:checked) .list-actions,
@@ -2656,7 +2673,7 @@ label.row-check {
   flex: 0 0 1rem;
   cursor: pointer;
 }
-.select-page-bar { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.5rem; font-size: 0.85rem; min-height: 2.5rem; padding: 0.2rem 0.35rem; cursor: pointer; }
+.select-page-bar { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.5rem; font-size: 0.82rem; min-height: 2.5rem; padding: 0.2rem 0.35rem; cursor: pointer; }
 .card-select {
   float: right;
   display: inline-flex;
@@ -2684,8 +2701,8 @@ label.row-check {
 /* Zabbix (read-only source): Discovery block, alert source pill, agent pill. */
 .discovery-sources { display: flex; flex-direction: column; gap: 0.9rem; min-width: 0; }
 .zabbix-block h2 { margin-bottom: 0.35rem; }
-.zabbix-block .zabbix-meta { margin: 0 0 0.3rem; font-size: 0.85rem; overflow-wrap: anywhere; }
-.zabbix-last-error { margin: 0.2rem 0 0; font-size: 0.85rem; color: var(--crit); overflow-wrap: anywhere; }
+.zabbix-block .zabbix-meta { margin: 0 0 0.3rem; font-size: 0.82rem; overflow-wrap: anywhere; }
+.zabbix-last-error { margin: 0.2rem 0 0; font-size: 0.82rem; color: var(--crit); overflow-wrap: anywhere; }
 .src-pill {
   display: inline-block;
   padding: 0 0.4rem;
