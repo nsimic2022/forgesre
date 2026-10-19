@@ -2313,7 +2313,7 @@ def process_escalations(db: Session) -> None:
 # Escalation only sends email (ensure_notification). These words look like a channel
 # choice; accepting them would store a step that claims a channel and then mails anyway.
 NON_EMAIL_CHANNELS = frozenset({"webhook", "sms", "slack", "pagerduty", "telegram"})
-EMAIL_ONLY_HINT = "Escalation sends email only: write minutes then a role (team, team-lead, engineer, oncall) or an email address. oncall is whoever is on the roster now."
+EMAIL_ONLY_HINT = "Escalation sends email only: L1–L4 minutes and a role (team, team-lead, engineer, manager, oncall) or an email address. oncall is whoever is on the roster now."
 
 
 def policy_step_problems(text: str) -> list[str]:
@@ -2330,6 +2330,25 @@ def policy_step_problems(text: str) -> list[str]:
             problems.append(f"Line {number} ({line}): {channel.lower()} is not supported. {EMAIL_ONLY_HINT}")
         elif url:
             problems.append(f"Line {number} ({line}): a URL is not a recipient. {EMAIL_ONLY_HINT}")
+    return problems
+
+
+def policy_steps_problems(steps: list[dict[str, Any]] | None) -> list[str]:
+    """Same checks as policy_step_problems, labeled L1–L4 when the step has a level."""
+    problems: list[str] = []
+    for step in steps or []:
+        try:
+            after = int(step.get("after_minutes") or 0)
+        except (TypeError, ValueError):
+            after = 0
+        target = str(step.get("target") or "").strip()
+        try:
+            level = int(step.get("level") or 0)
+        except (TypeError, ValueError):
+            level = 0
+        label = f"L{level}" if level in (1, 2, 3, 4) else "step"
+        for msg in policy_step_problems(f"{after} {target}"):
+            problems.append(msg.replace("Line 1 (", f"{label} (", 1))
     return problems
 
 
@@ -2363,11 +2382,11 @@ def parse_policy_steps(text: str) -> list[dict[str, Any]]:
             continue
         target = tokens[1] if len(tokens) > 1 else "team"
         rows.append({"after_minutes": after, "target": target, "channel": "email"})
-    return rows or [
-        {"after_minutes": 0, "target": "team", "channel": "email"},
-        {"after_minutes": 15, "target": "team-lead", "channel": "email"},
-        {"after_minutes": 30, "target": "engineer", "channel": "email"},
-    ]
+    if rows:
+        return rows
+    from app.asset_ladder import DEFAULT_POLICY_STEPS
+
+    return [dict(step) for step in DEFAULT_POLICY_STEPS]
 
 
 def _keyed_steps(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -2380,14 +2399,19 @@ def _keyed_steps(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen[key] = seen.get(key, 0) + 1
         if seen[key] > 1:
             key = f"{key}-{seen[key]}"
-        steps.append(
-            {
-                "after_minutes": after,
-                "target": str(step.get("target") or "team"),
-                "channel": "email",
-                "step_key": key,
-            }
-        )
+        keyed = {
+            "after_minutes": after,
+            "target": str(step.get("target") or "team"),
+            "channel": "email",
+            "step_key": key,
+        }
+        try:
+            level = int(step.get("level") or 0)
+        except (TypeError, ValueError):
+            level = 0
+        if level in (1, 2, 3, 4):
+            keyed["level"] = level
+        steps.append(keyed)
     return steps
 
 
@@ -2416,11 +2440,9 @@ def escalation_steps(incident: Incident, db: Session | None = None) -> list[dict
         if custom is not None:
             return _keyed_steps(custom)
     policy = incident.playrule.escalation_policy if incident.playrule else None
-    raw = list(policy.steps) if policy and policy.steps else [
-        {"after_minutes": 0, "target": "team", "channel": "email"},
-        {"after_minutes": 15, "target": "team-lead", "channel": "email"},
-        {"after_minutes": 30, "target": "engineer", "channel": "email"},
-    ]
+    from app.asset_ladder import DEFAULT_POLICY_STEPS, with_policy_levels
+
+    raw = with_policy_levels(list(policy.steps) if policy and policy.steps else DEFAULT_POLICY_STEPS)
     return _keyed_steps(raw)
 
 

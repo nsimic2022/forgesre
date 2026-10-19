@@ -19,10 +19,10 @@ Incident list — how far this incident climbed:
 - Gray: no such level.
 
 When the asset Ladder is empty, escalation steps (the matched rule's ladder,
-otherwise Default warning) map in order onto L1, L2, L3, and L4. Default
-warning is three steps (0 team, 15 team-lead, 30 engineer), so L1–L3 follow
-those steps and L4 stays gray. A policy with more than four steps folds the
-fourth and later steps into L4.
+otherwise Default warning) occupy L1–L4. Seeded Default warning is four steps
+(0 team, 15 team-lead, 30 engineer, 60 manager). A step with a stored level
+sits on that cube; older policies without a level still map in order. Extra
+steps past L4 fold into L4.
 """
 
 from __future__ import annotations
@@ -136,32 +136,30 @@ def asset_ladder_cubes(asset: Asset | None, db: Session | None = None) -> list[d
 
 
 def _policy_cubes(steps: list[dict[str, Any]], fired: set[str]) -> list[dict[str, Any]]:
-    """Map ladder steps in order onto L1–L4. Extra steps past L4 fold into L4."""
+    """Map policy steps onto L1–L4. Stored level wins; otherwise order. Extra past L4 fold into L4."""
+    by_level: dict[int, list[dict[str, Any]]] = {1: [], 2: [], 3: [], 4: []}
+    for index, step in enumerate(steps or []):
+        try:
+            level = int(step.get("level") or 0)
+        except (TypeError, ValueError):
+            level = 0
+        if level not in (1, 2, 3, 4):
+            level = 4 if index >= 3 else index + 1
+        by_level[level].append(step)
     cubes: list[dict[str, Any]] = []
-    for index, (level, _label) in enumerate(LADDER_LEVELS):
-        if level < 4:
-            if index >= len(steps):
-                cubes.append(_cube(level, "grey", f"L{level} · no such level"))
-                continue
-            step = steps[index]
-            red = str(step.get("step_key") or "") in fired
-            title = f"L{level} · {int(step.get('after_minutes') or 0)} min · {step.get('target') or 'team'}"
-            if red:
-                title += " · escalated"
-            cubes.append(_cube(level, "red" if red else "green", title))
+    for level, _label in LADDER_LEVELS:
+        group = by_level.get(level) or []
+        if not group:
+            cubes.append(_cube(level, "grey", f"L{level} · no such level"))
             continue
-        tail = steps[3:]
-        if not tail:
-            cubes.append(_cube(4, "grey", "L4 · no such level"))
-            continue
-        red = any(str(step.get("step_key") or "") in fired for step in tail)
-        first = tail[0]
-        title = f"L4 · {int(first.get('after_minutes') or 0)} min · {first.get('target') or 'team'}"
-        if len(tail) > 1:
-            title += f" · +{len(tail) - 1} later"
+        red = any(str(step.get("step_key") or "") in fired for step in group)
+        first = group[0]
+        title = f"L{level} · {int(first.get('after_minutes') or 0)} min · {first.get('target') or 'team'}"
+        if len(group) > 1:
+            title += f" · +{len(group) - 1} later"
         if red:
             title += " · escalated"
-        cubes.append(_cube(4, "red" if red else "green", title))
+        cubes.append(_cube(level, "red" if red else "green", title))
     return cubes
 
 

@@ -116,7 +116,7 @@
       {% endfor %}
     </select>
   </label>
-  <label><span class="label-line">Default escalation {% with %}{% set tip %}Used only when that asset's Escalation column is empty. Seeded Default warning is 0 / 15 / 30 min. A step with an email address mails that address; a role step mails the asset owner email; no address at all is recorded as no-recipient and not sent. A filled asset Escalation does not also use this.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+  <label><span class="label-line">Default escalation {% with %}{% set tip %}Used only when that asset's Escalation column is empty. Seeded Default warning is L1–L4 at 0 / 15 / 30 / 60 min. A step with an email address mails that address; a role step mails the asset owner email; no address at all is recorded as no-recipient and not sent. A filled asset Escalation does not also use this.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <select name="escalation_policy_id">
       {% for policy in policies %}
       <option value="{{ policy.id }}" {% if (form.escalation_policy_id and form.escalation_policy_id == policy.id) or (not form.escalation_policy_id and policy.slug == 'default-warning') %}selected{% endif %}>{{ policy.name }}</option>

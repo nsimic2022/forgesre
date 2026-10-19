@@ -88,7 +88,7 @@ Seeded on first start:
 | Asset `forge-demo-sw-01` | Seeded network lab switch `10.10.10.22` (not a live SNMP walk) |
 | Playbooks `CPU-HIGH`, `DISK-FULL`, `MEMORY-HIGH`, `HOST-UNREACHABLE`, `NETWORK-UNREACHABLE`, `WINDOWS-UNREACHABLE` | Guidance steps only |
 | Playrules `high-cpu`, `high-disk`, `snmp-down`, `node-exporter-down`, `node-filesystem`, `node-cpu`, `node-memory`, `windows-cpu`, `windows-exporter-down`, `windows-filesystem`, `windows-memory` | Demo gauges, SNMP `up`, `node_exporter`, and `windows_exporter` |
-| Escalation `Default warning` | 0 / 15 / 30 minutes → generated email |
+| Escalation `Default warning` | L1–L4 at 0 / 15 / 30 / 60 minutes → generated email |
 | Discovery candidate `10.20.30.41` | Demo row on `/discovery` so you can click Approve |
 
 Lab demos (`./forgesre demo`, `./forgesre demo-rca`) fire **demo gauges on Core**, not real disk/CPU on a customer VM. After install, Dashboard **Run demo** (top right, admin) opens a closeable panel with Linux, Windows, and network lab scenarios. Rows they create are labeled **DEMO**.
@@ -561,11 +561,12 @@ YAML examples in `config/examples/playbook-*.yml` are documentation for a later 
 
 ## 11. Escalation and email
 
-Per-asset **Escalation** (Add / Edit, bottom row, L1 | L2 | L3 | L4) replaces this page for that host when any level is filled. Otherwise **Escalation** in the left nav (`/escalation`, under Playbooks) shows **Default escalation** on the left (seeded policy **Default warning**) and **Create escalation policy** on the right:
+Per-asset **Escalation** (Add / Edit, bottom row, L1 | L2 | L3 | L4) replaces this page for that host when any level is filled. Otherwise **Escalation** in the left nav (`/escalation`, under Playbooks) shows **Default escalation** on the left (seeded policy **Default warning**) and **Create escalation policy** on the right — both use the same L1–L4 rungs as the incident cubes:
 
-- 0 min → `team`
-- 15 min → `team-lead`
-- 30 min → `engineer`
+- L1 NOC · 0 min → `team`
+- L2 Shift · 15 min → `team-lead`
+- L3 Engineer · 30 min → `engineer`
+- L4 Manager · 60 min → `manager`
 
 A background loop every 30 seconds generates (and optionally sends) those steps, counted from the incident start, until someone **Acknowledges** (status `OPEN` / `INVESTIGATING` / `ESCALATED` with no ack). Each step is written once per incident. The outbox is `/ops#mail`.
 
@@ -579,7 +580,7 @@ Recipient per step, in order:
 
 Incident reports and escalation mail are **multipart** (`text/plain` + `text/html`). Gmail and Outlook show the HTML (severity color bar, DEMO banner when the asset is `forge-demo-*`, ForgeRCA sections). The **mail outbox** on `/ops#mail` stores the plain-text body. **Send email** on `/ops` (Compose) stays as the operator typed it — ForgeSRE does not rewrite that text into HTML tables.
 
-Analysts can **create** another policy (name, slug, steps as `minutes role` lines) in the right-hand form with **Save** and **Cancel**, same pattern as Playbooks. **Edit** on a policy card reopens that form (slug fixed); **Remove** deletes it and moves its playrules to **Default warning** (Default warning itself cannot be removed). New playrules still attach **Default warning** unless the playrule form picks a different policy. The 30s loop reads that policy’s `after_minutes` / `target` steps. This is not a ticket system.
+Analysts can **create** another policy (name, slug, L1–L4 minutes and a role or email) in the right-hand form with **Save** and **Cancel**, same pattern as the asset Escalation row. **Edit** on a policy card reopens that form (slug fixed); **Remove** deletes it and moves its playrules to **Default warning** (Default warning itself cannot be removed). New playrules still attach **Default warning** unless the playrule form picks a different policy. The 30s loop reads that policy’s `after_minutes` / `target` steps. This is not a ticket system. OFF levels are skipped and that cube stays gray.
 
 Every step is **email**. A line such as `15 team-lead webhook` or a URL as the recipient is refused on Save with the line number — there is no webhook, SMS or chat channel. An older policy that still carries a non-email channel shows `webhook: sent as email`; that step mails the same recipient as any other step.
 
