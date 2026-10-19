@@ -41,6 +41,7 @@
   {% endfor %}
 </div>
 
+<div class="table-scroll">
 <table class="health-table">
   <thead><tr><th>Component</th><th>State</th><th>Why</th><th>Test</th><th>Fix</th><th>Open</th></tr></thead>
   <tbody>
@@ -70,6 +71,7 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% if journal %}
 <section class="health-journal" id="journal">
   <h2>Journal {% with %}{% set tip %}Internal process journal. Each module writes a short ok / warn / error report when it finishes a job. Old rows are dropped automatically (about 200 per module) so search stays small. Raw Docker/Loki logs are separate — this is the operator view, not a bash shell.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>

@@ -248,7 +248,7 @@ def test_assets_list_shows_edit_clone_remove():
     assert b"reach-sq" in page.content
     assert b">ICMP<" in page.content
     assert b'class="col-port"' in page.content
-    assert b">Escalation " in page.content
+    assert ">L1–L4 " in page.text
     chips = page.text.split('aria-label="Asset filters"', 1)[1].split("</nav>", 1)[0]
     for label in (">All<", ">Critical<", ">Warning<", ">Offline<"):
         assert label in chips
@@ -429,7 +429,7 @@ def test_asset_table_actions_live_in_the_pager():
     assert "vertical-align: middle" in css
     assert ".asset-table { table-layout: auto;" in css
     assert ".evidence-table { table-layout: fixed; }" in css
-    assert "app.css?v=v09-Z" in base
+    assert "app.css?v=v09-10" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():

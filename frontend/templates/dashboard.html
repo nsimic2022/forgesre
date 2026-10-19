@@ -99,10 +99,10 @@
     <thead>
       <tr>
         {{ sel.head() }}
-        <th class="col-host">Hostname</th>
         <th class="col-name">Incident</th>
+        <th class="col-host">Hostname</th>
         <th class="col-status">Status</th>
-        <th class="col-ladder" title="How far this incident climbed. Four squares stacked L1, L2, L3, L4. Red means this incident already mailed that level. Green means the asset has that level and this incident has not mailed it yet. Gray means no such level. An empty asset Escalation maps Default warning steps onto L1, L2, L3, and L4 in order. A three-step Default warning fills L1 to L3 and leaves L4 gray.">Escalation</th>
+        <th class="col-ladder" title="How far this incident climbed. Four squares stacked L1, L2, L3, L4. Red means this incident already mailed that level. Green means the asset has that level and this incident has not mailed it yet. Gray means no such level. An empty asset Escalation maps Default warning steps onto L1, L2, L3, and L4 in order. A three-step Default warning fills L1 to L3 and leaves L4 gray.">L1–L4</th>
         <th class="col-when">When</th>
         <th class="col-enum">Severity</th>
         <th class="col-resolved">Resolved by</th>
@@ -113,8 +113,8 @@
       {% set done = item.status|upper in ['RESOLVED', 'CLOSED'] %}
       <tr class="dash-pick {{ incident_tone(item.status, item.severity) }}{% if done %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}" data-list-row data-dash-incident="{{ item.number }}" data-dash-select="graphs" data-asset="{{ item.asset.asset_id if item.asset else '' }}" data-host="{{ incident_host(item) }}" data-active="{{ 'false' if done else 'true' }}" tabindex="{{ '0' if loop.first else '-1' }}">
         {{ sel.cell(item.number) }}
-        <td class="col-host">{% set host = incident_host(item) %}<span class="inc-host">{{ host or "—" }}</span></td>
         {% include "_incident_cell.html" %}
+        <td class="col-host">{% set host = incident_host(item) %}<span class="inc-host">{{ host or "—" }}</span></td>
         {% include "_incident_status_cell.html" %}
         <td class="col-ladder">{% with cubes=incident_ladder_cubes(item) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
         {% with show_notes=false, show_ack=false, show_severity=true %}{% include "_incident_scan_tail.html" %}{% endwith %}

@@ -61,7 +61,7 @@ def test_dashboard_recent_drops_notes_and_ack_column():
     head = recent.split("</thead>", 1)[0]
     assert ">Notes<" not in head and "col-notes" not in recent
     assert ">Acknowledged<" not in head and "col-ack" not in head
-    assert head.index(">Escalation<") < head.index(">When<") < head.index(">Resolved by<")
+    assert head.index(">L1–L4<") < head.index(">When<") < head.index(">Resolved by<")
     assert ">Ack<" not in head and "info-tip" not in head
     assert 'class="col-when">When</th>' in head
     assert 'class="col-status">Status</th>' in head
@@ -77,7 +77,7 @@ def test_dashboard_recent_drops_notes_and_ack_column():
     assert ">Acknowledged<" not in inc_head and "col-ack" not in inc_head
     assert 'class="col-status">Status</th>' in inc_head
     assert inc_head.index(">When<") < inc_head.index(">Resolved by<") < inc_head.index(">Notes<")
-    assert ">Ladder<" not in inc_head and ">Escalation<" in inc_head
+    assert ">Ladder<" not in inc_head and ">L1–L4<" in inc_head
 
 
 def test_dashboard_status_cell_shows_acknowledged_in_green():
@@ -147,7 +147,7 @@ def test_dashboard_status_cell_shows_acknowledged_in_green():
         inc_head = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
         assert ">Acknowledged<" not in inc_head and "col-ack" not in inc_head
         assert 'class="col-status">Status</th>' in inc_head
-        assert inc_head.index(">Escalation<") < inc_head.index(">When<") < inc_head.index(">Resolved by<") < inc_head.index(">Notes<")
+        assert inc_head.index(">L1–L4<") < inc_head.index(">When<") < inc_head.index(">Resolved by<") < inc_head.index(">Notes<")
         inc_row = listed.text.split(f"Acked closed {token}", 1)[1].split("</tr>", 1)[0]
         assert "ack-dot" not in inc_row and "col-ack" not in inc_row
         inc_status = inc_row.split('class="col-status"', 1)[1].split("</td>", 1)[0]
