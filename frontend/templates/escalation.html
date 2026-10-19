@@ -1,7 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Default escalation · ForgeSRE{% endblock %}
+{% import "_select.html" as sel %}
+{% block title %}Escalation · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Default escalation {% with %}{% set tip %}Used when an asset Escalation is empty (same 30s loop as before, not a ticket system). Each step is minutes after the incident opened and an email recipient: an address is mailed as written, a role (team, team-lead, engineer) mails the asset owner email, and a role with no owner email is recorded as no-recipient and not sent — ForgeSRE does not invent role@forgesre.local addresses. The 0 min step is the mail at open; without it, nothing is sent at open. Email is the only channel: there is no webhook, SMS, or chat step. Seeded Default warning (0 / 15 / 30 min) is what new rules attach unless you pick another policy here. An asset with any Escalation level filled does not also use this page. Edit changes escalation for incidents that open after Save. Remove moves its rules to Default warning. Acknowledge stops further steps. SMTP off means the row stays generated — that is the lab outbox. Scheduled reports are a different mail path.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Escalation {% with %}{% set tip %}Used when an asset Escalation is empty (same 30s loop as before, not a ticket system). Each step is minutes after the incident opened and an email recipient: an address is mailed as written, a role (team, team-lead, engineer) mails the asset owner email, and a role with no owner email is recorded as no-recipient and not sent — ForgeSRE does not invent role@forgesre.local addresses. The 0 min step is the mail at open; without it, nothing is sent at open. Email is the only channel: there is no webhook, SMS, or chat step. Seeded Default warning (0 / 15 / 30 min) is what new rules attach unless you pick another policy here. An asset with any Escalation level filled does not also use this page. Edit changes escalation for incidents that open after Save. Remove moves its rules to Default warning. Acknowledge stops further steps. SMTP off means the row stays generated — that is the lab outbox. Scheduled reports are a different mail path.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<div class="escalation-cols">
+<div class="escalation-policies">
+<h2>Default escalation</h2>
 <div class="list-scroll list-scroll-cards" data-list-scroll>
 <div class="policy-grid">
 {% for policy in policies %}
@@ -30,12 +34,14 @@
   {% endif %}
 </section>
 {% else %}
-<p class="muted">No policies yet. Create one below, or keep using the seeded Default warning after seed.</p>
+<p class="muted">No policies yet. Create one on the right, or keep using the seeded Default warning after seed.</p>
 {% endfor %}
 </div>
 </div>
 {% include "_pager.html" %}
+</div>
 {% if can('write_play') %}
+<div class="escalation-create">
 {% if form_mode == "edit" %}
 <h2>Edit escalation policy</h2>
 <form method="post" action="/escalation/{{ selected.id }}/update" class="stack" id="escalation-form">
@@ -54,46 +60,84 @@
     <a href="/escalation">Cancel</a>
   </div>
 </form>
+</div>
 {% endif %}
-<h2 id="oncall">On call {% with %}{% set tip %}A short weekly roster. Each row is one weekday and a from/until time in the appliance timezone (inclusive). L1 (or any step) with the role oncall mails whoever matches now. Empty roster = that step is no-recipient. The Dashboard On call line shows this person. This is not PagerDuty.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-<p data-oncall-now>{% if oncall %}Now: <strong>{{ oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}<span class="muted">No one scheduled right now.</span>{% endif %}{% if can('write_play') %} <form method="post" action="/escalation/oncall/take" class="oncall-take"><input type="hidden" name="next" value="/escalation"><button type="submit" class="secondary">I'm on duty now</button></form>{% endif %}</p>
-{% if oncall_slots %}
+</div>
+<h2 id="oncall">On call {% with %}{% set tip %}A short weekly roster. Each row is one weekday and a from/until time in the appliance timezone (inclusive). L1 (or any step) with the role oncall mails whoever matches now. Empty roster = that step is no-recipient. The Dashboard On call line shows this person. OFF rows stay stored and are skipped. This is not PagerDuty.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+{% if request.query_params.get('edit_note') == 'select-one' %}
+<div class="banner" role="status">Select one</div>
+{% endif %}
+<p class="oncall-now" data-oncall-now>{% if oncall %}Now: <strong>{{ oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}<span class="muted">No one scheduled right now.</span>{% endif %}{% if can('write_play') %} <form method="post" action="/escalation/oncall/take" class="oncall-take"><input type="hidden" name="next" value="/escalation"><button type="submit" class="secondary">I'm on duty now</button></form>{% endif %}</p>
+<div data-select-scope>
+<div class="table-scroll list-scroll" data-list-scroll>
 <table class="scan-list" data-oncall-roster>
-  <thead><tr><th>When</th><th>Name</th><th>Email</th><th>Phone</th>{% if can('write_play') %}<th></th>{% endif %}</tr></thead>
+  <thead><tr>{{ sel.head() }}<th>When</th><th>Name</th><th>Email</th><th>Phone</th><th>Enabled</th></tr></thead>
   <tbody>
   {% for slot in oncall_slots %}
-    <tr>
+    <tr class="{% if not slot.enabled %}slot-off{% endif %}{% if oncall_selected and oncall_selected.id == slot.id %} selected{% endif %}" data-list-row>
+      {{ sel.cell(slot.id, slot.name) }}
       <td>{{ slot.window }}</td>
       <td>{{ slot.name }}</td>
       <td>{{ slot.email }}</td>
       <td>{{ slot.phone or "—" }}</td>
-      {% if can('write_play') %}
       <td>
-        <form method="post" action="/escalation/oncall/{{ slot.id }}/delete">
-          <button type="submit" class="secondary">Remove</button>
+        {% if can('write_play') %}
+        <form method="post" action="/escalation/oncall/{{ slot.id }}/toggle" class="onoff-form">
+          <button type="submit" class="onoff {{ 'is-on' if slot.enabled else 'is-off' }}" aria-pressed="{{ 'true' if slot.enabled else 'false' }}" title="ON: this window can match now. OFF: stored, skipped. That is not Remove.">{% if slot.enabled %}ON{% else %}OFF{% endif %}</button>
         </form>
+        {% else %}
+        <span class="onoff {{ 'is-on' if slot.enabled else 'is-off' }}">{% if slot.enabled %}ON{% else %}OFF{% endif %}</span>
+        {% endif %}
       </td>
-      {% endif %}
     </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">No on-call slots yet.</td></tr>
   {% endfor %}
   </tbody>
 </table>
-{% endif %}
+</div>
+{% set stay_parts = [] %}
+{% for key, value in request.query_params.multi_items() if key not in ["oncall_edit", "oncall_clone", "edit_note", "notice"] %}
+{% set _ = stay_parts.append(key ~ "=" ~ (value|urlencode)) %}
+{% endfor %}
+{% set list_stay = "/escalation" ~ ("?" ~ stay_parts|join("&") if stay_parts else "") %}
+{% with pager=oncall_pager, list_actions={"delete": "/escalation/oncall/bulk-delete" if can('write_play') else "", "delete_label": "Remove", "delete_last": True, "open_edit": "/escalation/oncall/open-edit" if can('write_play') else "", "open_edit_title": "Edit this on-call slot", "clone": "/escalation/oncall/open-clone" if can('write_play') else "", "clone_title": "Clone this on-call slot", "export": "/escalation/oncall/export", "next": "/escalation#oncall", "stay": list_stay, "confirm": "Remove the selected on-call slots? The roster loses those windows."} %}
+{% include "_pager.html" %}
+{% endwith %}
+</div>
 {% if can('write_play') %}
-<form method="post" action="/escalation/oncall" class="stack" data-oncall-form>
-  <label>Weekday
-    <select name="weekday">
-      {% for day in weekdays %}
-      <option value="{{ loop.index0 }}">{{ day }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>From <input name="start" type="time" value="08:00" required></label>
-  <label>Until <input name="end" type="time" value="16:00" required></label>
-  <label>Name <input name="name" required placeholder="Ana"></label>
-  <label>Email <input name="email" type="email" required placeholder="ana@dc.local"></label>
-  <label>Phone <input name="phone" placeholder="+381-11-000-0000"></label>
-  <button type="submit">Add on-call slot</button>
+{% set oc = oncall_form or {} %}
+{% if oncall_form_mode == "edit" %}
+<h2 id="oncall-form-title">Edit on-call <span class="muted">{{ oncall_selected.name }}</span></h2>
+<form method="post" action="/escalation/oncall/{{ oncall_selected.id }}/update" class="oncall-form-grid" id="oncall-form" data-oncall-form>
+{% elif oncall_form_mode == "clone" %}
+<h2 id="oncall-form-title">Clone on-call {% with %}{% set tip %}Copy of {{ oncall_clone_name }}. Tweak the fields, then Save to create a new window. Cancel discards the draft.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+<form method="post" action="/escalation/oncall" class="oncall-form-grid" id="oncall-form" data-oncall-form>
+{% else %}
+<h2 id="oncall-form-title">Add on-call</h2>
+<form method="post" action="/escalation/oncall" class="oncall-form-grid" id="oncall-form" data-oncall-form>
+{% endif %}
+  {% if oncall_error %}<p class="error" role="alert">{{ oncall_error }}</p>{% endif %}
+  <div class="oncall-form-when">
+    <label>Weekday
+      <select name="weekday">
+        {% for day in weekdays %}
+        <option value="{{ loop.index0 }}" {% if oc.weekday == loop.index0 %}selected{% endif %}>{{ day }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>From <input name="start" type="time" value="{{ oc.start or '08:00' }}" required></label>
+    <label>Until <input name="end" type="time" value="{{ oc.end or '16:00' }}" required></label>
+  </div>
+  <div class="oncall-form-who">
+    <label>Name <input name="name" required placeholder="Ana" value="{{ oc.name }}"></label>
+    <label>Email <input name="email" type="email" required placeholder="ana@dc.local" value="{{ oc.email }}"></label>
+    <label>Phone <input name="phone" placeholder="+381-11-000-0000" value="{{ oc.phone }}"></label>
+  </div>
+  <div class="row-actions">
+    <button type="submit">{% if oncall_form_mode == "clone" %}Save copy{% elif oncall_form_mode == "edit" %}Save{% else %}Add on-call slot{% endif %}</button>
+    <a href="/escalation#oncall">Cancel</a>
+  </div>
 </form>
 {% endif %}
 <h2>Generated notifications {% with %}{% set tip %}The outbox is one table on Email & reports (/ops#mail). This page is escalation only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>

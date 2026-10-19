@@ -72,6 +72,12 @@ def test_escalation_page_has_create_cancel_and_saves_policy():
     assert 'href="/escalation">Cancel</a>' in page.text
     assert 'id="escalation-form"' in page.text
     assert "Default warning" in page.text
+    assert "<title>Escalation · ForgeSRE</title>" in page.text
+    assert 'class="escalation-cols"' in page.text
+    assert "<h2>Create escalation policy</h2>" in page.text
+    assert page.text.index("escalation-policies") < page.text.index("escalation-create")
+    assert 'class="oncall-form-grid"' in page.text
+    assert "oncall-form-when" in page.text and "oncall-form-who" in page.text
     created = client.post(
         "/escalation",
         data={

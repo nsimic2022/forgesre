@@ -37,6 +37,7 @@ from app.models import (
     Job,
     JournalEntry,
     Notification,
+    OncallSlot,
     Playbook,
     Playrule,
     ScheduledReport,
@@ -69,6 +70,8 @@ _NEXT = {
     "/discovery",
     "/playrules",
     "/playbooks",
+    "/escalation",
+    "/escalation#oncall",
     "/journal",
     "/health-ui",
     "/health-ui#journal",
@@ -171,7 +174,7 @@ def _discovery_query(raw: str, **put: str) -> str:
     return "/discovery" + (("?" + encoded) if encoded else "")
 
 
-_LIST_PATHS = frozenset({"/playrules", "/playbooks"})
+_LIST_PATHS = frozenset({"/playrules", "/playbooks", "/escalation"})
 
 
 def _safe_list_url(raw: str, path: str) -> str:
@@ -190,7 +193,7 @@ def _safe_list_url(raw: str, path: str) -> str:
 def _list_query(raw: str, path: str, **put: str) -> str:
     base = _safe_list_url(raw, path)
     _, _, query = base.partition("?")
-    drop = {"edit", "clone", "view", "edit_note", "notice"}
+    drop = {"edit", "clone", "view", "edit_note", "notice", "oncall_edit", "oncall_clone"}
     pairs = [(key, value) for key, value in parse_qsl(query, keep_blank_values=True) if key not in drop and key not in put]
     for key, value in put.items():
         if value:
@@ -929,6 +932,65 @@ def playrules_csv(db: Session, ids: list[int]) -> tuple[list[str], list[list[obj
     return (["Rule", "Alertname", "Fires when", "Severity", "Playbook", "Enabled"], out)
 
 
+def delete_oncall_slots(db: Session, ids: list[int], actor: str) -> int:
+    """Same as the per-row Remove: the roster loses that weekday window."""
+    rows = db.query(OncallSlot).filter(OncallSlot.id.in_(ids)).all() if ids else []
+    for row in rows:
+        audit(db, "oncall.remove", actor=actor, object_type="oncall", object_id=str(row.id), data={"name": row.name})
+        db.delete(row)
+    if rows:
+        db.commit()
+    return len(rows)
+
+
+def oncall_text(db: Session, ids: list[int]) -> list[str]:
+    from app.dc_noc import oncall_slot_view
+
+    rows = db.query(OncallSlot).filter(OncallSlot.id.in_(ids)).all() if ids else []
+    by = {row.id: row for row in rows}
+    records = []
+    labels = []
+    for pk in ids:
+        row = by.get(pk)
+        if row is None:
+            continue
+        view = oncall_slot_view(row)
+        labels.append(view["window"] or str(pk))
+        records.append(
+            [
+                _field("when", view["window"]),
+                _field("name", view["name"]),
+                _field("email", view["email"]),
+                _field("phone", view["phone"] or "—"),
+                _field("enabled", "ON" if view["enabled"] else "OFF"),
+            ]
+        )
+    return _join_docs(f"ForgeSRE on-call ({len(records)})", records, labels)
+
+
+def oncall_csv(db: Session, ids: list[int]) -> tuple[list[str], list[list[object]]]:
+    from app.dc_noc import oncall_slot_view
+
+    rows = db.query(OncallSlot).filter(OncallSlot.id.in_(ids)).all() if ids else []
+    by = {row.id: row for row in rows}
+    out: list[list[object]] = []
+    for pk in ids:
+        row = by.get(pk)
+        if row is None:
+            continue
+        view = oncall_slot_view(row)
+        out.append(
+            [
+                view["window"] or "—",
+                view["name"] or "—",
+                view["email"] or "—",
+                view["phone"] or "—",
+                "ON" if view["enabled"] else "OFF",
+            ]
+        )
+    return (["When", "Name", "Email", "Phone", "Enabled"], out)
+
+
 def delete_playbooks(db: Session, ids: list[int], actor: str) -> int:
     """Same unlink as the per-card Remove: rules and incidents keep working without the book."""
     rows = db.query(Playbook).filter(Playbook.id.in_(ids)).all() if ids else []
@@ -1614,6 +1676,63 @@ def playbooks_export(
         headers, rows = playbooks_csv(db, ids)
         return _download_csv("playbooks.csv", headers, rows)
     return _download("playbooks.txt", playbooks_text(db, ids))
+
+
+@router.post("/escalation/oncall/open-edit")
+def oncall_open_edit(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    stay: Annotated[str, Form()] = "",
+):
+    """Open the existing on-call form for exactly one row. Zero or many do not write."""
+    _forbid(user, can(user, "write_play"))
+    row = _one_pk(db, OncallSlot, selected)
+    if row is None:
+        return RedirectResponse(_list_query(stay, "/escalation", edit_note="select-one") + "#oncall", status_code=303)
+    return RedirectResponse(_list_query(stay, "/escalation", oncall_edit=str(row.id)) + "#oncall-form", status_code=303)
+
+
+@router.post("/escalation/oncall/open-clone")
+def oncall_open_clone(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    stay: Annotated[str, Form()] = "",
+):
+    """Prefill Add on-call from exactly one row. Zero or many do not write."""
+    _forbid(user, can(user, "write_play"))
+    row = _one_pk(db, OncallSlot, selected)
+    if row is None:
+        return RedirectResponse(_list_query(stay, "/escalation", edit_note="select-one") + "#oncall", status_code=303)
+    return RedirectResponse(_list_query(stay, "/escalation", oncall_clone=str(row.id)) + "#oncall-form", status_code=303)
+
+
+@router.post("/escalation/oncall/bulk-delete")
+def oncall_bulk_delete(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    nxt: Annotated[str, Form(alias="next")] = "",
+):
+    _forbid(user, can(user, "write_play"))
+    delete_oncall_slots(db, _ints(selected_values(selected)), user.email)
+    return _back(nxt, "/escalation#oncall")
+
+
+@router.post("/escalation/oncall/export")
+def oncall_export(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    fmt: Annotated[str, Form(alias="format")] = "txt",
+):
+    _forbid(user, can(user, "read_play"))
+    ids = _ints(_need(selected))
+    if _export_format(fmt) == "csv":
+        headers, rows = oncall_csv(db, ids)
+        return _download_csv("oncall.csv", headers, rows)
+    return _download("oncall.txt", oncall_text(db, ids))
 
 
 @router.post("/journal/bulk-delete")

@@ -28,8 +28,11 @@ from app.dc_noc import (
     interface_facts,
     list_oncall_slots,
     maintenance_label,
+    oncall_form_values,
     snmp_surface,
     take_duty,
+    toggle_oncall_slot,
+    update_oncall_slot,
 )
 from app.asset_extras import (
     EXTRA_FIELDS,
@@ -91,6 +94,7 @@ from app.models import (
     Job,
     MailContact,
     Notification,
+    OncallSlot,
     Playbook,
     Playrule,
     ScheduledReport,
@@ -2474,6 +2478,7 @@ def playbook_delete(
 
 DEFAULT_POLICY_SLUG = "default-warning"
 ESCALATION_FORM_DEFAULT = {"name": "", "slug": "", "steps": "0 team\n15 team-lead\n30 engineer"}
+ONCALL_FORM_DEFAULT = {"weekday": 0, "start": "08:00", "end": "16:00", "name": "", "email": "", "phone": ""}
 
 
 def _escalation_view(
@@ -2482,14 +2487,28 @@ def _escalation_view(
     user: User,
     *,
     page: str = "1",
+    oncall_page: str = "1",
     form_mode: str = "create",
     selected: EscalationPolicy | None = None,
     form: dict | None = None,
     error: str = "",
+    oncall_form_mode: str = "create",
+    oncall_selected: OncallSlot | None = None,
+    oncall_form: dict | None = None,
+    oncall_error: str = "",
+    oncall_clone_name: str = "",
     status_code: int = 200,
 ):
     policies = db.query(EscalationPolicy).order_by(EscalationPolicy.name).all()
     policies, pager = paginate(policies, page, size=per_page(request))
+    slots = list_oncall_slots(db)
+    slots, oncall_pager = paginate(
+        slots,
+        oncall_page,
+        size=per_page(request, "oncall_page"),
+        param="oncall_page",
+        fragment="#oncall",
+    )
     usage = dict(
         db.query(Playrule.escalation_policy_id, func.count(Playrule.id))
         .filter(Playrule.escalation_policy_id.isnot(None))
@@ -2508,8 +2527,14 @@ def _escalation_view(
         error=error,
         usage=usage,
         default_slug=DEFAULT_POLICY_SLUG,
-        oncall_slots=list_oncall_slots(db),
+        oncall_slots=slots,
+        oncall_pager=oncall_pager,
         oncall=current_oncall(db),
+        oncall_form_mode=oncall_form_mode,
+        oncall_selected=oncall_selected,
+        oncall_form=oncall_form or dict(ONCALL_FORM_DEFAULT),
+        oncall_error=oncall_error,
+        oncall_clone_name=oncall_clone_name,
         weekdays=WEEKDAYS,
     )
     response.status_code = status_code
@@ -2522,7 +2547,10 @@ def escalation_page(
     db: Session = Depends(get_db),
     user: User = Depends(require_page("read_play")),
     page: str = "1",
+    oncall_page: str = "1",
     edit: str = "",
+    oncall_edit: str = "",
+    oncall_clone: str = "",
 ):
     selected = None
     form = None
@@ -2531,14 +2559,36 @@ def escalation_page(
         selected = db.get(EscalationPolicy, edit_id)
     if selected is not None:
         form = {"name": selected.name, "slug": selected.slug, "steps": policy_steps_text(selected.steps)}
+    oncall_row = None
+    oncall_form = None
+    oncall_form_mode = "create"
+    oncall_clone_name = ""
+    slot_edit = _parse_id_query(oncall_edit)
+    slot_clone = _parse_id_query(oncall_clone)
+    if can(user, "write_play") and slot_edit is not None:
+        oncall_row = db.get(OncallSlot, slot_edit)
+        if oncall_row is not None:
+            oncall_form_mode = "edit"
+            oncall_form = oncall_form_values(oncall_row)
+    elif can(user, "write_play") and slot_clone is not None:
+        source = db.get(OncallSlot, slot_clone)
+        if source is not None:
+            oncall_form_mode = "clone"
+            oncall_form = oncall_form_values(source, clone=True)
+            oncall_clone_name = source.name or "slot"
     return _escalation_view(
         request,
         db,
         user,
         page=page,
+        oncall_page=oncall_page,
         form_mode="edit" if selected is not None else "create",
         selected=selected,
         form=form,
+        oncall_form_mode=oncall_form_mode,
+        oncall_selected=oncall_row,
+        oncall_form=oncall_form,
+        oncall_clone_name=oncall_clone_name,
     )
 
 
@@ -2640,8 +2690,24 @@ def escalation_delete(
     return RedirectResponse("/escalation", status_code=302)
 
 
+def _oncall_posted_form(weekday: str, start: str, end: str, name: str, email: str, phone: str) -> dict:
+    try:
+        day = int(weekday)
+    except (TypeError, ValueError):
+        day = 0
+    return {
+        "weekday": day if day in range(7) else 0,
+        "start": start,
+        "end": end,
+        "name": name,
+        "email": email,
+        "phone": phone,
+    }
+
+
 @router.post("/escalation/oncall")
 def escalation_oncall_add(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     weekday: str = Form("0"),
@@ -2653,13 +2719,83 @@ def escalation_oncall_add(
 ):
     if not can(user, "write_play"):
         raise HTTPException(status_code=403)
+    form = _oncall_posted_form(weekday, start, end, name, email, phone)
     try:
         add_oncall_slot(db, weekday=weekday, start=start, end=end, name=name, email=email, phone=phone)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _escalation_view(
+            request,
+            db,
+            user,
+            oncall_form_mode="create",
+            oncall_form=form,
+            oncall_error=str(exc),
+            status_code=400,
+        )
     audit(db, "oncall.add", actor=user.email, object_type="oncall", object_id=email, data={"weekday": weekday, "name": name})
     db.commit()
-    return RedirectResponse("/escalation", status_code=302)
+    return RedirectResponse("/escalation#oncall", status_code=302)
+
+
+@router.post("/escalation/oncall/{slot_id}/update")
+def escalation_oncall_update(
+    slot_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    weekday: str = Form("0"),
+    start: str = Form(""),
+    end: str = Form(""),
+    name: str = Form(""),
+    email: str = Form(""),
+    phone: str = Form(""),
+):
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    row = db.get(OncallSlot, slot_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    form = _oncall_posted_form(weekday, start, end, name, email, phone)
+    try:
+        update_oncall_slot(db, row, weekday=weekday, start=start, end=end, name=name, email=email, phone=phone)
+    except ValueError as exc:
+        return _escalation_view(
+            request,
+            db,
+            user,
+            oncall_form_mode="edit",
+            oncall_selected=row,
+            oncall_form=form,
+            oncall_error=str(exc),
+            status_code=400,
+        )
+    audit(db, "oncall.update", actor=user.email, object_type="oncall", object_id=str(slot_id), data={"name": name})
+    db.commit()
+    return RedirectResponse("/escalation#oncall", status_code=302)
+
+
+@router.post("/escalation/oncall/{slot_id}/toggle")
+def escalation_oncall_toggle(
+    slot_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+):
+    if not can(user, "write_play"):
+        raise HTTPException(status_code=403)
+    row = db.get(OncallSlot, slot_id)
+    if row is None:
+        raise HTTPException(status_code=404)
+    toggle_oncall_slot(row)
+    audit(
+        db,
+        "oncall.toggle",
+        actor=user.email,
+        object_type="oncall",
+        object_id=str(slot_id),
+        data={"enabled": bool(row.enabled)},
+    )
+    db.commit()
+    return RedirectResponse("/escalation#oncall", status_code=302)
 
 
 def _oncall_back(raw: str) -> RedirectResponse:
@@ -2750,15 +2886,13 @@ def escalation_oncall_delete(
 ):
     if not can(user, "write_play"):
         raise HTTPException(status_code=403)
-    from app.models import OncallSlot
-
     row = db.get(OncallSlot, slot_id)
     if row is None:
         raise HTTPException(status_code=404)
     db.delete(row)
     audit(db, "oncall.remove", actor=user.email, object_type="oncall", object_id=str(slot_id))
     db.commit()
-    return RedirectResponse("/escalation", status_code=302)
+    return RedirectResponse("/escalation#oncall", status_code=302)
 
 
 def _journal_panel(request: Request, db: Session, *, module: str, status: str, q: str, page: str) -> dict:

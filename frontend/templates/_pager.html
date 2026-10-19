@@ -68,7 +68,7 @@
     <form method="post" action="{{ actions.clone }}" data-bulk-edit>
       <input type="hidden" name="next" value="{{ actions.next }}">
       {% if actions.stay %}<input type="hidden" name="stay" value="{{ actions.stay }}">{% endif %}
-      <button type="submit" title="Select one" data-one-title="Clone this asset">Clone</button>
+      <button type="submit" title="Select one" data-one-title="{{ actions.get('clone_title') or 'Clone this asset' }}">Clone</button>
     </form>
     {% endif %}
     {% if actions.verify %}

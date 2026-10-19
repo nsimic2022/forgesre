@@ -15,7 +15,7 @@
       document.documentElement.setAttribute("data-theme", theme);
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v09-10">
+  <link rel="stylesheet" href="/static/app.css?v=v09-11">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -38,6 +38,7 @@
     {% if can('read_play') %}
     <a href="/playrules" class="{% if request.url.path.startswith('/playrules') %}active{% endif %}">Rules</a>
     <a href="/playbooks" class="{% if request.url.path.startswith('/playbooks') %}active{% endif %}">Playbooks</a>
+    <a href="/escalation" class="{% if request.url.path.startswith('/escalation') %}active{% endif %}">Escalation</a>
     {% endif %}
     <a href="/health-ui" class="{% if request.url.path.startswith('/health-ui') %}active{% endif %}">System Health</a>
     <a href="/ops" class="{% if request.url.path.startswith('/ops') %}active{% endif %}">Email &amp; reports</a>
