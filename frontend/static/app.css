@@ -366,6 +366,7 @@ th, td {
   vertical-align: middle;
 }
 table tbody tr:hover td { background: var(--row-hover); }
+/* v09-13: Escalation is three columns; Users carry phone / phone 2 for Add on-call. */
 /* v09-12: Default / Create policy is L1–L4, same rungs as incident cubes. */
 .list-scroll > table,
 .dash-recent-scroll > table,
@@ -1915,7 +1916,11 @@ td.ops-report-actions .row-actions a.button {
   }
   .ops-report-cols { flex-direction: column; }
   .escalation-cols { flex-direction: column; }
-  .oncall-form-grid { grid-template-columns: 1fr; }
+  .escalation-policies,
+  .escalation-create,
+  .escalation-oncall-form { flex: 1 1 auto; max-width: none; }
+  .oncall-form-grid { display: flex; flex-direction: column; }
+  .oncall-roster-wrap { width: 100%; min-width: 0; max-width: none; }
   .policy-ladder { grid-template-columns: 1fr; }
   .asset-detail-split { grid-template-columns: minmax(0, 1fr); }
   .asset-detail-col-1-4 { max-height: none; }
@@ -2005,18 +2010,26 @@ details.rule-note-fields summary { cursor: pointer; color: var(--muted); font-si
   flex-direction: row;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 1.5rem;
+  gap: 1.25rem;
   width: 100%;
   margin-bottom: 1.25rem;
 }
 .escalation-policies,
-.escalation-create {
-  flex: 1 1 22rem;
+.escalation-create,
+.escalation-oncall-form {
+  flex: 1 1 0;
   min-width: 16rem;
 }
 .escalation-policies > h2,
-.escalation-create > h2 { margin-top: 0; }
+.escalation-create > h2,
+.escalation-oncall-form > h2 { margin-top: 0; }
 .escalation-create form.stack { max-width: none; }
+.oncall-roster-wrap {
+  width: 33.333%;
+  min-width: 20rem;
+  max-width: 36rem;
+  margin: 0 0 1.5rem;
+}
 .policy-ladder {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2035,22 +2048,22 @@ details.rule-note-fields summary { cursor: pointer; color: var(--muted); font-si
 .policy-ladder label { display: flex; flex-direction: column; gap: 0.2rem; margin: 0.35rem 0 0; }
 .policy-ladder input { width: 100%; box-sizing: border-box; }
 .oncall-form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.6rem 1.5rem;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  align-items: stretch;
   max-width: none;
-  margin: 0.6rem 0 1.1rem;
+  margin: 0;
 }
-.oncall-form-grid > .error { grid-column: 1 / -1; margin: 0; }
+.oncall-form-grid > .error { margin: 0; }
 .oncall-form-when,
 .oncall-form-who {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.55rem;
   min-width: 0;
 }
-.oncall-form-grid .row-actions { grid-column: 1 / -1; }
+.oncall-form-grid .row-actions { margin-top: 0.15rem; }
 .oncall-form-grid label { display: flex; flex-direction: column; gap: 0.25rem; }
 .oncall-form-grid input,
 .oncall-form-grid select { width: 100%; box-sizing: border-box; }

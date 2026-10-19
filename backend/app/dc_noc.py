@@ -385,6 +385,7 @@ def _oncall_fields(
     name: str,
     email: str,
     phone: str = "",
+    phone2: str = "",
 ) -> dict[str, Any]:
     try:
         day = int(weekday)
@@ -412,6 +413,7 @@ def _oncall_fields(
         "name": person[:255],
         "email": address[:255],
         "phone": " ".join(str(phone or "").split())[:64],
+        "phone2": " ".join(str(phone2 or "").split())[:64],
     }
 
 
@@ -424,10 +426,14 @@ def add_oncall_slot(
     name: str,
     email: str,
     phone: str = "",
+    phone2: str = "",
     enabled: bool = True,
 ) -> OncallSlot:
     """One weekday window. Times are appliance-local. Until is inclusive and must be after from."""
-    row = OncallSlot(**_oncall_fields(weekday=weekday, start=start, end=end, name=name, email=email, phone=phone), enabled=bool(enabled))
+    row = OncallSlot(
+        **_oncall_fields(weekday=weekday, start=start, end=end, name=name, email=email, phone=phone, phone2=phone2),
+        enabled=bool(enabled),
+    )
     db.add(row)
     db.flush()
     return row
@@ -443,9 +449,10 @@ def update_oncall_slot(
     name: str,
     email: str,
     phone: str = "",
+    phone2: str = "",
 ) -> OncallSlot:
     """Rewrite one roster row. ON/OFF stays on the toggle — this does not flip enabled."""
-    fields = _oncall_fields(weekday=weekday, start=start, end=end, name=name, email=email, phone=phone)
+    fields = _oncall_fields(weekday=weekday, start=start, end=end, name=name, email=email, phone=phone, phone2=phone2)
     for key, value in fields.items():
         setattr(row, key, value)
     db.flush()
@@ -470,6 +477,7 @@ def oncall_form_values(row: OncallSlot, *, clone: bool = False) -> dict[str, Any
         "name": name,
         "email": view["email"],
         "phone": view["phone"],
+        "phone2": view["phone2"],
     }
 
 
@@ -484,6 +492,7 @@ def oncall_slot_view(row: OncallSlot) -> dict[str, Any]:
         "name": row.name,
         "email": row.email,
         "phone": row.phone or "",
+        "phone2": getattr(row, "phone2", "") or "",
         "enabled": slot_enabled(row),
         "window": f"{day} {_hhmm(row.start_minute)}–{_hhmm(row.end_minute)}",
     }
@@ -556,6 +565,8 @@ def take_duty(db: Session, user: Any, at: datetime | None = None) -> dict[str, A
         end=_hhmm(end_minute),
         name=name,
         email=email,
+        phone=str(getattr(user, "phone", "") or ""),
+        phone2=str(getattr(user, "phone2", "") or ""),
     )
     return oncall_slot_view(slot)
 

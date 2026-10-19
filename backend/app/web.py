@@ -2486,7 +2486,15 @@ def playbook_delete(
 
 
 DEFAULT_POLICY_SLUG = "default-warning"
-ONCALL_FORM_DEFAULT = {"weekday": 0, "start": "08:00", "end": "16:00", "name": "", "email": "", "phone": ""}
+ONCALL_FORM_DEFAULT = {
+    "weekday": 0,
+    "start": "08:00",
+    "end": "16:00",
+    "name": "",
+    "email": "",
+    "phone": "",
+    "phone2": "",
+}
 
 
 def _escalation_form(*, name: str = "", slug: str = "", steps: str = "", ladder: list | None = None) -> dict:
@@ -2585,6 +2593,11 @@ def _escalation_view(
         .group_by(Playrule.escalation_policy_id)
         .all()
     )
+    directory = (
+        db.query(User).filter(User.is_active.is_(True)).order_by(User.name, User.email).all()
+        if can(user, "write_play")
+        else []
+    )
     response = render(
         request,
         "escalation.html",
@@ -2607,6 +2620,7 @@ def _escalation_view(
         oncall_error=oncall_error,
         oncall_clone_name=oncall_clone_name,
         weekdays=WEEKDAYS,
+        directory=directory,
     )
     response.status_code = status_code
     return response
@@ -2820,7 +2834,9 @@ def escalation_delete(
     return RedirectResponse("/escalation", status_code=302)
 
 
-def _oncall_posted_form(weekday: str, start: str, end: str, name: str, email: str, phone: str) -> dict:
+def _oncall_posted_form(
+    weekday: str, start: str, end: str, name: str, email: str, phone: str, phone2: str = ""
+) -> dict:
     try:
         day = int(weekday)
     except (TypeError, ValueError):
@@ -2832,6 +2848,7 @@ def _oncall_posted_form(weekday: str, start: str, end: str, name: str, email: st
         "name": name,
         "email": email,
         "phone": phone,
+        "phone2": phone2,
     }
 
 
@@ -2846,12 +2863,15 @@ def escalation_oncall_add(
     name: str = Form(""),
     email: str = Form(""),
     phone: str = Form(""),
+    phone2: str = Form(""),
 ):
     if not can(user, "write_play"):
         raise HTTPException(status_code=403)
-    form = _oncall_posted_form(weekday, start, end, name, email, phone)
+    form = _oncall_posted_form(weekday, start, end, name, email, phone, phone2)
     try:
-        add_oncall_slot(db, weekday=weekday, start=start, end=end, name=name, email=email, phone=phone)
+        add_oncall_slot(
+            db, weekday=weekday, start=start, end=end, name=name, email=email, phone=phone, phone2=phone2
+        )
     except ValueError as exc:
         return _escalation_view(
             request,
@@ -2879,15 +2899,18 @@ def escalation_oncall_update(
     name: str = Form(""),
     email: str = Form(""),
     phone: str = Form(""),
+    phone2: str = Form(""),
 ):
     if not can(user, "write_play"):
         raise HTTPException(status_code=403)
     row = db.get(OncallSlot, slot_id)
     if row is None:
         raise HTTPException(status_code=404)
-    form = _oncall_posted_form(weekday, start, end, name, email, phone)
+    form = _oncall_posted_form(weekday, start, end, name, email, phone, phone2)
     try:
-        update_oncall_slot(db, row, weekday=weekday, start=start, end=end, name=name, email=email, phone=phone)
+        update_oncall_slot(
+            db, row, weekday=weekday, start=start, end=end, name=name, email=email, phone=phone, phone2=phone2
+        )
     except ValueError as exc:
         return _escalation_view(
             request,
@@ -3485,6 +3508,8 @@ def admin_create_user(
     name: str = Form(...),
     password: str = Form(...),
     role: str = Form("analyst"),
+    phone: str = Form(""),
+    phone2: str = Form(""),
 ):
     if not can(user, "admin"):
         raise HTTPException(status_code=403)
@@ -3492,7 +3517,9 @@ def admin_create_user(
     from app.users import create_user
 
     try:
-        row = create_user(db, user, email=email, name=name, password=password, role=role)
+        row = create_user(
+            db, user, email=email, name=name, password=password, role=role, phone=phone, phone2=phone2
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()
@@ -3509,6 +3536,8 @@ def admin_update_user(
     name: str = Form(...),
     password: str = Form(""),
     role: str = Form("analyst"),
+    phone: str = Form(""),
+    phone2: str = Form(""),
 ):
     if not can(user, "admin"):
         raise HTTPException(status_code=403)
@@ -3519,7 +3548,9 @@ def admin_update_user(
     from app.users import update_user
 
     try:
-        update_user(db, user, target, email=email, name=name, password=password, role=role)
+        update_user(
+            db, user, target, email=email, name=name, password=password, role=role, phone=phone, phone2=phone2
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()

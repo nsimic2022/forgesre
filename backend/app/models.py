@@ -20,6 +20,8 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
+    phone: Mapped[str] = mapped_column(String(64), default="")
+    phone2: Mapped[str] = mapped_column(String(64), default="")
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(32), default="viewer")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -414,6 +416,7 @@ class OncallSlot(Base):
     name: Mapped[str] = mapped_column(String(255), default="")
     email: Mapped[str] = mapped_column(String(255), default="")
     phone: Mapped[str] = mapped_column(String(64), default="")
+    phone2: Mapped[str] = mapped_column(String(64), default="")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

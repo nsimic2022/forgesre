@@ -1,5 +1,6 @@
 """Escalation page create / edit / remove + policy step parser (email only)."""
 
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -76,12 +77,23 @@ def test_escalation_page_has_create_cancel_and_saves_policy():
     assert "<title>Escalation · ForgeSRE</title>" in page.text
     assert 'class="escalation-cols"' in page.text
     assert "<h2>Create escalation policy</h2>" in page.text
-    assert page.text.index("escalation-policies") < page.text.index("escalation-create")
+    assert page.text.index("escalation-policies") < page.text.index("escalation-create") < page.text.index("escalation-oncall-form")
+    assert page.text.index('id="oncall-form"') < page.text.index("oncall-roster-wrap")
     assert "L1 NOC" in page.text and "L4 Manager" in page.text
     assert 'name="ladder_present"' in page.text
     assert 'name="ladder_target_4"' in page.text
     assert 'class="oncall-form-grid"' in page.text
     assert "oncall-form-when" in page.text and "oncall-form-who" in page.text
+    assert page.text.index("oncall-form-when") < page.text.index("oncall-form-who")
+    assert 'data-oncall-person' in page.text
+    assert 'name="phone2"' in page.text
+    picker = page.text.split("data-oncall-person", 1)[1].split("</select>", 1)[0]
+    assert "admin@forgesre.local" in picker
+    css = (Path(__file__).resolve().parents[1] / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".oncall-roster-wrap" in css and "width: 33.333%" in css
+    assert "flex-direction: column" in css.split(".oncall-form-grid {", 1)[1]
+    js = (Path(__file__).resolve().parents[1] / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    assert "bindOncallPerson" in js and "data-oncall-person" in js
     default = db.query(EscalationPolicy).filter_by(slug="default-warning").one()
     assert [int(step["after_minutes"]) for step in default.steps] == [0, 15, 30, 60]
     assert [str(step["target"]) for step in default.steps] == ["team", "team-lead", "engineer", "manager"]

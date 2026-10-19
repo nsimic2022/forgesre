@@ -962,6 +962,7 @@ def oncall_text(db: Session, ids: list[int]) -> list[str]:
                 _field("name", view["name"]),
                 _field("email", view["email"]),
                 _field("phone", view["phone"] or "—"),
+                _field("phone2", view["phone2"] or "—"),
                 _field("enabled", "ON" if view["enabled"] else "OFF"),
             ]
         )
@@ -985,10 +986,11 @@ def oncall_csv(db: Session, ids: list[int]) -> tuple[list[str], list[list[object
                 view["name"] or "—",
                 view["email"] or "—",
                 view["phone"] or "—",
+                view["phone2"] or "—",
                 "ON" if view["enabled"] else "OFF",
             ]
         )
-    return (["When", "Name", "Email", "Phone", "Enabled"], out)
+    return (["When", "Name", "Email", "Phone", "Phone 2", "Enabled"], out)
 
 
 def delete_playbooks(db: Session, ids: list[int], actor: str) -> int:

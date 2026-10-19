@@ -78,7 +78,8 @@ def _ensure_oncall_slots(conn: Connection) -> None:
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                 "weekday INTEGER, start_minute INTEGER DEFAULT 0, end_minute INTEGER DEFAULT 0, "
                 "name VARCHAR(255) DEFAULT '', email VARCHAR(255) DEFAULT '', "
-                "phone VARCHAR(64) DEFAULT '', enabled BOOLEAN DEFAULT 1, created_at DATETIME)"
+                "phone VARCHAR(64) DEFAULT '', phone2 VARCHAR(64) DEFAULT '', "
+                "enabled BOOLEAN DEFAULT 1, created_at DATETIME)"
             )
         )
     else:
@@ -88,7 +89,8 @@ def _ensure_oncall_slots(conn: Connection) -> None:
                 "id SERIAL PRIMARY KEY, "
                 "weekday INTEGER, start_minute INTEGER DEFAULT 0, end_minute INTEGER DEFAULT 0, "
                 "name VARCHAR(255) DEFAULT '', email VARCHAR(255) DEFAULT '', "
-                "phone VARCHAR(64) DEFAULT '', enabled BOOLEAN DEFAULT TRUE, created_at TIMESTAMPTZ)"
+                "phone VARCHAR(64) DEFAULT '', phone2 VARCHAR(64) DEFAULT '', "
+                "enabled BOOLEAN DEFAULT TRUE, created_at TIMESTAMPTZ)"
             )
         )
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_oncall_slots_weekday ON oncall_slots (weekday)"))
@@ -100,6 +102,8 @@ def _ensure_oncall_slots(conn: Connection) -> None:
     if "enabled" not in existing:
         conn.execute(text("ALTER TABLE oncall_slots ADD COLUMN enabled BOOLEAN DEFAULT TRUE"))
         conn.execute(text("UPDATE oncall_slots SET enabled = TRUE WHERE enabled IS NULL"))
+    if "phone2" not in existing:
+        conn.execute(text("ALTER TABLE oncall_slots ADD COLUMN phone2 VARCHAR(64) DEFAULT ''"))
 
 
 def _ensure_lookup_indexes(conn: Connection) -> None:
@@ -131,6 +135,10 @@ def migrate(engine: Engine) -> None:
         existing = {col["name"] for col in inspector.get_columns("users")}
         if "journal_error_ack_id" not in existing:
             statements.append("ALTER TABLE users ADD COLUMN journal_error_ack_id INTEGER DEFAULT 0")
+        if "phone" not in existing:
+            statements.append("ALTER TABLE users ADD COLUMN phone VARCHAR(64) DEFAULT ''")
+        if "phone2" not in existing:
+            statements.append("ALTER TABLE users ADD COLUMN phone2 VARCHAR(64) DEFAULT ''")
     if "assets" in tables:
         existing = {col["name"] for col in inspector.get_columns("assets")}
         if "source" not in existing:
