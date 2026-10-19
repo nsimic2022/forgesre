@@ -279,7 +279,7 @@ def test_asset_list_and_incident_ladder_cubes_after_a_fired_step():
     assert "not configured" in before[2][2]
     thead = client.get("/assets").text.split('<table class="asset-table"', 1)[1].split("</thead>", 1)[0]
     assert thead.index('class="col-port"') < thead.index(">Status<") < thead.index('class="col-escalation"')
-    assert ">Escalation " in thead and "ICMP / port / SNMP" not in thead
+    assert ">L1–L4 " in thead and "ICMP / port / SNMP" not in thead
     assert "reach-sq" in (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8").split(".ladder-cubes", 1)[1]
 
     incident = ingest_alertmanager(db, _alert(alertname, asset_id))[0]

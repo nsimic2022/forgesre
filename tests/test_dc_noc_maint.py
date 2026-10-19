@@ -173,7 +173,7 @@ def test_incident_status_stacks_maintenance_under_severity():
     inc_head = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
     assert ">Acknowledged<" not in inc_head and "col-ack" not in inc_head
     assert 'class="col-status">Status</th>' in inc_head
-    assert inc_head.index(">Status<") < inc_head.index(">Escalation<")
+    assert inc_head.index(">Status<") < inc_head.index(">L1–L4<")
 
     warn_row = listed.text.split(warning_name, 1)[1].split("</tr>", 1)[0]
     warn_cell = _status_cell(warn_row)

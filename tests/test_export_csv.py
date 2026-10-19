@@ -92,9 +92,9 @@ def test_incident_csv_keeps_serbian_notes_and_table_columns():
     assert 'filename="incidents.csv"' in exported.headers["content-disposition"]
     assert exported.content.startswith(b"\xef\xbb\xbf")
     table = _csv_rows(exported.content)
-    assert table[0] == ["Hostname", "Incident", "Status", "Escalation", "When", "Severity", "Resolved by", "Notes"]
+    assert table[0] == ["Incident", "Hostname", "Status", "L1–L4", "When", "Severity", "Resolved by", "Notes"]
     assert len(table) == 2
-    host, title, status, _ladder, _when, severity, resolved, notes = table[1]
+    title, host, status, _ladder, _when, severity, resolved, notes = table[1]
     assert host == f"csv-host-{token}"
     assert title == f"HighCPU {token}"
     assert status == "OPEN"
@@ -136,7 +136,7 @@ def test_other_list_csv_exports_use_table_headers():
     assert assets.status_code == 200
     assert 'filename="assets.csv"' in assets.headers["content-disposition"]
     asset_table = _csv_rows(assets.content)
-    assert asset_table[0][0] == "Hostname" and "Notes" in asset_table[0]
+    assert asset_table[0] == ["Hostname", "Status", "L1–L4", "#", "ID", "IP", "Owner", "Contact", "Type", "Environment", "Source", "Notes"]
     assert any(f"csv-a-{token}" in row for row in asset_table[1:])
 
     found_csv = client.post("/discovery/export", data={"selected": str(found_id), "format": "csv"})

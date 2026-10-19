@@ -211,11 +211,11 @@ def test_row_checkboxes_named_selected_on_list_surfaces():
         assert "data-select-row" in page.text, path
     incidents = client.get("/incidents").text
     head = incidents.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert head.index("data-select-page") < head.index(">Hostname<") < head.index(">Incident<")
+    assert head.index("data-select-page") < head.index(">Incident<") < head.index(">Hostname<")
     assert ">Acknowledged<" not in head and "col-ack" not in head
     assert "Resolved by" in head and ">Notes<" in head
     assert ">Ack<" not in head and "info-tip" not in head
-    assert head.index(">Status<") < head.index(">Escalation<") < head.index(">When<") < head.index(">Resolved by<") < head.index(">Notes<")
+    assert head.index(">Status<") < head.index(">L1–L4<") < head.index(">When<") < head.index(">Resolved by<") < head.index(">Notes<")
     assert "delete-selected" not in incidents
     admin = (TEMPLATES / "admin.html").read_text(encoding="utf-8")
     backup_table = admin.split("{% for b in backups %}", 1)[1].split("</tr>", 1)[0]
@@ -312,7 +312,7 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.15rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-Z" in base
+    assert "app.css?v=v09-10" in base
 
 
 def test_dashboard_banner_block_gone_from_template_js_css():

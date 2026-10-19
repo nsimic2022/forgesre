@@ -663,8 +663,8 @@ def incidents_csv(db: Session, numbers: list[str]) -> tuple[list[str], list[list
             continue
         out.append(
             [
-                incident_host(row) or "—",
                 row.title or row.number,
+                incident_host(row) or "—",
                 _incident_status_csv(row),
                 _ladder_csv(incident_ladder_cubes(row, db)),
                 compact_when_text(row.started_at) or "—",
@@ -674,7 +674,7 @@ def incidents_csv(db: Session, numbers: list[str]) -> tuple[list[str], list[list
             ]
         )
     return (
-        ["Hostname", "Incident", "Status", "Escalation", "When", "Severity", "Resolved by", "Notes"],
+        ["Incident", "Hostname", "Status", "L1–L4", "When", "Severity", "Resolved by", "Notes"],
         out,
     )
 
@@ -771,7 +771,7 @@ def assets_csv(db: Session, asset_ids: list[str]) -> tuple[list[str], list[list[
             ]
         )
     return (
-        ["Hostname", "Status", "Escalation", "#", "Asset ID", "IP", "Owner", "Contact", "Type", "Environment", "Source", "Notes"],
+        ["Hostname", "Status", "L1–L4", "#", "ID", "IP", "Owner", "Contact", "Type", "Environment", "Source", "Notes"],
         out,
     )
 

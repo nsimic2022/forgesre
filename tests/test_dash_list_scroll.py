@@ -120,7 +120,8 @@ def test_list_scrolls_inside_its_box_with_pager_outside():
     block = css.split(".dash-recent-scroll {", 1)[1].split("}", 1)[0]
     assert "overflow-y: auto" in block and "max-height:" in block
     assert ".dash-recent-scroll thead th { position: sticky" in css
-    assert ".dash-recent a.inc-title { display: inline-block" in css
+    assert ".dash-recent a.inc-title { max-width: 100%;" in css
+    assert "-webkit-line-clamp: 2" in css.split(".scan-list .inc-title,", 1)[1].split("}", 1)[0]
 
 
 _KEYS_HARNESS = r"""
@@ -426,4 +427,4 @@ def test_js_pager_restores_only_matching_fresh_entry():
 
 def test_cache_bust_bumped():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-Z" in base and "app.js?v=v09-T" in base
+    assert "app.css?v=v09-10" in base and "app.js?v=v09-T" in base

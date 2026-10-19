@@ -43,7 +43,7 @@ def test_history_page_redirects_and_incidents_lists_closed():
     assert closed.status_code == 200
     assert "INC-" in closed.text
     headers = closed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert headers.index(">Hostname<") < headers.index(">Incident<")
+    assert headers.index(">Incident<") < headers.index(">Hostname<")
     assert ">Acknowledged<" not in headers and "col-ack" not in headers
     assert ">Ack<" not in headers and "info-tip" not in headers
     assert "Resolved by" in headers
@@ -317,7 +317,7 @@ def test_send_incident_report_to_address_book_email():
     assert "Closed" in listed.text
     assert "Open/firing" not in listed.text
     headers = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert headers.index(">Hostname<") < headers.index(">Incident<")
+    assert headers.index(">Incident<") < headers.index(">Hostname<")
     assert "Severity" in headers
     assert "Status" in headers
     assert "When" in headers

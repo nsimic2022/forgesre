@@ -366,6 +366,86 @@ th, td {
   vertical-align: middle;
 }
 table tbody tr:hover td { background: var(--row-hover); }
+/* v09-10: every operator list is spaced card-rows with a muted header. */
+.list-scroll > table,
+.dash-recent-scroll > table,
+.health-table,
+.verify-table,
+.scan-list {
+  border-collapse: separate;
+  border-spacing: 0 0.5rem;
+  background: transparent;
+}
+.list-scroll > table > thead th,
+.dash-recent-scroll > table > thead th,
+.health-table > thead th,
+.verify-table > thead th,
+.scan-list > thead th {
+  border-bottom: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding-top: 0.25rem;
+  padding-bottom: 0.35rem;
+  background: var(--bg);
+  box-shadow: none;
+}
+.card .list-scroll > table > thead th {
+  background: var(--panel);
+}
+.list-scroll > table > tbody > tr > td,
+.dash-recent-scroll > table > tbody > tr > td,
+.health-table > tbody > tr > td,
+.verify-table > tbody > tr > td,
+.scan-list > tbody > tr > td {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  padding: 0.85rem 0.9rem;
+}
+.list-scroll > table > tbody > tr > td:first-child,
+.dash-recent-scroll > table > tbody > tr > td:first-child,
+.health-table > tbody > tr > td:first-child,
+.verify-table > tbody > tr > td:first-child,
+.scan-list > tbody > tr > td:first-child {
+  border-left: 1px solid var(--line);
+  border-radius: 10px 0 0 10px;
+}
+.list-scroll > table > tbody > tr > td:last-child,
+.dash-recent-scroll > table > tbody > tr > td:last-child,
+.health-table > tbody > tr > td:last-child,
+.verify-table > tbody > tr > td:last-child,
+.scan-list > tbody > tr > td:last-child {
+  border-right: 1px solid var(--line);
+  border-radius: 0 10px 10px 0;
+}
+.list-scroll > table > tbody > tr:hover > td,
+.dash-recent-scroll > table > tbody > tr:hover > td,
+.health-table > tbody > tr:hover > td,
+.verify-table > tbody > tr:hover > td,
+.scan-list > tbody > tr:hover > td {
+  background: var(--row-hover);
+}
+.list-scroll > table > tbody > tr.selected > td,
+.dash-recent-scroll > table > tbody > tr.selected > td,
+.user-table tr.selected td,
+.asset-table tr.selected td,
+.scan-list > tbody > tr.selected > td {
+  background: var(--selected);
+}
+.list-scroll > table > tbody > tr.selected:hover > td,
+.dash-recent-scroll > table > tbody > tr.selected:hover > td,
+.user-table tr.selected:hover td,
+.asset-table tr.selected:hover td,
+.scan-list > tbody > tr.selected:hover > td {
+  background: var(--selected-hover);
+}
+.list-scroll > table > tbody > tr.is-selected > td,
+.dash-recent-scroll > table > tbody > tr.is-selected > td,
+.scan-list > tbody > tr.is-selected > td {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
 .user-table tr.selected td,
 .asset-table tr.selected td,
 table tbody tr.selected td { background: var(--selected); }
@@ -386,9 +466,10 @@ table tbody tr.selected td { background: var(--selected); }
 .asset-table th.col-host,
 .asset-table td.col-host {
   width: auto;
+  min-width: 9rem;
   max-width: none;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .asset-table th.col-ip,
 .asset-table td.col-ip { width: 1%; white-space: nowrap; }
@@ -405,10 +486,10 @@ table tbody tr.selected td { background: var(--selected); }
 }
 .asset-table th.col-escalation,
 .asset-table td.col-escalation {
-  width: 2.4rem;
-  max-width: 2.8rem;
-  padding-left: 0.35rem;
-  padding-right: 0.35rem;
+  width: 3.6rem;
+  max-width: 4.2rem;
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
   white-space: nowrap;
 }
 .asset-table th.col-asset-notes,
@@ -416,7 +497,7 @@ table tbody tr.selected td { background: var(--selected); }
   width: auto;
   max-width: none;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-size: 0.82rem;
 }
 .asset-table td.asset-actions {
@@ -518,10 +599,10 @@ a.button {
 .incidents-table td.col-ladder,
 .dash-recent th.col-ladder,
 .dash-recent td.col-ladder {
-  width: 2.4rem;
-  max-width: 2.8rem;
-  padding-left: 0.35rem;
-  padding-right: 0.35rem;
+  width: 3.6rem;
+  max-width: 4.2rem;
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
   white-space: nowrap;
 }
 .enum-clip {
@@ -551,7 +632,7 @@ a.button {
   width: auto;
   max-width: none;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .found-table td.row-actions { width: 1%; white-space: nowrap; }
 .reach-stack [hidden] { display: none !important; }
@@ -1169,8 +1250,12 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
   font-weight: 600;
   max-width: 28rem;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .scan-list .inc-host,
 .incidents-table .inc-host {
@@ -1374,11 +1459,12 @@ form.ops-compose {
 .incidents-table th.col-name,
 .incidents-table td.col-name {
   width: auto;
+  min-width: 8.5rem;
   max-width: none;
   white-space: normal;
 }
-.dash-recent td.col-host { overflow-wrap: anywhere; font-weight: 600; }
-.incidents-table td.col-host { overflow-wrap: anywhere; vertical-align: middle; }
+.dash-recent td.col-host { overflow-wrap: break-word; font-weight: 600; }
+.incidents-table td.col-host { overflow-wrap: break-word; vertical-align: middle; }
 .incidents-table td.col-host .inc-host {
   color: var(--text);
   font-size: 0.92rem;
@@ -1459,7 +1545,7 @@ form.ops-compose {
 .incidents-table td.col-notes,
 .dash-recent td.col-notes {
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 /* v09-V: Recent incidents uses the same Status stack as the Incidents list. */
 .dash-recent .incidents-table { table-layout: auto; width: 100%; }
@@ -1851,7 +1937,7 @@ td.ops-report-actions .row-actions a.button {
 .stat.stat-zero strong { color: var(--muted); font-weight: 600; }
 
 .scan-list a.inc-title,
-.incidents-table a.inc-title { display: block; text-decoration: none; }
+.incidents-table a.inc-title { text-decoration: none; }
 .scan-list a.inc-title:hover,
 .incidents-table a.inc-title:hover { text-decoration: underline; }
 .scan-list tr.inc-crit:not(.inc-row-done) .inc-title { font-weight: 700; }
@@ -2390,17 +2476,19 @@ h1.incident-head .sev-warn { color: var(--warn); }
   scrollbar-gutter: stable;
 }
 .dash-recent-scroll > table { margin: 0; }
-.dash-recent-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: inset 0 -1px 0 var(--line); }
-.dash-recent a.inc-title { display: inline-block; max-width: 100%; vertical-align: top; }
+.dash-recent-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--bg); box-shadow: none; }
+.dash-recent a.inc-title { max-width: 100%; vertical-align: top; }
 /* Every other list: the same inner box (sticky header; JS sizes it to about ten rows when the page has more). */
 .list-scroll {
   max-height: min(40rem, 72vh);
   overflow: auto;
   max-width: 100%;
+  padding: 0 0.15rem 0.2rem;
 }
 .asset-detail-sections .list-scroll { max-height: 12rem; }
 .list-scroll > table { margin: 0; }
-.list-scroll > table > thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: inset 0 -1px 0 var(--line); }
+.list-scroll > table > thead th { position: sticky; top: 0; z-index: 1; background: var(--bg); box-shadow: none; }
+.card .list-scroll > table > thead th { background: var(--panel); }
 .list-scroll-cards { padding: 2px; margin-bottom: 1.1rem; }
 .list-scroll-cards > .playbook-grid,
 .list-scroll-cards > .policy-grid { margin-bottom: 0; }
