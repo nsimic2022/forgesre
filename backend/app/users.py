@@ -10,6 +10,10 @@ from app.models import User
 from app.security import CREATABLE_ROLES, can, hash_password
 
 
+def clean_phone(value: str | None) -> str:
+    return " ".join(str(value or "").split())[:64]
+
+
 def find_email(db: Session, email: str, *, exclude_id: int | None = None) -> User | None:
     q = db.query(User).filter(func.lower(User.email) == email.strip().lower())
     if exclude_id is not None:
@@ -44,6 +48,8 @@ def create_user(
     name: str,
     password: str,
     role: str,
+    phone: str = "",
+    phone2: str = "",
 ) -> User:
     email = (email or "").strip()
     name = (name or "").strip()
@@ -54,7 +60,14 @@ def create_user(
         raise ValueError("invalid role")
     if find_email(db, email):
         raise ValueError("email already exists")
-    row = User(email=email, name=name, password_hash=hash_password(password), role=role)
+    row = User(
+        email=email,
+        name=name,
+        phone=clean_phone(phone),
+        phone2=clean_phone(phone2),
+        password_hash=hash_password(password),
+        role=role,
+    )
     db.add(row)
     db.flush()
     audit(db, "user.create", actor=actor.email, object_type="user", object_id=email)
@@ -70,6 +83,8 @@ def update_user(
     name: str | None = None,
     password: str | None = None,
     role: str | None = None,
+    phone: str | None = None,
+    phone2: str | None = None,
 ) -> User:
     reason = edit_blocked(actor, target)
     if reason:
@@ -86,6 +101,10 @@ def update_user(
         if not name:
             raise ValueError("name is required")
         target.name = name
+    if phone is not None:
+        target.phone = clean_phone(phone)
+    if phone2 is not None:
+        target.phone2 = clean_phone(phone2)
     if password:
         target.password_hash = hash_password(password)
     if role is not None:

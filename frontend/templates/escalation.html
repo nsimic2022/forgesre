@@ -39,7 +39,7 @@
   {% endif %}
 </section>
 {% else %}
-<p class="muted">No policies yet. Create one on the right, or keep using the seeded Default warning after seed.</p>
+<p class="muted">No policies yet. Create one in the middle column, or keep using the seeded Default warning after seed.</p>
 {% endfor %}
 </div>
 </div>
@@ -90,13 +90,58 @@
   </div>
 </form>
 </div>
+{% set oc = oncall_form or {} %}
+<div class="escalation-oncall-form">
+{% if oncall_form_mode == "edit" %}
+<h2 id="oncall-form-title">Edit on-call <span class="muted">{{ oncall_selected.name }}</span></h2>
+<form method="post" action="/escalation/oncall/{{ oncall_selected.id }}/update" class="oncall-form-grid" id="oncall-form" data-oncall-form>
+{% elif oncall_form_mode == "clone" %}
+<h2 id="oncall-form-title">Clone on-call {% with %}{% set tip %}Copy of {{ oncall_clone_name }}. Tweak the fields, then Save to create a new window. Cancel discards the draft.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+<form method="post" action="/escalation/oncall" class="oncall-form-grid" id="oncall-form" data-oncall-form>
+{% else %}
+<h2 id="oncall-form-title">Add on-call</h2>
+<form method="post" action="/escalation/oncall" class="oncall-form-grid" id="oncall-form" data-oncall-form>
+{% endif %}
+  {% if oncall_error %}<p class="error" role="alert">{{ oncall_error }}</p>{% endif %}
+  <div class="oncall-form-when">
+    <label>Weekday
+      <select name="weekday">
+        {% for day in weekdays %}
+        <option value="{{ loop.index0 }}" {% if oc.weekday == loop.index0 %}selected{% endif %}>{{ day }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>From <input name="start" type="time" value="{{ oc.start or '08:00' }}" required></label>
+    <label>Until <input name="end" type="time" value="{{ oc.end or '16:00' }}" required></label>
+  </div>
+  <div class="oncall-form-who">
+    <label>Person
+      <select data-oncall-person aria-label="Pick a user">
+        <option value="">Pick a user…</option>
+        {% for person in directory or [] %}
+        <option value="{{ person.id }}" data-name="{{ person.name }}" data-email="{{ person.email }}" data-phone="{{ person.phone }}" data-phone2="{{ person.phone2 }}" {% if oc.email and oc.email|lower == person.email|lower %}selected{% endif %}>{{ person.name }} · {{ person.email }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Name <input name="name" required placeholder="Ana" value="{{ oc.name }}"></label>
+    <label>Email <input name="email" type="email" required placeholder="ana@dc.local" value="{{ oc.email }}"></label>
+    <label>Phone <input name="phone" placeholder="+381-11-000-0000" value="{{ oc.phone }}"></label>
+    <label>Phone 2 <input name="phone2" placeholder="+381-11-000-0001" value="{{ oc.phone2 }}"></label>
+  </div>
+  <div class="row-actions">
+    <button type="submit">{% if oncall_form_mode == "clone" %}Save copy{% elif oncall_form_mode == "edit" %}Save{% else %}Add on-call slot{% endif %}</button>
+    <a href="/escalation#oncall">Cancel</a>
+  </div>
+</form>
+</div>
 {% endif %}
 </div>
-<h2 id="oncall">On call {% with %}{% set tip %}A short weekly roster. Each row is one weekday and a from/until time in the appliance timezone (inclusive). L1 (or any step) with the role oncall mails whoever matches now. Empty roster = that step is no-recipient. The Dashboard On call line shows this person. OFF rows stay stored and are skipped. This is not PagerDuty.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+<h2 id="oncall">On call {% with %}{% set tip %}A short weekly roster. Each row is one weekday and a from/until time in the appliance timezone (inclusive). L1 (or any step) with the role oncall mails whoever matches now. Empty roster = that step is no-recipient. The Dashboard On call line shows this person. OFF rows stay stored and are skipped. People come from Administration → Users (name, email, phone, phone 2). This is not PagerDuty.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% if request.query_params.get('edit_note') == 'select-one' %}
 <div class="banner" role="status">Select one</div>
 {% endif %}
-<p class="oncall-now" data-oncall-now>{% if oncall %}Now: <strong>{{ oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}<span class="muted">No one scheduled right now.</span>{% endif %}{% if can('write_play') %} <form method="post" action="/escalation/oncall/take" class="oncall-take"><input type="hidden" name="next" value="/escalation"><button type="submit" class="secondary">I'm on duty now</button></form>{% endif %}</p>
+<p class="oncall-now" data-oncall-now>{% if oncall %}Now: <strong>{{ oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %}{% if oncall.phone2 %} · {{ oncall.phone2 }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}<span class="muted">No one scheduled right now.</span>{% endif %}{% if can('write_play') %} <form method="post" action="/escalation/oncall/take" class="oncall-take"><input type="hidden" name="next" value="/escalation"><button type="submit" class="secondary">I'm on duty now</button></form>{% endif %}</p>
+<div class="oncall-roster-wrap">
 <div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="scan-list" data-oncall-roster>
@@ -108,7 +153,7 @@
       <td>{{ slot.window }}</td>
       <td>{{ slot.name }}</td>
       <td>{{ slot.email }}</td>
-      <td>{{ slot.phone or "—" }}</td>
+      <td>{% if slot.phone or slot.phone2 %}{{ slot.phone or "—" }}{% if slot.phone2 %}<div class="muted">{{ slot.phone2 }}</div>{% endif %}{% else %}—{% endif %}</td>
       <td>
         {% if can('write_play') %}
         <form method="post" action="/escalation/oncall/{{ slot.id }}/toggle" class="onoff-form">
@@ -134,40 +179,6 @@
 {% include "_pager.html" %}
 {% endwith %}
 </div>
-{% if can('write_play') %}
-{% set oc = oncall_form or {} %}
-{% if oncall_form_mode == "edit" %}
-<h2 id="oncall-form-title">Edit on-call <span class="muted">{{ oncall_selected.name }}</span></h2>
-<form method="post" action="/escalation/oncall/{{ oncall_selected.id }}/update" class="oncall-form-grid" id="oncall-form" data-oncall-form>
-{% elif oncall_form_mode == "clone" %}
-<h2 id="oncall-form-title">Clone on-call {% with %}{% set tip %}Copy of {{ oncall_clone_name }}. Tweak the fields, then Save to create a new window. Cancel discards the draft.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-<form method="post" action="/escalation/oncall" class="oncall-form-grid" id="oncall-form" data-oncall-form>
-{% else %}
-<h2 id="oncall-form-title">Add on-call</h2>
-<form method="post" action="/escalation/oncall" class="oncall-form-grid" id="oncall-form" data-oncall-form>
-{% endif %}
-  {% if oncall_error %}<p class="error" role="alert">{{ oncall_error }}</p>{% endif %}
-  <div class="oncall-form-when">
-    <label>Weekday
-      <select name="weekday">
-        {% for day in weekdays %}
-        <option value="{{ loop.index0 }}" {% if oc.weekday == loop.index0 %}selected{% endif %}>{{ day }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>From <input name="start" type="time" value="{{ oc.start or '08:00' }}" required></label>
-    <label>Until <input name="end" type="time" value="{{ oc.end or '16:00' }}" required></label>
-  </div>
-  <div class="oncall-form-who">
-    <label>Name <input name="name" required placeholder="Ana" value="{{ oc.name }}"></label>
-    <label>Email <input name="email" type="email" required placeholder="ana@dc.local" value="{{ oc.email }}"></label>
-    <label>Phone <input name="phone" placeholder="+381-11-000-0000" value="{{ oc.phone }}"></label>
-  </div>
-  <div class="row-actions">
-    <button type="submit">{% if oncall_form_mode == "clone" %}Save copy{% elif oncall_form_mode == "edit" %}Save{% else %}Add on-call slot{% endif %}</button>
-    <a href="/escalation#oncall">Cancel</a>
-  </div>
-</form>
-{% endif %}
+</div>
 <h2>Generated notifications {% with %}{% set tip %}The outbox is one table on Email & reports (/ops#mail). This page is escalation only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% endblock %}

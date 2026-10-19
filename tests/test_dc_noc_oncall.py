@@ -129,6 +129,11 @@ def test_l1_oncall_mails_the_current_address_and_dashboard_shows_them():
     assert f"/escalation/oncall/" in page.text and "/toggle" in page.text
     assert ">Remove<" in page.text and ">Edit<" in page.text
     assert "oncall-form-when" in page.text
+    assert "oncall-form-who" in page.text
+    assert page.text.index("oncall-form-when") < page.text.index("oncall-form-who")
+    assert 'class="escalation-oncall-form"' in page.text
+    assert "oncall-roster-wrap" in page.text
+    assert 'data-oncall-person' in page.text
     db.close()
 
 
@@ -216,7 +221,7 @@ def test_disabled_slot_is_skipped_and_can_be_edited_cloned_removed():
     exported = client.post("/escalation/oncall/export", data={"selected": str(slot_id), "format": "csv"})
     assert exported.status_code == 200
     assert exported.headers["content-type"].startswith("text/csv")
-    assert "When,Name,Email,Phone,Enabled" in exported.text.replace("\r", "")
+    assert "When,Name,Email,Phone,Phone 2,Enabled" in exported.text.replace("\r", "")
     assert "Eli Night" in exported.text
 
     gone = client.post("/escalation/oncall/bulk-delete", data={"selected": str(slot_id), "next": "/escalation#oncall"}, follow_redirects=False)

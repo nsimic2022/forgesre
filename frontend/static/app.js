@@ -826,6 +826,25 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
   });
 })();
 
+(function bindOncallPerson() {
+  document.querySelectorAll("[data-oncall-person]").forEach((sel) => {
+    sel.addEventListener("change", () => {
+      const opt = sel.options[sel.selectedIndex];
+      if (!opt || !opt.value) return;
+      const form = sel.closest("form");
+      if (!form) return;
+      const fill = (name, attr) => {
+        const input = form.querySelector('[name="' + name + '"]');
+        if (input) input.value = opt.getAttribute(attr) || "";
+      };
+      fill("name", "data-name");
+      fill("email", "data-email");
+      fill("phone", "data-phone");
+      fill("phone2", "data-phone2");
+    });
+  });
+})();
+
 (function bindAssetReachability() {
   const boxes = document.querySelectorAll("[data-asset-reach]");
   if (!boxes.length) return;

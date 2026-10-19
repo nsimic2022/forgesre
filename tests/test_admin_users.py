@@ -157,3 +157,80 @@ def test_api_update_and_delete_user():
     db.expire_all()
     assert db.query(User).filter_by(id=user_id).first() is None
     db.close()
+
+
+def test_admin_create_user_phones_feed_oncall_picker():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    page = client.get("/admin")
+    assert page.status_code == 200
+    create = page.text.split("<h3>Create user</h3>", 1)[1]
+    assert (
+        create.index('name="name"')
+        < create.index('name="phone"')
+        < create.index('name="phone2"')
+        < create.index('name="email"')
+        < create.index('name="password"')
+        < create.index('name="role"')
+    )
+    created = client.post(
+        "/admin/users",
+        data={
+            "email": "noc@dc.local",
+            "name": "Noc One",
+            "password": "noc-pass",
+            "role": "analyst",
+            "phone": "+381-11-555-0100",
+            "phone2": "+381-11-555-0101",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+    row = db.query(User).filter_by(email="noc@dc.local").one()
+    assert row.phone == "+381-11-555-0100"
+    assert row.phone2 == "+381-11-555-0101"
+    listed = client.get("/admin")
+    assert "+381-11-555-0100" in listed.text
+    assert "+381-11-555-0101" in listed.text
+    saved = client.post(
+        f"/admin/users/{row.id}",
+        data={
+            "email": "noc@dc.local",
+            "name": "Noc One",
+            "password": "",
+            "role": "analyst",
+            "phone": "+381-11-555-0200",
+            "phone2": "+381-11-555-0201",
+        },
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    db.refresh(row)
+    assert row.phone == "+381-11-555-0200"
+    assert row.phone2 == "+381-11-555-0201"
+    esc = client.get("/escalation")
+    assert esc.status_code == 200
+    picker = esc.text.split("data-oncall-person", 1)[1].split("</select>", 1)[0]
+    assert "noc@dc.local" in picker
+    assert "Noc One" in picker
+    assert "+381-11-555-0200" in picker
+    assert "+381-11-555-0201" in picker
+    slot = client.post(
+        "/escalation/oncall",
+        data={
+            "weekday": "0",
+            "start": "08:00",
+            "end": "16:00",
+            "name": "Noc One",
+            "email": "noc@dc.local",
+            "phone": "+381-11-555-0200",
+            "phone2": "+381-11-555-0201",
+        },
+        follow_redirects=False,
+    )
+    assert slot.status_code in {302, 303}
+    roster = client.get("/escalation")
+    assert "+381-11-555-0200" in roster.text
+    assert "+381-11-555-0201" in roster.text
+    db.close()

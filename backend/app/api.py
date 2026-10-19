@@ -120,6 +120,8 @@ class UserBody(BaseModel):
     name: str
     password: str
     role: str = "analyst"
+    phone: str = ""
+    phone2: str = ""
 
 
 class UserUpdateBody(BaseModel):
@@ -127,6 +129,8 @@ class UserUpdateBody(BaseModel):
     name: str | None = None
     password: str | None = None
     role: str | None = None
+    phone: str | None = None
+    phone2: str | None = None
 
 
 class PlayruleBody(BaseModel):
@@ -1244,7 +1248,16 @@ def create_user(body: UserBody, db: Session = Depends(get_db), user: User = Depe
     from app.users import create_user as add_user
 
     try:
-        row = add_user(db, user, email=body.email, name=body.name, password=body.password, role=body.role)
+        row = add_user(
+            db,
+            user,
+            email=body.email,
+            name=body.name,
+            password=body.password,
+            role=body.role,
+            phone=body.phone,
+            phone2=body.phone2,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()
@@ -1272,6 +1285,8 @@ def update_user_api(
             name=body.name,
             password=body.password or "",
             role=body.role,
+            phone=body.phone,
+            phone2=body.phone2,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
