@@ -5,6 +5,7 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 
 from app.demo_ids import DEMO_ASSET_PREFIX, is_demo_asset_id
+from app.asset_ladder import DEFAULT_POLICY_STEPS, is_vanilla_three_default
 from app.models import AuditLog, Asset, EscalationPolicy, Incident, Playbook, Playrule, User, utcnow
 from app.security import hash_password
 from app.settings import settings
@@ -306,13 +307,12 @@ def seed(db: Session) -> None:
         policy = EscalationPolicy(
             slug="default-warning",
             name="Default warning",
-            steps=[
-                {"after_minutes": 0, "target": "team", "channel": "email"},
-                {"after_minutes": 15, "target": "team-lead", "channel": "email"},
-                {"after_minutes": 30, "target": "engineer", "channel": "email"},
-            ],
+            steps=list(DEFAULT_POLICY_STEPS),
         )
         db.add(policy)
+        db.flush()
+    elif is_vanilla_three_default(policy.steps):
+        policy.steps = list(DEFAULT_POLICY_STEPS)
         db.flush()
 
     if db.query(Playrule).filter_by(name="high-cpu").first() is None:

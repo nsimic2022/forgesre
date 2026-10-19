@@ -31,7 +31,7 @@ def test_info_tip_partial_and_css_exist():
     assert ".info-tip" in css
     assert ".info-tip-bubble" in css
     assert "bindInfoTips" in js
-    assert "app.css?v=v09-11" in base
+    assert "app.css?v=v09-12" in base
 
 
 def test_discovery_and_assets_include_info_tip():
@@ -99,7 +99,7 @@ def test_title_subtitles_live_only_in_info_tips():
     esc = (TEMPLATES / "escalation.html").read_text(encoding="utf-8")
     esc_h1 = esc.split("</h1>", 1)[0]
     assert esc_h1.count('include "_info_tip.html"') == 1
-    assert "Each step is minutes after the incident opened" in esc_h1
+    assert "Each level is minutes after the incident opened" in esc_h1
     assert "does not invent" in esc_h1
     assert "Acknowledge stops further steps" in esc_h1
     assert "does not invent" not in _outside_tips(esc)

@@ -366,7 +366,7 @@ th, td {
   vertical-align: middle;
 }
 table tbody tr:hover td { background: var(--row-hover); }
-/* v09-11: Escalation two-column policy + on-call form; v09-10 card-rows stay. */
+/* v09-12: Default / Create policy is L1–L4, same rungs as incident cubes. */
 .list-scroll > table,
 .dash-recent-scroll > table,
 .health-table,
@@ -1916,6 +1916,7 @@ td.ops-report-actions .row-actions a.button {
   .ops-report-cols { flex-direction: column; }
   .escalation-cols { flex-direction: column; }
   .oncall-form-grid { grid-template-columns: 1fr; }
+  .policy-ladder { grid-template-columns: 1fr; }
   .asset-detail-split { grid-template-columns: minmax(0, 1fr); }
   .asset-detail-col-1-4 { max-height: none; }
   .asset-chart-grid,
@@ -2016,6 +2017,23 @@ details.rule-note-fields summary { cursor: pointer; color: var(--muted); font-si
 .escalation-policies > h2,
 .escalation-create > h2 { margin-top: 0; }
 .escalation-create form.stack { max-width: none; }
+.policy-ladder {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem 1rem;
+  width: 100%;
+  margin: 0.35rem 0 0.4rem;
+}
+.policy-ladder .ladder-level {
+  min-width: 0;
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.policy-ladder .ladder-label { font-weight: 700; }
+.policy-ladder label { display: flex; flex-direction: column; gap: 0.2rem; margin: 0.35rem 0 0; }
+.policy-ladder input { width: 100%; box-sizing: border-box; }
 .oncall-form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

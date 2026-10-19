@@ -341,15 +341,15 @@ def test_empty_asset_ladder_maps_default_warning_onto_incident_cubes():
 
     listed = client.get("/incidents", params={"q": incident.number, "per_page": "100"}).text
     cubes = _cubes(listed.split("incidents-table", 1)[1].split(incident.number, 1)[1].split("</tr>", 1)[0])
-    assert [tone for _level, tone, _title in cubes] == ["red", "green", "green", "grey"]
+    assert [tone for _level, tone, _title in cubes] == ["red", "green", "green", "green"]
     assert cubes[0][2].startswith("L1 · 0 min · team") and cubes[0][2].endswith("escalated")
     assert cubes[1][2] == "L2 · 15 min · team-lead"
     assert cubes[2][2] == "L3 · 30 min · engineer"
-    assert cubes[3][2] == "L4 · no such level"
+    assert cubes[3][2] == "L4 · 60 min · manager"
     incident.started_at = utcnow() - timedelta(minutes=20)
     db.commit()
     process_escalations(db)
     listed = client.get("/incidents", params={"q": incident.number, "per_page": "100"}).text
     cubes = _cubes(listed.split("incidents-table", 1)[1].split(incident.number, 1)[1].split("</tr>", 1)[0])
-    assert [tone for _level, tone, _title in cubes] == ["red", "red", "green", "grey"]
+    assert [tone for _level, tone, _title in cubes] == ["red", "red", "green", "green"]
     db.close()

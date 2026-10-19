@@ -18,6 +18,23 @@ LADDER_LEVELS: tuple[tuple[int, str], ...] = (
     (3, "L3 Engineer"),
     (4, "L4 Manager"),
 )
+# Same four rungs as the asset form / incident cubes. Role targets mail the owner email
+# (oncall mails whoever is on the roster now). An address is mailed as written.
+POLICY_LEVEL_HINTS: dict[int, tuple[int, str]] = {
+    1: (0, "team"),
+    2: (15, "team-lead"),
+    3: (30, "engineer"),
+    4: (60, "manager"),
+}
+DEFAULT_POLICY_STEPS: list[dict[str, Any]] = [
+    {"after_minutes": minutes, "target": target, "channel": "email", "level": level}
+    for level, (minutes, target) in POLICY_LEVEL_HINTS.items()
+]
+VANILLA_THREE_DEFAULT = (
+    (0, "team"),
+    (15, "team-lead"),
+    (30, "engineer"),
+)
 MAX_MINUTES = 10080
 
 
@@ -26,6 +43,96 @@ def ladder_label(level: int) -> str:
         if number == level:
             return label
     return f"L{level}"
+
+
+def _step_level(step: dict[str, Any], index: int) -> int:
+    raw = step.get("level")
+    try:
+        level = int(raw)
+    except (TypeError, ValueError):
+        level = 0
+    if level in (1, 2, 3, 4):
+        return level
+    return 4 if index >= 3 else index + 1
+
+
+def policy_step_signature(steps: list[dict[str, Any]] | None) -> tuple[tuple[int, str], ...]:
+    rows: list[tuple[int, str]] = []
+    for step in steps or []:
+        try:
+            after = int(step.get("after_minutes") or 0)
+        except (TypeError, ValueError):
+            after = 0
+        rows.append((after, str(step.get("target") or "").strip().lower()))
+    return tuple(rows)
+
+
+def is_vanilla_three_default(steps: list[dict[str, Any]] | None) -> bool:
+    """Unedited Default warning from before L4 existed — safe to add Manager."""
+    return policy_step_signature(steps) == VANILLA_THREE_DEFAULT
+
+
+def with_policy_levels(steps: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Copy steps and stamp L1–L4 when the stored JSON has no level yet."""
+    out: list[dict[str, Any]] = []
+    for index, step in enumerate(steps or []):
+        row = dict(step)
+        row["channel"] = "email"
+        row["level"] = _step_level(row, index)
+        out.append(row)
+    return out
+
+
+def policy_ladder_slots(steps: list[dict[str, Any]] | None, *, create: bool = False) -> list[dict[str, Any]]:
+    """Four L1–L4 rows for Create / Edit policy. Missing levels are off (create fills the seed)."""
+    by_level: dict[int, dict[str, Any]] = {}
+    for index, step in enumerate(steps or []):
+        level = _step_level(step, index)
+        by_level.setdefault(level, step)
+    slots: list[dict[str, Any]] = []
+    for level, label in LADDER_LEVELS:
+        hint_minutes, hint_target = POLICY_LEVEL_HINTS[level]
+        row = by_level.get(level)
+        if create and not steps:
+            row = {"after_minutes": hint_minutes, "target": hint_target, "level": level}
+        on = row is not None
+        minutes = hint_minutes if row is None else int(row.get("after_minutes") or 0)
+        target = hint_target if row is None else str(row.get("target") or "").strip() or hint_target
+        slots.append(
+            {
+                "level": level,
+                "label": label,
+                "on": on,
+                "minutes": minutes,
+                "target": target,
+            }
+        )
+    return slots
+
+
+def policy_steps_from_levels(
+    ons: list[str] | list[Any],
+    minutes: list[str] | list[Any],
+    targets: list[str] | list[Any],
+) -> list[dict[str, Any]]:
+    """Posted L1–L4. OFF or blank recipient is omitted — that cube stays gray."""
+    out: list[dict[str, Any]] = []
+    for index, (level, _label) in enumerate(LADDER_LEVELS):
+        on = ons[index] if index < len(ons) else ""
+        if not str(on or "").strip():
+            continue
+        target = str(targets[index] if index < len(targets) else "").strip()
+        if not target:
+            continue
+        out.append(
+            {
+                "after_minutes": _minutes(minutes[index] if index < len(minutes) else 0),
+                "target": target[:255],
+                "channel": "email",
+                "level": level,
+            }
+        )
+    return out
 
 
 def _valid_email(value: str) -> str:

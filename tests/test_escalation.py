@@ -53,7 +53,8 @@ def test_parse_policy_steps_minutes_role():
 
 def test_parse_policy_steps_empty_uses_default_warning():
     steps = parse_policy_steps("   \n")
-    assert [s["after_minutes"] for s in steps] == [0, 15, 30]
+    assert [s["after_minutes"] for s in steps] == [0, 15, 30, 60]
+    assert steps[3]["target"] == "manager"
 
 
 def test_escalation_page_has_create_cancel_and_saves_policy():
@@ -76,8 +77,14 @@ def test_escalation_page_has_create_cancel_and_saves_policy():
     assert 'class="escalation-cols"' in page.text
     assert "<h2>Create escalation policy</h2>" in page.text
     assert page.text.index("escalation-policies") < page.text.index("escalation-create")
+    assert "L1 NOC" in page.text and "L4 Manager" in page.text
+    assert 'name="ladder_present"' in page.text
+    assert 'name="ladder_target_4"' in page.text
     assert 'class="oncall-form-grid"' in page.text
     assert "oncall-form-when" in page.text and "oncall-form-who" in page.text
+    default = db.query(EscalationPolicy).filter_by(slug="default-warning").one()
+    assert [int(step["after_minutes"]) for step in default.steps] == [0, 15, 30, 60]
+    assert [str(step["target"]) for step in default.steps] == ["team", "team-lead", "engineer", "manager"]
     created = client.post(
         "/escalation",
         data={
@@ -134,7 +141,7 @@ def test_create_with_webhook_shows_message_and_saves_nothing():
     assert 'class="error" role="alert"' in posted.text
     assert "webhook is not supported" in posted.text
     assert "Escalation sends email only" in posted.text
-    assert "10 engineer webhook</textarea>" in posted.text
+    assert 'name="ladder_target_1"' in posted.text
     db.expire_all()
     assert db.query(EscalationPolicy).filter_by(slug=slug).first() is None
     db.close()
@@ -151,7 +158,9 @@ def test_edit_policy_prefills_form_and_saves_new_steps():
     assert form.status_code == 200
     assert "Edit escalation policy" in form.text
     assert f'action="/escalation/{row.id}/update"' in form.text
-    assert "0 team\n20 engineer</textarea>" in form.text
+    assert 'name="ladder_target_1" value="team"' in form.text
+    assert 'name="ladder_minutes_2" value="20"' in form.text or 'value="20"' in form.text
+    assert 'name="ladder_target_2" value="engineer"' in form.text
     assert f'value="{slug}" readonly' in form.text
     saved = client.post(
         f"/escalation/{row.id}/update",
@@ -163,8 +172,8 @@ def test_edit_policy_prefills_form_and_saves_new_steps():
     row = db.query(EscalationPolicy).filter_by(slug=slug).one()
     assert row.name == "Edited ladder"
     assert row.steps == [
-        {"after_minutes": 0, "target": "noc@dc.local", "channel": "email"},
-        {"after_minutes": 5, "target": "team-lead", "channel": "email"},
+        {"after_minutes": 0, "target": "noc@dc.local", "channel": "email", "level": 1},
+        {"after_minutes": 5, "target": "team-lead", "channel": "email", "level": 2},
     ]
     refused = client.post(
         f"/escalation/{row.id}/update",
@@ -266,5 +275,61 @@ def test_legacy_webhook_step_is_labelled_and_mailed_as_email():
     page = _client().get("/escalation?per_page=100")
     assert "webhook: sent as email" in page.text
     form = _client().get(f"/escalation?edit={policy.id}")
-    assert "0 team</textarea>" in form.text
+    assert 'name="ladder_target_1" value="team"' in form.text
+    db.close()
+
+
+def test_seed_adds_l4_to_vanilla_three_step_default():
+    db = _db()
+    policy = db.query(EscalationPolicy).filter_by(slug="default-warning").one()
+    policy.steps = [
+        {"after_minutes": 0, "target": "team", "channel": "email"},
+        {"after_minutes": 15, "target": "team-lead", "channel": "email"},
+        {"after_minutes": 30, "target": "engineer", "channel": "email"},
+    ]
+    db.commit()
+    seed(db)
+    db.expire_all()
+    row = db.query(EscalationPolicy).filter_by(slug="default-warning").one()
+    assert [str(step["target"]) for step in row.steps] == ["team", "team-lead", "engineer", "manager"]
+    assert int(row.steps[3]["after_minutes"]) == 60
+    db.close()
+
+
+def test_create_policy_posts_l1_l4_fields():
+    db = _db()
+    client = _client()
+    slug = f"esc-l4-{uuid4().hex[:6]}"
+    posted = client.post(
+        "/escalation",
+        data={
+            "name": "Four rungs",
+            "slug": slug,
+            "ladder_present": "1",
+            "ladder_on_1": "1",
+            "ladder_minutes_1": "0",
+            "ladder_target_1": "team",
+            "ladder_on_2": "1",
+            "ladder_minutes_2": "15",
+            "ladder_target_2": "team-lead",
+            "ladder_on_3": "1",
+            "ladder_minutes_3": "30",
+            "ladder_target_3": "engineer",
+            "ladder_on_4": "1",
+            "ladder_minutes_4": "60",
+            "ladder_target_4": "duty@dc.local",
+        },
+        follow_redirects=False,
+    )
+    assert posted.status_code == 302, posted.text
+    row = db.query(EscalationPolicy).filter_by(slug=slug).one()
+    assert [(int(step["after_minutes"]), step["target"], int(step["level"])) for step in row.steps] == [
+        (0, "team", 1),
+        (15, "team-lead", 2),
+        (30, "engineer", 3),
+        (60, "duty@dc.local", 4),
+    ]
+    listing = client.get("/escalation")
+    assert "L4 Manager" in listing.text
+    assert "duty@dc.local" in listing.text
     db.close()

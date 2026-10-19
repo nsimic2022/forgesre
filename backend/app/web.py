@@ -46,6 +46,14 @@ from app.asset_extras import (
     playrule_ids_from_form,
     support_status,
 )
+from app.asset_ladder import (
+    DEFAULT_POLICY_STEPS,
+    LADDER_LEVELS,
+    POLICY_LEVEL_HINTS,
+    policy_ladder_slots,
+    policy_steps_from_levels,
+    with_policy_levels,
+)
 from app.ladder_cubes import asset_ladder_cubes, incident_ladder_cubes
 from app.playrule_mute import muted_playrule_ids, playrule_off_from_form
 from app.asset_snmp import AUTH_PROTOCOLS, PRIV_PROTOCOLS, SNMP_VERSIONS, V3_LEVELS, auth_status, snmp_from_form
@@ -133,6 +141,7 @@ from app.services import (
     short_when_label,
     parse_policy_steps,
     policy_step_problems,
+    policy_steps_problems,
     policy_steps_text,
     run_demo,
     run_demo_host,
@@ -2477,8 +2486,69 @@ def playbook_delete(
 
 
 DEFAULT_POLICY_SLUG = "default-warning"
-ESCALATION_FORM_DEFAULT = {"name": "", "slug": "", "steps": "0 team\n15 team-lead\n30 engineer"}
 ONCALL_FORM_DEFAULT = {"weekday": 0, "start": "08:00", "end": "16:00", "name": "", "email": "", "phone": ""}
+
+
+def _escalation_form(*, name: str = "", slug: str = "", steps: str = "", ladder: list | None = None) -> dict:
+    return {
+        "name": name,
+        "slug": slug,
+        "steps": steps,
+        "ladder": ladder if ladder is not None else policy_ladder_slots(DEFAULT_POLICY_STEPS),
+    }
+
+
+def _posted_policy_steps(
+    *,
+    steps: str,
+    ladder_present: str,
+    on1: str,
+    minutes1: str,
+    target1: str,
+    on2: str,
+    minutes2: str,
+    target2: str,
+    on3: str,
+    minutes3: str,
+    target3: str,
+    on4: str,
+    minutes4: str,
+    target4: str,
+) -> tuple[list[dict], str, list[dict]]:
+    """L1–L4 form when posted; otherwise the old minutes-role text (tests / API)."""
+    if str(ladder_present or "").strip():
+        ons = [on1, on2, on3, on4]
+        minutes = [minutes1, minutes2, minutes3, minutes4]
+        targets = [target1, target2, target3, target4]
+        raw = policy_steps_from_levels(ons, minutes, targets)
+        slots: list[dict] = []
+        for index, (level, label) in enumerate(LADDER_LEVELS):
+            hint_minutes, hint_target = POLICY_LEVEL_HINTS[level]
+            typed_minutes = str(minutes[index] or "").strip()
+            typed_target = str(targets[index] or "").strip()
+            slots.append(
+                {
+                    "level": level,
+                    "label": label,
+                    "on": bool(str(ons[index] or "").strip()),
+                    "minutes": typed_minutes if typed_minutes else hint_minutes,
+                    "target": typed_target or hint_target,
+                }
+            )
+        missing = [
+            LADDER_LEVELS[index][1]
+            for index in range(4)
+            if str(ons[index] or "").strip() and not str(targets[index] or "").strip()
+        ]
+        error = " ".join(policy_steps_problems(raw))
+        if missing:
+            error = (error + " " if error else "") + "; ".join(f"{label} is ON but has no recipient." for label in missing)
+        if not raw and not error:
+            error = "Need at least one L1–L4 level."
+        return raw, error, slots
+    error = " ".join(policy_step_problems(steps))
+    raw = with_policy_levels(parse_policy_steps(steps))
+    return raw, error, policy_ladder_slots(raw)
 
 
 def _escalation_view(
@@ -2523,7 +2593,8 @@ def _escalation_view(
         pager=pager,
         form_mode=form_mode,
         selected=selected,
-        form=form or dict(ESCALATION_FORM_DEFAULT),
+        form=form or _escalation_form(),
+        policy_ladders={row.id: policy_ladder_slots(row.steps) for row in policies},
         error=error,
         usage=usage,
         default_slug=DEFAULT_POLICY_SLUG,
@@ -2558,7 +2629,12 @@ def escalation_page(
     if edit_id is not None and can(user, "write_play"):
         selected = db.get(EscalationPolicy, edit_id)
     if selected is not None:
-        form = {"name": selected.name, "slug": selected.slug, "steps": policy_steps_text(selected.steps)}
+        form = _escalation_form(
+            name=selected.name,
+            slug=selected.slug,
+            steps=policy_steps_text(selected.steps),
+            ladder=policy_ladder_slots(selected.steps),
+        )
     oncall_row = None
     oncall_form = None
     oncall_form_mode = "create"
@@ -2600,21 +2676,47 @@ def escalation_create(
     name: str = Form(...),
     slug: str = Form(...),
     steps: str = Form(""),
+    ladder_present: str = Form(""),
+    ladder_on_1: str = Form(""),
+    ladder_minutes_1: str = Form(""),
+    ladder_target_1: str = Form(""),
+    ladder_on_2: str = Form(""),
+    ladder_minutes_2: str = Form(""),
+    ladder_target_2: str = Form(""),
+    ladder_on_3: str = Form(""),
+    ladder_minutes_3: str = Form(""),
+    ladder_target_3: str = Form(""),
+    ladder_on_4: str = Form(""),
+    ladder_minutes_4: str = Form(""),
+    ladder_target_4: str = Form(""),
 ):
     if not can(user, "write_play"):
         raise HTTPException(status_code=403)
     clean_slug = (slug or "").strip().lower().replace(" ", "-")
-    form = {"name": name, "slug": slug, "steps": steps}
-    error = ""
+    raw, error, ladder = _posted_policy_steps(
+        steps=steps,
+        ladder_present=ladder_present,
+        on1=ladder_on_1,
+        minutes1=ladder_minutes_1,
+        target1=ladder_target_1,
+        on2=ladder_on_2,
+        minutes2=ladder_minutes_2,
+        target2=ladder_target_2,
+        on3=ladder_on_3,
+        minutes3=ladder_minutes_3,
+        target3=ladder_target_3,
+        on4=ladder_on_4,
+        minutes4=ladder_minutes_4,
+        target4=ladder_target_4,
+    )
+    form = _escalation_form(name=name, slug=slug, steps=steps or policy_steps_text(raw), ladder=ladder)
     if not clean_slug:
         error = "Slug is required."
     elif db.query(EscalationPolicy).filter_by(slug=clean_slug).first():
         error = f"Slug {clean_slug} already exists. Edit that policy instead, or pick another slug."
-    else:
-        error = " ".join(policy_step_problems(steps))
     if error:
         return _escalation_view(request, db, user, form=form, error=error, status_code=400)
-    row = EscalationPolicy(name=name.strip(), slug=clean_slug, steps=parse_policy_steps(steps))
+    row = EscalationPolicy(name=name.strip(), slug=clean_slug, steps=raw)
     db.add(row)
     audit(db, "escalation.create", actor=user.email, object_type="escalation_policy", object_id=clean_slug)
     db.commit()
@@ -2629,26 +2731,54 @@ def escalation_update(
     user: User = Depends(login_required),
     name: str = Form(...),
     steps: str = Form(""),
+    ladder_present: str = Form(""),
+    ladder_on_1: str = Form(""),
+    ladder_minutes_1: str = Form(""),
+    ladder_target_1: str = Form(""),
+    ladder_on_2: str = Form(""),
+    ladder_minutes_2: str = Form(""),
+    ladder_target_2: str = Form(""),
+    ladder_on_3: str = Form(""),
+    ladder_minutes_3: str = Form(""),
+    ladder_target_3: str = Form(""),
+    ladder_on_4: str = Form(""),
+    ladder_minutes_4: str = Form(""),
+    ladder_target_4: str = Form(""),
 ):
     if not can(user, "write_play"):
         raise HTTPException(status_code=403)
     row = db.get(EscalationPolicy, policy_id)
     if row is None:
         raise HTTPException(status_code=404)
-    problems = policy_step_problems(steps)
-    if problems or not name.strip():
+    raw, error, ladder = _posted_policy_steps(
+        steps=steps,
+        ladder_present=ladder_present,
+        on1=ladder_on_1,
+        minutes1=ladder_minutes_1,
+        target1=ladder_target_1,
+        on2=ladder_on_2,
+        minutes2=ladder_minutes_2,
+        target2=ladder_target_2,
+        on3=ladder_on_3,
+        minutes3=ladder_minutes_3,
+        target3=ladder_target_3,
+        on4=ladder_on_4,
+        minutes4=ladder_minutes_4,
+        target4=ladder_target_4,
+    )
+    if error or not name.strip():
         return _escalation_view(
             request,
             db,
             user,
             form_mode="edit",
             selected=row,
-            form={"name": name, "slug": row.slug, "steps": steps},
-            error=" ".join(problems) or "Name is required.",
+            form=_escalation_form(name=name, slug=row.slug, steps=steps or policy_steps_text(raw), ladder=ladder),
+            error=error or "Name is required.",
             status_code=400,
         )
     row.name = name.strip()
-    row.steps = parse_policy_steps(steps)
+    row.steps = raw
     audit(db, "escalation.update", actor=user.email, object_type="escalation_policy", object_id=row.slug)
     db.commit()
     return RedirectResponse("/escalation", status_code=302)

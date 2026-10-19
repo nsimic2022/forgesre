@@ -2,7 +2,7 @@
 {% import "_select.html" as sel %}
 {% block title %}Escalation · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Escalation {% with %}{% set tip %}Used when an asset Escalation is empty (same 30s loop as before, not a ticket system). Each step is minutes after the incident opened and an email recipient: an address is mailed as written, a role (team, team-lead, engineer) mails the asset owner email, and a role with no owner email is recorded as no-recipient and not sent — ForgeSRE does not invent role@forgesre.local addresses. The 0 min step is the mail at open; without it, nothing is sent at open. Email is the only channel: there is no webhook, SMS, or chat step. Seeded Default warning (0 / 15 / 30 min) is what new rules attach unless you pick another policy here. An asset with any Escalation level filled does not also use this page. Edit changes escalation for incidents that open after Save. Remove moves its rules to Default warning. Acknowledge stops further steps. SMTP off means the row stays generated — that is the lab outbox. Scheduled reports are a different mail path.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Escalation {% with %}{% set tip %}Used when an asset Escalation is empty (same 30s loop as before, not a ticket system). L1–L4 here is the same four rungs as the incident cubes and the asset form: L1 NOC, L2 Shift, L3 Engineer, L4 Manager. Each level is minutes after the incident opened and a recipient: an address is mailed as written, a role (team, team-lead, engineer, manager) mails the asset owner email, oncall mails whoever is on the roster now, and a role with no owner email is recorded as no-recipient and not sent — ForgeSRE does not invent role@forgesre.local addresses. The 0 min step is the mail at open; without it, nothing is sent at open. Email is the only channel: there is no webhook, SMS, or chat step. Seeded Default warning (0 / 15 / 30 / 60 min) is what new rules attach unless you pick another policy here. An asset with any Escalation level filled does not also use this page. Edit changes escalation for incidents that open after Save. Remove moves its rules to Default warning. Acknowledge stops further steps. SMTP off means the row stays generated — that is the lab outbox. Scheduled reports are a different mail path.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 <div class="escalation-cols">
 <div class="escalation-policies">
 <h2>Default escalation</h2>
@@ -12,12 +12,17 @@
 <section class="card policy-card {% if selected and selected.id == policy.id %}selected{% endif %}" data-list-row>
   <h2>{{ policy.name }} <span class="muted policy-slug"><code>{{ policy.slug }}</code></span></h2>
   <table class="scan-list step-list">
-    <thead><tr><th>After</th><th>Recipient</th></tr></thead>
+    <thead><tr><th>Level</th><th>After</th><th>Recipient</th></tr></thead>
     <tbody>
-    {% for step in policy.steps %}
-      <tr>
-        <td class="inc-when">{{ step.after_minutes }} min</td>
-        <td>{% if '@' in (step.target or '') %}<code>{{ step.target }}</code>{% elif (step.target or '')|lower == 'oncall' %}oncall <span class="muted">→ whoever is on call now{% if oncall %} ({{ oncall.email }}){% endif %}</span>{% else %}{{ step.target }} <span class="muted">→ owner email</span>{% endif %}{% if step.channel and step.channel != 'email' %} <span class="pill warn" title="Escalation has no {{ step.channel }} channel. This step is mailed. Edit and Save to clear it.">{{ step.channel }}: sent as email</span>{% endif %}</td>
+    {% for slot in policy_ladders.get(policy.id, []) %}
+      <tr class="{% if not slot.on %}slot-off{% endif %}">
+        <td>{{ slot.label }}</td>
+        {% if slot.on %}
+        <td class="inc-when">{{ slot.minutes }} min</td>
+        <td>{% if '@' in (slot.target or '') %}<code>{{ slot.target }}</code>{% elif (slot.target or '')|lower == 'oncall' %}oncall <span class="muted">→ whoever is on call now{% if oncall %} ({{ oncall.email }}){% endif %}</span>{% else %}{{ slot.target }} <span class="muted">→ owner email</span>{% endif %}{% for step in policy.steps %}{% if step.channel and step.channel != 'email' and (step.target or '') == slot.target %} <span class="pill warn" title="Escalation has no {{ step.channel }} channel. This step is mailed. Edit and Save to clear it.">{{ step.channel }}: sent as email</span>{% endif %}{% endfor %}</td>
+        {% else %}
+        <td colspan="2" class="muted">off</td>
+        {% endif %}
       </tr>
     {% endfor %}
     </tbody>
@@ -52,9 +57,33 @@
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <label>Name <input name="name" placeholder="Default warning" required value="{{ form.name }}"></label>
   <label>Slug <input name="slug" placeholder="default-warning" required value="{{ form.slug }}" {% if form_mode == "edit" %}readonly{% endif %}></label>
-  <label><span class="label-line">Steps (one per line: minutes then role or email) {% with %}{% set tip %}Each line is minutes then a role (team, team-lead, engineer, oncall) or an email address. team / team-lead / engineer mail the asset owner email. oncall mails whoever is on the roster now. An address is used as written. Email only — webhook, SMS or a URL is refused.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
-    <textarea name="steps" rows="6">{{ form.steps }}</textarea>
-  </label>
+  <input type="hidden" name="ladder_present" value="1">
+  <p class="muted">L1–L4 {% with %}{% set tip %}Same four rungs as the incident cubes and Add / Edit asset. ON needs minutes and a role (team, team-lead, engineer, manager, oncall) or an email. OFF is skipped and that cube stays gray. team / team-lead / engineer / manager mail the asset owner email. oncall mails whoever is on the roster now. Email only — webhook, SMS or a URL is refused.{% endset %}{% include "_info_tip.html" %}{% endwith %}</p>
+  {% set minute_hint = {1: "0", 2: "15", 3: "30", 4: "60"} %}
+  <div class="policy-ladder ladder-levels">
+    {% for slot in form.ladder %}
+    <div class="ladder-level" data-ladder-level="{{ slot.level }}">
+      <div class="alarm-row">
+        <button type="button" class="onoff {{ 'is-on' if slot.on else 'is-off' }}" data-onoff aria-pressed="{{ 'true' if slot.on else 'false' }}">{% if slot.on %}ON{% else %}OFF{% endif %}</button>
+        <input type="checkbox" class="onoff-check" name="ladder_on_{{ slot.level }}" value="1" {% if slot.on %}checked{% endif %} tabindex="-1">
+        <span class="ladder-label">{{ slot.label }}</span>
+      </div>
+      <label>Minutes
+        <input type="number" name="ladder_minutes_{{ slot.level }}" min="0" max="10080" step="1" inputmode="numeric" value="{{ slot.minutes }}" placeholder="{{ minute_hint[slot.level] }}">
+      </label>
+      <label>Recipient
+        <input name="ladder_target_{{ slot.level }}" value="{{ slot.target }}" list="policy-roles" placeholder="team or noc@dc.local" autocomplete="off">
+      </label>
+    </div>
+    {% endfor %}
+  </div>
+  <datalist id="policy-roles">
+    <option value="team"></option>
+    <option value="team-lead"></option>
+    <option value="engineer"></option>
+    <option value="manager"></option>
+    <option value="oncall"></option>
+  </datalist>
   <div class="row-actions">
     <button type="submit">Save</button>
     <a href="/escalation">Cancel</a>
