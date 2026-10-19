@@ -366,6 +366,7 @@ th, td {
   vertical-align: middle;
 }
 table tbody tr:hover td { background: var(--row-hover); }
+/* v09-14: Escalation is four same-style cards in one row; Add on-call is typed by hand. */
 /* v09-13: Escalation is three columns; Users carry phone / phone 2 for Add on-call. */
 /* v09-12: Default / Create policy is L1–L4, same rungs as incident cubes. */
 .list-scroll > table,
@@ -1918,9 +1919,9 @@ td.ops-report-actions .row-actions a.button {
   .escalation-cols { flex-direction: column; }
   .escalation-policies,
   .escalation-create,
-  .escalation-oncall-form { flex: 1 1 auto; max-width: none; }
+  .escalation-oncall-form,
+  .oncall-roster-wrap { flex: 1 1 auto; max-width: none; min-width: 0; }
   .oncall-form-grid { display: flex; flex-direction: column; }
-  .oncall-roster-wrap { width: 100%; min-width: 0; max-width: none; }
   .policy-ladder { grid-template-columns: 1fr; }
   .asset-detail-split { grid-template-columns: minmax(0, 1fr); }
   .asset-detail-col-1-4 { max-height: none; }
@@ -2003,33 +2004,32 @@ details.rule-note-fields { border: 1px solid var(--line); border-radius: 9px; pa
 details.rule-note-fields summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
 .alarm-limit { font-size: 0.82rem; margin: 0.15rem 0 0.35rem; }
 
-.policy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.8rem; margin-bottom: 1rem; }
+.policy-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.8rem; margin-bottom: 0.4rem; }
 .policy-grid .card { margin-bottom: 0; }
 .escalation-cols {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 1.25rem;
+  align-items: stretch;
+  gap: 0.9rem;
   width: 100%;
   margin-bottom: 1.25rem;
 }
-.escalation-policies,
-.escalation-create,
-.escalation-oncall-form {
-  flex: 1 1 0;
-  min-width: 16rem;
+.escalation-pane {
+  margin-bottom: 0;
+  min-width: 13rem;
+  box-sizing: border-box;
 }
-.escalation-policies > h2,
-.escalation-create > h2,
-.escalation-oncall-form > h2 { margin-top: 0; }
+.escalation-policies { flex: 1.05 1 14rem; }
+.escalation-create { flex: 1.05 1 14rem; }
+.escalation-oncall-form { flex: 0.72 1 12rem; }
+.oncall-roster-wrap { flex: 1.55 1 18rem; width: auto; max-width: none; min-width: 18rem; }
+.escalation-pane > h2 { margin-top: 0; }
+.escalation-pane > h3 { margin: 0 0 0.45rem; font-size: 1.02rem; }
+.policy-block.selected { outline: 1px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
 .escalation-create form.stack { max-width: none; }
-.oncall-roster-wrap {
-  width: 33.333%;
-  min-width: 20rem;
-  max-width: 36rem;
-  margin: 0 0 1.5rem;
-}
+.oncall-roster-wrap .pager-bar { margin-bottom: 0; }
+.oncall-roster-wrap .list-actions { flex-wrap: wrap; }
 .policy-ladder {
   display: grid;
   grid-template-columns: 1fr 1fr;

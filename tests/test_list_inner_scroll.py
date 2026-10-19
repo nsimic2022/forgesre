@@ -168,12 +168,14 @@ def test_every_paginated_page_has_a_list_box_with_pickable_rows():
 
 def test_card_lists_select_cards_inside_a_box():
     client = _client()
-    for path, card in (("/playbooks", "playbook-card"), ("/escalation", "policy-card")):
-        html = client.get(path).text
-        boxes = [b for b in _boxes(html) if card in b]
-        assert len(boxes) == 1, path
-        cards = re.findall(r'<section class="card ' + card + r'[^"]*" data-list-row>', boxes[0])
-        assert cards, path
+    books = client.get("/playbooks").text
+    book_boxes = [b for b in _boxes(books) if "playbook-card" in b]
+    assert len(book_boxes) == 1
+    assert re.findall(r'<section class="card playbook-card[^"]*" data-list-row>', book_boxes[0])
+    esc = client.get("/escalation").text
+    policy_boxes = [b for b in _boxes(esc) if "policy-block" in b]
+    assert len(policy_boxes) == 1
+    assert re.findall(r'<section class="policy-block[^"]*" data-list-row>', policy_boxes[0])
     raw = (TEMPLATES / "playbooks.html").read_text(encoding="utf-8")
     assert '<div class="list-scroll list-scroll-cards" data-list-scroll>' in raw
 
