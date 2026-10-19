@@ -112,7 +112,7 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert "[data-select-scope]:has([data-select-row]:checked) .list-actions" in css
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-14" in base and "app.js?v=v09-V" in base
+    assert "app.css?v=v09-15" in base and "app.js?v=v09-V" in base
 
     assets = _middle(client.get("/assets").text)
     _order(assets, ["View", "Edit", "Clone", "Verify", "Export", "Remove"])
@@ -175,10 +175,10 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     oncall = escalation.split('id="oncall"', 1)[1]
     oncall_table = oncall.split("<table", 1)[1].split("</table>", 1)[0]
     oncall_actions = _middle(oncall)
-    _order(oncall_actions, ["Edit", "Clone", "Export", "Remove"])
+    _order(oncall_actions, ["Edit", "Remove"])
     assert 'action="/escalation/oncall/open-edit"' in oncall_actions
-    assert 'action="/escalation/oncall/open-clone"' in oncall_actions
-    assert 'action="/escalation/oncall/export"' in oncall_actions
+    assert 'action="/escalation/oncall/open-clone"' not in oncall_actions
+    assert 'action="/escalation/oncall/export"' not in oncall_actions
     assert 'action="/escalation/oncall/bulk-delete"' in oncall_actions
     assert "/toggle" not in oncall_actions
     assert 'class="onoff' in oncall_table or "No on-call slots yet." in oncall_table
@@ -365,7 +365,7 @@ def test_edit_with_zero_or_two_rows_stays_on_the_list():
     assert "open-edit" not in engineer_books and "bulk-delete" not in engineer_books
     assert 'class="onoff' in engineer.get("/playrules").text
     engineer_oncall = _middle(engineer.get("/escalation").text.split('id="oncall"', 1)[1])
-    assert 'action="/escalation/oncall/export"' in engineer_oncall
+    assert 'action="/escalation/oncall/export"' not in engineer_oncall
     assert "open-edit" not in engineer_oncall and "open-clone" not in engineer_oncall and "bulk-delete" not in engineer_oncall
     db.close()
 

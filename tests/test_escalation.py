@@ -89,9 +89,18 @@ def test_escalation_page_has_create_cancel_and_saves_policy():
     assert 'data-oncall-person' not in page.text
     assert "Pick a user" not in page.text
     assert 'name="phone2"' in page.text
-    assert 'action="/escalation/oncall/open-clone"' in page.text
-    assert 'action="/escalation/oncall/export"' in page.text
+    assert 'action="/escalation/oncall/open-edit"' in page.text
+    assert 'action="/escalation/oncall/open-clone"' not in page.text
+    assert 'action="/escalation/oncall/export"' not in page.text
+    roster_head = page.text.split('data-oncall-roster', 1)[1].split("</thead>", 1)[0]
+    assert ">Phone<" not in roster_head
+    assert ">Email<" in roster_head
+    assert roster_head.index(">When<") < roster_head.index(">Name<") < roster_head.index(">Email<") < roster_head.index(">Enabled<")
+    assert "oncall-contact" in page.text
     css = (Path(__file__).resolve().parents[1] / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".content {" in css and "font-size: 0.82rem" in css.split(".content {", 1)[1].split("}", 1)[0]
+    assert "font-size: 0.82rem" in css.split("th, td {", 1)[1].split("}", 1)[0]
+    assert "font-size: 0.82rem" in css.split(".scan-list > tbody > tr > td {", 1)[1].split("}", 1)[0]
     assert ".escalation-oncall-form { flex: 0.72" in css
     assert ".oncall-roster-wrap { flex: 1.55" in css
     assert "flex-direction: column" in css.split(".oncall-form-grid {", 1)[1]
