@@ -1012,7 +1012,7 @@ _COMPOSE_IMAGE_PINS = {
     "netbox-redis": "redis:7-alpine",
     "netbox-db-init": "postgres:16-alpine",
     "netbox": "docker.io/netboxcommunity/netbox:v4.6.9-5.0.2",
-    "llm": "ghcr.io/ggml-org/llama.cpp:server",
+    "llm": "ghcr.io/ggml-org/llama.cpp:server-b11718",
     "mailserver": "ghcr.io/docker-mailserver/docker-mailserver:15.1.0",
     "roundcube": "roundcube/roundcubemail:1.6.11-apache",
 }
@@ -1026,6 +1026,8 @@ def test_compose_and_mailbox_image_pins():
         if "image" in svc
     }
     assert images == _COMPOSE_IMAGE_PINS
+    assert images["llm"].startswith("ghcr.io/ggml-org/llama.cpp:server-b")
+    assert not images["llm"].endswith(":server")
     assert "v4.4-3.2.0" not in images.values()
     assert "build" in data["services"]["core"]
     dockerfile = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")

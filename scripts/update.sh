@@ -51,6 +51,12 @@ core_inputs_hash() {
   ) | sha256sum | awk '{print $1}'
 }
 
+# Hash of every Compose `image:` pin. Unchanged pins = skip compose pull
+# (llama.cpp :server used to move daily and re-download ~300MB).
+compose_images_hash() {
+  awk '/^[[:space:]]+image:/{print}' "$ROOT/docker-compose.yml" | sha256sum | awk '{print $1}'
+}
+
 # Hash of the NetBox launch / token helper inputs; a change forces NetBox + Core recreate.
 netbox_launch_hash() {
   (
@@ -69,10 +75,22 @@ if [[ -f "$STAMP" ]] && [[ "$(cat "$STAMP" 2>/dev/null || true)" == "$cur" ]]; t
   echo "Core image inputs unchanged (Dockerfile/backend/agents/frontend); skipping --build."
 fi
 
+IMG_STAMP="$ROOT/data/.compose-images.stamp"
+img_cur="$(compose_images_hash)"
+need_pull=1
 if [[ "$OFFLINE" -eq 1 ]]; then
+  need_pull=0
   echo "Offline: skipping compose pull. Lab use: ./forgesre update --offline"
-else
-  "${DC[@]}" pull || true
+elif [[ -f "$IMG_STAMP" ]] && [[ "$(cat "$IMG_STAMP" 2>/dev/null || true)" == "$img_cur" ]]; then
+  need_pull=0
+  echo "Compose image pins unchanged; skipping compose pull."
+fi
+if [[ "$need_pull" -eq 1 ]]; then
+  if "${DC[@]}" pull; then
+    printf '%s\n' "$img_cur" > "$IMG_STAMP"
+  else
+    echo "compose pull failed; stack continues on local images. Next update will retry the pull."
+  fi
 fi
 
 if [[ "$need_build" -eq 1 ]]; then

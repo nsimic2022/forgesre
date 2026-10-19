@@ -160,7 +160,7 @@ ai:
     timeout_seconds: 90
 ```
 
-Leave `COMPOSE_PROFILES` without `ai` if you do not want `ghcr.io/ggml-org/llama.cpp:server`. Recreate Core:
+Leave `COMPOSE_PROFILES` without `ai` if you do not want `ghcr.io/ggml-org/llama.cpp:server-b11718`. Recreate Core:
 
 ```bash
 docker compose up -d --force-recreate core
@@ -230,7 +230,7 @@ docker compose ps llm
 
 What the container runs:
 
-- Image `ghcr.io/ggml-org/llama.cpp:server`
+- Image `ghcr.io/ggml-org/llama.cpp:server-b11718` (pinned bNNNN — not the floating `:server` tag, which moves daily). Bump that pin in `docker-compose.yml` when llama.cpp must change; `./forgesre update` then pulls. The GGUF in `data/models/model.gguf` is separate and is not re-downloaded.
 - Host network, bind **127.0.0.1:8088** (not published to the laptop; Core on the same VM talks to it)
 - `-m /models/model.gguf -c 8192 -t $FORGESRE_LLM_THREADS`
 - Health: `curl -f http://127.0.0.1:8088/v1/models`
