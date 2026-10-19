@@ -123,4 +123,125 @@ def test_l1_oncall_mails_the_current_address_and_dashboard_shows_them():
     assert 'id="oncall"' in page.text
     assert 'data-oncall-form' in page.text
     assert "Dana" in page.text
+    assert 'action="/escalation/oncall/open-edit"' in page.text
+    assert 'action="/escalation/oncall/open-clone"' in page.text
+    assert 'action="/escalation/oncall/bulk-delete"' in page.text
+    assert f"/escalation/oncall/" in page.text and "/toggle" in page.text
+    assert ">Remove<" in page.text and ">Edit<" in page.text
+    assert "oncall-form-when" in page.text
+    db.close()
+
+
+def test_disabled_slot_is_skipped_and_can_be_edited_cloned_removed():
+    db = _db()
+    zone = ZoneInfo(settings.timezone)
+    now = utcnow().astimezone(zone)
+    db.query(OncallSlot).filter(OncallSlot.weekday == now.weekday()).delete(synchronize_session=False)
+    db.commit()
+    slot = add_oncall_slot(
+        db,
+        weekday=now.weekday(),
+        start="00:00",
+        end="23:59",
+        name="Eli",
+        email="eli@dc.local",
+        phone="+381-11-400",
+    )
+    db.commit()
+    slot_id = slot.id
+    client = _client()
+    assert current_oncall(db, now)["email"] == "eli@dc.local"
+    off = client.post(f"/escalation/oncall/{slot_id}/toggle", follow_redirects=False)
+    assert off.status_code == 302
+    db.expire_all()
+    assert not db.get(OncallSlot, slot_id).enabled
+    assert current_oncall(db, now) is None
+    on = client.post(f"/escalation/oncall/{slot_id}/toggle", follow_redirects=False)
+    assert on.status_code == 302
+    db.expire_all()
+    assert db.get(OncallSlot, slot_id).enabled
+
+    opened = client.post(
+        "/escalation/oncall/open-edit",
+        data={"selected": str(slot_id), "stay": "/escalation"},
+        follow_redirects=False,
+    )
+    assert opened.status_code == 303
+    assert opened.headers["location"] == f"/escalation?oncall_edit={slot_id}#oncall-form"
+    edit_page = client.get(f"/escalation?oncall_edit={slot_id}")
+    assert 'id="oncall-form-title">Edit on-call' in edit_page.text
+    assert 'value="Eli"' in edit_page.text
+    saved = client.post(
+        f"/escalation/oncall/{slot_id}/update",
+        data={
+            "weekday": str(now.weekday()),
+            "start": "00:00",
+            "end": "23:59",
+            "name": "Eli Night",
+            "email": "eli@dc.local",
+            "phone": "+381-11-401",
+        },
+        follow_redirects=False,
+    )
+    assert saved.status_code == 302
+    db.expire_all()
+    assert db.get(OncallSlot, slot_id).name == "Eli Night"
+
+    cloned = client.post(
+        "/escalation/oncall/open-clone",
+        data={"selected": str(slot_id), "stay": "/escalation"},
+        follow_redirects=False,
+    )
+    assert cloned.status_code == 303
+    assert f"oncall_clone={slot_id}" in cloned.headers["location"]
+    clone_page = client.get(f"/escalation?oncall_clone={slot_id}")
+    assert 'id="oncall-form-title">Clone on-call' in clone_page.text
+    assert 'value="Eli Night copy"' in clone_page.text
+    copy = client.post(
+        "/escalation/oncall",
+        data={
+            "weekday": str((now.weekday() + 1) % 7),
+            "start": "08:00",
+            "end": "16:00",
+            "name": "Eli Night copy",
+            "email": "eli@dc.local",
+            "phone": "+381-11-401",
+        },
+        follow_redirects=False,
+    )
+    assert copy.status_code == 302
+    copies = db.query(OncallSlot).filter(OncallSlot.name == "Eli Night copy").all()
+    assert len(copies) == 1
+
+    exported = client.post("/escalation/oncall/export", data={"selected": str(slot_id), "format": "csv"})
+    assert exported.status_code == 200
+    assert exported.headers["content-type"].startswith("text/csv")
+    assert "When,Name,Email,Phone,Enabled" in exported.text.replace("\r", "")
+    assert "Eli Night" in exported.text
+
+    gone = client.post("/escalation/oncall/bulk-delete", data={"selected": str(slot_id), "next": "/escalation#oncall"}, follow_redirects=False)
+    assert gone.status_code == 303
+    db.expire_all()
+    assert db.query(OncallSlot).filter_by(id=slot_id).first() is None
+    db.close()
+
+
+def test_oncall_edit_with_zero_or_two_rows_stays_on_the_list():
+    db = _db()
+    client = _client()
+    first = add_oncall_slot(db, weekday=0, start="08:00", end="12:00", name="A", email="a@dc.local")
+    second = add_oncall_slot(db, weekday=0, start="12:00", end="16:00", name="B", email="b@dc.local")
+    db.commit()
+    many = client.post(
+        "/escalation/oncall/open-edit",
+        data={"selected": [str(first.id), str(second.id)], "stay": "/escalation?oncall_page=1"},
+        follow_redirects=False,
+    )
+    assert many.status_code == 303
+    assert many.headers["location"] == "/escalation?oncall_page=1&edit_note=select-one#oncall"
+    flashed = client.get("/escalation?oncall_page=1&edit_note=select-one")
+    assert 'role="status">Select one' in flashed.text
+    assert 'id="oncall-form-title">Edit on-call' not in flashed.text
+    none = client.post("/escalation/oncall/open-edit", data={"stay": "https://evil.example/escalation"}, follow_redirects=False)
+    assert none.headers["location"] == "/escalation?edit_note=select-one#oncall"
     db.close()

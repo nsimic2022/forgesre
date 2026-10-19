@@ -371,8 +371,13 @@ def _hhmm(minute: int) -> str:
     return f"{minute // 60:02d}:{minute % 60:02d}"
 
 
-def add_oncall_slot(
-    db: Session,
+def slot_enabled(row: OncallSlot) -> bool:
+    """Missing or NULL enabled is ON — that is how older rows behaved."""
+    value = getattr(row, "enabled", True)
+    return True if value is None else bool(value)
+
+
+def _oncall_fields(
     *,
     weekday: str | int,
     start: str,
@@ -380,8 +385,7 @@ def add_oncall_slot(
     name: str,
     email: str,
     phone: str = "",
-) -> OncallSlot:
-    """One weekday window. Times are appliance-local. Until is inclusive and must be after from."""
+) -> dict[str, Any]:
     try:
         day = int(weekday)
     except (TypeError, ValueError):
@@ -401,17 +405,72 @@ def add_oncall_slot(
     local, _, domain = address.partition("@")
     if not local or "." not in domain:
         raise ValueError("On-call needs an email address.")
-    row = OncallSlot(
-        weekday=day,
-        start_minute=start_minute,
-        end_minute=end_minute,
-        name=person[:255],
-        email=address[:255],
-        phone=" ".join(str(phone or "").split())[:64],
-    )
+    return {
+        "weekday": day,
+        "start_minute": start_minute,
+        "end_minute": end_minute,
+        "name": person[:255],
+        "email": address[:255],
+        "phone": " ".join(str(phone or "").split())[:64],
+    }
+
+
+def add_oncall_slot(
+    db: Session,
+    *,
+    weekday: str | int,
+    start: str,
+    end: str,
+    name: str,
+    email: str,
+    phone: str = "",
+    enabled: bool = True,
+) -> OncallSlot:
+    """One weekday window. Times are appliance-local. Until is inclusive and must be after from."""
+    row = OncallSlot(**_oncall_fields(weekday=weekday, start=start, end=end, name=name, email=email, phone=phone), enabled=bool(enabled))
     db.add(row)
     db.flush()
     return row
+
+
+def update_oncall_slot(
+    db: Session,
+    row: OncallSlot,
+    *,
+    weekday: str | int,
+    start: str,
+    end: str,
+    name: str,
+    email: str,
+    phone: str = "",
+) -> OncallSlot:
+    """Rewrite one roster row. ON/OFF stays on the toggle — this does not flip enabled."""
+    fields = _oncall_fields(weekday=weekday, start=start, end=end, name=name, email=email, phone=phone)
+    for key, value in fields.items():
+        setattr(row, key, value)
+    db.flush()
+    return row
+
+
+def toggle_oncall_slot(row: OncallSlot) -> OncallSlot:
+    row.enabled = not slot_enabled(row)
+    return row
+
+
+def oncall_form_values(row: OncallSlot, *, clone: bool = False) -> dict[str, Any]:
+    """Prefill Add on-call. Clone is a draft until Save."""
+    view = oncall_slot_view(row)
+    name = view["name"]
+    if clone:
+        name = f"{name} copy".strip()
+    return {
+        "weekday": view["weekday"],
+        "start": view["start"],
+        "end": view["end"],
+        "name": name,
+        "email": view["email"],
+        "phone": view["phone"],
+    }
 
 
 def oncall_slot_view(row: OncallSlot) -> dict[str, Any]:
@@ -425,6 +484,7 @@ def oncall_slot_view(row: OncallSlot) -> dict[str, Any]:
         "name": row.name,
         "email": row.email,
         "phone": row.phone or "",
+        "enabled": slot_enabled(row),
         "window": f"{day} {_hhmm(row.start_minute)}–{_hhmm(row.end_minute)}",
     }
 
@@ -447,7 +507,11 @@ def current_oncall(db: Session, at: datetime | None = None) -> dict[str, Any] | 
         .order_by(OncallSlot.start_minute, OncallSlot.id)
         .all()
     )
-    matches = [row for row in rows if int(row.start_minute) <= minute <= int(row.end_minute)]
+    matches = [
+        row
+        for row in rows
+        if slot_enabled(row) and int(row.start_minute) <= minute <= int(row.end_minute)
+    ]
     if not matches:
         return None
     matches.sort(key=lambda row: (int(row.start_minute), int(row.id or 0)))
@@ -475,6 +539,8 @@ def take_duty(db: Session, user: Any, at: datetime | None = None) -> dict[str, A
         .all()
     )
     for row in overlapping:
+        if not slot_enabled(row):
+            continue
         if int(row.start_minute) <= start_minute <= int(row.end_minute):
             closed = start_minute - 1
             if closed < int(row.start_minute):

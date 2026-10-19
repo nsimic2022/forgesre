@@ -366,7 +366,7 @@ th, td {
   vertical-align: middle;
 }
 table tbody tr:hover td { background: var(--row-hover); }
-/* v09-10: every operator list is spaced card-rows with a muted header. */
+/* v09-11: Escalation two-column policy + on-call form; v09-10 card-rows stay. */
 .list-scroll > table,
 .dash-recent-scroll > table,
 .health-table,
@@ -1914,6 +1914,8 @@ td.ops-report-actions .row-actions a.button {
     min-width: 0;
   }
   .ops-report-cols { flex-direction: column; }
+  .escalation-cols { flex-direction: column; }
+  .oncall-form-grid { grid-template-columns: 1fr; }
   .asset-detail-split { grid-template-columns: minmax(0, 1fr); }
   .asset-detail-col-1-4 { max-height: none; }
   .asset-chart-grid,
@@ -1997,6 +1999,44 @@ details.rule-note-fields summary { cursor: pointer; color: var(--muted); font-si
 
 .policy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.8rem; margin-bottom: 1rem; }
 .policy-grid .card { margin-bottom: 0; }
+.escalation-cols {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.5rem;
+  width: 100%;
+  margin-bottom: 1.25rem;
+}
+.escalation-policies,
+.escalation-create {
+  flex: 1 1 22rem;
+  min-width: 16rem;
+}
+.escalation-policies > h2,
+.escalation-create > h2 { margin-top: 0; }
+.escalation-create form.stack { max-width: none; }
+.oncall-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem 1.5rem;
+  align-items: start;
+  max-width: none;
+  margin: 0.6rem 0 1.1rem;
+}
+.oncall-form-grid > .error { grid-column: 1 / -1; margin: 0; }
+.oncall-form-when,
+.oncall-form-who {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.oncall-form-grid .row-actions { grid-column: 1 / -1; }
+.oncall-form-grid label { display: flex; flex-direction: column; gap: 0.25rem; }
+.oncall-form-grid input,
+.oncall-form-grid select { width: 100%; box-sizing: border-box; }
+.scan-list tr.slot-off td { color: var(--muted); }
 .policy-slug { font-size: 0.8rem; font-weight: 400; }
 .step-list th, .step-list td { padding: 0.4rem 0.55rem; font-size: 0.88rem; }
 .recipient-rules { margin: 0 0 1rem; }

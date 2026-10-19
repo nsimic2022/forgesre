@@ -117,10 +117,11 @@ def test_add_asset_columns_nav_rules_and_escalated_cube():
     assert "Client playrules" not in text
     assert 'href="/escalation">Default escalation</a>' in text
     nav = text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
-    assert ">Rules<" in nav and ">Playbooks<" in nav
-    assert ">Playrules<" not in nav and ">Escalation<" not in nav
+    assert ">Rules<" in nav and ">Playbooks<" in nav and ">Escalation<" in nav
+    assert ">Playrules<" not in nav
     assert ">Journal<" not in nav and 'href="/history"' not in nav
-    assert 'href="/playrules"' in nav and 'href="/escalation"' not in nav
+    assert 'href="/playrules"' in nav and 'href="/escalation"' in nav
+    assert nav.index(">Playbooks<") < nav.index(">Escalation<") < nav.index(">System Health<")
     rules = client.get("/playrules")
     assert rules.status_code == 200
     assert "<h1>Rules" in rules.text or ">Rules<" in rules.text.split("<h1>", 1)[1][:40]
@@ -128,7 +129,9 @@ def test_add_asset_columns_nav_rules_and_escalated_cube():
     default = client.get("/escalation")
     assert default.status_code == 200
     assert "Default warning" in default.text
-    assert "<h1>Default escalation" in default.text
+    assert "<h1>Escalation" in default.text
+    assert "<h2>Default escalation" in default.text
+    assert "escalation-cols" in default.text
     home = client.get("/")
     alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
     assert 'data-tile="escalated"' in alarms

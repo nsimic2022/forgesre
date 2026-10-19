@@ -112,7 +112,7 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert "[data-select-scope]:has([data-select-row]:checked) .list-actions" in css
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-10" in base and "app.js?v=v09-T" in base
+    assert "app.css?v=v09-11" in base and "app.js?v=v09-T" in base
 
     assets = _middle(client.get("/assets").text)
     _order(assets, ["View", "Edit", "Clone", "Verify", "Export", "Remove"])
@@ -170,6 +170,23 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert ">Clone<" in card and ">Clone<" not in book_actions
     assert ">Edit<" not in card and ">Remove<" not in card
     _no_invented(book_actions)
+
+    escalation = client.get("/escalation").text
+    oncall = escalation.split('id="oncall"', 1)[1]
+    oncall_table = oncall.split("<table", 1)[1].split("</table>", 1)[0]
+    oncall_actions = _middle(oncall)
+    _order(oncall_actions, ["Edit", "Clone", "Export", "Remove"])
+    assert 'action="/escalation/oncall/open-edit"' in oncall_actions
+    assert 'action="/escalation/oncall/open-clone"' in oncall_actions
+    assert 'action="/escalation/oncall/export"' in oncall_actions
+    assert 'action="/escalation/oncall/bulk-delete"' in oncall_actions
+    assert "/toggle" not in oncall_actions
+    assert 'class="onoff' in oncall_table or "No on-call slots yet." in oncall_table
+    assert ">Edit<" not in oncall_table and ">Remove<" not in oncall_table
+    _no_invented(oncall_actions)
+    nav = escalation.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    assert ">Escalation<" in nav
+    assert nav.index(">Playbooks<") < nav.index(">Escalation<")
 
     journal = client.get("/health-ui").text.split('id="journal"', 1)[1]
     journal_actions = _middle(journal)
@@ -335,6 +352,9 @@ def test_edit_with_zero_or_two_rows_stays_on_the_list():
         ("/playbooks/open-edit", book_ids[0]),
         ("/playbooks/bulk-delete", book_ids[0]),
         ("/playrules/bulk-delete", rule_ids[0]),
+        ("/escalation/oncall/open-edit", "1"),
+        ("/escalation/oncall/open-clone", "1"),
+        ("/escalation/oncall/bulk-delete", "1"),
     ):
         assert engineer.post(path, data={"selected": selected}, follow_redirects=False).status_code == 403
     engineer_rules = _middle(engineer.get("/playrules").text)
@@ -344,6 +364,9 @@ def test_edit_with_zero_or_two_rows_stays_on_the_list():
     assert 'action="/playbooks/export"' in engineer_books
     assert "open-edit" not in engineer_books and "bulk-delete" not in engineer_books
     assert 'class="onoff' in engineer.get("/playrules").text
+    engineer_oncall = _middle(engineer.get("/escalation").text.split('id="oncall"', 1)[1])
+    assert 'action="/escalation/oncall/export"' in engineer_oncall
+    assert "open-edit" not in engineer_oncall and "open-clone" not in engineer_oncall and "bulk-delete" not in engineer_oncall
     db.close()
 
 
