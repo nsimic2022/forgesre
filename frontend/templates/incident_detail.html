@@ -18,33 +18,34 @@
   <span class="incident-nav-step pager-disabled" aria-disabled="true" title="Newest in this list" data-incident-newer>Newer →</span>
   {% endif %}
 </nav>
-{% set when = incident_when(incident) %}
-{% set host = incident_host(incident) %}
-<header class="incident-strip {{ incident_tone(incident.status, incident.severity) }}" data-incident-strip>
-  <h1 class="incident-head"><span class="sev-{{ severity_pill(incident.severity) }}">{{ incident.title or incident.number }}</span> {% if is_demo_incident(incident) %}<span class="pill demo">DEMO</span>{% endif %}</h1>
-  <p class="incident-facts">
-    <span class="incident-short" title="{{ incident.number }}">{{ incident_short_label(incident.number) }}</span>
-    {% if incident.asset %}
-    <a href="/assets/{{ incident.asset.asset_id }}">{{ incident.asset.hostname }}</a>
-    {% elif host %}
-    <span title="From the alert labels — no asset matched">{{ host }}</span>
-    {% else %}
-    <span class="muted">No asset matched the alert labels</span>
-    {% endif %}
-    <span class="pill {{ incident.status|lower }}">{{ incident.status }}</span>
-    <span class="pill {{ severity_pill(incident.severity) }}">{{ incident.severity }}</span>
-    <span class="src-pill src-{{ incident_source(incident) }}" data-source="{{ incident_source(incident) }}" title="Alert source">{{ incident_source_label(incident) }}</span>
-    <span class="muted">First <span class="incident-fact" title="{{ format_started_at(incident.started_at) }}">{{ when.wall }}</span></span>
-    {% if when.duration %}<span class="muted">{% if when.live %}Open{% else %}Lasted{% endif %} <span class="incident-fact" data-incident-duration>{{ when.duration }}</span></span>{% endif %}
-    {% if when.ended %}<span class="muted">Ended <span class="incident-fact" title="{{ when.ended_full }}">{{ when.ended }}</span></span>{% endif %}
-    {% if incident.ack_by %}<span class="muted">Ack {{ incident.ack_by }} · {{ short_when_label(incident.ack_at) }}</span>{% endif %}
-    {% if incident.resolved_by %}<span class="muted">{{ incident.status }} by {{ incident.resolved_by }}</span>{% endif %}
-    <code class="incident-id muted">{{ incident.number }}</code>
-  </p>
-</header>
-<div class="tool-row">
-  <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
-  <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
+{% set item = incident %}
+{% set nav_qs = nav.qs %}
+{% set show_demo_pill = true %}
+{% set done = incident.status|upper in ['RESOLVED', 'CLOSED'] %}
+<div class="table-scroll incident-identity" data-incident-identity>
+<table class="scan-list incidents-table">
+  <thead>
+    <tr>
+      <th class="col-name">Incident</th>
+      <th class="col-host">Hostname</th>
+      <th class="col-status">Status</th>
+      <th class="col-ladder" title="How far this incident climbed. Four squares stacked L1, L2, L3, L4.">L1–L4</th>
+      <th class="col-when">When</th>
+      <th class="col-enum">Severity</th>
+      <th class="col-resolved">Resolved by</th>
+      <th class="col-notes">Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="{{ incident_tone(incident.status, incident.severity) }}{% if done %} inc-row-done{% endif %}{% if is_demo_incident(incident) %} inc-row-demo{% endif %}">
+      {% include "_incident_cell.html" %}
+      <td class="col-host">{% set host = incident_host(incident) %}{% if incident.asset %}<a class="inc-host" href="/assets/{{ incident.asset.asset_id }}">{{ incident.asset.hostname }}</a>{% elif host %}<span class="inc-host" title="From the alert labels — no asset matched">{{ host }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+      {% include "_incident_status_cell.html" %}
+      <td class="col-ladder">{% with cubes=incident_ladder_cubes(incident) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
+      {% with show_ack=false, show_severity=true, show_notes=true %}{% include "_incident_scan_tail.html" %}{% endwith %}
+    </tr>
+  </tbody>
+</table>
 </div>
 {% set st = incident.status|upper %}
 {% set acked = incident.ack_at is not none %}
@@ -83,21 +84,8 @@
 {% endfor %}
 {% endif %}
 
-{% set iface = interface_facts(incident) %}
-{% if iface.ifName or iface.ifIndex or iface.ifAlias or iface.ifDescr %}
-<section class="card" data-interface>
-  <h2>Interface {% with %}{% set tip %}From the alert labels (if_mib lookup: ifName, ifIndex, ifAlias). The hostname is still the asset. Empty labels mean this alert was not about one interface.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <dl class="kv">
-    {% if iface.ifName %}<dt>ifName</dt><dd data-if-name>{{ iface.ifName }}</dd>{% endif %}
-    {% if iface.ifIndex %}<dt>ifIndex</dt><dd data-if-index>{{ iface.ifIndex }}</dd>{% endif %}
-    {% if iface.ifAlias %}<dt>ifAlias</dt><dd data-if-alias>{{ iface.ifAlias }}</dd>{% endif %}
-    {% if iface.ifDescr %}<dt>ifDescr</dt><dd>{{ iface.ifDescr }}</dd>{% endif %}
-  </dl>
-</section>
-{% endif %}
-
 {% if incident.asset %}
-<section class="card">
+<section class="card incident-call">
   <h2>Who to call {% with %}{% set tip %}Default escalation role steps mail the owner email below. A step that names an address mails that address instead. With no owner email, role steps are recorded as no-recipient and nothing is sent. A filled asset Escalation mails those addresses only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <dl class="kv">
     <dt>Owner / team</dt><dd>{{ incident.asset.owner or "—" }}</dd>
@@ -125,7 +113,7 @@
 {% endif %}
 
 {% if can_send %}
-<section class="card" id="send-report">
+<section class="card incident-mail-card" id="send-report">
   <h2>Send incident report {% with %}{% set tip %}Current snapshot (alert + ForgeRCA if it has run). Does not change status.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <p class="muted">
     {% if smtp_on %}
@@ -149,25 +137,6 @@
 </section>
 {% endif %}
 
-{% if syslog_lines %}
-<section class="card" data-syslog>
-  <h2>Syslog {% with %}{% set tip %}Up to 20 Loki lines for this asset from 30 minutes before the incident started until 30 minutes after. A real host is job=syslog, hostname then IP. The demo asset may use job=forgesre. No asset or no lines: this block is omitted. Appliance demo logs are not attached to a real host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <pre class="pre-wrap syslog-lines" data-syslog-lines>{% for line in syslog_lines %}{{ line }}
-{% endfor %}</pre>
-</section>
-{% endif %}
-
-<section class="card" id="ai">
-  <h2>What happened? {% with %}{% set tip %}ForgeRCA is the builtin facts/anomalies/causes page. The local LLM, if enabled, only rewrites text in the background.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <p>{{ incident.summary or "Awaiting evidence." }}</p>
-  {% if investigation %}
-  <p>{{ investigation.summary }}</p>
-  <p class="muted">{{ investigation.disclaimer }} · Engine {{ investigation.engine or "forgerca" }} {{ investigation.engine_version or "" }}</p>
-  {% else %}
-  <p class="muted">No ForgeRCA result yet. Use <strong>Open ForgeRCA</strong> above for the full builtin page (facts, anomalies, causes). The local LLM, if enabled, rewrites text in the background.</p>
-  {% endif %}
-</section>
-
 {% if incident.asset %}
 <section class="card incident-graphs" data-incident-graphs data-asset="{{ incident.asset.asset_id }}" data-host="{{ incident.asset.hostname }}" data-incident="{{ incident.number }}" aria-live="polite">
   <h2>Host metrics {% with %}{% set tip %}Loaded once when this card is on screen. From one hour before this incident started through now, or through the end if it is resolved. A vertical line marks When. Hover a point for the host, time, and value. Prometheus series for scraped hosts. A host imported from or linked to Zabbix with no Prometheus samples shows Zabbix trend.get hourly averages for CPU / memory / disk (last 24 h), only if those items exist. Zabbix down or slow (2–5 s timeout) shows No samples yet — the rest of this page is unaffected.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
@@ -177,9 +146,36 @@
 </section>
 {% endif %}
 
-{% if incident.playrule or incident.playbook %}
+<div class="incident-story">
+<section class="card incident-happened" id="ai">
+  <h2>What happened? {% with %}{% set tip %}ForgeRCA is the builtin facts/anomalies/causes. ForgeAI, when enabled, rewrites the insight and remediation in this cube. The full facts page stays on Open ForgeRCA.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="tool-row">
+    <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
+    <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
+  </div>
+  <p>{{ incident.summary or "Awaiting evidence." }}</p>
+  {% if investigation %}
+  <p>{{ investigation.summary }}</p>
+  {% if investigation.likely_cause %}
+  <h3>Likely cause</h3>
+  <p>{{ investigation.likely_cause }}</p>
+  {% endif %}
+  {% if investigation.recommended_action %}
+  <h3>Remediation</h3>
+  <p>{{ investigation.recommended_action }}</p>
+  {% endif %}
+  <p class="muted">{{ investigation.disclaimer }} · {% if investigation.provider == "forgerca-llm" %}ForgeAI wrote the prose{% else %}ForgeRCA (builtin){% endif %} · Engine {{ investigation.engine or "forgerca" }} {{ investigation.engine_version or "" }}</p>
+  {% if llm_pending and investigation.provider != "forgerca-llm" %}
+  <p class="muted">A local LLM rewrite is queued. Refresh later for the rewritten insight. Builtin text stays until then.</p>
+  {% endif %}
+  {% else %}
+  <p class="muted">No ForgeRCA result yet. Use <strong>Open ForgeRCA</strong> for the builtin investigation (facts, anomalies, causes). The local LLM, if enabled, rewrites the insight and remediation here.</p>
+  {% endif %}
+</section>
+
 <section class="card workflow">
   <h2>Workflow {% with %}{% set tip %}The playbook is a checklist for the person on call. Guidance only — nothing here is executed or ticked off. Write what you did in Operator notes.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  {% if incident.playrule or incident.playbook %}
   <p class="muted">
     Matched playrule <strong>{{ incident.playrule.name if incident.playrule else "—" }}</strong>
     → playbook <strong>{{ incident.playbook.name if incident.playbook else "—" }}</strong>.
@@ -191,12 +187,14 @@
     {% endfor %}
   </ul>
   {% endif %}
+  {% else %}
+  <p class="muted">No playbook attached.</p>
+  {% endif %}
 </section>
-{% endif %}
 
-{% if similar %}
-<section>
+<section class="card incident-similar">
   <h2>Similar on this asset</h2>
+  {% if similar %}
   <ul>
     {% for group in similar %}
     <li>
@@ -207,13 +205,48 @@
     </li>
     {% endfor %}
   </ul>
+  {% else %}
+  <p class="muted">No similar history on this asset.</p>
+  {% endif %}
 </section>
-{% endif %}
+</div>
 
-<p class="muted" id="mail">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>
+<div class="incident-ledger">
+<section id="evidence" class="card incident-evidence">
+  <h2>Engineer evidence {% with %}{% set tip %}Stored evidence rows (alert, inventory, Prometheus / Loki samples) as collected — nothing is re-queried here. One line per row; double-click a row to show the full stored text, double-click anywhere on it again (the open text too) to fold it. Drag to select text to copy.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  {% if syslog_lines %}
+  <div data-syslog>
+    <h3>Syslog {% with %}{% set tip %}Up to 20 Loki lines for this asset from 30 minutes before the incident started until 30 minutes after. A real host is job=syslog, hostname then IP. The demo asset may use job=forgesre. No asset or no lines: this block is omitted. Appliance demo logs are not attached to a real host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <pre class="pre-wrap syslog-lines" data-syslog-lines>{% for line in syslog_lines %}{{ line }}
+{% endfor %}</pre>
+  </div>
+  {% endif %}
+  {% if can('read_evidence') %}
+  <div class="table-scroll list-scroll" data-list-scroll>
+  <table class="scan-list evidence-table" data-evidence-table>
+    <thead><tr><th class="ev-when">When</th><th class="ev-actor">Source</th><th>Action</th></tr></thead>
+    <tbody>
+    {% for row in evidence_rows %}
+      <tr data-list-row data-evidence-row id="{{ row.anchor }}" aria-expanded="false">
+        <td class="ev-when" title="{{ row.when_full }}"><span class="stamp"><span class="stamp-date">{{ row.when or "—" }}</span>{% if row.when_time %}<span class="stamp-time">{{ row.when_time }}</span>{% endif %}</span></td>
+        <td class="ev-actor">{{ row.actor }}</td>
+        <td class="ev-action"><span class="ev-short">{{ row.action }}</span><div class="ev-full" data-evidence-full>{{ row.full }}</div></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="3" class="muted">No evidence collected yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% with pager=evidence_pager %}{% include "_pager.html" %}{% endwith %}
+  {% else %}
+  <p class="muted">Evidence is visible to engineers.</p>
+  {% endif %}
+</section>
 
-<section id="audit">
+<section id="audit" class="card incident-audit">
   <h2>Who did what {% with %}{% set tip %}Audit rows for this INC (login clicks, status, notes). Not an email read-receipt. Export includes when, who, action, and the extra fields on the row.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <p class="muted" id="mail">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>
   <div data-select-scope>
   <div class="table-scroll list-scroll" data-list-scroll>
   <table>
@@ -235,11 +268,12 @@
   {% with pager=audit_pager, list_actions={"delete": "", "export": "/incidents/" ~ incident.number ~ "/audit/export", "next": "/incidents/" ~ incident.number ~ "#audit", "confirm": ""} %}{% include "_pager.html" %}{% endwith %}
   </div>
 </section>
+</div>
 
-<section id="notes">
+<section id="notes" class="card incident-notes">
   <h2>Operator notes {% with %}{% set tip %}What a person actually did (e.g. cleaned WAL). Not the playbook and not RCA.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   {% for row in operator_notes %}
-    <div class="card">
+    <div class="note-block">
       <p class="muted">{{ stamp.show(row.at) }} · {{ row.actor }}</p>
       <p>{{ row.body }}</p>
     </div>
@@ -254,27 +288,4 @@
   </form>
   {% endif %}
 </section>
-
-{% if can('read_evidence') %}
-<section id="evidence">
-  <h2>Engineer evidence {% with %}{% set tip %}Stored evidence rows (alert, inventory, Prometheus / Loki samples) as collected — nothing is re-queried here. One line per row; double-click a row to show the full stored text, double-click anywhere on it again (the open text too) to fold it. Drag to select text to copy.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <div class="table-scroll list-scroll" data-list-scroll>
-  <table class="scan-list evidence-table" data-evidence-table>
-    <thead><tr><th class="ev-when">When</th><th class="ev-actor">Source</th><th>Action</th></tr></thead>
-    <tbody>
-    {% for row in evidence_rows %}
-      <tr data-list-row data-evidence-row id="{{ row.anchor }}" aria-expanded="false">
-        <td class="ev-when" title="{{ row.when_full }}"><span class="stamp"><span class="stamp-date">{{ row.when or "—" }}</span>{% if row.when_time %}<span class="stamp-time">{{ row.when_time }}</span>{% endif %}</span></td>
-        <td class="ev-actor">{{ row.actor }}</td>
-        <td class="ev-action"><span class="ev-short">{{ row.action }}</span><div class="ev-full" data-evidence-full>{{ row.full }}</div></td>
-      </tr>
-    {% else %}
-      <tr><td colspan="3" class="muted">No evidence collected yet.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-  {% with pager=evidence_pager %}{% include "_pager.html" %}{% endwith %}
-</section>
-{% endif %}
 {% endblock %}

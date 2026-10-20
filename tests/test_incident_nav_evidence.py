@@ -95,7 +95,7 @@ def test_older_newer_walk_the_list_order_and_land_on_the_neighbour():
 
     older = client.get(f"/incidents/{first}")
     assert older.status_code == 200
-    assert f'<code class="incident-id muted">{first}</code>' in older.text
+    assert first in older.text and "data-incident-identity" in older.text
     assert _step(_nav(older.text), "newer") == ("a", f"/incidents/{middle}")
 
     newest = client.get(f"/incidents/{last}").text
@@ -112,7 +112,8 @@ def test_nav_sits_right_above_the_header_strip_and_back_links_stay_on_top():
     nav_start = html.rindex("<nav", 0, html.index("data-incident-nav"))
     nav_end = html.index("</nav>", nav_start) + len("</nav>")
     assert back < nav_start
-    assert html[nav_end:].lstrip().startswith('<header class="incident-strip')
+    assert 'data-incident-identity' in html[nav_end:]
+    assert html[nav_end:].lstrip().startswith('<div class="table-scroll incident-identity"')
     assert html.count('class="pager-bar"') == html.count("data-pager-size-form")
 
 
@@ -166,7 +167,8 @@ def _with_evidence(n_rca: int) -> str:
 
 
 def _evidence(html: str) -> str:
-    start = html.index('<section id="evidence">')
+    start = html.index('id="evidence"')
+    start = html.rindex("<section", 0, start)
     return html[start : html.index("</section>", start)]
 
 

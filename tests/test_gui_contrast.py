@@ -65,9 +65,9 @@ def _block(start: str) -> str:
 
 
 def test_cache_bust_is_v09_s_for_css_only():
-    assert "app.css?v=v09-15" in BASE
-    assert "app.js?v=v09-V" in BASE
-    assert "app.css?v=v09-V" not in BASE
+    assert "app.css?v=v09-16" in BASE
+    assert "app.js?v=v09-W" in BASE
+    assert "app.css?v=v09-W" not in BASE
 
 
 def test_light_palette_stays_and_dark_tokens_are_stronger():

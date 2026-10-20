@@ -1902,3 +1902,35 @@ function graphPane(pane) {
   window.addEventListener("scroll", hide, true);
   window.addEventListener("resize", hide);
 })();
+
+(function bindOncallDirectory() {
+  const form = document.querySelector("[data-oncall-form]");
+  if (!form) return;
+  const blob = form.querySelector("[data-oncall-directory]");
+  const nameInput = form.querySelector("[data-oncall-name]");
+  const emailInput = form.querySelector('input[name="email"]');
+  const phoneInput = form.querySelector('input[name="phone"]');
+  const phone2Input = form.querySelector('input[name="phone2"]');
+  if (!blob || !nameInput || !emailInput) return;
+  let people = [];
+  try {
+    people = JSON.parse(blob.textContent || "[]");
+  } catch (err) {
+    people = [];
+  }
+  if (!Array.isArray(people)) people = [];
+  const fill = () => {
+    const key = String(nameInput.value || "").trim().toLowerCase();
+    if (!key) return;
+    const hit = people.find(
+      (row) => String(row.name || "").toLowerCase() === key || String(row.email || "").toLowerCase() === key
+    );
+    if (!hit) return;
+    nameInput.value = hit.name || nameInput.value;
+    emailInput.value = hit.email || "";
+    if (phoneInput) phoneInput.value = hit.phone || "";
+    if (phone2Input) phone2Input.value = hit.phone2 || "";
+  };
+  nameInput.addEventListener("change", fill);
+  nameInput.addEventListener("input", fill);
+})();

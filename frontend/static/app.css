@@ -374,6 +374,7 @@ th, td {
   vertical-align: middle;
 }
 table tbody tr:hover td { background: var(--row-hover); }
+/* v09-16: Incident page identity row + Host metrics row; Add on-call Users typeahead. */
 /* v09-15: On-call Name is a person; phone+email stacked; platform copy matches Dashboard. */
 /* v09-14: Escalation is four same-style cards in one row; Add on-call is typed by hand. */
 /* v09-13: Escalation is three columns; Users carry phone / phone 2 for Add on-call. */
@@ -1038,13 +1039,27 @@ button.playrule-remove:hover { color: var(--crit); border-color: var(--crit); }
 .pill.closed, .pill.resolved { background: var(--pill-ok-bg); color: var(--pill-ok); }
 .pill.investigating, .pill.escalated { background: var(--pill-warn-bg); color: var(--pill-warn); }
 .inline { display: inline-block; margin-right: 0.45rem; }
+.incident-identity {
+  width: 100%;
+  margin: 0 0 1rem;
+}
+.incident-identity > table { width: 100%; table-layout: auto; }
+.incident-identity th.col-notes,
+.incident-identity td.col-notes {
+  width: auto;
+  min-width: 8rem;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.incident-identity .inc-host { font-weight: 600; }
 .incident-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   column-gap: 1.25rem;
   row-gap: 0.65rem;
-  margin-top: 1rem;
+  margin: 0 0 1rem;
+  padding-top: 0.15rem;
 }
 .incident-actions form {
   display: flex;
@@ -2721,7 +2736,53 @@ label.row-check {
 .pill.zbx-agent.down { background: var(--pill-crit-bg); color: var(--pill-crit); }
 .pill.zbx-agent.unknown { background: var(--pill); color: var(--muted); }
 .filter-chips .chip-sep { color: var(--muted); align-self: center; padding: 0 0.1rem; }
-.incident-graphs .dash-graph-list { grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.55rem 1rem; }
+.incident-graphs { margin: 0 0 1rem; }
+.incident-graphs .dash-graph-list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+  align-items: stretch;
+}
+.incident-graphs .dash-graph {
+  min-width: 0;
+  min-height: 11rem;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem 0.4rem;
+  box-sizing: border-box;
+}
+.incident-call { margin: 0 0 0.85rem; padding: 0.7rem 0.9rem; }
+.incident-call .kv {
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.25rem 0.9rem;
+}
+.incident-mail-card { margin: 0 0 0.85rem; padding: 0.7rem 0.9rem; }
+.incident-story {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 0 0 1rem;
+  align-items: start;
+}
+.incident-story > .card { margin: 0; min-width: 0; }
+.incident-happened .tool-row { margin: 0 0 0.55rem; }
+.incident-happened h3 { margin: 0.65rem 0 0.25rem; font-size: 0.82rem; }
+.incident-ledger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.9rem;
+  margin: 0 0 1rem;
+  align-items: start;
+}
+.incident-ledger > .card { margin: 0; min-width: 0; }
+.incident-notes { margin: 0 0 1.25rem; }
+.incident-notes .note-block { margin: 0 0 0.7rem; }
+@media (max-width: 1100px) {
+  .incident-graphs .dash-graph-list,
+  .incident-story,
+  .incident-ledger { grid-template-columns: minmax(0, 1fr); }
+}
 /* v08-14: one select look for Type / support / lead time / email picks / playrule add. */
 select.nice-select,
 .client-playrules .playrule-add select {

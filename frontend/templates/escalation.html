@@ -115,7 +115,15 @@
     <label>Until <input name="end" type="time" value="{{ oc.end or '16:00' }}" required></label>
   </div>
   <div class="oncall-form-who">
-    <label>Name <input name="name" required placeholder="Ana" value="{{ oc.name }}"></label>
+    <label>Name
+      <input name="name" required placeholder="Ana" value="{{ oc.name }}" list="oncall-people" data-oncall-name autocomplete="off">
+    </label>
+    <datalist id="oncall-people">
+      {% for person in oncall_people or [] %}
+      <option value="{{ person.name }}"></option>
+      {% endfor %}
+    </datalist>
+    <script type="application/json" data-oncall-directory>{{ oncall_people|tojson }}</script>
     <label>Email <input name="email" type="email" required placeholder="ana@dc.local" value="{{ oc.email }}"></label>
     <label>Phone <input name="phone" placeholder="+381-11-000-0000" value="{{ oc.phone }}"></label>
     <label>Phone 2 <input name="phone2" placeholder="+381-11-000-0001" value="{{ oc.phone2 }}"></label>
@@ -128,7 +136,7 @@
 </section>
 {% endif %}
 <section class="card escalation-pane oncall-roster-wrap" id="oncall">
-<h2>On call {% with %}{% set tip %}A short weekly roster. Type a person's name, email and phone in Add on-call — the Name column is that person, never Analyst / Engineer / Super admin. The Email column stacks phone, then email. Each row is one weekday and a from/until time in the appliance timezone (inclusive). L1 (or any step) with the role oncall mails whoever matches now. Empty roster = that step is no-recipient. The Dashboard On call line shows this person. Pager is Edit / Remove only. OFF rows stay stored and are skipped. This is not PagerDuty.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+<h2>On call {% with %}{% set tip %}A short weekly roster. Type a person's name in Add on-call — suggestions come from Administration Users (the person, never Analyst / Engineer / Super admin). Picking one fills email and phones; a name that is not on the list is still saved as typed. The Email column stacks phone, then email. Each row is one weekday and a from/until time in the appliance timezone (inclusive). L1 (or any step) with the role oncall mails whoever matches now. Empty roster = that step is no-recipient. The Dashboard On call line shows this person. Pager is Edit / Remove only. OFF rows stay stored and are skipped. This is not PagerDuty.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% if request.query_params.get('edit_note') == 'select-one' %}
 <div class="banner" role="status">Select one</div>
 {% endif %}

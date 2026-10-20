@@ -88,6 +88,9 @@ def test_escalation_page_has_create_cancel_and_saves_policy():
     assert page.text.index("oncall-form-when") < page.text.index("oncall-form-who")
     assert 'data-oncall-person' not in page.text
     assert "Pick a user" not in page.text
+    assert 'data-oncall-name' in page.text
+    assert 'data-oncall-directory' in page.text
+    assert 'id="oncall-people"' in page.text
     assert 'name="phone2"' in page.text
     assert 'action="/escalation/oncall/open-edit"' in page.text
     assert 'action="/escalation/oncall/open-clone"' not in page.text
@@ -101,10 +104,14 @@ def test_escalation_page_has_create_cancel_and_saves_policy():
     assert ".content {" in css and "font-size: 0.82rem" in css.split(".content {", 1)[1].split("}", 1)[0]
     assert "font-size: 0.82rem" in css.split("th, td {", 1)[1].split("}", 1)[0]
     assert "font-size: 0.82rem" in css.split(".scan-list > tbody > tr > td {", 1)[1].split("}", 1)[0]
+    assert ".incident-story {" in css
+    assert "repeat(3, minmax(0, 1fr))" in css.split(".incident-story {", 1)[1].split("}", 1)[0]
+    assert "repeat(4, minmax(0, 1fr))" in css.split(".incident-graphs .dash-graph-list {", 1)[1].split("}", 1)[0]
     assert ".escalation-oncall-form { flex: 0.72" in css
     assert ".oncall-roster-wrap { flex: 1.55" in css
     assert "flex-direction: column" in css.split(".oncall-form-grid {", 1)[1]
     js = (Path(__file__).resolve().parents[1] / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    assert "bindOncallDirectory" in js
     assert "bindOncallPerson" not in js and "data-oncall-person" not in js
     default = db.query(EscalationPolicy).filter_by(slug="default-warning").one()
     assert [int(step["after_minutes"]) for step in default.steps] == [0, 15, 30, 60]

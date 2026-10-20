@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from app.models import Asset, Incident, MaintenanceWindow, OncallSlot, utcnow
+from app.models import Asset, Incident, MaintenanceWindow, OncallSlot, User, utcnow
 from app.security import ROLE_LABELS, role_label
 
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -522,6 +522,35 @@ def oncall_slot_view(row: OncallSlot) -> dict[str, Any]:
 def list_oncall_slots(db: Session) -> list[dict[str, Any]]:
     rows = db.query(OncallSlot).order_by(OncallSlot.weekday, OncallSlot.start_minute, OncallSlot.id).all()
     return [oncall_slot_view(row) for row in rows]
+
+
+def oncall_directory(db: Session) -> list[dict[str, str]]:
+    """Active Administration users for Add on-call typeahead. Name is a person, not a role."""
+    rows = db.query(User).filter(User.is_active.is_(True)).order_by(User.email, User.id).all()
+    people: list[dict[str, str]] = []
+    used: set[str] = set()
+    for row in rows:
+        email = str(row.email or "").strip()
+        if not email:
+            continue
+        name = oncall_person_name(row.name, email, getattr(row, "role", None))
+        if not name:
+            continue
+        label = name
+        key = label.casefold()
+        if key in used:
+            label = f"{name} ({email})"
+            key = label.casefold()
+        used.add(key)
+        people.append(
+            {
+                "name": label[:255],
+                "email": email[:255],
+                "phone": str(row.phone or ""),
+                "phone2": str(getattr(row, "phone2", "") or ""),
+            }
+        )
+    return people
 
 
 def current_oncall(db: Session, at: datetime | None = None) -> dict[str, Any] | None:
