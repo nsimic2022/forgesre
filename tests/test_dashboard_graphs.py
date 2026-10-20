@@ -93,15 +93,24 @@ def test_dashboard_has_graph_pane_right_of_recent_incidents():
 
 def test_rows_carry_asset_id_or_empty_for_no_host():
     db = _db()
-    demo = db.query(Asset).filter_by(asset_id=DEMO_ASSET).one()
-    with_asset = _add(db, asset=demo)
+    host = Asset(
+        asset_id=f"dash-graph-{uuid4().hex[:6]}",
+        hostname="dash-graph-host",
+        ip="10.66.9.9",
+        type="Linux Server",
+        status="healthy",
+    )
+    db.add(host)
+    db.flush()
+    with_asset = _add(db, asset=host)
     no_asset = _add(db)
-    done = _add(db, status="RESOLVED", asset=demo)
+    done = _add(db, status="RESOLVED", asset=host)
     numbers = (with_asset.number, no_asset.number, done.number)
+    asset_id = host.asset_id
     db.close()
     html = _client().get("/").text
     a = _row_attrs(html, numbers[0])
-    assert a["data-asset"] == DEMO_ASSET and a["data-active"] == "true"
+    assert a["data-asset"] == asset_id and a["data-active"] == "true"
     b = _row_attrs(html, numbers[1])
     assert b["data-asset"] == "" and b["data-active"] == "true"
     c = _row_attrs(html, numbers[2])

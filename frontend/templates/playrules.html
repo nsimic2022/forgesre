@@ -125,7 +125,7 @@
   </label>
   <details class="rule-note-fields" {% if form.metric %}open{% endif %}>
     <summary>Firing sample — used to pick among rules with the same alertname</summary>
-    <p class="muted">Alertname still has to match. When Metric and Value are set, ForgeSRE compares the firing Alertmanager sample (<code>$value</code> in the annotation, or a label with that metric name). Prometheus in <code>monitoring/alerts.yml</code> still opens the incident; this only chooses which playbook/escalation attaches.</p>
+    <p class="muted">Alertname still has to match. When Metric and Value are set, ForgeSRE compares the firing Alertmanager sample (<code>$value</code> in the annotation, or a label with that metric name). If that sample is missing, this rule does not attach. Prometheus in <code>monitoring/alerts.yml</code> still opens the incident; this only chooses which playbook/escalation attaches.</p>
     <div class="form-grid">
       <label>Metric
         <select name="metric" id="playrule-metric">

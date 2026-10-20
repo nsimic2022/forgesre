@@ -8,7 +8,20 @@ from typing import Any, Callable
 from rca.types import EvidenceItem, normalize_log, normalize_metric, utc_now
 
 MetricFetcher = Callable[[str], dict[str, Any]]
+RangeFetcher = Callable[[str], dict[str, Any]]
 LogFetcher = Callable[[str, datetime, datetime], dict[str, Any]]
+
+
+def previous_from_range(payload: dict[str, Any] | None, current: Any = None) -> float | None:
+    """Earliest finite sample from a Prometheus range. Needs two points so it is not the instant value."""
+    del current
+    values = (payload or {}).get("values") or []
+    if len(values) < 2:
+        return None
+    try:
+        return float(values[0])
+    except (TypeError, ValueError):
+        return None
 
 DEMO_ASSET = "forge-demo-01"
 
@@ -346,6 +359,7 @@ def collect_evidence_set(
     maintenance: list[dict[str, Any]],
     metric_fetcher: MetricFetcher | None,
     log_fetcher: LogFetcher | None,
+    range_fetcher: RangeFetcher | None = None,
     window_minutes: int = 30,
     max_log_lines: int = 20,
     max_evidence: int = 40,
@@ -414,10 +428,13 @@ def collect_evidence_set(
                     confidence=0.2,
                 )
                 continue
+            previous = result.get("previous")
+            if previous in (None, "") and range_fetcher is not None:
+                previous = previous_from_range(range_fetcher(expr), result.get("value"))
             add(
                 "METRIC",
                 "prometheus",
-                normalize_metric(name, result.get("value"), utc_now(), unit),
+                normalize_metric(name, result.get("value"), utc_now(), unit, previous=previous),
                 query=expr,
                 extra={"window_minutes": window_minutes, "start": started.isoformat()},
             )

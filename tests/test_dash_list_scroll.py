@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from app.db import Base, SessionLocal, engine
 from app.main import app
 from app.models import Asset, Incident
-from app.seed import DEMO_ASSET, seed
+from app.seed import seed
 from app.services import next_incident_number
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,7 +49,15 @@ def _client() -> TestClient:
 
 def _add_many(n: int) -> list[str]:
     db = _db()
-    demo = db.query(Asset).filter_by(asset_id=DEMO_ASSET).one()
+    host = Asset(
+        asset_id=f"dash-prod-{uuid4().hex[:6]}",
+        hostname="dash-prod",
+        ip="10.66.8.8",
+        type="Linux Server",
+        status="healthy",
+    )
+    db.add(host)
+    db.flush()
     numbers = []
     for i in range(n):
         row = Incident(
@@ -59,7 +67,7 @@ def _add_many(n: int) -> list[str]:
             status="OPEN",
             fingerprint=f"dashscroll:{uuid4().hex}",
             started_at=datetime.now(timezone.utc),
-            asset_id=demo.id,
+            asset_id=host.id,
         )
         db.add(row)
         db.commit()
@@ -427,4 +435,4 @@ def test_js_pager_restores_only_matching_fresh_entry():
 
 def test_cache_bust_bumped():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-16" in base and "app.js?v=v09-W" in base
+    assert "app.css?v=v09-17" in base and "app.js?v=v09-W" in base

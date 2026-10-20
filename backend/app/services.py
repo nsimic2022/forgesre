@@ -502,6 +502,7 @@ def next_incident_number(db: Session, when: datetime | None = None) -> str:
 
 
 _ALERT_SAMPLE_RE = re.compile(r"(?:is|reached)\s+(\d+(?:\.\d+)?)\s*%?", re.I)
+_ALERT_PCT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%")
 
 
 def alert_sample_value(
@@ -533,13 +534,17 @@ def alert_sample_value(
         match = _ALERT_SAMPLE_RE.search(str(text))
         if match:
             return float(match.group(1))
+        pct = _ALERT_PCT_RE.search(str(text))
+        if pct:
+            return float(pct.group(1))
     return None
 
 
 def playrule_condition_holds(condition: dict[str, Any] | None, sample: float | None) -> bool:
     """True when the rule has no metric/value, or the firing sample satisfies operator/value.
 
-    Missing sample does not reject the rule — Prometheus already opened the alert.
+    A rule that sets metric and value does not attach when the firing sample is missing.
+    Prometheus still opens the incident; only the playbook mapping is skipped.
     """
     cond = condition if isinstance(condition, dict) else {}
     if not str(cond.get("metric") or "").strip():
@@ -548,7 +553,7 @@ def playrule_condition_holds(condition: dict[str, Any] | None, sample: float | N
     if raw in (None, ""):
         return True
     if sample is None:
-        return True
+        return False
     try:
         wanted = float(raw)
     except (TypeError, ValueError):
@@ -1026,6 +1031,9 @@ def persist_rca_evidence(
             return {"error": prom_error, "query": expr}
         return {"value": None, "query": expr}
 
+    def range_fetcher(expr: str) -> dict[str, Any]:
+        return query_prometheus_range(expr, hours=1.0, step="5m", timeout=range_timeout(3600.0))
+
     def log_fetcher(query: str, start, end) -> dict[str, Any]:
         del start, end
         from rca.collector import is_demo_loki_query
@@ -1043,6 +1051,7 @@ def persist_rca_evidence(
         maintenance=maintenance,
         metric_fetcher=metric_fetcher,
         log_fetcher=log_fetcher if settings.loki_enabled else None,
+        range_fetcher=range_fetcher,
         window_minutes=settings.rca_window_minutes,
         max_log_lines=settings.rca_max_log_lines,
     )
@@ -1209,11 +1218,7 @@ def query_prometheus(asset: Asset | None = None) -> dict[str, Any]:
 
 
 def query_prometheus_expr(expr: str, timeout: float = 5.0) -> dict[str, Any]:
-    from app.metrics import demo_metric_values
-
-    live = demo_metric_values()
-    if expr in live:
-        return {"value": live[expr], "query": expr}
+    """Instant PromQL. Demo gauges are not short-circuited here — only query_prometheus overlays them for forge-demo-01."""
     try:
         with httpx.Client(timeout=timeout) as client:
             response = client.get(f"{settings.prometheus_url}/api/v1/query", params={"query": expr})
@@ -1504,22 +1509,27 @@ def run_investigation(
     engine = get_engine(settings.rca_engine, llm=llm)
     result = engine.investigate(ctx)
     packed = result.get("result") or {}
-    row = Investigation(
-        incident_id=incident.id,
-        summary=result.get("summary") or "",
-        likely_cause=result.get("likely_cause") or "",
-        confidence=float(result.get("confidence") or 0),
-        evidence=result.get("evidence") or [],
-        recommended_action=result.get("recommended_action") or "",
-        provider=result.get("provider") or "builtin-analyst",
-        disclaimer=result.get("disclaimer") or "AI has not modified the system.",
-        result=packed,
-        engine=packed.get("engine") or engine.get_name(),
-        engine_version=packed.get("engine_version") or engine.get_version(),
-        model=packed.get("model") or "",
-        requested_by=actor,
-    )
-    db.add(row)
+    fields = {
+        "summary": result.get("summary") or "",
+        "likely_cause": result.get("likely_cause") or "",
+        "confidence": float(result.get("confidence") or 0),
+        "evidence": result.get("evidence") or [],
+        "recommended_action": result.get("recommended_action") or "",
+        "provider": result.get("provider") or "builtin-analyst",
+        "disclaimer": result.get("disclaimer") or "AI has not modified the system.",
+        "result": packed,
+        "engine": packed.get("engine") or engine.get_name(),
+        "engine_version": packed.get("engine_version") or engine.get_version(),
+        "model": packed.get("model") or "",
+        "requested_by": actor,
+    }
+    if latest is not None:
+        for key, value in fields.items():
+            setattr(latest, key, value)
+        row = latest
+    else:
+        row = Investigation(incident_id=incident.id, **fields)
+        db.add(row)
     # Status stays as is: INVESTIGATING means a human acknowledged (ack_at), not that RCA ran.
     append_timeline(incident, "ai", "AI ANALYSIS", row.summary)
     append_timeline(incident, "rca", "RCA", row.likely_cause)

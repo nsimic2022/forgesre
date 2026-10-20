@@ -10,7 +10,7 @@ from rca.llm import LLMProvider, NullLLM, ground_llm_fields, prompt_context, val
 from rca.types import RCAContext, utc_now
 
 DISCLAIMER = "AI has not modified the system."
-FORGERCA_VERSION = "0.3.1"
+FORGERCA_VERSION = "0.3.2"
 
 
 class RCAEngine(Protocol):
@@ -102,7 +102,10 @@ class ForgeRCA:
         if ctx.maintenance:
             ctx.limitations.append("Overlapping maintenance reduces confidence that this is unexpected.")
         ctx.limitations.append(
-            "Confidence is a simple ForgeSRE score (evidence + anomalies + history), not a validated model."
+            "Confidence is a simple ForgeSRE score (anomalies + supporting evidence − contradicting), not a validated model."
+        )
+        ctx.limitations.append(
+            "Catalog hypothesis is ranked from a fixed family menu. ForgeRCA does not collect a process list or a per-interface SNMP walk."
         )
         action = validate_recommendation(action)
         visual = _visual(ctx, top)

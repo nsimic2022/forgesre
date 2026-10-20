@@ -93,6 +93,10 @@
   <div class="banner" role="status">Select one</div>
   {% endif %}
   <h2>Recent incidents</h2>
+  <nav class="filter-chips" aria-label="Recent incident filters">
+    <a class="chip{% if not include_lab %} on{% endif %}" href="/">Production</a>
+    <a class="chip{% if include_lab %} on{% endif %}" href="/?demo=1">Lab DEMO</a>
+  </nav>
   <div data-select-scope>
   <div class="dash-recent-scroll" data-dash-list>
   <table class="scan-list incidents-table" data-dash-incident-table>
@@ -120,12 +124,12 @@
         {% with show_notes=false, show_ack=false, show_severity=true %}{% include "_incident_scan_tail.html" %}{% endwith %}
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">No incidents yet. Use Run demo (top right) or wait for an alert.</td></tr>
+      <tr><td colspan="8" class="muted">{% if include_lab %}No lab DEMO incidents yet. Use Run demo (top right).{% else %}No production incidents yet. Lab DEMO rows stay under the Lab DEMO chip.{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
-  {% with list_actions={"delete": "/incidents/bulk-delete" if can('write_incidents') else "", "edit": "/incidents/edit" if can('write_incidents') else "", "delete_last": True, "export": "/incidents/export", "next": "/", "confirm": "Delete the selected incidents? Mail already sent stays in the outbox."} %}
+  {% with list_actions={"delete": "/incidents/bulk-delete" if can('write_incidents') else "", "edit": "/incidents/edit" if can('write_incidents') else "", "delete_last": True, "export": "/incidents/export", "next": "/?demo=1" if include_lab else "/", "confirm": "Delete the selected incidents? Mail already sent stays in the outbox."} %}
   {% include "_pager.html" %}
   {% endwith %}
   </div>

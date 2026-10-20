@@ -690,6 +690,7 @@ a.button {
 .verify-table td .muted { font-size: 0.8rem; }
 .pill { display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px; background: var(--pill); font-size: 0.8rem; }
 .pill.healthy, .pill.ok { background: var(--pill-ok-bg); color: var(--pill-ok); }
+.pill.unknown { background: var(--pill-warn-bg); color: var(--pill-warn); }
 .pill.warning, .pill.warn, .pill.maint, .pill.suppressed { background: var(--pill-warn-bg); color: var(--pill-warn); }
 .capacity-spark { width: 5.5rem; height: 1.4rem; vertical-align: middle; margin: 0 0.35rem; }
 .capacity-spark polyline { fill: none; stroke: currentColor; stroke-width: 1.5; }

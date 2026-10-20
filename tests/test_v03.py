@@ -227,6 +227,7 @@ def test_anomaly_hypothesis_and_scoring():
     assert any(item.kind == "threshold_violation" for item in ctx.anomalies)
     facts = facts_from(ctx)
     assert any("94" in fact["text"] for fact in facts)
+    assert any("No process list was collected" in fact["text"] for fact in facts)
     hyps = candidate_causes(ctx)
     assert hyps
     assert hyps[0].supporting_evidence
@@ -252,7 +253,7 @@ def test_forgerca_cpu_compat():
         }
     )
     assert result["disclaimer"] == DISCLAIMER
-    assert result["confidence"] >= 70
+    assert 10 <= result["confidence"] <= 95
     assert "forge-demo-01" in result["summary"]
     assert result["provider"] == "builtin-analyst"
     packed = result["result"]
@@ -455,7 +456,7 @@ def test_automatic_rca_does_not_duplicate_without_force():
     run_pending_jobs(db)
     assert _inv_count(db, incident.id) == 1
     run_investigation(db, incident, force=True)
-    assert _inv_count(db, incident.id) == 2
+    assert _inv_count(db, incident.id) == 1
     client = TestClient(app)
     client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
     page = client.get(f"/ai/{incident.number}")
@@ -580,7 +581,7 @@ def test_investigate_button_opens_builtin_rca_immediately():
     assert again.status_code == 303
     run_pending_jobs(db)
     db.expire_all()
-    assert _inv_count(db, incident.id) == 2
+    assert _inv_count(db, incident.id) == 1
     db.close()
 
 

@@ -28,7 +28,7 @@
   <h2>Catalog hypothesis {% with %}{% set tip %}Top ranked line from the ForgeRCA catalog using collected metrics and the alert. Not a process list. Open ForgeRCA re-collects evidence.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <p>{{ investigation.likely_cause }}</p>
   <p>Score: <strong>{{ investigation.confidence|int }}%</strong>
-    {% with %}{% set tip %}Simple ForgeSRE score from evidence, anomalies, and history — not a validated model and not taken from the LLM.{% endset %}{% include "_info_tip.html" %}{% endwith %}</p>
+    {% with %}{% set tip %}Simple ForgeSRE score from anomalies and supporting vs contradicting evidence — not a validated model and not taken from the LLM. There is no 0.45 starting bonus.{% endset %}{% include "_info_tip.html" %}{% endwith %}</p>
   <h2>Recommended actions {% with %}{% set tip %}Recommended only. Nothing was executed.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <p>{{ investigation.recommended_action }}</p>
 </section>
