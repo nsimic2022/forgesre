@@ -636,7 +636,7 @@ def investigate_incident(
         raise HTTPException(status_code=404, detail="incident not found")
     from app.services import queue_llm_rewrite, run_investigation
 
-    run_investigation(db, item, actor=user.email, use_llm=False)
+    run_investigation(db, item, actor=user.email, force=True, use_llm=False)
     queue_llm_rewrite(db, item, actor=user.email)
     db.refresh(item)
     data = _incident(item, include_evidence=can(user, "read_evidence"))

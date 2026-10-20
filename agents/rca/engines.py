@@ -6,11 +6,11 @@ from typing import Any, Protocol
 
 from rca.analysis import candidate_causes, detect_anomalies, facts_from, metric_samples, score_confidence
 from rca.catalog import action_for, classify_family, summary_for
-from rca.llm import LLMProvider, NullLLM, prompt_context, validate_recommendation
+from rca.llm import LLMProvider, NullLLM, ground_llm_fields, prompt_context, validate_recommendation
 from rca.types import RCAContext, utc_now
 
 DISCLAIMER = "AI has not modified the system."
-FORGERCA_VERSION = "0.3.0"
+FORGERCA_VERSION = "0.3.1"
 
 
 class RCAEngine(Protocol):
@@ -76,10 +76,21 @@ class ForgeRCA:
             ),
         )
         if llm_payload:
-            provider = "forgerca-llm"
-            summary = str(llm_payload.get("summary") or summary).strip() or summary
-            cause = str(llm_payload.get("likely_cause") or cause).strip() or cause
-            action = validate_recommendation(str(llm_payload.get("recommended_action") or action))
+            draft = {
+                "summary": summary,
+                "likely_cause": cause,
+                "recommended_action": action,
+            }
+            allowed = " ".join(str(fact.get("text") or "") for fact in facts)
+            allowed += " " + " ".join(item.summary for item in hypotheses)
+            grounded, invented = ground_llm_fields(llm_payload, draft=draft, allowed_text=allowed)
+            summary = grounded["summary"] or summary
+            cause = grounded["likely_cause"] or cause
+            action = validate_recommendation(grounded["recommended_action"] or action)
+            if invented:
+                ctx.limitations.append("LLM rewrite invented figures; kept ForgeRCA catalog text.")
+            else:
+                provider = "forgerca-llm"
             extra = llm_payload.get("limitations") or []
             if isinstance(extra, list):
                 ctx.limitations.extend(str(item) for item in extra if item)

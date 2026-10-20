@@ -506,6 +506,44 @@ def _playrule_row(playrules: Any) -> dict[str, Any] | None:
     return packed or None
 
 
+_NUM = re.compile(r"\d+(?:\.\d+)?")
+
+
+def _number_set(text: str) -> set[float]:
+    out: set[float] = set()
+    for token in _NUM.findall(text or ""):
+        try:
+            out.add(round(float(token), 1))
+        except ValueError:
+            continue
+    return out
+
+
+def ground_llm_fields(
+    payload: dict[str, Any] | None,
+    *,
+    draft: dict[str, str],
+    allowed_text: str,
+) -> tuple[dict[str, str], bool]:
+    """Keep LLM prose only when every number already appears in facts/draft. Returns (fields, invented)."""
+    payload = payload if isinstance(payload, dict) else {}
+    allowed = _number_set(allowed_text)
+    for value in draft.values():
+        allowed |= _number_set(str(value or ""))
+    out: dict[str, str] = {}
+    invented = False
+    for key in ("summary", "likely_cause", "recommended_action"):
+        draft_text = str(draft.get(key) or "").strip()
+        text = str(payload.get(key) or "").strip() or draft_text
+        extra = _number_set(text) - allowed
+        if extra:
+            invented = True
+            out[key] = draft_text
+        else:
+            out[key] = text
+    return out, invented
+
+
 def validate_recommendation(text: str) -> str:
     cleaned = (text or "").strip()
     if not cleaned:

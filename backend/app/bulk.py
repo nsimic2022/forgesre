@@ -1783,6 +1783,7 @@ def mail_export(
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
 ):
+    _forbid(user, can_send_ops(user))
     ids = _ints(_need(selected))
     if _export_format(fmt) == "csv":
         headers, rows = mail_csv(db, ids)

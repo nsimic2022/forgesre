@@ -14,6 +14,7 @@ from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.audit import audit
+from app.demo_ids import DEMO_ASSET_PREFIX
 from app.models import Asset, AuditLog, Incident, IncidentNote, Notification, utcnow
 
 DEFAULT_DAYS = 90
@@ -236,6 +237,7 @@ def incident_query(
     dc_row: str = "",
     rack: str = "",
     q: str = "",
+    exclude_demo: bool = False,
 ):
     """Single filter used by the Incidents list and the Dashboard tiles (tile count = rows behind the click).
 
@@ -285,6 +287,13 @@ def incident_query(
                 ),
             )
         )
+    if exclude_demo:
+        query = query.filter(
+            ~exists().where(
+                Asset.id == Incident.asset_id,
+                func.lower(Asset.asset_id).like(f"{DEMO_ASSET_PREFIX}%"),
+            )
+        )
     return query
 
 
@@ -305,6 +314,7 @@ def incident_list_filters(
     dc_row: str = "",
     rack: str = "",
     q: str = "",
+    demo: str = "",
 ) -> dict[str, Any]:
     """The /incidents filter from its query keys: incident_query kwargs, form state, and a canonical query string (empty for the default list).
 
@@ -358,6 +368,8 @@ def incident_list_filters(
     row_value = " ".join((dc_row or "").split())
     rack_value = " ".join((rack or "").split())
     q_value = " ".join((q or "").split())
+    demo_raw = (demo or "").strip().lower()
+    exclude_demo = demo_raw in {"0", "no", "exclude"}
     keep: list[tuple[str, str]] = []
     if status_group != "all":
         keep.append(("status", status_group))
@@ -385,6 +397,8 @@ def incident_list_filters(
         keep.append(("rack", rack_value))
     if q_value:
         keep.append(("q", q_value))
+    if exclude_demo:
+        keep.append(("demo", "0"))
     return {
         "query": {
             "days": days_n,
@@ -400,6 +414,7 @@ def incident_list_filters(
             "dc_row": row_value,
             "rack": rack_value,
             "q": q_value,
+            "exclude_demo": exclude_demo,
         },
         "status_group": status_group,
         "severity_group": "critical" if critical_only else ("warning" if warning_only else ""),
@@ -441,11 +456,11 @@ def dashboard_incident_tiles(db: Session) -> list[dict[str, Any]]:
     Open (unacked) is a filter on Incidents, not a cube.
     """
     specs = [
-        ("Critical", "crit", {"open_only": True, "critical_only": True}, "/incidents?status=active&severity=critical"),
-        ("Warning", "warn", {"open_only": True, "warning_only": True}, "/incidents?status=active&severity=warning"),
-        ("Investigating", "warn", {"status": "INVESTIGATING"}, "/incidents?status=INVESTIGATING"),
-        ("Escalated", "warn", {"status": "ESCALATED"}, "/incidents?status=ESCALATED"),
-        ("Resolved", "cold", {"status": "RESOLVED"}, "/incidents?status=RESOLVED"),
+        ("Critical", "crit", {"open_only": True, "critical_only": True}, "/incidents?status=active&severity=critical&demo=0"),
+        ("Warning", "warn", {"open_only": True, "warning_only": True}, "/incidents?status=active&severity=warning&demo=0"),
+        ("Investigating", "warn", {"status": "INVESTIGATING"}, "/incidents?status=INVESTIGATING&demo=0"),
+        ("Escalated", "warn", {"status": "ESCALATED"}, "/incidents?status=ESCALATED&demo=0"),
+        ("Resolved", "cold", {"status": "RESOLVED"}, "/incidents?status=RESOLVED&demo=0"),
     ]
     tiles = []
     for label, tone, filters, href in specs:
@@ -454,7 +469,7 @@ def dashboard_incident_tiles(db: Session) -> list[dict[str, Any]]:
                 "label": label,
                 "tone": tone,
                 "href": href,
-                "count": incident_query(db, **filters).count(),
+                "count": incident_query(db, exclude_demo=True, **filters).count(),
                 "key": label.lower(),
             }
         )
@@ -493,6 +508,7 @@ def list_history(
     since: datetime | None = None,
     until: datetime | None = None,
     q: str = "",
+    exclude_demo: bool = False,
 ) -> tuple[list[Incident], int]:
     limit = max(1, min(int(limit or LIST_LIMIT), 500))
     query = incident_query(
@@ -511,6 +527,7 @@ def list_history(
         dc_row=dc_row,
         rack=rack,
         q=q,
+        exclude_demo=exclude_demo,
     )
     number = (number or "").strip()
     if number:

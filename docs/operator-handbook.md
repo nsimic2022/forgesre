@@ -131,7 +131,7 @@ Three operating roles, plus a read-only viewer. The install user is `super_admin
 | **System admin** (`admin`) | Deputy for the box | Users, inventory, discovery, demos, doctor | Cannot create another super_admin |
 | **Analyst** | Watch incidents, keep inventory, write the workflow | Ack/resolve incidents, **add/edit assets**, run AI (analyst view), **create playrules and playbooks** | PromQL/LogQL, Administration |
 | **Engineer** | Deep RCA | Inventory, discovery Approve, full AI page (queries, evidence, history), resolve | Create playrules/playbooks, Administration |
-| Viewer | Read-only | Dashboard, assets, incidents, System Health, Email & reports (read) | Rules, Playbooks, the Default escalation page, Journal, Discovery (403), any writes |
+| Viewer | Read-only | Dashboard, assets, incidents, System Health | Rules, Playbooks, Escalation, Email & reports (`/ops`), Journal, Discovery (403), any writes |
 
 Analyst vs engineer on **AI Investigation**: same facts and likely cause. Engineer additionally sees PromQL, LogQL, evidence hashes, and similar-incident history on that page. Similar-incident history for an asset is on the **asset page** for every role that can read assets.
 
@@ -513,12 +513,12 @@ Who: **analyst** (permission `write_play`). Engineers can read, not create.
 
 1. Optionally create the playbook first (`/playbooks`).
 2. **Playrules** → **Create playrule**.
-3. Name (unique), **alertname** (must match Prometheus; the form suggests names from `alerts.yml` and previews that rule's PromQL read-only), severity, playbook, escalation policy. **Operator note — not executed:** metric / operator / value are free text for humans. ForgeSRE never evaluates them; the threshold lives in the Prometheus rule.
+3. Name (unique), **alertname** (must match Prometheus; the form suggests names from `alerts.yml` and previews that rule's PromQL read-only), severity, playbook, escalation policy. Optional **firing sample** (metric / operator / value): when set, ingest compares the Alertmanager sample (`$value` in the annotation, or a label with that metric name) to pick among rules with the same alertname. Prometheus still opens the incident; this only chooses playbook and escalation.
 4. **Save**. **Cancel** next to Save returns to this page without creating. **Edit** loads the same form (Save updates the row). **Toggle** disables without deleting. **Remove** deletes the playrule; existing incidents keep their playbook, new alerts with that name open without one.
 
 The list column **Fires when (alerts.yml)** shows the PromQL `expr` / `for` read from `monitoring/alerts.yml` + `alerts.local.yml` (`FORGESRE_MONITORING_DIR`). **No Prometheus rule** means no bundled/local rule has that alertname. For **Prometheus** alerts that pill is a warning (nothing will fire that name until you add PromQL). For **Zabbix** it is leftover wording: playrules still match Zabbix incidents by **Alertname** after ingest, with no PromQL and no Grafana — [zabbix.md §10](zabbix.md#10-forgesre-playrules-for-zabbix-triggers).
 
-The form stores `condition.alertname`. Matching on ingest is **alertname only**: the first enabled playrule whose `condition.alertname` equals the alert's `labels.alertname` (case-insensitive), whether that alert came from Alertmanager or the Zabbix webhook. Metric / operator / value are not used for matching.
+The form stores `condition.alertname` plus optional metric / operator / value. Matching on ingest is **alertname first**, then the firing sample when a threshold is set. A missing sample does not reject the rule (Prometheus already fired). Custom alarms on the asset are still tried first.
 
 So if Prometheus fires `alertname: HighCPU`, the seeded rule `high-cpu` matches because its condition includes `"alertname": "HighCPU"`. Extra Prom rules: `monitoring/alerts.local.yml`, then `./forgesre render-monitoring`.
 
@@ -691,7 +691,7 @@ Incidents come from Prometheus → Alertmanager → Core. Open Grafana from **Sy
 
 Open **ForgeRCA** from the incident (primary CTA → `/ai/INC-…`).
 
-The button runs **builtin ForgeRCA immediately** and opens Summary → Root cause → Recommended actions → Facts → Anomalies → Candidate causes → Limitations. Two pills sit at the top: **ForgeRCA** (green when builtin has a result) and **ForgeAI** (green if the LLM rewrote the prose, yellow while the rewrite runs, red if the LLM is off or unreachable). If `ai.enabled` is on, refresh later for ForgeAI. Do not mash Run now.
+The button **re-collects evidence** and runs builtin ForgeRCA, then opens Summary → Catalog hypothesis → Recommended actions → Facts → Anomalies → Candidate causes → Limitations. The hypothesis is the top ranked line from a fixed catalog scored on collected metrics — not a process list. Two pills sit at the top: **ForgeRCA** (green when builtin has a result) and **ForgeAI** (green if the LLM rewrote the prose, yellow while the rewrite runs, red if the LLM is off or unreachable). If `ai.enabled` is on, refresh later for ForgeAI. A rewrite that invents figures is dropped and the catalog text stays.
 
 The Dashboard **ForgeAI** strip (`/#forgeai`) is a different surface: Core counts repeats / hot groups / parent–child / aging / last 30 days in SQL (DEMO excluded), then **Ask ForgeAI** may rewrite 3–5 sentences from those facts. It does not run ForgeRCA and it is not on the alarm path. See [llm.md](llm.md).
 
@@ -854,7 +854,7 @@ V0.9 on one Ubuntu VM, Docker Compose, host networking:
 - **Incidents** — Prometheus → Alertmanager → Core. Grafana (`:3000`) is extra graphs from System Health.
 - **Playbooks** — checklists the operator follows. Assets, users (except the install super admin and yourself), and escalation policies (email steps) are edited in the UI.
 - **Discovery** — TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, confirmed YAML `discovery.cidrs` only (suggested primary IPv4 `/24`; empty list skips the probe), **256 hosts/CIDR** and **1024 total**. SNMP GET uses UDP/161.
-- **Roles** — Viewer reads Dashboard, assets, incidents, System Health, Email & reports. Playrules, Playbooks, Escalation, Console, and Discovery stay at 403 for that role.
+- **Roles** — Viewer reads Dashboard, assets, incidents, and System Health. Playrules, Playbooks, Escalation, Email & reports (`/ops`), Console, and Discovery stay at 403 for that role.
 - **NetBox** — bundled UI on `:8001`. Core reads devices with `NETBOX_API_TOKEN`.
 - **Zabbix** — optional read source (§18). Ack / Resolve / Close stay in ForgeSRE.
 - **Install** — `./install.sh` once. Live box: `git pull origin main && ./forgesre update`. A second install regenerates secrets. Core starts with a real `SECRET_KEY` / webhook token (`FORGESRE_DEV=1` is tests/lab only). Example YAML in `config/examples/` is documentation; live playrules live in Postgres. Optional TLS is an example Caddyfile.

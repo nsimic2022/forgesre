@@ -527,7 +527,7 @@ A trigger name that contains a host name (`Load on app-01`) needs one playrule p
 |---|---|---|
 | **Name** | Unique label in the list (`zbx-high-cpu`) | Not matched on ingest |
 | **Alertname** | The only match key. Must equal the Zabbix trigger/event name the webhook sent | Not PromQL. Not Grafana. Not the playrule Name |
-| Metric / operator / value | Operator note, stored, **never evaluated** | Not a Zabbix trigger expression |
+| Metric / operator / value | Compared to the firing sample when set (same as Prometheus ingest) | Not a Zabbix trigger expression |
 
 **Client playrules** on the asset (Add/Edit, right column, or the asset page card) are tried first, in saved order. The first enabled one whose Alertname equals this trigger wins. Empty list → the global Playrules list (first enabled by id).
 

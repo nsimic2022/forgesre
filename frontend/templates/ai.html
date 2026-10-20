@@ -25,10 +25,10 @@
 <section class="card">
   <h2>Summary</h2>
   <p>{{ investigation.summary }}</p>
-  <h2>Root cause</h2>
+  <h2>Catalog hypothesis {% with %}{% set tip %}Top ranked line from the ForgeRCA catalog using collected metrics and the alert. Not a process list. Open ForgeRCA re-collects evidence.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <p>{{ investigation.likely_cause }}</p>
-  <p>Confidence: <strong>{{ investigation.confidence|int }}%</strong>
-    {% with %}{% set tip %}Calculated by ForgeSRE from evidence/anomalies/history, not taken from the LLM.{% endset %}{% include "_info_tip.html" %}{% endwith %}</p>
+  <p>Score: <strong>{{ investigation.confidence|int }}%</strong>
+    {% with %}{% set tip %}Simple ForgeSRE score from evidence, anomalies, and history — not a validated model and not taken from the LLM.{% endset %}{% include "_info_tip.html" %}{% endwith %}</p>
   <h2>Recommended actions {% with %}{% set tip %}Recommended only. Nothing was executed.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <p>{{ investigation.recommended_action }}</p>
 </section>
@@ -50,7 +50,7 @@
 </section>
 {% endif %}
 
-<p class="muted" id="mail">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>
+{% if can_send_ops %}<p class="muted" id="mail">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>{% endif %}
 
 {% for line in rca.limitations or [] %}
   {% if "host logs" in line|lower or "empty Loki" in line or "No host logs" in line %}

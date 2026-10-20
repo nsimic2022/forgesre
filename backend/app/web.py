@@ -610,6 +610,8 @@ def ctx(request: Request, user: User | None, **extra):
                 "state": "unknown",
                 "title": "System Health did not answer.",
             }
+    data["can_send_ops"] = can_send_ops(user) if user else False
+    data["is_lab_inventory_row"] = is_lab_inventory_row
     data.update(extra)
     return data
 
@@ -816,6 +818,7 @@ def assets_page(
     rack: str = "",
     hostname: str = "",
     ip: str = "",
+    lab: str = "",
     page: str = "1",
 ):
     every = db.query(Asset).order_by(Asset.number, Asset.hostname).all()
@@ -835,6 +838,7 @@ def assets_page(
         ip=ip,
         row=row,
         rack=rack,
+        lab=lab,
     )
     rows, pager = paginate(rows, page, size=per_page(request))
     filters = {
@@ -850,6 +854,7 @@ def assets_page(
         "rack": rack,
         "hostname": hostname,
         "ip": ip,
+        "lab": lab,
     }
     filter_tail = "".join(f"&{urlencode({key: value})}" for key, value in filters.items() if value)
     form_mode = ""
@@ -908,6 +913,7 @@ def assets_page(
         rack=rack,
         hostname=hostname,
         ip=ip,
+        lab=lab,
         filter_tail=filter_tail,
         source_filters=ASSET_SOURCE_FILTERS,
         filter_options=asset_filter_options(every),
@@ -1876,6 +1882,7 @@ def incidents_page(
     row: str = "",
     rack: str = "",
     q: str = "",
+    demo: str = "",
     page: str = "1",
 ):
     filters = incident_list_filters(
@@ -1891,6 +1898,7 @@ def incidents_page(
         dc_row=row,
         rack=rack,
         q=q,
+        demo=demo,
     )
     size = per_page(request)
     rows, total = list_history(db, **filters["query"], limit=size, page=page)
@@ -2007,6 +2015,7 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
         dc_row=q.get("row", ""),
         rack=q.get("rack", ""),
         q=q.get("q", ""),
+        demo=q.get("demo", ""),
     )
     evidence, evidence_pager = paginate(
         [evidence_row(ev) for ev in sorted(item.evidence, key=lambda ev: ev.id or 0)] if can(user, "read_evidence") else [],
@@ -2088,7 +2097,7 @@ def incident_investigate(
         raise HTTPException(status_code=404)
     from app.services import queue_llm_rewrite, run_investigation
 
-    run_investigation(db, item, actor=user.email, use_llm=False)
+    run_investigation(db, item, actor=user.email, force=True, use_llm=False)
     queue_llm_rewrite(db, item, actor=user.email)
     return RedirectResponse(f"/ai/{number}", status_code=303)
 
@@ -2173,7 +2182,7 @@ def playrule_form_values(rule: Playrule | None = None) -> dict:
 
 
 def playrule_condition(alertname: str, name: str, metric: str, operator: str, value: str) -> dict:
-    """alertname is the only matched key. metric/operator/value are a free-text note, never evaluated."""
+    """alertname is required. metric/operator/value compare the firing Alertmanager sample when set."""
     condition: dict = {"alertname": (alertname or name).strip()}
     note_value: float | str | None = None
     raw = (value or "").strip()
@@ -2993,6 +3002,8 @@ def insights_export(
 ):
     from app.bulk import _download, _download_csv, _export_format
 
+    if not can(user, "read_ai"):
+        raise HTTPException(status_code=403)
     panel = insight_panel(db)
     if _export_format(fmt) == "csv":
         headers, rows = insights_csv(panel)
@@ -3119,6 +3130,8 @@ def ops_page(
     edit: str = "",
     clone: str = "",
 ):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
     from app.bulk import mail_row_deletable
     from app.services import list_mail_addresses
 

@@ -1596,10 +1596,12 @@ def assets_matching(
     ip: str = "",
     row: str = "",
     rack: str = "",
+    lab: str = "",
 ) -> list[Asset]:
     """Filter inventory by asset number, id, hostname, or IP (substring), optional status, flag, source, Zabbix agent,
     Type, and extras Site / VLAN / Customer (exact, case-insensitive). Hostname and IP are their own substring
-    filters (same field names as Add asset). Every filter given must match.
+    filters (same field names as Add asset). ``lab=0`` drops forge-demo-* / 10.20.30.41;
+    ``lab=1`` keeps only those. Every filter given must match.
     Search also matches the VLAN text.
 
     ``source=zabbix`` includes assets from other sources that are linked to a Zabbix host; ``source=forge`` is every
@@ -1643,19 +1645,26 @@ def assets_matching(
     addr = (ip or "").strip().lower()
     if addr:
         out = [row for row in out if addr in (row.ip or "").lower()]
+    lab_key = (lab or "").strip().lower()
+    if lab_key in {"0", "no", "exclude"}:
+        out = [row for row in out if not is_lab_inventory_row(row)]
+    elif lab_key in {"1", "yes", "only"}:
+        out = [row for row in out if is_lab_inventory_row(row)]
     return out
 
 
 def asset_tiles(rows: list[Asset]) -> list[dict]:
     """Dashboard inventory tiles. Each count is the length of the /assets list behind its link.
 
-    In problem = an OPEN / INVESTIGATING / ESCALATED incident on that asset (``flag=in-problem``).
-    Unreachable = the existing ICMP / probe-down flag, not an incident count.
+    Lab forge-demo-* / 10.20.30.41 rows are excluded here (``lab=0``). They stay on
+    /assets with a DEMO pill. In problem = an OPEN / INVESTIGATING / ESCALATED
+    incident on that asset (``flag=in-problem``). Unreachable = the existing ICMP /
+    probe-down flag, not an incident count.
     """
     specs = [
-        ("Assets", "", {}, "/assets", "assets"),
-        ("In problem", "warn", {"flag": PROBLEM_FLAG}, f"/assets?flag={PROBLEM_FLAG}", "problem"),
-        ("Unreachable", "crit", {"flag": "unreachable"}, "/assets?flag=unreachable", "unreachable"),
+        ("Assets", "", {"lab": "0"}, "/assets?lab=0", "assets"),
+        ("In problem", "warn", {"flag": PROBLEM_FLAG, "lab": "0"}, f"/assets?flag={PROBLEM_FLAG}&lab=0", "problem"),
+        ("Unreachable", "crit", {"flag": "unreachable", "lab": "0"}, "/assets?flag=unreachable&lab=0", "unreachable"),
     ]
     return [
         {
