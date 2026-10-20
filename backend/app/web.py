@@ -123,10 +123,12 @@ from app.security import (
 from app.api import doctor_payload, run_asset_verify, verify_assets
 from app.asset_metrics import glance_cells, safe_asset_metric_panel
 from app.insights import insight_panel, insights_csv, insights_text, rewrite_insights
+from app.incident_report_mail import build_incident_report
 from app.metrics import reset_demo_gauges
 from app.services import (
     compact_stamp,
     format_started_at,
+    incident_alarm_subject,
     report_recipients,
     schedule_label,
     incident_host,
@@ -2049,6 +2051,8 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
             evidence_pager=evidence_pager,
             client_playrules=asset_playrules(db, item.asset),
             syslog_lines=incident_syslog_lines(item),
+            report_preview=build_incident_report(db, item),
+            report_subject=incident_alarm_subject(item),
             **ops_mail_ctx(db, user, item),
         )
 
@@ -2131,6 +2135,8 @@ def incident_send_report(
     user: User = Depends(login_required),
     target: str = Form(""),
     new_email: str = Form(""),
+    subject: str = Form(""),
+    body: str = Form(""),
 ):
     if not can_send_ops(user):
         raise HTTPException(status_code=403)
@@ -2141,10 +2147,42 @@ def incident_send_report(
 
     chosen = (new_email or "").strip() or (target or "").strip()
     try:
-        send_incident_report(db, item, chosen, actor=user.email)
+        send_incident_report(db, item, chosen, actor=user.email, subject=subject, body=body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return RedirectResponse(f"/incidents/{number}", status_code=303)
+
+
+@router.post("/incidents/{number}/report/export")
+def incident_report_export(
+    number: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(login_required),
+    fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
+    subject: str = Form(""),
+    body: str = Form(""),
+):
+    if not can_send_ops(user) and not can(user, "read_incidents"):
+        raise HTTPException(status_code=403)
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404)
+    from app.bulk import _download, _download_csv, _export_format, _safe_export_name
+
+    text = (body or "").strip() or build_incident_report(db, item)
+    title = (subject or "").strip() or incident_alarm_subject(item)
+    stem = filename or f"{number}-report"
+    if _export_format(fmt) == "csv":
+        rows: list[list[object]] = [["Subject", title]]
+        for line in text.splitlines():
+            if ": " in line and not line.startswith(("#", " ", "-")):
+                label, value = line.split(": ", 1)
+                rows.append([label, value])
+            elif line.strip():
+                rows.append(["", line])
+        return _download_csv(_safe_export_name(stem, f"{number}-report", fmt), ["Field", "Value"], rows)
+    return _download(_safe_export_name(stem, f"{number}-report", fmt), text.splitlines())
 
 
 @router.get("/ai/{number}", response_class=HTMLResponse)
@@ -3002,16 +3040,17 @@ def insights_export(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
-    from app.bulk import _download, _download_csv, _export_format
+    from app.bulk import _download, _download_csv, _export_format, _safe_export_name
 
     if not can(user, "read_ai"):
         raise HTTPException(status_code=403)
     panel = insight_panel(db)
     if _export_format(fmt) == "csv":
         headers, rows = insights_csv(panel)
-        return _download_csv("forgeai-digest.csv", headers, rows)
-    return _download("forgeai-digest.txt", insights_text(panel))
+        return _download_csv(_safe_export_name(filename, "forgeai-digest", fmt), headers, rows)
+    return _download(_safe_export_name(filename, "forgeai-digest", fmt), insights_text(panel))
 
 
 @router.post("/insights/mail")

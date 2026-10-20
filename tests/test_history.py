@@ -351,7 +351,7 @@ def test_send_incident_report_to_address_book_email():
         .filter_by(target="oncall@dc.local", step_key="incident-report")
         .one()
     )
-    assert "Likely cause:" in rca_mail.body
+    assert "Catalog hypothesis:" in rca_mail.body
     assert "ForgeRCA" in rca_mail.body
     db.close()
 

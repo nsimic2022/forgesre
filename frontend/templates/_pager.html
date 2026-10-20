@@ -79,14 +79,22 @@
     </form>
     {% endif %}
     {% if actions.export %}
-    <form method="post" action="{{ actions.export }}" data-bulk-export>
-      <label class="export-format">
-        <select name="format" aria-label="Export format">
-          <option value="txt">TXT</option>
-          <option value="csv">CSV UTF-8</option>
-        </select>
-      </label>
-      <button type="submit">Export</button>
+    <form method="post" action="{{ actions.export }}" data-bulk-export data-export-picker>
+      <button type="button" data-export-open>Export</button>
+      <dialog class="export-dialog" data-export-dialog>
+        <h3>Save export</h3>
+        <label>Name <input type="text" name="filename" value="" autocomplete="off" data-export-name placeholder="export"></label>
+        <label>Format
+          <select name="format" aria-label="Export format">
+            <option value="txt">TXT</option>
+            <option value="csv">CSV UTF-8</option>
+          </select>
+        </label>
+        <div class="export-dialog-actions">
+          <button type="button" class="secondary" data-export-cancel>Cancel</button>
+          <button type="submit">Save</button>
+        </div>
+      </dialog>
     </form>
     {% endif %}
     {% if actions.delete and actions.get("delete_last") %}

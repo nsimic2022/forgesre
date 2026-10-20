@@ -136,7 +136,7 @@ def build_incident_report(db: Session, incident: Incident) -> str:
                 "",
                 f"## ForgeRCA ({investigation.engine or 'forgerca'} {investigation.engine_version or ''} · {investigation.provider or ''})".strip(),
                 f"Summary: {investigation.summary or '—'}",
-                f"Likely cause: {investigation.likely_cause or '—'}",
+                f"Catalog hypothesis: {investigation.likely_cause or '—'}",
                 f"Confidence: {int(investigation.confidence or 0)}% (ForgeSRE score, not a validated model)",
                 f"What should I do: {investigation.recommended_action or '—'}",
             ]
@@ -212,7 +212,7 @@ def build_incident_report_html(db: Session | None, incident: Incident) -> str:
     if investigation:
         engine = f"{investigation.engine or 'forgerca'} {investigation.engine_version or ''} · {investigation.provider or ''}".strip()
         sections.append((f"ForgeRCA · {engine}", prose_to_html(investigation.summary or DASH), False))
-        sections.append(("Likely cause", prose_to_html(investigation.likely_cause or DASH), False))
+        sections.append(("Catalog hypothesis", prose_to_html(investigation.likely_cause or DASH), False))
         sections.append(
             (
                 "Confidence",

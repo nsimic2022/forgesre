@@ -115,6 +115,53 @@ def is_host_down_incident(incident: Incident | None) -> bool:
     return incident_alertname(incident) in HOST_DOWN_ALERTNAMES
 
 
+def alarm_ticker(db: Session, *, limit: int = 5, fresh_minutes: int = 15) -> dict[str, Any]:
+    """Newest active production incidents for the top blink bar. Lab DEMO rows stay off it."""
+    cap = max(1, min(int(limit or 5), 12))
+    window = max(1, min(int(fresh_minutes or 15), 120))
+    rows = (
+        db.query(Incident)
+        .filter(Incident.status.in_(("OPEN", "INVESTIGATING", "ESCALATED")))
+        .order_by(Incident.started_at.desc(), Incident.id.desc())
+        .limit(max(80, cap * 16))
+        .all()
+    )
+    now = utcnow()
+    items: list[dict[str, Any]] = []
+    fresh = False
+    heat = ""
+    for row in rows:
+        if is_demo_incident(row):
+            continue
+        started = row.started_at
+        age_s = None
+        if started is not None:
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            age_s = max(0, int((now - started).total_seconds()))
+            if age_s <= window * 60:
+                fresh = True
+        sev = str(row.severity or "").upper()
+        items.append(
+            {
+                "number": row.number,
+                "title": row.title or "",
+                "severity": row.severity or "",
+                "status": row.status or "",
+                "host": incident_host(row),
+                "href": f"/incidents/{row.number}",
+                "age_s": age_s,
+            }
+        )
+        if sev == "CRITICAL":
+            heat = "crit"
+        elif heat != "crit":
+            heat = "warn"
+        if len(items) >= cap:
+            break
+    return {"items": items, "heat": heat, "fresh": bool(fresh and items)}
+
+
 def list_host_down_incidents(db: Session, limit: int = 12) -> list[Incident]:
     """Open host/SNMP-down incidents for the dashboard banner (newest first)."""
     cap = max(1, min(int(limit or 12), 20))
@@ -1981,20 +2028,29 @@ def send_performance_report(
     )
 
 
-def send_incident_report(db: Session, incident: Incident, target: str, actor: str = "system") -> Notification:
+def send_incident_report(
+    db: Session,
+    incident: Incident,
+    target: str,
+    actor: str = "system",
+    subject: str | None = None,
+    body: str | None = None,
+) -> Notification:
     contact = remember_mail_contact(db, target, actor=actor)
     if contact is None:
         raise ValueError("Need a valid email address")
-    body = build_incident_report(db, incident)
+    generated = build_incident_report(db, incident)
+    text = (body or "").strip() or generated.strip()
+    unchanged = text == generated.strip()
     return send_outbound_mail(
         db,
         target=contact.email,
-        subject=incident_alarm_subject(incident),
-        body=body,
+        subject=(subject or "").strip() or incident_alarm_subject(incident),
+        body=generated if unchanged else text,
         actor=actor,
         step_key="incident-report",
         incident=incident,
-        html=build_incident_report_html(db, incident),
+        html=build_incident_report_html(db, incident) if unchanged else None,
     )
 
 

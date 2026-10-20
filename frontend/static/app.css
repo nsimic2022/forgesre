@@ -769,9 +769,18 @@ label.inline-check { flex-direction: row; align-items: center; gap: 0.5rem; max-
 .backup-actions { flex-wrap: wrap; margin: 0.6rem 0 1rem; }
 .backup-restore { max-width: 520px; margin-top: 0.8rem; }
 /* Admin only: Import/restore left, ./forgesre cheatsheet right. Do not use .split. */
+.admin-mid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem 1.5rem;
+  align-items: start;
+  margin: 1rem 0 1.4rem;
+}
+.admin-audit-pane,
+.admin-backup-pane { min-width: 0; }
 .admin-backup-cli {
   display: grid;
-  grid-template-columns: minmax(24rem, 1fr) minmax(22rem, 1fr);
+  grid-template-columns: minmax(16rem, 1fr) minmax(22rem, 2fr);
   gap: 1.5rem 2rem;
   align-items: start;
   margin-top: 0.35rem;
@@ -811,6 +820,7 @@ label.inline-check { flex-direction: row; align-items: center; gap: 0.5rem; max-
 .cli-cheatsheet td:last-child { color: var(--muted); }
 .cli-cheatsheet code { font-size: 0.82rem; }
 @media (max-width: 1100px) {
+  .admin-mid,
   .admin-backup-cli { grid-template-columns: 1fr; }
 }
 td.row-actions form { margin: 0; }
@@ -1937,6 +1947,7 @@ td.ops-report-actions .row-actions a.button {
   .mail-providers { grid-template-columns: 1fr; }
   .demo-scenarios { grid-template-columns: 1fr; }
   .split { grid-template-columns: 1fr; }
+  .admin-mid,
   .admin-backup-cli { grid-template-columns: 1fr; }
   .ops-mail-cols { flex-direction: column; }
   form.ops-add-email,
@@ -2187,12 +2198,13 @@ h1.incident-head .sev-warn { color: var(--warn); }
   --dash-tile-gap: 0.7rem;
   --dash-tile-band: 42.5rem;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(240px, 22vw, 340px);
-  grid-template-areas: "inc app" "infra app";
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 22vw) clamp(240px, 22vw, 340px);
+  grid-template-areas: "inc ai app" "infra ai app";
   gap: 0.9rem 1rem;
   margin: 0.5rem 0 0.7rem;
 }
 .dash-top > section { margin: 0; min-width: 0; }
+.dash-ai-cube { grid-area: ai; }
 .dash-tiles-incidents,
 .dash-tiles-infra {
   justify-self: start;
@@ -2370,18 +2382,19 @@ h1.incident-head .sev-warn { color: var(--warn); }
   white-space: nowrap;
 }
 @media (max-width: 1100px) {
-  .dash-top { grid-template-columns: 1fr; grid-template-areas: "inc" "infra" "app"; }
+  .dash-top { grid-template-columns: 1fr; grid-template-areas: "inc" "infra" "ai" "app"; }
 }
 
-/* Dashboard: Recent incidents ~3/4, Host metrics ~1/4. */
+/* Dashboard: Recent incidents and Host metrics share one row height. */
 .dash-incidents {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
+  min-height: 28rem;
 }
-.dash-incidents > section { margin: 0; min-width: 0; }
-.dash-graphs-col { min-width: 0; position: sticky; top: 1rem; }
+.dash-incidents > section { margin: 0; min-width: 0; display: flex; flex-direction: column; }
+.dash-graphs-col { min-width: 0; display: flex; flex-direction: column; }
 .dash-graphs-col > h2 { margin: 0 0 0.55rem; }
 .dash-graphs { margin: 0; min-width: 0; }
 .dash-graphs .metric-panel-head { justify-content: flex-end; margin-bottom: 0.15rem; }
@@ -2647,9 +2660,7 @@ form.pager-size button { padding: 0.22rem 0.6rem; font-size: 0.82rem; }
 .list-actions form { margin: 0; display: inline-flex; }
 .list-actions form[hidden] { display: none; }
 .list-actions form[data-bulk-export] { align-items: center; gap: 0.3rem; }
-.list-actions .export-format { margin: 0; }
-.list-actions .export-format select { width: auto; padding: 0.22rem 0.4rem; font-size: 0.82rem; border-radius: 7px; }
-.list-actions button { width: auto; flex: 0 0 auto; padding: 0.28rem 0.7rem; font-size: 0.82rem; }
+.list-actions button { width: auto; flex: 0 0 auto; padding: 0.32rem 0.65rem; font-size: 0.82rem; }
 .list-actions button.is-muted { opacity: 0.55; }
 .select-one-flash { color: var(--warn); font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
 [data-select-scope]:has([data-select-row]:checked) .list-actions,
@@ -2758,7 +2769,21 @@ label.row-check {
   grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
   gap: 0.25rem 0.9rem;
 }
-.incident-mail-card { margin: 0 0 0.85rem; padding: 0.7rem 0.9rem; }
+.call-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: 0.7rem 0.9rem;
+}
+.call-cell h3 {
+  margin: 0 0 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.call-cell p { margin: 0; overflow-wrap: anywhere; }
+.incident-mail-card { margin: 0; padding: 0.7rem 0.9rem; }
 .incident-story {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2777,12 +2802,28 @@ label.row-check {
   align-items: start;
 }
 .incident-ledger > .card { margin: 0; min-width: 0; }
-.incident-notes { margin: 0 0 1.25rem; }
+.incident-notes { margin: 0; }
 .incident-notes .note-block { margin: 0 0 0.7rem; }
+.incident-ops {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.9rem;
+  margin: 0 0 1.25rem;
+  align-items: start;
+}
+.incident-ops > .card { margin: 0; min-width: 0; }
+.incident-ops:not(:has(.incident-mail-card)) { grid-template-columns: minmax(0, 1fr); }
+.incident-mail-edit label { display: flex; flex-direction: column; gap: 0.25rem; margin: 0 0 0.55rem; }
+.incident-mail-edit textarea { min-height: 14rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.78rem; }
+.report-actions { margin: 0.35rem 0 0.7rem; }
+.report-export { margin: 0 0 0.85rem; }
+.report-sent h3 { margin: 0 0 0.35rem; font-size: 0.88rem; }
+.report-sent p { margin: 0 0 0.25rem; overflow-wrap: anywhere; }
 @media (max-width: 1100px) {
   .incident-graphs .dash-graph-list,
   .incident-story,
-  .incident-ledger { grid-template-columns: minmax(0, 1fr); }
+  .incident-ledger,
+  .incident-ops { grid-template-columns: minmax(0, 1fr); }
 }
 /* v08-14: one select look for Type / support / lead time / email picks / playrule add. */
 select.nice-select,
@@ -2864,3 +2905,108 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 .list-filters select.filter-select { width: auto; min-width: 8.5rem; max-width: 13rem; }
 .health-journal { margin-top: 2.75rem; }
 .journal-filters { margin: 0.8rem 0; }
+
+/* v09-18: square unframed action buttons, Save As dialog, ticker, ForgeAI cube. */
+.list-actions button,
+.row-actions button,
+.row-actions a.button,
+.incident-actions button,
+.incident-actions a.button,
+.backup-row-actions button,
+.backup-row-actions a.button,
+.user-actions button,
+.user-actions a.button,
+.report-export > button,
+.dash-ai-ask button {
+  border: 0;
+  border-radius: 2px;
+  box-shadow: none;
+}
+.incident-actions a.button { border-radius: 2px; }
+.export-dialog {
+  width: min(22rem, 92vw);
+  padding: 1rem 1.1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+}
+.export-dialog::backdrop { background: rgba(18, 22, 30, 0.35); }
+.export-dialog h3 { margin: 0 0 0.7rem; }
+.export-dialog label { display: flex; flex-direction: column; gap: 0.25rem; margin: 0 0 0.65rem; font-size: 0.82rem; color: var(--muted); }
+.export-dialog-actions { display: flex; justify-content: flex-end; gap: 0.45rem; margin-top: 0.35rem; }
+.alarm-ticker {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  width: 100%;
+  min-height: 1.55rem;
+  margin: -0.6rem 0 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.alarm-ticker[hidden] { display: none; }
+.alarm-ticker.heat-crit { background: var(--pill-crit-bg); color: var(--pill-crit); }
+.alarm-ticker.heat-warn { background: var(--pill-warn-bg); color: var(--pill-warn); }
+.alarm-ticker a { color: inherit; text-decoration: none; }
+.alarm-ticker.is-blink { animation: ticker-blink 1.05s ease-in-out 4; }
+@keyframes ticker-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.22; } }
+@media (prefers-reduced-motion: reduce) {
+  .alarm-ticker.is-blink { animation: none; }
+}
+.dash-band {
+  height: 0.4rem;
+  margin: 0.1rem 0 0.85rem;
+  border-radius: 3px;
+  background: var(--line);
+}
+.dash-ai-cube {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0.7rem 0.9rem 0.85rem;
+}
+.dash-ai-cube h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 0 0 0.45rem;
+}
+.dash-ai-scroll {
+  flex: 1 1 auto;
+  min-height: 6.5rem;
+  overflow: hidden;
+}
+.dash-ai-scroll p { margin: 0 0 0.55rem; }
+.dash-ai-ask { margin-top: auto; padding-top: 0.45rem; }
+.dash-ai-ask button { width: auto; }
+.appliance-oncall {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--line);
+}
+.appliance-oncall p { margin: 0 0 0.4rem; }
+.appliance-oncall .oncall-take { margin: 0; }
+.appliance-oncall .oncall-take button { width: auto; padding: 0.28rem 0.65rem; font-size: 0.82rem; }
+.dash-recent { min-height: 0; }
+.dash-recent-scroll {
+  flex: 1 1 auto;
+  min-height: 16rem;
+  max-height: none;
+}
+.dash-graphs { flex: 1 1 auto; }
+.cli-example {
+  margin: 0 0 0.7rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.82rem;
+  overflow-x: auto;
+}
+.cli-example code { font-size: inherit; }

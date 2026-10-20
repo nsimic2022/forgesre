@@ -56,6 +56,7 @@ from app.exporter_detect import detect_exporter, is_auto_asset_type
 from app.demo_ids import is_lab_inventory_row
 from app.seed import seed
 from app.services import (
+    alarm_ticker,
     host_down_public,
     incident_source,
     ingest_alertmanager,
@@ -1215,6 +1216,13 @@ def system_resources(user: User = Depends(require_user)) -> dict:
     """This appliance VM (node_exporter / /proc), not a random inventory asset."""
     del user
     return appliance_resources()
+
+
+@router.get("/ticker")
+def ticker(db: Session = Depends(get_db), user: User = Depends(require_user)) -> dict:
+    """Newest active production incidents for the top blink bar."""
+    del user
+    return alarm_ticker(db)
 
 
 @router.get("/jobs")

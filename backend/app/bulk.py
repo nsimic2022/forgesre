@@ -231,8 +231,19 @@ def _download(filename: str, lines: list[str]) -> PlainTextResponse:
 
 
 def _export_format(raw: str) -> str:
-    """TXT is the default. CSV is an explicit opt-in from the pager dropdown."""
+    """TXT is the default. CSV is an explicit opt-in from the Save export dialog."""
     return "csv" if str(raw or "").strip().lower() == "csv" else "txt"
+
+
+def _safe_export_name(raw: str, stem: str, fmt: str) -> str:
+    """Operator Save As name. Path parts are dropped; the format supplies the suffix."""
+    ext = _export_format(fmt)
+    text = str(raw or "").strip().replace("\\", "/").split("/")[-1]
+    if text.lower().endswith(".csv") or text.lower().endswith(".txt"):
+        text = text.rsplit(".", 1)[0]
+    cleaned = "".join(ch if ch.isalnum() or ch in "-_." else "-" for ch in text).strip(".-")
+    base = (cleaned or str(stem or "export").strip() or "export")[:80]
+    return f"{base}.{ext}"
 
 
 def _csv_cell(value: object) -> str:
@@ -1430,6 +1441,7 @@ def incident_audit_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
     _forbid(user, can(user, "read_incidents"))
     row = db.query(Incident).filter_by(number=number).first()
@@ -1439,8 +1451,8 @@ def incident_audit_export(
     safe = number.replace(":", "-")
     if _export_format(fmt) == "csv":
         headers, rows = incident_audit_csv(db, number, ids)
-        return _download_csv(f"{safe}-who-did-what.csv", headers, rows)
-    return _download(f"{safe}-who-did-what.txt", incident_audit_text(db, number, ids))
+        return _download_csv(_safe_export_name(filename, f"{safe}-who-did-what", fmt), headers, rows)
+    return _download(_safe_export_name(filename, f"{safe}-who-did-what", fmt), incident_audit_text(db, number, ids))
 
 
 @router.post("/incidents/export")
@@ -1449,13 +1461,14 @@ def incidents_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
     _forbid(user, can(user, "read_incidents"))
     ids = _need(selected)
     if _export_format(fmt) == "csv":
         headers, rows = incidents_csv(db, ids)
-        return _download_csv("incidents.csv", headers, rows)
-    return _download("incidents.txt", incidents_text(db, ids))
+        return _download_csv(_safe_export_name(filename, "incidents", fmt), headers, rows)
+    return _download(_safe_export_name(filename, "incidents", fmt), incidents_text(db, ids))
 
 
 @router.post("/assets/bulk-delete")
@@ -1545,13 +1558,14 @@ def assets_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
     _forbid(user, can(user, "read_assets"))
     ids = _need(selected)
     if _export_format(fmt) == "csv":
         headers, rows = assets_csv(db, ids)
-        return _download_csv("assets.csv", headers, rows)
-    return _download("assets.txt", assets_text(db, ids))
+        return _download_csv(_safe_export_name(filename, "assets", fmt), headers, rows)
+    return _download(_safe_export_name(filename, "assets", fmt), assets_text(db, ids))
 
 
 @router.post("/discovery/open-import")
@@ -1587,13 +1601,14 @@ def discovery_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
     _forbid(user, can(user, "write_assets"))
     ids = _ints(_need(selected))
     if _export_format(fmt) == "csv":
         headers, rows = found_csv(db, ids)
-        return _download_csv("found-assets.csv", headers, rows)
-    return _download("found-assets.txt", found_text(db, ids))
+        return _download_csv(_safe_export_name(filename, "found-assets", fmt), headers, rows)
+    return _download(_safe_export_name(filename, "found-assets", fmt), found_text(db, ids))
 
 
 @router.post("/playrules/open-edit")
@@ -1629,13 +1644,14 @@ def playrules_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
     _forbid(user, can(user, "read_play"))
     ids = _ints(_need(selected))
     if _export_format(fmt) == "csv":
         headers, rows = playrules_csv(db, ids)
-        return _download_csv("playrules.csv", headers, rows)
-    return _download("playrules.txt", playrules_text(db, ids))
+        return _download_csv(_safe_export_name(filename, "playrules", fmt), headers, rows)
+    return _download(_safe_export_name(filename, "playrules", fmt), playrules_text(db, ids))
 
 
 @router.post("/playbooks/open-edit")
@@ -1671,13 +1687,14 @@ def playbooks_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
     _forbid(user, can(user, "read_play"))
     ids = _ints(_need(selected))
     if _export_format(fmt) == "csv":
         headers, rows = playbooks_csv(db, ids)
-        return _download_csv("playbooks.csv", headers, rows)
-    return _download("playbooks.txt", playbooks_text(db, ids))
+        return _download_csv(_safe_export_name(filename, "playbooks", fmt), headers, rows)
+    return _download(_safe_export_name(filename, "playbooks", fmt), playbooks_text(db, ids))
 
 
 @router.post("/escalation/oncall/open-edit")
@@ -1728,13 +1745,14 @@ def oncall_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
     _forbid(user, can(user, "read_play"))
     ids = _ints(_need(selected))
     if _export_format(fmt) == "csv":
         headers, rows = oncall_csv(db, ids)
-        return _download_csv("oncall.csv", headers, rows)
-    return _download("oncall.txt", oncall_text(db, ids))
+        return _download_csv(_safe_export_name(filename, "oncall", fmt), headers, rows)
+    return _download(_safe_export_name(filename, "oncall", fmt), oncall_text(db, ids))
 
 
 @router.post("/journal/bulk-delete")
@@ -1755,13 +1773,14 @@ def journal_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
     _forbid(user, can(user, "read_play"))
     ids = _ints(_need(selected))
     if _export_format(fmt) == "csv":
         headers, rows = journal_csv(db, ids)
-        return _download_csv("journal.csv", headers, rows)
-    return _download("journal.txt", journal_text(db, ids))
+        return _download_csv(_safe_export_name(filename, "journal", fmt), headers, rows)
+    return _download(_safe_export_name(filename, "journal", fmt), journal_text(db, ids))
 
 
 @router.post("/ops/mail/bulk-delete")
@@ -1782,13 +1801,14 @@ def mail_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
     _forbid(user, can_send_ops(user))
     ids = _ints(_need(selected))
     if _export_format(fmt) == "csv":
         headers, rows = mail_csv(db, ids)
-        return _download_csv("mail.csv", headers, rows)
-    return _download("mail.txt", mail_text(db, ids))
+        return _download_csv(_safe_export_name(filename, "mail", fmt), headers, rows)
+    return _download(_safe_export_name(filename, "mail", fmt), mail_text(db, ids))
 
 
 @router.post("/ops/reports/bulk-delete")
@@ -1809,13 +1829,14 @@ def reports_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
     _forbid(user, can_send_ops(user))
     ids = _ints(_need(selected))
     if _export_format(fmt) == "csv":
         headers, rows = reports_csv(db, ids)
-        return _download_csv("scheduled-reports.csv", headers, rows)
-    return _download("scheduled-reports.txt", reports_text(db, ids))
+        return _download_csv(_safe_export_name(filename, "scheduled-reports", fmt), headers, rows)
+    return _download(_safe_export_name(filename, "scheduled-reports", fmt), reports_text(db, ids))
 
 
 @router.post("/admin/audit/export")
@@ -1824,13 +1845,14 @@ def audit_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
     _forbid(user, can(user, "admin"))
     ids = _ints(_need(selected))
     if _export_format(fmt) == "csv":
         headers, rows = audit_csv(db, ids)
-        return _download_csv("audit.csv", headers, rows)
-    return _download("audit.txt", audit_text(db, ids))
+        return _download_csv(_safe_export_name(filename, "audit", fmt), headers, rows)
+    return _download(_safe_export_name(filename, "audit", fmt), audit_text(db, ids))
 
 
 @router.post("/admin/backups/export")
@@ -1838,11 +1860,12 @@ def backups_export(
     user: User = Depends(_user),
     selected: Annotated[list[str], Form()] = [],
     fmt: Annotated[str, Form(alias="format")] = "txt",
+    filename: Annotated[str, Form()] = "",
 ):
     """Names and times of the selected backup folders. Archive bytes stay on Download."""
     _forbid(user, can(user, "admin"))
     names = _need(selected)
     if _export_format(fmt) == "csv":
         headers, rows = backups_csv(names)
-        return _download_csv("backups.csv", headers, rows)
-    return _download("backups.txt", backups_text(names))
+        return _download_csv(_safe_export_name(filename, "backups", fmt), headers, rows)
+    return _download(_safe_export_name(filename, "backups", fmt), backups_text(names))
