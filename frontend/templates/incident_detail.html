@@ -28,6 +28,9 @@
     <tr>
       <th class="col-name">Incident</th>
       <th class="col-host">Hostname</th>
+      <th class="col-ip">IP</th>
+      <th class="col-owner">Owner</th>
+      <th class="col-contact">Contact</th>
       <th class="col-status">Status</th>
       <th class="col-ladder" title="How far this incident climbed. Four squares stacked L1, L2, L3, L4.">L1–L4</th>
       <th class="col-when">When</th>
@@ -40,8 +43,11 @@
     <tr class="{{ incident_tone(incident.status, incident.severity) }}{% if done %} inc-row-done{% endif %}{% if is_demo_incident(incident) %} inc-row-demo{% endif %}">
       {% include "_incident_cell.html" %}
       <td class="col-host">{% set host = incident_host(incident) %}{% if incident.asset %}<a class="inc-host" href="/assets/{{ incident.asset.asset_id }}">{{ incident.asset.hostname }}</a>{% elif host %}<span class="inc-host" title="From the alert labels — no asset matched">{{ host }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="col-ip">{% if incident.asset and incident.asset.ip %}{{ incident.asset.ip }}{% else %}—{% endif %}</td>
+      <td class="col-owner">{% if incident.asset and incident.asset.owner %}{{ incident.asset.owner }}{% else %}—{% endif %}</td>
+      <td class="col-contact">{% if incident.asset and incident.asset.contact_name %}{{ incident.asset.contact_name }}{% else %}—{% endif %}</td>
       {% include "_incident_status_cell.html" %}
-      <td class="col-ladder">{% with cubes=incident_ladder_cubes(incident) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
+      <td class="col-ladder">{% with cubes=incident_ladder_cubes(item) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
       {% with show_ack=false, show_severity=true, show_notes=true %}{% include "_incident_scan_tail.html" %}{% endwith %}
     </tr>
   </tbody>
@@ -82,68 +88,6 @@
 {% for step in incident.timeline or [] if step.id == 'parent' %}
 <p class="muted" data-parent-link>{{ step.detail }}</p>
 {% endfor %}
-{% endif %}
-
-{% if incident.asset %}
-<section class="card incident-call">
-  <h2>Who to call {% with %}{% set tip %}Default escalation role steps mail the owner email below. A step that names an address mails that address instead. With no owner email, role steps are recorded as no-recipient and nothing is sent. A filled asset Escalation mails those addresses only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <dl class="kv">
-    <dt>Owner / team</dt><dd>{{ incident.asset.owner or "—" }}</dd>
-    <dt>Contact</dt><dd>{{ incident.asset.contact_name or "—" }}</dd>
-    <dt>Email</dt><dd>{% if incident.asset.owner_email %}{{ incident.asset.owner_email }}{% else %}<span class="pill warn">No owner email</span> <span class="muted">escalation has nobody to mail</span>{% endif %}</dd>
-    <dt>Phone</dt><dd>{{ incident.asset.owner_phone or "—" }}</dd>
-    {% set sup = support_status(incident.asset) %}
-    <dt>Support</dt><dd data-support-state="{{ sup.state }}"><span class="pill support-pill {{ sup.tone }}">{{ sup.label }}</span> {{ sup.call_note }}{% if sup.state == 'expired' %} <span class="muted">({{ sup.detail }})</span>{% endif %}</dd>
-    {% for key, label, value in extras_rows(incident.asset) if key != 'runbook_note' %}
-    <dt>{{ label }}</dt><dd class="extra-{{ key }}">{{ value }}</dd>
-    {% endfor %}
-    {% if client_playrules %}
-    <dt>Custom alarms</dt>
-    <dd>{% for rule in client_playrules %}{{ rule.name }}{% if incident.playrule_id == rule.id %} <span class="pill ok">used</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</dd>
-    {% endif %}
-  </dl>
-  {% for key, label, value in extras_rows(incident.asset) if key == 'runbook_note' %}
-  <div class="runbook-note" data-runbook-note>
-    <strong>{{ label }}</strong>
-    <p class="pre-wrap">{{ value }}</p>
-  </div>
-  {% endfor %}
-  <p class="muted"><a href="/assets/{{ incident.asset.asset_id }}">Edit contacts on the asset</a>.</p>
-</section>
-{% endif %}
-
-{% if can_send %}
-<section class="card incident-mail-card" id="send-report">
-  <h2>Send incident report {% with %}{% set tip %}Current snapshot (alert + ForgeRCA if it has run). Does not change status.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <p class="muted">
-    {% if smtp_on %}
-    SMTP is <strong>on</strong> — this leaves the VM to the address you pick.{% if can_send_ops %} Outbox: <a href="/ops#mail">Email &amp; reports</a>.{% endif %}
-    {% else %}
-    SMTP is <strong>off</strong> — the row is stored as <em>generated</em>{% if can_send_ops %} in the <a href="/ops#mail">mail outbox</a>{% else %} in the mail outbox{% endif %}. Gmail will not receive it until you enable SMTP (see operator handbook §11).
-    {% endif %}
-  </p>
-  <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail">
-    <label>To
-      <select name="target">
-        <option value="">Select an address</option>
-        {% for addr in addresses %}
-        <option value="{{ addr.email }}" {% if addr.email == default_to %}selected{% endif %}>{% if addr.label %}{{ addr.label }} — {% endif %}{{ addr.email }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>Or new email <input name="new_email" type="email" placeholder="ops@dc.local"></label>
-    <button type="submit">Send incident report</button>
-  </form>
-</section>
-{% endif %}
-
-{% if incident.asset %}
-<section class="card incident-graphs" data-incident-graphs data-asset="{{ incident.asset.asset_id }}" data-host="{{ incident.asset.hostname }}" data-incident="{{ incident.number }}" aria-live="polite">
-  <h2>Host metrics {% with %}{% set tip %}Loaded once when this card is on screen. From one hour before this incident started through now, or through the end if it is resolved. A vertical line marks When. Hover a point for the host, time, and value. Prometheus series for scraped hosts. A host imported from or linked to Zabbix with no Prometheus samples shows Zabbix trend.get hourly averages for CPU / memory / disk (last 24 h), only if those items exist. Zabbix down or slow (2–5 s timeout) shows No samples yet — the rest of this page is unaffected.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <p class="muted dash-graph-caption" data-dash-graph-caption hidden></p>
-  <p class="muted dash-graph-empty" data-dash-graph-empty>Loading…</p>
-  <div class="dash-graph-list" data-dash-graph-list></div>
-</section>
 {% endif %}
 
 <div class="incident-story">
@@ -211,6 +155,63 @@
 </section>
 </div>
 
+{% if incident.asset %}
+<section class="card incident-graphs" data-incident-graphs data-asset="{{ incident.asset.asset_id }}" data-host="{{ incident.asset.hostname }}" data-incident="{{ incident.number }}" aria-live="polite">
+  <h2>Host metrics {% with %}{% set tip %}Loaded once when this card is on screen. From one hour before this incident started through now, or through the end if it is resolved. A vertical line marks When. Hover a point for the host, time, and value. Prometheus series for scraped hosts. A host imported from or linked to Zabbix with no Prometheus samples shows Zabbix trend.get hourly averages for CPU / memory / disk (last 24 h), only if those items exist. Zabbix down or slow (2–5 s timeout) shows No samples yet — the rest of this page is unaffected.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <p class="muted dash-graph-caption" data-dash-graph-caption hidden></p>
+  <p class="muted dash-graph-empty" data-dash-graph-empty>Loading…</p>
+  <div class="dash-graph-list" data-dash-graph-list></div>
+</section>
+{% endif %}
+
+{% if incident.asset %}
+<section class="card incident-call">
+  <h2>Who to call {% with %}{% set tip %}Default escalation role steps mail the owner email below. A step that names an address mails that address instead. With no owner email, role steps are recorded as no-recipient and nothing is sent. A filled asset Escalation mails those addresses only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="call-grid">
+    <div class="call-cell">
+      <h3>Owner / team</h3>
+      <p>{{ incident.asset.owner or "—" }}</p>
+    </div>
+    <div class="call-cell">
+      <h3>Contact</h3>
+      <p>{{ incident.asset.contact_name or "—" }}</p>
+    </div>
+    <div class="call-cell">
+      <h3>Email</h3>
+      <p>{% if incident.asset.owner_email %}{{ incident.asset.owner_email }}{% else %}<span class="pill warn">No owner email</span> <span class="muted">escalation has nobody to mail</span>{% endif %}</p>
+    </div>
+    <div class="call-cell">
+      <h3>Phone</h3>
+      <p>{{ incident.asset.owner_phone or "—" }}</p>
+    </div>
+    {% set sup = support_status(incident.asset) %}
+    <div class="call-cell">
+      <h3>Support</h3>
+      <p data-support-state="{{ sup.state }}"><span class="pill support-pill {{ sup.tone }}">{{ sup.label }}</span> {{ sup.call_note }}{% if sup.state == 'expired' %} <span class="muted">({{ sup.detail }})</span>{% endif %}</p>
+    </div>
+    {% for key, label, value in extras_rows(incident.asset) if key != 'runbook_note' %}
+    <div class="call-cell extra-{{ key }}">
+      <h3>{{ label }}</h3>
+      <p>{{ value }}</p>
+    </div>
+    {% endfor %}
+    {% if client_playrules %}
+    <div class="call-cell">
+      <h3>Custom alarms</h3>
+      <p>{% for rule in client_playrules %}{{ rule.name }}{% if incident.playrule_id == rule.id %} <span class="pill ok">used</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+    </div>
+    {% endif %}
+  </div>
+  {% for key, label, value in extras_rows(incident.asset) if key == 'runbook_note' %}
+  <div class="runbook-note" data-runbook-note>
+    <strong>{{ label }}</strong>
+    <p class="pre-wrap">{{ value }}</p>
+  </div>
+  {% endfor %}
+  <p class="muted"><a href="/assets/{{ incident.asset.asset_id }}">Edit contacts on the asset</a>.</p>
+</section>
+{% endif %}
+
 <div class="incident-ledger">
 <section id="evidence" class="card incident-evidence">
   <h2>Engineer evidence {% with %}{% set tip %}Stored evidence rows (alert, inventory, Prometheus / Loki samples) as collected — nothing is re-queried here. One line per row; double-click a row to show the full stored text, double-click anywhere on it again (the open text too) to fold it. Drag to select text to copy.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
@@ -270,6 +271,7 @@
 </section>
 </div>
 
+<div class="incident-ops">
 <section id="notes" class="card incident-notes">
   <h2>Operator notes {% with %}{% set tip %}What a person actually did (e.g. cleaned WAL). Not the playbook and not RCA.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   {% for row in operator_notes %}
@@ -288,4 +290,57 @@
   </form>
   {% endif %}
 </section>
+
+{% if can_send %}
+<section class="card incident-mail-card" id="send-report">
+  <h2>Send incident report {% with %}{% set tip %}Current snapshot (alert + ForgeRCA if it has run). Preview is the text that will be mailed — edit subject or body before Send. Export writes that text (TXT or CSV UTF-8). Does not change status. {% if smtp_on %}SMTP is on — this leaves the VM to the address you pick.{% else %}SMTP is off — the row is stored as generated in the mail outbox. Gmail will not receive it until you enable SMTP (see operator handbook §11).{% endif %}{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  {% if can_send_ops %}<p class="muted">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>{% endif %}
+  <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail-edit" data-report-form>
+    <label>Subject <input name="subject" value="{{ report_subject }}" autocomplete="off"></label>
+    <label>Report <textarea name="body" rows="14" data-report-body>{{ report_preview }}</textarea></label>
+    <div class="incident-mail">
+      <label>To
+        <select name="target">
+          <option value="">Select an address</option>
+          {% for addr in addresses %}
+          <option value="{{ addr.email }}" {% if addr.email == default_to %}selected{% endif %}>{% if addr.label %}{{ addr.label }} — {% endif %}{{ addr.email }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Or new email <input name="new_email" type="email" placeholder="ops@dc.local"></label>
+    </div>
+    <div class="row-actions report-actions">
+      <button type="submit">Send incident report</button>
+    </div>
+  </form>
+  <form method="post" action="/incidents/{{ incident.number }}/report/export" class="report-export" data-export-picker data-export-from-report>
+    <input type="hidden" name="subject" value="{{ report_subject }}" data-export-subject>
+    <input type="hidden" name="body" value="" data-export-body>
+    <button type="button" data-export-open>Export</button>
+    <dialog class="export-dialog" data-export-dialog>
+      <h3>Save export</h3>
+      <label>Name <input type="text" name="filename" value="{{ incident.number }}-report" autocomplete="off" data-export-name></label>
+      <label>Format
+        <select name="format" aria-label="Export format">
+          <option value="txt">TXT</option>
+          <option value="csv">CSV UTF-8</option>
+        </select>
+      </label>
+      <div class="export-dialog-actions">
+        <button type="button" class="secondary" data-export-cancel>Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </dialog>
+  </form>
+  <div class="report-sent" data-report-sent>
+    <h3>Sent to</h3>
+    {% for row in mail if row.step_key == 'incident-report' %}
+    <p>{{ row.target }} · {{ row.status }}{% if row.subject %} · {{ row.subject }}{% endif %}</p>
+    {% else %}
+    <p class="muted">Not sent yet.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+</div>
 {% endblock %}

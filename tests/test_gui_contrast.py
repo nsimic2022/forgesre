@@ -65,8 +65,8 @@ def _block(start: str) -> str:
 
 
 def test_cache_bust_is_v09_s_for_css_only():
-    assert "app.css?v=v09-17" in BASE
-    assert "app.js?v=v09-W" in BASE
+    assert "app.css?v=v09-18" in BASE
+    assert "app.js?v=v09-X" in BASE
     assert "app.css?v=v09-W" not in BASE
 
 

@@ -125,6 +125,8 @@
     {% endif %}
   </div>
 </div>
+<div class="admin-mid">
+<section class="admin-audit-pane">
 <h2>Audit log</h2>
 <div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
@@ -147,6 +149,8 @@
 {% include "_pager.html" %}
 {% endwith %}
 </div>
+</section>
+<section class="admin-backup-pane">
 <h2>Platform backup {% with %}{% set tip %}Full-system archive for crash recovery or VM migration. Each run is a folder data/backups/backup_YYYYMMDDTHHMMSSZ/ (gitignored, directory mode 700) with one forgesre.tar.gz (mode 600) plus a short MANIFEST.txt. Import that tar — do not unpack it into loose files. Includes config/forgesre.yml, .env, secrets/secrets.env, a logical Postgres dump (users, incidents, playbooks, playrules, journal), compressed logs, monitoring/alerts.local.yml, and data/generated/. Not in the backup: container images, Prometheus/Loki/Grafana volumes, nested backups, optional mailbox mail. LLM GGUF weights are skipped unless you tick the checkbox (they are often multi-GB). Download requires this admin session — there is no unauthenticated URL.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 {% if request.query_params.get('backup') %}
 <p class="banner"><strong>Backup written</strong> {{ request.query_params.get('backup') }} under <code>data/backups/</code> (mode 600, gitignored).</p>
@@ -199,6 +203,8 @@
 {% else %}
 <p class="muted">No archives yet. Create one, or import a <code>forgesre.tar.gz</code> (or legacy <code>forgesre-YYYYMMDDTHHMMSSZ.tar.gz</code>).</p>
 {% endif %}
+</section>
+</div>
 <div class="admin-backup-cli">
 <div class="admin-restore-pane">
 <h3>Import / restore {% with %}{% set tip %}Import only stores a tar.gz under data/backups/backup_…/. Restore overwrites the live database (users, incidents, playbooks) and does not run unless you tick the box and type RESTORE. Preferred after a crash or when migrating: SSH, stop Core, ./forgesre restore (pick a number) or ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes, then ./forgesre update. Config / .env / secrets on disk are not rewritten from this browser (Core mounts them read-only).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
@@ -223,6 +229,9 @@
 </div>
 <div class="admin-cli-pane">
 <h3>ForgeSRE CLI {% with %}{% set tip %}There is no terminal in this browser. Use SSH, then ./forgesre or ./forgesre shell. The table lists every ./forgesre subcommand. Details on the VM: ./forgesre help &lt;command&gt;.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+<pre class="cli-example" aria-label="Example session"><code>ssh admin@forgesre
+./forgesre doctor
+./forgesre incidents</code></pre>
 <div class="cli-cheatsheet-scroll">
 <table class="cli-cheatsheet">
   <thead><tr><th>Command</th><th>What it does</th></tr></thead>

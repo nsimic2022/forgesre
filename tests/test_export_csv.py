@@ -46,12 +46,16 @@ def test_pager_export_offers_txt_and_csv():
     _db().close()
     html = _client().get("/incidents").text
     form = html.split('action="/incidents/export"', 1)[1].split("</form>", 1)[0]
+    assert 'data-export-picker' in form
+    assert 'data-export-dialog' in form
     assert 'name="format"' in form
+    assert 'name="filename"' in form
     assert 'value="txt"' in form and 'value="csv"' in form
     assert ">TXT<" in form and ">CSV UTF-8<" in form
     home = _client().get("/").text
     dash = home.split('action="/incidents/export"', 1)[1].split("</form>", 1)[0]
     assert 'value="csv"' in dash
+    assert "Save export" in dash
 
 
 def test_incident_csv_keeps_serbian_notes_and_table_columns():

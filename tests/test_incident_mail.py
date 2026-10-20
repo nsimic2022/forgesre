@@ -238,11 +238,11 @@ def test_forgerca_section_renders_lists():
     assert "disk 95%" in html
     assert "write spike" in html
     assert "candidate WAL" in html
-    assert "Likely cause" in html
+    assert "Catalog hypothesis" in html
     assert "Recommendation" in html
     assert "Facts" in html
     assert "<li" in html
-    assert "Likely cause:" in plain
+    assert "Catalog hypothesis:" in plain
     assert "disk 95%" in plain
     assert svc_build_incident_report is build_incident_report or "disk 95%" in plain
 

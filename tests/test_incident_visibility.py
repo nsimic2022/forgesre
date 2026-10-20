@@ -273,13 +273,17 @@ def test_detail_header_strip_has_first_and_duration():
     assert 'class="pill investigating"' in identity or "INVESTIGATING" in identity
     assert 'class="pill crit"' in identity
     assert page.text.index("data-incident-identity") < page.text.index("class=\"incident-actions\"")
-    assert page.text.index("class=\"incident-actions\"") < page.text.index("<h2>Who to call")
-    assert page.text.index("<h2>Who to call") < page.text.index("<h2>Host metrics")
-    assert page.text.index("<h2>Host metrics") < page.text.index("<h2>What happened")
+    assert page.text.index("class=\"incident-actions\"") < page.text.index("<h2>What happened")
     assert page.text.index("<h2>What happened") < page.text.index("<h2>Workflow")
     assert page.text.index("<h2>Workflow") < page.text.index("<h2>Similar on this asset")
+    assert page.text.index("<h2>Similar on this asset") < page.text.index("<h2>Host metrics")
+    assert page.text.index("<h2>Host metrics") < page.text.index("<h2>Who to call")
+    assert page.text.index("<h2>Who to call") < page.text.index('id="evidence"')
     assert page.text.index('id="evidence"') < page.text.index('id="audit"')
     assert page.text.index('id="audit"') < page.text.index('id="notes"')
+    assert ">IP<" in identity
+    assert ">Owner<" in identity
+    assert ">Contact<" in identity
     db.close()
 
 
@@ -334,4 +338,4 @@ def test_stack_cube_font_bumped_box_unchanged():
     assert "padding: 0.28rem" in block
     assert "line-height: 0.77rem" in block
     assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v09-17" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "app.css?v=v09-18" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

@@ -1934,3 +1934,127 @@ function graphPane(pane) {
   nameInput.addEventListener("change", fill);
   nameInput.addEventListener("input", fill);
 })();
+
+(function bindExportPicker() {
+  const stemFrom = (form) => {
+    const named = form.querySelector("[data-export-name]");
+    if (named && named.value) return named.value;
+    const action = form.getAttribute("action") || "";
+    const parts = action.split("/").filter(Boolean);
+    const last = parts[parts.length - 1] || "";
+    const prev = parts[parts.length - 2] || "";
+    if (last === "export" && prev === "audit") return "who-did-what";
+    if (last === "export" && prev === "report") return "incident-report";
+    if (last === "export") return prev || "export";
+    return "export";
+  };
+  const syncReport = (form) => {
+    if (!form.hasAttribute("data-export-from-report")) return;
+    const source = document.querySelector("[data-report-form]");
+    const subject = form.querySelector("[data-export-subject]");
+    const body = form.querySelector("[data-export-body]");
+    if (source && subject) {
+      const field = source.querySelector('input[name="subject"]');
+      if (field) subject.value = field.value || "";
+    }
+    if (source && body) {
+      const field = source.querySelector("[data-report-body]");
+      if (field) body.value = field.value || "";
+    }
+  };
+  document.addEventListener("click", (event) => {
+    const open = event.target.closest("[data-export-open]");
+    if (open) {
+      const form = open.closest("form[data-export-picker]");
+      if (!form) return;
+      const dialog = form.querySelector("[data-export-dialog]");
+      const name = form.querySelector("[data-export-name]");
+      if (name && !name.value) name.value = stemFrom(form);
+      if (dialog) dialog.showModal();
+      return;
+    }
+    const cancel = event.target.closest("[data-export-cancel]");
+    if (cancel) {
+      const dialog = cancel.closest("dialog");
+      if (dialog) dialog.close();
+    }
+  });
+  document.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.hasAttribute("data-export-picker")) return;
+    if (form.hasAttribute("data-bulk-export")) {
+      const scope = form.closest("[data-select-scope]");
+      const picked = scope ? scope.querySelectorAll("[data-select-row]:checked") : [];
+      if (!picked.length) return;
+    }
+    syncReport(form);
+    const dialog = form.querySelector("[data-export-dialog]");
+    const picker = window.showSaveFilePicker;
+    if (typeof picker !== "function") {
+      if (dialog && dialog.open) dialog.close();
+      return;
+    }
+    event.preventDefault();
+    const fmt = (form.querySelector('[name="format"]') || {}).value || "txt";
+    const raw = (form.querySelector("[data-export-name]") || {}).value || stemFrom(form);
+    const ext = fmt === "csv" ? ".csv" : ".txt";
+    const suggested = raw.toLowerCase().endsWith(ext) ? raw : raw + ext;
+    const types =
+      fmt === "csv"
+        ? [{ description: "CSV UTF-8", accept: { "text/csv": [".csv"] } }]
+        : [{ description: "Text", accept: { "text/plain": [".txt"] } }];
+    picker({ suggestedName: suggested, types })
+      .then((handle) => {
+        const data = new FormData(form);
+        return fetch(form.action, { method: "POST", body: data, credentials: "same-origin" }).then((response) => {
+          if (!response.ok) throw new Error("export failed");
+          return response.blob().then((blob) => handle.createWritable().then((writable) => writable.write(blob).then(() => writable.close())));
+        });
+      })
+      .then(() => {
+        if (dialog && dialog.open) dialog.close();
+      })
+      .catch((err) => {
+        if (err && err.name === "AbortError") return;
+        if (dialog && dialog.open) dialog.close();
+        form.submit();
+      });
+  });
+})();
+
+(function bindAlarmTicker() {
+  const bar = document.querySelector("[data-alarm-ticker]");
+  if (!bar) return;
+  const link = bar.querySelector("[data-ticker-link]");
+  let last = "";
+  const paint = (data) => {
+    if (!data || !data.fresh || !data.items || !data.items.length) {
+      bar.hidden = true;
+      bar.classList.remove("heat-crit", "heat-warn", "is-blink");
+      return;
+    }
+    const item = data.items[0];
+    const label = ["NEW", item.number, item.host, item.title].filter(Boolean).join(" · ");
+    bar.hidden = false;
+    bar.classList.toggle("heat-crit", data.heat === "crit");
+    bar.classList.toggle("heat-warn", data.heat === "warn");
+    if (link) {
+      link.href = item.href || "/";
+      link.textContent = label;
+    }
+    if (item.number !== last) {
+      bar.classList.remove("is-blink");
+      void bar.offsetWidth;
+      bar.classList.add("is-blink");
+      last = item.number;
+    }
+  };
+  const load = () => {
+    fetch("/api/v1/ticker", { headers: { Accept: "application/json" } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(paint)
+      .catch(() => {});
+  };
+  load();
+  window.setInterval(load, 8000);
+})();

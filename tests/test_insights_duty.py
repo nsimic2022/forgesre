@@ -96,7 +96,7 @@ def test_later_take_duty_wins_and_dashboard_shows_the_button():
     assert home.status_code == 200
     assert "I'm on duty now" in home.text
     assert 'action="/escalation/oncall/take"' in home.text
-    assert admin.email in home.text or "On call" in home.text
+    assert admin.email in home.text or "On duty" in home.text
     took = client.post("/escalation/oncall/take", data={"next": "/"}, follow_redirects=False)
     assert took.status_code == 303
     assert took.headers["location"] == "/"
@@ -181,12 +181,11 @@ def test_dashboard_forgeai_strip_and_report_export():
     html = client.get("/").text
     assert "data-forgeai-insights" in html
     assert 'id="forgeai"' in html
-    assert ">Repeats<" in html
-    assert ">Hot groups<" in html
-    assert "Parent–child" in html or "Parent-child" in html
-    assert ">Aging open<" in html
-    assert 'action="/insights/export"' in html
+    assert "Paused" in html or "Live" in html
     assert 'action="/insights/refresh"' in html
+    assert "Ask ForgeAI" in html
+    assert "data-appliance-card" in html
+    assert "On duty" in html
     exported = client.post("/insights/export", data={"format": "txt"})
     assert exported.status_code == 200
     assert 'filename="forgeai-digest.txt"' in exported.headers["content-disposition"]

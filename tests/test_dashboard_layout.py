@@ -251,7 +251,7 @@ def test_dashboard_order_tiles_appliance_sections_without_banners():
     recent = html.index("<h2>Recent incidents</h2>")
     graphs = html.index("data-dash-graphs")
     insights = html.index("data-forgeai-insights")
-    assert title < top < incidents_tile < infra < appliance < recent < graphs < insights
+    assert title < top < incidents_tile < infra < insights < appliance < recent < graphs
     assert "Recent journal" not in html
     assert "Layout journal error" not in html
     for gone in ('class="dash-banners"', 'id="host-down-banner"', "data-host-down-banner", "HOST DOWN",
@@ -312,7 +312,7 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.15rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-17" in base
+    assert "app.css?v=v09-18" in base
 
 
 def test_dashboard_banner_block_gone_from_template_js_css():
@@ -407,9 +407,13 @@ def test_dashboard_card_has_no_container_controls(monkeypatch):
     monkeypatch.setattr(web, "doctor_payload", _fake_doctor)
     _db().close()
     card = _card(_client().get("/").text).lower()
-    assert "<form" not in card and "<button" not in card
+    body = card.split("</h2>", 1)[1]
+    stack = body.split("appliance-oncall", 1)[0]
+    assert "<form" not in stack and "<button" not in stack
+    assert "appliance-oncall" in card
+    assert "i'm on duty now" in body
     for word in ("start", "stop", "restart", "docker", ">on<", ">off<"):
-        assert word not in card.split("</h2>", 1)[1], word
+        assert word not in stack, word
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".stack-cube.ok { background: var(--ok)" in css
     assert ".stack-cube.warn { background: var(--warn)" in css

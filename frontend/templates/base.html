@@ -15,7 +15,7 @@
       document.documentElement.setAttribute("data-theme", theme);
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v09-17">
+  <link rel="stylesheet" href="/static/app.css?v=v09-18">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -65,6 +65,9 @@
     </div>
   </aside>
   <main class="content">
+    <div class="alarm-ticker" data-alarm-ticker hidden role="status">
+      <a data-ticker-link href="/"></a>
+    </div>
     {% block content %}{% endblock %}
   </main>
   {% else %}
@@ -75,6 +78,6 @@
     </div>
   </main>
   {% endif %}
-  <script src="/static/app.js?v=v09-W"></script>
+  <script src="/static/app.js?v=v09-X"></script>
 </body>
 </html>
