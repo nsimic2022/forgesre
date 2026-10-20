@@ -135,7 +135,7 @@ def test_add_asset_columns_nav_rules_and_escalated_cube():
     home = client.get("/")
     alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
     assert 'data-tile="escalated"' in alarms
-    assert 'href="/incidents?status=ESCALATED"' in alarms
+    assert 'href="/incidents?status=ESCALATED&amp;demo=0"' in alarms
     assert ">Open<" not in alarms
     db.close()
 

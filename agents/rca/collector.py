@@ -413,7 +413,7 @@ def collect_evidence_set(
                     extra={"unavailable": True, "window_minutes": window_minutes},
                     confidence=0.2,
                 )
-                break
+                continue
             add(
                 "METRIC",
                 "prometheus",

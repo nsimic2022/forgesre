@@ -14,6 +14,7 @@
   {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
   {% if flag %}<input type="hidden" name="flag" value="{{ flag }}">{% endif %}
   {% if agent %}<input type="hidden" name="agent" value="{{ agent }}">{% endif %}
+  {% if lab %}<input type="hidden" name="lab" value="{{ lab }}">{% endif %}
   {% set type_on = asset_type|lower %}
   <select name="type" class="nice-select filter-select" aria-label="Type" title="Type" data-asset-filter="type">
     <option value=""{% if not type_on %} selected{% endif %}>Type</option>
@@ -55,13 +56,15 @@
   {% endfor %}
   {% include "_pager_keep.html" %}
   <button type="submit">Search</button>
-  {% if q or hostname or ip or status or flag or source or agent or asset_type or site or vlan or customer or row or rack %}<a class="muted list-reset" href="/assets">Reset</a>{% endif %}
+  {% if q or hostname or ip or status or flag or source or agent or asset_type or site or vlan or customer or row or rack or lab %}<a class="muted list-reset" href="/assets">Reset</a>{% endif %}
 </form>
 <nav class="filter-chips" aria-label="Asset filters">
   {% for key, value, label in [("", "", "All"), ("status", "critical", "Critical"), ("status", "warning", "Warning"), ("flag", "unreachable", "Offline")] %}
-  {% set on = (not key and not status and not flag and not source and not agent and not asset_type and not site and not vlan and not customer and not row and not rack and not hostname and not ip) or (key == "status" and status == value) or (key == "flag" and flag == value) %}
+  {% set on = (not key and not status and not flag and not source and not agent and not asset_type and not site and not vlan and not customer and not row and not rack and not hostname and not ip and not lab) or (key == "status" and status == value) or (key == "flag" and flag == value) %}
   <a class="chip{% if on %} on{% endif %}" href="/assets{% if key %}?{{ key }}={{ value }}{% endif %}{% if q %}{{ '&' if key else '?' }}q={{ q }}{% endif %}{% set size_tail = pager_keep(pager, page=False) %}{% if size_tail %}{{ size_tail if (key or q) else '?' ~ size_tail[1:] }}{% endif %}">{{ label }}</a>
   {% endfor %}
+  <a class="chip{% if lab == '0' %} on{% endif %}" href="/assets?lab=0{% if q %}&q={{ q }}{% endif %}{{ pager_keep(pager, page=False) }}">Production</a>
+  <a class="chip{% if lab == '1' %} on{% endif %}" href="/assets?lab=1{% if q %}&q={{ q }}{% endif %}{{ pager_keep(pager, page=False) }}">Lab DEMO</a>
   {% if zabbix_filters %}
   <span class="chip-sep" aria-hidden="true">·</span>
   {% for value, label in [("", "Zabbix"), ("up", "agent up"), ("down", "agent down"), ("unknown", "agent unknown")] %}
@@ -101,7 +104,7 @@
     {% for asset in assets %}
     <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}" data-list-row data-list-view="/assets?view={{ asset.asset_id }}{{ view_tail }}">
       {{ sel.cell(asset.asset_id) }}
-      <td class="col-host"><a href="/assets?view={{ asset.asset_id }}{{ view_tail }}" data-list-open>{{ asset.hostname }}</a>{% if asset.parent %}<div class="muted" data-parent-host>parent {{ asset.parent.hostname }}</div>{% endif %}</td>
+      <td class="col-host"><a href="/assets?view={{ asset.asset_id }}{{ view_tail }}" data-list-open>{{ asset.hostname }}</a>{% if is_lab_inventory_row(asset) %} <span class="pill demo">DEMO</span>{% endif %}{% if asset.parent %}<div class="muted" data-parent-host>parent {{ asset.parent.hostname }}</div>{% endif %}</td>
       <td class="col-port">
         {% set r = reachability_snapshot(asset) %}
         {% set reach_id = asset.asset_id %}

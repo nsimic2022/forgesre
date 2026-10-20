@@ -117,9 +117,9 @@
   <h2>Send incident report {% with %}{% set tip %}Current snapshot (alert + ForgeRCA if it has run). Does not change status.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <p class="muted">
     {% if smtp_on %}
-    SMTP is <strong>on</strong> — this leaves the VM to the address you pick. Outbox: <a href="/ops#mail">Email &amp; reports</a>.
+    SMTP is <strong>on</strong> — this leaves the VM to the address you pick.{% if can_send_ops %} Outbox: <a href="/ops#mail">Email &amp; reports</a>.{% endif %}
     {% else %}
-    SMTP is <strong>off</strong> — the row is stored as <em>generated</em> in the <a href="/ops#mail">mail outbox</a>. Gmail will not receive it until you enable SMTP (see operator handbook §11).
+    SMTP is <strong>off</strong> — the row is stored as <em>generated</em>{% if can_send_ops %} in the <a href="/ops#mail">mail outbox</a>{% else %} in the mail outbox{% endif %}. Gmail will not receive it until you enable SMTP (see operator handbook §11).
     {% endif %}
   </p>
   <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail">
@@ -148,7 +148,7 @@
 
 <div class="incident-story">
 <section class="card incident-happened" id="ai">
-  <h2>What happened? {% with %}{% set tip %}ForgeRCA is the builtin facts/anomalies/causes. ForgeAI, when enabled, rewrites the insight and remediation in this cube. The full facts page stays on Open ForgeRCA.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>What happened? {% with %}{% set tip %}ForgeRCA collects Prometheus/Loki facts and ranks a fixed hypothesis catalog. It does not list processes on the host. ForgeAI, when enabled, rewrites the insight and remediation from those facts. Open ForgeRCA re-collects evidence.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="tool-row">
     <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
     <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
@@ -157,14 +157,14 @@
   {% if investigation %}
   <p>{{ investigation.summary }}</p>
   {% if investigation.likely_cause %}
-  <h3>Likely cause</h3>
+  <h3>Catalog hypothesis {% with %}{% set tip %}Top ranked line from the ForgeRCA catalog, scored from collected metrics and the alert — not a process list or a proven root cause.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
   <p>{{ investigation.likely_cause }}</p>
   {% endif %}
   {% if investigation.recommended_action %}
   <h3>Remediation</h3>
   <p>{{ investigation.recommended_action }}</p>
   {% endif %}
-  <p class="muted">{{ investigation.disclaimer }} · {% if investigation.provider == "forgerca-llm" %}ForgeAI wrote the prose{% else %}ForgeRCA (builtin){% endif %} · Engine {{ investigation.engine or "forgerca" }} {{ investigation.engine_version or "" }}</p>
+  <p class="muted">{{ investigation.disclaimer }} · score {{ investigation.confidence|int }}% (evidence, not a validated model) · {% if investigation.provider == "forgerca-llm" %}ForgeAI wrote the prose{% else %}ForgeRCA (builtin){% endif %} · Engine {{ investigation.engine or "forgerca" }} {{ investigation.engine_version or "" }}</p>
   {% if llm_pending and investigation.provider != "forgerca-llm" %}
   <p class="muted">A local LLM rewrite is queued. Refresh later for the rewritten insight. Builtin text stays until then.</p>
   {% endif %}
@@ -246,7 +246,7 @@
 
 <section id="audit" class="card incident-audit">
   <h2>Who did what {% with %}{% set tip %}Audit rows for this INC (login clicks, status, notes). Not an email read-receipt. Export includes when, who, action, and the extra fields on the row.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <p class="muted" id="mail">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>
+  {% if can_send_ops %}<p class="muted" id="mail">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>{% endif %}
   <div data-select-scope>
   <div class="table-scroll list-scroll" data-list-scroll>
   <table>

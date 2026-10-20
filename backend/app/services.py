@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -500,28 +501,94 @@ def next_incident_number(db: Session, when: datetime | None = None) -> str:
     return format_incident_number(highest + 1, when)
 
 
+_ALERT_SAMPLE_RE = re.compile(r"(?:is|reached)\s+(\d+(?:\.\d+)?)\s*%?", re.I)
+
+
+def alert_sample_value(
+    labels: dict[str, Any] | None = None,
+    annotations: dict[str, Any] | None = None,
+    metric: str = "",
+) -> float | None:
+    """Firing sample from Alertmanager labels / annotations ($value), not a guessed number."""
+    labels = labels if isinstance(labels, dict) else {}
+    annotations = annotations if isinstance(annotations, dict) else {}
+    keys = [metric, "value", "cpu_usage", "filesystem_usage", "memory_usage", "cpu_percent", "disk_percent"]
+    seen: set[str] = set()
+    for key in keys:
+        name = str(key or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        for bag in (labels, annotations):
+            raw = bag.get(name)
+            if raw in (None, ""):
+                continue
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                continue
+    for text in (annotations.get("description"), annotations.get("summary")):
+        if not text:
+            continue
+        match = _ALERT_SAMPLE_RE.search(str(text))
+        if match:
+            return float(match.group(1))
+    return None
+
+
+def playrule_condition_holds(condition: dict[str, Any] | None, sample: float | None) -> bool:
+    """True when the rule has no metric/value, or the firing sample satisfies operator/value.
+
+    Missing sample does not reject the rule — Prometheus already opened the alert.
+    """
+    cond = condition if isinstance(condition, dict) else {}
+    if not str(cond.get("metric") or "").strip():
+        return True
+    raw = cond.get("value")
+    if raw in (None, ""):
+        return True
+    if sample is None:
+        return True
+    try:
+        wanted = float(raw)
+    except (TypeError, ValueError):
+        return True
+    op = str(cond.get("operator") or ">").strip()
+    if op == ">=":
+        return sample >= wanted
+    if op == "==":
+        return sample == wanted
+    if op == "<":
+        return sample < wanted
+    return sample > wanted
+
+
 def match_playrule(
     db: Session,
     alertname: str,
     labels: dict[str, Any] | None = None,
     asset: Asset | None = None,
+    annotations: dict[str, Any] | None = None,
 ) -> Playrule | None:
-    """Alertname only. condition.metric/operator/value are operator notes and are never evaluated.
+    """Alertname first. When a rule also has metric/operator/value, the firing sample must satisfy it.
 
     An asset's Custom alarms (assets.playrule_ids) are tried first, in the order saved,
     skipping ids in asset_playrule_mutes (OFF on this host). The first enabled ON rule
-    whose alertname matches wins. Otherwise the global first-by-id match, also skipping
-    muted ids, so an OFF rule is not used for this host at all.
+    whose alertname matches (and whose threshold holds) wins. Otherwise the global
+    first-by-id match, also skipping muted ids, so an OFF rule is not used for this host at all.
     """
-    del labels
     wanted = (alertname or "").strip().lower()
     if not wanted:
         return None
     rules = db.query(Playrule).filter_by(enabled=True).order_by(Playrule.id).all()
 
     def _hits(rule: Playrule) -> bool:
-        expected = str((rule.condition or {}).get("alertname") or "").strip().lower()
-        return bool(expected) and expected == wanted
+        cond = rule.condition if isinstance(rule.condition, dict) else {}
+        expected = str(cond.get("alertname") or "").strip().lower()
+        if not expected or expected != wanted:
+            return False
+        sample = alert_sample_value(labels, annotations, str(cond.get("metric") or ""))
+        return playrule_condition_holds(cond, sample)
 
     from app.asset_extras import asset_playrule_ids
     from app.playrule_mute import muted_playrule_ids
@@ -754,7 +821,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
                     object_id=str(getattr(asset, "asset_id", "") or asset_name),
                 )
                 continue
-            rule = match_playrule(db, alertname, labels, asset=asset)
+            rule = match_playrule(db, alertname, labels, asset=asset, annotations=annotations)
             incident = Incident(
                 number=next_incident_number(db),
                 title=str(annotations.get("summary") or alertname),

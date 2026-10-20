@@ -531,9 +531,8 @@ def test_outbox_delete_is_offered_only_for_deletable_rows():
     assert db.get(Notification, step_id) is not None
     assert db.get(Notification, manual_id) is None
     viewer = _client(_user(db, "viewer"))
-    viewer_mail = viewer.get("/ops").text.split('id="mail"', 1)[1].split('id="reports"', 1)[0]
-    assert 'action="/ops/mail/export"' in viewer_mail
-    assert 'action="/ops/mail/bulk-delete"' not in viewer_mail
+    assert viewer.get("/ops").status_code == 403
+    assert viewer.post("/ops/mail/export", data={"selected": str(step_id)}, follow_redirects=False).status_code == 403
     assert viewer.post("/ops/mail/bulk-delete", data={"selected": str(step_id)}, follow_redirects=False).status_code == 403
     db.close()
 

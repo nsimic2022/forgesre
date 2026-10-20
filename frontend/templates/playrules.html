@@ -32,7 +32,7 @@
         <span class="muted">Never matches until alerts.yml has this alertname.</span>
         {% endfor %}
         {% if cond.get('metric') %}
-        <div class="muted rule-note" title="Operator note. Not evaluated.">Note: {{ cond.get('metric') }} {{ cond.get('operator') or '' }} {{ cond.get('value') if cond.get('value') is not none else '' }} · not executed</div>
+        <div class="muted rule-note" title="Compared to the firing Alertmanager sample when this rule is considered.">Sample: {{ cond.get('metric') }} {{ cond.get('operator') or '' }} {{ cond.get('value') if cond.get('value') is not none else '' }}</div>
         {% endif %}
       </td>
       <td><span class="pill {{ severity_pill(rule.severity) }}">{{ rule.severity }}</span></td>
@@ -124,8 +124,8 @@
     </select>
   </label>
   <details class="rule-note-fields" {% if form.metric %}open{% endif %}>
-    <summary>Operator note — not executed</summary>
-    <p class="muted">Free-text reminder of the threshold. ForgeSRE never evaluates it; change the real threshold in <code>monitoring/alerts.yml</code> (or <code>alerts.local.yml</code>).</p>
+    <summary>Firing sample — used to pick among rules with the same alertname</summary>
+    <p class="muted">Alertname still has to match. When Metric and Value are set, ForgeSRE compares the firing Alertmanager sample (<code>$value</code> in the annotation, or a label with that metric name). Prometheus in <code>monitoring/alerts.yml</code> still opens the incident; this only chooses which playbook/escalation attaches.</p>
     <div class="form-grid">
       <label>Metric
         <select name="metric" id="playrule-metric">

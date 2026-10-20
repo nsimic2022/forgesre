@@ -568,7 +568,7 @@ def test_investigate_button_opens_builtin_rca_immediately():
     assert "ForgeRCA" in html.text
     assert "ForgeAI" in html.text
     assert "Summary" in html.text
-    assert "Root cause" in html.text
+    assert "Catalog hypothesis" in html.text
     assert "Recommended actions" in html.text
     assert "Facts" in html.text
     assert "Anomalies" in html.text
@@ -580,7 +580,7 @@ def test_investigate_button_opens_builtin_rca_immediately():
     assert again.status_code == 303
     run_pending_jobs(db)
     db.expire_all()
-    assert _inv_count(db, incident.id) == 1
+    assert _inv_count(db, incident.id) == 2
     db.close()
 
 

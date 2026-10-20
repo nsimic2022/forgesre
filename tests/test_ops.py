@@ -279,14 +279,14 @@ def test_process_scheduled_reports_runs_when_due():
     db.close()
 
 
-def test_viewer_can_read_ops_but_cannot_send():
+def test_viewer_cannot_read_ops_or_send():
     db = _db()
     if db.query(User).filter_by(email="viewer@forgesre.local").first() is None:
         db.add(User(email="viewer@forgesre.local", name="V", password_hash=hash_password("testpass"), role="viewer"))
         db.commit()
     client = TestClient(app)
     _login(client, "viewer@forgesre.local")
-    assert client.get("/ops").status_code == 200
+    assert client.get("/ops").status_code == 403
     posted = client.post(
         "/ops/mail",
         data={"target": "nope@example.local", "subject": "x", "body": "y"},
@@ -472,13 +472,7 @@ def test_ops_report_actions_reject_viewer():
         db.commit()
     client = TestClient(app)
     _login(client, "viewer@forgesre.local")
-    page = client.get("/ops")
-    reports = page.text.split('id="reports"', 1)[1]
-    assert ">Edit<" not in reports
-    assert ">Clone<" not in reports
-    assert ">Remove<" not in reports
-    assert ">ON<" in reports
-    assert "/toggle" not in reports
+    assert client.get("/ops").status_code == 403
     assert client.post(f"/ops/reports/{row.id}/update", data={"name": "nope", "to_email": "x@example.local"}, follow_redirects=False).status_code == 403
     assert client.post(f"/ops/reports/{row.id}/delete", follow_redirects=False).status_code == 403
     assert client.post(f"/ops/reports/{row.id}/toggle", follow_redirects=False).status_code == 403

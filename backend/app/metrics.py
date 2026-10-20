@@ -50,7 +50,7 @@ def refresh_runtime_metrics() -> None:
         percent = (usage.used / usage.total) * 100 if usage.total else 0
         disk_used.set(round(percent, 2))
     except OSError:
-        disk_used.set(0)
+        pass
     up.set(1)
 
 

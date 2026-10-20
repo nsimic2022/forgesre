@@ -174,11 +174,11 @@ def test_dashboard_incident_tiles_match_the_list_behind_the_click():
     alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
     tiles = _tile_counts(alarms)
     assert set(tiles) == {"critical", "warning", "investigating", "escalated", "resolved"}
-    assert tiles["critical"][0] == "/incidents?status=active&amp;severity=critical"
-    assert tiles["warning"][0] == "/incidents?status=active&amp;severity=warning"
-    assert tiles["investigating"][0] == "/incidents?status=INVESTIGATING"
-    assert tiles["escalated"][0] == "/incidents?status=ESCALATED"
-    assert tiles["resolved"][0] == "/incidents?status=RESOLVED"
+    assert tiles["critical"][0] == "/incidents?status=active&amp;severity=critical&amp;demo=0"
+    assert tiles["warning"][0] == "/incidents?status=active&amp;severity=warning&amp;demo=0"
+    assert tiles["investigating"][0] == "/incidents?status=INVESTIGATING&amp;demo=0"
+    assert tiles["escalated"][0] == "/incidents?status=ESCALATED&amp;demo=0"
+    assert tiles["resolved"][0] == "/incidents?status=RESOLVED&amp;demo=0"
     assert 'class="stat crit' in alarms and 'class="stat warn' in alarms and 'class="stat cold' in alarms
     for gone in ('data-tile="open"', ">Open<", "No owner email", "Assets without incident"):
         assert gone not in alarms, gone
@@ -190,13 +190,13 @@ def test_dashboard_incident_tiles_match_the_list_behind_the_click():
         shown = re.search(r'class="muted list-count">(\d+) incident', listed.text)
         assert shown is not None, key
         assert int(shown.group(1)) == count, key
-    critical = client.get("/incidents?status=active&severity=critical")
+    critical = client.get("/incidents?status=active&severity=critical&demo=0")
     body = critical.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
     assert f"tile OPEN {token}" in body
     assert f"tile ESCALATED {token}" in body
     assert f"tile RESOLVED {token}" not in body
     assert f"tile INVESTIGATING {token}" not in body
-    warning = client.get("/incidents?status=active&severity=warning")
+    warning = client.get("/incidents?status=active&severity=warning&demo=0")
     warn_body = warning.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
     assert f"tile INVESTIGATING {token}" in warn_body
     assert f"tile CLOSED {token}" not in warn_body
@@ -229,14 +229,14 @@ def test_dashboard_asset_tiles_match_assets_filters():
     infra = home.text.split("dash-tiles-infra", 1)[1].split("</section>", 1)[0]
     tiles = _tile_counts(infra)
     assert set(tiles) == {"assets", "problem", "unreachable"}
-    assert tiles["assets"][0] == "/assets"
-    assert tiles["problem"][0] == "/assets?flag=in-problem"
-    assert tiles["unreachable"][0] == "/assets?flag=unreachable"
+    assert tiles["assets"][0] == "/assets?lab=0"
+    assert tiles["problem"][0] == "/assets?flag=in-problem&amp;lab=0"
+    assert tiles["unreachable"][0] == "/assets?flag=unreachable&amp;lab=0"
     assert ">Assets<" in infra and ">In problem<" in infra and ">Unreachable<" in infra
     for gone in ("No owner email", "Assets without incident", "No open incident", 'href="/assets?flag=no-email"', ">Open<"):
         assert gone not in infra, gone
     for key, (href, count) in tiles.items():
-        listed = client.get(href)
+        listed = client.get(href.replace("&amp;", "&"))
         assert listed.status_code == 200, key
         assert _asset_total(listed.text) == count, key
     problem = client.get(f"/assets?flag=in-problem&q={host.asset_id}")
@@ -257,7 +257,7 @@ def test_playrules_edit_delete_and_promql_preview():
     page = client.get("/playrules")
     assert page.status_code == 200
     assert "forgesre_demo_cpu_percent &gt; 80" in page.text
-    assert "not executed" in page.text
+    assert "firing Alertmanager sample" in page.text
     assert "cannot fire earlier than the Prometheus rule" in page.text
     name = f"pr-{uuid4().hex[:6]}"
     created = client.post(

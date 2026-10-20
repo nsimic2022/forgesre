@@ -7,16 +7,6 @@ from typing import Any
 from rca.catalog import classify_family, hypotheses_for
 from rca.types import Anomaly, EvidenceItem, Hypothesis, RCAContext
 
-BASELINES = {
-    "cpu_percent": (20.0, 40.0),
-    "cpu_usage": (20.0, 40.0),
-    "disk_percent": (30.0, 70.0),
-    "filesystem_usage": (30.0, 70.0),
-    "disk_volume_percent": (30.0, 70.0),
-    "memory_percent": (30.0, 70.0),
-    "memory_usage": (30.0, 70.0),
-}
-
 THRESHOLDS = {
     "cpu_percent": 80.0,
     "cpu_usage": 80.0,
@@ -74,15 +64,22 @@ def detect_anomalies(context: RCAContext) -> list[Anomaly]:
                     strength=min(1.0, (value - threshold) / 20.0 + 0.5),
                 )
             )
-        low, high = BASELINES.get(name, (None, None))
-        if high is not None and value > high + 20:
+        previous = None
+        content = item.content if isinstance(item.content, dict) else {}
+        raw_previous = content.get("previous")
+        if raw_previous not in (None, ""):
+            try:
+                previous = float(raw_previous)
+            except (TypeError, ValueError):
+                previous = None
+        if previous is not None and value > previous + 20:
             anomalies.append(
                 Anomaly(
                     kind="sudden_increase",
-                    summary=f"{name} increased from a typical {low:.0f}–{high:.0f} range to {value:.1f}.",
+                    summary=f"{name} increased from {previous:.1f} to {value:.1f}.",
                     metric=name,
                     evidence_ids=[item.evidence_id],
-                    strength=min(1.0, (value - high) / 40.0),
+                    strength=min(1.0, (value - previous) / 40.0),
                 )
             )
     for item in context.evidence:
@@ -206,7 +203,7 @@ def candidate_causes(context: RCAContext) -> list[Hypothesis]:
         contradicting: list[str] = []
         for item in context.evidence:
             blob = str(item.content).lower()
-            if any(key in blob for key in keywords) or item.type in {"ALERT", "METRIC"} and hid.split("-")[0] in blob:
+            if any(key in blob for key in keywords):
                 supporting.append(item.evidence_id)
             if item.type == "METRIC":
                 content = item.content if isinstance(item.content, dict) else {}

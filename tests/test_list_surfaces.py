@@ -87,7 +87,7 @@ def test_dashboard_recent_incidents_uses_scan_columns():
     kpi = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
     for label in (">Critical<", ">Warning<", ">Investigating<", ">Escalated<", ">Resolved<"):
         assert label in kpi
-    assert ">Open<" not in kpi and 'href="/incidents?status=ESCALATED"' in kpi
+    assert ">Open<" not in kpi and 'href="/incidents?status=ESCALATED&amp;demo=0"' in kpi
     db.close()
 
 
