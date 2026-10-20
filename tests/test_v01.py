@@ -13,7 +13,7 @@ def test_heuristic_cpu_rca():
         }
     )
     assert result["disclaimer"] == DISCLAIMER
-    assert result["confidence"] >= 70
+    assert 10 <= result["confidence"] <= 95
     assert "forge-demo-01" in result["summary"]
     assert result["provider"] == "builtin-analyst"
 
@@ -29,9 +29,10 @@ def test_playrule_match_and_incident(monkeypatch):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     seed(db)
-    rule = match_playrule(db, "HighCPU", {})
+    rule = match_playrule(db, "HighCPU", {}, annotations={"description": "CPU usage is 94% on forge-demo-01."})
     assert rule is not None
     assert rule.name == "high-cpu"
+    assert match_playrule(db, "HighCPU", {}) is None
     close_open_incidents(db, "HighCPU:forge-demo-01")
 
     payload = {

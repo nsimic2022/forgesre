@@ -125,8 +125,10 @@ def test_unlabeled_alert_does_not_attach_to_demo_host():
 
 def test_match_playrule_is_alertname_only():
     db = _db()
-    assert match_playrule(db, "HighCPU", {}).name == "high-cpu"
-    assert match_playrule(db, "highcpu").name == "high-cpu"
+    notes = {"description": "CPU usage is 94% on forge-demo-01."}
+    assert match_playrule(db, "HighCPU", {}, annotations=notes).name == "high-cpu"
+    assert match_playrule(db, "highcpu", annotations=notes).name == "high-cpu"
+    assert match_playrule(db, "HighCPU", {}) is None
     assert match_playrule(db, "cpu_usage", {"metric": "cpu_usage"}) is None
     assert match_playrule(db, "") is None
     db.close()
@@ -344,6 +346,7 @@ def test_netbox_sync_does_not_guess_linux_or_overwrite_contacts(monkeypatch):
     new = db.query(Asset).filter_by(netbox_id=f"9{token}").one()
     assert new.asset_id == f"core-sw-{token}"
     assert new.type == AUTO_ASSET_TYPE
+    assert new.status == "unknown"
     assert new.scrape_address == ""
     assert new.monitoring_profile == ""
     assert "9100" not in (new.scrape_address or "")
@@ -472,7 +475,7 @@ def test_analyst_templates_say_the_honest_thing(monkeypatch):
         assert "Guidance only" in page.text
         assert "playbook-guide" in page.text
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-16" in base
+    assert "app.css?v=v09-17" in base
     for name in ["incident_detail.html", "asset_detail.html", "_asset_form.html", "escalation.html"]:
         text = (ROOT / "frontend" / "templates" / name).read_text(encoding="utf-8")
         assert "falls back to policy role@forgesre.local" not in text

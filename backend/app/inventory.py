@@ -1205,7 +1205,7 @@ def sync_netbox(db: Session) -> dict:
                 ip=ip,
                 type=AUTO_ASSET_TYPE,
                 environment="Production",
-                status="healthy" if device.get("status") == "active" else "offline",
+                status="unknown" if device.get("status") == "active" else "offline",
                 monitoring_profile="",
                 owner="",
                 source="netbox",
@@ -1231,7 +1231,7 @@ def sync_netbox(db: Session) -> dict:
         "sync",
         "ok",
         summary=f"NetBox sync: {created} new, {linked} already linked",
-        detail="New devices: type Auto, no scrape address. Owner, contact, email, and notes on existing assets are never changed.",
+        detail="New devices: type Auto, status unknown until Verify or a probe, no scrape address. Owner, contact, email, and notes on existing assets are never changed.",
     )
     return {"synced": created + linked, "created": created, "linked": linked}
 

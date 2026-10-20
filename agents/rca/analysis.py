@@ -185,7 +185,35 @@ def facts_from(context: RCAContext) -> list[dict[str, Any]]:
                 "kind": "observed",
             }
         )
+    family = classify_family(context, metric_samples(context.evidence))
+    if family in {"linux-cpu", "linux-memory", "linux-disk", "linux-host", "windows"}:
+        facts.append(
+            {
+                "id": "fact-no-process-list",
+                "text": "No process list was collected. ForgeSRE is read-only and does not run top or ps on the host.",
+                "kind": "limitation",
+            }
+        )
+    if family in {"switch", "router", "firewall", "snmp"} and not _has_interface_metric(context.evidence):
+        facts.append(
+            {
+                "id": "fact-no-ifoper-list",
+                "text": "No per-interface SNMP ifOperStatus list was used in this investigation. snmp_exporter may still walk if_mib for alerts and the asset page.",
+                "kind": "limitation",
+            }
+        )
     return facts
+
+
+def _has_interface_metric(evidence: list[EvidenceItem]) -> bool:
+    for item in evidence:
+        if item.type != "METRIC":
+            continue
+        content = item.content if isinstance(item.content, dict) else {}
+        name = str(content.get("name") or "").lower()
+        if name in {"ifoperstatus", "ifadminstatus"} or "ifoper" in name:
+            return True
+    return False
 
 
 def candidate_causes(context: RCAContext) -> list[Hypothesis]:
@@ -258,19 +286,19 @@ def score_confidence(
     maintenance: list,
     sources_ok: bool,
 ) -> float:
-    score = 0.45
-    score += min(0.20, 0.08 * len(anomalies))
+    score = 0.0
+    score += min(0.45, 0.15 * len(anomalies))
     supporting = len(hypotheses[0].supporting_evidence) if hypotheses else 0
     contradicting = len(hypotheses[0].contradicting_evidence) if hypotheses else 0
-    score += min(0.20, 0.05 * supporting)
-    score -= min(0.15, 0.05 * contradicting)
+    score += min(0.40, 0.10 * supporting)
+    score -= min(0.30, 0.10 * contradicting)
     if history:
-        score += 0.08
+        score += 0.10
     if maintenance:
         score -= 0.20
     if not sources_ok:
         score -= 0.15
-    return round(min(0.95, max(0.15, score)), 2)
+    return round(min(0.95, max(0.10, score)), 2)
 
 
 def _corpus(context: RCAContext) -> str:

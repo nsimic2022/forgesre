@@ -185,19 +185,25 @@ class RCAContext:
         )
 
 
-def normalize_metric(name: str, value: Any, timestamp: str, unit: str = "") -> dict[str, Any]:
+def normalize_metric(name: str, value: Any, timestamp: str, unit: str = "", previous: Any = None) -> dict[str, Any]:
     numeric: float | None
     try:
         numeric = float(value)
     except (TypeError, ValueError):
         numeric = None
-    return {
+    out: dict[str, Any] = {
         "type": "metric",
         "name": name,
         "value": numeric if numeric is not None else value,
         "unit": unit,
         "timestamp": timestamp,
     }
+    if previous not in (None, ""):
+        try:
+            out["previous"] = float(previous)
+        except (TypeError, ValueError):
+            pass
+    return out
 
 
 def normalize_log(message: str, timestamp: str) -> dict[str, Any]:

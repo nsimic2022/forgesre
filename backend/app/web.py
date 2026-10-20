@@ -735,7 +735,9 @@ def dashboard(
     asset_rows = asset_tiles(db.query(Asset).all())
     incident_rows = dashboard_incident_tiles(db)
     size = per_page(request)
-    recent, total = list_history(db, days=None, open_only=False, limit=size, page=page)
+    demo_raw = (request.query_params.get("demo") or "").strip().lower()
+    include_lab = demo_raw in {"1", "yes", "include"}
+    recent, total = list_history(db, days=None, open_only=False, limit=size, page=page, exclude_demo=not include_lab)
     pager = pager_state(page, total=total, size=size)
     stack = enrich_components(doctor_payload().get("components") or {}, request.headers.get("host") or "localhost")
     return render(
@@ -750,6 +752,7 @@ def dashboard(
         resource_crit=RESOURCE_CRIT_PERCENT,
         recent=recent,
         pager=pager,
+        include_lab=include_lab,
         oncall=current_oncall(db),
         insights=insight_panel(db),
     )
