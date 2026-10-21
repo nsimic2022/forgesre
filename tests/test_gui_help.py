@@ -121,10 +121,10 @@ def test_title_subtitles_live_only_in_info_tips():
     assert "Full stack diagnostics live on" not in _outside_tips(dash)
     assert "The journal is on System Health" not in _outside_tips(dash)
     assert '<p class="muted">Full stack diagnostics' not in dash
-    assert "Raises the demo CPU gauge to 94%" not in _outside_tips(dash)
-    assert "Lab only. Every scenario opens a DEMO incident" not in _outside_tips(dash)
-    assert "Does not stop a real scrape" not in _outside_tips(dash)
-    assert "Not a live SNMP walk" not in _outside_tips(dash)
+    assert "Raises the demo CPU gauge to 94%" in _outside_tips(dash)
+    assert 'include "_info_tip.html"' not in dash.split('id="demo-panel"', 1)[1].split("</dialog>", 1)[0]
+    assert "Reset demo gauges" not in dash
+    assert "Not a live SNMP walk" in _outside_tips(dash)
 
     form = (TEMPLATES / "_asset_form.html").read_text(encoding="utf-8")
     assert "It cannot fire earlier than the Prometheus rule in alerts.yml." not in _outside_tips(form)

@@ -79,7 +79,8 @@ def test_dashboard_has_one_run_demo_control_not_two_forms():
     assert html.find("Linux NodeCPUHigh", panel_at) > panel_at
     assert html.find('action="/demo"', panel_at) > panel_at
     assert html.find('action="/demo-rca"', panel_at) > panel_at
-    assert html.find('action="/demo-reset"', panel_at) > panel_at
+    assert 'action="/demo-reset"' not in html[panel_at:]
+    assert "Reset demo gauges" not in html[panel_at:]
     assert html.find('action="/demo-windows"', panel_at) > panel_at
     assert html.find('action="/demo-network"', panel_at) > panel_at
     assert html.find('action="/demo-nodecpu"', panel_at) > panel_at
@@ -182,7 +183,7 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
     assert 'class="pill demo"' in ops.text or "[DEMO]" in ops.text
 
     dash = client.get("/")
-    assert "DEMO incident on a seeded lab asset" in dash.text
+    assert "Raises the demo CPU gauge to 94%" in dash.text
 
     journal_page = client.get("/journal")
     assert journal_page.status_code == 200
