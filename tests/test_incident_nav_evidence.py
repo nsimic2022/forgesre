@@ -113,7 +113,8 @@ def test_nav_sits_right_above_the_header_strip_and_back_links_stay_on_top():
     assert 'data-incident-identity' in html[nav_end:]
     assert html[nav_end:].lstrip().startswith('<div class="incident-head">')
     assert 'class="table-scroll incident-identity"' in html[nav_end:]
-    assert 'class="card incident-actions"' in html[nav_end:]
+    assert 'class="incident-actions"' in html[nav_end:]
+    assert 'class="card incident-actions"' not in html
     assert html.count('class="pager-bar"') == html.count("data-pager-size-form")
 
 
@@ -220,7 +221,10 @@ def test_evidence_css_one_line_platform_font():
     head = css.split(".incident-head {", 1)[1].split("}", 1)[0]
     assert "repeat(3, minmax(0, 1fr))" in head
     assert "grid-column: 1 / 3" in css.split(".incident-identity {", 1)[1].split("}", 1)[0]
-    assert "grid-column: 3" in css.split(".incident-actions {", 1)[1].split("}", 1)[0]
+    actions = css.split(".incident-actions {", 1)[1].split("}", 1)[0]
+    assert "grid-column: 3" in actions
+    assert "align-items: flex-start" in actions
+    assert "width: auto" in css.split(".incident-actions button {", 1)[1].split("}", 1)[0]
     ledger = css.split(".incident-ledger > .card {", 1)[1].split("}", 1)[0]
     assert "min-height: 22rem" in ledger
 
