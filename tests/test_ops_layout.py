@@ -61,7 +61,7 @@ def test_ticker_api_lists_fresh_production_incidents():
     assert "items" in data and "heat" in data and "fresh" in data
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "data-alarm-ticker" in base
-    assert "app.css?v=v09-25" in base and "app.js?v=v09-C" in base
+    assert "app.css?v=v09-26" in base and "app.js?v=v09-C" in base
 
 
 def test_incident_report_preview_edit_export_and_sent_to():
@@ -98,8 +98,11 @@ def test_incident_report_preview_edit_export_and_sent_to():
     assert 'name="subject"' in page.text
     assert 'data-report-body' in page.text
     assert "ForgeSRE incident report" in page.text
-    assert "Sent to" in page.text
-    assert "Not sent yet." in page.text
+    assert "Sent to" not in page.text
+    assert "Not sent yet." not in page.text
+    assert "Outbox:" not in page.text
+    assert 'class="incident-mail-toolbar"' in page.text
+    assert 'form="incident-send-report"' in page.text
     assert 'action="/incidents/%s/report/export"' % number in page.text
     assert page.text.index("<h2>What happened") < page.text.index("<h2>Who to call")
     assert page.text.index('id="notes"') < page.text.index('id="send-report"')

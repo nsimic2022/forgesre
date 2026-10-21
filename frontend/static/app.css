@@ -1103,11 +1103,12 @@ button.playrule-remove:hover { color: var(--crit); border-color: var(--crit); }
 .incident-identity .inc-host { font-weight: 600; }
 .incident-actions {
   grid-column: 3;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
-  gap: 0.45rem;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: start;
+  justify-content: start;
+  column-gap: 0.9rem;
+  row-gap: 0.45rem;
   margin: 0;
   padding: 0.15rem 0 0 0.4rem;
   min-width: 0;
@@ -1115,7 +1116,9 @@ button.playrule-remove:hover { color: var(--crit); border-color: var(--crit); }
   border: 0;
   box-shadow: none;
 }
-.incident-actions form {
+.incident-actions .incident-status,
+.incident-actions .incident-rca,
+.incident-actions .incident-rca form {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -2223,7 +2226,9 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .evidence-table th.ev-actor { width: 8.5rem; }
 .evidence-table th.ev-action { width: auto; }
 .evidence-table th:last-child,
-.incident-audit table th:last-child { width: 5.2rem; }
+.audit-table th:last-child { width: 5.2rem; }
+.audit-table { table-layout: fixed; width: 100%; }
+.audit-table td { vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .evidence-table td { vertical-align: middle; }
 .evidence-table td.ev-when { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
 .evidence-table td.ev-actor,
@@ -2948,14 +2953,26 @@ label.row-check {
   flex-direction: column;
   min-height: 22rem;
   max-height: min(28rem, 64vh);
+  overflow: hidden;
+}
+.incident-audit-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .incident-ledger .list-scroll {
   flex: 1 1 auto;
   min-height: 0;
-  max-height: none;
+  max-height: none !important;
+  overflow: auto;
 }
+.incident-audit-body .pager-bar { flex: 0 0 auto; margin-top: 0.35rem; }
 .incident-notes { margin: 0; }
 .incident-notes .note-block { margin: 0 0 0.7rem; }
+.incident-note-form { max-width: none; width: 100%; }
+.incident-note-form textarea { width: 100%; box-sizing: border-box; min-height: 6rem; resize: vertical; }
+.incident-note-form button[type="submit"] { width: auto; align-self: flex-start; }
 .incident-ops {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -2967,10 +2984,16 @@ label.row-check {
 .incident-ops:not(:has(.incident-mail-card)) { grid-template-columns: minmax(0, 1fr); }
 .incident-mail-edit label { display: flex; flex-direction: column; gap: 0.25rem; margin: 0 0 0.55rem; }
 .incident-mail-edit textarea { min-height: 14rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.78rem; }
-.report-actions { margin: 0.35rem 0 0.7rem; }
-.report-export { margin: 0 0 0.85rem; }
-.report-sent h3 { margin: 0 0 0.35rem; font-size: 0.88rem; }
-.report-sent p { margin: 0 0 0.25rem; overflow-wrap: anywhere; }
+.incident-mail-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+  margin: 0.7rem 0 0;
+}
+.incident-mail-toolbar > button,
+.incident-mail-toolbar .report-export > button { width: auto; }
+.report-export { margin: 0; }
 @media (max-width: 1100px) {
   .incident-graphs .dash-graph-list,
   .incident-head,
@@ -3181,6 +3204,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 .cli-example code { font-size: inherit; }
 
 /* v09-25: action buttons natural size. Locked --bg / --text / --ok hexes stay. */
+/* v09-26: Who did what stays in its cube; report/notes chrome; Ack/Resolve/Close | ForgeRCA. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {

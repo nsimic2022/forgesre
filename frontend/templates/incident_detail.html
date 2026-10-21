@@ -53,7 +53,7 @@
 {% set resolved = st in ["RESOLVED", "CLOSED"] %}
 {% set closed = st == "CLOSED" %}
 <div class="incident-actions">
-  <form method="post" action="/incidents/{{ incident.number }}/status" hx-boost="false">
+  <form method="post" action="/incidents/{{ incident.number }}/status" class="incident-status" hx-boost="false">
     {% if can('ack_incidents') %}
     <button name="status" value="INVESTIGATING" class="{{ 'done' if acked else 'todo' }}">Acknowledge</button>
     {% endif %}
@@ -62,6 +62,7 @@
     <button name="status" value="CLOSED" class="{{ 'done' if closed else 'todo' }}">Close</button>
     {% endif %}
   </form>
+  <div class="incident-rca">
   {% if can('investigate') or can('read_ai') %}
   {% if investigation %}
   <a class="button done" href="/ai/{{ incident.number }}">Open ForgeRCA</a>
@@ -73,6 +74,7 @@
   {% else %}
   <button type="button" class="off" disabled>Open ForgeRCA</button>
   {% endif %}
+  </div>
 </div>
 </div>
 {% if incident.status|upper == "MAINT" %}
@@ -254,10 +256,9 @@
 
 <section id="audit" class="card incident-audit">
   <h2>Who did what {% with %}{% set tip %}Audit rows for this INC (login clicks, status, notes). Not an email read-receipt. Action stays one line. Body View opens the extra fields the same way as Mail outbox. Export includes when, who, action, and those fields.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  {% if can_send_ops %}<p class="muted" id="mail">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>{% endif %}
-  <div data-select-scope>
+  <div class="incident-audit-body" data-select-scope>
   <div class="table-scroll list-scroll" data-list-scroll>
-  <table>
+  <table class="scan-list audit-table">
     <thead><tr>{{ sel.head() }}<th>When</th><th>Actor</th><th>Action</th><th>Body</th></tr></thead>
     <tbody>
     {% for row in audit_rows %}
@@ -300,7 +301,7 @@
   {% endfor %}
   {% with pager=notes_pager %}{% include "_pager.html" %}{% endwith %}
   {% if can('write_incidents') %}
-  <form method="post" action="/incidents/{{ incident.number }}/notes" class="stack" hx-boost="false">
+  <form method="post" action="/incidents/{{ incident.number }}/notes" class="stack incident-note-form" hx-boost="false">
     <label>Add note <textarea name="body" rows="3" required placeholder="What you did on the host" data-note-body{% if request.query_params.get('focus') == 'notes' %} autofocus{% endif %}></textarea></label>
     <button type="submit">Save note</button>
   </form>
@@ -310,8 +311,7 @@
 {% if can_send %}
 <section class="card incident-mail-card" id="send-report">
   <h2>Send incident report {% with %}{% set tip %}Current snapshot (alert + ForgeRCA if it has run). Preview is the text that will be mailed — edit subject or body before Send. Export writes that text (TXT or CSV UTF-8). Does not change status. {% if smtp_on %}SMTP is on — this leaves the VM to the address you pick.{% else %}SMTP is off — the row is stored as generated in the mail outbox. Gmail will not receive it until you enable SMTP (see operator handbook §11).{% endif %}{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  {% if can_send_ops %}<p class="muted">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>{% endif %}
-  <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail-edit" data-report-form hx-boost="false">
+  <form id="incident-send-report" method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail-edit" data-report-form hx-boost="false">
     <label>Subject <input name="subject" value="{{ report_subject }}" autocomplete="off"></label>
     <label>Report <textarea name="body" rows="14" data-report-body>{{ report_preview }}</textarea></label>
     <div class="incident-mail">
@@ -325,36 +325,28 @@
       </label>
       <label>Or new email <input name="new_email" type="email" placeholder="ops@dc.local"></label>
     </div>
-    <div class="row-actions report-actions">
-      <button type="submit">Send incident report</button>
-    </div>
   </form>
-  <form method="post" action="/incidents/{{ incident.number }}/report/export" class="report-export" data-export-picker data-export-from-report hx-boost="false">
-    <input type="hidden" name="subject" value="{{ report_subject }}" data-export-subject>
-    <input type="hidden" name="body" value="" data-export-body>
-    <button type="button" data-export-open>Export</button>
-    <dialog class="export-dialog" data-export-dialog>
-      <h3>Save export</h3>
-      <label>Name <input type="text" name="filename" value="{{ incident.number }}-report" autocomplete="off" data-export-name></label>
-      <label>Format
-        <select name="format" aria-label="Export format">
-          <option value="txt">TXT</option>
-          <option value="csv">CSV UTF-8</option>
-        </select>
-      </label>
-      <div class="export-dialog-actions">
-        <button type="button" class="secondary" data-export-cancel>Cancel</button>
-        <button type="submit">Save</button>
-      </div>
-    </dialog>
-  </form>
-  <div class="report-sent" data-report-sent>
-    <h3>Sent to</h3>
-    {% for row in mail if row.step_key == 'incident-report' %}
-    <p>{{ row.target }} · {{ row.status }}{% if row.subject %} · {{ row.subject }}{% endif %}</p>
-    {% else %}
-    <p class="muted">Not sent yet.</p>
-    {% endfor %}
+  <div class="incident-mail-toolbar">
+    <button type="submit" form="incident-send-report" hx-boost="false">Send incident report</button>
+    <form method="post" action="/incidents/{{ incident.number }}/report/export" class="report-export" data-export-picker data-export-from-report hx-boost="false">
+      <input type="hidden" name="subject" value="{{ report_subject }}" data-export-subject>
+      <input type="hidden" name="body" value="" data-export-body>
+      <button type="button" data-export-open>Export</button>
+      <dialog class="export-dialog" data-export-dialog>
+        <h3>Save export</h3>
+        <label>Name <input type="text" name="filename" value="{{ incident.number }}-report" autocomplete="off" data-export-name></label>
+        <label>Format
+          <select name="format" aria-label="Export format">
+            <option value="txt">TXT</option>
+            <option value="csv">CSV UTF-8</option>
+          </select>
+        </label>
+        <div class="export-dialog-actions">
+          <button type="button" class="secondary" data-export-cancel>Cancel</button>
+          <button type="submit">Save</button>
+        </div>
+      </dialog>
+    </form>
   </div>
 </section>
 {% endif %}

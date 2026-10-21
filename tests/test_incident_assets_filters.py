@@ -82,9 +82,11 @@ def test_who_did_what_has_its_own_pager_and_rows_select():
     number = _incident_with_audit(14)
     client = _client()
     audit = _audit(client.get(f"/incidents/{number}").text)
-    assert re.search(r'<div class="table-scroll list-scroll" data-list-scroll>\s*<table>', audit)
+    assert re.search(r'<div class="table-scroll list-scroll" data-list-scroll>\s*<table class="scan-list audit-table">', audit)
     assert ">Body<" in audit
     assert "data-text-open" in audit or "—" in audit
+    assert "Outbox:" not in audit
+    assert 'class="incident-audit-body"' in audit
     assert audit.count("iaf.step") == 10
     assert 'class="pager-bar"' in audit and '<div class="pager-left">' in audit
     assert "Showing 1–10 of 14" in audit
@@ -252,6 +254,6 @@ def test_edit_link_keeps_filters(seeded):
 
 def test_v08_15_cache_bump_and_compact_select_css():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-25" in base and "app.js?v=v09-C" in base
+    assert "app.css?v=v09-26" in base and "app.js?v=v09-C" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".list-filters select.filter-select { width: auto;" in css
