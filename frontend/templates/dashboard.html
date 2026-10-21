@@ -18,32 +18,32 @@
     <div class="demo-scenarios">
       <article class="demo-scenario" id="demo-highcpu">
         <h3>Linux HighCPU {% with %}{% set tip %}Raises the demo CPU gauge to 94% and opens a HighCPU incident with owner mail. Next: incident page → Who to call → Escalation outbox. Same as ./forgesre demo.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-        <form method="post" action="/demo"><button type="submit">Run</button></form>
+        <form method="post" action="/demo" hx-boost="false"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-disk">
         <h3>Linux disk / ForgeRCA {% with %}{% set tip %}Raises the demo disk gauge to 94% and opens FilesystemUsageHigh with builtin RCA. Next: ForgeRCA page (facts / likely cause). Click Refresh if the LLM rewrite is still queued. Same as ./forgesre demo-rca.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-        <form method="post" action="/demo-rca"><button type="submit">Run</button></form>
+        <form method="post" action="/demo-rca" hx-boost="false"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-host">
         <h3>Linux host unreachable {% with %}{% set tip %}Opens a NodeExporterDown incident and HOST-UNREACHABLE playbook on the demo host. Lab only — this does not stop a real scrape.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-        <form method="post" action="/demo-host"><button type="submit">Run</button></form>
+        <form method="post" action="/demo-host" hx-boost="false"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-windows">
         <h3>Windows CPU (lab) {% with %}{% set tip %}Opens WindowsCPUHigh on seeded forge-demo-win-01. Lab scenario, DEMO tagged — that host is not scraped. Real Windows assets use windows_exporter :9182.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-        <form method="post" action="/demo-windows"><button type="submit">Run</button></form>
+        <form method="post" action="/demo-windows" hx-boost="false"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-network">
         <h3>Network SNMP unreachable (lab) {% with %}{% set tip %}Opens SnmpDeviceUnreachable on seeded forge-demo-sw-01. Lab scenario, DEMO tagged. Not a live SNMP walk — snmp_exporter is not polling this switch.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-        <form method="post" action="/demo-network"><button type="submit">Run</button></form>
+        <form method="post" action="/demo-network" hx-boost="false"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-nodecpu">
         <h3>Linux NodeCPUHigh {% with %}{% set tip %}Opens NodeCPUHigh on forge-demo-01. Same demo host, different Linux alertname. Lab only — does not change a real host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-        <form method="post" action="/demo-nodecpu"><button type="submit">Run</button></form>
+        <form method="post" action="/demo-nodecpu" hx-boost="false"><button type="submit">Run</button></form>
       </article>
     </div>
     <div class="demo-reset">
       <p class="muted"><span class="label-line">Reset demo gauges {% with %}{% set tip %}Sets demo CPU/disk gauges back to 12% / 35% (same as ./forgesre demo-reset). Open DEMO incidents stay until you Resolve / Close them.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></p>
-      <form method="post" action="/demo-reset"><button type="submit" class="secondary">Reset demo gauges</button></form>
+      <form method="post" action="/demo-reset" hx-boost="false"><button type="submit" class="secondary">Reset demo gauges</button></form>
     </div>
   </div>
 </dialog>
@@ -81,7 +81,7 @@
     {% endfor %}
   </div>
   {% if can('read_ai') %}
-  <form method="post" action="/insights/refresh" class="dash-ai-ask">
+  <form method="post" action="/insights/refresh" class="dash-ai-ask" hx-boost="false">
     <button type="submit" class="secondary">Ask ForgeAI</button>
   </form>
   {% endif %}
@@ -102,9 +102,13 @@
   </a>
   {% endif %}
   <div class="appliance-oncall" data-oncall>
-    <p>{% if oncall %}On duty <strong>{{ oncall.person or oncall.name }}</strong>{% if oncall.email %} · {{ oncall.email }}{% endif %}{% if oncall.phone %} · {{ oncall.phone }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}On duty <span class="muted">no one scheduled</span>{% endif %}{% if can('read_play') %} · <a href="/escalation#oncall">Roster</a>{% endif %}</p>
+    <div class="oncall-head">
+      <span class="oncall-label">On duty</span>
+      {% if can('read_play') %}<a class="oncall-link" href="/escalation#oncall">On-call</a>{% endif %}
+    </div>
+    <p class="oncall-who">{% if oncall %}<strong>{{ oncall.person or oncall.name }}</strong>{% if oncall.email %} <span class="muted">{{ oncall.email }}</span>{% endif %}{% if oncall.phone %} <span class="muted">{{ oncall.phone }}</span>{% endif %}{% if oncall.window %} <span class="muted">{{ oncall.window }}</span>{% endif %}{% else %}<span class="muted">no one scheduled</span>{% endif %}</p>
     {% if can('write_play') %}
-    <form method="post" action="/escalation/oncall/take" class="oncall-take"><input type="hidden" name="next" value="/"><button type="submit" class="secondary">I'm on duty now</button></form>
+    <form method="post" action="/escalation/oncall/take" class="oncall-take" hx-boost="false"><input type="hidden" name="next" value="/"><button type="submit" class="secondary">I'm on duty now</button></form>
     {% endif %}
   </div>
 </aside>
@@ -138,7 +142,7 @@
     <tbody>
     {% for item in recent %}
       {% set done = item.status|upper in ['RESOLVED', 'CLOSED'] %}
-      <tr class="dash-pick {{ incident_tone(item.status, item.severity) }}{% if done %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}" data-list-row data-dash-incident="{{ item.number }}" data-dash-select="graphs" data-asset="{{ item.asset.asset_id if item.asset else '' }}" data-host="{{ incident_host(item) }}" data-active="{{ 'false' if done else 'true' }}" tabindex="{{ '0' if loop.first else '-1' }}">
+      <tr class="dash-pick {{ incident_tone(item.status, item.severity) }}{% if done %} inc-row-done{% endif %}{% if is_demo_incident(item) %} inc-row-demo{% endif %}" data-list-row data-list-view="/incidents/{{ item.number }}" data-title="{{ item.title or item.number }}" data-dash-incident="{{ item.number }}" data-dash-select="graphs" data-asset="{{ item.asset.asset_id if item.asset else '' }}" data-host="{{ incident_host(item) }}" data-active="{{ 'false' if done else 'true' }}" tabindex="{{ '0' if loop.first else '-1' }}">
         {{ sel.cell(item.number) }}
         {% include "_incident_cell.html" %}
         <td class="col-host">{% set host = incident_host(item) %}<span class="inc-host">{{ host or "—" }}</span></td>
@@ -160,10 +164,13 @@
 <section class="dash-graphs-col">
   <h2>Host metrics {% with %}{% set tip %}Live Prometheus series for the host of the selected incident (click a row or move with Up / Down; the first active incident is picked on load). A row click only selects — open the incident with its title or short number link, or Enter on the selected row. Arrows move inside the list without scrolling the page; click empty page space to scroll the Dashboard again. From one hour before the incident started through now, or through the end if it is resolved. A vertical line marks When. Hover a point for the host, time, and value. Same queries as the asset page, which stays on the last hour. Linux / Windows show CPU, Memory, Disk and Collecting (up); network devices and hosts without a CPU series show up/down only — never a guessed CPU. Queries use the Prometheus scrape identity (SD job + instance, or the SNMP target). Standard alarms mute does not change this chart. Not scraped = this host is not in Prometheus. No samples yet = that window is empty. Steady = the samples did not move. No placeholder wave. Refreshes every 30 s.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
 <aside class="dash-graphs card" data-dash-graphs aria-live="polite" aria-label="Live metrics for the selected incident's host">
+  <div class="metric-ident">
+    <p class="dash-graph-subject" data-dash-graph-subject>{% if recent %}Loading…{% else %}No incident selected.{% endif %}</p>
+    <p class="dash-graph-host" data-dash-graph-host></p>
+  </div>
   <div class="metric-panel-head">
     <a class="metric-edit" href="#" data-dash-graph-asset hidden>Open asset</a>
   </div>
-  <p class="dash-graph-subject" data-dash-graph-subject>{% if recent %}Loading…{% else %}No incident selected.{% endif %}</p>
   <p class="muted dash-graph-caption" data-dash-graph-caption hidden></p>
   <p class="muted dash-graph-empty" data-dash-graph-empty hidden></p>
   <div class="dash-graph-list" data-dash-graph-list></div>

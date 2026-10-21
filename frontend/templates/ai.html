@@ -35,7 +35,7 @@
 {% if can_send %}
 <section class="card" id="send-report">
   <h2>Send incident report {% with %}{% set tip %}Sends the same snapshot as the incident page. Does not change incident status. SMTP off stores it as generated in the mail outbox.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail">
+  <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail" hx-boost="false">
     <label>To
       <select name="target">
         <option value="">Select an address</option>
@@ -140,7 +140,7 @@
 {% else %}
 <p>No ForgeRCA result yet. Click Run now to open the full builtin investigation immediately. The local LLM, if enabled, rewrites text afterwards.</p>
 <p>{% if can('investigate') or can('read_ai') %}
-<form method="post" action="/incidents/{{ incident.number }}/investigate" class="inline"><button>Run now</button></form>
+<form method="post" action="/incidents/{{ incident.number }}/investigate" class="inline" hx-boost="false"><button>Run now</button></form>
 {% endif %}</p>
 {% endif %}
 {% endblock %}

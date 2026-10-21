@@ -1,11 +1,13 @@
 """HTMX + Alpine trial: vendored offline, boost nav, downloads stay native."""
 
+import re
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.main import app
+from app.models import Incident
 from app.seed import seed
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,14 +38,14 @@ def test_vendor_htmx_and_alpine_are_offline():
 
 
 def test_cache_bust_and_boost_chrome():
-    assert "app.css?v=v09-19" in BASE
-    assert "app.js?v=v09-Y" in BASE
+    assert "app.css?v=v09-20" in BASE
+    assert "app.js?v=v09-Z" in BASE
     assert 'hx-boost="true"' in BASE
     assert 'hx-indicator="#hx-progress"' in BASE
     assert 'id="hx-progress"' in BASE
     assert 'hx-boost="false"' in BASE
     assert "/static/vendor/htmx.min.js" in BASE.split("<head>", 1)[1].split("</head>", 1)[0]
-    assert "/static/app.js?v=v09-Y" in BASE.split("<head>", 1)[1].split("</head>", 1)[0]
+    assert "/static/app.js?v=v09-Z" in BASE.split("<head>", 1)[1].split("</head>", 1)[0]
 
 
 def test_downloads_and_multipart_are_not_boosted():
@@ -77,6 +79,7 @@ def test_js_is_boost_safe():
     assert 'data-onoff-bound' in JS
     assert "barOf" in JS
     assert 'querySelector("[data-appliance-resources]")' in JS
+    assert 'form.setAttribute("hx-boost", "false")' in JS
 
 
 def test_design_tokens_do_not_replace_locked_hexes():
@@ -126,4 +129,59 @@ def test_pages_serve_htmx_and_vendor_assets():
     assert 'hx-boost="true"' in home.text
     assert 'id="hx-progress"' in home.text
     assert "/static/vendor/htmx.min.js" in home.text
+    db.close()
+
+
+def test_every_template_form_opts_out_of_boost():
+    for path in (ROOT / "frontend" / "templates").rglob("*.html"):
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"<form\b[^>]*>", text):
+            assert 'hx-boost="false"' in match.group(0), f"{path.name}: {match.group(0)}"
+    assert 'querySelectorAll("form")' in BASE.split("</body>", 1)[0]
+
+
+def test_incident_lists_open_the_incident_page():
+    dash = (ROOT / "frontend" / "templates" / "dashboard.html").read_text(encoding="utf-8")
+    incidents = (ROOT / "frontend" / "templates" / "incidents.html").read_text(encoding="utf-8")
+    assert 'data-list-view="/incidents/{{ item.number }}"' in dash
+    assert 'data-list-view="/incidents/{{ item.number }}"' in incidents
+    assert "On-call" in dash
+    assert "Roster" not in dash
+    assert "data-dash-graph-host" in dash
+    assert "metric-ident" in dash
+    top = CSS.split(".dash-top {", 1)[1].split("}", 1)[0]
+    assert "minmax(0, var(--dash-tile-band))" in top
+    assert "minmax(12rem, 1fr)" in top
+    band = CSS.split(".dash-incidents {", 1)[1].split("}", 1)[0]
+    assert "minmax(0, 2fr) minmax(0, 1fr)" in band
+    graphs = JS.split("(function bindDashGraphs() {", 1)[1].split("\n})();", 1)[0]
+    assert 'subject.textContent = number + (title ? " · " + title : "")' in graphs
+    assert 'hostEl.textContent = host || asset || ""' in graphs
+
+
+def test_edit_one_incident_opens_clean_detail_url():
+    db = _db()
+    client = TestClient(app)
+    client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
+    home = client.get("/")
+    assert home.status_code == 200
+    assert 'hx-boost="false"' in home.text
+    assert "On-call" in home.text
+    demo = client.get("/?demo=1")
+    listed = client.get("/incidents")
+    assert listed.status_code == 200
+    assert 'data-list-view="/incidents/' in listed.text
+    assert 'data-list-view="/incidents/' in demo.text or 'data-list-view="/incidents/' in home.text
+    row = db.query(Incident).first()
+    assert row is not None
+    opened = client.post(
+        "/incidents/edit",
+        data={"selected": row.number, "next": "/"},
+        follow_redirects=False,
+    )
+    assert opened.status_code == 303
+    assert opened.headers["location"] == f"/incidents/{row.number}"
+    detail = client.get(opened.headers["location"])
+    assert detail.status_code == 200
+    assert row.number in detail.text
     db.close()

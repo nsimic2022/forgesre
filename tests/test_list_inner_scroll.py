@@ -171,7 +171,7 @@ def test_card_lists_select_cards_inside_a_box():
     books = client.get("/playbooks").text
     book_boxes = [b for b in _boxes(books) if "playbook-card" in b]
     assert len(book_boxes) == 1
-    assert re.findall(r'<section class="card playbook-card[^"]*" data-list-row>', book_boxes[0])
+    assert re.findall(r'<section class="card playbook-card[^"]*" data-list-row(?:\s|>)', book_boxes[0])
     esc = client.get("/escalation").text
     policy_boxes = [b for b in _boxes(esc) if "policy-block" in b]
     assert len(policy_boxes) == 1

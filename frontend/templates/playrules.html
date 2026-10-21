@@ -17,7 +17,7 @@
   {% for rule in playrules %}
     {% set cond = rule.condition or {} %}
     {% set prom = rules_for(cond.get('alertname') or '') %}
-    <tr class="{% if not rule.enabled %}rule-off{% endif %}{% if selected and selected.id == rule.id %} selected{% endif %}" data-list-row>
+    <tr class="{% if not rule.enabled %}rule-off{% endif %}{% if selected and selected.id == rule.id %} selected{% endif %}" data-list-row{% if can('write_play') %} data-list-view="/playrules?edit={{ rule.id }}"{% endif %}>
       {{ sel.cell(rule.id, rule.name) }}
       <td class="inc-cell">
         <div class="inc-title">{{ rule.name }}</div>
@@ -39,7 +39,7 @@
       <td>{{ rule.playbook.name if rule.playbook else "—" }}{% if rule.escalation_policy %}<div class="muted">{{ rule.escalation_policy.name }}</div>{% endif %}</td>
       <td>
         {% if can('write_play') %}
-        <form method="post" action="/playrules/{{ rule.id }}/toggle" class="onoff-form">
+        <form method="post" action="/playrules/{{ rule.id }}/toggle" class="onoff-form" hx-boost="false">
           <button type="submit" class="onoff {{ 'is-on' if rule.enabled else 'is-off' }}" aria-pressed="{{ 'true' if rule.enabled else 'false' }}" title="ON: this rule can match an alert. OFF: stored, skipped. This does not change alerts.yml.">{% if rule.enabled %}ON{% else %}OFF{% endif %}</button>
         </form>
         {% else %}
@@ -63,10 +63,10 @@
 {% if can('write_play') %}
 {% if form_mode == "edit" %}
 <h2 id="playrule-form-title">Edit rule <span class="muted">{{ selected.name }}</span></h2>
-<form method="post" action="/playrules/{{ selected.id }}/update" class="stack" id="playrule-form">
+<form method="post" action="/playrules/{{ selected.id }}/update" class="stack" id="playrule-form" hx-boost="false">
 {% else %}
 <h2 id="playrule-form-title">Create rule</h2>
-<form method="post" action="/playrules" class="stack" id="playrule-form">
+<form method="post" action="/playrules" class="stack" id="playrule-form" hx-boost="false">
   <label><span class="label-line">Preset {% with %}{% set tip %}Fills the fields below from bundled examples. Does not write monitoring/alerts.yml.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <select id="playrule-preset">
       <option value="">Custom — type the fields below</option>

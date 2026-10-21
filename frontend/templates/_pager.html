@@ -32,47 +32,47 @@
   {% if actions %}
   <div class="list-actions" data-list-actions>
     {% if actions.delete and not actions.get("delete_last") %}
-    <form method="post" action="{{ actions.delete }}" data-bulk-delete{% if actions.get("delete_gated") %} data-delete-gated{% endif %} onsubmit='return confirm({{ actions.confirm|tojson }});'>
+    <form method="post" action="{{ actions.delete }}" data-bulk-delete{% if actions.get("delete_gated") %} data-delete-gated{% endif %} onsubmit='return confirm({{ actions.confirm|tojson }});' hx-boost="false">
       <input type="hidden" name="next" value="{{ actions.next }}">
       <button type="submit" class="danger">{{ actions.get("delete_label") or "Delete" }}</button>
     </form>
     {% endif %}
     {% if actions.edit %}
-    <form method="post" action="{{ actions.edit }}" data-bulk-edit>
+    <form method="post" action="{{ actions.edit }}" data-bulk-edit hx-boost="false">
       <input type="hidden" name="next" value="{{ actions.next }}">
-      <button type="submit" title="Select one">Edit</button>
+      <button type="submit" title="Select one" data-one-title="Open this incident">Edit</button>
     </form>
     {% endif %}
     {% if actions.open_view %}
-    <form method="post" action="{{ actions.open_view }}" data-bulk-edit>
+    <form method="post" action="{{ actions.open_view }}" data-bulk-edit hx-boost="false">
       <input type="hidden" name="next" value="{{ actions.next }}">
       {% if actions.stay %}<input type="hidden" name="stay" value="{{ actions.stay }}">{% endif %}
       <button type="submit" title="Select one" data-one-title="{{ actions.get('open_view_title') or 'View this asset' }}">View</button>
     </form>
     {% endif %}
     {% if actions.open_import %}
-    <form method="post" action="{{ actions.open_import }}" data-bulk-edit>
+    <form method="post" action="{{ actions.open_import }}" data-bulk-edit hx-boost="false">
       <input type="hidden" name="next" value="{{ actions.next }}">
       {% if actions.stay %}<input type="hidden" name="stay" value="{{ actions.stay }}">{% endif %}
       <button type="submit" title="Select one" data-one-title="{{ actions.get('open_import_title') or 'Import into Add asset' }}">Import</button>
     </form>
     {% endif %}
     {% if actions.open_edit %}
-    <form method="post" action="{{ actions.open_edit }}" data-bulk-edit>
+    <form method="post" action="{{ actions.open_edit }}" data-bulk-edit hx-boost="false">
       <input type="hidden" name="next" value="{{ actions.next }}">
       {% if actions.stay %}<input type="hidden" name="stay" value="{{ actions.stay }}">{% endif %}
       <button type="submit" title="Select one" data-one-title="{{ actions.get('open_edit_title') or 'Edit' }}">Edit</button>
     </form>
     {% endif %}
     {% if actions.clone %}
-    <form method="post" action="{{ actions.clone }}" data-bulk-edit>
+    <form method="post" action="{{ actions.clone }}" data-bulk-edit hx-boost="false">
       <input type="hidden" name="next" value="{{ actions.next }}">
       {% if actions.stay %}<input type="hidden" name="stay" value="{{ actions.stay }}">{% endif %}
       <button type="submit" title="Select one" data-one-title="{{ actions.get('clone_title') or 'Clone this asset' }}">Clone</button>
     </form>
     {% endif %}
     {% if actions.verify %}
-    <form method="post" action="{{ actions.verify }}" data-bulk-verify>
+    <form method="post" action="{{ actions.verify }}" data-bulk-verify hx-boost="false">
       <input type="hidden" name="next" value="{{ actions.next }}">
       {% if actions.stay %}<input type="hidden" name="stay" value="{{ actions.stay }}">{% endif %}
       <button type="submit" title="Select one or more" data-many-title="Verify selected assets">Verify</button>
@@ -83,6 +83,7 @@
       <button type="button" data-export-open>Export</button>
       <dialog class="export-dialog" data-export-dialog>
         <h3>Save export</h3>
+        <p class="muted export-hint">Save opens your browser’s Save As dialog (Chrome / Edge). Other browsers download to the usual folder.</p>
         <label>Name <input type="text" name="filename" value="" autocomplete="off" data-export-name placeholder="export"></label>
         <label>Format
           <select name="format" aria-label="Export format">
@@ -98,14 +99,14 @@
     </form>
     {% endif %}
     {% if actions.delete and actions.get("delete_last") %}
-    <form method="post" action="{{ actions.delete }}" data-bulk-delete{% if actions.get("delete_gated") %} data-delete-gated{% endif %} onsubmit='return confirm({{ actions.confirm|tojson }});'>
+    <form method="post" action="{{ actions.delete }}" data-bulk-delete{% if actions.get("delete_gated") %} data-delete-gated{% endif %} onsubmit='return confirm({{ actions.confirm|tojson }});' hx-boost="false">
       <input type="hidden" name="next" value="{{ actions.next }}">
       <button type="submit" class="danger">{{ actions.get("delete_label") or "Delete" }}</button>
     </form>
     {% endif %}
   </div>
   {% endif %}
-  <form method="get" action="{{ request.url.path }}{{ pager.hash }}" class="pager-size" data-pager-size-form>
+  <form method="get" action="{{ request.url.path }}{{ pager.hash }}" class="pager-size" data-pager-size-form hx-boost="false">
     {% for key, value in request.query_params.multi_items() if key not in [pager.param, pager.size_param] %}
     <input type="hidden" name="{{ key }}" value="{{ value }}">
     {% endfor %}

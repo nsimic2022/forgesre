@@ -84,7 +84,7 @@ def test_dashboard_has_graph_pane_right_of_recent_incidents():
     assert 'class="pager-bar"' in html[recent:title] or "data-select-page" in html[recent:title]
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     block = css.split(".dash-incidents {", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns: minmax(0, 3fr) minmax(0, 1fr)" in block
+    assert "grid-template-columns: minmax(0, 2fr) minmax(0, 1fr)" in block
     graphs = css.split(".dash-graphs {", 1)[1].split("}", 1)[0]
     assert "margin: 0" in graphs
     assert "2.35rem" not in graphs

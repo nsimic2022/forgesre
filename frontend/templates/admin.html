@@ -12,7 +12,7 @@
     <thead><tr><th>Email</th><th>Name</th><th>Phone</th><th>Role</th><th>Actions</th></tr></thead>
     <tbody>
     {% for u in users %}
-      <tr class="{% if selected and selected.id == u.id %}selected{% endif %}" data-list-row>
+      <tr class="{% if selected and selected.id == u.id %}selected{% endif %}" data-list-row data-list-view="/admin?selected={{ u.id }}{{ pager_keep(pager) }}">
         <td><a href="/admin?selected={{ u.id }}{{ pager_keep(pager) }}" data-list-open>{{ u.email }}</a></td>
         <td>{{ u.name }}</td>
         <td>{% if u.phone or u.phone2 %}{{ u.phone or "—" }}{% if u.phone2 %}<div class="muted">{{ u.phone2 }}</div>{% endif %}{% else %}—{% endif %}</td>
@@ -22,7 +22,7 @@
           <a class="button" href="/admin?selected={{ u.id }}{{ pager_keep(pager) }}">Edit</a>
           <a class="button" href="/admin?clone={{ u.id }}{{ pager_keep(pager) }}">Clone</a>
           {% if not (u.id == user.id or u.role == "super_admin") %}
-          <form method="post" action="/admin/users/{{ u.id }}/delete" onsubmit="return confirm('Remove {{ u.email }}? They will not be able to sign in.');">
+          <form method="post" action="/admin/users/{{ u.id }}/delete" onsubmit="return confirm('Remove {{ u.email }}? They will not be able to sign in.');" hx-boost="false">
             <button type="submit" class="danger">Remove</button>
           </form>
           {% endif %}
@@ -37,7 +37,7 @@
   </div>
   <div class="card admin-user-pane">
     {% if selected %}
-    <form method="post" action="/admin/users/{{ selected.id }}" class="stack" id="edit-user-form">
+    <form method="post" action="/admin/users/{{ selected.id }}" class="stack" id="edit-user-form" hx-boost="false">
       <h3>Edit user</h3>
       {% if not can_edit_selected %}
       <p class="muted">The install super admin can only be edited by that account.</p>
@@ -68,7 +68,7 @@
       {% endif %}
       <a class="button" href="/admin?clone={{ selected.id }}">Clone</a>
       {% if can_delete_selected %}
-      <form method="post" action="/admin/users/{{ selected.id }}/delete" class="inline" onsubmit="return confirm('Remove {{ selected.email }}? They will not be able to sign in.');">
+      <form method="post" action="/admin/users/{{ selected.id }}/delete" class="inline" onsubmit="return confirm('Remove {{ selected.email }}? They will not be able to sign in.');" hx-boost="false">
         <button type="submit" class="danger">Remove</button>
       </form>
       {% else %}
@@ -81,7 +81,7 @@
     </div>
     <p class="muted"><a href="/admin">Create another user</a></p>
     {% elif clone_of %}
-    <form method="post" action="/admin/users" class="stack">
+    <form method="post" action="/admin/users" class="stack" hx-boost="false">
       <h3>Clone user {% with %}{% set tip %}Copy of {{ clone_of.email }}. Type a new email and password.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
       <label>Name <input name="name" required value="{{ clone_of.name }}"></label>
       <label>Phone <input name="phone" value="{{ clone_of.phone }}" placeholder="+381-11-000-0000"></label>
@@ -102,7 +102,7 @@
       </div>
     </form>
     {% else %}
-    <form method="post" action="/admin/users" class="stack">
+    <form method="post" action="/admin/users" class="stack" hx-boost="false">
       <h3>Create user</h3>
       <label>Name <input name="name" required></label>
       <label>Phone <input name="phone" placeholder="+381-11-000-0000"></label>
@@ -166,7 +166,7 @@
 {% if request.query_params.get('removed') %}
 <p class="banner"><strong>Backup removed</strong> {{ request.query_params.get('removed') }}. Other folders under <code>data/backups/</code> are unchanged.</p>
 {% endif %}
-<form method="post" action="/admin/backups" class="row-actions backup-actions">
+<form method="post" action="/admin/backups" class="row-actions backup-actions" hx-boost="false">
   <label class="inline-check"><input type="checkbox" name="include_models" value="1"> Include LLM GGUF (multi-GB) {% with %}{% set tip %}Skipped unless ticked. GGUF weights are often multi-GB and are not required to restore incidents or users.{% endset %}{% include "_info_tip.html" %}{% endwith %}</label>
   <button type="submit">Backup</button>
 </form>
@@ -185,7 +185,7 @@
       <td>
         <div class="row-actions backup-row-actions">
           <a class="button" href="/admin/backups/{{ b.name }}" hx-boost="false">Download</a>
-          <form method="post" action="/admin/backups/remove" onsubmit="return confirm('Remove {{ b.name }}? This deletes only that backup folder (tar + MANIFEST). data/backups/ stays.');">
+          <form method="post" action="/admin/backups/remove" onsubmit="return confirm('Remove {{ b.name }}? This deletes only that backup folder (tar + MANIFEST). data/backups/ stays.');" hx-boost="false">
             <input type="hidden" name="name" value="{{ b.name }}">
             <button type="submit" class="danger">Remove</button>
           </form>
@@ -213,7 +213,7 @@
   <button type="submit">Import</button>
 </form>
 {% if backup_choices %}
-<form method="post" action="/admin/backups/restore" class="stack backup-restore" onsubmit="return confirm('This overwrites the live database. Continue only if you typed RESTORE and you can recover from another copy.');">
+<form method="post" action="/admin/backups/restore" class="stack backup-restore" onsubmit="return confirm('This overwrites the live database. Continue only if you typed RESTORE and you can recover from another copy.');" hx-boost="false">
   <label>Backup folder (newest first)
     <select name="name" required>
       {% for b in backup_choices %}

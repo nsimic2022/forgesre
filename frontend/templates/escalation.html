@@ -31,7 +31,7 @@
   <div class="row-actions asset-form-actions">
     <a class="button" href="/escalation?edit={{ policy.id }}{{ pager_keep(pager) }}#escalation-form">Edit</a>
     {% if policy.slug != default_slug %}
-    <form method="post" action="/escalation/{{ policy.id }}/delete" onsubmit="return confirm('Remove this escalation policy? {{ usage.get(policy.id, 0) }} playrule(s) using it move to Default warning.');">
+    <form method="post" action="/escalation/{{ policy.id }}/delete" onsubmit="return confirm('Remove this escalation policy? {{ usage.get(policy.id, 0) }} playrule(s) using it move to Default warning.');" hx-boost="false">
       <button type="submit" class="danger">Remove</button>
     </form>
     {% endif %}
@@ -49,10 +49,10 @@
 <section class="card escalation-pane escalation-create">
 {% if form_mode == "edit" %}
 <h2>Edit escalation policy</h2>
-<form method="post" action="/escalation/{{ selected.id }}/update" class="stack" id="escalation-form">
+<form method="post" action="/escalation/{{ selected.id }}/update" class="stack" id="escalation-form" hx-boost="false">
 {% else %}
 <h2>Create escalation policy</h2>
-<form method="post" action="/escalation" class="stack" id="escalation-form">
+<form method="post" action="/escalation" class="stack" id="escalation-form" hx-boost="false">
 {% endif %}
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <label>Name <input name="name" placeholder="Default warning" required value="{{ form.name }}"></label>
@@ -94,13 +94,13 @@
 <section class="card escalation-pane escalation-oncall-form">
 {% if oncall_form_mode == "edit" %}
 <h2 id="oncall-form-title">Edit on-call <span class="muted">{{ oc.name }}</span></h2>
-<form method="post" action="/escalation/oncall/{{ oncall_selected.id }}/update" class="oncall-form-grid" id="oncall-form" data-oncall-form>
+<form method="post" action="/escalation/oncall/{{ oncall_selected.id }}/update" class="oncall-form-grid" id="oncall-form" data-oncall-form hx-boost="false">
 {% elif oncall_form_mode == "clone" %}
 <h2 id="oncall-form-title">Clone on-call {% with %}{% set tip %}Copy of {{ oncall_clone_name }}. Tweak the fields, then Save to create a new window. Cancel discards the draft.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-<form method="post" action="/escalation/oncall" class="oncall-form-grid" id="oncall-form" data-oncall-form>
+<form method="post" action="/escalation/oncall" class="oncall-form-grid" id="oncall-form" data-oncall-form hx-boost="false">
 {% else %}
 <h2 id="oncall-form-title">Add on-call</h2>
-<form method="post" action="/escalation/oncall" class="oncall-form-grid" id="oncall-form" data-oncall-form>
+<form method="post" action="/escalation/oncall" class="oncall-form-grid" id="oncall-form" data-oncall-form hx-boost="false">
 {% endif %}
   {% if oncall_error %}<p class="error" role="alert">{{ oncall_error }}</p>{% endif %}
   <div class="oncall-form-when">
@@ -140,14 +140,14 @@
 {% if request.query_params.get('edit_note') == 'select-one' %}
 <div class="banner" role="status">Select one</div>
 {% endif %}
-<p class="oncall-now" data-oncall-now>{% if oncall %}Now: <strong>{{ oncall.person or oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %}{% if oncall.phone2 %} · {{ oncall.phone2 }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}<span class="muted">No one scheduled right now.</span>{% endif %}{% if can('write_play') %} <form method="post" action="/escalation/oncall/take" class="oncall-take"><input type="hidden" name="next" value="/escalation"><button type="submit" class="secondary">I'm on duty now</button></form>{% endif %}</p>
+<p class="oncall-now" data-oncall-now>{% if oncall %}Now: <strong>{{ oncall.person or oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %}{% if oncall.phone2 %} · {{ oncall.phone2 }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}<span class="muted">No one scheduled right now.</span>{% endif %}{% if can('write_play') %} <form method="post" action="/escalation/oncall/take" class="oncall-take" hx-boost="false"><input type="hidden" name="next" value="/escalation"><button type="submit" class="secondary">I'm on duty now</button></form>{% endif %}</p>
 <div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
 <table class="scan-list" data-oncall-roster>
   <thead><tr>{{ sel.head() }}<th>When</th><th>Name</th><th>Email</th><th>Enabled</th></tr></thead>
   <tbody>
   {% for slot in oncall_slots %}
-    <tr class="{% if not slot.enabled %}slot-off{% endif %}{% if oncall_selected and oncall_selected.id == slot.id %} selected{% endif %}" data-list-row>
+    <tr class="{% if not slot.enabled %}slot-off{% endif %}{% if oncall_selected and oncall_selected.id == slot.id %} selected{% endif %}" data-list-row{% if can('write_play') %} data-list-view="/escalation?oncall_edit={{ slot.id }}#oncall"{% endif %}>
       {{ sel.cell(slot.id, slot.person or slot.name) }}
       <td>{{ slot.window }}</td>
       <td class="oncall-name">{{ slot.person or slot.name }}</td>
@@ -157,7 +157,7 @@
       </td>
       <td>
         {% if can('write_play') %}
-        <form method="post" action="/escalation/oncall/{{ slot.id }}/toggle" class="onoff-form">
+        <form method="post" action="/escalation/oncall/{{ slot.id }}/toggle" class="onoff-form" hx-boost="false">
           <button type="submit" class="onoff {{ 'is-on' if slot.enabled else 'is-off' }}" aria-pressed="{{ 'true' if slot.enabled else 'false' }}" title="ON: this window can match now. OFF: stored, skipped. That is not Remove.">{% if slot.enabled %}ON{% else %}OFF{% endif %}</button>
         </form>
         {% else %}

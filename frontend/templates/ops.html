@@ -74,13 +74,13 @@
   <h2>Send email</h2>
   {% if can_send %}
   <div class="ops-mail-cols">
-    <form method="post" action="/ops/contacts" class="stack ops-add-email">
+    <form method="post" action="/ops/contacts" class="stack ops-add-email" hx-boost="false">
       <h3>Add email {% with %}{% set tip %}Saves an address so it appears in the Compose To list. Asset owner emails from Assets already appear there.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
       <label>Name <input name="name" placeholder="Storage on-call"></label>
       <label>Email <input name="email" type="email" required placeholder="ops@example.local"></label>
       <button type="submit">Save address</button>
     </form>
-    <form method="post" action="/ops/mail" class="stack ops-compose">
+    <form method="post" action="/ops/mail" class="stack ops-compose" hx-boost="false">
       <h3>Compose</h3>
       <label>To
         <select name="target">
@@ -140,7 +140,7 @@
   {% set report_mode = report_form_mode or "add" %}
   {% set rf = report_form or {} %}
   <div class="ops-report-cols">
-  <form method="post" action="{% if report_mode == 'edit' %}/ops/reports/{{ editing_report.id }}/update{% else %}/ops/reports{% endif %}" class="stack" id="report-schedule-form">
+  <form method="post" action="{% if report_mode == 'edit' %}/ops/reports/{{ editing_report.id }}/update{% else %}/ops/reports{% endif %}" class="stack" id="report-schedule-form" hx-boost="false">
     <h3>
       {% if report_mode == "edit" %}Edit report {% with %}{% set tip %}Same fields as create. Save updates this row. Cancel discards the edits and returns to the list.{% endset %}{% include "_info_tip.html" %}{% endwith %}
       {% elif report_mode == "clone" %}Clone report {% with %}{% set tip %}Copy of {{ clone_source_name }}. Tweak the fields, then Save to create a new job. Cancel discards the draft.{% endset %}{% include "_info_tip.html" %}{% endwith %}
@@ -203,7 +203,7 @@
       <a href="/ops#reports">Cancel</a>
     </div>
   </form>
-  <form method="post" action="/ops/reports/send-now" class="stack ops-report-now">
+  <form method="post" action="/ops/reports/send-now" class="stack ops-report-now" hx-boost="false">
     <h3>Send now {% with %}{% set tip %}One snapshot, immediately. Does not create a 6-hour schedule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
     <fieldset class="report-recipients">
       <legend>Recipients</legend>
@@ -239,7 +239,7 @@
         <td class="muted">{{ stamp.show(row.next_run_at) if row.next_run_at else "—" }}</td>
         <td>
           {% if can_send %}
-          <form method="post" action="/ops/reports/{{ row.id }}/toggle" class="onoff-form">
+          <form method="post" action="/ops/reports/{{ row.id }}/toggle" class="onoff-form" hx-boost="false">
             <button type="submit" class="onoff {{ 'is-on' if row.enabled else 'is-off' }}" aria-pressed="{{ 'true' if row.enabled else 'false' }}" title="ON: fire at Next. OFF: stored, the scheduler skips it. That is not Remove.">{% if row.enabled %}ON{% else %}OFF{% endif %}</button>
           </form>
           {% else %}
@@ -255,8 +255,8 @@
             <a class="button" href="/ops?edit={{ row.id }}{{ pager_keep(reports_pager) }}#reports">Edit</a>
             {% endif %}
             <a class="button" href="/ops?clone={{ row.id }}{{ pager_keep(reports_pager) }}#reports">Clone</a>
-            <form method="post" action="/ops/reports/{{ row.id }}/run"><button type="submit">Run now</button></form>
-            <form method="post" action="/ops/reports/{{ row.id }}/delete" onsubmit="return confirm('Remove this scheduled report? The job is deleted. Outbox mail already generated stays.');">
+            <form method="post" action="/ops/reports/{{ row.id }}/run" hx-boost="false"><button type="submit">Run now</button></form>
+            <form method="post" action="/ops/reports/{{ row.id }}/delete" onsubmit="return confirm('Remove this scheduled report? The job is deleted. Outbox mail already generated stays.');" hx-boost="false">
               <button type="submit" class="danger">Remove</button>
             </form>
           </div>

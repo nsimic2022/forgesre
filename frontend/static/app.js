@@ -55,6 +55,9 @@ applyTheme(currentTheme());
 
 function bootUi() {
   ForgeSRE.stop();
+  document.querySelectorAll("form").forEach((form) => {
+    form.setAttribute("hx-boost", "false");
+  });
 
 
 (function bindReportSchedule() {
@@ -301,7 +304,7 @@ function bootUi() {
     bar.querySelectorAll("[data-bulk-edit] button").forEach((edit) => {
       edit.classList.toggle("is-muted", !one);
       const ready = edit.getAttribute("data-one-title");
-      edit.title = one ? (ready || "Edit notes on this incident") : "Select one";
+      edit.title = one ? (ready || "Open this incident") : "Select one";
     });
     bar.querySelectorAll("[data-bulk-verify] button").forEach((button) => {
       button.classList.toggle("is-muted", !some);
@@ -1660,10 +1663,13 @@ function graphPane(pane) {
     if (pending) window.clearTimeout(pending);
     pending = 0;
     const number = row.getAttribute("data-dash-incident") || "";
+    const title = row.getAttribute("data-title") || "";
     const asset = row.getAttribute("data-asset") || "";
     const host = row.getAttribute("data-host") || "";
     pane.setAttribute("data-host", host);
-    if (subject) subject.textContent = number + (asset || host ? " · " + (asset || host) : "");
+    if (subject) subject.textContent = number + (title ? " · " + title : "");
+    const hostEl = pane.querySelector("[data-dash-graph-host]");
+    if (hostEl) hostEl.textContent = host || asset || "";
     if (assetLink) {
       assetLink.hidden = !asset;
       assetLink.href = asset ? "/assets/" + encodeURIComponent(asset) : "#";

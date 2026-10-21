@@ -9,7 +9,7 @@
 {% if notice %}
 <div class="banner">{{ notice }}</div>
 {% endif %}
-<form method="get" action="/assets" class="row-actions list-filters">
+<form method="get" action="/assets" class="row-actions list-filters" hx-boost="false">
   <input name="q" value="{{ q }}" placeholder="search #, id, hostname, IP, VLAN" aria-label="Search">
   {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
   {% if flag %}<input type="hidden" name="flag" value="{{ flag }}">{% endif %}

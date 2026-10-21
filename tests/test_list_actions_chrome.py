@@ -112,7 +112,7 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert "[data-select-scope]:has([data-select-row]:checked) .list-actions" in css
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-19" in base and "app.js?v=v09-Y" in base
+    assert "app.css?v=v09-20" in base and "app.js?v=v09-Z" in base
 
     assets = _middle(client.get("/assets").text)
     _order(assets, ["View", "Edit", "Clone", "Verify", "Export", "Remove"])
@@ -316,8 +316,8 @@ def test_edit_with_zero_or_two_rows_stays_on_the_list():
         follow_redirects=False,
     )
     assert one_incident.status_code == 303
-    assert one_incident.headers["location"].startswith(f"/incidents/{numbers[0]}")
-    assert "focus=notes" in one_incident.headers["location"]
+    assert one_incident.headers["location"] == f"/incidents/{numbers[0]}"
+    assert "focus=notes" not in one_incident.headers["location"]
     many_incidents = client.post(
         "/incidents/edit",
         data={"selected": numbers, "next": "/incidents"},

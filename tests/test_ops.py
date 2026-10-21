@@ -377,7 +377,8 @@ def test_ops_scheduled_report_edit_clone_disable_remove():
 
     edit_page = client.get(f"/ops?edit={row.id}")
     assert edit_page.status_code == 200
-    assert f'<form method="post" action="/ops/reports/{row.id}/update" class="stack" id="report-schedule-form">' in edit_page.text
+    assert f'action="/ops/reports/{row.id}/update"' in edit_page.text
+    assert 'id="report-schedule-form"' in edit_page.text
     form = edit_page.text.split('id="report-schedule-form"', 1)[1].split("</form>", 1)[0]
     assert "Edit report" in form
     assert 'value="storage-job"' in form
@@ -408,7 +409,8 @@ def test_ops_scheduled_report_edit_clone_disable_remove():
     assert db.query(ScheduledReport).filter_by(name="storage-job").first() is None
 
     clone_page = client.get(f"/ops?clone={row.id}")
-    assert '<form method="post" action="/ops/reports" class="stack" id="report-schedule-form">' in clone_page.text
+    assert 'id="report-schedule-form"' in clone_page.text
+    assert 'action="/ops/reports"' in clone_page.text
     clone_form = clone_page.text.split('id="report-schedule-form"', 1)[1].split("</form>", 1)[0]
     assert "Clone report" in clone_form
     assert "storage-daily-copy" in clone_form

@@ -7,7 +7,7 @@
 {% if import_of %}<p class="muted">From scan {{ form.ip }} — change anything, then Save to create the asset.</p>{% endif %}
 {% endif %}
 {% from "_email_pick.html" import email_pick %}
-<form method="post" action="{% if form_mode == 'edit' %}/assets/{{ selected.asset_id }}/update{% else %}/assets{% endif %}" class="asset-form-split" id="asset-form">
+<form method="post" action="{% if form_mode == 'edit' %}/assets/{{ selected.asset_id }}/update{% else %}/assets{% endif %}" class="asset-form-split" id="asset-form" hx-boost="false">
   {% set ex = form.extras or {} %}
   <div class="asset-form-band asset-form-row-1">
   <div class="asset-form-col asset-form-left">
@@ -268,11 +268,11 @@
   {% if form_mode == "edit" %}
   <a href="{{ form_list }}">Cancel</a>
   <a class="button" href="/assets/{{ selected.asset_id }}/verify">Verify</a>
-  <form method="post" action="/assets/{{ selected.asset_id }}/detect" class="inline">
+  <form method="post" action="/assets/{{ selected.asset_id }}/detect" class="inline" hx-boost="false">
     <button type="submit" class="secondary">Detect OS / scrape port</button>
   </form>
   {% if not delete_blocked(selected) %}
-  <form method="post" action="/assets/{{ selected.asset_id }}/delete" class="inline" onsubmit="return confirm('Remove {{ selected.hostname }}? Prometheus will stop scraping it. Incidents stay on the Incidents list without this host. Core is unchanged.');">
+  <form method="post" action="/assets/{{ selected.asset_id }}/delete" class="inline" onsubmit="return confirm('Remove {{ selected.hostname }}? Prometheus will stop scraping it. Incidents stay on the Incidents list without this host. Core is unchanged.');" hx-boost="false">
     <button type="submit" class="danger">Remove</button>
   </form>
   {% endif %}
