@@ -52,7 +52,7 @@
 {% set acked = incident.ack_at is not none %}
 {% set resolved = st in ["RESOLVED", "CLOSED"] %}
 {% set closed = st == "CLOSED" %}
-<div class="card incident-actions">
+<div class="incident-actions">
   <form method="post" action="/incidents/{{ incident.number }}/status" hx-boost="false">
     {% if can('ack_incidents') %}
     <button name="status" value="INVESTIGATING" class="{{ 'done' if acked else 'todo' }}">Acknowledge</button>

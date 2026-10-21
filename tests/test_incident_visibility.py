@@ -278,8 +278,9 @@ def test_detail_header_strip_has_first_and_duration():
     assert 'class="pill investigating"' in identity or "INVESTIGATING" in identity
     assert 'class="pill crit"' in identity
     assert page.text.index('class="incident-head"') < page.text.index("data-incident-identity")
-    assert page.text.index("data-incident-identity") < page.text.index("class=\"card incident-actions\"")
-    assert page.text.index("class=\"card incident-actions\"") < page.text.index("<h2>What happened")
+    assert page.text.index("data-incident-identity") < page.text.index("class=\"incident-actions\"")
+    assert page.text.index("class=\"incident-actions\"") < page.text.index("<h2>What happened")
+    assert 'class="card incident-actions"' not in page.text
     assert page.text.index("<h2>What happened") < page.text.index("<h2>Workflow")
     assert page.text.index("<h2>Workflow") < page.text.index("<h2>Similar on this asset")
     assert page.text.index("<h2>Similar on this asset") < page.text.index("<h2>Host metrics")
@@ -343,4 +344,4 @@ def test_stack_cube_font_bumped_box_unchanged():
     assert "padding: 0.28rem" in block
     assert "line-height: 0.77rem" in block
     assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v09-24" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "app.css?v=v09-25" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
