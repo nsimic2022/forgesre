@@ -79,7 +79,7 @@
     </form>
     {% endif %}
     {% if actions.export %}
-    <form method="post" action="{{ actions.export }}" data-bulk-export data-export-picker>
+    <form method="post" action="{{ actions.export }}" data-bulk-export data-export-picker hx-boost="false">
       <button type="button" data-export-open>Export</button>
       <dialog class="export-dialog" data-export-dialog>
         <h3>Save export</h3>

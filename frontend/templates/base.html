@@ -15,10 +15,14 @@
       document.documentElement.setAttribute("data-theme", theme);
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v09-18">
+  <link rel="stylesheet" href="/static/app.css?v=v09-19">
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  <script src="/static/vendor/alpine.min.js" defer></script>
+  <script src="/static/app.js?v=v09-Y" defer></script>
   {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body hx-boost="true" hx-indicator="#hx-progress">
+  <div id="hx-progress" class="hx-progress htmx-indicator" aria-hidden="true"></div>
   {% macro theme_toggle() -%}
   <button type="button" class="theme-toggle" data-theme-toggle aria-label="Theme">
     <span class="theme-label theme-label-light">Light</span>
@@ -60,7 +64,7 @@
       </div>
       <div class="nav-foot-actions">
         {{ theme_toggle() }}
-        <form class="nav-logout" method="post" action="/logout"><button type="submit" class="secondary">Logout</button></form>
+        <form class="nav-logout" method="post" action="/logout" hx-boost="false"><button type="submit" class="secondary">Logout</button></form>
       </div>
     </div>
   </aside>
@@ -78,6 +82,5 @@
     </div>
   </main>
   {% endif %}
-  <script src="/static/app.js?v=v09-X"></script>
 </body>
 </html>

@@ -24,13 +24,38 @@ function applyTheme(theme) {
   });
 }
 
-document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
-  button.addEventListener("click", () => {
+const ForgeSRE = window.ForgeSRE || { timers: [] };
+window.ForgeSRE = ForgeSRE;
+ForgeSRE.every = function every(ms, fn) {
+  const id = window.setInterval(fn, ms);
+  this.timers.push(id);
+  return id;
+};
+ForgeSRE.stop = function stop() {
+  (this.timers || []).forEach((id) => window.clearInterval(id));
+  this.timers = [];
+};
+function bindOnce(flag, fn) {
+  if (document.documentElement.hasAttribute(flag)) return false;
+  document.documentElement.setAttribute(flag, "");
+  fn();
+  return true;
+}
+
+if (!document.documentElement.hasAttribute("data-theme-bound")) {
+  document.documentElement.setAttribute("data-theme-bound", "");
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-theme-toggle]");
+    if (!button) return;
     const index = THEMES.indexOf(currentTheme());
     applyTheme(THEMES[(index + 1) % THEMES.length]);
   });
-});
+}
 applyTheme(currentTheme());
+
+function bootUi() {
+  ForgeSRE.stop();
+
 
 (function bindReportSchedule() {
   const form = document.getElementById("report-schedule-form");
@@ -94,9 +119,9 @@ applyTheme(currentTheme());
 })();
 
 (function bindClock() {
-  const clocks = document.querySelectorAll("[data-clock]");
-  if (!clocks.length) return;
   const tick = () => {
+    const clocks = document.querySelectorAll("[data-clock]");
+    if (!clocks.length) return;
     let text;
     try {
       text = new Date().toLocaleTimeString(undefined, {
@@ -113,13 +138,16 @@ applyTheme(currentTheme());
     });
   };
   tick();
-  window.setInterval(tick, 1000);
+  ForgeSRE.every(1000, tick);
 })();
 
 (function bindApplianceResources() {
-  const box = document.querySelector("[data-appliance-resources]");
-  if (!box) return;
-  const row = (key) => box.querySelector('[data-metric="' + key + '"]');
+  const box = () => document.querySelector("[data-appliance-resources]");
+  if (!box()) return;
+  const row = (key) => {
+    const root = box();
+    return root ? root.querySelector('[data-metric="' + key + '"]') : null;
+  };
   const gib = (n) => {
     const v = Number(n) / 1073741824;
     if (!isFinite(v) || v < 0) return "—";
@@ -161,13 +189,14 @@ applyTheme(currentTheme());
     set("net", levels.net, net.reading || "no reading");
   };
   const load = () => {
+    if (!box()) return;
     fetch("/api/v1/system/resources", { headers: { Accept: "application/json" } })
       .then((response) => (response.ok ? response.json() : null))
       .then(paint)
       .catch(blocked);
   };
   load();
-  window.setInterval(load, 8000);
+  ForgeSRE.every(8000, load);
 })();
 
 // Pager tabs and Rows N reload the page with new ?page= / ?per_page=. Remember where the window was and put it
@@ -208,14 +237,17 @@ applyTheme(currentTheme());
     if (document.readyState !== "complete") window.addEventListener("load", put, { once: true });
   }
 
-  document.addEventListener("click", (event) => {
-    if (event.defaultPrevented || event.button !== 0) return;
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const link = event.target.closest(".pager-bar .pager a[href]");
-    if (!link) return;
-    event.preventDefault();
-    go(new URL(link.href, window.location.href));
-  });
+  if (!window.__fsrePagerClick) {
+    window.__fsrePagerClick = true;
+    document.addEventListener("click", (event) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = event.target.closest(".pager-bar .pager a[href]");
+      if (!link) return;
+      event.preventDefault();
+      go(new URL(link.href, window.location.href));
+    });
+  }
 
   const submitSize = (form) => {
     const url = new URL(form.getAttribute("action") || window.location.pathname, window.location.href);
@@ -237,6 +269,8 @@ applyTheme(currentTheme());
 })();
 
 (function bindRowSelect() {
+  if (document.documentElement.hasAttribute("data-row-select-bound")) return;
+  document.documentElement.setAttribute("data-row-select-bound", "");
   const scopeOf = (el) => el.closest("[data-select-scope]") || el.closest("table");
   const rowsIn = (scope) => (scope ? scope.querySelectorAll("[data-select-row]") : []);
   const flashSelectOne = (form) => {
@@ -810,19 +844,21 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
     button.setAttribute("aria-pressed", on ? "true" : "false");
   };
   document.querySelectorAll(".onoff-check").forEach(sync);
-  document.addEventListener("change", (event) => {
-    const el = event.target;
-    if (el instanceof HTMLInputElement && el.classList.contains("onoff-check")) sync(el);
-  });
-  document.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-onoff]");
-    if (!button || button.tagName !== "BUTTON") return;
-    const row = button.closest(".alarm-row");
-    const box = row && row.querySelector(".onoff-check");
-    if (!box) return;
-    event.preventDefault();
-    box.checked = !box.checked;
-    sync(box);
+  bindOnce("data-onoff-bound", () => {
+    document.addEventListener("change", (event) => {
+      const el = event.target;
+      if (el instanceof HTMLInputElement && el.classList.contains("onoff-check")) sync(el);
+    });
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-onoff]");
+      if (!button || button.tagName !== "BUTTON") return;
+      const row = button.closest(".alarm-row");
+      const box = row && row.querySelector(".onoff-check");
+      if (!box) return;
+      event.preventDefault();
+      box.checked = !box.checked;
+      sync(box);
+    });
   });
 })();
 
@@ -981,11 +1017,15 @@ function listPicker(root, opts) {
     if (openRow(row)) event.preventDefault();
   });
 
-  document.addEventListener("mousedown", (event) => {
-    if (!box || box.contains(event.target)) return;
-    const active = document.activeElement;
-    if (active && box.contains(active) && typeof active.blur === "function") active.blur();
-  });
+  if (!window.__fsreListMouse) {
+    window.__fsreListMouse = true;
+    document.addEventListener("mousedown", (event) => {
+      const active = document.activeElement;
+      const live = active && active.closest && active.closest("[data-list-bound]");
+      if (!live || live.contains(event.target)) return;
+      if (typeof active.blur === "function") active.blur();
+    });
+  }
 
   return { rows, select };
 }
@@ -1637,6 +1677,7 @@ function graphPane(pane) {
       pending = 0;
       load();
       timer = window.setInterval(load, 30000);
+      if (window.ForgeSRE && window.ForgeSRE.timers) window.ForgeSRE.timers.push(timer);
     };
     // Holding an arrow key walks many rows; only the row it settles on fetches.
     if (options.defer) pending = window.setTimeout(start, 180);
@@ -1705,7 +1746,8 @@ function graphPane(pane) {
       .catch(() => showEmpty("Not scraped."));
   };
   load();
-  window.setInterval(load, 30000);
+  const assetTimer = window.setInterval(load, 30000);
+  if (window.ForgeSRE && window.ForgeSRE.timers) window.ForgeSRE.timers.push(assetTimer);
 })();
 
 // Every other list box: select-only rows. A box with more than ten rows is sized to about ten, so a longer page
@@ -1718,7 +1760,10 @@ function graphPane(pane) {
     if (box.hasAttribute("data-list-bound")) return;
     picked.push({ box, picker: listPicker(box) });
   });
-  if (!picked.length) return;
+  if (!picked.length) {
+    if (window.ForgeSRE) window.ForgeSRE.fitLists = null;
+    return;
+  }
 
   const fit = () => {
     picked.forEach(({ box, picker }) => {
@@ -1736,16 +1781,20 @@ function graphPane(pane) {
     if (start) picker.select(start);
   });
 
-  let frame = 0;
-  const refit = () => {
-    if (frame) return;
-    frame = window.requestAnimationFrame(() => {
-      frame = 0;
-      fit();
-    });
-  };
-  window.addEventListener("resize", refit);
-  if (document.readyState !== "complete") window.addEventListener("load", refit, { once: true });
+  if (window.ForgeSRE) window.ForgeSRE.fitLists = fit;
+  if (!window.__fsreListResize) {
+    window.__fsreListResize = true;
+    let frame = 0;
+    const refit = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        if (window.ForgeSRE && window.ForgeSRE.fitLists) window.ForgeSRE.fitLists();
+      });
+    };
+    window.addEventListener("resize", refit);
+    if (document.readyState !== "complete") window.addEventListener("load", refit, { once: true });
+  }
 })();
 
 // Engineer evidence: a single click only selects (listPicker); double-click anywhere on the row (the open text too)
@@ -1797,11 +1846,16 @@ function graphPane(pane) {
   const GAP = 8;
   let timer = 0;
   let active = null;
-  const bubble = document.createElement("div");
-  bubble.className = "info-tip-bubble";
-  bubble.setAttribute("role", "tooltip");
-  bubble.hidden = true;
-  document.body.appendChild(bubble);
+  const bubble = () => {
+    let el = document.querySelector(".info-tip-bubble");
+    if (el) return el;
+    el = document.createElement("div");
+    el.className = "info-tip-bubble";
+    el.setAttribute("role", "tooltip");
+    el.hidden = true;
+    document.body.appendChild(el);
+    return el;
+  };
 
   const tipText = (el) =>
     String(el.getAttribute("data-tip") || el.getAttribute("aria-label") || el.getAttribute("title") || "")
@@ -1822,8 +1876,9 @@ function graphPane(pane) {
       window.clearTimeout(timer);
       timer = 0;
     }
-    bubble.hidden = true;
-    bubble.textContent = "";
+    const tip = bubble();
+    tip.hidden = true;
+    tip.textContent = "";
     if (active) {
       active.classList.remove("is-open");
       restoreTitle(active);
@@ -1834,12 +1889,13 @@ function graphPane(pane) {
   const place = (el) => {
     const text = tipText(el);
     if (!text) return;
-    bubble.textContent = text;
-    bubble.hidden = false;
-    bubble.style.left = "0px";
-    bubble.style.top = "0px";
+    const tip = bubble();
+    tip.textContent = text;
+    tip.hidden = false;
+    tip.style.left = "0px";
+    tip.style.top = "0px";
     const rect = el.getBoundingClientRect();
-    const size = bubble.getBoundingClientRect();
+    const size = tip.getBoundingClientRect();
     let left = rect.left;
     let top = rect.bottom + GAP;
     if (left + size.width > window.innerWidth - GAP) {
@@ -1850,8 +1906,8 @@ function graphPane(pane) {
       top = rect.top - size.height - GAP;
     }
     if (top < GAP) top = GAP;
-    bubble.style.left = Math.round(left) + "px";
-    bubble.style.top = Math.round(top) + "px";
+    tip.style.left = Math.round(left) + "px";
+    tip.style.top = Math.round(top) + "px";
   };
 
   const show = (el) => {
@@ -1868,39 +1924,41 @@ function graphPane(pane) {
     place(el);
   };
 
-  document.addEventListener("pointerover", (event) => {
-    const el = event.target.closest(".info-tip");
-    if (!el) return;
-    if (timer) window.clearTimeout(timer);
-    timer = window.setTimeout(() => show(el), DELAY_MS);
+  bindOnce("data-tips-bound", () => {
+    document.addEventListener("pointerover", (event) => {
+      const el = event.target.closest(".info-tip");
+      if (!el) return;
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => show(el), DELAY_MS);
+    });
+    document.addEventListener("pointerout", (event) => {
+      const el = event.target.closest(".info-tip");
+      if (!el) return;
+      if (el.contains(event.relatedTarget)) return;
+      hide();
+    });
+    document.addEventListener("focusin", (event) => {
+      const el = event.target.closest(".info-tip");
+      if (el) show(el);
+    });
+    document.addEventListener("focusout", (event) => {
+      const el = event.target.closest(".info-tip");
+      if (!el) return;
+      if (el.contains(event.relatedTarget)) return;
+      hide();
+    });
+    document.addEventListener("click", (event) => {
+      const el = event.target.closest(".info-tip");
+      if (!el) return;
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") hide();
+    });
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
   });
-  document.addEventListener("pointerout", (event) => {
-    const el = event.target.closest(".info-tip");
-    if (!el) return;
-    if (el.contains(event.relatedTarget)) return;
-    hide();
-  });
-  document.addEventListener("focusin", (event) => {
-    const el = event.target.closest(".info-tip");
-    if (el) show(el);
-  });
-  document.addEventListener("focusout", (event) => {
-    const el = event.target.closest(".info-tip");
-    if (!el) return;
-    if (el.contains(event.relatedTarget)) return;
-    hide();
-  });
-  document.addEventListener("click", (event) => {
-    const el = event.target.closest(".info-tip");
-    if (!el) return;
-    event.preventDefault();
-    event.stopPropagation();
-  });
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") hide();
-  });
-  window.addEventListener("scroll", hide, true);
-  window.addEventListener("resize", hide);
 })();
 
 (function bindOncallDirectory() {
@@ -1936,6 +1994,8 @@ function graphPane(pane) {
 })();
 
 (function bindExportPicker() {
+  if (document.documentElement.hasAttribute("data-export-bound")) return;
+  document.documentElement.setAttribute("data-export-bound", "");
   const stemFrom = (form) => {
     const named = form.querySelector("[data-export-name]");
     if (named && named.value) return named.value;
@@ -2023,11 +2083,13 @@ function graphPane(pane) {
 })();
 
 (function bindAlarmTicker() {
-  const bar = document.querySelector("[data-alarm-ticker]");
-  if (!bar) return;
-  const link = bar.querySelector("[data-ticker-link]");
+  const barOf = () => document.querySelector("[data-alarm-ticker]");
+  if (!barOf()) return;
   let last = "";
   const paint = (data) => {
+    const bar = barOf();
+    if (!bar) return;
+    const link = bar.querySelector("[data-ticker-link]");
     if (!data || !data.fresh || !data.items || !data.items.length) {
       bar.hidden = true;
       bar.classList.remove("heat-crit", "heat-warn", "is-blink");
@@ -2050,11 +2112,29 @@ function graphPane(pane) {
     }
   };
   const load = () => {
+    if (!barOf()) return;
     fetch("/api/v1/ticker", { headers: { Accept: "application/json" } })
       .then((response) => (response.ok ? response.json() : null))
       .then(paint)
       .catch(() => {});
   };
   load();
-  window.setInterval(load, 8000);
+  ForgeSRE.every(8000, load);
 })();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bootUi);
+} else {
+  bootUi();
+}
+bindOnce("data-htmx-bound", () => {
+  document.addEventListener("htmx:afterSettle", (event) => {
+    const elt = event.detail && event.detail.elt;
+    if (elt !== document.body && !(elt && elt.tagName === "BODY")) return;
+    bootUi();
+    if (window.Alpine && typeof window.Alpine.initTree === "function") {
+      window.Alpine.initTree(document.body);
+    }
+  });
+});
