@@ -22,6 +22,7 @@
 {% set nav_qs = nav.qs %}
 {% set show_demo_pill = true %}
 {% set done = incident.status|upper in ['RESOLVED', 'CLOSED'] %}
+<div class="incident-head">
 <div class="table-scroll incident-identity" data-incident-identity>
 <table class="scan-list incidents-table">
   <thead>
@@ -51,7 +52,7 @@
 {% set acked = incident.ack_at is not none %}
 {% set resolved = st in ["RESOLVED", "CLOSED"] %}
 {% set closed = st == "CLOSED" %}
-<div class="incident-actions">
+<div class="card incident-actions">
   <form method="post" action="/incidents/{{ incident.number }}/status" hx-boost="false">
     {% if can('ack_incidents') %}
     <button name="status" value="INVESTIGATING" class="{{ 'done' if acked else 'todo' }}">Acknowledge</button>
@@ -72,6 +73,7 @@
   {% else %}
   <button type="button" class="off" disabled>Open ForgeRCA</button>
   {% endif %}
+</div>
 </div>
 {% if incident.status|upper == "MAINT" %}
 <p class="banner" data-maint-incident>Maintenance — this incident is on the list and the mail ladder did not start. Standard-alarm mute is a different switch (it drops the alert). After the window, a new firing can email.</p>
