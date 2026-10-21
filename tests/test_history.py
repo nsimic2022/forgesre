@@ -171,7 +171,8 @@ def test_ack_resolve_and_operator_note_on_incident():
     assert page.status_code == 200
     assert "admin@forgesre.local" in page.text
     assert "Cleaned WAL on the host." in page.text
-    assert "/ops#mail" in page.text
+    assert "Outbox:" not in page.text
+    assert 'id="mail"' not in page.text
     ops = client.get("/ops")
     assert ops.status_code == 200
     assert "Owner mail body" in ops.text
@@ -283,8 +284,10 @@ def test_send_incident_report_to_address_book_email():
     page = client.get(f"/incidents/{number}")
     assert page.status_code == 200
     assert "Send incident report" in page.text
-    assert "/ops#mail" in page.text
+    assert "Outbox:" not in page.text
     assert "Report outbox" not in page.text
+    assert "Not sent yet." not in page.text
+    assert "class=\"incident-mail-toolbar\"" in page.text
     assert "Open ForgeRCA" in page.text
     assert "ForgeRCA" in page.text
     assert "ForgeAI" in page.text

@@ -115,6 +115,8 @@ def test_nav_sits_right_above_the_header_strip_and_back_links_stay_on_top():
     assert 'class="table-scroll incident-identity"' in html[nav_end:]
     assert 'class="incident-actions"' in html[nav_end:]
     assert 'class="card incident-actions"' not in html
+    assert 'class="incident-status"' in html[nav_end:]
+    assert 'class="incident-rca"' in html[nav_end:]
     assert html.count('class="pager-bar"') == html.count("data-pager-size-form")
 
 
@@ -223,10 +225,21 @@ def test_evidence_css_one_line_platform_font():
     assert "grid-column: 1 / 3" in css.split(".incident-identity {", 1)[1].split("}", 1)[0]
     actions = css.split(".incident-actions {", 1)[1].split("}", 1)[0]
     assert "grid-column: 3" in actions
-    assert "align-items: flex-start" in actions
+    assert "grid-template-columns: auto auto" in actions
     assert "width: auto" in css.split(".incident-actions button {", 1)[1].split("}", 1)[0]
     ledger = css.split(".incident-ledger > .card {", 1)[1].split("}", 1)[0]
     assert "min-height: 22rem" in ledger
+    assert "overflow: hidden" in ledger
+    assert "max-height: none !important" in css.split(".incident-ledger .list-scroll {", 1)[1].split("}", 1)[0]
+    assert ".incident-note-form { max-width: none;" in css
+    assert "width: auto; align-self: flex-start" in css.split(".incident-note-form button[type=\"submit\"] {", 1)[1]
+    assert ".incident-mail-toolbar {" in css
+    html = (ROOT / "frontend" / "templates" / "incident_detail.html").read_text(encoding="utf-8")
+    assert "Outbox:" not in html
+    assert "report-sent" not in html
+    assert "Not sent yet." not in html
+    assert 'class="incident-mail-toolbar"' in html
+    assert 'class="stack incident-note-form"' in html
 
 
 def test_evidence_opens_like_mail_outbox_view():
