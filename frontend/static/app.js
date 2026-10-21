@@ -1628,8 +1628,9 @@ function graphPane(pane) {
   const pane = document.querySelector("[data-dash-graphs]");
   const table = document.querySelector("[data-dash-incident-table]");
   if (!pane || !table) return;
-  const subject = pane.querySelector("[data-dash-graph-subject]");
-  const assetLink = pane.querySelector("[data-dash-graph-asset]");
+  const col = (pane.closest && pane.closest(".dash-graphs-col")) || pane;
+  const subject = col.querySelector("[data-dash-graph-subject]");
+  const assetLink = col.querySelector("[data-dash-graph-asset]");
   const { paint, showEmpty } = graphPane(pane);
   let selected = null;
   let timer = 0;
@@ -1668,7 +1669,7 @@ function graphPane(pane) {
     const host = row.getAttribute("data-host") || "";
     pane.setAttribute("data-host", host);
     if (subject) subject.textContent = number + (title ? " · " + title : "");
-    const hostEl = pane.querySelector("[data-dash-graph-host]");
+    const hostEl = col.querySelector("[data-dash-graph-host]");
     if (hostEl) hostEl.textContent = host || asset || "";
     if (assetLink) {
       assetLink.hidden = !asset;
