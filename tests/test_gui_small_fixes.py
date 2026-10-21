@@ -27,7 +27,7 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-26" in base
+    assert "app.css?v=v09-27" in base
     assert ".banner-short" not in css
     assert ".banner-x" in css
     assert "top: 0.35rem" in css.split(".banner-x {", 1)[1].split("}", 1)[0]
@@ -37,6 +37,7 @@ def test_css_cache_bust_is_current():
     assert "forgesre-flash-dismiss" in js
     assert "sessionStorage" in js
     assert ".playbook-grid" in css
+    assert "repeat(3, minmax(0, 1fr))" in css.split(".playbook-grid {", 1)[1].split("}", 1)[0]
     assert ".ack-dot" in css
     assert ".list-filters" in css
     assert "grid-template-columns: 1fr 1fr" in css
@@ -184,9 +185,12 @@ def test_discovery_candidate_edit_clone_remove():
     db.close()
 
 
-def test_playbooks_two_per_row_and_row_actions():
+def test_playbooks_three_per_row_and_row_actions():
     html = (ROOT / "frontend" / "templates" / "playbooks.html").read_text(encoding="utf-8")
     assert "playbook-grid" in html
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    assert "repeat(3, minmax(0, 1fr))" in css.split(".playbook-grid {", 1)[1].split("}", 1)[0]
+    assert '<div class="list-scroll list-scroll-cards" data-list-scroll>' in html
     assert '<p class="muted">V0.1 playbooks are instructions and workflow. They do not execute commands.</p>' not in html
     db = _db()
     client = TestClient(app)

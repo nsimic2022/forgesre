@@ -178,6 +178,7 @@ def test_card_lists_select_cards_inside_a_box():
     assert re.findall(r'<section class="policy-block[^"]*" data-list-row>', policy_boxes[0])
     raw = (TEMPLATES / "playbooks.html").read_text(encoding="utf-8")
     assert '<div class="list-scroll list-scroll-cards" data-list-scroll>' in raw
+    assert "repeat(3, minmax(0, 1fr))" in CSS.read_text(encoding="utf-8").split(".playbook-grid {", 1)[1].split("}", 1)[0]
 
 
 def test_every_template_with_a_pager_wraps_its_list():
