@@ -313,7 +313,7 @@
       <button type="submit">Send incident report</button>
     </div>
   </form>
-  <form method="post" action="/incidents/{{ incident.number }}/report/export" class="report-export" data-export-picker data-export-from-report>
+  <form method="post" action="/incidents/{{ incident.number }}/report/export" class="report-export" data-export-picker data-export-from-report hx-boost="false">
     <input type="hidden" name="subject" value="{{ report_subject }}" data-export-subject>
     <input type="hidden" name="body" value="" data-export-body>
     <button type="button" data-export-open>Export</button>

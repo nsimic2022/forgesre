@@ -220,7 +220,7 @@
   <a class="button" href="/assets?edit={{ asset.asset_id }}">Edit</a>
   <a class="button" href="/assets?clone={{ asset.asset_id }}">Clone</a>
   <a class="button" href="/assets/{{ asset.asset_id }}/verify">Verify</a>
-  <form method="post" action="/assets/export">
+  <form method="post" action="/assets/export" hx-boost="false">
     <input type="hidden" name="selected" value="{{ asset.asset_id }}">
     <button type="submit" class="secondary">Export</button>
   </form>

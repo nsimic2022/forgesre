@@ -184,7 +184,7 @@
       <td>{{ format_size(b.size) }}</td>
       <td>
         <div class="row-actions backup-row-actions">
-          <a class="button" href="/admin/backups/{{ b.name }}">Download</a>
+          <a class="button" href="/admin/backups/{{ b.name }}" hx-boost="false">Download</a>
           <form method="post" action="/admin/backups/remove" onsubmit="return confirm('Remove {{ b.name }}? This deletes only that backup folder (tar + MANIFEST). data/backups/ stays.');">
             <input type="hidden" name="name" value="{{ b.name }}">
             <button type="submit" class="danger">Remove</button>
@@ -208,7 +208,7 @@
 <div class="admin-backup-cli">
 <div class="admin-restore-pane">
 <h3>Import / restore {% with %}{% set tip %}Import only stores a tar.gz under data/backups/backup_…/. Restore overwrites the live database (users, incidents, playbooks) and does not run unless you tick the box and type RESTORE. Preferred after a crash or when migrating: SSH, stop Core, ./forgesre restore (pick a number) or ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes, then ./forgesre update. Config / .env / secrets on disk are not rewritten from this browser (Core mounts them read-only).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-<form method="post" action="/admin/backups/import" enctype="multipart/form-data" class="row-actions backup-actions">
+<form method="post" action="/admin/backups/import" enctype="multipart/form-data" class="row-actions backup-actions" hx-boost="false">
   <input type="file" name="archive" accept=".tar.gz,application/gzip" required>
   <button type="submit">Import</button>
 </form>
