@@ -103,14 +103,16 @@
     {% endfor %}
   </a>
   {% endif %}
-  <div class="appliance-oncall" data-oncall>
-    <div class="oncall-head">
+  <div class="appliance-oncall slot-block" data-oncall>
+    <div class="oncall-head slot-row">
       <span class="oncall-label">On duty</span>
       {% if can('read_play') %}<a class="oncall-link" href="/escalation#oncall">On-call</a>{% endif %}
     </div>
-    <p class="oncall-who">{% if oncall %}<strong>{{ oncall.person or oncall.name }}</strong>{% if oncall.email %} <span class="muted">{{ oncall.email }}</span>{% endif %}{% if oncall.phone %} <span class="muted">{{ oncall.phone }}</span>{% endif %}{% if oncall.window %} <span class="muted">{{ oncall.window }}</span>{% endif %}{% else %}<span class="muted">no one scheduled</span>{% endif %}</p>
+    <p class="oncall-who slot-row">{% if oncall %}<strong>{{ oncall.person or oncall.name }}</strong>{% else %}<span class="muted">no one scheduled</span>{% endif %}</p>
     {% if can('write_play') %}
-    <form method="post" action="/escalation/oncall/take" class="oncall-take" hx-boost="false"><input type="hidden" name="next" value="/"><button type="submit" class="secondary">I'm on duty now</button></form>
+    <div class="oncall-actions slot-row end">
+      <form method="post" action="/escalation/oncall/take" class="oncall-take" hx-boost="false"><input type="hidden" name="next" value="/"><button type="submit" class="secondary">I'm on duty now</button></form>
+    </div>
     {% endif %}
   </div>
 </aside>

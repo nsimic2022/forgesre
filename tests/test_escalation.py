@@ -89,6 +89,8 @@ def test_escalation_page_has_create_cancel_and_saves_policy():
     assert 'data-oncall-person' not in page.text
     assert "Pick a user" not in page.text
     assert 'data-oncall-name' in page.text
+    assert 'data-oncall-surname' in page.text
+    assert 'name="surname"' in page.text
     assert 'data-oncall-directory' in page.text
     assert 'id="oncall-people"' in page.text
     assert 'name="phone2"' in page.text

@@ -970,7 +970,7 @@ def oncall_text(db: Session, ids: list[int]) -> list[str]:
         records.append(
             [
                 _field("when", view["window"]),
-                _field("name", view["name"]),
+                _field("name", view["person"] or view["name"]),
                 _field("email", view["email"]),
                 _field("phone", view["phone"] or "—"),
                 _field("phone2", view["phone2"] or "—"),
@@ -994,7 +994,7 @@ def oncall_csv(db: Session, ids: list[int]) -> tuple[list[str], list[list[object
         out.append(
             [
                 view["window"] or "—",
-                view["name"] or "—",
+                view["person"] or view["name"] or "—",
                 view["email"] or "—",
                 view["phone"] or "—",
                 view["phone2"] or "—",

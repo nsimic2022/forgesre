@@ -165,20 +165,28 @@ def test_admin_create_user_phones_and_manual_oncall():
     _login(client)
     page = client.get("/admin")
     assert page.status_code == 200
-    create = page.text.split("<h3>Create user</h3>", 1)[1]
+    create = page.text.split("Create user", 1)[1]
     assert (
         create.index('name="name"')
+        < create.index('name="surname"')
         < create.index('name="phone"')
         < create.index('name="phone2"')
         < create.index('name="email"')
+        < create.index('name="email2"')
         < create.index('name="password"')
         < create.index('name="role"')
     )
+    assert 'class="form-grid person-grid"' in page.text
+    assert ">Surname<" in page.text
+    users_head = page.text.split('class="user-table"', 1)[1].split("</thead>", 1)[0]
+    assert users_head.index(">Email<") < users_head.index(">Name<") < users_head.index(">Surname<") < users_head.index(">Phone<")
     created = client.post(
         "/admin/users",
         data={
             "email": "noc@dc.local",
-            "name": "Noc One",
+            "email2": "noc-alt@dc.local",
+            "name": "Noc",
+            "surname": "One",
             "password": "noc-pass",
             "role": "analyst",
             "phone": "+381-11-555-0100",
@@ -190,14 +198,19 @@ def test_admin_create_user_phones_and_manual_oncall():
     row = db.query(User).filter_by(email="noc@dc.local").one()
     assert row.phone == "+381-11-555-0100"
     assert row.phone2 == "+381-11-555-0101"
+    assert row.surname == "One"
+    assert row.email2 == "noc-alt@dc.local"
     listed = client.get("/admin")
     assert "+381-11-555-0100" in listed.text
     assert "+381-11-555-0101" in listed.text
+    assert ">One<" in listed.text or "One" in listed.text
     saved = client.post(
         f"/admin/users/{row.id}",
         data={
             "email": "noc@dc.local",
-            "name": "Noc One",
+            "email2": "noc-desk@dc.local",
+            "name": "Noc",
+            "surname": "One",
             "password": "",
             "role": "analyst",
             "phone": "+381-11-555-0200",
@@ -209,6 +222,7 @@ def test_admin_create_user_phones_and_manual_oncall():
     db.refresh(row)
     assert row.phone == "+381-11-555-0200"
     assert row.phone2 == "+381-11-555-0201"
+    assert row.email2 == "noc-desk@dc.local"
     esc = client.get("/escalation")
     assert esc.status_code == 200
     assert 'data-oncall-person' not in esc.text
@@ -220,7 +234,8 @@ def test_admin_create_user_phones_and_manual_oncall():
             "weekday": "0",
             "start": "08:00",
             "end": "16:00",
-            "name": "Noc One",
+            "name": "Noc",
+            "surname": "One",
             "email": "noc@dc.local",
             "phone": "+381-11-555-0200",
             "phone2": "+381-11-555-0201",

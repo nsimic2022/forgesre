@@ -19,7 +19,9 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    email2: Mapped[str] = mapped_column(String(255), default="")
     name: Mapped[str] = mapped_column(String(255))
+    surname: Mapped[str] = mapped_column(String(255), default="")
     phone: Mapped[str] = mapped_column(String(64), default="")
     phone2: Mapped[str] = mapped_column(String(64), default="")
     password_hash: Mapped[str] = mapped_column(String(255))
@@ -414,6 +416,7 @@ class OncallSlot(Base):
     start_minute: Mapped[int] = mapped_column(Integer, default=0)
     end_minute: Mapped[int] = mapped_column(Integer, default=0)
     name: Mapped[str] = mapped_column(String(255), default="")
+    surname: Mapped[str] = mapped_column(String(255), default="")
     email: Mapped[str] = mapped_column(String(255), default="")
     phone: Mapped[str] = mapped_column(String(64), default="")
     phone2: Mapped[str] = mapped_column(String(64), default="")

@@ -118,7 +118,9 @@ class LoginBody(BaseModel):
 
 class UserBody(BaseModel):
     email: str
+    email2: str = ""
     name: str
+    surname: str = ""
     password: str
     role: str = "analyst"
     phone: str = ""
@@ -127,7 +129,9 @@ class UserBody(BaseModel):
 
 class UserUpdateBody(BaseModel):
     email: str | None = None
+    email2: str | None = None
     name: str | None = None
+    surname: str | None = None
     password: str | None = None
     role: str | None = None
     phone: str | None = None
@@ -1260,7 +1264,9 @@ def create_user(body: UserBody, db: Session = Depends(get_db), user: User = Depe
             db,
             user,
             email=body.email,
+            email2=body.email2,
             name=body.name,
+            surname=body.surname,
             password=body.password,
             role=body.role,
             phone=body.phone,
@@ -1290,7 +1296,9 @@ def update_user_api(
             user,
             row,
             email=body.email,
+            email2=body.email2,
             name=body.name,
+            surname=body.surname,
             password=body.password or "",
             role=body.role,
             phone=body.phone,

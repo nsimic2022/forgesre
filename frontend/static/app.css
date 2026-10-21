@@ -912,6 +912,28 @@ form label.inline-check input[type="checkbox"],
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; max-width: 720px; }
 .form-grid label, .form-grid .wide { display: flex; flex-direction: column; gap: 0.25rem; }
 .form-grid .wide { grid-column: 1 / -1; }
+.form-grid.person-grid {
+  max-width: none;
+  width: 100%;
+}
+.form-grid.person-grid > h3,
+.form-grid.person-grid > p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.form-grid.person-grid input,
+.form-grid.person-grid select { width: 100%; box-sizing: border-box; }
+.form-grid.person-grid .row-actions { flex-direction: row; align-items: center; }
+.slot-block { display: flex; flex-direction: column; gap: 0.35rem; }
+.slot-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 1.35em;
+  margin: 0;
+}
+.slot-row.end { justify-content: flex-end; }
 /* Add / Edit asset: three full-width bands. Thin 1px rules between bands,
    same language as .asset-detail-section, with extra air above and below each rule.
    Row 1 is four equal quarters: Identity | Ports | Contacts | Support.
@@ -2100,6 +2122,10 @@ details.rule-note-fields summary { cursor: pointer; color: var(--muted); font-si
   gap: 0.55rem;
   min-width: 0;
 }
+.oncall-form-who.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
 .oncall-form-grid .row-actions { margin-top: 0.15rem; }
 .oncall-form-grid label { display: flex; flex-direction: column; gap: 0.25rem; }
 .oncall-form-grid input,
@@ -3056,7 +3082,12 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 }
 .appliance-oncall .oncall-label { font-weight: 700; }
 .appliance-oncall .oncall-link { font-size: 0.82rem; }
-.appliance-oncall .oncall-who { margin: 0.28rem 0 0.45rem; overflow-wrap: anywhere; }
+.appliance-oncall .oncall-who {
+  margin: 0;
+  min-height: 1.35em;
+  overflow-wrap: anywhere;
+}
+.appliance-oncall .oncall-actions { margin: 0; }
 .appliance-oncall .oncall-take { margin: 0; }
 .appliance-oncall .oncall-take button { width: auto; padding: 0.28rem 0.65rem; font-size: 0.82rem; }
 .export-hint { margin: 0 0 0.7rem; font-size: 0.78rem; line-height: 1.35; }
@@ -3078,7 +3109,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 }
 .cli-example code { font-size: inherit; }
 
-/* v09-21: HTMX + Alpine chrome. Locked --bg / --text / --ok hexes stay. */
+/* v09-22: person slots + HTMX chrome. Locked --bg / --text / --ok hexes stay. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {
