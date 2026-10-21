@@ -1411,7 +1411,7 @@ def incidents_edit(
     selected: Annotated[list[str], Form()] = [],
     nxt: Annotated[str, Form(alias="next")] = "",
 ):
-    """Open one incident's notes. Zero or many rows do not write anything."""
+    """Open one selected incident page. Zero or many rows do not write anything."""
     _forbid(user, can(user, "write_incidents"))
     ids = selected_values(selected)
     if len(ids) != 1:
@@ -1419,7 +1419,7 @@ def incidents_edit(
     row = db.query(Incident).filter(Incident.number == ids[0]).first()
     if row is None:
         return RedirectResponse(_select_one_target(nxt, "/incidents"), status_code=303)
-    return RedirectResponse(f"/incidents/{row.number}?focus=notes#notes", status_code=303)
+    return RedirectResponse(f"/incidents/{row.number}", status_code=303)
 
 
 @router.post("/incidents/bulk-delete")

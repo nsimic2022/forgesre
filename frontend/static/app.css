@@ -1844,7 +1844,7 @@ td.ops-report-actions .row-actions a.button {
   white-space: nowrap;
 }
 /* v09-X: Assets list pane — Collecting, CPU, RAM, HDD, NET under the table. */
-/* v09-Y: Host metrics title sits above the cube; Export has TXT / CSV. */
+/* v09-Z: Host metrics title sits above the cube; Export has TXT / CSV. */
 /* v09-Z: ForgeAI digest under Recent incidents; I'm on duty now. */
 .asset-pane { margin: 0.85rem 0 1.25rem; }
 .asset-glance {
@@ -2198,7 +2198,7 @@ h1.incident-head .sev-warn { color: var(--warn); }
   --dash-tile-gap: 0.7rem;
   --dash-tile-band: 42.5rem;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(15rem, 22vw) clamp(240px, 22vw, 340px);
+  grid-template-columns: minmax(0, var(--dash-tile-band)) minmax(12rem, 1fr) clamp(240px, 22vw, 340px);
   grid-template-areas: "inc ai app" "infra ai app";
   gap: 0.9rem 1rem;
   margin: 0.5rem 0 0.7rem;
@@ -2383,12 +2383,13 @@ h1.incident-head .sev-warn { color: var(--warn); }
 }
 @media (max-width: 1100px) {
   .dash-top { grid-template-columns: 1fr; grid-template-areas: "inc" "infra" "ai" "app"; }
+  .dash-graphs .dash-graph-list { grid-template-columns: 1fr; }
 }
 
 /* Dashboard: Recent incidents and Host metrics share one row height. */
 .dash-incidents {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 1rem;
   align-items: stretch;
   min-height: 28rem;
@@ -2397,7 +2398,24 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .dash-graphs-col { min-width: 0; display: flex; flex-direction: column; }
 .dash-graphs-col > h2 { margin: 0 0 0.55rem; }
 .dash-graphs { margin: 0; min-width: 0; }
-.dash-graphs .metric-panel-head { justify-content: flex-end; margin-bottom: 0.15rem; }
+.dash-graphs .metric-panel-head { justify-content: flex-end; margin: 0 0 0.35rem; }
+.metric-ident {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0 0 0.2rem;
+}
+.metric-ident .dash-graph-subject { margin: 0; flex: 1 1 auto; min-width: 0; }
+.dash-graph-host {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
 .dash-insights { margin: 1.1rem 0 0; padding: 0.85rem 1rem 1rem; }
 .dash-insights-head h2 { margin: 0 0 0.25rem; }
 .dash-insights-hint { margin: 0 0 0.7rem; }
@@ -2416,7 +2434,19 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .dash-graph-caption { margin: 0 0 0.35rem; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .dash-graph-empty { margin: 0 0 0.5rem; font-size: 0.82rem; }
 .dash-graph-list { display: grid; gap: 0.55rem; }
+.dash-graphs .dash-graph-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  align-items: stretch;
+}
 .dash-graph { border-top: 1px solid var(--line); padding-top: 0.45rem; min-width: 0; }
+.dash-graphs .dash-graph {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 10px);
+  padding: 0.5rem 0.55rem 0.45rem;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
 .dash-graph-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 0.82rem; }
 .dash-graph-none { margin: 0.2rem 0 0; font-size: 0.8rem; }
 /* Dark performance plot (axes, light grid, hover). Page theme stays on the labels. */
@@ -2990,9 +3020,18 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
   padding-top: 0.65rem;
   border-top: 1px solid var(--line);
 }
-.appliance-oncall p { margin: 0 0 0.4rem; }
+.appliance-oncall .oncall-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+.appliance-oncall .oncall-label { font-weight: 700; }
+.appliance-oncall .oncall-link { font-size: 0.82rem; }
+.appliance-oncall .oncall-who { margin: 0.28rem 0 0.45rem; overflow-wrap: anywhere; }
 .appliance-oncall .oncall-take { margin: 0; }
 .appliance-oncall .oncall-take button { width: auto; padding: 0.28rem 0.65rem; font-size: 0.82rem; }
+.export-hint { margin: 0 0 0.7rem; font-size: 0.78rem; line-height: 1.35; }
 .dash-recent { min-height: 0; }
 .dash-recent-scroll {
   flex: 1 1 auto;
@@ -3011,7 +3050,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 }
 .cli-example code { font-size: inherit; }
 
-/* v09-19: HTMX + Alpine chrome. Locked --bg / --text / --ok hexes stay. */
+/* v09-20: HTMX + Alpine chrome. Locked --bg / --text / --ok hexes stay. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {

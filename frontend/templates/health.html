@@ -7,7 +7,7 @@
     {% if grafana_enabled %}
     <a class="button-link" href="{{ grafana_open }}" target="_blank" rel="noreferrer">Open Grafana</a>
     {% endif %}
-    <form method="post" action="/health-ui/refresh">
+    <form method="post" action="/health-ui/refresh" hx-boost="false">
       <button type="submit">Run doctor</button>
     </form>
   </div>

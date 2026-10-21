@@ -429,7 +429,7 @@ def test_asset_table_actions_live_in_the_pager():
     assert "vertical-align: middle" in css
     assert ".asset-table { table-layout: auto;" in css
     assert ".evidence-table { table-layout: fixed; }" in css
-    assert "app.css?v=v09-19" in base
+    assert "app.css?v=v09-20" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():

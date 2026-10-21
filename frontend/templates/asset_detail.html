@@ -191,7 +191,7 @@
 <section class="asset-detail-section asset-detail-playrules" id="client-playrules" data-asset-section="alarms" data-client-playrules data-asset-playrules="{{ asset.asset_id }}">
 <h3 class="asset-facts-head label-line">Custom alarms {% with %}{% set tip %}Does not create Prometheus thresholds — only which rule / Playbook this asset prefers when that alertname arrives. Core uses the first ON rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules. List order is match order. Empty list, or no listed rule matches the alertname = Rules. OFF skips that rule on this host only — it stays in the list, and Save keeps it off. Disabled rules on Rules are skipped. Mail follows the asset Escalation when a level is filled.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
 {% if can('write_assets') %}
-<form method="post" action="/assets/{{ asset.asset_id }}/playrules" class="playrule-detail-form">
+<form method="post" action="/assets/{{ asset.asset_id }}/playrules" class="playrule-detail-form" hx-boost="false">
   <input type="hidden" name="playrules_present" value="1">
   {% with picked=picked_playrules, off_ids=playrule_off %}{% include "_playrule_picker.html" %}{% endwith %}
   <div class="row-actions playrule-detail-actions">
@@ -225,7 +225,7 @@
     <button type="submit" class="secondary">Export</button>
   </form>
   {% if can_remove %}
-  <form method="post" action="/assets/{{ asset.asset_id }}/delete" onsubmit="return confirm('Remove {{ asset.hostname }}? Prometheus will stop scraping it. Incidents stay on the Incidents list without this host. Core is unchanged.');">
+  <form method="post" action="/assets/{{ asset.asset_id }}/delete" onsubmit="return confirm('Remove {{ asset.hostname }}? Prometheus will stop scraping it. Incidents stay on the Incidents list without this host. Core is unchanged.');" hx-boost="false">
     <button type="submit" class="danger">Remove</button>
   </form>
   {% else %}

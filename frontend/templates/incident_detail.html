@@ -58,7 +58,7 @@
 {% set resolved = st in ["RESOLVED", "CLOSED"] %}
 {% set closed = st == "CLOSED" %}
 <div class="incident-actions">
-  <form method="post" action="/incidents/{{ incident.number }}/status">
+  <form method="post" action="/incidents/{{ incident.number }}/status" hx-boost="false">
     {% if can('ack_incidents') %}
     <button name="status" value="INVESTIGATING" class="{{ 'done' if acked else 'todo' }}">Acknowledge</button>
     {% endif %}
@@ -71,7 +71,7 @@
   {% if investigation %}
   <a class="button done" href="/ai/{{ incident.number }}">Open ForgeRCA</a>
   {% else %}
-  <form method="post" action="/incidents/{{ incident.number }}/investigate">
+  <form method="post" action="/incidents/{{ incident.number }}/investigate" hx-boost="false">
     <button type="submit" class="todo">Open ForgeRCA</button>
   </form>
   {% endif %}
@@ -284,7 +284,7 @@
   {% endfor %}
   {% with pager=notes_pager %}{% include "_pager.html" %}{% endwith %}
   {% if can('write_incidents') %}
-  <form method="post" action="/incidents/{{ incident.number }}/notes" class="stack">
+  <form method="post" action="/incidents/{{ incident.number }}/notes" class="stack" hx-boost="false">
     <label>Add note <textarea name="body" rows="3" required placeholder="What you did on the host" data-note-body{% if request.query_params.get('focus') == 'notes' %} autofocus{% endif %}></textarea></label>
     <button type="submit">Save note</button>
   </form>
@@ -295,7 +295,7 @@
 <section class="card incident-mail-card" id="send-report">
   <h2>Send incident report {% with %}{% set tip %}Current snapshot (alert + ForgeRCA if it has run). Preview is the text that will be mailed — edit subject or body before Send. Export writes that text (TXT or CSV UTF-8). Does not change status. {% if smtp_on %}SMTP is on — this leaves the VM to the address you pick.{% else %}SMTP is off — the row is stored as generated in the mail outbox. Gmail will not receive it until you enable SMTP (see operator handbook §11).{% endif %}{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   {% if can_send_ops %}<p class="muted">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>{% endif %}
-  <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail-edit" data-report-form>
+  <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail-edit" data-report-form hx-boost="false">
     <label>Subject <input name="subject" value="{{ report_subject }}" autocomplete="off"></label>
     <label>Report <textarea name="body" rows="14" data-report-body>{{ report_preview }}</textarea></label>
     <div class="incident-mail">

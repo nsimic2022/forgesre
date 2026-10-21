@@ -44,7 +44,7 @@
 {% if can('write_assets') %}
 <section class="card">
   <h2>Scan now {% with %}{% set tip %}TCP / SNMP / HTTP probe of confirmed discovery.cidrs only (max 256/CIDR, 1024 total). Prefills this VM’s primary IPv4 as /24 — Confirm &amp; scan writes config/forgesre.yml and queues a background probe (Postgres jobs — not Celery). Scan now stays disabled until a CIDR is confirmed. Empty cidrs = no scan. Not nmap. Does not write inventory until you Approve.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <form method="post" action="/discovery/scan" class="discovery-scan-form">
+  <form method="post" action="/discovery/scan" class="discovery-scan-form" hx-boost="false">
     <label>Management CIDR(s)
       <input name="cidrs" value="{{ cidr_prefill }}" placeholder="{{ suggested_cidr or '10.10.10.0/24' }}" autocomplete="off">
     </label>
@@ -91,7 +91,7 @@
         <span class="netbox-status-dot" aria-hidden="true"></span>{{ netbox_sync_label }}
       </span>
       {% if netbox_sync_clickable or netbox_sync_ready %}
-      <form method="post" action="/discovery/netbox-sync" class="inline">
+      <form method="post" action="/discovery/netbox-sync" class="inline" hx-boost="false">
         <button type="submit">Sync NetBox</button>
       </form>
       {% else %}
@@ -127,7 +127,7 @@
     </span>
     {% if can('admin') %}
       {% if zabbix.clickable %}
-      <form method="post" action="/discovery/zabbix-sync" class="inline">
+      <form method="post" action="/discovery/zabbix-sync" class="inline" hx-boost="false">
         <button type="submit">Sync hosts</button>
       </form>
       {% else %}
@@ -210,14 +210,14 @@
         <div class="row-actions">
         {% if can('write_assets') %}
         {% if row.status == 'new' %}
-        <form method="post" action="/discovery/{{ row.id }}/approve"><button type="submit" title="Asset ID: hostname slug if set (Edit), else disc-&lt;ip&gt;">Approve</button></form>
+        <form method="post" action="/discovery/{{ row.id }}/approve" hx-boost="false"><button type="submit" title="Asset ID: hostname slug if set (Edit), else disc-&lt;ip&gt;">Approve</button></form>
         {% endif %}
         <a class="button" href="/discovery?edit={{ row.id }}{{ pager_keep(pager) }}">Edit</a>
         <a class="button" href="/discovery?clone={{ row.id }}{{ pager_keep(pager) }}">Clone</a>
         {% if row.status == 'new' %}
-        <form method="post" action="/discovery/{{ row.id }}/ignore"><button type="submit" class="secondary">Ignore</button></form>
+        <form method="post" action="/discovery/{{ row.id }}/ignore" hx-boost="false"><button type="submit" class="secondary">Ignore</button></form>
         {% endif %}
-        <form method="post" action="/discovery/{{ row.id }}/delete" onsubmit="return confirm('Remove candidate {{ row.ip }}? This does not remove an approved asset.');">
+        <form method="post" action="/discovery/{{ row.id }}/delete" onsubmit="return confirm('Remove candidate {{ row.ip }}? This does not remove an approved asset.');" hx-boost="false">
           <button type="submit" class="danger">Remove</button>
         </form>
         {% endif %}
@@ -243,10 +243,10 @@
 <section class="card" id="candidate-form">
   {% if candidate_mode == "edit" %}
   <h2>Edit candidate</h2>
-  <form method="post" action="/discovery/{{ selected.id }}/update" class="form-grid">
+  <form method="post" action="/discovery/{{ selected.id }}/update" class="form-grid" hx-boost="false">
   {% else %}
   <h2>Clone candidate {% with %}{% set tip %}Copy of {{ selected.ip }}. Type a new IP. A DEMO source stays a lab row.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <form method="post" action="/discovery/{{ selected.id }}/clone" class="form-grid">
+  <form method="post" action="/discovery/{{ selected.id }}/clone" class="form-grid" hx-boost="false">
   {% endif %}
     <label>IP <input name="ip" value="{{ candidate_form.ip }}" required></label>
     <label>Hostname <input name="hostname" value="{{ candidate_form.hostname }}" placeholder="optional"></label>

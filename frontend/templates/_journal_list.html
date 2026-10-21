@@ -7,7 +7,7 @@
   <a class="pill {% if filter_module == item.module %}ok{% endif %}" href="{{ journal_base }}?module={{ item.module|urlencode }}&amp;status={{ filter_status|urlencode }}&amp;q={{ filter_q|urlencode }}#journal">{{ item.module }} ({{ item.count }})</a>
   {% endfor %}
 </nav>
-<form method="get" action="{{ journal_base }}#journal" class="row-actions journal-filters">
+<form method="get" action="{{ journal_base }}#journal" class="row-actions journal-filters" hx-boost="false">
   <input type="hidden" name="module" value="{{ filter_module }}">
   <select name="status" aria-label="Status">
     <option value="">any status</option>

@@ -148,13 +148,12 @@ def test_incidents_and_dashboard_show_notes_and_edit_one_row():
         follow_redirects=False,
     )
     assert one.status_code == 303
-    assert one.headers["location"].startswith(f"/incidents/{filled_number}")
-    assert "focus=notes" in one.headers["location"]
-    assert one.headers["location"].endswith("#notes")
-    detail = client.get(f"/incidents/{filled_number}?focus=notes")
+    assert one.headers["location"] == f"/incidents/{filled_number}"
+    assert "focus=notes" not in one.headers["location"]
+    assert "#notes" not in one.headers["location"]
+    detail = client.get(f"/incidents/{filled_number}")
     assert 'id="notes"' in detail.text
     assert "data-note-body" in detail.text
-    assert "autofocus" in detail.text.split("data-note-body", 1)[1][:40]
     assert latest in detail.text
     assert db.query(IncidentNote).count() == before
 
@@ -378,6 +377,6 @@ def test_multi_record_exports_have_titled_breaks():
 
 def test_cache_bust_is_v08_26():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-19" in base
-    assert "app.js?v=v09-Y" in base
+    assert "app.css?v=v09-20" in base
+    assert "app.js?v=v09-Z" in base
     assert "v08-25" not in base
