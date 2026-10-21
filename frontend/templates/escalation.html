@@ -114,18 +114,21 @@
     <label>From <input name="start" type="time" value="{{ oc.start or '08:00' }}" required></label>
     <label>Until <input name="end" type="time" value="{{ oc.end or '16:00' }}" required></label>
   </div>
-  <div class="oncall-form-who">
+  <div class="oncall-form-who form-grid person-grid">
     <label>Name
       <input name="name" required placeholder="Ana" value="{{ oc.name }}" list="oncall-people" data-oncall-name autocomplete="off">
     </label>
+    <label>Surname
+      <input name="surname" placeholder="Kovač" value="{{ oc.surname }}" data-oncall-surname autocomplete="off">
+    </label>
     <datalist id="oncall-people">
       {% for person in oncall_people or [] %}
-      <option value="{{ person.name }}"></option>
+      <option value="{{ person.label or person.name }}"></option>
       {% endfor %}
     </datalist>
     <script type="application/json" data-oncall-directory>{{ oncall_people|tojson }}</script>
-    <label>Email <input name="email" type="email" required placeholder="ana@dc.local" value="{{ oc.email }}"></label>
-    <label>Phone <input name="phone" placeholder="+381-11-000-0000" value="{{ oc.phone }}"></label>
+    <label class="wide">Email <input name="email" type="email" required placeholder="ana@dc.local" value="{{ oc.email }}"></label>
+    <label>Phone 1 <input name="phone" placeholder="+381-11-000-0000" value="{{ oc.phone }}"></label>
     <label>Phone 2 <input name="phone2" placeholder="+381-11-000-0001" value="{{ oc.phone2 }}"></label>
   </div>
   <div class="row-actions">

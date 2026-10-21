@@ -67,6 +67,35 @@ def _incident(db, asset, *, title, status="OPEN", started=None, ack=False, demo=
     return row
 
 
+def test_take_duty_copies_surname_onto_dashboard():
+    db = _db()
+    zone = __import__("zoneinfo", fromlist=["ZoneInfo"]).ZoneInfo(settings.timezone)
+    now = utcnow().astimezone(zone)
+    if now.hour == 23 and now.minute >= 59:
+        db.close()
+        return
+    admin = db.query(User).filter_by(email="admin@forgesre.local").one()
+    admin.surname = "Kovač"
+    db.commit()
+    slot = take_duty(db, admin, at=now)
+    db.commit()
+    assert slot["name"] == "Admin"
+    assert slot["surname"] == "Kovač"
+    assert slot["person"] == "Admin Kovač"
+    db.close()
+    client = _client()
+    cube = client.get("/").text.split("data-oncall", 1)[1].split("</aside>", 1)[0]
+    assert "Admin Kovač" in cube
+    assert "admin@forgesre.local" not in cube
+    assert "oncall-actions" in cube
+    tidy = _db()
+    admin_row = tidy.query(User).filter_by(email="admin@forgesre.local").one()
+    admin_row.surname = ""
+    tidy.query(OncallSlot).filter(OncallSlot.email == "admin@forgesre.local").delete(synchronize_session=False)
+    tidy.commit()
+    tidy.close()
+
+
 def test_later_take_duty_wins_and_dashboard_shows_the_button():
     db = _db()
     zone = __import__("zoneinfo", fromlist=["ZoneInfo"]).ZoneInfo(settings.timezone)
@@ -101,7 +130,11 @@ def test_later_take_duty_wins_and_dashboard_shows_the_button():
     assert took.status_code == 303
     assert took.headers["location"] == "/"
     again = client.get("/")
-    assert admin.email in again.text
+    cube = again.text.split('data-oncall', 1)[1].split("</aside>", 1)[0]
+    assert "Admin" in cube
+    assert admin.email not in cube
+    assert "oncall-actions" in cube
+    assert "I'm on duty now" in cube
 
     viewer = _user(_db(), "viewer")
     denied = _client(viewer.email)

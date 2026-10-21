@@ -14,6 +14,14 @@ def clean_phone(value: str | None) -> str:
     return " ".join(str(value or "").split())[:64]
 
 
+def clean_name(value: str | None) -> str:
+    return " ".join(str(value or "").split())[:255]
+
+
+def clean_email2(value: str | None) -> str:
+    return " ".join(str(value or "").split())[:255]
+
+
 def find_email(db: Session, email: str, *, exclude_id: int | None = None) -> User | None:
     q = db.query(User).filter(func.lower(User.email) == email.strip().lower())
     if exclude_id is not None:
@@ -50,9 +58,11 @@ def create_user(
     role: str,
     phone: str = "",
     phone2: str = "",
+    surname: str = "",
+    email2: str = "",
 ) -> User:
     email = (email or "").strip()
-    name = (name or "").strip()
+    name = clean_name(name)
     password = password or ""
     if not email or not name or not password:
         raise ValueError("email, name, and password are required")
@@ -62,7 +72,9 @@ def create_user(
         raise ValueError("email already exists")
     row = User(
         email=email,
+        email2=clean_email2(email2),
         name=name,
+        surname=clean_name(surname),
         phone=clean_phone(phone),
         phone2=clean_phone(phone2),
         password_hash=hash_password(password),
@@ -85,6 +97,8 @@ def update_user(
     role: str | None = None,
     phone: str | None = None,
     phone2: str | None = None,
+    surname: str | None = None,
+    email2: str | None = None,
 ) -> User:
     reason = edit_blocked(actor, target)
     if reason:
@@ -97,10 +111,14 @@ def update_user(
             raise ValueError("email already exists")
         target.email = email
     if name is not None:
-        name = name.strip()
+        name = clean_name(name)
         if not name:
             raise ValueError("name is required")
         target.name = name
+    if surname is not None:
+        target.surname = clean_name(surname)
+    if email2 is not None:
+        target.email2 = clean_email2(email2)
     if phone is not None:
         target.phone = clean_phone(phone)
     if phone2 is not None:

@@ -2542,6 +2542,7 @@ ONCALL_FORM_DEFAULT = {
     "start": "08:00",
     "end": "16:00",
     "name": "",
+    "surname": "",
     "email": "",
     "phone": "",
     "phone2": "",
@@ -2881,7 +2882,7 @@ def escalation_delete(
 
 
 def _oncall_posted_form(
-    weekday: str, start: str, end: str, name: str, email: str, phone: str, phone2: str = ""
+    weekday: str, start: str, end: str, name: str, email: str, phone: str, phone2: str = "", surname: str = ""
 ) -> dict:
     try:
         day = int(weekday)
@@ -2892,6 +2893,7 @@ def _oncall_posted_form(
         "start": start,
         "end": end,
         "name": name,
+        "surname": surname,
         "email": email,
         "phone": phone,
         "phone2": phone2,
@@ -2907,16 +2909,25 @@ def escalation_oncall_add(
     start: str = Form(""),
     end: str = Form(""),
     name: str = Form(""),
+    surname: str = Form(""),
     email: str = Form(""),
     phone: str = Form(""),
     phone2: str = Form(""),
 ):
     if not can(user, "write_play"):
         raise HTTPException(status_code=403)
-    form = _oncall_posted_form(weekday, start, end, name, email, phone, phone2)
+    form = _oncall_posted_form(weekday, start, end, name, email, phone, phone2, surname)
     try:
         add_oncall_slot(
-            db, weekday=weekday, start=start, end=end, name=name, email=email, phone=phone, phone2=phone2
+            db,
+            weekday=weekday,
+            start=start,
+            end=end,
+            name=name,
+            surname=surname,
+            email=email,
+            phone=phone,
+            phone2=phone2,
         )
     except ValueError as exc:
         return _escalation_view(
@@ -2943,6 +2954,7 @@ def escalation_oncall_update(
     start: str = Form(""),
     end: str = Form(""),
     name: str = Form(""),
+    surname: str = Form(""),
     email: str = Form(""),
     phone: str = Form(""),
     phone2: str = Form(""),
@@ -2952,10 +2964,19 @@ def escalation_oncall_update(
     row = db.get(OncallSlot, slot_id)
     if row is None:
         raise HTTPException(status_code=404)
-    form = _oncall_posted_form(weekday, start, end, name, email, phone, phone2)
+    form = _oncall_posted_form(weekday, start, end, name, email, phone, phone2, surname)
     try:
         update_oncall_slot(
-            db, row, weekday=weekday, start=start, end=end, name=name, email=email, phone=phone, phone2=phone2
+            db,
+            row,
+            weekday=weekday,
+            start=start,
+            end=end,
+            name=name,
+            surname=surname,
+            email=email,
+            phone=phone,
+            phone2=phone2,
         )
     except ValueError as exc:
         return _escalation_view(
@@ -3556,7 +3577,9 @@ def admin_create_user(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     email: str = Form(...),
+    email2: str = Form(""),
     name: str = Form(...),
+    surname: str = Form(""),
     password: str = Form(...),
     role: str = Form("analyst"),
     phone: str = Form(""),
@@ -3569,7 +3592,16 @@ def admin_create_user(
 
     try:
         row = create_user(
-            db, user, email=email, name=name, password=password, role=role, phone=phone, phone2=phone2
+            db,
+            user,
+            email=email,
+            email2=email2,
+            name=name,
+            surname=surname,
+            password=password,
+            role=role,
+            phone=phone,
+            phone2=phone2,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -3584,7 +3616,9 @@ def admin_update_user(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     email: str = Form(...),
+    email2: str = Form(""),
     name: str = Form(...),
+    surname: str = Form(""),
     password: str = Form(""),
     role: str = Form("analyst"),
     phone: str = Form(""),
@@ -3600,7 +3634,17 @@ def admin_update_user(
 
     try:
         update_user(
-            db, user, target, email=email, name=name, password=password, role=role, phone=phone, phone2=phone2
+            db,
+            user,
+            target,
+            email=email,
+            email2=email2,
+            name=name,
+            surname=surname,
+            password=password,
+            role=role,
+            phone=phone,
+            phone2=phone2,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

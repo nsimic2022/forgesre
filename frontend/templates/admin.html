@@ -9,12 +9,13 @@
   <div class="card admin-user-pane">
   <div class="table-scroll list-scroll" data-list-scroll>
   <table class="user-table">
-    <thead><tr><th>Email</th><th>Name</th><th>Phone</th><th>Role</th><th>Actions</th></tr></thead>
+    <thead><tr><th>Email</th><th>Name</th><th>Surname</th><th>Phone</th><th>Role</th><th>Actions</th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr class="{% if selected and selected.id == u.id %}selected{% endif %}" data-list-row data-list-view="/admin?selected={{ u.id }}{{ pager_keep(pager) }}">
         <td><a href="/admin?selected={{ u.id }}{{ pager_keep(pager) }}" data-list-open>{{ u.email }}</a></td>
         <td>{{ u.name }}</td>
+        <td>{{ u.surname or "—" }}</td>
         <td>{% if u.phone or u.phone2 %}{{ u.phone or "—" }}{% if u.phone2 %}<div class="muted">{{ u.phone2 }}</div>{% endif %}{% else %}—{% endif %}</td>
         <td>{{ role_label(u.role) }}</td>
         <td class="row-actions">
@@ -37,17 +38,19 @@
   </div>
   <div class="card admin-user-pane">
     {% if selected %}
-    <form method="post" action="/admin/users/{{ selected.id }}" class="stack" id="edit-user-form" hx-boost="false">
-      <h3>Edit user</h3>
+    <form method="post" action="/admin/users/{{ selected.id }}" class="form-grid person-grid" id="edit-user-form" hx-boost="false">
+      <h3 class="wide">Edit user</h3>
       {% if not can_edit_selected %}
-      <p class="muted">The install super admin can only be edited by that account.</p>
+      <p class="muted wide">The install super admin can only be edited by that account.</p>
       {% endif %}
       <label>Name <input name="name" required value="{{ selected.name }}" {% if not can_edit_selected %}readonly{% endif %}></label>
-      <label>Phone <input name="phone" value="{{ selected.phone }}" placeholder="+381-11-000-0000" {% if not can_edit_selected %}readonly{% endif %}></label>
+      <label>Surname <input name="surname" value="{{ selected.surname }}" {% if not can_edit_selected %}readonly{% endif %}></label>
+      <label>Phone 1 <input name="phone" value="{{ selected.phone }}" placeholder="+381-11-000-0000" {% if not can_edit_selected %}readonly{% endif %}></label>
       <label>Phone 2 <input name="phone2" value="{{ selected.phone2 }}" placeholder="+381-11-000-0001" {% if not can_edit_selected %}readonly{% endif %}></label>
-      <label>Email <input name="email" type="email" required value="{{ selected.email }}" {% if not can_edit_selected %}readonly{% endif %}></label>
-      <label>New password <input name="password" type="password" placeholder="leave blank to keep" {% if not can_edit_selected %}disabled{% endif %}></label>
-      <label><span class="label-line">Role {% with %}{% set tip %}Analyst: incidents, inventory, playrules, playbooks. Engineer: detailed RCA, inventory. System admin: users and appliance. Viewer: read only. Super admin is the install account and cannot change.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+      <label>Email 1 <input name="email" type="email" required value="{{ selected.email }}" {% if not can_edit_selected %}readonly{% endif %}></label>
+      <label>Email 2 <input name="email2" type="email" value="{{ selected.email2 }}" {% if not can_edit_selected %}readonly{% endif %}></label>
+      <label class="wide">New password <input name="password" type="password" placeholder="leave blank to keep" {% if not can_edit_selected %}disabled{% endif %}></label>
+      <label class="wide"><span class="label-line">Role {% with %}{% set tip %}Analyst: incidents, inventory, playrules, playbooks. Engineer: detailed RCA, inventory. System admin: users and appliance. Viewer: read only. Super admin is the install account and cannot change.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
         <select name="role" {% if not can_edit_selected or selected.role == 'super_admin' %}disabled{% endif %}>
           <option value="analyst" {% if selected.role == "analyst" %}selected{% endif %}>Analyst — incidents, inventory, playrules, playbooks</option>
           <option value="engineer" {% if selected.role == "engineer" %}selected{% endif %}>Engineer — detailed RCA, inventory</option>
@@ -81,14 +84,16 @@
     </div>
     <p class="muted"><a href="/admin">Create another user</a></p>
     {% elif clone_of %}
-    <form method="post" action="/admin/users" class="stack" hx-boost="false">
-      <h3>Clone user {% with %}{% set tip %}Copy of {{ clone_of.email }}. Type a new email and password.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <form method="post" action="/admin/users" class="form-grid person-grid" hx-boost="false">
+      <h3 class="wide">Clone user {% with %}{% set tip %}Copy of {{ clone_of.email }}. Type a new email and password.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
       <label>Name <input name="name" required value="{{ clone_of.name }}"></label>
-      <label>Phone <input name="phone" value="{{ clone_of.phone }}" placeholder="+381-11-000-0000"></label>
+      <label>Surname <input name="surname" value="{{ clone_of.surname }}"></label>
+      <label>Phone 1 <input name="phone" value="{{ clone_of.phone }}" placeholder="+381-11-000-0000"></label>
       <label>Phone 2 <input name="phone2" value="{{ clone_of.phone2 }}" placeholder="+381-11-000-0001"></label>
-      <label>Email <input name="email" type="email" required value="{{ clone_of.email }}"></label>
-      <label>Password <input name="password" type="password" required></label>
-      <label><span class="label-line">Role {% with %}{% set tip %}Analyst: incidents, inventory, playrules, playbooks. Engineer: detailed RCA, inventory. System admin: users and appliance. Viewer: read only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+      <label>Email 1 <input name="email" type="email" required value="{{ clone_of.email }}"></label>
+      <label>Email 2 <input name="email2" type="email" value="{{ clone_of.email2 }}"></label>
+      <label class="wide">Password <input name="password" type="password" required></label>
+      <label class="wide"><span class="label-line">Role {% with %}{% set tip %}Analyst: incidents, inventory, playrules, playbooks. Engineer: detailed RCA, inventory. System admin: users and appliance. Viewer: read only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
         <select name="role">
           <option value="analyst" {% if clone_role == "analyst" %}selected{% endif %}>Analyst — incidents, inventory, playrules, playbooks</option>
           <option value="engineer" {% if clone_role == "engineer" %}selected{% endif %}>Engineer — detailed RCA, inventory</option>
@@ -96,20 +101,22 @@
           <option value="viewer" {% if clone_role == "viewer" %}selected{% endif %}>Viewer — read only</option>
         </select>
       </label>
-      <div class="row-actions">
+      <div class="row-actions wide">
         <button type="submit">Save</button>
         <a href="/admin">Cancel</a>
       </div>
     </form>
     {% else %}
-    <form method="post" action="/admin/users" class="stack" hx-boost="false">
-      <h3>Create user</h3>
+    <form method="post" action="/admin/users" class="form-grid person-grid" hx-boost="false">
+      <h3 class="wide">Create user</h3>
       <label>Name <input name="name" required></label>
-      <label>Phone <input name="phone" placeholder="+381-11-000-0000"></label>
+      <label>Surname <input name="surname"></label>
+      <label>Phone 1 <input name="phone" placeholder="+381-11-000-0000"></label>
       <label>Phone 2 <input name="phone2" placeholder="+381-11-000-0001"></label>
-      <label>Email <input name="email" type="email" required></label>
-      <label>Password <input name="password" type="password" required></label>
-      <label><span class="label-line">Role {% with %}{% set tip %}Analyst: incidents, inventory, playrules, playbooks. Engineer: detailed RCA, inventory. System admin: users and appliance. Viewer: read only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+      <label>Email 1 <input name="email" type="email" required></label>
+      <label>Email 2 <input name="email2" type="email"></label>
+      <label class="wide">Password <input name="password" type="password" required></label>
+      <label class="wide"><span class="label-line">Role {% with %}{% set tip %}Analyst: incidents, inventory, playrules, playbooks. Engineer: detailed RCA, inventory. System admin: users and appliance. Viewer: read only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
         <select name="role">
           <option value="analyst">Analyst — incidents, inventory, playrules, playbooks</option>
           <option value="engineer">Engineer — detailed RCA, inventory</option>
@@ -117,7 +124,7 @@
           <option value="viewer">Viewer — read only</option>
         </select>
       </label>
-      <div class="row-actions">
+      <div class="row-actions wide">
         <button type="submit">Create</button>
         <a href="/admin">Cancel</a>
       </div>

@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
-from app.dc_noc import add_oncall_slot, current_oncall, oncall_directory, oncall_person_name
+from app.dc_noc import add_oncall_slot, current_oncall, oncall_directory, oncall_person_name, person_label
 from app.inventory import create_manual_asset
 from app.main import app
 from app.models import EscalationPolicy, Notification, OncallSlot, Playrule, utcnow
@@ -36,6 +36,8 @@ def test_oncall_person_name_is_not_a_role_label():
     assert oncall_person_name("Super Admin", "admin@forgesre.local") == "Admin"
     assert oncall_person_name("Analyst", "ana@dc.local") == "Ana"
     assert oncall_person_name("super_admin", "admin@forgesre.local", "super_admin") == "Admin"
+    assert person_label("Ana", "Kovač") == "Ana Kovač"
+    assert person_label("Admin", "") == "Admin"
 
 
 def test_oncall_directory_lists_users_as_people():
@@ -44,6 +46,8 @@ def test_oncall_directory_lists_users_as_people():
     by_email = {row["email"]: row for row in people}
     assert "admin@forgesre.local" in by_email
     assert by_email["admin@forgesre.local"]["name"] == "Admin"
+    assert by_email["admin@forgesre.local"]["surname"] == ""
+    assert by_email["admin@forgesre.local"]["label"] == "Admin"
     assert "Super Admin" not in by_email["admin@forgesre.local"]["name"]
     db.close()
 
@@ -133,8 +137,13 @@ def test_l1_oncall_mails_the_current_address_and_dashboard_shows_them():
     dash = client.get("/")
     assert dash.status_code == 200
     assert 'data-oncall' in dash.text
-    assert f"dana-{token}@dc.local" in dash.text
+    cube = dash.text.split('data-oncall', 1)[1].split("</aside>", 1)[0]
+    assert "Dana" in cube
+    assert f"dana-{token}@dc.local" not in cube
+    assert "+381-11-300" not in cube
+    assert "00:00" not in cube
     assert 'href="/escalation#oncall"' in dash.text
+    assert f"dana-{token}@dc.local" in client.get("/escalation").text
     page = client.get("/escalation")
     assert page.status_code == 200
     assert 'id="oncall"' in page.text

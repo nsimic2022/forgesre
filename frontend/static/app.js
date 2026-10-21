@@ -1970,13 +1970,15 @@ function graphPane(pane) {
 
 (function bindOncallDirectory() {
   const form = document.querySelector("[data-oncall-form]");
-  if (!form) return;
+  if (!form || form.hasAttribute("data-oncall-bound")) return;
   const blob = form.querySelector("[data-oncall-directory]");
   const nameInput = form.querySelector("[data-oncall-name]");
+  const surnameInput = form.querySelector("[data-oncall-surname]");
   const emailInput = form.querySelector('input[name="email"]');
   const phoneInput = form.querySelector('input[name="phone"]');
   const phone2Input = form.querySelector('input[name="phone2"]');
   if (!blob || !nameInput || !emailInput) return;
+  form.setAttribute("data-oncall-bound", "");
   let people = [];
   try {
     people = JSON.parse(blob.textContent || "[]");
@@ -1987,11 +1989,16 @@ function graphPane(pane) {
   const fill = () => {
     const key = String(nameInput.value || "").trim().toLowerCase();
     if (!key) return;
-    const hit = people.find(
-      (row) => String(row.name || "").toLowerCase() === key || String(row.email || "").toLowerCase() === key
-    );
+    const hit = people.find((row) => {
+      const first = String(row.name || "").toLowerCase();
+      const last = String(row.surname || "").trim().toLowerCase();
+      const label = String(row.label || [row.name, row.surname].filter(Boolean).join(" ")).toLowerCase();
+      return first === key || label === key || String(row.email || "").toLowerCase() === key
+        || `${first} ${last}`.trim() === key;
+    });
     if (!hit) return;
     nameInput.value = hit.name || nameInput.value;
+    if (surnameInput) surnameInput.value = hit.surname || "";
     emailInput.value = hit.email || "";
     if (phoneInput) phoneInput.value = hit.phone || "";
     if (phone2Input) phone2Input.value = hit.phone2 || "";

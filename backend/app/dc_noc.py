@@ -378,6 +378,12 @@ def slot_enabled(row: OncallSlot) -> bool:
     return True if value is None else bool(value)
 
 
+def person_label(name: str | None, surname: str | None = "") -> str:
+    """Reserved first + last name. Empty parts are dropped."""
+    parts = [" ".join(str(part or "").split()) for part in (name, surname)]
+    return " ".join(part for part in parts if part)[:255]
+
+
 def oncall_person_name(name: str | None, email: str | None = "", role: str | None = None) -> str:
     """Roster Name is a person. Role phrases (Super Admin, Analyst, …) are not a name."""
     text = " ".join(str(name or "").split())
@@ -406,6 +412,7 @@ def _oncall_fields(
     email: str,
     phone: str = "",
     phone2: str = "",
+    surname: str = "",
 ) -> dict[str, Any]:
     try:
         day = int(weekday)
@@ -426,11 +433,13 @@ def _oncall_fields(
     person = oncall_person_name(name, address)
     if not person:
         raise ValueError("On-call needs a name.")
+    last = " ".join(str(surname or "").split())[:255]
     return {
         "weekday": day,
         "start_minute": start_minute,
         "end_minute": end_minute,
         "name": person[:255],
+        "surname": last,
         "email": address[:255],
         "phone": " ".join(str(phone or "").split())[:64],
         "phone2": " ".join(str(phone2 or "").split())[:64],
@@ -447,11 +456,14 @@ def add_oncall_slot(
     email: str,
     phone: str = "",
     phone2: str = "",
+    surname: str = "",
     enabled: bool = True,
 ) -> OncallSlot:
     """One weekday window. Times are appliance-local. Until is inclusive and must be after from."""
     row = OncallSlot(
-        **_oncall_fields(weekday=weekday, start=start, end=end, name=name, email=email, phone=phone, phone2=phone2),
+        **_oncall_fields(
+            weekday=weekday, start=start, end=end, name=name, surname=surname, email=email, phone=phone, phone2=phone2
+        ),
         enabled=bool(enabled),
     )
     db.add(row)
@@ -470,9 +482,12 @@ def update_oncall_slot(
     email: str,
     phone: str = "",
     phone2: str = "",
+    surname: str = "",
 ) -> OncallSlot:
     """Rewrite one roster row. ON/OFF stays on the toggle — this does not flip enabled."""
-    fields = _oncall_fields(weekday=weekday, start=start, end=end, name=name, email=email, phone=phone, phone2=phone2)
+    fields = _oncall_fields(
+        weekday=weekday, start=start, end=end, name=name, surname=surname, email=email, phone=phone, phone2=phone2
+    )
     for key, value in fields.items():
         setattr(row, key, value)
     db.flush()
@@ -487,7 +502,8 @@ def toggle_oncall_slot(row: OncallSlot) -> OncallSlot:
 def oncall_form_values(row: OncallSlot, *, clone: bool = False) -> dict[str, Any]:
     """Prefill Add on-call. Clone is a draft until Save."""
     view = oncall_slot_view(row)
-    name = view["person"] or view["name"]
+    name = view["name"]
+    surname = view["surname"]
     if clone:
         name = f"{name} copy".strip()
     return {
@@ -495,6 +511,7 @@ def oncall_form_values(row: OncallSlot, *, clone: bool = False) -> dict[str, Any
         "start": view["start"],
         "end": view["end"],
         "name": name,
+        "surname": surname,
         "email": view["email"],
         "phone": view["phone"],
         "phone2": view["phone2"],
@@ -510,7 +527,8 @@ def oncall_slot_view(row: OncallSlot) -> dict[str, Any]:
         "start": _hhmm(row.start_minute),
         "end": _hhmm(row.end_minute),
         "name": row.name,
-        "person": oncall_person_name(row.name, row.email),
+        "surname": getattr(row, "surname", "") or "",
+        "person": person_label(oncall_person_name(row.name, row.email), getattr(row, "surname", "") or ""),
         "email": row.email,
         "phone": row.phone or "",
         "phone2": getattr(row, "phone2", "") or "",
@@ -536,15 +554,18 @@ def oncall_directory(db: Session) -> list[dict[str, str]]:
         name = oncall_person_name(row.name, email, getattr(row, "role", None))
         if not name:
             continue
-        label = name
+        surname = " ".join(str(getattr(row, "surname", "") or "").split())[:255]
+        label = person_label(name, surname)
         key = label.casefold()
         if key in used:
-            label = f"{name} ({email})"
+            label = f"{label} ({email})"
             key = label.casefold()
         used.add(key)
         people.append(
             {
-                "name": label[:255],
+                "name": name[:255],
+                "surname": surname,
+                "label": label[:255],
                 "email": email[:255],
                 "phone": str(row.phone or ""),
                 "phone2": str(getattr(row, "phone2", "") or ""),
@@ -616,6 +637,7 @@ def take_duty(db: Session, user: Any, at: datetime | None = None) -> dict[str, A
         start=_hhmm(start_minute),
         end=_hhmm(end_minute),
         name=name,
+        surname=str(getattr(user, "surname", "") or ""),
         email=email,
         phone=str(getattr(user, "phone", "") or ""),
         phone2=str(getattr(user, "phone2", "") or ""),

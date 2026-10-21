@@ -312,7 +312,7 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.15rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-21" in base
+    assert "app.css?v=v09-22" in base
 
 
 def test_dashboard_banner_block_gone_from_template_js_css():
@@ -418,3 +418,23 @@ def test_dashboard_card_has_no_container_controls(monkeypatch):
     assert ".stack-cube.ok { background: var(--ok)" in css
     assert ".stack-cube.warn { background: var(--warn)" in css
     assert ".stack-cube.crit { background: var(--crit)" in css
+
+
+def test_on_duty_reserved_slots_are_name_only():
+    cube = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8").split("appliance-oncall", 1)[1]
+    assert "oncall.person or oncall.name" in cube
+    assert "oncall.email" not in cube
+    assert "oncall.phone" not in cube
+    assert "oncall.window" not in cube
+    assert "oncall-actions" in cube
+    assert "I'm on duty now" in cube
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".form-grid.person-grid" in css
+    assert ".slot-row.end" in css
+    admin = (TEMPLATES / "admin.html").read_text(encoding="utf-8")
+    assert ">Surname<" in admin
+    assert 'name="email2"' in admin
+    assert 'class="form-grid person-grid"' in admin
+    esc = (TEMPLATES / "escalation.html").read_text(encoding="utf-8")
+    assert 'name="surname"' in esc
+    assert "data-oncall-surname" in esc
