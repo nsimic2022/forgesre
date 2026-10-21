@@ -1804,47 +1804,17 @@ function graphPane(pane) {
   }
 })();
 
-// Engineer evidence: a single click only selects (listPicker); double-click anywhere on the row (the open text too)
-// or Enter folds the stored text open or shut in place. Press-and-drag selects text to copy and never toggles.
-(function bindEvidenceRows() {
-  const table = document.querySelector("[data-evidence-table]");
-  if (!table) return;
-  const DRAG_PX = 4;
-  let down = null;
-  let dragged = false;
-  const rowOf = (event) => {
-    if (event.target.closest("a, input, button, select, textarea")) return null;
-    return event.target.closest("[data-evidence-row]");
-  };
-  const toggle = (row) => {
-    const open = !row.classList.contains("is-expanded");
-    row.classList.toggle("is-expanded", open);
-    row.setAttribute("aria-expanded", open ? "true" : "false");
-  };
-  const at = (event) => ({ x: Number(event.clientX) || 0, y: Number(event.clientY) || 0 });
-  table.addEventListener("mousedown", (event) => {
-    if (event.detail > 1) {
-      if (rowOf(event)) event.preventDefault();
-      return;
-    }
-    down = at(event);
-    dragged = false;
-  });
-  table.addEventListener("mouseup", (event) => {
-    if (!down) return;
-    const up = at(event);
-    if (Math.abs(up.x - down.x) + Math.abs(up.y - down.y) > DRAG_PX) dragged = true;
-  });
-  table.addEventListener("dblclick", (event) => {
-    const row = rowOf(event);
-    if (row && !dragged) toggle(row);
-  });
-  table.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey) return;
-    const row = event.target.closest("[data-evidence-row]");
-    if (!row || event.target !== row) return;
-    event.preventDefault();
-    toggle(row);
+(function bindTextViews() {
+  document.querySelectorAll("[data-text-open]").forEach((btn) => {
+    if (btn.hasAttribute("data-text-bound")) return;
+    const dialog = btn.parentElement && btn.parentElement.querySelector("dialog.text-file");
+    if (!dialog || typeof dialog.showModal !== "function") return;
+    btn.setAttribute("data-text-bound", "");
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      dialog.showModal();
+    });
   });
 })();
 

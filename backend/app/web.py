@@ -482,7 +482,7 @@ def _evidence_brief(value) -> str:
 
 
 def evidence_row(ev) -> dict:
-    """One Engineer evidence row: When / Source / short Action, plus the full stored payload for the expanded view. Display only."""
+    """One Engineer evidence row: When / Source / short Action, plus the full stored payload for Body View. Display only."""
     payload = ev.payload if ev.payload is not None else {}
     body = payload.get("content", payload) if isinstance(payload, dict) and "evidence_id" in payload else payload
     brief = _evidence_brief(body)

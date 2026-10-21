@@ -268,8 +268,13 @@ def test_detail_header_strip_has_first_and_duration():
     assert page.status_code == 200
     identity = page.text.split("data-incident-identity", 1)[1].split("</table>", 1)[0]
     assert "Strip check" in identity
-    assert f'href="/assets/{asset.asset_id}"' in identity
     assert ">Notes<" in identity
+    assert identity.index(">Incident<") < identity.index(">Hostname<") < identity.index(">Status<") < identity.index(">L1–L4<")
+    assert identity.index(">When<") < identity.index(">Severity<") < identity.index(">Resolved by<") < identity.index(">Notes<")
+    assert ">IP<" not in identity
+    assert ">Owner<" not in identity
+    assert ">Contact<" not in identity
+    assert 'class="inc-host"' in identity
     assert 'class="pill investigating"' in identity or "INVESTIGATING" in identity
     assert 'class="pill crit"' in identity
     assert page.text.index("data-incident-identity") < page.text.index("class=\"incident-actions\"")
@@ -281,9 +286,8 @@ def test_detail_header_strip_has_first_and_duration():
     assert page.text.index("<h2>Who to call") < page.text.index('id="evidence"')
     assert page.text.index('id="evidence"') < page.text.index('id="audit"')
     assert page.text.index('id="audit"') < page.text.index('id="notes"')
-    assert ">IP<" in identity
-    assert ">Owner<" in identity
-    assert ">Contact<" in identity
+    assert "Resolved is not Closed" not in page.text
+    assert 'class="card-scroll"' in page.text
     db.close()
 
 
@@ -338,4 +342,4 @@ def test_stack_cube_font_bumped_box_unchanged():
     assert "padding: 0.28rem" in block
     assert "line-height: 0.77rem" in block
     assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v09-22" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "app.css?v=v09-23" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

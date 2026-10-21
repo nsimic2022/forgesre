@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
-import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -176,16 +174,18 @@ def test_engineer_evidence_is_a_when_source_action_list_not_a_pre_dump():
     number = _with_evidence(2)
     html = _client().get(f"/incidents/{number}").text
     ev = _evidence(html)
-    assert "<pre" not in ev
     assert re.search(r'<div class="table-scroll list-scroll" data-list-scroll>\s*<table class="scan-list evidence-table" data-evidence-table>', ev)
-    assert "<th class=\"ev-when\">When</th><th class=\"ev-actor\">Source</th><th>Action</th>" in ev
+    assert "<th class=\"ev-when\">When</th><th class=\"ev-actor\">Source</th><th>Action</th><th>Body</th>" in ev
     rows = re.findall(r"<tr data-list-row data-evidence-row[^>]*>(.*?)</tr>", ev, flags=re.S)
     assert len(rows) == 3
     assert '<td class="ev-actor">ForgeRCA</td>' in rows[0]
     assert '<span class="ev-short">Metrics · cpu_percent=92.5, queries={…}</span>' in rows[0]
     assert '<td class="ev-actor">Prometheus</td>' in rows[1]
     assert '<span class="ev-short">METRIC EV-00001 · value=90, unit=%</span>' in rows[1]
-    full = re.search(r'<div class="ev-full" data-evidence-full>(.*?)</div>', rows[1], flags=re.S).group(1)
+    assert 'data-text-open' in rows[1]
+    assert ">View<" in rows[1]
+    assert "<dialog class=\"text-file\">" in rows[1]
+    full = re.search(r'<pre class="mail-body">(.*?)</pre>', rows[1], flags=re.S).group(1)
     assert full.startswith("ID: EV-00001\nQuery: up{instance=&#34;h0&#34;}\n{")
     assert "&#34;content&#34;: {" in full and "&#34;value&#34;: 90" in full
     assert 'id="EV-00002"' in ev
@@ -208,113 +208,28 @@ def test_evidence_css_one_line_platform_font():
     assert ".evidence-table { table-layout: fixed; }" in css
     short = css.split(".evidence-table td.ev-action .ev-short { overflow", 1)
     assert len(short) == 2 and "text-overflow: ellipsis; white-space: nowrap;" in short[1].split("}", 1)[0]
-    full = css.split(".evidence-table .ev-full {", 1)[1].split("}", 1)[0]
-    assert "display: none" in full and "font: inherit" in full and "white-space: pre-wrap" in full
-    assert "monospace" not in full
-    assert ".evidence-table tr.is-expanded .ev-full { display: block; }" in css
+    assert "dialog.text-file" in css
+    assert ".evidence-table tr.is-expanded" not in css
+    assert ".ev-full" not in css
+    story = css.split(".incident-story {", 1)[1].split("}", 1)[0]
+    assert "align-items: stretch" in story
+    assert "repeat(3, minmax(0, 1fr))" in story
+    assert "max-height: 18rem" in css.split(".incident-story > .card {", 1)[1].split("}", 1)[0]
+    ledger = css.split(".incident-ledger > .card {", 1)[1].split("}", 1)[0]
+    assert "min-height: 22rem" in ledger
 
 
-def _js_block(name: str) -> str:
-    src = JS.read_text(encoding="utf-8")
-    head = f"(function {name}() {{"
-    assert head in src, name
-    return head + src.split(head, 1)[1].split("\n})();", 1)[0] + "\n})();"
-
-
-_DBL_HARNESS = r"""
-const SRC = process.argv[1];
-function el(tag, parent, attrs) {
-  const e = {
-    tagName: tag, parent: parent || null, attrs: attrs || {}, classes: new Set(), listeners: {},
-    getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; },
-    setAttribute(k, v) { this.attrs[k] = String(v); },
-    addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); },
-    closest(sel) {
-      for (let n = this; n; n = n.parent) {
-        if (sel.split(",").some((s) => {
-          s = s.trim();
-          if (s[0] === "[") return s.slice(1, -1) in n.attrs;
-          return n.tagName === s;
-        })) return n;
-      }
-      return null;
-    },
-  };
-  e.classList = {
-    contains: (c) => e.classes.has(c),
-    toggle: (c, on) => { (on === undefined ? !e.classes.has(c) : on) ? e.classes.add(c) : e.classes.delete(c); },
-  };
-  return e;
-}
-const table = el("table", null, { "data-evidence-table": "" });
-const row = el("tr", table, { "data-list-row": "", "data-evidence-row": "", "aria-expanded": "false" });
-const cell = el("td", row);
-const full = el("div", cell, { "data-evidence-full": "" });
-globalThis.document = { querySelector: (s) => (s === "[data-evidence-table]" ? table : null) };
-eval(SRC);
-const fire = (type, target, extra) => {
-  const ev = Object.assign({ target, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } }, extra || {});
-  (table.listeners[type] || []).forEach((fn) => fn(ev));
-  return ev.defaultPrevented;
-};
-const state = () => ({ expanded: row.classes.has("is-expanded"), aria: row.attrs["aria-expanded"] });
-const out = {};
-const press = (target, x0, x1) => {
-  fire("mousedown", target, { detail: 1, clientX: x0, clientY: 10 });
-  fire("mouseup", target, { detail: 1, clientX: x1, clientY: 10 });
-};
-out.noClickListener = !("click" in table.listeners);
-fire("dblclick", cell);
-out.afterDbl = state();
-press(full, 20, 20);
-out.secondDownPrevented = fire("mousedown", full, { detail: 2, clientX: 20, clientY: 10 });
-fire("dblclick", full);
-out.dblOnOpenBody = state();
-press(cell, 5, 5);
-out.firstDownPrevented = fire("mousedown", cell, { detail: 1 });
-fire("dblclick", cell);
-out.afterSecondDbl = state();
-press(full, 10, 120);
-fire("dblclick", full);
-out.afterDragDbl = state();
-press(full, 30, 31);
-fire("dblclick", full);
-out.afterStillDbl = state();
-press(full, 30, 30);
-fire("dblclick", full);
-out.afterCloseAgain = state();
-out.enterPrevented = fire("keydown", row, { key: "Enter" });
-out.afterEnter = state();
-console.log(JSON.stringify(out));
-"""
-
-
-def test_double_click_anywhere_toggles_including_open_body_drag_does_not():
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("node not installed")
-    proc = subprocess.run(
-        [node, "-e", _DBL_HARNESS, "--", _js_block("bindEvidenceRows")], capture_output=True, text=True, timeout=20
-    )
-    assert proc.returncode == 0, proc.stderr
-    out = json.loads(proc.stdout.strip().splitlines()[-1])
-    closed, opened = {"expanded": False, "aria": "false"}, {"expanded": True, "aria": "true"}
-    assert out["noClickListener"] is True
-    assert out["afterDbl"] == opened
-    assert out["secondDownPrevented"] is True and out["firstDownPrevented"] is False
-    assert out["dblOnOpenBody"] == closed
-    assert out["afterSecondDbl"] == opened
-    assert out["afterDragDbl"] == opened
-    assert out["afterStillDbl"] == closed
-    assert out["afterCloseAgain"] == opened
-    assert out["enterPrevented"] is True
-    assert out["afterEnter"] == closed
-
-
-def test_evidence_js_no_longer_skips_the_open_body():
-    block = _js_block("bindEvidenceRows")
-    assert "[data-evidence-full]" not in block
-    assert 'addEventListener("mouseup"' in block and "DRAG_PX" in block
+def test_evidence_opens_like_mail_outbox_view():
+    js = JS.read_text(encoding="utf-8")
+    assert "bindEvidenceRows" not in js
+    assert "data-evidence-full" not in js
+    assert "bindTextViews" in js
+    html = (ROOT / "frontend" / "templates" / "incident_detail.html").read_text(encoding="utf-8")
+    assert 'data-text-open' in html
+    assert 'class="text-file"' in html
+    ops = (ROOT / "frontend" / "templates" / "ops.html").read_text(encoding="utf-8")
+    assert "<summary data-list-open>View</summary>" in ops
+    assert "Resolved is not Closed" not in html
 
 
 def test_evidence_view_does_not_change_stored_payload():
