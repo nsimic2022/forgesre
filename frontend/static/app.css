@@ -2192,26 +2192,44 @@ h1.incident-head .sev-warn { color: var(--warn); }
 .incident-nav a.incident-nav-step:hover { border-color: var(--accent); color: var(--accent); }
 .incident-nav .incident-nav-pos { color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
 
-/* Engineer evidence: the Who did what table language, one line per row; double-click shows the stored text. */
+/* Engineer evidence / Who did what: one line per row. Body View opens text like Mail outbox, overlaid so the row stays thin. */
 .evidence-table { table-layout: fixed; }
 .evidence-table th.ev-when { width: 7.5rem; }
 .evidence-table th.ev-actor { width: 8.5rem; }
-.evidence-table td { vertical-align: top; }
+.evidence-table th.ev-action { width: auto; }
+.evidence-table th:last-child,
+.incident-audit table th:last-child { width: 5.2rem; }
+.evidence-table td { vertical-align: middle; }
 .evidence-table td.ev-when { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
 .evidence-table td.ev-actor,
 .evidence-table td.ev-action .ev-short { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .evidence-table td.ev-action .ev-short { display: block; }
-.evidence-table .ev-full {
-  display: none;
-  margin-top: 0.4rem;
+.evidence-table td.ev-body { white-space: nowrap; }
+button.text-view-open {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
   font: inherit;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  color: var(--text);
-  cursor: text;
+  cursor: pointer;
+  text-decoration: underline;
 }
-.evidence-table tr.is-expanded .ev-full { display: block; }
-.evidence-table tr.is-expanded .ev-short { white-space: normal; }
+dialog.text-file {
+  width: min(40rem, 92vw);
+  max-height: min(32rem, 80vh);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.8rem 0.9rem;
+  background: var(--panel);
+  color: var(--text);
+}
+dialog.text-file .mail-body {
+  max-height: min(24rem, 60vh);
+  overflow: auto;
+  margin: 0 0 0.7rem;
+}
+dialog.text-file::backdrop { background: color-mix(in srgb, var(--text) 28%, transparent); }
 
 /* Dashboard layout pass: square Incidents / Infrastructure tiles, appliance card on the right.
    Both groups share one band width (five squares). They do not stretch to the card. */
@@ -2873,9 +2891,22 @@ label.row-check {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.9rem;
   margin: 0 0 1rem;
-  align-items: start;
+  align-items: stretch;
 }
-.incident-story > .card { margin: 0; min-width: 0; }
+.incident-story > .card {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 18rem;
+  max-height: 18rem;
+}
+.incident-story .card-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
 .incident-happened .tool-row { margin: 0 0 0.55rem; }
 .incident-happened h3 { margin: 0.65rem 0 0.25rem; font-size: 0.82rem; }
 .incident-ledger {
@@ -2883,9 +2914,21 @@ label.row-check {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.9rem;
   margin: 0 0 1rem;
-  align-items: start;
+  align-items: stretch;
 }
-.incident-ledger > .card { margin: 0; min-width: 0; }
+.incident-ledger > .card {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 22rem;
+  max-height: min(28rem, 64vh);
+}
+.incident-ledger .list-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
 .incident-notes { margin: 0; }
 .incident-notes .note-block { margin: 0 0 0.7rem; }
 .incident-ops {
@@ -3109,7 +3152,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 }
 .cli-example code { font-size: inherit; }
 
-/* v09-22: person slots + HTMX chrome. Locked --bg / --text / --ok hexes stay. */
+/* v09-23: incident row + equal cubes. Locked --bg / --text / --ok hexes stay. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {
