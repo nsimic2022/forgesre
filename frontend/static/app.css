@@ -1424,11 +1424,6 @@ button.demo-close {
 .demo-scenario h3 { margin: 0 0 0.3rem; }
 .demo-scenario p { margin: 0.2rem 0; }
 .demo-scenario form { margin: 0.55rem 0 0; }
-.demo-reset {
-  border-top: 1px solid var(--line);
-  padding-top: 0.85rem;
-  margin-top: 0.25rem;
-}
 .mail-body { margin: 0.2rem 0; font-size: 0.82rem; max-height: 8rem; overflow: auto; }
 /* Email & reports: do not use .split (1.2fr / 0.8fr puts Add email first and wider). */
 .ops-mail-cols {

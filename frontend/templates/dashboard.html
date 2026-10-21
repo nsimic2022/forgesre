@@ -12,38 +12,40 @@
 <dialog id="demo-panel" class="demo-panel" aria-labelledby="demo-panel-title">
   <div class="demo-panel-inner">
     <div class="demo-panel-head">
-      <h2 id="demo-panel-title">Run demo {% with %}{% set tip %}Lab only. Every scenario opens a DEMO incident on a seeded lab asset (forge-demo-01, forge-demo-win-01, forge-demo-sw-01) — not a customer host. The incident opens with the demo owner on Who to call. Escalation mail is labeled DEMO and goes to platform@forgesre.local. Open ForgeRCA on the incident, then Resolve / Close when finished.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+      <h2 id="demo-panel-title">Run demo</h2>
       <button type="button" class="secondary demo-close" data-demo-close aria-label="Close">×</button>
     </div>
     <div class="demo-scenarios">
       <article class="demo-scenario" id="demo-highcpu">
-        <h3>Linux HighCPU {% with %}{% set tip %}Raises the demo CPU gauge to 94% and opens a HighCPU incident with owner mail. Next: incident page → Who to call → Escalation outbox. Same as ./forgesre demo.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+        <h3>Linux HighCPU</h3>
+        <p>Raises the demo CPU gauge to 94% and opens a HighCPU incident with owner mail. Next: incident page → Who to call → Escalation outbox. Same as ./forgesre demo.</p>
         <form method="post" action="/demo" hx-boost="false"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-disk">
-        <h3>Linux disk / ForgeRCA {% with %}{% set tip %}Raises the demo disk gauge to 94% and opens FilesystemUsageHigh with builtin RCA. Next: ForgeRCA page (facts / likely cause). Click Refresh if the LLM rewrite is still queued. Same as ./forgesre demo-rca.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+        <h3>Linux disk / ForgeRCA</h3>
+        <p>Raises the demo disk gauge to 94% and opens FilesystemUsageHigh with builtin RCA. Next: ForgeRCA page (facts / likely cause). Click Refresh if the LLM rewrite is still queued. Same as ./forgesre demo-rca.</p>
         <form method="post" action="/demo-rca" hx-boost="false"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-host">
-        <h3>Linux host unreachable {% with %}{% set tip %}Opens a NodeExporterDown incident and HOST-UNREACHABLE playbook on the demo host. Lab only — this does not stop a real scrape.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+        <h3>Linux host unreachable</h3>
+        <p>Opens a NodeExporterDown incident and HOST-UNREACHABLE playbook on the demo host. Lab only — this does not stop a real scrape.</p>
         <form method="post" action="/demo-host" hx-boost="false"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-windows">
-        <h3>Windows CPU (lab) {% with %}{% set tip %}Opens WindowsCPUHigh on seeded forge-demo-win-01. Lab scenario, DEMO tagged — that host is not scraped. Real Windows assets use windows_exporter :9182.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+        <h3>Windows CPU (lab)</h3>
+        <p>Opens WindowsCPUHigh on seeded forge-demo-win-01. Lab scenario, DEMO tagged — that host is not scraped. Real Windows assets use windows_exporter :9182.</p>
         <form method="post" action="/demo-windows" hx-boost="false"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-network">
-        <h3>Network SNMP unreachable (lab) {% with %}{% set tip %}Opens SnmpDeviceUnreachable on seeded forge-demo-sw-01. Lab scenario, DEMO tagged. Not a live SNMP walk — snmp_exporter is not polling this switch.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+        <h3>Network SNMP unreachable (lab)</h3>
+        <p>Opens SnmpDeviceUnreachable on seeded forge-demo-sw-01. Lab scenario, DEMO tagged. Not a live SNMP walk — snmp_exporter is not polling this switch.</p>
         <form method="post" action="/demo-network" hx-boost="false"><button type="submit">Run</button></form>
       </article>
       <article class="demo-scenario" id="demo-nodecpu">
-        <h3>Linux NodeCPUHigh {% with %}{% set tip %}Opens NodeCPUHigh on forge-demo-01. Same demo host, different Linux alertname. Lab only — does not change a real host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+        <h3>Linux NodeCPUHigh</h3>
+        <p>Opens NodeCPUHigh on forge-demo-01. Same demo host, different Linux alertname. Lab only — does not change a real host.</p>
         <form method="post" action="/demo-nodecpu" hx-boost="false"><button type="submit">Run</button></form>
       </article>
-    </div>
-    <div class="demo-reset">
-      <p class="muted"><span class="label-line">Reset demo gauges {% with %}{% set tip %}Sets demo CPU/disk gauges back to 12% / 35% (same as ./forgesre demo-reset). Open DEMO incidents stay until you Resolve / Close them.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></p>
-      <form method="post" action="/demo-reset" hx-boost="false"><button type="submit" class="secondary">Reset demo gauges</button></form>
     </div>
   </div>
 </dialog>
