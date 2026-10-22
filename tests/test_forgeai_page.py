@@ -39,9 +39,10 @@ def test_forgeai_page_has_five_cubes_and_cron():
     page = client.get("/investigations")
     assert page.status_code == 200
     html = page.text
-    for marker in ('id="runs"', 'id="setup"', 'id="ask"', 'id="digest"', 'id="jobs"', 'id="reports"', 'id="cron"'):
+    for marker in ('id="activity"', 'id="setup"', 'id="ask"', 'id="digest"', 'id="jobs"', 'id="reports"', 'id="cron"'):
         assert marker in html, marker
     assert "Investigations" in html
+    assert "Recent activity" in html
     assert "GGUF" in html
     assert "Ask ForgeAI" in html
     assert "Export TXT" in html
@@ -49,7 +50,7 @@ def test_forgeai_page_has_five_cubes_and_cron():
     assert client.get("/forgeai").status_code == 200
     home = client.get("/").text
     assert 'href="/investigations"' in home
-    assert "Open Investigations" in home
+    assert "Open Investigations" not in home
     nav = home.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
     menu = nav.split("nav-status", 1)[0]
     assert ">Investigations<" in menu
@@ -154,6 +155,6 @@ def test_ask_posts_question_and_css_cache():
     assert posted.status_code == 303
     assert posted.headers["location"] == "/investigations#ask"
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-33" in base
+    assert "app.css?v=v09-34" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".forgeai-grid" in css

@@ -72,23 +72,21 @@
   </div>
 </section>
 <section class="dash-ai-cube card" id="forgeai" data-forgeai-insights>
-  <h2>ForgeAI {% with %}{% set tip %}SQL digest of production incidents (repeats, hot group, aging). DEMO excluded. When the local LLM is off or unreachable this cube stays Paused — it does not invent a live brief.{% endset %}{% include "_info_tip.html" %}{% endwith %}
-    <span class="pill {{ 'ok' if insights.source in ['llm', 'forgeai'] else 'warn' }}" data-insights-source="{{ insights.source }}">{% if insights.source in ['llm', 'forgeai'] %}Live{% else %}Paused{% endif %}</span>
-  </h2>
-  <div class="dash-ai-scroll" aria-live="polite">
-    {% for line in insights.sentences %}
-    <p>{{ line }}</p>
+  <h2>Recent activity {% with %}{% set tip %}Same investigation runs as /investigations. Click a row to open that ForgeRCA / ForgeAI page.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="dash-ai-scroll" aria-label="Recent investigation activity">
+    {% for row in activity %}
+    <a class="act-line" href="{{ row.href }}">
+      <span class="act-line-main"><strong>{{ row.title }}</strong> <span class="muted">{{ row.number }}</span></span>
+      <span class="act-line-meta">
+        <span class="muted">{{ row.host }}</span>
+        <span class="pill {{ row.css }}">{{ row.status }}</span>
+        <span class="muted">{{ short_when_label(row.created_at) }}</span>
+      </span>
+    </a>
     {% else %}
-    <p class="muted">No digest yet.</p>
+    <p class="muted">No investigation runs yet.</p>
     {% endfor %}
   </div>
-  {% if can('read_ai') %}
-  <form method="post" action="/insights/refresh" class="dash-ai-ask" hx-boost="false">
-    <input type="hidden" name="next" value="/#forgeai">
-    <button type="submit" class="secondary">Ask ForgeAI</button>
-  </form>
-  <p class="muted dash-ai-open"><a href="/investigations">Open Investigations</a></p>
-  {% endif %}
 </section>
 <aside class="appliance-card" data-appliance-card aria-label="This ForgeSRE appliance">
   <h2>ForgeSRE {% with %}{% set tip %}The ForgeSRE VM running Core — not an inventory asset. CPU from the host /proc/stat; RAM and HDD from node_exporter on this VM (or /proc and statvfs). Refreshes every 8 s. Dash: green below {{ resource_warn }}%, yellow {{ resource_warn }}–{{ resource_crit - 1 }}%, red {{ resource_crit }}% or more, or no reading (blocked). NET: green = this VM has a default route on a non-docker interface whose link is up; red = no usable default route, or that interface is down. No ping and no internet probe — an air-gapped lab with a LAN gateway is green. Network throughput is not measured. Cubes are the System Health rows (same checks as ./forgesre doctor, as of page load): green running, yellow warn / paused / starting / disabled, red down. Read-only — click to open System Health.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>

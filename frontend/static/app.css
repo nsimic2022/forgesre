@@ -3039,6 +3039,26 @@ label.row-check {
 @media (max-width: 800px) {
   .specialist-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.act-list { width: 100%; }
+.act-list .act-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.7rem;
+}
+.act-expand { display: none; }
+.act-list tr.is-selected + .act-expand { display: table-row; }
+.act-expand > td {
+  padding: 0.35rem 0.55rem 0.75rem;
+  background: var(--bg);
+}
+.specialist-row-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+}
+@media (max-width: 900px) {
+  .specialist-row-5 { grid-template-columns: 1fr; }
+}
 .incident-ledger {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -3246,6 +3266,8 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   padding: 0.7rem 0.9rem 0.85rem;
 }
 .dash-ai-cube h2 {
@@ -3258,11 +3280,30 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 .dash-ai-scroll {
   flex: 1 1 auto;
   min-height: 6.5rem;
-  overflow: hidden;
+  overflow: auto;
 }
 .dash-ai-scroll p { margin: 0 0 0.55rem; }
 .dash-ai-ask { margin-top: auto; padding-top: 0.45rem; }
 .dash-ai-ask button { width: auto; }
+.dash-ai-cube a.act-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.12rem;
+  padding: 0.4rem 0.15rem 0.45rem;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+}
+.dash-ai-cube a.act-line:last-of-type { border-bottom: 0; }
+.dash-ai-cube a.act-line:hover { background: var(--bg); }
+.dash-ai-cube a.act-line strong { color: var(--accent); }
+.act-line-main { min-width: 0; overflow-wrap: anywhere; }
+.act-line-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+}
 .appliance-oncall {
   margin-top: 0.75rem;
   padding-top: 0.65rem;
@@ -3311,6 +3352,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 /* v09-30: Discovery four cubes (Scan now | NetBox | Zabbix | GLPI); optional GLPI read-only import. */
 /* v09-32: OpenSRE-inspired slate / emerald chrome; nav follows the theme. */
 /* v09-33: Investigations runs list; four specialist cubes on the incident / ForgeRCA page. */
+/* v09-34: Recent activity expands to five specialist cubes; Dashboard cube is the same list. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {

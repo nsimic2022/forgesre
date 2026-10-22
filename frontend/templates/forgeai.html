@@ -2,48 +2,48 @@
 {% block title %}Investigations · ForgeSRE{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Investigations {% with %}{% set tip %}History of ForgeRCA / ForgeAI runs. Same idea as OpenSRE agent-runs. Start a run from an incident with Open ForgeRCA. Digest, Ask, and cron stay below — SQL first, LLM only rewrites sentences.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+  <h1>Investigations {% with %}{% set tip %}Recent ForgeRCA / ForgeAI runs. Click a row to open the five specialist cubes. Digest, Ask, and cron stay below — SQL first, LLM only rewrites sentences.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 </div>
 
-<section class="card" id="runs">
-  <h2>Runs {% with %}{% set tip %}Each row is one ForgeRCA pass (optional ForgeAI rewrite). Status: running = rewrite queued, done = result stored, failed = LLM job error. Open the identity link — a row click only selects.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
-  <form method="get" action="/investigations" class="list-filters" hx-boost="false">
-    <input name="q" value="{{ filters.q }}" placeholder="host, problem, INC" aria-label="Search runs">
-    {% if filters.run %}<input type="hidden" name="run" value="{{ filters.run }}">{% endif %}
-    {% if filters.site %}<input type="hidden" name="site" value="{{ filters.site }}">{% endif %}
-    {% if filters.severity %}<input type="hidden" name="severity" value="{{ filters.severity }}">{% endif %}
-  </form>
-  <nav class="filter-chips" aria-label="Run status">
-    <a class="chip{% if not filters.run %} on{% endif %}" href="/investigations{% if filters.q %}?q={{ urlquote(filters.q) }}{% endif %}#runs">All</a>
-    {% for value, label in [("running", "Running"), ("done", "Done"), ("failed", "Failed")] %}
-    <a class="chip{% if filters.run == value %} on{% endif %}" href="/investigations?run={{ value }}{% if filters.q %}&amp;q={{ urlquote(filters.q) }}{% endif %}#runs">{{ label }}</a>
-    {% endfor %}
-  </nav>
-  <p class="muted">Start from an incident → <strong>Open ForgeRCA</strong>. This list does not invent a run without an incident.</p>
+<section class="card" id="activity">
+  <h2>Recent activity {% with %}{% set tip %}Each row is one ForgeRCA pass (optional ForgeAI rewrite). A click selects the row and opens the five specialist cubes underneath. The title link opens the investigation.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="table-scroll list-scroll" data-list-scroll>
-    <table class="scan-list">
-      <thead>
-        <tr>
-          <th>Investigation</th>
-          <th>Host</th>
-          <th>Engine</th>
-          <th>Status</th>
-          <th>Score</th>
-          <th>When</th>
-        </tr>
-      </thead>
+    <table class="scan-list act-list">
       <tbody>
       {% for row in runs %}
-        <tr data-list-row data-list-view="{{ row.href }}">
-          <td><a href="{{ row.href }}">{{ row.title }}</a> <span class="muted">{{ row.number }}</span></td>
-          <td>{{ row.host }}</td>
-          <td>{{ row.engine }}</td>
-          <td><span class="pill {{ row.css }}">{{ row.status }}</span></td>
-          <td>{% if row.confidence %}{{ row.confidence }}%{% else %}—{% endif %}</td>
-          <td>{{ short_when_label(row.created_at) }}</td>
+        <tr data-list-row class="act-row">
+          <td>
+            <div class="act-line">
+              <a href="{{ row.href }}">{{ row.title }}</a>
+              <span class="muted">{{ row.number }}</span>
+              <span class="muted">{{ row.host }}</span>
+              <span class="pill {{ row.css }}">{{ row.status }}</span>
+              <span class="muted">{{ short_when_label(row.created_at) }}</span>
+            </div>
+          </td>
+        </tr>
+        <tr class="act-expand">
+          <td>
+            <div class="specialist-row specialist-row-5" aria-label="Investigation specialists">
+              {% for spec in row.specialists %}
+              <div class="specialist-cube {{ spec.css }}" title="{{ spec.hint }}">
+                <strong>{{ spec.label }}</strong>
+                <span>{{ spec.detail }}</span>
+              </div>
+              {% endfor %}
+              <div class="specialist-cube {{ row.writer.css }}" title="{{ row.writer.hint }}">
+                <strong>{{ row.writer.label }}</strong>
+                {% for line in row.writer.sentences %}
+                <span>{{ line }}</span>
+                {% else %}
+                <span>{{ row.writer.detail }}</span>
+                {% endfor %}
+              </div>
+            </div>
+          </td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="muted">No investigation runs yet. Open ForgeRCA on an incident.</td></tr>
+        <tr><td class="muted">No investigation runs yet. Open ForgeRCA on an incident.</td></tr>
       {% endfor %}
       </tbody>
     </table>

@@ -788,6 +788,7 @@ def dashboard(
         include_lab=include_lab,
         oncall=current_oncall(db),
         insights=insight_panel(db),
+        activity=list_investigation_runs(db)[:24],
     )
 
 
@@ -842,7 +843,7 @@ def forgeai_page(
         list_investigation_runs(db, status=run, q=q),
         request.query_params.get("page", "1"),
         size=per_page(request),
-        fragment="#runs",
+        fragment="#activity",
     )
     return render(
         request,

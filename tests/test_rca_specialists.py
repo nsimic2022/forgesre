@@ -91,11 +91,30 @@ def test_investigations_page_lists_runs_and_specialist_cubes():
     assert 'class="specialist-row"' in incident.text
     listing = client.get("/investigations")
     assert listing.status_code == 200
-    assert 'id="runs"' in listing.text
+    assert 'id="activity"' in listing.text
+    assert "Recent activity" in listing.text
+    activity = listing.text.split('id="activity"', 1)[1].split('id="setup"', 1)[0]
+    assert "filter-chips" not in activity
+    assert "Start from an" not in activity
+    assert ">Investigation<" not in activity
+    assert 'class="act-expand"' in activity
+    assert ">Metrics<" in activity
+    assert ">Logs<" in activity
+    assert ">Inventory<" in activity
+    assert ">History<" in activity
+    assert ">ForgeAI<" in activity
     assert number in listing.text
     assert 'href="/ai/%s"' % number in listing.text
     runs = list_investigation_runs(db)
-    assert any(row["number"] == number for row in runs)
+    match = next(row for row in runs if row["number"] == number)
+    assert len(match["specialists"]) == 4
+    assert match["writer"]["label"] == "ForgeAI"
+    home = client.get("/").text
+    cube = home.split('id="forgeai"', 1)[1].split("</section>", 1)[0]
+    assert "Recent activity" in cube
+    assert "Ask ForgeAI" not in cube
+    assert "Open Investigations" not in cube
+    assert f'href="/ai/{number}"' in cube
     db.close()
 
 
@@ -147,9 +166,11 @@ def test_writer_uses_specialist_brief_only():
     assert dropped["summary"] == builtin["summary"]
 
 
-def test_cache_bust_is_v09_33():
+def test_cache_bust_is_v09_34():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-33" in base
+    assert "app.css?v=v09-34" in base
     assert ".specialist-row" in css
     assert ".specialist-cube.ok" in css
+    assert ".act-expand" in css
+    assert ".specialist-row-5" in css
