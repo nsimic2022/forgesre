@@ -2028,6 +2028,59 @@ def send_performance_report(
     )
 
 
+def report_kind(row: ScheduledReport | None) -> str:
+    kind = str(getattr(row, "kind", "") or "").strip().lower() if row is not None else ""
+    return kind if kind == "forgeai" else "performance"
+
+
+def send_forgeai_digest(
+    db: Session,
+    *,
+    recipients: list[str],
+    actor: str = "system",
+    name: str = "forgeai-digest",
+    rewrite: bool = True,
+) -> Notification | None:
+    """Mail the current ForgeAI digest. Optional LLM rewrite first. Not a performance snapshot."""
+    from app.insights import insight_facts, insight_panel, insights_text, rewrite_insights
+    from app.settings import settings
+
+    addresses = [str(item).strip() for item in (recipients or []) if str(item).strip()]
+    if not addresses:
+        raise ValueError("Need a valid email address")
+    if rewrite and settings.ai_enabled and settings.llm_url:
+        rewrite_insights(db, insight_facts(db), actor=actor)
+    panel = insight_panel(db)
+    body = "\n".join(insights_text(panel))
+    last: Notification | None = None
+    problems: list[str] = []
+    for email in addresses:
+        try:
+            last = send_outbound_mail(
+                db,
+                target=email,
+                subject=f"ForgeSRE ForgeAI digest — {name}",
+                body=body,
+                actor=actor,
+                step_key="report",
+            )
+        except Exception as exc:
+            problems.append(f"{email}: {exc}")
+    report(
+        db,
+        "insights",
+        "cron",
+        "error" if problems else "ok",
+        summary=f"ForgeAI digest mailed to {len(addresses) - len(problems)}/{len(addresses)} by {actor}",
+        detail=body[:2000] if not problems else "; ".join(problems)[:2000],
+        object_type="insights",
+        object_id=name,
+    )
+    if problems:
+        raise RuntimeError("; ".join(problems)[:400])
+    return last
+
+
 def send_incident_report(
     db: Session,
     incident: Incident,
@@ -2273,6 +2326,7 @@ def _report_job(row: ScheduledReport) -> dict[str, Any]:
     return {
         "id": row.id,
         "name": row.name or "performance",
+        "kind": report_kind(row),
         "to_email": recipients[0] if recipients else (row.to_email or ""),
         "recipients": recipients,
         "asset_ids": list(row.asset_ids or []),
@@ -2288,6 +2342,13 @@ def _send_report_job(db: Session, job: dict[str, Any], actor: str) -> Notificati
         recipients = [job["to_email"]]
     if not recipients:
         raise ValueError("Need a valid email address")
+    if str(job.get("kind") or "performance") == "forgeai":
+        return send_forgeai_digest(
+            db,
+            recipients=recipients,
+            actor=actor,
+            name=str(job.get("name") or "forgeai-digest"),
+        )
     subject, body, html = performance_report_message(db, list(job.get("asset_ids") or []), str(job.get("name") or "report"))
     last: Notification | None = None
     problems: list[str] = []
@@ -2401,7 +2462,22 @@ def process_scheduled_reports(db: Session) -> int:
         try:
             if not _claim_due_report(db, job, now):
                 continue
-            _send_report_job(db, job, "scheduler")
+            if job.get("kind") == "forgeai":
+                from app.jobs import enqueue
+
+                enqueue(
+                    db,
+                    "forgeai_digest",
+                    f"report-{pk}",
+                    object_type="report",
+                    payload={
+                        "actor": "scheduler",
+                        "recipients": list(job.get("recipients") or []),
+                        "name": job.get("name") or "forgeai-digest",
+                    },
+                )
+            else:
+                _send_report_job(db, job, "scheduler")
             ran += 1
         except Exception as exc:
             db.rollback()

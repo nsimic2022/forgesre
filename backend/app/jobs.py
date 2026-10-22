@@ -15,6 +15,7 @@ DISCOVERY_SCAN_KIND = "discovery_scan"
 DISCOVERY_SCAN_OBJECT_ID = "scan"
 # Re-running these is safe: builtin RCA returns the existing result, an LLM rewrite only adds
 # a new Investigation row, a discovery scan upserts candidates. None of them sends mail.
+FORGEAI_DIGEST_KIND = "forgeai_digest"
 RESTART_RETRY_KINDS = ("investigate", DISCOVERY_SCAN_KIND)
 RESTART_MAX_ATTEMPTS = 3
 INTERRUPTED_NOTE = "interrupted by Core restart"
@@ -114,6 +115,8 @@ def recover_interrupted_jobs(db: Session) -> dict[str, int]:
 
 def job_is_llm(row: Job) -> bool:
     """True when this investigate job will wait on llama.cpp."""
+    if row.kind == FORGEAI_DIGEST_KIND:
+        return True
     if row.kind != "investigate":
         return False
     payload = row.payload or {}
@@ -173,6 +176,16 @@ def run_pending_jobs(db: Session, limit: int = 8) -> int:
                     run_scan(db, cidrs=list(cidrs), merge_auto=False)
                 else:
                     run_scan(db, merge_auto=False)
+            elif row.kind == FORGEAI_DIGEST_KIND:
+                from app.services import send_forgeai_digest
+
+                payload = row.payload or {}
+                send_forgeai_digest(
+                    db,
+                    recipients=list(payload.get("recipients") or []),
+                    actor=str(payload.get("actor") or "system"),
+                    name=str(payload.get("name") or "forgeai-digest"),
+                )
             else:
                 raise RuntimeError(f"unknown job kind {row.kind}")
             row.status = "done"

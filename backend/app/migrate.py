@@ -285,13 +285,16 @@ def migrate(engine: Engine) -> None:
                 conn.execute(text("ALTER TABLE scheduled_reports ADD COLUMN recipients JSON"))
             if "schedule" not in existing:
                 conn.execute(text("ALTER TABLE scheduled_reports ADD COLUMN schedule JSON"))
+            if "kind" not in existing:
+                conn.execute(text("ALTER TABLE scheduled_reports ADD COLUMN kind VARCHAR(32) DEFAULT 'performance'"))
         if "scheduled_reports" not in tables:
             if engine.dialect.name == "sqlite":
                 conn.execute(
                     text(
                         "CREATE TABLE IF NOT EXISTS scheduled_reports ("
                         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                        "name VARCHAR(255), to_email VARCHAR(255), recipients JSON, "
+                        "name VARCHAR(255), kind VARCHAR(32) DEFAULT 'performance', "
+                        "to_email VARCHAR(255), recipients JSON, "
                         "interval_hours INTEGER DEFAULT 6, schedule JSON, "
                         "asset_ids JSON, enabled BOOLEAN DEFAULT 1, "
                         "last_run_at DATETIME, next_run_at DATETIME, "
@@ -303,7 +306,8 @@ def migrate(engine: Engine) -> None:
                     text(
                         "CREATE TABLE IF NOT EXISTS scheduled_reports ("
                         "id SERIAL PRIMARY KEY, "
-                        "name VARCHAR(255), to_email VARCHAR(255), recipients JSON, "
+                        "name VARCHAR(255), kind VARCHAR(32) DEFAULT 'performance', "
+                        "to_email VARCHAR(255), recipients JSON, "
                         "interval_hours INTEGER DEFAULT 6, schedule JSON, "
                         "asset_ids JSON, enabled BOOLEAN DEFAULT TRUE, "
                         "last_run_at TIMESTAMPTZ, next_run_at TIMESTAMPTZ, "
