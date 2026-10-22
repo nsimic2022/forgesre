@@ -24,6 +24,7 @@ COMPONENT_LABELS = {
     "snmp": "SNMP exporter",
     "netbox": "NetBox",
     "zabbix": "Zabbix",
+    "glpi": "GLPI",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -39,6 +40,7 @@ COMPONENT_SHORT = {
     "llm": "LLM",
     "netbox": "NetBox",
     "zabbix": "Zabbix",
+    "glpi": "GLPI",
     "discovery": "Discovery",
     "redis": "Redis",
     "mailpit": "Mailpit",

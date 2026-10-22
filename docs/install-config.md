@@ -285,6 +285,8 @@ inventory:
     enabled: true
     mode: bundled          # only "disabled" is read (turns NetBox sync off)
     url: "http://127.0.0.1:8001"
+  # zabbix / glpi: optional read-only sources — see zabbix.md and glpi.md
+  # tokens stay in secrets/secrets.env
 
 discovery:
   enabled: true
@@ -384,6 +386,8 @@ Do **not** treat `FORGESRE_ADMIN_PASSWORD` or `NETBOX_SUPERUSER_PASSWORD` in the
 | SMTP | `SMTP_USERNAME`, `SMTP_PASSWORD` (+ optional mailbox bind keys) | Email when YAML enables it |
 | SNMP | `SNMP_COMMUNITY` | Discovery + snmp_exporter |
 | NetBox | `NETBOX_SUPERUSER_*`, `NETBOX_DB_PASSWORD`, `NETBOX_REDIS_PASSWORD`, `NETBOX_SECRET_KEY`, `NETBOX_API_TOKEN`, `SUPERUSER_API_TOKEN`, `NETBOX_API_TOKEN_PEPPER`, `API_TOKEN_PEPPER_1` | Bundled NetBox UI/API |
+| Zabbix | `ZABBIX_URL`, `ZABBIX_API_TOKEN`, `ZABBIX_WEBHOOK_TOKEN` | Optional read-only host import + webhook ([zabbix.md](zabbix.md)) |
+| GLPI | `GLPI_URL`, `GLPI_APP_TOKEN`, `GLPI_USER_TOKEN` | Optional read-only Computer / NetworkEquipment import ([glpi.md](glpi.md)) |
 | Optional mailbox | `MAILBOX_*` (commented) | Local mailserver when enabled |
 
 ```bash

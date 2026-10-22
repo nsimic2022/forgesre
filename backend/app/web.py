@@ -1290,6 +1290,7 @@ def discovery_page(
         netbox_sync_count=int(netbox_sync.get("count") or 0),
         netbox_sync_why=str(netbox_sync.get("why") or ""),
         zabbix=zabbix_discovery_ctx(db),
+        glpi=glpi_discovery_ctx(db),
         demo_candidate_ip=DEMO_CANDIDATE_IP,
         scan_job=active_discovery_scan(db),
         pager=pager,
@@ -1349,6 +1350,62 @@ def discovery_zabbix_page(db: Session = Depends(get_db), user: User = Depends(lo
         notice = (
             f"Zabbix sync: {int(result.get('created') or 0)} new, {int(result.get('linked') or 0)} linked, "
             f"{int(result.get('skipped') or 0)} skipped. New hosts are Auto type with no scrape — "
+            "set Type / owner email on Assets."
+        )
+    return RedirectResponse(f"/discovery?notice={quote(notice)}", status_code=302)
+
+
+def glpi_discovery_ctx(db: Session) -> dict:
+    """Discovery GLPI block: cached status chip, last sync / last error."""
+    from app.glpi import NOT_CONFIGURED_WHY
+    from app.glpi_sync import current_status, last_sync_entry
+
+    enabled = settings.glpi_enabled
+    if enabled:
+        try:
+            status = current_status()
+        except Exception as exc:
+            status = {"configured": True, "ok": False, "light": "grey", "label": "API error", "why": str(exc)[:300]}
+    else:
+        status = {"configured": False, "ok": False, "light": "grey", "label": "Not configured", "why": NOT_CONFIGURED_WHY}
+    last = last_sync_entry(db) if enabled else None
+    last_error = ""
+    last_ok = ""
+    if last is not None:
+        stamp = short_when_label(last.at)
+        if last.status == "error":
+            last_error = f"{stamp} — {last.detail or last.summary}"
+        else:
+            last_ok = f"{stamp} — {last.summary}"
+    return {
+        "enabled": enabled,
+        "url": settings.glpi_url,
+        "auto_sync": settings.glpi_auto_sync,
+        "light": str(status.get("light") or "grey"),
+        "label": str(status.get("label") or "Not configured"),
+        "why": "" if status.get("light") == "green" else str(status.get("why") or ""),
+        "hosts": int(status.get("hosts") or 0),
+        "clickable": bool(enabled),
+        "last_ok": last_ok,
+        "last_error": last_error,
+    }
+
+
+@router.post("/discovery/glpi-sync")
+def discovery_glpi_page(db: Session = Depends(get_db), user: User = Depends(login_required)):
+    if not can(user, "admin"):
+        raise HTTPException(status_code=403)
+    from app.glpi_sync import sync_glpi
+
+    result = sync_glpi(db, force=True) or {}
+    if result.get("error"):
+        notice = f"GLPI sync failed: {result['error']}"
+    elif result.get("skipped"):
+        notice = "GLPI is not configured (GLPI_URL + GLPI_APP_TOKEN + GLPI_USER_TOKEN in secrets/secrets.env)."
+    else:
+        notice = (
+            f"GLPI sync: {int(result.get('created') or 0)} new, {int(result.get('linked') or 0)} linked, "
+            f"{int(result.get('skipped') or 0)} skipped. New items are Auto type with no scrape — "
             "set Type / owner email on Assets."
         )
     return RedirectResponse(f"/discovery?notice={quote(notice)}", status_code=302)

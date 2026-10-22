@@ -74,6 +74,10 @@ def _discovery_loop(stop: threading.Event) -> None:
                 from app.zabbix_sync import sync_zabbix
 
                 sync_zabbix(db)
+            if settings.glpi_enabled and settings.glpi_auto_sync:
+                from app.glpi_sync import sync_glpi
+
+                sync_glpi(db)
             mark_discovery_loop_alive()
         except Exception as exc:
             log.exception("discovery loop failed")

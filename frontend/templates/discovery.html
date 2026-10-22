@@ -2,15 +2,7 @@
 {% import "_select.html" as sel %}
 {% block title %}Discovery · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Discovery {% with %}{% set tip %}Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on UDP/161 (TCP/161 is skipped — that is not SNMP) and HTTP GET /metrics on :9182 and :9100 when a host is alive. windows_ metrics → Windows Server :9182. node_ metrics → Linux Server :9100. SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics. TCP open without exporter text is not an OS pick (ICMP ping is not a scrape). Suggested CIDR is this VM’s primary IPv4 /24 — Confirm &amp; scan writes discovery.cidrs and queues a background probe (Postgres jobs, one Core worker — not Celery). Empty discovery.cidrs = no scan (not all VLANs). This is not nmap and does not replace nmap. New hosts wait here until an engineer Approves or Ignores them.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
-<p class="muted">
-  Mode: <code>{{ discovery_mode }}</code>
-  · CIDRs: <code>{{ discovery_cidrs or "none (confirm first)" }}</code>
-  · Enabled: <code>{{ "On" if discovery_enabled else "Off" }}</code>
-  {% if suggested_cidr %}
-  · Suggested: <code>{{ suggested_cidr }}</code>
-  {% endif %}
-</p>
+<h1>Discovery {% with %}{% set tip %}Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on UDP/161 (TCP/161 is skipped — that is not SNMP) and HTTP GET /metrics on :9182 and :9100 when a host is alive. windows_ metrics → Windows Server :9182. node_ metrics → Linux Server :9100. SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics. TCP open without exporter text is not an OS pick (ICMP ping is not a scrape). Suggested CIDR is this VM’s primary IPv4 /24 — Confirm &amp; scan writes discovery.cidrs and queues a background probe (Postgres jobs, one Core worker — not Celery). Empty discovery.cidrs = no scan (not all VLANs). This is not nmap and does not replace nmap. New hosts wait here until an engineer Approves or Ignores them. NetBox, Zabbix and GLPI on this page are separate read-only imports.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 
 {% if request.query_params.get('edit_note') == 'select-one' %}
 <div class="banner" role="status">Select one</div>
@@ -72,7 +64,6 @@
 </section>
 {% endif %}
 
-<div class="discovery-sources">
 <section class="card">
   <h2>NetBox sync {% with %}{% set tip %}Read-only. ForgeSRE never writes back. Separate from Scan now. Empty inventory is yellow (No devices), not a failure. New NetBox devices become assets with type Auto and no scrape address — ForgeSRE does not guess Linux :9100. Owner, contact, email, and notes on assets that already exist are never overwritten.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   {% if netbox_enabled %}
@@ -154,7 +145,41 @@
   <p class="muted">Last sync: {{ zabbix.last_ok }}</p>
   {% endif %}
 </section>
-</div>
+
+<section class="card glpi-block" data-glpi-block>
+  <h2>GLPI {% with %}{% set tip %}Read-only Computer / NetworkEquipment import over the GLPI REST API. ForgeSRE never creates, updates or deletes anything in GLPI. New items become assets with type Auto, no scrape address and source glpi — ForgeSRE does not guess Linux :9100. Matches existing assets by GLPI id, then IP, then hostname, so a NetBox / Zabbix / discovery host is linked, not cloned. Owner, contact, email, phone, notes and filled extras are never overwritten. Secrets: GLPI_URL, GLPI_APP_TOKEN, GLPI_USER_TOKEN. Cookbook: docs/glpi.md.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <div class="tool-row">
+    <span class="netbox-status {{ glpi.light }}" role="status" data-glpi-status>
+      <span class="netbox-status-dot" aria-hidden="true"></span>{{ glpi.label }}
+    </span>
+    {% if can('admin') %}
+      {% if glpi.clickable %}
+      <form method="post" action="/discovery/glpi-sync" class="inline" hx-boost="false">
+        <button type="submit">Sync hosts</button>
+      </form>
+      {% else %}
+      <button type="button" disabled title="Set GLPI_URL, GLPI_APP_TOKEN and GLPI_USER_TOKEN first">Sync hosts</button>
+      {% endif %}
+    {% else %}
+      <button type="button" disabled>Sync hosts</button>
+      <span class="muted">Admin only.</span>
+    {% endif %}
+  </div>
+  <p class="muted glpi-meta">
+    {% if glpi.enabled %}
+    URL: <code>{{ glpi.url }}</code>
+    · {% if glpi.auto_sync %}auto every 6 h{% else %}manual (<code>inventory.glpi.auto_sync: false</code>){% endif %}
+    {% else %}
+    {{ glpi.why }}
+    {% endif %}
+  </p>
+  {% if glpi.enabled and glpi.why %}<p class="muted">{{ glpi.why }}</p>{% endif %}
+  {% if glpi.last_error %}
+  <p class="zabbix-last-error" data-glpi-last-error>Last error: {{ glpi.last_error }}</p>
+  {% elif glpi.last_ok %}
+  <p class="muted">Last sync: {{ glpi.last_ok }}</p>
+  {% endif %}
+</section>
 </div>
 
 <h2>Found assets</h2>

@@ -52,6 +52,7 @@ class Asset(Base):
     netbox_id: Mapped[str] = mapped_column(String(64), default="")
     zabbix_hostid: Mapped[str] = mapped_column(String(64), default="", index=True)
     zabbix_agent: Mapped[str] = mapped_column(String(16), default="")
+    glpi_id: Mapped[str] = mapped_column(String(64), default="", index=True)
     scrape_address: Mapped[str] = mapped_column(String(128), default="")
     snmp_port: Mapped[int | None] = mapped_column(Integer, default=0, nullable=True)
     alarms: Mapped[dict] = mapped_column(JSONType, default=dict)

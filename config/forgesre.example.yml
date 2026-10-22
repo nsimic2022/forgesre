@@ -21,6 +21,12 @@ inventory:
     # url: "https://zabbix.example.local/zabbix"
     auto_sync: false # true = host import with the 6 h discovery loop; false = only Discovery → Sync hosts
     timeout_seconds: 4 # per API call, clamped 2–5; a dead Zabbix backs off 2 min instead of retrying
+  glpi:
+    # Read-only. On when GLPI_URL + GLPI_APP_TOKEN + GLPI_USER_TOKEN are in secrets/secrets.env (url here overrides GLPI_URL).
+    # enabled: false        # force off even with secrets set
+    # url: "https://glpi.example.local/glpi"
+    auto_sync: false # true = import with the 6 h discovery loop; false = only Discovery → Sync hosts
+    timeout_seconds: 4 # per API call, clamped 2–5; a dead GLPI backs off 2 min instead of retrying
 
 discovery:
   enabled: true

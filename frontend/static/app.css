@@ -1236,7 +1236,7 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 .policy-card.selected { border-color: var(--accent); }
 .discovery-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.9rem 1rem;
   margin-bottom: 1.1rem;
   align-items: start;
@@ -1269,6 +1269,9 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
   min-width: 0;
   flex: none;
   position: static;
+}
+@media (max-width: 1100px) {
+  .discovery-actions { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 800px) {
   .playbook-grid { grid-template-columns: 1fr; }
@@ -2898,9 +2901,11 @@ label.row-check {
 }
 .runbook-note p { margin: 0.25rem 0 0; }
 
-/* Zabbix (read-only source): Discovery block, alert source pill, agent pill. */
+/* Zabbix / GLPI (read-only sources): Discovery blocks, alert source pill, agent pill. */
 .discovery-sources { display: flex; flex-direction: column; gap: 0.9rem; min-width: 0; }
-.zabbix-block h2 { margin-bottom: 0.35rem; }
+.zabbix-block h2,
+.glpi-block h2 { margin-bottom: 0.35rem; }
+.glpi-block .glpi-meta { margin: 0 0 0.3rem; font-size: 0.82rem; overflow-wrap: anywhere; }
 .zabbix-block .zabbix-meta { margin: 0 0 0.3rem; font-size: 0.82rem; overflow-wrap: anywhere; }
 .zabbix-last-error { margin: 0.2rem 0 0; font-size: 0.82rem; color: var(--crit); overflow-wrap: anywhere; }
 .src-pill {
@@ -3249,6 +3254,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 /* v09-27: Playbooks cubes three per row inside the scroll box. */
 /* v09-28: Assets list keeps one search cube; Type / Source / Site / VLAN / Customer / Row / Rack dropdowns are gone. */
 /* v09-29: Admin Users/Create user 50/50; History backup; Create new backup above Import/restore; CLI without example. */
+/* v09-30: Discovery four cubes (Scan now | NetBox | Zabbix | GLPI); optional GLPI read-only import. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {
