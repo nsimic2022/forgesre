@@ -13,15 +13,15 @@ from typing import Any
 DASH = "—"
 
 # ForgeSRE light UI tokens (email-safe hex, no CSS variables).
-ACCENT = "#c47a2e"
-TEXT = "#1a2233"
-MUTED = "#5a6a82"
-LINE = "#d4dbe8"
-BG = "#f3f5f9"
+ACCENT = "#059669"
+TEXT = "#0f172a"
+MUTED = "#64748b"
+LINE = "#e2e8f0"
+BG = "#f9fafb"
 PANEL = "#ffffff"
-CRITICAL = "#c44538"
-WARNING = "#c47a2e"
-INFO = "#2b6cb0"
+CRITICAL = "#e11d48"
+WARNING = "#d97706"
+INFO = "#0284c7"
 INVESTIGATING = "#0d9488"
 
 _FONT = "Segoe UI, Helvetica, Arial, sans-serif"

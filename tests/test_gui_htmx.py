@@ -38,7 +38,7 @@ def test_vendor_htmx_and_alpine_are_offline():
 
 
 def test_cache_bust_and_boost_chrome():
-    assert "app.css?v=v09-31" in BASE
+    assert "app.css?v=v09-32" in BASE
     assert "app.js?v=v09-C" in BASE
     assert 'hx-boost="true"' in BASE
     assert 'hx-indicator="#hx-progress"' in BASE
@@ -83,19 +83,19 @@ def test_js_is_boost_safe():
 
 
 def test_design_tokens_do_not_replace_locked_hexes():
-    assert "--radius-sm: 6px;" in CSS
+    assert "--radius-sm: 8px;" in CSS
     assert "--shadow:" in CSS
     assert "[x-cloak]" in CSS
     assert ".hx-progress" in CSS
     assert ".password-toggle" in CSS
     light = CSS.split('html[data-theme="light"],', 1)[1].split("}", 1)[0]
     dark = CSS.split('html[data-theme="dark"] {', 1)[1].split("}", 1)[0]
-    assert "--bg: #f3f5f9;" in light
-    assert "--text: #1a2233;" in light
-    assert "--ok: #1e7a4c;" in light
-    assert "--bg: #12151c;" in dark
-    assert "--text: #f7f9fc;" in dark
-    assert "--ok: #34c97a;" in dark
+    assert "--bg: #f9fafb;" in light
+    assert "--text: #0f172a;" in light
+    assert "--ok: #059669;" in light
+    assert "--bg: #0f172a;" in dark
+    assert "--text: #f8fafc;" in dark
+    assert "--ok: #34d399;" in dark
     big = CSS.split(".stat-row-big .stat {", 1)[1].split("}", 1)[0]
     assert "aspect-ratio: 1" in big
     assert "@keyframes heat-pulse-crit" in CSS
