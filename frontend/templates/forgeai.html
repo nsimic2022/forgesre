@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}ForgeAI · ForgeSRE{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>ForgeAI {% with %}{% set tip %}SQL facts first. The local LLM only rewrites short sentences. Not on the alarm path. Setup stays in config/forgesre.yml and ./forgesre fetch-llm — this page does not write secrets.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+</div>
+
+<div class="forgeai-grid">
+<section class="card" id="setup">
+  <h2>Setup {% with %}{% set tip %}Read-only view of ai.enabled, the llama.cpp URL, model, timeout, and whether data/models/model.gguf is on disk. Doctor state is the same LLM row as System Health.{% endset %}{% include "_info_tip.html" %}{% endwith %}
+    <span class="pill {{ setup.doctor_css }}">{{ setup.doctor_state }}</span>
+  </h2>
+  <ul class="forgeai-setup">
+    <li><span>Enabled</span><strong>{{ "yes" if setup.enabled else "no" }}</strong></li>
+    <li><span>URL</span><strong>{{ setup.url or "—" }}</strong></li>
+    <li><span>Model</span><strong>{{ setup.model }}</strong></li>
+    <li><span>Mode</span><strong>{{ setup.mode }}</strong></li>
+    <li><span>Timeout</span><strong>{{ setup.timeout }}s</strong></li>
+    <li><span>GGUF</span><strong>{% if setup.gguf_ready %}ready{% elif setup.gguf_present %}present (small){% else %}missing{% endif %}</strong></li>
+    <li><span>Doctor</span><strong>{{ setup.doctor_why or setup.doctor_state }}</strong></li>
+  </ul>
+  <p class="muted">Turn on with <code>./forgesre fetch-llm</code>. Do not re-run <code>./install.sh</code> on a live box.</p>
+</section>
+
+<section class="card" id="ask">
+  <h2>Ask {% with %}{% set tip %}Sends the current SQL digest (and optional question) to the local LLM. 3–5 sentences. Facts stay from SQL. 20s rewrite cap.{% endset %}{% include "_info_tip.html" %}{% endwith %}
+    <span class="pill {{ 'ok' if insights.source in ['llm', 'forgeai'] else 'warn' }}">{% if insights.source in ['llm', 'forgeai'] %}Live{% else %}Facts{% endif %}</span>
+  </h2>
+  {% for line in insights.sentences %}
+  <p>{{ line }}</p>
+  {% else %}
+  <p class="muted">No digest yet.</p>
+  {% endfor %}
+  <p class="muted">{{ insights.hint }}</p>
+  {% if can('read_ai') %}
+  <form method="post" action="/insights/refresh" class="stack forgeai-ask" hx-boost="false">
+    <input type="hidden" name="next" value="/forgeai#ask">
+    <input type="hidden" name="site" value="{{ filters.site }}">
+    <input type="hidden" name="severity" value="{{ filters.severity }}">
+    <label>Question
+      <textarea name="question" maxlength="400" placeholder="What is repeating this week?"></textarea>
+    </label>
+    <button type="submit">Ask ForgeAI</button>
+  </form>
+  {% endif %}
+</section>
+</div>
+
+<section class="card forgeai-wide" id="digest">
+  <h2>Digest {% with %}{% set tip %}SQL counts: repeats, hot groups, parent–child, aging open, last 30 days. DEMO excluded. Filters apply to the SQL, not the prompt.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <nav class="filter-chips" aria-label="Digest filters">
+    <a class="chip{% if not filters.severity %} on{% endif %}" href="/forgeai{% if filters.site %}?site={{ urlquote(filters.site) }}{% endif %}#digest">All</a>
+    {% for sev in filter_options.severities %}
+    <a class="chip{% if filters.severity == sev %} on{% endif %}" href="/forgeai?severity={{ sev }}{% if filters.site %}&amp;site={{ urlquote(filters.site) }}{% endif %}#digest">{{ sev|title }}</a>
+    {% endfor %}
+    {% for item in filter_options.sites %}
+    <a class="chip{% if filters.site == item %} on{% endif %}" href="/forgeai?site={{ urlquote(item) }}{% if filters.severity %}&amp;severity={{ filters.severity }}{% endif %}#digest">{{ item }}</a>
+    {% endfor %}
+  </nav>
+  <div class="forgeai-facts">
+    <h3>Repeats</h3>
+    <ul>
+      {% for item in insights.facts.repeats %}
+      <li><a href="/incidents/{{ item.last }}">{{ item.hostname }}</a> — {{ item.alertname }} ×{{ item.count }} in {{ item.days }}d</li>
+      {% else %}
+      <li class="muted">No repeats.</li>
+      {% endfor %}
+    </ul>
+    <h3>Hot groups</h3>
+    <ul>
+      {% for item in insights.facts.hot_groups %}
+      <li>{{ item.kind }} {{ item.name }}: {{ item.this_week }} this week / {{ item.last_week }} last week</li>
+      {% else %}
+      <li class="muted">No hot group.</li>
+      {% endfor %}
+    </ul>
+    <h3>Parent–child</h3>
+    <ul>
+      {% for item in insights.facts.parent_child %}
+      <li><a href="/incidents/{{ item.number }}">{{ item.child }}</a> under {{ item.parent }}</li>
+      {% else %}
+      <li class="muted">No parent–child pile-up.</li>
+      {% endfor %}
+    </ul>
+    <h3>Aging</h3>
+    <ul>
+      {% for item in insights.facts.aging %}
+      <li><a href="/ai/{{ item.number }}">{{ item.number }}</a> on {{ item.hostname }} — {{ item.status }} {{ item.hours }}h</li>
+      {% else %}
+      <li class="muted">No aging open incidents.</li>
+      {% endfor %}
+    </ul>
+    <h3>Last {{ insights.facts.month.days }} days</h3>
+    <p>{{ insights.facts.month.incidents }} incidents ({{ insights.facts.month.critical }} critical, {{ insights.facts.month.warning }} warning); {{ insights.facts.month.new_problems }} new, {{ insights.facts.month.repeat_problems }} seen before.</p>
+  </div>
+</section>
+
+<div class="forgeai-grid">
+<section class="card" id="jobs">
+  <h2>Jobs {% with %}{% set tip %}investigate = per-incident ForgeRCA / ForgeAI rewrite. forgeai_digest = scheduled digest mail. One Core worker thread. Rewrites can occupy it up to ai.llm.timeout_seconds.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <table class="scan-list forgeai-jobs">
+    <thead><tr><th>Kind</th><th>What</th><th>Status</th><th>When</th></tr></thead>
+    <tbody>
+    {% for job in jobs %}
+      <tr>
+        <td>{{ job.kind }}</td>
+        <td>{% if job.kind == "investigate" %}<a href="/ai/{{ job.object_id }}">{{ job.object_id }}</a>{% else %}{{ job.object_id }}{% endif %}</td>
+        <td><span class="pill {{ 'ok' if job.status == 'done' else 'warn' if job.status in ['pending', 'running'] else 'crit' }}">{{ job.status }}</span></td>
+        <td>{{ short_when_label(job.created_at) }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">No investigate or digest jobs yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if rewrites %}
+  <h3>Recent rewrites</h3>
+  <ul>
+    {% for row in rewrites %}
+    <li>{{ row.status }} — {{ row.summary }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section class="card" id="reports">
+  <h2>Reports {% with %}{% set tip %}TXT or CSV of the SQL facts. Send uses the mail outbox. Performance asset reports stay on Email &amp; reports.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <form method="post" action="/insights/export" class="row-actions" hx-boost="false">
+    <button type="submit" name="format" value="txt">Export TXT</button>
+    <button type="submit" name="format" value="csv" class="secondary">Export CSV</button>
+  </form>
+  {% if can_send_ops %}
+  <form method="post" action="/insights/mail" class="stack" hx-boost="false">
+    <input type="hidden" name="next" value="/forgeai#reports">
+    <label>To
+      <select name="target">
+        <option value="">Select an address</option>
+        {% for addr in addresses %}
+        <option value="{{ addr.email }}">{% if addr.label %}{{ addr.label }} — {% endif %}{{ addr.email }} ({{ addr.source }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Send digest</button>
+  </form>
+  {% endif %}
+  {% if can_send_ops %}<p class="muted">Outbox: <a href="/ops#mail">Email &amp; reports</a>.</p>{% endif %}
+</section>
+</div>
+
+<section class="card forgeai-wide" id="cron">
+  <h2>Cron {% with %}{% set tip %}ForgeAI digest schedule only. Not the /ops performance snapshot. Due rows enqueue forgeai_digest so the worker can mail after other /ops reports. SMTP off stores generated in the outbox.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  {% if can_send_ops %}
+  {% set report_mode = report_form_mode or "add" %}
+  {% set rf = report_form or {} %}
+  <form method="post" action="{% if report_mode == 'edit' %}/forgeai/cron/{{ editing_report.id }}/update{% else %}/forgeai/cron{% endif %}" class="stack" hx-boost="false">
+    <h3>{% if report_mode == "edit" %}Edit digest schedule{% else %}New digest schedule{% endif %}</h3>
+    <label>Name <input name="name" value="{{ rf.name or 'forgeai-digest' }}" required></label>
+    {% set picked = rf.recipients or [] %}
+    {% set picked_l = picked|map('lower')|list %}
+    <fieldset class="report-recipients">
+      <legend>Recipients</legend>
+      <div class="recipient-picks">
+        {% for item in addresses %}
+        <label class="check"><input type="checkbox" name="to_email" value="{{ item.email }}" {% if item.email|lower in picked_l %}checked{% endif %}> {{ item.email }}{% if item.label %} · {{ item.label }}{% endif %}</label>
+        {% else %}
+        <p class="muted">No saved addresses yet. Type them below.</p>
+        {% endfor %}
+      </div>
+      <label>Additional emails <textarea name="extra_emails" rows="2" placeholder="one per line, or comma-separated"></textarea></label>
+    </fieldset>
+    <fieldset class="report-schedule">
+      <legend>Schedule</legend>
+      {% set preset = rf.preset or '24h' %}
+      <label>Every
+        <select name="schedule" data-schedule>
+          <option value="15m" {% if preset == '15m' %}selected{% endif %}>15 minutes</option>
+          <option value="30m" {% if preset == '30m' %}selected{% endif %}>30 minutes</option>
+          <option value="60m" {% if preset == '60m' %}selected{% endif %}>60 minutes</option>
+          <option value="1h" {% if preset == '1h' %}selected{% endif %}>1 hour</option>
+          <option value="6h" {% if preset == '6h' %}selected{% endif %}>6 hours</option>
+          <option value="12h" {% if preset == '12h' %}selected{% endif %}>12 hours</option>
+          <option value="24h" {% if preset == '24h' %}selected{% endif %}>24 hours</option>
+          <option value="custom" {% if preset == 'custom' %}selected{% endif %}>Custom interval</option>
+          <option value="once" {% if preset == 'once' %}selected{% endif %}>Once (no repeat)</option>
+        </select>
+      </label>
+      <div class="custom-interval" data-custom-interval {% if preset != 'custom' %}hidden{% endif %}>
+        <label>Amount <input name="every_n" type="number" min="1" max="10080" value="{{ rf.every_n or '' }}" placeholder="90"></label>
+        <label>Unit
+          <select name="every_unit">
+            <option value="minutes" {% if (rf.every_unit or 'minutes') != 'hours' %}selected{% endif %}>minutes</option>
+            <option value="hours" {% if rf.every_unit == 'hours' %}selected{% endif %}>hours</option>
+          </select>
+        </label>
+      </div>
+      <div class="weekday-picks" data-weekdays {% if preset == 'once' %}hidden{% endif %}>
+        <span class="muted">Only these days</span>
+        {% for value, label in [(0, 'Mon'), (1, 'Tue'), (2, 'Wed'), (3, 'Thu'), (4, 'Fri'), (5, 'Sat'), (6, 'Sun')] %}
+        <label class="check"><input type="checkbox" name="weekday" value="{{ value }}" {% if value in (rf.weekdays if rf.weekdays is not none else [0,1,2,3,4,5,6]) %}checked{% endif %}> {{ label }}</label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <div class="row-actions">
+      <button type="submit">{% if report_mode == "edit" %}Save schedule{% else %}Save digest schedule{% endif %}</button>
+      {% if report_mode == "edit" %}<a href="/forgeai#cron">Cancel</a>{% endif %}
+    </div>
+  </form>
+  {% endif %}
+  <table class="scan-list">
+    <thead><tr><th>Name</th><th>To</th><th>Every</th><th>Next</th><th>On</th><th></th></tr></thead>
+    <tbody>
+    {% for row in crons %}
+      <tr>
+        <td>{{ row.name }}</td>
+        <td>{{ report_recipients(row)|join(", ") }}</td>
+        <td>{{ schedule_label(row) }}</td>
+        <td>{{ short_when_label(row.next_run_at) if row.next_run_at else "—" }}</td>
+        <td>{% if can_send_ops %}
+          <form method="post" action="/forgeai/cron/{{ row.id }}/toggle" class="onoff-form" hx-boost="false">
+            <button type="submit" class="onoff {{ 'is-on' if row.enabled else 'is-off' }}">{% if row.enabled %}ON{% else %}OFF{% endif %}</button>
+          </form>
+        {% else %}{{ "ON" if row.enabled else "OFF" }}{% endif %}</td>
+        <td class="row-actions">
+          {% if can_send_ops %}
+          <a class="button" href="/forgeai?edit={{ row.id }}#cron">Edit</a>
+          <form method="post" action="/forgeai/cron/{{ row.id }}/run" hx-boost="false"><button type="submit">Run now</button></form>
+          <form method="post" action="/forgeai/cron/{{ row.id }}/delete" onsubmit="return confirm('Remove this ForgeAI digest schedule? Outbox mail stays.');" hx-boost="false"><button type="submit" class="danger">Remove</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">No ForgeAI digest schedule yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

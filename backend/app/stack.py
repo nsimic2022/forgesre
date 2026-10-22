@@ -195,6 +195,24 @@ def appliance_cube(payload: dict[str, Any] | None) -> dict[str, str]:
     }
 
 
+def forgeai_cube(payload: dict[str, Any] | None) -> dict[str, str]:
+    """Nav ForgeAI square from the doctor LLM row. Same lights as System Health."""
+    item = ((payload or {}).get("components") or {}).get("llm") or {}
+    if not settings.ai_enabled or not settings.llm_url:
+        return {
+            "css": "warn",
+            "state": "disabled",
+            "title": "ForgeAI is off (ai.enabled false or no LLM URL). Open ForgeAI.",
+        }
+    state, css = runtime_state(item)
+    why = str(item.get("why") or item.get("status") or state)
+    return {
+        "css": css,
+        "state": state,
+        "title": f"ForgeAI is {state} ({why}). Open ForgeAI.",
+    }
+
+
 def runtime_state(item: dict[str, Any] | None) -> tuple[str, str]:
     """running (green), warn/paused/starting (yellow), down (red).
 

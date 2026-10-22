@@ -9,7 +9,7 @@ from urllib.parse import quote, urlencode
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.audit import audit
@@ -122,7 +122,17 @@ from app.security import (
 )
 from app.api import doctor_payload, run_asset_verify, verify_assets
 from app.asset_metrics import glance_cells, safe_asset_metric_panel
-from app.insights import insight_panel, insights_csv, insights_text, rewrite_insights
+from app.insights import (
+    forgeai_setup,
+    insight_facts,
+    insight_filter_options,
+    insight_panel,
+    insights_csv,
+    insights_text,
+    list_forgeai_jobs,
+    list_insight_rewrites,
+    rewrite_insights,
+)
 from app.incident_report_mail import build_incident_report
 from app.metrics import reset_demo_gauges
 from app.services import (
@@ -154,7 +164,7 @@ from app.services import (
     run_demo_windows,
     run_investigation,
 )
-from app.stack import appliance_cube, enrich_components, rewrite_host
+from app.stack import appliance_cube, enrich_components, forgeai_cube, rewrite_host
 from app.history import (
     ack_circle,
     acknowledge,
@@ -317,15 +327,25 @@ def parse_scheduled_report_form(
     }
 
 
-def _enabled_report_twin(db: Session, name: str, emails: list[str], schedule: dict, asset_ids: list[str]) -> ScheduledReport | None:
+def _enabled_report_twin(
+    db: Session,
+    name: str,
+    emails: list[str],
+    schedule: dict,
+    asset_ids: list[str],
+    kind: str = "performance",
+) -> ScheduledReport | None:
     """An enabled report that would send the same mail. A double-click on Save must not leave a second copy firing after Remove."""
-    from app.services import report_recipients, report_schedule
+    from app.services import report_kind, report_recipients, report_schedule
 
     wanted = sorted(asset_ids)
     wanted_mail = sorted(item.lower() for item in emails)
     wanted_days = sorted(int(day) for day in (schedule.get("weekdays") or []))
+    wanted_kind = "forgeai" if kind == "forgeai" else "performance"
     rows = db.query(ScheduledReport).filter(ScheduledReport.enabled.is_(True), ScheduledReport.name == name).all()
     for row in rows:
+        if report_kind(row) != wanted_kind:
+            continue
         sch = report_schedule(row)
         if sorted(item.lower() for item in report_recipients(row)) != wanted_mail:
             continue
@@ -601,16 +621,24 @@ def ctx(request: Request, user: User | None, **extra):
         "in_maintenance": in_maintenance,
         "maintenance_label": maintenance_label,
         "interface_facts": interface_facts,
+        "urlquote": lambda value: quote(str(value or ""), safe=""),
     }
     if user is not None:
         try:
-            data["appliance_cube"] = appliance_cube(doctor_payload())
+            doctor = doctor_payload()
+            data["appliance_cube"] = appliance_cube(doctor)
+            data["forgeai_cube"] = forgeai_cube(doctor)
         except Exception:
             log.debug("appliance cube skipped", exc_info=True)
             data["appliance_cube"] = {
                 "css": "warn",
                 "state": "unknown",
                 "title": "System Health did not answer.",
+            }
+            data["forgeai_cube"] = {
+                "css": "warn",
+                "state": "unknown",
+                "title": "ForgeAI status did not answer.",
             }
     data["can_send_ops"] = can_send_ops(user) if user else False
     data["is_lab_inventory_row"] = is_lab_inventory_row
@@ -757,6 +785,66 @@ def dashboard(
         include_lab=include_lab,
         oncall=current_oncall(db),
         insights=insight_panel(db),
+    )
+
+
+def _local_next(raw: str, fallback: str) -> str:
+    path = (raw or "").strip() or fallback
+    if not path.startswith("/") or path.startswith("//"):
+        return fallback
+    return path
+
+
+@router.get("/forgeai", response_class=HTMLResponse)
+def forgeai_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("read_ai")),
+    site: str = "",
+    severity: str = "",
+    edit: str = "",
+):
+    from app.services import list_mail_addresses
+
+    site = (site or "").strip()
+    severity = (severity or "").strip().upper()
+    facts = insight_facts(db, site=site, severity=severity)
+    panel = insight_panel(db)
+    panel = {**panel, "facts": facts}
+    doctor = doctor_payload()
+    crons = (
+        db.query(ScheduledReport)
+        .filter(ScheduledReport.kind == "forgeai")
+        .order_by(ScheduledReport.id.desc())
+        .all()
+    )
+    report_form = scheduled_report_form_values()
+    report_form["name"] = "forgeai-digest"
+    report_form["preset"] = "24h"
+    report_form_mode = "add"
+    editing_report = None
+    edit_id = _parse_id_query(edit)
+    if edit_id is not None:
+        row = db.get(ScheduledReport, edit_id)
+        if row is not None and (row.kind or "") == "forgeai":
+            editing_report = row
+            report_form_mode = "edit"
+            report_form = scheduled_report_form_values(row)
+    return render(
+        request,
+        "forgeai.html",
+        user,
+        setup=forgeai_setup(doctor=doctor),
+        insights=panel,
+        filters={"site": site, "severity": severity},
+        filter_options=insight_filter_options(db),
+        jobs=list_forgeai_jobs(db),
+        rewrites=list_insight_rewrites(db),
+        crons=crons,
+        addresses=list_mail_addresses(db),
+        report_form=report_form,
+        report_form_mode=report_form_mode,
+        editing_report=editing_report,
     )
 
 
@@ -3104,13 +3192,20 @@ def escalation_oncall_take(
 def insights_refresh(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
+    question: str = Form(""),
+    site: str = Form(""),
+    severity: str = Form(""),
+    nxt: Annotated[str, Form(alias="next")] = "",
 ):
     if not can(user, "read_ai"):
         raise HTTPException(status_code=403)
-    from app.insights import insight_facts
-
-    rewrite_insights(db, insight_facts(db), actor=user.email)
-    return RedirectResponse("/#forgeai", status_code=303)
+    rewrite_insights(
+        db,
+        insight_facts(db, site=site, severity=severity),
+        actor=user.email,
+        question=question,
+    )
+    return RedirectResponse(_local_next(nxt, "/forgeai#ask"), status_code=303)
 
 
 @router.post("/insights/export")
@@ -3136,6 +3231,7 @@ def insights_mail(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     target: str = Form(""),
+    nxt: Annotated[str, Form(alias="next")] = "",
 ):
     if not can_send_ops(user):
         raise HTTPException(status_code=403)
@@ -3155,7 +3251,189 @@ def insights_mail(
         step_key="report",
     )
     db.commit()
-    return RedirectResponse("/#forgeai", status_code=303)
+    return RedirectResponse(_local_next(nxt, "/forgeai#reports"), status_code=303)
+
+
+def _save_forgeai_cron(
+    db: Session,
+    *,
+    user: User,
+    name: str,
+    to_email: list[str],
+    extra_emails: str,
+    schedule: str,
+    every_n: str,
+    every_unit: str,
+    weekday: list[str],
+    interval_hours: int,
+    row: ScheduledReport | None = None,
+) -> ScheduledReport:
+    from app.services import initial_next_run, utcnow
+
+    parsed = parse_scheduled_report_form(
+        db,
+        name=name,
+        to_email=to_email,
+        new_email="",
+        extra_emails=extra_emails,
+        schedule=schedule,
+        every_n=every_n,
+        every_unit=every_unit,
+        weekday=list(weekday or []),
+        interval_hours=interval_hours,
+        asset_id=[],
+        actor=user.email,
+    )
+    if row is None:
+        twin = _enabled_report_twin(db, parsed["name"], parsed["emails"], parsed["schedule"], [], kind="forgeai")
+        if twin is not None:
+            return twin
+        row = ScheduledReport(
+            name=parsed["name"],
+            kind="forgeai",
+            to_email=parsed["email"],
+            recipients=parsed["emails"],
+            interval_hours=parsed["hours"],
+            schedule=parsed["schedule"],
+            asset_ids=[],
+            enabled=True,
+            created_by=user.email,
+            next_run_at=initial_next_run(utcnow(), parsed["schedule"]),
+        )
+        db.add(row)
+        audit(db, "report.create", actor=user.email, object_type="report", object_id=row.name, data={"kind": "forgeai"})
+    else:
+        row.name = parsed["name"]
+        row.kind = "forgeai"
+        row.to_email = parsed["email"]
+        row.recipients = parsed["emails"]
+        row.interval_hours = parsed["hours"]
+        row.schedule = parsed["schedule"]
+        row.asset_ids = []
+        row.next_run_at = initial_next_run(utcnow(), parsed["schedule"])
+        audit(db, "report.update", actor=user.email, object_type="report", object_id=row.name, data={"kind": "forgeai"})
+    db.commit()
+    return row
+
+
+def report_kind_of(row: ScheduledReport | None) -> str:
+    from app.services import report_kind
+
+    return report_kind(row)
+
+
+@router.post("/forgeai/cron")
+def forgeai_cron_create(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("read_ai")),
+    name: str = Form("forgeai-digest"),
+    to_email: Annotated[list[str], Form()] = [],
+    extra_emails: str = Form(""),
+    schedule: str = Form("24h"),
+    every_n: str = Form(""),
+    every_unit: str = Form("minutes"),
+    weekday: Annotated[list[str], Form()] = [],
+    interval_hours: int = Form(0),
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    _save_forgeai_cron(
+        db,
+        user=user,
+        name=name,
+        to_email=to_email,
+        extra_emails=extra_emails,
+        schedule=schedule,
+        every_n=every_n,
+        every_unit=every_unit,
+        weekday=weekday,
+        interval_hours=interval_hours,
+    )
+    return RedirectResponse("/forgeai#cron", status_code=303)
+
+
+@router.post("/forgeai/cron/{report_id}/update")
+def forgeai_cron_update(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("read_ai")),
+    name: str = Form("forgeai-digest"),
+    to_email: Annotated[list[str], Form()] = [],
+    extra_emails: str = Form(""),
+    schedule: str = Form("24h"),
+    every_n: str = Form(""),
+    every_unit: str = Form("minutes"),
+    weekday: Annotated[list[str], Form()] = [],
+    interval_hours: int = Form(0),
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    row = db.get(ScheduledReport, report_id)
+    if row is None or report_kind_of(row) != "forgeai":
+        raise HTTPException(status_code=404)
+    _save_forgeai_cron(
+        db,
+        user=user,
+        name=name,
+        to_email=to_email,
+        extra_emails=extra_emails,
+        schedule=schedule,
+        every_n=every_n,
+        every_unit=every_unit,
+        weekday=weekday,
+        interval_hours=interval_hours,
+        row=row,
+    )
+    return RedirectResponse("/forgeai#cron", status_code=303)
+
+
+@router.post("/forgeai/cron/{report_id}/run")
+def forgeai_cron_run(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("read_ai")),
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    from app.services import run_scheduled_report
+
+    row = db.get(ScheduledReport, report_id)
+    if row is None or report_kind_of(row) != "forgeai":
+        raise HTTPException(status_code=404)
+    run_scheduled_report(db, row, actor=user.email)
+    return RedirectResponse("/forgeai#cron", status_code=303)
+
+
+@router.post("/forgeai/cron/{report_id}/toggle")
+def forgeai_cron_toggle(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("read_ai")),
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    row = db.get(ScheduledReport, report_id)
+    if row is None or report_kind_of(row) != "forgeai":
+        raise HTTPException(status_code=404)
+    row.enabled = not bool(row.enabled)
+    db.commit()
+    return RedirectResponse("/forgeai#cron", status_code=303)
+
+
+@router.post("/forgeai/cron/{report_id}/delete")
+def forgeai_cron_delete(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("read_ai")),
+):
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403)
+    row = db.get(ScheduledReport, report_id)
+    if row is None or report_kind_of(row) != "forgeai":
+        raise HTTPException(status_code=404)
+    db.delete(row)
+    db.commit()
+    return RedirectResponse("/forgeai#cron", status_code=303)
 
 
 @router.post("/escalation/oncall/{slot_id}/delete")
@@ -3261,7 +3539,12 @@ def ops_page(
         size=per_page(request),
         fragment="#mail",
     )
-    reports = db.query(ScheduledReport).order_by(ScheduledReport.id.desc()).all()
+    reports = (
+        db.query(ScheduledReport)
+        .filter(or_(ScheduledReport.kind.is_(None), ScheduledReport.kind != "forgeai"))
+        .order_by(ScheduledReport.id.desc())
+        .all()
+    )
     reports, reports_pager = paginate(
         reports,
         reports_page,
@@ -3388,12 +3671,13 @@ def ops_create_report(
         asset_id=asset_id,
         actor=user.email,
     )
-    if _enabled_report_twin(db, parsed["name"], parsed["emails"], parsed["schedule"], parsed["ids"]) is not None:
+    if _enabled_report_twin(db, parsed["name"], parsed["emails"], parsed["schedule"], parsed["ids"], kind="performance") is not None:
         return RedirectResponse("/ops#reports", status_code=303)
     from app.services import initial_next_run
 
     row = ScheduledReport(
         name=parsed["name"],
+        kind="performance",
         to_email=parsed["email"],
         recipients=parsed["emails"],
         interval_hours=parsed["hours"],

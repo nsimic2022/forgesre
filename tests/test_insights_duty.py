@@ -228,6 +228,7 @@ def test_dashboard_forgeai_strip_and_report_export():
     assert 'filename="forgeai-digest.csv"' in csv_file.headers["content-disposition"]
     mailed = client.post("/insights/mail", data={"target": "ops-digest@example.local"}, follow_redirects=False)
     assert mailed.status_code == 303
+    assert mailed.headers["location"] == "/forgeai#reports"
     db = _db()
     row = (
         db.query(Notification)

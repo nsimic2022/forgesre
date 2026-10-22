@@ -7,6 +7,7 @@ Not on the alarm path.
 from __future__ import annotations
 
 import json
+import os
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -14,7 +15,7 @@ from typing import Any
 from sqlalchemy.orm import Session, joinedload
 
 from app.journal import report
-from app.models import Asset, Incident, JournalEntry, utcnow
+from app.models import Asset, Incident, Job, JournalEntry, utcnow
 from app.services import compact_when_text, is_demo_incident
 
 REPEAT_DAYS = 4
@@ -67,7 +68,32 @@ def _real_incidents(db: Session, since: datetime | None = None) -> list[Incident
     return [row for row in query.all() if not is_demo_incident(row)]
 
 
-def insight_facts(db: Session, *, now: datetime | None = None) -> dict[str, Any]:
+def _row_site(row: Incident) -> str:
+    return _extra(row.asset, "site") if row.asset is not None else ""
+
+
+def _match_filters(row: Incident, *, site: str = "", severity: str = "") -> bool:
+    wanted_sev = (severity or "").strip().upper()
+    if wanted_sev and (row.severity or "").upper() != wanted_sev:
+        return False
+    wanted_site = (site or "").strip()
+    if wanted_site and _row_site(row).casefold() != wanted_site.casefold():
+        return False
+    return True
+
+
+def insight_filter_options(db: Session) -> dict[str, list[str]]:
+    sites = sorted({_extra(asset, "site") for asset in db.query(Asset).all() if _extra(asset, "site")})
+    return {"sites": sites, "severities": ["CRITICAL", "WARNING"]}
+
+
+def insight_facts(
+    db: Session,
+    *,
+    now: datetime | None = None,
+    site: str = "",
+    severity: str = "",
+) -> dict[str, Any]:
     """Bounded counts. Safe to run on every Dashboard GET."""
     moment = now or utcnow()
     if moment.tzinfo is None:
@@ -78,12 +104,12 @@ def insight_facts(db: Session, *, now: datetime | None = None) -> dict[str, Any]
     repeat_start = moment - timedelta(days=REPEAT_DAYS)
     age_cut = moment - timedelta(hours=AGE_HOURS)
 
-    month = _real_incidents(db, month_start)
-    older = _real_incidents(db, moment - timedelta(days=MONTH_DAYS * 2))
+    month = [row for row in _real_incidents(db, month_start) if _match_filters(row, site=site, severity=severity)]
+    older = [row for row in _real_incidents(db, moment - timedelta(days=MONTH_DAYS * 2)) if _match_filters(row, site=site, severity=severity)]
     all_active = [
         row
         for row in db.query(Incident).options(joinedload(Incident.asset)).filter(Incident.status.in_(ACTIVE)).all()
-        if not is_demo_incident(row)
+        if not is_demo_incident(row) and _match_filters(row, site=site, severity=severity)
     ]
 
     repeats: list[dict[str, Any]] = []
@@ -161,7 +187,7 @@ def insight_facts(db: Session, *, now: datetime | None = None) -> dict[str, Any]
     parent_child: list[dict[str, Any]] = []
     seen_pc: set[str] = set()
     for row in children:
-        if is_demo_incident(row):
+        if is_demo_incident(row) or not _match_filters(row, site=site, severity=severity):
             continue
         asset = row.asset
         parent = asset.parent if asset is not None else None
@@ -199,7 +225,7 @@ def insight_facts(db: Session, *, now: datetime | None = None) -> dict[str, Any]
         )
     aging.sort(key=lambda item: (-int(item["hours"]), item["hostname"]))
 
-    severity = Counter((row.severity or "").upper() or "UNKNOWN" for row in month)
+    sev_counts = Counter((row.severity or "").upper() or "UNKNOWN" for row in month)
     hosts = Counter(_host(row) for row in month if _host(row) != "—")
     seen_before = {
         (_host(row), _problem_key(row))
@@ -221,6 +247,7 @@ def insight_facts(db: Session, *, now: datetime | None = None) -> dict[str, Any]
 
     return {
         "generated_at": compact_when_text(moment) or "",
+        "filters": {"site": (site or "").strip(), "severity": (severity or "").strip().upper()},
         "repeats": repeats[:12],
         "hot_groups": hot[:12],
         "parent_child": parent_child[:12],
@@ -228,8 +255,8 @@ def insight_facts(db: Session, *, now: datetime | None = None) -> dict[str, Any]
         "month": {
             "days": MONTH_DAYS,
             "incidents": len(month),
-            "critical": int(severity.get("CRITICAL", 0)),
-            "warning": int(severity.get("WARNING", 0)),
+            "critical": int(sev_counts.get("CRITICAL", 0)),
+            "warning": int(sev_counts.get("WARNING", 0)),
             "new_problems": new_month,
             "repeat_problems": repeat_month,
             "top_hosts": [{"hostname": name, "count": count} for name, count in hosts.most_common(10)],
@@ -310,12 +337,19 @@ def last_insight_prose(db: Session) -> dict[str, Any] | None:
     return {"sentences": sentences[:5], "summary": row.summary, "at": compact_when_text(row.at) or ""}
 
 
-def rewrite_insights(db: Session, facts: dict[str, Any], *, actor: str = "system") -> dict[str, Any]:
+def rewrite_insights(
+    db: Session,
+    facts: dict[str, Any],
+    *,
+    actor: str = "system",
+    question: str = "",
+) -> dict[str, Any]:
     """Optional local LLM rewrite. Facts stay from SQL. Never invents hosts or counts."""
     from app.settings import settings
     from rca.llm import make_provider
 
     fallback = insight_sentences(facts)
+    asked = " ".join((question or "").split())[:400]
     if not settings.ai_enabled or not settings.llm_url:
         report(
             db,
@@ -331,13 +365,22 @@ def rewrite_insights(db: Session, facts: dict[str, Any], *, actor: str = "system
 
     timeout = min(float(settings.llm_timeout or 90), 20.0)
     llm = make_provider(settings.llm_url, settings.llm_model, timeout=timeout)
-    blob = json.dumps(_compact_facts(facts), ensure_ascii=False)[:REWRITE_MAX]
-    parsed = llm.complete_json(
-        "You write 3 to 5 short NOC sentences from the JSON facts. "
-        "Do not invent hosts, counts, or incidents. No commands. "
-        'Return JSON {"sentences": ["...", "..."]}.',
-        blob,
-    )
+    packed = _compact_facts(facts)
+    if asked:
+        packed = {"question": asked, "facts": packed}
+        instruction = (
+            "Answer the operator question in 3 to 5 short NOC sentences using only the JSON facts. "
+            "If the facts do not answer it, say so. Do not invent hosts, counts, or incidents. No commands. "
+            'Return JSON {"sentences": ["...", "..."]}.'
+        )
+    else:
+        instruction = (
+            "You write 3 to 5 short NOC sentences from the JSON facts. "
+            "Do not invent hosts, counts, or incidents. No commands. "
+            'Return JSON {"sentences": ["...", "..."]}.'
+        )
+    blob = json.dumps(packed, ensure_ascii=False)[:REWRITE_MAX]
+    parsed = llm.complete_json(instruction, blob)
     sentences: list[str] = []
     if isinstance(parsed, dict):
         raw = parsed.get("sentences") or parsed.get("lines") or []
@@ -472,3 +515,55 @@ def insights_csv(panel: dict[str, Any]) -> tuple[list[str], list[list[object]]]:
     for line in panel.get("sentences") or []:
         rows.append(["Conclusion", line, "", "", ""])
     return (["Kind", "Where", "What", "Count", "Ref"], rows)
+
+
+def forgeai_setup(*, doctor: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Read-only LLM setup for the ForgeAI page. Does not write YAML or secrets."""
+    from app.backup import layout_from_env
+    from app.settings import settings
+    from app.stack import runtime_state
+
+    ai = settings.yaml.get("ai") or {}
+    llm = ai.get("llm") or {}
+    url = str(llm.get("url") or os.environ.get("LLM_URL") or settings.llm_url or "")
+    gguf = layout_from_env().models_dir / "model.gguf"
+    size = gguf.stat().st_size if gguf.is_file() else 0
+    item = ((doctor or {}).get("components") or {}).get("llm") or {}
+    if settings.ai_enabled and settings.llm_url:
+        state, css = runtime_state(item)
+    else:
+        state, css = "disabled", "warn"
+    return {
+        "enabled": bool(settings.ai_enabled),
+        "url": url,
+        "model": str(llm.get("model") or settings.llm_model or "local"),
+        "mode": str(llm.get("mode") or ("bundled" if settings.ai_enabled else "off")),
+        "timeout": int(settings.llm_timeout or 90),
+        "gguf_present": gguf.is_file(),
+        "gguf_ready": size > 1_000_000_000,
+        "gguf_bytes": size,
+        "gguf_name": gguf.name if gguf.is_file() else "model.gguf",
+        "doctor_state": state,
+        "doctor_css": css,
+        "doctor_why": str(item.get("why") or item.get("status") or ""),
+    }
+
+
+def list_forgeai_jobs(db: Session, *, limit: int = 20) -> list[Job]:
+    return (
+        db.query(Job)
+        .filter(Job.kind.in_(("investigate", "forgeai_digest")))
+        .order_by(Job.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def list_insight_rewrites(db: Session, *, limit: int = 10) -> list[JournalEntry]:
+    return (
+        db.query(JournalEntry)
+        .filter(JournalEntry.module == "insights", JournalEntry.action.in_(("rewrite", "cron")))
+        .order_by(JournalEntry.id.desc())
+        .limit(limit)
+        .all()
+    )

@@ -328,6 +328,7 @@ class ScheduledReport(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
+    kind: Mapped[str] = mapped_column(String(32), default="performance", index=True)
     to_email: Mapped[str] = mapped_column(String(255))
     recipients: Mapped[list] = mapped_column(JSONType, default=list)
     interval_hours: Mapped[int] = mapped_column(Integer, default=6)
