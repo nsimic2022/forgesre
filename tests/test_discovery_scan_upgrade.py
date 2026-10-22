@@ -136,7 +136,7 @@ def test_confirm_and_scan_writes_yaml_and_page_layout(tmp_path, monkeypatch):
         assert "Confirm &amp; scan" not in page.text and "Confirm & scan" not in page.text
         assert ">Scan now<" in page.text
         assert "Proposed role" not in page.text.split("<h2>Found assets</h2>", 1)[1].split("</thead>", 1)[0]
-        assert ">Type " in page.text.split("<h2>Found assets</h2>", 1)[1].split("</thead>", 1)[0]
+        assert ">Type<" in page.text.split("<h2>Found assets</h2>", 1)[1].split("</thead>", 1)[0]
         assert "10.55.0.0/24" in page.text
         assert 'name="cidrs"' in page.text
         assert page.text.find("Scan now") < page.text.find("NetBox sync")
@@ -179,7 +179,7 @@ def test_discovery_template_side_by_side_and_columns():
     assert ">Scan now<" in html
     assert "Management CIDR" not in html
     assert html.find("Scan now") < html.find("NetBox sync") < html.find("<h2>Zabbix") < html.find("<h2>GLPI")
-    assert "app.css?v=v09-35" in base
+    assert "app.css?v=v09-36" in base
     assert "Mode:" not in html.split("<h1>", 1)[1].split("discovery-actions", 1)[0]
     assert "repeat(4, minmax(0, 1fr))" in css
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")

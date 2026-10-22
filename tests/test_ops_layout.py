@@ -61,7 +61,13 @@ def test_ticker_api_lists_fresh_production_incidents():
     assert "items" in data and "heat" in data and "fresh" in data
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "data-alarm-ticker" in base
-    assert "app.css?v=v09-35" in base and "app.js?v=v09-C" in base
+    assert "app.css?v=v09-36" in base and "app.js?v=v09-D" in base
+    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    ticker = js.split("(function bindAlarmTicker() {", 1)[1].split("\n})();", 1)[0]
+    assert "forgesre-ticker-seen" in ticker
+    assert "sessionStorage" in ticker
+    assert "ticker-blink" in ticker
+    assert 'path === "/"' in ticker
 
 
 def test_incident_report_preview_edit_export_and_sent_to():

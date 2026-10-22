@@ -218,8 +218,8 @@ def test_assets_notes_column_is_the_form_runbook():
     page = client.get(f"/assets?q={token}&per_page=100")
     assert page.status_code == 200
     head = page.text.split('<table class="asset-table"', 1)[1].split("</thead>", 1)[0]
-    assert head.index(">Source<") < head.index(">Notes ")
-    assert "<th" not in head.split(">Notes ", 1)[1].split("</tr>", 1)[0]
+    assert head.index(">Source<") < head.index(">Notes<")
+    assert "<th" not in head.split(">Notes<", 1)[1].split("</tr>", 1)[0]
     filled_row = page.text.split(f"/assets/{filled}", 1)[1].split("</tr>", 1)[0]
     filled_cell = filled_row.split('class="col-asset-notes"', 1)[1].split("</td>", 1)[0]
     assert runbook in filled_cell

@@ -118,8 +118,8 @@ def test_version_is_0_9_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v0.9</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-35" in base
-    assert "app.js?v=v09-C" in base
+    assert "app.css?v=v09-36" in base
+    assert "app.js?v=v09-D" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.9.0" in text
@@ -377,7 +377,7 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     assert "max-width: none;" in split_rule
     assert "118rem" not in block
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in block.split(".asset-form-row-1", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);" in block.split(".asset-form-row-2", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in block.split(".asset-form-row-2", 1)[1].split("}", 1)[0]
     rules = block.split(".asset-form-band + .asset-form-band", 1)[1].split("}", 1)[0]
     assert "border-top: 1px solid var(--line);" in rules
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in css.split(".ladder-levels", 1)[1].split("}", 1)[0]

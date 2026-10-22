@@ -38,14 +38,14 @@ def test_vendor_htmx_and_alpine_are_offline():
 
 
 def test_cache_bust_and_boost_chrome():
-    assert "app.css?v=v09-35" in BASE
-    assert "app.js?v=v09-C" in BASE
+    assert "app.css?v=v09-36" in BASE
+    assert "app.js?v=v09-D" in BASE
     assert 'hx-boost="true"' in BASE
     assert 'hx-indicator="#hx-progress"' in BASE
     assert 'id="hx-progress"' in BASE
     assert 'hx-boost="false"' in BASE
     assert "/static/vendor/htmx.min.js" in BASE.split("<head>", 1)[1].split("</head>", 1)[0]
-    assert "/static/app.js?v=v09-C" in BASE.split("<head>", 1)[1].split("</head>", 1)[0]
+    assert "/static/app.js?v=v09-D" in BASE.split("<head>", 1)[1].split("</head>", 1)[0]
 
 
 def test_downloads_and_multipart_are_not_boosted():
@@ -147,10 +147,10 @@ def test_incident_lists_open_the_incident_page():
     assert 'data-list-view="/incidents/{{ item.number }}"' in incidents
     assert "On-call" in dash
     assert "Roster" not in dash
-    assert "data-dash-graph-host" in dash
-    assert "metric-ident" in dash
-    assert "metric-toolbar" in dash
-    assert dash.index("metric-toolbar") < dash.index("data-dash-graphs")
+    assert "metric-toolbar" not in dash
+    assert "data-dash-graph-host" not in dash
+    assert "dash-graphs-spacer" in dash
+    assert dash.index("dash-graphs-spacer") < dash.index("data-dash-graphs")
     assert "repeat(2, minmax(0, 1fr))" not in CSS.split(".dash-graphs .dash-graph-list {", 1)[1].split("}", 1)[0]
     assert "grid-template-columns: minmax(0, 1fr)" in CSS.split(".dash-graphs .dash-graph-list {", 1)[1]
     assert "height: 9.25rem" in CSS

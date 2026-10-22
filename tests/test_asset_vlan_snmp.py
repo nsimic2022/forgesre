@@ -149,12 +149,12 @@ def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     for version in ("v1", "v2c", "v3"):
         assert f'<option value="{version}"' in middle
     thead = listed.split('<table class="asset-table"', 1)[1].split("</thead>", 1)[0]
-    assert 'class="col-port"' in thead and ">Port " in thead and "ICMP / port / SNMP" not in thead
-    assert thead.index(">ID ") < thead.index(">Hostname<") < thead.index('class="col-port"') < thead.index(">Status<") < thead.index(">L1–L4 ")
+    assert 'class="col-port"' in thead and ">Port<" in thead and "ICMP / port / SNMP" not in thead
+    assert thead.index(">ID<") < thead.index(">Hostname<") < thead.index('class="col-port"') < thead.index(">Status<") < thead.index(">L1–L4<")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".asset-ladder .ladder-level {" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-35" in base and "app.js?v=v09-C" in base
+    assert "app.css?v=v09-36" in base and "app.js?v=v09-D" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "[data-snmp-version]" in js and "[data-snmp-v3-level]" in js
 

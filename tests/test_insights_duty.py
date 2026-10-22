@@ -215,7 +215,8 @@ def test_dashboard_forgeai_strip_and_report_export():
     assert "data-forgeai-insights" in html
     assert 'id="forgeai"' in html
     cube = html.split('id="forgeai"', 1)[1].split("</section>", 1)[0]
-    assert "Recent activity" in cube
+    assert "Recent investigations" in cube
+    assert "Recent activity" not in cube
     assert "Ask ForgeAI" not in cube
     assert "Open Investigations" not in cube
     assert 'action="/insights/refresh"' not in cube

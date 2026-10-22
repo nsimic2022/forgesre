@@ -77,7 +77,7 @@ def test_add_asset_column_widths_fill_the_page():
     row2 = block.split(".asset-form-row-2", 1)[1].split("}", 1)[0]
     assert "width: 100%;" in split and "max-width: none;" in split
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in row1
-    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);" in row2
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in row2
     chip = css.split(".playrule-chip-text", 1)[1].split("}", 1)[0]
     assert "ellipsis" not in chip
     page = _client().get("/discovery")
@@ -279,7 +279,7 @@ def test_asset_list_and_incident_ladder_cubes_after_a_fired_step():
     assert "not configured" in before[2][2]
     thead = client.get("/assets").text.split('<table class="asset-table"', 1)[1].split("</thead>", 1)[0]
     assert thead.index('class="col-port"') < thead.index(">Status<") < thead.index('class="col-escalation"')
-    assert ">L1–L4 " in thead and "ICMP / port / SNMP" not in thead
+    assert ">L1–L4<" in thead and "ICMP / port / SNMP" not in thead
     assert "reach-sq" in (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8").split(".ladder-cubes", 1)[1]
 
     incident = ingest_alertmanager(db, _alert(alertname, asset_id))[0]

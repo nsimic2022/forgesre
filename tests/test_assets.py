@@ -11,6 +11,8 @@ from app.security import hash_password
 from app.seed import DEMO_ASSET, DEMO_OWNER_EMAIL, DEMO_WIN_ASSET, seed
 from app.services import ingest_alertmanager, run_demo
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def _db():
     Base.metadata.create_all(bind=engine)
@@ -249,7 +251,7 @@ def test_assets_list_shows_edit_clone_remove():
     assert b"reach-sq" in page.content
     assert b">ICMP<" in page.content
     assert b'class="col-port"' in page.content
-    assert ">L1–L4 " in page.text
+    assert ">L1–L4<" in page.text
     chips = page.text.split('aria-label="Asset filters"', 1)[1].split("</nav>", 1)[0]
     for label in (">All<", ">Critical<", ">Warning<", ">Offline<"):
         assert label in chips
@@ -430,7 +432,7 @@ def test_asset_table_actions_live_in_the_pager():
     assert "vertical-align: middle" in css
     assert ".asset-table { table-layout: auto;" in css
     assert ".evidence-table { table-layout: fixed; }" in css
-    assert "app.css?v=v09-35" in base
+    assert "app.css?v=v09-36" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():
@@ -700,9 +702,12 @@ def test_assets_legend_explains_yellow_ping_when_scrape_works():
     )
     page = client.get("/assets")
     assert page.status_code == 200
-    body = page.content
-    assert b"ICMP failed but exporter/SNMP" in body or b"ICMP unused/blocked" in body
-    assert b"ICMP and port 22 are not required" in body
+    thead = page.text.split('<table class="asset-table"', 1)[1].split("</thead>", 1)[0]
+    assert ">Port<" in thead
+    assert 'class="info-tip"' not in thead
+    assert "ICMP failed but exporter/SNMP" not in thead
+    form = (ROOT / "frontend" / "templates" / "_asset_form.html").read_text(encoding="utf-8")
+    assert "ICMP ping is not a scrape" in form
     db.close()
 
 

@@ -2069,31 +2069,70 @@ function graphPane(pane) {
 (function bindAlarmTicker() {
   const barOf = () => document.querySelector("[data-alarm-ticker]");
   if (!barOf()) return;
-  let last = "";
+  const SEEN_KEY = "forgesre-ticker-seen";
+  const seenSet = () => {
+    try {
+      const raw = JSON.parse(sessionStorage.getItem(SEEN_KEY) || "[]");
+      return new Set(Array.isArray(raw) ? raw : []);
+    } catch (err) {
+      return new Set();
+    }
+  };
+  const markSeen = (number) => {
+    if (!number) return;
+    const seen = seenSet();
+    seen.add(number);
+    try {
+      sessionStorage.setItem(SEEN_KEY, JSON.stringify([...seen]));
+    } catch (err) {
+      /* private mode */
+    }
+  };
+  const hide = (bar) => {
+    const target = bar || barOf();
+    if (!target) return;
+    target.hidden = true;
+    target.classList.remove("heat-crit", "heat-warn", "is-blink");
+    target.removeAttribute("data-ticker-number");
+  };
+  const onDashboard = () => {
+    const path = (window.location && window.location.pathname) || "";
+    return path === "/" || path === "";
+  };
   const paint = (data) => {
     const bar = barOf();
     if (!bar) return;
     const link = bar.querySelector("[data-ticker-link]");
-    if (!data || !data.fresh || !data.items || !data.items.length) {
-      bar.hidden = true;
-      bar.classList.remove("heat-crit", "heat-warn", "is-blink");
+    const item = data && data.fresh && data.items && data.items[0];
+    if (!item || !item.number) {
+      hide(bar);
       return;
     }
-    const item = data.items[0];
+    if (onDashboard()) {
+      markSeen(item.number);
+      hide(bar);
+      return;
+    }
+    if (seenSet().has(item.number)) {
+      hide(bar);
+      return;
+    }
     const label = ["NEW", item.number, item.host, item.title].filter(Boolean).join(" · ");
     bar.hidden = false;
+    bar.setAttribute("data-ticker-number", item.number);
     bar.classList.toggle("heat-crit", data.heat === "crit");
     bar.classList.toggle("heat-warn", data.heat === "warn");
     if (link) {
-      link.href = item.href || "/";
+      link.href = item.href || "/incidents/" + encodeURIComponent(item.number);
       link.textContent = label;
     }
-    if (item.number !== last) {
-      bar.classList.remove("is-blink");
-      void bar.offsetWidth;
-      bar.classList.add("is-blink");
-      last = item.number;
-    }
+    markSeen(item.number);
+    bar.classList.remove("is-blink");
+    void bar.offsetWidth;
+    bar.classList.add("is-blink");
+    window.setTimeout(() => {
+      if (bar.getAttribute("data-ticker-number") === item.number) hide(bar);
+    }, 4500);
   };
   const load = () => {
     if (!barOf()) return;
@@ -2102,8 +2141,25 @@ function graphPane(pane) {
       .then(paint)
       .catch(() => {});
   };
+  bindOnce("data-ticker-bound", () => {
+    document.addEventListener("click", (event) => {
+      const link = event.target.closest("[data-ticker-link]");
+      if (!link) return;
+      const bar = link.closest("[data-alarm-ticker]");
+      const number = (bar && bar.getAttribute("data-ticker-number")) || "";
+      markSeen(number);
+      hide(bar);
+    });
+    document.addEventListener("animationend", (event) => {
+      if (event.animationName !== "ticker-blink") return;
+      const bar = event.target.closest("[data-alarm-ticker]");
+      if (!bar) return;
+      markSeen(bar.getAttribute("data-ticker-number") || "");
+      hide(bar);
+    });
+    ForgeSRE.every(8000, load);
+  });
   load();
-  ForgeSRE.every(8000, load);
 })();
 }
 
