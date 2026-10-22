@@ -315,6 +315,17 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "app.css?v=v09-30" in base
 
 
+def test_dashboard_recent_has_no_production_lab_chips():
+    template = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
+    assert "filter-chips" not in template
+    assert "Recent incident filters" not in template
+    html = _client().get("/").text
+    recent = html.split("<h2>Recent incidents</h2>", 1)[1].split("dash-graphs", 1)[0]
+    assert "filter-chips" not in recent
+    assert "Lab DEMO" not in recent
+    assert ">Production<" not in recent
+
+
 def test_dashboard_banner_block_gone_from_template_js_css():
     template = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
     for gone in ("dash-banners", "host-down-banner", "journal-error-banner", "NEW DEVICE DETECTED", "down_incidents", "journal_error"):
