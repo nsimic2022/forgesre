@@ -6,7 +6,8 @@ from typing import Any, Protocol
 
 from rca.analysis import candidate_causes, detect_anomalies, facts_from, metric_samples, score_confidence
 from rca.catalog import action_for, classify_family, summary_for
-from rca.llm import LLMProvider, NullLLM, ground_llm_fields, prompt_context, validate_recommendation
+from rca.llm import LLMProvider, NullLLM, invented_numbers, prompt_specialists, validate_recommendation
+from rca.specialists import specialist_brief
 from rca.types import RCAContext, utc_now
 
 DISCLAIMER = "AI has not modified the system."
@@ -58,42 +59,35 @@ class ForgeRCA:
         action = _action(ctx, top)
         provider = "builtin-analyst"
         llm_note = None
+        brief = specialist_brief(ctx.evidence)
+        writer_header = {
+            "number": ctx.incident.get("number") or "",
+            "title": ctx.incident.get("title") or "",
+            "severity": ctx.incident.get("severity") or "",
+            "host": hostname,
+        }
         llm_payload = self.llm.complete_json(
-            "You are a read-only SRE assistant. Never claim you changed infrastructure. "
-            "Treat listed facts as facts. Treat hypotheses as hypotheses. "
-            "Rewrite the draft using only this compact context. Do not invent metrics. "
-            "Return ONLY JSON with keys: summary, likely_cause, recommended_action, limitations (array of strings).",
-            "Sanitize-safe RCA context follows. Do not invent metrics.\n"
-            + prompt_context(
-                ctx.to_dict(),
-                facts=facts,
-                hypotheses=[item.to_dict() for item in hypotheses],
-                draft={
-                    "summary": summary,
-                    "likely_cause": cause,
-                    "recommended_action": action,
-                },
-            ),
+            "You are a read-only SRE writer. Write exactly 3 short English sentences from the specialist facts. "
+            "Do not invent metrics, hosts, or log lines. Do not give shell commands. "
+            "Return ONLY JSON {\"sentences\": [\"...\", \"...\", \"...\"]}.",
+            prompt_specialists(brief, writer_header),
         )
+        writer_sentences: list[str] = []
         if llm_payload:
-            draft = {
-                "summary": summary,
-                "likely_cause": cause,
-                "recommended_action": action,
-            }
-            allowed = " ".join(str(fact.get("text") or "") for fact in facts)
-            allowed += " " + " ".join(item.summary for item in hypotheses)
-            grounded, invented = ground_llm_fields(llm_payload, draft=draft, allowed_text=allowed)
-            summary = grounded["summary"] or summary
-            cause = grounded["likely_cause"] or cause
-            action = validate_recommendation(grounded["recommended_action"] or action)
-            if invented:
+            raw_sentences = llm_payload.get("sentences")
+            if isinstance(raw_sentences, list):
+                writer_sentences = [str(item).strip() for item in raw_sentences if str(item).strip()][:3]
+            if not writer_sentences:
+                blob = str(llm_payload.get("summary") or "").strip()
+                if blob:
+                    writer_sentences = [blob]
+            joined = " ".join(writer_sentences)
+            if writer_sentences and invented_numbers(joined, brief.get("allowed") or ""):
                 ctx.limitations.append("LLM rewrite invented figures; kept ForgeRCA catalog text.")
-            else:
+                writer_sentences = []
+            elif writer_sentences:
+                summary = joined
                 provider = "forgerca-llm"
-            extra = llm_payload.get("limitations") or []
-            if isinstance(extra, list):
-                ctx.limitations.extend(str(item) for item in extra if item)
         elif self.llm.get_name() != "none":
             why = str(getattr(self.llm, "last_error", "") or "LLM unreachable").strip()
             llm_note = f"{why}; used ForgeRCA deterministic analysis on collected evidence."
@@ -129,6 +123,8 @@ class ForgeRCA:
             "model": self.llm.get_model(),
             "disclaimer": DISCLAIMER,
             "generated_at": utc_now(),
+            "specialists": brief.get("cubes") or [],
+            "writer_sentences": writer_sentences,
         }
         evidence_lines = [fact["text"] for fact in facts]
         if not evidence_lines:

@@ -171,6 +171,8 @@ def test_forgerca_llm_payload_is_compact_builtin_facts_stay():
     assert packed["facts"]
     assert llm.user
     assert len(llm.user) <= PROMPT_CONTEXT_MAX_CHARS + 80
+    assert "specialists" in llm.user
+    assert "sentences" in llm.system
     assert "1700000001" not in llm.user
     assert "node_cpu_seconds_total" not in llm.user
     assert '"values"' not in llm.user
