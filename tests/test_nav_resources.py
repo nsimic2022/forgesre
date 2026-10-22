@@ -116,7 +116,7 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "form.nav-logout" in css
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-34" in base
+    assert "app.css?v=v09-35" in base
     assert "app.js?v=v09-C" in base
     assert "bindInfoTips" in js
     assert "ops-report-actions" in css

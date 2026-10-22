@@ -784,6 +784,17 @@ a.button {
   align-self: flex-end;
 }
 .list-filters a.list-reset:hover { color: var(--text); text-decoration: underline; }
+.assets-filters button[type="submit"] { margin-left: 0.15rem; }
+.assets-filters a.button.list-reset {
+  margin-left: 1.85rem;
+  align-self: flex-end;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.5rem 0.9rem;
+  text-decoration: none;
+}
+.assets-filters a.button.list-reset:hover { color: var(--text); text-decoration: none; }
 .incidents-filters { gap: 0.55rem 0.85rem; margin: 0.55rem 0 0.9rem; }
 .incidents-filters label { min-width: 0; }
 /* display:flex on a <td> shrinks the cell to content height, so
@@ -1025,6 +1036,17 @@ form label.inline-check input[type="checkbox"],
 .asset-form-notes .asset-form-block { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 16rem; }
 .asset-form-notes textarea { flex: 1 1 auto; width: 100%; min-height: 16rem; resize: vertical; }
 .asset-form-block { min-width: 0; }
+.asset-form-row-1 .asset-form-cube {
+  margin: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
+.asset-form-row-1 .asset-form-block-head {
+  font-size: 1.02rem;
+  border-bottom: 0;
+  padding-bottom: 0;
+  margin: 0 0 0.65rem;
+}
 .asset-form-block-head {
   margin: 0 0 0.5rem;
   font-size: 0.82rem;
@@ -1283,16 +1305,28 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
   gap: 0.25rem;
 }
 .discovery-scan-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.55rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
   width: 100%;
 }
+.discovery-scan-actions input[name="cidrs"] {
+  width: 50%;
+  max-width: 14rem;
+  flex: 0 0 50%;
+  min-width: 0;
+}
 .discovery-scan-actions button {
-  width: 100%;
+  width: auto;
   min-width: 0;
   flex: none;
   position: static;
+  padding: 0.32rem 0.7rem;
+  font-size: 0.82rem;
+}
+.found-table .col-host .row-actions {
+  margin-top: 0.35rem;
+  flex-wrap: wrap;
 }
 @media (max-width: 1100px) {
   .discovery-actions { grid-template-columns: 1fr 1fr; }
@@ -3353,6 +3387,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 /* v09-32: OpenSRE-inspired slate / emerald chrome; nav follows the theme. */
 /* v09-33: Investigations runs list; four specialist cubes on the incident / ForgeRCA page. */
 /* v09-34: Recent activity expands to five specialist cubes; Dashboard cube is the same list. */
+/* v09-35: Assets Reset + column order; Discovery Scan now / Found columns / Add asset cubes. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {

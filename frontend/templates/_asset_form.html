@@ -11,8 +11,8 @@
   {% set ex = form.extras or {} %}
   <div class="asset-form-band asset-form-row-1">
   <div class="asset-form-col asset-form-left">
-  <div class="asset-form-block" data-asset-identity>
-  <h3 class="asset-form-block-head">Identity</h3>
+  <section class="card asset-form-block asset-form-cube" data-asset-identity>
+  <h2 class="asset-form-block-head">Identity</h2>
   <div class="form-grid asset-form-grid">
   {% if form_mode == "edit" %}
   <label class="identity-lg"><span class="label-line">Asset ID {% with %}{% set tip %}Set at add; cannot change (Prometheus label / history).{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
@@ -61,15 +61,15 @@
       {% endfor %}
     </select></label>
   </div>
-  </div>
+  </section>
   </div>
   {% set snmp_default = snmp_family(form.type or '') %}
   {% set snmp_version = ex.snmp_version or 'v2c' %}
   {% set v3_level = ex.snmp_v3_level or 'noAuthNoPriv' %}
   <div class="asset-form-col asset-form-middle">
-  <div class="asset-form-block asset-comms" data-asset-comms>
+  <section class="card asset-form-block asset-form-cube asset-comms" data-asset-comms>
     <input type="hidden" name="comms_present" value="1">
-    <h3 class="asset-form-block-head label-line">Ports {% with %}{% set tip %}How this appliance talks to the host. Scrape address = Prometheus HTTP exporter host:port (any port, e.g. 10.0.0.5:9101). SNMP port = UDP port snmp_exporter polls on the IP. SNMP version and community / v3 user pick the snmp_exporter auth for this host. Both scrape and SNMP can be set; both can be empty (agentless — ping only).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h2 class="asset-form-block-head label-line">Ports {% with %}{% set tip %}How this appliance talks to the host. Scrape address = Prometheus HTTP exporter host:port (any port, e.g. 10.0.0.5:9101). SNMP port = UDP port snmp_exporter polls on the IP. SNMP version and community / v3 user pick the snmp_exporter auth for this host. Both scrape and SNMP can be set; both can be empty (agentless — ping only).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
     <label><span class="label-line">Scrape address {% with %}{% set tip %}Prometheus HTTP target as host:port (e.g. 10.10.10.21:9100, 10.10.10.21:9182, or an odd port like 1.2.3.4:9101). Blank: Linux Server defaults to ip:9100, Windows Server to ip:9182, every other type stays empty — Type never invents a scrape. SNMP is not this field.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
       <input name="scrape_address" value="{{ form.scrape_address }}" placeholder="host:port — e.g. 10.10.10.21:9100" data-scrape-address></label>
     <label><span class="label-line">SNMP port <span class="muted label-hint">UDP</span> {% with %}{% set tip %}Network family types (Network device, Switch, Router, Firewall, Storage, QNAP/NAS, Printer) are polled on UDP/161 when this is blank. Type a port (e.g. 1161) to use another one, or to turn SNMP on for any other type. Blank on Linux / Windows / Hypervisor / Web / Other = no SNMP.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
@@ -121,11 +121,11 @@
     </div>
     </div>
     </div>
-  </div>
+  </section>
   </div>
   <div class="asset-form-col" data-asset-contacts>
-  <div class="asset-form-block">
-  <h3 class="asset-form-block-head">Contacts {% with %}{% set tip %}Shown on the incident page under Who to call and in the mail. Default escalation role steps still mail Owner email only — the backup contact is for the human on shift. A filled Escalation on this asset mails those addresses instead.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+  <section class="card asset-form-block asset-form-cube">
+  <h2 class="asset-form-block-head">Contacts {% with %}{% set tip %}Shown on the incident page under Who to call and in the mail. Default escalation role steps still mail Owner email only — the backup contact is for the human on shift. A filled Escalation on this asset mails those addresses instead.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="form-grid asset-form-grid">
   <input type="hidden" name="extras_present" value="1">
   <label>Owner / team <input name="owner" value="{{ form.owner or 'platform' }}" placeholder="platform"></label>
@@ -138,11 +138,11 @@
   <label><span class="label-line">Backup on-call email {% with %}{% set tip %}For the human on shift. Escalation does not mail this address unless you add it on a level.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     {{ email_pick("extra_backup_email", ex.backup_email, "backup@dc.local", mail_addresses or [], fill_name="extra_backup_name") }}</label>
   </div>
-  </div>
+  </section>
   </div>
   <div class="asset-form-col" data-asset-support>
-  <div class="asset-form-block asset-support">
-  <h3 class="asset-form-block-head label-line">Support {% with %}{% set tip %}Hours, timezone, and license / contract / SLA live only here (one field each — Contacts is people, phones, and emails). Also whether a vendor or your own team will take a ticket for this host, and until when. Shown as a pill on Assets and on the incident Who to call. Expiring = the To date is within the lead time. This is a reminder only — it does not create an alert, incident, or Playrule, and nothing is written to NetBox.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+  <section class="card asset-form-block asset-support asset-form-cube">
+  <h2 class="asset-form-block-head label-line">Support {% with %}{% set tip %}Hours, timezone, and license / contract / SLA live only here (one field each — Contacts is people, phones, and emails). Also whether a vendor or your own team will take a ticket for this host, and until when. Shown as a pill on Assets and on the incident Who to call. Expiring = the To date is within the lead time. This is a reminder only — it does not create an alert, incident, or Playrule, and nothing is written to NetBox.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <div class="form-grid asset-form-grid">
   <label>Support hours <input name="extra_support_hours" value="{{ ex.support_hours }}" placeholder="24/7 or Mon–Fri 08–17"></label>
   <label>Timezone <input name="extra_timezone" value="{{ ex.timezone }}" placeholder="Europe/Belgrade"></label>
@@ -171,7 +171,7 @@
   <label><span class="label-line">Maintenance until {% with %}{% set tip %}Empty together with Maintenance from = not in maintenance. After until, a new firing starts mail again.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
     <input name="extra_maint_until" type="datetime-local" value="{{ ex.maint_until }}" data-maint-until></label>
   </div>
-  </div>
+  </section>
   </div>
   </div>
   <div class="asset-form-band asset-form-row-2">

@@ -61,16 +61,17 @@ def test_discovery_buttons_not_stacked_helper_in_tip():
     assert "discovery-scan-actions" in html
     assert "discovery-scan-actions" in css
     actions = html[html.index("discovery-scan-actions") :]
-    assert "Confirm &amp; scan" in actions
-    assert actions.find("Confirm &amp; scan") < actions.find("Scan now")
+    assert "Confirm &amp; scan" not in actions
+    assert ">Scan now<" in actions
+    assert 'name="confirm" value="1"' in actions
     assert html.find("Scan now") < html.find("NetBox sync")
-    assert "grid-template-columns: 1fr 1fr" in css.split(".discovery-scan-actions")[1].split("}")[0]
+    assert "flex" in css.split(".discovery-scan-actions")[1].split("}")[0]
     assert "repeat(4, minmax(0, 1fr))" in css.split(".discovery-actions")[1].split("}")[0]
     assert "background job" in html or "background probe" in html
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "discovery_scan" in handbook
     assert "jobs" in handbook.lower() and "Postgres" in handbook
-    assert "Confirm & scan" in handbook or "Confirm &amp; scan" in handbook
+    assert "Scan now" in handbook
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "./config/forgesre.yml:/config/forgesre.yml:ro" not in compose
     assert "./config/forgesre.yml:/config/forgesre.yml" in compose

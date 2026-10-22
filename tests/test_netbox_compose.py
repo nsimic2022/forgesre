@@ -467,7 +467,7 @@ def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
     assert ">Yellow<" not in html
     assert ">Grey<" not in html
     assert ">Green<" not in html
-    assert EMPTY_DEVICES_WHY in html
+    assert EMPTY_DEVICES_WHY not in html
     assert "API 403" not in html
     assert "Admin only." not in html
     assert "still points Core at an external instance" not in html
