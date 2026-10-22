@@ -69,9 +69,9 @@ def test_health_service_cubes_share_one_size_and_split_even_counts():
     cols_attr = page.text.split('data-health-cols="', 1)[1].split('"', 1)[0]
     style_cols = page.text.split('style="--health-cols: ', 1)[1].split('"', 1)[0]
     assert count_attr == str(count)
-    assert int(count_attr) % 2 == 0
-    assert cols_attr == style_cols == str(int(count_attr) // 2)
-    assert count == 12 and cols_attr == "6"
+    expected_cols = count // 2 if count % 2 == 0 else count // 2 + 1
+    assert cols_attr == style_cols == str(expected_cols)
+    assert count == 13 and cols_attr == "7"
     assert ">discovery</span>" in grid
     discovery = grid.split(">discovery</span>", 1)[0]
     assert 'class="stat ' in discovery[-180:]

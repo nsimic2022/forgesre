@@ -298,7 +298,8 @@ def test_ops_console_on_off_nav_and_ai_anchor():
     assert "class=\"active\"" in admin.text
     discovery = client.get("/discovery")
     assert discovery.status_code == 200
-    assert "Enabled:" in discovery.text
+    assert "Scan now" in discovery.text
+    assert "Confirm" in discovery.text
     assert ">True<" not in discovery.text and ">False<" not in discovery.text
     close_open_incidents(db, "HighCPU:forge-demo-01")
     created = ingest_alertmanager(

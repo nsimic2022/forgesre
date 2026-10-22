@@ -1543,14 +1543,21 @@ def asset_in_zabbix(asset: Asset) -> bool:
     return (asset.source or "") == "zabbix" or bool((getattr(asset, "zabbix_hostid", "") or "").strip())
 
 
+def asset_in_glpi(asset: Asset) -> bool:
+    """Imported from GLPI, or another source later linked to a GLPI id."""
+    return (asset.source or "") == "glpi" or bool((getattr(asset, "glpi_id", "") or "").strip())
+
+
 def asset_source_tokens(asset: Asset) -> list[str]:
-    """Source dropdown values this asset matches on /assets (forge, its raw source, zabbix when linked)."""
+    """Source dropdown values this asset matches on /assets (forge, its raw source, zabbix/glpi when linked)."""
     source = (asset.source or "manual").strip().lower() or "manual"
     tokens: list[str] = []
     if source not in IMPORTED_SOURCES:
         tokens.append("forge")
     if asset_in_zabbix(asset) and "zabbix" not in tokens:
         tokens.append("zabbix")
+    if asset_in_glpi(asset) and "glpi" not in tokens:
+        tokens.append("glpi")
     if source not in tokens:
         tokens.append(source)
     return tokens
@@ -1565,8 +1572,13 @@ def zabbix_agent_state(asset: Asset) -> str:
 
 
 # Assets list Source dropdown. Forge = rows ForgeSRE created itself (manual, discovery, scan, demo).
-ASSET_SOURCE_FILTERS: tuple[tuple[str, str], ...] = (("forge", "Forge"), ("netbox", "NetBox"), ("zabbix", "Zabbix"))
-IMPORTED_SOURCES = frozenset({"netbox", "zabbix"})
+ASSET_SOURCE_FILTERS: tuple[tuple[str, str], ...] = (
+    ("forge", "Forge"),
+    ("netbox", "NetBox"),
+    ("zabbix", "Zabbix"),
+    ("glpi", "GLPI"),
+)
+IMPORTED_SOURCES = frozenset({"netbox", "zabbix", "glpi"})
 
 
 def asset_extra(asset: Asset, key: str) -> str:
@@ -1621,8 +1633,8 @@ def assets_matching(
     stay exact (case-insensitive) for chips and old links. Hostname and IP are their own substring
     filters. ``lab=0`` drops forge-demo-* / 10.20.30.41; ``lab=1`` keeps only those. Every filter given must match.
 
-    ``source=zabbix`` includes assets from other sources that are linked to a Zabbix host; ``source=forge`` is every
-    asset not imported from NetBox or Zabbix.
+    ``source=zabbix`` includes assets from other sources that are linked to a Zabbix host; ``source=glpi`` is the
+    same for a GLPI id; ``source=forge`` is every asset not imported from NetBox, Zabbix or GLPI.
     """
     needle = (q or "").strip().lower()
     wanted = (status or "").strip().lower()

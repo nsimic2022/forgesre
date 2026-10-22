@@ -179,8 +179,10 @@ def test_discovery_template_side_by_side_and_columns():
     assert "node_exporter" in html
     assert "windows_exporter" in html
     assert "SNMP" in html
-    assert html.find("Scan now") < html.find("NetBox sync")
-    assert "app.css?v=v09-29" in base
+    assert html.find("Scan now") < html.find("NetBox sync") < html.find("<h2>Zabbix") < html.find("<h2>GLPI")
+    assert "app.css?v=v09-30" in base
+    assert "Mode:" not in html.split("<h1>", 1)[1].split("discovery-actions", 1)[0]
+    assert "repeat(4, minmax(0, 1fr))" in css
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "primary IPv4" in handbook
     assert "Confirm & scan" in handbook or "Confirm &amp; scan" in handbook

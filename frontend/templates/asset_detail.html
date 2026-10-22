@@ -97,6 +97,9 @@
   {% if asset.zabbix_hostid %}
   <dt>Zabbix host ID</dt><dd>{{ asset.zabbix_hostid }} <span class="pill zbx-agent {{ asset.zabbix_agent or 'unknown' }}" data-zabbix-agent="{{ asset.zabbix_agent or 'unknown' }}">Zabbix agent: {{ asset.zabbix_agent or "unknown" }}</span></dd>
   {% endif %}
+  {% if asset.glpi_id %}
+  <dt>GLPI ID</dt><dd>{{ asset.glpi_id }}</dd>
+  {% endif %}
   <dt>SNMP</dt>
   <dd>
     {% if snmp_target %}

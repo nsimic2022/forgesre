@@ -332,6 +332,48 @@ class Settings:
             raw = 4.0
         return max(2.0, min(5.0, raw))
 
+    def _glpi_yaml(self) -> dict[str, Any]:
+        raw = (self.yaml.get("inventory") or {}).get("glpi") or {}
+        return raw if isinstance(raw, dict) else {}
+
+    @property
+    def glpi_url(self) -> str:
+        """GLPI frontend base (https://glpi.example.local/glpi). YAML inventory.glpi.url wins over GLPI_URL."""
+        yaml_url = str(self._glpi_yaml().get("url") or "").strip()
+        return (yaml_url or self._secret("GLPI_URL")).rstrip("/")
+
+    @property
+    def glpi_app_token(self) -> str:
+        return self._secret("GLPI_APP_TOKEN")
+
+    @property
+    def glpi_user_token(self) -> str:
+        return self._secret("GLPI_USER_TOKEN")
+
+    @property
+    def glpi_enabled(self) -> bool:
+        """On when URL + App-Token + User-Token are set, unless inventory.glpi.enabled is false."""
+        if self._glpi_yaml().get("enabled") is False:
+            return False
+        return bool(self.glpi_url and self.glpi_app_token and self.glpi_user_token)
+
+    @property
+    def glpi_auto_sync(self) -> bool:
+        """inventory.glpi.auto_sync (default false): import with the 6 h discovery loop."""
+        value = self._glpi_yaml().get("auto_sync", False)
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    @property
+    def glpi_timeout(self) -> float:
+        """Seconds per GLPI API call, clamped to 2–5 so a dead GLPI never stalls a page."""
+        try:
+            raw = float(self._glpi_yaml().get("timeout_seconds") or 4)
+        except (TypeError, ValueError):
+            raw = 4.0
+        return max(2.0, min(5.0, raw))
+
 
     @property
     def cookie_secure(self) -> bool:

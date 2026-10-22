@@ -877,6 +877,13 @@ def discovery_zabbix_sync(db: Session = Depends(get_db), user: User = Depends(re
     return sync_zabbix(db, force=True)
 
 
+@router.post("/discovery/glpi-sync")
+def discovery_glpi_sync(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    from app.glpi_sync import sync_glpi
+
+    return sync_glpi(db, force=True)
+
+
 class AssetBody(BaseModel):
     hostname: str
     asset_id: str = ""
@@ -1442,6 +1449,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "llm": _http((settings.llm_url or "").rstrip("/") + "/models", "GET") if settings.llm_url else _ok("disabled"),
         "netbox": _netbox_check(),
         "zabbix": _zabbix_check(),
+        "glpi": _glpi_check(),
         "discovery": _discovery_check(),
     }
     for name, item in components.items():
@@ -1694,6 +1702,45 @@ def _zabbix_check() -> dict[str, str]:
     }
 
 
+def _glpi_check() -> dict[str, str]:
+    """Cached GLPI API probe. Down is yellow warn (optional source), never red."""
+    from app.glpi import api_root
+    from app.glpi_sync import current_status, note_health
+
+    if not settings.glpi_enabled:
+        return {
+            "status": "disabled",
+            "why": "Not configured (GLPI_URL + GLPI_APP_TOKEN + GLPI_USER_TOKEN in secrets/secrets.env).",
+            "fix": "See docs/glpi.md. Optional — Prometheus path does not need it.",
+        }
+    try:
+        status = current_status()
+    except Exception as exc:
+        status = {"configured": True, "ok": False, "label": "API error", "why": str(exc)[:300]}
+    test = f"GET {api_root(settings.glpi_url)}/initSession (read-only)"
+    try:
+        from app.db import SessionLocal
+
+        db = SessionLocal()
+        try:
+            note_health(db, status)
+        finally:
+            db.close()
+    except Exception:
+        log.debug("glpi health journal skipped", exc_info=True)
+    if status.get("ok") and status.get("light") == "green":
+        return {"status": "ok", "why": str(status.get("why") or "GLPI API answered."), "test": test}
+    return {
+        "status": "warn",
+        "why": f"{status.get('label') or 'Unreachable'}: {status.get('why') or ''}".strip(" :"),
+        "test": test,
+        "fix": (
+            "Check GLPI_URL / GLPI_APP_TOKEN / GLPI_USER_TOKEN and that the API user can read "
+            "Computer and NetworkEquipment. Optional source — incidents, mail and the UI keep working."
+        ),
+    }
+
+
 def _candidate(item: DiscoveryCandidate) -> dict[str, Any]:
     return {
         "id": item.id,
@@ -1769,6 +1816,7 @@ def _asset(item: Asset) -> dict[str, Any]:
         "source": item.source,
         "zabbix_hostid": item.zabbix_hostid or "",
         "zabbix_agent": item.zabbix_agent or "",
+        "glpi_id": getattr(item, "glpi_id", "") or "",
         "scrape_address": item.scrape_address,
         "snmp_port": snmp_port_for(item) if is_snmp_asset(item) else 0,
         "alarms": getattr(item, "alarms", None) or {},
