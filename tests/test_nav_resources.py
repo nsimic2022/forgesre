@@ -116,7 +116,7 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "form.nav-logout" in css
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-31" in base
+    assert "app.css?v=v09-32" in base
     assert "app.js?v=v09-C" in base
     assert "bindInfoTips" in js
     assert "ops-report-actions" in css
@@ -152,7 +152,7 @@ def test_nav_cubes_precede_clock_separator():
     assert "font-size: 2.4rem" in clock_css
     assert ".nav a.nav-cube.ok { background: var(--ok)" in css
     assert ".nav a.nav-cube.warn { background: var(--warn)" in css
-    assert ".nav span.nav-cube.idle { background: #4e5358" in css
+    assert ".nav span.nav-cube.idle { background: var(--shell-line)" in css
     assert 'href="/health-ui"' in nav and ">Journal<" not in nav
 
 

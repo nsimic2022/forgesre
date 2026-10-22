@@ -1,112 +1,111 @@
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {
-  --bg: #f3f5f9;
+  --bg: #f9fafb;
   --panel: #ffffff;
-  --line: #d4dbe8;
-  --text: #1a2233;
-  --muted: #5a6a82;
-  --accent: #c47a2e;
-  --ok: #1e7a4c;
-  --warn: #a67c14;
-  --crit: #c44538;
-  --font: "Segoe UI", system-ui, sans-serif;
-  --nav-hover: #e8edf6;
-  --row-hover: #eef2f8;
-  --selected: #e2e8f4;
-  --selected-hover: #d4dbe8;
-  --pill: #e2e8f4;
-  --pill-ok-bg: #d8f0e4;
-  --pill-ok: #14663d;
-  --pill-warn-bg: #f6e9c8;
-  --pill-warn: #7a5a08;
-  --pill-crit-bg: #f6d4d0;
-  --pill-crit: #9a2a20;
-  --pill-generated: #4a5a72;
+  --line: #e2e8f0;
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #059669;
+  --ok: #059669;
+  --warn: #d97706;
+  --crit: #e11d48;
+  --font: "Geist", "Inter", "Segoe UI", system-ui, sans-serif;
+  --nav-hover: #f1f5f9;
+  --row-hover: #f8fafc;
+  --selected: #ecfdf5;
+  --selected-hover: #d1fae5;
+  --pill: #f1f5f9;
+  --pill-ok-bg: #d1fae5;
+  --pill-ok: #065f46;
+  --pill-warn-bg: #fef3c7;
+  --pill-warn: #92400e;
+  --pill-crit-bg: #ffe4e6;
+  --pill-crit: #9f1239;
+  --pill-generated: #475569;
   --input-bg: #ffffff;
-  --btn-text: #1a1208;
+  --btn-text: #ffffff;
   --btn-danger-text: #ffffff;
-  --secondary: #e2e8f4;
-  --disabled: #c5cddc;
-  --code-bg: #eef1f6;
+  --secondary: #f1f5f9;
+  --disabled: #cbd5e1;
+  --code-bg: #f1f5f9;
   color-scheme: light;
 }
 html[data-theme="dark"] {
-  --bg: #12151c;
-  --panel: #1b2030;
-  --line: #3c4d6b;
-  --text: #f7f9fc;
-  --muted: #b4c2d6;
-  --accent: #d08a3d;
-  --ok: #34c97a;
-  --warn: #f0c044;
-  --crit: #f2786c;
-  --heading: #fcfdff;
-  --tip: #fcfdff;
-  --check-edge: #c9d4e8;
-  --check-accent: #f7f9fc;
-  --ink-on-ok: #062014;
-  --ink-on-crit: #1a0908;
-  --nav-hover: #242b3d;
-  --row-hover: #22293a;
-  --selected: #242b3d;
-  --selected-hover: #2a3348;
-  --pill: #2a3348;
-  --pill-ok-bg: #0f5c3a;
-  --pill-ok: #d8ffe9;
-  --pill-warn-bg: #5a4210;
-  --pill-warn: #ffe8ad;
-  --pill-crit-bg: #641f1b;
-  --pill-crit: #ffd2cb;
-  --pill-generated: #d4def2;
-  --input-bg: #12151c;
-  --btn-text: #1a1208;
-  --btn-danger-text: #1a0908;
-  --secondary: #2a3348;
-  --disabled: #3a4154;
-  --code-bg: #0e1117;
+  --bg: #0f172a;
+  --panel: #1e293b;
+  --line: #334155;
+  --text: #f8fafc;
+  --muted: #cbd5e1;
+  --accent: #34d399;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --crit: #fda4af;
+  --heading: #ffffff;
+  --tip: #ffffff;
+  --check-edge: #cbd5e1;
+  --check-accent: #f8fafc;
+  --ink-on-ok: #022c22;
+  --ink-on-crit: #4c0519;
+  --nav-hover: #1e293b;
+  --row-hover: #1e293b;
+  --selected: #064e3b;
+  --selected-hover: #065f46;
+  --pill: #334155;
+  --pill-ok-bg: #064e3b;
+  --pill-ok: #d1fae5;
+  --pill-warn-bg: #78350f;
+  --pill-warn: #fef3c7;
+  --pill-crit-bg: #881337;
+  --pill-crit: #ffe4e6;
+  --pill-generated: #e2e8f0;
+  --input-bg: #0f172a;
+  --btn-text: #022c22;
+  --btn-danger-text: #4c0519;
+  --secondary: #334155;
+  --disabled: #475569;
+  --code-bg: #020617;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
   html[data-theme="system"] {
-    --bg: #12151c;
-    --panel: #1b2030;
-    --line: #3c4d6b;
-    --text: #f7f9fc;
-    --muted: #b4c2d6;
-    --accent: #d08a3d;
-    --ok: #34c97a;
-    --warn: #f0c044;
-    --crit: #f2786c;
-    --heading: #fcfdff;
-    --tip: #fcfdff;
-    --check-edge: #c9d4e8;
-    --check-accent: #f7f9fc;
-    --ink-on-ok: #062014;
-    --ink-on-crit: #1a0908;
-    --nav-hover: #242b3d;
-    --row-hover: #22293a;
-    --selected: #242b3d;
-    --selected-hover: #2a3348;
-    --pill: #2a3348;
-    --pill-ok-bg: #0f5c3a;
-    --pill-ok: #d8ffe9;
-    --pill-warn-bg: #5a4210;
-    --pill-warn: #ffe8ad;
-    --pill-crit-bg: #641f1b;
-    --pill-crit: #ffd2cb;
-    --pill-generated: #d4def2;
-    --input-bg: #12151c;
-    --btn-text: #1a1208;
-    --btn-danger-text: #1a0908;
-    --secondary: #2a3348;
-    --disabled: #3a4154;
-    --code-bg: #0e1117;
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --line: #334155;
+    --text: #f8fafc;
+    --muted: #cbd5e1;
+    --accent: #34d399;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --crit: #fda4af;
+    --heading: #ffffff;
+    --tip: #ffffff;
+    --check-edge: #cbd5e1;
+    --check-accent: #f8fafc;
+    --ink-on-ok: #022c22;
+    --ink-on-crit: #4c0519;
+    --nav-hover: #1e293b;
+    --row-hover: #1e293b;
+    --selected: #064e3b;
+    --selected-hover: #065f46;
+    --pill: #334155;
+    --pill-ok-bg: #064e3b;
+    --pill-ok: #d1fae5;
+    --pill-warn-bg: #78350f;
+    --pill-warn: #fef3c7;
+    --pill-crit-bg: #881337;
+    --pill-crit: #ffe4e6;
+    --pill-generated: #e2e8f0;
+    --input-bg: #0f172a;
+    --btn-text: #022c22;
+    --btn-danger-text: #4c0519;
+    --secondary: #334155;
+    --disabled: #475569;
+    --code-bg: #020617;
     color-scheme: dark;
   }
 }
-/* v09-U: darker NOC, higher contrast. Light palette is unchanged.
-   --heading / --tip / --check-* / --ink-on-* exist only on the dark tokens, so system+light falls back. */
+/* OpenSRE-inspired slate / emerald. --heading / --tip / --check-* / --ink-on-* exist only on dark tokens. */
 html[data-theme="dark"] h1,
 html[data-theme="dark"] h2,
 html[data-theme="dark"] h3,
@@ -176,21 +175,41 @@ a { color: var(--accent); }
   outline-offset: 2px;
 }
 .nav {
-  --shell-bg: #151515;
-  --shell-text: #f0f0f0;
-  --shell-muted: #b8bbbe;
-  --shell-hover: #3c3f42;
-  --shell-active: #292929;
-  --shell-line: #3c3f42;
-  --shell-accent: #c9190b;
+  --shell-bg: #ffffff;
+  --shell-text: #0f172a;
+  --shell-muted: #64748b;
+  --shell-hover: #f1f5f9;
+  --shell-active: #ecfdf5;
+  --shell-line: #e2e8f0;
+  --shell-accent: #059669;
   position: fixed; inset: 0 auto 0 0; width: 220px; background: var(--shell-bg);
   color: var(--shell-text);
   border-right: 1px solid var(--shell-line); padding: 1.25rem 1rem; display: flex; flex-direction: column; gap: 0.35rem;
 }
+html[data-theme="dark"] .nav {
+  --shell-bg: #0f172a;
+  --shell-text: #f8fafc;
+  --shell-muted: #cbd5e1;
+  --shell-hover: #1e293b;
+  --shell-active: #064e3b;
+  --shell-line: #334155;
+  --shell-accent: #34d399;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] .nav {
+    --shell-bg: #0f172a;
+    --shell-text: #f8fafc;
+    --shell-muted: #cbd5e1;
+    --shell-hover: #1e293b;
+    --shell-active: #064e3b;
+    --shell-line: #334155;
+    --shell-accent: #34d399;
+  }
+}
 .nav :focus-visible { outline-color: var(--shell-accent); }
 .brand { font-weight: 700; letter-spacing: 0.04em; margin-bottom: 1rem; color: var(--shell-text); }
 .brand span { color: var(--shell-muted); font-weight: 500; font-size: 0.8rem; }
-.nav a { color: var(--shell-text); text-decoration: none; padding: 0.45rem 0.55rem; border-radius: 8px; }
+.nav a { color: var(--shell-text); text-decoration: none; padding: 0.45rem 0.55rem; border-radius: 0.75rem; }
 .nav a:hover { background: var(--shell-hover); }
 .nav a.active {
   background: var(--shell-active);
@@ -234,7 +253,7 @@ a { color: var(--accent); }
 .nav span.nav-cube.ok { background: var(--ok); color: #fff; }
 .nav span.nav-cube.warn { background: var(--warn); color: #1a1408; }
 .nav span.nav-cube.crit { background: var(--crit); color: #fff; }
-.nav span.nav-cube.idle { background: #4e5358; color: #e4e6e8; cursor: default; }
+.nav span.nav-cube.idle { background: var(--shell-line); color: var(--shell-text); cursor: default; }
 .nav a.nav-cube.ok:hover { background: var(--ok); color: #fff; }
 .nav a.nav-cube.warn:hover { background: var(--warn); color: #1a1408; }
 .nav a.nav-cube.crit:hover { background: var(--crit); color: #fff; }
@@ -245,10 +264,10 @@ a { color: var(--accent); }
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
-  color: #f3f4f6;
+  color: var(--shell-text);
   line-height: 1.1;
 }
-.nav a.nav-clock:hover { background: none; color: #ffffff; }
+.nav a.nav-clock:hover { background: none; color: var(--shell-text); }
 .who { color: var(--shell-muted); font-size: 0.8rem; margin-bottom: 0.5rem; }
 .who-name, .who-role { display: block; }
 .who-name + .who-role { margin-top: 0.15rem; }
@@ -550,7 +569,7 @@ a.button {
   background: var(--secondary);
   color: var(--text);
   font-weight: 600;
-  border-radius: 9px;
+  border-radius: 0.75rem;
   padding: 0.28rem 0.55rem;
   font-size: 0.82rem;
   width: auto;
@@ -893,7 +912,7 @@ pre.cli-hint {
   max-width: 520px;
 }
 button, input, select, textarea {
-  font: inherit; background: var(--input-bg); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 0.5rem 0.75rem;
+  font: inherit; background: var(--input-bg); color: var(--text); border: 1px solid var(--line); border-radius: 0.75rem; padding: 0.5rem 0.75rem;
 }
 button {
   background: var(--accent); color: var(--btn-text); border: 0; font-weight: 600; cursor: pointer; padding: 0.5rem 0.9rem;
@@ -1221,7 +1240,7 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
   border-color: var(--ok);
 }
 .netbox-status.green .netbox-status-dot { background: var(--ok); }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1.05rem 1.2rem; margin-bottom: 1.1rem; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 1.25rem; padding: 1.05rem 1.2rem; margin-bottom: 1.1rem; }
 .playbook-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1477,7 +1496,7 @@ dialog.demo-panel {
   overflow: auto;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 1.25rem;
   background: var(--panel);
   color: var(--text);
 }
@@ -2336,7 +2355,7 @@ dialog.text-file::backdrop { background: color-mix(in srgb, var(--text) 28%, tra
   height: 100%;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 1.25rem;
   padding: 0.7rem 0.9rem 0.9rem;
 }
 .tile-group h2 { margin: 0 0 0.55rem; }
@@ -2417,7 +2436,7 @@ dialog.text-file::backdrop { background: color-mix(in srgb, var(--text) 28%, tra
   min-width: 0;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 1.25rem;
   padding: 0.7rem 1.1rem 1rem;
   container-type: inline-size;
 }
@@ -2690,9 +2709,9 @@ dialog.text-file::backdrop { background: color-mix(in srgb, var(--text) 28%, tra
   min-width: 8.5rem;
   max-width: 14rem;
   padding: 0.32rem 0.48rem 0.38rem;
-  background: #1b2030;
-  color: #f7f9fc;
-  border: 1px solid #3a4660;
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid #334155;
   border-radius: 6px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
   font-size: 0.75rem;
@@ -3260,14 +3279,15 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 /* v09-28: Assets list keeps one search cube; Type / Source / Site / VLAN / Customer / Row / Rack dropdowns are gone. */
 /* v09-29: Admin Users/Create user 50/50; History backup; Create new backup above Import/restore; CLI without example. */
 /* v09-30: Discovery four cubes (Scan now | NetBox | Zabbix | GLPI); optional GLPI read-only import. */
+/* v09-32: OpenSRE-inspired slate / emerald chrome; nav follows the theme. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --shadow: 0 8px 24px rgba(16, 24, 40, 0.08);
-  --shadow-lg: 0 16px 40px rgba(16, 24, 40, 0.12);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.10);
   --ease: 160ms ease;
 }
 html[data-theme="dark"] {
@@ -3323,7 +3343,7 @@ html[data-theme="dark"] {
 }
 .login-wrap {
   background:
-    radial-gradient(980px 420px at 50% -8%, rgba(196, 122, 46, 0.14), transparent 62%),
+    radial-gradient(980px 420px at 50% -8%, rgba(5, 150, 105, 0.16), transparent 62%),
     var(--bg);
 }
 .login-card {

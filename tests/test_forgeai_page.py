@@ -149,6 +149,6 @@ def test_ask_posts_question_and_css_cache():
     assert posted.status_code == 303
     assert posted.headers["location"] == "/forgeai#ask"
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-31" in base
+    assert "app.css?v=v09-32" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".forgeai-grid" in css

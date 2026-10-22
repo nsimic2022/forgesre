@@ -7,36 +7,36 @@ CSS = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
 BASE = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
 
 DARK = {
-    "--text": "#f7f9fc",
-    "--muted": "#b4c2d6",
-    "--ok": "#34c97a",
-    "--warn": "#f0c044",
-    "--crit": "#f2786c",
-    "--heading": "#fcfdff",
-    "--tip": "#fcfdff",
-    "--check-edge": "#c9d4e8",
-    "--check-accent": "#f7f9fc",
-    "--ink-on-ok": "#062014",
-    "--ink-on-crit": "#1a0908",
-    "--pill-ok-bg": "#0f5c3a",
-    "--pill-ok": "#d8ffe9",
-    "--pill-warn-bg": "#5a4210",
-    "--pill-warn": "#ffe8ad",
-    "--pill-crit-bg": "#641f1b",
-    "--pill-crit": "#ffd2cb",
-    "--btn-danger-text": "#1a0908",
-    "--line": "#3c4d6b",
-    "--bg": "#12151c",
-    "--panel": "#1b2030",
+    "--text": "#f8fafc",
+    "--muted": "#cbd5e1",
+    "--ok": "#34d399",
+    "--warn": "#fbbf24",
+    "--crit": "#fda4af",
+    "--heading": "#ffffff",
+    "--tip": "#ffffff",
+    "--check-edge": "#cbd5e1",
+    "--check-accent": "#f8fafc",
+    "--ink-on-ok": "#022c22",
+    "--ink-on-crit": "#4c0519",
+    "--pill-ok-bg": "#064e3b",
+    "--pill-ok": "#d1fae5",
+    "--pill-warn-bg": "#78350f",
+    "--pill-warn": "#fef3c7",
+    "--pill-crit-bg": "#881337",
+    "--pill-crit": "#ffe4e6",
+    "--btn-danger-text": "#4c0519",
+    "--line": "#334155",
+    "--bg": "#0f172a",
+    "--panel": "#1e293b",
 }
 
 LIGHT = {
-    "--text": "#1a2233",
-    "--muted": "#5a6a82",
-    "--ok": "#1e7a4c",
-    "--warn": "#a67c14",
-    "--crit": "#c44538",
-    "--bg": "#f3f5f9",
+    "--text": "#0f172a",
+    "--muted": "#64748b",
+    "--ok": "#059669",
+    "--warn": "#d97706",
+    "--crit": "#e11d48",
+    "--bg": "#f9fafb",
     "--panel": "#ffffff",
     "--btn-danger-text": "#ffffff",
 }
@@ -65,7 +65,7 @@ def _block(start: str) -> str:
 
 
 def test_cache_bust_is_v09_s_for_css_only():
-    assert "app.css?v=v09-31" in BASE
+    assert "app.css?v=v09-32" in BASE
     assert "app.js?v=v09-C" in BASE
     assert "app.css?v=v09-W" not in BASE
 
@@ -103,7 +103,7 @@ def test_status_ack_clock_charts_checkbox_and_cube_edges():
     assert "color: var(--ok)" in _block(".dash-recent .status-ack {")
     assert "color: var(--ok)" in _block(".list-scroll .status-ack {")
     clock = _block(".nav a.nav-clock {")
-    assert "color: #f3f4f6" in clock
+    assert "color: var(--shell-text)" in clock
     assert "shell-muted" not in clock
     assert "color: var(--text)" in _block(".appliance-clock {")
     assert "background: #12151c" in _block(".dash-chart-plot {")
