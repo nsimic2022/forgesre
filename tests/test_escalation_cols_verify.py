@@ -59,7 +59,7 @@ def test_shared_columns_and_enum_widths():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".asset-table { table-layout: auto;" in css
     assert ".incidents-table { table-layout: auto;" in css
-    assert ".found-table { table-layout: auto;" in css
+    assert ".found-table { table-layout: fixed;" in css
     assert "border-collapse: separate" in css
     assert "border-spacing: 0 0.5rem" in css.split(".list-scroll > table,", 1)[1].split("}", 1)[0]
     assert "border-radius: 10px 0 0 10px" in css
@@ -70,7 +70,7 @@ def test_shared_columns_and_enum_widths():
 
     assets = client.get("/assets").text
     asset_head = assets.split('<table class="asset-table"', 1)[1].split("</thead>", 1)[0]
-    _order(asset_head, [">#<", ">ID ", ">Hostname<", ">IP<", 'class="col-port"', ">Type ", ">Status<", 'class="col-escalation"', ">L1–L4 ", ">Owner<", ">Contact<", ">Environment<", ">Source<", ">Notes "])
+    _order(asset_head, [">#<", ">ID<", ">Hostname<", ">IP<", 'class="col-port"', ">Type<", ">Status<", 'class="col-escalation"', ">L1–L4<", ">Owner<", ">Contact<", ">Environment<", ">Source<", ">Notes<"])
     assert ">When<" not in asset_head
     assert 'class="enum-clip"' in assets and 'title="Linux Server"' in assets
 
@@ -88,7 +88,7 @@ def test_shared_columns_and_enum_widths():
     assert "Resolved by" in recent_head.rsplit("<th", 1)[1]
 
     found = client.get("/discovery").text.split("<h2>Found assets</h2>", 1)[1].split("</thead>", 1)[0]
-    _order(found, [">#<", ">ID ", ">Hostname<", ">IP<", 'class="col-port"', ">Type ", ">Status<", 'class="col-escalation"', ">L1–L4 ", ">Owner<", ">Contact<", ">Environment<", ">Source<", ">Notes "])
+    _order(found, [">#<", ">ID<", ">Hostname<", ">IP<", 'class="col-port"', ">Type<", ">Status<", 'class="col-escalation"', ">L1–L4<", ">Owner<", ">Contact<", ">Environment<", ">Source<", ">Notes<"])
 
 
 def test_filter_bars_search_first_without_all_labels():

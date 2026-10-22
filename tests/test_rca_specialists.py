@@ -111,7 +111,8 @@ def test_investigations_page_lists_runs_and_specialist_cubes():
     assert match["writer"]["label"] == "ForgeAI"
     home = client.get("/").text
     cube = home.split('id="forgeai"', 1)[1].split("</section>", 1)[0]
-    assert "Recent activity" in cube
+    assert "Recent investigations" in cube
+    assert "Recent activity" not in cube
     assert "Ask ForgeAI" not in cube
     assert "Open Investigations" not in cube
     assert f'href="/ai/{number}"' in cube
@@ -169,7 +170,7 @@ def test_writer_uses_specialist_brief_only():
 def test_cache_bust_is_v09_35():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-35" in base
+    assert "app.css?v=v09-36" in base
     assert ".specialist-row" in css
     assert ".specialist-cube.ok" in css
     assert ".act-expand" in css
