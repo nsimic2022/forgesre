@@ -15,7 +15,7 @@
       document.documentElement.setAttribute("data-theme", theme);
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v09-32">
+  <link rel="stylesheet" href="/static/app.css?v=v09-33">
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
   <script src="/static/app.js?v=v09-C" defer></script>
@@ -35,7 +35,7 @@
     <div class="brand">ForgeSRE <span>v0.9</span></div>
     <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
     {% if can('read_ai') %}
-    <a href="/forgeai" class="{% if request.url.path.startswith('/forgeai') %}active{% endif %}">ForgeAI</a>
+    <a href="/investigations" class="{% if request.url.path.startswith('/investigations') or request.url.path.startswith('/forgeai') %}active{% endif %}">Investigations</a>
     {% endif %}
     <a href="/assets" class="{% if request.url.path.startswith('/assets') %}active{% endif %}">Assets</a>
     {% if can('write_assets') %}
@@ -55,7 +55,7 @@
       <div class="nav-status" aria-label="ForgeSRE and ForgeAI">
         <a class="nav-cube {{ appliance_cube.css }}" href="/health-ui" data-nav-cube="forgesre" title="{{ appliance_cube.title }}">ForgeSRE</a>
         {% if can('read_ai') and forgeai_cube is defined %}
-        <a class="nav-cube {{ forgeai_cube.css }}" href="/forgeai" data-nav-cube="forgeai" title="{{ forgeai_cube.title }}">ForgeAI</a>
+        <a class="nav-cube {{ forgeai_cube.css }}" href="/investigations" data-nav-cube="forgeai" title="{{ forgeai_cube.title }}">ForgeAI</a>
         {% elif forgeai_cube is defined %}
         <span class="nav-cube {{ forgeai_cube.css }}" data-nav-cube="forgeai" title="{{ forgeai_cube.title }}">ForgeAI</span>
         {% else %}

@@ -122,6 +122,8 @@ from app.security import (
 )
 from app.api import doctor_payload, run_asset_verify, verify_assets
 from app.asset_metrics import glance_cells, safe_asset_metric_panel
+from rca.specialists import specialists_from_evidence
+
 from app.insights import (
     forgeai_setup,
     insight_facts,
@@ -131,6 +133,7 @@ from app.insights import (
     insights_text,
     list_forgeai_jobs,
     list_insight_rewrites,
+    list_investigation_runs,
     rewrite_insights,
 )
 from app.incident_report_mail import build_incident_report
@@ -795,6 +798,7 @@ def _local_next(raw: str, fallback: str) -> str:
     return path
 
 
+@router.get("/investigations", response_class=HTMLResponse)
 @router.get("/forgeai", response_class=HTMLResponse)
 def forgeai_page(
     request: Request,
@@ -803,11 +807,15 @@ def forgeai_page(
     site: str = "",
     severity: str = "",
     edit: str = "",
+    run: str = "",
+    q: str = "",
 ):
     from app.services import list_mail_addresses
 
     site = (site or "").strip()
     severity = (severity or "").strip().upper()
+    run = (run or "").strip().lower()
+    q = (q or "").strip()
     facts = insight_facts(db, site=site, severity=severity)
     panel = insight_panel(db)
     panel = {**panel, "facts": facts}
@@ -830,13 +838,19 @@ def forgeai_page(
             editing_report = row
             report_form_mode = "edit"
             report_form = scheduled_report_form_values(row)
+    runs, runs_pager = paginate(
+        list_investigation_runs(db, status=run, q=q),
+        request.query_params.get("page", "1"),
+        size=per_page(request),
+        fragment="#runs",
+    )
     return render(
         request,
         "forgeai.html",
         user,
         setup=forgeai_setup(doctor=doctor),
         insights=panel,
-        filters={"site": site, "severity": severity},
+        filters={"site": site, "severity": severity, "run": run, "q": q},
         filter_options=insight_filter_options(db),
         jobs=list_forgeai_jobs(db),
         rewrites=list_insight_rewrites(db),
@@ -845,6 +859,8 @@ def forgeai_page(
         report_form=report_form,
         report_form_mode=report_form_mode,
         editing_report=editing_report,
+        runs=runs,
+        runs_pager=runs_pager,
     )
 
 
@@ -2189,6 +2205,7 @@ def incident_detail(number: str, request: Request, db: Session = Depends(get_db)
             operator_notes=notes,
             llm_pending=pending,
             tools=tool_status(investigation, pending, llm_job_error(db, number)),
+            specialists=specialists_from_evidence(item.evidence),
             audit_pager=audit_pager,
             notes_pager=notes_pager,
             nav=incident_neighbors(db, item, filters),
@@ -2348,6 +2365,7 @@ def ai_page(number: str, request: Request, db: Session = Depends(get_db), user: 
         engineer=can(user, "read_evidence"),
         llm_pending=pending,
         tools=tool_status(investigation, pending, llm_job_error(db, number)),
+        specialists=specialists_from_evidence(item.evidence),
         mail=notifications_for(db, item),
         **ops_mail_ctx(db, user, item),
     )

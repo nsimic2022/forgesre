@@ -94,7 +94,7 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert nav.index('class="nav-status"') < nav.index('class="nav-glance"') < nav.index("data-clock")
     glance = nav.split('class="nav-glance"', 1)[1].split('class="who"', 1)[0]
     assert "data-nav-cube" not in glance and "data-clock" in glance
-    assert 'href="/forgeai"' in nav
+    assert 'href="/investigations"' in nav
     assert "Coming later" not in nav
     css_nav = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     status_css = css_nav.split(".nav-status {", 1)[1].split("}", 1)[0]
@@ -116,7 +116,7 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "form.nav-logout" in css
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-32" in base
+    assert "app.css?v=v09-33" in base
     assert "app.js?v=v09-C" in base
     assert "bindInfoTips" in js
     assert "ops-report-actions" in css
@@ -136,7 +136,7 @@ def test_nav_cubes_precede_clock_separator():
     glance_html = nav.split('class="nav-glance"', 1)[1].split('class="who"', 1)[0]
     assert "data-nav-cube" not in glance_html
     assert "data-clock" in glance_html
-    assert 'href="/forgeai"' in nav and 'data-nav-cube="forgeai"' in nav
+    assert 'href="/investigations"' in nav and 'data-nav-cube="forgeai"' in nav
     assert "Coming later" not in nav
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     status_css = css.split(".nav-status {", 1)[1].split("}", 1)[0]
