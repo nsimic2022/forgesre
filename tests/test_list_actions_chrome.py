@@ -112,7 +112,7 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert "[data-select-scope]:has([data-select-row]:checked) .list-actions" in css
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-28" in base and "app.js?v=v09-C" in base
+    assert "app.css?v=v09-29" in base and "app.js?v=v09-C" in base
 
     assets = _middle(client.get("/assets").text)
     _order(assets, ["View", "Edit", "Clone", "Verify", "Export", "Remove"])
@@ -219,7 +219,7 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     _no_invented(report_actions)
 
     admin = client.get("/admin").text
-    audit = admin.split("<h2>Audit log</h2>", 1)[1].split("<h2>Platform backup", 1)[0]
+    audit = admin.split("<h2>Audit log</h2>", 1)[1].split("<h2>History backup", 1)[0]
     audit_actions = _middle(audit)
     assert ">Export<" in audit_actions
     assert 'action="/admin/audit/export"' in audit_actions
@@ -548,7 +548,7 @@ def test_backup_export_lists_selected_names_and_times(tmp_path, monkeypatch):
         (folder / INNER_ARCHIVE).write_bytes(b"x" * 16)
     client = _client()
     page = client.get("/admin").text
-    backups = page.split("<h2>Platform backup", 1)[1].split("admin-backup-cli", 1)[0]
+    backups = page.split("<h2>History backup", 1)[1].split("admin-backup-cli", 1)[0]
     actions = _middle(backups)
     _order(actions, ["Export", "Delete selected"])
     assert 'action="/admin/backups/export"' in actions
