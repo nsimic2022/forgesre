@@ -3009,6 +3009,36 @@ label.row-check {
 }
 .incident-happened .tool-row { margin: 0 0 0.55rem; }
 .incident-happened h3 { margin: 0.65rem 0 0.25rem; font-size: 0.82rem; }
+.specialist-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0 0 0.75rem;
+}
+.specialist-cube {
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left-width: 6px;
+  border-radius: 0.75rem;
+  padding: 0.45rem 0.55rem 0.5rem;
+}
+.specialist-cube.ok { border-left-color: var(--ok); }
+.specialist-cube.warn { border-left-color: var(--warn); }
+.specialist-cube.crit { border-left-color: var(--crit); }
+.specialist-cube.ignored { border-left-color: var(--line); color: var(--muted); }
+.specialist-cube strong { display: block; font-size: 0.78rem; }
+.specialist-cube span {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 800px) {
+  .specialist-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .incident-ledger {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -3280,6 +3310,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 /* v09-29: Admin Users/Create user 50/50; History backup; Create new backup above Import/restore; CLI without example. */
 /* v09-30: Discovery four cubes (Scan now | NetBox | Zabbix | GLPI); optional GLPI read-only import. */
 /* v09-32: OpenSRE-inspired slate / emerald chrome; nav follows the theme. */
+/* v09-33: Investigations runs list; four specialist cubes on the incident / ForgeRCA page. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {

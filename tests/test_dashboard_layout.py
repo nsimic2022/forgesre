@@ -312,7 +312,7 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     assert "font-size: 2.15rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-32" in base
+    assert "app.css?v=v09-33" in base
 
 
 def test_dashboard_recent_has_no_production_lab_chips():

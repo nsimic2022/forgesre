@@ -1,0 +1,10 @@
+{% if specialists %}
+<div class="specialist-row" aria-label="Investigation specialists">
+  {% for spec in specialists %}
+  <div class="specialist-cube {{ spec.css }}" title="{{ spec.hint }}">
+    <strong>{{ spec.label }}</strong>
+    <span>{{ spec.detail }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}

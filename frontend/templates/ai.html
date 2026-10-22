@@ -9,6 +9,7 @@
   <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
   <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
 </div>
+{% include "_specialists.html" %}
 {% if investigation %}
 <p class="muted">{{ investigation.disclaimer }} ·
   {% if investigation.provider == "forgerca-llm" %}

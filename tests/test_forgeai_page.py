@@ -36,22 +36,26 @@ def test_forgeai_page_has_five_cubes_and_cron():
     db = _db()
     db.close()
     client = _client()
-    page = client.get("/forgeai")
+    page = client.get("/investigations")
     assert page.status_code == 200
     html = page.text
-    for marker in ('id="setup"', 'id="ask"', 'id="digest"', 'id="jobs"', 'id="reports"', 'id="cron"'):
+    for marker in ('id="runs"', 'id="setup"', 'id="ask"', 'id="digest"', 'id="jobs"', 'id="reports"', 'id="cron"'):
         assert marker in html, marker
+    assert "Investigations" in html
     assert "GGUF" in html
     assert "Ask ForgeAI" in html
     assert "Export TXT" in html
     assert "Save digest schedule" in html
+    assert client.get("/forgeai").status_code == 200
     home = client.get("/").text
-    assert 'href="/forgeai"' in home
-    assert "Open ForgeAI" in home
+    assert 'href="/investigations"' in home
+    assert "Open Investigations" in home
     nav = home.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    menu = nav.split("nav-status", 1)[0]
+    assert ">Investigations<" in menu
     assert ">ForgeAI<" in nav
     assert "Coming later" not in nav
-    assert nav.index(">Dashboard<") < nav.index('href="/forgeai"') < nav.index(">Assets<")
+    assert nav.index(">Dashboard<") < nav.index('href="/investigations"') < nav.index(">Assets<")
 
 
 def test_viewer_forbidden_on_forgeai():
@@ -61,10 +65,11 @@ def test_viewer_forbidden_on_forgeai():
     db.commit()
     db.close()
     client = _client(email)
+    assert client.get("/investigations").status_code == 403
     assert client.get("/forgeai").status_code == 403
     home = client.get("/").text
     nav = home.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
-    assert 'href="/forgeai"' not in nav.split("nav-status", 1)[0]
+    assert 'href="/investigations"' not in nav.split("nav-status", 1)[0]
 
 
 def test_digest_filter_chips():
@@ -89,10 +94,10 @@ def test_digest_filter_chips():
     db.commit()
     db.close()
     client = _client()
-    page = client.get("/forgeai?severity=CRITICAL&site=Lab-East")
+    page = client.get("/investigations?severity=CRITICAL&site=Lab-East")
     assert page.status_code == 200
     assert "Lab-East" in page.text
-    assert 'href="/forgeai?severity=CRITICAL' in page.text
+    assert 'href="/investigations?severity=CRITICAL' in page.text
     digest = page.text.split('id="digest"', 1)[1].split('id="jobs"', 1)[0]
     assert "chip on" in digest
 
@@ -143,12 +148,12 @@ def test_ask_posts_question_and_css_cache():
     client = _client()
     posted = client.post(
         "/insights/refresh",
-        data={"question": "What is repeating?", "next": "/forgeai#ask"},
+        data={"question": "What is repeating?", "next": "/investigations#ask"},
         follow_redirects=False,
     )
     assert posted.status_code == 303
-    assert posted.headers["location"] == "/forgeai#ask"
+    assert posted.headers["location"] == "/investigations#ask"
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-32" in base
+    assert "app.css?v=v09-33" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".forgeai-grid" in css

@@ -38,7 +38,7 @@ def test_vendor_htmx_and_alpine_are_offline():
 
 
 def test_cache_bust_and_boost_chrome():
-    assert "app.css?v=v09-32" in BASE
+    assert "app.css?v=v09-33" in BASE
     assert "app.js?v=v09-C" in BASE
     assert 'hx-boost="true"' in BASE
     assert 'hx-indicator="#hx-progress"' in BASE

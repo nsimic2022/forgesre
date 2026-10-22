@@ -1,9 +1,55 @@
 {% extends "base.html" %}
-{% block title %}ForgeAI · ForgeSRE{% endblock %}
+{% block title %}Investigations · ForgeSRE{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>ForgeAI {% with %}{% set tip %}SQL facts first. The local LLM only rewrites short sentences. Not on the alarm path. Setup stays in config/forgesre.yml and ./forgesre fetch-llm — this page does not write secrets.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+  <h1>Investigations {% with %}{% set tip %}History of ForgeRCA / ForgeAI runs. Same idea as OpenSRE agent-runs. Start a run from an incident with Open ForgeRCA. Digest, Ask, and cron stay below — SQL first, LLM only rewrites sentences.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
 </div>
+
+<section class="card" id="runs">
+  <h2>Runs {% with %}{% set tip %}Each row is one ForgeRCA pass (optional ForgeAI rewrite). Status: running = rewrite queued, done = result stored, failed = LLM job error. Open the identity link — a row click only selects.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <form method="get" action="/investigations" class="list-filters" hx-boost="false">
+    <input name="q" value="{{ filters.q }}" placeholder="host, problem, INC" aria-label="Search runs">
+    {% if filters.run %}<input type="hidden" name="run" value="{{ filters.run }}">{% endif %}
+    {% if filters.site %}<input type="hidden" name="site" value="{{ filters.site }}">{% endif %}
+    {% if filters.severity %}<input type="hidden" name="severity" value="{{ filters.severity }}">{% endif %}
+  </form>
+  <nav class="filter-chips" aria-label="Run status">
+    <a class="chip{% if not filters.run %} on{% endif %}" href="/investigations{% if filters.q %}?q={{ urlquote(filters.q) }}{% endif %}#runs">All</a>
+    {% for value, label in [("running", "Running"), ("done", "Done"), ("failed", "Failed")] %}
+    <a class="chip{% if filters.run == value %} on{% endif %}" href="/investigations?run={{ value }}{% if filters.q %}&amp;q={{ urlquote(filters.q) }}{% endif %}#runs">{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <p class="muted">Start from an incident → <strong>Open ForgeRCA</strong>. This list does not invent a run without an incident.</p>
+  <div class="table-scroll list-scroll" data-list-scroll>
+    <table class="scan-list">
+      <thead>
+        <tr>
+          <th>Investigation</th>
+          <th>Host</th>
+          <th>Engine</th>
+          <th>Status</th>
+          <th>Score</th>
+          <th>When</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in runs %}
+        <tr data-list-row data-list-view="{{ row.href }}">
+          <td><a href="{{ row.href }}">{{ row.title }}</a> <span class="muted">{{ row.number }}</span></td>
+          <td>{{ row.host }}</td>
+          <td>{{ row.engine }}</td>
+          <td><span class="pill {{ row.css }}">{{ row.status }}</span></td>
+          <td>{% if row.confidence %}{{ row.confidence }}%{% else %}—{% endif %}</td>
+          <td>{{ short_when_label(row.created_at) }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="muted">No investigation runs yet. Open ForgeRCA on an incident.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% with pager=runs_pager %}{% include "_pager.html" %}{% endwith %}
+</section>
 
 <div class="forgeai-grid">
 <section class="card" id="setup">
@@ -34,7 +80,7 @@
   <p class="muted">{{ insights.hint }}</p>
   {% if can('read_ai') %}
   <form method="post" action="/insights/refresh" class="stack forgeai-ask" hx-boost="false">
-    <input type="hidden" name="next" value="/forgeai#ask">
+    <input type="hidden" name="next" value="/investigations#ask">
     <input type="hidden" name="site" value="{{ filters.site }}">
     <input type="hidden" name="severity" value="{{ filters.severity }}">
     <label>Question
@@ -49,12 +95,12 @@
 <section class="card forgeai-wide" id="digest">
   <h2>Digest {% with %}{% set tip %}SQL counts: repeats, hot groups, parent–child, aging open, last 30 days. DEMO excluded. Filters apply to the SQL, not the prompt.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
   <nav class="filter-chips" aria-label="Digest filters">
-    <a class="chip{% if not filters.severity %} on{% endif %}" href="/forgeai{% if filters.site %}?site={{ urlquote(filters.site) }}{% endif %}#digest">All</a>
+    <a class="chip{% if not filters.severity %} on{% endif %}" href="/investigations{% if filters.site %}?site={{ urlquote(filters.site) }}{% endif %}#digest">All</a>
     {% for sev in filter_options.severities %}
-    <a class="chip{% if filters.severity == sev %} on{% endif %}" href="/forgeai?severity={{ sev }}{% if filters.site %}&amp;site={{ urlquote(filters.site) }}{% endif %}#digest">{{ sev|title }}</a>
+    <a class="chip{% if filters.severity == sev %} on{% endif %}" href="/investigations?severity={{ sev }}{% if filters.site %}&amp;site={{ urlquote(filters.site) }}{% endif %}#digest">{{ sev|title }}</a>
     {% endfor %}
     {% for item in filter_options.sites %}
-    <a class="chip{% if filters.site == item %} on{% endif %}" href="/forgeai?site={{ urlquote(item) }}{% if filters.severity %}&amp;severity={{ filters.severity }}{% endif %}#digest">{{ item }}</a>
+    <a class="chip{% if filters.site == item %} on{% endif %}" href="/investigations?site={{ urlquote(item) }}{% if filters.severity %}&amp;severity={{ filters.severity }}{% endif %}#digest">{{ item }}</a>
     {% endfor %}
   </nav>
   <div class="forgeai-facts">
@@ -131,7 +177,7 @@
   </form>
   {% if can_send_ops %}
   <form method="post" action="/insights/mail" class="stack" hx-boost="false">
-    <input type="hidden" name="next" value="/forgeai#reports">
+    <input type="hidden" name="next" value="/investigations#reports">
     <label>To
       <select name="target">
         <option value="">Select an address</option>

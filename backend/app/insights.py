@@ -15,7 +15,7 @@ from typing import Any
 from sqlalchemy.orm import Session, joinedload
 
 from app.journal import report
-from app.models import Asset, Incident, Job, JournalEntry, utcnow
+from app.models import Asset, Incident, Investigation, Job, JournalEntry, utcnow
 from app.services import compact_when_text, is_demo_incident
 
 REPEAT_DAYS = 4
@@ -547,6 +547,67 @@ def forgeai_setup(*, doctor: dict[str, Any] | None = None) -> dict[str, Any]:
         "doctor_css": css,
         "doctor_why": str(item.get("why") or item.get("status") or ""),
     }
+
+
+def list_investigation_runs(db: Session, *, status: str = "", q: str = "") -> list[dict[str, Any]]:
+    """ForgeRCA / ForgeAI runs for the Investigations page (OpenSRE-style agent-runs)."""
+    wanted = (status or "").strip().lower()
+    needle = (q or "").strip().lower()
+    pending = {
+        row[0]
+        for row in db.query(Job.object_id).filter(
+            Job.kind == "investigate",
+            Job.status.in_(("pending", "running")),
+        )
+    }
+    failed = {
+        row[0]
+        for row in db.query(Job.object_id).filter(Job.kind == "investigate", Job.status == "error")
+    }
+    rows = (
+        db.query(Investigation)
+        .options(joinedload(Investigation.incident).joinedload(Incident.asset))
+        .order_by(Investigation.id.desc())
+        .all()
+    )
+    out: list[dict[str, Any]] = []
+    for inv in rows:
+        incident = inv.incident
+        if incident is None:
+            continue
+        number = incident.number
+        if number in pending:
+            run_status = "running"
+        elif number in failed and inv.provider != "forgerca-llm":
+            run_status = "failed"
+        else:
+            run_status = "done"
+        if wanted and run_status != wanted:
+            continue
+        host = ""
+        if incident.asset is not None:
+            host = str(incident.asset.hostname or incident.asset.asset_id or "").strip()
+        title = str(incident.title or number)
+        blob = f"{title} {number} {host}".lower()
+        if needle and needle not in blob:
+            continue
+        engine = "ForgeAI" if inv.provider == "forgerca-llm" else "ForgeRCA"
+        css = {"running": "warn", "done": "ok", "failed": "crit"}.get(run_status, "ignored")
+        out.append(
+            {
+                "id": inv.id,
+                "number": number,
+                "title": title,
+                "host": host or "—",
+                "engine": engine,
+                "status": run_status,
+                "css": css,
+                "confidence": int(inv.confidence or 0),
+                "created_at": inv.created_at,
+                "href": f"/ai/{number}",
+            }
+        )
+    return out
 
 
 def list_forgeai_jobs(db: Session, *, limit: int = 20) -> list[Job]:
