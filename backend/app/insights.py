@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.journal import report
 from app.models import Asset, Incident, Investigation, Job, JournalEntry, utcnow
 from app.services import compact_when_text, is_demo_incident
+from rca.specialists import specialist_brief
 
 REPEAT_DAYS = 4
 REPEAT_MIN = 3
@@ -549,8 +550,49 @@ def forgeai_setup(*, doctor: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
+def _specialist_cubes(inv: Investigation, incident: Incident) -> list[dict[str, Any]]:
+    result = inv.result if isinstance(inv.result, dict) else {}
+    stored = result.get("specialists")
+    cubes: list[dict[str, Any]] = []
+    if isinstance(stored, list) and len(stored) >= 4:
+        for item in stored[:4]:
+            if not isinstance(item, dict):
+                cubes = []
+                break
+            cubes.append(
+                {
+                    "id": str(item.get("id") or ""),
+                    "label": str(item.get("label") or ""),
+                    "css": str(item.get("css") or "ignored"),
+                    "detail": str(item.get("detail") or ""),
+                    "hint": str(item.get("hint") or ""),
+                }
+            )
+        if len(cubes) == 4:
+            return cubes
+    return specialist_brief(incident.evidence)["cubes"]
+
+
+def _writer_view(inv: Investigation) -> dict[str, Any]:
+    result = inv.result if isinstance(inv.result, dict) else {}
+    raw = result.get("writer_sentences")
+    sentences = [str(line).strip() for line in (raw or []) if str(line).strip()][:3]
+    if not sentences:
+        summary = str(inv.summary or "").strip()
+        if summary:
+            sentences = [summary]
+    return {
+        "id": "forgeai",
+        "label": "ForgeAI",
+        "css": "ok" if sentences else "ignored",
+        "detail": " ".join(sentences)[:220] if sentences else "No rewrite yet.",
+        "hint": "Three sentences from the specialist facts.",
+        "sentences": sentences,
+    }
+
+
 def list_investigation_runs(db: Session, *, status: str = "", q: str = "") -> list[dict[str, Any]]:
-    """ForgeRCA / ForgeAI runs for the Investigations page (OpenSRE-style agent-runs)."""
+    """ForgeRCA / ForgeAI runs for Recent activity (Investigations + Dashboard)."""
     wanted = (status or "").strip().lower()
     needle = (q or "").strip().lower()
     pending = {
@@ -566,7 +608,10 @@ def list_investigation_runs(db: Session, *, status: str = "", q: str = "") -> li
     }
     rows = (
         db.query(Investigation)
-        .options(joinedload(Investigation.incident).joinedload(Incident.asset))
+        .options(
+            joinedload(Investigation.incident).joinedload(Incident.asset),
+            joinedload(Investigation.incident).joinedload(Incident.evidence),
+        )
         .order_by(Investigation.id.desc())
         .all()
     )
@@ -605,6 +650,8 @@ def list_investigation_runs(db: Session, *, status: str = "", q: str = "") -> li
                 "confidence": int(inv.confidence or 0),
                 "created_at": inv.created_at,
                 "href": f"/ai/{number}",
+                "specialists": _specialist_cubes(inv, incident),
+                "writer": _writer_view(inv),
             }
         )
     return out
