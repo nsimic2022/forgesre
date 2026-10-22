@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import func
 from sqlalchemy.orm import Session, object_session
 
-from app.asset_extras import asset_playrule_ids, form_extras, known_playrule_ids, merge_extras
+from app.asset_extras import asset_playrule_ids, form_extras, known_playrule_ids, merge_extras, public_extras
 from app.asset_snmp import auth_spec, desired_auth, effective_auth, rendered_auth_names
 from app.asset_types import ASSET_TYPE_CHOICES, ASSET_TYPE_GROUPS, parse_snmp_port, snmp_port_for, snmp_target
 from app.audit import audit
@@ -1444,19 +1444,37 @@ def _form_ladder(asset: Asset | None) -> list:
 
 
 def asset_search_blob(asset: Asset) -> str:
+    """All inventory fields an operator can type into the Assets search box (no SNMP secrets)."""
+    extras = public_extras(getattr(asset, "extras", None))
+    extra_text = " ".join(
+        str(value)
+        for key, value in extras.items()
+        if value not in (None, "", True, False) and not str(key).endswith("_set")
+    )
+    parent = getattr(asset, "parent", None)
     return " ".join(
         [
             str(asset.number or ""),
             asset.asset_id or "",
             asset.hostname or "",
             asset.ip or "",
+            asset.type or "",
+            asset.environment or "",
+            asset.status or "",
+            asset.source or "",
             asset.owner or "",
             asset.contact_name or "",
-            asset_extra(asset, "site"),
-            asset_extra(asset, "customer"),
-            asset_extra(asset, "vlan"),
-            asset_extra(asset, "row"),
-            asset_extra(asset, "rack"),
+            asset.owner_email or "",
+            asset.owner_phone or "",
+            asset.notes or "",
+            asset.monitoring_profile or "",
+            asset.scrape_address or "",
+            asset.netbox_id or "",
+            asset.zabbix_hostid or "",
+            asset.zabbix_agent or "",
+            extra_text,
+            getattr(parent, "hostname", "") or "",
+            getattr(parent, "asset_id", "") or "",
         ]
     ).lower()
 
@@ -1598,11 +1616,10 @@ def assets_matching(
     rack: str = "",
     lab: str = "",
 ) -> list[Asset]:
-    """Filter inventory by asset number, id, hostname, or IP (substring), optional status, flag, source, Zabbix agent,
-    Type, and extras Site / VLAN / Customer (exact, case-insensitive). Hostname and IP are their own substring
-    filters (same field names as Add asset). ``lab=0`` drops forge-demo-* / 10.20.30.41;
-    ``lab=1`` keeps only those. Every filter given must match.
-    Search also matches the VLAN text.
+    """Filter inventory. ``q`` is a substring over :func:`asset_search_blob` (any field).
+    Optional status, flag, source, Zabbix agent, Type, and extras Site / VLAN / Customer / Row / Rack
+    stay exact (case-insensitive) for chips and old links. Hostname and IP are their own substring
+    filters. ``lab=0`` drops forge-demo-* / 10.20.30.41; ``lab=1`` keeps only those. Every filter given must match.
 
     ``source=zabbix`` includes assets from other sources that are linked to a Zabbix host; ``source=forge`` is every
     asset not imported from NetBox or Zabbix.

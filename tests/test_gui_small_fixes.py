@@ -27,7 +27,7 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-27" in base
+    assert "app.css?v=v09-28" in base
     assert ".banner-short" not in css
     assert ".banner-x" in css
     assert "top: 0.35rem" in css.split(".banner-x {", 1)[1].split("}", 1)[0]
@@ -73,7 +73,7 @@ def test_assets_verify_copy_lives_in_title_tip_not_always_on_sentence():
     assert "./forgesre doctor" in html
     assert "./forgesre test" in html
     table = html.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
-    filters = html.split('class="row-actions list-filters"', 1)[1].split("</form>", 1)[0]
+    filters = html.split("assets-filters", 1)[1].split("</form>", 1)[0]
     assert ">Verify<" not in table
     assert "Verify all" not in html
     assert "Verify" not in filters

@@ -93,11 +93,12 @@ def test_shared_columns_and_enum_widths():
 
 def test_filter_bars_search_first_without_all_labels():
     assets_html = (ROOT / "frontend" / "templates" / "assets.html").read_text(encoding="utf-8")
-    asset_form = assets_html.split('class="row-actions list-filters"', 1)[1].split("</form>", 1)[0]
+    asset_form = assets_html.split("assets-filters", 1)[1].split("</form>", 1)[0]
     assert "Verify all" not in asset_form and "Verify all" not in assets_html
-    assert asset_form.index('name="q"') < asset_form.index('name="type"') < asset_form.index('name="source"')
-    assert '"Type"' in asset_form and '"Source"' in asset_form and '"Site"' in asset_form
-    assert '"VLAN"' in asset_form and '"Customer"' in asset_form and '"Row"' in asset_form and '"Rack"' in asset_form
+    assert 'name="q"' in asset_form
+    assert "Search any field" in asset_form
+    assert 'data-asset-filter="' not in asset_form
+    assert "<select" not in asset_form
     assert "All types" not in asset_form and "All sites" not in asset_form
 
     incidents_html = (ROOT / "frontend" / "templates" / "incidents.html").read_text(encoding="utf-8")
@@ -120,8 +121,9 @@ def test_filter_bars_search_first_without_all_labels():
     assert form.index('name="q"') < form.index('name="status"')
     assert "All sites" not in form and ">Status</option>" in form
     assets = client.get("/assets").text
-    asset_page = assets.split('class="row-actions list-filters"', 1)[1].split("</form>", 1)[0]
-    assert asset_page.index('name="q"') < asset_page.index('name="type"')
-    for label in (">Type</option>", ">Source</option>", ">Site</option>", ">VLAN</option>", ">Customer</option>", ">Row</option>", ">Rack</option>"):
-        assert label in asset_page, label
+    asset_page = assets.split("assets-filters", 1)[1].split("</form>", 1)[0]
+    assert 'name="q"' in asset_page
+    assert "Search any field" in asset_page
+    assert 'data-asset-filter="' not in asset_page
+    assert "<select" not in asset_page
     assert "Verify all" not in asset_page

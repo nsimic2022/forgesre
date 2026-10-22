@@ -166,7 +166,7 @@ def test_pager_verify_probes_the_selected_assets_only(monkeypatch):
     for asset_id in picked:
         assert asset_id in page.text
     assets = client.get("/assets")
-    form = assets.text.split('class="row-actions list-filters"', 1)[1].split("</form>", 1)[0]
+    form = assets.text.split("assets-filters", 1)[1].split("</form>", 1)[0]
     assert "Verify all" not in form and "Verify all" not in assets.text
     assert 'data-bulk-verify' in assets.text
 

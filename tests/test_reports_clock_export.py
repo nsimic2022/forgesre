@@ -278,15 +278,13 @@ def test_assets_hostname_and_ip_filters_match_add_asset_names():
     assert page.status_code == 200
     assert f'data-asset-reach="{host.asset_id}"' in page.text
     assert f'data-asset-reach="{other.asset_id}"' not in page.text
-    form = page.text.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
+    form = page.text.split("assets-filters", 1)[1].split("</form>", 1)[0]
     assert form.count('name="q"') == 1
     assert 'name="hostname"' not in form and 'aria-label="Hostname"' not in form
     assert 'name="ip"' not in form and 'aria-label="IP"' not in form
-    assert ">Type</option>" in form
-    assert ">Source</option>" in form
-    assert ">Site</option>" in form
-    assert ">VLAN</option>" in form
-    assert ">Customer</option>" in form
+    assert 'data-asset-filter="' not in form
+    assert "<select" not in form
+    assert "Search any field" in form
     assert "All types" not in form and "All sources" not in form and "All sites" not in form
     assert "All VLANs" not in form and "All customers" not in form and "Project" not in form
     ip_page = client.get("/assets?ip=10.50.60.22")
@@ -332,5 +330,5 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert "height: 100%" in css.split(".admin-user-split > .admin-user-pane", 1)[1].split("}", 1)[0]
     assert "margin: 2.25rem 0 0.7rem" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-27" in base and "app.js?v=v09-C" in base
+    assert "app.css?v=v09-28" in base and "app.js?v=v09-C" in base
     db.close()

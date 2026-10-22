@@ -51,12 +51,14 @@ def test_filter_by_rack_returns_that_host():
     assert {item.asset_id for item in assets_matching(rows, rack="r14", row="A")} == {here.asset_id}
     assert assets_matching(rows, rack="R14", row="B") == []
     client = _client()
-    page = client.get("/assets?rack=R14")
+    page = client.get("/assets?q=R14")
     assert page.status_code == 200
     body = page.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
     assert here.asset_id in body
     assert other.asset_id not in body
-    assert 'data-asset-filter="rack"' in page.text
+    filters = page.text.split("assets-filters", 1)[1].split("</form>", 1)[0]
+    assert 'data-asset-filter="' not in filters
+    assert "<select" not in filters
     assert 'name="extra_row"' in client.get("/discovery").text
     assert 'name="extra_rack"' in client.get("/discovery").text
 
