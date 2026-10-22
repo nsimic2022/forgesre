@@ -244,7 +244,7 @@ def test_facts_state_missing_process_and_ifoper_lists():
     assert any("No per-interface SNMP ifOperStatus list" in text for text in texts)
 
 
-def test_dashboard_recent_hides_lab_until_chip():
+def test_dashboard_recent_hides_lab_demo():
     from app.models import Incident
     from app.services import next_incident_number
 
@@ -266,14 +266,15 @@ def test_dashboard_recent_hides_lab_until_chip():
     _login(client)
     home = client.get("/")
     recent = home.text.split("<h2>Recent incidents</h2>", 1)[1].split("dash-graphs", 1)[0]
-    assert 'href="/?demo=1"' in recent
-    assert "Lab DEMO" in recent
+    assert "filter-chips" not in recent
+    assert "Lab DEMO" not in recent
+    assert ">Production<" not in recent
     assert title not in recent
     lab = client.get("/?demo=1")
     shown = lab.text.split("<h2>Recent incidents</h2>", 1)[1].split("dash-graphs", 1)[0]
     assert title in shown
     assert "forge-demo-01" in shown
-    assert 'class="chip on"' in shown
+    assert "filter-chips" not in shown
 
 
 def test_force_investigation_overwrites_latest_row():

@@ -124,10 +124,6 @@
   <div class="banner" role="status">Select one</div>
   {% endif %}
   <h2>Recent incidents</h2>
-  <nav class="filter-chips" aria-label="Recent incident filters">
-    <a class="chip{% if not include_lab %} on{% endif %}" href="/">Production</a>
-    <a class="chip{% if include_lab %} on{% endif %}" href="/?demo=1">Lab DEMO</a>
-  </nav>
   <div data-select-scope>
   <div class="dash-recent-scroll" data-dash-list>
   <table class="scan-list incidents-table" data-dash-incident-table>
@@ -155,7 +151,7 @@
         {% with show_notes=false, show_ack=false, show_severity=true %}{% include "_incident_scan_tail.html" %}{% endwith %}
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">{% if include_lab %}No lab DEMO incidents yet. Use Run demo (top right).{% else %}No production incidents yet. Lab DEMO rows stay under the Lab DEMO chip.{% endif %}</td></tr>
+      <tr><td colspan="8" class="muted">{% if include_lab %}No lab DEMO incidents yet. Use Run demo (top right).{% else %}No production incidents yet.{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>
