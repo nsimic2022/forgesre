@@ -276,6 +276,7 @@ def asset_log_identity(asset: Any) -> dict[str, Any]:
         "type": str(get("type") or ""),
         "monitoring_profile": str(get("monitoring_profile") or ""),
         "scrape_address": str(get("scrape_address") or ""),
+        "source": str(get("source") or ""),
     }
 
 

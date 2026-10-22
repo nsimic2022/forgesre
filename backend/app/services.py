@@ -1060,6 +1060,7 @@ def persist_rca_evidence(
     asset = asset_log_identity(incident.asset)
     if incident.asset:
         asset["status"] = incident.asset.status
+        asset["source"] = str(getattr(incident.asset, "source", "") or "")
     maintenance = overlapping_maintenance(db, asset.get("asset_id") or "", incident.started_at or utcnow())
 
     query_map = (metrics or {}).get("queries") or {}

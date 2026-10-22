@@ -9,6 +9,7 @@ from typing import Any, Protocol
 import httpx
 
 from rca.sanitize import sanitize
+from rca.specialists import writer_payload
 
 SHELLISH = ("sudo ", "rm -", "ssh ", "docker ", "iptables", "mkfs", "dd if=", "systemctl ", "reboot")
 
@@ -141,6 +142,19 @@ _MAX_ANOMALIES = 8
 _MAX_HYPOTHESES = 5
 _MAX_LIMITATIONS = 8
 _UNIX_TS_MIN = 1_000_000_000  # Prom sample timestamps, not CPU/mem percents
+
+
+def prompt_specialists(brief: dict[str, Any], incident: dict[str, Any] | None = None) -> str:
+    """Writer user message: four specialist briefs, no Prom/Loki dump."""
+    cap = PROMPT_CONTEXT_MAX_CHARS
+    raw = json.dumps(writer_payload(brief, incident), default=str, ensure_ascii=False)
+    return raw if len(raw) <= cap else raw[:cap]
+
+
+def invented_numbers(text: str, allowed_text: str) -> bool:
+    """True when prose contains a number that is not in the specialist facts."""
+    extra = _number_set(text) - _number_set(allowed_text)
+    return bool(extra)
 
 
 def prompt_context(
