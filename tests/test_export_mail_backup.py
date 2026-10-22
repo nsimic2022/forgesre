@@ -375,7 +375,7 @@ def test_backup_row_uses_compact_stamp_and_delete_selected_is_admin_only(tmp_pat
     text = page.text
     compact = backup_compact(next(row for row in list_archives() if row["name"] == name))
     assert compact["date"] and compact["time"]
-    backups = text.split("<h2>Platform backup", 1)[1].split("admin-backup-cli", 1)[0]
+    backups = text.split("<h2>History backup", 1)[1].split("admin-backup-cli", 1)[0]
     assert compact["date"] in backups and compact["time"] in backups
     cell = backups.split('class="backup-when"', 1)[1].split("</td>", 1)[0]
     assert "stamp-date" in cell and "stamp-time" in cell
@@ -384,7 +384,7 @@ def test_backup_row_uses_compact_stamp_and_delete_selected_is_admin_only(tmp_pat
     assert "Delete selected" in backups
     assert 'action="/admin/backups/bulk-delete"' in backups
     assert ">Download</a>" in backups and ">Remove<" in backups
-    audit = text.split("<h2>Audit log</h2>", 1)[1].split("<h2>Platform backup", 1)[0]
+    audit = text.split("<h2>Audit log</h2>", 1)[1].split("<h2>History backup", 1)[0]
     assert "Delete selected" not in audit
     removed = client.post("/admin/backups/bulk-delete", data={"selected": name}, follow_redirects=False)
     assert removed.status_code == 303

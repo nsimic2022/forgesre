@@ -183,18 +183,28 @@ def test_admin_backup_buttons_before_cli_cheatsheet(tmp_path, monkeypatch):
     page = client.get("/admin")
     assert page.status_code == 200
     text = page.text
-    assert "Platform backup" in text
+    assert "History backup" in text
+    assert "Create new backup" in text
+    assert "Platform backup" not in text
     assert ">Backup<" in text
     assert ">Import<" in text
     assert "ForgeSRE CLI" in text
     assert "Appliance shell" not in text
     assert "admin-backup-cli" in text
     assert "admin-restore-pane" in text
+    assert "admin-create-backup-pane" in text
     assert "admin-cli-pane" in text
-    assert text.index("admin-restore-pane") < text.index("admin-cli-pane")
-    assert text.index("Import / restore") < text.index("ForgeSRE CLI")
-    assert text.index("Platform backup") < text.index("ForgeSRE CLI")
+    assert text.index("admin-create-backup-pane") < text.index("admin-restore-pane") < text.index("admin-cli-pane")
+    assert text.index("Create new backup") < text.index("Import / restore") < text.index("ForgeSRE CLI")
+    assert text.index("History backup") < text.index("Create new backup")
     assert text.index(">Backup<") < text.index("ForgeSRE CLI")
+    history = text.split("<h2>History backup", 1)[1].split("admin-backup-cli", 1)[0]
+    assert "include_models" not in history
+    assert ">Backup<" not in history
+    create = text.split("<h2>Create new backup", 1)[1].split("Import / restore", 1)[0]
+    assert 'name="include_models"' in create
+    assert ">Backup<" in create
+    assert 'action="/admin/backups"' in create
     assert "no terminal in this browser" in text.lower()
     assert "./forgesre" in text
     assert "./forgesre shell" in text
@@ -242,7 +252,7 @@ def test_admin_backup_buttons_before_cli_cheatsheet(tmp_path, monkeypatch):
     assert "SECRET_KEY" not in text
     assert ">Download</a>" in text
     assert 'action="/admin/backups/remove"' in text
-    backups = text[text.index("Platform backup") :]
+    backups = text[text.index("History backup") :]
     assert backups.index(">Download</a>") < backups.index(">Remove<")
     assert "/admin/backups/remove" in text
     assert "onsubmit=" in text
@@ -290,7 +300,7 @@ def test_admin_restore_picker_uses_compact_stamps_and_inline_confirm(tmp_path, m
     assert parsed[0]["selected"] is True
     assert parsed[1]["selected"] is False
     assert parsed[0]["value"] == newer
-    table = text.split("<h2>Platform backup", 1)[1].split("admin-backup-cli", 1)[0]
+    table = text.split("<h2>History backup", 1)[1].split("admin-backup-cli", 1)[0]
     for row, opt in zip(rows, parsed):
         compact = backup_compact(row)
         label = backup_picker_label(row)
@@ -966,7 +976,7 @@ def test_admin_remove_backup_is_admin_only(tmp_path, monkeypatch):
     assert 'action="/admin/backups/remove"' in text
     assert "onsubmit=" in text
     assert "confirm(" in text
-    backups = text[text.index("Platform backup") :]
+    backups = text[text.index("History backup") :]
     assert backups.index(">Download</a>") < backups.index(">Remove<")
     traversal = client.post(
         "/admin/backups/remove",

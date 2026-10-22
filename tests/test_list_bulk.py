@@ -272,7 +272,7 @@ def test_audit_exports_and_has_no_delete_for_anyone():
     db.commit()
     admin = _client()
     page = admin.get("/admin").text
-    audit = page.split("<h2>Audit log</h2>", 1)[1].split("<h2>Platform backup", 1)[0]
+    audit = page.split("<h2>Audit log</h2>", 1)[1].split("<h2>History backup", 1)[0]
     assert 'action="/admin/audit/export"' in audit
     assert ">Delete<" not in audit
     assert "bulk-delete" not in audit
