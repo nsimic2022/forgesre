@@ -17,15 +17,13 @@
   {% if lab %}<input type="hidden" name="lab" value="{{ lab }}">{% endif %}
   {% include "_pager_keep.html" %}
   <button type="submit">Search</button>
-  {% if q or hostname or ip or status or flag or source or agent or asset_type or site or vlan or customer or row or rack or lab %}<a class="muted list-reset" href="/assets">Reset</a>{% endif %}
+  <a class="button secondary list-reset" href="/assets">Reset</a>
 </form>
 <nav class="filter-chips" aria-label="Asset filters">
   {% for key, value, label in [("", "", "All"), ("status", "critical", "Critical"), ("status", "warning", "Warning"), ("flag", "unreachable", "Offline")] %}
   {% set on = (not key and not status and not flag and not source and not agent and not asset_type and not site and not vlan and not customer and not row and not rack and not hostname and not ip and not lab) or (key == "status" and status == value) or (key == "flag" and flag == value) %}
   <a class="chip{% if on %} on{% endif %}" href="/assets{% if key %}?{{ key }}={{ value }}{% endif %}{% if q %}{{ '&' if key else '?' }}q={{ q }}{% endif %}{% set size_tail = pager_keep(pager, page=False) %}{% if size_tail %}{{ size_tail if (key or q) else '?' ~ size_tail[1:] }}{% endif %}">{{ label }}</a>
   {% endfor %}
-  <a class="chip{% if lab == '0' %} on{% endif %}" href="/assets?lab=0{% if q %}&q={{ q }}{% endif %}{{ pager_keep(pager, page=False) }}">Production</a>
-  <a class="chip{% if lab == '1' %} on{% endif %}" href="/assets?lab=1{% if q %}&q={{ q }}{% endif %}{{ pager_keep(pager, page=False) }}">Lab DEMO</a>
   {% if zabbix_filters %}
   <span class="chip-sep" aria-hidden="true">·</span>
   {% for value, label in [("", "Zabbix"), ("up", "agent up"), ("down", "agent down"), ("unknown", "agent unknown")] %}
@@ -45,37 +43,25 @@
 <table class="asset-table" data-asset-reachability>
   <thead>
     <tr>
-      {{ sel.head() }}
-      <th class="col-host">Hostname</th>
-      <th class="col-port"><span class="label-line">Port {% with %}{% set tip %}Stacked squares, green / yellow / red. ICMP: green reply; yellow not probed, or ICMP failed but exporter/SNMP (/metrics) answers (typical Windows: ICMP unused/blocked); red ICMP failed and exporter/SNMP failed or timed out. ICMP and port 22 are not required. The middle square is the TCP scrape (9100 node_exporter, 9182 windows_exporter, or the asset's port) with no colon. SNMP is its own square (UDP 161, or the asset's SNMP port) when snmp_exporter polls the host. Last-known colors on first paint.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
-      <th class="col-status">Status</th>
-      <th class="col-escalation"><span class="label-line">L1–L4 {% with %}{% set tip %}Four squares stacked L1, L2, L3, L4 — same family as the Port squares, narrow so the column stays thin. Green = that level is on this asset (enabled and has an email). Red = an active incident already mailed that level, or the incident is ESCALATED and enough minutes have passed for that rung. Red wins over green. Gray = the level is not on this asset. An empty Escalation (Default escalation) stays gray here — the climb shows on the incident.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
-      <th class="col-num" title="Asset number">#</th>
-      <th class="col-id"><span class="label-line">ID {% with %}{% set tip %}Short unique slug set at add (Asset ID). Cannot change afterwards — Prometheus asset= labels and history keep matching.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
-      <th class="col-ip">IP</th>
-      <th>Owner</th>
-      <th>Contact</th>
-      <th class="col-enum"><span class="label-line">Type {% with %}{% set tip %}Linux Server = node_exporter :9100. Windows Server = windows_exporter :9182. Network device, Switch, Router, Firewall, Storage, QNAP/NAS, Printer = snmp_exporter UDP/161 (or the asset's SNMP port), no HTTP scrape unless you type one. Hypervisor, Web/appliance, Other = no default scrape. Auto detects from /metrics on this appliance.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
-      <th class="col-enum">Environment</th>
-      <th class="col-enum">Source</th>
-      <th class="col-asset-notes"><span class="label-line">Notes {% with %}{% set tip %}The Notes field on Add / Edit (the half-row note for the person on shift). An em dash means that field is empty. Not an incident write-up.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></th>
+      {% include "_inventory_head.html" %}
     </tr>
   </thead>
   <tbody>
     {% for asset in assets %}
     <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}" data-list-row data-list-view="/assets?view={{ asset.asset_id }}{{ view_tail }}">
       {{ sel.cell(asset.asset_id) }}
+      <td class="col-num">{{ asset.number or "—" }}</td>
+      <td class="col-id"><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
       <td class="col-host"><a href="/assets?view={{ asset.asset_id }}{{ view_tail }}" data-list-open>{{ asset.hostname }}</a>{% if is_lab_inventory_row(asset) %} <span class="pill demo">DEMO</span>{% endif %}{% if asset.parent %}<div class="muted" data-parent-host>parent {{ asset.parent.hostname }}</div>{% endif %}</td>
+      <td class="col-ip">{{ asset.ip or "—" }}</td>
       <td class="col-port">
         {% set r = reachability_snapshot(asset) %}
         {% set reach_id = asset.asset_id %}
         {% include "_reach_stack.html" %}
       </td>
+      <td class="col-enum asset-type"><span class="enum-clip" title="{{ asset.type }}">{{ asset_type_abbrev(asset.type) }}</span></td>
       <td class="col-status"><span class="status-cell"><span class="status-line"><span class="pill {{ asset.status }}">{{ asset.status }}</span></span>{% if in_maintenance(asset) %}<span class="status-line"><span class="pill warn" data-maint-badge title="{{ maintenance_label(asset) }}">Maintenance</span></span>{% endif %}</span></td>
       <td class="col-escalation">{% with cubes=asset_ladder_cubes(asset) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
-      <td class="col-num">{{ asset.number or "—" }}</td>
-      <td class="col-id"><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
-      <td class="col-ip">{{ asset.ip or "—" }}</td>
       <td>{{ asset.owner or "—" }}</td>
       <td>
         {% if asset.contact_name %}{{ asset.contact_name }}{% endif %}
@@ -87,7 +73,6 @@
         {% set sup = support_status(asset) %}
         <div><span class="pill support-pill {{ sup.tone }}" data-support-state="{{ sup.state }}" title="{{ sup.detail }}">{{ sup.label }}</span>{% if sup.custom_note %} <span class="support-note" data-support-note>{{ sup.custom_note }}</span>{% endif %}</div>
       </td>
-      <td class="col-enum asset-type"><span class="enum-clip" title="{{ asset.type }}">{{ asset_type_abbrev(asset.type) }}</span></td>
       <td class="col-enum"><span class="enum-clip" title="{{ asset.environment }}">{{ asset.environment }}</span></td>
       <td class="col-fit">
         <span class="enum-clip" title="{{ asset.source }}">{{ asset.source }}</span>

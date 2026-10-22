@@ -70,7 +70,7 @@ def test_shared_columns_and_enum_widths():
 
     assets = client.get("/assets").text
     asset_head = assets.split('<table class="asset-table"', 1)[1].split("</thead>", 1)[0]
-    _order(asset_head, [">Hostname<", 'class="col-port"', ">Status<", 'class="col-escalation"', ">L1–L4 ", ">ID ", ">Type ", ">Environment<", ">Source<", ">Notes "])
+    _order(asset_head, [">#<", ">ID ", ">Hostname<", ">IP<", 'class="col-port"', ">Type ", ">Status<", 'class="col-escalation"', ">L1–L4 ", ">Owner<", ">Contact<", ">Environment<", ">Source<", ">Notes "])
     assert ">When<" not in asset_head
     assert 'class="enum-clip"' in assets and 'title="Linux Server"' in assets
 
@@ -88,7 +88,7 @@ def test_shared_columns_and_enum_widths():
     assert "Resolved by" in recent_head.rsplit("<th", 1)[1]
 
     found = client.get("/discovery").text.split("<h2>Found assets</h2>", 1)[1].split("</thead>", 1)[0]
-    _order(found, [">Hostname<", ">IP<", ">Proposed role<", ">Status<", ">Source<"])
+    _order(found, [">#<", ">ID ", ">Hostname<", ">IP<", 'class="col-port"', ">Type ", ">Status<", 'class="col-escalation"', ">L1–L4 ", ">Owner<", ">Contact<", ">Environment<", ">Source<", ">Notes "])
 
 
 def test_filter_bars_search_first_without_all_labels():
@@ -97,9 +97,12 @@ def test_filter_bars_search_first_without_all_labels():
     assert "Verify all" not in asset_form and "Verify all" not in assets_html
     assert 'name="q"' in asset_form
     assert "Search any field" in asset_form
+    assert 'href="/assets">Reset</a>' in asset_form
     assert 'data-asset-filter="' not in asset_form
     assert "<select" not in asset_form
     assert "All types" not in asset_form and "All sites" not in asset_form
+    assert ">Production<" not in assets_html
+    assert "Lab DEMO" not in assets_html
 
     incidents_html = (ROOT / "frontend" / "templates" / "incidents.html").read_text(encoding="utf-8")
     incident_form = incidents_html.split('class="list-filters incidents-filters"', 1)[1].split("</form>", 1)[0]
@@ -114,6 +117,7 @@ def test_filter_bars_search_first_without_all_labels():
     found = discovery_html.split("<h2>Found assets</h2>", 1)[1]
     assert "list-filters" not in found
     assert 'name="type"' not in found and "All sites" not in found
+    assert "Proposed role" not in found
 
     client = _client()
     listed = client.get("/incidents").text

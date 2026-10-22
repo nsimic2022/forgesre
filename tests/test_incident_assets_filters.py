@@ -199,9 +199,10 @@ def test_search_and_reset_clears(seeded):
     assert form.count('<input name="q"') == 1
     assert form.count("<select") == 0
     assert 'data-asset-filter="' not in form
-    assert '<a class="muted list-reset" href="/assets">Reset</a>' in form
+    assert 'href="/assets">Reset</a>' in form
+    assert "list-reset" in form
     empty = _get(client, "").split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
-    assert "list-reset" not in empty
+    assert 'href="/assets">Reset</a>' in empty
 
 
 def test_edit_link_keeps_search(seeded):
@@ -223,7 +224,7 @@ def test_edit_link_keeps_search(seeded):
 
 def test_v08_15_cache_bump_and_compact_select_css():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-34" in base and "app.js?v=v09-C" in base
+    assert "app.css?v=v09-35" in base and "app.js?v=v09-C" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".list-filters select.filter-select { width: auto;" in css
     assert ".assets-filters input[name=\"q\"]" in css

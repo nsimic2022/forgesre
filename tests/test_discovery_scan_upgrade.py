@@ -133,10 +133,10 @@ def test_confirm_and_scan_writes_yaml_and_page_layout(tmp_path, monkeypatch):
         page = client.get("/discovery")
         assert page.status_code == 200
         assert "discovery-actions" in page.text
-        assert "Confirm &amp; scan" in page.text or "Confirm & scan" in page.text
-        assert "node_exporter" in page.text
-        assert "windows_exporter" in page.text
-        assert "SNMP" in page.text
+        assert "Confirm &amp; scan" not in page.text and "Confirm & scan" not in page.text
+        assert ">Scan now<" in page.text
+        assert "Proposed role" not in page.text.split("<h2>Found assets</h2>", 1)[1].split("</thead>", 1)[0]
+        assert ">Type " in page.text.split("<h2>Found assets</h2>", 1)[1].split("</thead>", 1)[0]
         assert "10.55.0.0/24" in page.text
         assert 'name="cidrs"' in page.text
         assert page.text.find("Scan now") < page.text.find("NetBox sync")
@@ -175,17 +175,16 @@ def test_discovery_template_side_by_side_and_columns():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     assert "discovery-actions" in html
     assert "discovery-actions" in css
-    assert "Confirm" in html
-    assert "node_exporter" in html
-    assert "windows_exporter" in html
-    assert "SNMP" in html
+    assert "Confirm &amp; scan" not in html
+    assert ">Scan now<" in html
+    assert "Management CIDR" not in html
     assert html.find("Scan now") < html.find("NetBox sync") < html.find("<h2>Zabbix") < html.find("<h2>GLPI")
-    assert "app.css?v=v09-34" in base
+    assert "app.css?v=v09-35" in base
     assert "Mode:" not in html.split("<h1>", 1)[1].split("discovery-actions", 1)[0]
     assert "repeat(4, minmax(0, 1fr))" in css
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "primary IPv4" in handbook
-    assert "Confirm & scan" in handbook or "Confirm &amp; scan" in handbook
+    assert "Scan now" in handbook
     assert "256" in handbook and "1024" in handbook
 
 

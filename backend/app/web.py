@@ -619,6 +619,8 @@ def ctx(request: Request, user: User | None, **extra):
         "support_status": support_status,
         "incident_notes_snippet": incident_notes_snippet,
         "asset_extra": asset_extra,
+        "asset_missing_email": asset_missing_email,
+        "reachability_snapshot": reachability_snapshot,
         "asset_ladder_cubes": asset_ladder_cubes,
         "incident_ladder_cubes": incident_ladder_cubes,
         "in_maintenance": in_maintenance,
@@ -1399,6 +1401,7 @@ def discovery_page(
         demo_candidate_ip=DEMO_CANDIDATE_IP,
         scan_job=active_discovery_scan(db),
         pager=pager,
+        found_assets={a.asset_id: a for a in inventory if a.asset_id},
         **asset_form_context(db, every=inventory, form_mode=form_mode, selected=None),
     )
 

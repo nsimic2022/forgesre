@@ -166,10 +166,10 @@ def test_writer_uses_specialist_brief_only():
     assert dropped["summary"] == builtin["summary"]
 
 
-def test_cache_bust_is_v09_34():
+def test_cache_bust_is_v09_35():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-34" in base
+    assert "app.css?v=v09-35" in base
     assert ".specialist-row" in css
     assert ".specialist-cube.ok" in css
     assert ".act-expand" in css

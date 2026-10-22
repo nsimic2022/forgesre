@@ -465,17 +465,18 @@ def test_analyst_templates_say_the_honest_thing(monkeypatch):
     monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
     monkeypatch.setattr("app.settings.Settings.netbox_auto_sync", True)
     disc = client.get("/discovery")
-    assert "every 6 h" in disc.text
+    assert "API token" in disc.text
     assert "Auto" in disc.text
     monkeypatch.setattr("app.settings.Settings.netbox_auto_sync", False)
-    assert "Manual only" in client.get("/discovery").text
+    assert "Automatic:" not in client.get("/discovery").text
+    assert "Manual only" not in client.get("/discovery").text
     incident = db.query(Incident).filter(Incident.playbook_id.isnot(None)).order_by(Incident.id.desc()).first()
     if incident is not None:
         page = client.get(f"/incidents/{incident.number}")
         assert "Guidance only" in page.text
         assert "playbook-guide" in page.text
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-34" in base
+    assert "app.css?v=v09-35" in base
     for name in ["incident_detail.html", "asset_detail.html", "_asset_form.html", "escalation.html"]:
         text = (ROOT / "frontend" / "templates" / name).read_text(encoding="utf-8")
         assert "falls back to policy role@forgesre.local" not in text
