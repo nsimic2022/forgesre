@@ -89,9 +89,9 @@ def test_analyst_can_create_and_edit_asset_contacts():
     page = client.get("/assets/app-lab-01")
     assert page.status_code == 200
     assert b"payments@dc.local" in page.content
-    form = client.get("/assets")
-    assert b"Windows Server" in form.content
-    assert b"Auto (detect exporter)" in form.content
+    listed = client.get("/assets")
+    assert b'placeholder="Search any field"' in listed.content
+    assert b'data-asset-filter="' not in listed.content
     assert b"+381-11-555-0101" in page.content
     assert b"Milan" in page.content
 
@@ -241,7 +241,8 @@ def test_assets_list_shows_edit_clone_remove():
     assert b">Verify<" in page.content
     assert b">Remove<" in page.content
     assert b">#</" in page.content or b"Asset number" in page.content or b">#</th>" in page.content
-    assert b'placeholder="search #, id, hostname, IP, VLAN"' in page.content
+    assert b'placeholder="Search any field"' in page.content
+    assert b'data-asset-filter="' not in page.content
     assert b'name="scrape_address"' not in page.content
     assert b'action="/assets/open-view"' in page.content
     assert b'action="/assets/open-edit"' in page.content
@@ -429,7 +430,7 @@ def test_asset_table_actions_live_in_the_pager():
     assert "vertical-align: middle" in css
     assert ".asset-table { table-layout: auto;" in css
     assert ".evidence-table { table-layout: fixed; }" in css
-    assert "app.css?v=v09-27" in base
+    assert "app.css?v=v09-28" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():

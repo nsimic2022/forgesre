@@ -1,4 +1,4 @@
-"""Incident detail Who did what list chrome (own pager + Rows), and the Assets Type / Source / Site / Customer filters."""
+"""Incident detail Who did what list chrome (own pager + Rows), and the Assets search box."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.asset_types import ASSET_TYPE_CHOICES
 from app.db import Base, SessionLocal, engine
 from app.inventory import asset_filter_options, assets_matching
 from app.main import app
@@ -174,86 +173,57 @@ def test_assets_matching_type_source_site_customer_unit():
     assert options["customers"] == ["Acme", "Globex"]
 
 
-def test_assets_page_type_filter(seeded):
-    page = _get(_client(), "type=Switch")
+def test_assets_page_search_covers_type_source_site_customer(seeded):
+    client = _client()
+    page = _get(client, "q=Switch")
     assert _ids(page) == {"iaf-sw1", "iaf-sw2"}
-    select = page.split('data-asset-filter="type">', 1)[1].split("</select>", 1)[0]
-    assert '<option value="Switch" selected>' in select
-    assert '<option value="">Type</option>' in select
-    assert "All types" not in select
-    for name in ASSET_TYPE_CHOICES:
-        assert f'<option value="{name}"' in select, name
-    assert '<optgroup label="Custom">' in select and '<option value="UPS (APC)"' in select
+    form = page.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
+    assert 'data-asset-filter="' not in form
+    assert "<select" not in form
+    assert 'placeholder="Search any field"' in form
+    assert _ids(_get(client, "q=zabbix")) == {"iaf-sw2"}
+    assert _ids(_get(client, "q=netbox")) == {"iaf-sw1", "iaf-fw"}
+    assert _ids(_get(client, "q=DC-East")) == {"iaf-sw1", "iaf-lin"}
+    assert _ids(_get(client, "q=Globex")) == {"iaf-sw2", "iaf-lin"}
+    assert _ids(_get(client, "q=DC-West")) >= {"iaf-sw2", "iaf-ups"}
 
 
-def test_assets_page_source_filter(seeded):
-    client = _client()
-    assert _ids(_get(client, "source=zabbix")) == {"iaf-sw2"}
-    assert _ids(_get(client, "source=netbox")) == {"iaf-sw1", "iaf-fw"}
-    assert _ids(_get(client, "source=forge")) == {"iaf-lin", "iaf-ups"}
-    select = _get(client, "source=zabbix").split('data-asset-filter="source">', 1)[1].split("</select>", 1)[0]
-    labels = re.findall(r'<option value="([^"]*)"[^>]*>([^<]+)</option>', select)
-    assert labels == [("", "Source"), ("forge", "Forge"), ("netbox", "NetBox"), ("zabbix", "Zabbix")]
-    assert "All sources" not in select
-    assert '<option value="zabbix" selected>' in select
-
-
-def test_assets_page_site_and_customer_filters(seeded):
-    client = _client()
-    assert _ids(_get(client, "site=DC-East")) == {"iaf-sw1", "iaf-lin"}
-    assert _ids(_get(client, "customer=Globex")) == {"iaf-sw2", "iaf-lin"}
-    assert _ids(_get(client, "site=")) >= {s[0] for s in SEEDED}
-    page = _get(client, "site=DC-West&customer=Acme")
-    assert _ids(page) == {"iaf-ups"}
-    site = page.split('data-asset-filter="site">', 1)[1].split("</select>", 1)[0]
-    assert '<option value="">Site</option>' in site
-    assert "All sites" not in site
-    assert '<option value="DC-West" selected>' in site and '<option value="DC-East">' in site
-    customer = page.split('data-asset-filter="customer">', 1)[1].split("</select>", 1)[0]
-    assert '<option value="">Customer</option>' in customer
-    assert '<option value="Acme" selected>' in customer and '<option value="Globex">' in customer
-
-
-def test_search_combines_with_filters_and_reset_clears(seeded):
+def test_search_and_reset_clears(seeded):
     client = _client()
     assert _ids(_get(client, "q=iaf-sw")) == {"iaf-sw1", "iaf-sw2"}
-    page = _get(client, "q=iaf-sw&source=zabbix")
-    assert _ids(page) == {"iaf-sw2"}
-    assert _ids(_get(client, "q=host&type=Switch&customer=Acme")) == {"iaf-sw1"}
-    assert _ids(_get(client, "q=nomatch-xyz&type=Switch")) == set()
+    page = _get(client, "q=iaf-sw")
+    assert _ids(page) == {"iaf-sw1", "iaf-sw2"}
+    assert _ids(_get(client, "q=Acme")) == {"iaf-sw1", "iaf-ups"}
+    assert _ids(_get(client, "q=nomatch-xyz")) == set()
     form = page.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
     assert form.count('<input name="q"') == 1
-    assert form.count("<select") == 7
-    assert 'type="hidden" name="source"' not in form
+    assert form.count("<select") == 0
+    assert 'data-asset-filter="' not in form
     assert '<a class="muted list-reset" href="/assets">Reset</a>' in form
-    def filter_form(query: str) -> str:
-        return _get(client, query).split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
-
-    assert "list-reset" not in filter_form("")
-    for query in ("type=Switch", "source=forge", "site=DC-East", "customer=Acme"):
-        assert "list-reset" in filter_form(query), query
+    empty = _get(client, "").split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
+    assert "list-reset" not in empty
 
 
-def test_edit_link_keeps_filters(seeded):
+def test_edit_link_keeps_search(seeded):
     client = _client()
-    page = _get(client, "type=Switch&site=DC-East")
-    assert 'name="stay" value="/assets?per_page=100&amp;type=Switch&amp;site=DC-East"' in page
+    page = _get(client, "q=DC-East")
+    assert 'name="stay" value="/assets?per_page=100&amp;q=DC-East"' in page
     opened = client.post(
         "/assets/open-edit",
-        data={"selected": "iaf-sw1", "stay": "/assets?per_page=100&type=Switch&site=DC-East"},
+        data={"selected": "iaf-sw1", "stay": "/assets?per_page=100&q=DC-East"},
         follow_redirects=False,
     )
     assert opened.status_code == 303
     assert "edit=iaf-sw1" in opened.headers["location"]
-    assert "type=Switch" in opened.headers["location"]
-    assert "site=DC-East" in opened.headers["location"]
+    assert "q=DC-East" in opened.headers["location"]
     form = page.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
-    filters = form.split('<input name="q"', 1)[1]
-    assert "Ping" not in filters
+    assert "Ping" not in form
+    assert "<select" not in form
 
 
 def test_v08_15_cache_bump_and_compact_select_css():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-27" in base and "app.js?v=v09-C" in base
+    assert "app.css?v=v09-28" in base and "app.js?v=v09-C" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".list-filters select.filter-select { width: auto;" in css
+    assert ".assets-filters input[name=\"q\"]" in css

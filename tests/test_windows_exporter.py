@@ -139,7 +139,11 @@ def test_assets_ui_offers_windows_server_and_http_sd():
     assert page.status_code == 200
     assert b"Windows Server" in page.content
     assert b"windows_exporter" in page.content
-    assert b"Auto (detect exporter)" in page.content
+    assert b'placeholder="Search any field"' in page.content
+    add = client.get("/discovery")
+    assert add.status_code == 200
+    assert b"Windows Server" in add.content
+    assert b"Auto (detect exporter)" in add.content
     created = client.post(
         "/assets",
         data={

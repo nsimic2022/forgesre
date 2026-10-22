@@ -746,6 +746,11 @@ a.button {
 }
 .list-filters label { min-width: 8rem; }
 .list-filters button { margin-left: 0.15rem; }
+.assets-filters input[name="q"] {
+  width: min(32rem, 100%);
+  min-width: 16rem;
+  padding: 0.55rem 0.8rem;
+}
 .list-filters a.list-reset {
   color: var(--muted);
   font-size: 0.82rem;
@@ -3087,7 +3092,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
   white-space: nowrap;
 }
 .support-note { font-size: 0.78rem; color: var(--muted); overflow-wrap: anywhere; }
-/* v08-20: Assets filter bar — one search box, compact Type / Source / Site / VLAN / Customer dropdowns. */
+/* v08-20: Assets filter bar — one search box (dropdown cubes removed in v09-28). */
 .list-filters select.filter-select { width: auto; min-width: 8.5rem; max-width: 13rem; }
 .health-journal { margin-top: 2.75rem; }
 .journal-filters { margin: 0.8rem 0; }
@@ -3214,6 +3219,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 /* v09-25: action buttons natural size. Locked --bg / --text / --ok hexes stay. */
 /* v09-26: Who did what stays in its cube; report/notes chrome; Ack/Resolve/Close | ForgeRCA. */
 /* v09-27: Playbooks cubes three per row inside the scroll box. */
+/* v09-28: Assets list keeps one search cube; Type / Source / Site / VLAN / Customer / Row / Rack dropdowns are gone. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {

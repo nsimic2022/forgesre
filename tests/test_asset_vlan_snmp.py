@@ -112,19 +112,17 @@ def test_vlan_persists_on_add_edit_detail_and_filters():
     assert resp.status_code in {302, 303}
     assert _row(db, f"{PREFIX}v10").extras["vlan"] == "30"
 
-    page = client.get("/assets?vlan=10.20").text
+    assert _ids(client.get("/assets?vlan=10.20").text) == {f"{PREFIX}v1020"}
+    page = client.get(f"/assets?q={PREFIX}v1020").text
     assert _ids(page) == {f"{PREFIX}v1020"}
-    assert _ids(client.get("/assets?vlan=30&type=Switch").text) == {f"{PREFIX}v10"}
-    assert _ids(client.get(f"/assets?q=10.20").text) >= {f"{PREFIX}v1020"}
-    form = page.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
-    bar = [form.index(f'data-asset-filter="{key}"') for key in ("type", "source", "site", "vlan", "customer")]
-    assert bar == sorted(bar)
-    vlan = form.split('data-asset-filter="vlan">', 1)[1].split("</select>", 1)[0]
-    assert '<option value="">VLAN</option>' in vlan
-    assert "All VLANs" not in vlan
-    assert '<option value="10.20" selected>' in vlan and '<option value="30">' in vlan
+    assert _ids(client.get("/assets?q=30").text) >= {f"{PREFIX}v10"}
+    form = page.split("assets-filters", 1)[1].split("</form>", 1)[0]
+    assert 'data-asset-filter="' not in form
+    assert "<select" not in form
+    assert 'placeholder="Search any field"' in form
+    assert f'value="{PREFIX}v1020"' in form
     assert '<a class="muted list-reset" href="/assets">Reset</a>' in form
-    assert 'name="stay" value="/assets?vlan=10.20"' in page.split('<table class="asset-table"', 1)[1]
+    assert f'name="stay" value="/assets?q={PREFIX}v1020"' in page.split('<table class="asset-table"', 1)[1]
     db.close()
 
 
@@ -155,7 +153,7 @@ def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".asset-ladder .ladder-level {" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-27" in base and "app.js?v=v09-C" in base
+    assert "app.css?v=v09-28" in base and "app.js?v=v09-C" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "[data-snmp-version]" in js and "[data-snmp-v3-level]" in js
 
