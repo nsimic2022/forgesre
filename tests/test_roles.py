@@ -111,15 +111,18 @@ def test_nav_foot_prints_role_once_and_theme_switcher():
     assert 'html[data-theme="light"]' in css
     assert 'html[data-theme="dark"]' in css
     assert 'html[data-theme="system"]' in css
+    assert 'html[data-theme="contrast"]' in css
     assert 'html[data-theme="high-contrast"]' not in css
     assert "prefers-color-scheme" in css
     assert "--shell-bg: #ffffff" in css
+    assert "--accent: #59db8f" in css
     assert "forgesre-theme" in js
     assert '"system"' in js
+    assert '"contrast"' in js
     assert "high-contrast" in js
     assert "matchMedia" not in js
     assert "theme-label-system" in base
-    assert "theme-label-contrast" not in base
+    assert "theme-label-contrast" in base
     assert "distinct_who_name(user.name, user.role, user.surname)" in base
     assert "class=\"secondary theme-toggle\"" not in base
     db.close()

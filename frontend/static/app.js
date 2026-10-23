@@ -1,5 +1,5 @@
-const THEMES = ["light", "dark", "system"];
-const THEME_LABELS = { light: "Light", dark: "Dark", system: "System" };
+const THEMES = ["light", "dark", "system", "contrast"];
+const THEME_LABELS = { light: "Light", dark: "Dark", system: "System", contrast: "Contrast" };
 const THEME_KEY = "forgesre-theme";
 
 function normalizeTheme(theme) {
