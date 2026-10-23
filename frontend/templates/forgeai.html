@@ -3,23 +3,24 @@
 {% block content %}
 <div class="page-head">
   <h1>Investigations</h1>
-  {% if case %}
-  <p class="muted invest-case-meta">{{ case.title }} · {{ case.number }} · {{ case.host }} · {{ short_when_label(case.created_at) }}</p>
-  {% endif %}
 </div>
 
-<section class="invest-case" id="activity" aria-label="Investigation case">
-  {% if case %}
-  {% include "_case_specialists.html" %}
-  {% else %}
+<div class="invest-stack" id="activity">
+{% for case in cases %}
+  <article class="invest-case" id="case-{{ case.number }}">
+    <p class="invest-case-meta"><strong>{{ case.title }}</strong> <span class="muted">{{ case.number }} · {{ case.host }} · {{ short_when_label(case.created_at) }}</span></p>
+    {% with specialists=case.specialists %}
+    {% include "_case_specialists.html" %}
+    {% endwith %}
+    <div class="invest-more">
+      <section class="card invest-empty"{% if loop.first %} id="summary"{% endif %}>
+        <h2>Summary</h2>
+      </section>
+      <section class="card invest-empty"{% if loop.first %} id="ai-more"{% endif %} aria-label="More"></section>
+    </div>
+  </article>
+{% else %}
   <p class="muted">No investigation runs yet. Open ForgeRCA on an incident.</p>
-  {% endif %}
-</section>
-
-<div class="invest-more">
-  <section class="card invest-empty" id="summary">
-    <h2>Summary</h2>
-  </section>
-  <section class="card invest-empty" id="ai-more" aria-label="More"></section>
+{% endfor %}
 </div>
 {% endblock %}

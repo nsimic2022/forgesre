@@ -814,41 +814,20 @@ def forgeai_page(
 ):
     selected = (n or "").strip()
     runs = list_investigation_runs(db)
-    case = next((row for row in runs if row["number"] == selected), None)
-    if case is None and not selected and runs:
-        case = runs[0]
-        selected = case["number"]
-    specialists: list = []
-    if case:
+    if selected:
+        cases = [row for row in runs if row["number"] == selected][:1]
+    else:
+        cases = runs
+    for case in cases:
         item = db.query(Incident).filter_by(number=case["number"]).first()
         if item is not None:
-            specialists = specialists_from_evidence(item.evidence)
-        else:
-            specialists = list(case.get("specialists") or [])
+            case["specialists"] = specialists_from_evidence(item.evidence)
     return render(
         request,
         "forgeai.html",
         user,
-        case=case,
-        specialists=specialists,
+        cases=cases,
         selected=selected,
-    )
-
-
-@router.get("/investigations/menu", response_class=HTMLResponse)
-def investigations_menu(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_page("read_ai")),
-):
-    return render(
-        request,
-        "_investigation_cases.html",
-        user,
-        cases=list_investigation_runs(db)[:10],
-        with_check=True,
-        selected="",
-        list_row=False,
     )
 
 

@@ -20,10 +20,10 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v09-45">
+  <link rel="stylesheet" href="/static/app.css?v=v09-46">
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
-  <script src="/static/app.js?v=v09-H" defer></script>
+  <script src="/static/app.js?v=v09-I" defer></script>
   {% block extra_head %}{% endblock %}
 </head>
 <body hx-boost="true" hx-indicator="#hx-progress">
@@ -40,13 +40,7 @@
     <div class="brand">ForgeSRE <span>v1.0</span></div>
     <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
     {% if can('read_ai') %}
-    <div class="nav-invest" data-nav-invest>
-      <button type="button" class="nav-invest-toggle{% if request.url.path.startswith('/investigations') or request.url.path.startswith('/forgeai') %} active{% endif %}" data-nav-invest-toggle aria-expanded="false" aria-controls="nav-invest-panel">Investigations</button>
-      <div id="nav-invest-panel" class="nav-invest-panel" data-nav-invest-panel hidden>
-        <a class="nav-invest-all" href="/investigations">Recent investigations</a>
-        <div class="nav-invest-list" data-nav-invest-list data-select-scope aria-label="Recent investigations"></div>
-      </div>
-    </div>
+    <a href="/investigations" class="{% if request.url.path.startswith('/investigations') or request.url.path.startswith('/forgeai') %}active{% endif %}">Investigations</a>
     {% endif %}
     <a href="/assets" class="{% if request.url.path.startswith('/assets') %}active{% endif %}">Assets</a>
     {% if can('write_assets') %}
