@@ -63,9 +63,11 @@ def test_distinct_who_name_skips_role_echo():
     assert distinct_who_name("  Super admin  ", "super_admin") == ""
     assert distinct_who_name("Nataša", "super_admin") == "Nataša"
     assert distinct_who_name("Ada", "analyst") == "Ada"
+    assert distinct_who_name("N", "super_admin", "Simić") == "N Simić"
     assert distinct_who_name("  Analyst ", "analyst") == ""
     assert distinct_who_name("", "admin") == ""
     assert distinct_who_name(None, "admin") == ""
+    assert distinct_who_name("Super", "super_admin", "Admin") == ""
 
 
 def _who_block(html: str) -> str:
@@ -118,7 +120,7 @@ def test_nav_foot_prints_role_once_and_theme_switcher():
     assert "matchMedia" not in js
     assert "theme-label-system" in base
     assert "theme-label-contrast" not in base
-    assert "distinct_who_name(user.name, user.role)" in base
+    assert "distinct_who_name(user.name, user.role, user.surname)" in base
     assert "class=\"secondary theme-toggle\"" not in base
     db.close()
 
@@ -131,6 +133,7 @@ def test_nav_foot_keeps_distinct_name_above_role():
         User(
             email="ada@forgesre.local",
             name="Ada",
+            surname="Lovelace",
             password_hash=hash_password("testpass"),
             role="analyst",
         )
@@ -142,8 +145,8 @@ def test_nav_foot_keeps_distinct_name_above_role():
     assert home.status_code == 200
     who = _who_block(home.text)
     assert 'class="who-name"' in who
-    assert ">Ada<" in who
-    assert who.count(">Ada<") == 1
+    assert ">Ada Lovelace<" in who
+    assert who.count(">Ada Lovelace<") == 1
     assert ">Analyst<" in who
     assert who.count(">Analyst<") == 1
     db.close()

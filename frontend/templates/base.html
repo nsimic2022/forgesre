@@ -20,7 +20,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v09-37">
+  <link rel="stylesheet" href="/static/app.css?v=v09-38">
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
   <script src="/static/app.js?v=v09-E" defer></script>
@@ -37,7 +37,7 @@
   {%- endmacro %}
   {% if user %}
   <aside class="nav" id="app-nav">
-    <div class="brand">ForgeSRE <span>v0.9</span></div>
+    <div class="brand">ForgeSRE <span>v1.0</span></div>
     <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
     {% if can('read_ai') %}
     <a href="/investigations" class="{% if request.url.path.startswith('/investigations') or request.url.path.startswith('/forgeai') %}active{% endif %}">Investigations</a>
@@ -57,7 +57,7 @@
     {% if can('admin') %}<a href="/admin" class="{% if request.url.path.startswith('/admin') %}active{% endif %}">Administration</a>{% endif %}
     <div class="nav-foot">
       <div class="who">
-        {% set display_name = distinct_who_name(user.name, user.role) %}
+        {% set display_name = distinct_who_name(user.name, user.role, user.surname) %}
         {% if display_name %}<span class="who-name">{{ display_name }}</span>{% endif %}
         <span class="who-role">{{ role_label(user.role) }}</span>
       </div>

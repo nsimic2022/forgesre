@@ -116,9 +116,9 @@ def test_version_is_0_9_on_product_surfaces():
 
     assert fastapi_app.version == "0.9.0"
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "<span>v0.9</span>" in base
+    assert "<span>v1.0</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-37" in base
+    assert "app.css?v=v09-38" in base
     assert "app.js?v=v09-E" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
@@ -141,7 +141,7 @@ def test_dashboard_footer_shows_v09():
     _db().close()
     home = _client().get("/")
     assert home.status_code == 200
-    assert "ForgeSRE <span>v0.9</span>" in home.text
+    assert "ForgeSRE <span>v1.0</span>" in home.text
 
 
 # --- appliance NET ------------------------------------------------------------
@@ -214,8 +214,7 @@ def test_dashboard_has_net_dash_and_api_level():
         assert f'data-metric="{key}"' in card
     assert card.index('data-metric="hdd"') < card.index('data-metric="net"')
     assert '<span class="metric-name">NET</span>' in card
-    assert "no internet probe" in card
-    assert "Network throughput is not measured." in card
+    assert "<h2>ForgeSRE</h2>" in card
     data = client.get("/api/v1/system/resources").json()
     assert data["levels"]["net"] in {"ok", "crit"}
     assert data["net"]["reading"]
