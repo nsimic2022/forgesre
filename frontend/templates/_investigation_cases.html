@@ -1,0 +1,24 @@
+{%- set selected_number = selected|default('') -%}
+{%- set show_check = with_check|default(false) -%}
+{%- set row_attr = list_row|default(false) -%}
+{% for row in cases %}
+<div class="act-case-row{% if show_check %} has-check{% endif %}{% if selected_number == row.number %} is-selected{% endif %}"{% if row_attr %} id="case-{{ row.number }}" data-list-row{% endif %}>
+  {% if show_check %}
+  <label class="row-check"><input type="checkbox" name="selected" value="{{ row.number }}" data-select-row aria-label="Select {{ row.number }}"></label>
+  {% endif %}
+  <a class="act-case" href="{{ row.href }}">
+    <span class="act-case-name">
+      <strong>{{ row.title }}</strong>
+      <span class="muted">{{ row.number }} · {{ row.host }} · {{ short_when_label(row.created_at) }}</span>
+    </span>
+    {% for spec in row.specialists %}
+    <span class="act-case-cell specialist-cube {{ spec.css }}" title="{{ spec.hint }}">
+      <strong>{{ spec.label }}</strong>
+      <span>{{ spec.detail }}</span>
+    </span>
+    {% endfor %}
+  </a>
+</div>
+{% else %}
+<p class="muted">No investigation runs yet.</p>
+{% endfor %}

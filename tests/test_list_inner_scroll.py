@@ -191,7 +191,8 @@ def test_every_template_with_a_pager_wraps_its_list():
         if '"_pager.html"' not in text:
             continue
         assert "data-list-scroll" in text, tpl.name
-        assert "data-list-row" in text, tpl.name
+        has_rows = "data-list-row" in text or '"_investigation_cases.html"' in text
+        assert has_rows, tpl.name
     dash = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
     assert "data-list-scroll" not in dash and "data-dash-list" in dash
 
