@@ -206,6 +206,15 @@ def test_css_box_scrolls_with_sticky_header_and_selection_style():
     assert ".card[data-list-row].is-selected {" in css
     assert "[data-list-row]:focus-visible" in css
     assert "tr[data-dash-incident].is-selected" not in css
+    hover = css.split(".act-case:hover,", 1)[1].split("}", 1)[0]
+    assert "background: var(--bg)" in hover
+    tables = css.split(".content table > tbody > tr:hover > td {", 1)[1].split("}", 1)[0]
+    assert "background: var(--bg)" in tables
+    selected = css.split(".content table > tbody > tr.selected:hover > td {", 1)[1].split("}", 1)[0]
+    assert "background: var(--selected-hover)" in selected
+    picked = css.split(".content table > tbody > tr.is-selected:hover > td {", 1)[1].split("}", 1)[0]
+    assert "var(--accent)" in picked
+    assert "background: var(--row-hover)" not in css.split("table tbody tr:hover td {", 1)[1].split("}", 1)[0]
 
 
 def _js_fn(name: str) -> str:

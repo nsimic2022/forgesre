@@ -12,7 +12,7 @@ html[data-theme="system"] {
   --crit: #e11d48;
   --font: "Geist", "Inter", "Segoe UI", system-ui, sans-serif;
   --nav-hover: #f1f5f9;
-  --row-hover: #f8fafc;
+  --row-hover: #f9fafb;
   --selected: #ecfdf5;
   --selected-hover: #d1fae5;
   --pill: #f1f5f9;
@@ -48,7 +48,7 @@ html[data-theme="dark"] {
   --ink-on-ok: #022c22;
   --ink-on-crit: #4c0519;
   --nav-hover: #1e293b;
-  --row-hover: #1e293b;
+  --row-hover: #0f172a;
   --selected: #064e3b;
   --selected-hover: #065f46;
   --pill: #334155;
@@ -85,7 +85,7 @@ html[data-theme="dark"] {
     --ink-on-ok: #022c22;
     --ink-on-crit: #4c0519;
     --nav-hover: #1e293b;
-    --row-hover: #1e293b;
+    --row-hover: #0f172a;
     --selected: #064e3b;
     --selected-hover: #065f46;
     --pill: #334155;
@@ -454,7 +454,7 @@ th, td {
   font-size: 0.82rem;
   vertical-align: middle;
 }
-table tbody tr:hover td { background: var(--row-hover); }
+table tbody tr:hover td { background: var(--bg); }
 /* v09-16: Incident page identity row + Host metrics row; Add on-call Users typeahead. */
 /* v09-15: On-call Name is a person; phone+email stacked; platform copy matches Dashboard. */
 /* v09-14: Escalation is four same-style cards in one row; Add on-call is typed by hand. */
@@ -523,8 +523,9 @@ table tbody tr:hover td { background: var(--row-hover); }
 .dash-recent-scroll > table > tbody > tr:hover > td,
 .health-table > tbody > tr:hover > td,
 .verify-table > tbody > tr:hover > td,
-.scan-list > tbody > tr:hover > td {
-  background: var(--row-hover);
+.scan-list > tbody > tr:hover > td,
+.content table > tbody > tr:hover > td {
+  background: var(--bg);
 }
 .list-scroll > table > tbody > tr.selected > td,
 .dash-recent-scroll > table > tbody > tr.selected > td,
@@ -537,8 +538,12 @@ table tbody tr:hover td { background: var(--row-hover); }
 .dash-recent-scroll > table > tbody > tr.selected:hover > td,
 .user-table tr.selected:hover td,
 .asset-table tr.selected:hover td,
-.scan-list > tbody > tr.selected:hover > td {
+.scan-list > tbody > tr.selected:hover > td,
+.content table > tbody > tr.selected:hover > td {
   background: var(--selected-hover);
+}
+.content table > tbody > tr.is-selected:hover > td {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .list-scroll > table > tbody > tr.is-selected > td,
 .dash-recent-scroll > table > tbody > tr.is-selected > td,
