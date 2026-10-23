@@ -809,43 +809,13 @@ def forgeai_page(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_page("read_ai")),
-    site: str = "",
-    severity: str = "",
-    edit: str = "",
-    run: str = "",
-    q: str = "",
+    n: str = "",
+    page: str = "1",
 ):
-    from app.services import list_mail_addresses
-
-    site = (site or "").strip()
-    severity = (severity or "").strip().upper()
-    run = (run or "").strip().lower()
-    q = (q or "").strip()
-    facts = insight_facts(db, site=site, severity=severity)
-    panel = insight_panel(db)
-    panel = {**panel, "facts": facts}
-    doctor = doctor_payload()
-    crons = (
-        db.query(ScheduledReport)
-        .filter(ScheduledReport.kind == "forgeai")
-        .order_by(ScheduledReport.id.desc())
-        .all()
-    )
-    report_form = scheduled_report_form_values()
-    report_form["name"] = "forgeai-digest"
-    report_form["preset"] = "24h"
-    report_form_mode = "add"
-    editing_report = None
-    edit_id = _parse_id_query(edit)
-    if edit_id is not None:
-        row = db.get(ScheduledReport, edit_id)
-        if row is not None and (row.kind or "") == "forgeai":
-            editing_report = row
-            report_form_mode = "edit"
-            report_form = scheduled_report_form_values(row)
+    selected = (n or "").strip()
     runs, runs_pager = paginate(
-        list_investigation_runs(db, status=run, q=q),
-        request.query_params.get("page", "1"),
+        list_investigation_runs(db),
+        page,
         size=per_page(request),
         fragment="#activity",
     )
@@ -853,19 +823,26 @@ def forgeai_page(
         request,
         "forgeai.html",
         user,
-        setup=forgeai_setup(doctor=doctor),
-        insights=panel,
-        filters={"site": site, "severity": severity, "run": run, "q": q},
-        filter_options=insight_filter_options(db),
-        jobs=list_forgeai_jobs(db),
-        rewrites=list_insight_rewrites(db),
-        crons=crons,
-        addresses=list_mail_addresses(db),
-        report_form=report_form,
-        report_form_mode=report_form_mode,
-        editing_report=editing_report,
         runs=runs,
         runs_pager=runs_pager,
+        selected=selected,
+    )
+
+
+@router.get("/investigations/menu", response_class=HTMLResponse)
+def investigations_menu(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("read_ai")),
+):
+    return render(
+        request,
+        "_investigation_cases.html",
+        user,
+        cases=list_investigation_runs(db)[:10],
+        with_check=True,
+        selected="",
+        list_row=False,
     )
 
 

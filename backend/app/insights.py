@@ -592,7 +592,7 @@ def _writer_view(inv: Investigation) -> dict[str, Any]:
 
 
 def list_investigation_runs(db: Session, *, status: str = "", q: str = "") -> list[dict[str, Any]]:
-    """ForgeRCA / ForgeAI runs for Recent activity (Investigations + Dashboard)."""
+    """ForgeRCA / ForgeAI runs for Recent investigations (Investigations + Dashboard + nav)."""
     wanted = (status or "").strip().lower()
     needle = (q or "").strip().lower()
     pending = {
@@ -649,7 +649,7 @@ def list_investigation_runs(db: Session, *, status: str = "", q: str = "") -> li
                 "css": css,
                 "confidence": int(inv.confidence or 0),
                 "created_at": inv.created_at,
-                "href": f"/ai/{number}",
+                "href": f"/investigations?n={number}",
                 "specialists": _specialist_cubes(inv, incident),
                 "writer": _writer_view(inv),
             }

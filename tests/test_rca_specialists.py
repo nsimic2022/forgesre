@@ -97,19 +97,18 @@ def test_investigations_page_lists_runs_and_specialist_cubes():
     listing = client.get("/investigations")
     assert listing.status_code == 200
     assert 'id="activity"' in listing.text
-    assert "Recent activity" in listing.text
-    activity = listing.text.split('id="activity"', 1)[1].split('id="setup"', 1)[0]
+    assert "Recent investigations" in listing.text
+    activity = listing.text.split('id="activity"', 1)[1].split('id="summary"', 1)[0]
     assert "filter-chips" not in activity
     assert "Start from an" not in activity
     assert ">Investigation<" not in activity
-    assert 'class="act-expand"' in activity
+    assert 'class="act-expand"' not in activity
     assert ">Metrics<" in activity
     assert ">Logs<" in activity
     assert ">Inventory<" in activity
     assert ">History<" in activity
-    assert ">ForgeAI<" in activity
     assert number in listing.text
-    assert 'href="/ai/%s"' % number in listing.text
+    assert 'href="/investigations?n=%s"' % number in listing.text
     runs = list_investigation_runs(db)
     match = next(row for row in runs if row["number"] == number)
     assert len(match["specialists"]) == 4
@@ -120,7 +119,7 @@ def test_investigations_page_lists_runs_and_specialist_cubes():
     assert "Recent activity" not in cube
     assert "Ask ForgeAI" not in cube
     assert "Open Investigations" not in cube
-    assert f'href="/ai/{number}"' in cube
+    assert f'href="/investigations?n={number}"' in cube
     assert 'class="act-case"' in cube
     assert cube.index(">Inventory<") < cube.index(">Metrics<") < cube.index(">Logs<") < cube.index(">History<")
     case = client.get(location).text
@@ -181,7 +180,7 @@ def test_writer_uses_specialist_brief_only():
 def test_cache_bust_is_v09_35():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-43" in base
+    assert "app.css?v=v09-44" in base
     assert ".specialist-row" in css
     assert ".specialist-cube.ok" in css
     assert ".act-expand" in css

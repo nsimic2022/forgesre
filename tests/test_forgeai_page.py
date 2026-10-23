@@ -39,20 +39,22 @@ def test_forgeai_page_has_five_cubes_and_cron():
     page = client.get("/investigations")
     assert page.status_code == 200
     html = page.text
-    for marker in ('id="activity"', 'id="setup"', 'id="ask"', 'id="digest"', 'id="jobs"', 'id="reports"', 'id="cron"'):
+    for marker in ('id="activity"', 'id="summary"', 'id="ai-more"'):
         assert marker in html, marker
     assert "Investigations" in html
-    assert "Recent activity" in html
-    assert "GGUF" in html
-    assert "Ask ForgeAI" in html
-    assert "Export TXT" in html
-    assert "Save digest schedule" in html
+    assert "Recent investigations" in html
+    assert "Recent activity" not in html
+    assert "Ask ForgeAI" not in html
+    assert "Save digest schedule" not in html
+    assert 'id="setup"' not in html
+    assert 'id="cron"' not in html
     assert client.get("/forgeai").status_code == 200
     home = client.get("/").text
     assert 'href="/investigations"' in home
     assert "Open Investigations" not in home
     nav = home.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
     assert ">Investigations<" in nav
+    assert 'data-nav-invest-toggle' in nav
     assert ">ForgeAI<" not in nav
     assert "Coming later" not in nav
     assert nav.index(">Dashboard<") < nav.index('href="/investigations"') < nav.index(">Assets<")
@@ -70,6 +72,7 @@ def test_viewer_forbidden_on_forgeai():
     home = client.get("/").text
     nav = home.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
     assert 'href="/investigations"' not in nav
+    assert client.get("/investigations/menu").status_code == 403
 
 
 def test_digest_filter_chips():
@@ -96,10 +99,9 @@ def test_digest_filter_chips():
     client = _client()
     page = client.get("/investigations?severity=CRITICAL&site=Lab-East")
     assert page.status_code == 200
-    assert "Lab-East" in page.text
-    assert 'href="/investigations?severity=CRITICAL' in page.text
-    digest = page.text.split('id="digest"', 1)[1].split('id="jobs"', 1)[0]
-    assert "chip on" in digest
+    assert 'id="digest"' not in page.text
+    assert "filter-chips" not in page.text
+    assert "Recent investigations" in page.text
 
 
 def test_forgeai_cron_stays_off_ops_and_mails():
@@ -114,7 +116,8 @@ def test_forgeai_cron_stays_off_ops_and_mails():
     assert created.status_code == 303
     assert created.headers["location"] == "/forgeai#cron"
     page = client.get("/forgeai").text
-    assert "nightly-digest" in page
+    assert "nightly-digest" not in page
+    assert 'id="cron"' not in page
     ops = client.get("/ops").text
     active = ops.split("Active scheduled reports", 1)[1]
     assert "nightly-digest" not in active
@@ -154,6 +157,6 @@ def test_ask_posts_question_and_css_cache():
     assert posted.status_code == 303
     assert posted.headers["location"] == "/investigations#ask"
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-43" in base
+    assert "app.css?v=v09-44" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".forgeai-grid" in css
