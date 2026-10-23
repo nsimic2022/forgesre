@@ -121,7 +121,7 @@ def test_assets_table_scrolls_inside_box_and_asset_id_opens():
     demo = next(r for r in rows if f'href="/assets/{DEMO_ASSET}"' in r)
     assert f'<a href="/assets/{DEMO_ASSET}">{DEMO_ASSET}</a>' in demo
     assert f'data-list-open>' in demo
-    assert f'/assets?view={DEMO_ASSET}' in demo
+    assert f'/assets?edit={DEMO_ASSET}' in demo
     assert "href=" not in demo.split(">", 1)[0]
 
 

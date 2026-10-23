@@ -121,7 +121,7 @@ from app.security import (
     verify_password,
 )
 from app.api import doctor_payload, run_asset_verify, verify_assets
-from app.asset_metrics import glance_cells, safe_asset_metric_panel
+from app.asset_metrics import safe_asset_metric_panel
 from rca.specialists import specialists_from_evidence
 
 from app.insights import (
@@ -903,7 +903,7 @@ def asset_form_context(
 
 def asset_saved_url(asset_id: str, notice: str = "") -> str:
     """Stay on the Assets list with the saved row's pane open."""
-    pairs = [("view", asset_id)]
+    pairs = [("edit", asset_id)]
     if notice:
         pairs.append(("notice", notice))
     return "/assets?" + urlencode(pairs)
@@ -973,31 +973,19 @@ def assets_page(
     selected = None
     form = asset_form_values()
     clone_source = ""
-    show_glance = False
-    metrics = None
-    glance = []
     notice = request.query_params.get("notice") or ""
-    if edit.strip():
-        selected = db.query(Asset).filter_by(asset_id=edit.strip()).first()
+    open_id = edit.strip() or view.strip()
+    if open_id:
+        selected = db.query(Asset).filter_by(asset_id=open_id).first()
         if selected is not None:
             form_mode = "edit"
             form = asset_form_values(selected)
-            show_glance = True
-    elif view.strip():
-        selected = db.query(Asset).filter_by(asset_id=view.strip()).first()
-        if selected is not None:
-            form_mode = "edit"
-            form = asset_form_values(selected)
-            show_glance = True
     elif clone.strip():
         selected = db.query(Asset).filter_by(asset_id=clone.strip()).first()
         if selected is not None:
             form_mode = "clone"
             form = clone_prefill(db, selected)
             clone_source = selected.asset_id
-    if show_glance and selected is not None:
-        metrics = safe_asset_metric_panel(selected)
-        glance = glance_cells(metrics)
     return render(
         request,
         "assets.html",
@@ -1007,9 +995,6 @@ def assets_page(
         form=form,
         selected=selected,
         clone_source=clone_source,
-        show_glance=show_glance,
-        metrics=metrics,
-        glance=glance,
         import_of="",
         notice=notice,
         q=q,

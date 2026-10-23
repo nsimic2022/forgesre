@@ -48,11 +48,11 @@
   </thead>
   <tbody>
     {% for asset in assets %}
-    <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}" data-list-row data-list-view="/assets?view={{ asset.asset_id }}{{ view_tail }}">
+    <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}" data-list-row{% if can('write_assets') %} data-list-view="/assets?edit={{ asset.asset_id }}{{ view_tail }}"{% else %} data-list-view="/assets/{{ asset.asset_id }}"{% endif %}>
       {{ sel.cell(asset.asset_id) }}
       <td class="col-num">{{ asset.number or "—" }}</td>
       <td class="col-id"><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
-      <td class="col-host"><a href="/assets?view={{ asset.asset_id }}{{ view_tail }}" data-list-open>{{ asset.hostname }}</a>{% if is_lab_inventory_row(asset) %} <span class="pill demo">DEMO</span>{% endif %}{% if asset.parent %}<div class="muted" data-parent-host>parent {{ asset.parent.hostname }}</div>{% endif %}</td>
+      <td class="col-host">{% if can('write_assets') %}<a href="/assets?edit={{ asset.asset_id }}{{ view_tail }}" data-list-open>{{ asset.hostname }}</a>{% else %}<a href="/assets/{{ asset.asset_id }}" data-list-open>{{ asset.hostname }}</a>{% endif %}{% if is_lab_inventory_row(asset) %} <span class="pill demo">DEMO</span>{% endif %}{% if asset.parent %}<div class="muted" data-parent-host>parent {{ asset.parent.hostname }}</div>{% endif %}</td>
       <td class="col-ip">{{ asset.ip or "—" }}</td>
       <td class="col-port">
         {% set r = reachability_snapshot(asset) %}
@@ -85,18 +85,19 @@
   </tbody>
 </table>
 </div>
-{% with list_actions={"delete": "/assets/bulk-delete" if can('write_assets') else "", "delete_label": "Remove", "delete_last": True, "open_view": "/assets/open-view", "open_view_title": "View this asset", "open_edit": "/assets/open-edit" if can('write_assets') else "", "open_edit_title": "Edit this asset", "clone": "/assets/open-clone" if can('write_assets') else "", "verify": "/assets/open-verify" if can('write_assets') else "", "export": "/assets/export", "next": "/assets", "stay": list_stay, "confirm": "Delete the selected assets? Incidents stay, without that host."} %}
+{% with list_actions={"delete": "/assets/bulk-delete" if can('write_assets') else "", "delete_label": "Remove", "delete_last": True, "open_edit": "/assets/open-edit" if can('write_assets') else "", "open_edit_title": "Edit this asset", "clone": "/assets/open-clone" if can('write_assets') else "", "verify": "/assets/open-verify" if can('write_assets') else "", "export": "/assets/export", "next": "/assets", "stay": list_stay, "confirm": "Delete the selected assets? Incidents stay, without that host."} %}
 {% include "_pager.html" %}
 {% endwith %}
 </div>
-{% if selected and (show_glance or form_mode) %}
+{% if selected and form_mode and can('write_assets') %}
 <section class="asset-pane" id="asset-pane">
-{% if show_glance %}
-{% include "_asset_glance.html" %}
+{% if form_mode == "edit" %}
+<aside class="dash-graphs card asset-edit-graphs" data-asset-graphs data-asset="{{ selected.asset_id }}" data-host="{{ selected.hostname }}" aria-live="polite" aria-label="Live metrics for this asset">
+  <p class="muted dash-graph-empty" data-dash-graph-empty hidden></p>
+  <div class="dash-graph-list" data-dash-graph-list></div>
+</aside>
 {% endif %}
-{% if can('write_assets') and form_mode %}
 {% include "_asset_form.html" %}
-{% endif %}
 </section>
 {% endif %}
 {% endblock %}

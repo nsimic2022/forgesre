@@ -990,10 +990,10 @@ form label.inline-check input[type="checkbox"],
   margin: 0;
 }
 .slot-row.end { justify-content: flex-end; }
-/* Add / Edit asset: three full-width bands. Thin 1px rules between bands,
+/* Add / Edit asset: two full-width bands. Thin 1px rules between bands,
    same language as .asset-detail-section, with extra air above and below each rule.
    Row 1 is four equal quarters: Identity | Ports | Contacts | Support.
-   Row 2 is Standard | Custom | Notes | empty. Row 3 is Escalation L1–L4. */
+   Row 2 is Alarms (standard 2×2 + scrolling custom) | Notes | Escalation half. */
 .asset-form-split {
   display: flex;
   flex-direction: column;
@@ -1021,7 +1021,8 @@ form label.inline-check input[type="checkbox"],
 }
 .asset-form-row-2 {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+  grid-auto-rows: 28rem;
   gap: 1rem;
   width: 100%;
   min-width: 0;
@@ -1040,14 +1041,57 @@ form label.inline-check input[type="checkbox"],
 }
 .asset-form-grid .identity-lg { grid-column: 1 / -1; }
 .asset-form-notes { min-height: 100%; }
-.asset-form-notes .asset-form-block { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 16rem; }
-.asset-form-notes textarea { flex: 1 1 auto; width: 100%; min-height: 16rem; resize: vertical; }
+.asset-form-notes .asset-form-block { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.asset-form-notes textarea { flex: 1 1 auto; width: 100%; min-height: 0; resize: none; }
 .asset-form-block { min-width: 0; }
 .asset-form-row-1 .asset-form-cube,
 .asset-form-row-2 .asset-form-cube {
   margin: 0;
   height: 100%;
   box-sizing: border-box;
+}
+.asset-form-row-2 .asset-form-cube {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.asset-form-row-2 .asset-ladder {
+  overflow-y: auto;
+}
+.asset-alarms-cube .alarm-standard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.35rem 0.75rem;
+  flex: 0 0 auto;
+}
+.asset-alarms-cube .asset-form-custom {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 0.7rem;
+}
+.asset-alarms-cube .asset-custom-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.asset-form-row-2 .asset-ladder .ladder-levels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.asset-form-row-2 .asset-ladder .ladder-level:nth-child(2n-1) {
+  border-left: 0;
+  padding-left: 0;
+}
+.asset-form-row-2 .asset-ladder .ladder-level:nth-child(n+3) {
+  border-top: 1px solid var(--line);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
 }
 .asset-form-row-1 .asset-form-block-head,
 .asset-form-row-2 .asset-form-block-head {
@@ -1078,6 +1122,11 @@ form label.inline-check input[type="checkbox"],
   flex-direction: column;
   gap: 0.25rem;
 }
+.asset-form-split .alarm-standard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.35rem 0.75rem;
+}
 .asset-form-split label.alarm-row { flex-direction: row; align-items: center; gap: 0.45rem; margin: 0.2rem 0; }
 .client-playrules .playrule-add select { width: 100%; }
 .playrule-list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
@@ -1107,8 +1156,12 @@ button.playrule-remove:hover { color: var(--crit); border-color: var(--crit); }
 @media (max-width: 1100px) {
   .asset-form-row-1,
   .asset-form-row-2,
-  .asset-ladder .ladder-levels { grid-template-columns: minmax(0, 1fr); }
-  .asset-ladder .ladder-level { border-left: 0; border-top: 1px solid var(--line); padding-left: 0; }
+  .asset-ladder .ladder-levels,
+  .asset-form-row-2 .asset-ladder .ladder-levels,
+  .asset-alarms-cube .alarm-standard-grid { grid-template-columns: minmax(0, 1fr); }
+  .asset-ladder .ladder-level,
+  .asset-form-row-2 .asset-ladder .ladder-level { border-left: 0; border-top: 1px solid var(--line); padding-left: 0; }
+  .dash-graphs.asset-edit-graphs .dash-graph-list { grid-template-columns: minmax(0, 1fr); }
 }
 .support-pill { white-space: nowrap; }
 .support-warning {
@@ -1997,6 +2050,18 @@ td.ops-report-actions .row-actions a.button {
 /* v09-A: Host metrics title sits above the cube; Export has TXT / CSV. */
 /* v09-A: ForgeAI digest under Recent incidents; I'm on duty now. */
 .asset-pane { margin: 0.85rem 0 1.25rem; }
+.dash-graphs.asset-edit-graphs {
+  margin: 0 0 1rem;
+  min-height: 0;
+  flex: none;
+}
+.dash-graphs.asset-edit-graphs .dash-graph-list {
+  flex: none;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: auto;
+  gap: 0.75rem;
+  min-height: 0;
+}
 .asset-glance {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -2130,7 +2195,10 @@ td.ops-report-actions .row-actions a.button {
   .asset-chart-panel[data-graph="up"] { grid-column: auto; }
   .asset-form-row-1,
   .asset-form-row-2,
-  .asset-ladder .ladder-levels { grid-template-columns: minmax(0, 1fr); }
+  .asset-ladder .ladder-levels,
+  .asset-form-row-2 .asset-ladder .ladder-levels,
+  .asset-alarms-cube .alarm-standard-grid,
+  .dash-graphs.asset-edit-graphs .dash-graph-list { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Analyst pass: one scan language across Dashboard, Incidents, Assets, Playrules, Escalation. */
@@ -3424,6 +3492,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 /* v09-36: Recent investigations scroll cube; ticker once; Found columns; alarm cubes. */
 /* v09-37: Left nav drops cubes/clock; collapse arrow on the divider. */
 /* v09-38: Brand v1.0; who name+surname; Dashboard titles without tips; bigger tile counts. */
+/* v09-39: Assets Edit Host metrics; one Alarms cube; Notes + half Escalation on row 2. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {
