@@ -211,7 +211,7 @@
     <p class="pre-wrap">{{ value }}</p>
   </div>
   {% endfor %}
-  <p class="muted"><a href="/assets/{{ incident.asset.asset_id }}">Edit contacts on the asset</a>.</p>
+  <p class="muted"><a href="/assets?edit={{ incident.asset.asset_id }}">Edit contacts on the asset</a>.</p>
 </section>
 {% endif %}
 

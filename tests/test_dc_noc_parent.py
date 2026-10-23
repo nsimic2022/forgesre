@@ -154,6 +154,9 @@ def test_parent_picker_on_the_asset_form_and_list():
     listed = client.get(f"/assets?q={child.asset_id}").text
     assert "data-parent-host" in listed
     assert parent.hostname in listed
-    detail = client.get(f"/assets/{child.asset_id}").text
-    assert f'href="/assets/{parent.asset_id}"' in detail
+    stale = client.get(f"/assets/{child.asset_id}", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == f"/assets?edit={child.asset_id}"
+    edit = client.get(f"/assets?edit={child.asset_id}").text
+    assert f'value="{parent.asset_id}"' in edit and "selected" in edit
     db.close()

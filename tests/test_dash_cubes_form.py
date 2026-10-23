@@ -220,11 +220,11 @@ def test_assets_notes_column_is_the_form_runbook():
     head = page.text.split('<table class="asset-table"', 1)[1].split("</thead>", 1)[0]
     assert head.index(">Source<") < head.index(">Notes<")
     assert "<th" not in head.split(">Notes<", 1)[1].split("</tr>", 1)[0]
-    filled_row = page.text.split(f"/assets/{filled}", 1)[1].split("</tr>", 1)[0]
+    filled_row = page.text.split(f"/assets?edit={filled}", 1)[1].split("</tr>", 1)[0]
     filled_cell = filled_row.split('class="col-asset-notes"', 1)[1].split("</td>", 1)[0]
     assert runbook in filled_cell
     assert "incident-style" not in filled_cell
-    blank_row = page.text.split(f"/assets/{blank}", 1)[1].split("</tr>", 1)[0]
+    blank_row = page.text.split(f"/assets?edit={blank}", 1)[1].split("</tr>", 1)[0]
     blank_cell = blank_row.split('class="col-asset-notes"', 1)[1].split("</td>", 1)[0]
     assert "—" in blank_cell
     assert "also hidden" not in blank_cell
@@ -246,16 +246,16 @@ def test_asset_form_has_one_notes_and_row1_order():
     page = _client().get("/discovery")
     assert page.status_code == 200
     form = page.text.split('id="asset-form"', 1)[1].split("</form>", 1)[0]
-    assert form.count(">Notes ") == 1
+    assert form.count(">Notes<") == 1
     assert 'name="notes"' not in form
     assert 'name="extra_runbook_note"' in form
     assert "Anything else the next operator should know" not in form
     row1 = form.split("asset-form-row-1", 1)[1].split("asset-form-row-2", 1)[0]
     order = [
         row1.index(">Identity<"),
-        row1.index(">Ports "),
-        row1.index(">Contacts "),
-        row1.index(">Support "),
+        row1.index(">Ports<"),
+        row1.index(">Contacts<"),
+        row1.index(">Support<"),
     ]
     assert order == sorted(order)
     assert "L1 NOC" in form and "L4 Manager" in form

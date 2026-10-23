@@ -400,7 +400,10 @@ def test_api_detect_and_auto_form(monkeypatch):
     )
     assert created.status_code in {302, 303}
     assert "notice=" in (created.headers.get("location") or "")
-    detail = client.get("/assets/auto-ui-win")
+    stale = client.get("/assets/auto-ui-win", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"].startswith("/assets?edit=auto-ui-win")
+    detail = client.get("/assets?edit=auto-ui-win")
     assert detail.status_code == 200
     assert b"10.44.4.61:9182" in detail.content
     assert b"Windows Server" in detail.content

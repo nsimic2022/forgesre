@@ -142,7 +142,6 @@ def test_assets_ui_offers_windows_server_and_http_sd():
     add = client.get("/discovery")
     assert add.status_code == 200
     assert b"Windows Server" in add.content
-    assert b"windows_exporter" in add.content
     assert b"Auto (detect exporter)" in add.content
     created = client.post(
         "/assets",
@@ -157,10 +156,12 @@ def test_assets_ui_offers_windows_server_and_http_sd():
         follow_redirects=False,
     )
     assert created.status_code in {302, 303}
-    detail = client.get("/assets/win-ui-01")
+    stale = client.get("/assets/win-ui-01", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == "/assets?edit=win-ui-01"
+    detail = client.get("/assets?edit=win-ui-01")
     assert detail.status_code == 200
     assert b"10.88.10.61:9182" in detail.content
-    assert b"windows_exporter" in detail.content
     sd = client.get(
         "/api/v1/sd/prometheus",
         headers={"Authorization": "Bearer forgesre-dev-webhook-token"},

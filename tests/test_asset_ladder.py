@@ -93,6 +93,19 @@ def test_ladder_form_parser_keeps_on_levels_and_drops_off_or_blank():
         {"level": 1, "after_minutes": 0, "emails": ["noc@dc.local"], "enabled": True},
         {"level": 3, "after_minutes": 0, "emails": ["lead@dc.local", "eng@dc.local"], "enabled": True},
     ]
+    roles = ladder_steps_from_form(
+        "1",
+        [
+            {"on": "1", "minutes": "0", "target": "team"},
+            {"on": "1", "minutes": "15", "target": "l2@dc.local"},
+            {"on": "", "minutes": "30", "target": "engineer"},
+            {"on": "1", "minutes": "60", "target": "not-a-role"},
+        ],
+    )
+    assert roles == [
+        {"level": 1, "after_minutes": 0, "emails": ["team"], "enabled": True},
+        {"level": 2, "after_minutes": 15, "emails": ["l2@dc.local"], "enabled": True},
+    ]
     assert ladder_steps_from_form("", [{"on": "1", "minutes": "0", "emails": ["a@dc.local"], "picks": []}]) is None
 
 
@@ -110,9 +123,9 @@ def test_add_asset_columns_nav_rules_and_escalated_cube():
         text.index("asset-form-ladder"),
     ]
     assert order == sorted(order)
-    assert "Identity" in text and ">Ports " in text
+    assert "Identity" in text and ">Ports<" in text
     assert "Standard alarms" in text and "Custom alarms" in text
-    assert ">Escalation " in text.split("data-asset-ladder", 1)[1]
+    assert ">Escalation<" in text.split("data-asset-ladder", 1)[1]
     assert "ladder-levels" in text.split("data-asset-ladder", 1)[1]
     assert "Client playrules" not in text
     assert 'href="/escalation">Default escalation</a>' in text
@@ -150,10 +163,10 @@ def test_ladder_persists_on_save_and_off_level_is_deleted():
             asset_id,
             ladder_on_1="1",
             ladder_minutes_1="0",
-            ladder_email_1="l1@dc.local",
+            ladder_target_1="l1@dc.local",
             ladder_on_2="1",
             ladder_minutes_2="15",
-            ladder_email_2=["l2a@dc.local", "l2b@dc.local"],
+            ladder_target_2="l2a@dc.local",
         ),
         follow_redirects=False,
     )
@@ -163,11 +176,11 @@ def test_ladder_persists_on_save_and_off_level_is_deleted():
     rows = {row.level: row for row in db.query(AssetLadderStep).filter_by(asset_id=asset.id)}
     assert set(rows) == {1, 2}
     assert rows[1].after_minutes == 0 and rows[1].emails == ["l1@dc.local"]
-    assert rows[2].after_minutes == 15 and rows[2].emails == ["l2a@dc.local", "l2b@dc.local"]
+    assert rows[2].after_minutes == 15 and rows[2].emails == ["l2a@dc.local"]
     edit = client.get(f"/assets?edit={asset_id}").text
     ladder = edit.split("data-asset-ladder", 1)[1].split("</form>", 1)[0]
-    assert 'name="ladder_email_1"' in ladder and "l1@dc.local" in ladder
-    assert ladder.count('name="ladder_email_2"') == 2
+    assert 'name="ladder_target_1"' in ladder and "l1@dc.local" in ladder
+    assert ladder.count('name="ladder_target_2"') == 1
     updated = client.post(
         f"/assets/{asset_id}/update",
         data={
@@ -177,7 +190,7 @@ def test_ladder_persists_on_save_and_off_level_is_deleted():
             "ladder_present": "1",
             "ladder_on_1": "1",
             "ladder_minutes_1": "5",
-            "ladder_email_1": "l1b@dc.local",
+            "ladder_target_1": "l1b@dc.local",
         },
         follow_redirects=False,
     )

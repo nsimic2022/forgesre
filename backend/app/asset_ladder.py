@@ -135,12 +135,25 @@ def policy_steps_from_levels(
     return out
 
 
+POLICY_ROLES = frozenset({"team", "team-lead", "engineer", "manager", "oncall"})
+
+
 def _valid_email(value: str) -> str:
     text = (value or "").strip()
     local, _, domain = text.partition("@")
     if not local or "." not in domain or any(ch.isspace() for ch in text):
         return ""
     return text
+
+
+def _valid_target(value: str) -> str:
+    """One recipient: a role (team / oncall / …) or an email."""
+    text = (value or "").strip()
+    if not text:
+        return ""
+    if text.lower() in POLICY_ROLES:
+        return text.lower()
+    return _valid_email(text)
 
 
 def _minutes(raw: Any) -> int:
@@ -169,22 +182,26 @@ def ladder_steps_from_form(present: str, levels: list[dict[str, Any]] | None) ->
         row = posted[index] if index < len(posted) else {}
         if not str(row.get("on") or "").strip():
             continue
-        emails_raw = row.get("emails") or []
-        picks = row.get("picks") or []
-        if isinstance(emails_raw, str):
-            emails_raw = [emails_raw]
-        if isinstance(picks, str):
-            picks = [picks]
         emails: list[str] = []
         seen: set[str] = set()
-        for i in range(max(len(emails_raw), len(picks))):
-            typed = emails_raw[i] if i < len(emails_raw) else ""
-            picked = picks[i] if i < len(picks) else ""
-            address = _valid_email(str(picked or "")) or _valid_email(str(typed or ""))
-            key = address.lower()
-            if address and key not in seen:
-                seen.add(key)
-                emails.append(address)
+        target = _valid_target(str(row.get("target") or ""))
+        if target:
+            emails = [target]
+        else:
+            emails_raw = row.get("emails") or []
+            picks = row.get("picks") or []
+            if isinstance(emails_raw, str):
+                emails_raw = [emails_raw]
+            if isinstance(picks, str):
+                picks = [picks]
+            for i in range(max(len(emails_raw), len(picks))):
+                typed = emails_raw[i] if i < len(emails_raw) else ""
+                picked = picks[i] if i < len(picks) else ""
+                address = _valid_target(str(picked or "")) or _valid_target(str(typed or ""))
+                key = address.lower()
+                if address and key not in seen:
+                    seen.add(key)
+                    emails.append(address)
         if not emails:
             continue
         out.append(
@@ -203,13 +220,13 @@ def ladder_form_slots(asset: Asset | None) -> list[dict[str, Any]]:
     saved: dict[int, AssetLadderStep] = {}
     if asset is not None:
         for row in list(getattr(asset, "ladder_steps", None) or []):
-            emails = [str(item) for item in (row.emails or []) if _valid_email(str(item))]
+            emails = [str(item) for item in (row.emails or []) if _valid_target(str(item))]
             if row.enabled and emails:
                 saved[int(row.level)] = row
     slots: list[dict[str, Any]] = []
     for level, label in LADDER_LEVELS:
         row = saved.get(level)
-        emails = [str(item) for item in (row.emails or []) if _valid_email(str(item))] if row is not None else []
+        emails = [str(item) for item in (row.emails or []) if _valid_target(str(item))] if row is not None else []
         slots.append(
             {
                 "level": level,
@@ -217,6 +234,7 @@ def ladder_form_slots(asset: Asset | None) -> list[dict[str, Any]]:
                 "on": row is not None,
                 "minutes": "" if row is None else int(row.after_minutes or 0),
                 "emails": emails or [""],
+                "target": emails[0] if emails else "",
             }
         )
     return slots
@@ -261,7 +279,7 @@ def filled_ladder_levels(db: Session, asset: Asset | None) -> list[dict[str, Any
     for row in rows:
         emails: list[str] = []
         for raw in row.emails or []:
-            address = _valid_email(str(raw))
+            address = _valid_target(str(raw))
             if address:
                 emails.append(address)
         if not emails:

@@ -5,7 +5,7 @@
 {% if request.query_params.get('edit_note') == 'select-one' %}
 <div class="banner" role="status">Select one</div>
 {% endif %}
-<h1>Assets {% with %}{% set tip %}Inventory this appliance monitors. Asset ID is the immutable slug. Port squares (ICMP, TCP, SNMP) refresh in the background from GET /api/v1/assets/reachability. Viewers can see status. Verify (this inventory path) is not System Health / ./forgesre doctor and is not ./forgesre test (appliance report).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Assets</h1>
 {% if notice %}
 <div class="banner">{{ notice }}</div>
 {% endif %}
@@ -48,11 +48,11 @@
   </thead>
   <tbody>
     {% for asset in assets %}
-    <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}" data-list-row{% if can('write_assets') %} data-list-view="/assets?edit={{ asset.asset_id }}{{ view_tail }}"{% else %} data-list-view="/assets/{{ asset.asset_id }}"{% endif %}>
+    <tr class="{% if selected and selected.asset_id == asset.asset_id %}selected{% endif %}" data-list-row data-list-view="/assets?edit={{ asset.asset_id }}{{ view_tail }}">
       {{ sel.cell(asset.asset_id) }}
       <td class="col-num">{{ asset.number or "—" }}</td>
-      <td class="col-id"><a href="/assets/{{ asset.asset_id }}">{{ asset.asset_id }}</a></td>
-      <td class="col-host">{% if can('write_assets') %}<a href="/assets?edit={{ asset.asset_id }}{{ view_tail }}" data-list-open>{{ asset.hostname }}</a>{% else %}<a href="/assets/{{ asset.asset_id }}" data-list-open>{{ asset.hostname }}</a>{% endif %}{% if is_lab_inventory_row(asset) %} <span class="pill demo">DEMO</span>{% endif %}{% if asset.parent %}<div class="muted" data-parent-host>parent {{ asset.parent.hostname }}</div>{% endif %}</td>
+      <td class="col-id"><a href="/assets?edit={{ asset.asset_id }}{{ view_tail }}">{{ asset.asset_id }}</a></td>
+      <td class="col-host"><a href="/assets?edit={{ asset.asset_id }}{{ view_tail }}" data-list-open>{{ asset.hostname }}</a>{% if is_lab_inventory_row(asset) %} <span class="pill demo">DEMO</span>{% endif %}{% if asset.parent %}<div class="muted" data-parent-host>parent {{ asset.parent.hostname }}</div>{% endif %}</td>
       <td class="col-ip">{{ asset.ip or "—" }}</td>
       <td class="col-port">
         {% set r = reachability_snapshot(asset) %}

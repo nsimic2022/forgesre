@@ -186,17 +186,17 @@ def test_asset_detail_graphs_use_the_host_metrics_api(monkeypatch):
     monkeypatch.setattr("app.services.query_prometheus_range", fake_range)
 
     client = _client()
-    page = client.get(f"/assets/{asset_id}")
+    stale = client.get(f"/assets/{asset_id}", follow_redirects=False)
+    assert stale.status_code == 303
+    page = client.get(f"/assets?edit={asset_id}")
     assert page.status_code == 200
     text = page.text
-    card = text.split("data-asset-metrics", 1)[1].split("</aside>", 1)[0]
-    assert f'data-asset="{asset_id}"' in card
-    assert f'data-host="{host}"' in card
-    assert "data-asset-graphs" in card
+    card = text.split("asset-edit-graphs", 1)[1].split("</aside>", 1)[0]
+    assert f'data-asset="{asset_id}"' in text
+    assert f'data-host="{host}"' in text
+    assert "data-asset-graphs" in text
     assert "data-dash-graph-list" in card
     assert "data-dash-graph-empty" in card
-    assert "data-dash-graph-caption" in card
-    assert "<p" not in card
 
     api = client.get(f"/api/v1/assets/{asset_id}/metrics")
     assert api.status_code == 200

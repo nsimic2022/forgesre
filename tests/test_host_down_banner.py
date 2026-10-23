@@ -130,9 +130,10 @@ def test_viewer_dashboard_without_host_down_banner_and_asset_pills():
     assert b">Port<" in assets.content
     assert b"reach-sq icmp ping" in assets.content
     assert b">ICMP<" in assets.content
-    detail = client.get(f"/assets/{DEMO_ASSET}")
-    assert detail.status_code == 200
-    assert b"reach-sq icmp ping" in detail.content
+    stale = client.get(f"/assets/{DEMO_ASSET}", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == f"/assets?edit={DEMO_ASSET}"
+    assert b"reach-sq icmp ping" in assets.content
     down = client.get("/api/v1/incidents/down")
     assert down.status_code == 200
     assert any(row["number"] == host.number for row in down.json())

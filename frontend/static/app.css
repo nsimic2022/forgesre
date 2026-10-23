@@ -993,7 +993,7 @@ form label.inline-check input[type="checkbox"],
 /* Add / Edit asset: two full-width bands. Thin 1px rules between bands,
    same language as .asset-detail-section, with extra air above and below each rule.
    Row 1 is four equal quarters: Identity | Ports | Contacts | Support.
-   Row 2 is Alarms (standard 2×2 + scrolling custom) | Notes | Escalation half. */
+   Row 2 is Alarms | Escalation (policy L1–L4) | Notes | empty. */
 .asset-form-split {
   display: flex;
   flex-direction: column;
@@ -1021,7 +1021,7 @@ form label.inline-check input[type="checkbox"],
 }
 .asset-form-row-2 {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-auto-rows: 28rem;
   gap: 1rem;
   width: 100%;
@@ -1059,6 +1059,16 @@ form label.inline-check input[type="checkbox"],
 .asset-form-row-2 .asset-ladder {
   overflow-y: auto;
 }
+.asset-form-row-2 .asset-ladder .policy-ladder {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.45rem;
+  margin: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.asset-form-row-2 .asset-ladder .policy-ladder .ladder-level {
+  padding: 0.4rem 0.45rem;
+}
 .asset-alarms-cube .alarm-standard-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1078,20 +1088,9 @@ form label.inline-check input[type="checkbox"],
   overflow-x: hidden;
   overflow-y: auto;
 }
-.asset-form-row-2 .asset-ladder .ladder-levels {
+.asset-form-row-2 .asset-ladder .ladder-levels.policy-ladder {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  flex: 1 1 auto;
-  min-height: 0;
-}
-.asset-form-row-2 .asset-ladder .ladder-level:nth-child(2n-1) {
-  border-left: 0;
-  padding-left: 0;
-}
-.asset-form-row-2 .asset-ladder .ladder-level:nth-child(n+3) {
-  border-top: 1px solid var(--line);
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 .asset-form-row-1 .asset-form-block-head,
 .asset-form-row-2 .asset-form-block-head {
@@ -3493,6 +3492,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 /* v09-37: Left nav drops cubes/clock; collapse arrow on the divider. */
 /* v09-38: Brand v1.0; who name+surname; Dashboard titles without tips; bigger tile counts. */
 /* v09-39: Assets Edit Host metrics; one Alarms cube; Notes + half Escalation on row 2. */
+/* v09-40: Asset ID opens Edit; policy L1–L4 cube; Notes/Escalation swapped; no Assets tips. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {

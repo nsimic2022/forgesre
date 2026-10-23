@@ -27,7 +27,7 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-39" in base
+    assert "app.css?v=v09-40" in base
     assert ".banner-short" not in css
     assert ".banner-x" in css
     assert "top: 0.35rem" in css.split(".banner-x {", 1)[1].split("}", 1)[0]
@@ -69,9 +69,10 @@ def test_dashboard_tiles_are_shortcuts_without_journal_banner():
 def test_assets_verify_copy_lives_in_title_tip_not_always_on_sentence():
     html = (ROOT / "frontend" / "templates" / "assets.html").read_text(encoding="utf-8")
     assert "reach-legend" not in html
-    assert "Verify (this inventory path)" in html
-    assert "./forgesre doctor" in html
-    assert "./forgesre test" in html
+    assert 'include "_info_tip.html"' not in html
+    assert "Verify (this inventory path)" not in html
+    assert "./forgesre doctor" not in html
+    assert "./forgesre test" not in html
     table = html.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
     filters = html.split("assets-filters", 1)[1].split("</form>", 1)[0]
     assert ">Verify<" not in table

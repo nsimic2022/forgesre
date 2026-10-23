@@ -77,7 +77,7 @@ def test_add_asset_column_widths_fill_the_page():
     row2 = block.split(".asset-form-row-2", 1)[1].split("}", 1)[0]
     assert "width: 100%;" in split and "max-width: none;" in split
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in row1
-    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);" in row2
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in row2
     chip = css.split(".playrule-chip-text", 1)[1].split("}", 1)[0]
     assert "ellipsis" not in chip
     page = _client().get("/discovery")
@@ -89,6 +89,7 @@ def test_add_asset_column_widths_fill_the_page():
         text.index("asset-form-right"),
         text.index("asset-form-custom"),
         text.index("asset-form-ladder"),
+        text.index("asset-form-notes"),
     ]
     assert order == sorted(order)
     assert "asset-form-split" not in _client().get("/").text
@@ -255,10 +256,10 @@ def test_asset_list_and_incident_ladder_cubes_after_a_fired_step():
             "ladder_present": "1",
             "ladder_on_1": "1",
             "ladder_minutes_1": "0",
-            "ladder_email_1": "l1@dc.local",
+            "ladder_target_1": "l1@dc.local",
             "ladder_on_2": "1",
             "ladder_minutes_2": "15",
-            "ladder_email_2": "l2@dc.local",
+            "ladder_target_2": "l2@dc.local",
         },
         follow_redirects=False,
     )
@@ -269,7 +270,7 @@ def test_asset_list_and_incident_ladder_cubes_after_a_fired_step():
     def asset_cubes() -> list[tuple[str, str, str]]:
         page = client.get("/assets", params={"q": asset_id, "per_page": "100"}).text
         table = page.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
-        before, after = table.split(f"/assets/{asset_id}", 1)
+        before, after = table.split(f"/assets?edit={asset_id}", 1)
         row = before.rsplit("<tr", 1)[1] + after.split("</tr>", 1)[0]
         return _cubes(row)
 
@@ -335,7 +336,7 @@ def test_empty_asset_ladder_maps_default_warning_onto_incident_cubes():
     incident = ingest_alertmanager(db, _alert(alertname, asset_id))[0]
     page = client.get("/assets", params={"q": asset_id, "per_page": "100"}).text
     table = page.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
-    before, after = table.split(f"/assets/{asset_id}", 1)
+    before, after = table.split(f"/assets?edit={asset_id}", 1)
     row = before.rsplit("<tr", 1)[1] + after.split("</tr>", 1)[0]
     assert [tone for _level, tone, _title in _cubes(row)] == ["grey", "grey", "grey", "grey"]
 

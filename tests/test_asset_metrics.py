@@ -523,41 +523,22 @@ def test_metrics_api_and_detail_html(monkeypatch):
     assert cpu["display"] == "22%"
     assert cpu["tone"] == "ok"
 
-    page = client.get("/assets/app-lab-metrics")
+    stale = client.get("/assets/app-lab-metrics", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == "/assets?edit=app-lab-metrics"
+    page = client.get("/assets?edit=app-lab-metrics")
     assert page.status_code == 200
     text = page.text
-    assert "asset-detail-split" in text
-    assert "asset-detail-col-1-4" in text
-    assert "asset-detail-col-2-3" in text
-    assert "data-asset-graph-grid" in text
-    assert "asset-detail-actions" in text
-    main_at = text.find("asset-detail-main")
-    actions_at = text.find("data-asset-actions")
-    metrics_at = text.find("asset-detail-metrics")
-    assert 0 <= main_at < actions_at < metrics_at
-    assert "22%" in text
-    assert 'href="/assets?edit=app-lab-metrics"' in text
-    actions = text.split("data-asset-actions", 1)[1].split("</div>", 1)[0]
-    for label in ("Edit", "Clone", "Verify", "Export", "Remove"):
-        assert f">{label}<" in actions
+    assert "asset-edit-graphs" in text
+    assert "data-asset-graphs" in text
+    assert 'data-asset="app-lab-metrics"' in text
+    assert "data-dash-graph-list" in text
+    assert "data-asset-graph-grid" not in text
+    assert "asset-detail-split" not in text
+    actions = text.split("asset-form-actions", 1)[1].split("</div>", 1)[0]
+    assert ">Save<" in actions and ">Verify<" in actions and ">Remove<" in actions
     assert actions.count('class="danger"') == 1
-    assert "Detect OS" not in actions
-
-    card = text.split("data-asset-metrics", 1)[1].split("</aside>", 1)[0]
-    for key in ("cpu_percent", "memory_percent", "disk_percent", "network", "up"):
-        assert f'data-chart-slot="{key}"' in card
-    cpu = card.split('data-graph="cpu_percent"', 1)[1].split("</section>", 1)[0]
-    mem = card.split('data-graph="memory_percent"', 1)[1].split("</section>", 1)[0]
-    disk = card.split('data-graph="disk_percent"', 1)[1].split("</section>", 1)[0]
-    up = card.split('data-graph="up"', 1)[1].split("</section>", 1)[0]
-    assert 'class="metric-value ok"' in cpu and "22%" in cpu
-    assert 'class="metric-value warn"' in mem and ">—</span>" in mem
-    assert 'class="metric-value crit"' in disk and "97%" in disk
-    assert 'class="metric-value ok"' in up and ">up</span>" in up
-    assert "Not scraped." in card
-    for gone in ("metric-tile", "metric-bar", "metric-swatch", "collecting_line", "Prometheus sees this target (up=1).</p>"):
-        assert gone not in card
-    assert "<p" not in card
+    assert "Detect OS" in actions
 
 
 def test_asset_detail_compact_metric_row_css():
@@ -585,19 +566,21 @@ def test_asset_detail_css_quarter_column():
     assert "minmax(0, 1.35fr)" not in css
 
 
-def test_demo_detail_page_has_demo_label_when_prom_down():
+def test_demo_edit_page_has_demo_label_when_prom_down():
     reset_demo_gauges()
     client = _login("admin@forgesre.local")
-    page = client.get(f"/assets/{DEMO_ASSET}")
+    stale = client.get(f"/assets/{DEMO_ASSET}", follow_redirects=False)
+    assert stale.status_code == 303
+    page = client.get(f"/assets?edit={DEMO_ASSET}")
     assert page.status_code == 200
     assert "DEMO" in page.text
-    assert "data-asset-graph-grid" in page.text
-    assert 'data-chart-slot="cpu_percent"' in page.text
-    assert "asset-detail-metrics" in page.text
-    win = client.get(f"/assets/{DEMO_WIN_ASSET}")
+    assert "asset-edit-graphs" in page.text
+    assert "data-asset-graphs" in page.text
+    assert "data-asset-graph-grid" not in page.text
+    win = client.get(f"/assets?edit={DEMO_WIN_ASSET}")
     assert win.status_code == 200
     assert "DEMO" in win.text
-    sw = client.get(f"/assets/{DEMO_SW_ASSET}")
+    sw = client.get(f"/assets?edit={DEMO_SW_ASSET}")
     assert sw.status_code == 200
     assert "DEMO" in sw.text
 
@@ -638,6 +621,9 @@ def test_viewer_can_read_metrics_api():
     assert login.status_code in {302, 303}
     api = client.get(f"/api/v1/assets/{DEMO_ASSET}/metrics")
     assert api.status_code == 200
-    page = client.get(f"/assets/{DEMO_ASSET}")
+    stale = client.get(f"/assets/{DEMO_ASSET}", follow_redirects=False)
+    assert stale.status_code == 303
+    page = client.get(f"/assets?edit={DEMO_ASSET}")
     assert page.status_code == 200
-    assert "data-asset-graph-grid" in page.text
+    assert 'id="asset-form"' not in page.text
+    assert "data-asset-graphs" not in page.text
