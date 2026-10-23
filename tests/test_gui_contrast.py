@@ -65,21 +65,21 @@ def _block(start: str) -> str:
 
 
 CONTRAST = {
-    "--bg": "#2b2b2b",
-    "--panel": "#222222",
-    "--line": "#454545",
-    "--text": "#f2f2f2",
-    "--muted": "#b0b0b0",
-    "--accent": "#59db8f",
-    "--ok": "#59db8f",
-    "--warn": "#ffc859",
-    "--crit": "#e45959",
+    "--bg": "#000000",
+    "--panel": "#000000",
+    "--line": "#ffffff",
+    "--text": "#ffffff",
+    "--muted": "#ffffff",
+    "--accent": "#00e676",
+    "--ok": "#00e676",
+    "--warn": "#ffcc00",
+    "--crit": "#ff3333",
     "--heading": "#ffffff",
 }
 
 
 def test_cache_bust_is_v09_s_for_css_only():
-    assert "app.css?v=v09-49" in BASE
+    assert "app.css?v=v09-50" in BASE
     assert "app.js?v=v09-J" in BASE
     assert "app.css?v=v09-W" not in BASE
 
@@ -118,12 +118,17 @@ def test_contrast_theme_uses_zabbix_dark_palette():
     for name, value in CONTRAST.items():
         assert f"{name}: {value};" in contrast
     nav = CSS.split('html[data-theme="contrast"] .nav {', 1)[1].split("}", 1)[0]
-    assert "--shell-bg: #0d0f11;" in nav
-    assert "--shell-accent: #59db8f;" in nav
+    assert "--shell-bg: #000000;" in nav
+    assert "--shell-text: #ffffff;" in nav
+    assert "--shell-accent: #00e676;" in nav
     panel = CONTRAST["--panel"]
-    assert _contrast(CONTRAST["--text"], panel) >= 12
-    assert _contrast(CONTRAST["--heading"], panel) > _contrast(CONTRAST["--text"], panel)
-    assert _contrast(CONTRAST["--ok"], panel) >= 7
+    assert _contrast(CONTRAST["--text"], panel) >= 18
+    assert _contrast(CONTRAST["--heading"], panel) >= 18
+    assert _contrast(CONTRAST["--muted"], panel) >= 18
+    assert _contrast(CONTRAST["--ok"], panel) >= 10
+    assert "#2b2b2b" not in contrast
+    assert "#b0b0b0" not in contrast
+    assert "#454545" not in contrast
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert '["light", "dark", "system", "contrast"]' in js
     assert "theme-label-contrast" in BASE

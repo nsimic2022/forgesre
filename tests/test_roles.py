@@ -115,7 +115,7 @@ def test_nav_foot_prints_role_once_and_theme_switcher():
     assert 'html[data-theme="high-contrast"]' not in css
     assert "prefers-color-scheme" in css
     assert "--shell-bg: #ffffff" in css
-    assert "--accent: #59db8f" in css
+    assert "--accent: #00e676" in css
     assert "forgesre-theme" in js
     assert '"system"' in js
     assert '"contrast"' in js

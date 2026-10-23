@@ -106,39 +106,39 @@ html[data-theme="dark"] {
   }
 }
 html[data-theme="contrast"] {
-  --bg: #2b2b2b;
-  --panel: #222222;
-  --line: #454545;
-  --text: #f2f2f2;
-  --muted: #b0b0b0;
-  --accent: #59db8f;
-  --ok: #59db8f;
-  --warn: #ffc859;
-  --crit: #e45959;
+  --bg: #000000;
+  --panel: #000000;
+  --line: #ffffff;
+  --text: #ffffff;
+  --muted: #ffffff;
+  --accent: #00e676;
+  --ok: #00e676;
+  --warn: #ffcc00;
+  --crit: #ff3333;
   --heading: #ffffff;
   --tip: #ffffff;
-  --check-edge: #f2f2f2;
-  --check-accent: #59db8f;
-  --ink-on-ok: #0b1f14;
-  --ink-on-crit: #2a0808;
-  --nav-hover: #1c1c1c;
-  --row-hover: #333333;
-  --selected: #163d2c;
-  --selected-hover: #1c4d37;
-  --pill: #3a3a3a;
-  --pill-ok-bg: #0f2e1f;
-  --pill-ok: #a8f0c8;
-  --pill-warn-bg: #3d2e0a;
-  --pill-warn: #ffe7a3;
-  --pill-crit-bg: #3d1010;
-  --pill-crit: #ffc4c4;
-  --pill-generated: #e2e2e2;
-  --input-bg: #1c1c1c;
-  --btn-text: #0b1f14;
-  --btn-danger-text: #2a0808;
-  --secondary: #3a3a3a;
-  --disabled: #555555;
-  --code-bg: #141414;
+  --check-edge: #ffffff;
+  --check-accent: #00e676;
+  --ink-on-ok: #000000;
+  --ink-on-crit: #000000;
+  --nav-hover: #000000;
+  --row-hover: #000000;
+  --selected: #000000;
+  --selected-hover: #000000;
+  --pill: #000000;
+  --pill-ok-bg: #000000;
+  --pill-ok: #00e676;
+  --pill-warn-bg: #000000;
+  --pill-warn: #ffcc00;
+  --pill-crit-bg: #000000;
+  --pill-crit: #ff3333;
+  --pill-generated: #ffffff;
+  --input-bg: #000000;
+  --btn-text: #000000;
+  --btn-danger-text: #000000;
+  --secondary: #000000;
+  --disabled: #000000;
+  --code-bg: #000000;
   color-scheme: dark;
 }
 /* OpenSRE-inspired slate / emerald. --heading / --tip / --check-* / --ink-on-* exist only on dark tokens. */
@@ -257,13 +257,13 @@ html[data-theme="dark"] .nav {
   }
 }
 html[data-theme="contrast"] .nav {
-  --shell-bg: #0d0f11;
-  --shell-text: #f2f2f2;
-  --shell-muted: #b0b0b0;
-  --shell-hover: #1c1c1c;
-  --shell-active: #163d2c;
-  --shell-line: #454545;
-  --shell-accent: #59db8f;
+  --shell-bg: #000000;
+  --shell-text: #ffffff;
+  --shell-muted: #ffffff;
+  --shell-hover: #000000;
+  --shell-active: #000000;
+  --shell-line: #ffffff;
+  --shell-accent: #00e676;
 }
 .nav :focus-visible { outline-color: var(--shell-accent); }
 .brand { font-weight: 700; letter-spacing: 0.04em; margin-bottom: 2rem; color: var(--shell-text); }
@@ -2875,6 +2875,10 @@ dialog.text-file::backdrop { background: color-mix(in srgb, var(--text) 28%, tra
   border: 1px solid #2e3a52;
   border-radius: 6px;
   min-width: 0;
+}
+html[data-theme="contrast"] .dash-chart-plot {
+  background: #000000;
+  border-color: #ffffff;
 }
 .dash-chart {
   display: block;
