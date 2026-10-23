@@ -271,12 +271,12 @@ def test_dashboard_order_tiles_appliance_sections_without_banners():
 
 def test_incident_heat_levels():
     def tiles(**counts):
-        return [{"key": key, "count": counts.get(key, 0)} for key in ("critical", "warning", "investigating", "resolved")]
+        return [{"key": key, "count": counts.get(key, 0)} for key in ("critical", "warning", "escalated")]
 
     assert incident_heat(tiles()) == ""
-    assert incident_heat(tiles(resolved=4)) == ""
+    assert incident_heat(tiles(escalated=0)) == ""
     assert incident_heat(tiles(warning=1)) == "warn"
-    assert incident_heat(tiles(investigating=2, resolved=1)) == "warn"
+    assert incident_heat(tiles(escalated=2)) == "warn"
     assert incident_heat(tiles(critical=1)) == "crit"
     assert incident_heat(tiles(warning=3, critical=1)) == "crit"
 
@@ -308,10 +308,10 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     big = css.split(".stat-row-big .stat {", 1)[1].split("}", 1)[0]
     assert "border-left-width: 8px" in big
     assert "aspect-ratio: 1" in big
-    assert "font-size: 4.3rem" in css
+    assert "font-size: 3.0rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-46" in base
+    assert "app.css?v=v09-47" in base
 
 
 def test_dashboard_recent_has_no_production_lab_chips():

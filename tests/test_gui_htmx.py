@@ -38,7 +38,7 @@ def test_vendor_htmx_and_alpine_are_offline():
 
 
 def test_cache_bust_and_boost_chrome():
-    assert "app.css?v=v09-46" in BASE
+    assert "app.css?v=v09-47" in BASE
     assert "app.js?v=v09-I" in BASE
     assert 'hx-boost="true"' in BASE
     assert 'hx-indicator="#hx-progress"' in BASE
@@ -156,7 +156,7 @@ def test_incident_lists_open_the_incident_page():
     assert "height: 9.25rem" in CSS
     top = CSS.split(".dash-top {", 1)[1].split("}", 1)[0]
     assert "minmax(0, var(--dash-tile-band))" in top
-    assert "minmax(20rem, 1.55fr)" in top
+    assert "minmax(24rem, 2.6fr)" in top
     band = CSS.split(".dash-incidents {", 1)[1].split("}", 1)[0]
     assert "minmax(0, 2fr) minmax(0, 1fr)" in band
     graphs = JS.split("(function bindDashGraphs() {", 1)[1].split("\n})();", 1)[0]
