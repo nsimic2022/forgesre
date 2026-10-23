@@ -37,8 +37,9 @@ def test_assets_list_has_no_empty_form_discovery_has_add_asset():
     listed = client.get(f"/assets?q={DEMO_ASSET}")
     assert listed.status_code == 200
     assert f'<a href="/assets/{DEMO_ASSET}" data-list-open>' not in listed.text
-    assert f'<a href="/assets/{DEMO_ASSET}">{DEMO_ASSET}</a>' in listed.text
-    assert f'/assets?edit={DEMO_ASSET}' in listed.text
+    assert f'<a href="/assets/{DEMO_ASSET}">{DEMO_ASSET}</a>' not in listed.text
+    assert f"?edit={DEMO_ASSET}" in listed.text
+    assert f">{DEMO_ASSET}</a>" in listed.text
     discovery = client.get("/discovery")
     assert discovery.status_code == 200
     assert "Add asset" in discovery.text

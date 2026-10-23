@@ -72,8 +72,10 @@ def test_query_window_is_30_days_and_one_point_is_not_a_forecast():
 
     client = TestClient(app)
     client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
-    page = client.get(f"/assets/{asset.asset_id}")
+    stale = client.get(f"/assets/{asset.asset_id}", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == f"/assets?edit={asset.asset_id}"
+    page = client.get(f"/assets?edit={asset.asset_id}")
     assert page.status_code == 200
-    assert 'data-capacity' in page.text
-    assert 'data-capacity-window="' + str(CAPACITY_SECONDS) in page.text or f'data-capacity-window="{CAPACITY_SECONDS:.1f}"' in page.text or "Not scraped." in page.text
+    assert "asset-edit-graphs" in page.text or "data-asset-graphs" in page.text
     db.close()

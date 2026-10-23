@@ -232,9 +232,11 @@ def test_support_custom_persists_and_shows_pill_without_incident():
 
     listing = _row(client.get("/assets?per_page=100&q=ats-sup").text, "ats-sup")
     assert 'data-support-state="in"' in listing and ">Custom</span>" in listing and "weekdays 8–16" in listing
-    detail = client.get("/assets/ats-sup").text
-    assert "Custom — describe below" in detail and "weekdays 8–16" in detail
+    stale = client.get("/assets/ats-sup", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == "/assets?edit=ats-sup"
     edit = client.get("/assets?edit=ats-sup").text
+    assert "Custom — describe below" in edit and "weekdays 8–16" in edit
     support = edit.split("data-asset-support", 1)[1].split("asset-form-middle", 1)[0]
     assert '<option value="custom" selected>' in support
     assert 'name="extra_support_custom" value="weekdays 8–16"' in support
@@ -288,13 +290,13 @@ def test_runbook_note_is_labelled_human_guidance():
     page = _client().get("/discovery").text
     notes = page.split("asset-form-notes", 1)[1].split("</section>", 1)[0]
     assert "for humans" not in notes
-    assert ">Notes " in notes
-    assert "3am" in notes and "Never executed" in notes and "not a rule" in notes
+    assert ">Notes<" in notes
+    assert "3am" not in notes and "Never executed" not in notes and "not a rule" not in notes
 
 
 def test_css_and_js_v08_14():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-39" in base and "app.js?v=v09-E" in base
+    assert "app.css?v=v09-40" in base and "app.js?v=v09-E" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "select.nice-select" in css and ".reach-snmp" in css
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")

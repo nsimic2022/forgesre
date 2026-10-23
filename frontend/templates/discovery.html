@@ -178,15 +178,15 @@
   <tbody>
   {% for row in candidates %}
     {% set found = found_assets.get(row.asset_id) if row.asset_id else none %}
-    <tr class="{% if selected and selected.id == row.id %}selected{% endif %}" data-list-row{% if can('write_assets') and not row.asset_id %} data-list-view="/discovery?import={{ row.id }}{{ import_tail }}"{% elif can('write_assets') and row.asset_id %} data-list-view="/assets?edit={{ row.asset_id }}"{% elif row.asset_id %} data-list-view="/assets/{{ row.asset_id }}"{% endif %}>
+    <tr class="{% if selected and selected.id == row.id %}selected{% endif %}" data-list-row{% if can('write_assets') and not row.asset_id %} data-list-view="/discovery?import={{ row.id }}{{ import_tail }}"{% elif row.asset_id %} data-list-view="/assets?edit={{ row.asset_id }}"{% endif %}>
       {{ sel.cell(row.id, row.ip) }}
       <td class="col-num">{% if found %}{{ found.number or "—" }}{% else %}—{% endif %}</td>
-      <td class="col-id">{% if found %}<a href="/assets/{{ found.asset_id }}">{{ found.asset_id }}</a>{% elif row.asset_id %}<a href="/assets/{{ row.asset_id }}">{{ row.asset_id }}</a>{% else %}—{% endif %}</td>
+      <td class="col-id">{% if found %}<a href="/assets?edit={{ found.asset_id }}">{{ found.asset_id }}</a>{% elif row.asset_id %}<a href="/assets?edit={{ row.asset_id }}">{{ row.asset_id }}</a>{% else %}—{% endif %}</td>
       <td class="col-host">
         {% if can('write_assets') and not row.asset_id %}
         <a href="/discovery?import={{ row.id }}{{ import_tail }}" data-list-open>{{ row.hostname or "—" }}</a>
         {% elif row.asset_id %}
-        <a href="{% if can('write_assets') %}/assets?edit={{ row.asset_id }}{% else %}/assets/{{ row.asset_id }}{% endif %}" data-list-open>{{ (found.hostname if found else row.hostname) or "—" }}</a>
+        <a href="/assets?edit={{ row.asset_id }}" data-list-open>{{ (found.hostname if found else row.hostname) or "—" }}</a>
         {% else %}
         {{ row.hostname or "—" }}
         {% endif %}

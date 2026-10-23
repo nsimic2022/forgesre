@@ -118,17 +118,18 @@ def test_assets_table_scrolls_inside_box_and_asset_id_opens():
     assert '<table class="asset-table" data-asset-reachability>' in box
     rows = _rows(box)
     assert rows
-    demo = next(r for r in rows if f'href="/assets/{DEMO_ASSET}"' in r)
-    assert f'<a href="/assets/{DEMO_ASSET}">{DEMO_ASSET}</a>' in demo
-    assert f'data-list-open>' in demo
-    assert f'/assets?edit={DEMO_ASSET}' in demo
+    demo = next(r for r in rows if f"?edit={DEMO_ASSET}" in r)
+    assert f"?edit={DEMO_ASSET}" in demo
+    assert f">{DEMO_ASSET}</a>" in demo
+    assert "data-list-open>" in demo
+    assert f'data-list-view="/assets?edit={DEMO_ASSET}' in demo
     assert "href=" not in demo.split(">", 1)[0]
 
 
 def test_edit_target_row_keeps_selected_class_inside_box():
     html = _client().get(f"/assets?edit={DEMO_ASSET}&q={DEMO_ASSET}").text
     rows = _rows(_boxes(html)[0])
-    edited = next(r for r in rows if f'href="/assets/{DEMO_ASSET}"' in r)
+    edited = next(r for r in rows if f"?edit={DEMO_ASSET}" in r)
     assert re.match(r'<tr class="selected" data-list-row', edited)
 
 

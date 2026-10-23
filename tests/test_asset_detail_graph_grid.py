@@ -48,7 +48,7 @@ def test_layout_is_a_quarter_fact_column_and_a_chart_grid():
     assert "request rate" not in html.lower() and "5xx" not in html.lower()
     assert "Math.sin" not in js
     assert 'data.collecting === false ? "Not scraped." : "No samples yet."' in js
-    assert "app.css?v=v09-39" in base and "app.js?v=v09-E" in base
+    assert "app.css?v=v09-40" in base and "app.js?v=v09-E" in base
     asset_js = js.split("(function bindAssetGraphs() {", 1)[1].split("\n})();", 1)[0]
     assert "?incident=" not in asset_js
     incident = (ROOT / "frontend" / "templates" / "incident_detail.html").read_text(encoding="utf-8")
@@ -71,31 +71,22 @@ def test_action_buttons_are_separate_and_only_remove_is_danger():
     )
     asset_id = asset.asset_id
     db.close()
-    page = _login().get(f"/assets/{asset_id}")
+    client = _login()
+    stale = client.get(f"/assets/{asset_id}", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == f"/assets?edit={asset_id}"
+    page = client.get(f"/assets?edit={asset_id}")
     assert page.status_code == 200
-    actions = page.text.split("data-asset-actions", 1)[1].split("</div>", 1)[0]
-    assert actions.count("<a ") == 3
-    assert actions.count("<form") == 2
-    assert actions.count("<button") == 2
-    for label in ("Edit", "Clone", "Verify", "Export", "Remove"):
-        assert f">{label}<" in actions
+    actions = page.text.split("asset-form-actions", 1)[1].split("</div>", 1)[0]
+    assert ">Save<" in actions
+    assert ">Cancel<" in actions
+    assert ">Verify<" in actions
+    assert ">Remove<" in actions
+    assert "Detect OS" in actions
     assert actions.count('class="danger"') == 1
-    assert 'class="danger">Remove<' in actions
-    assert "Detect OS" not in actions
-    left = page.text.split("asset-detail-col-1-4", 1)[1].split("asset-detail-side", 1)[0]
-    order = [
-        'data-asset-section="identity"',
-        'data-asset-section="noc"',
-        'data-asset-section="support"',
-        'data-asset-section="monitoring"',
-        'data-asset-section="similar"',
-        'data-asset-section="alarms"',
-    ]
-    spots = [left.index(token) for token in order]
-    assert spots == sorted(spots)
-    assert left.index('data-asset-section="alarms"') < page.text.index("data-asset-actions")
-    assert page.text.count('data-asset-section="similar"') == 1
-    assert "Similar incident history" in page.text
+    assert "asset-edit-graphs" in page.text
+    form = page.text.split("asset-form-row-2", 1)[1]
+    assert form.index(">Escalation<") < form.index(">Notes<")
 
 
 def test_linux_network_is_two_real_lines_and_snmp_skips_cpu():

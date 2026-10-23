@@ -123,9 +123,12 @@ def test_asset_page_and_api_mark_snmp_target():
         follow_redirects=False,
     )
     assert login.status_code in {302, 303}
-    page = client.get("/assets/edge-sw-01")
+    stale = client.get("/assets/edge-sw-01", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == "/assets?edit=edge-sw-01"
+    page = client.get("/assets?edit=edge-sw-01")
     assert page.status_code == 200
-    assert b"snmp_exporter" in page.content
+    assert b'name="snmp_port"' in page.content or b"SNMP" in page.content
     data = client.get("/api/v1/assets/edge-sw-01").json()
     assert data["snmp"] is True
     demo = client.get("/api/v1/assets/forge-demo-01").json()

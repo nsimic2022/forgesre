@@ -73,8 +73,9 @@ def test_assets_copy_separates_verify_doctor_and_test():
     assert page.status_code == 200
     text = page.text.lower()
     assert "verify" in text
-    assert "./forgesre doctor" in page.text or "system health" in text
-    assert "./forgesre test" in page.text
+    assert "./forgesre doctor" not in page.text
+    assert "./forgesre test" not in page.text
+    assert 'class="info-tip"' not in page.text
 
 
 def test_grafana_only_on_health_ui_not_nav_or_incidents():

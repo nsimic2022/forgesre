@@ -31,7 +31,7 @@ def test_info_tip_partial_and_css_exist():
     assert ".info-tip" in css
     assert ".info-tip-bubble" in css
     assert "bindInfoTips" in js
-    assert "app.css?v=v09-39" in base
+    assert "app.css?v=v09-40" in base
 
 
 def test_discovery_and_assets_include_info_tip():
@@ -39,10 +39,10 @@ def test_discovery_and_assets_include_info_tip():
     assets = (TEMPLATES / "assets.html").read_text(encoding="utf-8")
     form = (TEMPLATES / "_asset_form.html").read_text(encoding="utf-8")
     assert 'include "_info_tip.html"' in discovery
-    assert 'include "_info_tip.html"' in assets
-    assert 'include "_info_tip.html"' in form
+    assert 'include "_info_tip.html"' not in assets
+    assert 'include "_info_tip.html"' not in form
     assert "not nmap" in discovery.lower()
-    assert "Set at add; cannot change" in form
+    assert "Set at add; cannot change" not in form
 
 
 def test_assets_and_discovery_pages_render_info_tip():
@@ -61,10 +61,10 @@ def test_assets_and_discovery_pages_render_info_tip():
     discovery = client.get("/discovery")
     assert assets.status_code == 200
     assert discovery.status_code == 200
-    assert 'class="info-tip"' in assets.text
+    assert 'class="info-tip"' not in assets.text
     assert 'class="info-tip"' in discovery.text
-    assert "./forgesre test" in assets.text
-    assert "./forgesre doctor" in assets.text
+    assert "./forgesre test" not in assets.text
+    assert "./forgesre doctor" not in assets.text
     assert "not nmap" in discovery.text.lower()
     assert "TCP/161 is skipped" in discovery.text
 

@@ -420,6 +420,7 @@ def _posted_ladder(
     minutes: list[str],
     emails: list[list[str]],
     picks: list[list[str]],
+    targets: list[str] | None = None,
 ) -> list | None:
     from app.asset_ladder import ladder_steps_from_form
 
@@ -431,6 +432,7 @@ def _posted_ladder(
                 "minutes": minutes[index] if index < len(minutes) else "",
                 "emails": emails[index] if index < len(emails) else [],
                 "picks": picks[index] if index < len(picks) else [],
+                "target": targets[index] if targets and index < len(targets) else "",
             }
         )
     return ladder_steps_from_form(present, levels)
@@ -1159,18 +1161,22 @@ def asset_create(
     ladder_present: str = Form(""),
     ladder_on_1: str = Form(""),
     ladder_minutes_1: str = Form(""),
+    ladder_target_1: str = Form(""),
     ladder_email_1: list[str] = Form([]),
     ladder_email_1_pick: list[str] = Form([]),
     ladder_on_2: str = Form(""),
     ladder_minutes_2: str = Form(""),
+    ladder_target_2: str = Form(""),
     ladder_email_2: list[str] = Form([]),
     ladder_email_2_pick: list[str] = Form([]),
     ladder_on_3: str = Form(""),
     ladder_minutes_3: str = Form(""),
+    ladder_target_3: str = Form(""),
     ladder_email_3: list[str] = Form([]),
     ladder_email_3_pick: list[str] = Form([]),
     ladder_on_4: str = Form(""),
     ladder_minutes_4: str = Form(""),
+    ladder_target_4: str = Form(""),
     ladder_email_4: list[str] = Form([]),
     ladder_email_4_pick: list[str] = Form([]),
 ):
@@ -1218,6 +1224,7 @@ def asset_create(
         minutes=[ladder_minutes_1, ladder_minutes_2, ladder_minutes_3, ladder_minutes_4],
         emails=[ladder_email_1, ladder_email_2, ladder_email_3, ladder_email_4],
         picks=[ladder_email_1_pick, ladder_email_2_pick, ladder_email_3_pick, ladder_email_4_pick],
+        targets=[ladder_target_1, ladder_target_2, ladder_target_3, ladder_target_4],
     )
     clone_row = db.query(Asset).filter_by(asset_id=cloned_from).first() if cloned_from else None
     try:
@@ -1623,11 +1630,10 @@ def discovery_approve_page(
     if row is None:
         raise HTTPException(status_code=404)
     asset = approve_candidate(db, row, actor=user.email)
-    suffix = ""
+    notice = ""
     if asset_missing_email(asset):
         notice = "Approved. Add an owner email (Edit) so escalation mail has a recipient."
-        suffix = f"?notice={quote(notice)}"
-    return RedirectResponse(f"/assets/{asset.asset_id}{suffix}", status_code=302)
+    return RedirectResponse(asset_saved_url(asset.asset_id, notice), status_code=302)
 
 
 @router.post("/discovery/{candidate_id}/ignore")
@@ -1727,39 +1733,11 @@ def discovery_netbox_page(db: Session = Depends(get_db), user: User = Depends(lo
 
 @router.get("/assets/{asset_id}", response_class=HTMLResponse)
 def asset_detail(asset_id: str, request: Request, db: Session = Depends(get_db), user: User = Depends(login_required)):
+    """Old fact-page URL. Edit lives on the Assets list."""
     item = db.query(Asset).filter_by(asset_id=asset_id).first()
     if item is None:
         raise HTTPException(status_code=404)
-    similar = similar_incident_groups(db, item)
-    similar, similar_pager = paginate(
-        similar,
-        request.query_params.get("similar_page", "1"),
-        size=per_page(request, "similar_page"),
-        param="similar_page",
-    )
-    return render(
-        request,
-        "asset_detail.html",
-        user,
-        asset=item,
-        similar=similar,
-        snmp_target=is_snmp_asset(item),
-        snmp_port=snmp_port_for(item),
-        snmp_enabled=settings.snmp_enabled,
-        can_remove=can(user, "write_assets") and not delete_blocked(item),
-        remove_blocked=delete_blocked(item) if can(user, "write_assets") else "",
-        reachability_snapshot=reachability_snapshot,
-        metrics=safe_asset_metric_panel(item),
-        similar_pager=similar_pager,
-        playrule_choices=playrule_choices(db),
-        picked_playrules=asset_playrule_ids(item),
-        playrule_off=muted_playrule_ids(item),
-        ex=form_extras(item),
-        support_labels=dict(SUPPORT_CHOICES),
-        snmp_auth=auth_status(item),
-        snmp_view=snmp_surface(item),
-        capacity=capacity_panel(item),
-    )
+    return RedirectResponse(asset_saved_url(item.asset_id), status_code=303)
 
 
 @router.post("/assets/{asset_id}/playrules")
@@ -1783,7 +1761,7 @@ def asset_playrules_update(
     set_asset_playrules(db, item, posted, actor=user.email, playrule_off=posted_off)
     count = len(item.playrule_ids or [])
     notice = f"Custom alarms saved ({count})." if count else "Custom alarms cleared — Rules apply."
-    return RedirectResponse(f"/assets/{asset_id}?notice={quote(notice)}#client-playrules", status_code=302)
+    return RedirectResponse(asset_saved_url(asset_id, notice) + "#client-playrules", status_code=302)
 
 
 
@@ -1872,18 +1850,22 @@ def asset_update(
     ladder_present: str = Form(""),
     ladder_on_1: str = Form(""),
     ladder_minutes_1: str = Form(""),
+    ladder_target_1: str = Form(""),
     ladder_email_1: list[str] = Form([]),
     ladder_email_1_pick: list[str] = Form([]),
     ladder_on_2: str = Form(""),
     ladder_minutes_2: str = Form(""),
+    ladder_target_2: str = Form(""),
     ladder_email_2: list[str] = Form([]),
     ladder_email_2_pick: list[str] = Form([]),
     ladder_on_3: str = Form(""),
     ladder_minutes_3: str = Form(""),
+    ladder_target_3: str = Form(""),
     ladder_email_3: list[str] = Form([]),
     ladder_email_3_pick: list[str] = Form([]),
     ladder_on_4: str = Form(""),
     ladder_minutes_4: str = Form(""),
+    ladder_target_4: str = Form(""),
     ladder_email_4: list[str] = Form([]),
     ladder_email_4_pick: list[str] = Form([]),
 ):
@@ -1933,6 +1915,7 @@ def asset_update(
         minutes=[ladder_minutes_1, ladder_minutes_2, ladder_minutes_3, ladder_minutes_4],
         emails=[ladder_email_1, ladder_email_2, ladder_email_3, ladder_email_4],
         picks=[ladder_email_1_pick, ladder_email_2_pick, ladder_email_3_pick, ladder_email_4_pick],
+        targets=[ladder_target_1, ladder_target_2, ladder_target_3, ladder_target_4],
     )
     posted_snmp = _posted_snmp(
         comms_present,
@@ -1995,7 +1978,7 @@ def asset_detect(
         raise HTTPException(status_code=404)
     update_asset(db, item, detect=True, actor=user.email, snmp_prober=_snmp_answer)
     notice = getattr(item, "_detect_message", "") or "No exporter detected."
-    return RedirectResponse(f"/assets/{asset_id}?notice={quote(notice)}", status_code=302)
+    return RedirectResponse(asset_saved_url(asset_id, notice), status_code=302)
 
 
 @router.post("/assets/{asset_id}/delete")
@@ -2012,7 +1995,7 @@ def asset_delete(
     try:
         result = delete_asset(db, item, actor=user.email)
     except ValueError as exc:
-        return RedirectResponse(f"/assets/{asset_id}?notice={quote(str(exc))}", status_code=302)
+        return RedirectResponse(asset_saved_url(asset_id, str(exc)), status_code=302)
     unlinked = result.get("unlinked_incidents") or 0
     notice = f"Removed {result['deleted']}."
     if unlinked:

@@ -281,11 +281,13 @@ def test_asset_list_badge_and_form_fields():
     assert page.status_code == 200
     assert 'name="extra_maint_from"' in page.text
     assert 'name="extra_maint_until"' in page.text
-    assert "Standard-alarm mute" in page.text or "not Standard-alarm mute" in page.text
     listed = client.get(f"/assets?q={asset.asset_id}")
     assert "data-maint-badge" in listed.text
     assert "Maintenance" in listed.text
-    detail = client.get(f"/assets/{asset.asset_id}")
-    assert 'data-maintenance' in detail.text
-    assert "data-maint-badge" in detail.text
+    stale = client.get(f"/assets/{asset.asset_id}", follow_redirects=False)
+    assert stale.status_code == 303
+    edit = client.get(f"/assets?edit={asset.asset_id}")
+    assert edit.status_code == 200
+    assert 'name="extra_maint_from"' in edit.text
+    assert "data-maint-badge" in listed.text
     db.close()

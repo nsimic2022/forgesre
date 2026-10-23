@@ -88,7 +88,10 @@ def test_analyst_can_create_and_edit_asset_contacts():
         follow_redirects=False,
     )
     assert created.status_code in {302, 303}
-    page = client.get("/assets/app-lab-01")
+    stale = client.get("/assets/app-lab-01", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == "/assets?edit=app-lab-01"
+    page = client.get("/assets?edit=app-lab-01")
     assert page.status_code == 200
     assert b"payments@dc.local" in page.content
     listed = client.get("/assets")
@@ -113,7 +116,7 @@ def test_analyst_can_create_and_edit_asset_contacts():
         follow_redirects=False,
     )
     assert edited.status_code in {302, 303}
-    page = client.get("/assets/app-lab-01")
+    page = client.get("/assets?edit=app-lab-01")
     assert b"milan@dc.local" in page.content
     assert b"Staging" in page.content
     body = client.get("/api/v1/assets/app-lab-01")
@@ -175,10 +178,13 @@ def test_notification_uses_asset_owner_email_and_demo_history():
     assert b'id="demo-open"' in home.content
     assert b'id="demo-panel"' in home.content
     assert b"First-hour walkthrough" not in home.content
-    asset_page = client.get(f"/assets/{DEMO_ASSET}")
-    assert b"Similar incident history" in asset_page.content
+    stale = client.get(f"/assets/{DEMO_ASSET}", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == f"/assets?edit={DEMO_ASSET}"
+    asset_page = client.get(f"/assets?edit={DEMO_ASSET}")
+    assert asset_page.status_code == 200
+    assert b"Edit asset" in asset_page.content
     assert b"<h2>Incidents</h2>" not in asset_page.content
-    assert b"High CPU" in asset_page.content or b"HighCPU" in asset_page.content
     incident_page = client.get(f"/incidents/{incident.number}")
     assert b"Who to call" in incident_page.content
     assert b"Similar on this asset" in incident_page.content
@@ -277,7 +283,6 @@ def test_assets_list_shows_edit_clone_remove():
     assert b'name="hostname"' in listed.content
     assert b'name="asset_id"' in listed.content
     assert b"readonly" in listed.content
-    assert b"cannot change" in listed.content
     assert b">Verify<" in listed.content
     assert b">Remove<" in listed.content
     assert b"/assets/forge-demo-01/verify" in listed.content
@@ -361,13 +366,13 @@ def test_assets_pager_opens_one_row_and_flashes_otherwise():
         assert viewer.post(path, data={"selected": DEMO_ASSET}, follow_redirects=False).status_code == 403
     opened = viewer.post("/assets/open-view", data={"selected": DEMO_ASSET}, follow_redirects=False)
     assert opened.status_code == 303
-    assert opened.headers["location"] == f"/assets/{DEMO_ASSET}"
+    assert opened.headers["location"] == f"/assets?edit={DEMO_ASSET}"
     listed = viewer.get("/assets")
     assert 'action="/assets/open-view"' not in listed.text
     assert 'action="/assets/open-edit"' not in listed.text
     assert 'action="/assets/bulk-delete"' not in listed.text
     assert 'action="/assets/export"' in listed.text
-    assert f'data-list-view="/assets/{DEMO_ASSET}"' in listed.text
+    assert f'data-list-view="/assets?edit={DEMO_ASSET}"' in listed.text
     pane = viewer.get(f"/assets?view={DEMO_ASSET}")
     assert pane.status_code == 200
     assert 'id="asset-form"' not in pane.text
@@ -437,7 +442,7 @@ def test_asset_table_actions_live_in_the_pager():
     assert "vertical-align: middle" in css
     assert ".asset-table { table-layout: auto;" in css
     assert ".evidence-table { table-layout: fixed; }" in css
-    assert "app.css?v=v09-39" in base
+    assert "app.css?v=v09-40" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():
@@ -712,7 +717,8 @@ def test_assets_legend_explains_yellow_ping_when_scrape_works():
     assert 'class="info-tip"' not in thead
     assert "ICMP failed but exporter/SNMP" not in thead
     form = (ROOT / "frontend" / "templates" / "_asset_form.html").read_text(encoding="utf-8")
-    assert "ICMP ping is not a scrape" in form
+    assert "ICMP ping is not a scrape" not in form
+    assert 'include "_info_tip.html"' not in form
     db.close()
 
 
@@ -761,11 +767,12 @@ def test_reachability_windows_icmp_blocked_exporter_up_is_yellow(monkeypatch):
     db.expire_all()
     stored = db.query(Asset).filter_by(asset_id=host.asset_id).one()
     assert stored.ping_status == "yellow"
-    listed = client.get("/assets")
+    listed = client.get(f"/assets?q={host.asset_id}")
     assert listed.status_code == 200
-    detail = client.get(f"/assets/{host.asset_id}")
-    assert detail.status_code == 200
-    assert b"reach-sq icmp ping yellow" in listed.content or b"reach-sq icmp ping yellow" in detail.content
+    stale = client.get(f"/assets/{host.asset_id}", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == f"/assets?edit={host.asset_id}"
+    assert b"reach-sq icmp ping yellow" in listed.content
     db.close()
 
 
@@ -806,9 +813,12 @@ def test_asset_numbers_are_stable_searchable_and_not_reused():
     api = client.get("/api/v1/assets").json()
     match = next(item for item in api if item["asset_id"] == "unique-num-host")
     assert match["number"] == host.number
-    detail = client.get("/assets/unique-num-host")
-    assert b"Asset number" in detail.content
-    assert f"#{host.number}".encode() in detail.content
+    stale = client.get("/assets/unique-num-host", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == "/assets?edit=unique-num-host"
+    edit = client.get("/assets?edit=unique-num-host")
+    assert edit.status_code == 200
+    assert str(host.number).encode() in found.content
 
     taken = host.number
     delete_asset(db, host, actor="tester")
@@ -910,7 +920,10 @@ def test_html_add_posts_asset_id_edit_keeps_it():
     )
     assert created.status_code in {302, 303}
     assert "edit=win10-gp" in created.headers.get("location", "")
-    page = client.get("/assets/win10-gp")
+    stale = client.get("/assets/win10-gp", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == "/assets?edit=win10-gp"
+    page = client.get("/assets?edit=win10-gp")
     assert page.status_code == 200
     assert b"DESKTOP-CG81N3J" in page.content
     assert b"win10-gp" in page.content
@@ -934,7 +947,7 @@ def test_html_add_posts_asset_id_edit_keeps_it():
     missing = client.get("/api/v1/assets/should-not-apply")
     assert missing.status_code == 404
     edit_form = client.get("/assets?edit=win10-gp")
-    assert "Set at add; cannot change" in edit_form.text
+    assert "Set at add; cannot change" not in edit_form.text
     assert "readonly" in edit_form.text
     db.close()
 

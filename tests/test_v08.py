@@ -3,7 +3,6 @@ support coverage."""
 
 from __future__ import annotations
 
-import re
 import subprocess
 from datetime import date, timedelta
 from pathlib import Path
@@ -118,7 +117,7 @@ def test_version_is_0_9_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v1.0</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-39" in base
+    assert "app.css?v=v09-40" in base
     assert "app.js?v=v09-E" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
@@ -305,14 +304,14 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     custom = text.index("asset-form-custom")
     notes = text.index("asset-form-notes")
     ladder = text.index("asset-form-ladder")
-    assert row1 < left < middle < contacts < support_at < row2 < right < custom < notes < ladder
+    assert row1 < left < middle < contacts < support_at < row2 < right < custom < ladder < notes
     identity = _between(text, "asset-form-left", "asset-form-middle")
     for name in ("asset_id", "hostname", "ip", "extra_customer", "extra_site", "extra_vlan"):
         assert f'name="{name}"' in identity, name
     assert 'name="notes"' not in identity
     assert "identity-lg" in identity
     contact = _between(text, "data-asset-contacts", "data-asset-support")
-    assert ">Contacts " in contact
+    assert ">Contacts<" in contact
     for name in (
         "owner", "contact_name", "owner_email", "owner_phone", "extra_backup_name",
         "extra_backup_phone", "extra_backup_email",
@@ -326,17 +325,16 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     assert "Comms / monitoring" not in text
     comms = text.index("data-asset-comms")
     assert middle < comms < text.index('name="scrape_address"') < text.index('name="snmp_port"') < text.index('name="snmp_version"') < row2
-    assert ">Ports " in _between(text, "asset-form-middle", "asset-form-row-2")
+    assert ">Ports<" in _between(text, "asset-form-middle", "asset-form-row-2")
     assert right < text.index("alarm-families") < custom < text.index("data-client-playrules") < notes
     assert "Standard alarms" in text
-    assert "It cannot fire earlier than the Prometheus rule in alerts.yml." in text
-    notes_html = _between(text, "asset-form-notes", "asset-form-ladder")
-    assert ">Notes " in notes_html
+    notes_html = _between(text, "asset-form-notes", "asset-form-row2-empty")
+    assert ">Notes<" in notes_html
     assert '<textarea name="extra_runbook_note"' in notes_html
     assert "Runbook note" not in text.split('id="asset-form"', 1)[1].split("</form>", 1)[0]
 
     support = _between(text, "data-asset-support", "asset-form-row-2")
-    assert ">Support " in support
+    assert ">Support<" in support
     form = text.split('id="asset-form"', 1)[1].split("</form>", 1)[0]
     for name in ("extra_support_hours", "extra_timezone", "extra_contract"):
         assert support.count(f'name="{name}"') == 1, name
@@ -349,11 +347,11 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     assert '<option value="14" selected>14 days</option>' in support
     assert '<option value="7"' in support and '<option value="30"' in support
 
-    playrules = _between(text, "asset-form-custom", "asset-form-notes")
+    playrules = _between(text, "asset-form-custom", "asset-form-ladder")
     assert "Custom alarms" in playrules
     assert "data-client-playrules" in playrules
     assert "Client playrules" not in text
-    assert "This does not create Prometheus thresholds." in playrules
+    assert "This does not create Prometheus thresholds." not in playrules
     assert 'type="checkbox"' not in playrules
     assert '<select name="playrule_add" data-playrule-add' in playrules
     assert f'<option value="{enabled_id}"' in playrules
@@ -364,7 +362,7 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     assert "hidden" not in empty
     assert "No custom alarms — Rules apply." in empty
     ladder_html = _between(text, "data-asset-ladder", "</form>")
-    assert ">Escalation " in ladder_html
+    assert ">Escalation<" in ladder_html
     assert "ladder-levels" in ladder_html
     assert 'href="/escalation">Default escalation</a>' in ladder_html
     for label in ("L1 NOC", "L2 Shift", "L3 Engineer", "L4 Manager"):
@@ -377,7 +375,7 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     assert "max-width: none;" in split_rule
     assert "118rem" not in block
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in block.split(".asset-form-row-1", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);" in block.split(".asset-form-row-2", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in block.split(".asset-form-row-2", 1)[1].split("}", 1)[0]
     rules = block.split(".asset-form-band + .asset-form-band", 1)[1].split("}", 1)[0]
     assert "border-top: 1px solid var(--line);" in rules
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in css.split(".ladder-levels", 1)[1].split("}", 1)[0]
@@ -397,12 +395,13 @@ def test_asset_extras_persist_edit_clone_and_show_on_incident():
     assert asset.extras["runbook_note"] == "Ignore disk until 95%; then call Mila."
     assert asset.netbox_id == ""
 
-    detail = client.get(f"/assets/{asset_id}")
-    assert "Backup on-call phone" in detail.text and "+381-11-555-0102" in detail.text
-    card = _between(detail.text, "data-asset-playrules", "</section>")
-    assert "No custom alarms — Rules apply." in card
+    stale = client.get(f"/assets/{asset_id}", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == f"/assets?edit={asset_id}"
 
     edit = client.get(f"/assets?edit={asset_id}")
+    assert "Backup on-call phone" in edit.text and "+381-11-555-0102" in edit.text
+    assert "No custom alarms — Rules apply." in edit.text
     assert 'value="Europe/Belgrade"' in edit.text
     assert "Ignore disk until 95%; then call Mila.</textarea>" in edit.text
 
@@ -647,14 +646,11 @@ def test_support_shows_on_list_detail_incident_and_never_opens_an_incident():
 
     labels = {"in": "In support", "expiring": "Support expiring", "expired": "Out of support", "unknown": "Support unknown"}
     for state, asset_id in ids.items():
-        detail = client.get(f"/assets/{asset_id}").text
-        assert f'data-support-state="{state}">{labels[state]}</span>' in detail, state
-        support = detail.split('data-asset-section="support"', 1)[1].split('data-asset-section="monitoring"', 1)[0]
-        if state in {"expiring", "expired"}:
-            assert "data-support-warning" in support
-            assert "no alert or incident is opened" in support
-        else:
-            assert "data-support-warning" not in detail
+        stale = client.get(f"/assets/{asset_id}", follow_redirects=False)
+        assert stale.status_code == 303
+        assert stale.headers["location"] == f"/assets?edit={asset_id}"
+        row = listing.split(f">{asset_id}<", 1)[1].split("</tr>", 1)[0]
+        assert f'data-support-state="{state}"' in row and labels[state] in row, state
 
     edit = client.get(f"/assets?edit={ids['expiring']}").text
     support = edit.split("data-asset-support", 1)[1].split("asset-form-middle", 1)[0]
@@ -686,24 +682,7 @@ def test_support_shows_on_list_detail_incident_and_never_opens_an_incident():
     db.close()
 
 
-# --- Asset detail: full fact list + Client playrules card --------------------------
-
-DETAIL_LABELS = (
-    "Asset number", "Hostname", "Type", "Environment", "Customer / domain", "Site / DC / room", "Notes",
-    "Owner / team", "Contact", "Email", "Phone", "Backup on-call name", "Backup on-call phone",
-    "Backup on-call email", "Support hours", "Timezone", "License / contract / SLA", "Runbook note",
-    "Under support", "From", "To", "Lead time",
-)
-
-
-def _dd(html: str, label: str) -> str:
-    match = re.search(r"<dt>" + re.escape(label) + r"</dt>\s*<dd[^>]*>(.*?)</dd>", html, re.S)
-    assert match, label
-    return match.group(1).strip()
-
-
-def _facts(html: str) -> str:
-    return _between(html, 'class="asset-detail-main', 'class="asset-detail-side')
+# --- Edit pane: fields + custom alarms (old /assets/{id} fact page is gone) --------
 
 
 def _viewer_client() -> TestClient:
@@ -721,7 +700,7 @@ def _viewer_client() -> TestClient:
     return client
 
 
-def test_asset_detail_lists_every_add_field_with_dash_when_empty():
+def test_old_asset_url_opens_edit_and_form_keeps_every_add_field():
     db = _db()
     client = _client()
     token = uuid4().hex[:6]
@@ -740,35 +719,33 @@ def test_asset_detail_lists_every_add_field_with_dash_when_empty():
     )
     assert resp.status_code in {302, 303}
 
-    full = _facts(client.get(f"/assets/{full_id}").text)
-    for label in DETAIL_LABELS:
-        assert _dd(full, label) not in {"", "—", "None"}, label
-    for label, value in (
-        ("Hostname", full_id), ("Customer / domain", "acme.local"), ("Site / DC / room", "BG-DC1 room 2 rack 14"),
-        ("Backup on-call email", "mila@acme.local"), ("Timezone", "Europe/Belgrade"),
-        ("License / contract / SLA", "SLA gold 4h"), ("Under support", "Internal — we hold it"),
-        ("From", "2026-01-01"), ("To", "2030-01-01"), ("Lead time", "30 days"),
-    ):
-        assert _dd(full, label) == value, label
-    assert "Ignore disk until 95%; then call Mila." in _dd(full, "Runbook note")
-    assert 'data-support-state="in">In support</span>' in full
-    assert "data-asset-facts=\"identity\"" in full and "data-asset-facts=\"support\"" in full
+    stale = client.get(f"/assets/{full_id}", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == f"/assets?edit={full_id}"
 
-    bare = _facts(client.get(f"/assets/{bare_id}").text)
-    for label in (
-        "Customer / domain", "Site / DC / room", "Notes", "Contact", "Phone", "Backup on-call name",
-        "Backup on-call phone", "Backup on-call email", "Support hours", "Timezone", "License / contract / SLA",
-        "Runbook note", "Under support", "From", "To", "Lead time",
-    ):
-        assert _dd(bare, label) == "—", label
-    assert _dd(bare, "Email").startswith("—")
-    assert "No owner email" in _dd(bare, "Email")
-    assert 'data-support-state="unknown">Support unknown</span>' in bare
-    assert ">None<" not in bare
+    full = client.get(f"/assets?edit={full_id}").text
+    form = full.split('id="asset-form"', 1)[1]
+    assert f'value="{full_id}"' in form
+    assert 'value="acme.local"' in form
+    assert 'value="BG-DC1 room 2 rack 14"' in form
+    assert 'value="mila@acme.local"' in form
+    assert 'value="Europe/Belgrade"' in form
+    assert 'value="SLA gold 4h"' in form
+    assert 'value="2026-01-01"' in form and 'value="2030-01-01"' in form
+    assert '<option value="30" selected>30 days</option>' in form
+    assert "Ignore disk until 95%; then call Mila." in form
+    listed = client.get(f"/assets?q={full_id}").text
+    assert 'data-support-state="in"' in listed and "In support" in listed
+
+    bare = client.get(f"/assets?edit={bare_id}").text
+    bare_form = bare.split('id="asset-form"', 1)[1]
+    assert 'name="extra_customer" value=""' in bare_form
+    assert 'name="contact_name" value=""' in bare_form
+    assert "No owner email" in client.get(f"/assets?q={bare_id}").text
     db.close()
 
 
-def test_asset_detail_without_stored_extras_still_renders():
+def test_asset_edit_without_stored_extras_still_renders():
     db = _db()
     client = _client()
     token = uuid4().hex[:6]
@@ -779,17 +756,17 @@ def test_asset_detail_without_stored_extras_still_renders():
     asset.extras = None
     asset.playrule_ids = None
     db.commit()
-    page = client.get(f"/assets/{asset_id}")
+    stale = client.get(f"/assets/{asset_id}", follow_redirects=False)
+    assert stale.status_code == 303
+    page = client.get(f"/assets?edit={asset_id}")
     assert page.status_code == 200
-    facts = _facts(page.text)
-    assert _dd(facts, "Customer / domain") == "—"
-    assert _dd(facts, "Under support") == "—"
-    card = _between(page.text, "data-asset-playrules", "</section>")
-    assert "No custom alarms — Rules apply." in card
+    form = page.text.split('id="asset-form"', 1)[1]
+    assert 'name="extra_customer"' in form
+    assert "No custom alarms — Rules apply." in form
     db.close()
 
 
-def test_asset_detail_client_playrules_card_sits_under_machine_metrics():
+def test_asset_edit_custom_alarms_sit_with_host_metrics():
     db = _db()
     token = uuid4().hex[:6]
     enabled = _rule(db, f"v08-card-{token}", f"Card{token}")
@@ -799,39 +776,32 @@ def test_asset_detail_client_playrules_card_sits_under_machine_metrics():
     client = _client()
     asset_id = f"v08-dc-{token}"
     _post_asset(client, asset_id, f"10.213.1.{int(token[:2], 16) % 250 + 1}")
-    text = client.get(f"/assets/{asset_id}").text
+    stale = client.get(f"/assets/{asset_id}", follow_redirects=False)
+    assert stale.status_code == 303
+    text = client.get(f"/assets?edit={asset_id}").text
 
-    facts = _facts(text)
-    assert "Custom alarms" in facts
-    assert facts.index('data-asset-section="similar"') < facts.index('data-asset-section="alarms"')
-    side = text.split('class="asset-detail-side', 1)[1].split("</aside>", 1)[0]
-    assert "data-asset-graph-grid" in side
-    assert "data-asset-playrules" not in side
-    assert "Custom alarms" not in side
-
-    card = _between(text, "data-asset-playrules", "</section>")
-    assert "<h3" in card and "Custom alarms" in card
-    assert "Does not create Prometheus thresholds" in card
-    assert f'action="/assets/{asset_id}/playrules"' in card
-    assert '<input type="hidden" name="playrules_present" value="1">' in card
-    assert '<select name="playrule_add" data-playrule-add' in card
-    assert f'<option value="{enabled_id}"' in card
-    assert f'<option value="{disabled_id}"' not in card
-    assert "data-playrule-list" in card
-    empty = _between(card, "data-playrule-empty", "</p>")
+    assert "asset-edit-graphs" in text
+    assert "data-asset-graphs" in text
+    assert "data-asset-graph-grid" not in text
+    assert "Custom alarms" in text
+    form = text.split('id="asset-form"', 1)[1]
+    custom = form.split("asset-form-custom", 1)[1].split("asset-form-ladder", 1)[0]
+    assert '<input type="hidden" name="playrules_present" value="1">' in custom
+    assert '<select name="playrule_add" data-playrule-add' in custom
+    assert f'<option value="{enabled_id}"' in custom
+    assert f'<option value="{disabled_id}"' not in custom
+    assert "data-playrule-list" in custom
+    empty = _between(custom, "data-playrule-empty", "</p>")
     assert "hidden" not in empty
     assert "No custom alarms — Rules apply." in empty
 
-    viewer = _between(_viewer_client().get(f"/assets/{asset_id}").text, "data-asset-playrules", "</section>")
-    assert "No custom alarms — Rules apply." in viewer
-    assert "<form" not in viewer and "playrule_add" not in viewer
-
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".asset-detail-side," in css and ".asset-detail-playrules {" in css
-    assert "minmax(0, 25%)" in css and "asset-detail-col-2-3" in css
+    viewer = _viewer_client().get(f"/assets?edit={asset_id}")
+    assert viewer.status_code == 200
+    assert 'id="asset-form"' not in viewer.text
+    assert "playrule_add" not in viewer.text
 
 
-def test_asset_detail_playrules_post_adds_and_removes_without_touching_other_fields():
+def test_asset_playrules_post_adds_and_removes_without_touching_other_fields():
     db = _db()
     token = uuid4().hex[:6]
     first = _rule(db, f"v08-pa-{token}", f"PA{token}")
@@ -848,7 +818,8 @@ def test_asset_detail_playrules_post_adds_and_removes_without_touching_other_fie
     def post(**data):
         resp = client.post(f"/assets/{asset_id}/playrules", data={"playrules_present": "1", **data}, follow_redirects=False)
         assert resp.status_code in {302, 303}, resp.text
-        assert resp.headers["location"].startswith(f"/assets/{asset_id}?notice=")
+        assert resp.headers["location"].startswith(f"/assets?edit={asset_id}")
+        assert "notice=" in resp.headers["location"]
         db.expire_all()
         return db.query(Asset).filter_by(asset_id=asset_id).one()
 
@@ -857,7 +828,7 @@ def test_asset_detail_playrules_post_adds_and_removes_without_touching_other_fie
     assert after.playrule_ids == [first_id, second_id]
     assert (after.hostname, after.ip, after.type, after.scrape_address, after.notes, dict(after.extras), dict(after.alarms or {})) == snapshot
 
-    card = _between(client.get(f"/assets/{asset_id}").text, "data-asset-playrules", "</section>")
+    card = client.get(f"/assets?edit={asset_id}").text.split("asset-form-custom", 1)[1]
     rows = _between(card, "data-playrule-list", "</ol>")
     assert rows.index(f'value="{first_id}"') < rows.index(f'value="{second_id}"')
     assert f"{first_name} <span class=\"muted\">· PA{token}" in rows

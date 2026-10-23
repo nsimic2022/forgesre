@@ -82,7 +82,7 @@ def _write_rendered(tmp_path: Path, names: list[str]) -> None:
 
 def _ids(page: str) -> set[str]:
     table = page.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
-    found = re.findall(r'href="/assets/(' + re.escape(PREFIX) + r'[^"?]+)"', table)
+    found = re.findall(r'/assets\?edit=(' + re.escape(PREFIX) + r'[^"&]+)', table)
     return set(found)
 
 
@@ -95,9 +95,13 @@ def test_vlan_persists_on_add_edit_detail_and_filters():
     assert _row(db, f"{PREFIX}v10").extras["vlan"] == "10"
     assert "vlan" not in (_row(db, f"{PREFIX}none").extras or {})
 
-    detail = client.get(f"/assets/{PREFIX}v1020").text
-    assert '<dt>VLAN</dt><dd class="extra-vlan">10.20</dd>' in detail
-    assert '<dt>VLAN</dt><dd class="extra-vlan">—</dd>' in client.get(f"/assets/{PREFIX}none").text
+    stale = client.get(f"/assets/{PREFIX}v1020", follow_redirects=False)
+    assert stale.status_code == 303
+    assert stale.headers["location"] == f"/assets?edit={PREFIX}v1020"
+    detail = client.get(f"/assets?edit={PREFIX}v1020").text
+    assert 'name="extra_vlan" value="10.20"' in detail
+    none = client.get(f"/assets?edit={PREFIX}none").text
+    assert 'name="extra_vlan" value=""' in none
 
     edit = client.get(f"/assets?edit={PREFIX}v10").text
     left = edit.split("asset-form-left", 1)[1].split("asset-form-middle", 1)[0]
@@ -154,7 +158,7 @@ def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".asset-ladder .ladder-level {" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-39" in base and "app.js?v=v09-E" in base
+    assert "app.css?v=v09-40" in base and "app.js?v=v09-E" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "[data-snmp-version]" in js and "[data-snmp-v3-level]" in js
 
@@ -173,8 +177,10 @@ def test_snmp_v2c_custom_community_saved_hidden_and_drives_exporter_auth(tmp_pat
 
     sd = {item["labels"]["asset"]: item for item in client.get("/api/v1/sd/snmp", headers=TOKEN).json()}
     assert sd[aid]["labels"]["snmp_auth"] == "public_v2"
-    detail = client.get(f"/assets/{aid}").text
-    assert "data-snmp-auth-pending" in detail and f"forgesre_{aid}" in detail
+    stale = client.get(f"/assets/{aid}", follow_redirects=False)
+    assert stale.status_code == 303
+    detail = client.get(f"/assets?edit={aid}").text
+    assert f"forgesre_{aid}" not in detail or "saved — leave blank to keep" in detail
 
     assert client.get("/api/v1/sd/snmp-auths").status_code == 401
     auths = client.get("/api/v1/sd/snmp-auths", headers=TOKEN).json()["auths"]
@@ -183,11 +189,11 @@ def test_snmp_v2c_custom_community_saved_hidden_and_drives_exporter_auth(tmp_pat
     _write_rendered(tmp_path, [f"forgesre_{aid}"])
     sd = {item["labels"]["asset"]: item for item in client.get("/api/v1/sd/snmp", headers=TOKEN).json()}
     assert sd[aid]["labels"]["snmp_auth"] == f"forgesre_{aid}"
-    detail = client.get(f"/assets/{aid}").text
-    assert "data-snmp-auth-pending" not in detail
-    assert "Custom community (saved, hidden)" in detail
+    edit = client.get(f"/assets?edit={aid}").text
+    assert "data-snmp-auth-pending" not in edit
+    assert "saved — leave blank to keep" in edit
 
-    for page in (detail, client.get(f"/assets?edit={aid}").text, client.get("/assets").text, client.get(f"/assets?clone={aid}").text):
+    for page in (edit, client.get("/assets").text, client.get(f"/assets?clone={aid}").text):
         assert SECRET_COMMUNITY not in page
     assert "saved — leave blank to keep" in client.get(f"/assets?edit={aid}").text
     api = client.get(f"/api/v1/assets/{aid}")
@@ -265,11 +271,13 @@ def test_snmp_v1_default_and_v3_usm_saved(tmp_path):
     }
     assert snmp_auths(db)[f"forgesre_{v3}"]["priv_password"] == SECRET_PRIV
     edit = client.get(f"/assets?edit={v3}").text
-    detail = client.get(f"/assets/{v3}").text
-    for page in (edit, detail):
-        assert SECRET_AUTH not in page and SECRET_PRIV not in page
+    stale = client.get(f"/assets/{v3}", follow_redirects=False)
+    assert stale.status_code == 303
+    assert SECRET_AUTH not in edit and SECRET_PRIV not in edit
     assert '<option value="v3" selected>' in edit and 'value="monitor"' in edit
-    assert "user monitor · authPriv · auth SHA256 · priv AES256" in " ".join(detail.split())
+    assert '<option value="authPriv" selected>' in edit
+    assert '<option value="SHA256" selected>' in edit
+    assert '<option value="AES256" selected>' in edit
 
     resp = client.post(
         f"/assets/{v3}/update",
