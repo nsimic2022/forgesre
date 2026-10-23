@@ -265,8 +265,7 @@ def test_dashboard_order_tiles_appliance_sections_without_banners():
     for key in ("cpu", "ram", "hdd"):
         assert f'data-metric="{key}"' in card
     assert "metric-dash" in card
-    assert "not an inventory asset" in card
-    assert "80%" in card and "95%" in card
+    assert "<h2>ForgeSRE</h2>" in card
     db.close()
 
 
@@ -309,10 +308,10 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     big = css.split(".stat-row-big .stat {", 1)[1].split("}", 1)[0]
     assert "border-left-width: 8px" in big
     assert "aspect-ratio: 1" in big
-    assert "font-size: 2.15rem" in css
+    assert "font-size: 4.3rem" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-37" in base
+    assert "app.css?v=v09-38" in base
 
 
 def test_dashboard_recent_has_no_production_lab_chips():
@@ -371,7 +370,7 @@ def test_dashboard_card_titled_forgesre_with_health_cubes(monkeypatch):
     _db().close()
     html = _client().get("/").text
     card = _card(html)
-    assert "<h2>ForgeSRE " in card
+    assert "<h2>ForgeSRE</h2>" in card
     assert "This appliance" not in html
     assert 'data-metric="net"' in card and "data-clock" not in card
     assert card.index('data-metric="net"') < card.index("data-stack-cubes")

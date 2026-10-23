@@ -142,8 +142,6 @@ def test_handbook_report_mode_escalated_cube_and_investigating_tip():
     assert "The Dashboard alarm row includes **Escalated**" in handbook
 
     dash = (ROOT / "frontend" / "templates" / "dashboard.html").read_text(encoding="utf-8")
-    tip = dash.split("Alarm counts", 1)[1].split("{% endset %}", 1)[0]
-    assert "RCA work in progress" not in tip
-    assert "only Acknowledge sets this" in tip
-    assert "escalated incident stays ESCALATED" in tip
-    assert "RCA does not set INVESTIGATING" in tip
+    assert 'include "_info_tip.html"' not in dash
+    assert "RCA work in progress" not in dash
+    assert "<h2>Incidents</h2>" in dash

@@ -204,7 +204,7 @@ html[data-theme="dark"] .nav {
   }
 }
 .nav :focus-visible { outline-color: var(--shell-accent); }
-.brand { font-weight: 700; letter-spacing: 0.04em; margin-bottom: 1rem; color: var(--shell-text); }
+.brand { font-weight: 700; letter-spacing: 0.04em; margin-bottom: 2rem; color: var(--shell-text); }
 .brand span { color: var(--shell-muted); font-weight: 500; font-size: 0.8rem; }
 .nav a { color: var(--shell-text); text-decoration: none; padding: 0.45rem 0.55rem; border-radius: 0.75rem; }
 .nav a:hover { background: var(--shell-hover); }
@@ -259,7 +259,7 @@ html[data-nav-collapsed] .nav-collapse-icon {
   border-right: 0;
   border-left: 0.38rem solid currentColor;
 }
-.who { color: var(--shell-muted); font-size: 0.8rem; margin-bottom: 0.5rem; }
+.who { color: var(--shell-muted); font-size: 0.8rem; margin-bottom: 1.25rem; overflow-wrap: anywhere; }
 .who-name, .who-role { display: block; }
 .who-name + .who-role { margin-top: 0.15rem; }
 .nav-foot-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
@@ -2427,8 +2427,9 @@ dialog.text-file::backdrop { background: color-mix(in srgb, var(--text) 28%, tra
 .stat-row-big .stat {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 0.35rem;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 0.2rem;
   aspect-ratio: 1;
   width: 100%;
   height: auto;
@@ -2440,7 +2441,17 @@ dialog.text-file::backdrop { background: color-mix(in srgb, var(--text) 28%, tra
   border-left-color: var(--muted);
 }
 .stat-row-big .stat span { color: var(--text); font-size: 0.86rem; font-weight: 600; line-height: 1.15; }
-.stat-row-big .stat strong { font-size: 2.15rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.stat-row-big .stat strong {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 4.3rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
 .stat-row-big .stat.ok { background: var(--pill-ok-bg); border-color: var(--ok); border-width: 2px; border-left-width: 8px; }
 .stat-row-big .stat.warn { background: var(--pill-warn-bg); border-color: var(--warn); border-width: 2px; border-left-width: 8px; }
 .stat-row-big .stat.crit { background: var(--pill-crit-bg); border-color: var(--crit); border-width: 2px; border-left-width: 8px; }
@@ -3412,6 +3423,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 /* v09-35: Assets Reset + column order; Discovery Scan now / Found columns / Add asset cubes. */
 /* v09-36: Recent investigations scroll cube; ticker once; Found columns; alarm cubes. */
 /* v09-37: Left nav drops cubes/clock; collapse arrow on the divider. */
+/* v09-38: Brand v1.0; who name+surname; Dashboard titles without tips; bigger tile counts. */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {

@@ -132,6 +132,8 @@ def test_dashboard_html_has_no_grafana_embed():
     assert "<iframe" not in html.lower()
     pane = html[html.index("data-dash-graphs") : html.index("</aside>", html.index("data-dash-graphs"))]
     assert "grafana" not in pane.lower()
+    assert "data-dash-graph-caption" not in pane
+    assert "dash-graph-caption" not in pane
     js = JS.read_text(encoding="utf-8")
     graphs = js.split("(function bindDashGraphs() {", 1)[1].split("\n})();", 1)[0]
     graphs += js.split("\nfunction graphPane(", 1)[1].split("\n}\n", 1)[0]

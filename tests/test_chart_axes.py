@@ -220,14 +220,18 @@ def test_empty_copy_and_no_chart_chrome():
     assert "dash-chart-tip-host" in js and "dash-chart-grid" in js and "dash-chart-marker" in js
     assert "#12151c" in css and ".dash-chart-grid" in css and ".dash-chart-tip" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-37" in base and "app.js?v=v09-E" in base
+    assert "app.css?v=v09-38" in base and "app.js?v=v09-E" in base
     for name in ("dashboard.html", "incident_detail.html", "asset_detail.html"):
         text = (ROOT / "frontend" / "templates" / name).read_text(encoding="utf-8")
         assert "Chart Options" not in text and "Real-time" not in text
-        assert "No samples yet" in text
     dash = (ROOT / "frontend" / "templates" / "dashboard.html").read_text(encoding="utf-8")
     asset_tpl = (ROOT / "frontend" / "templates" / "asset_detail.html").read_text(encoding="utf-8")
-    assert "Not scraped" in dash and "Not scraped" in asset_tpl
+    incident_tpl = (ROOT / "frontend" / "templates" / "incident_detail.html").read_text(encoding="utf-8")
+    assert "No samples yet" in js
+    assert "Not scraped" in js
+    assert "No samples yet" in incident_tpl and "No samples yet" in asset_tpl
+    assert "Not scraped" in asset_tpl
+    assert "data-dash-graph-caption" not in dash
     incident = (ROOT / "frontend" / "templates" / "incident_detail.html").read_text(encoding="utf-8")
     asset = (ROOT / "frontend" / "templates" / "asset_detail.html").read_text(encoding="utf-8")
     assert 'data-host="{{ incident.asset.hostname }}"' in incident

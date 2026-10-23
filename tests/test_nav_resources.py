@@ -105,11 +105,13 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "bindApplianceResources" in js
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".nav-collapse {" in css
+    assert "margin-bottom: 2rem" in css.split(".brand {", 1)[1].split("}", 1)[0]
+    assert "margin-bottom: 1.25rem" in css.split(".who {", 1)[1].split("}", 1)[0]
     assert ".appliance-clock" in css
     assert "form.nav-logout" in css
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-37" in base
+    assert "app.css?v=v09-38" in base
     assert "app.js?v=v09-E" in base
     assert "bindInfoTips" in js
     assert "ops-report-actions" in css

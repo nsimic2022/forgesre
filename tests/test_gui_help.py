@@ -31,7 +31,7 @@ def test_info_tip_partial_and_css_exist():
     assert ".info-tip" in css
     assert ".info-tip-bubble" in css
     assert "bindInfoTips" in js
-    assert "app.css?v=v09-37" in base
+    assert "app.css?v=v09-38" in base
 
 
 def test_discovery_and_assets_include_info_tip():
@@ -114,12 +114,10 @@ def test_title_subtitles_live_only_in_info_tips():
 
     dash = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
     dash_h1 = dash.split("</h1>", 1)[0]
-    assert dash_h1.count('include "_info_tip.html"') == 1
-    assert "Full stack diagnostics live on System Health" in dash_h1
-    assert "The journal is on System Health" in dash_h1
-    assert "the internal process log, not Loki" in dash_h1
-    assert "Full stack diagnostics live on" not in _outside_tips(dash)
-    assert "The journal is on System Health" not in _outside_tips(dash)
+    assert 'include "_info_tip.html"' not in dash
+    assert "<h1>Dashboard" in dash_h1
+    assert "Full stack diagnostics live on System Health" not in dash
+    assert "The journal is on System Health" not in dash
     assert '<p class="muted">Full stack diagnostics' not in dash
     assert "Raises the demo CPU gauge to 94%" in _outside_tips(dash)
     assert 'include "_info_tip.html"' not in dash.split('id="demo-panel"', 1)[1].split("</dialog>", 1)[0]
@@ -206,10 +204,10 @@ def test_rules_playbooks_and_escalation_render_one_title_tip():
     home = client.get("/")
     assert home.status_code == 200
     home_h1 = home.text.split("<h1>", 1)[1].split("</h1>", 1)[0]
-    assert home_h1.count('class="info-tip"') == 1
-    assert "Full stack diagnostics live on System Health" in home_h1
-    assert "The journal is on System Health" in home_h1
-    assert "the internal process log, not Loki" in home_h1
+    assert home_h1.count('class="info-tip"') == 0
+    assert home_h1.strip() == "Dashboard"
+    assert "Full stack diagnostics live on System Health" not in home.text
+    assert "The journal is on System Health" not in home.text
     under_cubes = home.text.split("data-appliance-card", 1)[1].split("</aside>", 1)[1].split("data-dash-incidents", 1)[0]
     assert "Full stack diagnostics" not in under_cubes
     assert "The journal is on" not in under_cubes
