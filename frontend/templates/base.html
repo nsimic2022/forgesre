@@ -7,7 +7,7 @@
   <script>
     (function () {
       var key = "forgesre-theme";
-      var allowed = { light: 1, dark: 1, system: 1 };
+      var allowed = { light: 1, dark: 1, system: 1, contrast: 1 };
       var theme = "light";
       try { theme = localStorage.getItem(key) || "light"; } catch (e) {}
       if (theme === "high-contrast") theme = "dark";
@@ -20,10 +20,10 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v09-48">
+  <link rel="stylesheet" href="/static/app.css?v=v09-49">
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
-  <script src="/static/app.js?v=v09-I" defer></script>
+  <script src="/static/app.js?v=v09-J" defer></script>
   {% block extra_head %}{% endblock %}
 </head>
 <body hx-boost="true" hx-indicator="#hx-progress">
@@ -33,6 +33,7 @@
     <span class="theme-label theme-label-light">Light</span>
     <span class="theme-label theme-label-dark">Dark</span>
     <span class="theme-label theme-label-system">System</span>
+    <span class="theme-label theme-label-contrast">Contrast</span>
   </button>
   {%- endmacro %}
   {% if user %}

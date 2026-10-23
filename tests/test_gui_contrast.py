@@ -64,9 +64,23 @@ def _block(start: str) -> str:
     return CSS.split(start, 1)[1].split("}", 1)[0]
 
 
+CONTRAST = {
+    "--bg": "#2b2b2b",
+    "--panel": "#222222",
+    "--line": "#454545",
+    "--text": "#f2f2f2",
+    "--muted": "#b0b0b0",
+    "--accent": "#59db8f",
+    "--ok": "#59db8f",
+    "--warn": "#ffc859",
+    "--crit": "#e45959",
+    "--heading": "#ffffff",
+}
+
+
 def test_cache_bust_is_v09_s_for_css_only():
-    assert "app.css?v=v09-48" in BASE
-    assert "app.js?v=v09-I" in BASE
+    assert "app.css?v=v09-49" in BASE
+    assert "app.js?v=v09-J" in BASE
     assert "app.css?v=v09-W" not in BASE
 
 
@@ -97,6 +111,23 @@ def test_light_palette_stays_and_dark_tokens_are_stronger():
     assert _contrast(DARK["--pill-crit"], DARK["--pill-crit-bg"]) >= 7
     assert _contrast(DARK["--ok"], panel) > _contrast("#3d9a6a", panel)
     assert _contrast(DARK["--crit"], panel) > _contrast("#d05a4d", panel)
+
+
+def test_contrast_theme_uses_zabbix_dark_palette():
+    contrast = _block('html[data-theme="contrast"] {')
+    for name, value in CONTRAST.items():
+        assert f"{name}: {value};" in contrast
+    nav = CSS.split('html[data-theme="contrast"] .nav {', 1)[1].split("}", 1)[0]
+    assert "--shell-bg: #0d0f11;" in nav
+    assert "--shell-accent: #59db8f;" in nav
+    panel = CONTRAST["--panel"]
+    assert _contrast(CONTRAST["--text"], panel) >= 12
+    assert _contrast(CONTRAST["--heading"], panel) > _contrast(CONTRAST["--text"], panel)
+    assert _contrast(CONTRAST["--ok"], panel) >= 7
+    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    assert '["light", "dark", "system", "contrast"]' in js
+    assert "theme-label-contrast" in BASE
+    assert ">Contrast<" in BASE
 
 
 def test_status_ack_clock_charts_checkbox_and_cube_edges():
