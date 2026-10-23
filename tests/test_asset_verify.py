@@ -689,7 +689,7 @@ def test_verify_templates_show_chain_hops():
     assert "Series present" in one
     assert "Alertmanager" in one
     assert "Core (this asset)" in one
-    assert "exporter → prometheus → alertmanager → core" in many
+    assert 'class="info-tip"' not in many
     assert "Target" in many
     assert "Series" in many
 

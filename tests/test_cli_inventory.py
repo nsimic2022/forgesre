@@ -131,7 +131,8 @@ def test_admin_page_lists_every_cli_command():
     missing = _dispatcher_commands() - shown
     assert not missing, f"missing from Administration CLI list: {sorted(missing)}"
     assert shown <= _dispatcher_commands(), sorted(shown - _dispatcher_commands())
-    assert "./forgesre help &lt;command&gt;" in page.text
+    assert "./forgesre help &lt;command&gt;" not in page.text
+    assert "<code>help</code>" in page.text
 
 
 def test_docs_cli_md_lists_every_command():

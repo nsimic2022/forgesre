@@ -4,7 +4,6 @@
 <p><a href="/incidents/{{ incident.number }}">← {{ incident.number }}</a></p>
 {% include "_case_specialists.html" %}
 <h1>ForgeRCA investigation {% if is_demo_incident(incident) %}<span class="pill demo">DEMO</span>{% endif %}
-  {% with %}{% set tip %}ForgeRCA is the Python builtin and always runs first. ForgeAI only rewrites prose; facts stay from ForgeRCA. Rewrite uses the same Core worker thread (not Celery) and can occupy it up to ai.llm.timeout_seconds ({{ llm_timeout|int }}s).{% endset %}{% include "_info_tip.html" %}{% endwith %}
 </h1>
 <div class="tool-row">
   <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
@@ -26,16 +25,15 @@
 <section class="card">
   <h2>Summary</h2>
   <p>{{ investigation.summary }}</p>
-  <h2>Catalog hypothesis {% with %}{% set tip %}Top ranked line from the ForgeRCA catalog using collected metrics and the alert. Not a process list. Open ForgeRCA re-collects evidence.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Catalog hypothesis</h2>
   <p>{{ investigation.likely_cause }}</p>
-  <p>Score: <strong>{{ investigation.confidence|int }}%</strong>
-    {% with %}{% set tip %}Simple ForgeSRE score from anomalies and supporting vs contradicting evidence — not a validated model and not taken from the LLM. There is no 0.45 starting bonus.{% endset %}{% include "_info_tip.html" %}{% endwith %}</p>
-  <h2>Recommended actions {% with %}{% set tip %}Recommended only. Nothing was executed.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <p>Score: <strong>{{ investigation.confidence|int }}%</strong></p>
+  <h2>Recommended actions</h2>
   <p>{{ investigation.recommended_action }}</p>
 </section>
 {% if can_send %}
 <section class="card" id="send-report">
-  <h2>Send incident report {% with %}{% set tip %}Sends the same snapshot as the incident page. Does not change incident status. SMTP off stores it as generated in the mail outbox.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Send incident report</h2>
   <form method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail" hx-boost="false">
     <label>To
       <select name="target">
@@ -43,11 +41,11 @@
         {% for addr in addresses %}
         <option value="{{ addr.email }}" {% if addr.email == default_to %}selected{% endif %}>{% if addr.label %}{{ addr.label }} — {% endif %}{{ addr.email }} ({{ addr.source }})</option>
         {% endfor %}
-      </select>
-    </label>
+</select>
+</label>
     <label>Or new email <input name="new_email" type="email"></label>
     <button type="submit">Send incident report</button>
-  </form>
+</form>
 </section>
 {% endif %}
 
@@ -69,7 +67,7 @@
     <li>{{ line }}</li>
     {% endfor %}
     {% endfor %}
-  </ul>
+</ul>
 </section>
 
 <section class="card">
@@ -80,7 +78,7 @@
     {% else %}
     <li class="muted">No deterministic anomaly recorded.</li>
     {% endfor %}
-  </ul>
+</ul>
 </section>
 
 <section class="card">
@@ -96,12 +94,12 @@
         {% if hyp.contradicting_evidence %}
         · contradicting {% for eid in hyp.contradicting_evidence %}<a href="#{{ eid }}">{{ eid }}</a> {% endfor %}
         {% endif %}
-      </div>
-    </li>
+</div>
+</li>
     {% else %}
     <li class="muted">No hypotheses.</li>
     {% endfor %}
-  </ol>
+</ol>
 </section>
 
 <section class="card">
@@ -112,7 +110,7 @@
     {% else %}
     <li>AI has not modified the system.</li>
     {% endfor %}
-  </ul>
+</ul>
 </section>
 
 <ol class="flow">
@@ -132,7 +130,7 @@
       <h3>{{ ev.evidence_id }} · {{ ev.kind }} · {{ ev.source }}</h3>
       {% if ev.query %}<p>Original query: <code>{{ ev.query }}</code></p>{% endif %}
       <pre>{{ ev.payload }}</pre>
-    </article>
+</article>
     {% endif %}
   {% endfor %}
 </section>

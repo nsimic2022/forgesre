@@ -2,7 +2,7 @@
 {% block title %}Verify {{ report.hostname or report.asset_id }} · ForgeSRE{% endblock %}
 {% block content %}
 <p><a href="/assets">← Assets</a> · <a href="/assets?edit={{ report.asset_id }}">{{ report.hostname or report.asset_id }}</a></p>
-<h1>Verify {{ report.hostname or report.asset_id }} {% with %}{% set tip %}Live communication from this appliance (Core container; ICMP uses iputils-ping in the Core image): exporter → prometheus → alertmanager → core. This is not ./forgesre test (appliance health) and not ./forgesre doctor (System Health). ICMP and port 22 are not required. Inventory → ICMP / exporter or SNMP → Prometheus up + scrape target health + family series → Alertmanager reachable → last Core incident/webhook (SKIP if none). Host CLI ./forgesre ping / verify still run on the Ubuntu VM. Missing exporter or no Prom target is SKIP/FAIL with a reason — never a fake green host. Ping ICMP FAIL is yellow (not red) when exporter/SNMP still answers.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Verify {{ report.hostname or report.asset_id }}</h1>
 {% if report.lab %}
 <div class="banner">DEMO lab host (<code>forge-demo-*</code> or discovery seed <code>10.20.30.41</code>). Not a real VM and not proof of a scrape.</div>
 {% endif %}
@@ -29,7 +29,7 @@
   <dt>Notes</dt><dd>{{ report.notes or "—" }}</dd>
 </dl>
 
-<h2>Class {% with %}{% set tip %}Universal classes: Linux :9100 node_, Windows :9182 windows_, Network SNMP, Unknown SKIP. Empty scrape + Unknown type still probes :9100/:9182 on the IP; a live node_ family is saved as Linux so HTTP SD can scrape it.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+<h2>Class</h2>
 <p><code>{{ report.class }}</code> — {{ report.class_reason }}</p>
 
 <h2>Live probes</h2>
@@ -37,7 +37,7 @@
 <table class="verify-table">
   <thead>
     <tr><th>Check</th><th>Result</th><th>Detail</th></tr>
-  </thead>
+</thead>
   <tbody>
     <tr><td>Ping (ICMP)</td><td><span class="verify-mark {{ report.ping_color }}">{{ report.icmp.mark }}</span></td><td>{{ report.icmp.detail }}</td></tr>
     <tr><td>Port / exporter / SNMP</td><td><span class="verify-mark {{ report.port.mark|lower }}">{{ report.port.mark }}</span></td><td>{{ report.port.detail }}</td></tr>
@@ -49,7 +49,7 @@
     <tr><td>Core (this asset)</td><td><span class="verify-mark {{ report.core.mark|lower }}">{{ report.core.mark }}</span></td><td>{{ report.core.detail }}</td></tr>
     <tr><td>Last RCA vs PromQL</td><td><span class="verify-mark {{ report.rca.mark|lower }}">{{ report.rca.mark }}</span></td><td>{{ report.rca.detail }}</td></tr>
     <tr><td>LLM (ForgeAI)</td><td><span class="verify-mark {{ report.llm.mark|lower }}">{{ report.llm.mark }}</span></td><td>{{ report.llm.detail }}</td></tr>
-  </tbody>
+</tbody>
 </table>
 {% if report.hint %}
 <p class="muted">{{ report.hint }}</p>

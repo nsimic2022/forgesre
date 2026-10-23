@@ -2,7 +2,7 @@
 {% import "_select.html" as sel %}
 {% block title %}Discovery · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Discovery {% with %}{% set tip %}Semi-automatic probe: TCP 22, 80, 443, 9100, 9182, plus SNMP GET on UDP/161 (TCP/161 is skipped — that is not SNMP) and HTTP GET /metrics on :9182 and :9100 when a host is alive. windows_ metrics → Windows Server :9182. node_ metrics → Linux Server :9100. SNMP UDP/161 GET (same path as snmp_exporter) → Network device — not guessed from missing HTTP /metrics. TCP open without exporter text is not an OS pick (ICMP ping is not a scrape). Suggested CIDR is this VM’s primary IPv4 /24 — Scan now writes discovery.cidrs and queues a background probe (Postgres jobs, one Core worker — not Celery). Empty discovery.cidrs = no scan (not all VLANs). This is not nmap and does not replace nmap. New hosts wait here until an engineer Approves or Ignores them. NetBox, Zabbix and GLPI on this page are separate read-only imports.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Discovery</h1>
 
 {% if request.query_params.get('edit_note') == 'select-one' %}
 <div class="banner" role="status">Select one</div>
@@ -35,14 +35,14 @@
 <div class="discovery-actions">
 {% if can('write_assets') %}
 <section class="card">
-  <h2>Scan now {% with %}{% set tip %}TCP / SNMP / HTTP probe of the CIDR in the box (max 256/CIDR, 1024 total). Prefills this VM’s primary IPv4 as /24. Scan now writes config/forgesre.yml and queues a background probe (Postgres jobs — not Celery). Empty cidrs = no scan. Not nmap. Does not write inventory until you Approve.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Scan now</h2>
   <form method="post" action="/discovery/scan" class="discovery-scan-form" hx-boost="false">
     <div class="discovery-scan-actions">
       <input name="cidrs" value="{{ cidr_prefill }}" placeholder="{{ suggested_cidr or '10.10.10.0/24' }}" autocomplete="off" aria-label="CIDR">
       <input type="hidden" name="confirm" value="1">
       <button type="submit">Scan now</button>
-    </div>
-  </form>
+</div>
+</form>
 </section>
 {% else %}
 <section class="card">
@@ -52,33 +52,25 @@
 {% endif %}
 
 <section class="card">
-  <h2>NetBox sync {% with %}{% set tip %}Read-only. ForgeSRE never writes back. Separate from Scan now. Empty inventory is yellow (No devices), not a failure. New NetBox devices become assets with type Auto and no scrape address — ForgeSRE does not guess Linux :9100. Owner, contact, email, and notes on assets that already exist are never overwritten.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>NetBox sync</h2>
   {% if can('admin') %}
     {% if netbox_enabled %}
     <div class="tool-row">
       <span class="netbox-status {{ netbox_sync_light }}" role="status">
         <span class="netbox-status-dot" aria-hidden="true"></span>{{ netbox_sync_label }}
-      </span>
+</span>
       {% if netbox_sync_clickable or netbox_sync_ready %}
       <form method="post" action="/discovery/netbox-sync" class="inline" hx-boost="false">
         <button type="submit">Sync NetBox</button>
-      </form>
+</form>
       {% else %}
       <button type="button" disabled>Sync NetBox</button>
       {% endif %}
       {% if netbox_sync_why and netbox_sync_label != "No devices" %}
       <span class="muted">{{ netbox_sync_why }}</span>
       {% endif %}
-    </div>
-    {% if netbox_url_is_local %}
-    <p class="muted">API token: {{ netbox_token_present }}
-      {% with %}{% set tip %}NetBox: bundled at {{ netbox_url }} (also http://VM-IP:8001). Core is not a NetBox UI login. Prefer a NetBox UI v2 token — the full nbt_… secret shown once at create, not the 12-character key — in NETBOX_API_TOKEN, then recreate core. Launch will not replace a v2 token with v1. A 40-character v1 value is still upserted as fallback on the superuser (NETBOX_SUPERUSER_NAME, usually admin).{% endset %}{% include "_info_tip.html" %}{% endwith %}
-    </p>
-    {% else %}
-    <p class="muted">API token: {{ netbox_token_present }}
-      {% with %}{% set tip %}NetBox: {{ netbox_url }} (external via inventory.netbox.url / --netbox-url). Read-only sync. ForgeSRE never writes back.{% endset %}{% include "_info_tip.html" %}{% endwith %}
-    </p>
-    {% endif %}
+</div>
+    <p class="muted">API token: {{ netbox_token_present }}</p>
     {% else %}
     <p class="muted">Sync is off in config.</p>
     {% endif %}
@@ -89,16 +81,16 @@
 </section>
 
 <section class="card zabbix-block" data-zabbix-block>
-  <h2>Zabbix {% with %}{% set tip %}Read-only host import over the Zabbix API (host.get). ForgeSRE never creates, updates, deletes or acknowledges anything in Zabbix. New hosts become assets with type Auto, no scrape address and source zabbix — ForgeSRE does not guess Linux :9100. Matches existing assets by Zabbix host id, then IP, then hostname, so a NetBox / discovery host is linked, not cloned. Owner, contact, email, phone, notes and filled extras are never overwritten. Problems arrive through the Zabbix webhook (POST /api/v1/webhooks/zabbix).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Zabbix</h2>
   <div class="tool-row">
     <span class="netbox-status {{ zabbix.light }}" role="status" data-zabbix-status>
       <span class="netbox-status-dot" aria-hidden="true"></span>{{ zabbix.label }}
-    </span>
+</span>
     {% if can('admin') %}
       {% if zabbix.clickable %}
       <form method="post" action="/discovery/zabbix-sync" class="inline" hx-boost="false">
         <button type="submit">Sync hosts</button>
-      </form>
+</form>
       {% else %}
       <button type="button" disabled title="Set ZABBIX_URL and ZABBIX_API_TOKEN first">Sync hosts</button>
       {% endif %}
@@ -106,7 +98,7 @@
       <button type="button" disabled>Sync hosts</button>
       <span class="muted">Admin only.</span>
     {% endif %}
-  </div>
+</div>
   <p class="muted zabbix-meta">
     {% if zabbix.enabled %}
     URL: <code>{{ zabbix.url }}</code>
@@ -115,7 +107,7 @@
     {% else %}
     {{ zabbix.why }}
     {% endif %}
-  </p>
+</p>
   {% if zabbix.enabled and zabbix.why %}<p class="muted">{{ zabbix.why }}</p>{% endif %}
   {% if zabbix.last_error %}
   <p class="zabbix-last-error" data-zabbix-last-error>Last error: {{ zabbix.last_error }}</p>
@@ -125,16 +117,16 @@
 </section>
 
 <section class="card glpi-block" data-glpi-block>
-  <h2>GLPI {% with %}{% set tip %}Read-only Computer / NetworkEquipment import over the GLPI REST API. ForgeSRE never creates, updates or deletes anything in GLPI. New items become assets with type Auto, no scrape address and source glpi — ForgeSRE does not guess Linux :9100. Matches existing assets by GLPI id, then IP, then hostname, so a NetBox / Zabbix / discovery host is linked, not cloned. Owner, contact, email, phone, notes and filled extras are never overwritten. Secrets: GLPI_URL, GLPI_APP_TOKEN, GLPI_USER_TOKEN. Cookbook: docs/glpi.md.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>GLPI</h2>
   <div class="tool-row">
     <span class="netbox-status {{ glpi.light }}" role="status" data-glpi-status>
       <span class="netbox-status-dot" aria-hidden="true"></span>{{ glpi.label }}
-    </span>
+</span>
     {% if can('admin') %}
       {% if glpi.clickable %}
       <form method="post" action="/discovery/glpi-sync" class="inline" hx-boost="false">
         <button type="submit">Sync hosts</button>
-      </form>
+</form>
       {% else %}
       <button type="button" disabled title="Set GLPI_URL, GLPI_APP_TOKEN and GLPI_USER_TOKEN first">Sync hosts</button>
       {% endif %}
@@ -142,7 +134,7 @@
       <button type="button" disabled>Sync hosts</button>
       <span class="muted">Admin only.</span>
     {% endif %}
-  </div>
+</div>
   <p class="muted glpi-meta">
     {% if glpi.enabled %}
     URL: <code>{{ glpi.url }}</code>
@@ -150,7 +142,7 @@
     {% else %}
     {{ glpi.why }}
     {% endif %}
-  </p>
+</p>
   {% if glpi.enabled and glpi.why %}<p class="muted">{{ glpi.why }}</p>{% endif %}
   {% if glpi.last_error %}
   <p class="zabbix-last-error" data-glpi-last-error>Last error: {{ glpi.last_error }}</p>
@@ -173,8 +165,8 @@
   <thead>
     <tr>
       {% include "_inventory_head.html" %}
-    </tr>
-  </thead>
+</tr>
+</thead>
   <tbody>
   {% for row in candidates %}
     {% set found = found_assets.get(row.asset_id) if row.asset_id else none %}
@@ -205,10 +197,10 @@
         {% endif %}
         <form method="post" action="/discovery/{{ row.id }}/delete" onsubmit="return confirm('Remove candidate {{ row.ip }}? This does not remove an approved asset.');" hx-boost="false">
           <button type="submit" class="danger">Remove</button>
-        </form>
-        </div>
+</form>
+</div>
         {% endif %}
-      </td>
+</td>
       <td class="col-ip" title="Approve uses the hostname slug as the asset ID when it is free">{{ (found.ip if found else row.ip) or "—" }}</td>
       <td class="col-port">
         {% if found %}
@@ -218,7 +210,7 @@
         {% else %}
           {{ row.open_ports|join(", ") if row.open_ports else "—" }}{% if row.snmp_ok %} · SNMP{% endif %}
         {% endif %}
-      </td>
+</td>
       <td class="col-enum asset-type"><span class="enum-clip" title="{{ found.type if found else row.proposed_role }}">{% if found %}{{ asset_type_abbrev(found.type) }}{% else %}{{ row.proposed_role }}{% endif %}</span></td>
       <td class="col-status">{% if found %}<span class="status-cell"><span class="status-line"><span class="pill {{ found.status }}">{{ found.status }}</span></span></span>{% else %}<span class="pill {{ row.status }}">{{ row.status }}</span>{% endif %}</td>
       <td class="col-escalation">{% with cubes=asset_ladder_cubes(found) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
@@ -234,15 +226,15 @@
         {% else %}
           —
         {% endif %}
-      </td>
+</td>
       <td class="col-enum"><span class="enum-clip" title="{{ found.environment if found else '' }}">{% if found %}{{ found.environment }}{% else %}—{% endif %}</span></td>
       <td class="col-enum"><span class="enum-clip" title="{{ row.source }}">{{ row.source }}</span></td>
       <td class="col-asset-notes">{% if found %}{% set runbook = asset_extra(found, "runbook_note") %}{% if runbook %}{{ runbook }}{% else %}—{% endif %}{% else %}—{% endif %}</td>
-    </tr>
+</tr>
   {% else %}
     <tr><td colspan="14" class="muted">No found assets yet. Type a CIDR and Scan now, or use the demo workflow.</td></tr>
   {% endfor %}
-  </tbody>
+</tbody>
 </table>
 </div>
 {% with list_actions={"delete": "/discovery/bulk-delete" if can('write_assets') else "", "delete_last": True, "open_import": "/discovery/open-import" if can('write_assets') else "", "open_import_title": "Import into Add asset", "export": "/discovery/export", "next": "/discovery", "stay": list_stay, "confirm": "Delete the selected found assets? An approved asset stays in Assets."} %}
@@ -255,7 +247,7 @@
   <h2>Edit candidate</h2>
   <form method="post" action="/discovery/{{ selected.id }}/update" class="form-grid" hx-boost="false">
   {% else %}
-  <h2>Clone candidate {% with %}{% set tip %}Copy of {{ selected.ip }}. Type a new IP. A DEMO source stays a lab row.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Clone candidate</h2>
   <form method="post" action="/discovery/{{ selected.id }}/clone" class="form-grid" hx-boost="false">
   {% endif %}
     <label>IP <input name="ip" value="{{ candidate_form.ip }}" required></label>
@@ -268,13 +260,13 @@
         {% if candidate_form.proposed_role and candidate_form.proposed_role not in role_choices %}
         <option value="{{ candidate_form.proposed_role }}" selected>{{ candidate_form.proposed_role }}</option>
         {% endif %}
-      </select>
-    </label>
+</select>
+</label>
     <div class="wide row-actions asset-form-actions">
       <button type="submit">{% if candidate_mode == "clone" %}Save copy{% else %}Save{% endif %}</button>
       <a href="/discovery">Cancel</a>
-    </div>
-  </form>
+</div>
+</form>
 </section>
 {% endif %}
 {% if can('write_assets') %}

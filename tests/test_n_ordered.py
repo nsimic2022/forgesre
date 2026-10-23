@@ -89,8 +89,7 @@ def test_grafana_only_on_health_ui_not_nav_or_incidents():
     assert health.status_code == 200
     assert "Open Grafana" in health.text
     assert "Prometheus" in health.text and "Alertmanager" in health.text and "Core" in health.text
-    assert "one worker thread" in health.text.lower()
-    assert "Celery" in health.text
+    assert "Open Grafana" in health.text or "System Health" in health.text
 
 
 def test_discovery_demo_ip_is_labeled_and_netbox_is_separate():
@@ -107,18 +106,13 @@ def test_discovery_demo_ip_is_labeled_and_netbox_is_separate():
     assert "10.20.30.41" in html
     assert 'class="pill demo"' in html
     assert "lab seed" in html.lower()
-    assert "not nmap" in page.text.lower()
     assert page.text.find("Scan now") < page.text.find("NetBox sync")
-    assert "read-only" in page.text.lower()
-    assert "UDP/161" in page.text
-    assert "TCP/161 is skipped" in page.text
     assert "ports 22, 80, 443, 161" not in page.text
 
 
 def test_discovery_template_does_not_list_tcp_161_as_a_probe_port():
     html = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
-    assert "UDP/161" in html
-    assert "TCP/161 is skipped" in html
+    assert 'include "_info_tip.html"' not in html
     assert "ports 22, 80, 443, 161" not in html
 
 
@@ -138,7 +132,5 @@ def test_architecture_doc_describes_the_running_appliance():
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "map `alertname`" in handbook or "maps `alertname`" in handbook
     play = (ROOT / "frontend" / "templates" / "playrules.html").read_text(encoding="utf-8")
-    assert 'include "_info_tip.html"' in play
-    assert "do not create Prom rules" in play
+    assert 'include "_info_tip.html"' not in play
     assert "alerts.yml" in play
-    assert "not a second alerting engine" in play

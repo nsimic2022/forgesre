@@ -67,7 +67,8 @@ def test_discovery_buttons_not_stacked_helper_in_tip():
     assert html.find("Scan now") < html.find("NetBox sync")
     assert "flex" in css.split(".discovery-scan-actions")[1].split("}")[0]
     assert "repeat(4, minmax(0, 1fr))" in css.split(".discovery-actions")[1].split("}")[0]
-    assert "background job" in html or "background probe" in html
+    assert "background job" not in html and "background probe" not in html
+    assert "This page does not wait on the probe" in html
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "discovery_scan" in handbook
     assert "jobs" in handbook.lower() and "Postgres" in handbook
