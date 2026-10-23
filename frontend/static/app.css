@@ -1330,7 +1330,7 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 1.25rem; padding: 1.05rem 1.2rem; margin-bottom: 1.1rem; }
 .playbook-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.9rem 1rem;
   margin-bottom: 1.1rem;
 }
@@ -2475,6 +2475,8 @@ dialog.text-file::backdrop { background: color-mix(in srgb, var(--text) 28%, tra
 .dash-top .appliance-card { grid-area: app; }
 .tile-group {
   position: relative;
+  display: flex;
+  flex-direction: column;
   height: 100%;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -2485,8 +2487,10 @@ dialog.text-file::backdrop { background: color-mix(in srgb, var(--text) 28%, tra
 .stat-row.stat-row-big { grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: var(--dash-tile-gap, 0.7rem); }
 .dash-tiles-incidents .stat-row.stat-row-big,
 .dash-tiles-infra .stat-row.stat-row-big {
-  align-items: start;
-  justify-content: start;
+  flex: 1 1 auto;
+  align-items: center;
+  align-content: center;
+  justify-content: center;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 @media (max-width: 720px) {
@@ -3593,7 +3597,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 
 /* v09-25: action buttons natural size. Locked --bg / --text / --ok hexes stay. */
 /* v09-26: Who did what stays in its cube; report/notes chrome; Ack/Resolve/Close | ForgeRCA. */
-/* v09-27: Playbooks cubes three per row inside the scroll box. */
+/* v09-27: Playbooks cubes five per row inside the scroll box. */
 /* v09-28: Assets list keeps one search cube; Type / Source / Site / VLAN / Customer / Row / Rack dropdowns are gone. */
 /* v09-29: Admin Users/Create user 50/50; History backup; Create new backup above Import/restore; CLI without example. */
 /* v09-30: Discovery four cubes (Scan now | NetBox | Zabbix | GLPI); optional GLPI read-only import. */

@@ -15,7 +15,7 @@
 <div class="playbook-grid">
 {% for book in playbooks %}
 <section class="card playbook-card {% if selected and selected.id == book.id %}selected{% endif %}" data-list-row{% if can('write_play') %} data-list-view="/playbooks?edit={{ book.id }}"{% endif %}>
-  <label class="card-select"><input type="checkbox" name="selected" value="{{ book.id }}" data-select-row aria-label="Select {{ book.name }}"></label>
+  <input class="sr-only" type="checkbox" name="selected" value="{{ book.id }}" data-select-row aria-label="Select {{ book.name }}">
   <h2>{{ book.name }} <span class="muted policy-slug"><code>{{ book.slug }}</code></span></h2>
   {% if book.description %}<p class="muted">{{ book.description }}</p>{% endif %}
   <ul class="playbook-guide">
@@ -25,6 +25,7 @@
   </ul>
   {% if can('write_play') %}
   <div class="row-actions asset-form-actions">
+    <a class="button" href="/playbooks?edit={{ book.id }}{{ pager_keep(pager) }}">Edit</a>
     <a class="button" href="/playbooks?clone={{ book.id }}{{ pager_keep(pager) }}">Clone</a>
   </div>
   {% endif %}
