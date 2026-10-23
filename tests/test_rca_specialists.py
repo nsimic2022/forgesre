@@ -24,12 +24,14 @@ class _Row:
 
 
 def test_specialists_from_metric_log_inventory_history():
-    cubes = {item["id"]: item for item in specialists_from_evidence([
+    raw = specialists_from_evidence([
         _Row("METRIC", {"name": "cpu_percent", "value": 94, "unit": "percent"}),
         _Row("LOG", {"line": "oom-killer"}, {"scope": "syslog"}),
         _Row("INVENTORY", {"hostname": "sw-a", "type": "linux"}),
         _Row("INCIDENT_HISTORY", [{"number": "INC-1"}, {"number": "INC-2"}, {"number": "INC-3"}]),
-    ])}
+    ])
+    assert [item["id"] for item in raw] == ["inventory", "metrics", "logs", "history"]
+    cubes = {item["id"]: item for item in raw}
     assert cubes["metrics"]["css"] == "warn"
     assert "CPU 94%" in cubes["metrics"]["detail"]
     assert cubes["logs"]["css"] == "ok"
@@ -59,8 +61,10 @@ def test_specialists_empty_and_prom_down():
     down = specialists_from_evidence([
         _Row("METRIC", {"error": "timeout"}, {"unavailable": True}),
     ])
-    assert down[0]["css"] == "crit"
-    assert "Prometheus" in down[0]["detail"]
+    by_id = {item["id"]: item for item in down}
+    assert [item["id"] for item in down] == ["inventory", "metrics", "logs", "history"]
+    assert by_id["metrics"]["css"] == "crit"
+    assert "Prometheus" in by_id["metrics"]["detail"]
 
 
 def _db():
@@ -81,7 +85,8 @@ def test_investigations_page_lists_runs_and_specialist_cubes():
     location = f"/ai/{number}"
     ai = client.get(location)
     assert ai.status_code == 200
-    assert 'class="specialist-row"' in ai.text
+    assert "case-specialists" in ai.text
+    assert "specialist-row-tall" in ai.text
     assert ">Metrics<" in ai.text
     assert ">Logs<" in ai.text
     assert ">Inventory<" in ai.text
@@ -116,6 +121,12 @@ def test_investigations_page_lists_runs_and_specialist_cubes():
     assert "Ask ForgeAI" not in cube
     assert "Open Investigations" not in cube
     assert f'href="/ai/{number}"' in cube
+    assert 'class="act-case"' in cube
+    assert cube.index(">Inventory<") < cube.index(">Metrics<") < cube.index(">Logs<") < cube.index(">History<")
+    case = client.get(location).text
+    header = case.split("<h1>", 1)[0]
+    assert 'class="case-specialists' in header
+    assert header.index(">Inventory<") < header.index(">Metrics<") < header.index(">Logs<") < header.index(">History<")
     db.close()
 
 
@@ -170,8 +181,10 @@ def test_writer_uses_specialist_brief_only():
 def test_cache_bust_is_v09_35():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-42" in base
+    assert "app.css?v=v09-43" in base
     assert ".specialist-row" in css
     assert ".specialist-cube.ok" in css
     assert ".act-expand" in css
     assert ".specialist-row-5" in css
+    assert ".specialist-row-tall" in css
+    assert ".act-case-name" in css
