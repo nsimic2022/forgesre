@@ -29,6 +29,8 @@ def test_dashboard_recent_investigations_scrolls_and_host_metrics_spacer():
     assert "Recent investigations" in cube
     assert "Recent activity" not in cube
     assert "dash-ai-scroll" in cube
+    assert "act-case" in cube
+    assert "act-case-name" in cube
     assert "metric-toolbar" not in dash
     assert "Open asset" not in dash
     assert "data-dash-graph-subject" not in dash

@@ -31,10 +31,20 @@ LABELS = {
 }
 
 ROLLUP_PREFIXES = ("ROLLUP-", "EV-LEGACY")
+CUBE_ORDER = ("inventory", "metrics", "logs", "history")
 
 
-def specialists_from_evidence(rows: Any = None) -> list[dict[str, str]]:
-    """UI cubes: Metrics, Logs, Inventory, History."""
+def order_cubes(cubes: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Inventory, Metrics, Logs, History — same order on Dashboard and the case page."""
+    by_id: dict[str, dict[str, Any]] = {}
+    for item in cubes or []:
+        if isinstance(item, dict) and item.get("id"):
+            by_id[str(item["id"])] = item
+    return [by_id[key] for key in CUBE_ORDER if key in by_id]
+
+
+def specialists_from_evidence(rows: Any = None) -> list[dict[str, Any]]:
+    """UI cubes: Inventory, Metrics, Logs, History."""
     return specialist_brief(rows)["cubes"]
 
 
@@ -43,9 +53,9 @@ def specialist_brief(rows: Any = None) -> dict[str, Any]:
     items = [_coerce(row) for row in (rows or []) if _usable(row)]
     collected = bool(items)
     workers = [
+        _inventory(items, collected),
         _metrics(items, collected),
         _logs(items, collected),
-        _inventory(items, collected),
         _history(items, collected),
     ]
     allowed = " ".join(
@@ -76,13 +86,15 @@ def writer_payload(brief: dict[str, Any], incident: dict[str, Any] | None = None
     return payload
 
 
-def _cube_view(worker: dict[str, Any]) -> dict[str, str]:
+def _cube_view(worker: dict[str, Any]) -> dict[str, Any]:
+    facts = [str(line).strip() for line in (worker.get("facts") or []) if str(line).strip()]
     return {
         "id": str(worker.get("id") or ""),
         "label": str(worker.get("label") or ""),
         "css": str(worker.get("css") or "ignored"),
         "detail": str(worker.get("detail") or ""),
         "hint": str(worker.get("hint") or ""),
+        "facts": facts[:8],
     }
 
 

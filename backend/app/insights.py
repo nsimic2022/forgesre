@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.journal import report
 from app.models import Asset, Incident, Investigation, Job, JournalEntry, utcnow
 from app.services import compact_when_text, is_demo_incident
-from rca.specialists import specialist_brief
+from rca.specialists import order_cubes, specialist_brief
 
 REPEAT_DAYS = 4
 REPEAT_MIN = 3
@@ -569,7 +569,7 @@ def _specialist_cubes(inv: Investigation, incident: Incident) -> list[dict[str, 
                 }
             )
         if len(cubes) == 4:
-            return cubes
+            return order_cubes(cubes)
     return specialist_brief(incident.evidence)["cubes"]
 
 

@@ -570,7 +570,8 @@ def test_investigate_button_opens_builtin_rca_immediately():
     assert "ForgeRCA (builtin)" in html.text
     assert "ForgeRCA" in html.text
     assert "ForgeAI" in html.text
-    assert 'class="specialist-row"' in html.text
+    assert "case-specialists" in html.text
+    assert "specialist-row-tall" in html.text
     assert ">Metrics<" in html.text
     assert "Summary" in html.text
     assert "Catalog hypothesis" in html.text

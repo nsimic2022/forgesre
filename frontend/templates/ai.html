@@ -2,6 +2,7 @@
 {% block title %}ForgeRCA · {{ incident.number }}{% endblock %}
 {% block content %}
 <p><a href="/incidents/{{ incident.number }}">← {{ incident.number }}</a></p>
+{% include "_case_specialists.html" %}
 <h1>ForgeRCA investigation {% if is_demo_incident(incident) %}<span class="pill demo">DEMO</span>{% endif %}
   {% with %}{% set tip %}ForgeRCA is the Python builtin and always runs first. ForgeAI only rewrites prose; facts stay from ForgeRCA. Rewrite uses the same Core worker thread (not Celery) and can occupy it up to ai.llm.timeout_seconds ({{ llm_timeout|int }}s).{% endset %}{% include "_info_tip.html" %}{% endwith %}
 </h1>
@@ -9,7 +10,6 @@
   <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
   <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
 </div>
-{% include "_specialists.html" %}
 {% if investigation %}
 <p class="muted">{{ investigation.disclaimer }} ·
   {% if investigation.provider == "forgerca-llm" %}
