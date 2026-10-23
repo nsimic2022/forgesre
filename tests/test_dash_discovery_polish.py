@@ -85,13 +85,22 @@ def test_discovery_cubes_match_and_found_columns_stay_even():
     assert "min-height: 12.5rem" in cards
     assert ".found-table { table-layout: fixed;" in css
     row2 = css.split(".asset-form-row-2 {", 1)[1].split("}", 1)[0]
-    assert "repeat(4, minmax(0, 1fr))" in row2
+    assert "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr)" in row2
+    assert "grid-auto-rows: 28rem" in row2
+    assert "overflow-y: auto" in css.split(".asset-custom-scroll", 1)[1].split("}", 1)[0]
+    assert "repeat(2, minmax(0, 1fr))" in css.split(".asset-form-row-2 .asset-ladder .ladder-levels", 1)[1].split("}", 1)[0]
     form = (ROOT / "frontend" / "templates" / "_asset_form.html").read_text(encoding="utf-8")
-    row = form.split("asset-form-row-2", 1)[1].split("asset-form-row-3", 1)[0]
-    assert 'class="card asset-form-block asset-form-cube alarm-families"' in row
-    assert 'class="card asset-form-block asset-form-cube client-playrules"' in row
-    assert "asset-form-row2-empty" in row
-    assert row.index("Standard alarms") < row.index("Custom alarms") < row.index(">Notes ") < row.index("asset-form-row2-empty")
+    row = form.split("asset-form-row-2", 1)[1]
+    assert "asset-alarms-cube" in row
+    assert "alarm-standard-grid" in row
+    assert "asset-custom-scroll" in row
+    assert "asset-form-row2-empty" not in row
+    assert "asset-form-row-3" not in form
+    assert row.index("Standard alarms") < row.index("Custom alarms") < row.index(">Notes ") < row.index(">Escalation ")
+    assert 'class="card asset-form-block asset-form-cube asset-alarms-cube"' in row
+    assert 'class="card asset-form-block asset-form-cube asset-ladder"' in row
+    assert "for humans" not in row
     html = _client().get("/discovery").text
-    assert "asset-form-row2-empty" in html
+    assert "asset-form-row2-empty" not in html
+    assert "asset-alarms-cube" in html
     assert "discovery-actions" in html

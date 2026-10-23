@@ -286,14 +286,15 @@ def test_contact_email_dropdowns_use_mail_book():
 def test_runbook_note_is_labelled_human_guidance():
     _db().close()
     page = _client().get("/discovery").text
-    runbook = page.split('name="extra_runbook_note"', 1)[0].rsplit("<label", 1)[1]
-    assert "for humans" in runbook
-    assert "3am" in runbook and "Never executed" in runbook and "not a rule" in runbook
+    notes = page.split("asset-form-notes", 1)[1].split("</section>", 1)[0]
+    assert "for humans" not in notes
+    assert ">Notes " in notes
+    assert "3am" in notes and "Never executed" in notes and "not a rule" in notes
 
 
 def test_css_and_js_v08_14():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-38" in base and "app.js?v=v09-E" in base
+    assert "app.css?v=v09-39" in base and "app.js?v=v09-E" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "select.nice-select" in css and ".reach-snmp" in css
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")

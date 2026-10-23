@@ -33,12 +33,12 @@ def test_assets_list_has_no_empty_form_discovery_has_add_asset():
     assert assets.status_code == 200
     assert 'id="asset-form"' not in assets.text
     assert "Add asset" not in assets.text
-    assert 'action="/assets/open-view"' in assets.text
+    assert 'action="/assets/open-view"' not in assets.text
     listed = client.get(f"/assets?q={DEMO_ASSET}")
     assert listed.status_code == 200
     assert f'<a href="/assets/{DEMO_ASSET}" data-list-open>' not in listed.text
     assert f'<a href="/assets/{DEMO_ASSET}">{DEMO_ASSET}</a>' in listed.text
-    assert f'/assets?view={DEMO_ASSET}' in listed.text
+    assert f'/assets?edit={DEMO_ASSET}' in listed.text
     discovery = client.get("/discovery")
     assert discovery.status_code == 200
     assert "Add asset" in discovery.text
@@ -46,25 +46,29 @@ def test_assets_list_has_no_empty_form_discovery_has_add_asset():
     assert 'action="/discovery/open-import"' in discovery.text
 
 
-def test_view_opens_glance_and_filled_form_on_the_list():
+def test_edit_opens_host_metrics_and_filled_form_on_the_list():
     _db().close()
     client = _client()
-    page = client.get(f"/assets?view={DEMO_ASSET}")
+    page = client.get(f"/assets?edit={DEMO_ASSET}")
     assert page.status_code == 200
-    assert f'data-asset-glance="{DEMO_ASSET}"' in page.text
-    for label in (">Collecting<", ">CPU<", ">RAM<", ">HDD<", ">NET<"):
-        assert label in page.text.split("data-asset-glance", 1)[1].split("id=\"asset-form\"", 1)[0]
+    assert f'data-asset-graphs' in page.text
+    assert f'data-asset="{DEMO_ASSET}"' in page.text
+    assert "asset-edit-graphs" in page.text
+    assert "data-asset-glance" not in page.text
+    graphs = page.text.split("asset-edit-graphs", 1)[1].split('id="asset-form"', 1)[0]
+    assert "data-dash-graph-list" in graphs
+    assert "data-asset-graph-grid" not in graphs
     assert "Edit asset" in page.text
     form = page.text.split('id="asset-form"', 1)[1]
     assert f'value="{DEMO_ASSET}"' in form
     assert 'name="hostname"' in form
     posted = client.post(
-        "/assets/open-view",
+        "/assets/open-edit",
         data={"selected": DEMO_ASSET, "stay": "/assets?q=forge"},
         follow_redirects=False,
     )
     assert posted.status_code == 303
-    assert f"view={DEMO_ASSET}" in posted.headers["location"]
+    assert f"edit={DEMO_ASSET}" in posted.headers["location"]
     assert "q=forge" in posted.headers["location"]
     saved = client.post(
         f"/assets/{DEMO_ASSET}/update",
@@ -72,7 +76,7 @@ def test_view_opens_glance_and_filled_form_on_the_list():
         follow_redirects=False,
     )
     assert saved.status_code in {302, 303}
-    assert f"view={DEMO_ASSET}" in saved.headers["location"]
+    assert f"edit={DEMO_ASSET}" in saved.headers["location"]
     assert saved.headers["location"].startswith("/assets?")
 
 
@@ -130,7 +134,7 @@ def test_import_prefills_add_asset_and_save_creates():
         follow_redirects=False,
     )
     assert created.status_code in {302, 303}
-    assert f"view={host}" in created.headers["location"]
+    assert f"edit={host}" in created.headers["location"]
     db = _db()
     asset = db.query(Asset).filter_by(asset_id=host).one()
     assert asset.ip == ip
@@ -148,14 +152,17 @@ def test_js_opens_view_on_enter_and_double_click():
     assert 'addEventListener("dblclick"' in js
     assert "openRow" in js
     css = (__import__("pathlib").Path("frontend/static/app.css")).read_text(encoding="utf-8")
-    assert ".asset-glance" in css
-    assert "grid-template-columns: repeat(5, minmax(0, 1fr))" in css
+    assert "asset-edit-graphs" in css
+    pane = css.split(".asset-pane {", 1)[1].split(".asset-glance", 1)[0]
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in pane
     pager = (__import__("pathlib").Path("frontend/templates/_pager.html")).read_text(encoding="utf-8")
     assert "open_view" in pager and ">View<" in pager
     assert "open_import" in pager and ">Import<" in pager
     assert pager.index("open_view") < pager.index("open_edit")
     assets = (__import__("pathlib").Path("frontend/templates/assets.html")).read_text(encoding="utf-8")
+    assert "open_view" not in assets
     assert 'include "_asset_form.html"' in assets.split("asset-pane", 1)[1]
     assert "include \"_asset_form.html\"" not in assets.split("<table", 1)[0]
+    assert "data-asset-graphs" in assets.split("asset-pane", 1)[1]
     discovery = (__import__("pathlib").Path("frontend/templates/discovery.html")).read_text(encoding="utf-8")
     assert 'include "_asset_form.html"' in discovery.split("<h2>Found assets</h2>", 1)[1]

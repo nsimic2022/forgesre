@@ -177,13 +177,14 @@
   <div class="asset-form-band asset-form-row-2">
   <div class="asset-form-col asset-form-right">
   <input type="hidden" name="alarms_present" value="1">
-  <section class="card asset-form-block asset-form-cube alarm-families" data-alarm-families>
+  <section class="card asset-form-block asset-form-cube asset-alarms-cube">
     <h2 class="asset-form-block-head alarm-heading label-line">Standard alarms {% with %}{% set tip %}Bundled mute-only thresholds on the Alertmanager webhook. This overlay can only mute an alert on this host or ignore it below your %. It cannot fire earlier than the Prometheus rule in alerts.yml. PromQL still lives in monitoring/alerts.yml. Not a second alerting engine and not a rule. cpu / mem / disk / up only — not every exporter series. Auto-detect still picks Linux / Windows / Network.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
     {% set alarms = form.alarms or {} %}
     {% set up_a = alarms.get('up') or {} %}
     {% set cpu_a = alarms.get('cpu_percent') or {} %}
     {% set mem_a = alarms.get('memory_percent') or {} %}
     {% set disk_a = alarms.get('disk_percent') or {} %}
+    <div class="alarm-families alarm-standard-grid" data-alarm-families>
     <div class="alarm-row">
       <button type="button" class="onoff {{ 'is-on' if up_a.get('enabled', True) else 'is-off' }}" data-onoff aria-pressed="{{ 'true' if up_a.get('enabled', True) else 'false' }}">{% if up_a.get('enabled', True) %}ON{% else %}OFF{% endif %}</button>
       <input type="checkbox" class="onoff-check" name="alarm_up_enabled" value="1" data-alarm-up {% if up_a.get('enabled', True) %}checked{% endif %} tabindex="-1">
@@ -207,27 +208,25 @@
       Disk
       <input type="number" name="alarm_disk_threshold" min="1" max="100" step="1" value="{{ disk_a.get('threshold') or 90 }}" data-alarm-disk-th> %
     </div>
-  </section>
-  </div>
-  <div class="asset-form-col asset-form-custom">
-  <section class="card asset-form-block asset-form-cube client-playrules" data-client-playrules>
+    </div>
+    <div class="asset-form-custom">
     <h2 class="asset-form-block-head label-line">Custom alarms {% with %}{% set tip %}This does not create Prometheus thresholds. When that alertname arrives, Core uses the first ON rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules with that alertname. List order is match order. Empty list, or no listed rule matches the alertname = Rules. OFF skips that rule for this host only — it stays in the list, and Save keeps it off. Disabled rules on Rules are skipped. Mail follows Escalation when a level is filled; otherwise that rule's default escalation. It does not send both.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+    <div class="client-playrules asset-custom-scroll" data-client-playrules>
     <input type="hidden" name="playrules_present" value="1">
     {% with picked=form.playrule_ids, off_ids=form.playrule_off %}{% include "_playrule_picker.html" %}{% endwith %}
+    </div>
+    </div>
   </section>
   </div>
   <div class="asset-form-col asset-form-notes">
   <section class="card asset-form-block asset-form-cube">
-    <h2 class="asset-form-block-head label-line">Notes <span class="muted label-hint">for humans</span> {% with %}{% set tip %}Guidance for whoever is woken up at 3am: what to check, who to call, what not to touch. Shown on the incident page (Who to call) and in the mail. Never executed — it is not a rule, not a Playbook step, and it does not change any threshold or alert.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+    <h2 class="asset-form-block-head label-line">Notes {% with %}{% set tip %}Guidance for whoever is woken up at 3am: what to check, who to call, what not to touch. Shown on the incident page (Who to call) and in the mail. Never executed — it is not a rule, not a Playbook step, and it does not change any threshold or alert.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
     <textarea name="extra_runbook_note" rows="12" placeholder="Ignore disk until 95%; then call the backup on-call.">{{ ex.runbook_note }}</textarea>
   </section>
   </div>
-  <div class="asset-form-col asset-form-row2-empty" aria-hidden="true"></div>
-  </div>
-  <div class="asset-form-band asset-form-row-3">
   <div class="asset-form-col asset-form-ladder">
-  <div class="asset-form-block asset-ladder" data-asset-ladder>
-    <h3 class="asset-form-block-head label-line">Escalation {% with %}{% set tip %}Mail steps for incidents on this host, counted from incident start, until Acknowledged. Each level is minutes and one or more emails. Off or blank is not mailed. Fast and slow are just different minutes. Empty (every level off) uses the Default escalation. Any filled level is the only mail for this host — Rules still match the Playbook and do not add a second mail policy. Email only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+  <section class="card asset-form-block asset-form-cube asset-ladder" data-asset-ladder>
+    <h2 class="asset-form-block-head label-line">Escalation {% with %}{% set tip %}Mail steps for incidents on this host, counted from incident start, until Acknowledged. Each level is minutes and one or more emails. Off or blank is not mailed. Fast and slow are just different minutes. Empty (every level off) uses the Default escalation. Any filled level is the only mail for this host — Rules still match the Playbook and do not add a second mail policy. Email only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
     <input type="hidden" name="ladder_present" value="1">
     <p class="ladder-default"><a href="/escalation">Default escalation</a></p>
     <div class="ladder-levels">
@@ -254,7 +253,7 @@
     </div>
     {% endfor %}
     </div>
-  </div>
+  </section>
   </div>
   </div>
   {% if form_mode == "clone" %}

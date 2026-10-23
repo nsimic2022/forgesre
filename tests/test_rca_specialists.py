@@ -170,7 +170,7 @@ def test_writer_uses_specialist_brief_only():
 def test_cache_bust_is_v09_35():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-38" in base
+    assert "app.css?v=v09-39" in base
     assert ".specialist-row" in css
     assert ".specialist-cube.ok" in css
     assert ".act-expand" in css

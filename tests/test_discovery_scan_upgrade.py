@@ -179,7 +179,7 @@ def test_discovery_template_side_by_side_and_columns():
     assert ">Scan now<" in html
     assert "Management CIDR" not in html
     assert html.find("Scan now") < html.find("NetBox sync") < html.find("<h2>Zabbix") < html.find("<h2>GLPI")
-    assert "app.css?v=v09-38" in base
+    assert "app.css?v=v09-39" in base
     assert "Mode:" not in html.split("<h1>", 1)[1].split("discovery-actions", 1)[0]
     assert "repeat(4, minmax(0, 1fr))" in css
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")

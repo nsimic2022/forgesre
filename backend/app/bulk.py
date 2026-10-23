@@ -1490,12 +1490,14 @@ def assets_open_view(
     selected: Annotated[list[str], Form()] = [],
     stay: Annotated[str, Form()] = "",
 ):
-    """Open the list pane (metrics + form) for exactly one selected asset. Viewers can View."""
+    """Open Edit for writers, or the asset page for viewers. One selected row only."""
     _forbid(user, can(user, "read_assets"))
     row = _one_asset(db, selected)
     if row is None:
         return RedirectResponse(_assets_query(stay, edit_note="select-one"), status_code=303)
-    return RedirectResponse(_assets_query(stay, view=row.asset_id), status_code=303)
+    if can(user, "write_assets"):
+        return RedirectResponse(_assets_query(stay, edit=row.asset_id), status_code=303)
+    return RedirectResponse(f"/assets/{row.asset_id}", status_code=303)
 
 
 @router.post("/assets/open-edit")

@@ -237,7 +237,7 @@ def test_assets_list_shows_edit_clone_remove():
     page = client.get("/assets")
     assert page.status_code == 200
     assert b"Add asset" not in page.content
-    assert b">View<" in page.content
+    assert b">View<" not in page.content
     assert b">Edit<" in page.content
     assert b">Clone<" in page.content
     assert b">Verify<" in page.content
@@ -246,7 +246,7 @@ def test_assets_list_shows_edit_clone_remove():
     assert b'placeholder="Search any field"' in page.content
     assert b'data-asset-filter="' not in page.content
     assert b'name="scrape_address"' not in page.content
-    assert b'action="/assets/open-view"' in page.content
+    assert b'action="/assets/open-view"' not in page.content
     assert b'action="/assets/open-edit"' in page.content
     assert b"reach-sq" in page.content
     assert b">ICMP<" in page.content
@@ -261,16 +261,19 @@ def test_assets_list_shows_edit_clone_remove():
     assert "flag=unreachable" in chips
     table = page.text.split('<table class="asset-table"', 1)[1].split("</table>", 1)[0]
     assert 'class="asset-actions"' not in table
-    assert "?edit=" not in table
+    assert "/assets?edit=" in table
     listed = client.get("/assets?edit=forge-demo-01")
     assert listed.status_code == 200
     assert b"Edit asset" in listed.content
-    assert b'data-asset-glance="forge-demo-01"' in listed.content
-    assert b">Collecting<" in listed.content
+    assert b'data-asset-graphs' in listed.content
+    assert b'data-asset="forge-demo-01"' in listed.content
+    assert b"asset-edit-graphs" in listed.content
+    assert b'data-asset-glance=' not in listed.content
     viewed = client.get("/assets?view=forge-demo-01")
     assert viewed.status_code == 200
     assert b"Edit asset" in viewed.content
-    assert b'data-asset-glance="forge-demo-01"' in viewed.content
+    assert b'data-asset-graphs' in viewed.content
+    assert b'data-asset-glance=' not in viewed.content
     assert b'name="hostname"' in listed.content
     assert b'name="asset_id"' in listed.content
     assert b"readonly" in listed.content
@@ -298,7 +301,7 @@ def test_assets_pager_opens_one_row_and_flashes_otherwise():
     )
     assert viewed.status_code == 303
     assert viewed.headers["location"].startswith("/assets?")
-    assert f"view={DEMO_ASSET}" in viewed.headers["location"]
+    assert f"edit={DEMO_ASSET}" in viewed.headers["location"]
     assert "q=forge" in viewed.headers["location"]
     one = client.post(
         "/assets/open-edit",
@@ -358,16 +361,18 @@ def test_assets_pager_opens_one_row_and_flashes_otherwise():
         assert viewer.post(path, data={"selected": DEMO_ASSET}, follow_redirects=False).status_code == 403
     opened = viewer.post("/assets/open-view", data={"selected": DEMO_ASSET}, follow_redirects=False)
     assert opened.status_code == 303
-    assert f"view={DEMO_ASSET}" in opened.headers["location"]
+    assert opened.headers["location"] == f"/assets/{DEMO_ASSET}"
     listed = viewer.get("/assets")
-    assert 'action="/assets/open-view"' in listed.text
+    assert 'action="/assets/open-view"' not in listed.text
     assert 'action="/assets/open-edit"' not in listed.text
     assert 'action="/assets/bulk-delete"' not in listed.text
     assert 'action="/assets/export"' in listed.text
+    assert f'data-list-view="/assets/{DEMO_ASSET}"' in listed.text
     pane = viewer.get(f"/assets?view={DEMO_ASSET}")
     assert pane.status_code == 200
-    assert f'data-asset-glance="{DEMO_ASSET}"' in pane.text
     assert 'id="asset-form"' not in pane.text
+    assert "data-asset-graphs" not in pane.text
+    assert "data-asset-glance" not in pane.text
     db.close()
 
 
@@ -422,7 +427,7 @@ def test_asset_table_actions_live_in_the_pager():
     assert 'class="col-enum' in table
     assert 'class="col-host"' in table
     pager = html.split("list_actions=", 1)[1]
-    assert '"/assets/open-view"' in pager
+    assert '"/assets/open-view"' not in pager
     assert '"/assets/open-edit"' in pager
     assert '"/assets/open-clone"' in pager
     assert '"/assets/open-verify"' in pager
@@ -432,7 +437,7 @@ def test_asset_table_actions_live_in_the_pager():
     assert "vertical-align: middle" in css
     assert ".asset-table { table-layout: auto;" in css
     assert ".evidence-table { table-layout: fixed; }" in css
-    assert "app.css?v=v09-38" in base
+    assert "app.css?v=v09-39" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():
@@ -904,7 +909,7 @@ def test_html_add_posts_asset_id_edit_keeps_it():
         follow_redirects=False,
     )
     assert created.status_code in {302, 303}
-    assert "view=win10-gp" in created.headers.get("location", "")
+    assert "edit=win10-gp" in created.headers.get("location", "")
     page = client.get("/assets/win10-gp")
     assert page.status_code == 200
     assert b"DESKTOP-CG81N3J" in page.content

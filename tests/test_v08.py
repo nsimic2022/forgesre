@@ -118,7 +118,7 @@ def test_version_is_0_9_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v1.0</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-38" in base
+    assert "app.css?v=v09-39" in base
     assert "app.js?v=v09-E" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
@@ -296,7 +296,7 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     text = page.text
     row1 = text.index("asset-form-row-1")
     row2 = text.index("asset-form-row-2")
-    row3 = text.index("asset-form-row-3")
+    assert "asset-form-row-3" not in text
     left = text.index("asset-form-left")
     contacts = text.index("data-asset-contacts")
     support_at = text.index("data-asset-support")
@@ -305,7 +305,7 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     custom = text.index("asset-form-custom")
     notes = text.index("asset-form-notes")
     ladder = text.index("asset-form-ladder")
-    assert row1 < left < middle < contacts < support_at < row2 < right < custom < notes < row3 < ladder
+    assert row1 < left < middle < contacts < support_at < row2 < right < custom < notes < ladder
     identity = _between(text, "asset-form-left", "asset-form-middle")
     for name in ("asset_id", "hostname", "ip", "extra_customer", "extra_site", "extra_vlan"):
         assert f'name="{name}"' in identity, name
@@ -330,7 +330,7 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     assert right < text.index("alarm-families") < custom < text.index("data-client-playrules") < notes
     assert "Standard alarms" in text
     assert "It cannot fire earlier than the Prometheus rule in alerts.yml." in text
-    notes_html = _between(text, "asset-form-notes", "asset-form-row-3")
+    notes_html = _between(text, "asset-form-notes", "asset-form-ladder")
     assert ">Notes " in notes_html
     assert '<textarea name="extra_runbook_note"' in notes_html
     assert "Runbook note" not in text.split('id="asset-form"', 1)[1].split("</form>", 1)[0]
@@ -349,8 +349,9 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     assert '<option value="14" selected>14 days</option>' in support
     assert '<option value="7"' in support and '<option value="30"' in support
 
-    playrules = _between(text, "data-client-playrules", "asset-form-notes")
+    playrules = _between(text, "asset-form-custom", "asset-form-notes")
     assert "Custom alarms" in playrules
+    assert "data-client-playrules" in playrules
     assert "Client playrules" not in text
     assert "This does not create Prometheus thresholds." in playrules
     assert 'type="checkbox"' not in playrules
@@ -376,7 +377,7 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     assert "max-width: none;" in split_rule
     assert "118rem" not in block
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in block.split(".asset-form-row-1", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in block.split(".asset-form-row-2", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);" in block.split(".asset-form-row-2", 1)[1].split("}", 1)[0]
     rules = block.split(".asset-form-band + .asset-form-band", 1)[1].split("}", 1)[0]
     assert "border-top: 1px solid var(--line);" in rules
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in css.split(".ladder-levels", 1)[1].split("}", 1)[0]
