@@ -1,4 +1,7 @@
-{% if form_mode == "edit" %}
+{% set asset_view = form_mode == "edit" and not can("write_assets") %}
+{% if asset_view %}
+<h2>View asset</h2>
+{% elif form_mode == "edit" %}
 <h2>Edit asset</h2>
 {% elif form_mode == "clone" %}
 <h2>Clone asset</h2>
@@ -7,7 +10,7 @@
 {% if import_of %}<p class="muted">From scan {{ form.ip }} — change anything, then Save to create the asset.</p>{% endif %}
 {% endif %}
 {% from "_email_pick.html" import email_pick %}
-<form method="post" action="{% if form_mode == 'edit' %}/assets/{{ selected.asset_id }}/update{% else %}/assets{% endif %}" class="asset-form-split" id="asset-form" hx-boost="false">
+<form method="post" action="{% if asset_view %}#{% elif form_mode == 'edit' %}/assets/{{ selected.asset_id }}/update{% else %}/assets{% endif %}" class="asset-form-split{% if asset_view %} asset-form-view{% endif %}" id="asset-form" hx-boost="false"{% if asset_view %} inert{% endif %}>
   {% set ex = form.extras or {} %}
   <div class="asset-form-band asset-form-row-1">
   <div class="asset-form-col asset-form-left">
@@ -266,6 +269,9 @@
 </form>
 {% set form_list = "/discovery" if request.url.path.startswith("/discovery") else "/assets" %}
 <div class="wide row-actions asset-form-actions">
+  {% if asset_view %}
+  <a href="{{ form_list }}">Close</a>
+  {% else %}
   <button type="submit" form="asset-form">{% if form_mode == 'clone' %}Save copy{% else %}Save{% endif %}</button>
   {% if form_mode == "edit" %}
   <a href="{{ form_list }}">Cancel</a>
@@ -282,7 +288,8 @@
   {% else %}
   <a href="{{ form_list }}">Cancel</a>
   {% endif %}
+  {% endif %}
 </div>
-{% if form_mode == "edit" and delete_blocked(selected) %}
+{% if form_mode == "edit" and not asset_view and delete_blocked(selected) %}
 <p class="muted">{{ delete_blocked(selected) }}</p>
 {% endif %}

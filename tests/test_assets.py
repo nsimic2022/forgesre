@@ -375,9 +375,23 @@ def test_assets_pager_opens_one_row_and_flashes_otherwise():
     assert f'data-list-view="/assets?edit={DEMO_ASSET}"' in listed.text
     pane = viewer.get(f"/assets?view={DEMO_ASSET}")
     assert pane.status_code == 200
-    assert 'id="asset-form"' not in pane.text
-    assert "data-asset-graphs" not in pane.text
+    assert "View asset" in pane.text
+    assert "Edit asset" not in pane.text
+    assert 'id="asset-form"' in pane.text
+    assert "asset-form-view" in pane.text
+    assert " inert" in pane.text
+    assert "data-asset-graphs" in pane.text
     assert "data-asset-glance" not in pane.text
+    assert ">Save<" not in pane.text.split("asset-form-actions", 1)[1]
+    assert ">Remove<" not in pane.text.split("asset-form-actions", 1)[1]
+    assert ">Verify<" not in pane.text.split("asset-form-actions", 1)[1]
+    assert ">Close<" in pane.text.split("asset-form-actions", 1)[1]
+    denied = viewer.post(
+        f"/assets/{DEMO_ASSET}/update",
+        data={"hostname": "nope", "ip": "10.20.30.40", "type": "Linux Server"},
+        follow_redirects=False,
+    )
+    assert denied.status_code == 403
     db.close()
 
 
@@ -442,7 +456,7 @@ def test_asset_table_actions_live_in_the_pager():
     assert "vertical-align: middle" in css
     assert ".asset-table { table-layout: auto;" in css
     assert ".evidence-table { table-layout: fixed; }" in css
-    assert "app.css?v=v09-40" in base
+    assert "app.css?v=v09-41" in base
 
 
 def test_viewer_cannot_see_asset_write_actions():

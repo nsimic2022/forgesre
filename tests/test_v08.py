@@ -117,7 +117,7 @@ def test_version_is_0_9_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v1.0</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-40" in base
+    assert "app.css?v=v09-41" in base
     assert "app.js?v=v09-E" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
@@ -797,8 +797,12 @@ def test_asset_edit_custom_alarms_sit_with_host_metrics():
 
     viewer = _viewer_client().get(f"/assets?edit={asset_id}")
     assert viewer.status_code == 200
-    assert 'id="asset-form"' not in viewer.text
-    assert "playrule_add" not in viewer.text
+    assert "View asset" in viewer.text
+    assert 'id="asset-form"' in viewer.text
+    form = viewer.text.split('id="asset-form"', 1)[1]
+    assert "playrule_add" in form
+    assert " inert" in viewer.text
+    assert ">Save<" not in viewer.text.split("asset-form-actions", 1)[1]
 
 
 def test_asset_playrules_post_adds_and_removes_without_touching_other_fields():
