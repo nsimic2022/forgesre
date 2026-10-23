@@ -54,7 +54,7 @@ def test_journal_redirects_to_health_and_nav_has_no_journal_item():
     assert 'action="/journal/export"' in section
     assert 'action="/journal/bulk-delete"' in section
     assert 'class="pager-bar"' in section
-    nav = health.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    nav = health.text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
     assert ">Journal<" not in nav
     assert 'href="/journal"' not in nav
     assert 'href="/health-ui"' in nav

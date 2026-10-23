@@ -13,12 +13,17 @@
       if (theme === "high-contrast") theme = "dark";
       if (!allowed[theme]) theme = "light";
       document.documentElement.setAttribute("data-theme", theme);
+      try {
+        if (localStorage.getItem("forgesre-nav") === "hidden") {
+          document.documentElement.setAttribute("data-nav-collapsed", "");
+        }
+      } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v09-36">
+  <link rel="stylesheet" href="/static/app.css?v=v09-37">
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
-  <script src="/static/app.js?v=v09-D" defer></script>
+  <script src="/static/app.js?v=v09-E" defer></script>
   {% block extra_head %}{% endblock %}
 </head>
 <body hx-boost="true" hx-indicator="#hx-progress">
@@ -31,7 +36,7 @@
   </button>
   {%- endmacro %}
   {% if user %}
-  <aside class="nav">
+  <aside class="nav" id="app-nav">
     <div class="brand">ForgeSRE <span>v0.9</span></div>
     <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
     {% if can('read_ai') %}
@@ -51,21 +56,6 @@
     {% if can_send_ops %}<a href="/ops" class="{% if request.url.path.startswith('/ops') %}active{% endif %}">Email &amp; reports</a>{% endif %}
     {% if can('admin') %}<a href="/admin" class="{% if request.url.path.startswith('/admin') %}active{% endif %}">Administration</a>{% endif %}
     <div class="nav-foot">
-      {% if appliance_cube is defined %}
-      <div class="nav-status" aria-label="ForgeSRE and ForgeAI">
-        <a class="nav-cube {{ appliance_cube.css }}" href="/health-ui" data-nav-cube="forgesre" title="{{ appliance_cube.title }}">ForgeSRE</a>
-        {% if can('read_ai') and forgeai_cube is defined %}
-        <a class="nav-cube {{ forgeai_cube.css }}" href="/investigations" data-nav-cube="forgeai" title="{{ forgeai_cube.title }}">ForgeAI</a>
-        {% elif forgeai_cube is defined %}
-        <span class="nav-cube {{ forgeai_cube.css }}" data-nav-cube="forgeai" title="{{ forgeai_cube.title }}">ForgeAI</span>
-        {% else %}
-        <span class="nav-cube idle" data-nav-cube="forgeai" title="ForgeAI">ForgeAI</span>
-        {% endif %}
-      </div>
-      {% endif %}
-      <div class="nav-glance">
-        <a class="nav-clock" href="/" data-clock title="Appliance CPU / RAM / HDD are on the Dashboard">—</a>
-      </div>
       <div class="who">
         {% set display_name = distinct_who_name(user.name, user.role) %}
         {% if display_name %}<span class="who-name">{{ display_name }}</span>{% endif %}
@@ -77,6 +67,10 @@
       </div>
     </div>
   </aside>
+  <button type="button" class="nav-collapse" data-nav-toggle aria-controls="app-nav" aria-expanded="true" title="Hide menu">
+    <span class="nav-collapse-icon" aria-hidden="true"></span>
+    <span class="sr-only">Hide menu</span>
+  </button>
   <main class="content">
     <div class="alarm-ticker" data-alarm-ticker hidden role="status">
       <a data-ticker-link href="/"></a>

@@ -152,7 +152,7 @@ def test_history_redirects_and_incidents_stay_ten_per_page():
     assert two.status_code == 200
     assert "days=90" in two.text
     assert "name=\"page\"" not in two.text.split("<form", 1)[1].split("</form>", 1)[0]
-    nav = two.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    nav = two.text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
     assert ">History<" not in nav
     db.close()
 

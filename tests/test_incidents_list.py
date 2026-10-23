@@ -94,7 +94,7 @@ def test_incidents_list_columns_short_id_and_full_href():
     landed = client.get("/history")
     assert f'href="/incidents/{number}"' in landed.text
     assert f">#{seq}<" in landed.text
-    nav = landed.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    nav = landed.text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
     assert ">History<" not in nav
     db.close()
 

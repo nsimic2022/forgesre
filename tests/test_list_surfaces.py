@@ -119,7 +119,7 @@ def test_incidents_keeps_ack_resolved_by_and_drops_reported_to():
     assert "ack-dot" in tail
     assert "Reported to" not in html
     assert "history.html" not in html
-    nav = page.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    nav = page.text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
     assert ">History<" not in nav
     db.close()
 

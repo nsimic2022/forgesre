@@ -112,7 +112,7 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert "[data-select-scope]:has([data-select-row]:checked) .list-actions" in css
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-36" in base and "app.js?v=v09-D" in base
+    assert "app.css?v=v09-37" in base and "app.js?v=v09-E" in base
 
     assets = _middle(client.get("/assets").text)
     _order(assets, ["View", "Edit", "Clone", "Verify", "Export", "Remove"])
@@ -184,7 +184,7 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert 'class="onoff' in oncall_table or "No on-call slots yet." in oncall_table
     assert ">Edit<" not in oncall_table and ">Remove<" not in oncall_table
     _no_invented(oncall_actions)
-    nav = escalation.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    nav = escalation.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
     assert ">Escalation<" in nav
     assert nav.index(">Playbooks<") < nav.index(">Escalation<")
 
