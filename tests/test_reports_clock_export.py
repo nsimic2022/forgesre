@@ -298,10 +298,10 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     client = _client()
     home = client.get("/")
     assert home.status_code == 200
-    nav = home.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
-    assert "nav-clock" in nav and "data-clock" in nav
+    nav = home.text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
+    assert "nav-clock" not in nav and "data-clock" not in nav
     assert "appliance-clock" not in home.text
-    assert "data-clock" in nav
+    assert "data-nav-toggle" in home.text
     recent = home.text.split("Recent incidents", 1)[1].split("</table>", 1)[0]
     assert recent.index(">Incident<") < recent.index(">Hostname<") < recent.index(">Status<") < recent.index(">L1–L4<")
     assert recent.index(">When<") < recent.index(">Severity<") < recent.index(">Resolved by<")
@@ -310,8 +310,8 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert head.index(">When<") < head.index(">Resolved by<")
     assert ">Problem<" not in recent and ">Ack<" not in recent and "info-tip" not in head
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    clock = css.split(".nav a.nav-clock {", 1)[1].split("}", 1)[0]
-    assert "font-size: 2.4rem" in clock
+    collapse = css.split(".nav-collapse {", 1)[1].split("}", 1)[0]
+    assert "position: fixed" in collapse and "left: 220px" in collapse
     appliance = css.split(".appliance-clock {", 1)[1].split("}", 1)[0]
     assert "padding:" in appliance and "14cqi" in appliance and "2.55rem" in appliance
     assert "5.4rem" not in appliance
@@ -330,5 +330,5 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert "height: 100%" in css.split(".admin-user-split > .admin-user-pane", 1)[1].split("}", 1)[0]
     assert "margin: 2.25rem 0 0.7rem" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-36" in base and "app.js?v=v09-D" in base
+    assert "app.css?v=v09-37" in base and "app.js?v=v09-E" in base
     db.close()

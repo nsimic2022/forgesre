@@ -51,10 +51,9 @@ def test_forgeai_page_has_five_cubes_and_cron():
     home = client.get("/").text
     assert 'href="/investigations"' in home
     assert "Open Investigations" not in home
-    nav = home.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
-    menu = nav.split("nav-status", 1)[0]
-    assert ">Investigations<" in menu
-    assert ">ForgeAI<" in nav
+    nav = home.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
+    assert ">Investigations<" in nav
+    assert ">ForgeAI<" not in nav
     assert "Coming later" not in nav
     assert nav.index(">Dashboard<") < nav.index('href="/investigations"') < nav.index(">Assets<")
 
@@ -69,8 +68,8 @@ def test_viewer_forbidden_on_forgeai():
     assert client.get("/investigations").status_code == 403
     assert client.get("/forgeai").status_code == 403
     home = client.get("/").text
-    nav = home.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
-    assert 'href="/investigations"' not in nav.split("nav-status", 1)[0]
+    nav = home.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
+    assert 'href="/investigations"' not in nav
 
 
 def test_digest_filter_chips():
@@ -155,6 +154,6 @@ def test_ask_posts_question_and_css_cache():
     assert posted.status_code == 303
     assert posted.headers["location"] == "/investigations#ask"
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-36" in base
+    assert "app.css?v=v09-37" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".forgeai-grid" in css

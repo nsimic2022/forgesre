@@ -85,75 +85,67 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "data-appliance-card" in home.text
     assert "data-appliance-resources" in home.text
     assert 'data-metric="cpu"' in home.text
-    nav = home.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
-    assert "nav-clock" in nav and "data-clock" in nav
+    nav = home.text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
+    assert "nav-clock" not in nav and "data-clock" not in nav
+    assert "nav-status" not in nav and "nav-glance" not in nav
+    assert "data-nav-cube" not in nav
     assert ">CPU<" not in nav and "data-metric" not in nav
-    assert 'data-nav-cube="forgesre"' in nav and ">ForgeSRE<" in nav
-    assert 'data-nav-cube="forgeai"' in nav and ">ForgeAI<" in nav
-    assert nav.index(">Administration<") < nav.index('class="nav-status"')
-    assert nav.index('class="nav-status"') < nav.index('class="nav-glance"') < nav.index("data-clock")
-    glance = nav.split('class="nav-glance"', 1)[1].split('class="who"', 1)[0]
-    assert "data-nav-cube" not in glance and "data-clock" in glance
     assert 'href="/investigations"' in nav
     assert "Coming later" not in nav
-    css_nav = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    status_css = css_nav.split(".nav-status {", 1)[1].split("}", 1)[0]
-    assert "margin: 0.85rem 0" in status_css
-    glance_css = css_nav.split(".nav-glance {", 1)[1].split("}", 1)[0]
-    assert "border-top:" in glance_css
+    assert "data-nav-toggle" in home.text
     assert 'class="nav-logout"' in home.text
     assert ">Logout<" in home.text
     other = client.get("/incidents")
-    other_nav = other.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
-    assert "nav-clock" in other_nav and "data-clock" in other_nav
+    other_nav = other.text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
+    assert "nav-clock" not in other_nav and "data-clock" not in other_nav
     assert "data-appliance-card" not in other.text
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "bindClock" in js
+    assert "bindNavCollapse" in js
     assert "bindApplianceResources" in js
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".nav a.nav-clock" in css
+    assert ".nav-collapse {" in css
     assert ".appliance-clock" in css
     assert "form.nav-logout" in css
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-36" in base
-    assert "app.js?v=v09-D" in base
+    assert "app.css?v=v09-37" in base
+    assert "app.js?v=v09-E" in base
     assert "bindInfoTips" in js
     assert "ops-report-actions" in css
 
 
-def test_nav_cubes_precede_clock_separator():
-    """Stacked ForgeSRE / ForgeAI cubes sit above the clock rule, then the clock."""
+def test_nav_hides_cubes_clock_and_has_collapse_arrow():
+    """Left nav is page links + who/logout. Cubes/clock are gone; the divider has a hide arrow."""
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    nav = base.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
-    admin = nav.index(">Administration<")
-    status = nav.index('class="nav-status"')
-    forgesre = nav.index('data-nav-cube="forgesre"')
-    forgeai = nav.index('data-nav-cube="forgeai"')
-    glance = nav.index('class="nav-glance"')
-    clock = nav.index("nav-clock")
-    assert admin < status < forgesre < forgeai < glance < clock
-    glance_html = nav.split('class="nav-glance"', 1)[1].split('class="who"', 1)[0]
-    assert "data-nav-cube" not in glance_html
-    assert "data-clock" in glance_html
-    assert 'href="/investigations"' in nav and 'data-nav-cube="forgeai"' in nav
+    nav = base.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
+    assert "nav-status" not in nav
+    assert "nav-glance" not in nav
+    assert "nav-clock" not in nav
+    assert "data-clock" not in nav
+    assert "data-nav-cube" not in nav
+    assert ">Administration<" in nav
+    assert 'href="/investigations"' in nav
     assert "Coming later" not in nav
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    status_css = css.split(".nav-status {", 1)[1].split("}", 1)[0]
-    assert "flex-direction: column" in status_css
-    assert "margin: 0.85rem 0" in status_css
-    glance_css = css.split(".nav-glance {", 1)[1].split("}", 1)[0]
-    assert "border-top: 1px solid var(--shell-line)" in glance_css
-    cube = css.split(".nav span.nav-cube {", 1)[1].split("}", 1)[0]
-    assert "min-width: 6.72rem" in cube
-    assert "height: 1.5rem" in cube
-    assert "font-size: 0.82rem" in cube
-    clock_css = css.split(".nav a.nav-clock {", 1)[1].split("}", 1)[0]
-    assert "font-size: 2.4rem" in clock_css
-    assert ".nav a.nav-cube.ok { background: var(--ok)" in css
-    assert ".nav a.nav-cube.warn { background: var(--warn)" in css
-    assert ".nav span.nav-cube.idle { background: var(--shell-line)" in css
     assert 'href="/health-ui"' in nav and ">Journal<" not in nav
+    assert "data-nav-toggle" in base
+    assert 'aria-controls="app-nav"' in base
+    assert 'id="app-nav"' in nav
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    collapse = css.split(".nav-collapse {", 1)[1].split("}", 1)[0]
+    assert "position: fixed" in collapse
+    assert "left: 220px" in collapse
+    assert "html[data-nav-collapsed] .nav" in css
+    assert "translateX(-100%)" in css
+    assert "html[data-nav-collapsed] .content { margin-left: 0; }" in css
+    assert ".nav-status {" not in css
+    assert ".nav a.nav-clock" not in css
+    assert ".nav a.nav-cube" not in css
+    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    toggle = js.split("(function bindNavCollapse() {", 1)[1].split("\n})();", 1)[0]
+    assert "forgesre-nav" in toggle
+    assert "data-nav-collapsed" in toggle
+    assert 'closest("[data-nav-toggle]")' in toggle
 
 
 def test_resource_levels_thresholds():

@@ -35,7 +35,7 @@ def test_history_page_redirects_and_incidents_lists_closed():
     page = client.get("/incidents")
     assert page.status_code == 200
     assert "INC-" in page.text
-    nav = page.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    nav = page.text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
     assert ">History<" not in nav
     assert 'href="/history"' not in nav
     assert 'href="/incidents"' in nav
@@ -110,7 +110,7 @@ def test_viewer_can_open_incidents_and_history_redirects():
     assert bounced.headers["location"] == "/incidents?page=2"
     page = client.get("/incidents")
     assert page.status_code == 200
-    nav = page.text.split('<aside class="nav">', 1)[1].split("</aside>", 1)[0]
+    nav = page.text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
     assert ">History<" not in nav
     assert "Last 1 hour" in page.text
     assert "Not acknowledged" in page.text

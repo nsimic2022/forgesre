@@ -65,8 +65,8 @@ def _block(start: str) -> str:
 
 
 def test_cache_bust_is_v09_s_for_css_only():
-    assert "app.css?v=v09-36" in BASE
-    assert "app.js?v=v09-D" in BASE
+    assert "app.css?v=v09-37" in BASE
+    assert "app.js?v=v09-E" in BASE
     assert "app.css?v=v09-W" not in BASE
 
 
@@ -102,9 +102,8 @@ def test_light_palette_stays_and_dark_tokens_are_stronger():
 def test_status_ack_clock_charts_checkbox_and_cube_edges():
     assert "color: var(--ok)" in _block(".dash-recent .status-ack {")
     assert "color: var(--ok)" in _block(".list-scroll .status-ack {")
-    clock = _block(".nav a.nav-clock {")
-    assert "color: var(--shell-text)" in clock
-    assert "shell-muted" not in clock
+    collapse = _block(".nav-collapse {")
+    assert "position: fixed" in collapse
     assert "color: var(--text)" in _block(".appliance-clock {")
     assert "background: #12151c" in _block(".dash-chart-plot {")
     assert "stroke-width: 2.5" in CSS
@@ -126,4 +125,4 @@ def test_status_ack_clock_charts_checkbox_and_cube_edges():
     assert "var(--ink-on-ok, #fff)" in CSS
     assert "var(--ink-on-crit, #fff)" in CSS
     assert ".stack-cube.ok { background: var(--ok)" in CSS
-    assert ".nav a.nav-cube.ok { background: var(--ok)" in CSS
+    assert ".nav-collapse {" in CSS

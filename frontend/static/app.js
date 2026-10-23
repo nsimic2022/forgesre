@@ -121,6 +121,41 @@ function bootUi() {
   });
 })();
 
+(function bindNavCollapse() {
+  const KEY = "forgesre-nav";
+  const apply = (collapsed) => {
+    if (collapsed) document.documentElement.setAttribute("data-nav-collapsed", "");
+    else document.documentElement.removeAttribute("data-nav-collapsed");
+    const button = document.querySelector("[data-nav-toggle]");
+    if (!button) return;
+    button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    button.setAttribute("title", collapsed ? "Show menu" : "Hide menu");
+    const label = button.querySelector(".sr-only");
+    if (label) label.textContent = collapsed ? "Show menu" : "Hide menu";
+  };
+  const read = () => {
+    try {
+      return localStorage.getItem(KEY) === "hidden";
+    } catch (err) {
+      return false;
+    }
+  };
+  bindOnce("data-nav-bound", () => {
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-nav-toggle]");
+      if (!button) return;
+      const next = !document.documentElement.hasAttribute("data-nav-collapsed");
+      try {
+        localStorage.setItem(KEY, next ? "hidden" : "open");
+      } catch (err) {
+        /* private mode */
+      }
+      apply(next);
+    });
+  });
+  apply(read());
+})();
+
 (function bindClock() {
   const tick = () => {
     const clocks = document.querySelectorAll("[data-clock]");
