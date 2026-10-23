@@ -6,7 +6,7 @@
 <h1>Administration</h1>
 <div class="split admin-user-split">
   <section class="admin-user-col">
-    <h2>Users {% with %}{% set tip %}Click a user on the left to edit or remove them. Login passwords are stored as bcrypt hashes in Postgres — never in git, never shown here. The install admin bootstrap copy in secrets/secrets.env is separate (see handbook §5).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+    <h2>Users</h2>
     <div class="card admin-user-pane">
     <div class="table-scroll list-scroll" data-list-scroll>
     <table class="user-table">
@@ -26,18 +26,18 @@
             {% if not (u.id == user.id or u.role == "super_admin") %}
             <form method="post" action="/admin/users/{{ u.id }}/delete" onsubmit="return confirm('Remove {{ u.email }}? They will not be able to sign in.');" hx-boost="false">
               <button type="submit" class="danger">Remove</button>
-            </form>
+</form>
             {% endif %}
-            </div>
-          </td>
-        </tr>
+</div>
+</td>
+</tr>
       {% endfor %}
-      </tbody>
-    </table>
-    </div>
+</tbody>
+</table>
+</div>
     {% include "_pager.html" %}
-    </div>
-  </section>
+</div>
+</section>
   <section class="admin-user-col">
     {% if selected %}
     <h2>Edit user</h2>
@@ -53,7 +53,7 @@
       <label>Email 1 <input name="email" type="email" required value="{{ selected.email }}" {% if not can_edit_selected %}readonly{% endif %}></label>
       <label>Email 2 <input name="email2" type="email" value="{{ selected.email2 }}" {% if not can_edit_selected %}readonly{% endif %}></label>
       <label class="wide">New password <input name="password" type="password" placeholder="leave blank to keep" {% if not can_edit_selected %}disabled{% endif %}></label>
-      <label class="wide"><span class="label-line">Role {% with %}{% set tip %}Analyst: incidents, inventory, playrules, playbooks. Engineer: detailed RCA, inventory. System admin: users and appliance. Viewer: read only. Super admin is the install account and cannot change.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+      <label class="wide"><span class="label-line">Role</span>
         <select name="role" {% if not can_edit_selected or selected.role == 'super_admin' %}disabled{% endif %}>
           <option value="analyst" {% if selected.role == "analyst" %}selected{% endif %}>Analyst — incidents, inventory, playrules, playbooks</option>
           <option value="engineer" {% if selected.role == "engineer" %}selected{% endif %}>Engineer — detailed RCA, inventory</option>
@@ -62,12 +62,12 @@
           {% if selected.role == "super_admin" %}
           <option value="super_admin" selected>Super admin (install — cannot change)</option>
           {% endif %}
-        </select>
-      </label>
+</select>
+</label>
       {% if selected.role == "super_admin" %}
       <input type="hidden" name="role" value="super_admin">
       {% endif %}
-    </form>
+</form>
     <div class="row-actions user-actions">
       {% if can_edit_selected %}
       <button type="submit" form="edit-user-form">Save</button>
@@ -76,7 +76,7 @@
       {% if can_delete_selected %}
       <form method="post" action="/admin/users/{{ selected.id }}/delete" class="inline" onsubmit="return confirm('Remove {{ selected.email }}? They will not be able to sign in.');" hx-boost="false">
         <button type="submit" class="danger">Remove</button>
-      </form>
+</form>
       {% else %}
         {% if selected.id == user.id %}
         <p class="muted">You cannot remove the account you are signed in as.</p>
@@ -84,11 +84,11 @@
         <p class="muted">The install super admin cannot be removed.</p>
         {% endif %}
       {% endif %}
-    </div>
+</div>
     <p class="muted"><a href="/admin">Create another user</a></p>
-    </div>
+</div>
     {% elif clone_of %}
-    <h2>Clone user {% with %}{% set tip %}Copy of {{ clone_of.email }}. Type a new email and password.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+    <h2>Clone user</h2>
     <div class="card admin-user-pane">
     <form method="post" action="/admin/users" class="form-grid person-grid" hx-boost="false">
       <label>Name <input name="name" required value="{{ clone_of.name }}"></label>
@@ -98,20 +98,20 @@
       <label>Email 1 <input name="email" type="email" required value="{{ clone_of.email }}"></label>
       <label>Email 2 <input name="email2" type="email" value="{{ clone_of.email2 }}"></label>
       <label class="wide">Password <input name="password" type="password" required></label>
-      <label class="wide"><span class="label-line">Role {% with %}{% set tip %}Analyst: incidents, inventory, playrules, playbooks. Engineer: detailed RCA, inventory. System admin: users and appliance. Viewer: read only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+      <label class="wide"><span class="label-line">Role</span>
         <select name="role">
           <option value="analyst" {% if clone_role == "analyst" %}selected{% endif %}>Analyst — incidents, inventory, playrules, playbooks</option>
           <option value="engineer" {% if clone_role == "engineer" %}selected{% endif %}>Engineer — detailed RCA, inventory</option>
           <option value="admin" {% if clone_role == "admin" %}selected{% endif %}>System admin — users and appliance</option>
           <option value="viewer" {% if clone_role == "viewer" %}selected{% endif %}>Viewer — read only</option>
-        </select>
-      </label>
+</select>
+</label>
       <div class="row-actions wide">
         <button type="submit">Save</button>
         <a href="/admin">Cancel</a>
-      </div>
-    </form>
-    </div>
+</div>
+</form>
+</div>
     {% else %}
     <h2>Create user</h2>
     <div class="card admin-user-pane">
@@ -123,22 +123,22 @@
       <label>Email 1 <input name="email" type="email" required></label>
       <label>Email 2 <input name="email2" type="email"></label>
       <label class="wide">Password <input name="password" type="password" required></label>
-      <label class="wide"><span class="label-line">Role {% with %}{% set tip %}Analyst: incidents, inventory, playrules, playbooks. Engineer: detailed RCA, inventory. System admin: users and appliance. Viewer: read only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+      <label class="wide"><span class="label-line">Role</span>
         <select name="role">
           <option value="analyst">Analyst — incidents, inventory, playrules, playbooks</option>
           <option value="engineer">Engineer — detailed RCA, inventory</option>
           <option value="admin">System admin — users and appliance</option>
           <option value="viewer">Viewer — read only</option>
-        </select>
-      </label>
+</select>
+</label>
       <div class="row-actions wide">
         <button type="submit">Create</button>
         <a href="/admin">Cancel</a>
-      </div>
-    </form>
-    </div>
+</div>
+</form>
+</div>
     {% endif %}
-  </section>
+</section>
 </div>
 <div class="admin-mid">
 <section class="admin-audit-pane">
@@ -155,9 +155,9 @@
       <td>{{ row.actor }}</td>
       <td>{{ row.action }}</td>
       <td>{{ row.object_type }} {{ row.object_id }}</td>
-    </tr>
+</tr>
   {% endfor %}
-  </tbody>
+</tbody>
 </table>
 </div>
 {% with pager=audit_pager, list_actions={"delete": "", "export": "/admin/audit/export", "next": "/admin", "confirm": ""} %}
@@ -188,12 +188,12 @@
           <form method="post" action="/admin/backups/remove" onsubmit="return confirm('Remove {{ b.name }}? This deletes only that backup folder (tar + MANIFEST). data/backups/ stays.');" hx-boost="false">
             <input type="hidden" name="name" value="{{ b.name }}">
             <button type="submit" class="danger">Remove</button>
-          </form>
-        </div>
-      </td>
-    </tr>
+</form>
+</div>
+</td>
+</tr>
   {% endfor %}
-  </tbody>
+</tbody>
 </table>
 </div>
 {% with pager=backup_pager, list_actions={"delete": "/admin/backups/bulk-delete", "delete_label": "Delete selected", "delete_last": True, "export": "/admin/backups/export", "next": "/admin", "confirm": "Delete the selected backups? Each selected folder (tar + MANIFEST) is removed. data/backups/ stays."} %}
@@ -208,19 +208,19 @@
 <div class="admin-backup-cli">
 <div class="admin-backup-left">
 <div class="admin-create-backup-pane">
-<h2>Create new backup {% with %}{% set tip %}Full-system archive for crash recovery or VM migration — the same archive as ./forgesre backup. Each run is a folder data/backups/backup_YYYYMMDDTHHMMSSZ/ (gitignored, directory mode 700) with one forgesre.tar.gz (mode 600) plus a short MANIFEST.txt. Import that tar — do not unpack it into loose files. Includes config/forgesre.yml, .env, secrets/secrets.env, a logical Postgres dump (users, incidents, playbooks, playrules, journal), compressed logs, monitoring/alerts.local.yml, and data/generated/. Not in the backup: container images, Prometheus/Loki/Grafana volumes, nested backups, optional mailbox mail. LLM GGUF weights are skipped unless you tick the checkbox (they are often multi-GB). Download requires this admin session — there is no unauthenticated URL.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+<h2>Create new backup</h2>
 <div class="card">
 {% if request.query_params.get('backup') %}
 <p class="banner"><strong>Backup written</strong> {{ request.query_params.get('backup') }} under <code>data/backups/</code> (mode 600, gitignored).</p>
 {% endif %}
 <form method="post" action="/admin/backups" class="row-actions backup-actions" hx-boost="false">
-  <label class="inline-check"><input type="checkbox" name="include_models" value="1"> Include LLM GGUF (multi-GB) {% with %}{% set tip %}Skipped unless ticked. GGUF weights are often multi-GB and are not required to restore incidents or users.{% endset %}{% include "_info_tip.html" %}{% endwith %}</label>
+  <label class="inline-check"><input type="checkbox" name="include_models" value="1"> Include LLM GGUF (multi-GB)</label>
   <button type="submit">Backup</button>
 </form>
 </div>
 </div>
 <div class="admin-restore-pane">
-<h3>Import / restore {% with %}{% set tip %}Import only stores a tar.gz under data/backups/backup_…/. Restore overwrites the live database (users, incidents, playbooks) and does not run unless you tick the box and type RESTORE. Preferred after a crash or when migrating: SSH, stop Core, ./forgesre restore (pick a number) or ./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes, then ./forgesre update. Config / .env / secrets on disk are not rewritten from this browser (Core mounts them read-only).{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+<h3>Import / restore</h3>
 {% if request.query_params.get('imported') %}
 <p class="banner"><strong>Archive stored</strong> {{ request.query_params.get('imported') }}. Restore still needs the confirmation below — it will not run by itself.</p>
 {% endif %}
@@ -240,8 +240,8 @@
       {% for b in backup_choices %}
       <option value="{{ b.name }}" title="{{ b.name }}"{% if loop.first %} selected{% endif %}>{{ backup_picker_label(b) }}</option>
       {% endfor %}
-    </select>
-  </label>
+</select>
+</label>
   <label class="inline-check"><input type="checkbox" name="acknowledged" value="1" required><span>I understand this overwrites users, incidents, and playbooks on this live box</span></label>
   <label>Type RESTORE <input name="confirm" required placeholder="RESTORE" autocomplete="off"></label>
   <button type="submit" class="danger">Restore</button>
@@ -250,7 +250,7 @@
 </div>
 </div>
 <div class="admin-cli-pane">
-<h3>ForgeSRE CLI {% with %}{% set tip %}There is no terminal in this browser. Use SSH, then ./forgesre or ./forgesre shell. The table lists every ./forgesre subcommand. Details on the VM: ./forgesre help &lt;command&gt;.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+<h3>ForgeSRE CLI</h3>
 <div class="cli-cheatsheet-scroll">
 <table class="cli-cheatsheet">
   <thead><tr><th>Command</th><th>What it does</th></tr></thead>
@@ -300,7 +300,7 @@
     <tr><td><code>completion</code></td><td>Print a source line for ~/.bashrc so TAB works in your login bash</td></tr>
     <tr><td><code>help</code></td><td>This overview, or detailed help for one command</td></tr>
     <tr><td><code>quit</code> · <code>exit</code></td><td>Leave the forgesre&gt; prompt (Ctrl-D also works)</td></tr>
-  </tbody>
+</tbody>
 </table>
 </div>
 </div>

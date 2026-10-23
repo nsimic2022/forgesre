@@ -44,16 +44,17 @@ def test_layout_is_a_quarter_fact_column_and_a_chart_grid():
         assert f"host_chart('{key}'" in html
     assert "host_chart('up'" not in html
     assert "Not scraped." in html
-    assert "No samples yet" in html
+    assert "No samples yet" not in html
     assert "grafana" not in html.lower() and "iframe" not in html.lower()
     assert "request rate" not in html.lower() and "5xx" not in html.lower()
     assert "Math.sin" not in js
     assert 'data.collecting === false ? "Not scraped." : "No samples yet."' in js
-    assert "app.css?v=v09-50" in base and "app.js?v=v09-J" in base
+    assert "app.css?v=v09-51" in base and "app.js?v=v09-J" in base
     asset_js = js.split("(function bindAssetGraphs() {", 1)[1].split("\n})();", 1)[0]
     assert "?incident=" not in asset_js
     incident = (ROOT / "frontend" / "templates" / "incident_detail.html").read_text(encoding="utf-8")
-    assert "last 24 hours" in incident.lower() or "24 hours" in incident.lower()
+    assert "Host metrics" in incident
+    assert "data-incident-graphs" in incident
     assert "data-asset-graph-grid" not in (ROOT / "frontend" / "templates" / "assets.html").read_text(encoding="utf-8")
 
 

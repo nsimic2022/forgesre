@@ -471,13 +471,11 @@ def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
     assert "API 403" not in html
     assert "Admin only." not in html
     assert "still points Core at an external instance" not in html
-    assert "NETBOX_API_TOKEN" in html
+    assert "NETBOX_API_TOKEN" not in html
     assert "API token: yes" in html
-    assert "v2" in html
-    assert "nbt_" in html
-    assert "12-character" in html
-    assert "NETBOX_SUPERUSER_NAME" in html
-    assert "not a NetBox UI login" in html
+    assert "nbt_" not in html
+    assert "12-character" not in html
+    assert "not a NetBox UI login" not in html
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     netbox_css = css[css.find(".netbox-status") : css.find(".card {")]
     assert "pointer-events" not in netbox_css
@@ -564,9 +562,9 @@ def test_discovery_footer_omits_external_when_bundled(monkeypatch):
     monkeypatch.setattr("app.netbox.netbox_status", lambda *a, **k: {"ok": True})
     client, db = _discovery_client()
     html = client.get("/discovery").text
-    assert "bundled at" in html
+    assert "bundled at" not in html
     assert "still points Core at an external instance" not in html
-    assert "NETBOX_API_TOKEN" in html
+    assert "NETBOX_API_TOKEN" not in html
     assert "API token: yes" in html
     db.close()
 
@@ -578,9 +576,8 @@ def test_discovery_footer_names_external_when_url_is_not_local(monkeypatch):
     monkeypatch.setattr("app.netbox.netbox_status", lambda *a, **k: {"ok": True})
     client, db = _discovery_client()
     html = client.get("/discovery").text
-    assert "https://netbox.example.local" in html
-    assert "inventory.netbox.url" in html
-    assert "--netbox-url" in html
+    assert "inventory.netbox.url" not in html
+    assert "--netbox-url" not in html
     assert "12-character" not in html
     assert "API token: yes" in html
     db.close()
@@ -891,8 +888,7 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "http://127.0.0.1:8001" in example
     disc = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
     assert "does not bundle NetBox" not in disc
-    assert "8001" in disc
-    assert "not nmap" in disc.lower()
+    assert "not nmap" not in disc.lower()
     assert 'action="/discovery/scan"' in disc
     assert 'action="/discovery/netbox-sync"' in disc
     assert 'class="secondary">Sync NetBox' not in disc
@@ -900,15 +896,12 @@ def test_install_and_update_bundle_netbox_default_on():
     assert "disabled" in disc
     assert disc.find("Scan now") < disc.find("NetBox sync")
     assert "still points Core at an external instance" not in disc
-    assert "NETBOX_API_TOKEN" in disc
+    assert "NETBOX_API_TOKEN" not in disc
     assert "API token:" in disc
     assert "netbox_token_present" in disc
-    assert "v2" in disc
-    assert "nbt_" in disc
-    assert "12-character" in disc
-    assert "NETBOX_SUPERUSER_NAME" in disc
-    assert "not a NetBox UI login" in disc
-    assert "netbox_url_is_local" in disc
+    assert "nbt_" not in disc
+    assert "12-character" not in disc
+    assert "not a NetBox UI login" not in disc
     assert "netbox_sync_clickable" in disc
     assert "netbox_sync_light" in disc
     assert "netbox_sync_label" in disc
@@ -923,7 +916,7 @@ def test_install_and_update_bundle_netbox_default_on():
     assert ".netbox-status-dot" in css
     netbox_css = css[css.find(".netbox-status") : css.find(".card {")]
     assert "pointer-events" not in netbox_css
-    assert "--netbox-url" in disc
+    assert "--netbox-url" not in disc
     handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
     assert "/api/status/" in handbook
     assert "Admin only" in handbook

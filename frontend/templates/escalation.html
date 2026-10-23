@@ -2,7 +2,7 @@
 {% import "_select.html" as sel %}
 {% block title %}Escalation · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Escalation {% with %}{% set tip %}Used when an asset Escalation is empty (same 30s loop as before, not a ticket system). L1–L4 here is the same four rungs as the incident cubes and the asset form: L1 NOC, L2 Shift, L3 Engineer, L4 Manager. Each level is minutes after the incident opened and a recipient: an address is mailed as written, a role (team, team-lead, engineer, manager) mails the asset owner email, oncall mails whoever is on the roster now, and a role with no owner email is recorded as no-recipient and not sent — ForgeSRE does not invent role@forgesre.local addresses. The 0 min step is the mail at open; without it, nothing is sent at open. Email is the only channel: there is no webhook, SMS, or chat step. Seeded Default warning (0 / 15 / 30 / 60 min) is what new rules attach unless you pick another policy here. An asset with any Escalation level filled does not also use this page. Edit changes escalation for incidents that open after Save. Remove moves its rules to Default warning. Acknowledge stops further steps. SMTP off means the row stays generated — that is the lab outbox. Scheduled reports are a different mail path.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Escalation</h1>
 <div class="escalation-cols">
 <section class="card escalation-pane escalation-policies">
 <h2>Default escalation</h2>
@@ -23,19 +23,19 @@
         {% else %}
         <td colspan="2" class="muted">off</td>
         {% endif %}
-      </tr>
+</tr>
     {% endfor %}
-    </tbody>
-  </table>
+</tbody>
+</table>
   {% if can('write_play') %}
   <div class="row-actions asset-form-actions">
     <a class="button" href="/escalation?edit={{ policy.id }}{{ pager_keep(pager) }}#escalation-form">Edit</a>
     {% if policy.slug != default_slug %}
     <form method="post" action="/escalation/{{ policy.id }}/delete" onsubmit="return confirm('Remove this escalation policy? {{ usage.get(policy.id, 0) }} playrule(s) using it move to Default warning.');" hx-boost="false">
       <button type="submit" class="danger">Remove</button>
-    </form>
+</form>
     {% endif %}
-  </div>
+</div>
   {% endif %}
 </section>
 {% else %}
@@ -58,7 +58,7 @@
   <label>Name <input name="name" placeholder="Default warning" required value="{{ form.name }}"></label>
   <label>Slug <input name="slug" placeholder="default-warning" required value="{{ form.slug }}" {% if form_mode == "edit" %}readonly{% endif %}></label>
   <input type="hidden" name="ladder_present" value="1">
-  <p class="muted">L1–L4 {% with %}{% set tip %}Same four rungs as the incident cubes and Add / Edit asset. ON needs minutes and a role (team, team-lead, engineer, manager, oncall) or an email. OFF is skipped and that cube stays gray. team / team-lead / engineer / manager mail the asset owner email. oncall mails whoever is on the roster now. Email only — webhook, SMS or a URL is refused.{% endset %}{% include "_info_tip.html" %}{% endwith %}</p>
+  <p class="muted">L1–L4</p>
   {% set minute_hint = {1: "0", 2: "15", 3: "30", 4: "60"} %}
   <div class="policy-ladder ladder-levels">
     {% for slot in form.ladder %}
@@ -67,27 +67,27 @@
         <button type="button" class="onoff {{ 'is-on' if slot.on else 'is-off' }}" data-onoff aria-pressed="{{ 'true' if slot.on else 'false' }}">{% if slot.on %}ON{% else %}OFF{% endif %}</button>
         <input type="checkbox" class="onoff-check" name="ladder_on_{{ slot.level }}" value="1" {% if slot.on %}checked{% endif %} tabindex="-1">
         <span class="ladder-label">{{ slot.label }}</span>
-      </div>
+</div>
       <label>Minutes
         <input type="number" name="ladder_minutes_{{ slot.level }}" min="0" max="10080" step="1" inputmode="numeric" value="{{ slot.minutes }}" placeholder="{{ minute_hint[slot.level] }}">
-      </label>
+</label>
       <label>Recipient
         <input name="ladder_target_{{ slot.level }}" value="{{ slot.target }}" list="policy-roles" placeholder="team or noc@dc.local" autocomplete="off">
-      </label>
-    </div>
+</label>
+</div>
     {% endfor %}
-  </div>
+</div>
   <datalist id="policy-roles">
     <option value="team"></option>
     <option value="team-lead"></option>
     <option value="engineer"></option>
     <option value="manager"></option>
     <option value="oncall"></option>
-  </datalist>
+</datalist>
   <div class="row-actions">
     <button type="submit">Save</button>
     <a href="/escalation">Cancel</a>
-  </div>
+</div>
 </form>
 </section>
 {% set oc = oncall_form or {} %}
@@ -96,7 +96,7 @@
 <h2 id="oncall-form-title">Edit on-call <span class="muted">{{ oc.name }}</span></h2>
 <form method="post" action="/escalation/oncall/{{ oncall_selected.id }}/update" class="oncall-form-grid" id="oncall-form" data-oncall-form hx-boost="false">
 {% elif oncall_form_mode == "clone" %}
-<h2 id="oncall-form-title">Clone on-call {% with %}{% set tip %}Copy of {{ oncall_clone_name }}. Tweak the fields, then Save to create a new window. Cancel discards the draft.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+<h2 id="oncall-form-title">Clone on-call</h2>
 <form method="post" action="/escalation/oncall" class="oncall-form-grid" id="oncall-form" data-oncall-form hx-boost="false">
 {% else %}
 <h2 id="oncall-form-title">Add on-call</h2>
@@ -109,37 +109,37 @@
         {% for day in weekdays %}
         <option value="{{ loop.index0 }}" {% if oc.weekday == loop.index0 %}selected{% endif %}>{{ day }}</option>
         {% endfor %}
-      </select>
-    </label>
+</select>
+</label>
     <label>From <input name="start" type="time" value="{{ oc.start or '08:00' }}" required></label>
     <label>Until <input name="end" type="time" value="{{ oc.end or '16:00' }}" required></label>
-  </div>
+</div>
   <div class="oncall-form-who form-grid person-grid">
     <label>Name
       <input name="name" required placeholder="Ana" value="{{ oc.name }}" list="oncall-people" data-oncall-name autocomplete="off">
-    </label>
+</label>
     <label>Surname
       <input name="surname" placeholder="Kovač" value="{{ oc.surname }}" data-oncall-surname autocomplete="off">
-    </label>
+</label>
     <datalist id="oncall-people">
       {% for person in oncall_people or [] %}
       <option value="{{ person.label or person.name }}"></option>
       {% endfor %}
-    </datalist>
+</datalist>
     <script type="application/json" data-oncall-directory>{{ oncall_people|tojson }}</script>
     <label class="wide">Email <input name="email" type="email" required placeholder="ana@dc.local" value="{{ oc.email }}"></label>
     <label>Phone 1 <input name="phone" placeholder="+381-11-000-0000" value="{{ oc.phone }}"></label>
     <label>Phone 2 <input name="phone2" placeholder="+381-11-000-0001" value="{{ oc.phone2 }}"></label>
-  </div>
+</div>
   <div class="row-actions">
     <button type="submit">{% if oncall_form_mode == "clone" %}Save copy{% elif oncall_form_mode == "edit" %}Save{% else %}Add on-call slot{% endif %}</button>
     <a href="/escalation#oncall">Cancel</a>
-  </div>
+</div>
 </form>
 </section>
 {% endif %}
 <section class="card escalation-pane oncall-roster-wrap" id="oncall">
-<h2>On call {% with %}{% set tip %}A short weekly roster. Type a person's name in Add on-call — suggestions come from Administration Users (the person, never Analyst / Engineer / Super admin). Picking one fills email and phones; a name that is not on the list is still saved as typed. The Email column stacks phone, then email. Each row is one weekday and a from/until time in the appliance timezone (inclusive). L1 (or any step) with the role oncall mails whoever matches now. Empty roster = that step is no-recipient. The Dashboard On call line shows this person. Pager is Edit / Remove only. OFF rows stay stored and are skipped. This is not PagerDuty.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+<h2>On call</h2>
 {% if request.query_params.get('edit_note') == 'select-one' %}
 <div class="banner" role="status">Select one</div>
 {% endif %}
@@ -157,21 +157,21 @@
       <td class="oncall-contact">
         <div>{{ slot.phone or "—" }}{% if slot.phone2 %} · {{ slot.phone2 }}{% endif %}</div>
         <div class="muted">{{ slot.email or "—" }}</div>
-      </td>
+</td>
       <td>
         {% if can('write_play') %}
         <form method="post" action="/escalation/oncall/{{ slot.id }}/toggle" class="onoff-form" hx-boost="false">
           <button type="submit" class="onoff {{ 'is-on' if slot.enabled else 'is-off' }}" aria-pressed="{{ 'true' if slot.enabled else 'false' }}" title="ON: this window can match now. OFF: stored, skipped. That is not Remove.">{% if slot.enabled %}ON{% else %}OFF{% endif %}</button>
-        </form>
+</form>
         {% else %}
         <span class="onoff {{ 'is-on' if slot.enabled else 'is-off' }}">{% if slot.enabled %}ON{% else %}OFF{% endif %}</span>
         {% endif %}
-      </td>
-    </tr>
+</td>
+</tr>
   {% else %}
     <tr><td colspan="5" class="muted">No on-call slots yet.</td></tr>
   {% endfor %}
-  </tbody>
+</tbody>
 </table>
 </div>
 {% set stay_parts = [] %}
@@ -185,5 +185,5 @@
 </div>
 </section>
 </div>
-<h2>Generated notifications {% with %}{% set tip %}The outbox is one table on Email & reports (/ops#mail). This page is escalation only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+<h2>Generated notifications</h2>
 {% endblock %}

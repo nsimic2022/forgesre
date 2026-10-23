@@ -35,8 +35,8 @@
       <th class="col-enum">Severity</th>
       <th class="col-resolved">Resolved by</th>
       <th class="col-notes">Notes</th>
-    </tr>
-  </thead>
+</tr>
+</thead>
   <tbody>
     <tr class="{{ incident_tone(incident.status, incident.severity) }}{% if done %} inc-row-done{% endif %}{% if is_demo_incident(incident) %} inc-row-demo{% endif %}">
       {% include "_incident_cell.html" %}
@@ -44,8 +44,8 @@
       {% include "_incident_status_cell.html" %}
       <td class="col-ladder">{% with cubes=incident_ladder_cubes(item) %}{% include "_ladder_cubes.html" %}{% endwith %}</td>
       {% with show_ack=false, show_severity=true, show_notes=true %}{% include "_incident_scan_tail.html" %}{% endwith %}
-    </tr>
-  </tbody>
+</tr>
+</tbody>
 </table>
 </div>
 {% set st = incident.status|upper %}
@@ -61,7 +61,7 @@
     <button name="status" value="RESOLVED" class="{{ 'done' if resolved else 'todo' }}">Resolve</button>
     <button name="status" value="CLOSED" class="{{ 'done' if closed else 'todo' }}">Close</button>
     {% endif %}
-  </form>
+</form>
   <div class="incident-rca">
   {% if can('investigate') or can('read_ai') %}
   {% if investigation %}
@@ -69,12 +69,12 @@
   {% else %}
   <form method="post" action="/incidents/{{ incident.number }}/investigate" hx-boost="false">
     <button type="submit" class="todo">Open ForgeRCA</button>
-  </form>
+</form>
   {% endif %}
   {% else %}
   <button type="button" class="off" disabled>Open ForgeRCA</button>
   {% endif %}
-  </div>
+</div>
 </div>
 </div>
 {% if incident.status|upper == "MAINT" %}
@@ -88,18 +88,18 @@
 
 <div class="incident-story">
 <section class="card incident-happened" id="ai">
-  <h2>What happened? {% with %}{% set tip %}Four Python workers collect Metrics, Logs, Inventory, and History. ForgeRCA ranks the catalog. ForgeAI, when enabled, writes 3 sentences from those facts only. Open ForgeRCA re-collects evidence.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>What happened?</h2>
   <div class="card-scroll">
   <div class="tool-row">
     <span class="pill {{ tools.rca_class }}" title="{{ tools.rca_hint }}">ForgeRCA</span>
     <span class="pill {{ tools.ai_class }}" title="{{ tools.ai_hint }}">ForgeAI</span>
-  </div>
+</div>
   {% include "_specialists.html" %}
   <p>{{ incident.summary or "Awaiting evidence." }}</p>
   {% if investigation %}
   <p>{{ investigation.summary }}</p>
   {% if investigation.likely_cause %}
-  <h3>Catalog hypothesis {% with %}{% set tip %}Top ranked line from the ForgeRCA catalog, scored from collected metrics and the alert — not a process list or a proven root cause.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+  <h3>Catalog hypothesis</h3>
   <p>{{ investigation.likely_cause }}</p>
   {% endif %}
   {% if investigation.recommended_action %}
@@ -113,28 +113,28 @@
   {% else %}
   <p class="muted">No ForgeRCA result yet. Use <strong>Open ForgeRCA</strong> for the builtin investigation (facts, anomalies, causes). The local LLM, if enabled, rewrites the insight and remediation here.</p>
   {% endif %}
-  </div>
+</div>
 </section>
 
 <section class="card workflow">
-  <h2>Workflow {% with %}{% set tip %}The playbook is a checklist for the person on call. Guidance only — nothing here is executed or ticked off. Write what you did in Operator notes.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Workflow</h2>
   <div class="card-scroll">
   {% if incident.playrule or incident.playbook %}
   <p class="muted">
     Matched playrule <strong>{{ incident.playrule.name if incident.playrule else "—" }}</strong>
     → playbook <strong>{{ incident.playbook.name if incident.playbook else "—" }}</strong>.
-  </p>
+</p>
   {% if incident.playbook and incident.playbook.steps %}
   <ul class="playbook-guide">
     {% for step in incident.playbook.steps %}
     <li>{{ step.title if step is mapping else step }}</li>
     {% endfor %}
-  </ul>
+</ul>
   {% endif %}
   {% else %}
   <p class="muted">No playbook attached.</p>
   {% endif %}
-  </div>
+</div>
 </section>
 
 <section class="card incident-similar">
@@ -148,19 +148,19 @@
       ({{ group.open_count }} open), last
       <a href="/incidents/{{ group.last_number }}">{{ group.last_number }}</a>
       {{ group.last_status }}
-    </li>
+</li>
     {% endfor %}
-  </ul>
+</ul>
   {% else %}
   <p class="muted">No similar history on this asset.</p>
   {% endif %}
-  </div>
+</div>
 </section>
 </div>
 
 {% if incident.asset %}
 <section class="card incident-graphs" data-incident-graphs data-asset="{{ incident.asset.asset_id }}" data-host="{{ incident.asset.hostname }}" data-incident="{{ incident.number }}" aria-live="polite">
-  <h2>Host metrics {% with %}{% set tip %}Loaded once when this card is on screen. Last 24 hours, or from one hour before this incident started when that is older, through now or the resolve time. A vertical line marks When. Hover a point for the host, time, and value. Prometheus series for scraped hosts. A host imported from or linked to Zabbix with no Prometheus samples shows Zabbix trend.get hourly averages for CPU / RAM / HDD (last 24 h), only if those items exist. Zabbix down or slow (2–5 s timeout) shows No samples yet — the rest of this page is unaffected.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Host metrics</h2>
   <p class="muted dash-graph-caption" data-dash-graph-caption hidden></p>
   <p class="muted dash-graph-empty" data-dash-graph-empty>Loading…</p>
   <div class="dash-graph-list" data-dash-graph-list></div>
@@ -169,47 +169,47 @@
 
 {% if incident.asset %}
 <section class="card incident-call">
-  <h2>Who to call {% with %}{% set tip %}Default escalation role steps mail the owner email below. A step that names an address mails that address instead. With no owner email, role steps are recorded as no-recipient and nothing is sent. A filled asset Escalation mails those addresses only.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Who to call</h2>
   <div class="call-grid">
     <div class="call-cell">
       <h3>Owner / team</h3>
       <p>{{ incident.asset.owner or "—" }}</p>
-    </div>
+</div>
     <div class="call-cell">
       <h3>Contact</h3>
       <p>{{ incident.asset.contact_name or "—" }}</p>
-    </div>
+</div>
     <div class="call-cell">
       <h3>Email</h3>
       <p>{% if incident.asset.owner_email %}{{ incident.asset.owner_email }}{% else %}<span class="pill warn">No owner email</span> <span class="muted">escalation has nobody to mail</span>{% endif %}</p>
-    </div>
+</div>
     <div class="call-cell">
       <h3>Phone</h3>
       <p>{{ incident.asset.owner_phone or "—" }}</p>
-    </div>
+</div>
     {% set sup = support_status(incident.asset) %}
     <div class="call-cell">
       <h3>Support</h3>
       <p data-support-state="{{ sup.state }}"><span class="pill support-pill {{ sup.tone }}">{{ sup.label }}</span> {{ sup.call_note }}{% if sup.state == 'expired' %} <span class="muted">({{ sup.detail }})</span>{% endif %}</p>
-    </div>
+</div>
     {% for key, label, value in extras_rows(incident.asset) if key != 'runbook_note' %}
     <div class="call-cell extra-{{ key }}">
       <h3>{{ label }}</h3>
       <p>{{ value }}</p>
-    </div>
+</div>
     {% endfor %}
     {% if client_playrules %}
     <div class="call-cell">
       <h3>Custom alarms</h3>
       <p>{% for rule in client_playrules %}{{ rule.name }}{% if incident.playrule_id == rule.id %} <span class="pill ok">used</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</p>
-    </div>
+</div>
     {% endif %}
-  </div>
+</div>
   {% for key, label, value in extras_rows(incident.asset) if key == 'runbook_note' %}
   <div class="runbook-note" data-runbook-note>
     <strong>{{ label }}</strong>
     <p class="pre-wrap">{{ value }}</p>
-  </div>
+</div>
   {% endfor %}
   <p class="muted"><a href="/assets?edit={{ incident.asset.asset_id }}">Edit contacts on the asset</a>.</p>
 </section>
@@ -217,13 +217,13 @@
 
 <div class="incident-ledger">
 <section id="evidence" class="card incident-evidence">
-  <h2>Engineer evidence {% with %}{% set tip %}Stored evidence rows (alert, inventory, Prometheus / Loki samples) as collected — nothing is re-queried here. One line per row. Body View opens the stored text the same way as Mail outbox — the row stays one line.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Engineer evidence</h2>
   {% if syslog_lines %}
   <div data-syslog>
-    <h3>Syslog {% with %}{% set tip %}Up to 20 Loki lines for this asset from 30 minutes before the incident started until 30 minutes after. A real host is job=syslog, hostname then IP. The demo asset may use job=forgesre. No asset or no lines: this block is omitted. Appliance demo logs are not attached to a real host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h3>Syslog</h3>
     <pre class="pre-wrap syslog-lines" data-syslog-lines>{% for line in syslog_lines %}{{ line }}
 {% endfor %}</pre>
-  </div>
+</div>
   {% endif %}
   {% if can('read_evidence') %}
   <div class="table-scroll list-scroll" data-list-scroll>
@@ -240,15 +240,15 @@
           <dialog class="text-file">
             <pre class="mail-body">{{ row.full }}</pre>
             <form method="dialog" hx-boost="false"><button type="submit" class="secondary">Close</button></form>
-          </dialog>
-        </td>
-      </tr>
+</dialog>
+</td>
+</tr>
     {% else %}
       <tr><td colspan="4" class="muted">No evidence collected yet.</td></tr>
     {% endfor %}
-    </tbody>
-  </table>
-  </div>
+</tbody>
+</table>
+</div>
   {% with pager=evidence_pager %}{% include "_pager.html" %}{% endwith %}
   {% else %}
   <p class="muted">Evidence is visible to engineers.</p>
@@ -256,7 +256,7 @@
 </section>
 
 <section id="audit" class="card incident-audit">
-  <h2>Who did what {% with %}{% set tip %}Audit rows for this INC (login clicks, status, notes). Not an email read-receipt. Action stays one line. Body View opens the extra fields the same way as Mail outbox. Export includes when, who, action, and those fields.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Who did what</h2>
   <div class="incident-audit-body" data-select-scope>
   <div class="table-scroll list-scroll" data-list-scroll>
   <table class="scan-list audit-table">
@@ -274,29 +274,29 @@
           <dialog class="text-file">
             <pre class="mail-body">{{ row.data | tojson(indent=2) }}</pre>
             <form method="dialog" hx-boost="false"><button type="submit" class="secondary">Close</button></form>
-          </dialog>
+</dialog>
           {% else %}—{% endif %}
-        </td>
-      </tr>
+</td>
+</tr>
     {% else %}
       <tr><td colspan="5" class="muted">No audit rows yet.</td></tr>
     {% endfor %}
-    </tbody>
-  </table>
-  </div>
+</tbody>
+</table>
+</div>
   {% with pager=audit_pager, list_actions={"delete": "", "export": "/incidents/" ~ incident.number ~ "/audit/export", "next": "/incidents/" ~ incident.number ~ "#audit", "confirm": ""} %}{% include "_pager.html" %}{% endwith %}
-  </div>
+</div>
 </section>
 </div>
 
 <div class="incident-ops">
 <section id="notes" class="card incident-notes">
-  <h2>Operator notes {% with %}{% set tip %}What a person actually did (e.g. cleaned WAL). Not the playbook and not RCA.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Operator notes</h2>
   {% for row in operator_notes %}
     <div class="note-block">
       <p class="muted">{{ stamp.show(row.at) }} · {{ row.actor }}</p>
       <p>{{ row.body }}</p>
-    </div>
+</div>
   {% else %}
     <p class="muted">No notes yet.</p>
   {% endfor %}
@@ -305,13 +305,13 @@
   <form method="post" action="/incidents/{{ incident.number }}/notes" class="stack incident-note-form" hx-boost="false">
     <label>Add note <textarea name="body" rows="3" required placeholder="What you did on the host" data-note-body{% if request.query_params.get('focus') == 'notes' %} autofocus{% endif %}></textarea></label>
     <button type="submit">Save note</button>
-  </form>
+</form>
   {% endif %}
 </section>
 
 {% if can_send %}
 <section class="card incident-mail-card" id="send-report">
-  <h2>Send incident report {% with %}{% set tip %}Current snapshot (alert + ForgeRCA if it has run). Preview is the text that will be mailed — edit subject or body before Send. Export writes that text (TXT or CSV UTF-8). Does not change status. {% if smtp_on %}SMTP is on — this leaves the VM to the address you pick.{% else %}SMTP is off — the row is stored as generated in the mail outbox. Gmail will not receive it until you enable SMTP (see operator handbook §11).{% endif %}{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Send incident report</h2>
   <form id="incident-send-report" method="post" action="/incidents/{{ incident.number }}/mail" class="incident-mail-edit" data-report-form hx-boost="false">
     <label>Subject <input name="subject" value="{{ report_subject }}" autocomplete="off"></label>
     <label>Report <textarea name="body" rows="14" data-report-body>{{ report_preview }}</textarea></label>
@@ -322,11 +322,11 @@
           {% for addr in addresses %}
           <option value="{{ addr.email }}" {% if addr.email == default_to %}selected{% endif %}>{% if addr.label %}{{ addr.label }} — {% endif %}{{ addr.email }}</option>
           {% endfor %}
-        </select>
-      </label>
+</select>
+</label>
       <label>Or new email <input name="new_email" type="email" placeholder="ops@dc.local"></label>
-    </div>
-  </form>
+</div>
+</form>
   <div class="incident-mail-toolbar">
     <button type="submit" form="incident-send-report" hx-boost="false">Send incident report</button>
     <form method="post" action="/incidents/{{ incident.number }}/report/export" class="report-export" data-export-picker data-export-from-report hx-boost="false">
@@ -340,15 +340,15 @@
           <select name="format" aria-label="Export format">
             <option value="txt">TXT</option>
             <option value="csv">CSV UTF-8</option>
-          </select>
-        </label>
+</select>
+</label>
         <div class="export-dialog-actions">
           <button type="button" class="secondary" data-export-cancel>Cancel</button>
           <button type="submit">Save</button>
-        </div>
-      </dialog>
-    </form>
-  </div>
+</div>
+</dialog>
+</form>
+</div>
 </section>
 {% endif %}
 </div>

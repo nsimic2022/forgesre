@@ -103,7 +103,8 @@ def test_escalation_page_has_create_cancel_and_saves_policy():
     assert roster_head.index(">When<") < roster_head.index(">Name<") < roster_head.index(">Email<") < roster_head.index(">Enabled<")
     assert "oncall-contact" in page.text
     css = (Path(__file__).resolve().parents[1] / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".content {" in css and "font-size: 0.82rem" in css.split(".content {", 1)[1].split("}", 1)[0]
+    assert ".content {" in css and "font-size: inherit" in css.split(".content {", 1)[1].split("}", 1)[0]
+    assert "font-size: 0.82rem" in css.split("html, body {", 1)[1].split("}", 1)[0]
     assert "font-size: 0.82rem" in css.split("th, td {", 1)[1].split("}", 1)[0]
     assert "font-size: 0.82rem" in css.split(".scan-list > tbody > tr > td {", 1)[1].split("}", 1)[0]
     assert ".incident-story {" in css

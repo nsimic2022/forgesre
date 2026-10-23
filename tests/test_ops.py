@@ -41,11 +41,8 @@ def test_system_health_has_open_column_and_grafana():
     assert "Core (container)" in page.text
     assert "SNMP exporter" in page.text
     assert "NetBox" in page.text
-    assert "paused (no SNMP targets)" in page.text
-    assert "warn" in page.text.lower()
-    assert "API 403 is" in page.text
-    assert "GUI" in page.text
-    assert "/targets?search=" in page.text
+    assert "API 403 is" not in page.text
+    assert 'class="info-tip"' not in page.text
     # Prometheus binds 127.0.0.1: a rewritten testserver:9 link would be dead from a NOC browser.
     assert 'href="http://testserver:9/' not in page.text
     assert 'href="http://testserver:9093' not in page.text
@@ -87,7 +84,7 @@ def test_health_service_cubes_share_one_size_and_split_even_counts():
     assert "gap: 0.75rem" in generic
     # Open links and Alloy / Loki labels are unchanged.
     assert ">Alloy<" in page.text or ">alloy<" in page.text.lower()
-    assert "Loki" in page.text
+    assert "loki" in page.text.lower()
     assert "<th>Open</th>" in page.text
     db.close()
 
@@ -119,8 +116,8 @@ def test_ops_page_lists_outbox_and_reports():
     reports_at = page.text.find("Scheduled reports")
     assert 0 <= send_at < outbox_at < reports_at
     assert "Add email" in page.text
-    assert "does not receive email" in page.text
-    assert "./forgesre mailbox" in page.text
+    assert "does not receive email" not in page.text
+    assert "./forgesre mailbox" not in page.text
     assert "Gmail" in page.text
     assert "Outlook" in page.text
     assert "not enabled" in page.text
@@ -138,7 +135,8 @@ def test_ops_page_lists_outbox_and_reports():
     assert "max-width: 38%" in page.text
     assert "min-width: 58%" in page.text
     reports = page.text.split('id="reports"', 1)[1]
-    assert "means the job fires" in reports and "Next" in reports
+    assert "means the job fires" not in reports
+    assert ">Next<" in reports
     assert 'href="/ops#reports">Cancel</a>' in reports
     assert ">Toggle<" not in reports
     db.close()

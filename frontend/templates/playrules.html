@@ -2,7 +2,7 @@
 {% import "_select.html" as sel %}
 {% block title %}Rules · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Rules {% with %}{% set tip %}A rule fires nothing. Prometheus evaluates monitoring/alerts.yml; when an alert arrives, ForgeSRE matches its alertname here and attaches the Playbook. They do not create Prom rules — alerts.yml is the PromQL source. Seeded rules are the default warning. Mail uses the asset Escalation when a level is filled; otherwise the default escalation on this rule. Asset alarms on Edit (assets.alarms enable/%) can only mute a bundled alert on that host — they cannot fire earlier than the Prometheus rule, and they are not a second alerting engine.{% if asset_alarm_hosts %} Saved on {{ asset_alarm_hosts|length }} host{% if asset_alarm_hosts|length != 1 %}s{% endif %} ({{ asset_alarm_hosts[:8]|join(", ") }}{% if asset_alarm_hosts|length > 8 %}, …{% endif %}).{% endif %}{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Rules</h1>
 {% if request.query_params.get('edit_note') == 'select-one' %}
 <div class="banner" role="status">Select one</div>
 {% endif %}
@@ -22,7 +22,7 @@
       <td class="inc-cell">
         <div class="inc-title">{{ rule.name }}</div>
         <div class="inc-host"><code>{{ cond.get('alertname') or '—' }}</code></div>
-      </td>
+</td>
       <td class="rule-expr">
         {% for item in prom %}
         <code>{{ item.expr }}</code>{% if item['for'] %} <span class="muted">for {{ item['for'] }}</span>{% endif %}{% if item.file != 'alerts.yml' %} <span class="muted">· {{ item.file }}</span>{% endif %}
@@ -34,21 +34,21 @@
         {% if cond.get('metric') %}
         <div class="muted rule-note" title="Compared to the firing Alertmanager sample when this rule is considered.">Sample: {{ cond.get('metric') }} {{ cond.get('operator') or '' }} {{ cond.get('value') if cond.get('value') is not none else '' }}</div>
         {% endif %}
-      </td>
+</td>
       <td><span class="pill {{ severity_pill(rule.severity) }}">{{ rule.severity }}</span></td>
       <td>{{ rule.playbook.name if rule.playbook else "—" }}{% if rule.escalation_policy %}<div class="muted">{{ rule.escalation_policy.name }}</div>{% endif %}</td>
       <td>
         {% if can('write_play') %}
         <form method="post" action="/playrules/{{ rule.id }}/toggle" class="onoff-form" hx-boost="false">
           <button type="submit" class="onoff {{ 'is-on' if rule.enabled else 'is-off' }}" aria-pressed="{{ 'true' if rule.enabled else 'false' }}" title="ON: this rule can match an alert. OFF: stored, skipped. This does not change alerts.yml.">{% if rule.enabled %}ON{% else %}OFF{% endif %}</button>
-        </form>
+</form>
         {% else %}
         <span class="onoff {{ 'is-on' if rule.enabled else 'is-off' }}">{% if rule.enabled %}ON{% else %}OFF{% endif %}</span>
         {% endif %}
-      </td>
-    </tr>
+</td>
+</tr>
   {% endfor %}
-  </tbody>
+</tbody>
 </table>
 </div>
 {% set stay_parts = [] %}
@@ -67,7 +67,7 @@
 {% else %}
 <h2 id="playrule-form-title">Create rule</h2>
 <form method="post" action="/playrules" class="stack" id="playrule-form" hx-boost="false">
-  <label><span class="label-line">Preset {% with %}{% set tip %}Fills the fields below from bundled examples. Does not write monitoring/alerts.yml.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+  <label><span class="label-line">Preset</span>
     <select id="playrule-preset">
       <option value="">Custom — type the fields below</option>
       {% for group in presets %}
@@ -83,46 +83,46 @@
           data-severity="{{ item.severity }}"
           data-playbook="{{ item.playbook }}">{{ item.label }}</option>
         {% endfor %}
-      </optgroup>
+</optgroup>
       {% endfor %}
-    </select>
-  </label>
+</select>
+</label>
 {% endif %}
   <label>Name <input name="name" value="{{ form.name }}" placeholder="high-disk" required></label>
-  <label><span class="label-line">Alertname {% with %}{% set tip %}The only thing ForgeSRE matches. Must equal the Prometheus alertname in monitoring/alerts.yml (e.g. FilesystemUsageHigh). This rule does not create a Prom rule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+  <label><span class="label-line">Alertname</span>
     <input name="alertname" value="{{ form.alertname }}" placeholder="FilesystemUsageHigh" list="alertnames" data-alertname-input autocomplete="off"></label>
   <datalist id="alertnames">
     {% for name in alert_rules.keys()|sort %}<option value="{{ name }}">{% endfor %}
-  </datalist>
+</datalist>
   <div class="rule-preview" data-rule-preview>
     <span class="muted">Prometheus rule:</span>
     <span data-rule-preview-body>
       {% set prom = rules_for(form.alertname) %}
       {% for item in prom %}<code>{{ item.expr }}</code>{% if item['for'] %} <span class="muted">for {{ item['for'] }}</span>{% endif %}{% if not loop.last %}<br>{% endif %}{% else %}<span class="muted">{% if form.alertname %}none in alerts.yml for this alertname{% else %}pick an alertname{% endif %}</span>{% endfor %}
-    </span>
-  </div>
+</span>
+</div>
   <script type="application/json" id="alert-rules-data">{{ alert_rules|tojson }}</script>
   <label>Severity
     <select name="severity">
       <option value="warning" {% if form.severity|lower != 'critical' %}selected{% endif %}>warning</option>
       <option value="critical" {% if form.severity|lower == 'critical' %}selected{% endif %}>critical</option>
-    </select>
-  </label>
+</select>
+</label>
   <label>Playbook
     <select name="playbook_id">
       <option value="">—</option>
       {% for book in playbooks %}
       <option value="{{ book.id }}" data-slug="{{ book.slug }}" {% if form.playbook_id == book.id %}selected{% endif %}>{{ book.name }}</option>
       {% endfor %}
-    </select>
-  </label>
-  <label><span class="label-line">Default escalation {% with %}{% set tip %}Used only when that asset's Escalation column is empty. Seeded Default warning is L1–L4 at 0 / 15 / 30 / 60 min. A step with an email address mails that address; a role step mails the asset owner email; no address at all is recorded as no-recipient and not sent. A filled asset Escalation does not also use this.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span>
+</select>
+</label>
+  <label><span class="label-line">Default escalation</span>
     <select name="escalation_policy_id">
       {% for policy in policies %}
       <option value="{{ policy.id }}" {% if (form.escalation_policy_id and form.escalation_policy_id == policy.id) or (not form.escalation_policy_id and policy.slug == 'default-warning') %}selected{% endif %}>{{ policy.name }}</option>
       {% endfor %}
-    </select>
-  </label>
+</select>
+</label>
   <details class="rule-note-fields" {% if form.metric %}open{% endif %}>
     <summary>Firing sample — used to pick among rules with the same alertname</summary>
     <p class="muted">Alertname still has to match. When Metric and Value are set, ForgeSRE compares the firing Alertmanager sample (<code>$value</code> in the annotation, or a label with that metric name). If that sample is missing, this rule does not attach. Prometheus in <code>monitoring/alerts.yml</code> still opens the incident; this only chooses which playbook/escalation attaches.</p>
@@ -136,22 +136,22 @@
           {% if form.metric and form.metric not in ["cpu_usage", "filesystem_usage", "memory_usage", "load1", "up", "ifOperStatus"] %}
           <option value="{{ form.metric }}" selected>{{ form.metric }}</option>
           {% endif %}
-        </select>
-      </label>
+</select>
+</label>
       <label>Operator
         <select name="operator">
           {% for opt in [">", ">=", "==", "<"] %}
           <option value="{{ opt }}" {% if (form.operator or '>') == opt %}selected{% endif %}>{{ opt }}</option>
           {% endfor %}
-        </select>
-      </label>
+</select>
+</label>
       <label>Value <input name="value" value="{{ form.value }}" placeholder="80"></label>
-    </div>
-  </details>
+</div>
+</details>
   <div class="row-actions">
     <button type="submit">Save</button>
     <a href="/playrules">Cancel</a>
-  </div>
+</div>
 </form>
 {% endif %}
 {% endblock %}

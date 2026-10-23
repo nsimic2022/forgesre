@@ -14,7 +14,7 @@
     <h2>{{ title }}</h2>
     {% if key == 'network' %}<span class="asset-chart-legend dash-chart-legend" data-chart-legend><i class="rx">RX</i><i class="tx">TX</i></span>{% endif %}
     <span class="metric-value{% if tile %} {{ tile.tone }}{% endif %}" data-chart-value>{% if tile and tile.value is not none %}{{ tile.display }}{% else %}—{% endif %}</span>
-  </div>
+</div>
   <div class="asset-chart-slot" data-chart-slot="{{ key }}">{% if not plotted %}<span class="muted dash-graph-none">Not scraped.</span>{% endif %}</div>
 </section>
 {%- endmacro %}
@@ -30,13 +30,13 @@
 <h3 class="asset-facts-head">Identity</h3>
 <dl class="kv asset-facts" data-asset-facts="identity">
   <dt>Asset number</dt><dd>{% if asset.number %}#{{ asset.number }}{% else %}—{% endif %}</dd>
-  <dt><span class="label-line">Asset ID {% with %}{% set tip %}Set at add and cannot change. Prometheus asset= labels and history keep matching this slug. Hostname and IP can change.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt><dd>{{ asset.asset_id }}</dd>
+  <dt><span class="label-line">Asset ID</span></dt><dd>{{ asset.asset_id }}</dd>
   <dt>Status</dt><dd>
     {% if metrics.collecting is true %}<span class="pill ok">Online</span>
     {% elif metrics.collecting is false %}<span class="pill crit">Offline</span>
     {% else %}<span class="pill warn">Unknown</span>{% endif %}
     <span class="muted">{{ metrics.collecting_line }}</span>
-  </dd>
+</dd>
   <dt>Hostname</dt><dd>{{ asset.hostname or "—" }}</dd>
   <dt>IP</dt><dd>{{ asset.ip or "—" }}</dd>
   <dt>Type</dt><dd>{{ asset.type or "—" }}</dd>
@@ -70,7 +70,7 @@
 
 {% set sup = support_status(asset) %}
 <section class="asset-detail-section" data-asset-section="support">
-<h3 class="asset-facts-head label-line">Support coverage {% with %}{% set tip %}From the asset's Support (Edit → Support). Expiring = the To date is within {{ sup.lead_days }} days. Reminder only — no alert, incident, or Playrule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+<h3 class="asset-facts-head label-line">Support coverage</h3>
 <dl class="kv asset-facts" data-asset-facts="support">
   <dt>Under support</dt><dd class="extra-support">{{ support_labels.get(ex.support) or "—" }}{% if ex.support == 'custom' and ex.support_custom %} <span class="support-note" data-support-note>{{ ex.support_custom }}</span>{% endif %}</dd>
   <dt>From</dt><dd class="extra-support_from">{{ ex.support_from or "—" }}</dd>
@@ -91,13 +91,13 @@
 <dl class="kv asset-facts" data-asset-facts="monitoring">
   <dt>Status</dt><dd>{% if asset.status %}<span class="pill {{ asset.status }}">{{ asset.status }}</span>{% else %}—{% endif %}</dd>
   <dt>Monitoring profile</dt><dd>{{ asset.monitoring_profile or "—" }}</dd>
-  <dt><span class="label-line">Scrape address {% with %}{% set tip %}Prometheus HTTP target. Linux default ip:9100 (node_exporter), Windows ip:9182 (windows_exporter). Network devices use SNMP, not this field.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt><dd>{{ asset.scrape_address or "—" }}</dd>
+  <dt><span class="label-line">Scrape address</span></dt><dd>{{ asset.scrape_address or "—" }}</dd>
   <dt>ICMP / port / SNMP</dt>
   <dd>
     {% set r = reachability_snapshot(asset) %}
     {% set reach_id = asset.asset_id %}
     {% include "_reach_stack.html" %}
-  </dd>
+</dd>
   <dt>Source</dt><dd>{{ asset.source or "—" }}</dd>
   <dt>NetBox ID</dt><dd>{{ asset.netbox_id or "—" }}</dd>
   {% if asset.zabbix_hostid %}
@@ -122,9 +122,9 @@
     {% else %}
       Disabled in <code>config/forgesre.yml</code> (<code>monitoring.snmp.enabled</code>).
     {% endif %}
-  </dd>
+</dd>
   {% if snmp_target %}
-  <dt><span class="label-line">SNMP auth {% with %}{% set tip %}Version and community / v3 user saved on Edit → Ports. Community strings and v3 passwords are never shown. A Custom community or v3 needs its own snmp_exporter auth in data/generated/snmp.yml — ./forgesre snmp-auths writes it (./forgesre update runs it too). Until then this host is polled with public_v2.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt>
+  <dt><span class="label-line">SNMP auth</span></dt>
   <dd data-snmp-auth-status>
     {{ snmp_auth.snmp_version }}
     {% if snmp_auth.snmp_version == 'v3' %}
@@ -136,7 +136,7 @@
     {% endif %}
     · exporter auth <code>{{ snmp_auth.effective }}</code>
     {% if snmp_auth.pending %}<span class="pill warn" data-snmp-auth-pending title="snmp.yml does not have {{ snmp_auth.desired }} yet">pending</span> <span class="muted">run <code>./forgesre snmp-auths</code> to write <code>{{ snmp_auth.desired }}</code></span>{% endif %}
-  </dd>
+</dd>
   {% endif %}
   {% if snmp_view.show %}
   <dt>Interfaces</dt>
@@ -152,23 +152,23 @@
       {% for row in snmp_view.interfaces %}
         <tr><td>{{ row.ifName or "—" }}</td><td>{{ row.ifIndex or "—" }}</td><td>{{ row.ifAlias or "—" }}</td><td>{{ row.state or "—" }}</td></tr>
       {% endfor %}
-      </tbody>
-    </table>
+</tbody>
+</table>
     {% endif %}
     {% endif %}
-  </dd>
+</dd>
   {% endif %}
 </dl>
 </section>
 
 <section class="asset-detail-section" data-asset-section="similar">
-<h3 class="asset-facts-head label-line">Similar {% with %}{% set tip %}Similar incident history. Same asset, grouped by alert. Use this to see whether HighCPU (or anything else) has happened here before.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+<h3 class="asset-facts-head label-line">Similar</h3>
 {% if similar %}
 <div class="table-scroll list-scroll" data-list-scroll>
 <table>
   <thead>
     <tr><th>Alert / title</th><th>Times</th><th>Open</th><th>Last</th><th>Last status</th></tr>
-  </thead>
+</thead>
   <tbody>
   {% for group in similar %}
     <tr data-list-row>
@@ -177,18 +177,18 @@
       <td>{{ group.open_count }}</td>
       <td><a href="/incidents/{{ group.last_number }}" data-list-open>{{ group.last_number }}</a></td>
       <td><span class="pill {{ group.last_status|lower }}">{{ group.last_status }}</span></td>
-    </tr>
+</tr>
     <tr>
       <td colspan="5">
         <ul class="compact">
           {% for item in group.incidents %}
           <li><a href="/incidents/{{ item.number }}">{{ item.number }}</a> {{ item.title }} ({{ item.status }}) · {{ stamp.show(item.started_at) }}</li>
           {% endfor %}
-        </ul>
-      </td>
-    </tr>
+</ul>
+</td>
+</tr>
   {% endfor %}
-  </tbody>
+</tbody>
 </table>
 </div>
 {% with pager=similar_pager %}{% include "_pager.html" %}{% endwith %}
@@ -198,7 +198,7 @@
 </section>
 
 <section class="asset-detail-section asset-detail-playrules" id="client-playrules" data-asset-section="alarms" data-client-playrules data-asset-playrules="{{ asset.asset_id }}">
-<h3 class="asset-facts-head label-line">Custom alarms {% with %}{% set tip %}Does not create Prometheus thresholds — only which rule / Playbook this asset prefers when that alertname arrives. Core uses the first ON rule in this list (enabled, same alertname) and its Playbook instead of the first rule on Rules. List order is match order. Empty list, or no listed rule matches the alertname = Rules. OFF skips that rule on this host only — it stays in the list, and Save keeps it off. Disabled rules on Rules are skipped. Mail follows the asset Escalation when a level is filled.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+<h3 class="asset-facts-head label-line">Custom alarms</h3>
 {% if can('write_assets') %}
 <form method="post" action="/assets/{{ asset.asset_id }}/playrules" class="playrule-detail-form" hx-boost="false">
   <input type="hidden" name="playrules_present" value="1">
@@ -206,7 +206,7 @@
   <div class="row-actions playrule-detail-actions">
     <button type="submit">Save</button>
     <span class="muted" data-playrule-unsaved hidden>Unsaved changes</span>
-  </div>
+</div>
 </form>
 {% else %}
 {% set shown = [] %}
@@ -217,7 +217,7 @@
   <li class="playrule-chip" data-playrule-id="{{ rule.id }}">
     <span class="onoff {{ 'is-on' if rule_on else 'is-off' }}">{% if rule_on %}ON{% else %}OFF{% endif %}</span>
     <span class="playrule-chip-text">{{ rule.name }} <span class="muted">· {{ rule.alertname or "no alertname" }}{% if rule.playbook %} → {{ rule.playbook }}{% endif %}{% if not rule.enabled %} · disabled{% endif %}</span></span>
-  </li>
+</li>
   {% endfor %}
 </ol>
 <p class="muted playrule-empty"{% if shown %} hidden{% endif %}>No custom alarms — Rules apply.</p>
@@ -232,11 +232,11 @@
   <form method="post" action="/assets/export" hx-boost="false">
     <input type="hidden" name="selected" value="{{ asset.asset_id }}">
     <button type="submit" class="secondary">Export</button>
-  </form>
+</form>
   {% if can_remove %}
   <form method="post" action="/assets/{{ asset.asset_id }}/delete" onsubmit="return confirm('Remove {{ asset.hostname }}? Prometheus will stop scraping it. Incidents stay on the Incidents list without this host. Core is unchanged.');" hx-boost="false">
     <button type="submit" class="danger">Remove</button>
-  </form>
+</form>
   {% else %}
   <button type="button" class="danger" disabled title="{{ remove_blocked }}">Remove</button>
   {% endif %}
@@ -245,7 +245,7 @@
 </div>
 
 <aside class="asset-detail-side asset-detail-metrics asset-detail-graphs asset-detail-col-2-3" data-asset-metrics="{{ asset.asset_id }}" data-asset-graphs data-asset-graph-grid data-asset="{{ asset.asset_id }}" data-host="{{ asset.hostname }}">
-  <div class="muted dash-graph-caption asset-chart-caption" data-dash-graph-caption><span class="label-line">Last 24 hours {% with %}{% set tip %}This asset, not the incident window. Hover a point for the host, time, and value. Not scraped = not in Prometheus. No samples yet = the window is empty. No placeholder wave. The 30-day note under the charts is disk % and interface receive when those series exist — a “days to full” line only when the disk slope is usable.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></div>
+  <div class="muted dash-graph-caption asset-chart-caption" data-dash-graph-caption><span class="label-line">Last 24 hours</span></div>
   <div class="muted dash-graph-empty" data-dash-graph-empty hidden></div>
   <div class="asset-chart-grid{% if metrics.class in ['network', 'unknown'] %} is-sparse{% endif %}" data-dash-graph-list>
     {% if metrics.class in ['network', 'unknown'] %}
@@ -256,7 +256,7 @@
       {{ host_chart('disk_percent', 'HDD', metrics.tiles) }}
       {{ host_chart('network', 'NET', metrics.tiles) }}
     {% endif %}
-  </div>
+</div>
   <section class="capacity-panel" data-capacity data-capacity-window="{{ capacity.window_seconds }}">
     <h2>30-day capacity</h2>
     {% for row in capacity.rows %}
@@ -264,9 +264,9 @@
       <strong>{{ row.label }}</strong>
       {% if row.spark %}<svg class="capacity-spark" viewBox="0 0 80 22" aria-hidden="true"><polyline points="{{ row.spark }}"></polyline></svg>{% endif %}
       <span class="muted">{{ row.note }}</span>
-    </div>
+</div>
     {% endfor %}
-  </section>
+</section>
 </aside>
 </div>
 {% endblock %}

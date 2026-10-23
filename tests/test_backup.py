@@ -205,9 +205,9 @@ def test_admin_backup_buttons_before_cli_cheatsheet(tmp_path, monkeypatch):
     assert 'name="include_models"' in create
     assert ">Backup<" in create
     assert 'action="/admin/backups"' in create
-    assert "no terminal in this browser" in text.lower()
+    assert "no terminal in this browser" not in text.lower()
     assert "./forgesre" in text
-    assert "./forgesre shell" in text
+    assert ">shell<" in text.lower() or "<code>shell</code>" in text
     assert "xterm" not in text.lower()
     assert "mailpit" not in text.lower()
     overview = _forgesre_overview_names()

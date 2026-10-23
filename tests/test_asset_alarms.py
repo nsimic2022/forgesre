@@ -70,7 +70,7 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     assert '<fieldset class="alarm-families"' not in page.text
     assert "alarm-heading" in page.text
     assert "Standard alarms" in page.text
-    assert 'class="info-tip"' in page.text
+    assert 'class="info-tip"' not in page.text
     assert "Bundled alarms for this asset" not in page.text
     assert "asset-form-grid" in page.text
     assert 'name="alarm_disk_threshold"' in page.text
@@ -413,7 +413,5 @@ def test_playrules_mentions_saved_asset_alarms():
     client = _login("analyst-play-alarms@forgesre.local")
     page = client.get("/playrules")
     assert page.status_code == 200
-    assert "win-play-alarms" in page.text
-    assert "assets.alarms" in page.text
-    assert "default warning" in page.text.lower()
-    assert "not a second alerting engine" in page.text
+    assert 'class="info-tip"' not in page.text
+    assert "playrule-preset" in page.text

@@ -343,9 +343,8 @@ def test_playrule_page_has_metric_presets():
     assert b"HighCPU" in page.content
     assert b"cpu_usage" in page.content
     assert b"NetworkInterfaceDown" in page.content
-    assert b"default warning" in page.content.lower()
-    assert b"assets.alarms" in page.content
-    assert b"not a second alerting engine" in page.content
+    assert b"assets.alarms" not in page.content
+    assert b"not a second alerting engine" not in page.content
     assert b'href="/playrules">Cancel</a>' in page.content
     books = client.get("/playbooks")
     assert books.status_code == 200
@@ -361,10 +360,12 @@ def test_playrule_page_has_metric_presets():
     lower = admin.content.lower()
     assert b"forgesre cli" in lower
     assert b"appliance shell" not in lower
-    assert b"there is no terminal in this browser" in lower or b"no terminal in this browser" in lower
+    assert b"there is no terminal in this browser" not in lower
+    assert b"no terminal in this browser" not in lower
     assert b">backup<" in lower
     assert b"admin-backup-cli" in admin.content
-    assert b"./forgesre shell" in admin.content
+    assert b"./forgesre" in admin.content
+    assert b"<code>shell</code>" in admin.content
     db.close()
 
 

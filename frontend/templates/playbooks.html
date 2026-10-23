@@ -2,7 +2,7 @@
 {% import "_select.html" as sel %}
 {% block title %}Playbooks · ForgeSRE{% endblock %}
 {% block content %}
-<h1>Playbooks {% with %}{% set tip %}A playbook is a checklist shown on the incident page. ForgeSRE never runs these steps, does not tick them off, and does not execute commands on the host.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+<h1>Playbooks</h1>
 {% if request.query_params.get('edit_note') == 'select-one' %}
 <div class="banner" role="status">Select one</div>
 {% endif %}
@@ -22,12 +22,12 @@
     {% for step in book.steps %}
     <li>{{ step.title if step is mapping else step }}</li>
     {% endfor %}
-  </ul>
+</ul>
   {% if can('write_play') %}
   <div class="row-actions asset-form-actions">
     <a class="button" href="/playbooks?edit={{ book.id }}{{ pager_keep(pager) }}">Edit</a>
     <a class="button" href="/playbooks?clone={{ book.id }}{{ pager_keep(pager) }}">Clone</a>
-  </div>
+</div>
   {% endif %}
 </section>
 {% endfor %}
@@ -47,7 +47,7 @@
 <h2>Edit playbook</h2>
 <form method="post" action="/playbooks/{{ selected.id }}/update" class="stack" id="playbook-form" hx-boost="false">
 {% elif form_mode == "clone" %}
-<h2>Clone playbook {% with %}{% set tip %}Copy of {{ selected.name }}. The slug must be unique.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+<h2>Clone playbook</h2>
 <form method="post" action="/playbooks" class="stack" id="playbook-form" hx-boost="false">
 {% else %}
 <h2>Create playbook</h2>
@@ -59,7 +59,7 @@
   <div class="row-actions">
     <button type="submit">{% if form_mode == "clone" %}Save copy{% else %}Save{% endif %}</button>
     <a href="/playbooks">Cancel</a>
-  </div>
+</div>
 </form>
 {% endif %}
 {% endblock %}

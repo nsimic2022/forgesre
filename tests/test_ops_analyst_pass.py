@@ -260,7 +260,7 @@ def test_playrules_edit_delete_and_promql_preview():
     assert page.status_code == 200
     assert "forgesre_demo_cpu_percent &gt; 80" in page.text
     assert "firing Alertmanager sample" in page.text
-    assert "cannot fire earlier than the Prometheus rule" in page.text
+    assert "cannot fire earlier than the Prometheus rule" not in page.text
     name = f"pr-{uuid4().hex[:6]}"
     created = client.post(
         "/playrules",
@@ -459,9 +459,10 @@ def test_analyst_templates_say_the_honest_thing(monkeypatch):
     client = TestClient(app)
     _login(client)
     esc = client.get("/escalation")
-    assert "no-recipient" in esc.text
-    assert "does not invent" in esc.text
+    assert "does not invent" not in esc.text
+    assert "no-recipient" not in esc.text
     assert "falls back to" not in esc.text
+    assert 'class="info-tip"' not in esc.text
     monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
     monkeypatch.setattr("app.settings.Settings.netbox_auto_sync", True)
     disc = client.get("/discovery")
@@ -473,10 +474,11 @@ def test_analyst_templates_say_the_honest_thing(monkeypatch):
     incident = db.query(Incident).filter(Incident.playbook_id.isnot(None)).order_by(Incident.id.desc()).first()
     if incident is not None:
         page = client.get(f"/incidents/{incident.number}")
-        assert "Guidance only" in page.text
+        assert "Guidance only" not in page.text
         assert "playbook-guide" in page.text
+        assert 'class="info-tip"' not in page.text
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-50" in base
+    assert "app.css?v=v09-51" in base
     for name in ["incident_detail.html", "asset_detail.html", "_asset_form.html", "escalation.html"]:
         text = (ROOT / "frontend" / "templates" / name).read_text(encoding="utf-8")
         assert "falls back to policy role@forgesre.local" not in text

@@ -38,20 +38,18 @@
 {% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Email &amp; reports {% with %}{% set tip %}This page only sends mail. There is no inbox — ForgeSRE does not receive email. Outbox is every generated / sent / failed message this appliance stored. SMTP off keeps the row as generated (lab). Escalation mail on an incident is unchanged. Grafana lives on System Health.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h1>
+  <h1>Email &amp; reports</h1>
 </div>
 
 <section class="card" id="providers">
-  <h2>Send through {% with %}{% set tip %}Core SMTP does not change when you pull this. Use Gmail or Outlook now. Own domain + Roundcube is a Compose profile that stays off until you enable it later.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Send through</h2>
   <div class="mail-providers">
     <div>
-      <h3>Gmail {% if smtp_provider == "gmail" %}<span class="pill ok">in use</span>{% endif %}
-        {% with %}{% set tip %}YAML host: smtp.gmail.com port 587 tls: true. App password in SMTP_USERNAME / SMTP_PASSWORD. Replies stay in Gmail.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-    </div>
+      <h3>Gmail {% if smtp_provider == "gmail" %}<span class="pill ok">in use</span>{% endif %}</h3>
+</div>
     <div>
-      <h3>Outlook / Microsoft 365 {% if smtp_provider == "outlook" %}<span class="pill ok">in use</span>{% endif %}
-        {% with %}{% set tip %}YAML host: smtp.office365.com port 587 tls: true. Same SMTP_* secrets. Replies stay in Outlook.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
-    </div>
+      <h3>Outlook / Microsoft 365 {% if smtp_provider == "outlook" %}<span class="pill ok">in use</span>{% endif %}</h3>
+</div>
     <div>
       <h3>Own domain + Roundcube
         {% if smtp_provider == "mailbox" or webmail_url %}
@@ -59,15 +57,14 @@
         {% else %}
         <span class="pill">not enabled</span>
         {% endif %}
-        {% with %}{% set tip %}Off by default. After you own a domain: ./forgesre mailbox (starts Postfix + Dovecot + Roundcube, does not rewrite Core SMTP). Core can keep sending through Gmail/Outlook unless you pass ./forgesre mailbox --bind-core.{% endset %}{% include "_info_tip.html" %}{% endwith %}
-      </h3>
+</h3>
       {% if webmail_url %}
       <p class="muted">
         <a href="{{ webmail_url }}" target="_blank" rel="noopener">Open Roundcube</a>
-      </p>
+</p>
       {% endif %}
-    </div>
-  </div>
+</div>
+</div>
 </section>
 
 <section class="card" id="send">
@@ -75,11 +72,11 @@
   {% if can_send %}
   <div class="ops-mail-cols">
     <form method="post" action="/ops/contacts" class="stack ops-add-email" hx-boost="false">
-      <h3>Add email {% with %}{% set tip %}Saves an address so it appears in the Compose To list. Asset owner emails from Assets already appear there.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+      <h3>Add email</h3>
       <label>Name <input name="name" placeholder="Storage on-call"></label>
       <label>Email <input name="email" type="email" required placeholder="ops@example.local"></label>
       <button type="submit">Save address</button>
-    </form>
+</form>
     <form method="post" action="/ops/mail" class="stack ops-compose" hx-boost="false">
       <h3>Compose</h3>
       <label>To
@@ -88,21 +85,21 @@
           {% for item in addresses %}
           <option value="{{ item.email }}">{% if item.label %}{{ item.label }} — {% endif %}{{ item.email }} ({{ item.source }})</option>
           {% endfor %}
-        </select>
-      </label>
+</select>
+</label>
       <label>Or new email <input name="new_email" type="email" placeholder="only if it is not in the list yet"></label>
       <label>Subject <input name="subject" required></label>
       <label>Body <textarea name="body" rows="6" required></textarea></label>
       <button type="submit">{% if smtp_on %}Send{% else %}Save to outbox{% endif %}</button>
-    </form>
-  </div>
+</form>
+</div>
   {% else %}
   <p class="muted">Read-only. Analyst / engineer / admin can send.</p>
   {% endif %}
 </section>
 
 <section class="card" id="mail">
-  <h2>Mail outbox {% with %}{% set tip %}One table for this appliance: this page, scheduled reports, and incident/escalation mail. Not an inbox. Incident and Escalation pages link here.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Mail outbox</h2>
   <div data-select-scope>
   <div class="table-scroll list-scroll" data-list-scroll>
   <table>
@@ -119,33 +116,33 @@
           <details>
             <summary data-list-open>View</summary>
             <pre class="mail-body">{{ note.body or "—" }}</pre>
-          </details>
-        </td>
-      </tr>
+</details>
+</td>
+</tr>
     {% else %}
       <tr><td colspan="6" class="muted">No mail yet.</td></tr>
     {% endfor %}
-    </tbody>
-  </table>
-  </div>
+</tbody>
+</table>
+</div>
 {% with pager=mail_pager, list_actions={"delete": "/ops/mail/bulk-delete" if can_send else "", "delete_gated": True, "delete_last": True, "export": "/ops/mail/export", "next": "/ops#mail", "confirm": "Delete the selected outbox rows? Escalation alarm mail is kept so it is not sent again."} %}
 {% include "_pager.html" %}
 {% endwith %}
-  </div>
+</div>
 </section>
 
 <section class="card" id="reports">
-  <h2>Scheduled reports {% with %}{% set tip %}Cron-like, inside Core. Pick assets and an interval, or use Send now for a one-shot mail (does not wait 6 hours). ForgeSRE snapshots CPU/disk/up from Prometheus (or demo gauges) even when there is no incident, then emails the text. Choose the recipient from the address book, or type a destination email. SMTP off stores the row as generated (not sent). This is not incident Escalation. Enabled means the job fires at Next. Off keeps the row stored; the scheduler skips it. That is not Remove.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h2>
+  <h2>Scheduled reports</h2>
   {% if can_send %}
   {% set report_mode = report_form_mode or "add" %}
   {% set rf = report_form or {} %}
   <div class="ops-report-cols">
   <form method="post" action="{% if report_mode == 'edit' %}/ops/reports/{{ editing_report.id }}/update{% else %}/ops/reports{% endif %}" class="stack" id="report-schedule-form" hx-boost="false">
     <h3>
-      {% if report_mode == "edit" %}Edit report {% with %}{% set tip %}Same fields as create. Save updates this row. Cancel discards the edits and returns to the list.{% endset %}{% include "_info_tip.html" %}{% endwith %}
-      {% elif report_mode == "clone" %}Clone report {% with %}{% set tip %}Copy of {{ clone_source_name }}. Tweak the fields, then Save to create a new job. Cancel discards the draft.{% endset %}{% include "_info_tip.html" %}{% endwith %}
+      {% if report_mode == "edit" %}Edit report
+      {% elif report_mode == "clone" %}Clone report
       {% else %}New report{% endif %}
-    </h3>
+</h3>
     <label>Name <input name="name" value="{{ rf.name or 'storage-6h' }}" required></label>
     {% set picked = rf.recipients or [] %}
     {% set picked_l = picked|map('lower')|list %}
@@ -162,9 +159,9 @@
         <label class="check"><input type="checkbox" name="to_email" value="{{ email }}" checked> {{ email }}</label>
         {% endif %}
         {% endfor %}
-      </div>
+</div>
       <label>Additional emails <textarea name="extra_emails" rows="2" placeholder="one per line, or comma-separated"></textarea></label>
-    </fieldset>
+</fieldset>
     <fieldset class="report-schedule">
       <legend>Schedule</legend>
       {% set preset = rf.preset or '6h' %}
@@ -179,32 +176,32 @@
           <option value="24h" {% if preset == '24h' %}selected{% endif %}>24 hours</option>
           <option value="custom" {% if preset == 'custom' %}selected{% endif %}>Custom interval</option>
           <option value="once" {% if preset == 'once' %}selected{% endif %}>Once (no repeat)</option>
-        </select>
-      </label>
+</select>
+</label>
       <div class="custom-interval" data-custom-interval {% if preset != 'custom' %}hidden{% endif %}>
         <label>Amount <input name="every_n" type="number" min="1" max="10080" value="{{ rf.every_n or '' }}" placeholder="90"></label>
         <label>Unit
           <select name="every_unit">
             <option value="minutes" {% if (rf.every_unit or 'minutes') != 'hours' %}selected{% endif %}>minutes</option>
             <option value="hours" {% if rf.every_unit == 'hours' %}selected{% endif %}>hours</option>
-          </select>
-        </label>
-      </div>
+</select>
+</label>
+</div>
       <div class="weekday-picks" data-weekdays {% if preset == 'once' %}hidden{% endif %}>
         <span class="muted">Only these days</span>
         {% for value, label in [(0, 'Mon'), (1, 'Tue'), (2, 'Wed'), (3, 'Thu'), (4, 'Fri'), (5, 'Sat'), (6, 'Sun')] %}
         <label class="check"><input type="checkbox" name="weekday" value="{{ value }}" {% if value in (rf.weekdays if rf.weekdays is not none else [0,1,2,3,4,5,6]) %}checked{% endif %}> {{ label }}</label>
         {% endfor %}
-      </div>
-    </fieldset>
+</div>
+</fieldset>
     {% with selected=rf.asset_ids or [] %}{% include "_asset_picker.html" %}{% endwith %}
     <div class="row-actions ops-report-form-actions">
       <button type="submit">{% if report_mode == "clone" %}Save copy{% else %}Save schedule{% endif %}</button>
       <a href="/ops#reports">Cancel</a>
-    </div>
-  </form>
+</div>
+</form>
   <form method="post" action="/ops/reports/send-now" class="stack ops-report-now" hx-boost="false">
-    <h3>Send now {% with %}{% set tip %}One snapshot, immediately. Does not create a 6-hour schedule.{% endset %}{% include "_info_tip.html" %}{% endwith %}</h3>
+    <h3>Send now</h3>
     <fieldset class="report-recipients">
       <legend>Recipients</legend>
       <div class="recipient-picks">
@@ -213,14 +210,14 @@
         {% else %}
         <p class="muted">No saved addresses yet. Type them below.</p>
         {% endfor %}
-      </div>
+</div>
       <label>Additional emails <textarea name="extra_emails" rows="2" placeholder="one per line, or comma-separated"></textarea></label>
       <label>Or destination email <input name="new_email" type="email" placeholder="ops@example.local"></label>
-    </fieldset>
+</fieldset>
     {% with selected=[] %}{% include "_asset_picker.html" %}{% endwith %}
     <button type="submit">{% if smtp_on %}Send now{% else %}Save to outbox{% endif %}</button>
-  </form>
-  </div>
+</form>
+</div>
   {% endif %}
   <h3 class="report-active-head">Active scheduled reports</h3>
   <div data-select-scope class="report-active-list">
@@ -241,11 +238,11 @@
           {% if can_send %}
           <form method="post" action="/ops/reports/{{ row.id }}/toggle" class="onoff-form" hx-boost="false">
             <button type="submit" class="onoff {{ 'is-on' if row.enabled else 'is-off' }}" aria-pressed="{{ 'true' if row.enabled else 'false' }}" title="ON: fire at Next. OFF: stored, the scheduler skips it. That is not Remove.">{% if row.enabled %}ON{% else %}OFF{% endif %}</button>
-          </form>
+</form>
           {% else %}
           <span class="onoff {{ 'is-on' if row.enabled else 'is-off' }}">{% if row.enabled %}ON{% else %}OFF{% endif %}</span>
           {% endif %}
-        </td>
+</td>
         <td class="ops-report-actions">
           {% if can_send %}
           <div class="row-actions">
@@ -258,20 +255,20 @@
             <form method="post" action="/ops/reports/{{ row.id }}/run" hx-boost="false"><button type="submit">Run now</button></form>
             <form method="post" action="/ops/reports/{{ row.id }}/delete" onsubmit="return confirm('Remove this scheduled report? The job is deleted. Outbox mail already generated stays.');" hx-boost="false">
               <button type="submit" class="danger">Remove</button>
-            </form>
-          </div>
+</form>
+</div>
           {% endif %}
-        </td>
-      </tr>
+</td>
+</tr>
     {% else %}
       <tr><td colspan="9" class="muted">No scheduled reports.</td></tr>
     {% endfor %}
-    </tbody>
-  </table>
-  </div>
+</tbody>
+</table>
+</div>
 {% with pager=reports_pager, list_actions={"delete": "/ops/reports/bulk-delete" if can_send else "", "delete_last": True, "export": "/ops/reports/export" if can_send else "", "next": "/ops#reports", "confirm": "Delete the selected scheduled reports? They stop sending. Mail already in the outbox stays."} %}
 {% include "_pager.html" %}
 {% endwith %}
-  </div>
+</div>
 </section>
 {% endblock %}
