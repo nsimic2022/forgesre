@@ -89,7 +89,7 @@
 {% include "_pager.html" %}
 {% endwith %}
 </div>
-{% if selected and form_mode and can('write_assets') %}
+{% if selected and form_mode %}
 <section class="asset-pane" id="asset-pane">
 {% if form_mode == "edit" %}
 <aside class="dash-graphs card asset-edit-graphs" data-asset-graphs data-asset="{{ selected.asset_id }}" data-host="{{ selected.hostname }}" aria-live="polite" aria-label="Live metrics for this asset">

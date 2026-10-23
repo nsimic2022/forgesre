@@ -994,6 +994,13 @@ form label.inline-check input[type="checkbox"],
    same language as .asset-detail-section, with extra air above and below each rule.
    Row 1 is four equal quarters: Identity | Ports | Contacts | Support.
    Row 2 is Alarms | Escalation (policy L1–L4) | Notes | empty. */
+.asset-form-split.asset-form-view input,
+.asset-form-split.asset-form-view select,
+.asset-form-split.asset-form-view textarea,
+.asset-form-split.asset-form-view button {
+  pointer-events: none;
+  background: var(--bg);
+}
 .asset-form-split {
   display: flex;
   flex-direction: column;
@@ -3493,6 +3500,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 /* v09-38: Brand v1.0; who name+surname; Dashboard titles without tips; bigger tile counts. */
 /* v09-39: Assets Edit Host metrics; one Alarms cube; Notes + half Escalation on row 2. */
 /* v09-40: Asset ID opens Edit; policy L1–L4 cube; Notes/Escalation swapped; no Assets tips. */
+/* v09-41: Viewers open the same Assets cubes read-only (View asset, no Save). */
 :root,
 html[data-theme="light"],
 html[data-theme="system"] {

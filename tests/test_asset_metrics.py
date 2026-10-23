@@ -625,5 +625,7 @@ def test_viewer_can_read_metrics_api():
     assert stale.status_code == 303
     page = client.get(f"/assets?edit={DEMO_ASSET}")
     assert page.status_code == 200
-    assert 'id="asset-form"' not in page.text
-    assert "data-asset-graphs" not in page.text
+    assert "View asset" in page.text
+    assert 'id="asset-form"' in page.text
+    assert "data-asset-graphs" in page.text
+    assert ">Save<" not in page.text.split("asset-form-actions", 1)[1]
