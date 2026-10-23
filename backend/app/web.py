@@ -813,18 +813,24 @@ def forgeai_page(
     page: str = "1",
 ):
     selected = (n or "").strip()
-    runs, runs_pager = paginate(
-        list_investigation_runs(db),
-        page,
-        size=per_page(request),
-        fragment="#activity",
-    )
+    runs = list_investigation_runs(db)
+    case = next((row for row in runs if row["number"] == selected), None)
+    if case is None and not selected and runs:
+        case = runs[0]
+        selected = case["number"]
+    specialists: list = []
+    if case:
+        item = db.query(Incident).filter_by(number=case["number"]).first()
+        if item is not None:
+            specialists = specialists_from_evidence(item.evidence)
+        else:
+            specialists = list(case.get("specialists") or [])
     return render(
         request,
         "forgeai.html",
         user,
-        runs=runs,
-        runs_pager=runs_pager,
+        case=case,
+        specialists=specialists,
         selected=selected,
     )
 

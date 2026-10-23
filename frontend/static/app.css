@@ -3241,6 +3241,9 @@ label.row-check {
 }
 .specialist-row-tall .specialist-cube {
   min-height: 16.5rem;
+  max-height: 28rem;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 0.75rem 0.8rem 0.85rem;
 }
 .specialist-row-tall .specialist-cube strong { font-size: 1.02rem; margin-bottom: 0.35rem; }
@@ -3741,8 +3744,10 @@ html[data-theme="dark"] {
 .nav-invest { position: relative; }
 .nav-invest-panel {
   position: fixed;
+  left: 228px;
   z-index: 60;
-  width: min(40rem, calc(100vw - 15rem));
+  width: min(42rem, calc(100vw - 15rem));
+  min-width: min(32rem, calc(100vw - 15rem));
   max-height: min(22rem, calc(100vh - 2rem));
   overflow: auto;
   padding: 0.55rem 0.65rem 0.7rem;
@@ -3764,12 +3769,9 @@ html[data-theme="dark"] {
 .nav-invest-panel .act-case-cell { padding: 0.24rem 0.3rem; }
 .nav-invest-panel .act-case-cell strong,
 .nav-invest-panel .act-case-cell span { font-size: 0.66rem; }
-.invest-list { min-width: 0; }
-.invest-list h2 { margin: 0 0 0.45rem; }
-.invest-scroll {
-  max-height: 28rem;
-  overflow: auto;
-}
+.invest-case { min-width: 0; }
+.invest-case-meta { margin: 0.15rem 0 0; }
+.invest-case .specialist-row-tall { margin: 0 0 0.2rem; }
 .invest-more {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

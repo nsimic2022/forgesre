@@ -42,7 +42,7 @@ def test_forgeai_page_has_five_cubes_and_cron():
     for marker in ('id="activity"', 'id="summary"', 'id="ai-more"'):
         assert marker in html, marker
     assert "Investigations" in html
-    assert "Recent investigations" in html
+    assert 'id="summary"' in html
     assert "Recent activity" not in html
     assert "Ask ForgeAI" not in html
     assert "Save digest schedule" not in html
@@ -157,6 +157,6 @@ def test_ask_posts_question_and_css_cache():
     assert posted.status_code == 303
     assert posted.headers["location"] == "/investigations#ask"
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-44" in base
+    assert "app.css?v=v09-45" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".forgeai-grid" in css
