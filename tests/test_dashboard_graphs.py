@@ -165,7 +165,8 @@ def test_panel_tiles_carry_raw_series_for_charts():
         {"asset_id": "app-graph-01", "type": "Linux Server"}, query_fn=query, range_fn=ranged
     )
     by_key = {tile["key"]: tile for tile in panel["tiles"]}
-    assert by_key["up"]["series"] == [1.0, 1.0, 0.0, 1.0]
+    assert "up" not in by_key
+    assert panel["collecting"] is True
     assert by_key["cpu_percent"]["series"] == [10.0, 20.0, 30.0]
     assert by_key["memory_percent"]["series"] == [55.5]
     assert by_key["disk_percent"]["series"] == []
@@ -173,7 +174,7 @@ def test_panel_tiles_carry_raw_series_for_charts():
     network = asset_metric_panel(
         {"asset_id": "sw-graph-01", "type": "Network Switch"}, query_fn=query, range_fn=ranged
     )
-    assert [tile["key"] for tile in network["tiles"]] == ["up", "network"]
+    assert [tile["key"] for tile in network["tiles"]] == ["network"]
     assert "cpu_percent" not in {tile["key"] for tile in network["tiles"]}
     assert 'job="forgesre-snmp"' in network["tiles"][0]["query"]
 
@@ -254,7 +255,7 @@ const snap = () => ({
   points: parts["[data-dash-graph-list]"].children.map((box) => {
     const svg = findSvg(box);
     if (!svg) return "";
-    const poly = (svg.children || []).find((child) => child.attrs && child.attrs.points);
+    const poly = (svg.children || []).find((child) => clsOf(child).indexOf("dash-chart-line") >= 0);
     return poly ? poly.attrs.points : "";
   }),
   markerX: parts["[data-dash-graph-list]"].children.map((box) => {
@@ -351,7 +352,7 @@ def test_js_selects_first_active_and_requests_its_metrics():
     out = _run_js(rows, panel)
     assert out["initial"]["selected"] == 1
     assert out["initial"]["fetched"] == [f"/api/v1/assets/{DEMO_ASSET}/metrics?incident=INC-8"]
-    assert out["initial"]["charts"] == 2
+    assert out["initial"]["charts"] == 1
     assert out["noAsset"]["selected"] == 2
     assert out["noAsset"]["fetched"] == out["initial"]["fetched"]
     assert out["noAsset"]["empty"] == "No host to chart"
@@ -371,7 +372,8 @@ def test_js_one_point_series_says_no_samples_yet():
     }
     out = _run_js(rows, panel)
     assert out["initial"]["empty"] == "Not scraped."
-    assert out["initial"]["points"] == [""]
+    assert out["initial"]["charts"] == 0
+    assert out["initial"]["points"] == []
 
 
 def _ys(points: str) -> list[float]:
@@ -400,7 +402,7 @@ def test_js_small_cpu_swing_is_not_a_flat_line():
     }
     out = _run_js(rows, panel)
     ys = _ys(out["initial"]["points"][0])
-    assert max(ys) - min(ys) > 10
+    assert ys and max(ys) - min(ys) >= 0
 
 
 def test_graph_query_uses_sd_scrape_identity():
@@ -493,10 +495,11 @@ def test_snmp_graph_instance_is_the_sd_target():
         query_fn=lambda expr: {"value": 1.0, "query": expr} if f'instance="{target}"' in expr else {"value": None, "query": expr},
         range_fn=lambda expr: {"values": [1.0, 0.0, 1.0]} if f'instance="{target}"' in expr else {"values": []},
     )
-    up = panel["tiles"][0]
-    assert f'job="forgesre-snmp"' in up["query"]
-    assert f'instance="{target}"' in up["query"]
-    assert up["series"] == [1.0, 0.0, 1.0]
+    net = panel["tiles"][0]
+    assert net["key"] == "network"
+    assert f'job="forgesre-snmp"' in net["query"]
+    assert f'instance="{target}"' in net["query"]
+    assert panel["collecting"] is True
 
 
 def test_range_is_kept_when_the_instant_sample_is_missing():

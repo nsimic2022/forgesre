@@ -16,6 +16,10 @@
   <div class="asset-form-col asset-form-left">
   <section class="card asset-form-block asset-form-cube" data-asset-identity>
   <h2 class="asset-form-block-head">Identity</h2>
+  <p class="asset-online" data-asset-online hidden>
+    <span class="pill warn" data-asset-online-pill>Unknown</span>
+    <span class="muted" data-asset-online-line></span>
+  </p>
   <div class="form-grid asset-form-grid">
   {% if form_mode == "edit" %}
   <label class="identity-lg"><span class="label-line">Asset ID</span>
@@ -225,7 +229,6 @@
   <section class="card asset-form-block asset-form-cube asset-ladder" data-asset-ladder>
     <h2 class="asset-form-block-head">Escalation</h2>
     <input type="hidden" name="ladder_present" value="1">
-    <p class="ladder-default"><a href="/escalation">Default escalation</a></p>
     <div class="policy-ladder ladder-levels">
     {% set minute_hint = {1: "0", 2: "15", 3: "30", 4: "60"} %}
     {% for slot in form.ladder %}

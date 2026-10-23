@@ -42,6 +42,7 @@ console.log(JSON.stringify({
   highBand: covers("percent", [92, 94, 93]),
   up: chartYScale("up", [1, 1, 0]),
   ticks: chartTicks(0, 100),
+  grids: chartGridTicks(0, 100, "percent"),
   clocks: chartClockTicks(noon, noon + 3600),
   multi: chartClockTicks(noon, later),
   tip: chartTipLines("hapfusion2-prod", noon, "CPU", "percent", 0.1, "%"),
@@ -69,30 +70,14 @@ def _helpers() -> dict:
     return json.loads(proc.stdout.strip().splitlines()[-1])
 
 
-def test_y_scale_autos_a_tiny_band_and_keeps_full_scale_for_a_drop():
+def test_y_scale_keeps_percent_on_0_to_100():
     out = _helpers()
-    tiny = out["tiny"]
-    assert tiny["covers"] is True
-    assert tiny["mode"] == "auto"
-    assert tiny["hi"] - tiny["lo"] < 5
-    assert tiny["hi"] < 1
-
-    swing = out["swing"]
-    assert swing["covers"] is True
-    assert swing["mode"] == "auto"
-    assert swing["hi"] < 30
-    assert swing["lo"] > 0
-
-    drop = out["drop"]
-    assert drop["covers"] is True
-    assert drop["mode"] == "full"
-    assert drop["lo"] <= 0
-    assert drop["hi"] >= 100
-
-    toward = out["toward"]
-    assert toward["covers"] is True
-    assert toward["mode"] == "full"
-    assert toward["lo"] <= 0 and toward["hi"] >= 100
+    for key in ("tiny", "swing", "drop", "toward", "smallDrop", "highBand"):
+        band = out[key]
+        assert band["covers"] is True
+        assert band["mode"] == "full"
+        assert band["lo"] <= 0
+        assert band["hi"] >= 100
 
     over = out["over"]
     assert over["covers"] is True
@@ -100,19 +85,10 @@ def test_y_scale_autos_a_tiny_band_and_keeps_full_scale_for_a_drop():
     assert over["lo"] <= 0
     assert over["hi"] >= 110
 
-    small = out["smallDrop"]
-    assert small["covers"] is True
-    assert small["mode"] == "full"
-    assert small["lo"] <= 0
-    assert 12 <= small["hi"] < 50
-
-    high = out["highBand"]
-    assert high["covers"] is True
-    assert high["mode"] == "full"
-    assert high["lo"] <= 0 and high["hi"] >= 100
-
     assert out["up"]["lo"] == 0 and out["up"]["hi"] == 1 and out["up"]["mode"] == "full"
     assert out["ticks"] == [0, 25, 50, 75, 100]
+    assert out["grids"][0] == 0 and out["grids"][-1] == 100 and out["grids"][1] == 5
+    assert len(out["grids"]) == 21
 
 
 def test_clock_labels_and_tooltip_lines():
@@ -157,18 +133,17 @@ def test_chart_markup_has_axes_grid_and_hover_tooltip():
     }
     out = _run_js(rows, panel)
     axis = out["initial"]["axes"][0]
-    assert axis["scale"] == "auto"
-    assert axis["ymax"] - axis["ymin"] < 5
+    assert axis["scale"] == "full"
+    assert axis["ymin"] <= 0 and axis["ymax"] >= 100
     assert axis["unit"] == "%"
-    assert "100" not in axis["y"]
-    assert axis["y"]
+    assert axis["y"] == ["100", "75", "50", "25", "0"]
     assert len(axis["x"]) == 4
     assert all(re.fullmatch(r"\d{2}:\d{2}( \d{2}\.\d{2})?", label) for label in axis["x"])
     assert axis["x"][0].startswith(datetime.fromtimestamp(start).strftime("%H:%M"))
-    assert axis["grids"] >= 4
+    assert axis["grids"] >= 21
     assert axis["tip"] is True
     ys = [float(pair.split(",")[1]) for pair in out["initial"]["points"][0].split() if "," in pair]
-    assert max(ys) - min(ys) > 10
+    assert ys and min(ys) >= 0 and max(ys) <= 48
     tip = out["initial"]["hoverTip"]
     assert tip["hidden"] is False
     assert tip["host"] == "hapfusion2-prod"
@@ -220,7 +195,7 @@ def test_empty_copy_and_no_chart_chrome():
     assert "dash-chart-tip-host" in js and "dash-chart-grid" in js and "dash-chart-marker" in js
     assert "#12151c" in css and ".dash-chart-grid" in css and ".dash-chart-tip" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-41" in base and "app.js?v=v09-E" in base
+    assert "app.css?v=v09-42" in base and "app.js?v=v09-F" in base
     for name in ("dashboard.html", "incident_detail.html", "asset_detail.html"):
         text = (ROOT / "frontend" / "templates" / name).read_text(encoding="utf-8")
         assert "Chart Options" not in text and "Real-time" not in text

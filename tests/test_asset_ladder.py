@@ -128,7 +128,8 @@ def test_add_asset_columns_nav_rules_and_escalated_cube():
     assert ">Escalation<" in text.split("data-asset-ladder", 1)[1]
     assert "ladder-levels" in text.split("data-asset-ladder", 1)[1]
     assert "Client playrules" not in text
-    assert 'href="/escalation">Default escalation</a>' in text
+    assert 'href="/escalation">Default escalation</a>' not in text
+    assert "ladder-default" not in text
     nav = text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
     assert ">Rules<" in nav and ">Playbooks<" in nav and ">Escalation<" in nav
     assert ">Playrules<" not in nav

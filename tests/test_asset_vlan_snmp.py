@@ -148,7 +148,7 @@ def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     assert "data-asset-form-reserved" not in text
     assert "data-alarm-families" in right and "data-client-playrules" not in right
     assert "Custom alarms" in custom and "data-client-playrules" in custom
-    assert "L1 NOC" in ladder and 'href="/escalation">Default escalation</a>' in ladder
+    assert "L1 NOC" in ladder and 'href="/escalation">Default escalation</a>' not in ladder
     assert 'name="alarms_present"' in right
     for version in ("v1", "v2c", "v3"):
         assert f'<option value="{version}"' in middle
@@ -158,7 +158,7 @@ def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".asset-ladder .ladder-level {" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-41" in base and "app.js?v=v09-E" in base
+    assert "app.css?v=v09-42" in base and "app.js?v=v09-F" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "[data-snmp-version]" in js and "[data-snmp-v3-level]" in js
 

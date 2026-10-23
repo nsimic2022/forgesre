@@ -117,8 +117,8 @@ def test_version_is_0_9_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v1.0</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-41" in base
-    assert "app.js?v=v09-E" in base
+    assert "app.css?v=v09-42" in base
+    assert "app.js?v=v09-F" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.9.0" in text
@@ -364,7 +364,8 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     ladder_html = _between(text, "data-asset-ladder", "</form>")
     assert ">Escalation<" in ladder_html
     assert "ladder-levels" in ladder_html
-    assert 'href="/escalation">Default escalation</a>' in ladder_html
+    assert 'href="/escalation">Default escalation</a>' not in ladder_html
+    assert "ladder-default" not in ladder_html
     for label in ("L1 NOC", "L2 Shift", "L3 Engineer", "L4 Manager"):
         assert label in ladder_html
 
