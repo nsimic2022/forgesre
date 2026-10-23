@@ -97,7 +97,7 @@ def test_incident_bounds_start_an_hour_before_and_stop_at_resolve():
     now = datetime(2026, 10, 9, 16, 0, tzinfo=timezone.utc)
     open_row = Incident(status="OPEN", started_at=started)
     bounds = incident_graph_bounds(open_row, now=now)
-    assert bounds["start"] == started.timestamp() - 3600
+    assert bounds["start"] == now.timestamp() - 24 * 3600
     assert bounds["end"] == now.timestamp()
     assert bounds["marker"] == started.timestamp()
     assert bounds["start"] < bounds["marker"] < bounds["end"]
@@ -107,8 +107,9 @@ def test_incident_bounds_start_an_hour_before_and_stop_at_resolve():
     closed = incident_graph_bounds(done, now=now)
     assert closed["end"] == resolved.timestamp()
     assert closed["end"] < now.timestamp()
-    assert range_step(closed["end"] - closed["start"]) == "5m"
-    assert range_step((now.timestamp() - (now - timedelta(days=2)).timestamp()) + 3600) == "30m"
+    assert closed["start"] == resolved.timestamp() - 24 * 3600
+    assert range_step(closed["end"] - closed["start"]) == "1m"
+    assert range_step((now.timestamp() - (now - timedelta(days=2)).timestamp()) + 3600) == "5m"
 
 
 def test_query_range_sends_the_window_and_keeps_the_drop(monkeypatch):
@@ -156,6 +157,7 @@ def test_query_range_sends_the_window_and_keeps_the_drop(monkeypatch):
     assert seen["params"]["end"] == 2000.0
     assert seen["params"]["step"] == "5m"
     assert out["values"] == [40.0, 40.0, 0.0]
+    assert len(out["series"]) == 2
     assert out["times"] == [1000.0, 1050.0, 1100.0]
 
 
@@ -255,10 +257,9 @@ def test_incident_graph_query_starts_before_the_incident(monkeypatch):
 
     body = client.get(f"/api/v1/assets/{asset_id}/metrics?incident={number}").json()
     assert calls, "incident chart did not query a range"
-    assert all(call["start"] < started_ts - 3500 for call in calls)
-    assert all(call["start"] > started_ts - 3700 for call in calls)
+    assert all(abs(call["start"] - (datetime.now(timezone.utc).timestamp() - 24 * 3600)) < 5 for call in calls)
     assert all(abs(call["end"] - datetime.now(timezone.utc).timestamp()) < 5 for call in calls)
-    assert calls[0]["step"] == "5m"
+    assert calls[0]["step"] == "1m"
     assert abs(body["window"]["marker"] - started_ts) < 1
     assert body["window"]["start"] < body["window"]["marker"] <= body["window"]["end"]
     cpu = next(tile for tile in body["tiles"] if tile["key"] == "cpu_percent")
@@ -276,12 +277,12 @@ def test_incident_graph_query_starts_before_the_incident(monkeypatch):
     calls.clear()
     plain = client.get(f"/api/v1/assets/{asset_id}/metrics").json()
     assert plain["window"]["marker"] is None
-    assert abs(calls[0]["start"] - (datetime.now(timezone.utc).timestamp() - 3600)) < 5
+    assert abs(calls[0]["start"] - (datetime.now(timezone.utc).timestamp() - 24 * 3600)) < 5
 
     calls.clear()
     ignored = client.get(f"/api/v1/assets/{asset_id}/metrics?incident={other_number}").json()
     assert ignored["window"]["marker"] is None
-    assert abs(calls[0]["start"] - (datetime.now(timezone.utc).timestamp() - 3600)) < 5
+    assert abs(calls[0]["start"] - (datetime.now(timezone.utc).timestamp() - 24 * 3600)) < 5
 
 
 def test_resolved_incident_graph_ends_when_it_ended(monkeypatch):

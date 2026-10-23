@@ -59,9 +59,9 @@ _PLAYRULE_METRIC = {
 _TILE_META = {
     "up": {"name": "Collecting", "kind": "up"},
     "cpu_percent": {"name": "CPU", "kind": "percent"},
-    "memory_percent": {"name": "Memory", "kind": "percent"},
-    "disk_percent": {"name": "Disk", "kind": "percent"},
-    "network": {"name": "Network", "kind": "bytes"},
+    "memory_percent": {"name": "RAM", "kind": "percent"},
+    "disk_percent": {"name": "HDD", "kind": "percent"},
+    "network": {"name": "NET", "kind": "bytes"},
 }
 
 # Assets list glance: Collecting, CPU, RAM, HDD, NET left → right. Missing tiles stay —.
@@ -73,15 +73,21 @@ GLANCE_CELLS = (
     ("network", "NET"),
 )
 
-# up stays first so existing tile-order checks keep Collecting at the front.
-# The asset chart grid lays CPU / Memory / Disk / Network / Uptime out itself.
+# Chart tiles are CPU / RAM / HDD / NET. `up` is queried for Online on Identity, not drawn.
 _CLASS_TILES = {
-    "demo": ("up", "cpu_percent", "memory_percent", "disk_percent", "network"),
-    "linux": ("up", "cpu_percent", "memory_percent", "disk_percent", "network"),
-    "windows": ("up", "cpu_percent", "memory_percent", "disk_percent", "network"),
-    "network": ("up", "network"),
-    "unknown": ("up", "network"),
+    "demo": ("cpu_percent", "memory_percent", "disk_percent", "network"),
+    "linux": ("cpu_percent", "memory_percent", "disk_percent", "network"),
+    "windows": ("cpu_percent", "memory_percent", "disk_percent", "network"),
+    "network": ("network",),
+    "unknown": ("network",),
 }
+
+GRAPH_WINDOW_SECONDS = 24 * 3600
+INCIDENT_PAD_SECONDS = 3600.0
+MAX_DISK_LINES = 4
+MIN_RAM_BYTES = 64 * 1024 * 1024
+MIN_LINK_BYTES = 1_000_000
+_SKIP_MOUNT = re.compile(r"^/(run|sys|dev|proc|boot/efi)(/|$)|docker|kubelet|containerd")
 
 # asset_kind leaves Storage / QNAP / Printer as "other". They are still if_mib hosts.
 _SNMP_FAMILY = ("network", "switch", "router", "firewall", "storage", "qnap", "nas", "printer", "snmp")
@@ -310,9 +316,11 @@ def _tile(
     unit: str = "",
     lines: list[dict[str, Any]] | None = None,
     display: str | None = None,
+    name: str | None = None,
+    kind: str | None = None,
 ) -> dict[str, Any]:
     meta = _TILE_META[key]
-    kind = str(meta["kind"])
+    kind = str(kind or meta["kind"])
     tone = _tone_for(kind, value, threshold, enabled=enabled)
     bar = _bar_pct(kind, value, tone)
     stamps = [round(float(t), 3) for t in (times or [])]
@@ -321,7 +329,7 @@ def _tile(
         stamps = []
     tile: dict[str, Any] = {
         "key": key,
-        "name": meta["name"],
+        "name": name or str(meta["name"]),
         "kind": kind,
         "value": None if value is None else round(float(value), 2),
         "display": display if display is not None else _display(kind, value),
@@ -363,9 +371,11 @@ def incident_graph_bounds(incident: Any, now: datetime | None = None) -> dict[st
             if isinstance(ended, datetime):
                 end_dt = ended
     end = float(end_dt.timestamp())
-    start = (marker - 3600.0) if marker is not None else (end - 3600.0)
-    if marker is not None and end < marker:
-        end = marker
+    start = end - GRAPH_WINDOW_SECONDS
+    if marker is not None:
+        start = min(marker - INCIDENT_PAD_SECONDS, start)
+        if end < marker:
+            end = marker
     if end <= start:
         end = start + 60.0
     return {
@@ -421,6 +431,105 @@ def _aligned_series(ranged: dict[str, Any]) -> tuple[list[float], list[float]]:
     return values, stamps
 
 
+def _bytes_label(raw: float | None) -> str:
+    """Human RAM size. None / tiny values stay empty so a percent sample is not shown as GB."""
+    value = _finite(raw)
+    if value is None or value < MIN_RAM_BYTES:
+        return ""
+    gib = value / (1024.0 ** 3)
+    if gib >= 10:
+        return f"{gib:.0f} GB"
+    text = f"{gib:.1f}".rstrip("0").rstrip(".")
+    return f"{text or '0'} GB"
+
+
+def _keep_mount(labels: dict[str, Any]) -> bool:
+    mount = str(labels.get("mountpoint") or labels.get("volume") or labels.get("device") or "")
+    if not mount:
+        return True
+    return _SKIP_MOUNT.search(mount) is None
+
+
+def _disk_line_name(labels: dict[str, Any], index: int) -> str:
+    mount = str(labels.get("mountpoint") or labels.get("volume") or labels.get("device") or "").strip()
+    if mount in {"/", "C:", "C"}:
+        return mount
+    if mount and len(mount) <= 18:
+        return mount
+    return f"HDD{index}"
+
+
+def _disk_sort_key(row: dict[str, Any]) -> tuple[int, float]:
+    labels = row.get("labels") or {}
+    mount = str(labels.get("mountpoint") or labels.get("volume") or "")
+    primary = 0 if mount in {"/", "C:", "C"} else 1
+    latest = _finite((row.get("values") or [None])[-1]) or 0.0
+    return (primary, -latest)
+
+
+def _range_rows(ranged: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = []
+    for raw in ranged.get("series") or []:
+        if not isinstance(raw, dict):
+            continue
+        values, stamps = _aligned_series({"values": raw.get("values") or [], "times": raw.get("times") or []})
+        if len(values) < 2:
+            continue
+        rows.append({"labels": dict(raw.get("labels") or {}), "values": values, "times": stamps})
+    if rows:
+        return rows
+    values, stamps = _aligned_series(ranged)
+    if len(values) < 2:
+        return []
+    return [{"labels": {}, "values": values, "times": stamps}]
+
+
+def _load_disk_lines(
+    expr: str,
+    spark_fetch: RangeFn | None,
+    *,
+    prom_down: bool,
+) -> list[dict[str, Any]]:
+    """Up to four filesystem / volume series. tmpfs and run mounts stay out."""
+    if prom_down or not expr or spark_fetch is None:
+        return []
+    ranged = spark_fetch(expr)
+    if ranged.get("error"):
+        return []
+    picked = [row for row in _range_rows(ranged) if _keep_mount(row.get("labels") or {})]
+    picked.sort(key=_disk_sort_key)
+    lines: list[dict[str, Any]] = []
+    for index, row in enumerate(picked[:MAX_DISK_LINES], start=1):
+        item: dict[str, Any] = {
+            "name": _disk_line_name(row.get("labels") or {}, index),
+            "className": f"disk-{index - 1}",
+            "series": [round(float(value), 3) for value in row["values"]],
+        }
+        stamps = row.get("times") or []
+        if len(stamps) == len(row["values"]):
+            item["times"] = [round(float(stamp), 3) for stamp in stamps]
+        lines.append(item)
+    return lines
+
+
+def _fmt_pct(value: float | None) -> str | None:
+    if value is None:
+        return None
+    if abs(value) >= 10:
+        return f"{value:.0f}%"
+    text = f"{value:.1f}".rstrip("0").rstrip(".")
+    return f"{text or '0'}%"
+
+
+def _network_pct_display(rx: float | None, tx: float | None) -> str:
+    parts: list[str] = []
+    for label, value in (("RX", rx), ("TX", tx)):
+        text = _fmt_pct(value)
+        if text:
+            parts.append(f"{label} {text}")
+    return " · ".join(parts) if parts else "—"
+
+
 def _load_network(
     packed: dict[str, tuple[str, str]],
     fetch: QueryFn,
@@ -469,10 +578,40 @@ def _load_network(
         pool.append(rx_val)
     if tx_val is not None:
         pool.append(tx_val)
-    divisor, unit = _rate_scale(pool)
+    speed_expr = packed.get("net_speed", ("", ""))[0]
+    speed = None
+    if not prom_down and speed_expr:
+        speed = _finite((fetch(speed_expr) or {}).get("value"))
+        if speed is not None and speed < MIN_LINK_BYTES:
+            speed = None
+    use_pct = speed is not None
+    if use_pct:
+        peak = max([abs(v) for v in pool] or [0.0])
+        if speed and peak / speed * 100.0 > 250.0:
+            use_pct = False
+            speed = None
 
-    def scaled(values: list[float]) -> list[float]:
-        return [round(value / divisor, 3) for value in values]
+    if use_pct and speed:
+        def scaled(values: list[float]) -> list[float]:
+            return [round(value / speed * 100.0, 3) for value in values]
+
+        primary = rx_val if rx_val is not None else tx_val
+        rx_pct = None if rx_val is None else rx_val / speed * 100.0
+        tx_pct = None if tx_val is None else tx_val / speed * 100.0
+        unit = "%"
+        display = _network_pct_display(rx_pct, tx_pct) if primary is not None else "—"
+        value = None if primary is None else primary / speed * 100.0
+        kind = "percent"
+    else:
+        divisor, unit = _rate_scale(pool)
+
+        def scaled(values: list[float]) -> list[float]:
+            return [round(value / divisor, 3) for value in values]
+
+        primary = rx_val if rx_val is not None else tx_val
+        display = _network_display(rx_val, tx_val, divisor, unit) if primary is not None else "—"
+        value = None if primary is None else primary / divisor
+        kind = "bytes"
 
     def line(name: str, class_name: str, values: list[float], stamps: list[float]) -> dict[str, Any] | None:
         if len(values) < 2:
@@ -489,15 +628,15 @@ def _load_network(
         primary_series, primary_times = tx_series, tx_times
     else:
         primary_series, primary_times = [], []
-    primary = rx_val if rx_val is not None else tx_val
     return {
         "query": query,
-        "value": None if primary is None else primary / divisor,
+        "value": value,
         "series": scaled(primary_series),
         "times": [round(stamp, 3) for stamp in primary_times] if len(primary_times) == len(primary_series) else [],
-        "unit": unit if primary is not None or lines else "",
+        "unit": unit if value is not None or lines else "",
+        "kind": kind,
         "lines": lines,
-        "display": _network_display(rx_val, tx_val, divisor, unit) if primary is not None else "—",
+        "display": display,
     }
 
 
@@ -522,7 +661,7 @@ def asset_metric_panel(
     keys = _CLASS_TILES.get(klass, _CLASS_TILES["unknown"])
     fetch = query_fn or _default_query
     queried_end = time.time() if range_end is None else float(range_end)
-    queried_start = queried_end - 3600.0 if range_start is None else float(range_start)
+    queried_start = queried_end - GRAPH_WINDOW_SECONDS if range_start is None else float(range_start)
     if queried_end <= queried_start:
         queried_end = queried_start + 60.0
     spark_fetch = range_fn
@@ -626,12 +765,42 @@ def asset_metric_panel(
         collecting = False
         collecting_line = "Prometheus is not collecting this target (up=0)."
 
+    ram_name = None
+    mem_total_expr = packed.get("memory_total", ("", ""))[0]
+    if mem_total_expr and not prom_down:
+        total = fetch(mem_total_expr)
+        if not total.get("error"):
+            label = _bytes_label(_finite(total.get("value")))
+            if label:
+                ram_name = f"RAM · {label}"
+
+    disk_lines: list[dict[str, Any]] = []
+    volumes_expr = packed.get("disk_volumes", ("", ""))[0]
+    if volumes_expr:
+        disk_lines = _load_disk_lines(volumes_expr, spark_fetch, prom_down=prom_down)
+        if disk_lines:
+            primary = disk_lines[0]
+            series["disk_percent"] = list(primary.get("series") or [])
+            times["disk_percent"] = list(primary.get("times") or [])
+            if samples.get("disk_percent") is None and primary.get("series"):
+                samples["disk_percent"] = primary["series"][-1]
+            sparks["disk_percent"] = _spark_points(series["disk_percent"])
+
     tiles = []
     for key in keys:
         extra: dict[str, Any] = {}
         threshold = tile_threshold(alarms, key, bundled.get(key)) if key not in {"up", "network"} else None
         if key == "network" and net:
-            extra = {"unit": net["unit"], "lines": net["lines"], "display": net["display"]}
+            extra = {
+                "unit": net["unit"],
+                "lines": net["lines"],
+                "display": net["display"],
+                "kind": net.get("kind"),
+            }
+        if key == "memory_percent" and ram_name:
+            extra["name"] = ram_name
+        if key == "disk_percent" and disk_lines:
+            extra["lines"] = disk_lines
         tiles.append(
             _tile(
                 key,
@@ -670,8 +839,18 @@ def asset_metric_panel(
 def glance_cells(panel: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Five glance cells for the Assets list pane. Missing tiles stay — (not a fake 0%)."""
     by_key = {tile.get("key"): tile for tile in (panel or {}).get("tiles") or []}
+    collecting = None if panel is None else panel.get("collecting")
     cells: list[dict[str, Any]] = []
     for key, label in GLANCE_CELLS:
+        if key == "up":
+            if collecting is True:
+                display, tone = "up", "ok"
+            elif collecting is False:
+                display, tone = "down", "crit"
+            else:
+                display, tone = "—", "warn"
+            cells.append({"key": key, "label": label, "display": display, "tone": tone})
+            continue
         tile = by_key.get(key) or {}
         cells.append(
             {
@@ -815,5 +994,8 @@ def safe_asset_metric_panel(asset: Any, **kwargs: Any) -> dict[str, Any]:
             "collecting": False,
             "collecting_line": "Prometheus is unreachable — not collecting.",
             "error": str(exc),
-            "tiles": [_tile("up", None, threshold=None)],
+            "tiles": [
+                _tile(key, None, threshold=None)
+                for key in _CLASS_TILES["unknown"]
+            ],
         }

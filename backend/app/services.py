@@ -1281,15 +1281,13 @@ def query_prometheus_expr(expr: str, timeout: float = 5.0) -> dict[str, Any]:
 
 
 def range_step(span_seconds: float) -> str:
-    """5-minute steps while a drop stays sharp; coarser once the window is many hours."""
+    """1-minute steps for host charts through two days; coarser only on longer windows."""
     span = max(0.0, float(span_seconds))
-    if span <= 6 * 3600:
+    if span <= 48 * 3600:
+        return "1m"
+    if span <= 7 * 24 * 3600:
         return "5m"
-    if span <= 24 * 3600:
-        return "15m"
-    if span <= 3 * 24 * 3600:
-        return "30m"
-    return "1h"
+    return "15m"
 
 
 def range_timeout(span_seconds: float) -> float:
@@ -1348,19 +1346,29 @@ def query_prometheus_range(
             best: list[float] = []
             best_times: list[float] = []
             best_key = (-1.0, -1)
+            series_out: list[dict[str, Any]] = []
             for series in result:
                 if not isinstance(series, dict):
                     continue
                 times, points = _range_samples(series)
                 if not points:
                     continue
+                labels = series.get("metric") if isinstance(series.get("metric"), dict) else {}
+                series_out.append({"labels": dict(labels or {}), "values": points, "times": times})
                 span = (max(points) - min(points)) if len(points) > 1 else 0.0
                 key = (span, len(points))
                 if key > best_key:
                     best = points
                     best_times = times
                     best_key = key
-            return {"values": best, "times": best_times, "query": expr, "start": start_ts, "end": end_ts}
+            return {
+                "values": best,
+                "times": best_times,
+                "series": series_out,
+                "query": expr,
+                "start": start_ts,
+                "end": end_ts,
+            }
     except Exception as exc:
         return {"error": str(exc), "query": expr, "start": start_ts, "end": end_ts}
 

@@ -12,7 +12,7 @@
 <section class="asset-chart-panel" data-graph="{{ key }}"{% if tile %} data-tone="{{ tile.tone }}"{% endif %}>
   <div class="asset-chart-head">
     <h2>{{ title }}</h2>
-    {% if key == 'network' %}<span class="asset-chart-legend" data-chart-legend><i class="rx">RX</i><i class="tx">TX</i></span>{% endif %}
+    {% if key == 'network' %}<span class="asset-chart-legend dash-chart-legend" data-chart-legend><i class="rx">RX</i><i class="tx">TX</i></span>{% endif %}
     <span class="metric-value{% if tile %} {{ tile.tone }}{% endif %}" data-chart-value>{% if tile and tile.value is not none %}{{ tile.display }}{% else %}—{% endif %}</span>
   </div>
   <div class="asset-chart-slot" data-chart-slot="{{ key }}">{% if not plotted %}<span class="muted dash-graph-none">Not scraped.</span>{% endif %}</div>
@@ -31,6 +31,12 @@
 <dl class="kv asset-facts" data-asset-facts="identity">
   <dt>Asset number</dt><dd>{% if asset.number %}#{{ asset.number }}{% else %}—{% endif %}</dd>
   <dt><span class="label-line">Asset ID {% with %}{% set tip %}Set at add and cannot change. Prometheus asset= labels and history keep matching this slug. Hostname and IP can change.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></dt><dd>{{ asset.asset_id }}</dd>
+  <dt>Status</dt><dd>
+    {% if metrics.collecting is true %}<span class="pill ok">Online</span>
+    {% elif metrics.collecting is false %}<span class="pill crit">Offline</span>
+    {% else %}<span class="pill warn">Unknown</span>{% endif %}
+    <span class="muted">{{ metrics.collecting_line }}</span>
+  </dd>
   <dt>Hostname</dt><dd>{{ asset.hostname or "—" }}</dd>
   <dt>IP</dt><dd>{{ asset.ip or "—" }}</dd>
   <dt>Type</dt><dd>{{ asset.type or "—" }}</dd>
@@ -239,18 +245,16 @@
 </div>
 
 <aside class="asset-detail-side asset-detail-metrics asset-detail-graphs asset-detail-col-2-3" data-asset-metrics="{{ asset.asset_id }}" data-asset-graphs data-asset-graph-grid data-asset="{{ asset.asset_id }}" data-host="{{ asset.hostname }}">
-  <div class="muted dash-graph-caption asset-chart-caption" data-dash-graph-caption><span class="label-line">Last hour {% with %}{% set tip %}This asset, not the incident window. Hover a point for the host, time, and value. Not scraped = not in Prometheus. No samples yet = the hour is empty. No placeholder wave. The 30-day note under the charts is disk % and interface receive when those series exist — a “days to full” line only when the disk slope is usable.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></div>
+  <div class="muted dash-graph-caption asset-chart-caption" data-dash-graph-caption><span class="label-line">Last 24 hours {% with %}{% set tip %}This asset, not the incident window. Hover a point for the host, time, and value. Not scraped = not in Prometheus. No samples yet = the window is empty. No placeholder wave. The 30-day note under the charts is disk % and interface receive when those series exist — a “days to full” line only when the disk slope is usable.{% endset %}{% include "_info_tip.html" %}{% endwith %}</span></div>
   <div class="muted dash-graph-empty" data-dash-graph-empty hidden></div>
   <div class="asset-chart-grid{% if metrics.class in ['network', 'unknown'] %} is-sparse{% endif %}" data-dash-graph-list>
     {% if metrics.class in ['network', 'unknown'] %}
-      {{ host_chart('network', 'Network', metrics.tiles) }}
-      {{ host_chart('up', 'Uptime', metrics.tiles) }}
+      {{ host_chart('network', 'NET', metrics.tiles) }}
     {% else %}
       {{ host_chart('cpu_percent', 'CPU', metrics.tiles) }}
-      {{ host_chart('memory_percent', 'Memory', metrics.tiles) }}
-      {{ host_chart('disk_percent', 'Disk', metrics.tiles) }}
-      {{ host_chart('network', 'Network', metrics.tiles) }}
-      {{ host_chart('up', 'Uptime', metrics.tiles) }}
+      {{ host_chart('memory_percent', 'RAM', metrics.tiles) }}
+      {{ host_chart('disk_percent', 'HDD', metrics.tiles) }}
+      {{ host_chart('network', 'NET', metrics.tiles) }}
     {% endif %}
   </div>
   <section class="capacity-panel" data-capacity data-capacity-window="{{ capacity.window_seconds }}">

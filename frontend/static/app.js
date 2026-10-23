@@ -1084,11 +1084,9 @@ function chartExtent(values) {
   return n ? { min: min, max: max, n: n } : null;
 }
 
-// Percent: a tight band (CPU near 0.1%, or a 10–14 swing) is padded so the wiggle fills
-// the plot. A series that reaches the upper half, swings by 25 points, or drops to ~0
-// from 15 or higher stays on 0–100, widened if a sample sits outside that. A smaller
-// crash to zero uses 0–max so the drop fills the plot. Every sample stays inside the
-// axis. Other units use 0–max when the swing is wide or hits zero from a peak.
+// Percent charts stay on 0–100 (widened if a sample sits outside). Other units use
+// 0–max when the swing is wide or hits zero from a peak. Every sample stays inside
+// the axis.
 function chartYScale(kind, values) {
   if (kind === "up") return { lo: 0, hi: 1, mode: "full" };
   const extent = chartExtent(values);
@@ -1097,13 +1095,7 @@ function chartYScale(kind, values) {
   const max = extent.max;
   const span = max - min;
   if (kind === "percent") {
-    const dropsHard = min <= 0.5 && max >= 15;
-    const towardTop = max >= 50 || span >= 25;
-    if (dropsHard || towardTop) return { lo: Math.min(0, min), hi: Math.max(100, max), mode: "full" };
-    if (min <= 0.5 && max > 0.5) {
-      const lo = Math.min(0, min);
-      return { lo: lo, hi: Math.max(max, lo + 1), mode: "full" };
-    }
+    return { lo: Math.min(0, min), hi: Math.max(100, max), mode: "full" };
   } else {
     const peak = Math.max(Math.abs(max), Math.abs(min), 0);
     const wide = peak > 0 && span >= peak * 0.45 && max > 0;
@@ -1125,6 +1117,15 @@ function chartYScale(kind, values) {
     hi = max + 0.5;
   }
   return { lo: lo, hi: hi, mode: "auto" };
+}
+
+function chartGridTicks(lo, hi, kind) {
+  if (kind === "percent" && Math.abs(lo) < 1e-6 && hi >= 100 - 1e-6) {
+    const ticks = [];
+    for (let v = 0; v <= 100; v += 5) ticks.push(v);
+    return ticks;
+  }
+  return chartTicks(lo, hi);
 }
 
 function chartTicks(lo, hi) {
@@ -1212,6 +1213,7 @@ function chartUnit(tile) {
 const ForgeChart = {
   yScale: chartYScale,
   ticks: chartTicks,
+  gridTicks: chartGridTicks,
   number: chartNumber,
   clockTicks: chartClockTicks,
   tip: chartTipLines,
@@ -1229,7 +1231,7 @@ function graphPane(pane) {
   const SVG = "http://www.w3.org/2000/svg";
   const W = 200;
   const H = 48;
-  let span = "last hour";
+  let span = "last 24 h";
   let windowInfo = null;
 
   const showCaption = (text) => {
@@ -1367,6 +1369,7 @@ function graphPane(pane) {
     const mark = markerX();
     const win = axisWindow(times);
     const yTickVals = tile.kind === "up" ? [1, 0] : chartTicks(scale.lo, scale.hi).slice().reverse();
+    const yGridVals = tile.kind === "up" ? [1, 0] : chartGridTicks(scale.lo, scale.hi, tile.kind).slice().reverse();
     const xTicks = win ? chartClockTicks(win.start, win.end) : [];
     const svg = svgEl("svg", {
       class: "dash-chart",
@@ -1378,9 +1381,22 @@ function graphPane(pane) {
       "data-ymin": String(Math.round(scale.lo * 1000) / 1000),
       "data-ymax": String(Math.round(scale.hi * 1000) / 1000),
     });
+    const labelSet = {};
     yTickVals.forEach((tick) => {
+      labelSet[String(tick)] = true;
+    });
+    yGridVals.forEach((tick) => {
       const y = yFor(tile, Number(tick), scale).toFixed(1);
-      svg.appendChild(svgEl("line", { class: "dash-chart-grid", x1: 0, x2: W, y1: y, y2: y }));
+      const minor = !labelSet[String(tick)];
+      svg.appendChild(
+        svgEl("line", {
+          class: "dash-chart-grid" + (minor ? " dash-chart-grid-minor" : ""),
+          x1: 0,
+          x2: W,
+          y1: y,
+          y2: y,
+        })
+      );
     });
     const slots = Math.max(xTicks.length, 2);
     xTicks.forEach((tick, i) => {
@@ -1408,6 +1424,11 @@ function graphPane(pane) {
         if (tile.kind === "up" && pts.length) pts.push(x.toFixed(1) + "," + pts[pts.length - 1].split(",")[1]);
         pts.push(x.toFixed(1) + "," + y.toFixed(1));
       });
+      const floor = (H - 2).toFixed(1);
+      if (tile.kind !== "up" && xs.length >= 2) {
+        const fill = xs[0].toFixed(1) + "," + floor + " " + pts.join(" ") + " " + xs[xs.length - 1].toFixed(1) + "," + floor;
+        svg.appendChild(svgEl("polygon", { class: "dash-chart-fill " + (track.className || "warn"), points: fill }));
+      }
       svg.appendChild(svgEl("polyline", { class: "dash-chart-line " + (track.className || "warn"), points: pts.join(" ") }));
       drawn.push({ track: track, xs: xs, ys: ys });
     });
@@ -1540,6 +1561,18 @@ function graphPane(pane) {
     value.className = "metric-value " + (tile.tone || "warn");
     value.textContent = tile.value == null ? "—" : tile.display;
     head.append(name, value);
+    const lineNames = (tile.lines || []).filter((line) => line && line.name);
+    if (lineNames.length > 1) {
+      const legend = document.createElement("span");
+      legend.className = "dash-chart-legend";
+      lineNames.forEach((line) => {
+        const item = document.createElement("i");
+        item.className = line.className ? String(line.className) : "";
+        item.textContent = String(line.name);
+        legend.appendChild(item);
+      });
+      head.appendChild(legend);
+    }
     box.appendChild(head);
     const raw = Array.isArray(tile.series) ? tile.series : [];
     const rawTimes = Array.isArray(tile.times) ? tile.times : [];
@@ -1581,9 +1614,10 @@ function graphPane(pane) {
     const named = data.hostname ? String(data.hostname) : "";
     pane.setAttribute("data-chart-host", named || pane.getAttribute("data-host") || "");
     windowInfo = data.window || null;
-    span = data.source === "zabbix" ? "last 24 h (Zabbix trends)" : "last hour";
+    span = data.source === "zabbix" ? "last 24 h (Zabbix trends)" : "last 24 h";
     pane.setAttribute("data-graph-source", data.source || "prometheus");
     showCaption(windowInfo && windowInfo.label ? String(windowInfo.label) : "");
+    paintOnline(data);
     if (empty) {
       const down = data.collecting === null && data.error;
       empty.textContent = down ? "Prometheus unreachable." : "";
@@ -1628,9 +1662,10 @@ function graphPane(pane) {
     }
     const named = data.hostname ? String(data.hostname) : "";
     pane.setAttribute("data-chart-host", named || pane.getAttribute("data-host") || "");
-    const tiles = data.tiles.filter((tile) => tile.key !== "network");
+    const tiles = data.tiles.filter((tile) => tile.key !== "up");
     windowInfo = data.window || null;
-    span = data.source === "zabbix" ? "last 24 h (Zabbix trends)" : "last hour";
+    span = data.source === "zabbix" ? "last 24 h (Zabbix trends)" : "last 24 h";
+    paintOnline(data);
     pane.setAttribute("data-graph-source", data.source || "prometheus");
     const anySeries = tiles.some((t) => Array.isArray(t.series) && t.series.length >= 2);
     showCaption(windowInfo && windowInfo.label ? String(windowInfo.label) : "");
@@ -1654,6 +1689,29 @@ function graphPane(pane) {
       empty.hidden = !empty.textContent;
     }
     if (list) list.replaceChildren(...tiles.map((tile) => tileRow(tile, anySeries)));
+  };
+
+  const paintOnline = (data) => {
+    const box = document.querySelector("[data-asset-online]");
+    if (!box) return;
+    box.hidden = false;
+    const pill = box.querySelector("[data-asset-online-pill]");
+    const line = box.querySelector("[data-asset-online-line]");
+    if (data.collecting === true) {
+      if (pill) {
+        pill.textContent = "Online";
+        pill.setAttribute("class", "pill ok");
+      }
+    } else if (data.collecting === false) {
+      if (pill) {
+        pill.textContent = "Offline";
+        pill.setAttribute("class", "pill crit");
+      }
+    } else if (pill) {
+      pill.textContent = "Unknown";
+      pill.setAttribute("class", "pill warn");
+    }
+    if (line) line.textContent = data.collecting_line ? String(data.collecting_line) : "";
   };
 
   return { paint, showEmpty };
@@ -1771,7 +1829,7 @@ function graphPane(pane) {
   }
 })();
 
-// Asset detail: last hour for this host, in problem or not. Same metrics URL as Dashboard, no incident window.
+// Asset detail: last 24 h for this host, in problem or not. Same metrics URL as Dashboard, no incident window.
 (function bindAssetGraphs() {
   const pane = document.querySelector("[data-asset-graphs]");
   if (!pane) return;

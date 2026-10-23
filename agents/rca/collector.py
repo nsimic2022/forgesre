@@ -177,6 +177,10 @@ def promql_queries_for(
                 _or_fill('sum(rate(ifHCOutOctets{job="forgesre-snmp",__SEL__}[5m]))', selectors),
                 "bytes",
             ),
+            "net_speed": (
+                _or_fill('sum(ifHighSpeed{job="forgesre-snmp",__SEL__}) * 125000', selectors),
+                "bytes",
+            ),
         }
     if windowsish:
         return {
@@ -210,6 +214,22 @@ def promql_queries_for(
                     selectors,
                 ),
                 "percent",
+            ),
+            "memory_total": (
+                _or_fill("windows_cs_physical_memory_bytes{__SEL__}", selectors),
+                "bytes",
+            ),
+            "disk_volumes": (
+                _or_fill(
+                    '100 * (1 - (windows_logical_disk_free_bytes{volume!~"_Total",__SEL__} '
+                    '/ windows_logical_disk_size_bytes{volume!~"_Total",__SEL__}))',
+                    selectors,
+                ),
+                "percent",
+            ),
+            "net_speed": (
+                _or_fill("sum(windows_net_current_bandwidth{__SEL__}) / 8", selectors),
+                "bytes",
             ),
             "up": (_or_fill("up{__SEL__}", selectors), ""),
         }
@@ -250,6 +270,25 @@ def promql_queries_for(
                 selectors,
             ),
             "percent",
+        ),
+        "memory_total": (
+            _or_fill("node_memory_MemTotal_bytes{__SEL__}", selectors),
+            "bytes",
+        ),
+        "disk_volumes": (
+            _or_fill(
+                '100 * (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.*|overlay",__SEL__} '
+                '/ node_filesystem_size_bytes{fstype!~"tmpfs|fuse.*|overlay",__SEL__}))',
+                selectors,
+            ),
+            "percent",
+        ),
+        "net_speed": (
+            _or_fill(
+                'sum(node_network_speed_bytes{device!~"lo|veth.*|docker.*|br-.*|cni.*|flannel.*|cali.*",__SEL__})',
+                selectors,
+            ),
+            "bytes",
         ),
         "up": (_or_fill("up{__SEL__}", selectors), ""),
     }

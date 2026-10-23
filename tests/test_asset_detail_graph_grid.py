@@ -40,19 +40,20 @@ def test_layout_is_a_quarter_fact_column_and_a_chart_grid():
     assert "minmax(0, 25%)" in rule and "minmax(0, 1fr)" in rule
     assert "repeat(5, minmax(0, 1fr))" in css
     assert "data-asset-graph-grid" in html
-    for key in ("cpu_percent", "memory_percent", "disk_percent", "network", "up"):
+    for key in ("cpu_percent", "memory_percent", "disk_percent", "network"):
         assert f"host_chart('{key}'" in html
+    assert "host_chart('up'" not in html
     assert "Not scraped." in html
     assert "No samples yet" in html
     assert "grafana" not in html.lower() and "iframe" not in html.lower()
     assert "request rate" not in html.lower() and "5xx" not in html.lower()
     assert "Math.sin" not in js
     assert 'data.collecting === false ? "Not scraped." : "No samples yet."' in js
-    assert "app.css?v=v09-41" in base and "app.js?v=v09-E" in base
+    assert "app.css?v=v09-42" in base and "app.js?v=v09-F" in base
     asset_js = js.split("(function bindAssetGraphs() {", 1)[1].split("\n})();", 1)[0]
     assert "?incident=" not in asset_js
     incident = (ROOT / "frontend" / "templates" / "incident_detail.html").read_text(encoding="utf-8")
-    assert "one hour before" in incident.lower() or "From one hour before" in incident
+    assert "last 24 hours" in incident.lower() or "24 hours" in incident.lower()
     assert "data-asset-graph-grid" not in (ROOT / "frontend" / "templates" / "assets.html").read_text(encoding="utf-8")
 
 
@@ -117,7 +118,7 @@ def test_linux_network_is_two_real_lines_and_snmp_skips_cpu():
         query_fn=query,
         range_fn=ranged,
     )
-    assert abs((panel["window"]["end"] - panel["window"]["start"]) - 3600) < 2
+    assert abs((panel["window"]["end"] - panel["window"]["start"]) - 24 * 3600) < 2
     assert panel["window"]["marker"] is None
     net = next(tile for tile in panel["tiles"] if tile["key"] == "network")
     assert net["unit"] == "MB/s"

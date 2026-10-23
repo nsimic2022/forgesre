@@ -156,13 +156,12 @@ def test_linux_tiles_cpu_below_95_is_green():
         range_fn=_no_spark,
     )
     by_key = {tile["key"]: tile for tile in panel["tiles"]}
-    assert list(by_key) == ["up", "cpu_percent", "memory_percent", "disk_percent", "network"]
+    assert list(by_key) == ["cpu_percent", "memory_percent", "disk_percent", "network"]
     assert by_key["cpu_percent"]["threshold"] == 95
     assert by_key["cpu_percent"]["tone"] == "ok"
     assert by_key["cpu_percent"]["display"] == "90%"
     assert by_key["cpu_percent"]["value"] == 90.0
-    assert by_key["up"]["tone"] == "ok"
-    assert by_key["up"]["display"] == "up"
+    assert "up" not in by_key
     assert panel["collecting"] is True
     assert "up=1" in panel["collecting_line"]
     blob = str(promql_queries_for({"asset_id": "app-lab-01", "type": "Linux Server"}))
@@ -313,11 +312,11 @@ def test_network_tile_is_up_and_interfaces_not_linux_cpu():
         query_fn=_query({'up{': 0.0}),
         range_fn=_no_spark,
     )
-    assert [tile["key"] for tile in panel["tiles"]] == ["up", "network"]
+    assert [tile["key"] for tile in panel["tiles"]] == ["network"]
     assert "cpu_percent" not in {tile["key"] for tile in panel["tiles"]}
-    assert panel["tiles"][0]["tone"] == "crit"
-    assert panel["tiles"][0]["display"] == "down"
-    net = panel["tiles"][1]
+    assert panel["collecting"] is False
+    assert "up=0" in panel["collecting_line"]
+    net = panel["tiles"][0]
     assert net["value"] is None
     assert net["lines"] == []
     blob = str(promql_queries_for({"asset_id": "edge-sw-01", "type": "Network Switch"}))
@@ -334,8 +333,9 @@ def test_unknown_class_is_yellow_not_collecting():
     )
     assert panel["class"] == "unknown"
     assert panel["collecting"] is False
+    assert panel["tiles"][0]["key"] == "network"
     assert panel["tiles"][0]["tone"] == "warn"
-    assert panel["tiles"][0]["display"] == "not collecting"
+    assert panel["tiles"][0]["display"] == "—"
 
 
 def test_windows_tiles_match_asset_label_or_instance_scrape():
@@ -378,7 +378,7 @@ def test_windows_tiles_match_asset_label_or_instance_scrape():
     assert panel["class"] == "windows"
     assert panel["collecting"] is True
     by_key = {tile["key"]: tile for tile in panel["tiles"]}
-    assert by_key["up"]["display"] == "up"
+    assert panel["collecting"] is True
     assert by_key["cpu_percent"]["value"] == 18.0
     assert by_key["cpu_percent"]["tone"] == "ok"
     assert by_key["memory_percent"]["display"] != "0%"
@@ -531,6 +531,8 @@ def test_metrics_api_and_detail_html(monkeypatch):
     text = page.text
     assert "asset-edit-graphs" in text
     assert "data-asset-graphs" in text
+    assert "data-asset-online" in text
+    assert "data-asset-online-pill" in text
     assert 'data-asset="app-lab-metrics"' in text
     assert "data-dash-graph-list" in text
     assert "data-asset-graph-grid" not in text
