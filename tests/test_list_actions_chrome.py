@@ -112,7 +112,7 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert "[data-select-scope]:has([data-select-row]:checked) .list-actions" in css
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-47" in base and "app.js?v=v09-I" in base
+    assert "app.css?v=v09-48" in base and "app.js?v=v09-I" in base
 
     assets = _middle(client.get("/assets").text)
     _order(assets, ["Edit", "Clone", "Verify", "Export", "Remove"])
@@ -169,7 +169,8 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert 'action="/playbooks/export"' in book_actions
     assert 'action="/playbooks/bulk-delete"' in book_actions
     assert ">Clone<" in card and ">Clone<" not in book_actions
-    assert ">Edit<" not in card and ">Remove<" not in card
+    assert ">Edit<" in card and card.index(">Edit<") < card.index(">Clone<")
+    assert ">Remove<" not in card
     _no_invented(book_actions)
 
     escalation = client.get("/escalation").text

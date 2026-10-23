@@ -46,6 +46,12 @@ def test_dashboard_tiles_are_square_and_share_one_group_width():
     assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in css
     assert "repeat(5, minmax(0, 1fr))" not in css.split("/* Dashboard layout pass:", 1)[1].split("/* Incidents tile only:", 1)[0]
     assert "minmax(24rem, 2.6fr)" in css
+    group = css.split(".tile-group {", 1)[1].split("}", 1)[0]
+    assert "display: flex" in group
+    assert "flex-direction: column" in group
+    row = css.split(".dash-tiles-incidents .stat-row.stat-row-big,", 1)[1].split("}", 1)[0]
+    assert "align-items: center" in row
+    assert "align-content: center" in row
     clock = css.split(".appliance-clock {", 1)[1].split("}", 1)[0]
     assert "padding:" in clock
     assert "clamp(1.85rem, 14cqi, 2.55rem)" in clock

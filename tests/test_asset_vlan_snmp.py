@@ -158,7 +158,7 @@ def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".asset-ladder .ladder-level {" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-47" in base and "app.js?v=v09-I" in base
+    assert "app.css?v=v09-48" in base and "app.js?v=v09-I" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "[data-snmp-version]" in js and "[data-snmp-v3-level]" in js
 

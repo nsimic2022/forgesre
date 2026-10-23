@@ -27,7 +27,7 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-47" in base
+    assert "app.css?v=v09-48" in base
     assert ".banner-short" not in css
     assert ".banner-x" in css
     assert "top: 0.35rem" in css.split(".banner-x {", 1)[1].split("}", 1)[0]
@@ -37,7 +37,7 @@ def test_css_cache_bust_is_current():
     assert "forgesre-flash-dismiss" in js
     assert "sessionStorage" in js
     assert ".playbook-grid" in css
-    assert "repeat(3, minmax(0, 1fr))" in css.split(".playbook-grid {", 1)[1].split("}", 1)[0]
+    assert "repeat(5, minmax(0, 1fr))" in css.split(".playbook-grid {", 1)[1].split("}", 1)[0]
     assert ".ack-dot" in css
     assert ".list-filters" in css
     assert "grid-template-columns: 1fr 1fr" in css
@@ -186,24 +186,30 @@ def test_discovery_candidate_edit_clone_remove():
     db.close()
 
 
-def test_playbooks_three_per_row_and_row_actions():
+def test_playbooks_five_per_row_and_row_actions():
     html = (ROOT / "frontend" / "templates" / "playbooks.html").read_text(encoding="utf-8")
     assert "playbook-grid" in html
+    assert "card-select" not in html
+    assert ">Edit</a>" in html
+    assert html.index(">Edit</a>") < html.index(">Clone</a>")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "repeat(3, minmax(0, 1fr))" in css.split(".playbook-grid {", 1)[1].split("}", 1)[0]
+    assert "repeat(5, minmax(0, 1fr))" in css.split(".playbook-grid {", 1)[1].split("}", 1)[0]
     assert '<div class="list-scroll list-scroll-cards" data-list-scroll>' in html
     assert '<p class="muted">V0.1 playbooks are instructions and workflow. They do not execute commands.</p>' not in html
     db = _db()
     client = TestClient(app)
     _login(client)
+    disk = db.query(Playbook).filter_by(slug="disk-full").one()
     page = client.get("/playbooks")
     assert page.status_code == 200
     assert "playbook-grid" in page.text
+    assert "card-select" not in page.text
+    assert f'href="/playbooks?edit={disk.id}' in page.text
+    assert page.text.index(">Edit<") < page.text.index(">Clone<")
     assert ">Edit<" in page.text
     assert ">Clone<" in page.text
     assert ">Remove<" in page.text
     assert 'href="/playbooks">Cancel</a>' in page.text
-    disk = db.query(Playbook).filter_by(slug="disk-full").one()
     clone_page = client.get(f"/playbooks?clone={disk.id}")
     assert clone_page.status_code == 200
     assert "Clone playbook" in clone_page.text
