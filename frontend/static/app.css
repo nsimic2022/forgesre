@@ -2450,12 +2450,12 @@ dialog.text-file .mail-body {
 dialog.text-file::backdrop { background: color-mix(in srgb, var(--text) 28%, transparent); }
 
 /* Dashboard layout pass: square Incidents / Infrastructure tiles, appliance card on the right.
-   Both groups share one band width (five squares). They do not stretch to the card. */
+   Both groups share one band width (three squares). Leftover width goes to Recent investigations. */
 .dash-top {
   --dash-tile-gap: 0.7rem;
-  --dash-tile-band: 42.5rem;
+  --dash-tile-band: 19.2rem;
   display: grid;
-  grid-template-columns: minmax(0, var(--dash-tile-band)) minmax(20rem, 1.55fr) clamp(148px, 13vw, 200px);
+  grid-template-columns: minmax(0, var(--dash-tile-band)) minmax(24rem, 2.6fr) clamp(148px, 13vw, 200px);
   grid-template-areas: "inc ai app" "infra ai app";
   grid-template-rows: min-content min-content;
   align-items: stretch;
@@ -2487,17 +2487,13 @@ dialog.text-file::backdrop { background: color-mix(in srgb, var(--text) 28%, tra
 .dash-tiles-infra .stat-row.stat-row-big {
   align-items: start;
   justify-content: start;
-}
-.dash-tiles-incidents .stat-row.stat-row-big { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-/* Same square as one Incidents tile: (band − four gaps) / 5. Three tiles, then empty group space. */
-.dash-tiles-infra .stat-row.stat-row-big {
-  grid-template-columns: repeat(3, calc((100% - 4 * var(--dash-tile-gap)) / 5));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 @media (max-width: 720px) {
   .dash-tiles-incidents,
   .dash-tiles-infra { width: 100%; }
   .dash-tiles-incidents .stat-row.stat-row-big,
-  .dash-tiles-infra .stat-row.stat-row-big { grid-template-columns: repeat(auto-fill, minmax(7.2rem, 7.2rem)); }
+  .dash-tiles-infra .stat-row.stat-row-big { grid-template-columns: repeat(auto-fill, minmax(5rem, 5rem)); }
 }
 .stat-row-big .stat {
   display: flex;
@@ -2510,18 +2506,18 @@ dialog.text-file::backdrop { background: color-mix(in srgb, var(--text) 28%, tra
   height: auto;
   min-height: 0;
   box-sizing: border-box;
-  padding: 0.55rem 0.5rem 0.6rem;
+  padding: 0.38rem 0.35rem 0.42rem;
   border-radius: 12px;
   border-left-width: 8px;
   border-left-color: var(--muted);
 }
-.stat-row-big .stat span { color: var(--text); font-size: 0.86rem; font-weight: 600; line-height: 1.15; }
+.stat-row-big .stat span { color: var(--text); font-size: 0.60rem; font-weight: 600; line-height: 1.15; }
 .stat-row-big .stat strong {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 4.3rem;
+  font-size: 3.0rem;
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;

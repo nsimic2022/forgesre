@@ -451,16 +451,15 @@ def incident_neighbors(db: Session, incident: Incident, filters: dict[str, Any] 
 def dashboard_incident_tiles(db: Session) -> list[dict[str, Any]]:
     """Alarm cubes. Each count is the Incidents list behind the click.
 
-    Critical / Warning are active (not RESOLVED or CLOSED). Investigating, Escalated, and Resolved
-    are exact statuses. Escalated counts incidents that already climbed a ladder.
-    Open (unacked) is a filter on Incidents, not a cube.
+    Critical / Warning are active (not RESOLVED or CLOSED). Escalated is the exact
+    status after a ladder climb. Investigating and Resolved stay on the Incidents
+    list — every incident is already investigated, and Resolved is history, not
+    live monitoring. Open (unacked) is a filter on Incidents, not a cube.
     """
     specs = [
         ("Critical", "crit", {"open_only": True, "critical_only": True}, "/incidents?status=active&severity=critical&demo=0"),
         ("Warning", "warn", {"open_only": True, "warning_only": True}, "/incidents?status=active&severity=warning&demo=0"),
-        ("Investigating", "warn", {"status": "INVESTIGATING"}, "/incidents?status=INVESTIGATING&demo=0"),
         ("Escalated", "warn", {"status": "ESCALATED"}, "/incidents?status=ESCALATED&demo=0"),
-        ("Resolved", "cold", {"status": "RESOLVED"}, "/incidents?status=RESOLVED&demo=0"),
     ]
     tiles = []
     for label, tone, filters, href in specs:
@@ -481,7 +480,7 @@ def incident_heat(tiles: list[dict[str, Any]]) -> str:
     counts = {tile.get("key"): int(tile.get("count") or 0) for tile in tiles}
     if counts.get("critical"):
         return "crit"
-    if counts.get("warning") or counts.get("investigating"):
+    if counts.get("warning") or counts.get("escalated"):
         return "warn"
     return ""
 

@@ -39,14 +39,13 @@ def test_dashboard_tiles_are_square_and_share_one_group_width():
     band = css.split(".dash-tiles-incidents,", 1)[1].split("}", 1)[0]
     assert "justify-self: start" in band
     assert "width: min(100%, var(--dash-tile-band))" in band
-    assert "--dash-tile-band: 42.5rem" in css
+    assert "--dash-tile-band: 19.2rem" in css
     tile = css.split(".stat-row-big .stat {", 1)[1].split("}", 1)[0]
     assert "aspect-ratio: 1" in tile
     assert "width: 100%" in tile
-    assert "grid-template-columns: repeat(5, minmax(0, 1fr));" in css
-    assert "grid-template-columns: repeat(3, calc((100% - 4 * var(--dash-tile-gap)) / 5));" in css
-    tiles = css.split("/* Dashboard layout pass:", 1)[1].split("/* Incidents tile only:", 1)[0]
-    assert "repeat(3, minmax(0, 1fr))" not in tiles
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in css
+    assert "repeat(5, minmax(0, 1fr))" not in css.split("/* Dashboard layout pass:", 1)[1].split("/* Incidents tile only:", 1)[0]
+    assert "minmax(24rem, 2.6fr)" in css
     clock = css.split(".appliance-clock {", 1)[1].split("}", 1)[0]
     assert "padding:" in clock
     assert "clamp(1.85rem, 14cqi, 2.55rem)" in clock
