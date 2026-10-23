@@ -3,16 +3,17 @@
 {% block content %}
 <div class="page-head">
   <h1>Investigations</h1>
+  {% if case %}
+  <p class="muted invest-case-meta">{{ case.title }} · {{ case.number }} · {{ case.host }} · {{ short_when_label(case.created_at) }}</p>
+  {% endif %}
 </div>
 
-<section class="card invest-list" id="activity">
-  <h2>Recent investigations</h2>
-  <div class="invest-scroll list-scroll" data-invest-list data-list-scroll data-select-scope aria-label="Recent investigation activity">
-    {% with cases=runs, with_check=true, selected=selected, list_row=true %}
-    {% include "_investigation_cases.html" %}
-    {% endwith %}
-  </div>
-  {% with pager=runs_pager %}{% include "_pager.html" %}{% endwith %}
+<section class="invest-case" id="activity" aria-label="Investigation case">
+  {% if case %}
+  {% include "_case_specialists.html" %}
+  {% else %}
+  <p class="muted">No investigation runs yet. Open ForgeRCA on an incident.</p>
+  {% endif %}
 </section>
 
 <div class="invest-more">

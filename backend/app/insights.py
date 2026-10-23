@@ -551,26 +551,37 @@ def forgeai_setup(*, doctor: dict[str, Any] | None = None) -> dict[str, Any]:
 
 
 def _specialist_cubes(inv: Investigation, incident: Incident) -> list[dict[str, Any]]:
+    brief = specialist_brief(incident.evidence)["cubes"]
     result = inv.result if isinstance(inv.result, dict) else {}
     stored = result.get("specialists")
     cubes: list[dict[str, Any]] = []
     if isinstance(stored, list) and len(stored) >= 4:
+        by_id = {str(item.get("id") or ""): item for item in brief if isinstance(item, dict)}
         for item in stored[:4]:
             if not isinstance(item, dict):
                 cubes = []
                 break
+            sid = str(item.get("id") or "")
+            live = by_id.get(sid) or {}
+            facts = live.get("facts") if isinstance(live.get("facts"), list) else item.get("facts")
+            if not isinstance(facts, list):
+                facts = []
+            facts = [str(line).strip() for line in facts if str(line).strip()][:8]
+            if not facts and item.get("detail"):
+                facts = [str(item.get("detail"))]
             cubes.append(
                 {
-                    "id": str(item.get("id") or ""),
-                    "label": str(item.get("label") or ""),
-                    "css": str(item.get("css") or "ignored"),
-                    "detail": str(item.get("detail") or ""),
-                    "hint": str(item.get("hint") or ""),
+                    "id": sid,
+                    "label": str(item.get("label") or live.get("label") or ""),
+                    "css": str(item.get("css") or live.get("css") or "ignored"),
+                    "detail": str(item.get("detail") or live.get("detail") or ""),
+                    "hint": str(item.get("hint") or live.get("hint") or ""),
+                    "facts": facts,
                 }
             )
         if len(cubes) == 4:
             return order_cubes(cubes)
-    return specialist_brief(incident.evidence)["cubes"]
+    return brief
 
 
 def _writer_view(inv: Investigation) -> dict[str, Any]:

@@ -1,4 +1,4 @@
-"""Investigations hub: Recent list, nav flyout, Dashboard links, empty cubes."""
+"""Investigations hub: one open case, nav flyout, Dashboard links, empty cubes."""
 
 from __future__ import annotations
 
@@ -39,20 +39,20 @@ def _investigate() -> tuple[str, TestClient]:
     return number, _client()
 
 
-def test_investigations_page_is_recent_list_with_empty_cubes():
+def test_investigations_page_opens_one_case_with_empty_cubes():
     number, client = _investigate()
-    page = client.get("/investigations")
+    page = client.get(f"/investigations?n={number}")
     assert page.status_code == 200
     html = page.text
-    assert "Recent investigations" in html
     assert 'id="activity"' in html
     assert 'id="summary"' in html
     assert ">Summary<" in html
     assert 'id="ai-more"' in html
-    assert 'data-invest-list' in html
-    assert 'class="act-case"' in html
-    assert 'name="selected"' in html
-    assert f'href="/investigations?n={number}"' in html
+    assert "case-specialists" in html
+    assert "specialist-row-tall" in html
+    assert number in html
+    assert 'data-invest-list' not in html
+    assert 'class="act-case-row' not in html.split('id="activity"', 1)[1]
     assert 'id="setup"' not in html
     assert 'id="ask"' not in html
     assert 'id="digest"' not in html
@@ -62,9 +62,9 @@ def test_investigations_page_is_recent_list_with_empty_cubes():
     assert "Ask ForgeAI" not in html
     assert "Save digest schedule" not in html
     assert "Recent activity" not in html
-    selected = client.get(f"/investigations?n={number}")
-    assert selected.status_code == 200
-    assert 'class="act-case-row has-check is-selected"' in selected.text
+    home = client.get("/investigations")
+    assert home.status_code == 200
+    assert "case-specialists" in home.text
     assert client.get("/forgeai").status_code == 200
 
 
@@ -96,6 +96,7 @@ def test_dashboard_and_nav_open_investigations_hub():
     runs = list_investigation_runs(db)
     match = next(row for row in runs if row["number"] == number)
     assert match["href"] == f"/investigations?n={number}"
+    assert match["specialists"][0].get("facts") is not None
     db.close()
 
 
@@ -103,12 +104,14 @@ def test_nav_flyout_css_and_cache():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
-    assert "app.css?v=v09-44" in base
-    assert "app.js?v=v09-G" in base
+    assert "app.css?v=v09-45" in base
+    assert "app.js?v=v09-H" in base
     assert ".nav-invest-panel {" in css
+    assert "left: 228px" in css.split(".nav-invest-panel {", 1)[1].split("}", 1)[0]
     assert ".invest-empty {" in css
-    assert ".act-case-row {" in css
+    assert ".invest-case {" in css
+    assert "max-height: 28rem" in css.split(".specialist-row-tall .specialist-cube {", 1)[1].split("}", 1)[0]
     assert "bindNavInvest" in js
     assert "data-nav-invest-toggle" in js
-    assert "bindInvestSelected" in js
+    assert '"228px"' in js
     assert "/investigations/menu" in js

@@ -171,9 +171,8 @@ function bootUi() {
     const panel = root.querySelector("[data-nav-invest-panel]");
     if (!button || !panel) return;
     const box = button.getBoundingClientRect();
-    const left = Math.round(Math.min(box.right + 8, window.innerWidth - 24));
     panel.style.top = Math.round(Math.max(8, box.top)) + "px";
-    panel.style.left = Math.max(8, left) + "px";
+    panel.style.left = "228px";
   };
   const load = (root) => {
     const list = root.querySelector("[data-nav-invest-list]");
