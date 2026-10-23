@@ -49,7 +49,7 @@ def test_layout_is_a_quarter_fact_column_and_a_chart_grid():
     assert "request rate" not in html.lower() and "5xx" not in html.lower()
     assert "Math.sin" not in js
     assert 'data.collecting === false ? "Not scraped." : "No samples yet."' in js
-    assert "app.css?v=v09-51" in base and "app.js?v=v09-J" in base
+    assert "app.css?v=v09-52" in base and "app.js?v=v09-J" in base
     asset_js = js.split("(function bindAssetGraphs() {", 1)[1].split("\n})();", 1)[0]
     assert "?incident=" not in asset_js
     incident = (ROOT / "frontend" / "templates" / "incident_detail.html").read_text(encoding="utf-8")
