@@ -11,7 +11,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.asset_extras import support_status
-from app.asset_types import ASSET_TYPE_CHOICES, snmp_family, snmp_port_for, snmp_target
+from app.asset_extras import extras_from_form
+from app.asset_types import ASSET_TYPE_CHOICES, snmp_family, snmp_poll_on, snmp_port_for, snmp_target
 from app.db import Base, SessionLocal, engine
 from app.inventory import default_scrape_address, is_snmp_asset, sd_snmp_targets, sd_targets
 from app.main import app
@@ -140,6 +141,13 @@ def test_snmp_family_and_effective_port():
     assert snmp_port_for(Asset(type="Switch", ip="1.1.1.1")) == 161
     assert snmp_port_for(Asset(type="Linux Server", ip="1.1.1.1")) == 0
     assert snmp_port_for(Asset(type="Linux Server", ip="1.1.1.1", snmp_port=1161)) == 1161
+    assert snmp_port_for(Asset(type="Other", ip="1.1.1.1", extras={"snmp_poll": "1"})) == 161
+    assert snmp_port_for(Asset(type="Hypervisor", ip="1.1.1.1", extras={"snmp_poll": "1"})) == 161
+    assert snmp_port_for(Asset(type="Other", ip="1.1.1.1")) == 0
+    assert snmp_poll_on({"snmp_poll": "1"})
+    assert not snmp_poll_on({})
+    assert extras_from_form("1", snmp_poll="1")["snmp_poll"] == "1"
+    assert "snmp_poll" not in extras_from_form("1", site="DC1")
     assert snmp_target("1.1.1.1", 161) == "1.1.1.1"
     assert snmp_target("1.1.1.1", 1161) == "1.1.1.1:1161"
 
@@ -294,10 +302,69 @@ def test_runbook_note_is_labelled_human_guidance():
     assert "3am" not in notes and "Never executed" not in notes and "not a rule" not in notes
 
 
+def test_any_type_snmp_poll_joins_sd():
+    db = _db()
+    client = _client()
+    other_ip, hv_ip, lnx_ip, skip_ip = _ip(), _ip(), _ip(), _ip()
+    assert _post(client, "ats-other-poll", "Other", other_ip, extras_present="1", snmp_poll="1").status_code in {302, 303}
+    assert _post(client, "ats-hv-poll", "Hypervisor", hv_ip, extras_present="1", snmp_poll="1").status_code in {302, 303}
+    assert _post(client, "ats-lnx-poll", "Linux Server", lnx_ip, extras_present="1", snmp_poll="1").status_code in {302, 303}
+    assert _post(client, "ats-other-off", "Other", skip_ip).status_code in {302, 303}
+    db.expire_all()
+    other = db.query(Asset).filter_by(asset_id="ats-other-poll").one()
+    assert other.extras.get("snmp_poll") == "1"
+    assert is_snmp_asset(other) is True
+    by_asset = {t["labels"]["asset"]: t for t in sd_snmp_targets(db)}
+    assert by_asset["ats-other-poll"]["targets"] == [other_ip]
+    assert by_asset["ats-other-poll"]["labels"]["snmp_port"] == "161"
+    assert by_asset["ats-hv-poll"]["targets"] == [hv_ip]
+    assert by_asset["ats-lnx-poll"]["targets"] == [lnx_ip]
+    assert "ats-other-off" not in by_asset
+    form = client.get("/assets?edit=ats-other-poll").text
+    comms = form.split("data-asset-comms", 1)[1].split("alarm-families", 1)[0]
+    assert 'name="snmp_poll"' in comms and "checked" in comms
+    db.close()
+
+
+def test_snmp_probe_json_any_ip():
+    _db().close()
+    client = _client()
+    import discovery as discovery_mod
+
+    orig = discovery_mod.probe_snmp_udp
+    calls = []
+
+    def fake(ip, community=None, timeout=0.4, port=161):
+        calls.append((ip, community, port))
+        return ip == "10.55.55.8"
+
+    discovery_mod.probe_snmp_udp = fake
+    try:
+        page = client.get("/discovery").text
+        comms = page.split("data-asset-comms", 1)[1].split("alarm-families", 1)[0]
+        assert 'name="snmp_poll"' in comms
+        assert "Poll SNMP" in comms
+        assert "data-snmp-probe" in comms and ">Probe<" in comms
+        miss = client.post("/assets/snmp-probe", data={"ip": "", "snmp_port": ""})
+        assert miss.status_code == 200
+        assert miss.json() == {"ok": False, "detail": "no IP", "port": 161}
+        ok = client.post("/assets/snmp-probe", data={"ip": "10.55.55.8", "snmp_port": "161", "community": "public"})
+        assert ok.status_code == 200
+        body = ok.json()
+        assert body["ok"] is True and body["port"] == 161 and "UDP/161" in body["detail"]
+        no = client.post("/assets/snmp-probe", data={"ip": "10.55.55.9", "snmp_port": "1161"})
+        assert no.status_code == 200
+        assert no.json()["ok"] is False and no.json()["port"] == 1161
+        assert ("10.55.55.8", "public", 161) in calls
+        assert ("10.55.55.9", None, 1161) in calls
+    finally:
+        discovery_mod.probe_snmp_udp = orig
+
+
 def test_css_and_js_v08_14():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-52" in base and "app.js?v=v09-J" in base
+    assert "app.css?v=v09-53" in base and "app.js?v=v09-K" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "select.nice-select" in css and ".reach-snmp" in css
+    assert "select.nice-select" in css and ".reach-snmp" in css and ".snmp-poll-row" in css
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
-    assert "bindAssetFormPicks" in js and "snmp_label" in js
+    assert "bindAssetFormPicks" in js and "snmp_label" in js and "data-snmp-probe" in js

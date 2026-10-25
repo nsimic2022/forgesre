@@ -2,8 +2,9 @@
 
 Type picks the default HTTP scrape only for Linux Server (:9100) and Windows Server (:9182).
 Every other type starts with an empty scrape address (agentless is fine) unless the operator
-types one. SNMP is on for the network family (default UDP/161) or when the operator sets an
-explicit per-asset ``snmp_port``.
+types one. SNMP is on for the network family (default UDP/161), when extras ``snmp_poll`` is
+set (any type, including devices with no other agent), or when the operator sets an explicit
+per-asset ``snmp_port``.
 """
 
 from __future__ import annotations
@@ -54,11 +55,25 @@ def parse_snmp_port(value: Any) -> int:
     return port if 0 < port < 65536 else 0
 
 
+def snmp_poll_on(raw: Any) -> bool:
+    """True when extras ``snmp_poll`` (or a bare flag) is on. Any asset type can opt in."""
+    value = raw.get("snmp_poll") if isinstance(raw, dict) else raw
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _asset_extras(asset: Any) -> dict:
+    raw = asset.get("extras") if isinstance(asset, dict) else getattr(asset, "extras", None)
+    return raw if isinstance(raw, dict) else {}
+
+
 def snmp_port_for(asset: Any) -> int:
-    """Effective SNMP UDP port: explicit ``snmp_port``, else 161 for the network family, else 0 (no SNMP)."""
+    """Effective SNMP UDP port: explicit ``snmp_port``, else 161 when poll is on or the
+    type is in the network family, else 0 (no SNMP)."""
     explicit = parse_snmp_port(getattr(asset, "snmp_port", None) if not isinstance(asset, dict) else asset.get("snmp_port"))
     if explicit:
         return explicit
+    if snmp_poll_on(_asset_extras(asset)):
+        return DEFAULT_SNMP_PORT
     if isinstance(asset, dict):
         type_, profile = str(asset.get("type") or ""), str(asset.get("monitoring_profile") or "")
     else:

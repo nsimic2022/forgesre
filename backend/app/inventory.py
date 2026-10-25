@@ -180,8 +180,8 @@ def sd_targets(db: Session, core_address: str | None = None) -> list[dict]:
 
 def is_snmp_asset(asset: Asset) -> bool:
     """Polled by snmp_exporter: network family (Network device, Switch, Router, Firewall, Storage,
-    QNAP/NAS, Printer) on UDP/161, or any type with an explicit per-asset ``snmp_port``.
-    Linux / Windows / Web with an empty SNMP port are not."""
+    QNAP/NAS, Printer) on UDP/161, extras ``snmp_poll`` on any type, or an explicit ``snmp_port``.
+    Linux / Windows / Web with neither poll nor port are not."""
     if not settings.snmp_enabled:
         return False
     if is_lab_inventory_row(asset):
