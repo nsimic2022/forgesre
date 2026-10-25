@@ -7,7 +7,7 @@ from typing import Annotated
 from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -58,7 +58,7 @@ from app.asset_ladder import (
 from app.ladder_cubes import asset_ladder_cubes, incident_ladder_cubes
 from app.playrule_mute import muted_playrule_ids, playrule_off_from_form
 from app.asset_snmp import AUTH_PROTOCOLS, PRIV_PROTOCOLS, SNMP_VERSIONS, V3_LEVELS, auth_status, snmp_from_form
-from app.asset_types import ASSET_TYPE_GROUPS, DEFAULT_SNMP_PORT, snmp_family, snmp_port_for
+from app.asset_types import ASSET_TYPE_GROUPS, DEFAULT_SNMP_PORT, parse_snmp_port, snmp_family, snmp_port_for
 from app.inventory import (
     ASSET_SOURCE_FILTERS,
     ASSET_TYPE_CHOICES,
@@ -1114,6 +1114,7 @@ def asset_create(
     extra_support_lead_days: str = Form(""),
     extra_maint_from: str = Form(""),
     extra_maint_until: str = Form(""),
+    snmp_poll: str = Form(""),
     parent_asset_id: str = Form(""),
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
@@ -1177,7 +1178,10 @@ def asset_create(
         support_lead_days=extra_support_lead_days,
         maint_from=extra_maint_from,
         maint_until=extra_maint_until,
+        snmp_poll=snmp_poll,
     )
+    if posted_extras is None and str(snmp_poll or "").strip():
+        posted_extras = extras_from_form("1", snmp_poll=snmp_poll)
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
     posted_off = playrule_off_from_form(playrule_switches, playrule_ids, playrule_on)
     posted_ladder = _posted_ladder(
@@ -1747,6 +1751,32 @@ def asset_verify_page(
     )
 
 
+@router.post("/assets/snmp-probe")
+def asset_snmp_probe(
+    user: User = Depends(login_required),
+    ip: str = Form(""),
+    snmp_port: str = Form(""),
+    community: str = Form(""),
+):
+    """v2c GET sysDescr against the typed IP. Any device class — not vendor-specific."""
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    from app.asset_probe import probe_snmp
+    from discovery import probe_snmp_udp
+
+    host = (ip or "").strip()
+    port = parse_snmp_port(snmp_port) or DEFAULT_SNMP_PORT
+    comm = "".join(ch for ch in (community or "").strip() if ch not in "\r\n")[:128]
+    if not host:
+        return JSONResponse({"ok": False, "detail": "no IP", "port": port})
+
+    def _prober(target: str, timeout: float, port: int = port) -> bool:
+        return bool(probe_snmp_udp(target, community=comm or None, timeout=timeout, port=port))
+
+    result = probe_snmp(host, timeout=1.5, prober=_prober, port=port)
+    return JSONResponse({"ok": result.ok is True, "detail": result.detail, "port": port})
+
+
 @router.post("/assets/{asset_id}/update")
 def asset_update(
     asset_id: str,
@@ -1803,6 +1833,7 @@ def asset_update(
     extra_support_lead_days: str = Form(""),
     extra_maint_from: str = Form(""),
     extra_maint_until: str = Form(""),
+    snmp_poll: str = Form(""),
     parent_asset_id: str = Form(""),
     playrules_present: str = Form(""),
     playrule_ids: list[str] = Form([]),
@@ -1868,6 +1899,7 @@ def asset_update(
         support_lead_days=extra_support_lead_days,
         maint_from=extra_maint_from,
         maint_until=extra_maint_until,
+        snmp_poll=snmp_poll,
     )
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
     posted_off = playrule_off_from_form(playrule_switches, playrule_ids, playrule_on)

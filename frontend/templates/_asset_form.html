@@ -80,7 +80,15 @@
     <label><span class="label-line">Scrape address</span>
       <input name="scrape_address" value="{{ form.scrape_address }}" placeholder="host:port — e.g. 10.10.10.21:9100" data-scrape-address></label>
     <label><span class="label-line">SNMP port <span class="muted label-hint">UDP</span></span>
-      <input name="snmp_port" type="number" min="1" max="65535" step="1" inputmode="numeric" value="{{ form.snmp_port }}" placeholder="{% if snmp_default %}{{ default_snmp_port }} (default){% else %}off{% endif %}" data-snmp-port data-snmp-default="{{ default_snmp_port }}"></label>
+      <input name="snmp_port" type="number" min="1" max="65535" step="1" inputmode="numeric" value="{{ form.snmp_port }}" placeholder="{% if snmp_default or ex.snmp_poll %}{{ default_snmp_port }} (default){% else %}off{% endif %}" data-snmp-port data-snmp-default="{{ default_snmp_port }}"></label>
+    <div class="snmp-poll-row" data-snmp-poll-row>
+      <input type="checkbox" name="snmp_poll" value="1" id="asset-snmp-poll" data-snmp-poll{% if ex.snmp_poll %} checked{% endif %}>
+      <label for="asset-snmp-poll">Poll SNMP</label>
+    </div>
+    <div class="snmp-probe-row">
+      <button type="button" class="secondary" data-snmp-probe>Probe</button>
+      <span class="muted" data-snmp-probe-out></span>
+    </div>
     <div class="snmp-auth" data-snmp-auth>
     <label><span class="label-line">SNMP version</span>
       <select name="snmp_version" class="nice-select" data-snmp-version>

@@ -3444,6 +3444,15 @@ select.nice-select option { font-weight: 400; color: var(--text); background: va
 .asset-comms .snmp-v3-pair { display: flex; flex-direction: column; gap: 0.55rem; }
 .asset-comms [hidden] { display: none; }
 .asset-comms select { width: 100%; }
+.asset-comms .snmp-poll-row,
+.asset-comms .snmp-probe-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.asset-comms .snmp-poll-row input[type="checkbox"] { width: auto; flex: 0 0 auto; }
+.asset-comms .snmp-poll-row label { display: inline; width: auto; margin: 0; }
+.asset-comms .snmp-probe-row button { width: auto; }
 .asset-ladder .ladder-levels {
   gap: 0;
   align-items: start;

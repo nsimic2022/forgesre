@@ -720,6 +720,7 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
   const ip = form.querySelector("[data-detect-ip]");
   const scrape = form.querySelector("[data-scrape-address]");
   const snmp = form.querySelector("[data-snmp-port]");
+  const poll = form.querySelector("[data-snmp-poll]");
   if (!type) return;
   const lower = () => String(type.value || "").toLowerCase();
   const exporterPort = () => {
@@ -733,17 +734,52 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
     if (t.startsWith("auto") || t.includes("windows") || t.includes("linux") || t.includes("web")) return false;
     return /network|switch|router|firewall|storage|qnap|printer|\bnas\b|\bsan\b/.test(t);
   };
+  const syncSnmpPortHint = () => {
+    if (!snmp) return;
+    const def = snmp.getAttribute("data-snmp-default") || "161";
+    const on = snmpFamily() || (poll && poll.checked);
+    snmp.placeholder = on ? def + " (default)" : "off";
+  };
   type.addEventListener("change", () => {
     const host = ip ? (ip.value || "").trim() : "";
     if (scrape && host && (scrape.value === host + ":9100" || scrape.value === host + ":9182")) {
       const port = exporterPort();
       scrape.value = port ? host + ":" + port : "";
     }
-    if (snmp) {
-      const def = snmp.getAttribute("data-snmp-default") || "161";
-      snmp.placeholder = snmpFamily() ? def + " (default)" : "off";
-    }
+    syncSnmpPortHint();
   });
+  if (poll) poll.addEventListener("change", syncSnmpPortHint);
+  syncSnmpPortHint();
+
+  const probeBtn = form.querySelector("[data-snmp-probe]");
+  const probeOut = form.querySelector("[data-snmp-probe-out]");
+  if (probeBtn) {
+    probeBtn.addEventListener("click", () => {
+      const host = ip ? (ip.value || "").trim() : "";
+      if (!host) {
+        if (probeOut) probeOut.textContent = "Enter an IP first";
+        return;
+      }
+      const data = new FormData();
+      data.set("ip", host);
+      data.set("snmp_port", snmp ? snmp.value : "");
+      const comm = form.querySelector("[data-snmp-community]");
+      if (comm && comm.value) data.set("community", comm.value);
+      probeBtn.disabled = true;
+      if (probeOut) probeOut.textContent = "Probing…";
+      fetch("/assets/snmp-probe", { method: "POST", body: data, credentials: "same-origin", headers: { Accept: "application/json" } })
+        .then((response) => (response.ok ? response.json() : { ok: false, detail: "Probe failed" }))
+        .then((payload) => {
+          if (probeOut) probeOut.textContent = payload.detail || (payload.ok ? "SNMP answered" : "No reply");
+        })
+        .catch(() => {
+          if (probeOut) probeOut.textContent = "Probe failed";
+        })
+        .finally(() => {
+          probeBtn.disabled = false;
+        });
+    });
+  }
 })();
 
 (function bindAssetLadder() {
