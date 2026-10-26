@@ -60,6 +60,19 @@ def active_discovery_scan(db: Session) -> Job | None:
     )
 
 
+def latest_discovery_scan(db: Session) -> Job | None:
+    """Newest discovery probe row (pending, running, done, or error)."""
+    return (
+        db.query(Job)
+        .filter(
+            Job.kind == DISCOVERY_SCAN_KIND,
+            Job.object_id == DISCOVERY_SCAN_OBJECT_ID,
+        )
+        .order_by(Job.id.desc())
+        .first()
+    )
+
+
 def enqueue_discovery_scan(
     db: Session,
     *,
@@ -170,12 +183,14 @@ def run_pending_jobs(db: Session, limit: int = 8) -> int:
                 from app.inventory import run_scan
 
                 # Payload cidrs = confirmed list (already persisted). Empty → no scan.
-                payload = row.payload or {}
+                payload = dict(row.payload or {})
                 cidrs = payload.get("cidrs")
                 if isinstance(cidrs, list):
-                    run_scan(db, cidrs=list(cidrs), merge_auto=False)
+                    result = run_scan(db, cidrs=list(cidrs), merge_auto=False)
                 else:
-                    run_scan(db, merge_auto=False)
+                    result = run_scan(db, merge_auto=False)
+                payload["result"] = result if isinstance(result, dict) else {}
+                row.payload = payload
             elif row.kind == FORGEAI_DIGEST_KIND:
                 from app.services import send_forgeai_digest
 
@@ -222,3 +237,70 @@ def run_pending_jobs(db: Session, limit: int = 8) -> int:
 
 def list_jobs(db: Session, limit: int = 50) -> list[Job]:
     return db.query(Job).order_by(Job.id.desc()).limit(limit).all()
+
+
+def scan_ports_view(job: Job | None, *, zabbix_on: bool = False) -> dict:
+    """Scan-now cubes: same .reach-sq size as Assets Port. Green = Forge can collect."""
+    from discovery import SCAN_CUBE_META, ZABBIX_AGENT_PORT
+
+    status = str(getattr(job, "status", "") or "")
+    payload = getattr(job, "payload", None) if job is not None else None
+    payload = payload if isinstance(payload, dict) else {}
+    result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+    seen: set[int] = set()
+    for raw in result.get("ports") or []:
+        try:
+            seen.add(int(raw))
+        except (TypeError, ValueError):
+            continue
+    live = status in {"pending", "running"}
+    cubes: list[dict] = []
+    sources: list[str] = []
+    for port, label, collect, source in SCAN_CUBE_META:
+        opened = port in seen
+        takes = bool(collect and opened)
+        if port == ZABBIX_AGENT_PORT:
+            takes = takes and zabbix_on
+        if live:
+            tone = "yellow"
+        elif takes:
+            tone = "green"
+            sources.append(source)
+        elif opened:
+            tone = "yellow"
+        else:
+            tone = "grey"
+        cubes.append({"port": port, "label": label, "tone": tone, "title": source, "collect": takes})
+    found = int(result.get("found") or 0) if result else 0
+    skipped = int(result.get("skipped") or 0) if result else 0
+    if not status:
+        line = "No scan yet. Type a CIDR and Scan now."
+    elif live:
+        line = f"Scan {status} — probing. This cube updates; refresh if it sticks."
+    elif status == "error":
+        err = str(getattr(job, "error", "") or "error")
+        line = f"Scan failed: {err[:160]}"
+    elif sources:
+        line = "Collecting from " + " · ".join(sources)
+        bits = []
+        if found:
+            bits.append(f"{found} new")
+        if skipped:
+            bits.append(f"{skipped} already in Assets")
+        if bits:
+            line = f"{line} ({', '.join(bits)})"
+    elif skipped and not found:
+        line = "Already in Assets — no new host. Grey cubes were not seen on this scan."
+    elif found:
+        line = "Done — host found, no metric source (9100 / 9182 / SNMP / Zabbix)."
+    else:
+        line = "Done — nothing answered 22 / 80 / 443 / 9100 / 9182 / SNMP / Zabbix."
+    return {
+        "status": status or "idle",
+        "live": live,
+        "line": line,
+        "cubes": cubes,
+        "sources": sources,
+        "found": found,
+        "skipped": skipped,
+    }

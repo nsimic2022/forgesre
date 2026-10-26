@@ -362,7 +362,7 @@ def run_scan(
     Empty cidrs = no scan (does not silently scan all VLANs). ``merge_auto`` is
     ignored (kept for call-site compatibility with the job worker).
     """
-    from discovery import normalize_cidrs, probe_host, scan_plan
+    from discovery import SCAN_PORT_ORDER, ZABBIX_AGENT_PORT, normalize_cidrs, probe_host, scan_plan
 
     _ = (merge_auto, ip_output)
     yaml_side = list(cidrs) if cidrs is not None else list(settings.discovery_cidrs)
@@ -402,11 +402,12 @@ def run_scan(
             "skipped_reason": "empty_cidrs",
             "hosts_planned": 0,
             "truncated": False,
+            "ports": [],
         }
     found = 0
     known_ips = {item.ip for item in db.query(Asset).all() if item.ip}
-    pending = [ip for ip in hosts if ip not in known_ips]
-    skipped = len(hosts) - len(pending)
+    skipped = sum(1 for ip in hosts if ip in known_ips)
+    ports_seen: set[int] = set()
 
     def _probe(ip: str) -> dict | None:
         try:
@@ -415,10 +416,24 @@ def run_scan(
             log.exception("discovery probe_host failed ip=%s", ip)
             return None
 
-    workers = max(1, min(DISCOVERY_PROBE_WORKERS, len(pending)))
+    def _note(result: dict | None) -> None:
+        if not result:
+            return
+        for port in result.get("open_ports") or []:
+            try:
+                ports_seen.add(int(port))
+            except (TypeError, ValueError):
+                continue
+        if result.get("snmp_ok"):
+            ports_seen.add(161)
+
+    workers = max(1, min(DISCOVERY_PROBE_WORKERS, len(hosts) or 1))
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="discovery-probe") as pool:
-        results = list(pool.map(_probe, pending))
-    for ip, result in zip(pending, results):
+        results = list(pool.map(_probe, hosts))
+    for ip, result in zip(hosts, results):
+        _note(result)
+        if ip in known_ips:
+            continue
         if not result or not result["alive"]:
             continue
         kind = str(result.get("exporter_kind") or "")
@@ -432,6 +447,18 @@ def run_scan(
             windows_exporter=kind == "windows",
         )
         found += 1
+    known_hit = [ip for ip in hosts if ip in known_ips]
+    if known_hit:
+        for asset in db.query(Asset).filter(Asset.ip.in_(known_hit)).all():
+            scrape = str(asset.scrape_address or "")
+            if scrape.endswith(":9100"):
+                ports_seen.add(9100)
+            if scrape.endswith(":9182"):
+                ports_seen.add(9182)
+            if snmp_port_for(asset) > 0:
+                ports_seen.add(161)
+            if asset_in_zabbix(asset):
+                ports_seen.add(ZABBIX_AGENT_PORT)
     if settings.discovery_mode == "automatic":
         for row in db.query(DiscoveryCandidate).filter_by(status="new").all():
             approve_candidate(db, row, actor="system-automatic")
@@ -458,6 +485,7 @@ def run_scan(
         "warnings": warnings,
         "hosts_planned": int(resolved.get("host_count") or len(hosts)),
         "truncated": bool(resolved.get("truncated")),
+        "ports": [port for port in SCAN_PORT_ORDER if port in ports_seen],
     }
 
 

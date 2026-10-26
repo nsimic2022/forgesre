@@ -1298,7 +1298,7 @@ def discovery_page(
     imported: str = Query("", alias="import"),
 ):
     from discovery import suggested_management_cidr
-    from app.jobs import active_discovery_scan
+    from app.jobs import active_discovery_scan, latest_discovery_scan, scan_ports_view
 
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
     rows = sorted(
@@ -1390,6 +1390,10 @@ def discovery_page(
         glpi=glpi_discovery_ctx(db),
         demo_candidate_ip=DEMO_CANDIDATE_IP,
         scan_job=active_discovery_scan(db),
+        scan_ports=scan_ports_view(
+            active_discovery_scan(db) or latest_discovery_scan(db),
+            zabbix_on=settings.zabbix_enabled,
+        ),
         pager=pager,
         found_assets={a.asset_id: a for a in inventory if a.asset_id},
         **asset_form_context(db, every=inventory, form_mode=form_mode, selected=None),
@@ -1507,6 +1511,26 @@ def discovery_glpi_page(db: Session = Depends(get_db), user: User = Depends(logi
             "set Type / owner email on Assets."
         )
     return RedirectResponse(f"/discovery?notice={quote(notice)}", status_code=302)
+
+
+@router.get("/discovery/scan-ports", response_class=HTMLResponse)
+def discovery_scan_ports_fragment(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("write_assets")),
+):
+    """HTMX poll for Scan now cubes. Same reach-sq size as Assets Port."""
+    from app.jobs import active_discovery_scan, latest_discovery_scan, scan_ports_view
+
+    return render(
+        request,
+        "_discovery_scan_ports.html",
+        user,
+        scan_ports=scan_ports_view(
+            active_discovery_scan(db) or latest_discovery_scan(db),
+            zabbix_on=settings.zabbix_enabled,
+        ),
+    )
 
 
 @router.post("/discovery/scan")
