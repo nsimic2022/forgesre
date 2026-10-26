@@ -327,4 +327,4 @@ def test_host_module_and_job_are_bundled():
     assert "forgesre-snmp-host" in detail
     assert "if_mib + host" in detail
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-54" in base and "app.js?v=v09-L" in base
+    assert "app.css?v=v09-55" in base and "app.js?v=v09-M" in base

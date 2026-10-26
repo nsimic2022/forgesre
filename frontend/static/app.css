@@ -1462,6 +1462,14 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
   padding: 0.32rem 0.7rem;
   font-size: 0.82rem;
 }
+.scan-ports { margin: 0; }
+.scan-port-line { margin: 0 0 0.35rem; }
+.scan-port-cubes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.28rem;
+}
 .found-table .col-host .row-actions {
   margin-top: 0.35rem;
   flex-wrap: wrap;

@@ -38,14 +38,14 @@ def test_vendor_htmx_and_alpine_are_offline():
 
 
 def test_cache_bust_and_boost_chrome():
-    assert "app.css?v=v09-54" in BASE
-    assert "app.js?v=v09-L" in BASE
+    assert "app.css?v=v09-55" in BASE
+    assert "app.js?v=v09-M" in BASE
     assert 'hx-boost="true"' in BASE
     assert 'hx-indicator="#hx-progress"' in BASE
     assert 'id="hx-progress"' in BASE
     assert 'hx-boost="false"' in BASE
     assert "/static/vendor/htmx.min.js" in BASE.split("<head>", 1)[1].split("</head>", 1)[0]
-    assert "/static/app.js?v=v09-L" in BASE.split("<head>", 1)[1].split("</head>", 1)[0]
+    assert "/static/app.js?v=v09-M" in BASE.split("<head>", 1)[1].split("</head>", 1)[0]
 
 
 def test_downloads_and_multipart_are_not_boosted():

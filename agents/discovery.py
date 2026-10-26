@@ -17,6 +17,18 @@ WINDOWS_PORTS = {9182}
 WEB_PORTS = {80, 443}
 SNMP_PORTS = {161}
 DEFAULT_PORTS = (22, 80, 443, 161, 9100, 9182)
+ZABBIX_AGENT_PORT = 10050
+# Scan-now cubes, same order as the Discovery card. 161 = SNMP, 10050 = Zabbix agent.
+SCAN_PORT_ORDER = (22, 80, 443, 9100, 9182, 161, ZABBIX_AGENT_PORT)
+SCAN_CUBE_META: tuple[tuple[int, str, bool, str], ...] = (
+    (22, "22", False, "TCP 22"),
+    (80, "80", False, "TCP 80"),
+    (443, "443", False, "TCP 443"),
+    (9100, "9100", True, "node :9100"),
+    (9182, "9182", True, "windows :9182"),
+    (161, "SNMP", True, "SNMP UDP/161"),
+    (ZABBIX_AGENT_PORT, "ZBX", True, "Zabbix :10050"),
+)
 MAX_HOSTS_PER_CIDR = 256
 MAX_HOSTS_TOTAL = 1024
 
@@ -456,10 +468,12 @@ def probe_host(
     snmp_ok = probe_snmp_udp(ip, timeout=max(timeout, 0.4))
     if snmp_ok:
         open_ports.append(161)
+    if ZABBIX_AGENT_PORT not in ports and _open_tcp(ip, ZABBIX_AGENT_PORT, timeout):
+        open_ports.append(ZABBIX_AGENT_PORT)
     alive = bool(open_ports) or snmp_ok
     exporter_kind = ""
     detect_message = ""
-    tcp_ports = [p for p in open_ports if p != 161]
+    tcp_ports = [p for p in open_ports if p not in {161, ZABBIX_AGENT_PORT}]
     if alive and tcp_ports:
         try:
             from app.exporter_detect import detect_exporter

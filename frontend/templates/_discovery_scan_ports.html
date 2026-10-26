@@ -1,0 +1,8 @@
+<div id="scan-ports" class="scan-ports"{% if scan_ports.live %} hx-get="/discovery/scan-ports" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <p class="muted scan-port-line">{{ scan_ports.line }}</p>
+  <div class="scan-port-cubes" role="status" aria-label="Scan ports">
+    {% for cube in scan_ports.cubes %}
+    <span class="reach-sq {{ cube.tone }}" title="{{ cube.title }}{% if cube.collect %} — collecting{% endif %}">{{ cube.label }}</span>
+    {% endfor %}
+  </div>
+</div>

@@ -42,12 +42,14 @@
       <input type="hidden" name="confirm" value="1">
       <button type="submit">Scan now</button>
 </div>
+    {% include "_discovery_scan_ports.html" %}
 </form>
 </section>
 {% else %}
 <section class="card">
   <h2>Scan now</h2>
   <p class="muted">Analyst / engineer / admin required.</p>
+  {% include "_discovery_scan_ports.html" %}
 </section>
 {% endif %}
 
