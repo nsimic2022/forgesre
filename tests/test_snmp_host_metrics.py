@@ -198,6 +198,8 @@ def test_collecting_cube_on_form_and_saves_families():
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "syncCollecting" in js
     assert "SNMP metrics" in js and "Prometheus metrics" in js
+    assert "portNum > 0" in js
+    assert "scrapeOn ? \"Prometheus metrics\"" in js or "scrapeOn ? 'Prometheus metrics'" in js
     ip = _ip()
     posted = _post(
         client,
@@ -222,13 +224,17 @@ def test_collecting_cube_on_form_and_saves_families():
     assert "shm-form-lnx" in host
     edit = client.get("/assets?edit=shm-form-lnx").text
     collect = edit.split("data-asset-collecting", 1)[1].split("</section>", 1)[0]
-    assert "SNMP metrics" in collect
+    assert "Prometheus metrics" in collect
+    assert 'class="reach-sq green" data-metric-source="snmp"' in collect
     assert "node :9100" not in collect
     assert 'name="snmp_metric_cpu"' in collect and "checked" in collect.split('name="snmp_metric_cpu"', 1)[1][:80]
     db.close()
 
 
-def test_graphs_label_snmp_not_node_when_poll_is_on():
+def test_graphs_use_prometheus_when_scrape_exists_even_if_snmp_poll_is_on():
+    from app.asset_metrics import safe_asset_metric_panel
+    from app.snmp_families import metric_family_heading, metric_source_cubes
+
     linux_http = {
         "asset_id": "shm-http-graph",
         "type": "Linux Server",
@@ -248,22 +254,61 @@ def test_graphs_label_snmp_not_node_when_poll_is_on():
     http_panel = asset_metric_panel(linux_http, query_fn=query, range_fn=lambda expr: {"values": []})
     poll_panel = asset_metric_panel(linux_poll, query_fn=query, range_fn=lambda expr: {"values": []})
     http_cpu = next(tile for tile in http_panel["tiles"] if tile["key"] == "cpu_percent")
-    poll_by = {tile["key"]: tile for tile in poll_panel["tiles"]}
+    poll_cpu = next(tile for tile in poll_panel["tiles"] if tile["key"] == "cpu_percent")
     assert http_cpu["source"] == "node :9100"
     assert "node_cpu_seconds_total" in http_cpu["query"]
     assert "forgesre-snmp-host" not in http_cpu["query"]
-    assert set(poll_by) >= {"cpu_percent", "load", "memory_percent", "swap_percent", "disk_percent", "proc", "network"}
-    assert poll_by["cpu_percent"]["source"] == "SNMP UDP/161"
-    assert "forgesre-snmp-host" in poll_by["cpu_percent"]["query"]
-    assert "hrProcessorLoad" in poll_by["cpu_percent"]["query"]
+    assert {tile["key"] for tile in poll_panel["tiles"]} == {
+        "cpu_percent",
+        "memory_percent",
+        "disk_percent",
+        "network",
+    }
+    assert poll_cpu["source"] == "node :9100"
+    assert "node_cpu_seconds_total" in poll_cpu["query"]
+    assert "forgesre-snmp-host" not in poll_cpu["query"]
     assert poll_panel["sources"]["http"] == "node :9100"
     assert poll_panel["sources"]["snmp"].startswith("SNMP UDP/161")
+    assert metric_family_heading(linux_poll) == "Prometheus metrics"
+    assert {row["key"]: row["on"] for row in metric_source_cubes(linux_poll)} == {
+        "prometheus": True,
+        "zabbix": False,
+        "snmp": True,
+        "glpi": False,
+    }
     packed = promql_queries_for(linux_poll)
-    assert "forgesre-snmp-host" in packed["cpu_percent"][0]
-    assert "ifHCInOctets" in packed["net_rx"][0]
+    assert "node_cpu_seconds_total" in packed["cpu_percent"][0]
+    snmp_only = {**linux_poll, "scrape_address": ""}
+    assert "forgesre-snmp-host" in promql_queries_for(snmp_only)["cpu_percent"][0]
+    assert metric_family_heading(snmp_only) == "SNMP metrics"
     switch = promql_queries_for({"asset_id": "shm-sw-q", "type": "Switch", "ip": "10.8.8.1"})
     assert "cpu_percent" not in switch
     assert "ifHCInOctets" in switch["net_rx"][0]
+
+    win = {
+        "asset_id": "shm-win-graph",
+        "hostname": "shm-win-graph",
+        "type": "Windows Server",
+        "ip": "10.8.8.7",
+        "scrape_address": "10.8.8.7:9182",
+        "monitoring_profile": "windows-standard",
+        "snmp_port": 161,
+    }
+    win_packed = promql_queries_for(win)
+    assert "windows_cpu_time_total" in win_packed["cpu_percent"][0]
+    assert "forgesre-snmp-host" not in win_packed["cpu_percent"][0]
+    assert metric_family_heading(win) == "Prometheus metrics"
+    assert {row["key"]: row["on"] for row in metric_source_cubes(win)}["snmp"] is True
+
+    def empty_http(expr: str) -> dict:
+        if "hrProcessorLoad" in expr or "ifHC" in expr or 'job="forgesre-snmp"' in expr:
+            return {"value": 7.0, "query": expr}
+        return {"value": None, "query": expr}
+
+    fallback = safe_asset_metric_panel(linux_poll, query_fn=empty_http, range_fn=lambda expr: {"values": []})
+    fb_cpu = next(tile for tile in fallback["tiles"] if tile["key"] == "cpu_percent")
+    assert fb_cpu["value"] == 7.0
+    assert "hrProcessorLoad" in fb_cpu["query"]
 
 
 def test_linux_poll_verify_passes_on_snmp_when_9100_is_down():
@@ -336,4 +381,4 @@ def test_host_module_and_job_are_bundled():
     assert "forgesre-snmp-host" in detail
     assert "if_mib + host" in detail
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-58" in base and "app.js?v=v09-O" in base
+    assert "app.css?v=v09-58" in base and "app.js?v=v09-P" in base

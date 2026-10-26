@@ -104,12 +104,36 @@ def families_from_form(present: str, **flags: str) -> str | None:
     return ",".join(picked)
 
 
+def http_exporter_on(asset: Any) -> bool:
+    """True when this asset has a node / windows scrape address — graphs use that, not SNMP."""
+    if isinstance(asset, dict):
+        scrape = str(asset.get("scrape_address") or "").strip()
+        kind = str(asset.get("type") or "")
+    else:
+        scrape = str(getattr(asset, "scrape_address", "") or "").strip()
+        kind = str(getattr(asset, "type", "") or "")
+    if not scrape:
+        return False
+    blob = kind.lower()
+    lower = scrape.lower()
+    return (
+        blob.startswith("auto")
+        or "linux" in blob
+        or "windows" in blob
+        or "win32" in blob
+        or lower.endswith(":9100")
+        or lower.endswith(":9182")
+    )
+
+
 def metrics_on(asset: Any) -> frozenset[str]:
-    """Families drawn as graphs. Stored pick wins; else SNMP defaults or Prometheus CPU/RAM/Disk/NET."""
+    """Families drawn as graphs. Stored pick wins; HTTP scrape uses Prometheus CPU/RAM/Disk/NET."""
     extras = _extras(asset)
     stored = parse_snmp_metrics(extras.get(SNMP_METRICS_KEY) if SNMP_METRICS_KEY in extras else None)
     if stored is not None:
         return frozenset(stored)
+    if http_exporter_on(asset):
+        return PROMETHEUS_FAMILIES
     if snmp_port_for(asset) > 0:
         return snmp_metrics_on(asset)
     scrape = (
@@ -182,20 +206,17 @@ def metric_source_cubes(asset: Any) -> list[dict[str, Any]]:
 
 def metric_family_heading(asset: Any) -> str:
     extras = _extras(asset)
+    if http_exporter_on(asset):
+        return "Prometheus metrics"
     if snmp_port_for(asset) > 0 or snmp_poll_on(extras):
         return "SNMP metrics"
-    scrape = (
-        str(asset.get("scrape_address") or "").strip()
-        if isinstance(asset, dict)
-        else str(getattr(asset, "scrape_address", "") or "").strip()
-    )
     kind = (
         str(asset.get("type") or "")
         if isinstance(asset, dict)
         else str(getattr(asset, "type", "") or "")
     )
     blob = kind.lower()
-    if scrape or blob.startswith("auto") or "linux" in blob or "windows" in blob:
+    if blob.startswith("auto") or "linux" in blob or "windows" in blob:
         return "Prometheus metrics"
     return "Metrics"
 

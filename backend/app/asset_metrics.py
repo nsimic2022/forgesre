@@ -665,6 +665,7 @@ def asset_metric_panel(
     range_start: float | None = None,
     range_end: float | None = None,
     marker: float | None = None,
+    force_snmp: bool = False,
 ) -> dict[str, Any]:
     """JSON for GET /api/v1/assets/{id}/metrics and the detail-page first paint."""
     from app.asset_alarms import normalize_alarms, tile_enabled, tile_threshold
@@ -708,8 +709,9 @@ def asset_metric_panel(
     times: dict[str, list[float]] = {}
     prom_error = ""
     prom_down = False
-    selectors = promql_selectors_for(info)
-    snmp = snmp_port_for(info) > 0 or klass == "network"
+    selectors = promql_selectors_for(info, force_snmp=force_snmp)
+    scrape_on = bool(info.get("scrape_address"))
+    snmp = force_snmp or ((snmp_port_for(info) > 0 or klass == "network") and not scrape_on)
 
     winning, up_value, up_error, up_expr = _query_up(selectors, fetch, snmp=snmp)
     queries["up"] = up_expr
@@ -726,6 +728,7 @@ def asset_metric_panel(
             info,
             selector=winning or None,
             include_fallbacks=not winning,
+            force_snmp=force_snmp,
         )
         packed["up"] = (up_expr, "")
 
@@ -851,7 +854,7 @@ def asset_metric_panel(
                 times=times.get(key),
                 query=queries.get(key) or "",
                 enabled=tile_enabled(alarms, key) if key != "network" else True,
-                source=tile_source_label(info, bool(snmp_fams) and key in {FAMILY_TILE[fam] for fam in snmp_fams}),
+                source=tile_source_label(info, snmp and bool(snmp_fams) and key in {FAMILY_TILE[fam] for fam in snmp_fams}),
                 **extra,
             )
         )
@@ -1028,7 +1031,7 @@ def metric_panel_with_zabbix(asset: Any, panel: dict[str, Any], **kwargs: Any) -
 
 def safe_asset_metric_panel(asset: Any, **kwargs: Any) -> dict[str, Any]:
     try:
-        return asset_metric_panel(asset, **kwargs)
+        panel = asset_metric_panel(asset, **kwargs)
     except Exception as exc:
         info = _asset_dict(asset)
         demo = is_lab_inventory_row(asset)
@@ -1046,3 +1049,15 @@ def safe_asset_metric_panel(asset: Any, **kwargs: Any) -> dict[str, Any]:
                 for key in _CLASS_TILES["unknown"]
             ],
         }
+    if kwargs.get("force_snmp"):
+        return panel
+    from app.asset_types import snmp_port_for
+    from app.snmp_families import http_exporter_on
+
+    if http_exporter_on(asset) and snmp_port_for(asset) > 0 and not prometheus_has_samples(panel):
+        try:
+            retry = {key: value for key, value in kwargs.items() if key != "force_snmp"}
+            return asset_metric_panel(asset, force_snmp=True, **retry)
+        except Exception:
+            return panel
+    return panel
