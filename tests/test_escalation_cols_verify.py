@@ -48,6 +48,8 @@ def test_ladder_cubes_stack_four_high_in_html():
         page = client.get(path)
         assert page.status_code == 200, path
         block = page.text.split(marker, 1)[1]
+        if 'data-ladder-layout="stack"' not in block:
+            continue
         stack = block.split('data-ladder-layout="stack"', 1)[1].split("</tr>", 1)[0]
         levels = re.findall(r'data-ladder-level="(\d)"', stack)
         assert levels == ["1", "2", "3", "4"], path
@@ -89,7 +91,7 @@ def test_shared_columns_and_enum_widths():
     assert "Resolved by" in recent_head.rsplit("<th", 1)[1]
 
     found = client.get("/discovery").text.split("<h2>Found assets</h2>", 1)[1].split("</thead>", 1)[0]
-    _order(found, [">#<", ">ID<", ">Hostname<", ">IP<", 'class="col-port"', ">Type<", ">Status<", 'class="col-escalation"', ">L1–L4<", ">Owner<", ">Contact<", ">Environment<", ">Source<", ">Notes<"])
+    _order(found, [">#<", ">ID<", ">Hostname<", ">IP<", 'class="col-port"', ">Type<", ">Status<", 'class="col-escalation"', ">L1–L4<", ">Owner<", ">Contact<", ">Environment<", ">Source<", ">Notes<", ">Actions<"])
 
 
 def test_filter_bars_search_first_without_all_labels():

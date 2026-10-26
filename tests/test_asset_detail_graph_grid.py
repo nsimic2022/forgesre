@@ -40,8 +40,7 @@ def test_layout_is_a_quarter_fact_column_and_a_chart_grid():
     assert "minmax(0, 25%)" in rule and "minmax(0, 1fr)" in rule
     assert "repeat(5, minmax(0, 1fr))" in css
     assert "data-asset-graph-grid" in html
-    for key in ("cpu_percent", "memory_percent", "disk_percent", "network"):
-        assert f"host_chart('{key}'" in html
+    assert "host_chart(tile.key" in html
     assert "host_chart('up'" not in html
     assert "Not scraped." in html
     assert "No samples yet" not in html
@@ -49,7 +48,7 @@ def test_layout_is_a_quarter_fact_column_and_a_chart_grid():
     assert "request rate" not in html.lower() and "5xx" not in html.lower()
     assert "Math.sin" not in js
     assert 'data.collecting === false ? "Not scraped." : "No samples yet."' in js
-    assert "app.css?v=v09-56" in base and "app.js?v=v09-N" in base
+    assert "app.css?v=v09-57" in base and "app.js?v=v09-O" in base
     asset_js = js.split("(function bindAssetGraphs() {", 1)[1].split("\n})();", 1)[0]
     assert "?incident=" not in asset_js
     incident = (ROOT / "frontend" / "templates" / "incident_detail.html").read_text(encoding="utf-8")

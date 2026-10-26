@@ -103,19 +103,12 @@
       <span class="muted">Admin only.</span>
     {% endif %}
 </div>
-  <p class="muted zabbix-meta">
-    {% if zabbix.enabled %}
-    URL: <code>{{ zabbix.url }}</code>
-    · {% if zabbix.auto_sync %}auto every 6 h{% else %}manual (<code>inventory.zabbix.auto_sync: false</code>){% endif %}
-    · webhook {{ "on" if zabbix.webhook_on else "off" }}
-    {% else %}
-    {{ zabbix.why }}
-    {% endif %}
-</p>
+  {% if zabbix.light != 'green' and zabbix.why %}
+  <p class="muted zabbix-meta">{{ zabbix.why }}</p>
+  {% endif %}
   <p class="token-line">
     <span class="token-btn {{ 'is-yes' if zabbix.token_present == 'yes' else 'is-no' }}" role="status">API token {{ zabbix.token_present|upper }}</span>
   </p>
-  {% if zabbix.enabled and zabbix.why %}<p class="muted">{{ zabbix.why }}</p>{% endif %}
   {% if zabbix.last_error %}
   <p class="zabbix-last-error" data-zabbix-last-error>Last error: {{ zabbix.last_error }}</p>
   {% elif zabbix.last_ok %}
@@ -142,18 +135,12 @@
       <span class="muted">Admin only.</span>
     {% endif %}
 </div>
-  <p class="muted glpi-meta">
-    {% if glpi.enabled %}
-    URL: <code>{{ glpi.url }}</code>
-    · {% if glpi.auto_sync %}auto every 6 h{% else %}manual (<code>inventory.glpi.auto_sync: false</code>){% endif %}
-    {% else %}
-    {{ glpi.why }}
-    {% endif %}
-</p>
+  {% if glpi.light != 'green' and glpi.why %}
+  <p class="muted glpi-meta">{{ glpi.why }}</p>
+  {% endif %}
   <p class="token-line">
     <span class="token-btn {{ 'is-yes' if glpi.token_present == 'yes' else 'is-no' }}" role="status">API token {{ glpi.token_present|upper }}</span>
   </p>
-  {% if glpi.enabled and glpi.why %}<p class="muted">{{ glpi.why }}</p>{% endif %}
   {% if glpi.last_error %}
   <p class="zabbix-last-error" data-glpi-last-error>Last error: {{ glpi.last_error }}</p>
   {% elif glpi.last_ok %}
@@ -175,6 +162,7 @@
   <thead>
     <tr>
       {% include "_inventory_head.html" %}
+      <th class="col-found-actions">Actions</th>
 </tr>
 </thead>
   <tbody>
@@ -193,25 +181,8 @@
         {% else %}
         {{ (found.hostname if found else row.hostname) or "—" }}
         {% endif %}
-        {% if already %}<div><span class="pill warn">already in assets</span></div>{% endif %}
         {% if row.source == 'demo' or row.ip == demo_candidate_ip %}
         <div><span class="pill demo">DEMO</span> <span class="muted">lab seed — not a Scan now production hit</span></div>
-        {% endif %}
-        {% if can('write_assets') %}
-        <div class="row-actions">
-        {% if already %}
-        <a class="button" href="/discovery?asset={{ found.asset_id }}{{ import_tail }}">Edit</a>
-        {% else %}
-        <a class="button" href="/discovery?import={{ row.id }}{{ import_tail }}">Import</a>
-        <a class="button" href="/discovery?clone={{ row.id }}{{ pager_keep(pager) }}">Clone</a>
-        {% if row.status == 'new' %}
-        <form method="post" action="/discovery/{{ row.id }}/ignore" hx-boost="false"><button type="submit" class="secondary">Ignore</button></form>
-        {% endif %}
-        {% endif %}
-        <form method="post" action="/discovery/{{ row.id }}/delete" onsubmit="return confirm('Remove candidate {{ row.ip }}? This does not remove an approved asset.');" hx-boost="false">
-          <button type="submit" class="danger">Remove</button>
-</form>
-</div>
         {% endif %}
 </td>
       <td class="col-ip" title="Approve uses the hostname slug as the asset ID when it is free">{{ (found.ip if found else row.ip) or "—" }}</td>
@@ -243,9 +214,31 @@
       <td class="col-enum"><span class="enum-clip" title="{{ found.environment if found else '' }}">{% if found %}{{ found.environment }}{% else %}—{% endif %}</span></td>
       <td class="col-enum"><span class="enum-clip" title="{{ row.source }}">{{ row.source }}</span></td>
       <td class="col-asset-notes">{% if found %}{% set runbook = asset_extra(found, "runbook_note") %}{% if runbook %}{{ runbook }}{% else %}—{% endif %}{% else %}—{% endif %}</td>
+      <td class="col-found-actions">
+        <div class="found-action-cubes">
+          <span class="reach-sq already {{ 'green' if already else 'grey' }}" title="Already in assets">Already in assets</span>
+          {% if can('write_assets') and already %}
+          <a class="reach-sq green" href="/discovery?asset={{ found.asset_id }}{{ import_tail }}">Edit</a>
+          <span class="reach-sq grey" title="Already in assets">Import</span>
+          {% elif can('write_assets') %}
+          <span class="reach-sq grey">Edit</span>
+          <a class="reach-sq green" href="/discovery?import={{ row.id }}{{ import_tail }}">Import</a>
+          {% else %}
+          <span class="reach-sq grey">Edit</span>
+          <span class="reach-sq grey">Import</span>
+          {% endif %}
+          {% if can('write_assets') %}
+          <form method="post" action="/discovery/{{ row.id }}/delete" onsubmit="return confirm('Remove candidate {{ row.ip }}? This does not remove an approved asset.');" hx-boost="false">
+            <button type="submit" class="reach-sq red">Remove</button>
+          </form>
+          {% else %}
+          <span class="reach-sq grey">Remove</span>
+          {% endif %}
+        </div>
+      </td>
 </tr>
   {% else %}
-    <tr><td colspan="14" class="muted">No found assets yet. Type a CIDR and Scan now, or use the demo workflow.</td></tr>
+    <tr><td colspan="15" class="muted">No found assets yet. Type a CIDR and Scan now, or use the demo workflow.</td></tr>
   {% endfor %}
 </tbody>
 </table>

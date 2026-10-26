@@ -16,10 +16,6 @@
   <div class="asset-form-col asset-form-left">
   <section class="card asset-form-block asset-form-cube" data-asset-identity>
   <h2 class="asset-form-block-head">Identity</h2>
-  <p class="asset-online" data-asset-online hidden>
-    <span class="pill warn" data-asset-online-pill>Unknown</span>
-    <span class="muted" data-asset-online-line></span>
-  </p>
   <div class="form-grid asset-form-grid">
   {% if form_mode == "edit" %}
   <label class="identity-lg"><span class="label-line">Asset ID</span>
@@ -143,18 +139,18 @@
     <input type="hidden" name="snmp_metrics_present" value="1">
     <h2 class="asset-form-block-head">Metrics</h2>
     {% set collect_target = selected if form_mode == 'edit' and selected else form %}
-    <p class="collect-source" data-collect-http>{{ http_source_label(collect_target) }}</p>
-    <p class="collect-source" data-collect-snmp>{{ snmp_source_label(collect_target) }}</p>
-    <p class="muted collect-note">Graphs use the SNMP families checked below. node :9100 / windows :9182 only when SNMP is off.</p>
-    <div class="alarm-families collect-families" data-snmp-families>
-    {% set fams = snmp_metrics_on(collect_target) %}
-    {% set snmp_on = snmp_port_for(collect_target) > 0 or ex.snmp_poll or snmp_default %}
-    <div class="alarm-row collect-net">NET — interfaces <span class="muted">{% if snmp_on %}SNMP on{% else %}SNMP off{% endif %}</span></div>
+    <div class="metric-source-cubes" data-metric-sources>
+      {% for src in metric_source_cubes(collect_target) %}
+      <span class="reach-sq {{ 'green' if src.on else 'grey' }}" data-metric-source="{{ src.key }}" title="{{ src.label }}">{{ src.label }}</span>
+      {% endfor %}
+    </div>
+    <p class="metric-family-head" data-metric-family-head>{{ metric_family_heading(collect_target) }}</p>
+    <div class="metric-family-cubes collect-families" data-snmp-families>
+    {% set fams = metrics_on_form(collect_target, form_mode) %}
     {% for key, label in snmp_family_choices %}
-    <div class="alarm-row">
-      <button type="button" class="onoff {{ 'is-on' if not fams or key in fams else 'is-off' }}" data-onoff aria-pressed="{{ 'true' if not fams or key in fams else 'false' }}">{% if not fams or key in fams %}ON{% else %}OFF{% endif %}</button>
-      <input type="checkbox" class="onoff-check" name="snmp_metric_{{ key }}" value="1" data-snmp-metric="{{ key }}" {% if not fams or key in fams %}checked{% endif %} tabindex="-1">
-      {{ label }}
+    <div class="alarm-row metric-fam">
+      <button type="button" class="reach-sq {{ 'green' if key in fams else 'grey' }}" data-onoff data-keep-label data-metric-cube aria-pressed="{{ 'true' if key in fams else 'false' }}">{{ label }}</button>
+      <input type="checkbox" class="onoff-check" name="snmp_metric_{{ key }}" value="1" data-snmp-metric="{{ key }}" {% if key in fams %}checked{% endif %} tabindex="-1">
     </div>
     {% endfor %}
     </div>

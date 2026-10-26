@@ -247,15 +247,12 @@
 <aside class="asset-detail-side asset-detail-metrics asset-detail-graphs asset-detail-col-2-3" data-asset-metrics="{{ asset.asset_id }}" data-asset-graphs data-asset-graph-grid data-asset="{{ asset.asset_id }}" data-host="{{ asset.hostname }}">
   <div class="muted dash-graph-caption asset-chart-caption" data-dash-graph-caption><span class="label-line">Last 24 hours</span></div>
   <div class="muted dash-graph-empty" data-dash-graph-empty hidden></div>
-  <div class="asset-chart-grid{% if metrics.class in ['network', 'unknown'] %} is-sparse{% endif %}" data-dash-graph-list>
-    {% if metrics.class in ['network', 'unknown'] %}
-      {{ host_chart('network', 'NET', metrics.tiles) }}
-    {% else %}
-      {{ host_chart('cpu_percent', 'CPU', metrics.tiles) }}
-      {{ host_chart('memory_percent', 'RAM', metrics.tiles) }}
-      {{ host_chart('disk_percent', 'HDD', metrics.tiles) }}
-      {{ host_chart('network', 'NET', metrics.tiles) }}
-    {% endif %}
+  <div class="asset-chart-grid{% if (metrics.tiles|length) < 3 %} is-sparse{% endif %}" data-dash-graph-list>
+    {% for tile in metrics.tiles %}
+      {% if tile.key != 'up' %}
+      {{ host_chart(tile.key, tile.name or tile.key, metrics.tiles) }}
+      {% endif %}
+    {% endfor %}
 </div>
   <section class="capacity-panel" data-capacity data-capacity-window="{{ capacity.window_seconds }}">
     <h2>30-day capacity</h2>

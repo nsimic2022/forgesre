@@ -775,28 +775,25 @@ if (alertRulesData && alertNameInput && rulePreviewBody) {
   if (poll) poll.addEventListener("change", syncSnmpPortHint);
   syncSnmpPortHint();
 
-  const httpLine = form.querySelector("[data-collect-http]");
-  const snmpLine = form.querySelector("[data-collect-snmp]");
   const familyBox = form.querySelector("[data-snmp-families]");
+  const familyHead = form.querySelector("[data-metric-family-head]");
+  const setSource = (key, on) => {
+    const cube = form.querySelector("[data-metric-source=\"" + key + "\"]");
+    if (!cube) return;
+    cube.classList.toggle("green", on);
+    cube.classList.toggle("grey", !on);
+  };
   const syncCollecting = () => {
-    const host = ip ? (ip.value || "").trim() : "";
     const t = lower();
-    let http = "HTTP off";
-    if (scrape && scrape.value) {
-      const s = scrape.value.toLowerCase();
-      if (s.endsWith(":9100")) http = "node :9100";
-      else if (s.endsWith(":9182")) http = "windows :9182";
-      else http = "HTTP " + scrape.value;
-    } else if (t.includes("linux")) http = "node :9100 (default scrape, not SNMP)";
-    else if (t.includes("windows")) http = "windows :9182 (default scrape, not SNMP)";
-    if (httpLine) httpLine.textContent = http;
+    const scrapeOn = !!(scrape && scrape.value);
     const portVal = snmp && snmp.value ? snmp.value : "";
-    const on = snmpFamily() || (poll && poll.checked) || !!portVal;
-    const port = portVal || "161";
-    const hostOn = familyBox && familyBox.querySelectorAll("[data-snmp-metric]:checked").length > 0;
-    if (snmpLine) snmpLine.textContent = on ? "SNMP UDP/" + port + " · " + (hostOn ? "if_mib + host" : "if_mib") : "SNMP off";
-    const netHint = form.querySelector(".collect-net .muted");
-    if (netHint) netHint.textContent = on ? "SNMP on" : "SNMP off";
+    const snmpOn = snmpFamily() || (poll && poll.checked) || !!portVal;
+    const prom = scrapeOn || (!snmpOn && (t.startsWith("auto") || t.includes("linux") || t.includes("windows")));
+    setSource("prometheus", prom);
+    setSource("snmp", snmpOn);
+    if (familyHead) {
+      familyHead.textContent = snmpOn ? "SNMP metrics" : (prom ? "Prometheus metrics" : "Metrics");
+    }
   };
   ["change", "input"].forEach((evt) => {
     [type, scrape, snmp, poll].forEach((el) => el && el.addEventListener(evt, syncCollecting));
@@ -967,7 +964,11 @@ if (alertRulesData && alertNameInput && rulePreviewBody) {
     const on = !!box.checked;
     button.classList.toggle("is-on", on);
     button.classList.toggle("is-off", !on);
-    button.textContent = on ? "ON" : "OFF";
+    button.classList.toggle("green", on);
+    button.classList.toggle("grey", !on);
+    if (!button.hasAttribute("data-keep-label")) {
+      button.textContent = on ? "ON" : "OFF";
+    }
     button.setAttribute("aria-pressed", on ? "true" : "false");
   };
   document.querySelectorAll(".onoff-check").forEach(sync);
@@ -1728,6 +1729,8 @@ function graphPane(pane) {
       const key = slot.getAttribute("data-chart-slot");
       const tile = byKey[key];
       const panel = typeof slot.closest === "function" ? slot.closest("[data-graph]") : null;
+      if (panel) panel.hidden = !tile;
+      if (!tile) return;
       if (panel && tile) {
         panel.setAttribute("data-tone", tile.tone || "warn");
         const value = typeof panel.querySelector === "function" ? panel.querySelector("[data-chart-value]") : null;

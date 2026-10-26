@@ -123,6 +123,6 @@ def test_markup_has_fill_grid_online_and_no_default_escalation_link():
     assert 'tile.key !== "up"' in js
     assert 'tile.key !== "network"' not in js.split("function graphPane(", 1)[1].split("\n}\n", 1)[0]
     assert ".dash-chart-fill" in css and ".dash-chart-fill.disk-0" in css
-    assert "data-asset-online" in form
+    assert "data-asset-online" not in form
     assert 'href="/escalation">Default escalation</a>' not in form
     assert "ladder-default" not in form
