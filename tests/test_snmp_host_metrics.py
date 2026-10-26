@@ -180,6 +180,9 @@ def test_collecting_cube_on_form_and_saves_families():
     page = client.get("/discovery").text
     cube = page.split("data-asset-collecting", 1)[1].split("</section>", 1)[0]
     assert ">Metrics<" in cube
+    assert ">Source<" in cube
+    assert "metric-source-block" in cube
+    assert cube.index(">Source<") < cube.index("Prometheus")
     assert "Prometheus" in cube and "Zabbix" in cube and "SNMP" in cube and "GLPI" in cube
     assert "node :9100" not in cube
     assert "SNMP on" not in cube and "Graphs use the SNMP" not in cube
@@ -187,6 +190,11 @@ def test_collecting_cube_on_form_and_saves_families():
     for key in ("net", "cpu", "load", "mem", "swap", "disk", "proc"):
         assert f'name="snmp_metric_{key}"' in cube, key
     assert "data-metric-source" in cube and "data-metric-family-head" in cube
+    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
+    block = css.split(".metric-source-block {", 1)[1].split("}", 1)[0]
+    assert "margin: 0 0 0.85rem" in block
+    assert "padding-bottom: 0.75rem" in block
+    assert "border-bottom" in block
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "syncCollecting" in js
     assert "SNMP metrics" in js and "Prometheus metrics" in js
@@ -328,4 +336,4 @@ def test_host_module_and_job_are_bundled():
     assert "forgesre-snmp-host" in detail
     assert "if_mib + host" in detail
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-57" in base and "app.js?v=v09-O" in base
+    assert "app.css?v=v09-58" in base and "app.js?v=v09-O" in base

@@ -139,10 +139,13 @@
     <input type="hidden" name="snmp_metrics_present" value="1">
     <h2 class="asset-form-block-head">Metrics</h2>
     {% set collect_target = selected if form_mode == 'edit' and selected else form %}
-    <div class="metric-source-cubes" data-metric-sources>
-      {% for src in metric_source_cubes(collect_target) %}
-      <span class="reach-sq {{ 'green' if src.on else 'grey' }}" data-metric-source="{{ src.key }}" title="{{ src.label }}">{{ src.label }}</span>
-      {% endfor %}
+    <div class="metric-source-block">
+      <p class="metric-source-head">Source</p>
+      <div class="metric-source-cubes" data-metric-sources>
+        {% for src in metric_source_cubes(collect_target) %}
+        <span class="reach-sq {{ 'green' if src.on else 'grey' }}" data-metric-source="{{ src.key }}" title="{{ src.label }}">{{ src.label }}</span>
+        {% endfor %}
+      </div>
     </div>
     <p class="metric-family-head" data-metric-family-head>{{ metric_family_heading(collect_target) }}</p>
     <div class="metric-family-cubes collect-families" data-snmp-families>

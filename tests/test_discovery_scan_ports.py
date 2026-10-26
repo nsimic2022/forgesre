@@ -48,7 +48,7 @@ def test_scan_cube_labels_match_assets_port_size():
     assert 'class="reach-sq' in frag
     assert "scan-port-cubes" in frag
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-57" in base and "app.js?v=v09-O" in base
+    assert "app.css?v=v09-58" in base and "app.js?v=v09-O" in base
 
 
 def test_scan_ports_view_green_only_for_collect_sources():
