@@ -595,16 +595,40 @@ if (alertRulesData && alertNameInput && rulePreviewBody) {
   });
 }
 
-document.querySelectorAll("[data-asset-id]").forEach((field) => {
-  field.addEventListener("input", () => {
-    const start = field.selectionStart;
-    const end = field.selectionEnd;
-    field.value = (field.value || "").toLowerCase();
+(function bindAssetIdFromHostname() {
+  const idField = document.querySelector("[data-asset-id]");
+  if (!idField) return;
+  const hostField = document.querySelector("[data-asset-hostname]");
+  const slug = (raw) =>
+    String(raw || "")
+      .replace(/[^a-zA-Z0-9-]/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase()
+      .slice(0, 63);
+  let locked = false;
+  const normalizeId = () => {
+    const start = idField.selectionStart;
+    const end = idField.selectionEnd;
+    idField.value = (idField.value || "").toLowerCase();
     if (start != null && end != null) {
-      field.setSelectionRange(start, end);
+      try {
+        idField.setSelectionRange(start, end);
+      } catch (e) {}
     }
+  };
+  idField.addEventListener("input", () => {
+    locked = true;
+    normalizeId();
   });
-});
+  if (!hostField) return;
+  hostField.addEventListener("input", () => {
+    if (locked) return;
+    idField.value = slug(hostField.value);
+  });
+  if (!(idField.value || "").trim() && (hostField.value || "").trim()) {
+    idField.value = slug(hostField.value);
+  }
+})();
 
 (function bindExporterDetect() {
   const ip = document.querySelector("[data-detect-ip]");

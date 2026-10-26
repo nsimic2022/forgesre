@@ -846,7 +846,7 @@ def test_handbook_and_secrets_example_document_zabbix():
         assert needle.lower() in handbook.lower(), needle
     assert "](zabbix.md)" in handbook
     assert "zabbix.md#18-end-to-end-operator-checklist" in handbook
-    assert "Standard alarms" in handbook
+    assert "Asset **Alarms** mute bundled Prometheus alerts" in handbook
     example = (ROOT / "secrets" / "secrets.example.env").read_text(encoding="utf-8")
     assert "# --- Zabbix ---" in example
     for key in ("ZABBIX_URL=", "ZABBIX_API_TOKEN=", "ZABBIX_WEBHOOK_TOKEN="):
@@ -876,7 +876,7 @@ def test_zabbix_guide_webhook_matches_handler():
         "secrets/secrets.env",
         "system.cpu.util",
         "vm.memory.utilization",
-        "Standard alarms",
+        "Alarms vs Zabbix incidents",
         "Acknowledge",
         "query_range",
         "trend.get",

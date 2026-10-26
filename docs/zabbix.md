@@ -32,7 +32,7 @@ Never done this? Follow the numbered [end-to-end checklist](#18-end-to-end-opera
 12. [Optional: automatic host import](#12-optional-automatic-host-import)
 13. [Troubleshooting](#13-troubleshooting)
 14. [Reference: payload and mapping](#14-reference-payload-and-mapping)
-15. [Standard alarms vs Zabbix incidents](#15-standard-alarms-vs-zabbix-incidents)
+15. [Alarms vs Zabbix incidents](#15-alarms-vs-zabbix-incidents)
 16. [Acknowledge, resolve, close — no write-back](#16-acknowledge-resolve-close--no-write-back)
 17. [CLI commands that matter](#17-cli-commands-that-matter)
 18. [End-to-end operator checklist](#18-end-to-end-operator-checklist)
@@ -60,7 +60,7 @@ Never done this? Follow the numbered [end-to-end checklist](#18-end-to-end-opera
 - Health links to `ZABBIX_URL`. Tokens live in `secrets/secrets.env` ([section 4](#4-forgesre-secrets-and-update)). There is no Admin UI field for those secrets. `/admin` is users, backup, and CLI cheat sheet.
 - Incidents open from the **webhook**. The 3-minute `problem.get` poll resolves an incident whose recovery webhook was lost.
 - Prometheus alarms stay exporter → Prometheus → Alertmanager webhook → Core. Zabbix is a **second ingest path** (JSON-RPC read + webhook). Grafana (`:3000`) is extra graphs from System Health.
-- Asset **Standard alarms** mute bundled **Prometheus** alerts ([section 15](#15-standard-alarms-vs-zabbix-incidents)). `./forgesre snmp-auths` is for ForgeSRE's own snmp_exporter.
+- Asset **Alarms** mute bundled **Prometheus** alerts ([section 15](#15-alarms-vs-zabbix-incidents)). `./forgesre snmp-auths` is for ForgeSRE's own snmp_exporter.
 
 If Zabbix is down: each API call gives up after 2–5 s, the **Zabbix** Health cube turns **yellow** (never red), Console gets **one** `zabbix` / `health` line, and ForgeSRE stops calling Zabbix for 2 minutes instead of retrying. Dashboard, incidents, Prometheus alerts, and mail keep working.
 
@@ -650,9 +650,9 @@ The **Alertname** must equal the trigger name exactly as it arrives (expanded ma
 
 Sync matches **Zabbix host ID**, then **IP** (not loopback), then hostname / asset ID. Webhook matches **host_id**, then `host_host` as asset ID / hostname, then `host_ip`. If Zabbix has `10.20.1.15` and the ForgeSRE asset has `10.20.1.16`, you get a second asset on sync (or an incident with **asset unknown**). Fix the IP on one side, remove the duplicate, **Sync hosts** again. Keep `{HOST.ID}` in the media type.
 
-### Standard alarms “muted” but Zabbix incidents still open
+### Alarms “muted” but Zabbix incidents still open
 
-Expected. Standard alarms only overlay bundled Prometheus alertnames. Unchecking CPU does not mute a Zabbix trigger unless that trigger's **name** is exactly `HighCPU` / `NodeCPUHigh` / `WindowsCPUHigh` ([section 15](#15-standard-alarms-vs-zabbix-incidents)).
+Expected. Alarms only overlay bundled Prometheus alertnames. Unchecking CPU does not mute a Zabbix trigger unless that trigger's **name** is exactly `HighCPU` / `NodeCPUHigh` / `WindowsCPUHigh` ([section 15](#15-alarms-vs-zabbix-incidents)).
 
 ---
 
@@ -704,7 +704,7 @@ See also: [operator handbook §18](operator-handbook.md#18-zabbix-read-only-sour
 
 ---
 
-## 15. Standard alarms vs Zabbix incidents
+## 15. Alarms vs Zabbix incidents
 
 ForgeSRE has two alarm paths. Do not mix the mute switches.
 
@@ -713,7 +713,7 @@ ForgeSRE has two alarm paths. Do not mix the mute switches.
 | Origin | Prometheus rules in `monitoring/alerts.yml` (`HighCPU`, `NodeCPUHigh`, `NodeExporterDown`, `WindowsCPUHigh`, `SnmpDeviceUnreachable`, …) → Alertmanager → `POST /api/v1/webhooks/alertmanager` | Zabbix trigger → media type → `POST /api/v1/webhooks/zabbix` |
 | Pill on the incident | **Prometheus** | **Zabbix** |
 | Playrule **Alertname** | Exact Prometheus `alertname` | Exact Zabbix `{TRIGGER.NAME}` (or `{EVENT.NAME}`) |
-| Asset **Standard alarms** (Add/Edit, right column: Collecting / CPU / Memory / Disk enable + %) | **Mute-only overlay.** Unchecking CPU skips opening an incident for `HighCPU` / `NodeCPUHigh` / `WindowsCPUHigh` on that host. It cannot fire earlier than `alerts.yml`. | **Does not mute Zabbix triggers.** A Zabbix “CPU > 90%” problem still opens an incident. |
+| Asset **Alarms** (Add/Edit: Collecting / CPU / Memory / Disk enable + %) | **Mute-only overlay.** Unchecking CPU skips opening an incident for `HighCPU` / `NodeCPUHigh` / `WindowsCPUHigh` on that host. It cannot fire earlier than `alerts.yml`. | **Does not mute Zabbix triggers.** A Zabbix “CPU > 90%” problem still opens an incident. |
 | Grafana | Not in the path | Not in the path |
 
 **Exception:** `bundled_alert_skip_reason` keys off the **alertname string**. If you name a Zabbix trigger exactly `HighCPU`, `NodeCPUHigh`, `FilesystemUsageHigh`, `NodeExporterDown`, and so on, unchecking the matching Standard alarm **will** skip that Zabbix incident. Do not reuse those Prometheus names for Zabbix triggers.
@@ -743,7 +743,7 @@ The other direction is also one-way:
 - An acknowledge or comment **in Zabbix** is ignored (leave **Update operations** empty on the action).
 - Resolving or closing in ForgeSRE does **not** recover the Zabbix problem. If the trigger is still PROBLEM, Zabbix will not send a new problem webhook until it recovers and fires again. The ForgeSRE incident you resolved stays resolved; a later fire after Zabbix recovery opens a new INC (RE-FIRED link).
 
-Escalation mail still goes to the asset **Owner email**. Mute of Standard alarms never applies here.
+Escalation mail still goes to the asset **Owner email**. Mute of Alarms never applies here.
 
 ---
 
@@ -779,7 +779,7 @@ Do these in order the first time. After that, the short version at the top of th
 6. **Fire a test problem.** Media-type **Test** with overwritten macros (422 with raw `{TRIGGER.NAME}` means token+URL are OK; 401 is the token). Then curl from the Zabbix server, then a real trigger. Success: HTTP 200 `"accepted": true`, Zabbix **Reports → Action log** *Sent*, ForgeSRE **Incidents** a new row with the **Zabbix** pill, id `INC-NNNN_DD.MM.YYYY_HH:MM`, title = event name, asset = the imported host.
 7. **Playrule.** **Playrules → Create playrule**. **Alertname** = the exact trigger name as it arrived (not the playrule Name, not PromQL). Ignore **No Prometheus rule**. Open the incident — playbook / escalation attached.
 8. **Graphs.** Open the asset or click the incident on the Dashboard. Zabbix-only host: caption *Zabbix trends (hourly average, last 24 h)* once items+trends exist. Scraped host: Prometheus graphs instead.
-9. **Mute / ack / resolve.** Uncheck Standard alarms CPU — a **Prometheus** `HighCPU` is skipped; a **Zabbix** CPU trigger is not. **Acknowledge** / **Resolve** / **Close** on the ForgeSRE incident do **not** change Zabbix. Recover the problem in Zabbix → incident **RESOLVED** by Zabbix. Close is human, in ForgeSRE only.
+9. **Mute / ack / resolve.** Uncheck Alarms CPU — a **Prometheus** `HighCPU` is skipped; a **Zabbix** CPU trigger is not. **Acknowledge** / **Resolve** / **Close** on the ForgeSRE incident do **not** change Zabbix. Recover the problem in Zabbix → incident **RESOLVED** by Zabbix. Close is human, in ForgeSRE only.
 
 ---
 

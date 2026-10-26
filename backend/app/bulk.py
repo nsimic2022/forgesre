@@ -1580,6 +1580,13 @@ def discovery_open_import(
     row = _one_pk(db, DiscoveryCandidate, selected)
     if row is None:
         return RedirectResponse(_discovery_query(stay, edit_note="select-one"), status_code=303)
+    existing = None
+    if (row.asset_id or "").strip():
+        existing = db.query(Asset).filter_by(asset_id=row.asset_id).first()
+    if existing is None and (row.ip or "").strip():
+        existing = db.query(Asset).filter_by(ip=row.ip).first()
+    if existing is not None:
+        return RedirectResponse(_discovery_query(stay, asset=existing.asset_id), status_code=303)
     return RedirectResponse(_discovery_query(stay, **{"import": str(row.id)}), status_code=303)
 
 

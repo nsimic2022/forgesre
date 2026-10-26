@@ -48,14 +48,14 @@ def test_scan_cube_labels_match_assets_port_size():
     assert 'class="reach-sq' in frag
     assert "scan-port-cubes" in frag
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-55" in base and "app.js?v=v09-M" in base
+    assert "app.css?v=v09-56" in base and "app.js?v=v09-N" in base
 
 
 def test_scan_ports_view_green_only_for_collect_sources():
     idle = scan_ports_view(None, zabbix_on=False)
     assert idle["status"] == "idle"
     assert idle["line"].startswith("No scan yet")
-    assert [cube["label"] for cube in idle["cubes"]] == ["22", "80", "443", "9100", "9182", "SNMP", "ZBX"]
+    assert [cube["label"] for cube in idle["cubes"]] == ["22", "80", "443", "9100", "9182", "SNMP", "10050", "12345"]
     assert all(cube["tone"] == "grey" for cube in idle["cubes"])
 
     pending = Job(kind=DISCOVERY_SCAN_KIND, status="pending", object_id="scan", payload={"cidrs": ["10.1.1.8/32"]})
@@ -76,12 +76,13 @@ def test_scan_ports_view_green_only_for_collect_sources():
     assert by_label["80"]["tone"] == "grey"
     assert by_label["9100"]["tone"] == "green"
     assert by_label["SNMP"]["tone"] == "green"
-    assert by_label["ZBX"]["tone"] == "green"
+    assert by_label["10050"]["tone"] == "green"
+    assert by_label["12345"]["tone"] == "grey"
     assert "node :9100" in view["line"]
     assert "SNMP UDP/161" in view["line"]
-    assert "Zabbix :10050" in view["line"]
+    assert "Zabbix passive :10050" in view["line"]
     off = scan_ports_view(done, zabbix_on=False)
-    assert next(cube["tone"] for cube in off["cubes"] if cube["label"] == "ZBX") == "yellow"
+    assert next(cube["tone"] for cube in off["cubes"] if cube["label"] == "10050") == "yellow"
     assert "Zabbix :10050" not in off["line"]
 
 
@@ -111,7 +112,8 @@ def test_discovery_page_renders_scan_cubes_and_stores_result(monkeypatch):
     assert 'class="reach-sq green"' in page.text
     assert ">9100<" in page.text
     assert ">SNMP<" in page.text
-    assert ">ZBX<" in page.text
+    assert ">10050<" in page.text
+    assert ">12345<" in page.text
     assert "Collecting from node :9100" in page.text
     frag = _login().get("/discovery/scan-ports")
     assert frag.status_code == 200

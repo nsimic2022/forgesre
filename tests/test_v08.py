@@ -117,8 +117,8 @@ def test_version_is_0_9_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v1.0</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-55" in base
-    assert "app.js?v=v09-M" in base
+    assert "app.css?v=v09-56" in base
+    assert "app.js?v=v09-N" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.9.0" in text
@@ -300,17 +300,18 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     contacts = text.index("data-asset-contacts")
     support_at = text.index("data-asset-support")
     middle = text.index("asset-form-middle")
+    collect = text.index("asset-form-collect")
     right = text.index("asset-form-right")
     custom = text.index("asset-form-custom")
     notes = text.index("asset-form-notes")
     ladder = text.index("asset-form-ladder")
-    assert row1 < left < middle < contacts < support_at < row2 < right < custom < ladder < notes
+    assert row1 < left < middle < collect < contacts < row2 < right < custom < ladder < support_at < notes
     identity = _between(text, "asset-form-left", "asset-form-middle")
     for name in ("asset_id", "hostname", "ip", "extra_customer", "extra_site", "extra_vlan"):
         assert f'name="{name}"' in identity, name
     assert 'name="notes"' not in identity
     assert "identity-lg" in identity
-    contact = _between(text, "data-asset-contacts", "data-asset-support")
+    contact = _between(text, "data-asset-contacts", "asset-form-row-2")
     assert ">Contacts<" in contact
     for name in (
         "owner", "contact_name", "owner_email", "owner_phone", "extra_backup_name",
@@ -326,14 +327,14 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     comms = text.index("data-asset-comms")
     assert middle < comms < text.index('name="scrape_address"') < text.index('name="snmp_port"') < text.index('name="snmp_version"') < row2
     assert ">Ports<" in _between(text, "asset-form-middle", "asset-form-row-2")
-    assert right < text.index("alarm-families") < custom < text.index("data-client-playrules") < notes
-    assert "Standard alarms" in text
-    notes_html = _between(text, "asset-form-notes", "asset-form-collect")
+    assert right < text.index("alarm-standard-grid") < custom < text.index("data-client-playrules") < notes
+    assert ">Alarms<" in text
+    notes_html = _between(text, "asset-form-notes", "</form>")
     assert ">Notes<" in notes_html
     assert '<textarea name="extra_runbook_note"' in notes_html
     assert "Runbook note" not in text.split('id="asset-form"', 1)[1].split("</form>", 1)[0]
 
-    support = _between(text, "data-asset-support", "asset-form-row-2")
+    support = _between(text, "data-asset-support", "asset-form-notes")
     assert ">Support<" in support
     form = text.split('id="asset-form"', 1)[1].split("</form>", 1)[0]
     for name in ("extra_support_hours", "extra_timezone", "extra_contract"):
@@ -510,7 +511,7 @@ def test_playrule_picker_does_not_change_match_for_unlinked_assets():
     assert match_playrule(db, alertname, asset=linked) is global_rule
 
     edit = client.get(f"/assets?edit={linked_id}")
-    picker = edit.text.split("data-client-playrules", 1)[1].split("</form>", 1)[0]
+    picker = edit.text.split("data-client-playrules", 1)[1].split("data-asset-ladder", 1)[0]
     rows = picker.split("data-playrule-list", 1)[1].split("</ol>", 1)[0]
     assert rows.index(f'value="{other_rule.id}"') < rows.index(f'value="{client_rule.id}"')
     assert f'<input type="hidden" name="playrule_ids" value="{client_rule.id}">' in rows

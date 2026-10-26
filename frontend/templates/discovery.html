@@ -72,7 +72,9 @@
       <span class="muted">{{ netbox_sync_why }}</span>
       {% endif %}
 </div>
-    <p class="muted">API token: {{ netbox_token_present }}</p>
+    <p class="token-line">
+      <span class="token-btn {{ 'is-yes' if netbox_token_present == 'yes' else 'is-no' }}" role="status">API token {{ netbox_token_present|upper }}</span>
+    </p>
     {% else %}
     <p class="muted">Sync is off in config.</p>
     {% endif %}
@@ -110,6 +112,9 @@
     {{ zabbix.why }}
     {% endif %}
 </p>
+  <p class="token-line">
+    <span class="token-btn {{ 'is-yes' if zabbix.token_present == 'yes' else 'is-no' }}" role="status">API token {{ zabbix.token_present|upper }}</span>
+  </p>
   {% if zabbix.enabled and zabbix.why %}<p class="muted">{{ zabbix.why }}</p>{% endif %}
   {% if zabbix.last_error %}
   <p class="zabbix-last-error" data-zabbix-last-error>Last error: {{ zabbix.last_error }}</p>
@@ -145,6 +150,9 @@
     {{ glpi.why }}
     {% endif %}
 </p>
+  <p class="token-line">
+    <span class="token-btn {{ 'is-yes' if glpi.token_present == 'yes' else 'is-no' }}" role="status">API token {{ glpi.token_present|upper }}</span>
+  </p>
   {% if glpi.enabled and glpi.why %}<p class="muted">{{ glpi.why }}</p>{% endif %}
   {% if glpi.last_error %}
   <p class="zabbix-last-error" data-glpi-last-error>Last error: {{ glpi.last_error }}</p>
@@ -156,14 +164,14 @@
 
 <h2>Found assets</h2>
 {% set stay_parts = [] %}
-{% for key, value in request.query_params.multi_items() if key not in ["edit", "clone", "import", "notice", "edit_note"] %}
+{% for key, value in request.query_params.multi_items() if key not in ["edit", "clone", "import", "asset", "notice", "edit_note"] %}
 {% set _ = stay_parts.append(key ~ "=" ~ (value|urlencode)) %}
 {% endfor %}
 {% set list_stay = "/discovery" ~ ("?" ~ stay_parts|join("&") if stay_parts else "") %}
 {% set import_tail = ("&" ~ stay_parts|join("&") if stay_parts else "") %}
 <div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
-<table class="found-table">
+<table class="asset-table">
   <thead>
     <tr>
       {% include "_inventory_head.html" %}
@@ -171,31 +179,34 @@
 </thead>
   <tbody>
   {% for row in candidates %}
-    {% set found = found_assets.get(row.asset_id) if row.asset_id else none %}
-    <tr class="{% if selected and selected.id == row.id %}selected{% endif %}" data-list-row{% if can('write_assets') and not row.asset_id %} data-list-view="/discovery?import={{ row.id }}{{ import_tail }}"{% elif row.asset_id %} data-list-view="/assets?edit={{ row.asset_id }}"{% endif %}>
+    {% set found = (found_assets.get(row.asset_id) if row.asset_id else none) or found_by_ip.get(row.ip) %}
+    {% set already = found is not none %}
+    <tr class="{% if selected_candidate and selected_candidate.id == row.id %}selected{% elif form_mode == 'edit' and selected and already and found.asset_id == selected.asset_id %}selected{% endif %}" data-list-row{% if can('write_assets') and already %} data-list-view="/discovery?asset={{ found.asset_id }}{{ import_tail }}"{% elif can('write_assets') %} data-list-view="/discovery?import={{ row.id }}{{ import_tail }}"{% endif %}>
       {{ sel.cell(row.id, row.ip) }}
-      <td class="col-num">{% if found %}{{ found.number or "—" }}{% else %}—{% endif %}</td>
-      <td class="col-id">{% if found %}<a href="/assets?edit={{ found.asset_id }}">{{ found.asset_id }}</a>{% elif row.asset_id %}<a href="/assets?edit={{ row.asset_id }}">{{ row.asset_id }}</a>{% else %}—{% endif %}</td>
+      <td class="col-num">{% if found and found.number %}{{ found.number }}{% else %}{{ loop.index }}{% endif %}</td>
+      <td class="col-id">{% if found %}<a href="/discovery?asset={{ found.asset_id }}{{ import_tail }}">{{ found.asset_id }}</a>{% elif row.asset_id %}<a href="/assets?edit={{ row.asset_id }}">{{ row.asset_id }}</a>{% else %}—{% endif %}</td>
       <td class="col-host">
-        {% if can('write_assets') and not row.asset_id %}
+        {% if can('write_assets') and already %}
+        <a href="/discovery?asset={{ found.asset_id }}{{ import_tail }}" data-list-open>{{ found.hostname or row.hostname or "—" }}</a>
+        {% elif can('write_assets') %}
         <a href="/discovery?import={{ row.id }}{{ import_tail }}" data-list-open>{{ row.hostname or "—" }}</a>
-        {% elif row.asset_id %}
-        <a href="/assets?edit={{ row.asset_id }}" data-list-open>{{ (found.hostname if found else row.hostname) or "—" }}</a>
         {% else %}
-        {{ row.hostname or "—" }}
+        {{ (found.hostname if found else row.hostname) or "—" }}
         {% endif %}
+        {% if already %}<div><span class="pill warn">already in assets</span></div>{% endif %}
         {% if row.source == 'demo' or row.ip == demo_candidate_ip %}
         <div><span class="pill demo">DEMO</span> <span class="muted">lab seed — not a Scan now production hit</span></div>
         {% endif %}
         {% if can('write_assets') %}
         <div class="row-actions">
-        {% if row.status == 'new' %}
-        <form method="post" action="/discovery/{{ row.id }}/approve" hx-boost="false"><button type="submit" title="Asset ID: hostname slug if set (Edit), else disc-&lt;ip&gt;">Approve</button></form>
-        {% endif %}
-        <a class="button" href="/discovery?edit={{ row.id }}{{ pager_keep(pager) }}">Edit</a>
+        {% if already %}
+        <a class="button" href="/discovery?asset={{ found.asset_id }}{{ import_tail }}">Edit</a>
+        {% else %}
+        <a class="button" href="/discovery?import={{ row.id }}{{ import_tail }}">Import</a>
         <a class="button" href="/discovery?clone={{ row.id }}{{ pager_keep(pager) }}">Clone</a>
         {% if row.status == 'new' %}
         <form method="post" action="/discovery/{{ row.id }}/ignore" hx-boost="false"><button type="submit" class="secondary">Ignore</button></form>
+        {% endif %}
         {% endif %}
         <form method="post" action="/discovery/{{ row.id }}/delete" onsubmit="return confirm('Remove candidate {{ row.ip }}? This does not remove an approved asset.');" hx-boost="false">
           <button type="submit" class="danger">Remove</button>
@@ -243,14 +254,14 @@
 {% include "_pager.html" %}
 {% endwith %}
 </div>
-{% if can('write_assets') and candidate_mode %}
+{% if can('write_assets') and candidate_mode and selected_candidate %}
 <section class="card" id="candidate-form">
   {% if candidate_mode == "edit" %}
   <h2>Edit candidate</h2>
-  <form method="post" action="/discovery/{{ selected.id }}/update" class="form-grid" hx-boost="false">
+  <form method="post" action="/discovery/{{ selected_candidate.id }}/update" class="form-grid" hx-boost="false">
   {% else %}
   <h2>Clone candidate</h2>
-  <form method="post" action="/discovery/{{ selected.id }}/clone" class="form-grid" hx-boost="false">
+  <form method="post" action="/discovery/{{ selected_candidate.id }}/clone" class="form-grid" hx-boost="false">
   {% endif %}
     <label>IP <input name="ip" value="{{ candidate_form.ip }}" required></label>
     <label>Hostname <input name="hostname" value="{{ candidate_form.hostname }}" placeholder="optional"></label>

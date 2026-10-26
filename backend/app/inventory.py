@@ -294,13 +294,15 @@ def upsert_candidate(
             source=source,
         )
         db.add(row)
-    elif row.status == "new":
-        row.proposed_role = role
+    else:
+        row.proposed_role = role or row.proposed_role
         row.open_ports = list(ports or [])
         row.snmp_ok = bool(snmp_ok)
         row.node_exporter = bool(node_exporter)
         row.windows_exporter = bool(windows_exporter)
         row.seen_at = utcnow()
+        if row.status == "ignored":
+            row.status = "new"
     return row
 
 
@@ -394,6 +396,7 @@ def run_scan(
         return {
             "found": 0,
             "skipped": 0,
+            "already": 0,
             "cidrs": [],
             "yaml": [],
             "auto": [],
@@ -405,8 +408,10 @@ def run_scan(
             "ports": [],
         }
     found = 0
-    known_ips = {item.ip for item in db.query(Asset).all() if item.ip}
-    skipped = sum(1 for ip in hosts if ip in known_ips)
+    already = 0
+    known_by_ip = {item.ip: item for item in db.query(Asset).all() if item.ip}
+    known_ips = set(known_by_ip)
+    skipped = 0
     ports_seen: set[int] = set()
 
     def _probe(ip: str) -> dict | None:
@@ -432,21 +437,32 @@ def run_scan(
         results = list(pool.map(_probe, hosts))
     for ip, result in zip(hosts, results):
         _note(result)
-        if ip in known_ips:
+        existing = known_by_ip.get(ip)
+        alive = bool(result and result.get("alive"))
+        if not alive and existing is None:
             continue
-        if not result or not result["alive"]:
-            continue
-        kind = str(result.get("exporter_kind") or "")
-        upsert_candidate(
+        kind = str((result or {}).get("exporter_kind") or "")
+        role = str((result or {}).get("proposed_role") or "") or (
+            existing.type if existing is not None else "Unknown device"
+        )
+        ports = list((result or {}).get("open_ports") or [])
+        row = upsert_candidate(
             db,
             ip,
-            result["proposed_role"],
-            result["open_ports"],
-            snmp_ok=bool(result.get("snmp_ok")),
+            role,
+            ports,
+            snmp_ok=bool((result or {}).get("snmp_ok")),
             node_exporter=kind == "linux",
             windows_exporter=kind == "windows",
         )
-        found += 1
+        if existing is not None:
+            row.asset_id = existing.asset_id
+            row.hostname = row.hostname or existing.hostname
+            row.status = "approved"
+            already += 1
+            skipped += 1
+        else:
+            found += 1
     known_hit = [ip for ip in hosts if ip in known_ips]
     if known_hit:
         for asset in db.query(Asset).filter(Asset.ip.in_(known_hit)).all():
@@ -486,6 +502,7 @@ def run_scan(
         "hosts_planned": int(resolved.get("host_count") or len(hosts)),
         "truncated": bool(resolved.get("truncated")),
         "ports": [port for port in SCAN_PORT_ORDER if port in ports_seen],
+        "already": already,
     }
 
 
@@ -975,8 +992,24 @@ def candidate_inventory_guess(row: DiscoveryCandidate) -> tuple[str, str, str]:
     return "Web/appliance", "web-standard", ""
 
 
+def asset_for_candidate(db: Session, row: DiscoveryCandidate) -> Asset | None:
+    """Saved asset for a Found row (linked id, else same IP)."""
+    aid = (getattr(row, "asset_id", None) or "").strip()
+    if aid:
+        found = db.query(Asset).filter_by(asset_id=aid).first()
+        if found is not None:
+            return found
+    ip = (row.ip or "").strip()
+    if ip:
+        return db.query(Asset).filter_by(ip=ip).first()
+    return None
+
+
 def candidate_form_values(db: Session, row: DiscoveryCandidate) -> dict:
     """Add-asset form prefill from a Found-assets scan row. Does not create the asset."""
+    existing = asset_for_candidate(db, row)
+    if existing is not None:
+        return asset_form_values(existing)
     form = asset_form_values()
     atype, _profile, scrape = candidate_inventory_guess(row)
     slug = approve_asset_id(db, row)

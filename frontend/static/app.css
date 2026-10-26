@@ -721,38 +721,11 @@ a.button {
 .asset-table td.col-enum,
 .incidents-table th.col-enum,
 .incidents-table td.col-enum,
-.found-table th.col-enum,
-.found-table td.col-enum,
 .asset-table td.col-fit {
   width: 1%;
   white-space: nowrap;
 }
 .asset-table td.col-fit { white-space: normal; }
-.found-table { table-layout: fixed; width: 100%; }
-.found-table th,
-.found-table td { overflow-wrap: anywhere; }
-.found-table th.col-num,
-.found-table td.col-num { width: 3.2rem; white-space: nowrap; }
-.found-table th.col-id,
-.found-table td.col-id { width: 7%; white-space: nowrap; }
-.found-table th.col-host,
-.found-table td.col-host {
-  width: 14%;
-  min-width: 7rem;
-  white-space: normal;
-  overflow-wrap: break-word;
-}
-.found-table th.col-ip,
-.found-table td.col-ip { width: 8%; white-space: nowrap; }
-.found-table th.col-port,
-.found-table td.col-port { width: 4.8rem; }
-.found-table th.col-status,
-.found-table td.col-status { width: 8%; }
-.found-table th.col-escalation,
-.found-table td.col-escalation { width: 3.6rem; }
-.found-table th.col-asset-notes,
-.found-table td.col-asset-notes { width: 10%; white-space: normal; }
-.found-table td.row-actions { white-space: nowrap; }
 .reach-stack [hidden] { display: none !important; }
 .incidents-filters input[type="date"] { width: 11rem; padding: 0.35rem 0.5rem; }
 .incidents-filters select[name="window"] { width: auto; min-width: 10rem; }
@@ -1470,7 +1443,7 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
   align-items: center;
   gap: 0.28rem;
 }
-.found-table .col-host .row-actions {
+.asset-table .col-host .row-actions {
   margin-top: 0.35rem;
   flex-wrap: wrap;
 }
@@ -2172,8 +2145,22 @@ td.ops-report-actions .row-actions a.button {
 .asset-glance-cell .metric-value { font-size: 1.05rem; }
 .asset-table td.col-host a { color: inherit; text-decoration: none; font-weight: 600; }
 .asset-table td.col-host a:hover { text-decoration: underline; }
-.found-table td.col-host a { color: inherit; text-decoration: none; font-weight: 600; }
-.found-table td.col-host a:hover { text-decoration: underline; }
+.token-line { margin: 0.45rem 0 0; }
+.token-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 8.2rem;
+  padding: 0.22rem 0.7rem;
+  border-radius: 7px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #fff;
+  cursor: default;
+}
+.token-btn.is-yes { background: var(--ok); }
+.token-btn.is-no { background: var(--crit); }
 @media (max-width: 52rem) {
   .asset-glance { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
 }
