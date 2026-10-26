@@ -41,6 +41,42 @@ groups:
           summary: "Interface down on {{ $labels.asset }}"
           description: "ifOperStatus is down while admin is up on {{ $labels.ifName }} (ifIndex {{ $labels.ifIndex }}) / {{ $labels.instance }}."
 
+      - alert: SnmpCpuHigh
+        expr: avg by (asset) (hrProcessorLoad{job="forgesre-snmp-host"}) > 90 or (100 - ssCpuIdle{job="forgesre-snmp-host"}) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SNMP CPU high on {{ $labels.asset }}"
+          description: "Host CPU from SNMP (hrProcessorLoad or 100-ssCpuIdle) is {{ $value }}%."
+
+      - alert: SnmpMemoryHigh
+        expr: 100 * (1 - memAvailReal{job="forgesre-snmp-host"} / memTotalReal{job="forgesre-snmp-host"}) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SNMP memory high on {{ $labels.asset }}"
+          description: "UCD mem used is {{ $value }}% on {{ $labels.asset }}."
+
+      - alert: SnmpDiskUsageHigh
+        expr: dskPercent{job="forgesre-snmp-host"} > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SNMP disk high on {{ $labels.asset }}"
+          description: "dskPercent is {{ $value }}% on {{ $labels.dskPath }} / {{ $labels.asset }}."
+
+      - alert: SnmpProcessDown
+        expr: prErrorFlag{job="forgesre-snmp-host"} == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SNMP process missing on {{ $labels.asset }}"
+          description: "snmpd proc table {{ $labels.prNames }} error flag is set on {{ $labels.asset }}."
+
   - name: forgesre-node
     rules:
       - alert: NodeExporterDown

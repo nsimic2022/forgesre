@@ -3453,6 +3453,10 @@ select.nice-select option { font-weight: 400; color: var(--text); background: va
 .asset-comms .snmp-poll-row input[type="checkbox"] { width: auto; flex: 0 0 auto; }
 .asset-comms .snmp-poll-row label { display: inline; width: auto; margin: 0; }
 .asset-comms .snmp-probe-row button { width: auto; }
+.asset-collect-cube .collect-source { margin: 0 0 0.25rem; font-weight: 700; }
+.asset-collect-cube .collect-note { margin: 0 0 0.65rem; }
+.asset-collect-cube .collect-net { font-weight: 700; }
+.metric-source { font-weight: 500; font-size: 0.78rem; }
 .asset-ladder .ladder-levels {
   gap: 0;
   align-items: start;

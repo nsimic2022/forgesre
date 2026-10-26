@@ -270,7 +270,28 @@
     <textarea name="extra_runbook_note" rows="12" placeholder="Ignore disk until 95%; then call the backup on-call.">{{ ex.runbook_note }}</textarea>
   </section>
   </div>
-  <div class="asset-form-col asset-form-row2-empty" aria-hidden="true"></div>
+  <div class="asset-form-col asset-form-collect">
+  <section class="card asset-form-block asset-form-cube asset-collect-cube" data-asset-collecting>
+    <input type="hidden" name="snmp_metrics_present" value="1">
+    <h2 class="asset-form-block-head">Collecting</h2>
+    {% set collect_target = selected if form_mode == 'edit' and selected else form %}
+    <p class="collect-source" data-collect-http>{{ http_source_label(collect_target) }}</p>
+    <p class="collect-source" data-collect-snmp>{{ snmp_source_label(collect_target) }}</p>
+    <p class="muted collect-note">Graphs use the SNMP families checked below. node :9100 / windows :9182 only when SNMP is off.</p>
+    <div class="alarm-families collect-families" data-snmp-families>
+    {% set fams = snmp_metrics_on(collect_target) %}
+    {% set snmp_on = snmp_port_for(collect_target) > 0 or ex.snmp_poll or snmp_default %}
+    <div class="alarm-row collect-net">NET — interfaces <span class="muted">{% if snmp_on %}SNMP on{% else %}SNMP off{% endif %}</span></div>
+    {% for key, label in snmp_family_choices %}
+    <div class="alarm-row">
+      <button type="button" class="onoff {{ 'is-on' if not fams or key in fams else 'is-off' }}" data-onoff aria-pressed="{{ 'true' if not fams or key in fams else 'false' }}">{% if not fams or key in fams %}ON{% else %}OFF{% endif %}</button>
+      <input type="checkbox" class="onoff-check" name="snmp_metric_{{ key }}" value="1" data-snmp-metric="{{ key }}" {% if not fams or key in fams %}checked{% endif %} tabindex="-1">
+      {{ label }}
+    </div>
+    {% endfor %}
+    </div>
+  </section>
+  </div>
   </div>
   {% if form_mode == "clone" %}
   <input type="hidden" name="clone_of" value="{{ clone_source }}">

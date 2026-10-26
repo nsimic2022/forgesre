@@ -751,6 +751,35 @@ document.querySelectorAll("[data-asset-id]").forEach((field) => {
   if (poll) poll.addEventListener("change", syncSnmpPortHint);
   syncSnmpPortHint();
 
+  const httpLine = form.querySelector("[data-collect-http]");
+  const snmpLine = form.querySelector("[data-collect-snmp]");
+  const familyBox = form.querySelector("[data-snmp-families]");
+  const syncCollecting = () => {
+    const host = ip ? (ip.value || "").trim() : "";
+    const t = lower();
+    let http = "HTTP off";
+    if (scrape && scrape.value) {
+      const s = scrape.value.toLowerCase();
+      if (s.endsWith(":9100")) http = "node :9100";
+      else if (s.endsWith(":9182")) http = "windows :9182";
+      else http = "HTTP " + scrape.value;
+    } else if (t.includes("linux")) http = "node :9100 (default scrape, not SNMP)";
+    else if (t.includes("windows")) http = "windows :9182 (default scrape, not SNMP)";
+    if (httpLine) httpLine.textContent = http;
+    const portVal = snmp && snmp.value ? snmp.value : "";
+    const on = snmpFamily() || (poll && poll.checked) || !!portVal;
+    const port = portVal || "161";
+    const hostOn = familyBox && familyBox.querySelectorAll("[data-snmp-metric]:checked").length > 0;
+    if (snmpLine) snmpLine.textContent = on ? "SNMP UDP/" + port + " · " + (hostOn ? "if_mib + host" : "if_mib") : "SNMP off";
+    const netHint = form.querySelector(".collect-net .muted");
+    if (netHint) netHint.textContent = on ? "SNMP on" : "SNMP off";
+  };
+  ["change", "input"].forEach((evt) => {
+    [type, scrape, snmp, poll].forEach((el) => el && el.addEventListener(evt, syncCollecting));
+    if (familyBox) familyBox.addEventListener(evt, syncCollecting);
+  });
+  syncCollecting();
+
   const probeBtn = form.querySelector("[data-snmp-probe]");
   const probeOut = form.querySelector("[data-snmp-probe-out]");
   if (probeBtn) {
@@ -1593,6 +1622,13 @@ function graphPane(pane) {
     const name = document.createElement("span");
     name.className = "metric-name";
     name.textContent = tile.name;
+    if (tile.source) {
+      const src = document.createElement("span");
+      src.className = "muted metric-source";
+      src.textContent = tile.source;
+      name.appendChild(document.createTextNode(" "));
+      name.appendChild(src);
+    }
     const value = document.createElement("span");
     value.className = "metric-value " + (tile.tone || "warn");
     value.textContent = tile.value == null ? "—" : tile.display;

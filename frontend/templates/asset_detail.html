@@ -109,7 +109,7 @@
   <dt>SNMP</dt>
   <dd>
     {% if snmp_target %}
-      Polled by snmp_exporter on UDP/{{ snmp_port }} (module if_mib). Prometheus job <code>forgesre-snmp</code>.
+      Polled by snmp_exporter on UDP/{{ snmp_port }} (module if_mib + host). Prometheus jobs <code>forgesre-snmp</code> and <code>forgesre-snmp-host</code>.
       ifName, ifIndex, ifAlias, and sysUpTime show in the list below when those series exist. No extra vendor MIB was added.
     {% elif snmp_enabled and asset.scrape_address %}
       {% if 'windows' in (asset.type or '')|lower or 'windows' in (asset.monitoring_profile or '')|lower %}

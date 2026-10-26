@@ -96,7 +96,7 @@ def test_discovery_cubes_match_and_found_columns_stay_even():
     assert "asset-alarms-cube" in row
     assert "alarm-standard-grid" in row
     assert "asset-custom-scroll" in row
-    assert "asset-form-row2-empty" in row
+    assert "asset-collect-cube" in row and "data-asset-collecting" in row
     assert "asset-form-row-3" not in form
     assert row.index("Standard alarms") < row.index("Custom alarms") < row.index(">Escalation<") < row.index(">Notes<")
     assert 'class="card asset-form-block asset-form-cube asset-alarms-cube"' in row
@@ -105,6 +105,6 @@ def test_discovery_cubes_match_and_found_columns_stay_even():
     assert "ladder_target_" in row
     assert "for humans" not in row
     html = _client().get("/discovery").text
-    assert "asset-form-row2-empty" in html
+    assert "asset-collect-cube" in html
     assert "asset-alarms-cube" in html
     assert "discovery-actions" in html

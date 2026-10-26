@@ -62,6 +62,9 @@ _TILE_META = {
     "memory_percent": {"name": "RAM", "kind": "percent"},
     "disk_percent": {"name": "HDD", "kind": "percent"},
     "network": {"name": "NET", "kind": "bytes"},
+    "load": {"name": "LOAD", "kind": "load"},
+    "swap_percent": {"name": "SWAP", "kind": "percent"},
+    "proc": {"name": "PROC", "kind": "proc"},
 }
 
 # Assets list glance: Collecting, CPU, RAM, HDD, NET left → right. Missing tiles stay —.
@@ -162,7 +165,10 @@ def metric_class_for(asset: Any) -> str:
 
 
 def _asset_dict(asset: Any) -> dict[str, Any]:
+    from app.asset_types import snmp_port_for
+
     if isinstance(asset, dict):
+        extras = asset.get("extras") if isinstance(asset.get("extras"), dict) else {}
         return {
             "asset_id": str(asset.get("asset_id") or ""),
             "hostname": str(asset.get("hostname") or ""),
@@ -170,9 +176,11 @@ def _asset_dict(asset: Any) -> dict[str, Any]:
             "type": str(asset.get("type") or ""),
             "monitoring_profile": str(asset.get("monitoring_profile") or ""),
             "scrape_address": str(asset.get("scrape_address") or ""),
-            "snmp_port": asset.get("snmp_port"),
+            "snmp_port": snmp_port_for(asset),
             "alarms": asset.get("alarms"),
+            "extras": extras,
         }
+    extras = getattr(asset, "extras", None)
     return {
         "asset_id": str(getattr(asset, "asset_id", "") or ""),
         "hostname": str(getattr(asset, "hostname", "") or ""),
@@ -180,8 +188,9 @@ def _asset_dict(asset: Any) -> dict[str, Any]:
         "type": str(getattr(asset, "type", "") or ""),
         "monitoring_profile": str(getattr(asset, "monitoring_profile", "") or ""),
         "scrape_address": str(getattr(asset, "scrape_address", "") or ""),
-        "snmp_port": getattr(asset, "snmp_port", None),
+        "snmp_port": snmp_port_for(asset),
         "alarms": getattr(asset, "alarms", None),
+        "extras": extras if isinstance(extras, dict) else {},
     }
 
 
@@ -204,6 +213,12 @@ def _tone_for(kind: str, value: float | None, threshold: float | None, *, enable
         if value >= 1:
             return "ok"
         return "ok" if not enabled else "crit"
+    if kind == "proc":
+        if value < 1:
+            return "ok"
+        return "ok" if not enabled else "crit"
+    if kind == "load":
+        return "ok"
     if not enabled:
         return "ok"
     if threshold is None:
@@ -220,6 +235,10 @@ def _display(kind: str, value: float | None) -> str:
         return "up" if value >= 1 else "down"
     if kind == "bytes":
         return "—"
+    if kind == "load":
+        return f"{value:.2f}"
+    if kind == "proc":
+        return "ok" if value < 1 else "down"
     return f"{value:.0f}%"
 
 
@@ -318,6 +337,7 @@ def _tile(
     display: str | None = None,
     name: str | None = None,
     kind: str | None = None,
+    source: str = "",
 ) -> dict[str, Any]:
     meta = _TILE_META[key]
     kind = str(kind or meta["kind"])
@@ -341,6 +361,7 @@ def _tile(
         "series": values,
         "times": stamps,
         "query": query,
+        "source": source,
     }
     if unit:
         tile["unit"] = unit
@@ -658,7 +679,14 @@ def asset_metric_panel(
     demo = is_lab_inventory_row(asset)
     bundled = bundled_thresholds().get("demo" if klass == "demo" else klass, {})
     alarms = normalize_alarms(info.get("alarms"), "demo" if klass == "demo" else klass)
-    keys = _CLASS_TILES.get(klass, _CLASS_TILES["unknown"])
+    from app.asset_types import snmp_port_for
+    from app.snmp_families import FAMILY_TILE, http_source_label, snmp_metrics_on, snmp_source_label, tile_source_label
+
+    fams = snmp_metrics_on(info)
+    if fams:
+        keys = tuple(FAMILY_TILE[key] for key in ("cpu", "load", "mem", "swap", "disk", "proc", "net") if key in fams)
+    else:
+        keys = _CLASS_TILES.get(klass, _CLASS_TILES["unknown"])
     fetch = query_fn or _default_query
     queried_end = time.time() if range_end is None else float(range_end)
     queried_start = queried_end - GRAPH_WINDOW_SECONDS if range_start is None else float(range_start)
@@ -673,7 +701,7 @@ def asset_metric_panel(
     prom_error = ""
     prom_down = False
     selectors = promql_selectors_for(info)
-    snmp = klass == "network"
+    snmp = snmp_port_for(info) > 0 or klass == "network"
 
     winning, up_value, up_error, up_expr = _query_up(selectors, fetch, snmp=snmp)
     queries["up"] = up_expr
@@ -685,7 +713,7 @@ def asset_metric_panel(
         samples["up"] = up_value
 
     packed: dict[str, tuple[str, str]] = {}
-    if klass != "unknown":
+    if klass != "unknown" or snmp:
         packed = promql_queries_for(
             info,
             selector=winning or None,
@@ -760,7 +788,11 @@ def asset_metric_panel(
         collecting_line = "Prometheus is not collecting this target."
     elif (samples.get("up") or 0) >= 1:
         collecting = True
-        collecting_line = "Prometheus sees this target (up=1)."
+        collecting_line = (
+            f"Prometheus sees {snmp_source_label(info)} (up=1)."
+            if snmp
+            else f"Prometheus sees {http_source_label(info)} (up=1)."
+        )
     else:
         collecting = False
         collecting_line = "Prometheus is not collecting this target (up=0)."
@@ -811,6 +843,7 @@ def asset_metric_panel(
                 times=times.get(key),
                 query=queries.get(key) or "",
                 enabled=tile_enabled(alarms, key) if key != "network" else True,
+                source=tile_source_label(info, bool(fams) and key in {FAMILY_TILE[fam] for fam in fams}),
                 **extra,
             )
         )
@@ -827,6 +860,7 @@ def asset_metric_panel(
         "error": prom_error,
         "alarms": alarms,
         "tiles": tiles,
+        "sources": {"http": http_source_label(info), "snmp": snmp_source_label(info)},
         "window": {
             "start": queried_start,
             "end": queried_end,

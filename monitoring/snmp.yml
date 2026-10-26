@@ -122,3 +122,135 @@ modules:
             labelname: ifName
             oid: 1.3.6.1.2.1.31.1.1.1.1
             type: DisplayString
+
+  # HOST-RESOURCES + UCD-SNMP host slice (snmp_exporter v0.26). Any device class.
+  # Missing OIDs stay empty — this is not a vendor SKU module.
+  host:
+    timeout: 8s
+    retries: 1
+    max_repetitions: 25
+    walk:
+      - 1.3.6.1.2.1.25.3.3.1.2
+      - 1.3.6.1.2.1.25.2.3.1.3
+      - 1.3.6.1.2.1.25.2.3.1.4
+      - 1.3.6.1.2.1.25.2.3.1.5
+      - 1.3.6.1.2.1.25.2.3.1.6
+      - 1.3.6.1.4.1.2021.10.1.5
+      - 1.3.6.1.4.1.2021.9.1.2
+      - 1.3.6.1.4.1.2021.9.1.9
+      - 1.3.6.1.4.1.2021.2.1.2
+      - 1.3.6.1.4.1.2021.2.1.5
+      - 1.3.6.1.4.1.2021.2.1.100
+    get:
+      - 1.3.6.1.4.1.2021.11.11.0
+      - 1.3.6.1.4.1.2021.4.5.0
+      - 1.3.6.1.4.1.2021.4.6.0
+      - 1.3.6.1.4.1.2021.4.3.0
+      - 1.3.6.1.4.1.2021.4.4.0
+    metrics:
+      - name: hrProcessorLoad
+        oid: 1.3.6.1.2.1.25.3.3.1.2
+        type: gauge
+        help: The average, over the last minute, of the percentage of this processor's load.
+        indexes:
+          - labelname: hrDeviceIndex
+            type: gauge
+      - name: hrStorageAllocationUnits
+        oid: 1.3.6.1.2.1.25.2.3.1.4
+        type: gauge
+        help: The size, in bytes, of the data objects allocated from this pool.
+        indexes:
+          - labelname: hrStorageIndex
+            type: gauge
+        lookups:
+          - labels: [hrStorageIndex]
+            labelname: hrStorageDescr
+            oid: 1.3.6.1.2.1.25.2.3.1.3
+            type: DisplayString
+      - name: hrStorageSize
+        oid: 1.3.6.1.2.1.25.2.3.1.5
+        type: gauge
+        help: The size of the storage in hrStorageAllocationUnits.
+        indexes:
+          - labelname: hrStorageIndex
+            type: gauge
+        lookups:
+          - labels: [hrStorageIndex]
+            labelname: hrStorageDescr
+            oid: 1.3.6.1.2.1.25.2.3.1.3
+            type: DisplayString
+      - name: hrStorageUsed
+        oid: 1.3.6.1.2.1.25.2.3.1.6
+        type: gauge
+        help: The amount of the storage used in hrStorageAllocationUnits.
+        indexes:
+          - labelname: hrStorageIndex
+            type: gauge
+        lookups:
+          - labels: [hrStorageIndex]
+            labelname: hrStorageDescr
+            oid: 1.3.6.1.2.1.25.2.3.1.3
+            type: DisplayString
+      - name: ssCpuIdle
+        oid: 1.3.6.1.4.1.2021.11.11
+        type: gauge
+        help: The percentage of time the CPU has spent idle.
+      - name: memTotalReal
+        oid: 1.3.6.1.4.1.2021.4.5
+        type: gauge
+        help: Total real/physical memory in kB.
+      - name: memAvailReal
+        oid: 1.3.6.1.4.1.2021.4.6
+        type: gauge
+        help: Available real/physical memory in kB.
+      - name: memTotalSwap
+        oid: 1.3.6.1.4.1.2021.4.3
+        type: gauge
+        help: Total swap in kB.
+      - name: memAvailSwap
+        oid: 1.3.6.1.4.1.2021.4.4
+        type: gauge
+        help: Available swap in kB.
+      - name: laLoadInt
+        oid: 1.3.6.1.4.1.2021.10.1.5
+        type: gauge
+        help: Integer load average (load * 100) for 1, 5, and 15 minutes.
+        indexes:
+          - labelname: laIndex
+            type: gauge
+      - name: dskPercent
+        oid: 1.3.6.1.4.1.2021.9.1.9
+        type: gauge
+        help: Percentage of space used on disk.
+        indexes:
+          - labelname: dskIndex
+            type: gauge
+        lookups:
+          - labels: [dskIndex]
+            labelname: dskPath
+            oid: 1.3.6.1.4.1.2021.9.1.2
+            type: DisplayString
+      - name: prCount
+        oid: 1.3.6.1.4.1.2021.2.1.5
+        type: gauge
+        help: Number of running instances of a watched process (snmpd proc table).
+        indexes:
+          - labelname: prIndex
+            type: gauge
+        lookups:
+          - labels: [prIndex]
+            labelname: prNames
+            oid: 1.3.6.1.4.1.2021.2.1.2
+            type: DisplayString
+      - name: prErrorFlag
+        oid: 1.3.6.1.4.1.2021.2.1.100
+        type: gauge
+        help: 1 when a watched process is missing or over the configured limit.
+        indexes:
+          - labelname: prIndex
+            type: gauge
+        lookups:
+          - labels: [prIndex]
+            labelname: prNames
+            oid: 1.3.6.1.4.1.2021.2.1.2
+            type: DisplayString

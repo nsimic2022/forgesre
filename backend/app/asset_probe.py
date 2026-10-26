@@ -581,8 +581,8 @@ def probe_target(
     extra: list[CheckResult] = []
     probe_both = str(item.get("_probe_both") or "") == "1"
     detect_message = ""
-    snmp_port = snmp_port_for(item) if (kind == "network" or "snmp_port" in item) else 0
-    use_snmp = kind == "network" or snmp_port > 0
+    snmp_port = snmp_port_for(item)
+    use_snmp = snmp_port > 0
     if not probe_both and not use_snmp and host and port is None:
         probe_both = True
     if use_snmp and not scrape and not probe_both:
@@ -637,6 +637,13 @@ def probe_target(
         elif metrics.ok is False and str(item.get("_also_try_windows") or "") == "1" and host:
             if port != WINDOWS_EXPORTER_PORT:
                 extra.append(probe_metrics(host, WINDOWS_EXPORTER_PORT, timeout, fetcher=metrics_fetcher))
+    if use_snmp and host and "SNMP UDP" not in (metrics.detail or ""):
+        snmp_result = probe_snmp(host, timeout, prober=snmp_prober, port=snmp_port or DEFAULT_SNMP_PORT)
+        if metrics.ok is True:
+            extra.append(snmp_result)
+        else:
+            extra.append(metrics)
+            metrics = snmp_result
     result = AssetProbe(
         asset_id=str(item.get("asset_id") or item.get("hostname") or host or "target"),
         hostname=str(item.get("hostname") or ""),

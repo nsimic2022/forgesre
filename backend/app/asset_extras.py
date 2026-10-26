@@ -19,6 +19,7 @@ from app.asset_snmp import SECRET_KEYS as SNMP_SECRET_KEYS
 from app.asset_snmp import SNMP_KEYS, normalize_snmp, public_snmp
 from app.asset_types import snmp_poll_on
 from app.dc_noc import MAINT_KEYS, maint_input_value, maint_pair_error, normalize_maint_fields
+from app.snmp_families import SNMP_METRICS_KEY, normalize_snmp_metrics
 
 SNMP_POLL_KEY = "snmp_poll"
 
@@ -99,6 +100,7 @@ def normalize_extras(raw: Any) -> dict[str, str]:
     out.update(normalize_snmp(raw))
     if snmp_poll_on(raw):
         out[SNMP_POLL_KEY] = "1"
+    out.update(normalize_snmp_metrics(raw))
     return out
 
 
@@ -135,6 +137,8 @@ def form_extras(asset: Any = None) -> dict[str, Any]:
         out[key] = maint_input_value(stored.get(key, ""))
     out.update(public_snmp(stored))
     out[SNMP_POLL_KEY] = stored.get(SNMP_POLL_KEY, "")
+    if stored.get(SNMP_METRICS_KEY):
+        out[SNMP_METRICS_KEY] = stored[SNMP_METRICS_KEY]
     return out
 
 
@@ -236,6 +240,8 @@ def extras_from_form(present: str, **values: str) -> dict[str, str] | None:
     for key in MAINT_KEYS:
         raw[key] = values.get(key, "")
     raw[SNMP_POLL_KEY] = values.get(SNMP_POLL_KEY, "")
+    if SNMP_METRICS_KEY in values:
+        raw[SNMP_METRICS_KEY] = values.get(SNMP_METRICS_KEY, "")
     return normalize_extras(raw)
 
 

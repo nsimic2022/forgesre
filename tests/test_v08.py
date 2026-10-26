@@ -117,8 +117,8 @@ def test_version_is_0_9_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v1.0</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-53" in base
-    assert "app.js?v=v09-K" in base
+    assert "app.css?v=v09-54" in base
+    assert "app.js?v=v09-L" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.9.0" in text
@@ -328,7 +328,7 @@ def test_asset_form_is_three_bands_with_dropdown_playrules():
     assert ">Ports<" in _between(text, "asset-form-middle", "asset-form-row-2")
     assert right < text.index("alarm-families") < custom < text.index("data-client-playrules") < notes
     assert "Standard alarms" in text
-    notes_html = _between(text, "asset-form-notes", "asset-form-row2-empty")
+    notes_html = _between(text, "asset-form-notes", "asset-form-collect")
     assert ">Notes<" in notes_html
     assert '<textarea name="extra_runbook_note"' in notes_html
     assert "Runbook note" not in text.split('id="asset-form"', 1)[1].split("</form>", 1)[0]
