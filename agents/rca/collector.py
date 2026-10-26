@@ -42,7 +42,12 @@ def _escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def _kind_flags(asset: dict[str, Any], alert: dict[str, Any] | None = None) -> tuple[bool, bool]:
+def _kind_flags(
+    asset: dict[str, Any],
+    alert: dict[str, Any] | None = None,
+    *,
+    force_snmp: bool = False,
+) -> tuple[bool, bool]:
     kind = str(asset.get("type") or "").lower()
     profile = str(asset.get("monitoring_profile") or "").lower()
     alertname = str((alert or {}).get("alertname") or "").lower()
@@ -54,14 +59,19 @@ def _kind_flags(asset: dict[str, Any], alert: dict[str, Any] | None = None) -> t
         any(token in family for token in ("network", "switch", "router", "firewall", "storage", "qnap", "nas", "printer", "snmp"))
         or any(token in alertname for token in ("network", "switch", "router", "firewall", "snmp"))
         or "network-switch" in profile
+        or force_snmp
     )
-    try:
-        from app.asset_types import snmp_port_for
+    if not snmpish:
+        try:
+            from app.asset_types import snmp_port_for
+            from app.snmp_families import http_exporter_on
 
-        if snmp_port_for(asset) > 0:
-            snmpish = True
-    except Exception:
-        pass
+            # Poll / port on a Linux or Windows host with :9100/:9182 must not steal
+            # the graph dialect — those series live on the HTTP exporter job.
+            if snmp_port_for(asset) > 0 and not http_exporter_on(asset):
+                snmpish = True
+        except Exception:
+            pass
     windowsish = "windows" in kind or "win32" in kind or "windows" in profile or scrape.endswith(":9182")
     return snmpish, windowsish
 
@@ -149,7 +159,12 @@ def _snmp_scrape_instance(ip: str, port: Any) -> str:
     return f"{ip}:{number}"
 
 
-def sd_scrape_identity(asset: dict[str, Any] | None, alert: dict[str, Any] | None = None) -> tuple[str, str]:
+def sd_scrape_identity(
+    asset: dict[str, Any] | None,
+    alert: dict[str, Any] | None = None,
+    *,
+    force_snmp: bool = False,
+) -> tuple[str, str]:
     """``(job, instance)`` Prometheus stores for this asset's HTTP SD row.
 
     Linux/Windows SD sets ``job`` to the monitoring profile and ``instance`` to
@@ -161,7 +176,7 @@ def sd_scrape_identity(asset: dict[str, Any] | None, alert: dict[str, Any] | Non
     scrape = str(asset.get("scrape_address") or "").strip()
     ip = str(asset.get("ip") or "").strip()
     profile = str(asset.get("monitoring_profile") or "").strip()
-    snmpish, windowsish = _kind_flags(asset, alert)
+    snmpish, windowsish = _kind_flags(asset, alert, force_snmp=force_snmp)
     if snmpish:
         return "forgesre-snmp", _snmp_scrape_instance(ip, asset.get("snmp_port"))
     if not scrape:
@@ -174,13 +189,18 @@ def sd_scrape_identity(asset: dict[str, Any] | None, alert: dict[str, Any] | Non
     return profile, scrape
 
 
-def promql_selectors_for(asset: dict[str, Any] | None, alert: dict[str, Any] | None = None) -> list[str]:
+def promql_selectors_for(
+    asset: dict[str, Any] | None,
+    alert: dict[str, Any] | None = None,
+    *,
+    force_snmp: bool = False,
+) -> list[str]:
     """Label matchers. First is the SD job+instance (or SNMP instance), then asset=<id>."""
     asset = asset or {}
     asset_id = str(asset.get("asset_id") or "").strip()
     hostname = str(asset.get("hostname") or "").strip()
-    job, instance = sd_scrape_identity(asset, alert)
-    snmpish, _windowsish = _kind_flags(asset, alert)
+    job, instance = sd_scrape_identity(asset, alert, force_snmp=force_snmp)
+    snmpish, _windowsish = _kind_flags(asset, alert, force_snmp=force_snmp)
     seen: list[str] = []
 
     def add(selector: str) -> None:
@@ -220,6 +240,7 @@ def promql_queries_for(
     *,
     selector: str | None = None,
     include_fallbacks: bool = True,
+    force_snmp: bool = False,
 ) -> dict[str, tuple[str, str]]:
     """PromQL for this asset. Demo gauges only for forge-demo-01.
 
@@ -234,14 +255,14 @@ def promql_queries_for(
         return dict(DEFAULT_QUERIES)
     if not asset_id:
         return {"up": ("up", "")}
-    selectors = promql_selectors_for(asset, alert)
+    selectors = promql_selectors_for(asset, alert, force_snmp=force_snmp)
     if selector:
         selectors = [selector]
     elif not include_fallbacks:
         selectors = selectors[:1]
     if not selectors:
         selectors = [f'asset="{_escape(asset_id)}"']
-    snmpish, windowsish = _kind_flags(asset, alert)
+    snmpish, windowsish = _kind_flags(asset, alert, force_snmp=force_snmp)
     if snmpish:
         packed = _snmp_if_queries(selectors)
         host_on = True

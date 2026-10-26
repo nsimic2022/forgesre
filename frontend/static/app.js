@@ -786,13 +786,14 @@ if (alertRulesData && alertNameInput && rulePreviewBody) {
   const syncCollecting = () => {
     const t = lower();
     const scrapeOn = !!(scrape && scrape.value);
-    const portVal = snmp && snmp.value ? snmp.value : "";
-    const snmpOn = snmpFamily() || (poll && poll.checked) || !!portVal;
+    const portNum = snmp && snmp.value ? Number(snmp.value) : 0;
+    const portOn = Number.isFinite(portNum) && portNum > 0 && portNum < 65536;
+    const snmpOn = snmpFamily() || (poll && poll.checked) || portOn;
     const prom = scrapeOn || (!snmpOn && (t.startsWith("auto") || t.includes("linux") || t.includes("windows")));
     setSource("prometheus", prom);
     setSource("snmp", snmpOn);
     if (familyHead) {
-      familyHead.textContent = snmpOn ? "SNMP metrics" : (prom ? "Prometheus metrics" : "Metrics");
+      familyHead.textContent = scrapeOn ? "Prometheus metrics" : (snmpOn ? "SNMP metrics" : (prom ? "Prometheus metrics" : "Metrics"));
     }
   };
   ["change", "input"].forEach((evt) => {
