@@ -27,7 +27,7 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
 def test_css_cache_bust_is_current():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-55" in base
+    assert "app.css?v=v09-56" in base
     assert ".banner-short" not in css
     assert ".banner-x" in css
     assert "top: 0.35rem" in css.split(".banner-x {", 1)[1].split("}", 1)[0]
@@ -154,8 +154,9 @@ def test_discovery_candidate_edit_clone_remove():
     listed = client.get("/discovery")
     assert listed.status_code == 200
     assert f"/discovery/{row.id}/delete" in listed.text
-    assert f"/discovery?edit={row.id}" in listed.text
+    assert f"/discovery?import={row.id}" in listed.text
     assert f"/discovery?clone={row.id}" in listed.text
+    assert ">Import<" in listed.text
     assert ">Ignore<" in listed.text
     assert 'class="pill demo"' in listed.text
     edited = client.get(f"/discovery?edit={row.id}")

@@ -93,7 +93,7 @@ def test_add_asset_column_widths_fill_the_page():
     ]
     assert order == sorted(order)
     assert "asset-form-split" not in _client().get("/").text
-    standard = text.split("alarm-families", 1)[1].split("asset-form-custom", 1)[0]
+    standard = text.split("alarm-standard-grid", 1)[1].split("asset-form-custom", 1)[0]
     assert 'name="alarm_cpu_enabled"' in standard and 'name="alarm_disk_threshold"' in standard
     assert "playrule_on" not in standard
 

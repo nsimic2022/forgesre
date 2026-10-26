@@ -112,7 +112,7 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert "[data-select-scope]:has([data-select-row]:checked) .list-actions" in css
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-55" in base and "app.js?v=v09-M" in base
+    assert "app.css?v=v09-56" in base and "app.js?v=v09-N" in base
 
     assets = _middle(client.get("/assets").text)
     _order(assets, ["Edit", "Clone", "Verify", "Export", "Remove"])
@@ -146,7 +146,8 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert 'action="/discovery/export"' in found
     assert 'action="/discovery/bulk-delete"' in found
     assert ">Approve<" not in found
-    assert ">Approve<" in discovery
+    assert ">Import<" in discovery
+    assert ">Approve<" not in discovery
     _no_invented(found)
 
     rules = client.get("/playrules").text

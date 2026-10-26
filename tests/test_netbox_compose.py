@@ -472,7 +472,8 @@ def test_discovery_sync_button_enabled_for_admin_when_api_ok(monkeypatch):
     assert "Admin only." not in html
     assert "still points Core at an external instance" not in html
     assert "NETBOX_API_TOKEN" not in html
-    assert "API token: yes" in html
+    assert "API token YES" in html
+    assert "token-btn is-yes" in html
     assert "nbt_" not in html
     assert "12-character" not in html
     assert "not a NetBox UI login" not in html
@@ -513,7 +514,8 @@ def test_discovery_sync_button_enabled_for_admin_when_ui_up_403(monkeypatch):
     assert ">Grey<" not in html
     assert FORBIDDEN_REJECTED_WHY in html
     assert "token missing" not in html
-    assert "API token: yes" in html
+    assert "API token YES" in html
+    assert "token-btn is-yes" in html
     assert leak not in html
     assert "Admin only." not in html
     db.close()
@@ -535,7 +537,8 @@ def test_discovery_empty_token_keeps_missing_copy(monkeypatch):
     client, db = _discovery_client()
     html = client.get("/discovery").text
     assert TOKEN_EMPTY_WHY in html
-    assert "API token: no" in html
+    assert "API token NO" in html
+    assert "token-btn is-no" in html
     assert FORBIDDEN_REJECTED_WHY not in html
     db.close()
 
@@ -565,7 +568,8 @@ def test_discovery_footer_omits_external_when_bundled(monkeypatch):
     assert "bundled at" not in html
     assert "still points Core at an external instance" not in html
     assert "NETBOX_API_TOKEN" not in html
-    assert "API token: yes" in html
+    assert "API token YES" in html
+    assert "token-btn is-yes" in html
     db.close()
 
 
@@ -579,7 +583,8 @@ def test_discovery_footer_names_external_when_url_is_not_local(monkeypatch):
     assert "inventory.netbox.url" not in html
     assert "--netbox-url" not in html
     assert "12-character" not in html
-    assert "API token: yes" in html
+    assert "API token YES" in html
+    assert "token-btn is-yes" in html
     db.close()
 
 
@@ -897,7 +902,7 @@ def test_install_and_update_bundle_netbox_default_on():
     assert disc.find("Scan now") < disc.find("NetBox sync")
     assert "still points Core at an external instance" not in disc
     assert "NETBOX_API_TOKEN" not in disc
-    assert "API token:" in disc
+    assert "API token" in disc and "token-btn" in disc
     assert "netbox_token_present" in disc
     assert "nbt_" not in disc
     assert "12-character" not in disc

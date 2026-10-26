@@ -82,7 +82,7 @@ The chart uses the scrape identity Prometheus actually stored:
 
 The asset page charts the last hour. Dashboard and the incident page start one hour before the incident and run through now, or through the end if it is resolved. A series that ran and then dropped to 0, or pegged, stays in that window.
 
-Standard alarms **mute** skips ingest of a bundled alert. The chart still shows the series.
+Alarms **mute** skips ingest of a bundled alert. The chart still shows the series.
 
 ---
 
@@ -92,7 +92,7 @@ Standard alarms **mute** skips ingest of a bundled alert. The chart still shows 
 |---|---|
 | **Rules** (`/playrules`) | After ingest, match **alertname** and attach a Playbook plus the default escalation. PromQL stays in `monitoring/alerts.yml`. |
 | **Playbooks** | A checklist a person reads on the incident. |
-| **Standard alarms** | Per-asset mute (and a percent note) for bundled alerts. Off means Core skips that incident. |
+| **Alarms** | Per-asset mute (and a percent note) for bundled alerts. Off means Core skips that incident. |
 | **Custom alarms** | Per-asset list. First ON rule with the same alertname wins over Rules. OFF skips that rule on this host only. |
 | **Escalation** | Per-asset mail steps L1–L4 from incident start until Acknowledge. Empty uses the Default escalation. Email only. |
 

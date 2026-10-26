@@ -31,7 +31,7 @@
   </label>
   {% endif %}
   <label class="identity-lg"><span class="label-line">Hostname</span>
-    <input name="hostname" required value="{{ form.hostname }}" placeholder="DESKTOP-CG81N3J"></label>
+    <input name="hostname" required value="{{ form.hostname }}" placeholder="DESKTOP-CG81N3J" data-asset-hostname></label>
   <label class="identity-lg"><span class="label-line">IP</span>
     <input name="ip" placeholder="10.10.10.21" value="{{ form.ip }}" data-detect-ip pattern="[^:\s]+|\S*:\S*:\S*" title="IP or hostname only — put ports in Scrape address or SNMP port"></label>
   <label><span class="label-line">Type</span>
@@ -138,6 +138,28 @@
     </div>
   </section>
   </div>
+  <div class="asset-form-col asset-form-collect">
+  <section class="card asset-form-block asset-form-cube asset-collect-cube" data-asset-collecting>
+    <input type="hidden" name="snmp_metrics_present" value="1">
+    <h2 class="asset-form-block-head">Metrics</h2>
+    {% set collect_target = selected if form_mode == 'edit' and selected else form %}
+    <p class="collect-source" data-collect-http>{{ http_source_label(collect_target) }}</p>
+    <p class="collect-source" data-collect-snmp>{{ snmp_source_label(collect_target) }}</p>
+    <p class="muted collect-note">Graphs use the SNMP families checked below. node :9100 / windows :9182 only when SNMP is off.</p>
+    <div class="alarm-families collect-families" data-snmp-families>
+    {% set fams = snmp_metrics_on(collect_target) %}
+    {% set snmp_on = snmp_port_for(collect_target) > 0 or ex.snmp_poll or snmp_default %}
+    <div class="alarm-row collect-net">NET — interfaces <span class="muted">{% if snmp_on %}SNMP on{% else %}SNMP off{% endif %}</span></div>
+    {% for key, label in snmp_family_choices %}
+    <div class="alarm-row">
+      <button type="button" class="onoff {{ 'is-on' if not fams or key in fams else 'is-off' }}" data-onoff aria-pressed="{{ 'true' if not fams or key in fams else 'false' }}">{% if not fams or key in fams %}ON{% else %}OFF{% endif %}</button>
+      <input type="checkbox" class="onoff-check" name="snmp_metric_{{ key }}" value="1" data-snmp-metric="{{ key }}" {% if not fams or key in fams %}checked{% endif %} tabindex="-1">
+      {{ label }}
+    </div>
+    {% endfor %}
+    </div>
+  </section>
+  </div>
   <div class="asset-form-col" data-asset-contacts>
   <section class="card asset-form-block asset-form-cube">
   <h2 class="asset-form-block-head">Contacts</h2>
@@ -155,45 +177,12 @@
   </div>
   </section>
   </div>
-  <div class="asset-form-col" data-asset-support>
-  <section class="card asset-form-block asset-support asset-form-cube">
-  <h2 class="asset-form-block-head label-line">Support</h2>
-  <div class="form-grid asset-form-grid">
-  <label>Support hours <input name="extra_support_hours" value="{{ ex.support_hours }}" placeholder="24/7 or Mon–Fri 08–17"></label>
-  <label>Timezone <input name="extra_timezone" value="{{ ex.timezone }}" placeholder="Europe/Belgrade"></label>
-  <label class="wide">License / contract / SLA <input name="extra_contract" value="{{ ex.contract }}" placeholder="SLA gold · 4h response"></label>
-  <label>Under support
-    <select name="extra_support" class="nice-select" data-support-kind>
-      <option value="" {% if not ex.support %}selected{% endif %}>Not set</option>
-      {% for value, label in support_choices %}
-      <option value="{{ value }}" {% if ex.support == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select></label>
-  <label>Lead time
-    <select name="extra_support_lead_days" class="nice-select">
-      {% set lead = (ex.support_lead_days or support_lead_default)|int %}
-      {% for days in support_lead_choices %}
-      <option value="{{ days }}" {% if lead == days %}selected{% endif %}>{{ days }} days</option>
-      {% endfor %}
-    </select></label>
-  <label class="wide" data-support-custom-row{% if ex.support != 'custom' %} hidden{% endif %}><span class="label-line">Custom support</span>
-    <input name="extra_support_custom" value="{{ ex.support_custom }}" maxlength="120" placeholder="weekdays 8–16" data-support-custom{% if ex.support == 'custom' %} required{% endif %}></label>
-  <label>From <input name="extra_support_from" type="date" value="{{ ex.support_from }}"></label>
-  <label><span class="label-line">To</span>
-    <input name="extra_support_to" type="date" value="{{ ex.support_to }}"></label>
-  <label><span class="label-line">Maintenance from</span>
-    <input name="extra_maint_from" type="datetime-local" value="{{ ex.maint_from }}" data-maint-from></label>
-  <label><span class="label-line">Maintenance until</span>
-    <input name="extra_maint_until" type="datetime-local" value="{{ ex.maint_until }}" data-maint-until></label>
-  </div>
-  </section>
-  </div>
   </div>
   <div class="asset-form-band asset-form-row-2">
   <div class="asset-form-col asset-form-right">
   <input type="hidden" name="alarms_present" value="1">
   <section class="card asset-form-block asset-form-cube asset-alarms-cube">
-    <h2 class="asset-form-block-head alarm-heading label-line">Standard alarms</h2>
+    <h2 class="asset-form-block-head alarm-heading label-line">Alarms</h2>
     {% set alarms = form.alarms or {} %}
     {% set up_a = alarms.get('up') or {} %}
     {% set cpu_a = alarms.get('cpu_percent') or {} %}
@@ -264,32 +253,43 @@
     </datalist>
   </section>
   </div>
+  <div class="asset-form-col" data-asset-support>
+  <section class="card asset-form-block asset-support asset-form-cube">
+  <h2 class="asset-form-block-head label-line">Support</h2>
+  <div class="form-grid asset-form-grid">
+  <label>Support hours <input name="extra_support_hours" value="{{ ex.support_hours }}" placeholder="24/7 or Mon–Fri 08–17"></label>
+  <label>Timezone <input name="extra_timezone" value="{{ ex.timezone }}" placeholder="Europe/Belgrade"></label>
+  <label class="wide">License / contract / SLA <input name="extra_contract" value="{{ ex.contract }}" placeholder="SLA gold · 4h response"></label>
+  <label>Under support
+    <select name="extra_support" class="nice-select" data-support-kind>
+      <option value="" {% if not ex.support %}selected{% endif %}>Not set</option>
+      {% for value, label in support_choices %}
+      <option value="{{ value }}" {% if ex.support == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select></label>
+  <label>Lead time
+    <select name="extra_support_lead_days" class="nice-select">
+      {% set lead = (ex.support_lead_days or support_lead_default)|int %}
+      {% for days in support_lead_choices %}
+      <option value="{{ days }}" {% if lead == days %}selected{% endif %}>{{ days }} days</option>
+      {% endfor %}
+    </select></label>
+  <label class="wide" data-support-custom-row{% if ex.support != 'custom' %} hidden{% endif %}><span class="label-line">Custom support</span>
+    <input name="extra_support_custom" value="{{ ex.support_custom }}" maxlength="120" placeholder="weekdays 8–16" data-support-custom{% if ex.support == 'custom' %} required{% endif %}></label>
+  <label>From <input name="extra_support_from" type="date" value="{{ ex.support_from }}"></label>
+  <label><span class="label-line">To</span>
+    <input name="extra_support_to" type="date" value="{{ ex.support_to }}"></label>
+  <label><span class="label-line">Maintenance from</span>
+    <input name="extra_maint_from" type="datetime-local" value="{{ ex.maint_from }}" data-maint-from></label>
+  <label><span class="label-line">Maintenance until</span>
+    <input name="extra_maint_until" type="datetime-local" value="{{ ex.maint_until }}" data-maint-until></label>
+  </div>
+  </section>
+  </div>
   <div class="asset-form-col asset-form-notes">
   <section class="card asset-form-block asset-form-cube">
     <h2 class="asset-form-block-head">Notes</h2>
     <textarea name="extra_runbook_note" rows="12" placeholder="Ignore disk until 95%; then call the backup on-call.">{{ ex.runbook_note }}</textarea>
-  </section>
-  </div>
-  <div class="asset-form-col asset-form-collect">
-  <section class="card asset-form-block asset-form-cube asset-collect-cube" data-asset-collecting>
-    <input type="hidden" name="snmp_metrics_present" value="1">
-    <h2 class="asset-form-block-head">Collecting</h2>
-    {% set collect_target = selected if form_mode == 'edit' and selected else form %}
-    <p class="collect-source" data-collect-http>{{ http_source_label(collect_target) }}</p>
-    <p class="collect-source" data-collect-snmp>{{ snmp_source_label(collect_target) }}</p>
-    <p class="muted collect-note">Graphs use the SNMP families checked below. node :9100 / windows :9182 only when SNMP is off.</p>
-    <div class="alarm-families collect-families" data-snmp-families>
-    {% set fams = snmp_metrics_on(collect_target) %}
-    {% set snmp_on = snmp_port_for(collect_target) > 0 or ex.snmp_poll or snmp_default %}
-    <div class="alarm-row collect-net">NET — interfaces <span class="muted">{% if snmp_on %}SNMP on{% else %}SNMP off{% endif %}</span></div>
-    {% for key, label in snmp_family_choices %}
-    <div class="alarm-row">
-      <button type="button" class="onoff {{ 'is-on' if not fams or key in fams else 'is-off' }}" data-onoff aria-pressed="{{ 'true' if not fams or key in fams else 'false' }}">{% if not fams or key in fams %}ON{% else %}OFF{% endif %}</button>
-      <input type="checkbox" class="onoff-check" name="snmp_metric_{{ key }}" value="1" data-snmp-metric="{{ key }}" {% if not fams or key in fams %}checked{% endif %} tabindex="-1">
-      {{ label }}
-    </div>
-    {% endfor %}
-    </div>
   </section>
   </div>
   </div>

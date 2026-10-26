@@ -1,5 +1,5 @@
 """Asset VLAN field + filter, per-asset SNMP version / community / v3 USM, the five-column Add/Edit
-layout (Comms, then Standard alarms, Custom alarms, Ladder), and the
+layout (Ports, Metrics, Alarms, Escalation), and the
 snmp_exporter auth render path. Secrets never reach GET HTML, the asset API, journal, or audit."""
 
 from __future__ import annotations
@@ -135,7 +135,7 @@ def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     _db().close()
     text = _client().get("/discovery").text
     listed = _client().get("/assets").text
-    middle = text.split("asset-form-middle", 1)[1].split("asset-form-right", 1)[0]
+    middle = text.split("asset-form-middle", 1)[1].split("asset-form-collect", 1)[0]
     right = text.split("asset-form-right", 1)[1].split("asset-form-custom", 1)[0]
     custom = text.split("asset-form-custom", 1)[1].split("asset-form-ladder", 1)[0]
     ladder = text.split("data-asset-ladder", 1)[1].split("</form>", 1)[0]
@@ -158,7 +158,7 @@ def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".asset-ladder .ladder-level {" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-55" in base and "app.js?v=v09-M" in base
+    assert "app.css?v=v09-56" in base and "app.js?v=v09-N" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "[data-snmp-version]" in js and "[data-snmp-v3-level]" in js
 

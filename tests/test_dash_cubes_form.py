@@ -259,14 +259,16 @@ def test_asset_form_has_one_notes_and_row1_order():
     order = [
         row1.index(">Identity<"),
         row1.index(">Ports<"),
+        row1.index(">Metrics<"),
         row1.index(">Contacts<"),
-        row1.index(">Support<"),
     ]
     assert order == sorted(order)
+    assert ">Support<" not in row1
     assert "L1 NOC" in form and "L4 Manager" in form
-    assert row1.index("asset-form-left") < row1.index("asset-form-middle") < row1.index("data-asset-contacts") < row1.index("data-asset-support")
-    contacts = row1.split("data-asset-contacts", 1)[1].split("data-asset-support", 1)[0]
-    support = row1.split("data-asset-support", 1)[1]
+    assert row1.index("asset-form-left") < row1.index("asset-form-middle") < row1.index("data-asset-collecting") < row1.index("data-asset-contacts")
+    contacts = row1.split("data-asset-contacts", 1)[1]
+    row2 = form.split("asset-form-row-2", 1)[1]
+    support = row2.split("data-asset-support", 1)[1].split("asset-form-notes", 1)[0]
     for label in ("Support hours", "Timezone", "License / contract / SLA"):
         assert label not in contacts
         assert label in support

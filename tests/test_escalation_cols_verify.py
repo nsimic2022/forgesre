@@ -59,7 +59,8 @@ def test_shared_columns_and_enum_widths():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".asset-table { table-layout: auto;" in css
     assert ".incidents-table { table-layout: auto;" in css
-    assert ".found-table { table-layout: fixed;" in css
+    assert ".found-table { table-layout: fixed;" not in css
+    assert ".asset-table { table-layout: auto;" in css
     assert "border-collapse: separate" in css
     assert "border-spacing: 0 0.5rem" in css.split(".list-scroll > table,", 1)[1].split("}", 1)[0]
     assert "border-radius: 10px 0 0 10px" in css

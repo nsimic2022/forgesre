@@ -85,7 +85,8 @@ def test_discovery_cubes_match_and_found_columns_stay_even():
     cards = css.split(".discovery-actions .card {", 1)[1].split("}", 1)[0]
     assert "height: 100%" in cards
     assert "min-height: 12.5rem" in cards
-    assert ".found-table { table-layout: fixed;" in css
+    assert ".found-table { table-layout: fixed;" not in css
+    assert ".asset-table { table-layout: auto;" in css
     row2 = css.split(".asset-form-row-2 {", 1)[1].split("}", 1)[0]
     assert "repeat(4, minmax(0, 1fr))" in row2
     assert "grid-auto-rows: 28rem" in row2
@@ -96,9 +97,11 @@ def test_discovery_cubes_match_and_found_columns_stay_even():
     assert "asset-alarms-cube" in row
     assert "alarm-standard-grid" in row
     assert "asset-custom-scroll" in row
-    assert "asset-collect-cube" in row and "data-asset-collecting" in row
+    assert "asset-collect-cube" not in row
     assert "asset-form-row-3" not in form
-    assert row.index("Standard alarms") < row.index("Custom alarms") < row.index(">Escalation<") < row.index(">Notes<")
+    assert row.index(">Alarms<") < row.index("Custom alarms") < row.index(">Escalation<") < row.index(">Support<") < row.index(">Notes<")
+    row1 = form.split("asset-form-row-1", 1)[1].split("asset-form-row-2", 1)[0]
+    assert "asset-collect-cube" in row1 and "data-asset-collecting" in row1
     assert 'class="card asset-form-block asset-form-cube asset-alarms-cube"' in row
     assert 'class="card asset-form-block asset-form-cube asset-ladder"' in row
     assert "policy-ladder" in row

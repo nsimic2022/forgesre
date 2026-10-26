@@ -85,6 +85,7 @@ from app.inventory import (
     assets_matching,
     clone_candidate,
     clone_prefill,
+    asset_for_candidate,
     candidate_form_values,
     create_manual_asset,
     delete_asset,
@@ -1296,6 +1297,7 @@ def discovery_page(
     edit: str = "",
     clone: str = "",
     imported: str = Query("", alias="import"),
+    asset: str = "",
 ):
     from discovery import suggested_management_cidr
     from app.jobs import active_discovery_scan, latest_discovery_scan, scan_ports_view
@@ -1314,29 +1316,46 @@ def discovery_page(
     netbox_sync = sync_cta(settings.netbox_url, token, settings.netbox_enabled)
     candidate_mode = ""
     selected = None
+    selected_candidate = None
     candidate_form = {"ip": "", "hostname": "", "proposed_role": "Unknown device"}
     form_mode = "add"
     form = asset_form_values()
     import_of = ""
     notice = request.query_params.get("notice") or ""
     if imported.strip().isdigit():
-        selected = db.get(DiscoveryCandidate, int(imported.strip()))
-        if selected is not None:
-            form = candidate_form_values(db, selected)
-            import_of = str(selected.id)
+        selected_candidate = db.get(DiscoveryCandidate, int(imported.strip()))
+        if selected_candidate is not None:
+            existing = asset_for_candidate(db, selected_candidate)
+            if existing is not None:
+                form_mode = "edit"
+                form = asset_form_values(existing)
+                selected = existing
+            else:
+                form = candidate_form_values(db, selected_candidate)
+                import_of = str(selected_candidate.id)
+    elif (asset or "").strip():
+        existing = db.query(Asset).filter_by(asset_id=asset.strip()).first()
+        if existing is not None:
+            form_mode = "edit"
+            form = asset_form_values(existing)
+            selected = existing
+            selected_candidate = (
+                db.query(DiscoveryCandidate).filter_by(asset_id=existing.asset_id).first()
+                or db.query(DiscoveryCandidate).filter_by(ip=existing.ip).first()
+            )
     elif edit.strip().isdigit():
-        selected = db.get(DiscoveryCandidate, int(edit.strip()))
-        if selected is not None:
+        selected_candidate = db.get(DiscoveryCandidate, int(edit.strip()))
+        if selected_candidate is not None:
             candidate_mode = "edit"
             candidate_form = {
-                "ip": selected.ip,
-                "hostname": selected.hostname or "",
-                "proposed_role": selected.proposed_role or "Unknown device",
+                "ip": selected_candidate.ip,
+                "hostname": selected_candidate.hostname or "",
+                "proposed_role": selected_candidate.proposed_role or "Unknown device",
             }
     elif clone.strip().isdigit():
         source = db.get(DiscoveryCandidate, int(clone.strip()))
         if source is not None:
-            selected = source
+            selected_candidate = source
             candidate_mode = "clone"
             candidate_form = {
                 "ip": suggest_clone_candidate_ip(db, source.ip),
@@ -1358,6 +1377,7 @@ def discovery_page(
         form_mode=form_mode,
         form=form,
         selected=selected,
+        selected_candidate=selected_candidate,
         clone_source="",
         import_of=import_of,
         role_choices=CANDIDATE_ROLE_CHOICES,
@@ -1396,13 +1416,19 @@ def discovery_page(
         ),
         pager=pager,
         found_assets={a.asset_id: a for a in inventory if a.asset_id},
-        **asset_form_context(db, every=inventory, form_mode=form_mode, selected=None),
+        found_by_ip={a.ip: a for a in inventory if a.ip},
+        **asset_form_context(
+            db,
+            every=inventory,
+            form_mode=form_mode,
+            selected=selected if form_mode == "edit" else None,
+        ),
     )
 
 
 def zabbix_discovery_ctx(db: Session) -> dict:
     """Discovery Zabbix block: cached status chip, last sync / last error. Never blocks on a dead Zabbix twice."""
-    from app.zabbix import NOT_CONFIGURED_WHY
+    from app.zabbix import NOT_CONFIGURED_WHY, token_presence as zabbix_token_presence
     from app.zabbix_sync import current_status, last_sync_entry
 
     enabled = settings.zabbix_enabled
@@ -1434,6 +1460,7 @@ def zabbix_discovery_ctx(db: Session) -> dict:
         "clickable": bool(enabled),
         "last_ok": last_ok,
         "last_error": last_error,
+        "token_present": zabbix_token_presence(settings.zabbix_token),
     }
 
 
@@ -1459,7 +1486,7 @@ def discovery_zabbix_page(db: Session = Depends(get_db), user: User = Depends(lo
 
 def glpi_discovery_ctx(db: Session) -> dict:
     """Discovery GLPI block: cached status chip, last sync / last error."""
-    from app.glpi import NOT_CONFIGURED_WHY
+    from app.glpi import NOT_CONFIGURED_WHY, token_presence as glpi_token_presence
     from app.glpi_sync import current_status, last_sync_entry
 
     enabled = settings.glpi_enabled
@@ -1490,6 +1517,7 @@ def glpi_discovery_ctx(db: Session) -> dict:
         "clickable": bool(enabled),
         "last_ok": last_ok,
         "last_error": last_error,
+        "token_present": glpi_token_presence(settings.glpi_app_token, settings.glpi_user_token),
     }
 
 

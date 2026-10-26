@@ -179,7 +179,7 @@ def test_collecting_cube_on_form_and_saves_families():
     client = _client()
     page = client.get("/discovery").text
     cube = page.split("data-asset-collecting", 1)[1].split("</section>", 1)[0]
-    assert ">Collecting<" in cube
+    assert ">Metrics<" in cube
     assert "node :9100" in cube or "HTTP off" in cube
     assert "SNMP off" in cube or "SNMP UDP" in cube
     assert 'name="snmp_metrics_present"' in cube
@@ -327,4 +327,4 @@ def test_host_module_and_job_are_bundled():
     assert "forgesre-snmp-host" in detail
     assert "if_mib + host" in detail
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-55" in base and "app.js?v=v09-M" in base
+    assert "app.css?v=v09-56" in base and "app.js?v=v09-N" in base

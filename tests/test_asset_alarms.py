@@ -69,7 +69,7 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     assert "<legend>Alarms</legend>" not in page.text
     assert '<fieldset class="alarm-families"' not in page.text
     assert "alarm-heading" in page.text
-    assert "Standard alarms" in page.text
+    assert ">Alarms<" in page.text
     assert 'class="info-tip"' not in page.text
     assert "Bundled alarms for this asset" not in page.text
     assert "asset-form-grid" in page.text
@@ -79,7 +79,7 @@ def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
     host_at = page.text.find('name="hostname"', form_at)
     id_at = page.text.find('name="asset_id"', form_at)
     ip_at = page.text.find('name="ip"', form_at)
-    alarm_at = page.text.find("alarm-families")
+    alarm_at = page.text.find("alarm-standard-grid")
     type_at = page.text.find('name="type" class="nice-select" data-detect-type')
     left_at = page.text.find("asset-form-left")
     middle_at = page.text.find("asset-form-middle")

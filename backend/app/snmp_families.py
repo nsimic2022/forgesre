@@ -69,7 +69,7 @@ def snmp_metrics_on(asset: Any) -> frozenset[str]:
 
     No stored key: Poll SNMP (or an explicit port on a non-family type) gets
     if_mib + host. Family SNMP (switch / router / printer / …) stays if_mib
-    until the Collecting cube stores a pick. Existing ``lnx`` + poll therefore
+    until the Metrics cube stores a pick. Existing ``lnx`` + poll therefore
     joins the host scrape without a form revisit.
     """
     if snmp_port_for(asset) <= 0:
