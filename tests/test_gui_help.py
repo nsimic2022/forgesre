@@ -15,7 +15,7 @@ TEMPLATES = ROOT / "frontend" / "templates"
 def test_no_template_includes_info_tip():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-57" in base
+    assert "app.css?v=v09-58" in base
     assert "font-size: 0.82rem" in css.split("html, body {", 1)[1].split("}", 1)[0]
     for path in TEMPLATES.rglob("*.html"):
         text = path.read_text(encoding="utf-8")

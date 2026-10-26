@@ -3456,11 +3456,17 @@ select.nice-select option { font-weight: 400; color: var(--text); background: va
   align-items: center;
   gap: 0.28rem;
 }
-.metric-source-cubes { margin: 0 0 0.55rem; }
+.metric-source-block {
+  margin: 0 0 0.85rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+.metric-source-head,
 .metric-family-head {
   margin: 0 0 0.4rem;
   font-weight: 700;
 }
+.metric-source-cubes { margin: 0; }
 .metric-family-cubes .metric-fam { margin: 0; }
 .metric-family-cubes .onoff-check { display: none; }
 .metric-family-cubes .reach-sq {
