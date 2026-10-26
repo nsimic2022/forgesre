@@ -55,8 +55,84 @@ def _kind_flags(asset: dict[str, Any], alert: dict[str, Any] | None = None) -> t
         or any(token in alertname for token in ("network", "switch", "router", "firewall", "snmp"))
         or "network-switch" in profile
     )
+    try:
+        from app.asset_types import snmp_port_for
+
+        if snmp_port_for(asset) > 0:
+            snmpish = True
+    except Exception:
+        pass
     windowsish = "windows" in kind or "win32" in kind or "windows" in profile or scrape.endswith(":9182")
     return snmpish, windowsish
+
+
+def _snmp_if_queries(selectors: list[str]) -> dict[str, tuple[str, str]]:
+    return {
+        "up": (_or_fill('up{job="forgesre-snmp",__SEL__}', selectors), ""),
+        "net_rx": (
+            _or_fill('sum(rate(ifHCInOctets{job="forgesre-snmp",__SEL__}[5m]))', selectors),
+            "bytes",
+        ),
+        "net_tx": (
+            _or_fill('sum(rate(ifHCOutOctets{job="forgesre-snmp",__SEL__}[5m]))', selectors),
+            "bytes",
+        ),
+        "net_speed": (
+            _or_fill('sum(ifHighSpeed{job="forgesre-snmp",__SEL__}) * 125000', selectors),
+            "bytes",
+        ),
+    }
+
+
+def _snmp_host_queries(selectors: list[str]) -> dict[str, tuple[str, str]]:
+    job = 'job="forgesre-snmp-host"'
+    return {
+        "cpu_percent": (
+            _or_fill(
+                f"avg(hrProcessorLoad{{{job},__SEL__}}) or (100 - ssCpuIdle{{{job},__SEL__}})",
+                selectors,
+            ),
+            "percent",
+        ),
+        "load": (
+            _or_fill(f'avg(laLoadInt{{{job},laIndex="1",__SEL__}}) / 100', selectors),
+            "load",
+        ),
+        "memory_percent": (
+            _or_fill(
+                f"100 * (1 - memAvailReal{{{job},__SEL__}} / memTotalReal{{{job},__SEL__}})",
+                selectors,
+            ),
+            "percent",
+        ),
+        "memory_total": (
+            _or_fill(f"memTotalReal{{{job},__SEL__}} * 1024", selectors),
+            "bytes",
+        ),
+        "swap_percent": (
+            _or_fill(
+                f"100 * (1 - memAvailSwap{{{job},__SEL__}} / memTotalSwap{{{job},__SEL__}})",
+                selectors,
+            ),
+            "percent",
+        ),
+        "disk_percent": (
+            _or_fill(
+                f"max(dskPercent{{{job},__SEL__}}) or "
+                f"max(100 * hrStorageUsed{{{job},__SEL__}} / clamp_min(hrStorageSize{{{job},__SEL__}}, 1))",
+                selectors,
+            ),
+            "percent",
+        ),
+        "disk_volumes": (
+            _or_fill(f"dskPercent{{{job},__SEL__}}", selectors),
+            "percent",
+        ),
+        "proc": (
+            _or_fill(f"max(prErrorFlag{{{job},__SEL__}})", selectors),
+            "proc",
+        ),
+    }
 
 
 def _snmp_scrape_instance(ip: str, port: Any) -> str:
@@ -167,21 +243,17 @@ def promql_queries_for(
         selectors = [f'asset="{_escape(asset_id)}"']
     snmpish, windowsish = _kind_flags(asset, alert)
     if snmpish:
-        return {
-            "up": (_or_fill('up{job="forgesre-snmp",__SEL__}', selectors), ""),
-            "net_rx": (
-                _or_fill('sum(rate(ifHCInOctets{job="forgesre-snmp",__SEL__}[5m]))', selectors),
-                "bytes",
-            ),
-            "net_tx": (
-                _or_fill('sum(rate(ifHCOutOctets{job="forgesre-snmp",__SEL__}[5m]))', selectors),
-                "bytes",
-            ),
-            "net_speed": (
-                _or_fill('sum(ifHighSpeed{job="forgesre-snmp",__SEL__}) * 125000', selectors),
-                "bytes",
-            ),
-        }
+        packed = _snmp_if_queries(selectors)
+        host_on = True
+        try:
+            from app.snmp_families import host_metrics_on
+
+            host_on = host_metrics_on(asset)
+        except Exception:
+            host_on = True
+        if host_on:
+            packed.update(_snmp_host_queries(selectors))
+        return packed
     if windowsish:
         return {
             "net_rx": (

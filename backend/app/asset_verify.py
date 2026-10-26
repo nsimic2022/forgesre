@@ -99,6 +99,8 @@ def _check(name: str, ok: bool | None, detail: str) -> CheckResult:
 
 
 def family_check(vclass: str, probe: AssetProbe) -> CheckResult:
+    if probe.metrics.ok is True and "SNMP UDP" in (probe.metrics.detail or ""):
+        return _check("family", True, "SNMP UDP/161 if_mib + host (not node :9100)")
     if vclass == CLASS_UNKNOWN:
         return _check("family", None, "no exporter class — not node_ / windows_ / SNMP")
     if vclass == CLASS_NETWORK:
@@ -158,9 +160,9 @@ def prometheus_check(
             None,
             "DEMO lab host is not in HTTP/SNMP SD — not proof of a real scrape",
         )
-    if vclass == CLASS_UNKNOWN:
+    if vclass == CLASS_UNKNOWN and not in_snmp_sd:
         return _check("prom", None, "no exporter class — Prometheus has nothing to scrape")
-    if vclass == CLASS_NETWORK:
+    if vclass == CLASS_NETWORK or in_snmp_sd:
         if not in_snmp_sd:
             return _check(
                 "prom",
@@ -264,6 +266,12 @@ def prometheus_target_check(
 ) -> CheckResult:
     """Scrape target health=up for this asset's job/instance (not a rewrite of PROM up)."""
     ident = scrape_identity(item, vclass)
+    if in_snmp_sd:
+        ident = {
+            "job": "forgesre-snmp",
+            "instance": str(item.get("ip") or "").strip() or ident["instance"],
+            "asset": ident["asset"],
+        }
     job, instance, asset_id = ident["job"], ident["instance"], ident["asset"]
     where = f'job={job or "—"} instance={instance or "—"} asset={asset_id or "—"}'
     if lab:
@@ -272,11 +280,11 @@ def prometheus_target_check(
             None,
             "DEMO lab host — scrape target health is not proof of a real scrape",
         )
-    if vclass == CLASS_UNKNOWN:
+    if vclass == CLASS_UNKNOWN and not in_snmp_sd:
         return _check("target", None, "no exporter class — Prometheus has no scrape target")
     if vclass == CLASS_NETWORK and not in_snmp_sd:
         return _check("target", None, "not in SNMP HTTP SD — no scrape target")
-    if vclass != CLASS_NETWORK and not in_http_sd:
+    if vclass != CLASS_NETWORK and not in_http_sd and not in_snmp_sd:
         return _check("target", None, "not in Prometheus HTTP SD — no scrape target")
     if targets:
         matched = [row for row in targets if _match_prom_target(row, ident)]
@@ -308,11 +316,11 @@ def prometheus_target_check(
             return _check("target", None, f"Prometheus targets API: {targets_error}")
         return _check("target", None, f"Prometheus scrape target not queried ({where})")
     exprs: list[str] = []
-    if vclass == CLASS_NETWORK and asset_id:
+    if (vclass == CLASS_NETWORK or in_snmp_sd) and asset_id:
         exprs.append(f'up{{job="forgesre-snmp",asset="{_escape_label(asset_id)}"}}')
         if instance:
             exprs.append(f'up{{job="forgesre-snmp",instance="{_escape_label(instance)}"}}')
-    else:
+    if vclass != CLASS_NETWORK and not in_snmp_sd:
         if job and asset_id:
             exprs.append(f'up{{job="{_escape_label(job)}",asset="{_escape_label(asset_id)}"}}')
         if job and instance:
@@ -348,8 +356,9 @@ def _series_expr(vclass: str, selector: str) -> str:
     if vclass == CLASS_WINDOWS:
         return f'count({{__name__=~"windows_.*",{selector}}})'
     return (
-        f'count({{__name__=~"ifOperStatus|ifHCInOctets|sysUpTime|ifAdminStatus",'
-        f'job="forgesre-snmp",{selector}}})'
+        f'count({{__name__=~"ifOperStatus|ifHCInOctets|sysUpTime|ifAdminStatus|'
+        f'hrProcessorLoad|ssCpuIdle|memTotalReal|dskPercent|prCount",'
+        f'job=~"forgesre-snmp.*",{selector}}})'
     )
 
 
@@ -366,18 +375,20 @@ def series_check(
     token = {"linux": "node_", "windows": "windows_", "network": "SNMP"}.get(vclass, "")
     if lab:
         return _check("series", None, "DEMO lab host — series are not proof of a real scrape")
-    if vclass == CLASS_UNKNOWN or not token:
+    if in_snmp_sd:
+        token = "SNMP"
+    if (vclass == CLASS_UNKNOWN or not token) and not in_snmp_sd:
         return _check("series", None, "no exporter class — no node_ / windows_ / SNMP series to expect")
     if vclass == CLASS_NETWORK and not in_snmp_sd:
         return _check("series", None, "not in SNMP HTTP SD — Prometheus has no SNMP series")
-    if vclass != CLASS_NETWORK and not in_http_sd:
+    if vclass != CLASS_NETWORK and not in_http_sd and not in_snmp_sd:
         return _check("series", None, "not in Prometheus HTTP SD — no family series")
     if query_fn is None:
         return _check("series", None, f"{token} series not queried")
     last_expr = ""
     last_error = ""
     for selector in _selector_candidates(item, vclass):
-        expr = _series_expr(vclass, selector)
+        expr = _series_expr("network" if in_snmp_sd else vclass, selector)
         last_expr = expr
         sample = query_fn(expr)
         if sample.get("error"):
@@ -750,8 +761,8 @@ def compose_verify(
         in_snmp_sd=in_snmp_sd,
         query_fn=query_fn,
     )
-    if not lab and vclass != CLASS_UNKNOWN and prom.ok is True and series.ok is None:
-        token = "node_" if vclass == CLASS_LINUX else ("windows_" if vclass == CLASS_WINDOWS else "SNMP")
+    if not lab and (vclass != CLASS_UNKNOWN or in_snmp_sd) and prom.ok is True and series.ok is None:
+        token = "SNMP" if in_snmp_sd else ("node_" if vclass == CLASS_LINUX else ("windows_" if vclass == CLASS_WINDOWS else "SNMP"))
         series = _check("series", False, f"Prometheus up=1 but no {token} series — empty Prom")
     am = alertmanager_check(am_health=am_health)
     core = core_check(incident=incident)

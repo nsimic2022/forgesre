@@ -112,7 +112,7 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert "[data-select-scope]:has([data-select-row]:checked) .list-actions" in css
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-53" in base and "app.js?v=v09-K" in base
+    assert "app.css?v=v09-54" in base and "app.js?v=v09-L" in base
 
     assets = _middle(client.get("/assets").text)
     _order(assets, ["Edit", "Clone", "Verify", "Export", "Remove"])

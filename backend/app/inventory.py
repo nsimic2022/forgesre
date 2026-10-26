@@ -222,6 +222,39 @@ def sd_snmp_targets(db: Session) -> list[dict]:
     return targets
 
 
+def sd_snmp_host_targets(db: Session) -> list[dict]:
+    """Second SNMP job: HOST-RESOURCES / UCD-SNMP ``host`` module for opted-in families."""
+    from app.snmp_families import HOST_MODULE, host_metrics_on
+
+    if not settings.snmp_enabled:
+        return []
+    targets: list[dict] = []
+    seen: set[str] = set()
+    rendered = rendered_auth_names()
+    for asset in db.query(Asset).order_by(Asset.asset_id).all():
+        if not is_snmp_asset(asset) or not host_metrics_on(asset):
+            continue
+        port = snmp_port_for(asset)
+        target = snmp_target(asset.ip, port)
+        if not target or target in seen:
+            continue
+        seen.add(target)
+        targets.append(
+            {
+                "targets": [target],
+                "labels": {
+                    "asset": asset.asset_id,
+                    "monitoring_profile": asset.monitoring_profile or "network-switch",
+                    "source": asset.source or "manual",
+                    "snmp_module": HOST_MODULE,
+                    "snmp_auth": effective_auth(asset, rendered),
+                    "snmp_port": str(port),
+                },
+            }
+        )
+    return targets
+
+
 def snmp_auths(db: Session) -> dict[str, dict]:
     """Per-asset snmp_exporter auths (Custom community or v3) for SNMP targets. Holds secrets —
     only the bearer-protected render endpoint returns this; never journal or log it."""
