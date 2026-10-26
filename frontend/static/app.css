@@ -3448,8 +3448,46 @@ select.nice-select option { font-weight: 400; color: var(--text); background: va
 .asset-comms .snmp-poll-row input[type="checkbox"] { width: auto; flex: 0 0 auto; }
 .asset-comms .snmp-poll-row label { display: inline; width: auto; margin: 0; }
 .asset-comms .snmp-probe-row button { width: auto; }
-.asset-collect-cube .collect-source { margin: 0 0 0.25rem; font-weight: 700; }
-.asset-collect-cube .collect-note { margin: 0 0 0.65rem; }
+.metric-source-cubes,
+.metric-family-cubes,
+.found-action-cubes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.28rem;
+}
+.metric-source-cubes { margin: 0 0 0.55rem; }
+.metric-family-head {
+  margin: 0 0 0.4rem;
+  font-weight: 700;
+}
+.metric-family-cubes .metric-fam { margin: 0; }
+.metric-family-cubes .onoff-check { display: none; }
+.metric-family-cubes .reach-sq {
+  min-width: 3.2rem;
+  cursor: pointer;
+}
+.found-action-cubes .reach-sq {
+  min-width: 3.4rem;
+  height: auto;
+  min-height: 1.35rem;
+  padding: 0.18rem 0.4rem;
+  text-decoration: none;
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+.found-action-cubes .reach-sq.already { min-width: 7.2rem; }
+.found-action-cubes form { margin: 0; display: inline-flex; }
+.found-action-cubes button.reach-sq {
+  cursor: pointer;
+  font-family: inherit;
+}
+.asset-table th.col-found-actions,
+.asset-table td.col-found-actions {
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: middle;
+}
 .asset-collect-cube .collect-net { font-weight: 700; }
 .metric-source { font-weight: 500; font-size: 0.78rem; }
 .asset-ladder .ladder-levels {

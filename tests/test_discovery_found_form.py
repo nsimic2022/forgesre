@@ -41,8 +41,10 @@ def test_found_table_uses_assets_layout_and_scan_cubes():
     assert 'table class="asset-table"' in disc
     assert 'table class="asset-table"' in assets
     assert "found-table" not in disc
-    assert "already in assets" in disc
-    assert ">Import<" in disc
+    assert "Already in assets" in disc
+    assert "found-action-cubes" in disc
+    assert "col-found-actions" in disc
+    assert ">Actions<" in disc
     assert "token-btn" in disc
     assert "zabbix.token_present" in disc and "glpi.token_present" in disc
     assert [item[0] for item in SCAN_CUBE_META] == list(SCAN_PORT_ORDER)
@@ -106,9 +108,9 @@ def test_scan_always_lists_known_ip_and_edit_prefills_saved_asset(monkeypatch):
     listed = client.get("/discovery")
     assert listed.status_code == 200
     assert ip in listed.text
-    assert "already in assets" in listed.text
+    assert "Already in assets" in listed.text
     assert f"/discovery?asset={host}" in listed.text
-    assert f">Import<" in listed.text or "Import" in listed.text
+    assert "found-action-cubes" in listed.text
     opened = client.get(f"/discovery?asset={host}")
     assert opened.status_code == 200
     assert "Edit asset" in opened.text
@@ -144,6 +146,28 @@ def test_import_new_candidate_fills_add_asset_only_after_click():
     filled = opened.text.split('id="asset-form"', 1)[1].split("</form>", 1)[0]
     assert f'value="{ip}"' in filled
     assert asset_id_slug(host) in filled or host in filled
+
+
+def test_off_metrics_drop_from_graphs():
+    from app.asset_metrics import asset_metric_panel
+    from app.snmp_families import metrics_on
+
+    three = {
+        "asset_id": "three-snmp",
+        "type": "Linux Server",
+        "ip": "10.4.4.4",
+        "extras": {"snmp_poll": "1", "snmp_metrics": "cpu,mem,disk"},
+    }
+    assert metrics_on(three) == frozenset({"cpu", "mem", "disk"})
+
+    def query(expr: str) -> dict:
+        return {"value": 1.0, "query": expr}
+
+    panel = asset_metric_panel(three, query_fn=query, range_fn=lambda expr: {"values": []})
+    assert {tile["key"] for tile in panel["tiles"]} == {"cpu_percent", "memory_percent", "disk_percent"}
+    assert "network" not in {tile["key"] for tile in panel["tiles"]}
+    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    assert "panel.hidden = !tile" in js
 
 
 def test_asset_id_slug_matches_python_helper():

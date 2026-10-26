@@ -85,17 +85,17 @@ def test_families_default_poll_all_family_snmp_net_only():
     assert snmp_metrics_on(linux_http) == frozenset()
     assert host_metrics_on(linux_http) is False
     assert snmp_metrics_on({"type": "Switch", "ip": "10.1.1.4", "extras": {"snmp_metrics": "cpu,disk"}}) == frozenset(
-        {"net", "cpu", "disk"}
+        {"cpu", "disk"}
     )
     assert families_from_form("") is None
-    assert families_from_form("1") == "net"
-    assert families_from_form("1", cpu="1", mem="on") == "net,cpu,mem"
+    assert families_from_form("1") == ""
+    assert families_from_form("1", net="1", cpu="1", mem="on") == "net,cpu,mem"
     stored = normalize_extras({"snmp_poll": "1", "snmp_metrics": "cpu,mem"})
     assert stored["snmp_poll"] == "1"
-    assert stored["snmp_metrics"] == "net,cpu,mem"
+    assert stored["snmp_metrics"] == "cpu,mem"
     assert extras_from_form("1", snmp_poll="1")["snmp_poll"] == "1"
     assert "snmp_metrics" not in extras_from_form("1", snmp_poll="1")
-    assert extras_from_form("1", snmp_metrics="cpu")["snmp_metrics"] == "net,cpu"
+    assert extras_from_form("1", snmp_metrics="cpu")["snmp_metrics"] == "cpu"
 
 
 def test_source_labels_name_node_9100_vs_snmp():
@@ -180,16 +180,16 @@ def test_collecting_cube_on_form_and_saves_families():
     page = client.get("/discovery").text
     cube = page.split("data-asset-collecting", 1)[1].split("</section>", 1)[0]
     assert ">Metrics<" in cube
-    assert "node :9100" in cube or "HTTP off" in cube
-    assert "SNMP off" in cube or "SNMP UDP" in cube
+    assert "Prometheus" in cube and "Zabbix" in cube and "SNMP" in cube and "GLPI" in cube
+    assert "node :9100" not in cube
+    assert "SNMP on" not in cube and "Graphs use the SNMP" not in cube
     assert 'name="snmp_metrics_present"' in cube
-    for key in HOST_FAMILIES:
+    for key in ("net", "cpu", "load", "mem", "swap", "disk", "proc"):
         assert f'name="snmp_metric_{key}"' in cube, key
-    assert "data-collect-http" in cube and "data-collect-snmp" in cube
+    assert "data-metric-source" in cube and "data-metric-family-head" in cube
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "syncCollecting" in js
-    assert "node :9100 (default scrape, not SNMP)" in js
-    assert "if_mib + host" in js
+    assert "SNMP metrics" in js and "Prometheus metrics" in js
     ip = _ip()
     posted = _post(
         client,
@@ -199,6 +199,7 @@ def test_collecting_cube_on_form_and_saves_families():
         extras_present="1",
         snmp_poll="1",
         snmp_metrics_present="1",
+        snmp_metric_net="1",
         snmp_metric_cpu="1",
         snmp_metric_mem="1",
         snmp_metric_disk="1",
@@ -213,8 +214,8 @@ def test_collecting_cube_on_form_and_saves_families():
     assert "shm-form-lnx" in host
     edit = client.get("/assets?edit=shm-form-lnx").text
     collect = edit.split("data-asset-collecting", 1)[1].split("</section>", 1)[0]
-    assert "SNMP UDP/161" in collect
-    assert "node :9100" in collect
+    assert "SNMP metrics" in collect
+    assert "node :9100" not in collect
     assert 'name="snmp_metric_cpu"' in collect and "checked" in collect.split('name="snmp_metric_cpu"', 1)[1][:80]
     db.close()
 
@@ -327,4 +328,4 @@ def test_host_module_and_job_are_bundled():
     assert "forgesre-snmp-host" in detail
     assert "if_mib + host" in detail
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-56" in base and "app.js?v=v09-N" in base
+    assert "app.css?v=v09-57" in base and "app.js?v=v09-O" in base

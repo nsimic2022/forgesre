@@ -531,8 +531,8 @@ def test_metrics_api_and_detail_html(monkeypatch):
     text = page.text
     assert "asset-edit-graphs" in text
     assert "data-asset-graphs" in text
-    assert "data-asset-online" in text
-    assert "data-asset-online-pill" in text
+    assert "data-asset-online" not in text
+    assert "data-asset-online-pill" not in text
     assert 'data-asset="app-lab-metrics"' in text
     assert "data-dash-graph-list" in text
     assert "data-asset-graph-grid" not in text

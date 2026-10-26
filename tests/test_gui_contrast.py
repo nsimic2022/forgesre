@@ -79,8 +79,8 @@ CONTRAST = {
 
 
 def test_cache_bust_is_v09_s_for_css_only():
-    assert "app.css?v=v09-56" in BASE
-    assert "app.js?v=v09-N" in BASE
+    assert "app.css?v=v09-57" in BASE
+    assert "app.js?v=v09-O" in BASE
     assert "app.css?v=v09-W" not in BASE
 
 

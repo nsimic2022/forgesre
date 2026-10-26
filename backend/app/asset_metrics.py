@@ -164,32 +164,28 @@ def metric_class_for(asset: Any) -> str:
     return "unknown"
 
 
+def _field(asset: Any, key: str) -> str:
+    if isinstance(asset, dict):
+        return str(asset.get(key) or "")
+    return str(getattr(asset, key, "") or "")
+
+
 def _asset_dict(asset: Any) -> dict[str, Any]:
     from app.asset_types import snmp_port_for
 
-    if isinstance(asset, dict):
-        extras = asset.get("extras") if isinstance(asset.get("extras"), dict) else {}
-        return {
-            "asset_id": str(asset.get("asset_id") or ""),
-            "hostname": str(asset.get("hostname") or ""),
-            "ip": str(asset.get("ip") or ""),
-            "type": str(asset.get("type") or ""),
-            "monitoring_profile": str(asset.get("monitoring_profile") or ""),
-            "scrape_address": str(asset.get("scrape_address") or ""),
-            "snmp_port": snmp_port_for(asset),
-            "alarms": asset.get("alarms"),
-            "extras": extras,
-        }
-    extras = getattr(asset, "extras", None)
+    extras = asset.get("extras") if isinstance(asset, dict) else getattr(asset, "extras", None)
     return {
-        "asset_id": str(getattr(asset, "asset_id", "") or ""),
-        "hostname": str(getattr(asset, "hostname", "") or ""),
-        "ip": str(getattr(asset, "ip", "") or ""),
-        "type": str(getattr(asset, "type", "") or ""),
-        "monitoring_profile": str(getattr(asset, "monitoring_profile", "") or ""),
-        "scrape_address": str(getattr(asset, "scrape_address", "") or ""),
+        "asset_id": _field(asset, "asset_id"),
+        "hostname": _field(asset, "hostname"),
+        "ip": _field(asset, "ip"),
+        "type": _field(asset, "type"),
+        "monitoring_profile": _field(asset, "monitoring_profile"),
+        "scrape_address": _field(asset, "scrape_address"),
+        "source": _field(asset, "source"),
+        "zabbix_hostid": _field(asset, "zabbix_hostid"),
+        "glpi_id": _field(asset, "glpi_id"),
         "snmp_port": snmp_port_for(asset),
-        "alarms": getattr(asset, "alarms", None),
+        "alarms": asset.get("alarms") if isinstance(asset, dict) else getattr(asset, "alarms", None),
         "extras": extras if isinstance(extras, dict) else {},
     }
 
@@ -680,13 +676,25 @@ def asset_metric_panel(
     bundled = bundled_thresholds().get("demo" if klass == "demo" else klass, {})
     alarms = normalize_alarms(info.get("alarms"), "demo" if klass == "demo" else klass)
     from app.asset_types import snmp_port_for
-    from app.snmp_families import FAMILY_TILE, http_source_label, snmp_metrics_on, snmp_source_label, tile_source_label
+    from app.snmp_families import (
+        FAMILY_TILE,
+        http_source_label,
+        metrics_on,
+        snmp_metrics_on,
+        snmp_source_label,
+        tile_source_label,
+    )
 
-    fams = snmp_metrics_on(info)
+    fams = metrics_on(info)
+    snmp_fams = snmp_metrics_on(info)
     if fams:
-        keys = tuple(FAMILY_TILE[key] for key in ("cpu", "load", "mem", "swap", "disk", "proc", "net") if key in fams)
+        keys = tuple(
+            FAMILY_TILE[key]
+            for key in ("cpu", "load", "mem", "swap", "disk", "proc", "net")
+            if key in fams
+        )
     else:
-        keys = _CLASS_TILES.get(klass, _CLASS_TILES["unknown"])
+        keys = ()
     fetch = query_fn or _default_query
     queried_end = time.time() if range_end is None else float(range_end)
     queried_start = queried_end - GRAPH_WINDOW_SECONDS if range_start is None else float(range_start)
@@ -843,7 +851,7 @@ def asset_metric_panel(
                 times=times.get(key),
                 query=queries.get(key) or "",
                 enabled=tile_enabled(alarms, key) if key != "network" else True,
-                source=tile_source_label(info, bool(fams) and key in {FAMILY_TILE[fam] for fam in fams}),
+                source=tile_source_label(info, bool(snmp_fams) and key in {FAMILY_TILE[fam] for fam in snmp_fams}),
                 **extra,
             )
         )
@@ -871,25 +879,25 @@ def asset_metric_panel(
 
 
 def glance_cells(panel: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Five glance cells for the Assets list pane. Missing tiles stay — (not a fake 0%)."""
-    by_key = {tile.get("key"): tile for tile in (panel or {}).get("tiles") or []}
+    """Glance cells follow the Metrics cube — only tracked tiles, plus Collecting."""
+    tiles = list((panel or {}).get("tiles") or [])
     collecting = None if panel is None else panel.get("collecting")
     cells: list[dict[str, Any]] = []
-    for key, label in GLANCE_CELLS:
-        if key == "up":
-            if collecting is True:
-                display, tone = "up", "ok"
-            elif collecting is False:
-                display, tone = "down", "crit"
-            else:
-                display, tone = "—", "warn"
-            cells.append({"key": key, "label": label, "display": display, "tone": tone})
+    if collecting is True:
+        display, tone = "up", "ok"
+    elif collecting is False:
+        display, tone = "down", "crit"
+    else:
+        display, tone = "—", "warn"
+    cells.append({"key": "up", "label": "Collecting", "display": display, "tone": tone})
+    for tile in tiles:
+        key = str(tile.get("key") or "")
+        if not key or key == "up":
             continue
-        tile = by_key.get(key) or {}
         cells.append(
             {
                 "key": key,
-                "label": label,
+                "label": tile.get("name") or dict(GLANCE_CELLS).get(key) or key,
                 "display": tile.get("display") or "—",
                 "tone": tile.get("tone") or "warn",
             }
@@ -934,8 +942,13 @@ def zabbix_metric_panel(asset: Any, *, trends_fn: Callable[[str], dict[str, Any]
     except Exception as exc:
         result = {"ok": False, "error": str(exc), "tiles": {}}
     found = result.get("tiles") or {}
+    from app.snmp_families import FAMILY_TILE, metrics_on
+
+    wanted = {FAMILY_TILE[key] for key in metrics_on(info)}
     tiles = []
     for key in ZABBIX_TILE_KEYS:
+        if wanted and key not in wanted:
+            continue
         row = found.get(key)
         if not row:
             continue

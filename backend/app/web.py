@@ -60,9 +60,13 @@ from app.playrule_mute import muted_playrule_ids, playrule_off_from_form
 from app.asset_snmp import AUTH_PROTOCOLS, PRIV_PROTOCOLS, SNMP_VERSIONS, V3_LEVELS, auth_status, snmp_from_form
 from app.asset_types import ASSET_TYPE_GROUPS, DEFAULT_SNMP_PORT, parse_snmp_port, snmp_family, snmp_port_for
 from app.snmp_families import (
+    ALL_FAMILIES,
     FAMILY_LABELS,
-    HOST_FAMILIES,
     http_source_label,
+    metric_family_heading,
+    metric_source_cubes,
+    metrics_on,
+    metrics_on_form,
     snmp_metrics_on,
     snmp_source_label,
     families_from_form,
@@ -874,8 +878,12 @@ def asset_form_context(
         "http_source_label": http_source_label,
         "snmp_source_label": snmp_source_label,
         "snmp_metrics_on": snmp_metrics_on,
+        "metrics_on": metrics_on,
+        "metrics_on_form": metrics_on_form,
+        "metric_source_cubes": metric_source_cubes,
+        "metric_family_heading": metric_family_heading,
         "snmp_port_for": snmp_port_for,
-        "snmp_family_choices": [(key, FAMILY_LABELS[key]) for key in HOST_FAMILIES],
+        "snmp_family_choices": [(key, FAMILY_LABELS[key]) for key in ALL_FAMILIES],
     }
 
 
@@ -1130,6 +1138,7 @@ def asset_create(
     extra_maint_until: str = Form(""),
     snmp_poll: str = Form(""),
     snmp_metrics_present: str = Form(""),
+    snmp_metric_net: str = Form(""),
     snmp_metric_cpu: str = Form(""),
     snmp_metric_load: str = Form(""),
     snmp_metric_mem: str = Form(""),
@@ -1205,6 +1214,7 @@ def asset_create(
         posted_extras = extras_from_form("1", snmp_poll=snmp_poll)
     picked_metrics = families_from_form(
         snmp_metrics_present,
+        net=snmp_metric_net,
         cpu=snmp_metric_cpu,
         load=snmp_metric_load,
         mem=snmp_metric_mem,
@@ -1919,6 +1929,7 @@ def asset_update(
     extra_maint_until: str = Form(""),
     snmp_poll: str = Form(""),
     snmp_metrics_present: str = Form(""),
+    snmp_metric_net: str = Form(""),
     snmp_metric_cpu: str = Form(""),
     snmp_metric_load: str = Form(""),
     snmp_metric_mem: str = Form(""),
@@ -1994,6 +2005,7 @@ def asset_update(
     )
     picked_metrics = families_from_form(
         snmp_metrics_present,
+        net=snmp_metric_net,
         cpu=snmp_metric_cpu,
         load=snmp_metric_load,
         mem=snmp_metric_mem,
@@ -2001,7 +2013,8 @@ def asset_update(
         disk=snmp_metric_disk,
         proc=snmp_metric_proc,
     )
-    if picked_metrics is not None and posted_extras is not None:
+    if picked_metrics is not None:
+        posted_extras = dict(posted_extras or {})
         posted_extras["snmp_metrics"] = picked_metrics
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
     posted_off = playrule_off_from_form(playrule_switches, playrule_ids, playrule_on)

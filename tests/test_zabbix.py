@@ -656,8 +656,8 @@ def test_discovery_block_sync_button_and_last_error(zbx):
     assert 'action="/discovery/zabbix-sync"' in page
     assert "Sync hosts" in page
     assert "Connected" in page
-    assert ZBX_URL in page
-    assert "webhook on" in page
+    assert ZBX_URL not in page
+    assert "webhook on" not in page
     assert "<iframe" not in page.lower()
 
     response = client.post("/discovery/zabbix-sync", follow_redirects=False)

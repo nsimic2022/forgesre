@@ -16,14 +16,15 @@ NET_FAMILY = "net"
 HOST_FAMILIES: tuple[str, ...] = ("cpu", "load", "mem", "swap", "disk", "proc")
 ALL_FAMILIES: tuple[str, ...] = (NET_FAMILY,) + HOST_FAMILIES
 FAMILY_LABELS = {
-    "net": "NET — interfaces",
+    "net": "NET",
     "cpu": "CPU",
     "load": "Load",
     "mem": "RAM",
     "swap": "Swap",
-    "disk": "Disk / partitions",
-    "proc": "Processes (snmpd proc table)",
+    "disk": "Disk",
+    "proc": "Proc",
 }
+PROMETHEUS_FAMILIES: frozenset[str] = frozenset({"cpu", "mem", "disk", "net"})
 FAMILY_TILE = {
     "net": "network",
     "cpu": "cpu_percent",
@@ -58,9 +59,7 @@ def normalize_snmp_metrics(raw: Any) -> dict[str, str]:
     parsed = parse_snmp_metrics(raw if not isinstance(raw, dict) else raw.get(SNMP_METRICS_KEY))
     if parsed is None:
         return {}
-    if not parsed:
-        return {SNMP_METRICS_KEY: NET_FAMILY}
-    ordered = [key for key in ALL_FAMILIES if key in parsed or key == NET_FAMILY]
+    ordered = [key for key in ALL_FAMILIES if key in parsed]
     return {SNMP_METRICS_KEY: ",".join(ordered)}
 
 
@@ -86,7 +85,7 @@ def snmp_metrics_on(asset: Any) -> frozenset[str]:
         if snmp_poll_on(extras) or not snmp_family(str(kind or ""), str(profile or "")):
             return frozenset(ALL_FAMILIES)
         return frozenset({NET_FAMILY})
-    return frozenset({NET_FAMILY, *stored})
+    return frozenset(stored)
 
 
 def host_metrics_on(asset: Any) -> bool:
@@ -94,14 +93,111 @@ def host_metrics_on(asset: Any) -> bool:
 
 
 def families_from_form(present: str, **flags: str) -> str | None:
-    """Posted Collecting-cube checkboxes. None when the cube was not on the form."""
+    """Posted Metrics-cube checkboxes. None when the cube was not on the form."""
     if not str(present or "").strip():
         return None
-    picked = [NET_FAMILY]
-    for key in HOST_FAMILIES:
-        if str(flags.get(key) or "").strip().lower() in {"1", "true", "yes", "on"}:
-            picked.append(key)
+    picked = [
+        key
+        for key in ALL_FAMILIES
+        if str(flags.get(key) or "").strip().lower() in {"1", "true", "yes", "on"}
+    ]
     return ",".join(picked)
+
+
+def metrics_on(asset: Any) -> frozenset[str]:
+    """Families drawn as graphs. Stored pick wins; else SNMP defaults or Prometheus CPU/RAM/Disk/NET."""
+    extras = _extras(asset)
+    stored = parse_snmp_metrics(extras.get(SNMP_METRICS_KEY) if SNMP_METRICS_KEY in extras else None)
+    if stored is not None:
+        return frozenset(stored)
+    if snmp_port_for(asset) > 0:
+        return snmp_metrics_on(asset)
+    scrape = (
+        str(asset.get("scrape_address") or "").strip()
+        if isinstance(asset, dict)
+        else str(getattr(asset, "scrape_address", "") or "").strip()
+    )
+    kind = (
+        str(asset.get("type") or "")
+        if isinstance(asset, dict)
+        else str(getattr(asset, "type", "") or "")
+    )
+    blob = kind.lower()
+    if scrape or "linux" in blob or "windows" in blob:
+        return PROMETHEUS_FAMILIES
+    zid = (
+        str(asset.get("zabbix_hostid") or "").strip()
+        if isinstance(asset, dict)
+        else str(getattr(asset, "zabbix_hostid", "") or "").strip()
+    )
+    source = (
+        str(asset.get("source") or "")
+        if isinstance(asset, dict)
+        else str(getattr(asset, "source", "") or "")
+    )
+    if zid or source == "zabbix":
+        return frozenset({"cpu", "mem", "disk"})
+    return frozenset({NET_FAMILY})
+
+
+def metrics_on_form(asset: Any, form_mode: str = "add") -> frozenset[str]:
+    """Checkbox defaults on Add: Prometheus CPU/RAM/Disk/NET until the operator saves a pick."""
+    extras = _extras(asset)
+    stored = parse_snmp_metrics(extras.get(SNMP_METRICS_KEY) if SNMP_METRICS_KEY in extras else None)
+    if stored is not None:
+        return frozenset(stored)
+    if form_mode != "edit":
+        if snmp_port_for(asset) > 0 or snmp_poll_on(extras):
+            return snmp_metrics_on(asset)
+        return PROMETHEUS_FAMILIES
+    return metrics_on(asset)
+
+
+def metric_source_cubes(asset: Any) -> list[dict[str, Any]]:
+    if isinstance(asset, dict):
+        scrape = str(asset.get("scrape_address") or "").strip()
+        kind = str(asset.get("type") or "")
+        source = str(asset.get("source") or "")
+        zid = str(asset.get("zabbix_hostid") or "").strip()
+        gid = str(asset.get("glpi_id") or "").strip()
+    else:
+        scrape = str(getattr(asset, "scrape_address", "") or "").strip()
+        kind = str(getattr(asset, "type", "") or "")
+        source = str(getattr(asset, "source", "") or "")
+        zid = str(getattr(asset, "zabbix_hostid", "") or "").strip()
+        gid = str(getattr(asset, "glpi_id", "") or "").strip()
+    extras = _extras(asset)
+    snmp = snmp_port_for(asset) > 0 or snmp_poll_on(extras)
+    blob = kind.lower()
+    prom = bool(scrape) or (
+        not snmp and (blob.startswith("auto") or "linux" in blob or "windows" in blob)
+    )
+    return [
+        {"key": "prometheus", "label": "Prometheus", "on": prom},
+        {"key": "zabbix", "label": "Zabbix", "on": source == "zabbix" or bool(zid)},
+        {"key": "snmp", "label": "SNMP", "on": snmp},
+        {"key": "glpi", "label": "GLPI", "on": source == "glpi" or bool(gid)},
+    ]
+
+
+def metric_family_heading(asset: Any) -> str:
+    extras = _extras(asset)
+    if snmp_port_for(asset) > 0 or snmp_poll_on(extras):
+        return "SNMP metrics"
+    scrape = (
+        str(asset.get("scrape_address") or "").strip()
+        if isinstance(asset, dict)
+        else str(getattr(asset, "scrape_address", "") or "").strip()
+    )
+    kind = (
+        str(asset.get("type") or "")
+        if isinstance(asset, dict)
+        else str(getattr(asset, "type", "") or "")
+    )
+    blob = kind.lower()
+    if scrape or blob.startswith("auto") or "linux" in blob or "windows" in blob:
+        return "Prometheus metrics"
+    return "Metrics"
 
 
 def http_source_label(asset: Any) -> str:
