@@ -75,6 +75,9 @@ def request_hostname(host_header: str) -> str:
     return (host_header or "localhost").split(":")[0] or "localhost"
 
 
+GRAFANA_DASHBOARD_PATH = "/d/forgesre-overview/forgesre-overview"
+
+
 def rewrite_host(url: str, hostname: str) -> str:
     """Show 127.0.0.1 services on the same host the operator used to open Core."""
     parsed = urlparse(url)
@@ -84,6 +87,20 @@ def rewrite_host(url: str, hostname: str) -> str:
         return url
     netloc = f"{hostname}:{parsed.port}" if parsed.port else hostname
     return urlunparse(parsed._replace(netloc=netloc))
+
+
+def grafana_open_url(hostname: str, public_url: str | None = None) -> str:
+    """LAN Grafana URL that lands on the provisioned overview dashboard.
+
+    Bundled Grafana allows anonymous Viewer so this opens the dashboard
+    without the login form. Admin password still works on /login.
+    """
+    base = rewrite_host(public_url or settings.grafana_public_url, hostname).rstrip("/")
+    if not base:
+        return GRAFANA_DASHBOARD_PATH
+    if "/d/" in urlparse(base).path:
+        return base
+    return base + GRAFANA_DASHBOARD_PATH
 
 
 def doctor_soft_status(status: str) -> bool:
@@ -273,7 +290,7 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
     ``local_addr`` text instead of links when the browser is not on the appliance.
     """
     hostname = request_hostname(host_header)
-    grafana = rewrite_host(settings.grafana_public_url, hostname)
+    grafana = grafana_open_url(hostname)
     raw = {
         "prometheus": (settings.prometheus_url or "http://127.0.0.1:9090").rstrip("/"),
         "alertmanager": (settings.alertmanager_url or "http://127.0.0.1:9093").rstrip("/"),

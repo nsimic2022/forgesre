@@ -94,6 +94,9 @@ def test_escalation_page_has_create_cancel_and_saves_policy():
     assert 'data-oncall-directory' in page.text
     assert 'id="oncall-people"' in page.text
     assert 'name="phone2"' in page.text
+    assert 'action="/escalation/open-edit"' in page.text
+    assert 'action="/escalation/bulk-delete"' in page.text
+    assert "Generated notifications" not in page.text
     assert 'action="/escalation/oncall/open-edit"' in page.text
     assert 'action="/escalation/oncall/open-clone"' not in page.text
     assert 'action="/escalation/oncall/export"' not in page.text
@@ -187,7 +190,10 @@ def test_edit_policy_prefills_form_and_saves_new_steps():
     slug = _create(client, "0 team\n20 engineer", name="Edit me")
     row = db.query(EscalationPolicy).filter_by(slug=slug).one()
     listing = client.get("/escalation")
-    assert f'href="/escalation?edit={row.id}#escalation-form">Edit</a>' in listing.text
+    policies = listing.text.split("escalation-policies", 1)[1].split("escalation-create", 1)[0]
+    assert f'data-list-view="/escalation?edit={row.id}#escalation-form"' in policies
+    assert 'action="/escalation/open-edit"' in policies
+    assert f'href="/escalation?edit={row.id}#escalation-form">Edit</a>' not in policies
     form = client.get(f"/escalation?edit={row.id}")
     assert form.status_code == 200
     assert "Edit escalation policy" in form.text
@@ -230,10 +236,14 @@ def test_remove_policy_moves_playrules_to_default_and_default_cannot_be_removed(
     db.add(rule)
     db.commit()
     listing = client.get("/escalation")
-    assert f'action="/escalation/{row.id}/delete"' in listing.text
-    assert "1 playrule(s) using it move to Default warning" in listing.text
+    policies = listing.text.split("escalation-policies", 1)[1].split("escalation-create", 1)[0]
+    assert 'action="/escalation/bulk-delete"' in policies
+    assert f'value="{row.id}"' in policies and "data-select-row" in policies
+    assert "Playrules using them move to Default warning" in policies
     default = db.query(EscalationPolicy).filter_by(slug="default-warning").one()
-    assert f'action="/escalation/{default.id}/delete"' not in listing.text
+    assert f'data-undeletable' in policies
+    assert f'action="/escalation/{default.id}/delete"' not in policies
+    assert f'action="/escalation/{row.id}/delete"' not in policies
     removed = client.post(f"/escalation/{row.id}/delete", follow_redirects=False)
     assert removed.status_code == 302
     db.expire_all()

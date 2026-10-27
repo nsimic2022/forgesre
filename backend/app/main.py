@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api import router as api_router
 from app.db import Base, SessionLocal, engine
-from app.journal import report
+from app.journal import maybe_prune_old, prune_older_than, report
 from app.inventory import run_scan, seed_demo_candidate, sync_netbox
 from app.jobs import recover_interrupted_jobs
 from app.metrics import metrics_response
@@ -98,6 +98,7 @@ def _jobs_loop(stop: threading.Event) -> None:
             process_scheduled_reports(db)
             run_pending_jobs(db)
             maybe_poll(db)
+            maybe_prune_old(db)
         except Exception as exc:
             log.exception("jobs loop failed")
             report(db, "rca", "jobs", "error", summary="Job worker failed", detail=str(exc))
@@ -150,6 +151,7 @@ def create_app() -> FastAPI:
                 object_type="asset",
                 object_id=DEMO_ASSET if db.query(Asset.id).filter_by(asset_id=DEMO_ASSET).first() else "",
             )
+            prune_older_than(db)
         except Exception as exc:
             log.exception("startup failed")
             report(db, "core", "startup", "error", summary="Core startup failed", detail=str(exc))

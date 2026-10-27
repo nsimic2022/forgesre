@@ -1176,7 +1176,18 @@ function listPicker(root, opts) {
     // Dragging to copy text out of a row is not a pick.
     if (typeof window.getSelection === "function" && String(window.getSelection() || "")) return;
     const row = event.target.closest(rowSel);
-    if (row && rows.includes(row)) select(row, { focus: true });
+    if (row && rows.includes(row)) {
+      select(row, { focus: true });
+      // Card lists hide the checkbox. Clicking the cube checks it so the
+      // pager-middle Edit / Remove cubes light up, same as a table row box.
+      if (row.closest(".list-scroll-cards")) {
+        const box = row.querySelector("[data-select-row]");
+        if (box) {
+          box.checked = !box.checked;
+          box.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }
+    }
   });
 
   const openRow = (row) => {

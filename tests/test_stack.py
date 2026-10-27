@@ -10,6 +10,7 @@ from app.stack import (
     component_label,
     doctor_soft_status,
     enrich_components,
+    grafana_open_url,
     journal_doctor_alarm_path,
     rewrite_host,
     runtime_state,
@@ -22,6 +23,13 @@ def test_rewrite_host_swaps_loopback_for_request_host():
     assert rewrite_host("http://127.0.0.1:9090/graph", "vm.example") == "http://vm.example:9090/graph"
     assert rewrite_host("http://localhost:3000", "10.1.2.3") == "http://10.1.2.3:3000"
     assert rewrite_host("http://grafana.corp:3000", "vm.example") == "http://grafana.corp:3000"
+
+
+def test_grafana_open_url_lands_on_overview_dashboard():
+    assert grafana_open_url("10.1.2.3", "http://localhost:3000") == "http://10.1.2.3:3000/d/forgesre-overview/forgesre-overview"
+    assert grafana_open_url("vm.example", "http://grafana.corp:3000") == "http://grafana.corp:3000/d/forgesre-overview/forgesre-overview"
+    already = "http://10.1.2.3:3000/d/forgesre-overview/forgesre-overview"
+    assert grafana_open_url("10.1.2.3", already) == already
 
 
 def test_runtime_state_maps_green_yellow_red():
@@ -194,6 +202,7 @@ def test_enrich_components_keeps_stack_order_and_open_links():
         assert "lab.local" not in row["gui"] + row["metrics"] + row["extra"], cid
     grafana = next(row for row in rows if row["id"] == "grafana")
     assert grafana["gui"].startswith("http://lab.local:")
+    assert grafana["gui"].endswith("/d/forgesre-overview/forgesre-overview")
     assert grafana["local_only"] is False
     assert grafana["label"] == "Grafana"
     netbox = next(row for row in rows if row["id"] == "netbox")

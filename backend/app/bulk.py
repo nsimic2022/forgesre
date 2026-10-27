@@ -29,6 +29,7 @@ from app.models import (
     Asset,
     AuditLog,
     DiscoveryCandidate,
+    EscalationPolicy,
     Evidence,
     Incident,
     IncidentEvent,
@@ -1004,6 +1005,35 @@ def oncall_csv(db: Session, ids: list[int]) -> tuple[list[str], list[list[object
     return (["When", "Name", "Email", "Phone", "Phone 2", "Enabled"], out)
 
 
+def delete_policies(db: Session, ids: list[int], actor: str) -> int:
+    """Remove extra policies. Default warning stays; playrules move onto it."""
+    rows = db.query(EscalationPolicy).filter(EscalationPolicy.id.in_(ids)).all() if ids else []
+    fallback = db.query(EscalationPolicy).filter_by(slug="default-warning").first()
+    removed = 0
+    for row in rows:
+        if row.slug == "default-warning":
+            continue
+        moved = (
+            db.query(Playrule)
+            .filter(Playrule.escalation_policy_id == row.id)
+            .update({Playrule.escalation_policy_id: fallback.id if fallback else None}, synchronize_session=False)
+        )
+        slug = row.slug
+        audit(
+            db,
+            "escalation.remove",
+            actor=actor,
+            object_type="escalation_policy",
+            object_id=slug,
+            data={"playrules_moved": int(moved or 0), "to": fallback.slug if fallback else ""},
+        )
+        db.delete(row)
+        removed += 1
+    if removed:
+        db.commit()
+    return removed
+
+
 def delete_playbooks(db: Session, ids: list[int], actor: str) -> int:
     """Same unlink as the per-card Remove: rules and incidents keep working without the book."""
     rows = db.query(Playbook).filter(Playbook.id.in_(ids)).all() if ids else []
@@ -1702,6 +1732,33 @@ def playbooks_export(
         headers, rows = playbooks_csv(db, ids)
         return _download_csv(_safe_export_name(filename, "playbooks", fmt), headers, rows)
     return _download(_safe_export_name(filename, "playbooks", fmt), playbooks_text(db, ids))
+
+
+@router.post("/escalation/open-edit")
+def policies_open_edit(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    stay: Annotated[str, Form()] = "",
+):
+    """Open the existing policy form for exactly one cube. Zero or many do not write."""
+    _forbid(user, can(user, "write_play"))
+    row = _one_pk(db, EscalationPolicy, selected)
+    if row is None:
+        return RedirectResponse(_list_query(stay, "/escalation", edit_note="select-one"), status_code=303)
+    return RedirectResponse(_list_query(stay, "/escalation", edit=str(row.id)) + "#escalation-form", status_code=303)
+
+
+@router.post("/escalation/bulk-delete")
+def policies_bulk_delete(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    nxt: Annotated[str, Form(alias="next")] = "",
+):
+    _forbid(user, can(user, "write_play"))
+    delete_policies(db, _ints(selected_values(selected)), user.email)
+    return _back(nxt, "/escalation")
 
 
 @router.post("/escalation/oncall/open-edit")
