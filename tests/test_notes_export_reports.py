@@ -238,8 +238,10 @@ def test_report_asset_filter_persists_many_assets_and_recipients(monkeypatch):
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "label.check[hidden]" in css
     send_form = page.text.split("ops-report-now", 1)[1].split("</form>", 1)[0]
-    assert send_form.count('name="to_email"') >= 1
+    assert "data-report-people" in send_form
+    assert send_form.count("recipient-line") >= 1
     assert 'name="extra_emails"' in send_form
+    assert 'name="to_email"' not in send_form
     row_html = page.text.split(f'value="{first.asset_id}"', 1)[0]
     # The label that owns this checkbox carries the same filter fields as /assets.
     label = page.text.split(f'value="{first.asset_id}"', 1)[0].rsplit("<label", 1)[1]
@@ -269,7 +271,8 @@ def test_report_asset_filter_persists_many_assets_and_recipients(monkeypatch):
         chunk = form.split(f'value="{asset_id}"', 1)[1][:80]
         assert "checked" in chunk
     for email in addresses:
-        assert f'value="{email}"' in form and "checked" in form.split(f'value="{email}"', 1)[1][:80]
+        assert f'data-email="{email}"' in form
+        assert email in form
 
     monkeypatch.setattr("app.services.query_prometheus", lambda asset=None: {"cpu_percent": 12, "up": 1})
     seen: list[dict] = []
@@ -381,6 +384,6 @@ def test_multi_record_exports_have_titled_breaks():
 
 def test_cache_bust_is_v08_26():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-61" in base
-    assert "app.js?v=v09-R" in base
+    assert "app.css?v=v09-62" in base
+    assert "app.js?v=v09-S" in base
     assert "v08-25" not in base

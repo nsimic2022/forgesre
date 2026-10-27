@@ -3857,6 +3857,7 @@ def ops_send_report_now(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     report_id: Annotated[list[str], Form()] = [],
+    name: str = Form(""),
     to_email: Annotated[list[str], Form()] = [],
     extra_emails: str = Form(""),
     new_email: str = Form(""),
@@ -3878,8 +3879,9 @@ def ops_send_report_now(
     ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
     typed = "\n".join(part for part in ((extra_emails or "").strip(), (new_email or "").strip()) if part)
     emails = _collect_report_emails(db, to_email, typed, user.email)
+    title = (name or "").strip() or "send-now"
     if emails:
-        subject, body, html = performance_report_message(db, ids, "send-now")
+        subject, body, html = performance_report_message(db, ids, title)
         try:
             for email in emails:
                 send_performance_report(
@@ -3887,7 +3889,7 @@ def ops_send_report_now(
                     asset_ids=ids,
                     to_email=email,
                     actor=user.email,
-                    name="send-now",
+                    name=title,
                     subject=subject,
                     body=body,
                     html=html,

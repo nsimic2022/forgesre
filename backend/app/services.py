@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app.audit import audit
 from app.journal import report
@@ -1929,7 +1929,36 @@ def _performance_pairs(db: Session, asset_ids: list[str]) -> list[tuple[Asset, d
     return [(asset, query_prometheus(asset)) for asset in _performance_assets(db, asset_ids)]
 
 
-def _performance_plain(pairs: list[tuple[Asset, dict[str, Any]]]) -> str:
+def _recent_asset_incidents(db: Session, assets: list[Asset]) -> dict[int, list[Incident]]:
+    """Open work plus the last 24h, a few lines per host. Used only to summarise the mailed report."""
+    pks = [int(asset.id) for asset in assets if getattr(asset, "id", None) is not None]
+    if not pks:
+        return {}
+    since = utcnow() - timedelta(hours=24)
+    rows = (
+        db.query(Incident)
+        .filter(Incident.asset_id.in_(pks))
+        .filter(or_(Incident.started_at >= since, Incident.status.in_(("OPEN", "ACK", "ACKNOWLEDGED", "INVESTIGATING"))))
+        .order_by(Incident.started_at.desc())
+        .limit(80)
+        .all()
+    )
+    by: dict[int, list[Incident]] = {pk: [] for pk in pks}
+    for row in rows:
+        bucket = by.get(int(row.asset_id or 0))
+        if bucket is not None and len(bucket) < 5:
+            bucket.append(row)
+    return by
+
+
+def _incident_line(row: Incident) -> str:
+    return f"{row.number} {row.title} ({row.severity}, {row.status})"
+
+
+def _performance_plain(
+    pairs: list[tuple[Asset, dict[str, Any]]],
+    happenings: dict[int, list[Incident]] | None = None,
+) -> str:
     lines = [
         "ForgeSRE performance report",
         f"Generated: {compact_when_text(utcnow())}",
@@ -1939,6 +1968,12 @@ def _performance_plain(pairs: list[tuple[Asset, dict[str, Any]]]) -> str:
     if not pairs:
         lines.append("No assets selected.")
         return "\n".join(lines) + "\n"
+    open_n = 0
+    for asset, _sample in pairs:
+        open_n += sum(1 for row in (happenings or {}).get(int(asset.id or 0), []) if str(row.status or "").upper() == "OPEN")
+    lines.append(f"Assets: {len(pairs)}")
+    lines.append(f"Open now: {open_n}")
+    lines.append("")
     total = len(pairs)
     for index, (asset, sample) in enumerate(pairs, start=1):
         if total >= 2:
@@ -1954,16 +1989,29 @@ def _performance_plain(pairs: list[tuple[Asset, dict[str, Any]]]) -> str:
             for key, label in _REPORT_METRICS:
                 if key in sample and sample[key] is not None:
                     lines.append(f"{label}: {sample[key]}")
+        events = (happenings or {}).get(int(asset.id or 0), [])
+        if events:
+            for row in events:
+                lines.append(f"Happened: {_incident_line(row)}")
+        else:
+            lines.append("Happened: none in the last 24h")
         lines.append("")
     return "\n".join(lines) + "\n"
 
 
-def _performance_html(pairs: list[tuple[Asset, dict[str, Any]]], name: str) -> str:
+def _performance_html(
+    pairs: list[tuple[Asset, dict[str, Any]]],
+    name: str,
+    happenings: dict[int, list[Incident]] | None = None,
+) -> str:
     """Gmail-style HTML: one section per asset, same shell as incident mail."""
     from app.email_html import DASH, esc, meta_table, render_email
 
     sections: list[tuple[str, str, bool]] = []
     total = len(pairs)
+    open_n = 0
+    for asset, _sample in pairs:
+        open_n += sum(1 for row in (happenings or {}).get(int(asset.id or 0), []) if str(row.status or "").upper() == "OPEN")
     for index, (asset, sample) in enumerate(pairs, start=1):
         rows = [
             ("Hostname", esc(asset.hostname or DASH)),
@@ -1978,6 +2026,12 @@ def _performance_html(pairs: list[tuple[Asset, dict[str, Any]]], name: str) -> s
             for key, label in _REPORT_METRICS:
                 if key in sample and sample[key] is not None:
                     rows.append((label, esc(sample[key])))
+        events = (happenings or {}).get(int(asset.id or 0), [])
+        if events:
+            for row in events:
+                rows.append(("Happened", esc(_incident_line(row))))
+        else:
+            rows.append(("Happened", "none in the last 24h"))
         if total >= 2:
             heading = f"{index} of {total} · {asset.hostname}"
         else:
@@ -1991,6 +2045,8 @@ def _performance_html(pairs: list[tuple[Asset, dict[str, Any]]], name: str) -> s
         meta_rows=[
             ("Generated", esc(compact_when_text(utcnow()))),
             ("Kind", "Performance snapshot"),
+            ("Assets", esc(str(len(pairs)))),
+            ("Open now", esc(str(open_n))),
         ],
         sections=sections,
         footer="",
@@ -2001,15 +2057,18 @@ def _performance_html(pairs: list[tuple[Asset, dict[str, Any]]], name: str) -> s
 def performance_report_message(db: Session, asset_ids: list[str], name: str) -> tuple[str, str, str]:
     """Subject, plain body, and HTML alternative. Built once so every recipient gets the same mail."""
     pairs = _performance_pairs(db, asset_ids)
-    return report_mail_subject(name), _performance_plain(pairs), _performance_html(pairs, name)
+    happenings = _recent_asset_incidents(db, [asset for asset, _sample in pairs])
+    return report_mail_subject(name), _performance_plain(pairs, happenings), _performance_html(pairs, name, happenings)
 
 
 def build_performance_report(db: Session, asset_ids: list[str]) -> str:
-    return _performance_plain(_performance_pairs(db, asset_ids))
+    pairs = _performance_pairs(db, asset_ids)
+    return _performance_plain(pairs, _recent_asset_incidents(db, [asset for asset, _sample in pairs]))
 
 
 def build_performance_report_html(db: Session, asset_ids: list[str], name: str = "report") -> str:
-    return _performance_html(_performance_pairs(db, asset_ids), name)
+    pairs = _performance_pairs(db, asset_ids)
+    return _performance_html(pairs, name, _recent_asset_incidents(db, [asset for asset, _sample in pairs]))
 
 
 def send_performance_report(

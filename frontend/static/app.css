@@ -1730,6 +1730,47 @@ button.demo-close {
   margin: 0;
 }
 .ops-sixths > .card h3 { margin: 0; font-size: 1rem; }
+.ops-mail-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 0.9rem;
+  align-items: stretch;
+  width: 100%;
+  min-height: 38rem;
+  margin-bottom: 1.15rem;
+}
+.ops-mail-row > .card {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ops-mail-row > .card > h2 { margin-top: 0; }
+.ops-write-card .ops-add-email { margin-bottom: 0.85rem; }
+.ops-compose {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.ops-compose-body-label {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 12rem;
+}
+.ops-compose-body-label textarea {
+  flex: 1 1 auto;
+  min-height: 12rem;
+  resize: vertical;
+}
+.ops-outbox-card [data-select-scope] {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.ops-outbox-card .table-scroll { flex: 1 1 auto; min-height: 16rem; }
 .ops-thirds {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1745,12 +1786,16 @@ button.demo-close {
   flex-direction: column;
 }
 .ops-thirds > .card > h2 { margin-top: 0; }
+.ops-mail-row .stack,
 .ops-thirds .stack,
 form.ops-add-email,
 form.ops-compose {
   max-width: none;
   width: 100%;
 }
+.ops-mail-row input,
+.ops-mail-row select,
+.ops-mail-row textarea,
 .ops-thirds input,
 .ops-thirds select,
 .ops-thirds textarea {
@@ -1763,15 +1808,41 @@ form.ops-compose {
 }
 .report-active-head { margin: 2.25rem 0 0.7rem; }
 .report-recipients .recipient-picks,
-.report-pick .recipient-picks {
+.report-pick .recipient-picks,
+.recipient-list {
   max-height: 5.4rem;
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.28rem;
+  gap: 0.12rem;
   margin-bottom: 0.55rem;
-  padding: 0.35rem 0.15rem;
+  padding: 0.2rem 0.1rem;
 }
+.recipient-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.28rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.recipient-line:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+.recipient-line.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+}
+.recipient-name { font-weight: 600; }
+.recipient-addr { color: var(--muted); font-size: 0.82rem; }
 .report-schedule .custom-interval { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 .report-schedule .custom-interval label { min-width: 8rem; }
 .report-schedule [hidden] { display: none !important; }
@@ -2284,7 +2355,9 @@ td.ops-report-actions .row-actions a.button {
     width: auto;
     max-width: none;
   }
+  .ops-mail-row,
   .ops-thirds { grid-template-columns: 1fr; }
+  .ops-mail-row { min-height: 0; }
   .ops-report-cols { grid-template-columns: 1fr; }
   .escalation-cols { flex-direction: column; }
   .escalation-policies,
