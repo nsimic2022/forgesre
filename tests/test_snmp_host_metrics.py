@@ -393,7 +393,7 @@ def test_host_module_and_job_are_bundled():
     assert "forgesre-snmp-host" in detail
     assert "if_mib + host" in detail
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-59" in base and "app.js?v=v09-R" in base
+    assert "app.css?v=v09-60" in base and "app.js?v=v09-R" in base
 
 
 def test_source_cubes_onoff_skip_default_9100_and_enable_snmp():

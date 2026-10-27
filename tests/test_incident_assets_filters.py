@@ -224,7 +224,7 @@ def test_edit_link_keeps_search(seeded):
 
 def test_v08_15_cache_bump_and_compact_select_css():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-59" in base and "app.js?v=v09-R" in base
+    assert "app.css?v=v09-60" in base and "app.js?v=v09-R" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".list-filters select.filter-select { width: auto;" in css
     assert ".assets-filters input[name=\"q\"]" in css

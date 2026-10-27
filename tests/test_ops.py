@@ -31,6 +31,7 @@ def test_system_health_has_open_column_and_grafana():
     page = client.get("/health-ui")
     assert page.status_code == 200
     assert "Open Grafana" in page.text
+    assert 'href="http://testserver:3000/d/forgesre-overview/forgesre-overview"' in page.text or "/d/forgesre-overview/forgesre-overview" in page.text
     assert "<th>Open</th>" in page.text
     assert "Prometheus" in page.text
     assert "prometheus" in page.text.lower()

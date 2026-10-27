@@ -176,7 +176,7 @@ def test_demo_incident_is_marked_demo_in_list_detail_and_api():
     esc = client.get("/escalation")
     assert esc.status_code == 200
     assert "/ops#mail" not in esc.text
-    assert "Generated notifications" in esc.text
+    assert "Generated notifications" not in esc.text
 
     ops = client.get("/ops")
     assert ops.status_code == 200

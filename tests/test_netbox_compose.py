@@ -101,6 +101,9 @@ def test_compose_netbox_is_default_service():
     assert "DROP DATABASE" not in upsert.upper()
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "mailpit" not in compose.lower()
+    assert "GF_AUTH_ANONYMOUS_ENABLED" in compose
+    assert "GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer" in compose
+    assert "forgesre-overview.json" in compose
     assert "profiles:" not in compose[compose.index("  netbox:"):compose.index("  llm:")]
     extra = (ROOT / "config" / "netbox" / "forgesre.py").read_text(encoding="utf-8")
     assert "API_TOKEN_PEPPERS" in extra

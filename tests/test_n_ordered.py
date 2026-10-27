@@ -88,6 +88,7 @@ def test_grafana_only_on_health_ui_not_nav_or_incidents():
     health = client.get("/health-ui")
     assert health.status_code == 200
     assert "Open Grafana" in health.text
+    assert "/d/forgesre-overview/forgesre-overview" in health.text
     assert "Prometheus" in health.text and "Alertmanager" in health.text and "Core" in health.text
     assert "Open Grafana" in health.text or "System Health" in health.text
 

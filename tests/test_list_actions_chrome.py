@@ -20,6 +20,7 @@ from app.migrate import migrate
 from app.models import (
     AuditLog,
     DiscoveryCandidate,
+    EscalationPolicy,
     Incident,
     JournalEntry,
     Notification,
@@ -122,8 +123,9 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert "min-width: 4.6rem" in pager_block
     assert "min-height: 2.05rem" in pager_block
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
+    assert 'row.closest(".list-scroll-cards")' in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-59" in base and "app.js?v=v09-R" in base
+    assert "app.css?v=v09-60" in base and "app.js?v=v09-R" in base
     pager_tpl = (ROOT / "frontend" / "templates" / "_pager.html").read_text(encoding="utf-8")
     assert 'class="pager-bar" data-list-pager' in pager_tpl
     assert pager_tpl.count("data-list-actions") == 1
@@ -198,6 +200,15 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     _no_invented(book_actions)
 
     escalation = client.get("/escalation").text
+    policies = escalation.split("escalation-policies", 1)[1].split("escalation-create", 1)[0]
+    policy_actions = _middle(policies)
+    _order(policy_actions, ["Edit", "Remove"])
+    assert 'action="/escalation/open-edit"' in policy_actions
+    assert 'action="/escalation/bulk-delete"' in policy_actions
+    assert "data-delete-gated" in policy_actions
+    assert ">Edit<" not in policies.split("policy-grid", 1)[1].split("data-list-actions", 1)[0]
+    assert 'href="/escalation">Cancel</a>' in escalation
+    _no_invented(policy_actions)
     oncall = escalation.split('id="oncall"', 1)[1]
     oncall_table = oncall.split("<table", 1)[1].split("</table>", 1)[0]
     oncall_actions = _middle(oncall)
@@ -336,6 +347,41 @@ def test_edit_with_zero_or_two_rows_stays_on_the_list():
     db.expire_all()
     assert db.get(Playbook, int(book_ids[0])).name == book_name
 
+    policies = db.query(EscalationPolicy).order_by(EscalationPolicy.id).all()
+    if len(policies) < 2:
+        extra = EscalationPolicy(slug="chrome-extra", name="Chrome extra", steps=[{"after_minutes": 0, "target": "team", "channel": "email"}])
+        db.add(extra)
+        db.commit()
+        db.refresh(extra)
+        policies = db.query(EscalationPolicy).order_by(EscalationPolicy.id).all()
+    policy_ids = [str(row.id) for row in policies[:2]]
+    policy_name = policies[0].name
+    one_policy = client.post(
+        "/escalation/open-edit",
+        data={"selected": policy_ids[0], "stay": "/escalation?page=1"},
+        follow_redirects=False,
+    )
+    assert one_policy.status_code == 303
+    assert one_policy.headers["location"] == f"/escalation?page=1&edit={policy_ids[0]}#escalation-form"
+    opened_policy = client.get(one_policy.headers["location"].split("#", 1)[0])
+    assert ">Edit escalation policy<" in opened_policy.text
+    assert 'href="/escalation">Cancel</a>' in opened_policy.text
+    many_policies = client.post(
+        "/escalation/open-edit",
+        data={"selected": policy_ids, "stay": "/escalation"},
+        follow_redirects=False,
+    )
+    assert many_policies.headers["location"] == "/escalation?edit_note=select-one"
+    assert 'role="status">Select one' in client.get(many_policies.headers["location"]).text
+    none_policies = client.post(
+        "/escalation/open-edit",
+        data={"stay": "https://evil.example/escalation"},
+        follow_redirects=False,
+    )
+    assert none_policies.headers["location"] == "/escalation?edit_note=select-one"
+    db.expire_all()
+    assert db.get(EscalationPolicy, int(policy_ids[0])).name == policy_name
+
     one_incident = client.post(
         "/incidents/edit",
         data={"selected": numbers[0], "next": "/incidents"},
@@ -378,6 +424,8 @@ def test_edit_with_zero_or_two_rows_stays_on_the_list():
         ("/playbooks/open-edit", book_ids[0]),
         ("/playbooks/bulk-delete", book_ids[0]),
         ("/playrules/bulk-delete", rule_ids[0]),
+        ("/escalation/open-edit", "1"),
+        ("/escalation/bulk-delete", "1"),
         ("/escalation/oncall/open-edit", "1"),
         ("/escalation/oncall/open-clone", "1"),
         ("/escalation/oncall/bulk-delete", "1"),
@@ -390,7 +438,10 @@ def test_edit_with_zero_or_two_rows_stays_on_the_list():
     assert 'action="/playbooks/export"' in engineer_books
     assert "open-edit" not in engineer_books and "bulk-delete" not in engineer_books
     assert 'class="onoff' in engineer.get("/playrules").text
-    engineer_oncall = _middle(engineer.get("/escalation").text.split('id="oncall"', 1)[1])
+    engineer_esc = engineer.get("/escalation").text
+    assert 'action="/escalation/open-edit"' not in engineer_esc
+    assert 'action="/escalation/bulk-delete"' not in engineer_esc
+    engineer_oncall = _middle(engineer_esc.split('id="oncall"', 1)[1])
     assert 'action="/escalation/oncall/export"' not in engineer_oncall
     assert "open-edit" not in engineer_oncall and "open-clone" not in engineer_oncall and "bulk-delete" not in engineer_oncall
     db.close()

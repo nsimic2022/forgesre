@@ -3,13 +3,19 @@
 {% block title %}Escalation · ForgeSRE{% endblock %}
 {% block content %}
 <h1>Escalation</h1>
+{% if request.query_params.get('edit_note') == 'select-one' %}
+<div class="banner" role="status">Select one</div>
+{% endif %}
 <div class="escalation-cols">
 <section class="card escalation-pane escalation-policies">
 <h2>Default escalation</h2>
+<div data-select-scope>
+{% if policies %}<label class="select-page-bar muted"><input type="checkbox" data-select-page aria-label="Select all policies on this page"> Select page</label>{% endif %}
 <div class="list-scroll list-scroll-cards" data-list-scroll>
 <div class="policy-grid">
 {% for policy in policies %}
-<section class="policy-block {% if selected and selected.id == policy.id %}selected{% endif %}" data-list-row>
+<section class="policy-block {% if selected and selected.id == policy.id %}selected{% endif %}" data-list-row{% if can('write_play') %} data-list-view="/escalation?edit={{ policy.id }}#escalation-form"{% endif %}>
+  <input class="sr-only" type="checkbox" name="selected" value="{{ policy.id }}" data-select-row{% if policy.slug == default_slug %} data-undeletable{% endif %} aria-label="Select {{ policy.name }}">
   <h3>{{ policy.name }} <span class="muted policy-slug"><code>{{ policy.slug }}</code></span></h3>
   <table class="scan-list step-list">
     <thead><tr><th>Level</th><th>After</th><th>Recipient</th></tr></thead>
@@ -27,23 +33,21 @@
     {% endfor %}
 </tbody>
 </table>
-  {% if can('write_play') %}
-  <div class="row-actions asset-form-actions">
-    <a class="button" href="/escalation?edit={{ policy.id }}{{ pager_keep(pager) }}#escalation-form">Edit</a>
-    {% if policy.slug != default_slug %}
-    <form method="post" action="/escalation/{{ policy.id }}/delete" onsubmit="return confirm('Remove this escalation policy? {{ usage.get(policy.id, 0) }} playrule(s) using it move to Default warning.');" hx-boost="false">
-      <button type="submit" class="danger">Remove</button>
-</form>
-    {% endif %}
-</div>
-  {% endif %}
 </section>
 {% else %}
 <p class="muted">No policies yet. Create one in the next column, or keep using the seeded Default warning after seed.</p>
 {% endfor %}
 </div>
 </div>
+{% set policy_stay_parts = [] %}
+{% for key, value in request.query_params.multi_items() if key not in ["edit", "edit_note", "notice"] %}
+{% set _ = policy_stay_parts.append(key ~ "=" ~ (value|urlencode)) %}
+{% endfor %}
+{% set policy_stay = "/escalation" ~ ("?" ~ policy_stay_parts|join("&") if policy_stay_parts else "") %}
+{% with list_actions={"delete": "/escalation/bulk-delete" if can('write_play') else "", "delete_label": "Remove", "delete_last": True, "delete_gated": True, "open_edit": "/escalation/open-edit" if can('write_play') else "", "open_edit_title": "Edit this escalation policy", "next": "/escalation", "stay": policy_stay, "confirm": "Remove the selected escalation policies? Playrules using them move to Default warning."} %}
 {% include "_pager.html" %}
+{% endwith %}
+</div>
 </section>
 {% if can('write_play') %}
 <section class="card escalation-pane escalation-create">
@@ -140,9 +144,6 @@
 {% endif %}
 <section class="card escalation-pane oncall-roster-wrap" id="oncall">
 <h2>On call</h2>
-{% if request.query_params.get('edit_note') == 'select-one' %}
-<div class="banner" role="status">Select one</div>
-{% endif %}
 <p class="oncall-now" data-oncall-now>{% if oncall %}Now: <strong>{{ oncall.person or oncall.name }}</strong> · {{ oncall.email }}{% if oncall.phone %} · {{ oncall.phone }}{% endif %}{% if oncall.phone2 %} · {{ oncall.phone2 }}{% endif %} <span class="muted">{{ oncall.window }}</span>{% else %}<span class="muted">No one scheduled right now.</span>{% endif %}{% if can('write_play') %} <form method="post" action="/escalation/oncall/take" class="oncall-take" hx-boost="false"><input type="hidden" name="next" value="/escalation"><button type="submit" class="secondary">I'm on duty now</button></form>{% endif %}</p>
 <div data-select-scope>
 <div class="table-scroll list-scroll" data-list-scroll>
@@ -185,5 +186,4 @@
 </div>
 </section>
 </div>
-<h2>Generated notifications</h2>
 {% endblock %}

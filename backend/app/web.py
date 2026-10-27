@@ -181,7 +181,7 @@ from app.services import (
     run_demo_windows,
     run_investigation,
 )
-from app.stack import appliance_cube, enrich_components, forgeai_cube, rewrite_host
+from app.stack import appliance_cube, enrich_components, forgeai_cube, grafana_open_url
 from app.history import (
     ack_circle,
     acknowledge,
@@ -3657,7 +3657,7 @@ def health_page(
         user,
         doctor=payload,
         stack=enrich_components(payload.get("components") or {}, host),
-        grafana_open=rewrite_host(settings.grafana_public_url, host.split(":")[0]),
+        grafana_open=grafana_open_url(host.split(":")[0]),
         journal=journal,
     )
 

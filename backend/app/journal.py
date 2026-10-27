@@ -2,13 +2,16 @@
 
 Raw container logs stay in Docker / Loki. This table is the operator console:
 split by module, pruned automatically so search stays small.
+Rows older than 30 days are deleted; each module also keeps a short tail.
 """
 
 from __future__ import annotations
 
 import logging
+import time
+from datetime import timedelta
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models import JournalEntry, utcnow
@@ -35,7 +38,11 @@ MODULES = [
 
 KEEP_PER_MODULE = 200
 PRUNE_AFTER = 250
+KEEP_DAYS = 30
 DETAIL_MAX = 4000
+STATUS_ALIASES = {"critical": "error", "crit": "error", "warning": "warn"}
+_AGE_PRUNE_EVERY = 3600
+_last_age_prune = 0.0
 
 
 def report(
@@ -85,6 +92,7 @@ def report(
         if commit:
             db.commit()
             prune_module(db, module)
+            maybe_prune_old(db)
         level = {"ok": logging.INFO, "warn": logging.WARNING, "error": logging.ERROR}.get(status, logging.INFO)
         log.log(
             level,
@@ -139,6 +147,36 @@ def prune_module(db: Session, module: str, keep: int = KEEP_PER_MODULE) -> int:
         return 0
 
 
+def prune_older_than(db: Session, days: int = KEEP_DAYS) -> int:
+    """Drop journal rows older than KEEP_DAYS. Search stays a recent window."""
+    try:
+        cutoff = utcnow() - timedelta(days=max(1, int(days or KEEP_DAYS)))
+        deleted = (
+            db.query(JournalEntry)
+            .filter(JournalEntry.at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        return int(deleted or 0)
+    except Exception:
+        log.exception("journal age prune failed")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return 0
+
+
+def maybe_prune_old(db: Session, days: int = KEEP_DAYS) -> int:
+    """Age-prune at most once an hour so the jobs loop stays cheap."""
+    global _last_age_prune
+    now = time.monotonic()
+    if now - _last_age_prune < _AGE_PRUNE_EVERY:
+        return 0
+    _last_age_prune = now
+    return prune_older_than(db, days=days)
+
+
 def error_banner_entries(db: Session, ack_id: int | None, limit: int = 5) -> list[JournalEntry]:
     """Recent error reports newer than the operator's last dismissed journal id."""
     rows = list_entries(db, status="error", limit=limit)
@@ -174,13 +212,23 @@ def _entries_query(
         query = query.filter(JournalEntry.status == status)
     needle = (q or "").strip()
     if needle:
-        like = f"%{needle}%"
-        query = query.filter(
-            (JournalEntry.summary.ilike(like))
-            | (JournalEntry.detail.ilike(like))
-            | (JournalEntry.action.ilike(like))
-            | (JournalEntry.object_id.ilike(like))
-        )
+        terms = {needle, STATUS_ALIASES.get(needle.lower(), "")}
+        terms.discard("")
+        clauses = []
+        for term in terms:
+            like = f"%{term}%"
+            clauses.extend(
+                [
+                    JournalEntry.summary.ilike(like),
+                    JournalEntry.detail.ilike(like),
+                    JournalEntry.action.ilike(like),
+                    JournalEntry.object_id.ilike(like),
+                    JournalEntry.object_type.ilike(like),
+                    JournalEntry.module.ilike(like),
+                    JournalEntry.status.ilike(like),
+                ]
+            )
+        query = query.filter(or_(*clauses))
     return query
 
 
