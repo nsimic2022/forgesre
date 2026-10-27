@@ -32,9 +32,9 @@
   </section>
 </div>
 
-<div class="ops-thirds" id="send">
-  <section class="card ops-mail-card">
-    <h2>Send email</h2>
+<div class="ops-mail-row" id="send">
+  <section class="card ops-mail-card ops-write-card">
+    <h2>Add email</h2>
     {% if can_send %}
     <form method="post" action="/ops/contacts" class="stack ops-add-email" hx-boost="false">
       <label>Name <input name="name" placeholder="Storage on-call"></label>
@@ -43,13 +43,7 @@
         <button type="submit">Save address</button>
       </div>
     </form>
-    {% else %}
-    <p class="muted">Read-only. Analyst / engineer / admin can send.</p>
-    {% endif %}
-  </section>
-  <section class="card ops-mail-card">
-    <h2>Compose</h2>
-    {% if can_send %}
+    <h2>Compose new email</h2>
     <form method="post" action="/ops/mail" class="stack ops-compose" hx-boost="false">
       <label>To
         <select name="target">
@@ -61,7 +55,7 @@
       </label>
       <label>Or new email <input name="new_email" type="email" placeholder="only if it is not in the list yet"></label>
       <label>Subject <input name="subject" required></label>
-      <label>Body <textarea name="body" rows="6" required></textarea></label>
+      <label class="ops-compose-body-label">Body <textarea name="body" rows="8" required></textarea></label>
       <div class="row-actions asset-form-actions">
         <button type="submit">{% if smtp_on %}Send{% else %}Save to outbox{% endif %}</button>
       </div>
@@ -70,7 +64,7 @@
     <p class="muted">Read-only. Analyst / engineer / admin can send.</p>
     {% endif %}
   </section>
-  <section class="card ops-mail-card" id="mail">
+  <section class="card ops-mail-card ops-outbox-card" id="mail">
     <h2>Mail outbox</h2>
     <div data-select-scope>
     <div class="table-scroll list-scroll" data-list-scroll>
@@ -116,27 +110,11 @@
     </h2>
     {% if can_send %}
     <form method="post" action="{% if report_mode == 'edit' %}/ops/reports/{{ editing_report.id }}/update{% else %}/ops/reports{% endif %}" class="stack" id="report-schedule-form" hx-boost="false">
-      <label>Name <input name="name" value="{{ rf.name or '' }}" placeholder="Dnevni report..." required></label>
-      {% set picked = rf.recipients or [] %}
-      {% set picked_l = picked|map('lower')|list %}
-      <fieldset class="report-recipients">
-        <legend>Recipients</legend>
-        <div class="recipient-picks">
-          {% for item in addresses %}
-          <label class="check"><input type="checkbox" name="to_email" value="{{ item.email }}" {% if item.email|lower in picked_l %}checked{% endif %}> {{ item.email }}{% if item.label %} · {{ item.label }}{% endif %} <span class="muted">({{ item.source }})</span></label>
-          {% else %}
-          <p class="muted">No saved addresses yet. Type them below.</p>
-          {% endfor %}
-          {% for email in picked %}
-          {% if email|lower not in addresses|map(attribute='email')|map('lower')|list %}
-          <label class="check"><input type="checkbox" name="to_email" value="{{ email }}" checked> {{ email }}</label>
-          {% endif %}
-          {% endfor %}
-        </div>
-        <label>Additional emails <textarea name="extra_emails" rows="2" placeholder="dodati email, zarez, jedan za drugim"></textarea></label>
-      </fieldset>
+      <label>Title <input name="name" value="{{ rf.name or '' }}" placeholder="Dnevni report..." required></label>
+      <p class="muted">Subject of the mailed report. Pick people, then assets, then how often.</p>
+      {% with picked=rf.recipients or [] %}{% include "_report_people.html" %}{% endwith %}
       <fieldset class="report-schedule">
-        <legend>Schedule</legend>
+        <legend>How often</legend>
         {% set preset = rf.preset or '6h' %}
         <label>Every
           <select name="schedule" data-schedule>
@@ -176,30 +154,25 @@
     {% endif %}
   </section>
   <section class="card ops-report-card">
-    <h2>Send now</h2>
+    <h2>Send now report</h2>
     {% if can_send %}
     <form method="post" action="/ops/reports/send-now" class="stack ops-report-now" hx-boost="false">
-      <fieldset class="report-pick">
-        <legend>Scheduled reports</legend>
-        <div class="recipient-picks">
+      <label>Title <input name="name" placeholder="Dnevni report..."></label>
+      <fieldset class="report-pick" data-report-pick>
+        <legend>Saved schedules</legend>
+        <p class="muted">Click a saved title to fire that schedule once. Or pick people and assets below.</p>
+        <div class="recipient-list">
           {% for row in report_choices %}
-          <label class="check"><input type="checkbox" name="report_id" value="{{ row.id }}"> {{ row.name }} <span class="muted">· {{ schedule_label(row) }}</span></label>
+          <button type="button" class="recipient-line" data-report-id="{{ row.id }}">
+            <span class="recipient-name">{{ row.name }}</span>
+            <span class="recipient-addr">{{ schedule_label(row) }}</span>
+          </button>
           {% else %}
           <p class="muted">No scheduled reports yet. Send a custom snapshot below.</p>
           {% endfor %}
         </div>
       </fieldset>
-      <fieldset class="report-recipients">
-        <legend>Recipients</legend>
-        <div class="recipient-picks">
-          {% for item in addresses %}
-          <label class="check"><input type="checkbox" name="to_email" value="{{ item.email }}"> {{ item.email }}{% if item.label %} · {{ item.label }}{% endif %} <span class="muted">({{ item.source }})</span></label>
-          {% else %}
-          <p class="muted">No saved addresses yet. Type them below.</p>
-          {% endfor %}
-        </div>
-        <label>Additional emails <textarea name="extra_emails" rows="2" placeholder="dodati email, zarez, jedan za drugim"></textarea></label>
-      </fieldset>
+      {% with picked=[] %}{% include "_report_people.html" %}{% endwith %}
       {% with selected=[] %}{% include "_asset_picker.html" %}{% endwith %}
       <div class="row-actions ops-report-form-actions asset-form-actions">
         <button type="submit" class="secondary">{% if smtp_on %}Send{% else %}Save to outbox{% endif %}</button>

@@ -114,8 +114,8 @@ def test_ops_page_lists_outbox_and_reports():
     assert page.status_code == 200
     assert "Email &amp; reports" in page.text or "Email & reports" in page.text
     through_at = page.text.find("Send through")
-    send_at = page.text.find("Send email")
-    compose_at = page.text.find(">Compose<")
+    send_at = page.text.find("Add email")
+    compose_at = page.text.find("Compose new email")
     outbox_at = page.text.find("Mail outbox")
     reports_at = page.text.find("Scheduled reports")
     assert 0 <= through_at < send_at < compose_at < outbox_at < reports_at
@@ -128,13 +128,14 @@ def test_ops_page_lists_outbox_and_reports():
     assert "Open Grafana" not in page.text
     assert "Stack UIs" not in page.text
     assert "platform@forgesre.local" in page.text
-    assert "Send now" in page.text
+    assert "Send now report" in page.text
     assert "Active scheduled reports" in page.text
     assert "Dnevni report..." in page.text
     assert "dodati email, zarez, jedan za drugim" in page.text
     assert "Or destination email" not in page.text
     assert "storage-6h" not in page.text.split('id="report-schedule-form"', 1)[1].split("</form>", 1)[0]
     assert "ops-sixths" in page.text
+    assert "ops-mail-row" in page.text
     assert "ops-thirds" in page.text
     mail = page.text.split('id="mail"', 1)[1].split('id="reports"', 1)[0]
     assert ">When<" in mail
@@ -149,7 +150,10 @@ def test_ops_page_lists_outbox_and_reports():
     assert ">Next<" in reports
     assert 'href="/ops#reports">Cancel</a>' in reports
     assert ">Toggle<" not in reports
-    assert 'name="report_id"' in reports or "No scheduled reports yet" in reports
+    assert 'data-report-id="' in reports or "No scheduled reports yet" in reports
+    assert "data-report-people" in reports
+    assert "recipient-line" in reports
+    assert 'name="extra_emails"' in reports
     assert "ops-report-now" in reports
     assert "Selected assets appear here" in reports
     db.close()
@@ -162,8 +166,13 @@ def test_ops_compose_column_is_forced_wider_than_add_email():
     assert "ops-add-email" in ops
     assert "ops-compose" in ops
     assert "ops-sixths" in ops and "ops-thirds" in ops
+    assert "ops-mail-row" in ops
+    assert "Add email" in ops
+    assert "Compose new email" in ops
+    assert "Send now report" in ops
     assert "max-width: 38%" not in ops
     assert "min-width: 58%" not in ops
+    assert "minmax(0, 1fr) minmax(0, 2fr)" in css
     assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
     assert "calc((100% - 1.8rem) / 6)" in css
     assert ".split { display: grid; grid-template-columns: 1.2fr 0.8fr;" in css
@@ -324,7 +333,7 @@ def test_ops_send_now_can_fire_an_existing_schedule_once():
     row = db.query(ScheduledReport).filter_by(name=f"daily-{token}").one()
     report_id = row.id
     page = client.get("/ops")
-    assert f'name="report_id" value="{report_id}"' in page.text or f'value="{report_id}"' in page.text.split("ops-report-now", 1)[1]
+    assert f'data-report-id="{report_id}"' in page.text
     posted = client.post("/ops/reports/send-now", data={"report_id": str(report_id)}, follow_redirects=False)
     assert posted.status_code == 303
     sent = db.query(Notification).filter_by(target=target, step_key="report").count()
@@ -334,6 +343,8 @@ def test_ops_send_now_can_fire_an_existing_schedule_once():
     assert "Type:" in mail.body
     assert "Status:" in mail.body
     assert "IP:" in mail.body
+    assert "Happened:" in mail.body
+    assert "Assets:" in mail.body
     assert "Not an incident" in mail.body
     html = build_performance_report_html(db, list(row.asset_ids or []), name=row.name)
     assert "forgesre-mail" in html
@@ -353,6 +364,33 @@ def test_ops_send_now_can_fire_an_existing_schedule_once():
     db.expire_all()
     assert db.query(Notification).filter_by(target=target, step_key="report").count() == 1
     assert db.get(ScheduledReport, report_id) is None
+    db.close()
+
+
+def test_ops_new_report_saves_people_from_extra_emails():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    token = uuid4().hex[:8]
+    one = f"one-{token}@example.local"
+    two = f"two-{token}@example.local"
+    posted = client.post(
+        "/ops/reports",
+        data={
+            "name": f"click-{token}",
+            "extra_emails": f"{one}, {two}",
+            "schedule": "6h",
+            "asset_id": "forge-demo-01",
+        },
+        follow_redirects=False,
+    )
+    assert posted.status_code == 303
+    row = db.query(ScheduledReport).filter_by(name=f"click-{token}").one()
+    assert sorted(item.lower() for item in (row.recipients or [])) == sorted([one, two])
+    edit = client.get(f"/ops?edit={row.id}").text
+    form = edit.split('id="report-schedule-form"', 1)[1].split("</form>", 1)[0]
+    assert one in form and two in form
+    assert 'name="to_email"' not in form
     db.close()
 
 
@@ -384,7 +422,7 @@ def test_ops_send_now_creates_outbox_without_waiting_or_schedule():
     assert "Not an incident" in mail.body
     assert "SMTP disabled" in (mail.error or "") or "not sent" in (mail.error or "").lower()
     page = client.get("/ops")
-    assert "Send now" in page.text
+    assert "Send now report" in page.text
     assert "now@example.local" in page.text
     db.close()
 
@@ -462,7 +500,9 @@ def test_ops_scheduled_report_edit_clone_disable_remove():
     assert ">Edit report<" in edit_page.text or "Edit report" in edit_page.text
     form = edit_page.text.split('id="report-schedule-form"', 1)[1].split("</form>", 1)[0]
     assert 'value="storage-job"' in form
-    assert 'value="cron@example.local"' in form and "selected" in form
+    assert "cron@example.local" in form
+    assert 'data-email="cron@example.local"' in form
+    assert "selected" in form
     assert 'value="forge-demo-01"' in form and "checked" in form
     assert 'href="/ops#reports">Cancel</a>' in form
     cancelled = client.get("/ops")

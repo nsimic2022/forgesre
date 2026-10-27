@@ -1,0 +1,17 @@
+<fieldset class="report-recipients" data-report-people>
+  <legend>People</legend>
+  <p class="muted">Click a line to add or remove that address. The report goes to the list below.</p>
+  <div class="recipient-list">
+    {% for item in addresses %}
+    <button type="button" class="recipient-line" data-email="{{ item.email }}">
+      <span class="recipient-name">{{ item.label or item.email }}</span>
+      <span class="recipient-addr">{{ item.email }}</span>
+    </button>
+    {% else %}
+    <p class="muted">No saved addresses yet. Type them below.</p>
+    {% endfor %}
+  </div>
+  <label>Additional emails
+    <textarea name="extra_emails" rows="2" data-email-picked placeholder="dodati email, zarez, jedan za drugim">{{ (picked or [])|join(', ') }}</textarea>
+  </label>
+</fieldset>

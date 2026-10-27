@@ -125,7 +125,7 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
     assert 'row.closest(".list-scroll-cards")' in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-61" in base and "app.js?v=v09-R" in base
+    assert "app.css?v=v09-62" in base and "app.js?v=v09-S" in base
     pager_tpl = (ROOT / "frontend" / "templates" / "_pager.html").read_text(encoding="utf-8")
     assert 'class="pager-bar" data-list-pager' in pager_tpl
     assert pager_tpl.count("data-list-actions") == 1

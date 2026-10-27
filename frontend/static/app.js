@@ -75,6 +75,62 @@ function bootUi() {
   sync();
 })();
 
+(function bindEmailPick() {
+  const split = (text) =>
+    String(text || "")
+      .split(/[\s,;]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  document.querySelectorAll("[data-report-people]").forEach((box) => {
+    const field = box.querySelector("[data-email-picked]");
+    if (!field) return;
+    const paint = () => {
+      const have = new Set(split(field.value).map((item) => item.toLowerCase()));
+      box.querySelectorAll("[data-email]").forEach((btn) => {
+        const email = (btn.getAttribute("data-email") || "").trim().toLowerCase();
+        btn.classList.toggle("is-on", Boolean(email && have.has(email)));
+      });
+    };
+    box.querySelectorAll("[data-email]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const email = (btn.getAttribute("data-email") || "").trim();
+        if (!email) return;
+        const have = split(field.value);
+        const key = email.toLowerCase();
+        const next = have.some((item) => item.toLowerCase() === key)
+          ? have.filter((item) => item.toLowerCase() !== key)
+          : have.concat(email);
+        field.value = next.join(", ");
+        paint();
+      });
+    });
+    field.addEventListener("input", paint);
+    paint();
+  });
+})();
+
+(function bindReportPick() {
+  document.querySelectorAll("[data-report-pick]").forEach((box) => {
+    box.querySelectorAll("[data-report-id]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = (btn.getAttribute("data-report-id") || "").trim();
+        if (!id) return;
+        const on = btn.classList.toggle("is-on");
+        let hidden = box.querySelector('input[name="report_id"][value="' + id + '"]');
+        if (on && !hidden) {
+          hidden = document.createElement("input");
+          hidden.type = "hidden";
+          hidden.name = "report_id";
+          hidden.value = id;
+          box.append(hidden);
+        } else if (!on && hidden) {
+          hidden.remove();
+        }
+      });
+    });
+  });
+})();
+
 (function bindFlashDismiss() {
   const keyName = "forgesre-flash-dismiss";
   let saved = [];
