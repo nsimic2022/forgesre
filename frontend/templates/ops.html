@@ -195,9 +195,9 @@
 </div>
 </fieldset>
     {% with selected=rf.asset_ids or [] %}{% include "_asset_picker.html" %}{% endwith %}
-    <div class="row-actions ops-report-form-actions">
+    <div class="row-actions ops-report-form-actions asset-form-actions">
       <button type="submit">{% if report_mode == "clone" %}Save copy{% else %}Save schedule{% endif %}</button>
-      <a href="/ops#reports">Cancel</a>
+      <a class="button" href="/ops#reports">Cancel</a>
 </div>
 </form>
   <form method="post" action="/ops/reports/send-now" class="stack ops-report-now" hx-boost="false">
