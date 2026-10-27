@@ -215,7 +215,7 @@
       <thead><tr>{{ sel.head() }}<th>Name</th><th>To</th><th>Every</th><th>Assets</th><th>Last</th><th>Next</th><th>Enabled</th></tr></thead>
       <tbody>
       {% for row in reports %}
-        <tr{% if editing_report and editing_report.id == row.id %} class="selected"{% endif %} data-list-row{% if can_send %} data-list-view="/ops?edit={{ row.id }}#reports"{% endif %}>
+        <tr{% if editing_report and editing_report.id == row.id %} class="selected"{% endif %}{% if can_send %} data-list-view="/ops?edit={{ row.id }}#reports"{% endif %} data-list-row>
           {{ sel.cell(row.id, row.name) }}
           <td>{{ row.name }}</td>
           <td>{{ report_recipients(row)|join(", ") or row.to_email }}</td>

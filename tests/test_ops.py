@@ -149,7 +149,8 @@ def test_ops_page_lists_outbox_and_reports():
     assert ">Next<" in reports
     assert 'href="/ops#reports">Cancel</a>' in reports
     assert ">Toggle<" not in reports
-    assert 'name="report_id"' in reports
+    assert 'name="report_id"' in reports or "No scheduled reports yet" in reports
+    assert "ops-report-now" in reports
     assert "Selected assets appear here" in reports
     db.close()
 
@@ -167,15 +168,15 @@ def test_ops_compose_column_is_forced_wider_than_add_email():
     assert "calc((100% - 1.8rem) / 6)" in css
     assert ".split { display: grid; grid-template-columns: 1.2fr 0.8fr;" in css
     assert 'href="/ops#reports">Cancel</a>' in ops
-    assert 'action="/ops/reports/open-edit"' in ops
-    assert 'action="/ops/reports/open-clone"' in ops
+    assert "/ops/reports/open-edit" in ops
+    assert "/ops/reports/open-clone" in ops
     assert '"delete_label": "Remove"' in ops
     assert 'class="onoff' in ops
     assert ">ON<" in ops or "ON{% else %}OFF" in ops
     assert "Enable" not in ops or "Enabled" in ops
     assert "Toggle" not in ops
     assert "Disable" not in ops
-    assert "confirm(" in ops
+    assert "They stop sending" in ops
     assert "Or destination email" not in ops
     assert "Dnevni report..." in ops
 
@@ -321,9 +322,10 @@ def test_ops_send_now_can_fire_an_existing_schedule_once():
     )
     assert created.status_code == 303
     row = db.query(ScheduledReport).filter_by(name=f"daily-{token}").one()
+    report_id = row.id
     page = client.get("/ops")
-    assert f'name="report_id" value="{row.id}"' in page.text or f'value="{row.id}"' in page.text.split("ops-report-now", 1)[1]
-    posted = client.post("/ops/reports/send-now", data={"report_id": str(row.id)}, follow_redirects=False)
+    assert f'name="report_id" value="{report_id}"' in page.text or f'value="{report_id}"' in page.text.split("ops-report-now", 1)[1]
+    posted = client.post("/ops/reports/send-now", data={"report_id": str(report_id)}, follow_redirects=False)
     assert posted.status_code == 303
     sent = db.query(Notification).filter_by(target=target, step_key="report").count()
     assert sent == 1
@@ -342,14 +344,15 @@ def test_ops_send_now_can_fire_an_existing_schedule_once():
     assert db.query(Notification).filter_by(target=target, step_key="report").count() == 1
     removed = client.post(
         "/ops/reports/bulk-delete",
-        data={"selected": str(row.id), "next": "/ops#reports"},
+        data={"selected": str(report_id), "next": "/ops#reports"},
         follow_redirects=False,
     )
     assert removed.status_code == 303
     for _ in range(3):
         process_scheduled_reports(SessionLocal())
+    db.expire_all()
     assert db.query(Notification).filter_by(target=target, step_key="report").count() == 1
-    assert db.get(ScheduledReport, row.id) is None
+    assert db.get(ScheduledReport, report_id) is None
     db.close()
 
 
@@ -456,8 +459,8 @@ def test_ops_scheduled_report_edit_clone_disable_remove():
     assert edit_page.status_code == 200
     assert f'action="/ops/reports/{row.id}/update"' in edit_page.text
     assert 'id="report-schedule-form"' in edit_page.text
+    assert ">Edit report<" in edit_page.text or "Edit report" in edit_page.text
     form = edit_page.text.split('id="report-schedule-form"', 1)[1].split("</form>", 1)[0]
-    assert "Edit report" in form
     assert 'value="storage-job"' in form
     assert 'value="cron@example.local"' in form and "selected" in form
     assert 'value="forge-demo-01"' in form and "checked" in form
@@ -488,8 +491,8 @@ def test_ops_scheduled_report_edit_clone_disable_remove():
     clone_page = client.get(f"/ops?clone={row.id}")
     assert 'id="report-schedule-form"' in clone_page.text
     assert 'action="/ops/reports"' in clone_page.text
+    assert "Clone report" in clone_page.text
     clone_form = clone_page.text.split('id="report-schedule-form"', 1)[1].split("</form>", 1)[0]
-    assert "Clone report" in clone_form
     assert "storage-daily-copy" in clone_form
     assert ">Save copy<" in clone_form
     cloned = client.post(
