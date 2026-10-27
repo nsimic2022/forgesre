@@ -35,9 +35,11 @@
     {% endfor %}
     <button type="button" data-asset-filter>Filter</button>
   </div>
-  <div class="asset-picker-chips" data-asset-chips>
+  <div class="asset-picked-cube" data-asset-chips>
     {% for asset in assets if asset.asset_id in (selected or []) %}
     <span class="asset-chip">{{ asset.hostname }}</span>
+    {% else %}
+    <span class="muted" data-asset-picked-empty>Selected assets appear here</span>
     {% endfor %}
   </div>
   <div class="asset-picker-list" data-asset-list>

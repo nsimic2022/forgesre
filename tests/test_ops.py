@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -8,7 +9,7 @@ from app.main import app
 from app.models import MailContact, Notification, ScheduledReport, User
 from app.security import hash_password
 from app.seed import seed
-from app.services import process_scheduled_reports
+from app.services import build_performance_report_html, process_scheduled_reports
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -112,20 +113,29 @@ def test_ops_page_lists_outbox_and_reports():
     page = client.get("/ops")
     assert page.status_code == 200
     assert "Email &amp; reports" in page.text or "Email & reports" in page.text
+    through_at = page.text.find("Send through")
     send_at = page.text.find("Send email")
+    compose_at = page.text.find(">Compose<")
     outbox_at = page.text.find("Mail outbox")
     reports_at = page.text.find("Scheduled reports")
-    assert 0 <= send_at < outbox_at < reports_at
-    assert "Add email" in page.text
+    assert 0 <= through_at < send_at < compose_at < outbox_at < reports_at
     assert "does not receive email" not in page.text
     assert "./forgesre mailbox" not in page.text
     assert "Gmail" in page.text
     assert "Outlook" in page.text
+    assert "Own domain" in page.text
     assert "not enabled" in page.text
     assert "Open Grafana" not in page.text
     assert "Stack UIs" not in page.text
     assert "platform@forgesre.local" in page.text
     assert "Send now" in page.text
+    assert "Active scheduled reports" in page.text
+    assert "Dnevni report..." in page.text
+    assert "dodati email, zarez, jedan za drugim" in page.text
+    assert "Or destination email" not in page.text
+    assert "storage-6h" not in page.text.split('id="report-schedule-form"', 1)[1].split("</form>", 1)[0]
+    assert "ops-sixths" in page.text
+    assert "ops-thirds" in page.text
     mail = page.text.split('id="mail"', 1)[1].split('id="reports"', 1)[0]
     assert ">When<" in mail
     assert ">To<" in mail
@@ -133,13 +143,14 @@ def test_ops_page_lists_outbox_and_reports():
     assert "scan-list" not in mail
     assert "ops-compose" in page.text
     assert "ops-add-email" in page.text
-    assert "max-width: 38%" in page.text
-    assert "min-width: 58%" in page.text
+    assert "max-width: 38%" not in page.text
     reports = page.text.split('id="reports"', 1)[1]
     assert "means the job fires" not in reports
     assert ">Next<" in reports
     assert 'href="/ops#reports">Cancel</a>' in reports
     assert ">Toggle<" not in reports
+    assert 'name="report_id"' in reports
+    assert "Selected assets appear here" in reports
     db.close()
 
 
@@ -149,22 +160,24 @@ def test_ops_compose_column_is_forced_wider_than_add_email():
     assert "split ops-forms" not in ops
     assert "ops-add-email" in ops
     assert "ops-compose" in ops
-    assert "max-width: 38%" in ops
-    assert "min-width: 58%" in ops
-    assert "max-width: 38%" in css
-    assert "min-width: 58%" in css
+    assert "ops-sixths" in ops and "ops-thirds" in ops
+    assert "max-width: 38%" not in ops
+    assert "min-width: 58%" not in ops
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
+    assert "calc((100% - 1.8rem) / 6)" in css
     assert ".split { display: grid; grid-template-columns: 1.2fr 0.8fr;" in css
     assert 'href="/ops#reports">Cancel</a>' in ops
-    assert ">Edit<" in ops
-    assert ">Clone<" in ops
-    assert ">Remove<" in ops
+    assert 'action="/ops/reports/open-edit"' in ops
+    assert 'action="/ops/reports/open-clone"' in ops
+    assert '"delete_label": "Remove"' in ops
     assert 'class="onoff' in ops
     assert ">ON<" in ops or "ON{% else %}OFF" in ops
-    assert "Enable" in ops
+    assert "Enable" not in ops or "Enabled" in ops
     assert "Toggle" not in ops
     assert "Disable" not in ops
-    assert "td.ops-report-actions" in css
     assert "confirm(" in ops
+    assert "Or destination email" not in ops
+    assert "Dnevni report..." in ops
 
 
 def test_ops_add_contact_then_pick_from_list():
@@ -295,6 +308,51 @@ def test_viewer_cannot_read_ops_or_send():
     db.close()
 
 
+def test_ops_send_now_can_fire_an_existing_schedule_once():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    token = uuid4().hex[:8]
+    target = f"once-{token}@example.local"
+    created = client.post(
+        "/ops/reports",
+        data={"name": f"daily-{token}", "to_email": target, "schedule": "24h"},
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+    row = db.query(ScheduledReport).filter_by(name=f"daily-{token}").one()
+    page = client.get("/ops")
+    assert f'name="report_id" value="{row.id}"' in page.text or f'value="{row.id}"' in page.text.split("ops-report-now", 1)[1]
+    posted = client.post("/ops/reports/send-now", data={"report_id": str(row.id)}, follow_redirects=False)
+    assert posted.status_code == 303
+    sent = db.query(Notification).filter_by(target=target, step_key="report").count()
+    assert sent == 1
+    mail = db.query(Notification).filter_by(target=target, step_key="report").one()
+    assert mail.subject == f"Report daily-{token}"
+    assert "Type:" in mail.body
+    assert "Status:" in mail.body
+    assert "IP:" in mail.body
+    assert "Not an incident" in mail.body
+    html = build_performance_report_html(db, list(row.asset_ids or []), name=row.name)
+    assert "forgesre-mail" in html
+    assert 'class="performance-report"' in html
+    assert "Performance snapshot" in html
+    assert ">Type<" in html
+    process_scheduled_reports(db)
+    assert db.query(Notification).filter_by(target=target, step_key="report").count() == 1
+    removed = client.post(
+        "/ops/reports/bulk-delete",
+        data={"selected": str(row.id), "next": "/ops#reports"},
+        follow_redirects=False,
+    )
+    assert removed.status_code == 303
+    for _ in range(3):
+        process_scheduled_reports(SessionLocal())
+    assert db.query(Notification).filter_by(target=target, step_key="report").count() == 1
+    assert db.get(ScheduledReport, row.id) is None
+    db.close()
+
+
 def test_ops_send_now_creates_outbox_without_waiting_or_schedule():
     db = _db()
     client = TestClient(app)
@@ -364,15 +422,35 @@ def test_ops_scheduled_report_edit_clone_disable_remove():
     listed = client.get("/ops")
     reports = listed.text.split('id="reports"', 1)[1]
     assert f"/ops?edit={row.id}" in reports
-    assert f"/ops?clone={row.id}" in reports
-    assert f"/ops/reports/{row.id}/delete" in reports
+    assert 'action="/ops/reports/open-edit"' in reports
+    assert 'action="/ops/reports/open-clone"' in reports
+    assert 'action="/ops/reports/bulk-delete"' in reports
+    assert f"/ops/reports/{row.id}/delete" not in reports
     assert 'class="onoff is-on"' in reports
     assert ">ON<" in reports
     assert ">Remove<" in reports
     assert ">Edit<" in reports
     assert ">Clone<" in reports
+    assert ">Cancel<" in reports
     assert ">Enabled<" in reports
     assert "confirm(" in reports
+    opened = client.post(
+        "/ops/reports/open-edit",
+        data={"selected": str(row.id), "stay": "/ops"},
+        follow_redirects=False,
+    )
+    assert opened.status_code == 303
+    assert f"edit={row.id}" in opened.headers["location"]
+    none = client.post("/ops/reports/open-edit", data={"stay": "/ops"}, follow_redirects=False)
+    assert none.status_code == 303
+    assert "edit_note=select-one" in none.headers["location"]
+    cloned_open = client.post(
+        "/ops/reports/open-clone",
+        data={"selected": str(row.id), "stay": "/ops"},
+        follow_redirects=False,
+    )
+    assert cloned_open.status_code == 303
+    assert f"clone={row.id}" in cloned_open.headers["location"]
 
     edit_page = client.get(f"/ops?edit={row.id}")
     assert edit_page.status_code == 200
