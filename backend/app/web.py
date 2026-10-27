@@ -453,10 +453,7 @@ def _posted_ladder(
 
 
 def _posted_extras(present: str, **values: str) -> dict | None:
-    try:
-        return extras_from_form(present, **values)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return extras_from_form(present, **values)
 
 
 def _posted_snmp(present: str, previous=None, **values: str) -> dict | None:
@@ -896,6 +893,30 @@ def asset_saved_url(asset_id: str, notice: str = "") -> str:
     return "/assets?" + urlencode(pairs)
 
 
+def _asset_form_notice(
+    exc: Exception,
+    *,
+    asset_id: str = "",
+    clone_of: str = "",
+    import_of: str = "",
+) -> RedirectResponse:
+    """Stay in the GUI with a banner. Form checks must not dump JSON."""
+    if clone_of:
+        return RedirectResponse(
+            f"/assets?clone={quote(clone_of)}&notice={quote(str(exc))}",
+            status_code=302,
+        )
+    imported = (import_of or "").strip()
+    if imported.isdigit():
+        return RedirectResponse(
+            f"/discovery?import={quote(imported)}&notice={quote(str(exc))}",
+            status_code=302,
+        )
+    if asset_id:
+        return RedirectResponse(asset_saved_url(asset_id, str(exc)), status_code=302)
+    return RedirectResponse(f"/discovery?notice={quote(str(exc))}", status_code=302)
+
+
 @router.get("/assets", response_class=HTMLResponse)
 def assets_page(
     request: Request,
@@ -1191,29 +1212,32 @@ def asset_create(
         disk_threshold=alarm_disk_threshold,
     )
     owner_email = _picked_email(owner_email_pick, owner_email)
-    posted_extras = _posted_extras(
-        extras_present,
-        customer=extra_customer,
-        site=extra_site,
-        vlan=extra_vlan,
-        row=extra_row,
-        rack=extra_rack,
-        backup_name=extra_backup_name,
-        backup_phone=extra_backup_phone,
-        backup_email=_picked_email(extra_backup_email_pick, extra_backup_email),
-        support_hours=extra_support_hours,
-        timezone=extra_timezone,
-        contract=extra_contract,
-        runbook_note=extra_runbook_note,
-        support=extra_support,
-        support_custom=extra_support_custom,
-        support_from=extra_support_from,
-        support_to=extra_support_to,
-        support_lead_days=extra_support_lead_days,
-        maint_from=extra_maint_from,
-        maint_until=extra_maint_until,
-        snmp_poll=snmp_poll,
-    )
+    try:
+        posted_extras = _posted_extras(
+            extras_present,
+            customer=extra_customer,
+            site=extra_site,
+            vlan=extra_vlan,
+            row=extra_row,
+            rack=extra_rack,
+            backup_name=extra_backup_name,
+            backup_phone=extra_backup_phone,
+            backup_email=_picked_email(extra_backup_email_pick, extra_backup_email),
+            support_hours=extra_support_hours,
+            timezone=extra_timezone,
+            contract=extra_contract,
+            runbook_note=extra_runbook_note,
+            support=extra_support,
+            support_custom=extra_support_custom,
+            support_from=extra_support_from,
+            support_to=extra_support_to,
+            support_lead_days=extra_support_lead_days,
+            maint_from=extra_maint_from,
+            maint_until=extra_maint_until,
+            snmp_poll=snmp_poll,
+        )
+    except ValueError as exc:
+        return _asset_form_notice(exc, clone_of=clone_of, import_of=import_of)
     if posted_extras is None and str(snmp_poll or "").strip():
         posted_extras = extras_from_form("1", snmp_poll=snmp_poll)
     picked_metrics = families_from_form(
@@ -1284,18 +1308,7 @@ def asset_create(
             source_snmp=None if posted_sources is None else posted_sources["snmp"],
         )
     except ValueError as exc:
-        if cloned_from:
-            return RedirectResponse(
-                f"/assets?clone={quote(cloned_from)}&notice={quote(str(exc))}",
-                status_code=302,
-            )
-        imported = (import_of or "").strip()
-        if imported.isdigit():
-            return RedirectResponse(
-                f"/discovery?import={quote(imported)}&notice={quote(str(exc))}",
-                status_code=302,
-            )
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _asset_form_notice(exc, clone_of=cloned_from, import_of=import_of)
     imported = (import_of or "").strip()
     if imported.isdigit():
         candidate = db.get(DiscoveryCandidate, int(imported))
@@ -2012,29 +2025,32 @@ def asset_update(
         disk_threshold=alarm_disk_threshold,
     )
     owner_email = _picked_email(owner_email_pick, owner_email)
-    posted_extras = _posted_extras(
-        extras_present,
-        customer=extra_customer,
-        site=extra_site,
-        vlan=extra_vlan,
-        row=extra_row,
-        rack=extra_rack,
-        backup_name=extra_backup_name,
-        backup_phone=extra_backup_phone,
-        backup_email=_picked_email(extra_backup_email_pick, extra_backup_email),
-        support_hours=extra_support_hours,
-        timezone=extra_timezone,
-        contract=extra_contract,
-        runbook_note=extra_runbook_note,
-        support=extra_support,
-        support_custom=extra_support_custom,
-        support_from=extra_support_from,
-        support_to=extra_support_to,
-        support_lead_days=extra_support_lead_days,
-        maint_from=extra_maint_from,
-        maint_until=extra_maint_until,
-        snmp_poll=snmp_poll,
-    )
+    try:
+        posted_extras = _posted_extras(
+            extras_present,
+            customer=extra_customer,
+            site=extra_site,
+            vlan=extra_vlan,
+            row=extra_row,
+            rack=extra_rack,
+            backup_name=extra_backup_name,
+            backup_phone=extra_backup_phone,
+            backup_email=_picked_email(extra_backup_email_pick, extra_backup_email),
+            support_hours=extra_support_hours,
+            timezone=extra_timezone,
+            contract=extra_contract,
+            runbook_note=extra_runbook_note,
+            support=extra_support,
+            support_custom=extra_support_custom,
+            support_from=extra_support_from,
+            support_to=extra_support_to,
+            support_lead_days=extra_support_lead_days,
+            maint_from=extra_maint_from,
+            maint_until=extra_maint_until,
+            snmp_poll=snmp_poll,
+        )
+    except ValueError as exc:
+        return _asset_form_notice(exc, asset_id=asset_id)
     picked_metrics = families_from_form(
         snmp_metrics_present,
         net=snmp_metric_net,
@@ -2075,7 +2091,7 @@ def asset_update(
     try:
         validate_ip_field(ip)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _asset_form_notice(exc, asset_id=asset_id)
     try:
         update_asset(
             db,
@@ -2104,7 +2120,7 @@ def asset_update(
             source_snmp=None if posted_sources is None else posted_sources["snmp"],
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _asset_form_notice(exc, asset_id=asset_id)
     notice = getattr(item, "_detect_message", "") or ""
     return RedirectResponse(asset_saved_url(asset_id, notice), status_code=302)
 

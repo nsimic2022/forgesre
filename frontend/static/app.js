@@ -684,6 +684,16 @@ if (alertRulesData && alertNameInput && rulePreviewBody) {
 (function bindAssetFormPicks() {
   const form = document.getElementById("asset-form");
   if (!form) return;
+  form.addEventListener("submit", (event) => {
+    const from = form.querySelector("[data-maint-from]");
+    const until = form.querySelector("[data-maint-until]");
+    const start = from ? String(from.value || "").trim() : "";
+    const end = until ? String(until.value || "").trim() : "";
+    if ((start && !end) || (!start && end)) {
+      event.preventDefault();
+      window.alert("Maintenance needs both from and until, or leave both empty.");
+    }
+  });
   form.addEventListener("change", (event) => {
     const select = event.target.closest("[data-email-select]");
     if (!select || !form.contains(select)) return;

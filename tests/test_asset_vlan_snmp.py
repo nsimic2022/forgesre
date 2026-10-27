@@ -158,7 +158,7 @@ def test_layout_comms_alone_in_middle_alarms_then_custom_then_ladder():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".asset-ladder .ladder-level {" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-58" in base and "app.js?v=v09-Q" in base
+    assert "app.css?v=v09-58" in base and "app.js?v=v09-R" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "[data-snmp-version]" in js and "[data-snmp-v3-level]" in js
 
@@ -290,15 +290,15 @@ def test_snmp_v1_default_and_v3_usm_saved(tmp_path):
     assert row.extras["snmp_v3_auth_pass"] == SECRET_AUTH and "snmp_v3_priv_pass" not in row.extras
 
     bad = client.post("/assets", data=_base(f"{PREFIX}bad", snmp_version="v3", snmp_v3_user=""), follow_redirects=False)
-    assert bad.status_code == 400
+    assert bad.status_code in {302, 303} and "notice=" in (bad.headers.get("location") or "")
     short = client.post(
         "/assets",
         data=_base(f"{PREFIX}short", snmp_version="v3", snmp_v3_user="u", snmp_v3_level="authNoPriv", snmp_v3_auth_pass="123"),
         follow_redirects=False,
     )
-    assert short.status_code == 400
+    assert short.status_code in {302, 303} and "notice=" in (short.headers.get("location") or "")
     nocomm = client.post("/assets", data=_base(f"{PREFIX}nocomm", snmp_community_mode="custom"), follow_redirects=False)
-    assert nocomm.status_code == 400
+    assert nocomm.status_code in {302, 303} and "notice=" in (nocomm.headers.get("location") or "")
     db.close()
 
 

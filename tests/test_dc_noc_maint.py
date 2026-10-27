@@ -291,3 +291,38 @@ def test_asset_list_badge_and_form_fields():
     assert 'name="extra_maint_from"' in edit.text
     assert "data-maint-badge" in listed.text
     db.close()
+
+
+def test_half_maintenance_stays_on_form_with_notice():
+    db = _db()
+    token = uuid4().hex[:8]
+    asset = _asset(db, token)
+    client = _client()
+    saved = client.post(
+        f"/assets/{asset.asset_id}/update",
+        data={
+            "hostname": asset.hostname,
+            "ip": asset.ip,
+            "type": "Linux Server",
+            "extras_present": "1",
+            "extra_maint_from": "2026-10-13T10:00",
+        },
+        follow_redirects=False,
+    )
+    assert saved.status_code in {302, 303}
+    location = saved.headers.get("location") or ""
+    assert f"edit={asset.asset_id}" in location
+    assert "notice=" in location
+    assert "Maintenance" in location
+    assert saved.headers.get("content-type", "").startswith("text/html") or "json" not in saved.headers.get("content-type", "")
+    bounced = client.get(location)
+    assert bounced.status_code == 200
+    assert "Maintenance needs both from and until" in bounced.text
+    assert 'class="banner"' in bounced.text
+    db.expire_all()
+    row = db.query(Asset).filter_by(asset_id=asset.asset_id).one()
+    assert not (row.extras or {}).get("maint_from")
+    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
+    assert "data-maint-from" in js and "window.alert" in js
+    assert "Maintenance needs both from and until" in js
+    db.close()
