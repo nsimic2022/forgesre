@@ -128,8 +128,9 @@ def test_qnap_with_typed_odd_port_scrape_keeps_it():
 def test_ip_field_refuses_port():
     _db().close()
     resp = _post(_client(), "ats-bad-ip", "Linux Server", "10.1.2.3:9100")
-    assert resp.status_code == 400
-    assert "no :port" in resp.text
+    assert resp.status_code in {302, 303}
+    assert "notice=" in (resp.headers.get("location") or "")
+    assert "port" in (resp.headers.get("location") or "").lower()
 
 
 def test_snmp_family_and_effective_port():
@@ -250,7 +251,9 @@ def test_support_custom_persists_and_shows_pill_without_incident():
     assert 'name="extra_support_custom" value="weekdays 8–16"' in support
 
     missing = _post(client, "ats-sup-bad", "Linux Server", extras_present="1", extra_support="custom")
-    assert missing.status_code == 400
+    assert missing.status_code in {302, 303}
+    assert "notice=" in (missing.headers.get("location") or "")
+    assert "Custom" in (missing.headers.get("location") or "")
     db.expire_all()
     assert db.query(Incident).count() == before
     db.close()
@@ -363,7 +366,7 @@ def test_snmp_probe_json_any_ip():
 
 def test_css_and_js_v08_14():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-58" in base and "app.js?v=v09-Q" in base
+    assert "app.css?v=v09-58" in base and "app.js?v=v09-R" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "select.nice-select" in css and ".reach-snmp" in css and ".snmp-poll-row" in css
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
