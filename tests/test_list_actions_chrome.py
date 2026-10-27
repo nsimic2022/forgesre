@@ -110,9 +110,32 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     assert "[data-select-scope]:has([data-select-row]:checked) .list-actions" in css
+    pager_block = css.split("/* Page cubes left,", 1)[1].split(".select-one-flash", 1)[0]
+    assert "grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr)" in pager_block
+    assert "align-items: end" in pager_block
+    assert "gap: 0.7rem 1.1rem" in pager_block
+    assert "margin: 0.95rem 0 1.15rem" in pager_block
+    assert "justify-self: center" in pager_block
+    assert "grid-column: 3" in pager_block
+    assert ".list-actions {\n  grid-column: 2;" in pager_block or "grid-column: 2" in pager_block
+    assert "gap: 0.7rem" in pager_block
+    assert "min-width: 4.6rem" in pager_block
+    assert "min-height: 2.05rem" in pager_block
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-58" in base and "app.js?v=v09-R" in base
+    assert "app.css?v=v09-59" in base and "app.js?v=v09-R" in base
+    pager_tpl = (ROOT / "frontend" / "templates" / "_pager.html").read_text(encoding="utf-8")
+    assert 'class="pager-bar" data-list-pager' in pager_tpl
+    assert pager_tpl.count("data-list-actions") == 1
+    edit = client.get("/assets?edit=forge-demo-01").text
+    form_actions = edit.split("asset-form-actions", 1)[1].split("</div>", 1)[0]
+    assert 'class="button" href="/assets">Cancel</a>' in form_actions
+    assert 'class="button" href="/discovery">Add another</a>' in form_actions
+    assert ">Save<" in form_actions
+    books = client.get("/playbooks").text
+    assert 'class="button" href="/playbooks">Cancel</a>' in books
+    esc = client.get("/escalation").text
+    assert 'class="button" href="/escalation">Cancel</a>' in esc
 
     assets = _middle(client.get("/assets").text)
     _order(assets, ["Edit", "Clone", "Verify", "Export", "Remove"])

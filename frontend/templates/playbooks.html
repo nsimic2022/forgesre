@@ -56,9 +56,9 @@
   <label>Name <input name="name" placeholder="DISK-FULL" required value="{{ form.name }}"></label>
   <label>Slug <input name="slug" placeholder="disk-full" required value="{{ form.slug }}" {% if form_mode == "edit" %}readonly{% endif %}></label>
   <label>Steps (one per line) <textarea name="steps" rows="6">{{ form.steps }}</textarea></label>
-  <div class="row-actions">
+  <div class="row-actions asset-form-actions">
     <button type="submit">{% if form_mode == "clone" %}Save copy{% else %}Save{% endif %}</button>
-    <a href="/playbooks">Cancel</a>
+    <a class="button" href="/playbooks">Cancel</a>
 </div>
 </form>
 {% endif %}

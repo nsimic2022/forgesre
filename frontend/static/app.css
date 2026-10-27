@@ -619,11 +619,11 @@ table tbody tr.selected td { background: var(--selected); }
 .asset-table .row-actions button,
 .asset-table .row-actions a.button,
 .asset-form-actions a.button {
-  padding: 0.28rem 0.55rem;
+  padding: 0.34rem 0.8rem;
   font-size: 0.82rem;
   width: auto;
   text-decoration: none;
-  display: inline-block;
+  display: inline-flex;
 }
 .asset-table .row-actions a.button,
 .asset-form-actions a.button,
@@ -631,14 +631,32 @@ a.button {
   background: var(--secondary);
   color: var(--text);
   font-weight: 600;
-  border-radius: 0.75rem;
-  padding: 0.28rem 0.55rem;
+  border-radius: 2px;
+  padding: 0.34rem 0.8rem;
   font-size: 0.82rem;
   width: auto;
   text-decoration: none;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
-.asset-form-actions { margin: 0.75rem 0 1rem; flex-wrap: wrap; }
+.asset-form-actions {
+  margin: 1rem 0 1.15rem;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0.7rem;
+}
+.wide.asset-form-actions,
+form .asset-form-actions {
+  justify-content: center;
+}
+.asset-form-actions button,
+.asset-form-actions a.button {
+  min-width: 4.6rem;
+  min-height: 2.05rem;
+}
 .reach-legend { margin: 0 0 0.75rem; }
 .reach-badges { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; margin-left: 0.4rem; vertical-align: middle; }
 .asset-table .reach-badges { margin-left: 0; }
@@ -3079,34 +3097,34 @@ tr[data-list-row].is-selected td:last-child { box-shadow: inset -3px 0 0 var(--a
   .dash-graphs { position: static; margin-top: 0; }
 }
 
-/* Pager tabs on the left, rows-per-page select bottom-right. Selected-row actions sit in the middle. */
-.pager-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.4rem 1rem;
-  margin: 0.4rem 0 1.1rem;
-}
-.pager-bar .pager { margin: 0; }
-.pager-bar .pager-meta { margin: 0.15rem 0 0.35rem; }
-form.pager-size { margin: 0 0 0 auto; display: flex; align-items: center; gap: 0.35rem; }
-form.pager-size label { flex-direction: row; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.82rem; }
-form.pager-size select { width: auto; padding: 0.22rem 0.45rem; font-size: 0.82rem; border-radius: 7px; }
-form.pager-size button { padding: 0.22rem 0.6rem; font-size: 0.82rem; }
+/* Page cubes left, row-size cube right, selected-row actions exactly in the middle. */
+.pager-bar,
 .pager-bar[data-list-pager] {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: end;
+  gap: 0.7rem 1.1rem;
+  margin: 0.95rem 0 1.15rem;
 }
-.pager-bar[data-list-pager] .pager-left { justify-self: start; }
-.pager-bar[data-list-pager] form.pager-size { margin: 0; justify-self: end; grid-column: 3; }
+.pager-bar .pager { margin: 0; }
+.pager-bar .pager-meta { margin: 0 0 0.35rem; }
+.pager-bar .pager-left { justify-self: start; }
+form.pager-size { margin: 0; display: flex; align-items: center; gap: 0.4rem; justify-self: end; grid-column: 3; }
+form.pager-size label { flex-direction: row; align-items: center; gap: 0.4rem; color: var(--muted); font-size: 0.82rem; }
+form.pager-size select {
+  width: auto;
+  min-height: 2.05rem;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.82rem;
+  border-radius: 2px;
+}
+form.pager-size button { padding: 0.32rem 0.7rem; font-size: 0.82rem; }
 .list-actions {
   grid-column: 2;
   justify-self: center;
   display: flex;
-  gap: 0.45rem;
+  gap: 0.7rem;
   align-items: center;
   visibility: hidden;
   pointer-events: none;
@@ -3117,8 +3135,15 @@ form.pager-size button { padding: 0.22rem 0.6rem; font-size: 0.82rem; }
 }
 .list-actions form { margin: 0; display: inline-flex; }
 .list-actions form[hidden] { display: none; }
-.list-actions form[data-bulk-export] { align-items: center; gap: 0.3rem; }
-.list-actions button { width: auto; flex: 0 0 auto; padding: 0.32rem 0.65rem; font-size: 0.82rem; }
+.list-actions form[data-bulk-export] { align-items: center; gap: 0.4rem; }
+.list-actions button {
+  width: auto;
+  flex: 0 0 auto;
+  min-width: 4.6rem;
+  min-height: 2.05rem;
+  padding: 0.34rem 0.8rem;
+  font-size: 0.82rem;
+}
 .list-actions button.is-muted { opacity: 0.55; }
 .select-one-flash { color: var(--warn); font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
 [data-select-scope]:has([data-select-row]:checked) .list-actions,
@@ -3476,13 +3501,14 @@ select.nice-select option { font-weight: 400; color: var(--text); background: va
   min-width: 3.2rem;
   cursor: pointer;
 }
+.found-action-cubes { gap: 0.45rem; }
 .found-action-cubes .reach-sq {
-  min-width: 3.4rem;
+  min-width: 3.8rem;
   height: auto;
-  min-height: 1.35rem;
-  padding: 0.18rem 0.4rem;
+  min-height: 1.7rem;
+  padding: 0.28rem 0.55rem;
   text-decoration: none;
-  font-size: 0.62rem;
+  font-size: 0.78rem;
   white-space: nowrap;
 }
 .found-action-cubes .reach-sq.already { min-width: 7.2rem; }

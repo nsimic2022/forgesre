@@ -84,9 +84,9 @@
     <option value="manager"></option>
     <option value="oncall"></option>
 </datalist>
-  <div class="row-actions">
+  <div class="row-actions asset-form-actions">
     <button type="submit">Save</button>
-    <a href="/escalation">Cancel</a>
+    <a class="button" href="/escalation">Cancel</a>
 </div>
 </form>
 </section>
@@ -131,9 +131,9 @@
     <label>Phone 1 <input name="phone" placeholder="+381-11-000-0000" value="{{ oc.phone }}"></label>
     <label>Phone 2 <input name="phone2" placeholder="+381-11-000-0001" value="{{ oc.phone2 }}"></label>
 </div>
-  <div class="row-actions">
+  <div class="row-actions asset-form-actions">
     <button type="submit">{% if oncall_form_mode == "clone" %}Save copy{% elif oncall_form_mode == "edit" %}Save{% else %}Add on-call slot{% endif %}</button>
-    <a href="/escalation#oncall">Cancel</a>
+    <a class="button" href="/escalation#oncall">Cancel</a>
 </div>
 </form>
 </section>

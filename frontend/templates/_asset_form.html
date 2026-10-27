@@ -310,11 +310,11 @@
 {% set form_list = "/discovery" if request.url.path.startswith("/discovery") else "/assets" %}
 <div class="wide row-actions asset-form-actions">
   {% if asset_view %}
-  <a href="{{ form_list }}">Close</a>
+  <a class="button" href="{{ form_list }}">Close</a>
   {% else %}
   <button type="submit" form="asset-form">{% if form_mode == 'clone' %}Save copy{% else %}Save{% endif %}</button>
   {% if form_mode == "edit" %}
-  <a href="{{ form_list }}">Cancel</a>
+  <a class="button" href="{{ form_list }}">Cancel</a>
   <a class="button" href="/assets/{{ selected.asset_id }}/verify">Verify</a>
   <form method="post" action="/assets/{{ selected.asset_id }}/detect" class="inline" hx-boost="false">
     <button type="submit" class="secondary">Detect OS / scrape port</button>
@@ -324,9 +324,9 @@
     <button type="submit" class="danger">Remove</button>
   </form>
   {% endif %}
-  <a href="/discovery">Add another</a>
+  <a class="button" href="/discovery">Add another</a>
   {% else %}
-  <a href="{{ form_list }}">Cancel</a>
+  <a class="button" href="{{ form_list }}">Cancel</a>
   {% endif %}
   {% endif %}
 </div>
