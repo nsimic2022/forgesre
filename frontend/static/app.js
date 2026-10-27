@@ -436,9 +436,11 @@ function bootUi() {
     const paintChips = () => {
       if (!chips) return;
       chips.replaceChildren();
+      let picked = 0;
       rows().forEach((row) => {
         const box = row.querySelector('input[name="asset_id"]');
         if (!box || !box.checked) return;
+        picked += 1;
         const chip = document.createElement("span");
         chip.className = "asset-chip";
         chip.setAttribute("data-asset-chip", box.value);
@@ -456,6 +458,13 @@ function bootUi() {
         chip.append(text, remove);
         chips.append(chip);
       });
+      if (!picked) {
+        const emptyPick = document.createElement("span");
+        emptyPick.className = "muted";
+        emptyPick.setAttribute("data-asset-picked-empty", "");
+        emptyPick.textContent = "Selected assets appear here";
+        chips.append(emptyPick);
+      }
     };
     const filterBtn = picker.querySelector("[data-asset-filter]");
     if (filterBtn) filterBtn.addEventListener("click", apply);

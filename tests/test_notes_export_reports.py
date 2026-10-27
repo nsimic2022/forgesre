@@ -303,6 +303,10 @@ def test_report_asset_filter_persists_many_assets_and_recipients(monkeypatch):
     assert seen[0]["body"] == seen[1]["body"] == mails[0].body
     assert seen[0]["subject"] == "Report send-now"
     html = seen[0]["html"]
+    assert "forgesre-mail" in html
+    assert 'class="performance-report"' in html
+    assert "Performance snapshot" in html
+    assert ">Type<" in html and ">Status<" in html and ">IP<" in html
     assert f"1 of 2 · {second.hostname}" in html
     assert f"2 of 2 · {first.hostname}" in html
     left, right = html.split(f"1 of 2 · {second.hostname}", 1)[1].split(f"2 of 2 · {first.hostname}", 1)
@@ -377,6 +381,6 @@ def test_multi_record_exports_have_titled_breaks():
 
 def test_cache_bust_is_v08_26():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-60" in base
+    assert "app.css?v=v09-61" in base
     assert "app.js?v=v09-R" in base
     assert "v08-25" not in base

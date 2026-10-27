@@ -1932,7 +1932,7 @@ def _performance_pairs(db: Session, asset_ids: list[str]) -> list[tuple[Asset, d
 def _performance_plain(pairs: list[tuple[Asset, dict[str, Any]]]) -> str:
     lines = [
         "ForgeSRE performance report",
-        f"Generated at {compact_when_text(utcnow())}",
+        f"Generated: {compact_when_text(utcnow())}",
         "Not an incident. Read-only snapshot from Prometheus / demo gauges.",
         "",
     ]
@@ -1945,13 +1945,15 @@ def _performance_plain(pairs: list[tuple[Asset, dict[str, Any]]]) -> str:
             lines.append(f"======== {index} of {total}  {asset.hostname} ========")
             lines.append("")
         lines.append(f"## {asset.hostname} ({asset.asset_id})")
-        lines.append(f"type={asset.type or '—'} status={asset.status or '—'} ip={asset.ip or '—'}")
+        lines.append(f"Type: {asset.type or '—'}")
+        lines.append(f"Status: {asset.status or '—'}")
+        lines.append(f"IP: {asset.ip or '—'}")
         if sample.get("error"):
-            lines.append(f"metrics error: {sample['error']}")
+            lines.append(f"Metrics: {sample['error']}")
         else:
-            for key, _label in _REPORT_METRICS:
+            for key, label in _REPORT_METRICS:
                 if key in sample and sample[key] is not None:
-                    lines.append(f"{key}={sample[key]}")
+                    lines.append(f"{label}: {sample[key]}")
         lines.append("")
     return "\n".join(lines) + "\n"
 
@@ -1986,6 +1988,10 @@ def _performance_html(pairs: list[tuple[Asset, dict[str, Any]]], name: str) -> s
     return render_email(
         kicker="Report",
         heading=report_mail_subject(name),
+        meta_rows=[
+            ("Generated", esc(compact_when_text(utcnow()))),
+            ("Kind", "Performance snapshot"),
+        ],
         sections=sections,
         footer="",
         kind="performance-report",

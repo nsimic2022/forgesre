@@ -171,7 +171,6 @@ def test_multiple_recipients_are_stored_and_each_gets_mail():
     page = client.get("/ops").text
     reports = page.split('id="reports"', 1)[1]
     assert "Active scheduled reports" in reports
-    assert "report-active-head" in reports
     assert "15 minutes" in reports and "Once (no repeat)" in reports and "Custom interval" in reports
     assert "Only these days" in reports
     assert 'name="extra_emails"' in reports
@@ -330,5 +329,5 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert "height: 100%" in css.split(".admin-user-split > .admin-user-pane", 1)[1].split("}", 1)[0]
     assert "margin: 2.25rem 0 0.7rem" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-60" in base and "app.js?v=v09-R" in base
+    assert "app.css?v=v09-61" in base and "app.js?v=v09-R" in base
     db.close()

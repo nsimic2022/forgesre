@@ -384,7 +384,7 @@ def scheduled_report_form_values(row: ScheduledReport | None = None, *, clone: b
 
     if row is None:
         return {
-            "name": "storage-6h",
+            "name": "",
             "recipients": [],
             "preset": "6h",
             "every_n": "",
@@ -3689,14 +3689,15 @@ def ops_page(
         size=per_page(request),
         fragment="#mail",
     )
-    reports = (
+    report_rows = (
         db.query(ScheduledReport)
         .filter(or_(ScheduledReport.kind.is_(None), ScheduledReport.kind != "forgeai"))
         .order_by(ScheduledReport.id.desc())
         .all()
     )
+    report_choices = sorted(report_rows, key=lambda row: (str(row.name or "").lower(), int(row.id or 0)))
     reports, reports_pager = paginate(
-        reports,
+        report_rows,
         reports_page,
         size=per_page(request, "reports_page"),
         param="reports_page",
@@ -3727,6 +3728,7 @@ def ops_page(
         mail=mail,
         mail_row_deletable=mail_row_deletable,
         reports=reports,
+        report_choices=report_choices,
         assets=assets,
         addresses=list_mail_addresses(db),
         smtp_on=settings.email_enabled and bool(settings.smtp_host),
@@ -3854,35 +3856,47 @@ def ops_create_report(
 def ops_send_report_now(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
+    report_id: Annotated[list[str], Form()] = [],
     to_email: Annotated[list[str], Form()] = [],
-    new_email: str = Form(""),
     extra_emails: str = Form(""),
+    new_email: str = Form(""),
     asset_id: Annotated[list[str], Form()] = [],
 ):
     if not can_send_ops(user):
         raise HTTPException(status_code=403)
-    from app.services import performance_report_message, send_performance_report
+    from app.services import performance_report_message, run_scheduled_report, send_performance_report
 
+    ran = 0
+    for raw in report_id or []:
+        if not str(raw).isdigit():
+            continue
+        row = db.get(ScheduledReport, int(raw))
+        if row is None:
+            continue
+        run_scheduled_report(db, row, actor=user.email)
+        ran += 1
     ids = [str(item).strip() for item in (asset_id or []) if str(item).strip()]
     typed = "\n".join(part for part in ((extra_emails or "").strip(), (new_email or "").strip()) if part)
     emails = _collect_report_emails(db, to_email, typed, user.email)
-    if not emails:
-        raise HTTPException(status_code=400, detail="Pick a saved address or enter a new email")
-    subject, body, html = performance_report_message(db, ids, "send-now")
-    try:
-        for email in emails:
-            send_performance_report(
-                db,
-                asset_ids=ids,
-                to_email=email,
-                actor=user.email,
-                name="send-now",
-                subject=subject,
-                body=body,
-                html=html,
-            )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if emails:
+        subject, body, html = performance_report_message(db, ids, "send-now")
+        try:
+            for email in emails:
+                send_performance_report(
+                    db,
+                    asset_ids=ids,
+                    to_email=email,
+                    actor=user.email,
+                    name="send-now",
+                    subject=subject,
+                    body=body,
+                    html=html,
+                )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        ran += 1
+    if not ran:
+        raise HTTPException(status_code=400, detail="Pick a saved report or enter recipients")
     return RedirectResponse("/ops#mail", status_code=303)
 
 

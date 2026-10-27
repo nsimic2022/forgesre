@@ -656,6 +656,7 @@ form .asset-form-actions {
 .asset-form-actions a.button {
   min-width: 4.6rem;
   min-height: 2.05rem;
+  border-radius: 2px;
 }
 .reach-legend { margin: 0 0 0.75rem; }
 .reach-badges { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; margin-left: 0.4rem; vertical-align: middle; }
@@ -1707,53 +1708,63 @@ button.demo-close {
 .demo-scenario p { margin: 0.2rem 0; }
 .demo-scenario form { margin: 0.55rem 0 0; }
 .mail-body { margin: 0.2rem 0; font-size: 0.82rem; max-height: 8rem; overflow: auto; }
-/* Email & reports: do not use .split (1.2fr / 0.8fr puts Add email first and wider). */
-.ops-mail-cols {
+.ops-section-head {
+  margin: 1.35rem 0 0.55rem;
+  font-size: 1.05rem;
+}
+.ops-sixths {
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: flex-start;
-  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.9rem;
   width: 100%;
+  margin-bottom: 1.15rem;
 }
-form.ops-add-email {
-  flex: 0 1 38%;
-  width: 38%;
-  max-width: 38%;
+.ops-sixths > .card {
+  flex: 0 0 calc((100% - 1.8rem) / 6);
+  width: calc((100% - 1.8rem) / 6);
+  max-width: calc((100% - 1.8rem) / 6);
   min-width: 0;
   box-sizing: border-box;
+  margin: 0;
 }
-form.ops-compose {
-  flex: 1 1 62%;
-  width: 62%;
-  min-width: 58%;
-  max-width: none;
-  box-sizing: border-box;
+.ops-sixths > .card h3 { margin: 0; font-size: 1rem; }
+.ops-thirds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  align-items: stretch;
+  width: 100%;
+  margin-bottom: 1.15rem;
 }
-.ops-mail-cols .stack,
+.ops-thirds > .card {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ops-thirds > .card > h2 { margin-top: 0; }
+.ops-thirds .stack,
 form.ops-add-email,
 form.ops-compose {
   max-width: none;
+  width: 100%;
 }
-.ops-mail-cols input,
-.ops-mail-cols select,
-.ops-mail-cols textarea {
+.ops-thirds input,
+.ops-thirds select,
+.ops-thirds textarea {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
 }
 .ops-report-cols {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 1.5rem;
-  width: 100%;
   margin-bottom: 0.25rem;
 }
 .report-active-head { margin: 2.25rem 0 0.7rem; }
-.report-recipients .recipient-picks {
-  max-height: 11rem;
+.report-recipients .recipient-picks,
+.report-pick .recipient-picks {
+  max-height: 5.4rem;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -1918,11 +1929,6 @@ form.ops-compose {
 }
 .incidents-table td.inc-when .stamp-date { color: var(--text); font-weight: 600; }
 .incidents-table tr.inc-row-done td.inc-when .stamp-date { font-weight: 500; }
-.ops-report-cols > form {
-  flex: 1 1 18rem;
-  min-width: 16rem;
-  max-width: none;
-}
 .ops-report-cols fieldset { max-width: none; }
 .asset-picker-filters {
   display: flex;
@@ -1934,7 +1940,20 @@ form.ops-compose {
 .asset-picker-filters input,
 .asset-picker-filters select { width: auto; min-width: 7.5rem; max-width: 14rem; }
 .asset-picker-filters button { width: auto; padding: 0.35rem 0.75rem; }
-.asset-picker-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.15rem 0 0.45rem; }
+.asset-picker-chips,
+.asset-picked-cube {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.15rem 0 0.45rem;
+  min-height: 3.2rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-sizing: border-box;
+  align-content: flex-start;
+}
 .asset-chip {
   display: inline-flex;
   align-items: center;
@@ -2260,15 +2279,13 @@ td.ops-report-actions .row-actions a.button {
   }
   .admin-mid,
   .admin-backup-cli { grid-template-columns: 1fr; }
-  .ops-mail-cols { flex-direction: column; }
-  form.ops-add-email,
-  form.ops-compose {
-    flex: 1 1 auto;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
+  .ops-sixths > .card {
+    flex: 1 1 calc(50% - 0.45rem);
+    width: auto;
+    max-width: none;
   }
-  .ops-report-cols { flex-direction: column; }
+  .ops-thirds { grid-template-columns: 1fr; }
+  .ops-report-cols { grid-template-columns: 1fr; }
   .escalation-cols { flex-direction: column; }
   .escalation-policies,
   .escalation-create,
@@ -3136,13 +3153,15 @@ form.pager-size button { padding: 0.32rem 0.7rem; font-size: 0.82rem; }
 .list-actions form { margin: 0; display: inline-flex; }
 .list-actions form[hidden] { display: none; }
 .list-actions form[data-bulk-export] { align-items: center; gap: 0.4rem; }
-.list-actions button {
+.list-actions button,
+.list-actions a.button {
   width: auto;
   flex: 0 0 auto;
   min-width: 4.6rem;
   min-height: 2.05rem;
   padding: 0.34rem 0.8rem;
   font-size: 0.82rem;
+  border-radius: 2px;
 }
 .list-actions button.is-muted { opacity: 0.55; }
 .select-one-flash { color: var(--warn); font-size: 0.82rem; font-weight: 700; white-space: nowrap; }

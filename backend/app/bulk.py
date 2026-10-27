@@ -1875,6 +1875,58 @@ def mail_export(
     return _download(_safe_export_name(filename, "mail", fmt), mail_text(db, ids))
 
 
+def _safe_ops_url(raw: str) -> str:
+    text = (raw or "").replace("\n", "").replace("\r", "").strip().split("#", 1)[0]
+    path, sep, query = text.partition("?")
+    if path != "/ops":
+        return "/ops"
+    if any(ch in query for ch in " <>\"'\\"):
+        return "/ops"
+    return text if sep else "/ops"
+
+
+def _ops_query(raw: str, **put: str) -> str:
+    base = _safe_ops_url(raw)
+    _, _, query = base.partition("?")
+    drop = {"edit", "clone", "edit_note", "notice"}
+    pairs = [(key, value) for key, value in parse_qsl(query, keep_blank_values=True) if key not in drop and key not in put]
+    for key, value in put.items():
+        if value:
+            pairs.append((key, value))
+    encoded = urlencode(pairs)
+    return "/ops" + (("?" + encoded) if encoded else "")
+
+
+@router.post("/ops/reports/open-edit")
+def reports_open_edit(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    stay: Annotated[str, Form()] = "",
+):
+    """Open the existing scheduled-report form for exactly one row."""
+    _forbid(user, can_send_ops(user))
+    row = _one_pk(db, ScheduledReport, selected)
+    if row is None:
+        return RedirectResponse(_ops_query(stay, edit_note="select-one") + "#reports", status_code=303)
+    return RedirectResponse(_ops_query(stay, edit=str(row.id)) + "#reports", status_code=303)
+
+
+@router.post("/ops/reports/open-clone")
+def reports_open_clone(
+    db: Session = Depends(get_db),
+    user: User = Depends(_user),
+    selected: Annotated[list[str], Form()] = [],
+    stay: Annotated[str, Form()] = "",
+):
+    """Prefill New report from exactly one row. Zero or many do not write."""
+    _forbid(user, can_send_ops(user))
+    row = _one_pk(db, ScheduledReport, selected)
+    if row is None:
+        return RedirectResponse(_ops_query(stay, edit_note="select-one") + "#reports", status_code=303)
+    return RedirectResponse(_ops_query(stay, clone=str(row.id)) + "#reports", status_code=303)
+
+
 @router.post("/ops/reports/bulk-delete")
 def reports_bulk_delete(
     db: Session = Depends(get_db),

@@ -71,6 +71,9 @@
       <button type="submit" title="Select one" data-one-title="{{ actions.get('clone_title') or 'Clone this asset' }}">Clone</button>
     </form>
     {% endif %}
+    {% if actions.cancel %}
+    <a class="button" href="{{ actions.cancel }}">Cancel</a>
+    {% endif %}
     {% if actions.verify %}
     <form method="post" action="{{ actions.verify }}" data-bulk-verify hx-boost="false">
       <input type="hidden" name="next" value="{{ actions.next }}">

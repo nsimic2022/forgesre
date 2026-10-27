@@ -125,7 +125,7 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert "form[data-delete-gated]" in js and "data-undeletable" in js
     assert 'row.closest(".list-scroll-cards")' in js
     assert "ids.length !== 1" in js and "Select one" in js
-    assert "app.css?v=v09-60" in base and "app.js?v=v09-R" in base
+    assert "app.css?v=v09-61" in base and "app.js?v=v09-R" in base
     pager_tpl = (ROOT / "frontend" / "templates" / "_pager.html").read_text(encoding="utf-8")
     assert 'class="pager-bar" data-list-pager' in pager_tpl
     assert pager_tpl.count("data-list-actions") == 1
@@ -245,13 +245,16 @@ def test_each_list_puts_its_actions_in_the_pager_middle():
     assert 'action="/ops/mail/export"' in mail_actions
     assert 'action="/ops/mail/bulk-delete"' in mail_actions
     assert "data-delete-gated" in mail_actions
-    _order(report_actions, ["Export", "Delete"])
+    _order(report_actions, ["Edit", "Clone", "Cancel", "Export", "Remove"])
+    assert 'action="/ops/reports/open-edit"' in report_actions
+    assert 'action="/ops/reports/open-clone"' in report_actions
+    assert 'href="/ops#reports">Cancel</a>' in report_actions
     assert 'action="/ops/reports/export"' in report_actions
     assert 'action="/ops/reports/bulk-delete"' in report_actions
     assert "onoff" not in report_actions
     reports_tpl = (ROOT / "frontend" / "templates" / "ops.html").read_text(encoding="utf-8").split('id="reports"', 1)[1]
     assert 'class="onoff' in reports_tpl and "/ops/reports/{{ row.id }}/toggle" in reports_tpl
-    assert ">Edit<" not in report_actions and ">Clone<" not in report_actions
+    assert ">Edit<" in report_actions and ">Clone<" in report_actions
     _no_invented(mail_actions)
     _no_invented(report_actions)
 
@@ -417,6 +420,31 @@ def test_edit_with_zero_or_two_rows_stays_on_the_list():
     assert none_assets.headers["location"].startswith("/assets?")
     assert "edit_note=select-one" in none_assets.headers["location"]
     assert "edit=" not in none_assets.headers["location"].split("edit_note", 1)[0]
+
+    first_report = ScheduledReport(name=f"chrome-a-{uuid4().hex[:6]}", to_email="a@example.local", interval_hours=6)
+    second_report = ScheduledReport(name=f"chrome-b-{uuid4().hex[:6]}", to_email="b@example.local", interval_hours=12)
+    db.add(first_report)
+    db.add(second_report)
+    db.commit()
+    db.refresh(first_report)
+    db.refresh(second_report)
+    one_report = client.post(
+        "/ops/reports/open-edit",
+        data={"selected": str(first_report.id), "stay": "/ops"},
+        follow_redirects=False,
+    )
+    assert one_report.status_code == 303
+    assert f"edit={first_report.id}" in one_report.headers["location"]
+    assert one_report.headers["location"].endswith("#reports")
+    many_reports = client.post(
+        "/ops/reports/open-edit",
+        data={"selected": [str(first_report.id), str(second_report.id)], "stay": "/ops"},
+        follow_redirects=False,
+    )
+    assert many_reports.status_code == 303
+    assert "edit_note=select-one" in many_reports.headers["location"]
+    none_reports = client.post("/ops/reports/open-clone", data={"stay": "https://evil.example/ops"}, follow_redirects=False)
+    assert none_reports.headers["location"] == "/ops?edit_note=select-one#reports"
 
     engineer = _client(_user(db, "engineer"))
     for path, selected in (
