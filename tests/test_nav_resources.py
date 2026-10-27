@@ -112,7 +112,7 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
     assert "app.css?v=v09-58" in base
-    assert "app.js?v=v09-P" in base
+    assert "app.js?v=v09-Q" in base
     assert "bindInfoTips" in js
     assert "ops-report-actions" in css
 

@@ -83,6 +83,7 @@
     </div>
     <div class="snmp-probe-row">
       <button type="button" class="secondary" data-snmp-probe>Probe</button>
+      <button type="button" class="secondary" data-http-probe>HTTP</button>
       <span class="muted" data-snmp-probe-out></span>
     </div>
     <div class="snmp-auth" data-snmp-auth>
@@ -137,17 +138,25 @@
   <div class="asset-form-col asset-form-collect">
   <section class="card asset-form-block asset-form-cube asset-collect-cube" data-asset-collecting>
     <input type="hidden" name="snmp_metrics_present" value="1">
+    <input type="hidden" name="source_present" value="1">
     <h2 class="asset-form-block-head">Metrics</h2>
     {% set collect_target = selected if form_mode == 'edit' and selected else form %}
     <div class="metric-source-block">
       <p class="metric-source-head">Source</p>
       <div class="metric-source-cubes" data-metric-sources>
-        {% for src in metric_source_cubes(collect_target) %}
+        {% for src in metric_source_cubes(collect_target, form_mode) %}
+        {% if src.toggle %}
+        <div class="alarm-row metric-src">
+          <button type="button" class="reach-sq {{ 'green' if src.on else 'grey' }}" data-source-toggle="{{ src.key }}" data-metric-source="{{ src.key }}" aria-pressed="{{ 'true' if src.on else 'false' }}" title="{{ src.label }}">{{ src.label }}</button>
+          <input type="checkbox" class="onoff-check" name="source_{{ src.key }}" value="1" {% if src.on %}checked{% endif %} tabindex="-1">
+        </div>
+        {% else %}
         <span class="reach-sq {{ 'green' if src.on else 'grey' }}" data-metric-source="{{ src.key }}" title="{{ src.label }}">{{ src.label }}</span>
+        {% endif %}
         {% endfor %}
       </div>
     </div>
-    <p class="metric-family-head" data-metric-family-head>{{ metric_family_heading(collect_target) }}</p>
+    <p class="metric-family-head" data-metric-family-head>{{ metric_family_heading(collect_target, form_mode) }}</p>
     <div class="metric-family-cubes collect-families" data-snmp-families>
     {% set fams = metrics_on_form(collect_target, form_mode) %}
     {% for key, label in snmp_family_choices %}

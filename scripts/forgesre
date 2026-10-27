@@ -30,7 +30,7 @@ need_env() {
 }
 
 run_cli_ops() {
-  PYTHONPATH="$ROOT/backend" python3 -m app.cli_ops "$(port_from_env)" "$@"
+  PYTHONPATH="$ROOT/backend:$ROOT/agents" python3 -m app.cli_ops "$(port_from_env)" "$@"
 }
 
 # Install admin from secrets.env into cookie jar $1. Password via stdin, not curl argv (ps).
@@ -1044,7 +1044,7 @@ case "$cmd" in
     fi
     ;;
   logout)
-    PYTHONPATH="$ROOT/backend" python3 -m app.cli_ops 0 logout
+    PYTHONPATH="$ROOT/backend:$ROOT/agents" python3 -m app.cli_ops 0 logout
     ;;
   whoami)
     need_env

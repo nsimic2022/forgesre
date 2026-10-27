@@ -10,7 +10,14 @@ from sqlalchemy.orm import Session, object_session
 
 from app.asset_extras import asset_playrule_ids, form_extras, known_playrule_ids, merge_extras, public_extras
 from app.asset_snmp import auth_spec, desired_auth, effective_auth, rendered_auth_names
-from app.asset_types import ASSET_TYPE_CHOICES, ASSET_TYPE_GROUPS, parse_snmp_port, snmp_port_for, snmp_target
+from app.asset_types import (
+    ASSET_TYPE_CHOICES,
+    ASSET_TYPE_GROUPS,
+    DEFAULT_SNMP_PORT,
+    parse_snmp_port,
+    snmp_port_for,
+    snmp_target,
+)
 from app.audit import audit
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE, detect_exporter, is_auto_asset_type
@@ -534,6 +541,8 @@ def create_manual_asset(
     snmp: dict | None = None,
     ladder: list | None = None,
     parent_asset_id: str | None = None,
+    source_prometheus: bool | None = None,
+    source_snmp: bool | None = None,
 ) -> Asset:
     hostname = (hostname or "").strip()
     ip = validate_ip_field(ip)
@@ -576,11 +585,17 @@ def create_manual_asset(
         if detected.kind == "windows":
             type = detected.asset_type
             monitoring_profile = monitoring_profile or detected.profile
-            scrape_address = (scrape_address or "").strip() or detected.scrape_address
+            if source_prometheus is False:
+                scrape_address = ""
+            else:
+                scrape_address = (scrape_address or "").strip() or detected.scrape_address
         elif detected.kind == "linux":
             type = detected.asset_type
             monitoring_profile = monitoring_profile or detected.profile
-            scrape_address = (scrape_address or "").strip() or detected.scrape_address
+            if source_prometheus is False:
+                scrape_address = ""
+            else:
+                scrape_address = (scrape_address or "").strip() or detected.scrape_address
         elif detected.kind == "network":
             type = detected.asset_type
             monitoring_profile = monitoring_profile or detected.profile
@@ -589,7 +604,18 @@ def create_manual_asset(
             type = "Unknown"
             monitoring_profile = (monitoring_profile or "").strip()
             scrape_address = (scrape_address or "").strip()
-    address = (scrape_address or "").strip() or default_scrape_address(type, ip, monitoring_profile)
+    if source_prometheus is False:
+        address = ""
+    else:
+        address = (scrape_address or "").strip() or default_scrape_address(type, ip, monitoring_profile)
+    if source_snmp is False:
+        extras = {key: value for key, value in (extras or {}).items() if key != "snmp_poll"}
+        snmp_port = 0
+    elif source_snmp is True:
+        extras = dict(extras or {})
+        extras["snmp_poll"] = "1"
+        if parse_snmp_port(snmp_port) <= 0:
+            snmp_port = DEFAULT_SNMP_PORT
     profile = default_monitoring_profile(type, monitoring_profile, address)
     stored_alarms: dict = {}
     if alarms is not None:
@@ -695,6 +721,8 @@ def update_asset(
     snmp: dict | None = None,
     ladder: list | None = None,
     parent_asset_id: str | None = None,
+    source_prometheus: bool | None = None,
+    source_snmp: bool | None = None,
 ) -> Asset:
     old_ip = asset.ip or ""
     old_type = asset.type or ""
@@ -737,7 +765,10 @@ def update_asset(
             asset.type = detected.asset_type
             if detected.profile and (auto or (asset.monitoring_profile or "") in {"", "linux-standard", "windows-standard"}):
                 asset.monitoring_profile = detected.profile
-            if scrape_address is None or not (scrape_address or "").strip():
+            allow_scrape = source_prometheus is not False
+            if detect and source_prometheus is None:
+                allow_scrape = bool((asset.scrape_address or "").strip())
+            if allow_scrape and (scrape_address is None or not (scrape_address or "").strip()):
                 asset.scrape_address = detected.scrape_address
                 scrape_address = detected.scrape_address
         elif auto:
@@ -752,9 +783,23 @@ def update_asset(
             asset.scrape_address = f"{asset.ip}:{LINUX_EXPORTER_PORT}"
         elif asset.scrape_address == f"{old_ip}:{WINDOWS_EXPORTER_PORT}":
             asset.scrape_address = f"{asset.ip}:{WINDOWS_EXPORTER_PORT}"
+    if source_prometheus is False:
+        asset.scrape_address = ""
+    elif source_prometheus is True and not (asset.scrape_address or "").strip():
+        asset.scrape_address = default_scrape_address(
+            asset.type or "", asset.ip or "", asset.monitoring_profile or ""
+        )
+    if source_snmp is False:
+        extras = {key: value for key, value in (extras if extras is not None else (asset.extras or {})).items() if key != "snmp_poll"}
+        snmp_port = 0
+    elif source_snmp is True:
+        extras = dict(extras) if extras is not None else dict(asset.extras or {})
+        extras["snmp_poll"] = "1"
+        if snmp_port is None or parse_snmp_port(snmp_port) <= 0:
+            snmp_port = DEFAULT_SNMP_PORT
     new_kind = asset_kind(asset.type or "", asset.monitoring_profile or "")
     old_kind = asset_kind(old_type, old_profile)
-    if scrape_address is None and not detect and not auto and asset.ip:
+    if scrape_address is None and not detect and not auto and asset.ip and source_prometheus is not False:
         old_default = default_scrape_address(old_type, asset.ip, old_profile) or default_scrape_address(
             old_type, old_ip, old_profile
         )
@@ -1442,8 +1487,6 @@ def clone_prefill(db: Session, asset: Asset) -> dict:
         if "not a real" in lowered or "seeded demo" in lowered or "lab incidents only" in lowered:
             notes = ""
     scrape = (asset.scrape_address or "").strip()
-    if not scrape:
-        scrape = default_scrape_address(asset.type or "", asset.ip or "", asset.monitoring_profile or "")
     return {
         "asset_id": suggest_clone_asset_id(db, asset),
         "hostname": suggest_clone_hostname(db, asset),

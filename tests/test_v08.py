@@ -118,7 +118,7 @@ def test_version_is_0_9_on_product_surfaces():
     assert "<span>v1.0</span>" in base
     assert "v0.8" not in base
     assert "app.css?v=v09-58" in base
-    assert "app.js?v=v09-P" in base
+    assert "app.js?v=v09-Q" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "0.9.0" in text

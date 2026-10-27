@@ -777,25 +777,68 @@ if (alertRulesData && alertNameInput && rulePreviewBody) {
 
   const familyBox = form.querySelector("[data-snmp-families]");
   const familyHead = form.querySelector("[data-metric-family-head]");
+  const sourceBox = form.querySelector("[data-metric-sources]");
+  const promCheck = form.querySelector("[name=\"source_prometheus\"]");
+  const snmpCheck = form.querySelector("[name=\"source_snmp\"]");
   const setSource = (key, on) => {
     const cube = form.querySelector("[data-metric-source=\"" + key + "\"]");
     if (!cube) return;
     cube.classList.toggle("green", on);
     cube.classList.toggle("grey", !on);
+    cube.setAttribute("aria-pressed", on ? "true" : "false");
+  };
+  const fillScrape = () => {
+    const host = ip ? (ip.value || "").trim() : "";
+    const port = exporterPort();
+    if (scrape && host && port && !(scrape.value || "").trim()) scrape.value = host + ":" + port;
+  };
+  const applyProm = (on) => {
+    if (promCheck) promCheck.checked = on;
+    if (scrape) {
+      if (on) fillScrape();
+      else scrape.value = "";
+    }
+  };
+  const applySnmp = (on) => {
+    if (snmpCheck) snmpCheck.checked = on;
+    if (poll) poll.checked = on;
+    if (snmp) {
+      const def = snmp.getAttribute("data-snmp-default") || "161";
+      snmp.value = on ? (snmp.value || def) : "";
+    }
+    syncSnmpPortHint();
   };
   const syncCollecting = () => {
     const t = lower();
-    const scrapeOn = !!(scrape && scrape.value);
+    const scrapeOn = !!(scrape && (scrape.value || "").trim());
     const portNum = snmp && snmp.value ? Number(snmp.value) : 0;
     const portOn = Number.isFinite(portNum) && portNum > 0 && portNum < 65536;
-    const snmpOn = snmpFamily() || (poll && poll.checked) || portOn;
-    const prom = scrapeOn || (!snmpOn && (t.startsWith("auto") || t.includes("linux") || t.includes("windows")));
+    const derivedSnmp = snmpFamily() || (poll && poll.checked) || portOn;
+    if (document.activeElement === scrape && promCheck) promCheck.checked = scrapeOn;
+    if ((document.activeElement === snmp || document.activeElement === poll) && snmpCheck) {
+      snmpCheck.checked = derivedSnmp;
+    }
+    const snmpOn = snmpCheck ? snmpCheck.checked : derivedSnmp;
+    const prom = promCheck ? promCheck.checked : (scrapeOn || (!snmpOn && (t.startsWith("auto") || t.includes("linux") || t.includes("windows"))));
     setSource("prometheus", prom);
     setSource("snmp", snmpOn);
     if (familyHead) {
       familyHead.textContent = scrapeOn ? "Prometheus metrics" : (snmpOn ? "SNMP metrics" : (prom ? "Prometheus metrics" : "Metrics"));
     }
   };
+  if (sourceBox) {
+    sourceBox.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-source-toggle]");
+      if (!button || button.tagName !== "BUTTON") return;
+      event.preventDefault();
+      const key = button.getAttribute("data-source-toggle");
+      const box = form.querySelector("[name=\"source_" + key + "\"]");
+      const on = !(box && box.checked);
+      if (key === "prometheus") applyProm(on);
+      if (key === "snmp") applySnmp(on);
+      syncCollecting();
+    });
+  }
   ["change", "input"].forEach((evt) => {
     [type, scrape, snmp, poll].forEach((el) => el && el.addEventListener(evt, syncCollecting));
     if (familyBox) familyBox.addEventListener(evt, syncCollecting);
@@ -803,6 +846,7 @@ if (alertRulesData && alertNameInput && rulePreviewBody) {
   syncCollecting();
 
   const probeBtn = form.querySelector("[data-snmp-probe]");
+  const httpBtn = form.querySelector("[data-http-probe]");
   const probeOut = form.querySelector("[data-snmp-probe-out]");
   if (probeBtn) {
     probeBtn.addEventListener("click", () => {
@@ -828,6 +872,32 @@ if (alertRulesData && alertNameInput && rulePreviewBody) {
         })
         .finally(() => {
           probeBtn.disabled = false;
+        });
+    });
+  }
+  if (httpBtn) {
+    httpBtn.addEventListener("click", () => {
+      const host = ip ? (ip.value || "").trim() : "";
+      if (!host) {
+        if (probeOut) probeOut.textContent = "Enter an IP first";
+        return;
+      }
+      const data = new FormData();
+      data.set("ip", host);
+      data.set("scrape_address", scrape ? scrape.value : "");
+      data.set("type", type ? type.value : "");
+      httpBtn.disabled = true;
+      if (probeOut) probeOut.textContent = "Checking HTTP…";
+      fetch("/assets/http-probe", { method: "POST", body: data, credentials: "same-origin", headers: { Accept: "application/json" } })
+        .then((response) => (response.ok ? response.json() : { ok: false, detail: "HTTP check failed" }))
+        .then((payload) => {
+          if (probeOut) probeOut.textContent = payload.detail || (payload.ok ? "Exporter answered" : "No reply");
+        })
+        .catch(() => {
+          if (probeOut) probeOut.textContent = "HTTP check failed";
+        })
+        .finally(() => {
+          httpBtn.disabled = false;
         });
     });
   }
