@@ -93,7 +93,7 @@ def test_nav_is_plain_link_and_cache():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     assert "app.css?v=v09-58" in base
-    assert "app.js?v=v09-P" in base
+    assert "app.js?v=v09-Q" in base
     assert 'href="/investigations"' in base
     assert "data-nav-invest-toggle" not in base
     assert ".nav-invest-panel {" not in css

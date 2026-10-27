@@ -245,6 +245,30 @@ def test_explicit_linux_still_defaults_9100_without_http():
     db.close()
 
 
+def test_detect_does_not_force_scrape_when_prometheus_is_off():
+    db = _db()
+    asset = create_manual_asset(
+        db,
+        hostname="was-snmp-only-01",
+        ip="10.44.2.71",
+        type="Linux Server",
+        actor="tester",
+        source_prometheus=False,
+        source_snmp=True,
+    )
+    assert asset.scrape_address == ""
+    fetcher = _fetch_map(
+        {
+            "http://10.44.2.71:9100/metrics": (200, "node_cpu_seconds_total 1\n"),
+            "http://10.44.2.71:9182/metrics": (None, ""),
+        }
+    )
+    updated = update_asset(db, asset, detect=True, actor="tester", metrics_fetcher=fetcher)
+    assert updated.type == "Linux Server"
+    assert updated.scrape_address == ""
+    db.close()
+
+
 def test_detect_button_rewrites_linux_row_to_windows():
     db = _db()
     asset = create_manual_asset(

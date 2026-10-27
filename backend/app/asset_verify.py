@@ -410,6 +410,13 @@ def series_check(
         )
     if last_error:
         return _check("series", None, f"Prometheus unreachable ({last_expr}): {last_error}")
+    if token == "SNMP":
+        return _check(
+            "series",
+            None,
+            f"no SNMP series yet ({last_expr or 'no selectors'}) — sysDescr can pass while "
+            "if_mib/host is blocked (Debian systemonly view). Not PASS",
+        )
     return _check(
         "series",
         None,

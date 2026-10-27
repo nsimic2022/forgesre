@@ -3467,6 +3467,9 @@ select.nice-select option { font-weight: 400; color: var(--text); background: va
   font-weight: 700;
 }
 .metric-source-cubes { margin: 0; }
+.metric-source-cubes .metric-src { margin: 0; }
+.metric-source-cubes .onoff-check { display: none; }
+.metric-source-cubes .reach-sq { cursor: pointer; }
 .metric-family-cubes .metric-fam { margin: 0; }
 .metric-family-cubes .onoff-check { display: none; }
 .metric-family-cubes .reach-sq {

@@ -70,6 +70,7 @@ from app.snmp_families import (
     snmp_metrics_on,
     snmp_source_label,
     families_from_form,
+    sources_from_form,
 )
 from app.inventory import (
     ASSET_SOURCE_FILTERS,
@@ -1137,6 +1138,9 @@ def asset_create(
     extra_maint_from: str = Form(""),
     extra_maint_until: str = Form(""),
     snmp_poll: str = Form(""),
+    source_present: str = Form(""),
+    source_prometheus: str = Form(""),
+    source_snmp: str = Form(""),
     snmp_metrics_present: str = Form(""),
     snmp_metric_net: str = Form(""),
     snmp_metric_cpu: str = Form(""),
@@ -1225,6 +1229,7 @@ def asset_create(
     if picked_metrics is not None:
         posted_extras = dict(posted_extras or {})
         posted_extras["snmp_metrics"] = picked_metrics
+    posted_sources = sources_from_form(source_present, prometheus=source_prometheus, snmp=source_snmp)
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
     posted_off = playrule_off_from_form(playrule_switches, playrule_ids, playrule_on)
     posted_ladder = _posted_ladder(
@@ -1275,6 +1280,8 @@ def asset_create(
             snmp=posted_snmp,
             ladder=posted_ladder,
             parent_asset_id=parent_asset_id,
+            source_prometheus=None if posted_sources is None else posted_sources["prometheus"],
+            source_snmp=None if posted_sources is None else posted_sources["snmp"],
         )
     except ValueError as exc:
         if cloned_from:
@@ -1871,6 +1878,28 @@ def asset_snmp_probe(
     return JSONResponse({"ok": result.ok is True, "detail": result.detail, "port": port})
 
 
+@router.post("/assets/http-probe")
+def asset_http_probe(
+    user: User = Depends(login_required),
+    ip: str = Form(""),
+    scrape_address: str = Form(""),
+    type: str = Form(""),
+):
+    """GET /metrics on the typed scrape address or the Linux/Windows default port."""
+    if not can(user, "write_assets"):
+        raise HTTPException(status_code=403)
+    from app.asset_probe import default_exporter_port, parse_host_port, probe_metrics
+
+    host, port = parse_host_port(scrape_address)
+    host = host or (ip or "").strip()
+    if port is None:
+        port = default_exporter_port(type)
+    if not host or port is None:
+        return JSONResponse({"ok": False, "detail": "no scrape address", "port": port or 0})
+    result = probe_metrics(host, port, timeout=1.5)
+    return JSONResponse({"ok": result.ok is True, "detail": result.detail, "port": port})
+
+
 @router.post("/assets/{asset_id}/update")
 def asset_update(
     asset_id: str,
@@ -1928,6 +1957,9 @@ def asset_update(
     extra_maint_from: str = Form(""),
     extra_maint_until: str = Form(""),
     snmp_poll: str = Form(""),
+    source_present: str = Form(""),
+    source_prometheus: str = Form(""),
+    source_snmp: str = Form(""),
     snmp_metrics_present: str = Form(""),
     snmp_metric_net: str = Form(""),
     snmp_metric_cpu: str = Form(""),
@@ -2016,6 +2048,7 @@ def asset_update(
     if picked_metrics is not None:
         posted_extras = dict(posted_extras or {})
         posted_extras["snmp_metrics"] = picked_metrics
+    posted_sources = sources_from_form(source_present, prometheus=source_prometheus, snmp=source_snmp)
     posted_playrules = playrule_ids_from_form(playrules_present, playrule_ids, playrule_add)
     posted_off = playrule_off_from_form(playrule_switches, playrule_ids, playrule_on)
     posted_ladder = _posted_ladder(
@@ -2067,6 +2100,8 @@ def asset_update(
             snmp=posted_snmp,
             ladder=posted_ladder,
             parent_asset_id=parent_asset_id,
+            source_prometheus=None if posted_sources is None else posted_sources["prometheus"],
+            source_snmp=None if posted_sources is None else posted_sources["snmp"],
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

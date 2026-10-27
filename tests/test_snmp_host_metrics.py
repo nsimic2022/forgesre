@@ -26,6 +26,7 @@ from app.snmp_families import (
     http_source_label,
     snmp_metrics_on,
     snmp_source_label,
+    sources_from_form,
     tile_source_label,
 )
 from rca.collector import promql_queries_for
@@ -96,6 +97,9 @@ def test_families_default_poll_all_family_snmp_net_only():
     assert extras_from_form("1", snmp_poll="1")["snmp_poll"] == "1"
     assert "snmp_metrics" not in extras_from_form("1", snmp_poll="1")
     assert extras_from_form("1", snmp_metrics="cpu")["snmp_metrics"] == "cpu"
+    assert sources_from_form("") is None
+    assert sources_from_form("1") == {"prometheus": False, "snmp": False}
+    assert sources_from_form("1", prometheus="1", snmp="on") == {"prometheus": True, "snmp": True}
 
 
 def test_source_labels_name_node_9100_vs_snmp():
@@ -187,9 +191,14 @@ def test_collecting_cube_on_form_and_saves_families():
     assert "node :9100" not in cube
     assert "SNMP on" not in cube and "Graphs use the SNMP" not in cube
     assert 'name="snmp_metrics_present"' in cube
+    assert 'name="source_present"' in cube
+    assert 'name="source_prometheus"' in cube and 'name="source_snmp"' in cube
+    assert "data-source-toggle" in cube
     for key in ("net", "cpu", "load", "mem", "swap", "disk", "proc"):
         assert f'name="snmp_metric_{key}"' in cube, key
     assert "data-metric-source" in cube and "data-metric-family-head" in cube
+    comms = page.split("data-asset-comms", 1)[1].split("</section>", 1)[0]
+    assert "data-http-probe" in comms and "data-snmp-probe" in comms
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     block = css.split(".metric-source-block {", 1)[1].split("}", 1)[0]
     assert "margin: 0 0 0.85rem" in block
@@ -199,6 +208,8 @@ def test_collecting_cube_on_form_and_saves_families():
     assert "syncCollecting" in js
     assert "SNMP metrics" in js and "Prometheus metrics" in js
     assert "portNum > 0" in js
+    assert "data-source-toggle" in js
+    assert "/assets/http-probe" in js
     assert "scrapeOn ? \"Prometheus metrics\"" in js or "scrapeOn ? 'Prometheus metrics'" in js
     ip = _ip()
     posted = _post(
@@ -225,7 +236,8 @@ def test_collecting_cube_on_form_and_saves_families():
     edit = client.get("/assets?edit=shm-form-lnx").text
     collect = edit.split("data-asset-collecting", 1)[1].split("</section>", 1)[0]
     assert "Prometheus metrics" in collect
-    assert 'class="reach-sq green" data-metric-source="snmp"' in collect
+    assert 'data-metric-source="snmp"' in collect and "green" in collect
+    assert 'name="source_snmp"' in collect and "checked" in collect.split('name="source_snmp"', 1)[1][:80]
     assert "node :9100" not in collect
     assert 'name="snmp_metric_cpu"' in collect and "checked" in collect.split('name="snmp_metric_cpu"', 1)[1][:80]
     db.close()
@@ -381,4 +393,131 @@ def test_host_module_and_job_are_bundled():
     assert "forgesre-snmp-host" in detail
     assert "if_mib + host" in detail
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-58" in base and "app.js?v=v09-P" in base
+    assert "app.css?v=v09-58" in base and "app.js?v=v09-Q" in base
+
+
+def test_source_cubes_onoff_skip_default_9100_and_enable_snmp():
+    from app.inventory import create_manual_asset, sd_snmp_targets, sd_targets
+
+    db = _db()
+    ip = _ip()
+    row = create_manual_asset(
+        db,
+        hostname="shm-off-prom",
+        ip=ip,
+        type="Linux Server",
+        actor="tester",
+        asset_id="shm-off-prom",
+        source_prometheus=False,
+        source_snmp=True,
+    )
+    assert row.scrape_address == ""
+    assert row.extras.get("snmp_poll") == "1"
+    assert snmp_port_for(row) == 161
+    assert not any(item["labels"]["asset"] == "shm-off-prom" for item in sd_targets(db))
+    assert any(item["labels"]["asset"] == "shm-off-prom" for item in sd_snmp_targets(db))
+    packed = promql_queries_for(
+        {
+            "asset_id": "shm-off-prom",
+            "type": "Linux Server",
+            "ip": ip,
+            "scrape_address": "",
+            "extras": {"snmp_poll": "1"},
+        }
+    )
+    assert "forgesre-snmp-host" in packed["cpu_percent"][0]
+    assert "node_cpu_seconds_total" not in packed["cpu_percent"][0]
+    db.close()
+
+    client = _client()
+    form_ip = _ip()
+    posted = _post(
+        client,
+        "shm-src-off",
+        "Linux Server",
+        form_ip,
+        source_present="1",
+        source_snmp="1",
+        extras_present="1",
+    )
+    assert posted.status_code in {302, 303}
+    db = _db()
+    saved = db.query(Asset).filter_by(asset_id="shm-src-off").one()
+    assert saved.scrape_address == ""
+    assert saved.extras.get("snmp_poll") == "1"
+    assert not any(item["labels"]["asset"] == "shm-src-off" for item in sd_targets(db))
+    assert any(item["labels"]["asset"] == "shm-src-off" for item in sd_snmp_targets(db))
+    db.close()
+
+
+def test_source_prometheus_on_still_defaults_9100():
+    from app.inventory import sd_targets
+
+    client = _client()
+    ip = _ip()
+    posted = _post(
+        client,
+        "shm-src-on",
+        "Linux Server",
+        ip,
+        source_present="1",
+        source_prometheus="1",
+    )
+    assert posted.status_code in {302, 303}
+    db = _db()
+    saved = db.query(Asset).filter_by(asset_id="shm-src-on").one()
+    assert saved.scrape_address == f"{ip}:9100"
+    assert any(item["labels"]["asset"] == "shm-src-on" for item in sd_targets(db))
+    db.close()
+
+
+def test_verify_mentions_systemonly_when_sysdescr_ok_but_no_series():
+    item = {
+        "asset_id": "shm-view-block",
+        "hostname": "shm-view-block",
+        "ip": "10.223.9.86",
+        "type": "Linux Server",
+        "scrape_address": "",
+        "monitoring_profile": "linux-standard",
+        "extras": {"snmp_poll": "1"},
+    }
+
+    def fetch(url, timeout):
+        del url, timeout
+        return None, "", "connection refused"
+
+    report = verify_target(
+        item,
+        ping_runner=lambda host, timeout: (0, "rtt min/avg/max = 1.0/1.0/1.0 ms", ""),
+        metrics_fetcher=fetch,
+        snmp_prober=lambda host, timeout=0.4, port=161: True,
+        in_http_sd=False,
+        in_snmp_sd=True,
+        query_fn=lambda expr: {"value": None, "query": expr},
+    )
+    assert "sysDescr" in (report.series.detail or "") or "systemonly" in (report.series.detail or "")
+    assert "view" in (report.series.detail or "").lower()
+
+
+def test_forgesre_cli_puts_agents_on_pythonpath():
+    text = (ROOT / "scripts" / "forgesre").read_text(encoding="utf-8")
+    assert 'PYTHONPATH="$ROOT/backend:$ROOT/agents"' in text
+    assert text.count('PYTHONPATH="$ROOT/backend:$ROOT/agents"') >= 2
+    assert 'PYTHONPATH="$ROOT/backend"' not in text.replace('PYTHONPATH="$ROOT/backend:$ROOT/agents"', "")
+
+
+def test_http_probe_endpoint_uses_scrape_or_default_port():
+    client = _client()
+    missing = client.post("/assets/http-probe", data={"ip": "", "type": "Linux Server"})
+    assert missing.status_code == 200
+    assert missing.json()["ok"] is False
+    assert missing.json()["detail"] == "no scrape address"
+    refused = client.post(
+        "/assets/http-probe",
+        data={"ip": "127.0.0.1", "scrape_address": "127.0.0.1:9", "type": "Linux Server"},
+    )
+    assert refused.status_code == 200
+    body = refused.json()
+    assert body["ok"] is False
+    assert body["port"] == 9
+    assert "metrics" in (body["detail"] or "").lower() or "unreachable" in (body["detail"] or "").lower() or "refused" in (body["detail"] or "").lower()

@@ -104,6 +104,17 @@ def families_from_form(present: str, **flags: str) -> str | None:
     return ",".join(picked)
 
 
+def _flag_on(raw: Any) -> bool:
+    return str(raw or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def sources_from_form(present: str, prometheus: str = "", snmp: str = "") -> dict[str, bool] | None:
+    """Posted Source-cube checkboxes. None when the cubes were not on the form."""
+    if not str(present or "").strip():
+        return None
+    return {"prometheus": _flag_on(prometheus), "snmp": _flag_on(snmp)}
+
+
 def http_exporter_on(asset: Any) -> bool:
     """True when this asset has a node / windows scrape address — graphs use that, not SNMP."""
     if isinstance(asset, dict):
@@ -177,7 +188,7 @@ def metrics_on_form(asset: Any, form_mode: str = "add") -> frozenset[str]:
     return metrics_on(asset)
 
 
-def metric_source_cubes(asset: Any) -> list[dict[str, Any]]:
+def metric_source_cubes(asset: Any, form_mode: str = "add") -> list[dict[str, Any]]:
     if isinstance(asset, dict):
         scrape = str(asset.get("scrape_address") or "").strip()
         kind = str(asset.get("type") or "")
@@ -193,18 +204,18 @@ def metric_source_cubes(asset: Any) -> list[dict[str, Any]]:
     extras = _extras(asset)
     snmp = snmp_port_for(asset) > 0 or snmp_poll_on(extras)
     blob = kind.lower()
-    prom = bool(scrape) or (
-        not snmp and (blob.startswith("auto") or "linux" in blob or "windows" in blob)
-    )
+    prom = bool(scrape)
+    if form_mode == "add" and not scrape and not snmp:
+        prom = blob.startswith("auto") or "linux" in blob or "windows" in blob
     return [
-        {"key": "prometheus", "label": "Prometheus", "on": prom},
-        {"key": "zabbix", "label": "Zabbix", "on": source == "zabbix" or bool(zid)},
-        {"key": "snmp", "label": "SNMP", "on": snmp},
-        {"key": "glpi", "label": "GLPI", "on": source == "glpi" or bool(gid)},
+        {"key": "prometheus", "label": "Prometheus", "on": prom, "toggle": True},
+        {"key": "zabbix", "label": "Zabbix", "on": source == "zabbix" or bool(zid), "toggle": False},
+        {"key": "snmp", "label": "SNMP", "on": snmp, "toggle": True},
+        {"key": "glpi", "label": "GLPI", "on": source == "glpi" or bool(gid), "toggle": False},
     ]
 
 
-def metric_family_heading(asset: Any) -> str:
+def metric_family_heading(asset: Any, form_mode: str = "add") -> str:
     extras = _extras(asset)
     if http_exporter_on(asset):
         return "Prometheus metrics"
@@ -216,7 +227,7 @@ def metric_family_heading(asset: Any) -> str:
         else str(getattr(asset, "type", "") or "")
     )
     blob = kind.lower()
-    if blob.startswith("auto") or "linux" in blob or "windows" in blob:
+    if form_mode == "add" and (blob.startswith("auto") or "linux" in blob or "windows" in blob):
         return "Prometheus metrics"
     return "Metrics"
 
