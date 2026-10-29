@@ -342,8 +342,10 @@ services:
       - secrets/secrets.env
     environment:
       TZ: ${FORGESRE_TIMEZONE:-Europe/Belgrade}
-      PUID: "0"
-      PGID: "0"
+      # Image default 1000. PUID=0 remaps librenms→root; lnms then exits
+      # "lnms must not run as root" during first-boot migrate (04-svc-main.sh).
+      PUID: "1000"
+      PGID: "1000"
       DB_HOST: 127.0.0.1
       DB_PORT: "3307"
       DB_NAME: librenms
@@ -385,8 +387,8 @@ services:
       - secrets/secrets.env
     environment:
       TZ: ${FORGESRE_TIMEZONE:-Europe/Belgrade}
-      PUID: "0"
-      PGID: "0"
+      PUID: "1000"
+      PGID: "1000"
       DB_HOST: 127.0.0.1
       DB_PORT: "3307"
       DB_NAME: librenms
