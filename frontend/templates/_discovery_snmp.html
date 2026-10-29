@@ -25,6 +25,9 @@
       <div class="row-actions asset-form-actions">
         <button type="submit" name="action" value="identify">Identify</button>
       </div>
+      {% if snmp_identify.vendor or snmp_identify.profile %}
+      <p class="muted">{% if snmp_identify.vendor %}Vendor {{ snmp_identify.vendor }}{% endif %}{% if snmp_identify.vendor and snmp_identify.profile %} · {% endif %}{% if snmp_identify.profile %}profile {{ snmp_identify.profile }}{% endif %}</p>
+      {% endif %}
       {% if snmp_identify.rows %}
       <table class="snmp-oid-table">
         <thead><tr><th>OID</th><th>Value</th></tr></thead>
@@ -55,7 +58,7 @@
 
     <section class="card">
       <h2>Recommendations</h2>
-      <p class="muted">Only OIDs this device answered. Catalog ≠ on device ≠ already in Prometheus if_mib/host.</p>
+      <p class="muted">Only OIDs this device answered. Catalog ≠ on device ≠ already in Prometheus if_mib/host. Tables apply as walk+indexes.</p>
       {% if snmp_cardinality %}
       <p class="muted">{{ snmp_cardinality }}</p>
       {% endif %}
@@ -70,7 +73,7 @@
               <input type="checkbox" name="oid_pick" value="{{ row.oid }}" {% if row.oid in snmp_form.oid_pick %}checked{% endif %} aria-label="Apply {{ row.name }}">
               {% endif %}
             </td>
-            <td><code>{{ row.name }}</code><div class="muted">{{ row.help }}{% if row.kind == "table" %} · table{% endif %}</div></td>
+            <td><code>{{ row.name }}</code><div class="muted">{{ row.help }}{% if row.kind == "table" %} · table{% endif %}{% if row.profile_match %} · {{ row.profile }}{% endif %}</div></td>
             <td>{% if row.ok %}{{ row.value }}{% else %}<span class="muted">{{ row.error or "silent" }}</span>{% endif %}</td>
             <td>
               <span class="pill">catalog</span>
@@ -90,21 +93,49 @@
 
   <section class="card discovery-snmp-activate">
     <h2>Extra module</h2>
-    <p class="muted">Optional get-only scalars go into <strong>generated</strong> <code>snmp.yml</code> as <code>forgesre_onboard</code>. Committed <code>monitoring/snmp.yml</code> stays <code>if_mib</code> + <code>host</code>. Table OIDs stay recommendations this round.</p>
+    <p class="muted">Optional scalars and tables go into <strong>generated</strong> <code>snmp.yml</code> as <code>forgesre_onboard</code>. Prometheus job <code>forgesre-snmp-onboard</code> scrapes only assets that applied. Committed <code>monitoring/snmp.yml</code> stays <code>if_mib</code> + <code>host</code>.</p>
     <div class="row-actions asset-form-actions">
       <button type="submit" name="action" value="apply">Apply extra module</button>
       <button type="submit" name="action" value="restore" class="secondary">Restore</button>
       <button type="submit" name="action" value="scrape" class="secondary">Test scrape</button>
     </div>
     {% if snmp_apply.ok %}
-    <p class="muted">Wrote {{ snmp_apply.module or "empty onboard block" }}. {{ snmp_apply.reload }}</p>
+    <p class="muted">Wrote {{ snmp_apply.module or "empty onboard block" }}. {{ snmp_apply.reload }} {{ snmp_apply.generator }}</p>
     {% elif snmp_apply.error %}
     <p class="muted">{{ snmp_apply.error }}</p>
+    {% endif %}
+    {% if snmp_scrape.prom %}
+    <p class="muted">Prometheus <code>{{ snmp_scrape.prom.query }}</code> → {{ snmp_scrape.prom.series }} series{% if snmp_scrape.prom.error %} ({{ snmp_scrape.prom.error }}){% endif %}.</p>
     {% endif %}
     {% if snmp_scrape.body %}
     <pre class="snmp-scrape">{{ snmp_scrape.body }}</pre>
     {% elif snmp_scrape.error %}
     <p class="muted">{{ snmp_scrape.error }}</p>
+    {% endif %}
+  </section>
+</form>
+
+<form method="post" action="/discovery/snmp/mib" class="discovery-snmp-form" enctype="multipart/form-data" hx-boost="false" autocomplete="off">
+  <section class="card discovery-snmp-activate">
+    <h2>MIB upload</h2>
+    <p class="muted">Stores the file under <code>data/mibs/</code> and writes <code>generator.yml</code>. OBJECT-TYPE names are listed by regex — not a SMIv2 compiler. If the <code>prom/snmp-generator</code> image is already present, Core runs <code>docker run --rm</code> once. No extra compose service.</p>
+    <input type="hidden" name="asset_id" value="{{ snmp_form.asset_id }}">
+    <input type="hidden" name="ip" value="{{ snmp_form.ip }}">
+    <input type="hidden" name="port" value="{{ snmp_form.port }}">
+    <input type="hidden" name="version" value="{{ snmp_form.version }}">
+    <input type="hidden" name="timeout" value="{{ snmp_form.timeout }}">
+    <input type="hidden" name="oid" value="{{ snmp_form.oid }}">
+    <label>MIB file <input type="file" name="mib_file" accept=".mib,.txt,.my,.mi2"></label>
+    <div class="row-actions asset-form-actions">
+      <button type="submit">Upload MIB</button>
+    </div>
+    {% if snmp_mib.ok %}
+    <p class="muted">Saved {{ snmp_mib.name }} — {{ snmp_mib.object_count }} OBJECT-TYPE names. {{ snmp_mib.generator }}</p>
+    {% if snmp_mib.objects %}
+    <p class="muted">{% for name in snmp_mib.objects %}<code>{{ name }}</code>{% if not loop.last %} {% endif %}{% endfor %}</p>
+    {% endif %}
+    {% elif snmp_mib.error %}
+    <p class="muted">{{ snmp_mib.error }}</p>
     {% endif %}
   </section>
 </form>

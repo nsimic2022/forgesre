@@ -1,13 +1,17 @@
 """Bounded SNMP GET/GET-NEXT for Discovery → SNMP devices. Not a MIB compiler and not a full walk.
 
 v1/v2c only (stdlib BER). v3 stays on snmp_exporter scrape after ``./forgesre snmp-auths``.
+Table OIDs land in the generated ``forgesre_onboard`` module as walk+indexes (snmp_exporter v0.26).
+MIB upload is OBJECT-TYPE regex + optional ``docker run --rm`` of ``prom/snmp-generator``.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import socket
+import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -20,8 +24,12 @@ from app.asset_snmp import generated_snmp_path, snmp_settings
 ONBOARD_BEGIN = "  # forgesre-onboard-modules begin"
 ONBOARD_END = "  # forgesre-onboard-modules end"
 ONBOARD_MODULE = "forgesre_onboard"
-MAX_OIDS_PER_PASS = 12
+ONBOARD_JOB = "forgesre-snmp-onboard"
+SNMP_ONBOARD_OIDS_KEY = "snmp_onboard_oids"
+MAX_OIDS_PER_PASS = 20
 DEFAULT_TIMEOUT = 0.8
+GENERATOR_IMAGE = "prom/snmp-generator"
+OBJECT_TYPE_RE = re.compile(r"^([A-Za-z][A-Za-z0-9-]*)\s+OBJECT-TYPE\b", re.MULTILINE)
 
 UdpSend = Callable[[bytes, tuple[str, int], float], bytes | None]
 
@@ -37,7 +45,7 @@ class OidDef:
     collected: bool = False
 
 
-# Compact catalog: IF-MIB + a few HOST-RESOURCES / UCD / UPS probes. Not every OID in those MIBs.
+# Compact catalog: IF-MIB + HOST-RESOURCES / UCD / UPS / ENTITY-SENSOR. Not every OID in those MIBs.
 CATALOG: tuple[OidDef, ...] = (
     OidDef("sysDescr", "sysDescr", "1.3.6.1.2.1.1.1.0", "system", "scalar", "Device description"),
     OidDef("sysObjectID", "sysObjectID", "1.3.6.1.2.1.1.2.0", "system", "scalar", "Vendor object ID"),
@@ -46,14 +54,24 @@ CATALOG: tuple[OidDef, ...] = (
     OidDef("ifNumber", "ifNumber", "1.3.6.1.2.1.2.1.0", "interfaces", "scalar", "Interface count (cardinality)"),
     OidDef("ifDescr", "ifDescr", "1.3.6.1.2.1.2.2.1.2", "interfaces", "table", "Interface description"),
     OidDef("ifOperStatus", "ifOperStatus", "1.3.6.1.2.1.2.2.1.8", "interfaces", "table", "Operational state"),
+    OidDef("ifInDiscards", "ifInDiscards", "1.3.6.1.2.1.2.2.1.13", "errors", "table", "In discards"),
+    OidDef("ifInErrors", "ifInErrors", "1.3.6.1.2.1.2.2.1.14", "errors", "table", "In errors"),
+    OidDef("ifOutErrors", "ifOutErrors", "1.3.6.1.2.1.2.2.1.20", "errors", "table", "Out errors"),
     OidDef("ifHCInOctets", "ifHCInOctets", "1.3.6.1.2.1.31.1.1.1.6", "traffic", "table", "In octets"),
     OidDef("ifHCOutOctets", "ifHCOutOctets", "1.3.6.1.2.1.31.1.1.1.10", "traffic", "table", "Out octets"),
-    OidDef("ifInErrors", "ifInErrors", "1.3.6.1.2.1.2.2.1.14", "errors", "table", "In errors"),
+    OidDef("ifHighSpeed", "ifHighSpeed", "1.3.6.1.2.1.31.1.1.1.15", "traffic", "table", "Nominal speed (Mbps)"),
     OidDef("hrProcessorLoad", "hrProcessorLoad", "1.3.6.1.2.1.25.3.3.1.2", "cpu", "table", "HOST-RESOURCES CPU load"),
+    OidDef("hrMemorySize", "hrMemorySize", "1.3.6.1.2.1.25.2.2.0", "memory", "scalar", "HOST-RESOURCES RAM size"),
     OidDef("hrStorageUsed", "hrStorageUsed", "1.3.6.1.2.1.25.2.3.1.6", "storage", "table", "HOST-RESOURCES storage used"),
     OidDef("ssCpuIdle", "ssCpuIdle", "1.3.6.1.4.1.2021.11.11.0", "cpu", "scalar", "UCD CPU idle"),
     OidDef("memAvailReal", "memAvailReal", "1.3.6.1.4.1.2021.4.6.0", "memory", "scalar", "UCD available RAM"),
+    OidDef("memAvailSwap", "memAvailSwap", "1.3.6.1.4.1.2021.4.4.0", "memory", "scalar", "UCD available swap"),
+    OidDef("laLoad1", "laLoad1", "1.3.6.1.4.1.2021.10.1.5.1", "cpu", "scalar", "UCD 1-minute load (laLoadInt.1)"),
     OidDef("upsOutputSource", "upsOutputSource", "1.3.6.1.2.1.33.1.4.1.0", "ups", "scalar", "UPS-MIB output source"),
+    OidDef("upsBatteryStatus", "upsBatteryStatus", "1.3.6.1.2.1.33.1.2.1.0", "ups", "scalar", "UPS battery status"),
+    OidDef("upsEstMinutes", "upsEstMinutes", "1.3.6.1.2.1.33.1.2.3.0", "ups", "scalar", "UPS minutes remaining"),
+    OidDef("upsEstCharge", "upsEstCharge", "1.3.6.1.2.1.33.1.2.4.0", "ups", "scalar", "UPS charge remaining"),
+    OidDef("upsOutputPercentLoad", "upsOutputPercentLoad", "1.3.6.1.2.1.33.1.4.4.1.5", "ups", "table", "UPS output percent load"),
     OidDef("entPhySensorValue", "entPhySensorValue", "1.3.6.1.2.1.99.1.1.1.4", "health", "table", "ENTITY-SENSOR value"),
 )
 
@@ -62,13 +80,114 @@ RECOMMEND_KEYS = (
     "ifNumber",
     "ifOperStatus",
     "ifHCInOctets",
+    "ifHCOutOctets",
+    "ifHighSpeed",
     "ifInErrors",
+    "ifInDiscards",
+    "ifOutErrors",
     "hrProcessorLoad",
     "hrStorageUsed",
+    "hrMemorySize",
     "ssCpuIdle",
     "memAvailReal",
+    "memAvailSwap",
+    "laLoad1",
     "upsOutputSource",
+    "upsBatteryStatus",
+    "upsEstMinutes",
+    "upsEstCharge",
+    "upsOutputPercentLoad",
     "entPhySensorValue",
+)
+PROFILE_KEYS: dict[str, tuple[str, ...]] = {
+    "switch": (
+        "ifNumber",
+        "ifOperStatus",
+        "ifHCInOctets",
+        "ifHCOutOctets",
+        "ifHighSpeed",
+        "ifInErrors",
+        "ifInDiscards",
+        "ifOutErrors",
+    ),
+    "linux-host": (
+        "hrProcessorLoad",
+        "hrStorageUsed",
+        "hrMemorySize",
+        "ssCpuIdle",
+        "memAvailReal",
+        "memAvailSwap",
+        "laLoad1",
+    ),
+    "ups": (
+        "upsOutputSource",
+        "upsBatteryStatus",
+        "upsEstMinutes",
+        "upsEstCharge",
+        "upsOutputPercentLoad",
+    ),
+    "health": ("entPhySensorValue",),
+}
+ENTERPRISE_VENDORS: dict[str, str] = {
+    "2": "IBM",
+    "9": "Cisco",
+    "11": "HPE",
+    "43": "3Com",
+    "171": "D-Link",
+    "311": "Microsoft",
+    "318": "APC",
+    "534": "Eaton",
+    "674": "Dell",
+    "8072": "net-snmp",
+    "2021": "UCD-SNMP",
+    "1916": "Extreme",
+    "2011": "Huawei",
+    "2327": "IBM",
+    "2636": "Juniper",
+    "3375": "F5",
+    "3833": "Eaton",
+    "4526": "Netgear",
+    "5596": "Vertiv",
+    "6574": "Synology",
+    "6876": "VMware",
+    "12356": "Fortinet",
+    "14179": "Aruba",
+    "14988": "MikroTik",
+    "24681": "QNAP",
+    "25461": "Palo Alto",
+    "25506": "H3C",
+    "30065": "Arista",
+}
+UPS_VENDORS = frozenset({"APC", "Eaton", "Vertiv"})
+SWITCH_VENDORS = frozenset(
+    {
+        "Cisco",
+        "Juniper",
+        "Arista",
+        "H3C",
+        "Huawei",
+        "Extreme",
+        "Fortinet",
+        "MikroTik",
+        "Aruba",
+        "HPE",
+        "3Com",
+        "D-Link",
+        "Netgear",
+        "F5",
+        "Palo Alto",
+    }
+)
+HOST_VENDORS = frozenset({"net-snmp", "UCD-SNMP", "Microsoft", "VMware", "Linux"})
+TABLE_INDEXES: tuple[tuple[str, str], ...] = (
+    ("1.3.6.1.2.1.2.2.1.", "ifIndex"),
+    ("1.3.6.1.2.1.31.1.1.1.", "ifIndex"),
+    ("1.3.6.1.2.1.25.3.3.1.", "hrDeviceIndex"),
+    ("1.3.6.1.2.1.25.3.2.1.", "hrDeviceIndex"),
+    ("1.3.6.1.2.1.25.2.3.1.", "hrStorageIndex"),
+    ("1.3.6.1.2.1.99.1.1.1.", "entPhySensorIndex"),
+    ("1.3.6.1.4.1.2021.10.1.", "laIndex"),
+    ("1.3.6.1.2.1.33.1.4.4.1.", "upsOutputLineIndex"),
 )
 
 
@@ -284,6 +403,146 @@ def clamp_timeout(raw: Any, default: float = DEFAULT_TIMEOUT) -> float:
     return max(0.2, min(n, 3.0))
 
 
+def parse_onboard_oids(raw: Any) -> list[str]:
+    if raw is None or raw == "":
+        return []
+    if isinstance(raw, (list, tuple, set, frozenset)):
+        parts = [str(item) for item in raw]
+    else:
+        parts = str(raw).replace(";", ",").replace(" ", ",").split(",")
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        try:
+            oid = normalize_oid(part)
+        except ValueError:
+            continue
+        if oid in seen:
+            continue
+        seen.add(oid)
+        out.append(oid)
+        if len(out) >= MAX_OIDS_PER_PASS:
+            break
+    return out
+
+
+def normalize_onboard_oids(raw: Any) -> dict[str, str]:
+    """Keep ``snmp_onboard_oids`` through asset Save. Unknown extras keys are otherwise dropped."""
+    if not isinstance(raw, dict) or SNMP_ONBOARD_OIDS_KEY not in raw:
+        return {}
+    oids = parse_onboard_oids(raw.get(SNMP_ONBOARD_OIDS_KEY))
+    if not oids:
+        return {}
+    return {SNMP_ONBOARD_OIDS_KEY: ",".join(oids)}
+
+
+def onboard_oids_for(asset: Any) -> list[str]:
+    extras = asset.get("extras") if isinstance(asset, dict) else getattr(asset, "extras", None)
+    if not isinstance(extras, dict):
+        return []
+    return parse_onboard_oids(extras.get(SNMP_ONBOARD_OIDS_KEY))
+
+
+def attach_onboard_oids(asset: Any, oids: list[str]) -> None:
+    current = dict(asset.extras) if isinstance(getattr(asset, "extras", None), dict) else {}
+    cleaned = parse_onboard_oids(oids)
+    if cleaned:
+        current[SNMP_ONBOARD_OIDS_KEY] = ",".join(cleaned)
+    else:
+        current.pop(SNMP_ONBOARD_OIDS_KEY, None)
+    asset.extras = current
+
+
+def vendor_from_sysobjectid(oid: str) -> str:
+    try:
+        parts = normalize_oid(oid).split(".")
+    except ValueError:
+        return ""
+    if parts[:6] != ["1", "3", "6", "1", "4", "1"] or len(parts) < 7:
+        return ""
+    return ENTERPRISE_VENDORS.get(parts[6], f"enterprise {parts[6]}")
+
+
+def profile_for(*, vendor: str = "", sys_descr: str = "", answered_keys: set[str] | None = None) -> str:
+    answered = answered_keys or set()
+    blob = f"{vendor} {sys_descr}".lower()
+    ups_oids = answered & {"upsOutputSource", "upsBatteryStatus", "upsEstMinutes", "upsEstCharge", "upsOutputPercentLoad"}
+    if vendor in UPS_VENDORS or "ups" in blob:
+        return "ups"
+    if vendor in HOST_VENDORS or any(word in blob for word in ("linux", "ubuntu", "red hat", "net-snmp", "windows")):
+        return "linux-host"
+    if vendor in SWITCH_VENDORS:
+        return "switch"
+    if "ifOperStatus" in answered or "ifNumber" in answered:
+        return "switch"
+    if ups_oids:
+        return "ups"
+    if "hrProcessorLoad" in answered or "ssCpuIdle" in answered or "memAvailReal" in answered:
+        return "linux-host"
+    if "entPhySensorValue" in answered:
+        return "health"
+    return "switch"
+
+
+def catalog_item_for_oid(oid: str) -> OidDef | None:
+    try:
+        n = normalize_oid(oid)
+    except ValueError:
+        return None
+    for item in CATALOG:
+        base = item.oid
+        if n == base or n == base + ".0" or base == n + ".0":
+            return item
+        if item.kind == "table" and (n == base or n.startswith(base + ".") or base.startswith(n + ".")):
+            return item
+    return None
+
+
+def kind_for_oid(oid: str) -> str:
+    item = catalog_item_for_oid(oid)
+    if item:
+        return item.kind
+    try:
+        n = normalize_oid(oid)
+    except ValueError:
+        return "scalar"
+    return "scalar" if n.endswith(".0") else "table"
+
+
+def table_index_label(oid: str) -> str:
+    try:
+        col = normalize_oid(oid)
+    except ValueError:
+        return "index"
+    if col.endswith(".0"):
+        col = col[:-2]
+    best = ""
+    label = "index"
+    for prefix, name in TABLE_INDEXES:
+        if col.startswith(prefix) and len(prefix) >= len(best):
+            best = prefix
+            label = name
+    return label
+
+
+def metric_name_for(oid: str) -> str:
+    item = catalog_item_for_oid(oid)
+    if item:
+        return item.name
+    try:
+        n = normalize_oid(oid)
+    except ValueError:
+        n = "x"
+    return "oid_" + n.replace(".", "_")
+
+
+def metric_type_for(oid: str) -> str:
+    name = metric_name_for(oid)
+    if any(token in name for token in ("Octets", "Errors", "Discards")):
+        return "counter"
+    return "gauge"
+
+
 def _probe_def(item: OidDef, ip: str, **kwargs: Any) -> dict[str, Any]:
     result = snmp_get(ip, item.oid, get_next=item.kind == "table", **kwargs)
     if not result["ok"] and item.kind == "table":
@@ -301,10 +560,20 @@ def identify_device(ip: str, **kwargs: Any) -> dict[str, Any]:
     rows = [_probe_def(by[key], ip, **kwargs) for key in IDENTIFY_KEYS]
     descr = next((row["value"] for row in rows if row["key"] == "sysDescr" and row["ok"]), "")
     name = next((row["value"] for row in rows if row["key"] == "sysName" and row["ok"]), "")
-    return {"ok": any(row["ok"] for row in rows), "sysDescr": descr, "sysName": name, "rows": rows}
+    object_id = next((row["value"] for row in rows if row["key"] == "sysObjectID" and row["ok"]), "")
+    vendor = vendor_from_sysobjectid(object_id)
+    return {
+        "ok": any(row["ok"] for row in rows),
+        "sysDescr": descr,
+        "sysName": name,
+        "sysObjectID": object_id,
+        "vendor": vendor,
+        "profile": "",
+        "rows": rows,
+    }
 
 
-def recommend_metrics(ip: str, **kwargs: Any) -> list[dict[str, Any]]:
+def recommend_metrics(ip: str, *, sys_descr: str = "", vendor: str = "", **kwargs: Any) -> list[dict[str, Any]]:
     collected = collected_oids()
     by = catalog_by_key()
     out: list[dict[str, Any]] = []
@@ -316,8 +585,14 @@ def recommend_metrics(ip: str, **kwargs: Any) -> list[dict[str, Any]]:
         row["in_mib"] = True
         row["in_prometheus"] = in_prom
         row["recommend"] = bool(row["ok"]) and not in_prom
-        row["applyable"] = bool(row["recommend"] and item.kind == "scalar")
+        row["applyable"] = bool(row["recommend"])
         out.append(row)
+    answered = {row["key"] for row in out if row.get("ok")}
+    profile = profile_for(vendor=vendor, sys_descr=sys_descr, answered_keys=answered)
+    wanted = set(PROFILE_KEYS.get(profile, ()))
+    for row in out:
+        row["profile"] = profile
+        row["profile_match"] = row["key"] in wanted
     return out
 
 
@@ -345,8 +620,9 @@ def splice_onboard_module(text: str, block: str) -> str:
 
 
 def onboard_module_yaml(oids: list[str]) -> str:
-    """v0.26 module: get-only extra scalars. Table OIDs stay recommendations until a later generator pass."""
+    """v0.26 module: scalar GET + table walk with indexes (ifIndex / hr* / entPhySensor / index)."""
     gets: list[str] = []
+    walks: list[str] = []
     metrics: list[str] = []
     seen: set[str] = set()
     for raw in oids:
@@ -357,30 +633,62 @@ def onboard_module_yaml(oids: list[str]) -> str:
         if oid in seen:
             continue
         seen.add(oid)
-        inst = oid if oid.endswith(".0") or oid.count(".") > 8 else oid
-        gets.append(f"      - {inst}")
-        name = "oid_" + oid.replace(".", "_")
-        metrics.append(
-            "      - name: "
-            + name
-            + "\n        oid: "
-            + (oid[:-2] if oid.endswith(".0") else oid)
-            + "\n        type: gauge\n        help: Operator-selected SNMP OID "
-            + oid
-        )
-    if not gets:
+        kind = kind_for_oid(oid)
+        name = metric_name_for(oid)
+        help_text = ""
+        item = catalog_item_for_oid(oid)
+        if item:
+            help_text = item.help
+        if kind == "table":
+            col = oid[:-2] if oid.endswith(".0") else oid
+            walks.append(f"      - {col}")
+            index = table_index_label(col)
+            metrics.append(
+                "      - name: "
+                + name
+                + "\n        oid: "
+                + col
+                + "\n        type: "
+                + metric_type_for(oid)
+                + "\n        help: "
+                + (help_text or "Operator-selected SNMP table OID " + col)
+                + "\n        indexes:\n          - labelname: "
+                + index
+                + "\n            type: gauge"
+            )
+        else:
+            inst = oid if oid.endswith(".0") else oid + ".0"
+            col = inst[:-2]
+            gets.append(f"      - {inst}")
+            metrics.append(
+                "      - name: "
+                + name
+                + "\n        oid: "
+                + col
+                + "\n        type: "
+                + metric_type_for(oid)
+                + "\n        help: "
+                + (help_text or "Operator-selected SNMP OID " + inst)
+            )
+        if len(seen) >= MAX_OIDS_PER_PASS:
+            break
+    if not gets and not walks:
         return ""
-    return (
-        f"  {ONBOARD_MODULE}:\n"
-        "    timeout: 5s\n"
-        "    retries: 1\n"
-        "    max_repetitions: 10\n"
-        "    get:\n"
-        + "\n".join(gets)
-        + "\n    metrics:\n"
-        + "\n".join(metrics)
-        + "\n"
-    )
+    lines = [
+        f"  {ONBOARD_MODULE}:",
+        "    timeout: 5s",
+        "    retries: 1",
+        "    max_repetitions: 10",
+    ]
+    if walks:
+        lines.append("    walk:")
+        lines.extend(walks)
+    if gets:
+        lines.append("    get:")
+        lines.extend(gets)
+    lines.append("    metrics:")
+    lines.extend(metrics)
+    return "\n".join(lines) + "\n"
 
 
 def apply_onboard_module(oids: list[str], path: Path | None = None) -> dict[str, Any]:
@@ -390,7 +698,8 @@ def apply_onboard_module(oids: list[str], path: Path | None = None) -> dict[str,
     text = target.read_text(encoding="utf-8")
     backup = target.with_suffix(".yml.onboard.bak")
     shutil.copy2(target, backup)
-    block = onboard_module_yaml(oids)
+    cleaned = parse_onboard_oids(oids)
+    block = onboard_module_yaml(cleaned)
     try:
         written = splice_onboard_module(text, block)
         import yaml
@@ -402,10 +711,11 @@ def apply_onboard_module(oids: list[str], path: Path | None = None) -> dict[str,
         if block and ONBOARD_MODULE not in modules:
             raise ValueError("onboard module missing after splice")
         target.write_text(written, encoding="utf-8")
+        write_generator_yml(cleaned, path=target.parent / "generator.yml")
     except Exception as exc:
         shutil.copy2(backup, target)
         return {"ok": False, "error": str(exc)[:300]}
-    return {"ok": True, "error": "", "backup": str(backup), "module": ONBOARD_MODULE if block else ""}
+    return {"ok": True, "error": "", "backup": str(backup), "module": ONBOARD_MODULE if block else "", "oids": cleaned}
 
 
 def restore_onboard_module(path: Path | None = None) -> dict[str, Any]:
@@ -415,6 +725,165 @@ def restore_onboard_module(path: Path | None = None) -> dict[str, Any]:
         return {"ok": False, "error": "No onboard backup to restore."}
     shutil.copy2(backup, target)
     return {"ok": True, "error": ""}
+
+
+def generated_onboard_present(path: Path | None = None) -> bool:
+    target = path or generated_snmp_path()
+    try:
+        text = target.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return f"  {ONBOARD_MODULE}:" in text
+
+
+def generated_dir() -> Path:
+    env = os.environ.get("FORGESRE_GENERATED_DIR")
+    if env:
+        return Path(env)
+    data = os.environ.get("FORGESRE_DATA")
+    root = Path(data) if data else Path(__file__).resolve().parents[2] / "data"
+    return root / "generated"
+
+
+def mibs_dir() -> Path:
+    env = os.environ.get("FORGESRE_GENERATED_DIR")
+    if env:
+        return Path(env) / "mibs"
+    data = os.environ.get("FORGESRE_DATA")
+    root = Path(data) if data else Path(__file__).resolve().parents[2] / "data"
+    return root / "mibs"
+
+
+def write_generator_yml(oids: list[str], path: Path | None = None) -> Path:
+    """snmp-generator input. Numeric OIDs only — not a SMIv2 compiler."""
+    target = path or (generated_dir() / "generator.yml")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    walks: list[str] = []
+    seen: set[str] = set()
+    for raw in parse_onboard_oids(oids):
+        col = raw[:-2] if raw.endswith(".0") else raw
+        if col in seen:
+            continue
+        seen.add(col)
+        walks.append(col)
+    if walks:
+        body = "modules:\n  forgesre_onboard:\n    walk:\n" + "".join(f"      - {oid}\n" for oid in walks)
+    else:
+        body = "modules:\n  forgesre_onboard:\n    walk: []\n"
+    target.write_text(body, encoding="utf-8")
+    return target
+
+
+def search_mib_object_types(text: str) -> list[str]:
+    """OBJECT-TYPE names via regex. Not a SMIv2 compiler."""
+    return OBJECT_TYPE_RE.findall(text or "")
+
+
+def save_mib_file(data: bytes, filename: str) -> dict[str, Any]:
+    name = Path(filename or "").name
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", name)[:120]
+    if not safe or safe.startswith("."):
+        raise ValueError("Need a MIB filename")
+    if len(data) > 2_000_000:
+        raise ValueError("MIB file too large (2 MB)")
+    folder = mibs_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / safe
+    path.write_bytes(data)
+    objects = search_mib_object_types(data.decode("utf-8", "replace"))
+    return {
+        "ok": True,
+        "path": str(path),
+        "name": safe,
+        "objects": objects[:40],
+        "object_count": len(objects),
+        "error": "",
+    }
+
+
+def run_snmp_generator(*, timeout: int = 45) -> dict[str, Any]:
+    """Optional ``docker run --rm``. Never pulls. Never an always-on compose service."""
+    if not shutil.which("docker"):
+        return {
+            "ok": False,
+            "ran": False,
+            "error": "docker not on PATH — Python v0.26 writer already produced snmp.yml.",
+        }
+    try:
+        inspect = subprocess.run(
+            ["docker", "image", "inspect", GENERATOR_IMAGE],
+            capture_output=True,
+            timeout=8,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        inspect = None
+    if inspect is None or inspect.returncode != 0:
+        return {
+            "ok": False,
+            "ran": False,
+            "error": f"{GENERATOR_IMAGE} image not present — skipped docker run. Python v0.26 writer already produced snmp.yml.",
+        }
+    gen = generated_dir()
+    mibs = mibs_dir()
+    gen.mkdir(parents=True, exist_ok=True)
+    mibs.mkdir(parents=True, exist_ok=True)
+    if not (gen / "generator.yml").is_file():
+        write_generator_yml([])
+    cmd = [
+        "docker",
+        "run",
+        "--rm",
+        "-v",
+        f"{mibs.resolve()}:/opt/mibs:ro",
+        "-v",
+        f"{gen.resolve()}:/opt/out",
+        GENERATOR_IMAGE,
+        "generate",
+        "-m",
+        "/opt/mibs",
+        "-g",
+        "/opt/out/generator.yml",
+        "-o",
+        "/opt/out/snmp-generator-out.yml",
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=timeout, text=True)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"ok": False, "ran": True, "error": str(exc)[:300]}
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "generator failed").strip()[:300]
+        return {"ok": False, "ran": True, "error": err}
+    return {"ok": True, "ran": True, "error": ""}
+
+
+def _promql_escape(value: str) -> str:
+    return str(value or "").replace("\\", "\\\\").replace('"', '\\"')
+
+
+def prometheus_onboard_status(instance: str = "", asset_id: str = "") -> dict[str, Any]:
+    """Series count in Prometheus for the extra onboard job. Empty when Prom is down."""
+    from app.services import query_prometheus_expr
+
+    parts = [f'job="{ONBOARD_JOB}"']
+    if asset_id:
+        parts.append(f'asset="{_promql_escape(asset_id)}"')
+    elif instance:
+        parts.append(f'instance="{_promql_escape(instance)}"')
+    selector = ",".join(parts)
+    count = query_prometheus_expr(f"count({{{selector}}})", timeout=2.0)
+    up = query_prometheus_expr(f"up{{{selector}}}", timeout=2.0)
+    raw = count.get("value")
+    try:
+        series = int(float(raw)) if raw is not None else 0
+    except (TypeError, ValueError):
+        series = 0
+    return {
+        "ok": series > 0,
+        "series": series,
+        "up": up.get("value"),
+        "query": count.get("query") or f"count({{{selector}}})",
+        "error": str(count.get("error") or ""),
+    }
 
 
 def reload_exporter(url: str | None = None) -> bool:
@@ -447,7 +916,7 @@ def exporter_scrape(
             body = resp.read().decode("utf-8", "replace")[:8000]
     except (urllib.error.URLError, OSError) as exc:
         return {"ok": False, "error": str(exc)[:200], "body": ""}
-    ok = any(token in body for token in ("sysUpTime", "ifOperStatus", "snmp_", "oid_1_3_6"))
+    ok = any(token in body for token in ("sysUpTime", "ifOperStatus", "snmp_", "oid_1_3_6", "ifInDiscards", "upsBattery"))
     return {
         "ok": ok,
         "error": "" if ok else "no SNMP metrics in scrape",

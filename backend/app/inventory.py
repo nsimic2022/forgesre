@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, object_session
 
 from app.asset_extras import asset_playrule_ids, form_extras, known_playrule_ids, merge_extras, public_extras
 from app.asset_snmp import auth_spec, desired_auth, effective_auth, rendered_auth_names
+from app.snmp_onboard import ONBOARD_MODULE, generated_onboard_present, onboard_oids_for
 from app.asset_types import (
     ASSET_TYPE_CHOICES,
     ASSET_TYPE_GROUPS,
@@ -254,6 +255,39 @@ def sd_snmp_host_targets(db: Session) -> list[dict]:
                     "monitoring_profile": asset.monitoring_profile or "network-switch",
                     "source": asset.source or "manual",
                     "snmp_module": HOST_MODULE,
+                    "snmp_auth": effective_auth(asset, rendered),
+                    "snmp_port": str(port),
+                },
+            }
+        )
+    return targets
+
+
+def sd_snmp_onboard_targets(db: Session) -> list[dict]:
+    """Third SNMP job: generated ``forgesre_onboard`` module, only IPs that applied extra OIDs."""
+    if not settings.snmp_enabled:
+        return []
+    if not generated_onboard_present():
+        return []
+    targets: list[dict] = []
+    seen: set[str] = set()
+    rendered = rendered_auth_names()
+    for asset in db.query(Asset).order_by(Asset.asset_id).all():
+        if not is_snmp_asset(asset) or not onboard_oids_for(asset):
+            continue
+        port = snmp_port_for(asset)
+        target = snmp_target(asset.ip, port)
+        if not target or target in seen:
+            continue
+        seen.add(target)
+        targets.append(
+            {
+                "targets": [target],
+                "labels": {
+                    "asset": asset.asset_id,
+                    "monitoring_profile": asset.monitoring_profile or "network-switch",
+                    "source": asset.source or "manual",
+                    "snmp_module": ONBOARD_MODULE,
                     "snmp_auth": effective_auth(asset, rendered),
                     "snmp_port": str(port),
                 },

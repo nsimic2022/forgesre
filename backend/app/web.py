@@ -62,15 +62,21 @@ from app.asset_types import ASSET_TYPE_GROUPS, DEFAULT_SNMP_PORT, parse_snmp_por
 from app.snmp_onboard import (
     ONBOARD_MODULE,
     apply_onboard_module,
+    attach_onboard_oids,
     cardinality_hint,
     clamp_timeout,
     community_for_asset,
     exporter_scrape,
     identify_device,
+    onboard_oids_for,
+    prometheus_onboard_status,
     recommend_metrics,
     reload_exporter,
     restore_onboard_module,
+    run_snmp_generator,
+    save_mib_file,
     snmp_get,
+    write_generator_yml,
 )
 from app.snmp_families import (
     ALL_FAMILIES,
@@ -1520,6 +1526,7 @@ def _snmp_onboard_ctx(
     cardinality: str = "",
     apply_result: dict | None = None,
     scrape: dict | None = None,
+    mib: dict | None = None,
 ) -> dict:
     rows = inventory if inventory is not None else db.query(Asset).order_by(Asset.hostname, Asset.asset_id).all()
     sticky = {
@@ -1542,6 +1549,7 @@ def _snmp_onboard_ctx(
         "snmp_cardinality": cardinality,
         "snmp_apply": apply_result or {},
         "snmp_scrape": scrape or {},
+        "snmp_mib": mib or {},
     }
 
 
@@ -1627,7 +1635,14 @@ def discovery_snmp_submit(
                     notice = scrape.get("error") or "snmp_exporter did not return SNMP metrics"
             else:
                 identify = identify_device(host, **kwargs)
-                recommendations = recommend_metrics(host, **kwargs)
+                recommendations = recommend_metrics(
+                    host,
+                    sys_descr=str(identify.get("sysDescr") or ""),
+                    vendor=str(identify.get("vendor") or ""),
+                    **kwargs,
+                )
+                if recommendations:
+                    identify["profile"] = recommendations[0].get("profile") or ""
                 if_number = next((row["value"] for row in recommendations if row.get("key") == "ifNumber" and row.get("ok")), "")
                 extra_cols = sum(1 for row in recommendations if row.get("ok") and row.get("kind") == "table" and row.get("recommend"))
                 cardinality = cardinality_hint(if_number, extra_cols)
@@ -1642,25 +1657,40 @@ def discovery_snmp_submit(
             if not probe.get("ok"):
                 notice = probe.get("error") or "no SNMP reply"
         elif action == "apply":
+            if asset is None:
+                match = db.query(Asset).filter(Asset.ip == host).order_by(Asset.asset_id).all()
+                if len(match) == 1:
+                    asset = match[0]
+                    form["asset_id"] = asset.asset_id
+            if asset is None:
+                raise ValueError("Pick an asset so Prometheus HTTP SD can scrape forgesre_onboard.")
             picks = list(oid_pick or [])
             if form["oid"]:
                 picks.append(form["oid"])
             if not picks:
-                raise ValueError("Select a scalar OID the device answered, or type one in OID tester.")
+                raise ValueError("Select an OID the device answered, or type one in OID tester.")
             apply_result = apply_onboard_module(picks)
             if apply_result.get("ok"):
+                attach_onboard_oids(asset, apply_result.get("oids") or picks)
+                db.add(asset)
                 apply_result["reload"] = (
                     "snmp_exporter reloaded."
                     if reload_exporter(settings.snmp_exporter_url)
                     else "snmp_exporter not reloaded — docker compose restart snmp-exporter."
+                )
+                gen = run_snmp_generator()
+                apply_result["generator"] = (
+                    "snmp-generator ran."
+                    if gen.get("ok")
+                    else (gen.get("error") or "generator skipped")
                 )
                 audit(
                     db,
                     "snmp.onboard.apply",
                     actor=user.email,
                     object_type="snmp",
-                    object_id=host,
-                    data={"module": ONBOARD_MODULE, "oids": len(picks)},
+                    object_id=asset.asset_id,
+                    data={"module": ONBOARD_MODULE, "oids": len(apply_result.get("oids") or picks)},
                     commit=True,
                 )
             else:
@@ -1693,6 +1723,10 @@ def discovery_snmp_submit(
                     timeout=max(wait, 2.0),
                     url=settings.snmp_exporter_url,
                 )
+            scrape["prom"] = prometheus_onboard_status(
+                snmp_target(host, udp),
+                asset_id=(asset.asset_id if asset is not None else ""),
+            )
             if not scrape.get("ok"):
                 notice = scrape.get("error") or "scrape failed"
         else:
@@ -1714,6 +1748,67 @@ def discovery_snmp_submit(
             apply_result=apply_result,
             scrape=scrape,
         ),
+    )
+
+
+@router.post("/discovery/snmp/mib", response_class=HTMLResponse)
+def discovery_snmp_mib(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("write_assets")),
+    asset_id: str = Form(""),
+    ip: str = Form(""),
+    port: str = Form("161"),
+    version: str = Form("v2c"),
+    timeout: str = Form("0.8"),
+    oid: str = Form(""),
+    mib_file: UploadFile = File(...),
+):
+    notice = ""
+    mib: dict = {}
+    form = {
+        "asset_id": (asset_id or "").strip(),
+        "ip": (ip or "").strip(),
+        "port": (port or "").strip() or str(DEFAULT_SNMP_PORT),
+        "version": (version or "v2c").strip().lower() or "v2c",
+        "timeout": str(clamp_timeout(timeout)),
+        "oid": (oid or "").strip(),
+        "get_next": "",
+        "oid_pick": [],
+    }
+    try:
+        data = mib_file.file.read()
+        mib = save_mib_file(data, mib_file.filename or "")
+        asset, host, _udp = None, form["ip"], DEFAULT_SNMP_PORT
+        try:
+            asset, host, _udp = _snmp_onboard_target(db, form["asset_id"], form["ip"], form["port"])
+            form["ip"] = host
+        except ValueError:
+            asset = None
+        oids = onboard_oids_for(asset) if asset is not None else []
+        if form["oid"]:
+            oids = list(oids) + [form["oid"]]
+        write_generator_yml(oids)
+        gen = run_snmp_generator()
+        mib["generator"] = "snmp-generator ran." if gen.get("ok") else (gen.get("error") or "generator skipped")
+        audit(
+            db,
+            "snmp.onboard.mib",
+            actor=user.email,
+            object_type="snmp",
+            object_id=mib.get("name") or "mib",
+            data={"objects": mib.get("object_count") or 0},
+            commit=True,
+        )
+    except ValueError as exc:
+        notice = str(exc)
+        mib = {"ok": False, "error": str(exc)}
+    return _render_discovery(
+        request,
+        db,
+        user,
+        notice=notice,
+        snmp=_snmp_onboard_ctx(db, form=form, mib=mib),
     )
 
 

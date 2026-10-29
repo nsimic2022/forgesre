@@ -20,6 +20,7 @@ from app.asset_snmp import SNMP_KEYS, normalize_snmp, public_snmp
 from app.asset_types import snmp_poll_on
 from app.dc_noc import MAINT_KEYS, maint_input_value, maint_pair_error, normalize_maint_fields
 from app.snmp_families import SNMP_METRICS_KEY, normalize_snmp_metrics
+from app.snmp_onboard import SNMP_ONBOARD_OIDS_KEY, normalize_onboard_oids
 
 SNMP_POLL_KEY = "snmp_poll"
 
@@ -101,6 +102,7 @@ def normalize_extras(raw: Any) -> dict[str, str]:
     if snmp_poll_on(raw):
         out[SNMP_POLL_KEY] = "1"
     out.update(normalize_snmp_metrics(raw))
+    out.update(normalize_onboard_oids(raw))
     return out
 
 
@@ -119,10 +121,13 @@ def merge_extras(current: Any, extras: dict | None, snmp: dict | None) -> dict[s
     settings; a posted SNMP block (already validated by snmp_from_form) replaces them."""
     before = normalize_extras(current)
     saved_snmp = {key: value for key, value in before.items() if key in SNMP_KEYS}
+    saved_onboard = {key: value for key, value in before.items() if key == SNMP_ONBOARD_OIDS_KEY}
     if extras is None:
         out = {key: value for key, value in before.items() if key not in SNMP_KEYS}
     else:
         out = {key: value for key, value in normalize_extras(extras).items() if key not in SNMP_KEYS}
+        if SNMP_ONBOARD_OIDS_KEY not in extras:
+            out.update(saved_onboard)
         if snmp is None and any(key in extras for key in SNMP_KEYS):
             snmp = normalize_snmp({**{key: value for key, value in saved_snmp.items() if key in SNMP_SECRET_KEYS}, **extras})
     out.update(saved_snmp if snmp is None else normalize_snmp(snmp))

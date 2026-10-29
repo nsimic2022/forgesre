@@ -43,6 +43,7 @@ from app.inventory import (
     persist_live_classification,
     sd_targets,
     sd_snmp_host_targets,
+    sd_snmp_onboard_targets,
     sd_snmp_targets,
     seed_demo_candidate,
     snmp_auths,
@@ -757,6 +758,13 @@ def snmp_host_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
     if not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid sd token")
     return sd_snmp_host_targets(db)
+
+
+@router.get("/sd/snmp-onboard")
+def snmp_onboard_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
+    if not _webhook_token_ok(request):
+        raise HTTPException(status_code=401, detail="invalid sd token")
+    return sd_snmp_onboard_targets(db)
 
 
 @router.get("/sd/snmp-auths")
