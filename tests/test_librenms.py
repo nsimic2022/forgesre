@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -229,6 +232,8 @@ def test_compose_librenms_is_default_service():
     assert "LIBRENMS_DB_PASSWORD" not in str(db.get("environment") or {})
     assert db["healthcheck"]["test"] == ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
     assert "SIDECAR_DISPATCHER" in data["services"]["librenms-dispatcher"]["environment"]
+    assert "APP_KEY" not in data["services"]["librenms"]["environment"]
+    assert "APP_KEY" not in data["services"]["librenms-dispatcher"]["environment"]
     assert "SIDECAR_SYSLOGNG" not in compose
     assert "SIDECAR_SNMPTRAPD" not in compose
     assert "LIBRENMS_URL" in data["services"]["core"]["environment"]
@@ -248,12 +253,16 @@ def test_update_and_scripts_bundle_librenms():
     assert "librenms-db-1" in update
     assert "mariadb:11.4.13" in update
     secrets = (ROOT / "scripts" / "ensure-librenms-secrets.sh").read_text(encoding="utf-8")
-    assert "LIBRENMS_DB_PASSWORD" in secrets
-    assert "MYSQL_ROOT_PASSWORD" in secrets
-    assert "MARIADB_ROOT_PASSWORD" in secrets
-    assert "LIBRENMS_APP_KEY" in secrets
-    assert "openssl rand" in secrets
+    dotenv_py = (ROOT / "scripts" / "librenms_dotenv.py").read_text(encoding="utf-8")
+    assert "librenms_dotenv.py" in secrets
+    assert "LIBRENMS_APP_KEY" in dotenv_py
+    assert "MYSQL_ROOT_PASSWORD" in dotenv_py
+    assert "MARIADB_ROOT_PASSWORD" in dotenv_py
+    assert "REDIS_PASSWORD" in dotenv_py
+    assert 'upsert(secrets_path, "REDIS_PASSWORD"' not in dotenv_py
+    assert 'upsert(secrets_path, "DB_PASSWORD"' not in dotenv_py
     assert "DROP DATABASE" not in secrets.upper()
+    assert "DROP DATABASE" not in dotenv_py.upper()
     completion = (ROOT / "scripts" / "forgesre-completion.bash").read_text(encoding="utf-8")
     assert "librenms-dispatcher" in completion
     example = (ROOT / "config" / "forgesre.example.yml").read_text(encoding="utf-8")
@@ -266,6 +275,129 @@ def test_update_and_scripts_bundle_librenms():
     assert "librenms-db" in restart and "librenms-dispatcher" in restart
     render = (ROOT / "scripts" / "render-monitoring.sh").read_text(encoding="utf-8")
     assert "render_snmp_onboard" in render
+    assert "Do not paste a Laravel APP_KEY" in secrets_ex
+    assert "APP_KEY is not interpolated" in env
+
+
+_DOTENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
+
+
+def _parse_dotenv(text: str) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        assert _DOTENV_ASSIGN.match(stripped), stripped
+        name, _, raw = stripped.partition("=")
+        value = raw[1:-1] if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {'"', "'"} else raw
+        parsed[name] = value
+    return parsed
+
+
+def test_ensure_librenms_app_key_quotes_base64_and_repairs_broken_dotenv(tmp_path):
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import librenms_dotenv as ld
+
+    slash_key = ld.random_app_key()
+    for _ in range(24):
+        if "/" in slash_key:
+            break
+        slash_key = ld.random_app_key()
+    assert ld.is_valid_app_key(slash_key)
+    head, tail = slash_key[:12], slash_key[12:]
+    joined = ld.repair_lines([f"LIBRENMS_APP_KEY={head}", tail, "# keep"])
+    assert ld.parse_assignment(joined[0])[1] == slash_key
+    assert joined[1].strip().startswith("#")
+    secrets = tmp_path / "secrets.env"
+    secrets.write_text(
+        "POSTGRES_PASSWORD=keepme\n"
+        f"LIBRENMS_APP_KEY={slash_key}\n"
+        "not a valid line\n"
+        "LIBRENMS_DB_PASSWORD=\n",
+        encoding="utf-8",
+    )
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("LIBRENMS_URL=\nLIBRENMS_APP_KEY=\n", encoding="utf-8")
+    laravel = tmp_path / "librenms" / "data" / ".env"
+    laravel.parent.mkdir(parents=True)
+    laravel.write_text(
+        "APP_KEY=The environment file is invalid!\n"
+        "Failed to parse dotenv file due to an invalid name.\n"
+        "*     Application In Production!     *\n"
+        "NODE_ID=keepnode12\n",
+        encoding="utf-8",
+    )
+    fill_key = ld.random_app_key()
+    got = ld.ensure(
+        secrets_path=secrets,
+        dotenv_path=dotenv,
+        laravel_path=laravel,
+        db_password="dbhexdbhexdbhexdbhexdbhexdbhexdbhe",
+        db_root_password="roothexroothexroothexroothexroothe",
+        redis_password="redhexredhexredhexredhexredhexredh",
+        app_key=fill_key,
+        admin_password="adminhexadminhe",
+    )
+    secret_map = _parse_dotenv(secrets.read_text(encoding="utf-8"))
+    env_map = _parse_dotenv(dotenv.read_text(encoding="utf-8"))
+    laravel_map = _parse_dotenv(laravel.read_text(encoding="utf-8"))
+    assert secret_map["POSTGRES_PASSWORD"] == "keepme"
+    assert secret_map["LIBRENMS_DB_PASSWORD"] == "dbhexdbhexdbhexdbhexdbhexdbhexdbhe"
+    assert secret_map["MYSQL_PASSWORD"] == secret_map["LIBRENMS_DB_PASSWORD"]
+    assert "REDIS_PASSWORD" not in secret_map
+    assert "DB_PASSWORD" not in secret_map
+    assert ld.is_valid_app_key(got)
+    assert secret_map["LIBRENMS_APP_KEY"] == got
+    assert secret_map["APP_KEY"] == got
+    assert env_map["LIBRENMS_APP_KEY"] == got
+    assert env_map["LIBRENMS_URL"] == "http://127.0.0.1:8000"
+    quoted = [line for line in secrets.read_text(encoding="utf-8").splitlines() if line.startswith("APP_KEY=")]
+    assert quoted and quoted[0].startswith('APP_KEY="base64:')
+    assert laravel_map["APP_KEY"] == got
+    assert laravel_map["NODE_ID"] == "keepnode12"
+    assert "invalid name" not in laravel.read_text(encoding="utf-8")
+
+    again = ld.ensure(
+        secrets_path=secrets,
+        dotenv_path=dotenv,
+        laravel_path=laravel,
+        db_password="rotated-should-not-apply",
+        db_root_password="rotated-should-not-apply",
+        redis_password="rotated-should-not-apply",
+        app_key=ld.random_app_key(),
+        admin_password="rotated-should-not-apply",
+    )
+    assert again == got
+    assert _parse_dotenv(secrets.read_text(encoding="utf-8"))["LIBRENMS_DB_PASSWORD"] == "dbhexdbhexdbhexdbhexdbhexdbhexdbhe"
+
+    subprocess.run(["bash", "-n", str(ROOT / "scripts" / "ensure-librenms-secrets.sh")], check=True)
+    appliance = tmp_path / "app"
+    (appliance / "scripts").mkdir(parents=True)
+    (appliance / "secrets").mkdir()
+    (appliance / "scripts" / "ensure-librenms-secrets.sh").write_text(
+        (ROOT / "scripts" / "ensure-librenms-secrets.sh").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (appliance / "scripts" / "librenms_dotenv.py").write_bytes(
+        (ROOT / "scripts" / "librenms_dotenv.py").read_bytes()
+    )
+    (appliance / "secrets" / "secrets.env").write_text("LIBRENMS_APP_KEY=\n", encoding="utf-8")
+    (appliance / ".env").write_text("LIBRENMS_URL=\n", encoding="utf-8")
+    result = subprocess.run(
+        ["bash", str(appliance / "scripts" / "ensure-librenms-secrets.sh")],
+        cwd=appliance,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert "LibreNMS secrets present" in result.stdout
+    live = _parse_dotenv((appliance / "secrets" / "secrets.env").read_text(encoding="utf-8"))
+    assert ld.is_valid_app_key(live["LIBRENMS_APP_KEY"])
+    assert live["APP_KEY"] == live["LIBRENMS_APP_KEY"]
+    laravel_live = _parse_dotenv((appliance / "data" / "librenms" / "data" / ".env").read_text(encoding="utf-8"))
+    assert laravel_live["APP_KEY"] == live["APP_KEY"]
 
 
 def test_render_snmp_onboard_keeps_block_when_core_is_down(tmp_path, monkeypatch):

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Fill missing LibreNMS DB / Redis / APP_KEY values. Never rotates a non-empty key.
+# Fill missing LibreNMS DB / Redis / APP_KEY values. Never rotates a valid key.
+# Quotes base64 APP_KEY and repairs orphan dotenv lines (Compose + Laravel phpdotenv).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -9,52 +10,7 @@ chmod 700 secrets 2>/dev/null || true
 touch secrets/secrets.env
 chmod 600 secrets/secrets.env 2>/dev/null || true
 
-ensure_nonempty() {
-  local file="$1" key="$2" value="$3"
-  if [[ ! -f "$file" ]]; then
-    printf '%s=%s\n' "$key" "$value" > "$file"
-    return 0
-  fi
-  if grep -qE "^${key}=.+" "$file"; then
-    return 0
-  fi
-  if grep -qE "^${key}=" "$file"; then
-    sed -i "s|^${key}=.*|${key}=${value}|" "$file"
-    return 0
-  fi
-  printf '%s=%s\n' "$key" "$value" >> "$file"
-}
-
-ln_db="$(openssl rand -hex 16)"
-ln_root="$(openssl rand -hex 16)"
-ln_redis="$(openssl rand -hex 16)"
-# Laravel APP_KEY: base64: + 32 random bytes.
-ln_app="base64:$(openssl rand -base64 32 | tr -d '\n')"
-
-ln_admin="$(openssl rand -hex 12)"
-
-ensure_nonempty "$ROOT/secrets/secrets.env" LIBRENMS_DB_PASSWORD "$ln_db"
-ensure_nonempty "$ROOT/secrets/secrets.env" LIBRENMS_DB_ROOT_PASSWORD "$ln_root"
-ensure_nonempty "$ROOT/secrets/secrets.env" LIBRENMS_REDIS_PASSWORD "$ln_redis"
-ensure_nonempty "$ROOT/secrets/secrets.env" LIBRENMS_APP_KEY "$ln_app"
-ensure_nonempty "$ROOT/secrets/secrets.env" LIBRENMS_ADMIN_PASSWORD "$ln_admin"
-
-secret_val() {
-  awk -F= -v k="$1" '$0 ~ "^"k"=" {print substr($0, index($0,"=")+1)}' "$ROOT/secrets/secrets.env" | tail -1
-}
-
-# MariaDB image reads MYSQL_* / MARIADB_* from env_file. Keep them equal to LIBRENMS_DB_*.
-# Never rotate a non-empty MYSQL_* independently.
-ensure_nonempty "$ROOT/secrets/secrets.env" MYSQL_PASSWORD "$(secret_val LIBRENMS_DB_PASSWORD)"
-ensure_nonempty "$ROOT/secrets/secrets.env" MYSQL_ROOT_PASSWORD "$(secret_val LIBRENMS_DB_ROOT_PASSWORD)"
-ensure_nonempty "$ROOT/secrets/secrets.env" MARIADB_PASSWORD "$(secret_val LIBRENMS_DB_PASSWORD)"
-ensure_nonempty "$ROOT/secrets/secrets.env" MARIADB_ROOT_PASSWORD "$(secret_val LIBRENMS_DB_ROOT_PASSWORD)"
-
-if [[ -f "$ROOT/.env" ]]; then
-  ensure_nonempty "$ROOT/.env" LIBRENMS_URL "http://127.0.0.1:8000"
-  ensure_nonempty "$ROOT/.env" LIBRENMS_DB_PASSWORD "$(secret_val LIBRENMS_DB_PASSWORD)"
-  ensure_nonempty "$ROOT/.env" LIBRENMS_DB_ROOT_PASSWORD "$(secret_val LIBRENMS_DB_ROOT_PASSWORD)"
-  ensure_nonempty "$ROOT/.env" LIBRENMS_REDIS_PASSWORD "$(secret_val LIBRENMS_REDIS_PASSWORD)"
-  ensure_nonempty "$ROOT/.env" LIBRENMS_APP_KEY "$(secret_val LIBRENMS_APP_KEY)"
-fi
-echo "LibreNMS secrets present (empty keys filled, existing values kept)."
+export FORGESRE_ROOT="$ROOT"
+export FORGESRE_DATA="$DATA_DIR"
+python3 "$ROOT/scripts/librenms_dotenv.py"
+chmod 600 secrets/secrets.env "${DATA_DIR}/librenms/data/.env" 2>/dev/null || true

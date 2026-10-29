@@ -355,7 +355,9 @@ services:
       REDIS_PASSWORD: ${LIBRENMS_REDIS_PASSWORD}
       CACHE_DRIVER: redis
       SESSION_DRIVER: redis
-      APP_KEY: ${LIBRENMS_APP_KEY}
+      # APP_KEY: env_file (quoted base64 in secrets/secrets.env + data/librenms/data/.env).
+      # Do not interpolate ${LIBRENMS_APP_KEY}: empty .env overrides env_file, and an
+      # unquoted base64 value with / makes Compose/Laravel reject the dotenv file.
       APP_URL: ${LIBRENMS_URL:-http://127.0.0.1:8000}
       BASE_URL: ${LIBRENMS_URL:-http://127.0.0.1:8000}
     volumes:
@@ -396,7 +398,7 @@ services:
       REDIS_PASSWORD: ${LIBRENMS_REDIS_PASSWORD}
       CACHE_DRIVER: redis
       SESSION_DRIVER: redis
-      APP_KEY: ${LIBRENMS_APP_KEY}
+      # APP_KEY: env_file (same quoted value as librenms). Do not interpolate.
       SIDECAR_DISPATCHER: "1"
       DISPATCHER_NODE_ID: forgesre-dispatcher
     volumes:
