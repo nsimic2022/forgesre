@@ -217,7 +217,7 @@ set_kv() {
 }
 
 write_files() {
-  mkdir -p "$DATA_DIR"/{postgres,prometheus,alertmanager,loki,grafana,logs,alloy,models,backups,generated,netbox/media,netbox/reports,netbox/scripts,netbox/redis} secrets config
+  mkdir -p "$DATA_DIR"/{postgres,prometheus,alertmanager,loki,grafana,logs,alloy,models,backups,generated,netbox/media,netbox/reports,netbox/scripts,netbox/redis,librenms/mysql,librenms/redis,librenms/data} secrets config
   touch "$DATA_DIR/logs/forgesre.log"
   chmod 700 secrets || true
   chmod 750 "$DATA_DIR" 2>/dev/null || true
@@ -344,6 +344,7 @@ write_files() {
   set_kv "$ROOT/.env" SNMP_EXPORTER_CONFIG "${DATA_DIR}/generated/snmp.yml"
   set_kv "$ROOT/.env" ALLOY_CONFIG "${DATA_DIR}/generated/config.alloy"
   set_kv "$ROOT/.env" LOKI_CONFIG "${DATA_DIR}/generated/loki.yml"
+  "$ROOT/scripts/ensure-librenms-secrets.sh"
 
   local grafana_enabled="true" loki_enabled="true"
   [[ "$BUNDLED_GRAFANA" == "yes" ]] || grafana_enabled="false"
@@ -362,6 +363,9 @@ inventory:
     enabled: ${netbox_enabled}
     mode: ${NETBOX_MODE}
     url: "${NETBOX_URL}"
+  librenms:
+    enabled: true
+    url: "http://127.0.0.1:8000"
 discovery:
   enabled: ${discovery_enabled}
   mode: semi-automatic
@@ -406,6 +410,7 @@ EOF
 - UI: http://127.0.0.1:${HTTP_PORT}
 - Grafana: http://127.0.0.1:3000 (user admin)
 - NetBox: http://127.0.0.1:8001 (user admin / email admin@forgesre.local)
+- LibreNMS: http://127.0.0.1:8000 (Discovery SNMP Identify; snmp_exporter still scrapes)
 - Admin email: admin@forgesre.local
 - Admin password: ${admin_pass}
 - Grafana password: ${gf_pass}
@@ -417,6 +422,7 @@ EOF
 - Discovery CIDRs: ${cidrs_yaml}
 - NetBox enabled: ${netbox_enabled} (mode ${NETBOX_MODE}, url ${NETBOX_URL})
 - NetBox first boot: migrations can take several minutes; doctor stays yellow until http://127.0.0.1:8001/login/ answers
+- LibreNMS first boot: MariaDB migrations; doctor stays yellow until http://127.0.0.1:8000/login answers and LIBRENMS_API_TOKEN is set
 
 Keep secrets/secrets.env private (mode 600).
 

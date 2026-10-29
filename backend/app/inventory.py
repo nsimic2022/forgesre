@@ -273,9 +273,11 @@ def sd_snmp_onboard_targets(db: Session) -> list[dict]:
     seen: set[str] = set()
     rendered = rendered_auth_names()
     for asset in db.query(Asset).order_by(Asset.asset_id).all():
-        if not is_snmp_asset(asset) or not onboard_oids_for(asset):
+        if is_lab_inventory_row(asset) or not onboard_oids_for(asset):
             continue
-        port = snmp_port_for(asset)
+        if not (asset.ip or "").strip():
+            continue
+        port = snmp_port_for(asset) or DEFAULT_SNMP_PORT
         target = snmp_target(asset.ip, port)
         if not target or target in seen:
             continue

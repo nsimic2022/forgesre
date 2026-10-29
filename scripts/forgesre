@@ -717,10 +717,11 @@ update — doctor (warn ok), backup, render-monitoring, compose pull/up, doctor.
 docker-compose.yml image pins are unchanged (llama.cpp is pinned server-bNNNN,
 not the daily :server tag). Core --build is skipped when Dockerfile, backend/,
 agents/, and frontend/ are unchanged.
-Starts default Compose services including snmp-exporter (127.0.0.1:9116)
-and bundled NetBox (http://127.0.0.1:8001). First NetBox boot runs
-migrations and can take several minutes; doctor stays yellow until
-/login/ answers — that is not a fake green.
+Starts default Compose services including snmp-exporter (127.0.0.1:9116),
+bundled NetBox (http://127.0.0.1:8001), and bundled LibreNMS
+(http://127.0.0.1:8000) for Discovery SNMP identify. First NetBox / LibreNMS
+boot runs migrations and can take several minutes; doctor stays yellow until
+/login answers — that is not a fake green.
 Backup runs on the host without sqlalchemy. The Postgres dump uses the same
 docker compose rights as this command (docker info, else sudo docker compose).
 If backup fails, update prints a clear error and continues so the stack
@@ -736,9 +737,10 @@ restart — restart the stack containers in place (same containers, new processe
 
   ./forgesre restart
 
-Order: Postgres (waits for pg_isready), NetBox Redis, Prometheus, Alertmanager,
-snmp_exporter, Loki, Alloy, Grafana, LLM, NetBox, mailbox, then Core (waits for
-GET /api/v1/health). Only services that already have a container are restarted;
+Order: Postgres (waits for pg_isready), NetBox Redis, LibreNMS MariaDB/Redis,
+Prometheus, Alertmanager, snmp_exporter, Loki, Alloy, Grafana, LLM, NetBox,
+LibreNMS, mailbox, then Core (waits for GET /api/v1/health). Only services that
+already have a container are restarted;
 profile-off services (llm, mailserver, roundcube) are skipped, not an error.
 The one-shot netbox-db-init is not re-run.
 

@@ -33,6 +33,8 @@ echo "Rendering Prometheus / Alertmanager / snmp_exporter / Alloy / Loki config.
 "$ROOT/scripts/render-monitoring.sh"
 echo "Ensuring bundled NetBox secrets and data dirs..."
 "$ROOT/scripts/ensure-netbox-secrets.sh"
+echo "Ensuring bundled LibreNMS secrets and data dirs..."
+"$ROOT/scripts/ensure-librenms-secrets.sh"
 
 # snmp-exporter and NetBox are default services (not Compose profiles).
 # OFFLINE=1 (--offline) skips docker compose pull.
@@ -103,7 +105,7 @@ else
     printf '%s\n' "$cur" > "$STAMP"
   fi
 fi
-"${DC[@]}" up -d snmp-exporter netbox-redis netbox
+"${DC[@]}" up -d snmp-exporter netbox-redis netbox librenms-db librenms-redis librenms librenms-dispatcher
 # Same stamp idea as Core: NB_STAMP = last NetBox launch hash, nb_cur = now, need_nb = changed.
 NB_STAMP="$ROOT/data/.netbox-launch.stamp"
 nb_cur="$(netbox_launch_hash)"
@@ -163,7 +165,36 @@ if [[ "$nb_ok" -ne 1 ]]; then
   echo "Doctor will stay yellow until http://127.0.0.1:${NB_PORT}/login/ answers."
   echo "Logs: docker compose logs --tail=80 netbox"
 fi
+echo "Waiting for LibreNMS on :8000 (first boot can take several minutes)..."
+ln_ok=0
+for _i in $(seq 1 45); do
+  if curl -fsS -m 2 "http://127.0.0.1:8000/login" >/dev/null 2>&1; then
+    echo "LibreNMS is up."
+    ln_ok=1
+    break
+  fi
+  sleep 4
+done
+if [[ "$ln_ok" -ne 1 ]]; then
+  echo "LibreNMS is still applying migrations or starting."
+  echo "Doctor will stay yellow until http://127.0.0.1:8000/login answers."
+  echo "Logs: docker compose logs --tail=80 librenms"
+fi
+wrote_lnms=0
+if lnms_out="$("$ROOT/scripts/librenms-upsert-token.sh")"; then
+  echo "$lnms_out"
+  if [[ "$lnms_out" == *"token written"* ]]; then
+    wrote_lnms=1
+  fi
+else
+  echo "LibreNMS token helper failed (see above). Create LIBRENMS_API_TOKEN in the UI."
+fi
+if [[ "$wrote_lnms" -eq 1 ]]; then
+  echo "Recreating core so it reads the new LIBRENMS_API_TOKEN."
+  "${DC[@]}" up -d --no-deps --force-recreate core || true
+fi
 "$ROOT/scripts/doctor.sh" || echo "Doctor still reports warnings (see above)."
 echo "Update finished."
-echo "SNMP:   ./forgesre snmp"
-echo "NetBox: http://127.0.0.1:${NB_PORT}  (admin / secrets/secrets.env NETBOX_SUPERUSER_*)"
+echo "SNMP:     ./forgesre snmp"
+echo "NetBox:   http://127.0.0.1:${NB_PORT}  (admin / secrets/secrets.env NETBOX_SUPERUSER_*)"
+echo "LibreNMS: http://127.0.0.1:8000  (Identify on Discovery SNMP; polling off after add)"

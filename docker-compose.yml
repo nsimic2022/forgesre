@@ -34,6 +34,7 @@ services:
       ALERTMANAGER_URL: http://127.0.0.1:9093
       GRAFANA_PUBLIC_URL: http://localhost:${GRAFANA_PORT:-3000}
       NETBOX_URL: ${NETBOX_URL:-http://127.0.0.1:8001}
+      LIBRENMS_URL: ${LIBRENMS_URL:-http://127.0.0.1:8000}
       # NETBOX_API_TOKEN comes from env_file secrets/secrets.env (listed last).
       # Do not interpolate ${NETBOX_API_TOKEN} here: empty/stale .env overrides env_file.
       FORGESRE_BACKUP_DIR: /backups
@@ -52,7 +53,9 @@ services:
       - ./.env:/host-dotenv:ro
       - ./secrets/secrets.env:/host-secrets.env:ro
       - ./monitoring:/host-monitoring:ro
-      - ${FORGESRE_DATA:-./data}/generated:/host-generated:ro
+      # rw: Discovery SNMP Apply splices forgesre_onboard into generated snmp.yml (same file
+      # snmp_exporter reads). :ro made Apply/MIB upload fail with EROFS on the live VM.
+      - ${FORGESRE_DATA:-./data}/generated:/host-generated
       - ${FORGESRE_DATA:-./data}/models:/host-models:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port ${FORGESRE_HTTP_PORT:-8080}
     depends_on:
@@ -271,6 +274,128 @@ services:
       timeout: 5s
       retries: 30
       start_period: 240s
+    restart: unless-stopped
+
+  librenms-db:
+    # Bundled LibreNMS MariaDB on 127.0.0.1:3307 (Postgres keeps 5432).
+    image: mariadb:11.4
+    network_mode: host
+    command:
+      - mysqld
+      - --bind-address=127.0.0.1
+      - --port=3307
+      - --innodb-file-per-table=1
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: librenms
+      MYSQL_USER: librenms
+      MYSQL_PASSWORD: ${LIBRENMS_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${LIBRENMS_DB_ROOT_PASSWORD}
+      TZ: ${FORGESRE_TIMEZONE:-Europe/Belgrade}
+    volumes:
+      - ${FORGESRE_DATA:-./data}/librenms/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -P 3307 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
+
+  librenms-redis:
+    image: redis:7-alpine
+    network_mode: host
+    environment:
+      LIBRENMS_REDIS_PASSWORD: ${LIBRENMS_REDIS_PASSWORD}
+      REDISCLI_AUTH: ${LIBRENMS_REDIS_PASSWORD}
+    command:
+      - sh
+      - -c
+      - redis-server --bind 127.0.0.1 --port 6380 --save 60 1 --loglevel warning --requirepass "$$LIBRENMS_REDIS_PASSWORD"
+    volumes:
+      - ${FORGESRE_DATA:-./data}/librenms/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "-p", "6380", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  librenms:
+    # Discovery inventory only. snmp_exporter still scrapes Prometheus metrics.
+    # Pin 26.10.2 (Hub, 25 Oct 2026). UI on 127.0.0.1:8000 (NetBox stays :8001).
+    image: librenms/librenms:26.10.2
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    env_file:
+      - secrets/secrets.env
+    environment:
+      TZ: ${FORGESRE_TIMEZONE:-Europe/Belgrade}
+      PUID: "0"
+      PGID: "0"
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3307"
+      DB_NAME: librenms
+      DB_USER: librenms
+      DB_PASSWORD: ${LIBRENMS_DB_PASSWORD}
+      DB_TIMEOUT: "90"
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6380"
+      REDIS_PASSWORD: ${LIBRENMS_REDIS_PASSWORD}
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: redis
+      APP_KEY: ${LIBRENMS_APP_KEY}
+      APP_URL: ${LIBRENMS_URL:-http://127.0.0.1:8000}
+      BASE_URL: ${LIBRENMS_URL:-http://127.0.0.1:8000}
+    volumes:
+      - ${FORGESRE_DATA:-./data}/librenms/data:/data
+    depends_on:
+      librenms-db:
+        condition: service_healthy
+      librenms-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/login >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 180s
+    restart: unless-stopped
+
+  librenms-dispatcher:
+    image: librenms/librenms:26.10.2
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    env_file:
+      - secrets/secrets.env
+    environment:
+      TZ: ${FORGESRE_TIMEZONE:-Europe/Belgrade}
+      PUID: "0"
+      PGID: "0"
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3307"
+      DB_NAME: librenms
+      DB_USER: librenms
+      DB_PASSWORD: ${LIBRENMS_DB_PASSWORD}
+      DB_TIMEOUT: "90"
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6380"
+      REDIS_PASSWORD: ${LIBRENMS_REDIS_PASSWORD}
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: redis
+      APP_KEY: ${LIBRENMS_APP_KEY}
+      SIDECAR_DISPATCHER: "1"
+      DISPATCHER_NODE_ID: forgesre-dispatcher
+    volumes:
+      - ${FORGESRE_DATA:-./data}/librenms/data:/data
+    depends_on:
+      librenms:
+        condition: service_healthy
     restart: unless-stopped
 
   llm:

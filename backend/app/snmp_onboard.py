@@ -1,7 +1,8 @@
-"""Bounded SNMP GET/GET-NEXT for Discovery → SNMP devices. Not a MIB compiler and not a full walk.
+"""Discovery SNMP devices: LibreNMS identify + snmp_exporter module writer.
 
-v1/v2c only (stdlib BER). v3 stays on snmp_exporter scrape after ``./forgesre snmp-auths``.
-Table OIDs land in the generated ``forgesre_onboard`` module as walk+indexes (snmp_exporter v0.26).
+LibreNMS discovers vendor/model/ports/sensors. This module maps that inventory onto a
+bounded catalog and splices ``forgesre_onboard`` for snmp_exporter v0.26. A leftover
+stdlib BER GET remains only for the OID tester (one GET, not identify).
 MIB upload is OBJECT-TYPE regex + optional ``docker run --rm`` of ``prom/snmp-generator``.
 """
 
@@ -26,6 +27,7 @@ ONBOARD_END = "  # forgesre-onboard-modules end"
 ONBOARD_MODULE = "forgesre_onboard"
 ONBOARD_JOB = "forgesre-snmp-onboard"
 SNMP_ONBOARD_OIDS_KEY = "snmp_onboard_oids"
+LIBRENMS_HOSTNAME_KEY = "librenms_hostname"
 MAX_OIDS_PER_PASS = 20
 DEFAULT_TIMEOUT = 0.8
 GENERATOR_IMAGE = "prom/snmp-generator"
@@ -427,13 +429,18 @@ def parse_onboard_oids(raw: Any) -> list[str]:
 
 
 def normalize_onboard_oids(raw: Any) -> dict[str, str]:
-    """Keep ``snmp_onboard_oids`` through asset Save. Unknown extras keys are otherwise dropped."""
-    if not isinstance(raw, dict) or SNMP_ONBOARD_OIDS_KEY not in raw:
+    """Keep ``snmp_onboard_oids`` / LibreNMS hostname through asset Save."""
+    if not isinstance(raw, dict):
         return {}
-    oids = parse_onboard_oids(raw.get(SNMP_ONBOARD_OIDS_KEY))
-    if not oids:
-        return {}
-    return {SNMP_ONBOARD_OIDS_KEY: ",".join(oids)}
+    out: dict[str, str] = {}
+    if SNMP_ONBOARD_OIDS_KEY in raw:
+        oids = parse_onboard_oids(raw.get(SNMP_ONBOARD_OIDS_KEY))
+        if oids:
+            out[SNMP_ONBOARD_OIDS_KEY] = ",".join(oids)
+    host = str(raw.get(LIBRENMS_HOSTNAME_KEY) or "").strip()[:255]
+    if host:
+        out[LIBRENMS_HOSTNAME_KEY] = host
+    return out
 
 
 def onboard_oids_for(asset: Any) -> list[str]:
@@ -443,14 +450,185 @@ def onboard_oids_for(asset: Any) -> list[str]:
     return parse_onboard_oids(extras.get(SNMP_ONBOARD_OIDS_KEY))
 
 
-def attach_onboard_oids(asset: Any, oids: list[str]) -> None:
+def attach_onboard_oids(asset: Any, oids: list[str], *, librenms_hostname: str = "") -> None:
     current = dict(asset.extras) if isinstance(getattr(asset, "extras", None), dict) else {}
     cleaned = parse_onboard_oids(oids)
     if cleaned:
         current[SNMP_ONBOARD_OIDS_KEY] = ",".join(cleaned)
     else:
         current.pop(SNMP_ONBOARD_OIDS_KEY, None)
+    name = str(librenms_hostname or current.get(LIBRENMS_HOSTNAME_KEY) or "").strip()
+    if name:
+        current[LIBRENMS_HOSTNAME_KEY] = name[:255]
+    elif not cleaned:
+        current.pop(LIBRENMS_HOSTNAME_KEY, None)
     asset.extras = current
+
+
+def librenms_hostname_for(asset: Any) -> str:
+    extras = asset.get("extras") if isinstance(asset, dict) else getattr(asset, "extras", None)
+    if not isinstance(extras, dict):
+        return ""
+    return str(extras.get(LIBRENMS_HOSTNAME_KEY) or "").strip()
+
+
+def union_onboard_oids(assets: list[Any]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for asset in assets:
+        for oid in onboard_oids_for(asset):
+            if oid in seen:
+                continue
+            seen.add(oid)
+            out.append(oid)
+            if len(out) >= MAX_OIDS_PER_PASS:
+                return out
+    return out
+
+
+def onboard_config(assets: list[Any]) -> dict[str, Any]:
+    """HTTP SD helper: extra module YAML only. No communities, no v3 passwords."""
+    oids = union_onboard_oids(assets)
+    return {"oids": oids, "block": onboard_module_yaml(oids), "module": ONBOARD_MODULE}
+
+
+def search_catalog(query: str) -> list[dict[str, Any]]:
+    q = str(query or "").strip().lower()
+    out: list[dict[str, Any]] = []
+    for item in CATALOG:
+        blob = f"{item.key} {item.name} {item.oid} {item.help}".lower()
+        if q and q not in blob:
+            continue
+        out.append({"name": item.name, "oid": item.oid, "help": item.help, "source": "catalog", "kind": item.kind})
+    return out[:80]
+
+
+def identify_from_librenms(inventory: dict[str, Any]) -> dict[str, Any]:
+    device = inventory.get("device") if isinstance(inventory, dict) else {}
+    if not isinstance(device, dict):
+        device = {}
+    ports = inventory.get("ports") if isinstance(inventory.get("ports"), list) else []
+    sys_descr = str(device.get("sysDescr") or "")
+    sys_name = str(device.get("sysName") or device.get("sysName_original") or "")
+    os_name = str(device.get("os") or "")
+    hardware = str(device.get("hardware") or "")
+    version = str(device.get("version") or "")
+    vendor = str(device.get("vendor") or os_name or "")
+    rows = [
+        {"key": "sysDescr", "name": "sysDescr", "ok": bool(sys_descr), "value": sys_descr, "error": ""},
+        {"key": "sysName", "name": "sysName", "ok": bool(sys_name), "value": sys_name, "error": ""},
+        {"key": "os", "name": "LibreNMS OS", "ok": bool(os_name), "value": os_name, "error": ""},
+        {"key": "hardware", "name": "hardware", "ok": bool(hardware), "value": hardware, "error": ""},
+        {"key": "version", "name": "version", "ok": bool(version), "value": version, "error": ""},
+        {"key": "ports", "name": "ports", "ok": bool(ports), "value": str(len(ports)), "error": ""},
+        {
+            "key": "processors",
+            "name": "processors",
+            "ok": bool(inventory.get("processors")),
+            "value": str(len(inventory.get("processors") or [])),
+            "error": "",
+        },
+        {
+            "key": "mempools",
+            "name": "mempools",
+            "ok": bool(inventory.get("mempools")),
+            "value": str(len(inventory.get("mempools") or [])),
+            "error": "",
+        },
+        {
+            "key": "storage",
+            "name": "storage",
+            "ok": bool(inventory.get("storage")),
+            "value": str(len(inventory.get("storage") or [])),
+            "error": "",
+        },
+        {
+            "key": "temperature",
+            "name": "temperature sensors",
+            "ok": bool(inventory.get("temperatures")),
+            "value": str(len(inventory.get("temperatures") or [])),
+            "error": "",
+        },
+    ]
+    return {
+        "ok": True,
+        "sysDescr": sys_descr,
+        "sysName": sys_name,
+        "sysObjectID": str(device.get("sysObjectID") or ""),
+        "vendor": vendor,
+        "os": os_name,
+        "hardware": hardware,
+        "hostname": str(inventory.get("hostname") or device.get("hostname") or ""),
+        "profile": "",
+        "rows": rows,
+        "disabled_polling": bool(inventory.get("disabled_polling")),
+    }
+
+
+def recommend_from_librenms(inventory: dict[str, Any]) -> list[dict[str, Any]]:
+    """Map LibreNMS ports/health onto the exporter catalog. No extra SNMP walk from Core."""
+    device = inventory.get("device") if isinstance(inventory.get("device"), dict) else {}
+    os_name = str(device.get("os") or "")
+    hardware = str(device.get("hardware") or "")
+    sys_descr = str(device.get("sysDescr") or "")
+    vendor = str(device.get("vendor") or os_name)
+    ports = inventory.get("ports") if isinstance(inventory.get("ports"), list) else []
+    answered: set[str] = set()
+    hints: dict[str, str] = {}
+    if ports:
+        for key in PROFILE_KEYS["switch"]:
+            answered.add(key)
+        hints["ifNumber"] = str(len(ports))
+        up = sum(1 for row in ports if str(row.get("ifOperStatus") or "") in {"1", "up"})
+        hints["ifOperStatus"] = f"{up}/{len(ports)} up"
+    if inventory.get("processors"):
+        for key in ("hrProcessorLoad", "ssCpuIdle", "laLoad1"):
+            answered.add(key)
+        hints["hrProcessorLoad"] = f"{len(inventory['processors'])} processor(s)"
+    if inventory.get("mempools"):
+        for key in ("hrMemorySize", "memAvailReal", "memAvailSwap"):
+            answered.add(key)
+        hints["memAvailReal"] = f"{len(inventory['mempools'])} mempool(s)"
+    if inventory.get("storage"):
+        answered.add("hrStorageUsed")
+        hints["hrStorageUsed"] = f"{len(inventory['storage'])} volume(s)"
+    if inventory.get("temperatures"):
+        answered.add("entPhySensorValue")
+        hints["entPhySensorValue"] = f"{len(inventory['temperatures'])} sensor(s)"
+    blob = f"{vendor} {os_name} {hardware} {sys_descr}"
+    if any(word in blob.lower() for word in ("ups", "apc", "eaton", "powerware")):
+        for key in PROFILE_KEYS["ups"]:
+            answered.add(key)
+    profile = profile_for(vendor=vendor, sys_descr=blob, answered_keys=answered)
+    collected = collected_oids()
+    by = catalog_by_key()
+    out: list[dict[str, Any]] = []
+    wanted = set(PROFILE_KEYS.get(profile, ()))
+    for key in RECOMMEND_KEYS:
+        item = by[key]
+        on_device = key in answered
+        base = normalize_oid(item.oid)
+        in_prom = any(oid == base or oid.startswith(base + ".") or base.startswith(oid + ".") for oid in collected)
+        out.append(
+            {
+                "ok": on_device,
+                "oid": item.oid,
+                "error": "" if on_device else "not in LibreNMS inventory",
+                "value": hints.get(key, "yes" if on_device else ""),
+                "key": item.key,
+                "name": item.name,
+                "group": item.group,
+                "help": item.help,
+                "kind": item.kind,
+                "in_mib": True,
+                "in_prometheus": in_prom,
+                "recommend": bool(on_device) and not in_prom,
+                "applyable": bool(on_device) and not in_prom,
+                "profile": profile,
+                "profile_match": key in wanted,
+            }
+        )
+    return out
 
 
 def vendor_from_sysobjectid(oid: str) -> str:
@@ -694,10 +872,27 @@ def onboard_module_yaml(oids: list[str]) -> str:
 def apply_onboard_module(oids: list[str], path: Path | None = None) -> dict[str, Any]:
     target = path or generated_snmp_path()
     if not target.is_file():
-        return {"ok": False, "error": "Generated snmp.yml is not on this host. Run ./forgesre render-monitoring first."}
-    text = target.read_text(encoding="utf-8")
+        src = Path(__file__).resolve().parents[2] / "monitoring" / "snmp.yml"
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if src.is_file():
+                shutil.copy2(src, target)
+        except OSError:
+            pass
+    if not target.is_file():
+        return {
+            "ok": False,
+            "error": "Generated snmp.yml is not writable. Recreate Core (data/generated must be rw) then ./forgesre render-monitoring.",
+        }
+    try:
+        text = target.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {"ok": False, "error": f"Cannot read snmp.yml: {exc}"[:300]}
     backup = target.with_suffix(".yml.onboard.bak")
-    shutil.copy2(target, backup)
+    try:
+        shutil.copy2(target, backup)
+    except OSError as exc:
+        return {"ok": False, "error": f"Cannot write snmp.yml backup (read-only volume?): {exc}"[:300]}
     cleaned = parse_onboard_oids(oids)
     block = onboard_module_yaml(cleaned)
     try:
@@ -712,8 +907,18 @@ def apply_onboard_module(oids: list[str], path: Path | None = None) -> dict[str,
             raise ValueError("onboard module missing after splice")
         target.write_text(written, encoding="utf-8")
         write_generator_yml(cleaned, path=target.parent / "generator.yml")
+        write_onboard_sidecar(cleaned, path=target.parent / "onboard-oids.yml")
+    except OSError as exc:
+        try:
+            shutil.copy2(backup, target)
+        except OSError:
+            pass
+        return {"ok": False, "error": f"Cannot write snmp.yml (read-only volume?): {exc}"[:300]}
     except Exception as exc:
-        shutil.copy2(backup, target)
+        try:
+            shutil.copy2(backup, target)
+        except OSError:
+            pass
         return {"ok": False, "error": str(exc)[:300]}
     return {"ok": True, "error": "", "backup": str(backup), "module": ONBOARD_MODULE if block else "", "oids": cleaned}
 
@@ -734,6 +939,20 @@ def generated_onboard_present(path: Path | None = None) -> bool:
     except OSError:
         return False
     return f"  {ONBOARD_MODULE}:" in text
+
+
+def write_onboard_sidecar(oids: list[str], path: Path | None = None) -> Path | None:
+    """Survive ./forgesre render-monitoring, which rewrites snmp.yml from the template."""
+    target = path or (generated_dir() / "onboard-oids.yml")
+    cleaned = parse_onboard_oids(oids)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        body = "oids:\n" + ("".join(f"  - {oid}\n" for oid in cleaned) if cleaned else "  []\n")
+        target.write_text(body, encoding="utf-8")
+        (target.parent / "onboard-module.yml").write_text(onboard_module_yaml(cleaned), encoding="utf-8")
+    except OSError:
+        return None
+    return target
 
 
 def generated_dir() -> Path:
