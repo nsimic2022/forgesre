@@ -44,8 +44,9 @@ CLI index: [`cli.md`](cli.md).
 | Alloy | Demo Core logs + device syslog | UI `127.0.0.1:12345`; syslog **UDP/TCP 514** on the host |
 | llama.cpp (optional) | Local LLM | `127.0.0.1:8088` |
 | NetBox (default on) | DCIM/IPAM; Core read-sync | host port `8001` |
+| LibreNMS (default on) | Discovery SNMP identify; snmp_exporter still scrapes | host port `8000` |
 
-From a laptop you open **Core :8080**, **Grafana :3000**, and **NetBox :8001**. Everything else stays on localhost on the VM.
+From a laptop you open **Core :8080**, **Grafana :3000**, **NetBox :8001**, and **LibreNMS :8000**. Everything else stays on localhost on the VM.
 
 AI is read-only. It never SSH-es, never runs playbooks, never writes NetBox.
 
@@ -176,6 +177,7 @@ From a laptop use the **VM IP**:
 - ForgeSRE: `http://<VM-IP>:8080`
 - Grafana: `http://<VM-IP>:3000` (user `admin`)
 - NetBox: `http://<VM-IP>:8001` (user `admin`, email `admin@forgesre.local`; password in `secrets/secrets.env`)
+- LibreNMS: `http://<VM-IP>:8000` (Discovery SNMP Identify; token `LIBRENMS_API_TOKEN`)
 
 ```bash
 sudo ufw allow OpenSSH
@@ -470,7 +472,7 @@ git pull origin main
 ./forgesre snmp
 ```
 
-`./forgesre update` = doctor (warn ok) → backup → render-monitoring → NetBox secrets → compose pull (unless `--offline`, or when image pins in `docker-compose.yml` are unchanged) / `up -d` (including **snmp-exporter** on `127.0.0.1:9116` and **NetBox** on `:8001`; Core `--build` skipped when Dockerfile/backend/agents/frontend are unchanged) → wait for NetBox `/login/` (migrations can take several minutes; doctor stays yellow until then) → doctor. Lab: `./forgesre update --offline` skips image pull. llama.cpp is pinned (`server-b11718`); a day-2 update does not re-download it unless that pin changes in git. It does **not** regenerate passwords. Host backup dumps Postgres via `docker compose exec postgres` (no sqlalchemy on the host). A backup failure is a clear error; update still starts the stack.
+`./forgesre update` = doctor (warn ok) → backup → render-monitoring → NetBox secrets → LibreNMS secrets → compose pull (unless `--offline`, or when image pins in `docker-compose.yml` are unchanged) / `up -d` (including **snmp-exporter** on `127.0.0.1:9116`, **NetBox** on `:8001`, and **LibreNMS** on `:8000`; Core `--build` skipped when Dockerfile/backend/agents/frontend are unchanged) → wait for NetBox / LibreNMS `/login` (migrations can take several minutes; doctor stays yellow until then) → doctor. Lab: `./forgesre update --offline` skips image pull. llama.cpp is pinned (`server-b11718`); a day-2 update does not re-download it unless that pin changes in git. It does **not** regenerate passwords. Host backup dumps Postgres via `docker compose exec postgres` (no sqlalchemy on the host). A backup failure is a clear error; update still starts the stack.
 
 Platform backup files: `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (one folder per run). Restore is not silent — `./forgesre restore FOLDER` prints the plan; add `--yes` after `docker compose stop core`, then `./forgesre update`. Administration can create/import the same archives (admin session only). Details: [`operator-handbook.md`](operator-handbook.md) (Platform backup).
 

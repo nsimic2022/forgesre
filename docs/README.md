@@ -15,7 +15,7 @@ The GitHub README is the product summary (what ForgeSRE monitors, first install,
 2. **Login** — `http://<VM-IP>:8080`. Credentials: `installation-report.md` and `secrets/secrets.env`. Handbook [§5](operator-handbook.md#5-users-and-admins).
 3. **System Health** — UI `/health-ui` = `./forgesre doctor`. Grafana (`:3000`) opens from this page. NetBox UI up + API 403 is yellow **warn**. SNMP with no Network device + IP is **paused (no SNMP targets)** (yellow — idle until you add a target).
 4. **Assets** — `/assets`. Local inventory is what Prometheus scrapes. Add / Edit / Clone / Verify. Handbook [§6–7](operator-handbook.md#6-adding-servers-inventory).
-5. **Discovery and inventory imports** — `/discovery`. Prefills this VM’s primary IPv4 `/24`; **Confirm & scan** writes `discovery.cidrs` and enqueues Postgres `discovery_scan` (one Core worker; empty cidrs skip the probe). Candidate table: open ports, node_exporter, windows_exporter, SNMP. Four cubes: **Scan now** · **NetBox** · **Zabbix** · **GLPI**. Empty NetBox is **yellow No devices**. Approve or Ignore; manual Assets stay the monitoring source of truth. Handbook [§6.B](operator-handbook.md#b-discovery-scan-the-management-network) / [§6.C](operator-handbook.md#c-bundled-netbox-read-sync). Optional GLPI: [glpi.md](glpi.md).
+5. **Discovery and inventory imports** — `/discovery`. Prefills this VM’s primary IPv4 `/24`; **Confirm & scan** writes `discovery.cidrs` and enqueues Postgres `discovery_scan` (one Core worker; empty cidrs skip the probe). Candidate table: open ports, node_exporter, windows_exporter, SNMP. Four cubes: **Scan now** · **NetBox** · **Zabbix** · **GLPI**. Below Add asset, **SNMP devices** Identify talks to bundled LibreNMS (`:8000`) then writes snmp_exporter `forgesre_onboard`. Empty NetBox is **yellow No devices**. Approve or Ignore; manual Assets stay the monitoring source of truth. Handbook [§6.B](operator-handbook.md#b-discovery-scan-the-management-network) / [§6.C](operator-handbook.md#c-bundled-netbox-read-sync). Optional GLPI: [glpi.md](glpi.md).
 
 6. **Incidents** — `/incidents` is the incident list. It defaults to **All** statuses, newest first (filter **Active (not resolved)** or **Not acknowledged** for live work). Columns include Ack and Resolved by. A resolved alert sets `RESOLVED`; the same alert firing again opens a new incident. Closed rows stay on this list. `/history` redirects here. IDs look like `INC-0134_16.08.2026_09:13`. Handbook [§8](operator-handbook.md#8-alerts-become-incidents) and [§12](operator-handbook.md#12-incident-workflow).
 7. **ForgeRCA and ForgeAI** — Open ForgeRCA on the incident (`/ai/INC-…`). **ForgeRCA** (Python) always runs first. **ForgeAI** rewrites prose (optional local LLM, default 90s timeout, **one worker thread**). `/forgeai` is the digest home (setup, ask, filters, jobs, reports, cron). Dashboard `#forgeai` is the short teaser. Handbook [§13](operator-handbook.md#13-ai-investigation-forgerca) · [llm.md](llm.md).
@@ -23,7 +23,7 @@ The GitHub README is the product summary (what ForgeSRE monitors, first install,
 9. **Backup** — Administration or `./forgesre backup`. Restore asks for `--yes`. Handbook [Platform backup](operator-handbook.md#platform-backup-and-restore).
 10. **CLI cheat sheet** — [cli.md](cli.md). On the box: `./forgesre help`.
 
-UI: `http://<VM-IP>:8080`. NetBox UI: `:8001`. Grafana: `:3000` (open from System Health).
+UI: `http://<VM-IP>:8080`. NetBox UI: `:8001`. LibreNMS UI: `:8000`. Grafana: `:3000` (open from System Health).
 
 ---
 

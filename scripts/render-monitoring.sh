@@ -88,12 +88,15 @@ render(
 )
 sys.path.insert(0, str(root / "scripts"))
 import render_snmp_auths
+import render_snmp_onboard
 
-# Keep the per-asset auth block from the previous snmp.yml in case Core is down right now.
+# Keep the per-asset auth + onboard blocks from the previous snmp.yml in case Core is down right now.
 old_snmp = out / "snmp.yml"
 previous_block = render_snmp_auths.asset_block(old_snmp.read_text()) if old_snmp.is_file() else None
+previous_onboard = render_snmp_onboard.onboard_block(old_snmp.read_text()) if old_snmp.is_file() else None
 render("snmp.yml", {"__SNMP_COMMUNITY__": community})
 snmp_status = render_snmp_auths.apply(out / "snmp.yml", port, token, previous_block=previous_block, reload=False)
+onboard_status = render_snmp_onboard.apply(out / "snmp.yml", port, token, previous_block=previous_onboard)
 
 # alerts.yml = bundled rules + optional monitoring/alerts.local.yml appended.
 base = (root / "monitoring" / "alerts.yml").read_text()
@@ -104,6 +107,7 @@ print(f"Wrote {out}/prometheus.yml")
 print(f"Wrote {out}/alertmanager.yml")
 print(f"Wrote {out}/snmp.yml")
 print(snmp_status)
+print(onboard_status)
 print(f"Wrote {out}/alerts.yml")
 PY
 

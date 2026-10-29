@@ -206,35 +206,22 @@ def test_discovery_keeps_cubes_and_snmp_below_add_asset():
 
 
 def test_identify_post_does_not_echo_community(monkeypatch):
-    def fake_ident(ip, **kwargs):
+    def fake_discover(ip, **kwargs):
         assert kwargs.get("community") == SECRET
         return {
             "ok": True,
-            "sysDescr": "lab",
-            "sysName": "lab",
-            "rows": [{"key": "sysDescr", "name": "sysDescr", "ok": True, "value": "lab", "error": ""}],
+            "hostname": ip,
+            "added": True,
+            "disabled_polling": True,
+            "device": {"hostname": ip, "sysDescr": "lab", "sysName": "lab", "os": "ios", "hardware": "C9300", "vendor": "Cisco"},
+            "ports": [{"ifIndex": 1, "ifOperStatus": "up"}],
+            "processors": [],
+            "mempools": [],
+            "storage": [],
+            "temperatures": [],
         }
 
-    def fake_rec(ip, **kwargs):
-        return [
-            {
-                "key": "ifNumber",
-                "name": "ifNumber",
-                "oid": "1.3.6.1.2.1.2.1.0",
-                "ok": True,
-                "value": "2",
-                "error": "",
-                "help": "Interface count (cardinality)",
-                "kind": "scalar",
-                "in_mib": True,
-                "in_prometheus": False,
-                "recommend": True,
-                "applyable": True,
-            }
-        ]
-
-    monkeypatch.setattr("app.web.identify_device", fake_ident)
-    monkeypatch.setattr("app.web.recommend_metrics", fake_rec)
+    monkeypatch.setattr("app.librenms.discover_device", fake_discover)
     client = _client()
     response = client.post(
         "/discovery/snmp",
@@ -246,6 +233,7 @@ def test_identify_post_does_not_echo_community(monkeypatch):
     assert SECRET not in response.text
     assert "recommend" in response.text
     assert ">Scan now<" in response.text and ">Add asset<" in response.text
+    assert "LibreNMS" in response.text
 
 
 def test_probe_and_apply_generated_only(monkeypatch, tmp_path):

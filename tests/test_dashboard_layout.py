@@ -387,12 +387,13 @@ def test_dashboard_card_titled_forgesre_with_health_cubes(monkeypatch):
         "alloy": "ok",
         "llm": "warn",
         "netbox": "ok",
+        "librenms": "warn",
         "zabbix": "warn",
         "discovery": "ok",
         "mailpit": "ok",
     }
     assert cubes == expected
-    for short in ("Core", "Postgres", "Prom", "Alertmgr", "Grafana", "Loki", "NetBox", "LLM", "Discovery", "Mailpit"):
+    for short in ("Core", "Postgres", "Prom", "Alertmgr", "Grafana", "Loki", "NetBox", "LNMS", "LLM", "Discovery", "Mailpit"):
         assert f">{short}<span" in card
     assert 'title="Alertmanager: down"' in card
 

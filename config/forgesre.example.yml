@@ -27,6 +27,12 @@ inventory:
     # url: "https://glpi.example.local/glpi"
     auto_sync: false # true = import with the 6 h discovery loop; false = only Discovery → Sync hosts
     timeout_seconds: 4 # per API call, clamped 2–5; a dead GLPI backs off 2 min instead of retrying
+  librenms:
+    # Bundled. Discovery SNMP Identify adds the IP here, reads ports/sensors, then disables LibreNMS polling
+    # so snmp_exporter remains the Prometheus collector. Token: LIBRENMS_API_TOKEN in secrets/secrets.env.
+    enabled: true
+    url: "http://127.0.0.1:8000"
+    timeout_seconds: 8 # add-device can wait on SNMP; clamped 2–15
 
 discovery:
   enabled: true

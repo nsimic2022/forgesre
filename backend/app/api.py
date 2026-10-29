@@ -767,6 +767,17 @@ def snmp_onboard_sd(request: Request, db: Session = Depends(get_db)) -> list[dic
     return sd_snmp_onboard_targets(db)
 
 
+@router.get("/sd/snmp-onboard-config")
+def snmp_onboard_config(request: Request, db: Session = Depends(get_db)) -> dict:
+    """Extra forgesre_onboard YAML for render_snmp_onboard.py. No SNMP secrets."""
+    if not settings.webhook_token or not _webhook_token_ok(request):
+        raise HTTPException(status_code=401, detail="invalid sd token")
+    from app.snmp_onboard import onboard_config
+
+    rows = db.query(Asset).order_by(Asset.asset_id).all()
+    return onboard_config(rows)
+
+
 @router.get("/sd/snmp-auths")
 def snmp_sd_auths(request: Request, db: Session = Depends(get_db)) -> dict:
     """Per-asset snmp_exporter auths for scripts/render_snmp_auths.py. Holds community strings and
@@ -1466,6 +1477,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "netbox": _netbox_check(),
         "zabbix": _zabbix_check(),
         "glpi": _glpi_check(),
+        "librenms": _librenms_check(),
         "discovery": _discovery_check(),
     }
     for name, item in components.items():
@@ -1753,6 +1765,41 @@ def _glpi_check() -> dict[str, str]:
         "fix": (
             "Check GLPI_URL / GLPI_APP_TOKEN / GLPI_USER_TOKEN and that the API user can read "
             "Computer and NetworkEquipment. Optional source — incidents, mail and the UI keep working."
+        ),
+    }
+
+
+def _librenms_check() -> dict[str, str]:
+    """Cached LibreNMS API probe. Down is yellow warn (discovery only), never red."""
+    from app.librenms import api_root, status as librenms_status
+
+    if not settings.librenms_enabled:
+        return _ok("disabled")
+    try:
+        result = librenms_status()
+    except Exception as exc:
+        result = {"configured": False, "ok": False, "label": "API error", "why": str(exc)[:300]}
+    url = (settings.librenms_url or "http://127.0.0.1:8000").rstrip("/")
+    test = f"GET {api_root(url)}/devices (read-only after Identify disables polling)"
+    if result.get("ok") and result.get("light") == "green":
+        return {"status": "ok", "why": str(result.get("why") or "LibreNMS API answered."), "test": test}
+    label = str(result.get("label") or "")
+    if label == "Disabled":
+        return _ok("disabled")
+    if label == "Starting":
+        return {
+            "status": "starting",
+            "why": str(result.get("why") or "LibreNMS UI is not answering yet."),
+            "test": f"curl -fsS {url}/login",
+            "fix": "Wait for first-boot MariaDB migrations (can take several minutes). Then: docker compose logs librenms.",
+        }
+    return {
+        "status": "warn",
+        "why": f"{label or 'Unreachable'}: {result.get('why') or ''}".strip(" :"),
+        "test": test,
+        "fix": (
+            "Set LIBRENMS_API_TOKEN in secrets/secrets.env (LibreNMS → API Access), then recreate core. "
+            "Optional — Prometheus still scrapes snmp_exporter without LibreNMS."
         ),
     }
 

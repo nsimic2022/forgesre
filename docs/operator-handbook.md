@@ -433,6 +433,8 @@ ForgeRCA for a real Linux host queries `node_*` labeled `asset=<asset_id>`. A re
 
 Bundled container `snmp-exporter` listens on `127.0.0.1:9116` (host network). Prometheus job `forgesre-snmp` asks Core for SNMP targets, then tells the exporter to walk each device IP.
 
+**Discovery → SNMP devices** (below Add asset): **Identify** sends the IP + community or saved v3 USM to bundled **LibreNMS** (`http://<VM-IP>:8000`, API token `LIBRENMS_API_TOKEN`). LibreNMS returns vendor, model, ports and sensors. Core then **disables LibreNMS SNMP polling** so the two stacks do not walk the same device. Recommended OIDs (availability, interfaces, traffic, errors, CPU, memory, temperature, power, storage) are a catalog slice — not every OID on the box. **Apply extra module** splices `forgesre_onboard` into generated `snmp.yml` (backup first, rollback via Restore). Prometheus job `forgesre-snmp-onboard` scrapes only assets that applied. MIB upload stores the file and optionally runs `prom/snmp-generator`. LibreNMS is inventory, not the Prometheus collector.
+
 ```bash
 ./forgesre snmp
 source secrets/secrets.env

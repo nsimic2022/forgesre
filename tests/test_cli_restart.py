@@ -33,7 +33,7 @@ exit 0
 
 DEFAULT_SERVICES = (
     "postgres core prometheus alertmanager snmp-exporter loki alloy grafana "
-    "netbox-redis netbox-db-init netbox"
+    "netbox-redis netbox-db-init netbox librenms-db librenms-redis librenms librenms-dispatcher"
 )
 
 
@@ -122,7 +122,7 @@ def test_restart_bounces_stack_without_install_or_secret_writes(tmp_path):
     order = _restarted(log)
     assert order[0] == "postgres"
     assert order[-1] == "core"
-    assert {"prometheus", "alertmanager", "snmp-exporter", "netbox", "grafana"} <= set(order)
+    assert {"prometheus", "alertmanager", "snmp-exporter", "netbox", "grafana", "librenms"} <= set(order)
     assert "netbox-db-init" not in order
     assert "llm" not in order
     assert "Skipping LLM (llama.cpp) (llm): no container" in result.stdout

@@ -374,6 +374,35 @@ class Settings:
             raw = 4.0
         return max(2.0, min(5.0, raw))
 
+    def _librenms_yaml(self) -> dict[str, Any]:
+        raw = (self.yaml.get("inventory") or {}).get("librenms") or {}
+        return raw if isinstance(raw, dict) else {}
+
+    @property
+    def librenms_url(self) -> str:
+        """Bundled LibreNMS UI. YAML inventory.librenms.url wins over LIBRENMS_URL."""
+        yaml_url = str(self._librenms_yaml().get("url") or "").strip()
+        return (yaml_url or self._secret("LIBRENMS_URL") or "http://127.0.0.1:8000").rstrip("/")
+
+    @property
+    def librenms_token(self) -> str:
+        return self._secret("LIBRENMS_API_TOKEN")
+
+    @property
+    def librenms_enabled(self) -> bool:
+        """Bundled LibreNMS is on unless inventory.librenms.enabled is false."""
+        if self._librenms_yaml().get("enabled") is False:
+            return False
+        return True
+
+    @property
+    def librenms_timeout(self) -> float:
+        try:
+            raw = float(self._librenms_yaml().get("timeout_seconds") or 8)
+        except (TypeError, ValueError):
+            raw = 8.0
+        return max(2.0, min(15.0, raw))
+
 
     @property
     def cookie_secure(self) -> bool:

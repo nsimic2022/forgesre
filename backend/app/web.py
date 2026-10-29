@@ -57,7 +57,7 @@ from app.asset_ladder import (
 )
 from app.ladder_cubes import asset_ladder_cubes, incident_ladder_cubes
 from app.playrule_mute import muted_playrule_ids, playrule_off_from_form
-from app.asset_snmp import AUTH_PROTOCOLS, PRIV_PROTOCOLS, SNMP_VERSIONS, V3_LEVELS, auth_status, effective_auth, snmp_from_form
+from app.asset_snmp import AUTH_PROTOCOLS, PRIV_PROTOCOLS, SNMP_VERSIONS, V3_LEVELS, auth_status, effective_auth, snmp_from_form, snmp_settings
 from app.asset_types import ASSET_TYPE_GROUPS, DEFAULT_SNMP_PORT, parse_snmp_port, snmp_family, snmp_port_for, snmp_target
 from app.snmp_onboard import (
     ONBOARD_MODULE,
@@ -67,15 +67,18 @@ from app.snmp_onboard import (
     clamp_timeout,
     community_for_asset,
     exporter_scrape,
-    identify_device,
+    identify_from_librenms,
+    librenms_hostname_for,
     onboard_oids_for,
     prometheus_onboard_status,
-    recommend_metrics,
+    recommend_from_librenms,
     reload_exporter,
     restore_onboard_module,
     run_snmp_generator,
     save_mib_file,
+    search_catalog,
     snmp_get,
+    union_onboard_oids,
     write_generator_yml,
 )
 from app.snmp_families import (
@@ -1527,7 +1530,12 @@ def _snmp_onboard_ctx(
     apply_result: dict | None = None,
     scrape: dict | None = None,
     mib: dict | None = None,
+    search: list | None = None,
+    snmp_notice: str = "",
+    librenms: dict | None = None,
 ) -> dict:
+    from app.librenms import status as librenms_status, token_presence as librenms_token_presence
+
     rows = inventory if inventory is not None else db.query(Asset).order_by(Asset.hostname, Asset.asset_id).all()
     sticky = {
         "asset_id": "",
@@ -1538,10 +1546,25 @@ def _snmp_onboard_ctx(
         "oid": "",
         "get_next": "",
         "oid_pick": [],
+        "mib_q": "",
     }
     sticky.update(form or {})
+    devices = []
+    for row in rows:
+        if not (row.ip or "").strip():
+            continue
+        extra = onboard_oids_for(row)
+        devices.append(
+            {
+                "row": row,
+                "oids": extra,
+                "on": bool(extra),
+                "librenms": librenms_hostname_for(row),
+            }
+        )
     return {
         "snmp_assets": [row for row in rows if (row.ip or "").strip()],
+        "snmp_devices": devices,
         "snmp_form": sticky,
         "snmp_identify": identify or {},
         "snmp_probe": probe or {},
@@ -1550,6 +1573,10 @@ def _snmp_onboard_ctx(
         "snmp_apply": apply_result or {},
         "snmp_scrape": scrape or {},
         "snmp_mib": mib or {},
+        "snmp_search": search or [],
+        "snmp_notice": snmp_notice,
+        "snmp_librenms": librenms if librenms is not None else librenms_status(),
+        "librenms_token_present": librenms_token_presence(settings.librenms_token),
     }
 
 
@@ -1573,6 +1600,7 @@ def discovery_snmp_submit(
     oid: str = Form(""),
     get_next: str = Form(""),
     oid_pick: list[str] = Form([]),
+    mib_q: str = Form(""),
 ):
     notice = ""
     identify: dict = {}
@@ -1581,6 +1609,7 @@ def discovery_snmp_submit(
     cardinality = ""
     apply_result: dict = {}
     scrape: dict = {}
+    search: list = []
     wait = clamp_timeout(timeout)
     ver = (version or "v2c").strip().lower()
     if ver not in {"v1", "v2c", "v3"}:
@@ -1594,145 +1623,244 @@ def discovery_snmp_submit(
         "oid": (oid or "").strip(),
         "get_next": "1" if (get_next or "").strip() else "",
         "oid_pick": list(oid_pick or []),
+        "mib_q": (mib_q or "").strip(),
     }
     try:
-        asset, host, udp = _snmp_onboard_target(db, form["asset_id"], form["ip"], form["port"])
-        form["ip"] = host
-        form["port"] = str(udp)
-        comm = community_for_asset(asset, community)
-        kwargs = {
-            "community": comm,
-            "port": udp,
-            "version": ver,
-            "timeout": wait,
-        }
-        if action == "identify":
-            if ver == "v3":
+        if (action or "").startswith("pick-"):
+            form["asset_id"] = action.split("pick-", 1)[1]
+            action = "pick"
+        if action == "search":
+            search = search_catalog(form["mib_q"] or form["oid"])
+            if not search:
+                notice = "No catalog names matched."
+        else:
+            asset, host, udp = _snmp_onboard_target(db, form["asset_id"], form["ip"], form["port"])
+            form["ip"] = host
+            form["port"] = str(udp)
+            comm = community_for_asset(asset, community)
+            kwargs = {
+                "community": comm,
+                "port": udp,
+                "version": ver,
+                "timeout": wait,
+            }
+            if action == "pick":
                 if asset is None:
-                    raise ValueError("SNMPv3 identify uses snmp_exporter. Pick an asset with USM saved, then run ./forgesre snmp-auths.")
-                scrape = exporter_scrape(
-                    snmp_target(host, udp),
-                    module="if_mib",
-                    auth=effective_auth(asset),
-                    timeout=max(wait, 2.0),
-                    url=settings.snmp_exporter_url,
-                )
-                identify = {
-                    "ok": scrape.get("ok"),
-                    "sysDescr": "",
-                    "sysName": "",
-                    "rows": [
-                        {
-                            "key": "exporter",
-                            "name": "snmp_exporter",
-                            "ok": scrape.get("ok"),
-                            "value": "if_mib scrape answered" if scrape.get("ok") else "",
-                            "error": scrape.get("error") or "",
-                        }
-                    ],
-                }
-                if not scrape.get("ok"):
-                    notice = scrape.get("error") or "snmp_exporter did not return SNMP metrics"
-            else:
-                identify = identify_device(host, **kwargs)
-                recommendations = recommend_metrics(
+                    raise ValueError("Pick an asset from the SNMP devices list.")
+                form["asset_id"] = asset.asset_id
+                form["ip"] = (asset.ip or "").strip()
+                extra = onboard_oids_for(asset)
+                form["oid_pick"] = extra
+            elif action == "identify":
+                from app.librenms import LibreNmsError, discover_device
+
+                stored = snmp_settings(getattr(asset, "extras", None) if asset is not None else None)
+                inventory = discover_device(
                     host,
-                    sys_descr=str(identify.get("sysDescr") or ""),
-                    vendor=str(identify.get("vendor") or ""),
-                    **kwargs,
+                    version=ver,
+                    community=comm,
+                    port=udp,
+                    v3_user=stored.get("snmp_v3_user") or "",
+                    v3_level=stored.get("snmp_v3_level") or "",
+                    v3_auth_proto=stored.get("snmp_v3_auth_proto") or "",
+                    v3_auth_pass=stored.get("snmp_v3_auth_pass") or "",
+                    v3_priv_proto=stored.get("snmp_v3_priv_proto") or "",
+                    v3_priv_pass=stored.get("snmp_v3_priv_pass") or "",
+                    disable_polling=True,
                 )
+                identify = identify_from_librenms(inventory)
+                recommendations = recommend_from_librenms(inventory)
                 if recommendations:
                     identify["profile"] = recommendations[0].get("profile") or ""
                 if_number = next((row["value"] for row in recommendations if row.get("key") == "ifNumber" and row.get("ok")), "")
                 extra_cols = sum(1 for row in recommendations if row.get("ok") and row.get("kind") == "table" and row.get("recommend"))
                 cardinality = cardinality_hint(if_number, extra_cols)
-                if not identify.get("ok"):
-                    notice = "No SNMP reply on that IP (v1/v2c GET)."
-        elif action == "probe":
-            if ver == "v3":
-                raise ValueError("OID tester is v1/v2c. For v3 use Test scrape after ./forgesre snmp-auths.")
-            if not form["oid"]:
-                raise ValueError("Need a numeric OID")
-            probe = snmp_get(host, form["oid"], get_next=bool(form["get_next"]), **kwargs)
-            if not probe.get("ok"):
-                notice = probe.get("error") or "no SNMP reply"
-        elif action == "apply":
-            if asset is None:
-                match = db.query(Asset).filter(Asset.ip == host).order_by(Asset.asset_id).all()
-                if len(match) == 1:
-                    asset = match[0]
-                    form["asset_id"] = asset.asset_id
-            if asset is None:
-                raise ValueError("Pick an asset so Prometheus HTTP SD can scrape forgesre_onboard.")
-            picks = list(oid_pick or [])
-            if form["oid"]:
-                picks.append(form["oid"])
-            if not picks:
-                raise ValueError("Select an OID the device answered, or type one in OID tester.")
-            apply_result = apply_onboard_module(picks)
-            if apply_result.get("ok"):
-                attach_onboard_oids(asset, apply_result.get("oids") or picks)
+                if asset is not None:
+                    attach_onboard_oids(asset, onboard_oids_for(asset), librenms_hostname=str(inventory.get("hostname") or host))
+                    db.add(asset)
+                    db.flush()
+                notice = (
+                    f"LibreNMS has {identify.get('hostname') or host}. "
+                    "SNMP polling there is off — snmp_exporter collects Prometheus series."
+                )
+            elif action == "probe":
+                if ver == "v3":
+                    raise ValueError("OID tester is v1/v2c. For v3 use Test scrape after ./forgesre snmp-auths.")
+                if not form["oid"]:
+                    raise ValueError("Need a numeric OID")
+                probe = snmp_get(host, form["oid"], get_next=bool(form["get_next"]), **kwargs)
+                if not probe.get("ok"):
+                    notice = probe.get("error") or "no SNMP reply"
+            elif action == "apply":
+                if asset is None:
+                    match = db.query(Asset).filter(Asset.ip == host).order_by(Asset.asset_id).all()
+                    if len(match) == 1:
+                        asset = match[0]
+                        form["asset_id"] = asset.asset_id
+                if asset is None:
+                    raise ValueError("Pick an asset so Prometheus HTTP SD can scrape forgesre_onboard.")
+                picks = list(oid_pick or [])
+                if form["oid"]:
+                    picks.append(form["oid"])
+                if not picks:
+                    raise ValueError("Select an OID LibreNMS recommended, or type one in OID tester.")
+                attach_onboard_oids(
+                    asset,
+                    list(onboard_oids_for(asset)) + picks,
+                    librenms_hostname=librenms_hostname_for(asset) or host,
+                )
                 db.add(asset)
-                apply_result["reload"] = (
-                    "snmp_exporter reloaded."
-                    if reload_exporter(settings.snmp_exporter_url)
-                    else "snmp_exporter not reloaded — docker compose restart snmp-exporter."
+                db.flush()
+                all_oids = union_onboard_oids(db.query(Asset).order_by(Asset.asset_id).all())
+                apply_result = apply_onboard_module(all_oids)
+                if apply_result.get("ok"):
+                    gen = run_snmp_generator()
+                    apply_result["generator"] = (
+                        "snmp-generator ran."
+                        if gen.get("ok")
+                        else (gen.get("error") or "generator skipped")
+                    )
+                    audit(
+                        db,
+                        "snmp.onboard.apply",
+                        actor=user.email,
+                        object_type="snmp",
+                        object_id=asset.asset_id,
+                        data={"module": ONBOARD_MODULE, "oids": len(all_oids)},
+                        commit=True,
+                    )
+                    apply_result["reload"] = (
+                        "snmp_exporter reloaded."
+                        if reload_exporter(settings.snmp_exporter_url)
+                        else "snmp_exporter not reloaded — docker compose restart snmp-exporter."
+                    )
+                else:
+                    notice = apply_result.get("error") or "Apply failed"
+            elif action == "apply_profile":
+                from app.librenms import discover_device
+
+                stored = snmp_settings(getattr(asset, "extras", None) if asset is not None else None)
+                inventory = discover_device(
+                    host,
+                    version=ver,
+                    community=comm,
+                    port=udp,
+                    v3_user=stored.get("snmp_v3_user") or "",
+                    v3_level=stored.get("snmp_v3_level") or "",
+                    v3_auth_proto=stored.get("snmp_v3_auth_proto") or "",
+                    v3_auth_pass=stored.get("snmp_v3_auth_pass") or "",
+                    v3_priv_proto=stored.get("snmp_v3_priv_proto") or "",
+                    v3_priv_pass=stored.get("snmp_v3_priv_pass") or "",
                 )
-                gen = run_snmp_generator()
-                apply_result["generator"] = (
-                    "snmp-generator ran."
-                    if gen.get("ok")
-                    else (gen.get("error") or "generator skipped")
+                identify = identify_from_librenms(inventory)
+                recommendations = recommend_from_librenms(inventory)
+                if recommendations:
+                    identify["profile"] = recommendations[0].get("profile") or ""
+                picks = [row["oid"] for row in recommendations if row.get("applyable") and row.get("profile_match")]
+                if not picks:
+                    raise ValueError("Identify first — no profile OIDs to apply (already in Prometheus if_mib/host).")
+                if asset is None:
+                    match = db.query(Asset).filter(Asset.ip == host).order_by(Asset.asset_id).all()
+                    if len(match) == 1:
+                        asset = match[0]
+                        form["asset_id"] = asset.asset_id
+                if asset is None:
+                    raise ValueError("Pick an asset so Prometheus HTTP SD can scrape forgesre_onboard.")
+                attach_onboard_oids(
+                    asset,
+                    list(onboard_oids_for(asset)) + picks,
+                    librenms_hostname=str(inventory.get("hostname") or host),
                 )
-                audit(
-                    db,
-                    "snmp.onboard.apply",
-                    actor=user.email,
-                    object_type="snmp",
-                    object_id=asset.asset_id,
-                    data={"module": ONBOARD_MODULE, "oids": len(apply_result.get("oids") or picks)},
-                    commit=True,
-                )
-            else:
-                notice = apply_result.get("error") or "Apply failed"
-        elif action == "restore":
-            apply_result = restore_onboard_module()
-            if apply_result.get("ok"):
-                apply_result["reload"] = (
-                    "snmp_exporter reloaded."
-                    if reload_exporter(settings.snmp_exporter_url)
-                    else "snmp_exporter not reloaded — docker compose restart snmp-exporter."
-                )
-                audit(db, "snmp.onboard.restore", actor=user.email, object_type="snmp", object_id=host, commit=True)
-            else:
-                notice = apply_result.get("error") or "Restore failed"
-        elif action == "scrape":
-            auth = effective_auth(asset) if asset is not None else "public_v2"
-            scrape = exporter_scrape(
-                snmp_target(host, udp),
-                module=ONBOARD_MODULE,
-                auth=auth,
-                timeout=max(wait, 2.0),
-                url=settings.snmp_exporter_url,
-            )
-            if not scrape.get("ok"):
+                db.add(asset)
+                db.flush()
+                all_oids = union_onboard_oids(db.query(Asset).order_by(Asset.asset_id).all())
+                apply_result = apply_onboard_module(all_oids)
+                if apply_result.get("ok"):
+                    audit(
+                        db,
+                        "snmp.onboard.apply",
+                        actor=user.email,
+                        object_type="snmp",
+                        object_id=asset.asset_id,
+                        data={"module": ONBOARD_MODULE, "oids": len(all_oids), "profile": True},
+                        commit=True,
+                    )
+                    apply_result["reload"] = (
+                        "snmp_exporter reloaded."
+                        if reload_exporter(settings.snmp_exporter_url)
+                        else "snmp_exporter not reloaded — docker compose restart snmp-exporter."
+                    )
+                else:
+                    notice = apply_result.get("error") or "Apply failed"
+            elif action in {"enable", "disable", "remove"}:
+                from app.librenms import delete_device, set_disabled
+
+                name = librenms_hostname_for(asset) if asset is not None else host
+                if action == "remove":
+                    delete_device(name)
+                    if asset is not None:
+                        attach_onboard_oids(asset, [], librenms_hostname="")
+                        db.add(asset)
+                        db.flush()
+                        remaining = union_onboard_oids(db.query(Asset).order_by(Asset.asset_id).all())
+                        apply_onboard_module(remaining)
+                        db.commit()
+                    notice = f"Removed {name} from LibreNMS."
+                else:
+                    set_disabled(name, disabled=(action == "disable"))
+                    notice = f"LibreNMS polling {'off' if action == 'disable' else 'on'} for {name}."
+            elif action == "restore":
+                if asset is not None:
+                    attach_onboard_oids(asset, [], librenms_hostname=librenms_hostname_for(asset))
+                    db.add(asset)
+                    db.flush()
+                    remaining = union_onboard_oids(db.query(Asset).order_by(Asset.asset_id).all())
+                    apply_result = apply_onboard_module(remaining)
+                else:
+                    apply_result = restore_onboard_module()
+                if apply_result.get("ok"):
+                    audit(db, "snmp.onboard.restore", actor=user.email, object_type="snmp", object_id=host, commit=True)
+                    apply_result["reload"] = (
+                        "snmp_exporter reloaded."
+                        if reload_exporter(settings.snmp_exporter_url)
+                        else "snmp_exporter not reloaded — docker compose restart snmp-exporter."
+                    )
+                else:
+                    notice = apply_result.get("error") or "Restore failed"
+            elif action == "scrape":
+                auth = effective_auth(asset) if asset is not None else "public_v2"
                 scrape = exporter_scrape(
                     snmp_target(host, udp),
-                    module="if_mib",
+                    module=ONBOARD_MODULE,
                     auth=auth,
                     timeout=max(wait, 2.0),
                     url=settings.snmp_exporter_url,
                 )
-            scrape["prom"] = prometheus_onboard_status(
-                snmp_target(host, udp),
-                asset_id=(asset.asset_id if asset is not None else ""),
-            )
-            if not scrape.get("ok"):
-                notice = scrape.get("error") or "scrape failed"
-        else:
-            raise ValueError("Unknown SNMP action")
+                if not scrape.get("ok"):
+                    scrape = exporter_scrape(
+                        snmp_target(host, udp),
+                        module="if_mib",
+                        auth=auth,
+                        timeout=max(wait, 2.0),
+                        url=settings.snmp_exporter_url,
+                    )
+                scrape["prom"] = prometheus_onboard_status(
+                    snmp_target(host, udp),
+                    asset_id=(asset.asset_id if asset is not None else ""),
+                )
+                if not scrape.get("ok"):
+                    notice = scrape.get("error") or "scrape failed"
+            else:
+                raise ValueError("Unknown SNMP action")
     except ValueError as exc:
         notice = str(exc)
+    except Exception as exc:
+        from app.librenms import LibreNmsError, LibreNmsUnavailable
+
+        if isinstance(exc, (LibreNmsError, LibreNmsUnavailable)):
+            notice = str(exc)
+        else:
+            raise
     return _render_discovery(
         request,
         db,
@@ -1747,6 +1875,8 @@ def discovery_snmp_submit(
             cardinality=cardinality,
             apply_result=apply_result,
             scrape=scrape,
+            search=search,
+            snmp_notice=notice,
         ),
     )
 

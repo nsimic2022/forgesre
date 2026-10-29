@@ -25,6 +25,7 @@ COMPONENT_LABELS = {
     "netbox": "NetBox",
     "zabbix": "Zabbix",
     "glpi": "GLPI",
+    "librenms": "LibreNMS",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -41,6 +42,7 @@ COMPONENT_SHORT = {
     "netbox": "NetBox",
     "zabbix": "Zabbix",
     "glpi": "GLPI",
+    "librenms": "LNMS",
     "discovery": "Discovery",
     "redis": "Redis",
     "mailpit": "Mailpit",
@@ -306,6 +308,7 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
     alloy = rewrite_host(raw["alloy"], hostname)
     llm = rewrite_host(raw["llm"], hostname)
     netbox = rewrite_host((settings.netbox_url or "http://127.0.0.1:8001").rstrip("/"), hostname)
+    librenms = rewrite_host((settings.librenms_url or "http://127.0.0.1:8000").rstrip("/"), hostname)
     catalog = [
         {
             "id": "core",
@@ -365,6 +368,12 @@ def enrich_components(components: dict[str, Any], host_header: str) -> list[dict
         {
             "id": "netbox",
             "gui": netbox,
+            "gui_label": "GUI",
+            "metrics": "",
+        },
+        {
+            "id": "librenms",
+            "gui": librenms,
             "gui_label": "GUI",
             "metrics": "",
         },

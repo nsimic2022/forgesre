@@ -21,6 +21,7 @@ Docker Compose, **host network**, one VM. Core is Python (FastAPI + Jinja2). The
 | **Loki** | Stores those logs. `127.0.0.1:3100`. |
 | **Grafana** | Extra graphs for an engineer (`:3000`), opened from System Health. |
 | **NetBox** | Bundled DCIM (`:8001`) plus its Redis and Postgres. Read-only from Core. |
+| **LibreNMS** | Bundled Discovery SNMP inventory (`:8000`) plus MariaDB `:3307` and Redis `:6380`. Identify only — snmp_exporter still scrapes Prometheus. |
 | **llama.cpp** | Optional profile `ai`. Prose rewrite. |
 
 Loopback UIs (Prometheus, Alertmanager, snmp_exporter, Loki, Alloy, the LLM) stay on `127.0.0.1`. Use them on the VM or over SSH.
@@ -105,6 +106,7 @@ Alarms **mute** skips ingest of a bundled alert. The chart still shows the serie
 ## 6. Read-only edges
 
 - **NetBox** — Core reads devices (`GET /api/dcim/devices/`). API 403 with the UI up is a warn on System Health.
+- **LibreNMS** — Core adds an IP via `/api/v0/devices`, reads ports/sensors, then disables LibreNMS SNMP polling so snmp_exporter is the only collector. Missing `LIBRENMS_API_TOKEN` is a yellow warn.
 - **Zabbix** — read-only token, webhook in. Ack / Resolve / Close stay in ForgeSRE.
 - **LLM** — optional. It rewrites investigation prose from compact facts Core already computed.
 
@@ -130,5 +132,5 @@ Prometheus, Alloy, and Loki absorb scrape and log volume. The practical ceiling 
 | Prometheus or Alertmanager | Inventory, existing incidents, logs | New metric alerts |
 | Grafana | The alarm path and Core's own charts | The Grafana UI |
 | Loki or Alloy | Alarms and metrics | New syslog lines |
-| NetBox or Zabbix | Local inventory and the Prometheus path | That integration |
+| NetBox, Zabbix, or LibreNMS | Local inventory and the Prometheus path | That integration |
 | LLM | Incidents and ForgeRCA facts | The prose rewrite |

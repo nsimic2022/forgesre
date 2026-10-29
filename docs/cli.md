@@ -70,7 +70,7 @@ Two logins:
 ./forgesre logout
 ```
 
-`./forgesre update` starts default Compose services including **snmp-exporter** (`127.0.0.1:9116`) and bundled **NetBox** (`http://<VM-IP>:8001`). First NetBox boot runs Django migrations and can take several minutes; `./forgesre doctor` stays **yellow** until `http://127.0.0.1:8001/login/` answers. Wait — that is not a fake green. `--offline` skips `compose pull` (lab / no egress). `compose pull` is also skipped when `docker-compose.yml` image pins are unchanged (llama.cpp is `server-b11718`, not the daily `:server` tag). Core `--build` is skipped when `backend/Dockerfile`, `backend/`, `agents/`, and `frontend/` are unchanged.
+`./forgesre update` starts default Compose services including **snmp-exporter** (`127.0.0.1:9116`), bundled **NetBox** (`http://<VM-IP>:8001`), and bundled **LibreNMS** (`http://<VM-IP>:8000`) for Discovery SNMP Identify. First NetBox / LibreNMS boot runs migrations and can take several minutes; `./forgesre doctor` stays **yellow** until `/login` answers. Wait — that is not a fake green. `--offline` skips `compose pull` (lab / no egress). `compose pull` is also skipped when `docker-compose.yml` image pins are unchanged (llama.cpp is `server-b11718`, not the daily `:server` tag). Core `--build` is skipped when `backend/Dockerfile`, `backend/`, `agents/`, and `frontend/` are unchanged.
 
 Root wrappers still work: `./install.sh`, `./doctor.sh`, `./test.sh`, `./backup.sh`, `./restore.sh`, `./update.sh`.
 
@@ -240,7 +240,7 @@ git pull origin main
 ./forgesre snmp
 ```
 
-`./forgesre update` = doctor (warn ok) → backup → render-monitoring → compose pull (unless `--offline`, or when image pins in `docker-compose.yml` are unchanged) → `docker compose up -d` (includes **snmp-exporter** on `127.0.0.1:9116` and bundled **NetBox** on `:8001`; Core `--build` only when Dockerfile/backend/agents/frontend changed) → `./forgesre snmp-auths` once Core answers → wait for NetBox `/login/` (first boot can take several minutes; doctor stays yellow) → doctor.
+`./forgesre update` = doctor (warn ok) → backup → render-monitoring → compose pull (unless `--offline`, or when image pins in `docker-compose.yml` are unchanged) → `docker compose up -d` (includes **snmp-exporter** on `127.0.0.1:9116`, bundled **NetBox** on `:8001`, and bundled **LibreNMS** on `:8000`; Core `--build` only when Dockerfile/backend/agents/frontend changed) → `./forgesre snmp-auths` once Core answers → wait for NetBox / LibreNMS `/login` (first boot can take several minutes; doctor stays yellow) → doctor.
 
 Backup on the host does **not** use sqlalchemy (that package is only in the Core image). The CLI dumps Postgres with `docker compose exec postgres` using the **same docker rights as update** (`docker info`, otherwise `sudo docker compose`). Administration Backup still runs inside Core. Each run is `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (plus `MANIFEST.txt`); import that one tar, do not unpack it. `./forgesre backup` still exists; `./forgesre update` also runs backup as a safety net. If backup fails, update prints a clear error and **continues** so the stack still comes up. A `docker.sock` permission error is not “postgres is down”. Do not `pip install sqlalchemy` on the host. Do not `./install.sh`.
 
