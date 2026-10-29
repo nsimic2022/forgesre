@@ -478,7 +478,7 @@ def test_analyst_templates_say_the_honest_thing(monkeypatch):
         assert "playbook-guide" in page.text
         assert 'class="info-tip"' not in page.text
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-62" in base
+    assert "app.css?v=v09-63" in base
     for name in ["incident_detail.html", "asset_detail.html", "_asset_form.html", "escalation.html"]:
         text = (ROOT / "frontend" / "templates" / name).read_text(encoding="utf-8")
         assert "falls back to policy role@forgesre.local" not in text

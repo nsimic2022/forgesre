@@ -1,0 +1,7 @@
+<nav class="discovery-menu" aria-label="Discovery">
+  <a href="/discovery#scan" class="{% if discovery_tab|default('scan') == 'scan' %}active{% endif %}">Scan now</a>
+  <a href="/discovery/snmp" class="{% if discovery_tab|default('scan') == 'snmp' %}active{% endif %}">SNMP devices</a>
+  <a href="/discovery#netbox">NetBox</a>
+  <a href="/discovery#zabbix">Zabbix</a>
+  <a href="/discovery#glpi">GLPI</a>
+</nav>

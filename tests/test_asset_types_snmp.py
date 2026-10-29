@@ -366,7 +366,7 @@ def test_snmp_probe_json_any_ip():
 
 def test_css_and_js_v08_14():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-62" in base and "app.js?v=v09-S" in base
+    assert "app.css?v=v09-63" in base and "app.js?v=v09-S" in base
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert "select.nice-select" in css and ".reach-snmp" in css and ".snmp-poll-row" in css
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")

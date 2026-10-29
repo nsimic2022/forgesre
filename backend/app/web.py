@@ -57,8 +57,21 @@ from app.asset_ladder import (
 )
 from app.ladder_cubes import asset_ladder_cubes, incident_ladder_cubes
 from app.playrule_mute import muted_playrule_ids, playrule_off_from_form
-from app.asset_snmp import AUTH_PROTOCOLS, PRIV_PROTOCOLS, SNMP_VERSIONS, V3_LEVELS, auth_status, snmp_from_form
-from app.asset_types import ASSET_TYPE_GROUPS, DEFAULT_SNMP_PORT, parse_snmp_port, snmp_family, snmp_port_for
+from app.asset_snmp import AUTH_PROTOCOLS, PRIV_PROTOCOLS, SNMP_VERSIONS, V3_LEVELS, auth_status, effective_auth, snmp_from_form
+from app.asset_types import ASSET_TYPE_GROUPS, DEFAULT_SNMP_PORT, parse_snmp_port, snmp_family, snmp_port_for, snmp_target
+from app.snmp_onboard import (
+    ONBOARD_MODULE,
+    apply_onboard_module,
+    cardinality_hint,
+    clamp_timeout,
+    community_for_asset,
+    exporter_scrape,
+    identify_device,
+    recommend_metrics,
+    reload_exporter,
+    restore_onboard_module,
+    snmp_get,
+)
 from app.snmp_families import (
     ALL_FAMILIES,
     FAMILY_LABELS,
@@ -1445,6 +1458,7 @@ def discovery_page(
             zabbix_on=settings.zabbix_enabled,
         ),
         pager=pager,
+        discovery_tab="scan",
         found_assets={a.asset_id: a for a in inventory if a.asset_id},
         found_by_ip={a.ip: a for a in inventory if a.ip},
         **asset_form_context(
@@ -1453,6 +1467,242 @@ def discovery_page(
             form_mode=form_mode,
             selected=selected if form_mode == "edit" else None,
         ),
+    )
+
+
+def _snmp_onboard_target(db: Session, asset_id: str, ip: str, port: str) -> tuple[Asset | None, str, int]:
+    asset = db.query(Asset).filter_by(asset_id=(asset_id or "").strip()).first() if (asset_id or "").strip() else None
+    host = (ip or "").strip() or ((asset.ip or "").strip() if asset is not None else "")
+    if not host:
+        raise ValueError("Need an IP or an asset with an IP")
+    raw_port = (port or "").strip()
+    if raw_port:
+        try:
+            udp = int(raw_port)
+        except ValueError as exc:
+            raise ValueError("UDP port must be a number") from exc
+    else:
+        udp = snmp_port_for(asset) if asset is not None else DEFAULT_SNMP_PORT
+    if udp <= 0:
+        udp = DEFAULT_SNMP_PORT
+    if udp > 65535:
+        raise ValueError("UDP port out of range")
+    return asset, host, udp
+
+
+def _discovery_snmp_render(
+    request: Request,
+    db: Session,
+    user: User,
+    *,
+    notice: str = "",
+    form: dict | None = None,
+    identify: dict | None = None,
+    probe: dict | None = None,
+    recommendations: list | None = None,
+    cardinality: str = "",
+    apply_result: dict | None = None,
+    scrape: dict | None = None,
+):
+    assets = [row for row in db.query(Asset).order_by(Asset.hostname, Asset.asset_id).all() if (row.ip or "").strip()]
+    sticky = {
+        "asset_id": "",
+        "ip": "",
+        "port": str(DEFAULT_SNMP_PORT),
+        "version": "v2c",
+        "timeout": "0.8",
+        "oid": "",
+        "get_next": "",
+        "oid_pick": [],
+    }
+    sticky.update(form or {})
+    return render(
+        request,
+        "discovery_snmp.html",
+        user,
+        discovery_tab="snmp",
+        snmp_assets=assets,
+        form=sticky,
+        identify=identify or {},
+        probe=probe or {},
+        recommendations=recommendations or [],
+        cardinality=cardinality,
+        apply_result=apply_result or {},
+        scrape=scrape or {},
+        notice=notice,
+    )
+
+
+@router.get("/discovery/snmp", response_class=HTMLResponse)
+def discovery_snmp_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("write_assets")),
+):
+    return _discovery_snmp_render(request, db, user, notice=request.query_params.get("notice") or "")
+
+
+@router.post("/discovery/snmp", response_class=HTMLResponse)
+def discovery_snmp_submit(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("write_assets")),
+    action: str = Form(""),
+    asset_id: str = Form(""),
+    ip: str = Form(""),
+    port: str = Form("161"),
+    version: str = Form("v2c"),
+    community: str = Form(""),
+    timeout: str = Form("0.8"),
+    oid: str = Form(""),
+    get_next: str = Form(""),
+    oid_pick: list[str] = Form([]),
+):
+    notice = ""
+    identify: dict = {}
+    probe: dict = {}
+    recommendations: list = []
+    cardinality = ""
+    apply_result: dict = {}
+    scrape: dict = {}
+    wait = clamp_timeout(timeout)
+    ver = (version or "v2c").strip().lower()
+    if ver not in {"v1", "v2c", "v3"}:
+        ver = "v2c"
+    form = {
+        "asset_id": (asset_id or "").strip(),
+        "ip": (ip or "").strip(),
+        "port": (port or "").strip() or str(DEFAULT_SNMP_PORT),
+        "version": ver,
+        "timeout": str(wait),
+        "oid": (oid or "").strip(),
+        "get_next": "1" if (get_next or "").strip() else "",
+        "oid_pick": list(oid_pick or []),
+    }
+    try:
+        asset, host, udp = _snmp_onboard_target(db, form["asset_id"], form["ip"], form["port"])
+        form["ip"] = host
+        form["port"] = str(udp)
+        comm = community_for_asset(asset, community)
+        kwargs = {
+            "community": comm,
+            "port": udp,
+            "version": ver,
+            "timeout": wait,
+        }
+        if action == "identify":
+            if ver == "v3":
+                if asset is None:
+                    raise ValueError("SNMPv3 identify uses snmp_exporter. Pick an asset with USM saved, then run ./forgesre snmp-auths.")
+                scrape = exporter_scrape(
+                    snmp_target(host, udp),
+                    module="if_mib",
+                    auth=effective_auth(asset),
+                    timeout=max(wait, 2.0),
+                    url=settings.snmp_exporter_url,
+                )
+                identify = {
+                    "ok": scrape.get("ok"),
+                    "sysDescr": "",
+                    "sysName": "",
+                    "rows": [
+                        {
+                            "key": "exporter",
+                            "name": "snmp_exporter",
+                            "ok": scrape.get("ok"),
+                            "value": "if_mib scrape answered" if scrape.get("ok") else "",
+                            "error": scrape.get("error") or "",
+                        }
+                    ],
+                }
+                if not scrape.get("ok"):
+                    notice = scrape.get("error") or "snmp_exporter did not return SNMP metrics"
+            else:
+                identify = identify_device(host, **kwargs)
+                recommendations = recommend_metrics(host, **kwargs)
+                if_number = next((row["value"] for row in recommendations if row.get("key") == "ifNumber" and row.get("ok")), "")
+                extra_cols = sum(1 for row in recommendations if row.get("ok") and row.get("kind") == "table" and row.get("recommend"))
+                cardinality = cardinality_hint(if_number, extra_cols)
+                if not identify.get("ok"):
+                    notice = "No SNMP reply on that IP (v1/v2c GET)."
+        elif action == "probe":
+            if ver == "v3":
+                raise ValueError("OID tester is v1/v2c. For v3 use Test scrape after ./forgesre snmp-auths.")
+            if not form["oid"]:
+                raise ValueError("Need a numeric OID")
+            probe = snmp_get(host, form["oid"], get_next=bool(form["get_next"]), **kwargs)
+            if not probe.get("ok"):
+                notice = probe.get("error") or "no SNMP reply"
+        elif action == "apply":
+            picks = list(oid_pick or [])
+            if form["oid"]:
+                picks.append(form["oid"])
+            if not picks:
+                raise ValueError("Select a scalar OID the device answered, or type one in OID tester.")
+            apply_result = apply_onboard_module(picks)
+            if apply_result.get("ok"):
+                apply_result["reload"] = (
+                    "snmp_exporter reloaded."
+                    if reload_exporter(settings.snmp_exporter_url)
+                    else "snmp_exporter not reloaded — docker compose restart snmp-exporter."
+                )
+                audit(
+                    db,
+                    "snmp.onboard.apply",
+                    actor=user.email,
+                    object_type="snmp",
+                    object_id=host,
+                    data={"module": ONBOARD_MODULE, "oids": len(picks)},
+                    commit=True,
+                )
+            else:
+                notice = apply_result.get("error") or "Apply failed"
+        elif action == "restore":
+            apply_result = restore_onboard_module()
+            if apply_result.get("ok"):
+                apply_result["reload"] = (
+                    "snmp_exporter reloaded."
+                    if reload_exporter(settings.snmp_exporter_url)
+                    else "snmp_exporter not reloaded — docker compose restart snmp-exporter."
+                )
+                audit(db, "snmp.onboard.restore", actor=user.email, object_type="snmp", object_id=host, commit=True)
+            else:
+                notice = apply_result.get("error") or "Restore failed"
+        elif action == "scrape":
+            auth = effective_auth(asset) if asset is not None else "public_v2"
+            scrape = exporter_scrape(
+                snmp_target(host, udp),
+                module=ONBOARD_MODULE,
+                auth=auth,
+                timeout=max(wait, 2.0),
+                url=settings.snmp_exporter_url,
+            )
+            if not scrape.get("ok"):
+                scrape = exporter_scrape(
+                    snmp_target(host, udp),
+                    module="if_mib",
+                    auth=auth,
+                    timeout=max(wait, 2.0),
+                    url=settings.snmp_exporter_url,
+                )
+            if not scrape.get("ok"):
+                notice = scrape.get("error") or "scrape failed"
+        else:
+            raise ValueError("Unknown SNMP action")
+    except ValueError as exc:
+        notice = str(exc)
+    return _discovery_snmp_render(
+        request,
+        db,
+        user,
+        notice=notice,
+        form=form,
+        identify=identify,
+        probe=probe,
+        recommendations=recommendations,
+        cardinality=cardinality,
+        apply_result=apply_result,
+        scrape=scrape,
     )
 
 
