@@ -1,15 +1,3 @@
-{% extends "base.html" %}
-{% block title %}SNMP devices · Discovery · ForgeSRE{% endblock %}
-{% block content %}
-<h1>Discovery</h1>
-
-{% if notice %}
-<div class="banner">{{ notice }}</div>
-{% endif %}
-
-<div class="discovery-shell">
-{% include "_discovery_menu.html" %}
-<div class="discovery-main">
 <form method="post" action="/discovery/snmp" class="discovery-snmp-form" hx-boost="false" autocomplete="off">
   <div class="discovery-snmp-grid">
     <section class="card">
@@ -19,29 +7,29 @@
         <select name="asset_id">
           <option value="">IP below</option>
           {% for row in snmp_assets %}
-          <option value="{{ row.asset_id }}" {% if form.asset_id == row.asset_id %}selected{% endif %}>{{ row.hostname or row.asset_id }} · {{ row.ip }}</option>
+          <option value="{{ row.asset_id }}" {% if snmp_form.asset_id == row.asset_id %}selected{% endif %}>{{ row.hostname or row.asset_id }} · {{ row.ip }}</option>
           {% endfor %}
         </select>
       </label>
-      <label>IP <input name="ip" value="{{ form.ip }}" placeholder="10.10.10.1" autocomplete="off"></label>
-      <label>UDP port <input name="port" value="{{ form.port }}" inputmode="numeric"></label>
+      <label>IP <input name="ip" value="{{ snmp_form.ip }}" placeholder="10.10.10.1" autocomplete="off"></label>
+      <label>UDP port <input name="port" value="{{ snmp_form.port }}" inputmode="numeric"></label>
       <label>Version
         <select name="version">
-          <option value="v2c" {% if form.version == 'v2c' %}selected{% endif %}>v2c</option>
-          <option value="v1" {% if form.version == 'v1' %}selected{% endif %}>v1</option>
-          <option value="v3" {% if form.version == 'v3' %}selected{% endif %}>v3 (exporter)</option>
+          <option value="v2c" {% if snmp_form.version == 'v2c' %}selected{% endif %}>v2c</option>
+          <option value="v1" {% if snmp_form.version == 'v1' %}selected{% endif %}>v1</option>
+          <option value="v3" {% if snmp_form.version == 'v3' %}selected{% endif %}>v3 (exporter)</option>
         </select>
       </label>
       <label>Community <input name="community" type="password" placeholder="blank = saved / default" autocomplete="off"></label>
-      <label>Timeout (s) <input name="timeout" value="{{ form.timeout }}" inputmode="decimal"></label>
+      <label>Timeout (s) <input name="timeout" value="{{ snmp_form.timeout }}" inputmode="decimal"></label>
       <div class="row-actions asset-form-actions">
         <button type="submit" name="action" value="identify">Identify</button>
       </div>
-      {% if identify.rows %}
+      {% if snmp_identify.rows %}
       <table class="snmp-oid-table">
         <thead><tr><th>OID</th><th>Value</th></tr></thead>
         <tbody>
-        {% for row in identify.rows %}
+        {% for row in snmp_identify.rows %}
           <tr>
             <td><code>{{ row.name }}</code></td>
             <td>{% if row.ok %}{{ row.value }}{% else %}<span class="muted">{{ row.error or "no reply" }}</span>{% endif %}</td>
@@ -55,31 +43,31 @@
     <section class="card">
       <h2>OID tester</h2>
       <p class="muted">One GET or GET-NEXT. Not a walk.</p>
-      <label>OID <input name="oid" value="{{ form.oid }}" placeholder="1.3.6.1.2.1.1.1.0" autocomplete="off"></label>
-      <label class="inline-check"><input type="checkbox" name="get_next" value="1" {% if form.get_next %}checked{% endif %}> GET-NEXT</label>
+      <label>OID <input name="oid" value="{{ snmp_form.oid }}" placeholder="1.3.6.1.2.1.1.1.0" autocomplete="off"></label>
+      <label class="inline-check"><input type="checkbox" name="get_next" value="1" {% if snmp_form.get_next %}checked{% endif %}> GET-NEXT</label>
       <div class="row-actions asset-form-actions">
         <button type="submit" name="action" value="probe">Probe</button>
       </div>
-      {% if probe %}
-      <p>{% if probe.ok %}<code>{{ probe.oid }}</code> = {{ probe.value }}{% else %}<span class="muted">{{ probe.error or "no reply" }}</span>{% endif %}</p>
+      {% if snmp_probe %}
+      <p>{% if snmp_probe.ok %}<code>{{ snmp_probe.oid }}</code> = {{ snmp_probe.value }}{% else %}<span class="muted">{{ snmp_probe.error or "no reply" }}</span>{% endif %}</p>
       {% endif %}
     </section>
 
     <section class="card">
       <h2>Recommendations</h2>
       <p class="muted">Only OIDs this device answered. Catalog ≠ on device ≠ already in Prometheus if_mib/host.</p>
-      {% if cardinality %}
-      <p class="muted">{{ cardinality }}</p>
+      {% if snmp_cardinality %}
+      <p class="muted">{{ snmp_cardinality }}</p>
       {% endif %}
-      {% if recommendations %}
+      {% if snmp_recommendations %}
       <table class="snmp-oid-table">
         <thead><tr><th></th><th>OID</th><th>Device</th><th>Flags</th></tr></thead>
         <tbody>
-        {% for row in recommendations %}
+        {% for row in snmp_recommendations %}
           <tr>
             <td>
               {% if row.applyable %}
-              <input type="checkbox" name="oid_pick" value="{{ row.oid }}" {% if row.oid in form.oid_pick %}checked{% endif %} aria-label="Apply {{ row.name }}">
+              <input type="checkbox" name="oid_pick" value="{{ row.oid }}" {% if row.oid in snmp_form.oid_pick %}checked{% endif %} aria-label="Apply {{ row.name }}">
               {% endif %}
             </td>
             <td><code>{{ row.name }}</code><div class="muted">{{ row.help }}{% if row.kind == "table" %} · table{% endif %}</div></td>
@@ -108,18 +96,15 @@
       <button type="submit" name="action" value="restore" class="secondary">Restore</button>
       <button type="submit" name="action" value="scrape" class="secondary">Test scrape</button>
     </div>
-    {% if apply_result.ok %}
-    <p class="muted">Wrote {{ apply_result.module or "empty onboard block" }}. {{ apply_result.reload }}</p>
-    {% elif apply_result.error %}
-    <p class="muted">{{ apply_result.error }}</p>
+    {% if snmp_apply.ok %}
+    <p class="muted">Wrote {{ snmp_apply.module or "empty onboard block" }}. {{ snmp_apply.reload }}</p>
+    {% elif snmp_apply.error %}
+    <p class="muted">{{ snmp_apply.error }}</p>
     {% endif %}
-    {% if scrape.body %}
-    <pre class="snmp-scrape">{{ scrape.body }}</pre>
-    {% elif scrape.error %}
-    <p class="muted">{{ scrape.error }}</p>
+    {% if snmp_scrape.body %}
+    <pre class="snmp-scrape">{{ snmp_scrape.body }}</pre>
+    {% elif snmp_scrape.error %}
+    <p class="muted">{{ snmp_scrape.error }}</p>
     {% endif %}
   </section>
 </form>
-</div>
-</div>
-{% endblock %}

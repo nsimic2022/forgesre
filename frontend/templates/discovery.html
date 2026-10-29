@@ -32,12 +32,9 @@
 </div>
 {% endif %}
 
-<div class="discovery-shell">
-{% include "_discovery_menu.html" %}
-<div class="discovery-main">
 <div class="discovery-actions">
 {% if can('write_assets') %}
-<section class="card" id="scan">
+<section class="card">
   <h2>Scan now</h2>
   <form method="post" action="/discovery/scan" class="discovery-scan-form" hx-boost="false">
     <div class="discovery-scan-actions">
@@ -49,14 +46,14 @@
 </form>
 </section>
 {% else %}
-<section class="card" id="scan">
+<section class="card">
   <h2>Scan now</h2>
   <p class="muted">Analyst / engineer / admin required.</p>
   {% include "_discovery_scan_ports.html" %}
 </section>
 {% endif %}
 
-<section class="card" id="netbox">
+<section class="card">
   <h2>NetBox sync</h2>
   {% if can('admin') %}
     {% if netbox_enabled %}
@@ -87,7 +84,7 @@
   {% endif %}
 </section>
 
-<section class="card zabbix-block" id="zabbix" data-zabbix-block>
+<section class="card zabbix-block" data-zabbix-block>
   <h2>Zabbix</h2>
   <div class="tool-row">
     <span class="netbox-status {{ zabbix.light }}" role="status" data-zabbix-status>
@@ -119,7 +116,7 @@
   {% endif %}
 </section>
 
-<section class="card glpi-block" id="glpi" data-glpi-block>
+<section class="card glpi-block" data-glpi-block>
   <h2>GLPI</h2>
   <div class="tool-row">
     <span class="netbox-status {{ glpi.light }}" role="status" data-glpi-status>
@@ -283,6 +280,9 @@
 {% include "_asset_form.html" %}
 </section>
 {% endif %}
-</div>
-</div>
+<div class="discovery-snmp-break dash-graphs-spacer" aria-hidden="true"></div>
+<section class="discovery-snmp" id="snmp" aria-label="SNMP devices">
+  <h2>SNMP devices</h2>
+  {% include "_discovery_snmp.html" %}
+</section>
 {% endblock %}

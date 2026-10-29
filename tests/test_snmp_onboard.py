@@ -1,4 +1,4 @@
-"""Discovery SNMP devices: bounded GET, left menu, generated onboard splice. Secrets stay out of HTML."""
+"""Discovery SNMP devices: bounded GET below Add asset, generated onboard splice. Secrets stay out of HTML."""
 
 from __future__ import annotations
 
@@ -155,22 +155,18 @@ def test_apply_refuses_without_if_mib(tmp_path):
     assert "if_mib" in result["error"]
 
 
-def test_discovery_menu_and_snmp_page():
+def test_discovery_keeps_cubes_and_snmp_below_add_asset():
     client = _client()
     scan = client.get("/discovery")
     assert scan.status_code == 200
-    assert 'class="discovery-shell"' in scan.text
-    assert 'class="discovery-menu"' in scan.text
-    assert 'href="/discovery/snmp"' in scan.text
-    assert ">SNMP devices<" in scan.text
-    assert 'href="/discovery#netbox"' in scan.text
-    assert 'id="zabbix"' in scan.text
-    assert ">Zabbix<" in scan.text
-    assert 'class="discovery-actions"' in scan.text
-    page = client.get("/discovery/snmp")
-    assert page.status_code == 200
-    html = page.text
-    assert ">SNMP devices<" in html
+    html = scan.text
+    assert "discovery-shell" not in html
+    assert "discovery-menu" not in html
+    assert 'class="discovery-actions"' in html
+    assert ">Scan now<" in html and ">Zabbix<" in html and ">NetBox sync<" in html and ">GLPI<" in html
+    assert ">Add asset<" in html
+    assert 'class="discovery-snmp-break dash-graphs-spacer"' in html
+    assert html.index(">Add asset<") < html.index('class="discovery-snmp-break') < html.index(">SNMP devices<")
     assert "OID tester" in html
     assert "Recommendations" in html
     assert "Identify" in html
@@ -180,11 +176,17 @@ def test_discovery_menu_and_snmp_page():
     assert 'type="password"' in html
     assert "Apply extra module" in html
     assert "forgesre_onboard" in html
+    bounced = client.get("/discovery/snmp", follow_redirects=False)
+    assert bounced.status_code in {302, 303}
+    assert bounced.headers.get("location", "").endswith("/discovery#snmp")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    shell = css.split(".discovery-shell {", 1)[1].split("}", 1)[0]
-    assert "11.5rem" in shell
-    menu = css.split(".discovery-menu {", 1)[1].split("}", 1)[0]
-    assert "sticky" in menu
+    assert ".discovery-shell {" not in css
+    assert ".discovery-menu {" not in css
+    break_css = css.split(".discovery-snmp-break {", 1)[1].split("}", 1)[0]
+    assert "2.6em" in break_css
+    assert "3px solid var(--line)" in break_css
+    spacer = css.split(".dash-graphs-spacer {", 1)[1].split("}", 1)[0]
+    assert "2.6em" in spacer
 
 
 def test_identify_post_does_not_echo_community(monkeypatch):
@@ -227,6 +229,7 @@ def test_identify_post_does_not_echo_community(monkeypatch):
     assert "ifNumber" in response.text
     assert SECRET not in response.text
     assert "recommend" in response.text
+    assert ">Scan now<" in response.text and ">Add asset<" in response.text
 
 
 def test_probe_and_apply_generated_only(monkeypatch, tmp_path):
@@ -273,5 +276,5 @@ def test_snmp_page_requires_login():
 
 def test_cache_pin_bumped():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-63" in base
+    assert "app.css?v=v09-64" in base
     assert "app.js?v=v09-S" in base

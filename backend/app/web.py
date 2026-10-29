@@ -1331,16 +1331,18 @@ def asset_create(
     return RedirectResponse(asset_saved_url(asset.asset_id, notice), status_code=302)
 
 
-@router.get("/discovery", response_class=HTMLResponse)
-def discovery_page(
+def _render_discovery(
     request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_page("write_assets")),
+    db: Session,
+    user: User,
+    *,
     page: str = "1",
     edit: str = "",
     clone: str = "",
-    imported: str = Query("", alias="import"),
+    imported: str = "",
     asset: str = "",
+    notice: str | None = None,
+    snmp: dict | None = None,
 ):
     from discovery import suggested_management_cidr
     from app.jobs import active_discovery_scan, latest_discovery_scan, scan_ports_view
@@ -1364,7 +1366,8 @@ def discovery_page(
     form_mode = "add"
     form = asset_form_values()
     import_of = ""
-    notice = request.query_params.get("notice") or ""
+    if notice is None:
+        notice = request.query_params.get("notice") or ""
     if imported.strip().isdigit():
         selected_candidate = db.get(DiscoveryCandidate, int(imported.strip()))
         if selected_candidate is not None:
@@ -1458,7 +1461,6 @@ def discovery_page(
             zabbix_on=settings.zabbix_enabled,
         ),
         pager=pager,
-        discovery_tab="scan",
         found_assets={a.asset_id: a for a in inventory if a.asset_id},
         found_by_ip={a.ip: a for a in inventory if a.ip},
         **asset_form_context(
@@ -1467,6 +1469,23 @@ def discovery_page(
             form_mode=form_mode,
             selected=selected if form_mode == "edit" else None,
         ),
+        **(snmp or _snmp_onboard_ctx(db, inventory=inventory)),
+    )
+
+
+@router.get("/discovery", response_class=HTMLResponse)
+def discovery_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_page("write_assets")),
+    page: str = "1",
+    edit: str = "",
+    clone: str = "",
+    imported: str = Query("", alias="import"),
+    asset: str = "",
+):
+    return _render_discovery(
+        request, db, user, page=page, edit=edit, clone=clone, imported=imported, asset=asset
     )
 
 
@@ -1490,12 +1509,10 @@ def _snmp_onboard_target(db: Session, asset_id: str, ip: str, port: str) -> tupl
     return asset, host, udp
 
 
-def _discovery_snmp_render(
-    request: Request,
+def _snmp_onboard_ctx(
     db: Session,
-    user: User,
     *,
-    notice: str = "",
+    inventory: list | None = None,
     form: dict | None = None,
     identify: dict | None = None,
     probe: dict | None = None,
@@ -1503,8 +1520,8 @@ def _discovery_snmp_render(
     cardinality: str = "",
     apply_result: dict | None = None,
     scrape: dict | None = None,
-):
-    assets = [row for row in db.query(Asset).order_by(Asset.hostname, Asset.asset_id).all() if (row.ip or "").strip()]
+) -> dict:
+    rows = inventory if inventory is not None else db.query(Asset).order_by(Asset.hostname, Asset.asset_id).all()
     sticky = {
         "asset_id": "",
         "ip": "",
@@ -1516,30 +1533,21 @@ def _discovery_snmp_render(
         "oid_pick": [],
     }
     sticky.update(form or {})
-    return render(
-        request,
-        "discovery_snmp.html",
-        user,
-        discovery_tab="snmp",
-        snmp_assets=assets,
-        form=sticky,
-        identify=identify or {},
-        probe=probe or {},
-        recommendations=recommendations or [],
-        cardinality=cardinality,
-        apply_result=apply_result or {},
-        scrape=scrape or {},
-        notice=notice,
-    )
+    return {
+        "snmp_assets": [row for row in rows if (row.ip or "").strip()],
+        "snmp_form": sticky,
+        "snmp_identify": identify or {},
+        "snmp_probe": probe or {},
+        "snmp_recommendations": recommendations or [],
+        "snmp_cardinality": cardinality,
+        "snmp_apply": apply_result or {},
+        "snmp_scrape": scrape or {},
+    }
 
 
-@router.get("/discovery/snmp", response_class=HTMLResponse)
-def discovery_snmp_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_page("write_assets")),
-):
-    return _discovery_snmp_render(request, db, user, notice=request.query_params.get("notice") or "")
+@router.get("/discovery/snmp")
+def discovery_snmp_page(user: User = Depends(require_page("write_assets"))):
+    return RedirectResponse("/discovery#snmp", status_code=302)
 
 
 @router.post("/discovery/snmp", response_class=HTMLResponse)
@@ -1691,18 +1699,21 @@ def discovery_snmp_submit(
             raise ValueError("Unknown SNMP action")
     except ValueError as exc:
         notice = str(exc)
-    return _discovery_snmp_render(
+    return _render_discovery(
         request,
         db,
         user,
         notice=notice,
-        form=form,
-        identify=identify,
-        probe=probe,
-        recommendations=recommendations,
-        cardinality=cardinality,
-        apply_result=apply_result,
-        scrape=scrape,
+        snmp=_snmp_onboard_ctx(
+            db,
+            form=form,
+            identify=identify,
+            probe=probe,
+            recommendations=recommendations,
+            cardinality=cardinality,
+            apply_result=apply_result,
+            scrape=scrape,
+        ),
     )
 
 
