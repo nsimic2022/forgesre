@@ -234,6 +234,11 @@ def test_compose_librenms_is_default_service():
     assert "SIDECAR_DISPATCHER" in data["services"]["librenms-dispatcher"]["environment"]
     assert "APP_KEY" not in data["services"]["librenms"]["environment"]
     assert "APP_KEY" not in data["services"]["librenms-dispatcher"]["environment"]
+    assert data["services"]["librenms"]["environment"]["PUID"] == "1000"
+    assert data["services"]["librenms"]["environment"]["PGID"] == "1000"
+    assert data["services"]["librenms-dispatcher"]["environment"]["PUID"] == "1000"
+    assert data["services"]["librenms-dispatcher"]["environment"]["PGID"] == "1000"
+    assert 'PUID: "0"' not in compose
     assert "SIDECAR_SYSLOGNG" not in compose
     assert "SIDECAR_SNMPTRAPD" not in compose
     assert "LIBRENMS_URL" in data["services"]["core"]["environment"]
@@ -252,9 +257,12 @@ def test_update_and_scripts_bundle_librenms():
     assert "up -d snmp-exporter netbox-redis netbox librenms-db librenms-redis librenms librenms-dispatcher" in update
     assert "librenms-db-1" in update
     assert "mariadb:11.4.13" in update
+    assert "logs --tail=80 librenms" in update
+    assert "lnms must not run as root" in update
     secrets = (ROOT / "scripts" / "ensure-librenms-secrets.sh").read_text(encoding="utf-8")
     dotenv_py = (ROOT / "scripts" / "librenms_dotenv.py").read_text(encoding="utf-8")
     assert "librenms_dotenv.py" in secrets
+    assert "chown -R 1000:1000" in secrets
     assert "LIBRENMS_APP_KEY" in dotenv_py
     assert "MYSQL_ROOT_PASSWORD" in dotenv_py
     assert "MARIADB_ROOT_PASSWORD" in dotenv_py

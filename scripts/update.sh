@@ -108,7 +108,10 @@ fi
 if ! "${DC[@]}" up -d snmp-exporter netbox-redis netbox librenms-db librenms-redis librenms librenms-dispatcher; then
   echo "LibreNMS/NetBox extras failed to start. MariaDB logs (librenms-db / librenms-db-1):"
   "${DC[@]}" logs --tail=80 librenms-db || true
+  echo "LibreNMS logs:"
+  "${DC[@]}" logs --tail=80 librenms || true
   echo "If pull/start of mariadb:11.4.13 failed: docker compose pull librenms-db && docker compose logs --tail=80 librenms-db"
+  echo "If lnms must not run as root: PUID/PGID must be 1000 (not 0), then ./forgesre update"
 fi
 # Same stamp idea as Core: NB_STAMP = last NetBox launch hash, nb_cur = now, need_nb = changed.
 NB_STAMP="$ROOT/data/.netbox-launch.stamp"

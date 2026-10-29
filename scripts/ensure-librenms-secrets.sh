@@ -14,3 +14,5 @@ export FORGESRE_ROOT="$ROOT"
 export FORGESRE_DATA="$DATA_DIR"
 python3 "$ROOT/scripts/librenms_dotenv.py"
 chmod 600 secrets/secrets.env "${DATA_DIR}/librenms/data/.env" 2>/dev/null || true
+# Container PUID/PGID 1000 (lnms refuses root). Host dir may be root-owned from first boot.
+chown -R 1000:1000 "${DATA_DIR}/librenms/data" 2>/dev/null || sudo chown -R 1000:1000 "${DATA_DIR}/librenms/data" 2>/dev/null || true
