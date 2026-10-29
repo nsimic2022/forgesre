@@ -1405,6 +1405,56 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 .playbook-grid .row-actions { margin-top: auto; }
 .playbook-card.selected,
 .policy-card.selected { border-color: var(--accent); }
+.discovery-shell {
+  display: grid;
+  grid-template-columns: 11.5rem minmax(0, 1fr);
+  gap: 0.9rem 1rem;
+  align-items: start;
+  width: 100%;
+}
+.discovery-menu {
+  position: sticky;
+  top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.discovery-menu a {
+  color: var(--text);
+  text-decoration: none;
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.75rem;
+}
+.discovery-menu a:hover { background: var(--nav-hover); }
+.discovery-menu a.active {
+  background: var(--selected);
+  box-shadow: inset 3px 0 0 var(--accent);
+  font-weight: 600;
+}
+.discovery-main { min-width: 0; }
+.discovery-snmp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem 1rem;
+  margin-bottom: 0.9rem;
+  align-items: stretch;
+}
+.discovery-snmp-grid .card,
+.discovery-snmp-activate {
+  margin-bottom: 0;
+  min-width: 0;
+}
+.discovery-snmp-form { max-width: none; }
+.discovery-snmp-form label { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.45rem; }
+.snmp-oid-table { width: 100%; font-size: 0.85rem; }
+.snmp-oid-table td, .snmp-oid-table th { vertical-align: top; }
+.snmp-scrape {
+  max-height: 12rem;
+  overflow: auto;
+  font-size: 0.78rem;
+  background: var(--code-bg);
+  padding: 0.6rem;
+}
 .discovery-actions {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1468,10 +1518,14 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 }
 @media (max-width: 1100px) {
   .discovery-actions { grid-template-columns: 1fr 1fr; }
+  .discovery-snmp-grid { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 800px) {
   .playbook-grid { grid-template-columns: 1fr; }
   .discovery-actions { grid-template-columns: 1fr; }
+  .discovery-shell { grid-template-columns: 1fr; }
+  .discovery-menu { position: static; flex-direction: row; flex-wrap: wrap; }
+  .discovery-snmp-grid { grid-template-columns: 1fr; }
 }
 .ack-dot {
   display: inline-block;

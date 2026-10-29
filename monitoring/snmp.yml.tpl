@@ -254,3 +254,5 @@ modules:
             labelname: prNames
             oid: 1.3.6.1.4.1.2021.2.1.2
             type: DisplayString
+  # forgesre-onboard-modules begin
+  # forgesre-onboard-modules end
