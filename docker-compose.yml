@@ -278,25 +278,33 @@ services:
 
   librenms-db:
     # Bundled LibreNMS MariaDB on 127.0.0.1:3307 (Postgres keeps 5432).
-    image: mariadb:11.4
+    # Pin 11.4.13 (Hub). Command is flags only — MariaDB 11.4 CMD is mariadbd, not mysqld
+    # (`mysqld` as command made compose service librenms-db-1 exit Error after pull).
+    image: mariadb:11.4.13
     network_mode: host
+    env_file:
+      - secrets/secrets.env
+    environment:
+      TZ: ${FORGESRE_TIMEZONE:-Europe/Belgrade}
+      MYSQL_DATABASE: librenms
+      MYSQL_USER: librenms
+      MARIADB_DATABASE: librenms
+      MARIADB_USER: librenms
+      MARIADB_AUTO_UPGRADE: "1"
+      # MYSQL_PASSWORD / MYSQL_ROOT_PASSWORD: env_file (ensure-librenms-secrets.sh).
+      # Do not interpolate ${LIBRENMS_DB_PASSWORD} here: empty .env overrides env_file
+      # and MariaDB exits 1 ("password option is not specified").
     command:
-      - mysqld
       - --bind-address=127.0.0.1
       - --port=3307
       - --innodb-file-per-table=1
+      - --lower-case-table-names=0
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
-    environment:
-      MYSQL_DATABASE: librenms
-      MYSQL_USER: librenms
-      MYSQL_PASSWORD: ${LIBRENMS_DB_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${LIBRENMS_DB_ROOT_PASSWORD}
-      TZ: ${FORGESRE_TIMEZONE:-Europe/Belgrade}
     volumes:
       - ${FORGESRE_DATA:-./data}/librenms/mysql:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -P 3307 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 30

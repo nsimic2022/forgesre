@@ -105,7 +105,11 @@ else
     printf '%s\n' "$cur" > "$STAMP"
   fi
 fi
-"${DC[@]}" up -d snmp-exporter netbox-redis netbox librenms-db librenms-redis librenms librenms-dispatcher
+if ! "${DC[@]}" up -d snmp-exporter netbox-redis netbox librenms-db librenms-redis librenms librenms-dispatcher; then
+  echo "LibreNMS/NetBox extras failed to start. MariaDB logs (librenms-db / librenms-db-1):"
+  "${DC[@]}" logs --tail=80 librenms-db || true
+  echo "If pull/start of mariadb:11.4.13 failed: docker compose pull librenms-db && docker compose logs --tail=80 librenms-db"
+fi
 # Same stamp idea as Core: NB_STAMP = last NetBox launch hash, nb_cur = now, need_nb = changed.
 NB_STAMP="$ROOT/data/.netbox-launch.stamp"
 nb_cur="$(netbox_launch_hash)"

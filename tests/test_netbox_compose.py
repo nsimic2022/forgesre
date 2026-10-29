@@ -1013,7 +1013,7 @@ _COMPOSE_IMAGE_PINS = {
     "netbox-redis": "redis:7-alpine",
     "netbox-db-init": "postgres:16-alpine",
     "netbox": "docker.io/netboxcommunity/netbox:v4.6.9-5.0.2",
-    "librenms-db": "mariadb:11.4",
+    "librenms-db": "mariadb:11.4.13",
     "librenms-redis": "redis:7-alpine",
     "librenms": "librenms/librenms:26.10.2",
     "librenms-dispatcher": "librenms/librenms:26.10.2",
