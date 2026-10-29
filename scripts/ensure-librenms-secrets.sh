@@ -43,6 +43,13 @@ secret_val() {
   awk -F= -v k="$1" '$0 ~ "^"k"=" {print substr($0, index($0,"=")+1)}' "$ROOT/secrets/secrets.env" | tail -1
 }
 
+# MariaDB image reads MYSQL_* / MARIADB_* from env_file. Keep them equal to LIBRENMS_DB_*.
+# Never rotate a non-empty MYSQL_* independently.
+ensure_nonempty "$ROOT/secrets/secrets.env" MYSQL_PASSWORD "$(secret_val LIBRENMS_DB_PASSWORD)"
+ensure_nonempty "$ROOT/secrets/secrets.env" MYSQL_ROOT_PASSWORD "$(secret_val LIBRENMS_DB_ROOT_PASSWORD)"
+ensure_nonempty "$ROOT/secrets/secrets.env" MARIADB_PASSWORD "$(secret_val LIBRENMS_DB_PASSWORD)"
+ensure_nonempty "$ROOT/secrets/secrets.env" MARIADB_ROOT_PASSWORD "$(secret_val LIBRENMS_DB_ROOT_PASSWORD)"
+
 if [[ -f "$ROOT/.env" ]]; then
   ensure_nonempty "$ROOT/.env" LIBRENMS_URL "http://127.0.0.1:8000"
   ensure_nonempty "$ROOT/.env" LIBRENMS_DB_PASSWORD "$(secret_val LIBRENMS_DB_PASSWORD)"

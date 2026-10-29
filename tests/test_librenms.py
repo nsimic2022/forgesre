@@ -220,7 +220,14 @@ def test_compose_librenms_is_default_service():
         assert svc.get("network_mode") == "host"
     assert data["services"]["librenms"]["image"] == "librenms/librenms:26.10.2"
     assert data["services"]["librenms-dispatcher"]["image"] == "librenms/librenms:26.10.2"
-    assert data["services"]["librenms-db"]["image"] == "mariadb:11.4"
+    db = data["services"]["librenms-db"]
+    assert db["image"] == "mariadb:11.4.13"
+    assert db["command"][0].startswith("--")
+    assert "mysqld" not in db["command"]
+    assert "secrets/secrets.env" in db["env_file"]
+    assert "MYSQL_PASSWORD" not in (db.get("environment") or {})
+    assert "LIBRENMS_DB_PASSWORD" not in str(db.get("environment") or {})
+    assert db["healthcheck"]["test"] == ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
     assert "SIDECAR_DISPATCHER" in data["services"]["librenms-dispatcher"]["environment"]
     assert "SIDECAR_SYSLOGNG" not in compose
     assert "SIDECAR_SNMPTRAPD" not in compose
@@ -238,8 +245,12 @@ def test_update_and_scripts_bundle_librenms():
     assert "ensure-librenms-secrets" in update
     assert "librenms-upsert-token" in update
     assert "up -d snmp-exporter netbox-redis netbox librenms-db librenms-redis librenms librenms-dispatcher" in update
+    assert "librenms-db-1" in update
+    assert "mariadb:11.4.13" in update
     secrets = (ROOT / "scripts" / "ensure-librenms-secrets.sh").read_text(encoding="utf-8")
     assert "LIBRENMS_DB_PASSWORD" in secrets
+    assert "MYSQL_ROOT_PASSWORD" in secrets
+    assert "MARIADB_ROOT_PASSWORD" in secrets
     assert "LIBRENMS_APP_KEY" in secrets
     assert "openssl rand" in secrets
     assert "DROP DATABASE" not in secrets.upper()
