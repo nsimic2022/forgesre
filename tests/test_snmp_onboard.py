@@ -165,7 +165,7 @@ def test_discovery_menu_and_snmp_page():
     assert ">SNMP devices<" in scan.text
     assert 'href="/discovery#netbox"' in scan.text
     assert 'id="zabbix"' in scan.text
-    assert 'action="/discovery/zabbix-sync"' in scan.text
+    assert ">Zabbix<" in scan.text
     assert 'class="discovery-actions"' in scan.text
     page = client.get("/discovery/snmp")
     assert page.status_code == 200
