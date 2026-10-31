@@ -97,6 +97,7 @@ def test_snmp_playrule_and_playbook_seeded():
     db = _db()
     book = db.query(Playbook).filter_by(slug="network-unreachable").one()
     assert book.name == "NETWORK-UNREACHABLE"
+    assert {step.get("id") for step in (book.steps or [])} >= {"port", "optics", "snmp"}
     rule = db.query(Playrule).filter_by(name="snmp-down").one()
     assert rule.condition.get("alertname") == "SnmpDeviceUnreachable"
     assert rule.playbook_id == book.id

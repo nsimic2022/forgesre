@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import re
 import threading
 import time
 from typing import Any
@@ -554,4 +555,99 @@ async def _probe_status(url: str, token: str) -> dict[str, Any]:
         "label": "Connected",
         "why": f"{len(devices)} device(s) in LibreNMS (SNMP polling off after Identify).",
         "hosts": len(devices),
+    }
+
+
+# --- webhook payload ---------------------------------------------------------
+
+_RECOVERY_WORDS = {"resolved", "ok", "recovery", "recovered", "0"}
+_SEVERITY = {
+    "critical": "CRITICAL",
+    "crit": "CRITICAL",
+    "error": "CRITICAL",
+    "major": "CRITICAL",
+    "warning": "WARNING",
+    "warn": "WARNING",
+    "minor": "WARNING",
+    "info": "INFO",
+    "ok": "INFO",
+    "1": "CRITICAL",
+    "2": "CRITICAL",
+    "3": "WARNING",
+    "4": "WARNING",
+    "5": "INFO",
+}
+
+
+def _norm_key(key: Any) -> str:
+    text = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", str(key or "").strip())
+    return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+
+
+def _clean(value: Any) -> str:
+    text = str(value if value is not None else "").strip()
+    if text in {"*UNKNOWN*", "UNKNOWN", "{{ $hostname }}"}:
+        return ""
+    return text
+
+
+def _pick(data: dict[str, str], *keys: str) -> str:
+    for key in keys:
+        value = data.get(key, "")
+        if value:
+            return value
+    return ""
+
+
+def librenms_fingerprint(alert_id: str, host: str, alertname: str = "") -> str:
+    ident = alert_id or re.sub(r"\s+", "-", (alertname or "alert").strip())[:96]
+    return f"librenms:{ident}:{host}"[:255]
+
+
+def parse_webhook(payload: Any) -> dict[str, Any]:
+    """LibreNMS API/alert transport JSON → one Alertmanager-shaped alert.
+
+    Accepts the usual LibreNMS keys (hostname, ip, title, rule, state, severity).
+    state 0 / recovered → resolved; anything else stays firing.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError("LibreNMS webhook body must be a JSON object")
+    data = {_norm_key(key): _clean(value) for key, value in payload.items() if not isinstance(value, (dict, list))}
+    alertname = _pick(data, "title", "rule", "name", "alertname", "msg")
+    host = _pick(data, "hostname", "sys_name", "sysname", "display", "host")
+    ip = _pick(data, "ip", "ipv4", "address")
+    if not alertname:
+        raise ValueError("missing title / rule (LibreNMS $TITLE or $RULE)")
+    if not (host or ip):
+        raise ValueError("missing hostname or ip (LibreNMS $HOSTNAME / $IP)")
+    host = host or ip
+    state = _pick(data, "state", "status", "alerted").lower()
+    recovery = state in _RECOVERY_WORDS
+    raw_severity = _pick(data, "severity", "alert_severity")
+    severity = _SEVERITY.get(raw_severity.lower(), "WARNING")
+    labels = {
+        "alertname": alertname,
+        "asset": host,
+        "instance": ip or host,
+        "severity": severity,
+        "source": "librenms",
+        "monitor": "librenms",
+    }
+    if ip:
+        labels["ip"] = ip
+    device_id = _pick(data, "device_id", "deviceid")
+    if device_id:
+        labels["librenms_device_id"] = device_id
+    alert_id = _pick(data, "id", "uid", "alert_id", "alertid")
+    if alert_id:
+        labels["librenms_alert_id"] = alert_id
+    summary = _pick(data, "title", "name") or alertname
+    description = _pick(data, "msg", "message", "description", "faults", "rule")
+    starts = _pick(data, "timestamp", "time", "date", "started")
+    return {
+        "status": "resolved" if recovery else "firing",
+        "labels": labels,
+        "annotations": {"summary": summary, "description": description},
+        **({"startsAt": starts} if starts else {}),
+        "forge": {"fingerprint": librenms_fingerprint(alert_id, host, alertname), "source": "librenms"},
     }

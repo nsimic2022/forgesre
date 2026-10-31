@@ -71,11 +71,19 @@ WINDOWS_STEPS = [
 
 NETWORK_STEPS = [
     {"id": "verify", "title": "Verify the device answers ping / SSH / console"},
+    {"id": "port", "title": "Check switch port status (ifOperStatus / link down vs admin down)"},
+    {"id": "optics", "title": "Check optical levels / light on the uplink"},
     {"id": "snmp", "title": "Check SNMP community, ACL, and UDP/161 from the ForgeSRE host"},
     {"id": "owner", "title": "Identify owner"},
     {"id": "notify", "title": "Notify responsible engineer"},
     {"id": "escalate", "title": "Escalate if not acknowledged"},
 ]
+
+
+def _vanilla_network_steps(steps: list | None) -> bool:
+    """True when the playbook still has the original five SNMP-only steps (safe to upgrade)."""
+    ids = [item.get("id") for item in (steps or []) if isinstance(item, dict)]
+    return ids == ["verify", "snmp", "owner", "notify", "escalate"]
 
 
 def _demo_deleted_by_operator(db: Session, asset_id: str) -> bool:
@@ -296,10 +304,14 @@ def seed(db: Session) -> None:
         net = Playbook(
             slug="network-unreachable",
             name="NETWORK-UNREACHABLE",
-            description="SNMP scrape failed. Guidance only — no commands are executed.",
+            description="SNMP / LibreNMS device workflow. Guidance only — no commands are executed.",
             steps=NETWORK_STEPS,
         )
         db.add(net)
+        db.flush()
+    elif _vanilla_network_steps(net.steps):
+        net.steps = list(NETWORK_STEPS)
+        net.description = "SNMP / LibreNMS device workflow. Guidance only — no commands are executed."
         db.flush()
 
     policy = db.query(EscalationPolicy).filter_by(slug="default-warning").first()

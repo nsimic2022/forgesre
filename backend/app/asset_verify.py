@@ -17,12 +17,16 @@ Seeded ``forge-demo-*`` rows and the discovery Approve seed ``10.20.30.41``
 
 from __future__ import annotations
 
+import asyncio
+import ipaddress
 import json
+import logging
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from app.asset_probe import (
@@ -33,9 +37,11 @@ from app.asset_probe import (
     apply_live_class_to_item,
     asset_kind,
     default_monitoring_profile,
+    parse_host_port,
     probe_target,
     select_assets,
 )
+from app.asset_types import snmp_family
 from app.demo_ids import is_lab_inventory_row
 from app.exporter_detect import classify_exporter_metrics, is_auto_asset_type
 
@@ -65,9 +71,284 @@ CLASS_REASON = {
     CLASS_UNKNOWN: "Unknown — not Linux :9100, Windows :9182, or Network SNMP",
 }
 
+# Incident source pills on /incidents. prometheus = node_exporter / windows_exporter (Agent path).
+SOURCE_PROMETHEUS = "prometheus"
+SOURCE_ZABBIX = "zabbix"
+SOURCE_LIBRENMS = "librenms"
+SOURCE_SNMP = "snmp"
+
+PLAYBOOK_NETWORK = "network_or_unmanaged"
+PLAYBOOK_OS = "standard_os"
+NETWORK_PLAYBOOK_SLUG = "network-unreachable"
+OS_PLAYBOOK_SLUGS = frozenset(
+    {
+        "disk-full",
+        "cpu-high",
+        "memory-high",
+        "host-unreachable",
+        "windows-unreachable",
+    }
+)
+SNMP_FLAP_SECONDS = 120  # mirrors monitoring/alerts.yml SnmpDeviceUnreachable for: 2m
+_SNMP_JOBS = ("forgesre-snmp", "forgesre-snmp-host", "forgesre-snmp-onboard")
+_LOOPBACK = {"::1", "0.0.0.0", "localhost"}
+
+log = logging.getLogger("forgesre.verify")
+
+# Tests set this to avoid a live UDP/161 probe. None = real probe (production).
+_snmp_flap_prober: Callable[[str, float], bool] | None = None
+
 
 def is_lab_asset(item: dict[str, Any] | Any) -> bool:
     return is_lab_inventory_row(item)
+
+
+def alert_labels(alert: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(alert, dict):
+        return {}
+    labels = alert.get("labels")
+    return labels if isinstance(labels, dict) else {}
+
+
+def alert_instance_ip(labels: dict[str, Any] | None) -> str:
+    """Bare device IP from ``ip`` / ``instance`` / ``address`` (strip ``:161`` / ``:9100``)."""
+    blob = labels if isinstance(labels, dict) else {}
+    for key in ("ip", "instance", "address", "device"):
+        raw = str(blob.get(key) or "").strip()
+        if not raw:
+            continue
+        host, _port = parse_host_port(raw)
+        host = (host or raw).strip()
+        try:
+            parsed = ipaddress.ip_address(host)
+        except ValueError:
+            continue
+        if parsed.is_loopback or host in _LOOPBACK or host.startswith("127."):
+            continue
+        return host
+    return ""
+
+
+def is_network_or_unmanaged(asset: Any | None) -> bool:
+    """True for switches/routers/storage/printers — no OS agent to log into."""
+    if asset is None:
+        return False
+    if isinstance(asset, dict):
+        type_, profile = str(asset.get("type") or ""), str(asset.get("monitoring_profile") or "")
+    else:
+        type_ = str(getattr(asset, "type", "") or "")
+        profile = str(getattr(asset, "monitoring_profile", "") or "")
+    if snmp_family(type_, profile):
+        return True
+    return asset_kind(type_, profile) == CLASS_NETWORK
+
+
+def classify_alert_source(alert: dict[str, Any] | None, webhook_source: str = "") -> str:
+    """prometheus | zabbix | librenms | snmp. Agent/node_exporter stays prometheus."""
+    labels = alert_labels(alert)
+    forge = alert.get("forge") if isinstance(alert, dict) and isinstance(alert.get("forge"), dict) else {}
+    name = str(labels.get("alertname") or "").lower()
+    job = str(labels.get("job") or "").lower()
+    monitor = str(labels.get("monitor") or "").lower()
+    tagged = str(labels.get("source") or forge.get("source") or webhook_source or "").strip().lower()
+    hook = (webhook_source or "").strip().lower()
+
+    if tagged == SOURCE_ZABBIX or hook == SOURCE_ZABBIX:
+        return SOURCE_ZABBIX
+    if (
+        tagged == SOURCE_LIBRENMS
+        or hook == SOURCE_LIBRENMS
+        or "librenms" in name
+        or "librenms" in job
+    ):
+        return SOURCE_LIBRENMS
+    if (
+        tagged == SOURCE_SNMP
+        or hook == SOURCE_SNMP
+        or monitor == "snmp"
+        or "snmp" in name
+        or "snmp" in job
+        or any(job == item or job.startswith(f"{item}-") for item in _SNMP_JOBS)
+        or job.startswith("forgesre-snmp")
+    ):
+        return SOURCE_SNMP
+    return SOURCE_PROMETHEUS
+
+
+def classify_playbook_type(
+    alert: dict[str, Any] | None,
+    asset: Any | None = None,
+    source: str = "",
+) -> str:
+    """network_or_unmanaged vs standard_os (disk/CPU/htop checklists)."""
+    src = source or classify_alert_source(alert)
+    if src == SOURCE_LIBRENMS:
+        return PLAYBOOK_NETWORK
+    if is_network_or_unmanaged(asset):
+        return PLAYBOOK_NETWORK
+    labels = alert_labels(alert)
+    name = str(labels.get("alertname") or "").lower()
+    job = str(labels.get("job") or "").lower()
+    if src == SOURCE_SNMP:
+        if "interface" in name or "ifoper" in name or name.endswith("down") or "unreachable" in name:
+            return PLAYBOOK_NETWORK
+        if job.startswith("forgesre-snmp") and "host" not in job:
+            return PLAYBOOK_NETWORK
+        return PLAYBOOK_OS
+    if "librenms" in name or name == "networkinterfacedown":
+        return PLAYBOOK_NETWORK
+    return PLAYBOOK_OS
+
+
+def parse_alert_starts(alert: dict[str, Any] | None) -> datetime | None:
+    if not isinstance(alert, dict):
+        return None
+    raw = alert.get("startsAt") or alert.get("starts_at") or ""
+    labels = alert_labels(alert)
+    if not raw:
+        raw = labels.get("startsAt") or ""
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def flap_skip_reason(
+    alert: dict[str, Any] | None,
+    source: str,
+    *,
+    webhook_source: str = "prometheus",
+    asset: Any | None = None,
+    now: datetime | None = None,
+) -> str:
+    """Why a young SNMP/LibreNMS down alert should not open yet. Empty = ingest.
+
+    Alertmanager already waits ``for: 2m`` on SnmpDeviceUnreachable — those webhooks
+    are not skipped here. LibreNMS fires immediately; a short UDP/161 confirm
+    (``unmanaged_still_reachable``) is the flap guard for that path.
+    """
+    if source not in {SOURCE_SNMP, SOURCE_LIBRENMS}:
+        return ""
+    if is_lab_asset(asset):
+        return ""
+    if (webhook_source or "").strip().lower() == SOURCE_PROMETHEUS:
+        return ""
+    labels = alert_labels(alert)
+    name = str(labels.get("alertname") or "")
+    try:
+        from app.dc_noc import is_down_style
+    except Exception:  # noqa: BLE001 — verify must stay import-safe
+        is_down_style = lambda value: "down" in (value or "").lower() or "unreach" in (value or "").lower()
+    if not is_down_style(name):
+        return ""
+    started = parse_alert_starts(alert)
+    if started is None:
+        return ""
+    clock = now or datetime.now(timezone.utc)
+    age = (clock - started).total_seconds()
+    if age < SNMP_FLAP_SECONDS:
+        return (
+            f"{name or 'alert'} younger than {SNMP_FLAP_SECONDS}s "
+            f"(SNMP/LibreNMS flap guard, age={int(max(age, 0))}s)"
+        )
+    return ""
+
+
+def unmanaged_still_reachable(ip: str, timeout: float = 0.8) -> bool:
+    """True if UDP/161 answers — treat a down alert as flap, do not open."""
+    host = (ip or "").strip()
+    if not host:
+        return False
+    prober = _snmp_flap_prober
+    if prober is not None:
+        return bool(prober(host, timeout))
+    try:
+        from discovery import probe_snmp_udp
+
+        return bool(probe_snmp_udp(host, timeout=max(0.2, min(2.0, float(timeout))), port=161))
+    except Exception:  # noqa: BLE001 — missing probe / timeout is "still down"
+        return False
+
+
+def drop_librenms_flaps(alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop down-style LibreNMS alerts whose IP still answers UDP/161."""
+    try:
+        from app.dc_noc import is_down_style
+    except Exception:  # noqa: BLE001
+        is_down_style = lambda value: "down" in (value or "").lower() or "unreach" in (value or "").lower()
+    kept: list[dict[str, Any]] = []
+    for alert in alerts:
+        labels = alert_labels(alert)
+        name = str(labels.get("alertname") or "")
+        ip = alert_instance_ip(labels)
+        if not ip or not is_down_style(name):
+            kept.append(alert)
+            continue
+        try:
+            if unmanaged_still_reachable(ip):
+                log.info("LibreNMS flap: %s on %s still answers UDP/161 — skip incident", name, ip)
+                continue
+        except Exception as exc:  # noqa: BLE001
+            log.info("LibreNMS flap probe failed for %s (%s) — ingest anyway", ip, exc)
+        kept.append(alert)
+    return kept
+
+
+def network_playbook_for(db: Any) -> Any:
+    """Seeded NETWORK-UNREACHABLE row (switch port / optics / UDP 161)."""
+    from app.models import Playbook
+
+    return db.query(Playbook).filter_by(slug=NETWORK_PLAYBOOK_SLUG).first()
+
+
+def prefer_network_playbook(db: Any, rule: Any, playbook_type: str) -> tuple[int | None, Any]:
+    """Keep a matching network/custom playbook; replace OS disk/CPU/host books."""
+    book = network_playbook_for(db) if playbook_type == PLAYBOOK_NETWORK else None
+    if book is None:
+        return (rule.playbook_id if rule is not None else None), rule
+    if rule is not None and rule.playbook_id:
+        slug = str(getattr(rule.playbook, "slug", "") or "")
+        if slug and slug not in OS_PLAYBOOK_SLUGS:
+            return rule.playbook_id, rule
+        return book.id, rule
+    return book.id, rule
+
+
+async def verify_and_route_alert(
+    db: Any,
+    alert_payload: dict[str, Any],
+    *,
+    source: str = "prometheus",
+) -> list[Any]:
+    """LibreNMS or Alertmanager payload → incidents. Runs ingest off the event loop."""
+    from app.librenms import parse_webhook as parse_librenms
+    from app.services import ingest_alertmanager
+
+    payload = alert_payload if isinstance(alert_payload, dict) else {}
+    src = (source or SOURCE_PROMETHEUS).strip().lower() or SOURCE_PROMETHEUS
+    if "alerts" not in payload:
+        looks_lnms = (
+            src == SOURCE_LIBRENMS
+            or "device_id" in payload
+            or ("hostname" in payload and ("rule" in payload or "title" in payload))
+        )
+        if looks_lnms:
+            payload = {"alerts": [parse_librenms(payload)]}
+            src = SOURCE_LIBRENMS
+        else:
+            payload = {"alerts": [payload]}
+    if src == SOURCE_LIBRENMS:
+        alerts = list(payload.get("alerts") or [])
+        payload = {**payload, "alerts": drop_librenms_flaps(alerts)}
+    return await asyncio.to_thread(lambda: ingest_alertmanager(db, payload, source=src))
 
 
 def classify_verify(item: dict[str, Any]) -> tuple[str, str]:
@@ -458,9 +739,12 @@ def core_check(*, incident: dict[str, Any] | None) -> CheckResult:
     number = str(incident.get("number") or incident.get("incident") or "").strip() or "incident"
     status = str(incident.get("status") or "").strip()
     title = str(incident.get("title") or "").strip()
+    source = str(incident.get("source_label") or incident.get("source") or "").strip()
     extra = f" {status}" if status else ""
     if title:
         extra = f"{extra} {title}".rstrip()
+    if source:
+        extra = f"{extra} [{source}]".rstrip()
     return _check("core", True, f"last incident {number}{extra} — webhook reached Core")
 
 
@@ -1084,16 +1368,34 @@ __all__ = [
     "CLASS_NETWORK",
     "CLASS_UNKNOWN",
     "CLASS_WINDOWS",
+    "NETWORK_PLAYBOOK_SLUG",
+    "PLAYBOOK_NETWORK",
+    "PLAYBOOK_OS",
+    "SNMP_FLAP_SECONDS",
+    "SOURCE_LIBRENMS",
+    "SOURCE_PROMETHEUS",
+    "SOURCE_SNMP",
+    "SOURCE_ZABBIX",
     "VerifyReport",
+    "alert_instance_ip",
+    "classify_alert_source",
+    "classify_playbook_type",
     "classify_verify",
     "compose_verify",
+    "drop_librenms_flaps",
+    "flap_skip_reason",
     "format_verify_report",
     "is_lab_asset",
+    "is_network_or_unmanaged",
+    "network_playbook_for",
     "parse_fact_metrics",
+    "prefer_network_playbook",
     "select_assets",
+    "unmanaged_still_reachable",
     "urllib_am_health",
     "urllib_prom_query",
     "urllib_prom_targets",
+    "verify_and_route_alert",
     "verify_exit",
     "verify_target",
 ]

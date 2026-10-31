@@ -61,6 +61,7 @@ from app.services import (
     alarm_ticker,
     host_down_public,
     incident_source,
+    incident_source_label,
     ingest_alertmanager,
     is_demo_incident,
     list_host_down_incidents,
@@ -282,6 +283,8 @@ def _latest_incident(db: Session, asset: Asset) -> dict[str, Any] | None:
         "number": incident.number,
         "title": incident.title or "",
         "status": incident.status or "",
+        "source": incident_source(incident),
+        "source_label": incident_source_label(incident),
         "started_at": incident.started_at.isoformat() if incident.started_at else "",
     }
 
@@ -1158,6 +1161,39 @@ async def zabbix_webhook(request: Request, db: Session = Depends(get_db)) -> dic
     return {
         "accepted": True,
         "source": "zabbix",
+        "status": [alert["status"] for alert in alerts],
+        "incidents": numbers,
+    }
+
+
+@router.post("/webhooks/librenms")
+async def librenms_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """LibreNMS API/alert transport → incidents with source=librenms.
+
+    Same Bearer as Alertmanager (ALERTMANAGER_WEBHOOK_TOKEN). Ingest and the
+    UDP/161 flap confirm run off the event loop.
+    """
+    from app.asset_verify import drop_librenms_flaps
+    from app.librenms import parse_webhook as parse_librenms
+
+    if not _webhook_token_ok(request):
+        raise HTTPException(status_code=401, detail="invalid webhook token")
+    try:
+        body = await request.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="body is not JSON") from exc
+    events = body if isinstance(body, list) else [body]
+    alerts = []
+    try:
+        for item in events[:50]:
+            alerts.append(parse_librenms(item))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    alerts = await run_in_threadpool(drop_librenms_flaps, alerts)
+    numbers = await run_in_threadpool(_ingest_numbers, db, {"alerts": alerts}, "librenms")
+    return {
+        "accepted": True,
+        "source": "librenms",
         "status": [alert["status"] for alert in alerts],
         "incidents": numbers,
     }

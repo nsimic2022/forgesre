@@ -3355,6 +3355,8 @@ label.row-check {
   vertical-align: baseline;
 }
 .src-pill.src-zabbix { border-color: var(--accent); color: var(--text); }
+.src-pill.src-snmp { border-color: var(--accent); color: var(--text); }
+.src-pill.src-librenms { border-color: var(--accent); color: var(--text); }
 .pill.zbx-agent { font-size: 0.72rem; margin-top: 0.15rem; }
 .pill.zbx-agent.up { background: var(--pill-ok-bg); color: var(--pill-ok); }
 .pill.zbx-agent.down { background: var(--pill-crit-bg); color: var(--pill-crit); }

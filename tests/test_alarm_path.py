@@ -621,7 +621,13 @@ def test_webhook_ingest_runs_in_a_worker_thread(monkeypatch):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert zbx.status_code == 200 and zbx.json()["source"] == "zabbix"
-    assert seen == [("prometheus", "worker"), ("zabbix", "worker")]
+    lnms = client.post(
+        "/api/v1/webhooks/librenms",
+        json={"title": "ap thread", "hostname": "nowhere", "state": "1"},
+        headers={"Authorization": f"Bearer {settings.webhook_token}"},
+    )
+    assert lnms.status_code == 200 and lnms.json()["source"] == "librenms"
+    assert seen == [("prometheus", "worker"), ("zabbix", "worker"), ("librenms", "worker")]
 
 
 def test_webhook_auth_still_checked_before_ingest(monkeypatch):
@@ -631,6 +637,7 @@ def test_webhook_auth_still_checked_before_ingest(monkeypatch):
     client = TestClient(app)
     assert client.post(WEBHOOK, json={"alerts": []}, headers={"Authorization": "Bearer nope"}).status_code == 401
     assert client.post("/api/v1/webhooks/zabbix", json={"host": "h"}, headers={"Authorization": "Bearer nope"}).status_code == 401
+    assert client.post("/api/v1/webhooks/librenms", json={"title": "x", "hostname": "h"}, headers={"Authorization": "Bearer nope"}).status_code == 401
     assert calls == []
 
 
