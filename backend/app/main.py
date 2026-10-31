@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 import sys
 import threading
 from contextlib import asynccontextmanager
@@ -15,7 +17,7 @@ from app.api import router as api_router
 from app.db import Base, SessionLocal, engine
 from app.journal import maybe_prune_old, prune_older_than, report
 from app.inventory import run_scan, seed_demo_candidate, sync_netbox
-from app.jobs import recover_interrupted_jobs
+from app.jobs import recover_interrupted_jobs, start_infrastructure_scheduler
 from app.metrics import metrics_response
 from app.migrate import migrate
 from app.models import Asset
@@ -163,7 +165,15 @@ def create_app() -> FastAPI:
         threading.Thread(target=_jobs_loop, args=(stop,), daemon=True).start()
         threading.Thread(target=_discovery_loop, args=(stop,), daemon=True).start()
         app.state.escalation_stop = stop
+        infra_stop = asyncio.Event()
+        infra_task = None
+        if not os.environ.get("PYTEST_CURRENT_TEST"):
+            infra_task = asyncio.create_task(start_infrastructure_scheduler(stop=infra_stop))
+        app.state.infra_scan_stop = infra_stop
         yield
+        infra_stop.set()
+        if infra_task is not None:
+            infra_task.cancel()
         stop.set()
 
     app = FastAPI(title="ForgeSRE", version="0.9.0", lifespan=lifespan)
