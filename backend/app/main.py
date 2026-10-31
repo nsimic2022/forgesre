@@ -173,10 +173,11 @@ def create_app() -> FastAPI:
     app.include_router(api_router)
     app.include_router(web_router)
     app.include_router(bulk_router)
-    from app.api import zabbix_webhook
+    from app.api import librenms_webhook, zabbix_webhook
 
-    # Short alias of POST /api/v1/webhooks/zabbix for Zabbix media types typed by hand.
+    # Short aliases for media types typed by hand (same handlers as /api/v1/webhooks/...).
     app.add_api_route("/webhooks/zabbix", zabbix_webhook, methods=["POST"], include_in_schema=False)
+    app.add_api_route("/webhooks/librenms", librenms_webhook, methods=["POST"], include_in_schema=False)
 
     @app.exception_handler(NotAuthenticated)
     async def _login_redirect(request, exc):  # noqa: ARG001

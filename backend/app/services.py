@@ -719,12 +719,22 @@ def tracked_incident_statuses() -> tuple[str, ...]:
 
     return ACTIVE_INCIDENT_STATUSES + QUIET_INCIDENT_STATUSES
 UNLABELED_ASSET = "unlabeled"
-INCIDENT_SOURCES = {"prometheus": "Prometheus", "zabbix": "Zabbix"}
-_RESOLVED_BY = {"prometheus": "Alertmanager", "zabbix": "Zabbix"}
+INCIDENT_SOURCES = {
+    "prometheus": "Prometheus",
+    "zabbix": "Zabbix",
+    "librenms": "LibreNMS",
+    "snmp": "SNMP",
+}
+_RESOLVED_BY = {
+    "prometheus": "Alertmanager",
+    "zabbix": "Zabbix",
+    "librenms": "LibreNMS",
+    "snmp": "snmp_exporter",
+}
 
 
 def incident_source(incident: Incident | None) -> str:
-    """prometheus | zabbix. Rows from before the column existed are Prometheus."""
+    """prometheus | zabbix | librenms | snmp. Unknown / empty rows stay Prometheus."""
     value = str(getattr(incident, "source", "") or "").strip().lower()
     return value if value in INCIDENT_SOURCES else "prometheus"
 
@@ -789,7 +799,9 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
     """Alertmanager (or Zabbix, normalized to the same shape) → incidents.
 
     One active incident per fingerprint: ``alertname:asset`` for Prometheus,
-    ``zabbix:{triggerid}:{host}`` for Zabbix (``alert["forge"]["fingerprint"]``).
+    ``zabbix:{triggerid}:{host}`` for Zabbix, ``librenms:{id}:{host}`` for
+    LibreNMS (``alert["forge"]["fingerprint"]``). SNMP-exporter alerts still
+    arrive via Alertmanager; the stored source pill is ``snmp``.
     A firing alert after that incident went RESOLVED opens a new INC (fresh
     escalation ladder) and links both timelines. CLOSED is final. A resolved
     alert marks the active incident RESOLVED; it never closes it.
@@ -799,14 +811,21 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
     The incident resolves only when every series of that fingerprint in the
     payload is resolved, whatever their order. Zabbix events stay one-by-one.
     """
+    from app.asset_verify import (
+        alert_instance_ip,
+        classify_alert_source,
+        classify_playbook_type,
+        flap_skip_reason,
+        prefer_network_playbook,
+    )
     from app.jobs import enqueue
 
-    source = source if source in INCIDENT_SOURCES else "prometheus"
-    resolver = _RESOLVED_BY[source]
+    webhook_source = source if source in INCIDENT_SOURCES else "prometheus"
+    resolver = _RESOLVED_BY.get(webhook_source, "Alertmanager")
     created: list[Incident] = []
     group_status = (payload.get("status") or "firing").lower()
     alerts = list(payload.get("alerts") or [])
-    grouped = source == "prometheus"
+    grouped = webhook_source == "prometheus"
     still_firing: set[str] = set()
     if grouped:
         still_firing = {
@@ -821,6 +840,8 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
         alert_status = (alert.get("status") or group_status).lower()
         alertname = str(labels.get("alertname") or "Alert")
         asset_name = str(labels.get("asset") or labels.get("instance") or "").strip()
+        classified = classify_alert_source(alert, webhook_source)
+        ip = str(labels.get("ip") or "") or alert_instance_ip(labels)
         fingerprint = alert_fingerprint(alert)
         if grouped and alert_status == "resolved" and (fingerprint in still_firing or fingerprint in resolved_here):
             continue
@@ -831,13 +852,18 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
             .first()
         )
         asset = None
-        if asset_name or labels.get("ip") or labels.get("zabbix_hostid"):
+        if asset_name or ip or labels.get("zabbix_hostid"):
             asset = match_alert_asset(
                 db,
                 asset_name,
-                ip=str(labels.get("ip") or ""),
+                ip=ip,
                 zabbix_hostid=str(labels.get("zabbix_hostid") or ""),
             )
+        if classified == "prometheus" and asset is not None:
+            from app.asset_verify import is_network_or_unmanaged
+
+            if is_network_or_unmanaged(asset) and webhook_source == "prometheus":
+                classified = "snmp"
         if alert_status == "resolved":
             resolved_here.add(fingerprint)
             if incident:
@@ -873,24 +899,48 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
                     object_id=str(getattr(asset, "asset_id", "") or asset_name),
                 )
                 continue
+            flap = flap_skip_reason(
+                alert, classified, webhook_source=webhook_source, asset=asset
+            )
+            if flap:
+                report(
+                    db,
+                    "incident",
+                    "suppress",
+                    "ok",
+                    summary=f"Skipped {alertname} on {asset_name}",
+                    detail=flap,
+                    object_type="asset",
+                    object_id=str(getattr(asset, "asset_id", "") or asset_name),
+                )
+                continue
+            playbook_type = classify_playbook_type(alert, asset, classified)
             rule = match_playrule(db, alertname, labels, asset=asset, annotations=annotations)
+            playbook_id, rule = prefer_network_playbook(db, rule, playbook_type)
             incident = Incident(
                 number=next_incident_number(db),
                 title=str(annotations.get("summary") or alertname),
                 severity=str(labels.get("severity") or (rule.severity if rule else "warning")).upper(),
                 status="OPEN",
                 fingerprint=fingerprint,
-                source=source,
+                source=classified if classified in INCIDENT_SOURCES else webhook_source,
                 asset_id=asset.id if asset else None,
                 playrule_id=rule.id if rule else None,
-                playbook_id=rule.playbook_id if rule else None,
+                playbook_id=playbook_id,
                 summary=str(annotations.get("description") or ""),
                 alert_payload=alert,
                 timeline=[],
             )
             db.add(incident)
             db.flush()
-            fired = f"{alertname} fired" if source == "prometheus" else f"{alertname} fired in Zabbix"
+            if classified == "zabbix":
+                fired = f"{alertname} fired in Zabbix"
+            elif classified == "librenms":
+                fired = f"{alertname} fired in LibreNMS"
+            elif classified == "snmp":
+                fired = f"{alertname} fired via SNMP"
+            else:
+                fired = f"{alertname} fired"
             append_timeline(incident, "alert", "ALERT", fired)
             append_timeline(incident, "incident", "INCIDENT", f"{incident.number} created")
             if previous_resolved is not None:
@@ -909,8 +959,14 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
             if rule:
                 via = " (custom alarm)" if playrule_from_asset(rule, asset) else ""
                 append_timeline(incident, "playrule", "PLAYRULE", f"{rule.name}{via}")
-                if rule.playbook:
-                    append_timeline(incident, "playbook", "PLAYBOOK", rule.playbook.name)
+            book_name = ""
+            if incident.playbook_id:
+                from app.models import Playbook
+
+                book = db.get(Playbook, incident.playbook_id)
+                book_name = book.name if book is not None else ""
+            if book_name:
+                append_timeline(incident, "playbook", "PLAYBOOK", book_name)
             db.add(IncidentEvent(incident_id=incident.id, kind="created", data=labels))
             audit(
                 db,
@@ -919,7 +975,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
                 object_id=incident.number,
                 data={
                     "alertname": alertname,
-                    **({"source": source} if source != "prometheus" else {}),
+                    **({"source": classified} if classified != "prometheus" else {}),
                     **({"refire_of": previous_resolved.number} if previous_resolved is not None else {}),
                 },
             )
@@ -943,7 +999,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
             summary=f"{mark}{incident.number} {incident.title}",
             detail=(
                 f"asset={incident.asset.hostname if incident.asset else 'unknown'} "
-                f"fingerprint={incident.fingerprint} source={source}"
+                f"fingerprint={incident.fingerprint} source={incident.source}"
             ),
             object_type="incident",
             object_id=incident.number,
