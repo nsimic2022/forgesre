@@ -34,6 +34,46 @@ def _fetch_map(mapping):
     return fetch
 
 
+def test_check_tcp_port_and_snmp_timeout():
+    import asyncio
+    import socket
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from app.exporter_detect import check_snmp_port, check_tcp_port, fetch_metrics_async
+
+    class _Ok(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"node_cpu_seconds_total 1\n")
+
+        def log_message(self, fmt, *args):
+            del fmt, args
+
+    server = HTTPServer(("127.0.0.1", 0), _Ok)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    async def _run():
+        opened = await check_tcp_port("127.0.0.1", port, timeout=1.0)
+        closed = await check_tcp_port("127.0.0.1", 1, timeout=0.3)
+        snmp = await check_snmp_port("127.0.0.1", 1, timeout=0.3)
+        status, body, err = await fetch_metrics_async(f"http://127.0.0.1:{port}/metrics", timeout=1.0)
+        return opened, closed, snmp, status, body, err
+
+    opened, closed, snmp, status, body, err = asyncio.run(_run())
+    server.shutdown()
+    assert opened is True
+    assert closed is False
+    assert snmp is False
+    assert status == 200
+    assert "node_cpu" in body
+    del socket, err
+
+
 def test_classify_metrics_windows_and_linux():
     assert classify_exporter_metrics("# HELP windows_cpu_time_total\nwindows_cpu_time_total 1") == "windows"
     assert classify_exporter_metrics("# TYPE node_cpu_seconds_total counter\nnode_cpu_seconds_total 1") == "linux"
@@ -384,9 +424,14 @@ def test_api_detect_and_auto_form(monkeypatch):
             role="Possible Windows server",
         )
 
+    async def fake_detect_type(ip, hint_type="", hint_profile="", timeout=1.0, fetcher=None, **kwargs):
+        del hint_type, hint_profile, timeout, fetcher, kwargs
+        return fake_detect(ip)
+
     monkeypatch.setattr("app.inventory.detect_exporter", fake_detect)
     monkeypatch.setattr("app.exporter_detect.detect_exporter", fake_detect)
-    monkeypatch.setattr("app.api.detect_exporter", fake_detect)
+    monkeypatch.setattr("app.exporter_detect.detect_exporter_type", fake_detect_type)
+    monkeypatch.setattr("app.inventory.detect_exporter_type", fake_detect_type)
 
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()

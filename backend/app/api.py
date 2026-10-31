@@ -54,7 +54,7 @@ from app.inventory import (
 from app.asset_probe import apply_probe_to_asset, probe_target, refresh_reachability, reachability_snapshot
 from app.asset_verify import compose_verify, select_assets as verify_select_assets
 from app.asset_verify import urllib_am_health, urllib_prom_targets
-from app.exporter_detect import detect_exporter, is_auto_asset_type
+from app.exporter_detect import is_auto_asset_type
 from app.demo_ids import is_lab_inventory_row
 from app.seed import seed
 from app.services import (
@@ -1113,13 +1113,15 @@ def delete_asset_api(
 
 
 @router.get("/detect-exporter")
-def detect_exporter_api(
+async def detect_exporter_api(
     ip: str = "",
     hint_type: str = "",
     user: User = Depends(require("write_assets")),
 ) -> dict[str, Any]:
     del user
-    return detect_exporter(ip, hint_type=hint_type, snmp_prober=_snmp_answer).as_dict()
+    from app.exporter_detect import detect_exporter_type
+
+    return (await detect_exporter_type(ip, hint_type=hint_type, snmp_prober=_snmp_answer)).as_dict()
 
 
 def _ingest_numbers(db: Session, payload: dict[str, Any], source: str = "prometheus") -> list[str]:
