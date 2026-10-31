@@ -867,11 +867,16 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
         if alert_status == "resolved":
             resolved_here.add(fingerprint)
             if incident:
-                incident.status = "RESOLVED"
-                incident.ended_at = utcnow()
-                append_timeline(incident, "alert", "ALERT", f"{alertname} resolved by {resolver}")
-                db.add(IncidentEvent(incident_id=incident.id, kind="resolved", data=labels))
-                refresh_asset_status(db, asset)
+                from app.asset_alarms import resolve_active_incident
+
+                resolve_active_incident(
+                    db,
+                    incident,
+                    asset,
+                    alertname=alertname,
+                    resolver=resolver,
+                    labels=labels,
+                )
                 if asset and asset.asset_id == DEMO_ASSET:
                     reset_demo_gauges()
             continue

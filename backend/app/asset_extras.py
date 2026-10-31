@@ -23,6 +23,7 @@ from app.snmp_families import SNMP_METRICS_KEY, normalize_snmp_metrics
 from app.snmp_onboard import LIBRENMS_HOSTNAME_KEY, SNMP_ONBOARD_OIDS_KEY, normalize_onboard_oids
 
 SNMP_POLL_KEY = "snmp_poll"
+OUTAGES_KEY = "outages"
 
 # key, English label, max length
 EXTRA_FIELDS: tuple[tuple[str, str, int], ...] = (
@@ -116,6 +117,13 @@ def public_extras(raw: Any) -> dict[str, Any]:
     return out
 
 
+def _saved_outages(raw: Any) -> list:
+    if not isinstance(raw, dict):
+        return []
+    rows = raw.get(OUTAGES_KEY)
+    return [item for item in rows if isinstance(item, dict)] if isinstance(rows, list) else []
+
+
 def merge_extras(current: Any, extras: dict | None, snmp: dict | None) -> dict[str, str]:
     """New extras for an update. A posted extras block without ``snmp_*`` keys keeps the saved SNMP
     settings; a posted SNMP block (already validated by snmp_from_form) replaces them."""
@@ -126,6 +134,7 @@ def merge_extras(current: Any, extras: dict | None, snmp: dict | None) -> dict[s
         for key, value in before.items()
         if key in {SNMP_ONBOARD_OIDS_KEY, LIBRENMS_HOSTNAME_KEY}
     }
+    saved_outages = _saved_outages(extras) if extras is not None and OUTAGES_KEY in extras else _saved_outages(current)
     if extras is None:
         out = {key: value for key, value in before.items() if key not in SNMP_KEYS}
     else:
@@ -135,6 +144,8 @@ def merge_extras(current: Any, extras: dict | None, snmp: dict | None) -> dict[s
         if snmp is None and any(key in extras for key in SNMP_KEYS):
             snmp = normalize_snmp({**{key: value for key, value in saved_snmp.items() if key in SNMP_SECRET_KEYS}, **extras})
     out.update(saved_snmp if snmp is None else normalize_snmp(snmp))
+    if saved_outages:
+        out[OUTAGES_KEY] = saved_outages
     return out
 
 
