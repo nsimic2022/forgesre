@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
 import re
+import threading
+from collections.abc import AsyncGenerator
 from typing import Any, Protocol
 
 import httpx
@@ -12,6 +16,57 @@ from rca.sanitize import sanitize
 from rca.specialists import writer_payload
 
 SHELLISH = ("sudo ", "rm -", "ssh ", "docker ", "iptables", "mkfs", "dd if=", "systemctl ", "reboot")
+STREAM_CONNECT_TIMEOUT = 5.0
+
+
+def _run_sync(awaitable: Any) -> Any:
+    """Run a coroutine from sync ForgeRCA / pytest. A live loop uses a worker thread."""
+    if not inspect.isawaitable(awaitable):
+        return awaitable
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(awaitable)
+    box: dict[str, Any] = {}
+
+    def _worker() -> None:
+        try:
+            box["value"] = asyncio.run(awaitable)
+        except Exception as exc:
+            box["error"] = exc
+
+    worker = threading.Thread(target=_worker, name="rca-llm-sync")
+    worker.start()
+    worker.join()
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
+def _sse_token(line: str) -> str | None:
+    """One OpenAI-compatible SSE line → token text, ``[DONE]``, or None."""
+    text = (line or "").strip()
+    if not text.startswith("data:"):
+        return None
+    data = text[5:].strip()
+    if data == "[DONE]":
+        return "[DONE]"
+    if not data:
+        return None
+    try:
+        payload = json.loads(data)
+    except json.JSONDecodeError:
+        return data
+    choice = (payload.get("choices") or [{}])[0]
+    if not isinstance(choice, dict):
+        return None
+    delta = choice.get("delta") if isinstance(choice.get("delta"), dict) else {}
+    content = delta.get("content") or delta.get("reasoning_content") or ""
+    if content:
+        return str(content)
+    message = choice.get("message") if isinstance(choice.get("message"), dict) else {}
+    text_out = message.get("content") or choice.get("text") or ""
+    return str(text_out) if text_out else None
 
 
 class LLMProvider(Protocol):
@@ -46,14 +101,36 @@ class OpenAICompatibleLLM:
     def get_model(self) -> str:
         return self.model
 
-    def complete_json(self, system: str, user: str) -> dict[str, Any] | None:
-        self.last_error = ""
+    def _endpoint(self) -> str:
         endpoint = self.url
         if not endpoint.endswith("/chat/completions"):
             endpoint = endpoint + "/chat/completions"
+        return endpoint
+
+    def _http_timeout(self, *, connect: float = 10.0) -> httpx.Timeout:
+        total = max(1.0, float(self.timeout or 180.0))
+        return httpx.Timeout(total, connect=min(connect, total))
+
+    async def _resolve_model(self, client: httpx.AsyncClient) -> str:
+        configured = (self.model or "local").strip() or "local"
+        if configured not in {"local", "default"}:
+            return configured
         try:
-            with httpx.Client(timeout=httpx.Timeout(self.timeout, connect=10.0)) as client:
-                model = self._resolve_model(client)
+            response = await client.get(self.url.rstrip("/") + "/models")
+            response.raise_for_status()
+            rows = response.json().get("data") or []
+            if rows and rows[0].get("id"):
+                return str(rows[0]["id"])
+        except Exception:
+            pass
+        return configured
+
+    async def complete_json_async(self, system: str, user: str) -> dict[str, Any] | None:
+        self.last_error = ""
+        endpoint = self._endpoint()
+        try:
+            async with httpx.AsyncClient(timeout=self._http_timeout()) as client:
+                model = await self._resolve_model(client)
                 last_why = ""
                 # Qwen2.5 (bundled GGUF) wants a plain OpenAI body. Extra
                 # chat_template_kwargs can 400 on llama.cpp, which we used to
@@ -69,7 +146,7 @@ class OpenAICompatibleLLM:
                         "max_tokens": 512,
                     }
                     payload.update(extra)
-                    response = client.post(endpoint, json=payload)
+                    response = await client.post(endpoint, json=payload)
                     if response.status_code in {400, 404, 422}:
                         last_why = f"HTTP {response.status_code}"
                         continue
@@ -88,19 +165,40 @@ class OpenAICompatibleLLM:
             self.last_error = str(exc)[:200]
             return None
 
-    def _resolve_model(self, client: httpx.Client) -> str:
-        configured = (self.model or "local").strip() or "local"
-        if configured not in {"local", "default"}:
-            return configured
+    def complete_json(self, system: str, user: str) -> dict[str, Any] | None:
+        return _run_sync(self.complete_json_async(system, user))
+
+    async def stream_completion(self, system: str, user: str) -> AsyncGenerator[str, None]:
+        """Token-by-token SSE from llama.cpp / OpenAI-compatible ``stream: true``."""
+        self.last_error = ""
+        endpoint = self._endpoint()
+        payload = {
+            "model": (self.model or "local").strip() or "local",
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "temperature": 0.1,
+            "max_tokens": 512,
+            "stream": True,
+        }
         try:
-            response = client.get(self.url.rstrip("/") + "/models")
-            response.raise_for_status()
-            rows = response.json().get("data") or []
-            if rows and rows[0].get("id"):
-                return str(rows[0]["id"])
-        except Exception:
-            pass
-        return configured
+            async with httpx.AsyncClient(timeout=self._http_timeout(connect=STREAM_CONNECT_TIMEOUT)) as client:
+                payload["model"] = await self._resolve_model(client)
+                async with client.stream("POST", endpoint, json=payload) as response:
+                    if response.status_code != 200:
+                        self.last_error = f"HTTP {response.status_code}"
+                        return
+                    async for line in response.aiter_lines():
+                        token = _sse_token(line)
+                        if token is None:
+                            continue
+                        if token == "[DONE]":
+                            break
+                        yield token
+        except httpx.RequestError as exc:
+            self.last_error = str(exc)[:200]
+            return
 
 
 def make_provider(url: str | None, model: str = "local", timeout: float = 180.0) -> LLMProvider:

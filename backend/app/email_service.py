@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-import smtplib
 import ssl
 from email.message import EmailMessage
 
+import aiosmtplib
+
+from app.metrics import run_sync
 from app.settings import settings
+
+SMTP_TIMEOUT = 5.0
 
 
 def smtp_ssl_context(host: str):
@@ -59,7 +63,8 @@ def compose_email_message(
     )
 
 
-def send_smtp(target: str, subject: str, body: str, html: str | None = None) -> None:
+async def send_smtp_async(target: str, subject: str, body: str, html: str | None = None) -> None:
+    """aiosmtplib send. STARTTLS when smtp_tls; 5s cap so a hung MTA does not freeze a worker."""
     address = resolve_smtp_address(target)
     message = build_email_message(
         from_addr=settings.smtp_from,
@@ -68,9 +73,21 @@ def send_smtp(target: str, subject: str, body: str, html: str | None = None) -> 
         body=body,
         html=html,
     )
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as client:
-        if settings.smtp_tls:
-            client.starttls(context=smtp_ssl_context(settings.smtp_host))
-        if settings.smtp_username:
-            client.login(settings.smtp_username, settings.smtp_password)
-        client.send_message(message)
+    kwargs: dict = {
+        "hostname": settings.smtp_host,
+        "port": int(settings.smtp_port or 587),
+        "timeout": SMTP_TIMEOUT,
+        "start_tls": bool(settings.smtp_tls),
+        "use_tls": False,
+    }
+    if settings.smtp_tls:
+        kwargs["tls_context"] = smtp_ssl_context(settings.smtp_host)
+    if settings.smtp_username:
+        kwargs["username"] = settings.smtp_username
+        kwargs["password"] = settings.smtp_password
+    await aiosmtplib.send(message, **kwargs)
+
+
+def send_smtp(target: str, subject: str, body: str, html: str | None = None) -> None:
+    """Sync wrapper for pytest and ``Depends(get_db)`` callers."""
+    run_sync(send_smtp_async(target, subject, body, html=html))

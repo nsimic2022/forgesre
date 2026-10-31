@@ -33,27 +33,11 @@ def _enable_smtp(monkeypatch):
 def _capture_smtp(monkeypatch):
     sent = []
 
-    class DummySMTP:
-        def __init__(self, host, port, timeout=10):
-            self.host = host
-            self.port = port
+    async def fake_send(message, **kwargs):
+        del kwargs
+        sent.append(message)
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def starttls(self, context=None):
-            return None
-
-        def login(self, user, password):
-            return None
-
-        def send_message(self, message):
-            sent.append(message)
-
-    monkeypatch.setattr("smtplib.SMTP", DummySMTP)
+    monkeypatch.setattr("app.email_service.aiosmtplib.send", fake_send)
     return sent
 
 

@@ -615,13 +615,13 @@ def test_openai_llm_retries_plain_then_thinking_kwargs(monkeypatch):
         }
         return httpx.Response(200, json=payload)
 
-    real_client = httpx.Client
+    real_client = httpx.AsyncClient
 
     def fake_client(*args, **kwargs):
         kwargs["transport"] = httpx.MockTransport(handler)
         return real_client(*args, **kwargs)
 
-    monkeypatch.setattr(httpx, "Client", fake_client)
+    monkeypatch.setattr("rca.llm.httpx.AsyncClient", fake_client)
     llm = OpenAICompatibleLLM("http://127.0.0.1:8088/v1")
     out = llm.complete_json("sys", "user")
     assert out is not None
