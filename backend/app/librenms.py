@@ -607,19 +607,27 @@ def librenms_fingerprint(alert_id: str, host: str, alertname: str = "") -> str:
 def parse_webhook(payload: Any) -> dict[str, Any]:
     """LibreNMS API/alert transport JSON → one Alertmanager-shaped alert.
 
-    Accepts the usual LibreNMS keys (hostname, ip, title, rule, state, severity).
+    Flat templates use ``rule_name`` / ``hostname`` / ``msg`` / ``device``.
+    ``device`` may be a hostname string or a ``{hostname, ip}`` object.
     state 0 / recovered → resolved; anything else stays firing.
     """
     if not isinstance(payload, dict):
         raise ValueError("LibreNMS webhook body must be a JSON object")
     data = {_norm_key(key): _clean(value) for key, value in payload.items() if not isinstance(value, (dict, list))}
-    alertname = _pick(data, "title", "rule", "name", "alertname", "msg")
-    host = _pick(data, "hostname", "sys_name", "sysname", "display", "host")
+    device = payload.get("device")
+    if isinstance(device, dict):
+        nested = {_norm_key(key): _clean(value) for key, value in device.items() if not isinstance(value, (dict, list))}
+        for key, value in nested.items():
+            data.setdefault(key, value)
+    elif isinstance(device, str) and _clean(device):
+        data.setdefault("device", _clean(device))
+    alertname = _pick(data, "rule_name", "title", "rule", "name", "alertname", "msg")
+    host = _pick(data, "hostname", "device", "sys_name", "sysname", "display", "host")
     ip = _pick(data, "ip", "ipv4", "address")
     if not alertname:
-        raise ValueError("missing title / rule (LibreNMS $TITLE or $RULE)")
+        raise ValueError("missing title / rule (LibreNMS $TITLE, $RULE, or rule_name)")
     if not (host or ip):
-        raise ValueError("missing hostname or ip (LibreNMS $HOSTNAME / $IP)")
+        raise ValueError("missing hostname or ip (LibreNMS $HOSTNAME / $IP / device)")
     host = host or ip
     state = _pick(data, "state", "status", "alerted").lower()
     recovery = state in _RECOVERY_WORDS
@@ -641,7 +649,7 @@ def parse_webhook(payload: Any) -> dict[str, Any]:
     alert_id = _pick(data, "id", "uid", "alert_id", "alertid")
     if alert_id:
         labels["librenms_alert_id"] = alert_id
-    summary = _pick(data, "title", "name") or alertname
+    summary = _pick(data, "title", "rule_name", "name") or alertname
     description = _pick(data, "msg", "message", "description", "faults", "rule")
     starts = _pick(data, "timestamp", "time", "date", "started")
     return {

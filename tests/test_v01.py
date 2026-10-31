@@ -69,7 +69,7 @@ def test_playrule_match_and_incident(monkeypatch):
         json=payload,
         headers={"Authorization": "Bearer forgesre-dev-webhook-token"},
     )
-    assert hook.status_code == 200
+    assert hook.status_code == 202
     metrics = client.get("/metrics")
     assert metrics.status_code == 200
     assert b"forgesre_demo_cpu_percent" in metrics.content

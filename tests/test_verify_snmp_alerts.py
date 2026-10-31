@@ -144,6 +144,27 @@ def test_parse_librenms_webhook_firing_and_recovery():
         {"title": "Device Down", "hostname": "edge-sw-09", "ip": "10.80.2.9", "state": "0", "id": "44"}
     )
     assert recovered["status"] == "resolved"
+    flat = parse_librenms(
+        {
+            "rule_name": "Device Down",
+            "hostname": "10.80.2.19",
+            "msg": "ICMP timeout",
+            "severity": "critical",
+            "status": "1",
+        }
+    )
+    assert flat["labels"]["alertname"] == "Device Down"
+    assert flat["labels"]["instance"] == "10.80.2.19"
+    assert flat["annotations"]["description"] == "ICMP timeout"
+    nested = parse_librenms(
+        {
+            "rule_name": "Port down",
+            "device": {"hostname": "core-sw-1", "ip": "10.80.2.20"},
+            "msg": "Gi0/1 down",
+        }
+    )
+    assert nested["labels"]["asset"] == "core-sw-1"
+    assert nested["labels"]["ip"] == "10.80.2.20"
 
 
 def test_ingest_snmp_matches_ip_and_attaches_network_playbook():
@@ -290,11 +311,17 @@ def test_librenms_webhook_creates_incident_and_pill(monkeypatch):
         },
         headers={"Authorization": f"Bearer {_token()}"},
     )
-    assert response.status_code == 200, response.text
+    assert response.status_code == 202, response.text
     body = response.json()
     assert body["accepted"] is True and body["source"] == "librenms"
-    assert len(body["incidents"]) == 1
-    number = body["incidents"][0]
+    assert body["queued"] == 1
+    assert "incidents" not in body
+    lookup = SessionLocal()
+    try:
+        incident = lookup.query(Incident).filter(Incident.fingerprint == f"librenms:{token}:sw-wh-{token}").one()
+        number = incident.number
+    finally:
+        lookup.close()
     client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
     page = client.get(f"/incidents/{number}")
     assert 'data-source="librenms"' in page.text
@@ -397,3 +424,48 @@ def test_core_check_includes_source_pill():
     assert hit.ok is True
     assert "[SNMP]" in hit.detail
     assert "webhook reached Core" in hit.detail
+
+
+def test_alerts_alias_accepts_flat_librenms_rule_name(monkeypatch):
+    monkeypatch.setattr(verify_mod, "_snmp_flap_prober", lambda ip, timeout: False)
+    db = _db()
+    token = uuid4().hex[:8]
+    db.add(
+        Asset(
+            asset_id=f"sw-flat-{token}",
+            hostname=f"sw-flat-{token}",
+            ip="10.80.9.5",
+            type="Switch",
+            monitoring_profile="network-switch",
+        )
+    )
+    db.commit()
+    db.close()
+    client = _client()
+    assert client.post(
+        "/api/v1/alerts/librenms",
+        json={"rule_name": "Device Down", "hostname": "10.80.9.5", "msg": "no ping"},
+        headers={"Authorization": "Bearer nope"},
+    ).status_code == 401
+    response = client.post(
+        "/api/v1/alerts/librenms",
+        json={
+            "rule_name": "Device Down",
+            "hostname": "10.80.9.5",
+            "msg": "no ping",
+            "severity": "critical",
+            "id": token,
+        },
+        headers={"Authorization": f"Bearer {_token()}"},
+    )
+    assert response.status_code == 202
+    assert response.json()["queued"] == 1
+    lookup = SessionLocal()
+    try:
+        row = lookup.query(Incident).filter(Incident.source == "librenms").order_by(Incident.id.desc()).first()
+        assert row is not None
+        assert row.asset is not None and row.asset.ip == "10.80.9.5"
+        assert row.playbook is not None and row.playbook.slug == "network-unreachable"
+        assert "Device Down" in (row.title or "")
+    finally:
+        lookup.close()

@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import func
@@ -1124,14 +1124,49 @@ def _ingest_numbers(db: Session, payload: dict[str, Any], source: str = "prometh
     return [item.number for item in ingest_alertmanager(db, payload, source=source)]
 
 
-@router.post("/webhooks/alertmanager")
-async def alertmanager_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+def _background_verify_and_route(payload: dict[str, Any], source: str) -> None:
+    """After 202. Own session — request ``get_db()`` is already closed.
+
+    Starlette runs this sync task in a threadpool, then ``verify_and_route_alert``
+    does ingest off that thread. Failures are journaled; they must not retry the HTTP.
+    """
+    from app.asset_verify import verify_and_route_alert
+    from app.db import SessionLocal
+    from app.librenms import run_sync
+
+    db = SessionLocal()
+    try:
+        run_sync(verify_and_route_alert(db, payload, source=source))
+    except Exception:
+        log.exception("webhook ingest failed source=%s", source)
+    finally:
+        db.close()
+
+
+def _queued_alert_count(payload: dict[str, Any]) -> int:
+    alerts = payload.get("alerts")
+    return len(alerts) if isinstance(alerts, list) else 0
+
+
+@router.post("/webhooks/alertmanager", status_code=202)
+@router.post("/alerts/alertmanager", status_code=202)
+async def alertmanager_webhook(request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    """Alertmanager group → 202, then verify_and_route_alert in the background.
+
+    The whole payload stays one job so group-aware resolve still works. Bearer is
+    ALERTMANAGER_WEBHOOK_TOKEN (same constant-time check as HTTP SD).
+    """
     if not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid webhook token")
-    payload = await request.json()
-    # Ingest blocks on Prometheus/Loki queries and SMTP; keep it off the event loop.
-    numbers = await run_in_threadpool(_ingest_numbers, db, payload)
-    return {"accepted": True, "incidents": numbers}
+    try:
+        payload = await request.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="body is not JSON") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="Alertmanager body must be a JSON object")
+    queued = _queued_alert_count(payload)
+    background_tasks.add_task(_background_verify_and_route, payload, "prometheus")
+    return {"accepted": True, "source": "prometheus", "queued": queued}
 
 
 @router.post("/webhooks/zabbix")
@@ -1166,14 +1201,15 @@ async def zabbix_webhook(request: Request, db: Session = Depends(get_db)) -> dic
     }
 
 
-@router.post("/webhooks/librenms")
-async def librenms_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
-    """LibreNMS API/alert transport → incidents with source=librenms.
+@router.post("/webhooks/librenms", status_code=202)
+@router.post("/alerts/librenms", status_code=202)
+async def librenms_webhook(request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    """LibreNMS API/alert transport → 202, then verify_and_route_alert.
 
-    Same Bearer as Alertmanager (ALERTMANAGER_WEBHOOK_TOKEN). Ingest and the
-    UDP/161 flap confirm run off the event loop.
+    Flat keys (rule_name, hostname, msg, device) are normalized to the
+    Alertmanager-shaped schema. Same Bearer as Alertmanager. Flap confirm
+    and ingest run after the 202.
     """
-    from app.asset_verify import drop_librenms_flaps
     from app.librenms import parse_webhook as parse_librenms
 
     if not _webhook_token_ok(request):
@@ -1189,13 +1225,13 @@ async def librenms_webhook(request: Request, db: Session = Depends(get_db)) -> d
             alerts.append(parse_librenms(item))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    alerts = await run_in_threadpool(drop_librenms_flaps, alerts)
-    numbers = await run_in_threadpool(_ingest_numbers, db, {"alerts": alerts}, "librenms")
+    queued = len(alerts)
+    background_tasks.add_task(_background_verify_and_route, {"alerts": alerts}, "librenms")
     return {
         "accepted": True,
         "source": "librenms",
+        "queued": queued,
         "status": [alert["status"] for alert in alerts],
-        "incidents": numbers,
     }
 
 
