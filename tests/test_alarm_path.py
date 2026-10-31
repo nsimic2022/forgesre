@@ -607,6 +607,9 @@ def test_webhook_ingest_runs_in_a_worker_thread(monkeypatch):
         return []
 
     monkeypatch.setattr(api_mod, "ingest_alertmanager", fake_ingest)
+    import app.services as services_mod
+
+    monkeypatch.setattr(services_mod, "ingest_alertmanager", fake_ingest)
     token = _zabbix_token(monkeypatch)
     client = TestClient(app)
     am = client.post(
@@ -614,7 +617,8 @@ def test_webhook_ingest_runs_in_a_worker_thread(monkeypatch):
         json=_group(_series("ApThread", "nowhere", "firing")),
         headers={"Authorization": f"Bearer {settings.webhook_token}"},
     )
-    assert am.status_code == 200 and am.json() == {"accepted": True, "incidents": []}
+    assert am.status_code == 202
+    assert am.json() == {"accepted": True, "source": "prometheus", "queued": 1}
     zbx = client.post(
         "/api/v1/webhooks/zabbix",
         json={"trigger_name": "ap thread", "host": "nowhere", "event_value": "1", "trigger_id": "4242"},
@@ -626,7 +630,7 @@ def test_webhook_ingest_runs_in_a_worker_thread(monkeypatch):
         json={"title": "ap thread", "hostname": "nowhere", "state": "1"},
         headers={"Authorization": f"Bearer {settings.webhook_token}"},
     )
-    assert lnms.status_code == 200 and lnms.json()["source"] == "librenms"
+    assert lnms.status_code == 202 and lnms.json()["source"] == "librenms"
     assert seen == [("prometheus", "worker"), ("zabbix", "worker"), ("librenms", "worker")]
 
 
@@ -651,11 +655,14 @@ def test_alertmanager_token_is_compared_in_constant_time(monkeypatch):
 
     monkeypatch.setattr(api_mod.hmac, "compare_digest", recording)
     monkeypatch.setattr(api_mod, "ingest_alertmanager", lambda *a, **k: [])
+    import app.services as services_mod
+
+    monkeypatch.setattr(services_mod, "ingest_alertmanager", lambda *a, **k: [])
     client = TestClient(app)
     good = {"Authorization": f"Bearer {settings.webhook_token}"}
     bad = {"Authorization": "Bearer nope"}
     assert client.post(WEBHOOK, json={"alerts": []}, headers=bad).status_code == 401
-    assert client.post(WEBHOOK, json={"alerts": []}, headers=good).status_code == 200
+    assert client.post(WEBHOOK, json={"alerts": []}, headers=good).status_code == 202
     assert client.get("/api/v1/sd/prometheus", headers=bad).status_code == 401
     assert client.get("/api/v1/sd/prometheus", headers=good).status_code == 200
     assert (b"nope", settings.webhook_token.encode()) in seen
@@ -668,6 +675,9 @@ def test_slow_webhook_ingest_does_not_stall_health(monkeypatch):
         return []
 
     monkeypatch.setattr(api_mod, "ingest_alertmanager", slow_ingest)
+    import app.services as services_mod
+
+    monkeypatch.setattr(services_mod, "ingest_alertmanager", slow_ingest)
 
     async def scenario() -> tuple[float, bool, int]:
         transport = httpx.ASGITransport(app=app)
@@ -689,6 +699,6 @@ def test_slow_webhook_ingest_does_not_stall_health(monkeypatch):
             return took, still_ingesting, response.status_code
 
     took, still_ingesting, status = asyncio.run(scenario())
-    assert status == 200
+    assert status == 202
     assert still_ingesting, "health answered only after the webhook finished"
     assert took < 0.75
