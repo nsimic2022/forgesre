@@ -225,7 +225,12 @@ def test_enrich_components_keeps_stack_order_and_open_links():
 
 
 def test_enrich_components_keeps_link_for_non_loopback_prometheus(monkeypatch):
-    monkeypatch.setattr("app.stack.settings.prometheus_url", "http://prom.corp:9090")
+    from app.settings import settings as live_settings
+
+    monkeypatch.setattr(
+        "app.stack.settings",
+        live_settings.model_copy(update={"prometheus_url": "http://prom.corp:9090"}),
+    )
     rows = enrich_components({"prometheus": {"status": "ok"}}, "lab.local")
     prom = next(row for row in rows if row["id"] == "prometheus")
     assert prom["local_only"] is False
@@ -248,7 +253,12 @@ def test_doctor_grafana_probe_uses_grafana_port(monkeypatch):
     assert "http://127.0.0.1:3300/api/health" in seen
     assert not any(":3000/" in url for url in seen)
     monkeypatch.delenv("GRAFANA_PORT")
-    monkeypatch.setattr("app.api.settings.grafana_public_url", "http://localhost:3400")
+    from app.settings import settings as live_settings
+
+    monkeypatch.setattr(
+        "app.api.settings",
+        live_settings.model_copy(update={"grafana_public_url": "http://localhost:3400"}),
+    )
     assert grafana_health_url() == "http://127.0.0.1:3400/api/health"
 
 

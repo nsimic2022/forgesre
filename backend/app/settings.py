@@ -4,8 +4,11 @@ import logging
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
+from pydantic import AliasChoices, Field, PrivateAttr, field_validator
+from pydantic_settings import BaseSettings, DotEnvSettingsSource, PydanticBaseSettingsSource, SettingsConfigDict
 
 log = logging.getLogger("forgesre")
 
@@ -33,24 +36,168 @@ def _dotenv_value(path: Path, key: str) -> str:
     return found
 
 
-class Settings:
-    def __init__(self) -> None:
-        self.frontend_dir = Path(os.environ.get("FRONTEND_DIR") or (_repo_root() / "frontend"))
-        self.config_path = Path(os.environ.get("FORGESRE_CONFIG") or (_repo_root() / "config" / "forgesre.yml"))
-        self.database_url = os.environ.get(
-            "DATABASE_URL",
-            "postgresql+psycopg2://forgesre:forgesre@127.0.0.1:5432/forgesre",
+def _env_files() -> tuple[Path, Path]:
+    """Public `.env` first; `secrets/secrets.env` (or FORGESRE_SECRETS_FILE) wins on clash."""
+    root = _repo_root()
+    public = root / ".env"
+    secrets = Path(os.environ.get("FORGESRE_SECRETS_FILE") or (root / "secrets" / "secrets.env"))
+    return public, secrets
+
+
+def _secrets_path() -> Path:
+    return Path(os.environ.get("FORGESRE_SECRETS_FILE") or (_repo_root() / "secrets" / "secrets.env"))
+
+
+def _require_http_url(value: str, name: str) -> str:
+    text = (value or "").strip()
+    if not text:
+        raise ValueError(f"{name} must be an http(s) URL")
+    parsed = urlparse(text)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(f"{name} must be an http(s) URL with a host")
+    return text
+
+
+class Settings(BaseSettings):
+    """Process env + `.env` + `secrets/secrets.env`. Frozen after load. YAML stays live."""
+
+    model_config = SettingsConfigDict(
+        env_file_encoding="utf-8",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+        populate_by_name=True,
+    )
+
+    frontend_dir: Path = Field(default_factory=lambda: _repo_root() / "frontend")
+    config_path: Path = Field(
+        default_factory=lambda: _repo_root() / "config" / "forgesre.yml",
+        validation_alias=AliasChoices("FORGESRE_CONFIG", "config_path"),
+    )
+    database_url: str = "postgresql+psycopg2://forgesre:forgesre@127.0.0.1:5432/forgesre"
+    secret_key: str = "forgesre-dev-secret-change-me"
+    admin_email: str = Field(
+        default="admin@forgesre.local",
+        validation_alias=AliasChoices("FORGESRE_ADMIN_EMAIL", "admin_email"),
+    )
+    admin_password: str = Field(
+        default="admin",
+        validation_alias=AliasChoices("FORGESRE_ADMIN_PASSWORD", "admin_password"),
+    )
+    webhook_token: str = Field(
+        default="forgesre-dev-webhook-token",
+        validation_alias=AliasChoices("ALERTMANAGER_WEBHOOK_TOKEN", "webhook_token"),
+    )
+    prometheus_url: str = "http://127.0.0.1:9090"
+    loki_url: str = "http://127.0.0.1:3100"
+    alertmanager_url: str = "http://127.0.0.1:9093"
+    grafana_public_url: str = "http://localhost:3000"
+    log_file: str = Field(default="", validation_alias=AliasChoices("FORGESRE_LOG_FILE", "log_file"))
+    smtp_username: str = ""
+    smtp_password: str = ""
+    # Env / dotenv only. YAML inventory.*.url still wins on the public properties.
+    librenms_env_url: str = Field(default="", validation_alias=AliasChoices("LIBRENMS_URL", "librenms_env_url"))
+    netbox_env_url: str = Field(
+        default="http://127.0.0.1:8001",
+        validation_alias=AliasChoices("NETBOX_URL", "netbox_env_url"),
+    )
+    _yaml: dict[str, Any] = PrivateAttr(default_factory=dict)
+    # config_path is patched in discovery tests; core endpoints stay locked.
+    _MUTABLE_FIELDS = frozenset({"config_path"})
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in {"yaml", "_yaml"}:
+            stored = value if isinstance(value, dict) else {}
+            if name == "_yaml" and isinstance(value, dict):
+                stored = value
+            try:
+                private = object.__getattribute__(self, "__pydantic_private__")
+            except AttributeError:
+                private = None
+            if isinstance(private, dict):
+                private["_yaml"] = stored
+            else:
+                object.__setattr__(self, "_yaml", stored)
+            return
+        fields = type(self).model_fields
+        ready = object.__getattribute__(self, "__dict__").get("__settings_ready__", False)
+        if name not in fields or name in self._MUTABLE_FIELDS or not ready:
+            object.__setattr__(self, name, value)
+            return
+        raise ValueError(f"{name} is read-only after startup")
+
+    def __delattr__(self, name: str) -> None:
+        fields = type(self).model_fields
+        if name not in fields or name in self._MUTABLE_FIELDS:
+            object.__delattr__(self, name)
+            return
+        raise ValueError(f"{name} is read-only after startup")
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        del dotenv_settings
+        return (
+            init_settings,
+            env_settings,
+            DotEnvSettingsSource(settings_cls, env_file=_env_files(), env_file_encoding="utf-8"),
+            file_secret_settings,
         )
-        self.secret_key = os.environ.get("SECRET_KEY", "forgesre-dev-secret-change-me")
-        self.admin_email = os.environ.get("FORGESRE_ADMIN_EMAIL", "admin@forgesre.local")
-        self.admin_password = os.environ.get("FORGESRE_ADMIN_PASSWORD", "admin")
-        self.webhook_token = os.environ.get("ALERTMANAGER_WEBHOOK_TOKEN", "forgesre-dev-webhook-token")
-        self.prometheus_url = os.environ.get("PROMETHEUS_URL", "http://127.0.0.1:9090")
-        self.loki_url = os.environ.get("LOKI_URL", "http://127.0.0.1:3100")
-        self.alertmanager_url = os.environ.get("ALERTMANAGER_URL", "http://127.0.0.1:9093")
-        self.grafana_public_url = os.environ.get("GRAFANA_PUBLIC_URL", "http://localhost:3000")
-        self.log_file = os.environ.get("FORGESRE_LOG_FILE", "")
-        self.yaml = self._load_yaml()
+
+    @field_validator("database_url")
+    @classmethod
+    def validate_database_url(cls, value: str) -> str:
+        text = (value or "").strip()
+        if text.startswith("sqlite:") or text.startswith(
+            ("postgresql://", "postgresql+psycopg2://", "postgresql+asyncpg://")
+        ):
+            return text
+        raise ValueError(
+            "DATABASE_URL must start with postgresql://, postgresql+psycopg2://, "
+            "postgresql+asyncpg://, or sqlite://"
+        )
+
+    @field_validator("prometheus_url", "loki_url", "alertmanager_url", "grafana_public_url")
+    @classmethod
+    def validate_http_url(cls, value: str, info: Any) -> str:
+        name = str(getattr(info, "field_name", None) or "URL").upper()
+        return _require_http_url(value, name)
+
+    @field_validator("librenms_env_url")
+    @classmethod
+    def validate_optional_http_url(cls, value: str) -> str:
+        text = (value or "").strip()
+        if not text:
+            return ""
+        return _require_http_url(text, "LIBRENMS_URL")
+
+    @field_validator("netbox_env_url")
+    @classmethod
+    def validate_netbox_env_url(cls, value: str) -> str:
+        return _require_http_url((value or "").strip() or "http://127.0.0.1:8001", "NETBOX_URL")
+
+    def model_post_init(self, __context: Any) -> None:
+        loaded = self._load_yaml()
+        private = getattr(self, "__pydantic_private__", None)
+        if isinstance(private, dict):
+            private["_yaml"] = loaded
+        else:
+            object.__setattr__(self, "_yaml", loaded)
+        object.__setattr__(self, "__settings_ready__", True)
+
+    @property
+    def yaml(self) -> dict[str, Any]:
+        return self._yaml
+
+    @yaml.setter
+    def yaml(self, value: dict[str, Any] | None) -> None:
+        object.__setattr__(self, "_yaml", value if isinstance(value, dict) else {})
 
     def _load_yaml(self) -> dict[str, Any]:
         if self.config_path.exists():
@@ -137,14 +284,6 @@ class Settings:
     @property
     def smtp_tls(self) -> bool:
         return bool((self.yaml.get("notifications") or {}).get("email", {}).get("tls", True))
-
-    @property
-    def smtp_username(self) -> str:
-        return os.environ.get("SMTP_USERNAME", "")
-
-    @property
-    def smtp_password(self) -> str:
-        return os.environ.get("SMTP_PASSWORD", "")
 
     @property
     def grafana_enabled(self) -> bool:
@@ -260,8 +399,8 @@ class Settings:
     def netbox_url(self) -> str:
         yaml_url = str(((self.yaml.get("inventory") or {}).get("netbox") or {}).get("url") or "").strip().rstrip("/")
         if yaml_url:
-            return yaml_url
-        return str(os.environ.get("NETBOX_URL") or "http://127.0.0.1:8001").rstrip("/")
+            return _require_http_url(yaml_url, "NETBOX_URL").rstrip("/")
+        return _require_http_url(self.netbox_env_url or "http://127.0.0.1:8001", "NETBOX_URL").rstrip("/")
 
     @property
     def netbox_token(self) -> str:
@@ -271,18 +410,14 @@ class Settings:
         is the source of truth. An empty or stale project .env must not override
         it. Fall back to the process environment only when that file is absent.
         """
-        secrets_path = Path(
-            os.environ.get("FORGESRE_SECRETS_FILE") or (_repo_root() / "secrets" / "secrets.env")
-        )
+        secrets_path = _secrets_path()
         if secrets_path.is_file():
             return _dotenv_value(secrets_path, "NETBOX_API_TOKEN")
         return (os.environ.get("NETBOX_API_TOKEN") or "").strip()
 
     def _secret(self, key: str) -> str:
         """Same source of truth as netbox_token: bind-mounted secrets file, then process env."""
-        secrets_path = Path(
-            os.environ.get("FORGESRE_SECRETS_FILE") or (_repo_root() / "secrets" / "secrets.env")
-        )
+        secrets_path = _secrets_path()
         if secrets_path.is_file():
             value = _dotenv_value(secrets_path, key)
             if value:
@@ -382,10 +517,12 @@ class Settings:
     def librenms_url(self) -> str:
         """Bundled LibreNMS UI. YAML inventory.librenms.url wins over LIBRENMS_URL."""
         yaml_url = str(self._librenms_yaml().get("url") or "").strip()
-        return (yaml_url or self._secret("LIBRENMS_URL") or "http://127.0.0.1:8000").rstrip("/")
+        raw = yaml_url or self.librenms_env_url or self._secret("LIBRENMS_URL") or "http://127.0.0.1:8000"
+        return _require_http_url(raw, "LIBRENMS_URL").rstrip("/")
 
     @property
     def librenms_token(self) -> str:
+        """LIBRENMS_API_TOKEN from secrets/secrets.env. No shipped default."""
         return self._secret("LIBRENMS_API_TOKEN")
 
     @property
@@ -403,13 +540,15 @@ class Settings:
             raw = 8.0
         return max(2.0, min(15.0, raw))
 
-
     @property
     def cookie_secure(self) -> bool:
         raw = os.environ.get("FORGESRE_COOKIE_SECURE") or (self.yaml.get("system") or {}).get("cookie_secure")
         if raw is None:
             return False
         return str(raw).lower() in {"1", "true", "yes", "on"}
+
+
+ForgeSRESettings = Settings
 
 
 def _truthy_dev() -> bool:
