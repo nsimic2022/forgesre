@@ -595,6 +595,11 @@ def _zabbix_token(monkeypatch, token: str = "ap-zbx-token") -> str:
 
 
 def test_webhook_ingest_runs_in_a_worker_thread(monkeypatch):
+    """AM/LibreNMS: get_db_session + run_sync on a Starlette worker's private loop.
+
+    session.run_sync() is a greenlet, so get_running_loop() succeeds even though
+    the FastAPI request loop is free. Zabbix stays on run_in_threadpool (no loop).
+    """
     seen: list[tuple[str, str]] = []
 
     def fake_ingest(db, payload, *, source="prometheus"):
@@ -631,7 +636,11 @@ def test_webhook_ingest_runs_in_a_worker_thread(monkeypatch):
         headers={"Authorization": f"Bearer {settings.webhook_token}"},
     )
     assert lnms.status_code == 202 and lnms.json()["source"] == "librenms"
-    assert seen == [("prometheus", "worker"), ("zabbix", "worker"), ("librenms", "worker")]
+    assert seen == [
+        ("prometheus", "event-loop"),
+        ("zabbix", "worker"),
+        ("librenms", "event-loop"),
+    ]
 
 
 def test_webhook_auth_still_checked_before_ingest(monkeypatch):
