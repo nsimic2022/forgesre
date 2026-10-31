@@ -3,10 +3,15 @@
 Forge uses LibreNMS to discover vendor, model, ports and sensors. snmp_exporter
 still collects Prometheus series — LibreNMS polling is disabled after identify
 so the two do not walk the same device. Credentials are never logged.
+
+HTTP uses ``httpx.AsyncClient`` with a short connect timeout so a hung DC hop
+does not freeze the FastAPI event loop. Sync callers use ``run_sync``.
 """
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import logging
 import threading
 import time
@@ -22,6 +27,7 @@ log = logging.getLogger("forgesre")
 BACKOFF_SECONDS = 120.0
 OK_TTL = 60.0
 FAIL_TTL = BACKOFF_SECONDS
+CONNECT_TIMEOUT = 3.0
 NOT_CONFIGURED_WHY = (
     "LibreNMS API token missing. ./forgesre update writes LIBRENMS_API_TOKEN after "
     "the bundled container is up, or create one in LibreNMS → API Access."
@@ -101,24 +107,78 @@ def _headers() -> dict[str, str]:
     }
 
 
-def _timeout() -> float:
-    return settings.librenms_timeout
+def http_timeout() -> httpx.Timeout:
+    """Read/write bound by YAML timeout_seconds; connect is always short."""
+    total = float(settings.librenms_timeout)
+    connect = min(CONNECT_TIMEOUT, total)
+    return httpx.Timeout(total, connect=connect)
 
 
-def _request(method: str, path: str, *, json_body: dict | None = None) -> dict[str, Any]:
+def run_sync(awaitable: Any) -> Any:
+    """Run a coroutine from sync doctor/CLI. If a loop is already running, use a worker thread."""
+    if not inspect.isawaitable(awaitable):
+        return awaitable
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(awaitable)
+    box: dict[str, Any] = {}
+
+    def _worker() -> None:
+        try:
+            box["value"] = asyncio.run(awaitable)
+        except Exception as exc:
+            box["error"] = exc
+
+    worker = threading.Thread(target=_worker, name="librenms-sync")
+    worker.start()
+    worker.join()
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
+async def maybe_await(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+async def _maybe(value: Any) -> Any:
+    return await maybe_await(value)
+
+
+def _timeout() -> httpx.Timeout:
+    return http_timeout()
+
+
+async def _request(
+    method: str,
+    path: str,
+    *,
+    json_body: dict | None = None,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
     if not configured():
         raise LibreNmsError(NOT_CONFIGURED_WHY)
     remaining = backoff_remaining()
     if remaining > 0:
         raise LibreNmsUnavailable(f"LibreNMS backoff {_state.get('down_why') or ''} ({int(remaining)}s)".strip())
     url = api_root(settings.librenms_url) + path
-    try:
-        with httpx.Client(timeout=_timeout()) as client:
-            response = client.request(method, url, headers=_headers(), json=json_body)
-    except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPError) as exc:
-        why = _short(exc)
-        _mark_down(why)
-        raise LibreNmsUnavailable(why) from exc
+
+    async def _do(owned: httpx.AsyncClient) -> httpx.Response:
+        try:
+            return await owned.request(method, url, headers=_headers(), json=json_body)
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPError) as exc:
+            why = _short(exc)
+            _mark_down(why)
+            raise LibreNmsUnavailable(why) from exc
+
+    if client is None:
+        async with httpx.AsyncClient(timeout=http_timeout(), follow_redirects=True) as owned:
+            response = await _do(owned)
+    else:
+        response = await _do(client)
     if response.status_code >= 500:
         why = f"HTTP {response.status_code}"
         _mark_down(why)
@@ -138,11 +198,19 @@ def _request(method: str, path: str, *, json_body: dict | None = None) -> dict[s
     return payload
 
 
-def list_devices(*, disabled: str = "") -> list[dict[str, Any]]:
+async def _call(method: str, path: str, *, json_body: dict | None = None, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
+    try:
+        result = _request(method, path, json_body=json_body, client=client)
+    except TypeError:
+        result = _request(method, path, json_body=json_body)
+    return await _maybe(result)
+
+
+async def list_devices(*, disabled: str = "", client: httpx.AsyncClient | None = None) -> list[dict[str, Any]]:
     path = "/devices"
     if disabled in {"0", "1"}:
         path += f"?type=disabled&query={disabled}"
-    payload = _request("GET", path)
+    payload = await _call("GET", path, client=client)
     rows = payload.get("devices") or []
     return [row for row in rows if isinstance(row, dict)]
 
@@ -155,9 +223,9 @@ def _host_path(hostname: str) -> str:
     return quote(host, safe=".-_:")
 
 
-def get_device(hostname: str) -> dict[str, Any]:
+async def get_device(hostname: str, *, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
     host = _host_path(hostname)
-    payload = _request("GET", f"/devices/{host}")
+    payload = await _call("GET", f"/devices/{host}", client=client)
     rows = payload.get("devices") or []
     if isinstance(rows, list) and rows and isinstance(rows[0], dict):
         return rows[0]
@@ -166,20 +234,24 @@ def get_device(hostname: str) -> dict[str, Any]:
     raise LibreNmsError("LibreNMS returned no device")
 
 
-def get_ports(hostname: str) -> list[dict[str, Any]]:
+async def get_ports(hostname: str, *, client: httpx.AsyncClient | None = None) -> list[dict[str, Any]]:
     host = _host_path(hostname)
-    payload = _request("GET", f"/devices/{host}/ports?columns=ifIndex,ifName,ifDescr,ifOperStatus,ifAdminStatus,ifSpeed")
+    payload = await _call(
+        "GET",
+        f"/devices/{host}/ports?columns=ifIndex,ifName,ifDescr,ifOperStatus,ifAdminStatus,ifSpeed",
+        client=client,
+    )
     rows = payload.get("ports") or []
     return [row for row in rows if isinstance(row, dict)]
 
 
-def get_health(hostname: str, kind: str) -> list[dict[str, Any]]:
+async def get_health(hostname: str, kind: str, *, client: httpx.AsyncClient | None = None) -> list[dict[str, Any]]:
     host = _host_path(hostname)
     safe_kind = quote(str(kind or "").strip(), safe=".-_")
     if not safe_kind:
         return []
     try:
-        payload = _request("GET", f"/devices/{host}/health/{safe_kind}")
+        payload = await _call("GET", f"/devices/{host}/health/{safe_kind}", client=client)
     except LibreNmsError:
         return []
     graphs = payload.get("graphs") or payload.get("health") or payload.get(kind) or []
@@ -188,22 +260,23 @@ def get_health(hostname: str, kind: str) -> list[dict[str, Any]]:
     return [row for row in graphs if isinstance(row, dict)]
 
 
-def add_device(body: dict[str, Any]) -> dict[str, Any]:
-    return _request("POST", "/devices", json_body=body)
+async def add_device(body: dict[str, Any], *, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
+    return await _call("POST", "/devices", json_body=body, client=client)
 
 
-def set_disabled(hostname: str, disabled: bool) -> dict[str, Any]:
+async def set_disabled(hostname: str, disabled: bool, *, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
     host = _host_path(hostname)
-    return _request(
+    return await _call(
         "PATCH",
         f"/devices/{host}",
         json_body={"field": ["disabled"], "data": ["1" if disabled else "0"]},
+        client=client,
     )
 
 
-def delete_device(hostname: str) -> dict[str, Any]:
+async def delete_device(hostname: str, *, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
     host = _host_path(hostname)
-    return _request("DELETE", f"/devices/{host}")
+    return await _call("DELETE", f"/devices/{host}", client=client)
 
 
 def add_payload(
@@ -252,7 +325,15 @@ def _first_device(payload: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def discover_device(
+def _as_rows(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        return [row for row in value if isinstance(row, dict)]
+    if isinstance(value, dict):
+        return [value]
+    return []
+
+
+async def discover_device(
     ip: str,
     *,
     version: str = "v2c",
@@ -265,8 +346,9 @@ def discover_device(
     v3_priv_proto: str = "",
     v3_priv_pass: str = "",
     disable_polling: bool = True,
+    client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
-    """Add (or fetch) a device, read ports/health, then disable LibreNMS SNMP polling."""
+    """Add (or fetch) a device, read ports/health in parallel, then disable polling."""
     host = (ip or "").strip()
     if not host:
         raise LibreNmsError("Need an IP")
@@ -282,52 +364,111 @@ def discover_device(
         v3_priv_proto=v3_priv_proto,
         v3_priv_pass=v3_priv_pass,
     )
-    added = False
-    try:
-        payload = add_device(body)
-        device = _first_device(payload) or get_device(host)
-        added = True
-    except LibreNmsError as exc:
-        text = str(exc).lower()
-        if "already" in text or "duplicate" in text or "exist" in text:
-            device = get_device(host)
-        else:
-            raise
-    hostname = str(device.get("hostname") or host)
-    ports: list[dict[str, Any]] = []
-    processors: list[dict[str, Any]] = []
-    mempools: list[dict[str, Any]] = []
-    storage: list[dict[str, Any]] = []
-    temperatures: list[dict[str, Any]] = []
-    try:
-        ports = get_ports(hostname)
-    except LibreNmsError:
-        ports = []
-    processors = get_health(hostname, "processor")
-    mempools = get_health(hostname, "mempool")
-    storage = get_health(hostname, "storage")
-    temperatures = get_health(hostname, "temperature")
-    if disable_polling:
+
+    async def _run(owned: httpx.AsyncClient) -> dict[str, Any]:
+        added = False
         try:
-            set_disabled(hostname, True)
-            device["disabled"] = 1
-        except LibreNmsError:
-            pass
-    return {
-        "ok": True,
-        "hostname": hostname,
-        "device": device,
-        "added": added,
-        "ports": ports,
-        "processors": processors,
-        "mempools": mempools,
-        "storage": storage,
-        "temperatures": temperatures,
-        "disabled_polling": disable_polling,
-    }
+            payload = await _maybe(add_device(body, client=owned))
+            device = _first_device(payload)
+            if not device:
+                device = await _maybe(get_device(host, client=owned))
+            added = True
+        except LibreNmsError as exc:
+            text = str(exc).lower()
+            if "already" in text or "duplicate" in text or "exist" in text:
+                device = await _maybe(get_device(host, client=owned))
+            else:
+                raise
+        hostname = str(device.get("hostname") or host)
+        ports_r, proc_r, mem_r, stor_r, temp_r = await asyncio.gather(
+            _maybe(get_ports(hostname, client=owned)),
+            _maybe(get_health(hostname, "processor", client=owned)),
+            _maybe(get_health(hostname, "mempool", client=owned)),
+            _maybe(get_health(hostname, "storage", client=owned)),
+            _maybe(get_health(hostname, "temperature", client=owned)),
+            return_exceptions=True,
+        )
+        ports = _as_rows(ports_r) if not isinstance(ports_r, BaseException) else []
+        processors = _as_rows(proc_r) if not isinstance(proc_r, BaseException) else []
+        mempools = _as_rows(mem_r) if not isinstance(mem_r, BaseException) else []
+        storage = _as_rows(stor_r) if not isinstance(stor_r, BaseException) else []
+        temperatures = _as_rows(temp_r) if not isinstance(temp_r, BaseException) else []
+        if disable_polling:
+            try:
+                await _maybe(set_disabled(hostname, True, client=owned))
+                device["disabled"] = 1
+            except LibreNmsError:
+                pass
+        return {
+            "ok": True,
+            "hostname": hostname,
+            "device": device,
+            "added": added,
+            "ports": ports,
+            "processors": processors,
+            "mempools": mempools,
+            "storage": storage,
+            "temperatures": temperatures,
+            "disabled_polling": disable_polling,
+        }
+
+    if client is not None:
+        return await _run(client)
+    async with httpx.AsyncClient(timeout=http_timeout(), follow_redirects=True) as owned:
+        return await _run(owned)
 
 
-def status() -> dict[str, Any]:
+async def get_devices_many(hostnames: list[str], *, client: httpx.AsyncClient | None = None) -> list[dict[str, Any]]:
+    """Parallel GET /devices/{host}. A down host is a row with ``error``, never a raised hang."""
+    hosts = [str(name or "").strip() for name in hostnames if str(name or "").strip()]
+
+    async def _one(owned: httpx.AsyncClient, host: str) -> dict[str, Any]:
+        try:
+            return await _maybe(get_device(host, client=owned))
+        except LibreNmsError as exc:
+            return {"hostname": host, "error": str(exc)[:300]}
+
+    async def _all(owned: httpx.AsyncClient) -> list[dict[str, Any]]:
+        if not hosts:
+            return []
+        return list(await asyncio.gather(*[_one(owned, host) for host in hosts]))
+
+    if client is not None:
+        return await _all(client)
+    async with httpx.AsyncClient(timeout=http_timeout(), follow_redirects=True) as owned:
+        return await _all(owned)
+
+
+async def discover_devices(items: list[dict[str, Any]], *, disable_polling: bool = True) -> list[dict[str, Any]]:
+    """Identify several hosts at once (one AsyncClient, gather)."""
+
+    async def _one(owned: httpx.AsyncClient, item: dict[str, Any]) -> dict[str, Any]:
+        host = str(item.get("ip") or item.get("hostname") or "").strip()
+        try:
+            return await discover_device(
+                host,
+                version=str(item.get("version") or "v2c"),
+                community=str(item.get("community") or ""),
+                port=int(item.get("port") or 161),
+                v3_user=str(item.get("v3_user") or ""),
+                v3_level=str(item.get("v3_level") or ""),
+                v3_auth_proto=str(item.get("v3_auth_proto") or ""),
+                v3_auth_pass=str(item.get("v3_auth_pass") or ""),
+                v3_priv_proto=str(item.get("v3_priv_proto") or ""),
+                v3_priv_pass=str(item.get("v3_priv_pass") or ""),
+                disable_polling=disable_polling,
+                client=owned,
+            )
+        except LibreNmsError as exc:
+            return {"ok": False, "hostname": host, "error": str(exc)[:300]}
+
+    async with httpx.AsyncClient(timeout=http_timeout(), follow_redirects=True) as owned:
+        if not items:
+            return []
+        return list(await asyncio.gather(*[_one(owned, item) for item in items]))
+
+
+async def status_async() -> dict[str, Any]:
     """Cached doctor row. Never logs the API token."""
     url = settings.librenms_url or "http://127.0.0.1:8000"
     token = settings.librenms_token
@@ -339,7 +480,7 @@ def status() -> dict[str, Any]:
             OK_TTL if cached.get("ok") else FAIL_TTL
         ):
             return dict(cached)
-    row = _probe_status(url, token)
+    row = await _probe_status(url, token)
     with _lock:
         _state["status"] = row
         _state["status_at"] = now
@@ -347,7 +488,11 @@ def status() -> dict[str, Any]:
     return dict(row)
 
 
-def _probe_status(url: str, token: str) -> dict[str, Any]:
+def status() -> dict[str, Any]:
+    return run_sync(status_async())
+
+
+async def _probe_status(url: str, token: str) -> dict[str, Any]:
     if not settings.librenms_enabled:
         return {
             "ok": True,
@@ -359,8 +504,8 @@ def _probe_status(url: str, token: str) -> dict[str, Any]:
         }
     login = (url or "").rstrip("/") + "/login"
     try:
-        with httpx.Client(timeout=min(_timeout(), 4.0), follow_redirects=True) as client:
-            probe = client.get(login)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(min(float(settings.librenms_timeout), 4.0), connect=CONNECT_TIMEOUT), follow_redirects=True) as client:
+            probe = await client.get(login)
         ui_up = probe.status_code < 500
     except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPError):
         ui_up = False
@@ -383,7 +528,7 @@ def _probe_status(url: str, token: str) -> dict[str, Any]:
             "hosts": 0,
         }
     try:
-        devices = list_devices()
+        devices = await list_devices()
     except LibreNmsUnavailable as exc:
         return {
             "ok": False,

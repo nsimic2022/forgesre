@@ -113,7 +113,8 @@ def _join_app_key_fragments(lines: list[str], start: int, partial: str) -> tuple
         return joined, 0
     for line in lines[start:]:
         stripped = line.strip()
-        if classify(line) != "orphan" or not B64_FRAG_RE.fullmatch(stripped):
+        # A leftover pad line like ``YYYY==`` parses as KEY=; still a base64 fragment.
+        if not B64_FRAG_RE.fullmatch(stripped):
             break
         joined += stripped
         consumed += 1

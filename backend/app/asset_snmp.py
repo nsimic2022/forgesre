@@ -14,6 +14,7 @@ journal and audit only see whether a secret is saved.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,16 @@ AUTH_PROTOCOLS = ("MD5", "SHA", "SHA224", "SHA256", "SHA384", "SHA512")
 PRIV_PROTOCOLS = ("DES", "AES", "AES192", "AES256", "AES192C", "AES256C")
 USM_MIN_PASSWORD = 8
 
+AUTH_YAML_ORDER = (
+    "version",
+    "community",
+    "username",
+    "security_level",
+    "auth_protocol",
+    "password",
+    "priv_protocol",
+    "priv_password",
+)
 SECRET_KEYS = ("snmp_community", "snmp_v3_auth_pass", "snmp_v3_priv_pass")
 PLAIN_KEYS = (
     "snmp_version",
@@ -201,6 +212,56 @@ def auth_spec(asset: Any) -> dict[str, Any] | None:
         spec["priv_protocol"] = stored.get("snmp_v3_priv_proto") or "AES"
         spec["priv_password"] = stored["snmp_v3_priv_pass"]
     return spec
+
+
+def dump_auth_block(auths: dict[str, Any]) -> str:
+    """Indent ``auths`` for snmp.yml. ``yaml.safe_dump`` quotes community / USM secrets."""
+    ordered: dict[str, dict[str, Any]] = {}
+    for name in sorted(auths, key=str):
+        spec = auths[name]
+        if not isinstance(spec, dict):
+            continue
+        row: dict[str, Any] = {}
+        for key in AUTH_YAML_ORDER:
+            if key in spec:
+                row[key] = spec[key]
+        for key, value in spec.items():
+            if key not in row:
+                row[key] = value
+        ordered[name] = row
+    if not ordered:
+        return ""
+    dumped = yaml.safe_dump(ordered, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    indented = "\n".join(("  " + line if line else "") for line in dumped.splitlines())
+    return indented + "\n"
+
+
+def write_auths_yaml(path: Path | str, auths: dict[str, Any], *, modules: dict[str, Any] | None = None) -> None:
+    """Write a standalone snmp_exporter snippet. Never interpolates secrets into a template string."""
+    target = Path(path)
+    payload: dict[str, Any] = {"auths": auths}
+    if modules is not None:
+        payload["modules"] = modules
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        yaml.safe_dump(payload, default_flow_style=False, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    try:
+        os.chmod(target, 0o600)
+    except OSError:
+        pass
+
+
+async def probe_snmp_async(host: str, timeout: float = 2.0, port: int = 161) -> bool:
+    """UDP/161 reachability off the event loop. Inventory walks stay in LibreNMS identify."""
+
+    def _run() -> bool:
+        from discovery import probe_snmp_udp
+
+        return bool(probe_snmp_udp(host, timeout=max(0.2, min(5.0, float(timeout))), port=int(port or 161)))
+
+    return await asyncio.to_thread(_run)
 
 
 def generated_snmp_path() -> Path:
