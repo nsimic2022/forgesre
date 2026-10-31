@@ -304,16 +304,16 @@ def test_query_prometheus_expr_does_not_short_circuit_demo_gauge(monkeypatch):
     from app.services import query_prometheus_expr
 
     class Boom:
-        def __enter__(self):
+        async def __aenter__(self):
             return self
 
-        def __exit__(self, *exc):
+        async def __aexit__(self, *exc):
             return False
 
-        def get(self, *args, **kwargs):
+        async def get(self, *args, **kwargs):
             raise RuntimeError("prometheus down")
 
-    monkeypatch.setattr("httpx.Client", lambda **kwargs: Boom())
+    monkeypatch.setattr("app.metrics.httpx.AsyncClient", lambda **kwargs: Boom())
     out = query_prometheus_expr("forgesre_demo_cpu_percent")
     assert "error" in out
     assert "value" not in out or out.get("value") is None
