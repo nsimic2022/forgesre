@@ -1,13 +1,22 @@
-"""Background jobs. Postgres durability, no Redis/Celery."""
+"""Background jobs. Postgres durability, no Redis/Celery.
+
+Periodic SNMP / unmanaged reachability runs on the event loop
+(``run_periodic_infrastructure_check``): own AsyncSession, overlap lock,
+``asyncio.gather`` for the probes.
+"""
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
+from typing import Any, Callable
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.journal import report
-from app.models import Incident, Job, utcnow
+from app.models import Asset, Incident, Job, utcnow
 
 log = logging.getLogger("forgesre")
 
@@ -304,3 +313,129 @@ def scan_ports_view(job: Job | None, *, zabbix_on: bool = False) -> dict:
         "found": found,
         "skipped": skipped,
     }
+
+
+INFRA_SCAN_INTERVAL_SECONDS = 30
+# Skip a new cycle when the previous gather is still waiting on slow ICMP/SNMP.
+_infrastructure_scan_lock = asyncio.Lock()
+
+
+def _infra_scan_under_pytest() -> bool:
+    return bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
+
+def infrastructure_scan_asset(asset: Asset) -> bool:
+    """Network / SNMP / unmanaged rows with an IP. Lab demo rows stay out."""
+    from app.demo_ids import is_lab_inventory_row
+    from app.inventory import asset_kind, is_snmp_asset
+
+    if is_lab_inventory_row(asset):
+        return False
+    if not (asset.ip or "").strip():
+        return False
+    if is_snmp_asset(asset):
+        return True
+    kind = asset_kind(asset.type or "", asset.monitoring_profile or "")
+    extras = asset.extras if isinstance(asset.extras, dict) else {}
+    if kind == "network":
+        return True
+    return str(extras.get("snmp_poll") or "").strip() in {"1", "true", "yes", "on"}
+
+
+async def run_periodic_infrastructure_check(
+    *,
+    force: bool = False,
+    probe_fn: Callable[..., Any] | None = None,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """One scan cycle: own AsyncSession, parallel probes, one commit.
+
+    Overlap: if the previous cycle still holds ``_infrastructure_scan_lock``,
+    this call returns immediately so jobs cannot pile up and exhaust the pool.
+    Network work is ``asyncio.gather`` + ``to_thread`` (probe_target is sync).
+    Session writes stay sequential after the gather — one AsyncSession is not
+    safe for concurrent awaits.
+    """
+    from app.asset_probe import LIST_PROBE_TIMEOUT, apply_probe_to_asset, asset_as_probe_item, probe_target
+    from app.db import AsyncSessionLocal
+
+    if _infrastructure_scan_lock.locked():
+        log.warning("infrastructure scan still running; skip this cycle")
+        return {"skipped": True, "reason": "overlap", "scanned": 0, "updated": 0}
+    if _infra_scan_under_pytest() and not force:
+        return {"skipped": True, "reason": "pytest", "scanned": 0, "updated": 0}
+
+    async with _infrastructure_scan_lock:
+        session = AsyncSessionLocal()
+        scanned = 0
+        updated = 0
+        errors = 0
+        try:
+            rows = list(await session.scalars(select(Asset).where(Asset.ip != "")))
+            assets = [row for row in rows if infrastructure_scan_asset(row)]
+            if not assets:
+                await session.commit()
+                return {"skipped": False, "reason": "", "scanned": 0, "updated": 0, "errors": 0}
+            scanned = len(assets)
+            log.info("infrastructure scan start count=%s", scanned)
+            wait = LIST_PROBE_TIMEOUT if timeout is None else timeout
+            run = probe_fn or probe_target
+
+            async def _probe_one(asset: Asset):
+                item = asset_as_probe_item(asset)
+                return asset, await asyncio.to_thread(run, item, timeout=wait)
+
+            gathered = await asyncio.gather(
+                *[_probe_one(asset) for asset in assets],
+                return_exceptions=True,
+            )
+            for item in gathered:
+                if isinstance(item, BaseException):
+                    errors += 1
+                    log.exception("infrastructure probe failed: %s", item)
+                    continue
+                asset, probe = item
+                before = (asset.ping_status, asset.exporter_status)
+                apply_probe_to_asset(asset, probe)
+                reachable = getattr(probe.icmp, "ok", None) is True or getattr(probe.metrics, "ok", None) is True
+                state = "UP" if reachable else "DOWN"
+                if before != (asset.ping_status, asset.exporter_status):
+                    updated += 1
+                    log.warning(
+                        "infrastructure %s %s (%s) ping=%s",
+                        state,
+                        asset.hostname,
+                        asset.ip,
+                        asset.ping_status,
+                    )
+            await session.commit()
+            log.info("infrastructure scan done scanned=%s updated=%s errors=%s", scanned, updated, errors)
+            return {"skipped": False, "reason": "", "scanned": scanned, "updated": updated, "errors": errors}
+        except Exception:
+            await session.rollback()
+            log.exception("infrastructure scan failed")
+            raise
+        finally:
+            await session.close()
+
+
+async def start_infrastructure_scheduler(
+    *,
+    interval: float = INFRA_SCAN_INTERVAL_SECONDS,
+    stop: asyncio.Event | None = None,
+) -> None:
+    """Cron-like loop on the FastAPI event loop. Each cycle is a fire-and-forget task."""
+    log.info("infrastructure scan scheduler started interval=%s", interval)
+    while stop is None or not stop.is_set():
+        if stop is not None:
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval)
+                break
+            except TimeoutError:
+                pass
+        else:
+            await asyncio.sleep(interval)
+        if _infrastructure_scan_lock.locked():
+            log.warning("infrastructure scan still running; skip this cycle")
+            continue
+        asyncio.create_task(run_periodic_infrastructure_check())
