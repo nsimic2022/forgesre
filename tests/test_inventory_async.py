@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from uuid import uuid4
 
 import pytest
@@ -32,31 +33,28 @@ def _ip() -> str:
     return f"10.{(n >> 16) & 0xFF}.{(n >> 8) & 0xFF}.{n & 0x7F or 1}"
 
 
-def test_detect_exporter_type_awaits_sync_detect(monkeypatch):
+def test_detect_exporter_type_gathers_fetcher_in_parallel():
     seen: list[str] = []
 
-    def fake_detect(ip, *args, **kwargs):
-        del args, kwargs
-        seen.append(ip)
-        return ExporterDetect(
-            kind="linux",
-            asset_type="Linux Server",
-            scrape_address=f"{ip}:9100",
-            profile="linux-standard",
-            port=9100,
-            linux=True,
-            message=f"detected {ip}",
-        )
-
-    monkeypatch.setattr("app.exporter_detect.detect_exporter", fake_detect)
+    def fake_fetch(url, timeout):
+        del timeout
+        seen.append(url)
+        time.sleep(0.25)
+        if ":9100" in url:
+            return 200, "node_cpu_seconds_total 1\n", ""
+        return None, "", "timeout"
 
     async def _run():
-        result = await detect_exporter_type("10.1.2.3")
+        started = time.monotonic()
+        result = await detect_exporter_type("10.1.2.3", fetcher=fake_fetch, snmp_ok=False)
+        elapsed = time.monotonic() - started
         assert result.kind == "linux"
         assert result.asset_type == "Linux Server"
+        assert elapsed < 0.45
 
     asyncio.run(_run())
-    assert seen == ["10.1.2.3"]
+    assert any(":9100" in url for url in seen)
+    assert any(":9182" in url for url in seen)
 
 
 def test_find_asset_by_ip_uses_async_session():
