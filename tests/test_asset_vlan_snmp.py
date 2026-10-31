@@ -14,7 +14,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from app.asset_snmp import auth_spec, desired_auth, effective_auth, snmp_from_form
+from app.asset_snmp import auth_spec, desired_auth, dump_auth_block, effective_auth, snmp_from_form, write_auths_yaml
 from app.db import Base, SessionLocal, engine
 from app.inventory import sd_snmp_targets, snmp_auths
 from app.main import app
@@ -323,6 +323,31 @@ def test_empty_scrape_kept_for_nas_and_switch_with_snmp_settings():
     targets = {item["labels"]["asset"] for item in sd_snmp_targets(db)}
     assert {f"{PREFIX}nas", f"{PREFIX}sw"} <= targets
     db.close()
+
+
+def test_dump_auth_block_safe_dumps_v3_special_chars(tmp_path):
+    secret = 'p"w:#1234 and : colon'
+    block = dump_auth_block(
+        {
+            "forgesre_avs-x": {
+                "version": 3,
+                "username": "mon",
+                "security_level": "authPriv",
+                "auth_protocol": "SHA",
+                "password": secret,
+                "priv_protocol": "AES",
+                "priv_password": secret,
+            }
+        }
+    )
+    parsed = yaml.safe_load("auths:\n" + block)
+    assert parsed["auths"]["forgesre_avs-x"]["password"] == secret
+    assert parsed["auths"]["forgesre_avs-x"]["priv_password"] == secret
+    assert "{{" not in block and "%s" not in block
+    dest = tmp_path / "snippet.yml"
+    write_auths_yaml(dest, parsed["auths"])
+    again = yaml.safe_load(dest.read_text(encoding="utf-8"))
+    assert again["auths"]["forgesre_avs-x"]["password"] == secret
 
 
 def test_render_snmp_auths_splices_block_and_keeps_it_when_core_is_down(tmp_path, monkeypatch):

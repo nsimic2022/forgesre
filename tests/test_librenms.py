@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import subprocess
 import sys
@@ -12,10 +13,14 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.librenms import (
+    LibreNmsError,
     _host_path,
     add_payload,
     api_root,
     discover_device,
+    discover_devices,
+    get_devices_many,
+    http_timeout,
     reset_state,
     token_presence,
 )
@@ -141,12 +146,42 @@ def test_discover_device_disables_polling(monkeypatch):
     monkeypatch.setattr("app.librenms.configured", lambda: True)
     monkeypatch.setattr("app.librenms.backoff_remaining", lambda: 0.0)
     monkeypatch.setattr("app.librenms._request", fake_request)
-    out = discover_device("10.9.9.9", community=SECRET, disable_polling=True)
+    out = asyncio.run(discover_device("10.9.9.9", community=SECRET, disable_polling=True))
     assert out["hostname"] == "10.9.9.9"
     assert out["disabled_polling"] is True
     assert out["ports"]
     assert ("PATCH", "/devices/10.9.9.9") in calls
     assert SECRET not in str(calls)
+    bulk = asyncio.run(discover_devices([{"ip": "10.9.9.9", "community": SECRET}]))
+    assert bulk[0]["hostname"] == "10.9.9.9"
+    assert SECRET not in str(bulk)
+
+
+def test_librenms_http_timeout_keeps_connect_short():
+    timeout = http_timeout()
+    assert timeout.connect == 3.0
+    assert timeout.read <= 15.0
+    src = (ROOT / "backend" / "app" / "librenms.py").read_text(encoding="utf-8")
+    assert "AsyncClient" in src
+    assert "httpx.Client(" not in src
+    assert "import requests" not in src
+
+
+def test_get_devices_many_gathers_without_raising(monkeypatch):
+    reset_state()
+
+    def fake_request(method, path, json_body=None):
+        if path.endswith("/10.1.1.1"):
+            return {"devices": [{"hostname": "10.1.1.1", "hardware": "C9300"}]}
+        raise LibreNmsError("LibreNMS unreachable")
+
+    monkeypatch.setattr("app.librenms.configured", lambda: True)
+    monkeypatch.setattr("app.librenms.backoff_remaining", lambda: 0.0)
+    monkeypatch.setattr("app.librenms._request", fake_request)
+    rows = asyncio.run(get_devices_many(["10.1.1.1", "10.1.1.2"]))
+    by = {row.get("hostname"): row for row in rows}
+    assert by["10.1.1.1"]["hardware"] == "C9300"
+    assert "error" in by["10.1.1.2"]
 
 
 def test_identify_post_uses_librenms_not_ber(monkeypatch):

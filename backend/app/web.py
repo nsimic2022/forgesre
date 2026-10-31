@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -1586,7 +1587,7 @@ def discovery_snmp_page(user: User = Depends(require_page("write_assets"))):
 
 
 @router.post("/discovery/snmp", response_class=HTMLResponse)
-def discovery_snmp_submit(
+async def discovery_snmp_submit(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_page("write_assets")),
@@ -1652,10 +1653,10 @@ def discovery_snmp_submit(
                 extra = onboard_oids_for(asset)
                 form["oid_pick"] = extra
             elif action == "identify":
-                from app.librenms import LibreNmsError, discover_device
+                from app.librenms import discover_device, maybe_await
 
                 stored = snmp_settings(getattr(asset, "extras", None) if asset is not None else None)
-                inventory = discover_device(
+                inventory = await maybe_await(discover_device(
                     host,
                     version=ver,
                     community=comm,
@@ -1667,7 +1668,7 @@ def discovery_snmp_submit(
                     v3_priv_proto=stored.get("snmp_v3_priv_proto") or "",
                     v3_priv_pass=stored.get("snmp_v3_priv_pass") or "",
                     disable_polling=True,
-                )
+                ))
                 identify = identify_from_librenms(inventory)
                 recommendations = recommend_from_librenms(inventory)
                 if recommendations:
@@ -1688,7 +1689,7 @@ def discovery_snmp_submit(
                     raise ValueError("OID tester is v1/v2c. For v3 use Test scrape after ./forgesre snmp-auths.")
                 if not form["oid"]:
                     raise ValueError("Need a numeric OID")
-                probe = snmp_get(host, form["oid"], get_next=bool(form["get_next"]), **kwargs)
+                probe = await asyncio.to_thread(snmp_get, host, form["oid"], get_next=bool(form["get_next"]), **kwargs)
                 if not probe.get("ok"):
                     notice = probe.get("error") or "no SNMP reply"
             elif action == "apply":
@@ -1737,10 +1738,10 @@ def discovery_snmp_submit(
                 else:
                     notice = apply_result.get("error") or "Apply failed"
             elif action == "apply_profile":
-                from app.librenms import discover_device
+                from app.librenms import discover_device, maybe_await
 
                 stored = snmp_settings(getattr(asset, "extras", None) if asset is not None else None)
-                inventory = discover_device(
+                inventory = await maybe_await(discover_device(
                     host,
                     version=ver,
                     community=comm,
@@ -1751,7 +1752,7 @@ def discovery_snmp_submit(
                     v3_auth_pass=stored.get("snmp_v3_auth_pass") or "",
                     v3_priv_proto=stored.get("snmp_v3_priv_proto") or "",
                     v3_priv_pass=stored.get("snmp_v3_priv_pass") or "",
-                )
+                ))
                 identify = identify_from_librenms(inventory)
                 recommendations = recommend_from_librenms(inventory)
                 if recommendations:
@@ -1793,11 +1794,11 @@ def discovery_snmp_submit(
                 else:
                     notice = apply_result.get("error") or "Apply failed"
             elif action in {"enable", "disable", "remove"}:
-                from app.librenms import delete_device, set_disabled
+                from app.librenms import delete_device, maybe_await, set_disabled
 
                 name = librenms_hostname_for(asset) if asset is not None else host
                 if action == "remove":
-                    delete_device(name)
+                    await maybe_await(delete_device(name))
                     if asset is not None:
                         attach_onboard_oids(asset, [], librenms_hostname="")
                         db.add(asset)
@@ -1807,7 +1808,7 @@ def discovery_snmp_submit(
                         db.commit()
                     notice = f"Removed {name} from LibreNMS."
                 else:
-                    set_disabled(name, disabled=(action == "disable"))
+                    await maybe_await(set_disabled(name, disabled=(action == "disable")))
                     notice = f"LibreNMS polling {'off' if action == 'disable' else 'on'} for {name}."
             elif action == "restore":
                 if asset is not None:

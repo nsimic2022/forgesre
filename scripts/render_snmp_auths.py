@@ -47,7 +47,11 @@ def splice(text: str, block: str) -> str:
 
 
 def yaml_block(auths: dict) -> str:
-    """Render ``{auth_name: {version, community | v3 USM fields}}`` as indented snmp.yml auths."""
+    """Render ``{auth_name: {version, community | v3 USM fields}}`` as indented snmp.yml auths.
+
+    Strings are JSON-quoted (stdlib) so community / USM secrets cannot break YAML.
+    Core uses ``app.asset_snmp.dump_auth_block`` (yaml.safe_dump) for the same shape.
+    """
     lines: list[str] = []
     # One auth per asset (forgesre_<asset id>), sorted so re-renders do not reorder the file.
     for name in sorted(auths):
