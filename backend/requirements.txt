@@ -8,6 +8,7 @@ greenlet>=3.1.0
 pyyaml>=6.0.2
 bcrypt>=4.2.0
 httpx>=0.27.2
+aiosmtplib>=3.0.0
 jinja2>=3.1.4
 python-multipart>=0.0.17
 prometheus-client>=0.21.0
