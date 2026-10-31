@@ -129,13 +129,13 @@ def test_query_range_sends_the_window_and_keeps_the_drop(monkeypatch):
         def __init__(self, *args, **kwargs):
             del args, kwargs
 
-        def __enter__(self):
+        async def __aenter__(self):
             return self
 
-        def __exit__(self, *args):
+        async def __aexit__(self, *args):
             return False
 
-        def get(self, url, params=None):
+        async def get(self, url, params=None):
             seen["url"] = url
             seen["params"] = dict(params or {})
             start = float(params["start"])
@@ -150,7 +150,7 @@ def test_query_range_sends_the_window_and_keeps_the_drop(monkeypatch):
                 }
             )
 
-    monkeypatch.setattr("app.services.httpx.Client", _Client)
+    monkeypatch.setattr("app.metrics.httpx.AsyncClient", _Client)
     out = query_prometheus_range("node_cpu_seconds_total", start=1_000.0, end=2_000.0, step="5m")
     assert seen["url"].endswith("/api/v1/query_range")
     assert seen["params"]["start"] == 1000.0

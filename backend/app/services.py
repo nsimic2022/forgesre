@@ -1288,90 +1288,28 @@ def _quiet_mail(db: Session, incident: Incident, asset: Asset | None, alertname:
 
 
 def query_prometheus(asset: Asset | None = None) -> dict[str, Any]:
-    from rca.collector import promql_queries_for
+    from app.metrics import get_asset_load, run_sync
 
-    asset_dict: dict[str, Any] = {}
-    if asset:
-        asset_dict = {
-            "asset_id": asset.asset_id,
-            "hostname": asset.hostname,
-            "ip": asset.ip,
-            "type": asset.type,
-            "monitoring_profile": asset.monitoring_profile,
-            "scrape_address": asset.scrape_address,
-            "snmp_port": getattr(asset, "snmp_port", None),
-        }
-    demo = bool(asset and asset.asset_id == DEMO_ASSET)
-    packed = promql_queries_for(asset_dict)
-    queries = {key: expr for key, (expr, _unit) in packed.items()}
-    out: dict[str, Any] = {"queries": dict(queries)}
-    try:
-        for key, expr in queries.items():
-            sample = query_prometheus_expr(expr)
-            if sample.get("error"):
-                out["error"] = sample["error"]
-                break
-            if "value" in sample and sample["value"] is not None:
-                out[key] = sample["value"]
-    except Exception as exc:
-        out["error"] = str(exc)
-    if demo:
-        from app.metrics import demo_metric_values
-
-        live = demo_metric_values()
-        out["cpu_percent"] = live["forgesre_demo_cpu_percent"]
-        out["disk_percent"] = live["forgesre_demo_disk_percent"]
-        out.setdefault("queries", {})["cpu_percent"] = "forgesre_demo_cpu_percent"
-        out.setdefault("queries", {})["disk_percent"] = "forgesre_demo_disk_percent"
-    return out
+    return run_sync(get_asset_load(asset))
 
 
 def query_prometheus_expr(expr: str, timeout: float = 5.0) -> dict[str, Any]:
     """Instant PromQL. Demo gauges are not short-circuited here — only query_prometheus overlays them for forge-demo-01."""
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            response = client.get(f"{settings.prometheus_url}/api/v1/query", params={"query": expr})
-            response.raise_for_status()
-            data = response.json()
-            result = (data.get("data") or {}).get("result") or []
-            if result:
-                return {"value": float(result[0]["value"][1]), "query": expr}
-            return {"value": None, "query": expr}
-    except Exception as exc:
-        return {"error": str(exc), "query": expr}
+    from app.metrics import query_prometheus_expr as _query, run_sync
+
+    return run_sync(_query(expr, timeout=timeout))
 
 
 def range_step(span_seconds: float) -> str:
-    """1-minute steps for host charts through two days; coarser only on longer windows."""
-    span = max(0.0, float(span_seconds))
-    if span <= 48 * 3600:
-        return "1m"
-    if span <= 7 * 24 * 3600:
-        return "5m"
-    return "15m"
+    from app.metrics import range_step as _fn
+
+    return _fn(span_seconds)
 
 
 def range_timeout(span_seconds: float) -> float:
-    hours = max(0.0, float(span_seconds)) / 3600.0
-    return min(8.0, max(2.0, 2.0 + hours * 0.15))
+    from app.metrics import range_timeout as _fn
 
-
-def _range_samples(series: dict[str, Any]) -> tuple[list[float], list[float]]:
-    times: list[float] = []
-    points: list[float] = []
-    for pair in series.get("values") or []:
-        try:
-            ts = float(pair[0])
-            value = float(pair[1])
-        except (TypeError, ValueError, IndexError):
-            continue
-        if value != value or value in {float("inf"), float("-inf")}:
-            continue
-        if ts != ts or ts in {float("inf"), float("-inf")}:
-            continue
-        times.append(ts)
-        points.append(value)
-    return times, points
+    return _fn(span_seconds)
 
 
 def query_prometheus_range(
@@ -1389,49 +1327,9 @@ def query_prometheus_range(
     The first series is often a flat ``up`` companion and would hide a drop to 0.
     Demo gauge names are queried here too — the live in-process value is not a history.
     """
-    import time
+    from app.metrics import query_prometheus_range as _query, run_sync
 
-    end_ts = time.time() if end is None else float(end)
-    start_ts = end_ts - max(0.1, float(hours)) * 3600.0 if start is None else float(start)
-    if end_ts <= start_ts:
-        end_ts = start_ts + 60.0
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            response = client.get(
-                f"{settings.prometheus_url}/api/v1/query_range",
-                params={"query": expr, "start": start_ts, "end": end_ts, "step": step},
-            )
-            response.raise_for_status()
-            data = response.json()
-            result = (data.get("data") or {}).get("result") or []
-            best: list[float] = []
-            best_times: list[float] = []
-            best_key = (-1.0, -1)
-            series_out: list[dict[str, Any]] = []
-            for series in result:
-                if not isinstance(series, dict):
-                    continue
-                times, points = _range_samples(series)
-                if not points:
-                    continue
-                labels = series.get("metric") if isinstance(series.get("metric"), dict) else {}
-                series_out.append({"labels": dict(labels or {}), "values": points, "times": times})
-                span = (max(points) - min(points)) if len(points) > 1 else 0.0
-                key = (span, len(points))
-                if key > best_key:
-                    best = points
-                    best_times = times
-                    best_key = key
-            return {
-                "values": best,
-                "times": best_times,
-                "series": series_out,
-                "query": expr,
-                "start": start_ts,
-                "end": end_ts,
-            }
-    except Exception as exc:
-        return {"error": str(exc), "query": expr, "start": start_ts, "end": end_ts}
+    return run_sync(_query(expr, hours=hours, step=step, timeout=timeout, start=start, end=end))
 
 
 def _loki_bound(value: Any) -> str | None:
