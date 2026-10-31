@@ -223,7 +223,20 @@ async def check_snmp_port(ip: str, port: int = 161, timeout: float = PORT_CHECK_
 
 
 async def _read_http_preview(reader: asyncio.StreamReader) -> tuple[int | None, str]:
-    raw = await reader.read(PREVIEW_LIMIT + 1024)
+    chunks: list[bytes] = []
+    while True:
+        piece = await reader.read(READ_CHUNK)
+        if not piece:
+            break
+        chunks.append(piece)
+        raw = b"".join(chunks)
+        if len(raw) >= PREVIEW_LIMIT:
+            break
+        if b"\r\n\r\n" in raw:
+            body = raw.split(b"\r\n\r\n", 1)[1]
+            if body or classify_exporter_metrics(body.decode("utf-8", errors="replace")):
+                break
+    raw = b"".join(chunks)
     if not raw:
         return None, ""
     header, sep, body = raw.partition(b"\r\n\r\n")
