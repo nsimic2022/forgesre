@@ -569,13 +569,13 @@ def test_query_range_prefers_the_series_that_moves_and_reads_demo_history(monkey
         def __init__(self, *args, **kwargs):
             del args, kwargs
 
-        def __enter__(self):
+        async def __aenter__(self):
             return self
 
-        def __exit__(self, *args):
+        async def __aexit__(self, *args):
             return False
 
-        def get(self, url, params=None):
+        async def get(self, url, params=None):
             del url
             query = (params or {}).get("query") or ""
             seen["query"] = query
@@ -592,7 +592,7 @@ def test_query_range_prefers_the_series_that_moves_and_reads_demo_history(monkey
                 }
             return _Resp(payload)
 
-    monkeypatch.setattr("app.services.httpx.Client", _Client)
+    monkeypatch.setattr("app.metrics.httpx.AsyncClient", _Client)
     history = query_prometheus_range("forgesre_demo_cpu_percent")
     assert seen["query"] == "forgesre_demo_cpu_percent"
     assert history["values"] == [12.0, 40.0, 94.0]

@@ -273,29 +273,9 @@ def interface_facts(source: Any) -> dict[str, str]:
 
 def query_prometheus_vector(expr: str, timeout: float = 2.0) -> dict[str, Any]:
     """All series for one instant query. Error or empty is not a fake sample."""
-    import httpx
+    from app.metrics import query_prometheus_vector as _query, run_sync
 
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            response = client.get(f"{settings.prometheus_url}/api/v1/query", params={"query": expr})
-            response.raise_for_status()
-            data = response.json()
-    except Exception as exc:
-        return {"error": str(exc), "series": [], "query": expr}
-    series = []
-    for row in (data.get("data") or {}).get("result") or []:
-        if not isinstance(row, dict):
-            continue
-        metric = row.get("metric") if isinstance(row.get("metric"), dict) else {}
-        raw = row.get("value") or [None, None]
-        try:
-            value = float(raw[1])
-        except (TypeError, ValueError, IndexError):
-            continue
-        if value != value or value in {float("inf"), float("-inf")}:
-            continue
-        series.append({"labels": metric, "value": value})
-    return {"series": series, "query": expr}
+    return run_sync(_query(expr, timeout=timeout))
 
 
 def format_snmp_uptime(hundredths: float) -> str:
