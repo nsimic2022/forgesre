@@ -76,6 +76,51 @@ GLANCE_CELLS = (
     ("network", "NET"),
 )
 
+SLA_WINDOW_SECONDS = 30 * 24 * 3600
+OUTAGE_HISTORY_MAX = 50
+
+
+def record_outage(
+    extras: dict | None,
+    *,
+    started_at: datetime | None,
+    ended_at: datetime | None,
+    seconds: float,
+    fingerprint: str = "",
+) -> dict[str, Any]:
+    """Append one outage window for later SLA. Does not invent Prometheus series."""
+    from app.asset_extras import OUTAGES_KEY
+
+    blob = dict(extras or {})
+    history = [item for item in (blob.get(OUTAGES_KEY) or []) if isinstance(item, dict)]
+    start = started_at.isoformat() if started_at is not None else ""
+    end = ended_at.isoformat() if ended_at is not None else ""
+    history.append(
+        {
+            "started_at": start,
+            "ended_at": end,
+            "seconds": max(0.0, float(seconds)),
+            "fingerprint": str(fingerprint or ""),
+        }
+    )
+    blob[OUTAGES_KEY] = history[-OUTAGE_HISTORY_MAX:]
+    return blob
+
+
+def sla_percent(extras: dict | None, *, window_seconds: float = SLA_WINDOW_SECONDS) -> float | None:
+    """Availability over ``window_seconds`` from recorded outages. None when no history."""
+    from app.asset_extras import OUTAGES_KEY
+
+    if not isinstance(extras, dict) or window_seconds <= 0:
+        return None
+    history = extras.get(OUTAGES_KEY)
+    if not isinstance(history, list) or not history:
+        return None
+    down = sum(float(item.get("seconds") or 0) for item in history if isinstance(item, dict))
+    up = max(0.0, float(window_seconds) - down)
+    return round(100.0 * up / float(window_seconds), 3)
+
+
 # Chart tiles are CPU / RAM / HDD / NET. `up` is queried for Online on Identity, not drawn.
 _CLASS_TILES = {
     "demo": ("cpu_percent", "memory_percent", "disk_percent", "network"),

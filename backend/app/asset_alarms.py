@@ -1,9 +1,18 @@
-"""Per-asset bundled alarm enable + threshold. Not Prometheus rule rewrites."""
+"""Per-asset bundled alarm enable + threshold, plus async firing/resolve state."""
 
 from __future__ import annotations
 
+import logging
 import re
+from datetime import datetime
 from typing import Any
+
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import object_session
+
+from app.audit import audit
+from app.models import Asset, Incident, IncidentEvent, IncidentNote, utcnow
 
 ALARM_KEYS = ("up", "cpu_percent", "memory_percent", "disk_percent")
 
@@ -228,3 +237,330 @@ def bundled_alert_skip_reason(
     if sample < threshold:
         return f"{alertname} value {sample:g} is below asset threshold {threshold:g}%"
     return ""
+
+
+# Sync helpers above stay for forms and ingest filters. Operator webhooks use
+# process_incoming_alarm_state: fetch asset, mark DOWN/UP, resolve by fingerprint.
+
+log = logging.getLogger("forgesre.asset_alarms")
+
+ACTIVE_ALARM_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED")
+RESOLVE_NOTE = "Monitoring reports the problem is gone. Automatic close."
+
+
+def canonical_asset_status(value: str) -> str:
+    """DOWN/UP from agentless webhooks map onto Asset.status (healthy/warning/critical)."""
+    text = (value or "").strip().lower()
+    if text in {"down", "critical"}:
+        return "critical"
+    if text in {"up", "ok", "healthy"}:
+        return "healthy"
+    if text == "warning":
+        return "warning"
+    return text or "healthy"
+
+
+def _parse_alert(alert_data: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(alert_data, dict):
+        return None
+    labels = alert_data.get("labels") if isinstance(alert_data.get("labels"), dict) else {}
+    alertname = str(labels.get("alertname") or "").strip()
+    status = str(alert_data.get("status") or "firing").strip().lower()
+    from app.asset_verify import alert_instance_ip
+
+    ip = str(labels.get("ip") or "").strip() or alert_instance_ip(labels)
+    name = str(labels.get("asset") or labels.get("hostname") or "").strip()
+    if not name:
+        instance = str(labels.get("instance") or "").strip()
+        if instance and not ip:
+            name = instance.split(":")[0] if instance.count(":") == 1 else instance
+        elif instance:
+            name = instance
+    if not alertname and not ip and not name:
+        return None
+    from app.services import alert_fingerprint
+
+    return {
+        "alert": alert_data,
+        "labels": labels,
+        "alertname": alertname or "Alert",
+        "status": status,
+        "ip": ip,
+        "name": name,
+        "severity": str(labels.get("severity") or "warning").upper(),
+        "fingerprint": alert_fingerprint(alert_data),
+    }
+
+
+def _downtime_seconds(started_at: datetime | None, ended_at: datetime | None) -> float:
+    if started_at is None or ended_at is None:
+        return 0.0
+    start = started_at if started_at.tzinfo else started_at.replace(tzinfo=ended_at.tzinfo)
+    end = ended_at if ended_at.tzinfo else ended_at.replace(tzinfo=started_at.tzinfo)
+    return max(0.0, (end - start).total_seconds())
+
+
+def apply_resolved_incident(
+    incident: Incident,
+    asset: Asset | None,
+    *,
+    alertname: str,
+    resolver: str,
+    labels: dict[str, Any] | None = None,
+    now: datetime | None = None,
+) -> float:
+    """Mark one active incident RESOLVED, audit, and record downtime. Sync or async session."""
+    from app.asset_metrics import record_outage
+    from app.history import apply_status_fields
+    from app.services import append_timeline
+
+    when = now or utcnow()
+    apply_status_fields(incident, "RESOLVED", resolver)
+    incident.status = "RESOLVED"
+    incident.ended_at = when
+    seconds = _downtime_seconds(incident.started_at, when)
+    append_timeline(incident, "alert", "ALERT", f"{alertname} resolved by {resolver}")
+    session = object_session(incident)
+    if session is not None:
+        session.add(IncidentEvent(incident_id=incident.id, kind="resolved", data=dict(labels or {})))
+        session.add(
+            IncidentNote(
+                incident_id=incident.id,
+                actor=resolver or "system",
+                body=RESOLVE_NOTE,
+            )
+        )
+        audit(
+            session,
+            "incident.resolve",
+            actor=resolver or "system",
+            object_type="incident",
+            object_id=incident.number,
+            data={"alertname": alertname, "downtime_seconds": seconds, "fingerprint": incident.fingerprint},
+        )
+    if asset is not None:
+        asset.extras = record_outage(
+            asset.extras if isinstance(asset.extras, dict) else {},
+            started_at=incident.started_at,
+            ended_at=when,
+            seconds=seconds,
+            fingerprint=incident.fingerprint or "",
+        )
+    return seconds
+
+
+def resolve_active_incident(
+    db,
+    incident: Incident,
+    asset: Asset | None,
+    *,
+    alertname: str,
+    resolver: str,
+    labels: dict[str, Any] | None = None,
+) -> float:
+    """Sync path used by ingest_alertmanager. Refreshes Asset.status after resolve."""
+    from app.services import refresh_asset_status
+
+    seconds = apply_resolved_incident(
+        incident, asset, alertname=alertname, resolver=resolver, labels=labels
+    )
+    refresh_asset_status(db, asset)
+    return seconds
+
+
+async def _update_asset_status(session: AsyncSession, asset_id: int, new_status: str) -> None:
+    """Core UPDATE — no full-row load. DOWN→critical, UP→healthy."""
+    status = canonical_asset_status(new_status)
+    await session.execute(update(Asset).where(Asset.id == asset_id).values(status=status))
+
+
+async def _refresh_asset_status(session: AsyncSession, asset: Asset) -> None:
+    rows = list(
+        await session.scalars(
+            select(Incident).where(
+                Incident.asset_id == asset.id,
+                Incident.status.in_(ACTIVE_ALARM_STATUSES),
+            )
+        )
+    )
+    if any(str(item.severity or "").upper() in {"CRITICAL", "HIGH"} for item in rows):
+        asset.status = "critical"
+    elif rows:
+        asset.status = "warning"
+    else:
+        asset.status = "healthy"
+
+
+async def fetch_asset_for_alert(session: AsyncSession, parsed: dict[str, Any]) -> Asset | None:
+    from app.demo_ids import is_lab_inventory_row
+    from app.inventory import find_asset_by_ip
+
+    ip = str(parsed.get("ip") or "").strip()
+    name = str(parsed.get("name") or "").strip()
+    if name:
+        found = await session.scalar(
+            select(Asset).where((Asset.asset_id == name) | (Asset.hostname == name))
+        )
+        if found is not None:
+            return found
+    if ip:
+        found = await find_asset_by_ip(session, ip)
+        if found is not None and not is_lab_inventory_row(found):
+            return found
+    return None
+
+
+async def _resolve_active_incident(
+    session: AsyncSession,
+    asset: Asset | None,
+    fingerprint: str,
+    *,
+    alertname: str = "Alert",
+    resolver: str = "Alertmanager",
+    labels: dict[str, Any] | None = None,
+) -> Incident | None:
+    """Look up the open incident by fingerprint, mark RESOLVED, audit, record downtime."""
+    incident = await session.scalar(
+        select(Incident)
+        .where(
+            Incident.fingerprint == fingerprint,
+            Incident.status.in_(ACTIVE_ALARM_STATUSES),
+        )
+        .order_by(Incident.id.desc())
+    )
+    if incident is None:
+        log.debug("resolved signal for %s with no active incident", fingerprint)
+        if asset is not None:
+            await _refresh_asset_status(session, asset)
+        return None
+    apply_resolved_incident(
+        incident, asset, alertname=alertname, resolver=resolver, labels=labels
+    )
+    await session.flush()
+    if asset is not None:
+        await _refresh_asset_status(session, asset)
+    elif incident.asset_id:
+        await _update_asset_status(session, incident.asset_id, "UP")
+    log.info(
+        "auto-resolved %s for %s downtime=%.1fs",
+        incident.number,
+        getattr(asset, "hostname", "") or fingerprint,
+        _downtime_seconds(incident.started_at, incident.ended_at),
+    )
+    return incident
+
+
+async def process_incoming_alarm_state(session: AsyncSession, alert_data: dict[str, Any]) -> dict[str, Any] | None:
+    """One firing/resolved alert: fetch asset, mark DOWN, or auto-resolve by fingerprint."""
+    parsed = _parse_alert(alert_data)
+    if parsed is None:
+        log.error("invalid alarm payload: %s", alert_data)
+        return None
+    asset = await fetch_asset_for_alert(session, parsed)
+    if asset is None:
+        log.warning(
+            "alarm %s for %s is not in inventory",
+            parsed["alertname"],
+            parsed["ip"] or parsed["name"] or "?",
+        )
+        return {"status": "unknown-asset", "fingerprint": parsed["fingerprint"]}
+    if parsed["status"] == "resolved":
+        incident = await _resolve_active_incident(
+            session,
+            asset,
+            parsed["fingerprint"],
+            alertname=parsed["alertname"],
+            labels=parsed["labels"],
+        )
+        return {
+            "status": "resolved" if incident is not None else "resolved-miss",
+            "fingerprint": parsed["fingerprint"],
+            "asset_id": asset.asset_id,
+        }
+    await _update_asset_status(session, asset.id, "DOWN")
+    asset.status = "critical"
+    log.info("asset %s marked DOWN for %s", asset.hostname, parsed["alertname"])
+    return {"status": "firing", "fingerprint": parsed["fingerprint"], "asset_id": asset.asset_id}
+
+
+async def process_incoming_alarm_states(
+    session: AsyncSession,
+    alerts: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Batch: one asset query + one incident query, then apply each state (no per-alert loop of SELECTs)."""
+    parsed_rows = [_parse_alert(item) for item in alerts or []]
+    parsed_rows = [row for row in parsed_rows if row is not None]
+    if not parsed_rows:
+        return []
+    ips = {row["ip"] for row in parsed_rows if row["ip"]}
+    names = {row["name"] for row in parsed_rows if row["name"]}
+    fingerprints = {row["fingerprint"] for row in parsed_rows if row["fingerprint"]}
+    assets: list[Asset] = []
+    if ips or names:
+        clauses = []
+        if ips:
+            clauses.append(Asset.ip.in_(list(ips)))
+        if names:
+            clauses.append((Asset.asset_id.in_(list(names))) | (Asset.hostname.in_(list(names))))
+        query = select(Asset)
+        if len(clauses) == 1:
+            query = query.where(clauses[0])
+        else:
+            query = query.where(clauses[0] | clauses[1])
+        assets = list(await session.scalars(query))
+    by_ip = {row.ip: row for row in assets if row.ip}
+    by_name = {row.asset_id: row for row in assets}
+    by_name.update({row.hostname: row for row in assets if row.hostname})
+    incidents: dict[str, Incident] = {}
+    if fingerprints:
+        rows = list(
+            await session.scalars(
+                select(Incident)
+                .where(
+                    Incident.fingerprint.in_(list(fingerprints)),
+                    Incident.status.in_(ACTIVE_ALARM_STATUSES),
+                )
+                .order_by(Incident.id.desc())
+            )
+        )
+        for item in rows:
+            incidents.setdefault(item.fingerprint, item)
+    out: list[dict[str, Any]] = []
+    for row in parsed_rows:
+        asset = by_name.get(row["name"]) or by_ip.get(row["ip"])
+        if asset is None:
+            out.append({"status": "unknown-asset", "fingerprint": row["fingerprint"]})
+            continue
+        if row["status"] == "resolved":
+            incident = incidents.get(row["fingerprint"])
+            if incident is None:
+                await _refresh_asset_status(session, asset)
+                out.append(
+                    {
+                        "status": "resolved-miss",
+                        "fingerprint": row["fingerprint"],
+                        "asset_id": asset.asset_id,
+                    }
+                )
+                continue
+            apply_resolved_incident(
+                incident,
+                asset,
+                alertname=row["alertname"],
+                resolver="Alertmanager",
+                labels=row["labels"],
+            )
+            await session.flush()
+            await _refresh_asset_status(session, asset)
+            out.append(
+                {
+                    "status": "resolved",
+                    "fingerprint": row["fingerprint"],
+                    "asset_id": asset.asset_id,
+                }
+            )
+            continue
+        await _update_asset_status(session, asset.id, "DOWN")
+        asset.status = "critical"
+        out.append({"status": "firing", "fingerprint": row["fingerprint"], "asset_id": asset.asset_id})
+    return out
