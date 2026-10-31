@@ -1125,22 +1125,32 @@ def _ingest_numbers(db: Session, payload: dict[str, Any], source: str = "prometh
 
 
 def _background_verify_and_route(payload: dict[str, Any], source: str) -> None:
-    """After 202. Own session — request ``get_db()`` is already closed.
+    """After 202. Async session (asyncpg / aiosqlite) on a worker thread.
 
-    Starlette runs this sync task in a threadpool, then ``verify_and_route_alert``
-    does ingest off that thread. Failures are journaled; they must not retry the HTTP.
+    Request ``get_db()`` is already closed. Starlette runs this sync task in a
+    threadpool so SMTP/RCA cannot block the event loop. The session is committed
+    or rolled back and always returned to the pool.
     """
-    from app.asset_verify import verify_and_route_alert
-    from app.db import SessionLocal
+    from app.asset_verify import drop_librenms_flaps
+    from app.db import get_db_session
     from app.librenms import run_sync
+    from app.services import ingest_alertmanager
 
-    db = SessionLocal()
+    async def _job() -> None:
+        async with get_db_session() as session:
+
+            def _sync(db: Session) -> None:
+                body = payload
+                if source == "librenms":
+                    body = {**payload, "alerts": drop_librenms_flaps(list(payload.get("alerts") or []))}
+                ingest_alertmanager(db, body, source=source)
+
+            await session.run_sync(_sync)
+
     try:
-        run_sync(verify_and_route_alert(db, payload, source=source))
+        run_sync(_job())
     except Exception:
         log.exception("webhook ingest failed source=%s", source)
-    finally:
-        db.close()
 
 
 def _queued_alert_count(payload: dict[str, Any]) -> int:
