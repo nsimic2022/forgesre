@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.journal import MODULES, entry_as_dict, list_entries, module_counts, report
-from app.db import get_db
+from app.db import get_db, get_db_session
 from app.metrics import reset_demo_gauges, set_demo_cpu, set_demo_disk
 from app.models import Asset, DiscoveryCandidate, EscalationPolicy, Evidence, Incident, Investigation, Playbook, Playrule, User
 from app.history import (
@@ -36,7 +36,7 @@ from app.security import can, user_from_session, verify_password
 from app.inventory import (
     approve_candidate,
     clone_prefill,
-    create_manual_asset,
+    add_asset,
     delete_asset,
     ignore_candidate,
     is_snmp_asset,
@@ -972,36 +972,36 @@ class AssetCloneBody(BaseModel):
 
 
 @router.post("/assets")
-def create_asset_api(
+async def create_asset_api(
     body: AssetBody,
     db: Session = Depends(get_db),
     user: User = Depends(require("write_assets")),
 ) -> dict:
-    from app.inventory import create_manual_asset
-
     try:
-        asset = create_manual_asset(
-            db,
-            hostname=body.hostname,
-            asset_id=body.asset_id,
-            ip=body.ip,
-            type=body.type,
-            environment=body.environment,
-            owner=body.owner,
-            contact_name=body.contact_name,
-            owner_email=body.owner_email,
-            owner_phone=body.owner_phone,
-            notes=body.notes,
-            monitoring_profile=body.monitoring_profile,
-            scrape_address=body.scrape_address,
-            actor=user.email,
-            snmp_prober=_snmp_answer if is_auto_asset_type(body.type) else None,
-            alarms=body.alarms,
-            extras=body.extras,
-            playrule_ids=body.playrule_ids,
-            playrule_off=body.playrule_off,
-            snmp_port=body.snmp_port,
-        )
+        async with get_db_session() as session:
+            asset = await add_asset(
+                session,
+                write_db=db,
+                hostname=body.hostname,
+                asset_id=body.asset_id,
+                ip=body.ip,
+                type=body.type,
+                environment=body.environment,
+                owner=body.owner,
+                contact_name=body.contact_name,
+                owner_email=body.owner_email,
+                owner_phone=body.owner_phone,
+                notes=body.notes,
+                monitoring_profile=body.monitoring_profile,
+                scrape_address=body.scrape_address,
+                actor=user.email,
+                snmp_prober=_snmp_answer if is_auto_asset_type(body.type) else None,
+                alarms=body.alarms,
+                extras=body.extras,
+                playrule_ids=body.playrule_ids,
+                playrule_off=body.playrule_off,
+                snmp_port=body.snmp_port,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _asset(asset)
@@ -1049,7 +1049,7 @@ def update_asset_api(
 
 
 @router.post("/assets/{asset_id}/clone")
-def clone_asset_api(
+async def clone_asset_api(
     asset_id: str,
     body: AssetCloneBody,
     db: Session = Depends(get_db),
@@ -1068,28 +1068,30 @@ def clone_asset_api(
             new_id = ""
         else:
             new_id = defaults.get("asset_id") or ""
-        asset = create_manual_asset(
-            db,
-            hostname=posted_host or defaults["hostname"],
-            asset_id=new_id,
-            ip=body.ip if body.ip is not None else "",
-            type=(body.type or "").strip() or defaults["type"],
-            environment=(body.environment or "").strip() or defaults["environment"],
-            owner=body.owner if body.owner is not None else defaults["owner"],
-            contact_name=body.contact_name if body.contact_name is not None else defaults["contact_name"],
-            owner_email=body.owner_email if body.owner_email is not None else defaults["owner_email"],
-            owner_phone=body.owner_phone if body.owner_phone is not None else defaults["owner_phone"],
-            notes=body.notes if body.notes is not None else defaults["notes"],
-            scrape_address=body.scrape_address if body.scrape_address is not None else defaults["scrape_address"],
-            actor=user.email,
-            require_new=True,
-            cloned_from=item.asset_id,
-            alarms=body.alarms if body.alarms is not None else getattr(item, "alarms", None),
-            extras=body.extras if body.extras is not None else defaults["extras"],
-            playrule_ids=body.playrule_ids if body.playrule_ids is not None else defaults["playrule_ids"],
-            playrule_off=body.playrule_off,
-            snmp_port=body.snmp_port if body.snmp_port is not None else defaults["snmp_port"],
-        )
+        async with get_db_session() as session:
+            asset = await add_asset(
+                session,
+                write_db=db,
+                hostname=posted_host or defaults["hostname"],
+                asset_id=new_id,
+                ip=body.ip if body.ip is not None else "",
+                type=(body.type or "").strip() or defaults["type"],
+                environment=(body.environment or "").strip() or defaults["environment"],
+                owner=body.owner if body.owner is not None else defaults["owner"],
+                contact_name=body.contact_name if body.contact_name is not None else defaults["contact_name"],
+                owner_email=body.owner_email if body.owner_email is not None else defaults["owner_email"],
+                owner_phone=body.owner_phone if body.owner_phone is not None else defaults["owner_phone"],
+                notes=body.notes if body.notes is not None else defaults["notes"],
+                scrape_address=body.scrape_address if body.scrape_address is not None else defaults["scrape_address"],
+                actor=user.email,
+                require_new=True,
+                cloned_from=item.asset_id,
+                alarms=body.alarms if body.alarms is not None else getattr(item, "alarms", None),
+                extras=body.extras if body.extras is not None else defaults["extras"],
+                playrule_ids=body.playrule_ids if body.playrule_ids is not None else defaults["playrule_ids"],
+                playrule_off=body.playrule_off,
+                snmp_port=body.snmp_port if body.snmp_port is not None else defaults["snmp_port"],
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _asset(asset)

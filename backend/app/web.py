@@ -14,7 +14,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.audit import audit
-from app.db import get_db
+from app.db import get_db, get_db_session
 from app.asset_probe import reachability_snapshot
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory_row
 from app.exporter_detect import AUTO_ASSET_TYPE
@@ -115,7 +115,7 @@ from app.inventory import (
     clone_prefill,
     asset_for_candidate,
     candidate_form_values,
-    create_manual_asset,
+    add_asset,
     delete_asset,
     delete_blocked,
     delete_candidate,
@@ -1124,7 +1124,7 @@ def assets_verify_all(
 
 
 @router.post("/assets")
-def asset_create(
+async def asset_create(
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     hostname: str = Form(...),
@@ -1302,34 +1302,36 @@ def asset_create(
             v3_priv_proto=snmp_v3_priv_proto,
             v3_priv_pass=snmp_v3_priv_pass,
         )
-        asset = create_manual_asset(
-            db,
-            hostname=hostname,
-            asset_id=asset_id,
-            ip=ip,
-            type=type,
-            environment=environment,
-            owner=owner,
-            contact_name=contact_name,
-            owner_email=owner_email,
-            owner_phone=owner_phone,
-            notes=notes,
-            scrape_address=scrape_address,
-            actor=user.email,
-            require_new=bool(cloned_from),
-            cloned_from=cloned_from,
-            snmp_prober=_snmp_answer,
-            alarms=posted_alarms,
-            extras=posted_extras,
-            playrule_ids=posted_playrules,
-            playrule_off=posted_off,
-            snmp_port=snmp_port,
-            snmp=posted_snmp,
-            ladder=posted_ladder,
-            parent_asset_id=parent_asset_id,
-            source_prometheus=None if posted_sources is None else posted_sources["prometheus"],
-            source_snmp=None if posted_sources is None else posted_sources["snmp"],
-        )
+        async with get_db_session() as session:
+            asset = await add_asset(
+                session,
+                write_db=db,
+                hostname=hostname,
+                asset_id=asset_id,
+                ip=ip,
+                type=type,
+                environment=environment,
+                owner=owner,
+                contact_name=contact_name,
+                owner_email=owner_email,
+                owner_phone=owner_phone,
+                notes=notes,
+                scrape_address=scrape_address,
+                actor=user.email,
+                require_new=bool(cloned_from),
+                cloned_from=cloned_from,
+                snmp_prober=_snmp_answer,
+                alarms=posted_alarms,
+                extras=posted_extras,
+                playrule_ids=posted_playrules,
+                playrule_off=posted_off,
+                snmp_port=snmp_port,
+                snmp=posted_snmp,
+                ladder=posted_ladder,
+                parent_asset_id=parent_asset_id,
+                source_prometheus=None if posted_sources is None else posted_sources["prometheus"],
+                source_snmp=None if posted_sources is None else posted_sources["snmp"],
+            )
     except ValueError as exc:
         return _asset_form_notice(exc, clone_of=cloned_from, import_of=import_of)
     imported = (import_of or "").strip()
