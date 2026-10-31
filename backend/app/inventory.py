@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
-from sqlalchemy import func
+from sqlalchemy import func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, object_session
 
 from app.asset_extras import asset_playrule_ids, form_extras, known_playrule_ids, merge_extras, public_extras
@@ -21,11 +25,13 @@ from app.asset_types import (
 )
 from app.audit import audit
 from app.demo_ids import DEMO_CANDIDATE_IP, is_lab_inventory, is_lab_inventory_row
-from app.exporter_detect import AUTO_ASSET_TYPE, detect_exporter, is_auto_asset_type
+from app.exporter_detect import AUTO_ASSET_TYPE, detect_exporter, detect_exporter_type, is_auto_asset_type
 from app.journal import report
 from app.models import Asset, AssetLadderStep, AssetPlayruleMute, DiscoveryCandidate, Incident, ScheduledReport, utcnow
 from app.settings import settings
 
+# Sync helpers stay for FastAPI ``Depends(get_db)`` and pytest. Operator Save
+# goes through ``add_asset`` (async IP check, ``detect_exporter_type``, fire-and-forget render).
 log = logging.getLogger("forgesre")
 _discovery_loop_mono: float = 0.0
 LINUX_EXPORTER_PORT = 9100
@@ -43,6 +49,7 @@ CANDIDATE_ROLE_CHOICES = [
 ]
 # Probes are socket waits (TCP connect, SNMP UDP, /metrics). DB writes stay on the scan thread.
 DISCOVERY_PROBE_WORKERS = 32
+RENDER_MONITORING = Path(__file__).resolve().parents[2] / "scripts" / "render-monitoring.sh"
 
 
 def asset_kind(type: str = "", profile: str = "") -> str:
@@ -549,6 +556,121 @@ def run_scan(
     }
 
 
+def find_conflicting_asset(
+    db: Session,
+    *,
+    ip: str,
+    hostname: str = "",
+    slug: str = "",
+    require_new: bool = False,
+) -> Asset | None:
+    """Same uniqueness rule as Save: asset id, or a non-empty IP, or hostname when require_new."""
+    existing = db.query(Asset).filter((Asset.asset_id == slug) | ((Asset.ip == ip) & (Asset.ip != ""))).first()
+    if existing is None and require_new:
+        existing = db.query(Asset).filter(Asset.hostname == hostname).first()
+    return existing
+
+
+async def find_asset_by_ip(session: AsyncSession, ip: str) -> Asset | None:
+    """IP uniqueness check on the async session (asyncpg / aiosqlite)."""
+    ip = (ip or "").strip()
+    if not ip:
+        return None
+    return await session.scalar(select(Asset).where(Asset.ip == ip))
+
+
+async def find_conflicting_asset_async(
+    session: AsyncSession,
+    *,
+    ip: str,
+    hostname: str = "",
+    slug: str = "",
+    require_new: bool = False,
+) -> Asset | None:
+    existing = await session.scalar(
+        select(Asset).where(or_((Asset.asset_id == slug), ((Asset.ip == ip) & (Asset.ip != ""))))
+    )
+    if existing is None and require_new and hostname:
+        existing = await session.scalar(select(Asset).where(Asset.hostname == hostname))
+    return existing
+
+
+def _apply_detected_create(
+    *,
+    type: str,
+    monitoring_profile: str,
+    scrape_address: str,
+    source_prometheus: bool | None,
+    detected,
+) -> tuple[str, str, str]:
+    if detected.kind == "windows":
+        type = detected.asset_type
+        monitoring_profile = monitoring_profile or detected.profile
+        if source_prometheus is False:
+            scrape_address = ""
+        else:
+            scrape_address = (scrape_address or "").strip() or detected.scrape_address
+    elif detected.kind == "linux":
+        type = detected.asset_type
+        monitoring_profile = monitoring_profile or detected.profile
+        if source_prometheus is False:
+            scrape_address = ""
+        else:
+            scrape_address = (scrape_address or "").strip() or detected.scrape_address
+    elif detected.kind == "network":
+        type = detected.asset_type
+        monitoring_profile = monitoring_profile or detected.profile
+        scrape_address = (scrape_address or "").strip()
+    else:
+        type = "Unknown"
+        monitoring_profile = (monitoring_profile or "").strip()
+        scrape_address = (scrape_address or "").strip()
+    return type, monitoring_profile, scrape_address
+
+
+def _conflict_save_error(existing: Asset) -> ValueError:
+    return ValueError(
+        f"{existing.asset_id} already uses this asset id, hostname, or IP — "
+        "change Asset ID, hostname, or IP before Save"
+    )
+
+
+def _skip_monitoring_render() -> bool:
+    """Never run render-monitoring.sh under pytest (needs .env / compose)."""
+    return bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
+
+async def _wait_render_process(process: asyncio.subprocess.Process) -> None:
+    try:
+        await process.wait()
+    except Exception:
+        log.exception("render-monitoring.sh wait failed")
+
+
+async def trigger_monitoring_render() -> asyncio.subprocess.Process | None:
+    """Fire-and-forget ``scripts/render-monitoring.sh`` so Save does not block the UI."""
+    if _skip_monitoring_render():
+        return None
+    script = RENDER_MONITORING
+    if not script.is_file():
+        log.error("render-monitoring.sh missing: %s", script)
+        return None
+    try:
+        process = await asyncio.create_subprocess_exec(
+            str(script),
+            cwd=str(script.parent.parent),
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        asyncio.create_task(_wait_render_process(process))
+        log.info("queued render-monitoring.sh pid=%s (fire-and-forget)", process.pid)
+        return process
+    except Exception:
+        log.exception("failed to start render-monitoring.sh")
+        return None
+
+
 def create_manual_asset(
     db: Session,
     hostname: str,
@@ -589,15 +711,10 @@ def create_manual_asset(
         slug = validate_asset_id(requested)
     else:
         slug = validate_asset_id(asset_id_slug(hostname, ip))
-    existing = db.query(Asset).filter((Asset.asset_id == slug) | ((Asset.ip == ip) & (Asset.ip != ""))).first()
-    if existing is None and require_new:
-        existing = db.query(Asset).filter(Asset.hostname == hostname).first()
+    existing = find_conflicting_asset(db, ip=ip, hostname=hostname, slug=slug, require_new=require_new)
     if existing:
         if require_new:
-            raise ValueError(
-                f"{existing.asset_id} already uses this asset id, hostname, or IP — "
-                "change Asset ID, hostname, or IP before Save"
-            )
+            raise _conflict_save_error(existing)
         report(
             db,
             "inventory",
@@ -618,28 +735,13 @@ def create_manual_asset(
             snmp_prober=snmp_prober,
         )
         detect_message = detected.message
-        if detected.kind == "windows":
-            type = detected.asset_type
-            monitoring_profile = monitoring_profile or detected.profile
-            if source_prometheus is False:
-                scrape_address = ""
-            else:
-                scrape_address = (scrape_address or "").strip() or detected.scrape_address
-        elif detected.kind == "linux":
-            type = detected.asset_type
-            monitoring_profile = monitoring_profile or detected.profile
-            if source_prometheus is False:
-                scrape_address = ""
-            else:
-                scrape_address = (scrape_address or "").strip() or detected.scrape_address
-        elif detected.kind == "network":
-            type = detected.asset_type
-            monitoring_profile = monitoring_profile or detected.profile
-            scrape_address = (scrape_address or "").strip()
-        else:
-            type = "Unknown"
-            monitoring_profile = (monitoring_profile or "").strip()
-            scrape_address = (scrape_address or "").strip()
+        type, monitoring_profile, scrape_address = _apply_detected_create(
+            type=type,
+            monitoring_profile=monitoring_profile,
+            scrape_address=scrape_address,
+            source_prometheus=source_prometheus,
+            detected=detected,
+        )
     if source_prometheus is False:
         address = ""
     else:
@@ -727,6 +829,147 @@ def create_manual_asset(
             object_type="asset",
             object_id=asset.asset_id,
         )
+    return asset
+
+
+async def add_asset(
+    session: AsyncSession,
+    hostname: str,
+    ip: str = "",
+    type: str = "Linux Server",
+    environment: str = "Production",
+    owner: str = "platform",
+    contact_name: str = "",
+    owner_email: str = "",
+    owner_phone: str = "",
+    notes: str = "",
+    monitoring_profile: str = "",
+    scrape_address: str = "",
+    actor: str = "system",
+    metrics_fetcher=None,
+    snmp_ok: bool | None = None,
+    snmp_prober=None,
+    require_new: bool = False,
+    cloned_from: str = "",
+    alarms: dict | None = None,
+    asset_id: str = "",
+    extras: dict | None = None,
+    playrule_ids: list | None = None,
+    playrule_off: list | None = None,
+    snmp_port: int | str | None = None,
+    snmp: dict | None = None,
+    ladder: list | None = None,
+    parent_asset_id: str | None = None,
+    source_prometheus: bool | None = None,
+    source_snmp: bool | None = None,
+    write_db: Session | None = None,
+) -> Asset:
+    """Async Save: IP check on ``session``, Auto detect off the loop, SNMP render in the background.
+
+    ``write_db`` is the request's sync session (same commit path as before). Sync
+    ``create_manual_asset`` stays for pytest and CLI.
+    """
+    hostname = (hostname or "").strip()
+    ip = validate_ip_field(ip)
+    if not hostname:
+        raise ValueError("hostname is required")
+    requested = (asset_id or "").strip()
+    if requested:
+        slug = validate_asset_id(requested)
+    else:
+        slug = validate_asset_id(asset_id_slug(hostname, ip))
+    by_ip = await find_asset_by_ip(session, ip)
+    existing = by_ip or await find_conflicting_asset_async(
+        session, ip=ip, hostname=hostname, slug=slug, require_new=require_new
+    )
+    if existing:
+        if require_new:
+            raise _conflict_save_error(existing)
+        if write_db is not None:
+            row = (
+                write_db.query(Asset)
+                .filter((Asset.id == existing.id) | (Asset.asset_id == existing.asset_id))
+                .first()
+            )
+            if row is not None:
+                existing = row
+            report(
+                write_db,
+                "inventory",
+                "asset.create",
+                "warn",
+                summary=f"{existing.asset_id} already exists — not duplicated",
+                object_type="asset",
+                object_id=existing.asset_id,
+            )
+        return existing
+    detect_message = ""
+    if is_auto_asset_type(type):
+        log.info("auto-detect exporter for %s", ip)
+        detected = await detect_exporter_type(
+            ip,
+            hint_type=type,
+            fetcher=metrics_fetcher,
+            snmp_ok=snmp_ok,
+            snmp_prober=snmp_prober,
+        )
+        detect_message = detected.message
+        type, monitoring_profile, scrape_address = _apply_detected_create(
+            type=type,
+            monitoring_profile=monitoring_profile,
+            scrape_address=scrape_address,
+            source_prometheus=source_prometheus,
+            detected=detected,
+        )
+        log.info("auto-detect %s → %s", ip, type)
+    def _write(db: Session) -> Asset:
+        return create_manual_asset(
+            db,
+            hostname=hostname,
+            ip=ip,
+            type=type,
+            environment=environment,
+            owner=owner,
+            contact_name=contact_name,
+            owner_email=owner_email,
+            owner_phone=owner_phone,
+            notes=notes,
+            monitoring_profile=monitoring_profile,
+            scrape_address=scrape_address,
+            actor=actor,
+            metrics_fetcher=metrics_fetcher,
+            snmp_ok=snmp_ok,
+            snmp_prober=snmp_prober,
+            require_new=require_new,
+            cloned_from=cloned_from,
+            alarms=alarms,
+            asset_id=asset_id,
+            extras=extras,
+            playrule_ids=playrule_ids,
+            playrule_off=playrule_off,
+            snmp_port=snmp_port,
+            snmp=snmp,
+            ladder=ladder,
+            parent_asset_id=parent_asset_id,
+            source_prometheus=source_prometheus,
+            source_snmp=source_snmp,
+        )
+
+    if write_db is not None:
+        asset = _write(write_db)
+    else:
+        from app.db import SessionLocal
+
+        db = SessionLocal()
+        try:
+            asset = _write(db)
+            db.expunge(asset)
+        finally:
+            db.close()
+    if detect_message:
+        setattr(asset, "_detect_message", detect_message)
+    if is_snmp_asset(asset) or asset_kind(asset.type or "") == "network":
+        await trigger_monitoring_render()
     return asset
 
 

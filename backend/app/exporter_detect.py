@@ -25,6 +25,7 @@ Classification:
 
 from __future__ import annotations
 
+import asyncio
 import socket
 import urllib.error
 import urllib.request
@@ -406,4 +407,26 @@ def detect_exporter(
             "and no SNMP UDP/161 answer. ICMP ping is not a scrape — pick "
             "Linux Server, Windows Server, or Network device yourself, or install the exporter."
         ),
+    )
+
+
+async def detect_exporter_type(
+    ip: str,
+    hint_type: str = "",
+    hint_profile: str = "",
+    timeout: float = DETECT_TIMEOUT,
+    fetcher: MetricsFetcher | None = None,
+    snmp_ok: bool | None = None,
+    snmp_prober: SnmpProber | None = None,
+) -> ExporterDetect:
+    """Async wrapper: urllib GET stays off the FastAPI event loop."""
+    return await asyncio.to_thread(
+        detect_exporter,
+        ip,
+        hint_type=hint_type,
+        hint_profile=hint_profile,
+        timeout=timeout,
+        fetcher=fetcher,
+        snmp_ok=snmp_ok,
+        snmp_prober=snmp_prober,
     )
