@@ -42,6 +42,8 @@ Keep a **single** Core replica. A second process would run a second escalation l
 
 An LLM rewrite can occupy the jobs thread until `ai.llm.timeout_seconds`. That is why reports are claimed before an LLM job.
 
+Request-path HTTP (Prometheus, LibreNMS, Loki, System Health probes) uses `httpx.AsyncClient` with a 5s read timeout. Mail uses `aiosmtplib`. llama.cpp streams tokens as an `AsyncGenerator`. Sync FastAPI routes and pytest call the same coroutines through `run_sync` (a worker thread when a loop is already running). The infrastructure scan holds `_infrastructure_scan_lock` and skips seeded `forge-demo-*` rows so Education Mode never spends ICMP or SNMP on lab assets.
+
 ---
 
 ## 3. Alarm path

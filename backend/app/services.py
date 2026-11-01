@@ -1332,6 +1332,9 @@ def query_prometheus_range(
     return run_sync(_query(expr, hours=hours, step=step, timeout=timeout, start=start, end=end))
 
 
+LOKI_TIMEOUT = 5.0
+
+
 def _loki_bound(value: Any) -> str | None:
     if value is None:
         return None
@@ -1342,25 +1345,63 @@ def _loki_bound(value: Any) -> str | None:
     return str(value)
 
 
-def _query_loki_selector(query: str, limit: int, start: Any, end: Any) -> list[str] | None:
-    """One LogQL selector. None means the request failed (caller may retry unbounded)."""
+def _loki_params(query: str, limit: int, start: Any, end: Any) -> dict[str, Any]:
     params: dict[str, Any] = {"query": query, "limit": str(limit), "direction": "backward"}
     if start is not None:
         params["start"] = _loki_bound(start)
     if end is not None:
         params["end"] = _loki_bound(end)
+    return params
+
+
+def _loki_lines(data: Any, limit: int) -> list[str]:
+    lines: list[str] = []
+    payload = data if isinstance(data, dict) else {}
+    for stream in (payload.get("data") or {}).get("result") or []:
+        for _ts, line in stream.get("values") or []:
+            lines.append(line)
+    return lines[:limit]
+
+
+async def _query_loki_selector_async(query: str, limit: int, start: Any, end: Any) -> list[str] | None:
+    """One LogQL selector. None means the request failed (caller may retry unbounded)."""
+    params = _loki_params(query, limit, start, end)
     try:
-        with httpx.Client(timeout=5.0) as client:
-            response = client.get(f"{settings.loki_url}/loki/api/v1/query_range", params=params)
+        async with httpx.AsyncClient(timeout=LOKI_TIMEOUT) as client:
+            response = await client.get(f"{settings.loki_url}/loki/api/v1/query_range", params=params)
             response.raise_for_status()
-            data = response.json()
-            lines: list[str] = []
-            for stream in (data.get("data") or {}).get("result") or []:
-                for _ts, line in stream.get("values") or []:
-                    lines.append(line)
-            return lines[:limit]
+            return _loki_lines(response.json(), limit)
     except Exception:
         return None
+
+
+def _query_loki_selector(query: str, limit: int, start: Any, end: Any) -> list[str] | None:
+    """Sync wrapper for pytest and sync routes. A live loop uses a worker thread."""
+    from app.metrics import run_sync
+
+    return run_sync(_query_loki_selector_async(query, limit, start, end))
+
+
+async def query_loki_async(limit: int = 20, query: str = "", start=None, end=None) -> list[str]:
+    """Run LogQL off the event loop. Hostname selector first, then IP."""
+    if not settings.loki_enabled or not str(query or "").strip():
+        return []
+    from rca.collector import logql_selectors
+
+    lines: list[str] = []
+    seen: set[str] = set()
+    for selector in logql_selectors(query):
+        got = await _query_loki_selector_async(selector, limit, start, end)
+        if got is None and start is not None:
+            got = await _query_loki_selector_async(selector, limit, None, None)
+        for line in got or []:
+            if line in seen:
+                continue
+            seen.add(line)
+            lines.append(line)
+            if len(lines) >= limit:
+                return lines
+    return lines
 
 
 def query_loki(limit: int = 20, query: str = "", start=None, end=None) -> list[str]:
