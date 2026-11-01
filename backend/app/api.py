@@ -1918,11 +1918,15 @@ def _probe_sql() -> dict[str, str]:
         return {"status": "error", "why": str(exc), "fix": "Check PostgreSQL container and DATABASE_URL"}
 
 
-def _http(url: str, method: str) -> dict[str, str]:
+DOCTOR_HTTP_TIMEOUT = 5.0
+
+
+async def _http_async(url: str, method: str) -> dict[str, str]:
+    """Probe a hop without blocking the FastAPI loop. Network blips become error rows."""
     test = f"curl -fsS {url}"
     try:
-        with httpx.Client(timeout=4.0) as client:
-            response = client.request(method, url)
+        async with httpx.AsyncClient(timeout=DOCTOR_HTTP_TIMEOUT) as client:
+            response = await client.request(method, url)
         if response.status_code < 400:
             return _ok("ok")
         return {
@@ -1938,6 +1942,13 @@ def _http(url: str, method: str) -> dict[str, str]:
             "test": test,
             "fix": "Confirm the service is running: ./doctor.sh",
         }
+
+
+def _http(url: str, method: str) -> dict[str, str]:
+    """Sync wrapper for System Health / pytest. A live loop uses a worker thread."""
+    from app.metrics import run_sync
+
+    return run_sync(_http_async(url, method))
 
 
 def _snmp_answer(ip: str) -> bool:
