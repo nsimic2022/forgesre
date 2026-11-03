@@ -33,6 +33,7 @@ UI: `http://<VM-IP>:8080`. NetBox UI: `:8001`. LibreNMS UI: `:8000`. Grafana: `:
 - [Architecture](architecture.md) — how the V0.9 appliance is put together (Compose, one Core, alarm path)
 - [Connecting Zabbix (optional, read-only)](zabbix.md) — operator cookbook, both machines: secrets, Sync hosts, Zabbix user/token, hosts + templates, webhook media type + Action, test (401 vs 422), playrules by Alertname, Prometheus graphs vs `trend.get`, mute vs real triggers, ack/resolve, CLI, numbered checklist (summary: [handbook §18](operator-handbook.md#18-zabbix-read-only-source))
 - [Connecting GLPI (optional, read-only inventory)](glpi.md) — API client + user token, secrets, Discovery → Sync hosts, match by GLPI id / IP / hostname, no write-back (summary: [handbook §19](operator-handbook.md#19-glpi-read-only-source))
+- [IBM Flash over SNMP](ibm-flash-snmp.md) — add as Type **Storage**; walk is IF-MIB only (up + interfaces + octet rates). No IBM pool/vdisk MIB. How to prove it on the VM and what a real module would take.
 - [Install and config (Ubuntu / vCenter)](install-config.md)
 - [Verify the appliance](verify.md)
 - [Operator CLI](cli.md)
