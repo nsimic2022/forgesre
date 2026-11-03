@@ -1464,6 +1464,7 @@ def _render_discovery(
         ),
         netbox_sync_count=int(netbox_sync.get("count") or 0),
         netbox_sync_why=str(netbox_sync.get("why") or ""),
+        librenms=librenms_discovery_ctx(),
         zabbix=zabbix_discovery_ctx(db),
         glpi=glpi_discovery_ctx(db),
         demo_candidate_ip=DEMO_CANDIDATE_IP,
@@ -1943,6 +1944,46 @@ def discovery_snmp_mib(
         notice=notice,
         snmp=_snmp_onboard_ctx(db, form=form, mib=mib),
     )
+
+
+def librenms_discovery_ctx() -> dict:
+    """Discovery LibreNMS cube: traffic light + API token, same shape as NetBox/Zabbix/GLPI."""
+    from app.librenms import status as librenms_status, token_presence as librenms_token_presence
+
+    enabled = settings.librenms_enabled
+    present = librenms_token_presence(settings.librenms_token)
+    if not enabled:
+        return {
+            "enabled": False,
+            "url": settings.librenms_url,
+            "light": "grey",
+            "label": "Disabled",
+            "why": "inventory.librenms.enabled is false",
+            "hosts": 0,
+            "clickable": False,
+            "token_present": present,
+        }
+    try:
+        status = librenms_status()
+    except Exception as exc:
+        status = {
+            "ok": False,
+            "light": "yellow",
+            "label": "API error",
+            "why": str(exc)[:300],
+            "hosts": 0,
+        }
+    light = str(status.get("light") or "grey")
+    return {
+        "enabled": True,
+        "url": settings.librenms_url,
+        "light": light,
+        "label": str(status.get("label") or "Not configured"),
+        "why": "" if light == "green" else str(status.get("why") or ""),
+        "hosts": int(status.get("hosts") or 0),
+        "clickable": present == "yes",
+        "token_present": present,
+    }
 
 
 def zabbix_discovery_ctx(db: Session) -> dict:

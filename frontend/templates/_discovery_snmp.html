@@ -2,9 +2,6 @@
   {% if snmp_notice %}
   <p class="banner">{{ snmp_notice }}</p>
   {% endif %}
-  {% if snmp_librenms %}
-  <p class="muted">LibreNMS {{ snmp_librenms.label or "" }} — {{ snmp_librenms.why }} Token {{ librenms_token_present|upper }}. UI <code>http://127.0.0.1:8000</code>.</p>
-  {% endif %}
 
   {% if snmp_devices %}
   <section class="card discovery-snmp-activate">

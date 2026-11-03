@@ -1440,7 +1440,7 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 }
 .discovery-actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.9rem 1rem;
   margin-bottom: 1.1rem;
   align-items: stretch;
@@ -3887,7 +3887,7 @@ hr.asset-form-rule { border: 0; border-top: 1px solid var(--line); margin: 0.2re
 /* v09-27: Playbooks cubes five per row inside the scroll box. */
 /* v09-28: Assets list keeps one search cube; Type / Source / Site / VLAN / Customer / Row / Rack dropdowns are gone. */
 /* v09-29: Admin Users/Create user 50/50; History backup; Create new backup above Import/restore; CLI without example. */
-/* v09-30: Discovery four cubes (Scan now | NetBox | Zabbix | GLPI); optional GLPI read-only import. */
+/* v09-30: Discovery five cubes (Scan now | LibreNMS | NetBox | Zabbix | GLPI). */
 /* v09-32: OpenSRE-inspired slate / emerald chrome; nav follows the theme. */
 /* v09-33: Investigations runs list; four specialist cubes on the incident / ForgeRCA page. */
 /* v09-34: Recent activity expands to five specialist cubes; Dashboard cube is the same list. */

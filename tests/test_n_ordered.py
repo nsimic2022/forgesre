@@ -107,7 +107,7 @@ def test_discovery_demo_ip_is_labeled_and_netbox_is_separate():
     assert "10.20.30.41" in html
     assert 'class="pill demo"' in html
     assert "lab seed" in html.lower()
-    assert page.text.find("Scan now") < page.text.find("NetBox sync")
+    assert page.text.find("Scan now") < page.text.find("<h2>LibreNMS") < page.text.find("NetBox sync")
     assert "ports 22, 80, 443, 161" not in page.text
 
 
