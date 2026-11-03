@@ -320,6 +320,24 @@ def test_update_and_scripts_bundle_librenms():
     assert "render_snmp_onboard" in render
     assert "Do not paste a Laravel APP_KEY" in secrets_ex
     assert "APP_KEY is not interpolated" in env
+    assert 'LIBRENMS_API_TOKEN="2|abc"' in secrets_ex
+    assert "Keep the pipe" in secrets_ex or "keep the pipe" in secrets_ex.lower()
+
+
+def test_repair_quotes_librenms_api_token_with_pipe():
+    """update → librenms_dotenv.repair_lines must not strip quotes around id|secret tokens."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import librenms_dotenv as ld
+
+    token = "2|plainUiTokenValueFromLibreNms"
+    quoted = ld.repair_lines([f'LIBRENMS_API_TOKEN="{token}"', "SNMP_COMMUNITY=public"])
+    assert quoted[0] == f'LIBRENMS_API_TOKEN="{token}"'
+    bare = ld.repair_lines([f"LIBRENMS_API_TOKEN={token}"])
+    assert bare[0] == f'LIBRENMS_API_TOKEN="{token}"'
+    assert ld.needs_quote(token)
+    assert ld.format_assignment("LIBRENMS_API_TOKEN", token) == f'LIBRENMS_API_TOKEN="{token}"'
+    key = "base64:abcDEF+/xyz=="
+    assert ld.format_assignment("LIBRENMS_APP_KEY", key) == f'LIBRENMS_APP_KEY="{key}"'
 
 
 _DOTENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")

@@ -19,11 +19,15 @@ ensure_nonempty() {
   if grep -qE "^${key}=.+" "$file"; then
     return 0
   fi
+  # Quote so a later source secrets.env does not treat | as a pipe.
+  local rendered
+  rendered="$(printf '%s="%s"' "$key" "$value")"
   if grep -qE "^${key}=" "$file"; then
-    sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+    # Avoid sed | in the token: rewrite via a temp line replace in python-less awk.
+    awk -v k="$key" -v line="$rendered" 'index($0, k "=")==1 {print line; next} {print}' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
     return 0
   fi
-  printf '%s=%s\n' "$key" "$value" >> "$file"
+  printf '%s\n' "$rendered" >> "$file"
 }
 
 token="$(secret_val "$ROOT/secrets/secrets.env" LIBRENMS_API_TOKEN)"

@@ -390,7 +390,18 @@ Do **not** treat `FORGESRE_ADMIN_PASSWORD` or `NETBOX_SUPERUSER_PASSWORD` in the
 | NetBox | `NETBOX_SUPERUSER_*`, `NETBOX_DB_PASSWORD`, `NETBOX_REDIS_PASSWORD`, `NETBOX_SECRET_KEY`, `NETBOX_API_TOKEN`, `SUPERUSER_API_TOKEN`, `NETBOX_API_TOKEN_PEPPER`, `API_TOKEN_PEPPER_1` | Bundled NetBox UI/API |
 | Zabbix | `ZABBIX_URL`, `ZABBIX_API_TOKEN`, `ZABBIX_WEBHOOK_TOKEN` | Optional read-only host import + webhook ([zabbix.md](zabbix.md)) |
 | GLPI | `GLPI_URL`, `GLPI_APP_TOKEN`, `GLPI_USER_TOKEN` | Optional read-only Computer / NetworkEquipment import ([glpi.md](glpi.md)) |
+| LibreNMS | `LIBRENMS_API_TOKEN`, `LIBRENMS_APP_KEY`, `APP_KEY`, `LIBRENMS_DB_*`, `LIBRENMS_ADMIN_PASSWORD` | Discovery SNMP Identify. **Always double-quote** `LIBRENMS_API_TOKEN` and `LIBRENMS_APP_KEY` (UI token is `id\|secret`; APP_KEY is `base64:…`). See below. |
 | Optional mailbox | `MAILBOX_*` (commented) | Local mailserver when enabled |
+
+**LibreNMS token / APP_KEY — how to type them.** LibreNMS → Settings → API Access shows the token **once**, in the form `2|plainSecret`. Keep the `|`. One line, exact key name, double quotes, no wrap:
+
+```bash
+LIBRENMS_API_TOKEN="2|plainSecretFromTheOrangeBox"
+LIBRENMS_APP_KEY="base64:...."
+APP_KEY="base64:...."
+```
+
+Wrong: `librenms_api_token=`, `LIBRENMS_API_TOKEN=2|abc` (unquoted), or the token on the next line. `./forgesre update` rewrites this file (`scripts/librenms_dotenv.py`) and must **keep** those quotes. Unquoted `|` makes `source secrets/secrets.env` print `command not found`.
 
 ```bash
 ./forgesre secrets-check
