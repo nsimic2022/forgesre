@@ -175,7 +175,7 @@ def test_discovery_keeps_cubes_and_snmp_below_add_asset():
     assert "discovery-shell" not in html
     assert "discovery-menu" not in html
     assert 'class="discovery-actions"' in html
-    assert ">Scan now<" in html and ">Zabbix<" in html and ">NetBox sync<" in html and ">GLPI<" in html
+    assert ">Scan now<" in html and ">LibreNMS<" in html and ">Zabbix<" in html and ">NetBox sync<" in html and ">GLPI<" in html
     assert ">Add asset<" in html
     assert 'class="discovery-snmp-break dash-graphs-spacer"' in html
     assert html.index(">Add asset<") < html.index('class="discovery-snmp-break') < html.index(">SNMP devices<")

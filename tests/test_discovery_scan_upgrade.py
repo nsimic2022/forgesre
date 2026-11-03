@@ -139,7 +139,7 @@ def test_confirm_and_scan_writes_yaml_and_page_layout(tmp_path, monkeypatch):
         assert ">Type<" in page.text.split("<h2>Found assets</h2>", 1)[1].split("</thead>", 1)[0]
         assert "10.55.0.0/24" in page.text
         assert 'name="cidrs"' in page.text
-        assert page.text.find("Scan now") < page.text.find("NetBox sync")
+        assert page.text.find("Scan now") < page.text.find("<h2>LibreNMS") < page.text.find("NetBox sync")
 
         empty = client.post("/discovery/scan", data={"confirm": "1", "cidrs": ""}, follow_redirects=False)
         assert empty.status_code == 302
@@ -178,7 +178,13 @@ def test_discovery_template_side_by_side_and_columns():
     assert "Confirm &amp; scan" not in html
     assert ">Scan now<" in html
     assert "Management CIDR" not in html
-    assert html.find("Scan now") < html.find("NetBox sync") < html.find("<h2>Zabbix") < html.find("<h2>GLPI")
+    assert (
+        html.find("Scan now")
+        < html.find("<h2>LibreNMS")
+        < html.find("NetBox sync")
+        < html.find("<h2>Zabbix")
+        < html.find("<h2>GLPI")
+    )
     assert "app.css?v=v09-64" in base
     assert "Mode:" not in html.split("<h1>", 1)[1].split("discovery-actions", 1)[0]
     assert "repeat(4, minmax(0, 1fr))" in css

@@ -25,7 +25,8 @@ ASSIGN_RE = re.compile(r"^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 APP_KEY_RE = re.compile(r"^base64:[A-Za-z0-9+/]{32,}={0,3}$")
 B64_FRAG_RE = re.compile(r"^[A-Za-z0-9+/=]+$")
 NODE_ID_RE = re.compile(r"^[A-Za-z0-9]{8,}$")
-QUOTE_CHARS = set(" \t#\"'`$\\\n\r/")
+QUOTE_CHARS = set(" \t#\"'`$\\\n\r/|&;<>()!")
+ALWAYS_QUOTE = frozenset({"APP_KEY", "LIBRENMS_APP_KEY", "LIBRENMS_API_TOKEN"})
 
 
 def random_hex(nbytes: int) -> str:
@@ -62,7 +63,7 @@ def needs_quote(value: str) -> bool:
 
 def format_assignment(key: str, value: str, *, quote: bool | None = None) -> str:
     if quote is None:
-        quote = needs_quote(value)
+        quote = key in ALWAYS_QUOTE or needs_quote(value)
     if quote:
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'{key}="{escaped}"'
@@ -141,7 +142,7 @@ def repair_lines(lines: list[str]) -> list[str]:
         if parsed is None:
             continue
         key, value = parsed
-        quote = key in {"APP_KEY", "LIBRENMS_APP_KEY"} or needs_quote(value)
+        quote = key in ALWAYS_QUOTE or needs_quote(value)
         if key in {"APP_KEY", "LIBRENMS_APP_KEY"} and value.startswith("base64:"):
             joined, consumed = _join_app_key_fragments(lines, idx + 1, value)
             value = joined

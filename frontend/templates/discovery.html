@@ -53,6 +53,35 @@
 </section>
 {% endif %}
 
+<section class="card librenms-block" data-librenms-block>
+  <h2>LibreNMS</h2>
+  {% if can('admin') %}
+    {% if librenms.enabled %}
+    <div class="tool-row">
+      <span class="netbox-status {{ librenms.light }}" role="status" data-librenms-status>
+        <span class="netbox-status-dot" aria-hidden="true"></span>{{ librenms.label }}
+      </span>
+      {% if librenms.clickable %}
+      <a class="button" href="#snmp">Identify</a>
+      {% else %}
+      <button type="button" disabled title="Set LIBRENMS_API_TOKEN in secrets/secrets.env, then recreate core">Identify</button>
+      {% endif %}
+      {% if librenms.why and librenms.light != 'green' %}
+      <span class="muted">{{ librenms.why }}</span>
+      {% endif %}
+    </div>
+    <p class="token-line">
+      <span class="token-btn {{ 'is-yes' if librenms.token_present == 'yes' else 'is-no' }}" role="status">API token {{ librenms.token_present|upper }}</span>
+    </p>
+    {% else %}
+    <p class="muted">Identify is off in config.</p>
+    {% endif %}
+  {% else %}
+  <button type="button" disabled>Identify</button>
+  <span class="muted">Admin only.</span>
+  {% endif %}
+</section>
+
 <section class="card">
   <h2>NetBox sync</h2>
   {% if can('admin') %}

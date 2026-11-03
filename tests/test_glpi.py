@@ -199,7 +199,13 @@ def test_discovery_page_has_glpi_cube_and_sync_route(glpi):
     assert "<h2>GLPI" in page.text
     assert 'action="/discovery/glpi-sync"' in page.text
     assert "Mode:" not in page.text.split("<h1>", 1)[1].split("discovery-actions", 1)[0]
-    assert page.text.find("Scan now") < page.text.find("NetBox sync") < page.text.find("<h2>Zabbix") < page.text.find("<h2>GLPI")
+    assert (
+        page.text.find("Scan now")
+        < page.text.find("<h2>LibreNMS")
+        < page.text.find("NetBox sync")
+        < page.text.find("<h2>Zabbix")
+        < page.text.find("<h2>GLPI")
+    )
     glpi.computers = [{"id": 1, "name": "lab-pc"}]
     posted = client.post("/discovery/glpi-sync", follow_redirects=False)
     assert posted.status_code == 302

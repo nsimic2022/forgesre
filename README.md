@@ -177,7 +177,7 @@ wget -O data/models/model.gguf \
 |---|---|
 | `/` | Dashboard: On call, incident / infrastructure counts, ForgeSRE card (CPU / RAM / HDD / NET for this VM), Recent incidents + Host metrics, **ForgeAI** digest, **Run demo** (admin). Full doctor grid is **System Health**. |
 | `/assets` | Inventory and owner contacts |
-| `/discovery` | Prefills primary IPv4 `/24`; **Confirm & scan** writes `discovery.cidrs` and queues a background probe; **Scan now** after confirm (empty CIDR list skips the probe) / Approve / Ignore; **Sync NetBox** beside it (read-only, admin). Empty NetBox = yellow. **Sync hosts** for Zabbix when `ZABBIX_URL` + `ZABBIX_API_TOKEN` are set. |
+| `/discovery` | Prefills primary IPv4 `/24`; **Confirm & scan** writes `discovery.cidrs` and queues a background probe; **Scan now** after confirm (empty CIDR list skips the probe) / Approve / Ignore. One row of five cubes: Scan now · LibreNMS (API token + Identify) · **Sync NetBox** · Zabbix · GLPI (admin). Empty NetBox = yellow. |
 | `/incidents` | All incidents by default, newest first (**10 per page**). Filters: status (including **Not acknowledged**), site, customer, time window, search. Columns include Ack and Resolved by. `/history` redirects here. |
 | `/ai/INC-…` | Read-only RCA (ForgeRCA first, ForgeAI rewrite) |
 | `/playrules` `/playbooks` `/escalation` | Workflow |

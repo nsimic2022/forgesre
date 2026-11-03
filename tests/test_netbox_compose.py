@@ -902,7 +902,7 @@ def test_install_and_update_bundle_netbox_default_on():
     assert 'class="secondary">Sync NetBox' not in disc
     assert "Admin only." in disc
     assert "disabled" in disc
-    assert disc.find("Scan now") < disc.find("NetBox sync")
+    assert disc.find("Scan now") < disc.find("<h2>LibreNMS") < disc.find("NetBox sync")
     assert "still points Core at an external instance" not in disc
     assert "NETBOX_API_TOKEN" not in disc
     assert "API token" in disc and "token-btn" in disc
