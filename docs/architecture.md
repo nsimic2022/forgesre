@@ -36,7 +36,7 @@ Inside that process:
 
 - The HTTP server serves the UI and the API.
 - One **jobs thread** claims rows from the Postgres `jobs` table (RCA, discovery scan, scheduled reports). Claim is pending-then-running.
-- The same process runs the escalation loop and the discovery loop as threads.
+- The same process runs the escalation loop and the discovery loop as threads. Those threads use sync SQLAlchemy; CMDB / Prom / Loki HTTP from them goes through `AsyncClient` + `run_sync` (not `urllib` / `httpx.Client` on the FastAPI loop). Discovery scan ICMP/TCP may occupy the jobs thread. Infra scan is an asyncio task with `_infrastructure_scan_lock`. Async incident loads use `selectinload` for `asset` / `evidence` — no lazy-load from `AsyncSession`. `models.py` stays sync ORM.
 
 Keep a **single** Core replica. A second process would run a second escalation loop and send the same mail twice. The same applies to extra uvicorn workers: each worker would run those loops. Throughput is bounded by scrape and syslog volume (see [Scale](#7-scale)).
 

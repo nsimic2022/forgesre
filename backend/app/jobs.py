@@ -13,7 +13,7 @@ import os
 from typing import Any, Callable
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.journal import report
 from app.models import Asset, Incident, Job, utcnow
@@ -176,7 +176,12 @@ def run_pending_jobs(db: Session, limit: int = 8) -> int:
             use_llm = False
             incident = None
             if row.kind == "investigate":
-                incident = db.query(Incident).filter_by(number=row.object_id).first()
+                incident = (
+                    db.query(Incident)
+                    .options(joinedload(Incident.asset), selectinload(Incident.evidence))
+                    .filter_by(number=row.object_id)
+                    .first()
+                )
                 if incident is None:
                     raise RuntimeError(f"incident {row.object_id} not found")
                 payload = row.payload or {}
@@ -191,6 +196,7 @@ def run_pending_jobs(db: Session, limit: int = 8) -> int:
             elif row.kind == DISCOVERY_SCAN_KIND:
                 from app.inventory import run_scan
 
+                # ICMP/TCP/SNMP in this jobs thread — may occupy the worker.
                 # Payload cidrs = confirmed list (already persisted). Empty → no scan.
                 payload = dict(row.payload or {})
                 cidrs = payload.get("cidrs")

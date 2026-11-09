@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import object_session
+from sqlalchemy.orm import object_session, selectinload
 
 from app.audit import audit
 from app.models import Asset, Incident, IncidentEvent, IncidentNote, utcnow
@@ -245,6 +245,8 @@ def bundled_alert_skip_reason(
 log = logging.getLogger("forgesre.asset_alarms")
 
 ACTIVE_ALARM_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED")
+# AsyncSession cannot lazy-load. Always pull asset + evidence with the incident.
+_INCIDENT_ASYNC = (selectinload(Incident.asset), selectinload(Incident.evidence))
 RESOLVE_NOTE = "Monitoring reports the problem is gone. Automatic close."
 
 
@@ -377,7 +379,9 @@ async def _update_asset_status(session: AsyncSession, asset_id: int, new_status:
 async def _refresh_asset_status(session: AsyncSession, asset: Asset) -> None:
     rows = list(
         await session.scalars(
-            select(Incident).where(
+            select(Incident)
+            .options(*_INCIDENT_ASYNC)
+            .where(
                 Incident.asset_id == asset.id,
                 Incident.status.in_(ACTIVE_ALARM_STATUSES),
             )
@@ -422,6 +426,7 @@ async def _resolve_active_incident(
     """Look up the open incident by fingerprint, mark RESOLVED, audit, record downtime."""
     incident = await session.scalar(
         select(Incident)
+        .options(*_INCIDENT_ASYNC)
         .where(
             Incident.fingerprint == fingerprint,
             Incident.status.in_(ACTIVE_ALARM_STATUSES),
@@ -516,6 +521,7 @@ async def process_incoming_alarm_states(
         rows = list(
             await session.scalars(
                 select(Incident)
+                .options(*_INCIDENT_ASYNC)
                 .where(
                     Incident.fingerprint.in_(list(fingerprints)),
                     Incident.status.in_(ACTIVE_ALARM_STATUSES),

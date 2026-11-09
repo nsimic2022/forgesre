@@ -68,6 +68,9 @@ def _discovery_loop(stop: threading.Event) -> None:
             continue
         db = SessionLocal()
         try:
+            # Scan is ICMP/TCP/SNMP in this thread (may hold the worker). CMDB
+            # HTTP is AsyncClient + run_sync — asyncio.run here, not urllib on
+            # the FastAPI loop.
             if settings.discovery_enabled and settings.discovery_mode != "manual":
                 run_scan(db)
             if settings.netbox_enabled and settings.netbox_auto_sync:
