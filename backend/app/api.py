@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 import logging
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -1553,22 +1554,48 @@ def _alloy_check() -> dict[str, str]:
 
 
 _DOCTOR_TTL = 8.0
+_doctor_lock = threading.Lock()
+_doctor_in_flight: threading.Event | None = None
 _doctor_cache: dict[str, Any] = {"at": 0.0, "payload": None}
 
 
-def doctor_payload(*, force: bool = False) -> dict[str, Any]:
-    now = time.monotonic()
+def _doctor_cache_fresh(now: float) -> bool:
     cached = _doctor_cache.get("payload")
-    if (
-        not force
-        and cached is not None
-        and now - float(_doctor_cache.get("at") or 0) < _DOCTOR_TTL
-    ):
-        return cached
-    payload = _doctor_payload_fresh()
-    _doctor_cache["at"] = now
-    _doctor_cache["payload"] = payload
-    return payload
+    return cached is not None and now - float(_doctor_cache.get("at") or 0) < _DOCTOR_TTL
+
+
+def doctor_payload(*, force: bool = False) -> dict[str, Any]:
+    """Cached System Health probe. Overlapping callers share one in-flight run."""
+    now = time.monotonic()
+    if not force and _doctor_cache_fresh(now):
+        return _doctor_cache["payload"]
+    wait_for: threading.Event | None = None
+    mine: threading.Event | None = None
+    with _doctor_lock:
+        now = time.monotonic()
+        if not force and _doctor_cache_fresh(now):
+            return _doctor_cache["payload"]
+        global _doctor_in_flight
+        if _doctor_in_flight is not None:
+            wait_for = _doctor_in_flight
+        else:
+            mine = threading.Event()
+            _doctor_in_flight = mine
+    if wait_for is not None:
+        wait_for.wait(timeout=60)
+        return _doctor_cache.get("payload") or {"overall": "DEGRADED", "components": {}, "failed": []}
+    try:
+        payload = _doctor_payload_fresh()
+        with _doctor_lock:
+            _doctor_cache["at"] = time.monotonic()
+            _doctor_cache["payload"] = payload
+        return payload
+    finally:
+        with _doctor_lock:
+            done = _doctor_in_flight
+            _doctor_in_flight = None
+        if done is not None:
+            done.set()
 
 
 def _doctor_payload_fresh() -> dict[str, Any]:
