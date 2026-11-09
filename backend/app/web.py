@@ -2134,7 +2134,9 @@ def health_page(
 
 
 @router.post("/health-ui/refresh")
-def health_refresh(user: User = Depends(login_required)):
+def health_refresh(user: User = Depends(require_page("admin", "investigate"))):
+    """Force a System Health probe. Viewer (and analyst) get 403; GET /health-ui stays login-only."""
+    del user
     doctor_payload(force=True)
     return RedirectResponse("/health-ui", status_code=303)
 
