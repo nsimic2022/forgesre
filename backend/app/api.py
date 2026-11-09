@@ -1157,8 +1157,28 @@ def _background_verify_and_route(payload: dict[str, Any], source: str) -> None:
 
     try:
         run_sync(_job())
-    except Exception:
+    except Exception as exc:
         log.exception("webhook ingest failed source=%s", source)
+        try:
+            from app.db import SessionLocal
+            from app.journal import report
+
+            journal_db = SessionLocal()
+            try:
+                report(
+                    journal_db,
+                    "incident",
+                    "ingest",
+                    "error",
+                    summary=f"Webhook ingest failed ({source})",
+                    detail=str(exc)[:400],
+                    object_type="webhook",
+                    object_id=source,
+                )
+            finally:
+                journal_db.close()
+        except Exception:
+            log.exception("webhook ingest journal failed source=%s", source)
 
 
 def _queued_alert_count(payload: dict[str, Any]) -> int:
@@ -1169,7 +1189,7 @@ def _queued_alert_count(payload: dict[str, Any]) -> int:
 @router.post("/webhooks/alertmanager", status_code=202)
 @router.post("/alerts/alertmanager", status_code=202)
 async def alertmanager_webhook(request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
-    """Alertmanager group → 202, then verify_and_route_alert in the background.
+    """Alertmanager group → 202, then ingest_alertmanager in the background.
 
     The whole payload stays one job so group-aware resolve still works. Bearer is
     ALERTMANAGER_WEBHOOK_TOKEN (same constant-time check as HTTP SD).

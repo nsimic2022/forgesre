@@ -777,7 +777,7 @@ def match_alert_asset(
             .filter((func.lower(Asset.hostname) == lowered) | (func.lower(Asset.asset_id) == lowered))
             .first()
         )
-        if found is not None and (ip or hostid):
+        if found is not None:
             return found
     ip = (ip or "").strip()
     if ip and not _loopback(ip):
