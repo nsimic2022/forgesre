@@ -551,6 +551,7 @@ def test_discovery_admin_can_post_netbox_sync(monkeypatch):
     monkeypatch.setattr("app.settings.Settings.netbox_url", "http://127.0.0.1:8001")
     monkeypatch.setattr("app.settings.Settings.netbox_token", "token")
     monkeypatch.setattr("app.web.sync_netbox", lambda db: {"synced": 0})
+    monkeypatch.setattr("app.web_discovery.sync_netbox", lambda db: {"synced": 0})
     monkeypatch.setattr("app.inventory.sync_netbox", lambda db: {"synced": 0})
     monkeypatch.setattr("app.api.sync_netbox", lambda db: {"synced": 0})
     client, db = _discovery_client()

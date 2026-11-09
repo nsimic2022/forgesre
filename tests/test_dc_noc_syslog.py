@@ -119,13 +119,13 @@ def test_syslog_lines_render_and_empty_is_omitted(monkeypatch):
     )
     number = created[0].number
     client = _client()
-    monkeypatch.setattr("app.web.incident_syslog_lines", lambda _item: ["collector-line-gi01"])
+    monkeypatch.setattr("app.web_incidents.incident_syslog_lines", lambda _item: ["collector-line-gi01"])
     page = client.get(f"/incidents/{number}")
     assert page.status_code == 200
     block = page.text.split('data-syslog', 1)[1].split("</section>", 1)[0]
     assert "collector-line-gi01" in block
     assert "forge-demo-01" not in block
-    monkeypatch.setattr("app.web.incident_syslog_lines", lambda _item: None)
+    monkeypatch.setattr("app.web_incidents.incident_syslog_lines", lambda _item: None)
     quiet = client.get(f"/incidents/{number}")
     assert 'data-syslog' not in quiet.text
     assert "forge-demo-01" not in quiet.text

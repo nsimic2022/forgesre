@@ -241,9 +241,9 @@ def test_probe_and_apply_generated_only(monkeypatch, tmp_path):
     target = tmp_path / "snmp.yml"
     target.write_text(src, encoding="utf-8")
     monkeypatch.setenv("FORGESRE_GENERATED_DIR", str(tmp_path))
-    monkeypatch.setattr("app.web.snmp_get", lambda ip, oid, **k: {"ok": True, "oid": oid, "error": "", "value": "48"})
-    monkeypatch.setattr("app.web.reload_exporter", lambda *_a, **_k: True)
-    monkeypatch.setattr("app.web.run_snmp_generator", lambda **_k: {"ok": False, "ran": False, "error": "skipped"})
+    monkeypatch.setattr("app.web_discovery.snmp_get", lambda ip, oid, **k: {"ok": True, "oid": oid, "error": "", "value": "48"})
+    monkeypatch.setattr("app.web_discovery.reload_exporter", lambda *_a, **_k: True)
+    monkeypatch.setattr("app.web_discovery.run_snmp_generator", lambda **_k: {"ok": False, "ran": False, "error": "skipped"})
     client = _client()
     db = SessionLocal()
     db.add(Asset(asset_id="onb-sw-1", hostname="onb-sw-1", ip="10.8.8.8", type="Switch"))
@@ -415,7 +415,7 @@ def test_mib_object_type_regex_and_upload(monkeypatch, tmp_path):
     )
     assert search_mib_object_types(text) == ["ifInDiscards", "ifOutErrors"]
     monkeypatch.setenv("FORGESRE_GENERATED_DIR", str(tmp_path))
-    monkeypatch.setattr("app.web.run_snmp_generator", lambda **_k: {"ok": False, "ran": False, "error": "image skipped"})
+    monkeypatch.setattr("app.web_discovery.run_snmp_generator", lambda **_k: {"ok": False, "ran": False, "error": "image skipped"})
     client = _client()
     uploaded = client.post(
         "/discovery/snmp/mib",
@@ -434,11 +434,11 @@ def test_mib_object_type_regex_and_upload(monkeypatch, tmp_path):
 
 def test_scrape_includes_promql_count(monkeypatch):
     monkeypatch.setattr(
-        "app.web.exporter_scrape",
+        "app.web_discovery.exporter_scrape",
         lambda *a, **k: {"ok": True, "error": "", "body": "ifInDiscards 1", "module": ONBOARD_MODULE, "auth": "public_v2", "target": "10.8.8.8"},
     )
     monkeypatch.setattr(
-        "app.web.prometheus_onboard_status",
+        "app.web_discovery.prometheus_onboard_status",
         lambda *a, **k: {"ok": True, "series": 4, "up": 1, "query": 'count({job="forgesre-snmp-onboard"})', "error": ""},
     )
     client = _client()
