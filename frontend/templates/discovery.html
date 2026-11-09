@@ -34,7 +34,7 @@
 
 <div class="discovery-actions">
 {% if can('write_assets') %}
-<section class="card">
+<section class="card discovery-scan-card">
   <h2>Scan now</h2>
   <form method="post" action="/discovery/scan" class="discovery-scan-form" hx-boost="false">
     <div class="discovery-scan-actions">
@@ -46,7 +46,7 @@
 </form>
 </section>
 {% else %}
-<section class="card">
+<section class="card discovery-scan-card">
   <h2>Scan now</h2>
   <p class="muted">Analyst / engineer / admin required.</p>
   {% include "_discovery_scan_ports.html" %}
@@ -62,19 +62,24 @@
         <span class="netbox-status-dot" aria-hidden="true"></span>{{ librenms.label }}
       </span>
       {% if librenms.clickable %}
-      <a class="button" href="#snmp">Identify</a>
+      <a class="button" href="#snmp" hx-boost="false">Identify</a>
       {% else %}
       <button type="button" disabled title="Set LIBRENMS_API_TOKEN in secrets/secrets.env, then recreate core">Identify</button>
-      {% endif %}
-      {% if librenms.why and librenms.light != 'green' %}
-      <span class="muted">{{ librenms.why }}</span>
       {% endif %}
     </div>
     <p class="token-line">
       <span class="token-btn {{ 'is-yes' if librenms.token_present == 'yes' else 'is-no' }}" role="status">API token {{ librenms.token_present|upper }}</span>
     </p>
+    {% if librenms.why and librenms.light != 'green' %}
+    <p class="muted librenms-meta">{{ librenms.why }}</p>
+    {% endif %}
     {% else %}
     <p class="muted">Identify is off in config.</p>
+    {% endif %}
+    {% if librenms.webhook_url %}
+    <p class="muted librenms-webhook">Alert webhook (LibreNMS → Incidents)
+      <code data-copy>{{ librenms.webhook_url }}</code>
+    </p>
     {% endif %}
   {% else %}
   <button type="button" disabled>Identify</button>
@@ -310,7 +315,7 @@
 </section>
 {% endif %}
 <div class="discovery-snmp-break dash-graphs-spacer" aria-hidden="true"></div>
-<section class="discovery-snmp" id="snmp" aria-label="SNMP devices">
+<section class="discovery-snmp" id="snmp" aria-label="SNMP devices"{% if snmp_notice or (snmp_identify and snmp_identify.rows) %} data-snmp-focus="identify"{% endif %}>
   <h2>SNMP devices</h2>
   {% include "_discovery_snmp.html" %}
 </section>

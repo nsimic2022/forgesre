@@ -1,7 +1,9 @@
 <form method="post" action="/discovery/snmp" class="discovery-snmp-form" hx-boost="false" autocomplete="off">
+  <div id="snmp-identify">
   {% if snmp_notice %}
   <p class="banner">{{ snmp_notice }}</p>
   {% endif %}
+  </div>
 
   {% if snmp_devices %}
   <section class="card discovery-snmp-activate">

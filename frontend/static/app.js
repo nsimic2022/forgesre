@@ -539,6 +539,35 @@ function bootUi() {
   });
 })();
 
+(function bindCopyFields() {
+  document.querySelectorAll("[data-copy]").forEach((el) => {
+    if (!el.getAttribute("title")) el.setAttribute("title", "Click to copy");
+    el.addEventListener("click", async () => {
+      const text = (el.textContent || "").trim();
+      if (!text || !navigator.clipboard) return;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (err) {
+        /* ignore */
+      }
+    });
+  });
+})();
+
+(function scrollDiscoverySnmp() {
+  const section = document.getElementById("snmp");
+  if (!section) return;
+  const focus = section.getAttribute("data-snmp-focus");
+  const hash = (window.location.hash || "").replace(/^#/, "");
+  let target = null;
+  if (focus === "identify") {
+    target = document.getElementById("snmp-identify") || section;
+  } else if (hash === "snmp" || hash === "snmp-identify") {
+    target = document.getElementById(hash) || section;
+  }
+  if (target && target.scrollIntoView) target.scrollIntoView({ block: "start" });
+})();
+
 (function focusIncidentNotes() {
   let focus = window.location.hash === "#notes";
   try {

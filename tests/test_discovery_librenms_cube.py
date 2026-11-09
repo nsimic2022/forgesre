@@ -1,4 +1,4 @@
-"""Discovery first row: Scan now · LibreNMS · NetBox · Zabbix · GLPI, equal fifths."""
+"""Discovery first row: wider Scan now · four equal LibreNMS / NetBox / Zabbix / GLPI."""
 
 from __future__ import annotations
 
@@ -24,12 +24,23 @@ def _client() -> TestClient:
     return client
 
 
-def test_discovery_five_equal_cubes_order():
+def test_discovery_scan_now_wider_four_equal_sync_cubes():
     html = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     snmp = (ROOT / "frontend" / "templates" / "_discovery_snmp.html").read_text(encoding="utf-8")
+    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     actions = css.split(".discovery-actions {", 1)[1].split("}", 1)[0]
-    assert "repeat(5, minmax(0, 1fr))" in actions
+    assert "minmax(0, 1.5fr) repeat(4, minmax(0, 1fr))" in actions
+    assert "repeat(5, minmax(0, 1fr))" not in actions
+    assert "discovery-scan-card { grid-column: 1 / -1; }" in css
+    assert 'class="card discovery-scan-card"' in html
+    cube = html.split("data-librenms-block", 1)[1].split("</section>", 1)[0]
+    assert "Sync hosts" not in cube
+    assert 'href="#snmp"' in cube
+    assert 'hx-boost="false"' in cube
+    assert "librenms-meta" in cube
+    assert "librenms-webhook" in cube
+    assert "librenms.webhook_url" in cube
     assert (
         html.find("Scan now")
         < html.find("<h2>LibreNMS")
@@ -37,12 +48,14 @@ def test_discovery_five_equal_cubes_order():
         < html.find("<h2>Zabbix")
         < html.find("<h2>GLPI")
     )
-    assert 'data-librenms-block' in html
     assert "API token {{ librenms.token_present|upper }}" in html
-    assert 'href="#snmp"' in html
     assert "librenms_token_present|upper" not in snmp
     assert "127.0.0.1:8000" not in snmp
     assert "No API token" not in snmp
+    assert 'id="snmp-identify"' in snmp
+    assert "scrollDiscoverySnmp" in js
+    assert 'getElementById("snmp-identify")' in js
+    assert 'data-snmp-focus="identify"' in html
 
 
 def test_librenms_discovery_ctx_token_gates_identify(monkeypatch):
@@ -92,7 +105,7 @@ def test_librenms_discovery_ctx_token_gates_identify(monkeypatch):
     assert "token" in (empty.get("why") or "").lower()
 
 
-def test_discovery_page_shows_librenms_token_pill(monkeypatch):
+def test_discovery_page_shows_librenms_why_and_webhook(monkeypatch):
     monkeypatch.setattr(
         "app.web_discovery.librenms_discovery_ctx",
         lambda: {
@@ -120,9 +133,17 @@ def test_discovery_page_shows_librenms_token_pill(monkeypatch):
     page = client.get("/discovery")
     assert page.status_code == 200
     head, _, tail = page.text.partition("<h2>SNMP devices</h2>")
-    assert 'data-librenms-block' in head
-    assert "API token NO" in head
-    assert ">Identify<" in head
-    assert "disabled" in head.split("data-librenms-block", 1)[1].split("</section>", 1)[0]
+    cube = head.split("data-librenms-block", 1)[1].split("</section>", 1)[0]
+    assert "API token NO" in cube
+    assert "LibreNMS API token missing." in cube
+    assert ">Identify<" in cube
+    assert "disabled" in cube
+    assert "/api/v1/webhooks/librenms" in cube
+    assert "Sync hosts" not in cube
     assert "API token NO" not in tail
     assert "LibreNMS API token missing." not in tail
+    assert html_snmp_below_add(page.text)
+
+
+def html_snmp_below_add(html: str) -> bool:
+    return html.index(">Add asset<") < html.index('id="snmp"') < html.index(">SNMP devices<")

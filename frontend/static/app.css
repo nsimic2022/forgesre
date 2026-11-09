@@ -1440,7 +1440,7 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 }
 .discovery-actions {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr));
   gap: 0.9rem 1rem;
   margin-bottom: 1.1rem;
   align-items: stretch;
@@ -1474,9 +1474,9 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
   width: 100%;
 }
 .discovery-scan-actions input[name="cidrs"] {
-  width: 50%;
-  max-width: 14rem;
-  flex: 0 0 50%;
+  width: auto;
+  max-width: none;
+  flex: 1 1 8rem;
   min-width: 0;
 }
 .discovery-scan-actions button {
@@ -1501,6 +1501,7 @@ a.inc-crit { color: var(--crit); font-weight: 700; }
 }
 @media (max-width: 1100px) {
   .discovery-actions { grid-template-columns: 1fr 1fr; }
+  .discovery-actions .discovery-scan-card { grid-column: 1 / -1; }
   .discovery-snmp-grid { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 800px) {
@@ -3341,6 +3342,18 @@ label.row-check {
 .glpi-block h2 { margin-bottom: 0.35rem; }
 .glpi-block .glpi-meta { margin: 0 0 0.3rem; font-size: 0.82rem; overflow-wrap: anywhere; }
 .zabbix-block .zabbix-meta { margin: 0 0 0.3rem; font-size: 0.82rem; overflow-wrap: anywhere; }
+.librenms-block .librenms-meta,
+.librenms-block .librenms-webhook {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+.librenms-webhook code {
+  display: block;
+  margin-top: 0.15rem;
+  user-select: all;
+  cursor: pointer;
+}
 .zabbix-last-error { margin: 0.2rem 0 0; font-size: 0.82rem; color: var(--crit); overflow-wrap: anywhere; }
 .src-pill {
   display: inline-block;
