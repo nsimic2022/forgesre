@@ -7,7 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func, or_
 
 from app.audit import audit
@@ -847,6 +847,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
             continue
         incident = (
             db.query(Incident)
+            .options(joinedload(Incident.asset), selectinload(Incident.evidence))
             .filter(Incident.fingerprint == fingerprint, Incident.status.in_(tracked_incident_statuses()))
             .order_by(Incident.id.desc())
             .first()
@@ -938,6 +939,8 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
             )
             db.add(incident)
             db.flush()
+            if asset is not None:
+                incident.asset = asset
             if classified == "zabbix":
                 fired = f"{alertname} fired in Zabbix"
             elif classified == "librenms":
@@ -995,6 +998,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
     db.commit()
     for incident in created:
         db.refresh(incident)
+        linked = db.get(Asset, incident.asset_id) if incident.asset_id else None
         mark = "DEMO " if is_demo_incident(incident) else ""
         report(
             db,
@@ -1003,7 +1007,7 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
             "ok",
             summary=f"{mark}{incident.number} {incident.title}",
             detail=(
-                f"asset={incident.asset.hostname if incident.asset else 'unknown'} "
+                f"asset={linked.hostname if linked else 'unknown'} "
                 f"fingerprint={incident.fingerprint} source={incident.source}"
             ),
             object_type="incident",
@@ -2574,6 +2578,7 @@ def process_escalations(db: Session) -> None:
     now = utcnow()
     open_rows = (
         db.query(Incident)
+        .options(joinedload(Incident.asset), selectinload(Incident.evidence))
         .filter(Incident.status.in_(["OPEN", "INVESTIGATING", "ESCALATED"]), Incident.ack_at.is_(None))
         .all()
     )
