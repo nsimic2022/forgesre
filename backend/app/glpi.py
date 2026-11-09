@@ -153,7 +153,7 @@ def _auth_headers(app_token: str, user_token: str, session: str = "") -> dict[st
     return headers
 
 
-def _get(
+async def _get_async(
     path: str,
     *,
     url: str,
@@ -175,8 +175,8 @@ def _get(
         raise GlpiUnavailable(str(_state["down_why"] or "GLPI unreachable"))
     target = urljoin(root.rstrip("/") + "/", leaf)
     try:
-        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-            response = client.get(
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.get(
                 target,
                 headers=_auth_headers(app_token, user_token, session),
                 params=params,
@@ -202,6 +202,34 @@ def _get(
         return response.json()
     except ValueError as exc:
         raise GlpiError("GLPI returned non-JSON") from exc
+
+
+def _get(
+    path: str,
+    *,
+    url: str,
+    app_token: str,
+    user_token: str = "",
+    session: str = "",
+    timeout: float,
+    params: dict[str, Any] | None = None,
+    force: bool = False,
+) -> Any:
+    """Sync wrapper for Discovery / doctor / pytest. A live loop uses a worker thread."""
+    from app.metrics import run_sync
+
+    return run_sync(
+        _get_async(
+            path,
+            url=url,
+            app_token=app_token,
+            user_token=user_token,
+            session=session,
+            timeout=timeout,
+            params=params,
+            force=force,
+        )
+    )
 
 
 def _body_error(response: httpx.Response) -> str:

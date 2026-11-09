@@ -127,13 +127,13 @@ def parse_version(raw: str) -> tuple[int, int]:
     return (int(match.group(1)), int(match.group(2)))
 
 
-def _post(url: str, body: dict[str, Any], headers: dict[str, str], timeout: float) -> Any:
+async def _post_async(url: str, body: dict[str, Any], headers: dict[str, str], timeout: float) -> Any:
     endpoint = api_endpoint(url)
     if not endpoint:
         raise ZabbixError("ZABBIX_URL is empty")
     try:
-        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-            response = client.post(endpoint, json=body, headers=headers)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.post(endpoint, json=body, headers=headers)
     except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError, OSError) as exc:
         why = f"Zabbix unreachable: {_short(exc)}"
         _mark_down(why)
@@ -155,6 +155,13 @@ def _post(url: str, body: dict[str, Any], headers: dict[str, str], timeout: floa
         detail = str(err.get("data") or "").strip()
         raise ZabbixError(f"Zabbix API: {message} {detail}".strip()[:400])
     return data.get("result") if isinstance(data, dict) else None
+
+
+def _post(url: str, body: dict[str, Any], headers: dict[str, str], timeout: float) -> Any:
+    """Sync wrapper for Discovery / doctor / pytest. A live loop uses a worker thread."""
+    from app.metrics import run_sync
+
+    return run_sync(_post_async(url, body, headers, timeout))
 
 
 def server_version(url: str, timeout: float, *, force: bool = False) -> tuple[int, int]:

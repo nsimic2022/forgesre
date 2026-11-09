@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import os
 import re
-import urllib.error
-import urllib.request
 from typing import Any
+
+import httpx
 
 NODE_EXPORTER_URL = os.environ.get("FORGESRE_NODE_EXPORTER_URL", "http://127.0.0.1:9100/metrics")
 _SKIP_FS = frozenset({"tmpfs", "overlay", "squashfs", "ramfs", "devtmpfs", "proc", "sysfs", "aufs"})
@@ -208,17 +208,23 @@ def network_status(
             "reading": f"{iface} down", "detail": "default route interface link is down"}
 
 
-def fetch_node_exporter(url: str = NODE_EXPORTER_URL, timeout: float = 0.25) -> str | None:
+async def fetch_node_exporter_async(url: str = NODE_EXPORTER_URL, timeout: float = 0.25) -> str | None:
     """Local node_exporter on the appliance VM (host network). Not an inventory scrape."""
     try:
-        req = urllib.request.Request(url, headers={"Accept": "text/plain"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            if getattr(resp, "status", 200) != 200:
-                return None
-            raw = resp.read(2_000_000)
-        return raw.decode("utf-8", "replace")
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.get(url, headers={"Accept": "text/plain"})
+        if response.status_code != 200:
+            return None
+        return response.content[:2_000_000].decode("utf-8", "replace")
+    except (httpx.HTTPError, TimeoutError, OSError, ValueError):
         return None
+
+
+def fetch_node_exporter(url: str = NODE_EXPORTER_URL, timeout: float = 0.25) -> str | None:
+    """Sync wrapper for the dash cube. A live loop uses a worker thread. Timeout stays 0.25s."""
+    from app.metrics import run_sync
+
+    return run_sync(fetch_node_exporter_async(url, timeout))
 
 
 def parse_node_exporter(text: str) -> dict[str, Any]:

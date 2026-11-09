@@ -52,8 +52,12 @@ from app.inventory import (
     update_asset,
 )
 from app.asset_probe import apply_probe_to_asset, probe_target, refresh_reachability, reachability_snapshot
-from app.asset_verify import compose_verify, select_assets as verify_select_assets
-from app.asset_verify import urllib_am_health, urllib_prom_targets
+from app.asset_verify import (
+    am_health as urllib_am_health,
+    compose_verify,
+    prom_targets as urllib_prom_targets,
+    select_assets as verify_select_assets,
+)
 from app.exporter_detect import is_auto_asset_type
 from app.demo_ids import is_lab_inventory_row
 from app.seed import seed

@@ -93,13 +93,13 @@ def test_list_devices_403_is_short(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(403, request=request)
 
-    real = httpx.Client
+    real = httpx.AsyncClient
 
     def wrapped(*args, **kwargs):
         kwargs["transport"] = httpx.MockTransport(handler)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(httpx, "Client", wrapped)
+    monkeypatch.setattr(httpx, "AsyncClient", wrapped)
     with pytest.raises(RuntimeError) as caught:
         list_devices("http://127.0.0.1:8001", "a" * 40)
     msg = str(caught.value)
@@ -128,13 +128,13 @@ def test_list_devices_reads_results(monkeypatch):
             request=request,
         )
 
-    real = httpx.Client
+    real = httpx.AsyncClient
 
     def wrapped(*args, **kwargs):
         kwargs["transport"] = httpx.MockTransport(handler)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(httpx, "Client", wrapped)
+    monkeypatch.setattr(httpx, "AsyncClient", wrapped)
     rows = list_devices("http://127.0.0.1:8001", "a" * 40)
     assert rows == [
         {
@@ -154,13 +154,13 @@ def test_list_devices_v2_sends_bearer(monkeypatch):
         seen["authorization"] = request.headers.get("authorization") or ""
         return httpx.Response(200, json={"results": [], "next": None}, request=request)
 
-    real = httpx.Client
+    real = httpx.AsyncClient
 
     def wrapped(*args, **kwargs):
         kwargs["transport"] = httpx.MockTransport(handler)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(httpx, "Client", wrapped)
+    monkeypatch.setattr(httpx, "AsyncClient", wrapped)
     token = "nbt_abcdefghijkl.notarealsecret"
     assert list_devices("http://127.0.0.1:8001", token) == []
     assert seen["authorization"] == f"Bearer {token}"
