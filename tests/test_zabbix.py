@@ -100,6 +100,10 @@ class _HttpxShim:
         kwargs.pop("transport", None)
         return httpx.Client(transport=self._transport, **kwargs)
 
+    def AsyncClient(self, **kwargs):  # noqa: N802 - mirrors httpx.AsyncClient
+        kwargs.pop("transport", None)
+        return httpx.AsyncClient(transport=self._transport, **kwargs)
+
 
 def _host(hostid: str, host: str, ip: str, *, groups=(), available: str = "1", name: str = "") -> dict:
     return {

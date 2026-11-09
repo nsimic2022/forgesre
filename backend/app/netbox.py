@@ -242,16 +242,17 @@ def sync_cta(url: str, token: str, enabled: bool, timeout: float = 2.0) -> dict[
     )
 
 
-def netbox_status(url: str, token: str, timeout: float = 5.0) -> dict[str, Any]:
+async def netbox_status_async(url: str, token: str, timeout: float = 5.0) -> dict[str, Any]:
+    """GET devices + login without blocking the FastAPI loop."""
     if not url:
         return _grey(why="NetBox URL missing")
     base = url.rstrip("/") + "/"
     try:
         headers = _headers(token) if token else {"Accept": "text/html,application/json"}
-        with httpx.Client(timeout=timeout, headers=headers, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=timeout, headers=headers, follow_redirects=True) as client:
             api_code = 0
             if token:
-                devices = client.get(urljoin(base, "api/dcim/devices/?limit=1"))
+                devices = await client.get(urljoin(base, "api/dcim/devices/?limit=1"))
                 api_code = int(devices.status_code)
                 if devices.status_code < 400:
                     try:
@@ -259,7 +260,7 @@ def netbox_status(url: str, token: str, timeout: float = 5.0) -> dict[str, Any]:
                     except ValueError:
                         payload = {}
                     return _working(_device_count(payload))
-            login = client.get(urljoin(base, "login/"))
+            login = await client.get(urljoin(base, "login/"))
             if login.status_code < 400:
                 if not token:
                     return _grey(
@@ -301,14 +302,21 @@ def netbox_status(url: str, token: str, timeout: float = 5.0) -> dict[str, Any]:
         return _grey(why=format_client_error(exc))
 
 
-def list_devices(url: str, token: str, timeout: float = 10.0) -> list[dict[str, Any]]:
+def netbox_status(url: str, token: str, timeout: float = 5.0) -> dict[str, Any]:
+    """Sync wrapper for Discovery / doctor / pytest. A live loop uses a worker thread."""
+    from app.metrics import run_sync
+
+    return run_sync(netbox_status_async(url, token, timeout))
+
+
+async def list_devices_async(url: str, token: str, timeout: float = 10.0) -> list[dict[str, Any]]:
     if not (token or "").strip():
         raise RuntimeError("NETBOX_API_TOKEN is empty")
     devices: list[dict[str, Any]] = []
     endpoint = urljoin(url.rstrip("/") + "/", "api/dcim/devices/?limit=200")
-    with httpx.Client(timeout=timeout, headers=_headers(token)) as client:
+    async with httpx.AsyncClient(timeout=timeout, headers=_headers(token)) as client:
         while endpoint:
-            response = client.get(endpoint)
+            response = await client.get(endpoint)
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
@@ -337,6 +345,13 @@ def list_devices(url: str, token: str, timeout: float = 10.0) -> list[dict[str, 
                 devices.append(device)
             endpoint = payload.get("next")
     return devices
+
+
+def list_devices(url: str, token: str, timeout: float = 10.0) -> list[dict[str, Any]]:
+    """Sync wrapper for Discovery sync / pytest. A live loop uses a worker thread."""
+    from app.metrics import run_sync
+
+    return run_sync(list_devices_async(url, token, timeout))
 
 
 def _authorization(token: str) -> str:

@@ -191,13 +191,13 @@ def test_netbox_status_ok_on_devices_200(monkeypatch):
             return httpx.Response(403, json={}, request=request)
         return httpx.Response(404, request=request)
 
-    real = httpx.Client
+    real = httpx.AsyncClient
 
     def wrapped(*args, **kwargs):
         kwargs["transport"] = httpx.MockTransport(handler)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(httpx, "Client", wrapped)
+    monkeypatch.setattr(httpx, "AsyncClient", wrapped)
     result = netbox_status("http://127.0.0.1:8001", "a" * 40)
     assert result["ok"] is True
     assert result.get("light") == "yellow"
@@ -220,13 +220,13 @@ def test_netbox_status_v2_token_200_empty_is_yellow(monkeypatch):
             return httpx.Response(200, text="login", request=request)
         return httpx.Response(404, request=request)
 
-    real = httpx.Client
+    real = httpx.AsyncClient
 
     def wrapped(*args, **kwargs):
         kwargs["transport"] = httpx.MockTransport(handler)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(httpx, "Client", wrapped)
+    monkeypatch.setattr(httpx, "AsyncClient", wrapped)
     token = "nbt_abcdefghijkl.notarealsecret"
     result = netbox_status("http://127.0.0.1:8001", token)
     assert seen["authorization"] == f"Bearer {token}"
@@ -255,13 +255,13 @@ def test_netbox_status_v2_token_200_with_devices_is_green(monkeypatch):
             )
         return httpx.Response(404, request=request)
 
-    real = httpx.Client
+    real = httpx.AsyncClient
 
     def wrapped(*args, **kwargs):
         kwargs["transport"] = httpx.MockTransport(handler)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(httpx, "Client", wrapped)
+    monkeypatch.setattr(httpx, "AsyncClient", wrapped)
     token = "nbt_abcdefghijkl.notarealsecret"
     result = netbox_status("http://127.0.0.1:8001", token)
     assert seen["authorization"] == f"Bearer {token}"
@@ -286,13 +286,13 @@ def test_netbox_status_403_ignores_status_endpoint_200(monkeypatch):
             return httpx.Response(200, text="login", request=request)
         return httpx.Response(404, request=request)
 
-    real = httpx.Client
+    real = httpx.AsyncClient
 
     def wrapped(*args, **kwargs):
         kwargs["transport"] = httpx.MockTransport(handler)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(httpx, "Client", wrapped)
+    monkeypatch.setattr(httpx, "AsyncClient", wrapped)
     token = "a" * 40
     result = netbox_status("http://127.0.0.1:8001", token)
     assert result["ok"] is False
@@ -312,13 +312,13 @@ def test_netbox_status_empty_token_keeps_missing(monkeypatch):
             return httpx.Response(200, text="login", request=request)
         return httpx.Response(404, request=request)
 
-    real = httpx.Client
+    real = httpx.AsyncClient
 
     def wrapped(*args, **kwargs):
         kwargs["transport"] = httpx.MockTransport(handler)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(httpx, "Client", wrapped)
+    monkeypatch.setattr(httpx, "AsyncClient", wrapped)
     result = netbox_status("http://127.0.0.1:8001", "")
     assert result["ok"] is False
     assert result.get("light") == "grey"

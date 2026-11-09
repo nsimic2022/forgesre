@@ -69,6 +69,10 @@ class _HttpxShim:
         kwargs.pop("transport", None)
         return httpx.Client(transport=self._transport, **kwargs)
 
+    def AsyncClient(self, **kwargs):  # noqa: N802
+        kwargs.pop("transport", None)
+        return httpx.AsyncClient(transport=self._transport, **kwargs)
+
 
 def _set_glpi(monkeypatch, *, url: str = GLPI_URL, app: str = APP_TOKEN, user: str = USER_TOKEN) -> None:
     cls = type(settings)

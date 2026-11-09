@@ -26,6 +26,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
+
+import httpx
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -1164,6 +1166,103 @@ def verify_target(
     )
 
 
+def _prom_query_result(payload: Any, expr: str) -> dict[str, Any]:
+    result = ((payload.get("data") or {}).get("result")) or []
+    if result:
+        try:
+            return {"value": float(result[0]["value"][1]), "query": expr}
+        except (KeyError, IndexError, TypeError, ValueError):
+            return {"value": None, "query": expr}
+    return {"value": None, "query": expr}
+
+
+def _prom_targets_result(payload: Any, url: str) -> dict[str, Any]:
+    data = payload.get("data") if isinstance(payload, dict) else None
+    active = (data or {}).get("activeTargets") if isinstance(data, dict) else None
+    return {"targets": active if isinstance(active, list) else [], "query": url}
+
+
+async def prom_query_async(
+    expr: str, base_url: str = "http://127.0.0.1:9090", timeout: float = 5.0
+) -> dict[str, Any]:
+    """GET Prometheus /api/v1/query without blocking the FastAPI loop."""
+    root = (base_url or "http://127.0.0.1:9090").rstrip("/")
+    url = f"{root}/api/v1/query"
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.get(
+                url,
+                params={"query": expr},
+                headers={"User-Agent": "forgesre-verify/1"},
+            )
+        if response.status_code >= 400:
+            return {"error": f"HTTP {response.status_code}", "query": expr}
+        payload = response.json()
+    except Exception as exc:  # noqa: BLE001 — live probe
+        return {"error": str(exc), "query": expr}
+    return _prom_query_result(payload, expr)
+
+
+def prom_query(expr: str, base_url: str = "http://127.0.0.1:9090", timeout: float = 5.0) -> dict[str, Any]:
+    """Verify UI / doctor. CLI keeps urllib_prom_query (host has no httpx requirement)."""
+    from app.metrics import run_sync
+
+    return run_sync(prom_query_async(expr, base_url, timeout))
+
+
+async def prom_targets_async(
+    base_url: str = "http://127.0.0.1:9090", timeout: float = 5.0
+) -> dict[str, Any]:
+    """GET Prometheus /api/v1/targets without blocking the FastAPI loop."""
+    root = (base_url or "http://127.0.0.1:9090").rstrip("/")
+    url = f"{root}/api/v1/targets"
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.get(url, headers={"User-Agent": "forgesre-verify/1"})
+        if response.status_code >= 400:
+            return {"error": f"HTTP {response.status_code}", "targets": []}
+        payload = response.json()
+    except Exception as exc:  # noqa: BLE001 — live probe
+        return {"error": str(exc), "targets": []}
+    return _prom_targets_result(payload, url)
+
+
+def prom_targets(base_url: str = "http://127.0.0.1:9090", timeout: float = 5.0) -> dict[str, Any]:
+    """Verify UI. CLI keeps urllib_prom_targets."""
+    from app.metrics import run_sync
+
+    return run_sync(prom_targets_async(base_url, timeout))
+
+
+async def am_health_async(base_url: str = "http://127.0.0.1:9093", timeout: float = 4.0) -> dict[str, Any]:
+    """GET Alertmanager /-/ready (then /-/healthy) without blocking the FastAPI loop."""
+    root = (base_url or "http://127.0.0.1:9093").rstrip("/")
+    last_error = "Alertmanager down"
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            for path in ("/-/ready", "/-/healthy"):
+                url = f"{root}{path}"
+                try:
+                    response = await client.get(url, headers={"User-Agent": "forgesre-verify/1"})
+                    if response.status_code < 400:
+                        return {"ok": True, "detail": f"Alertmanager reachable ({path})"}
+                    last_error = f"HTTP {response.status_code} {path}"
+                except httpx.HTTPError as exc:
+                    last_error = str(exc)
+                except Exception as exc:  # noqa: BLE001 — live probe
+                    last_error = str(exc)
+    except Exception as exc:  # noqa: BLE001 — live probe
+        last_error = str(exc)
+    return {"ok": False, "detail": last_error, "error": last_error}
+
+
+def am_health(base_url: str = "http://127.0.0.1:9093", timeout: float = 4.0) -> dict[str, Any]:
+    """Verify UI / doctor. CLI keeps urllib_am_health."""
+    from app.metrics import run_sync
+
+    return run_sync(am_health_async(base_url, timeout))
+
+
 def urllib_prom_query(expr: str, base_url: str = "http://127.0.0.1:9090", timeout: float = 5.0) -> dict[str, Any]:
     """GET Prometheus /api/v1/query. Stdlib only — host CLI has no httpx requirement."""
     root = (base_url or "http://127.0.0.1:9090").rstrip("/")
@@ -1378,6 +1477,7 @@ __all__ = [
     "SOURCE_ZABBIX",
     "VerifyReport",
     "alert_instance_ip",
+    "am_health",
     "classify_alert_source",
     "classify_playbook_type",
     "classify_verify",
@@ -1390,6 +1490,8 @@ __all__ = [
     "network_playbook_for",
     "parse_fact_metrics",
     "prefer_network_playbook",
+    "prom_query",
+    "prom_targets",
     "select_assets",
     "unmanaged_still_reachable",
     "urllib_am_health",

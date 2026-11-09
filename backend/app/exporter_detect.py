@@ -566,19 +566,18 @@ def detect_exporter(
             "Pick Linux Server (:9100), Windows Server (:9182), or Network device (SNMP).",
         )
     if fetcher is None:
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(
-                detect_exporter_type(
-                    ip,
-                    hint_type=hint_type,
-                    hint_profile=hint_profile,
-                    timeout=min(float(timeout or PORT_CHECK_TIMEOUT), PORT_CHECK_TIMEOUT),
-                    snmp_ok=snmp_ok,
-                    snmp_prober=snmp_prober,
-                )
+        from app.metrics import run_sync
+
+        return run_sync(
+            detect_exporter_type(
+                ip,
+                hint_type=hint_type,
+                hint_profile=hint_profile,
+                timeout=min(float(timeout or PORT_CHECK_TIMEOUT), PORT_CHECK_TIMEOUT),
+                snmp_ok=snmp_ok,
+                snmp_prober=snmp_prober,
             )
+        )
     get = fetcher or fetch_metrics
     win_url = f"http://{ip}:{WINDOWS_EXPORTER_PORT}{METRICS_PATH}"
     lnx_url = f"http://{ip}:{LINUX_EXPORTER_PORT}{METRICS_PATH}"
