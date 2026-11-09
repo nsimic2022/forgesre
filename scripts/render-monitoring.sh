@@ -10,13 +10,13 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# secrets.env is parsed (never sourced) — LibreNMS tokens contain `|`.
+# shellcheck source=dotenv_load.sh
+source "$ROOT/scripts/dotenv_load.sh"
 set -a
 # shellcheck disable=SC1091
 source .env
-if [[ -f secrets/secrets.env ]]; then
-  # shellcheck disable=SC1091
-  source secrets/secrets.env
-fi
+dotenv_load "$ROOT/secrets/secrets.env"
 set +a
 
 # Inputs for the templates: output dir, Core port, SD bearer token, default SNMP community.

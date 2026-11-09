@@ -10,13 +10,13 @@ if [[ ! -f .env ]]; then
 fi
 
 # Export .env and secrets so app.backup sees POSTGRES_PASSWORD, FORGESRE_DATA, etc.
+# secrets.env is parsed (never sourced) — LibreNMS tokens contain `|`.
+# shellcheck source=dotenv_load.sh
+source "$ROOT/scripts/dotenv_load.sh"
 # shellcheck disable=SC1091
 set -a
 source .env
-if [[ -f secrets/secrets.env ]]; then
-  # shellcheck disable=SC1091
-  source secrets/secrets.env
-fi
+dotenv_load "$ROOT/secrets/secrets.env"
 set +a
 
 # Point at the host-published Postgres when .env does not set DATABASE_URL.

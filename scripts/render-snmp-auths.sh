@@ -12,13 +12,13 @@ fi
 
 # Export .env and secrets (FORGESRE_HTTP_PORT, ALERTMANAGER_WEBHOOK_TOKEN, FORGESRE_DATA)
 # so render_snmp_auths.py can read them from its environment.
+# secrets.env is parsed (never sourced) — LibreNMS tokens contain `|`.
+# shellcheck source=dotenv_load.sh
+source "$ROOT/scripts/dotenv_load.sh"
 set -a
 # shellcheck disable=SC1091
 source .env
-if [[ -f secrets/secrets.env ]]; then
-  # shellcheck disable=SC1091
-  source secrets/secrets.env
-fi
+dotenv_load "$ROOT/secrets/secrets.env"
 set +a
 
 exec python3 "$ROOT/scripts/render_snmp_auths.py" "${FORGESRE_DATA:-./data}/generated/snmp.yml"
