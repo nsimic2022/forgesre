@@ -94,7 +94,7 @@ def test_librenms_discovery_ctx_token_gates_identify(monkeypatch):
 
 def test_discovery_page_shows_librenms_token_pill(monkeypatch):
     monkeypatch.setattr(
-        "app.web.librenms_discovery_ctx",
+        "app.web_discovery.librenms_discovery_ctx",
         lambda: {
             "enabled": True,
             "url": "http://127.0.0.1:8000",

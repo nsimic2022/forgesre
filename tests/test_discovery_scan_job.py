@@ -39,7 +39,7 @@ def _login() -> TestClient:
 
 
 def test_web_and_api_handlers_do_not_call_run_scan_inline():
-    web = (ROOT / "backend" / "app" / "web.py").read_text(encoding="utf-8")
+    web = (ROOT / "backend" / "app" / "web_discovery.py").read_text(encoding="utf-8")
     api = (ROOT / "backend" / "app" / "api.py").read_text(encoding="utf-8")
     web_fn = web[web.index("def discovery_scan_page") : web.index("def discovery_approve_page")]
     api_fn = api[api.index("def discovery_scan(") : api.index("def discovery_approve(")]
@@ -53,6 +53,11 @@ def test_web_and_api_handlers_do_not_call_run_scan_inline():
     assert "run_scan" in loop and "merge_auto" in loop
     assert "import celery" not in jobs.lower()
     assert "from celery" not in jobs.lower()
+    core = (ROOT / "backend" / "app" / "web.py").read_text(encoding="utf-8")
+    assert "def discovery_scan_page" not in core
+    assert "from app import web_discovery" in core
+    assert "from app import web_assets" in core
+    assert "from app import web_incidents" in core
 
 
 def test_discovery_buttons_not_stacked_helper_in_tip():
