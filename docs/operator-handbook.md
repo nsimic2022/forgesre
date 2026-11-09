@@ -376,8 +376,8 @@ An approved Linux host is scraped only if:
 2. Prometheus HTTP SD can see that address.
 
 ```bash
-source secrets/secrets.env
-curl -fsS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
+TOKEN="$(python3 scripts/dotenv_export.py --get ALERTMANAGER_WEBHOOK_TOKEN secrets/secrets.env)"
+curl -fsS -H "Authorization: Bearer ${TOKEN}" \
   http://127.0.0.1:8080/api/v1/sd/prometheus
 ```
 
@@ -445,12 +445,12 @@ LIBRENMS_APP_KEY="base64:...."
 APP_KEY="base64:...."
 ```
 
-`./forgesre update` rewrites `secrets/secrets.env` (`scripts/ensure-librenms-secrets.sh` → `librenms_dotenv.py`). That rewrite **must keep** the quotes; a token with `|` without quotes makes `source secrets/secrets.env` print `command not found`. Do not use `librenms_api_token=` (wrong case). Do not put the token on the next line. Do not `source` the file by hand to “test” it unless every special value is quoted. Recommended OIDs (availability, interfaces, traffic, errors, CPU, memory, temperature, power, storage) are a catalog slice — not every OID on the box. **Apply extra module** splices `forgesre_onboard` into generated `snmp.yml` (backup first, rollback via Restore). Prometheus job `forgesre-snmp-onboard` scrapes only assets that applied. MIB upload stores the file and optionally runs `prom/snmp-generator`. LibreNMS is inventory, not the Prometheus collector.
+`./forgesre update` rewrites `secrets/secrets.env` (`scripts/ensure-librenms-secrets.sh` → `librenms_dotenv.py`). That rewrite **must keep** the quotes. Do not use `librenms_api_token=` (wrong case). Do not put the token on the next line. Appliance scripts parse `KEY=value` via `scripts/dotenv_export.py` — they never `source` this file, because an unquoted `|` is a bash pipe (`command not found`). To read one key: `python3 scripts/dotenv_export.py --get LIBRENMS_API_TOKEN secrets/secrets.env`. Recommended OIDs (availability, interfaces, traffic, errors, CPU, memory, temperature, power, storage) are a catalog slice — not every OID on the box. **Apply extra module** splices `forgesre_onboard` into generated `snmp.yml` (backup first, rollback via Restore). Prometheus job `forgesre-snmp-onboard` scrapes only assets that applied. MIB upload stores the file and optionally runs `prom/snmp-generator`. LibreNMS is inventory, not the Prometheus collector.
 
 ```bash
 ./forgesre snmp
-source secrets/secrets.env
-curl -fsS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
+TOKEN="$(python3 scripts/dotenv_export.py --get ALERTMANAGER_WEBHOOK_TOKEN secrets/secrets.env)"
+curl -fsS -H "Authorization: Bearer ${TOKEN}" \
   http://127.0.0.1:8080/api/v1/sd/snmp
 ```
 

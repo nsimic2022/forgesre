@@ -29,6 +29,7 @@ def _appliance(tmp_path: Path) -> tuple[Path, dict, Path]:
     app = tmp_path / "app"
     (app / "scripts").mkdir(parents=True)
     shutil.copy2(ROOT / "scripts" / "forgesre", app / "scripts" / "forgesre")
+    shutil.copy2(ROOT / "scripts" / "dotenv_load.sh", app / "scripts" / "dotenv_load.sh")
     (app / ".env").write_text("FORGESRE_HTTP_PORT=8080\n")
     (app / "secrets").mkdir()
     (app / "secrets" / "secrets.env").write_text(

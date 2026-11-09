@@ -401,7 +401,7 @@ LIBRENMS_APP_KEY="base64:...."
 APP_KEY="base64:...."
 ```
 
-Wrong: `librenms_api_token=`, `LIBRENMS_API_TOKEN=2|abc` (unquoted), or the token on the next line. `./forgesre update` rewrites this file (`scripts/librenms_dotenv.py`) and must **keep** those quotes. Unquoted `|` makes `source secrets/secrets.env` print `command not found`.
+Wrong: `librenms_api_token=`, `LIBRENMS_API_TOKEN=2|abc` (unquoted), or the token on the next line. `./forgesre update` rewrites this file (`scripts/librenms_dotenv.py`) and must **keep** those quotes. Appliance scripts never `source` this file (`scripts/dotenv_export.py` parses `KEY=value`); an unquoted `|` is still a bash pipe if you source it by hand.
 
 ```bash
 ./forgesre secrets-check

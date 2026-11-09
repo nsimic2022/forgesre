@@ -33,10 +33,12 @@ else
 fi
 
 # Webhook bearer token for the SD and doctor endpoints (empty if secrets are unreadable).
+# Parse KEY=value — never source secrets.env (LibreNMS tokens contain `|`).
 TOKEN=""
 if [[ -f secrets/secrets.env ]]; then
-  # shellcheck disable=SC1091
-  source secrets/secrets.env
+  # shellcheck source=dotenv_load.sh
+  source "$ROOT/scripts/dotenv_load.sh"
+  dotenv_load "$ROOT/secrets/secrets.env"
   TOKEN="${ALERTMANAGER_WEBHOOK_TOKEN:-}"
 fi
 

@@ -19,7 +19,7 @@ ensure_nonempty() {
   if grep -qE "^${key}=.+" "$file"; then
     return 0
   fi
-  # Quote so a later source secrets.env does not treat | as a pipe.
+  # Quote so Compose / librenms_dotenv keep the id|secret pipe (scripts never source this file).
   local rendered
   rendered="$(printf '%s="%s"' "$key" "$value")"
   if grep -qE "^${key}=" "$file"; then

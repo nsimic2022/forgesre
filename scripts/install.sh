@@ -473,8 +473,10 @@ post_install_journal() {
   if [[ ! -f "$ROOT/secrets/secrets.env" ]]; then
     return 0
   fi
-  # shellcheck disable=SC1091
-  source "$ROOT/secrets/secrets.env"
+  # Parse KEY=value — never source secrets.env (LibreNMS tokens contain `|`).
+  # shellcheck source=dotenv_load.sh
+  source "$ROOT/scripts/dotenv_load.sh"
+  dotenv_load "$ROOT/secrets/secrets.env"
   local jar
   jar="$(mktemp)"
   printf '%s' "$FORGESRE_ADMIN_PASSWORD" | curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${HTTP_PORT}/login" \

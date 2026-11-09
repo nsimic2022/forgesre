@@ -4,6 +4,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+load_secrets() {
+  # Parse KEY=value — never source secrets.env (LibreNMS tokens contain `|`).
+  # shellcheck source=dotenv_load.sh
+  source "$ROOT/scripts/dotenv_load.sh"
+  dotenv_load "$ROOT/secrets/secrets.env"
+}
+
 # First word is the subcommand; the rest ("$@") is passed on to it.
 cmd="${1:-}"
 shift || true
@@ -786,8 +793,7 @@ cmd_snmp() {
   # port = Core HTTP port; code = HTTP status from snmp_exporter /metrics.
   local port code
   port="$(port_from_env)"
-  # shellcheck disable=SC1091
-  source secrets/secrets.env
+  load_secrets
   echo "=== snmp-exporter ==="
   code="$(curl -sS -o /tmp/forgesre-snmp-metrics.txt -w "%{http_code}" http://127.0.0.1:9116/metrics || true)"
   if [[ "${code:-}" != "200" ]] && curl -fsS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
@@ -910,8 +916,7 @@ case "$cmd" in
   demo)
     need_env
     PORT="$(port_from_env)"
-    # shellcheck disable=SC1091
-    source secrets/secrets.env
+    load_secrets
     echo "Generating demo incident workflow..."
     jar="$(mktemp)"
     admin_login "$jar"
@@ -927,8 +932,7 @@ case "$cmd" in
   demo-rca)
     need_env
     PORT="$(port_from_env)"
-    # shellcheck disable=SC1091
-    source secrets/secrets.env
+    load_secrets
     echo "Generating filesystem RCA demo..."
     jar="$(mktemp)"
     admin_login "$jar"
@@ -939,8 +943,7 @@ case "$cmd" in
   demo-reset)
     need_env
     PORT="$(port_from_env)"
-    # shellcheck disable=SC1091
-    source secrets/secrets.env
+    load_secrets
     jar="$(mktemp)"
     admin_login "$jar"
     curl -fsS -c "$jar" -b "$jar" -X POST "http://127.0.0.1:${PORT}/api/v1/demo-reset"
@@ -951,8 +954,7 @@ case "$cmd" in
   jobs)
     need_env
     PORT="$(port_from_env)"
-    # shellcheck disable=SC1091
-    source secrets/secrets.env
+    load_secrets
     jar="$(mktemp)"
     admin_login "$jar"
     curl -fsS -c "$jar" -b "$jar" "http://127.0.0.1:${PORT}/api/v1/jobs"
@@ -961,8 +963,7 @@ case "$cmd" in
     ;;
   secrets-check)
     need_env
-    # shellcheck disable=SC1091
-    source secrets/secrets.env
+    load_secrets
     # Becomes 1 if any secret is still a shipped default; used as the exit code.
     fail=0
     if [[ "${SECRET_KEY:-}" == "forgesre-dev-secret-change-me" || -z "${SECRET_KEY:-}" ]]; then
@@ -988,8 +989,7 @@ case "$cmd" in
   journal)
     need_env
     PORT="$(port_from_env)"
-    # shellcheck disable=SC1091
-    source secrets/secrets.env
+    load_secrets
     # module = optional Journal filter (snmp, rca, …); jar = temp cookie file for the admin login.
     module="${1:-}"
     jar="$(mktemp)"
@@ -1058,8 +1058,7 @@ case "$cmd" in
   sd)
     need_env
     PORT="$(port_from_env)"
-    # shellcheck disable=SC1091
-    source secrets/secrets.env
+    load_secrets
     echo "=== Linux node_exporter / Windows windows_exporter HTTP SD ==="
     curl -sS -H "Authorization: Bearer ${ALERTMANAGER_WEBHOOK_TOKEN}" \
       "http://127.0.0.1:${PORT}/api/v1/sd/prometheus" || true

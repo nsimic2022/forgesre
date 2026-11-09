@@ -10,13 +10,13 @@ if [[ ! -f .env ]]; then
 fi
 
 # Export .env and secrets so app.backup resolves FORGESRE_DATA the same way as backup.
+# secrets.env is parsed (never sourced) — LibreNMS tokens contain `|`.
+# shellcheck source=dotenv_load.sh
+source "$ROOT/scripts/dotenv_load.sh"
 # shellcheck disable=SC1091
 set -a
 source .env
-if [[ -f secrets/secrets.env ]]; then
-  # shellcheck disable=SC1091
-  source secrets/secrets.env
-fi
+dotenv_load "$ROOT/secrets/secrets.env"
 set +a
 
 # Host Python has no sqlalchemy. remove only deletes one folder under
