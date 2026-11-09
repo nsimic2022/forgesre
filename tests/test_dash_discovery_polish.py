@@ -81,7 +81,7 @@ def test_discovery_cubes_match_and_found_columns_stay_even():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     actions = css.split(".discovery-actions {", 1)[1].split("}", 1)[0]
     assert "align-items: stretch" in actions
-    assert "repeat(5, minmax(0, 1fr))" in actions
+    assert "minmax(0, 1.5fr) repeat(4, minmax(0, 1fr))" in actions
     cards = css.split(".discovery-actions .card {", 1)[1].split("}", 1)[0]
     assert "height: 100%" in cards
     assert "min-height: 12.5rem" in cards

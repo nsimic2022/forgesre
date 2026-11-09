@@ -192,7 +192,7 @@ def _render_discovery(
         ),
         netbox_sync_count=int(netbox_sync.get("count") or 0),
         netbox_sync_why=str(netbox_sync.get("why") or ""),
-        librenms=librenms_discovery_ctx(),
+        librenms=_librenms_cube(request),
         zabbix=zabbix_discovery_ctx(db),
         glpi=glpi_discovery_ctx(db),
         demo_candidate_ip=DEMO_CANDIDATE_IP,
@@ -597,7 +597,7 @@ async def discovery_snmp_submit(
         request,
         db,
         user,
-        notice=notice,
+        notice="",
         snmp=_snmp_onboard_ctx(
             db,
             form=form,
@@ -672,6 +672,13 @@ def discovery_snmp_mib(
         notice=notice,
         snmp=_snmp_onboard_ctx(db, form=form, mib=mib),
     )
+
+
+def _librenms_cube(request: Request) -> dict:
+    """Cube context plus the copy-paste alert webhook URL for this GUI host."""
+    row = librenms_discovery_ctx()
+    row["webhook_url"] = f"{str(request.base_url).rstrip('/')}/api/v1/webhooks/librenms"
+    return row
 
 
 def librenms_discovery_ctx() -> dict:

@@ -182,6 +182,8 @@ def test_discovery_keeps_cubes_and_snmp_below_add_asset():
     assert "OID tester" in html
     assert "Recommendations" in html
     assert "Identify" in html
+    assert 'id="snmp-identify"' in html
+    assert "/api/v1/webhooks/librenms" in html
     assert 'name="community"' in html
     assert SECRET not in html
     assert f'value="{SECRET}"' not in html
@@ -234,6 +236,9 @@ def test_identify_post_does_not_echo_community(monkeypatch):
     assert "recommend" in response.text
     assert ">Scan now<" in response.text and ">Add asset<" in response.text
     assert "LibreNMS" in response.text
+    assert 'id="snmp-identify"' in response.text
+    assert "LibreNMS has" in response.text.split('id="snmp-identify"', 1)[1]
+    assert 'data-snmp-focus="identify"' in response.text
 
 
 def test_probe_and_apply_generated_only(monkeypatch, tmp_path):
@@ -307,8 +312,8 @@ def test_snmp_page_requires_login():
 
 def test_cache_pin_bumped():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-64" in base
-    assert "app.js?v=v09-S" in base
+    assert "app.css?v=v09-65" in base
+    assert "app.js?v=v09-T" in base
 
 
 def test_vendor_profile_and_table_indexes():
