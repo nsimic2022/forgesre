@@ -211,7 +211,7 @@ from app.services import (
     run_demo_windows,
     run_investigation,
 )
-from app.stack import appliance_cube, enrich_components, forgeai_cube, grafana_open_url
+from app.stack import enrich_components, grafana_open_url
 from app.history import (
     ack_circle,
     acknowledge,
@@ -671,23 +671,8 @@ def ctx(request: Request, user: User | None, **extra):
         "interface_facts": interface_facts,
         "urlquote": lambda value: quote(str(value or ""), safe=""),
     }
-    if user is not None:
-        try:
-            doctor = doctor_payload()
-            data["appliance_cube"] = appliance_cube(doctor)
-            data["forgeai_cube"] = forgeai_cube(doctor)
-        except Exception:
-            log.debug("appliance cube skipped", exc_info=True)
-            data["appliance_cube"] = {
-                "css": "warn",
-                "state": "unknown",
-                "title": "System Health did not answer.",
-            }
-            data["forgeai_cube"] = {
-                "css": "warn",
-                "state": "unknown",
-                "title": "ForgeAI status did not answer.",
-            }
+    # Doctor probes stay on GET / (dashboard stack), GET /health-ui, and
+    # POST /health-ui/refresh — not on every logged-in TemplateResponse.
     data["can_send_ops"] = can_send_ops(user) if user else False
     data["is_lab_inventory_row"] = is_lab_inventory_row
     data.update(extra)
