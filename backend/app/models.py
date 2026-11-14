@@ -2,12 +2,30 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, event, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    event,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from app.db import Base
 
 JSONType = JSON
+
+# Must match services.tracked_incident_statuses() (paging + quiet MAINT/SUPPRESSED).
+TRACKED_INCIDENT_STATUSES = ("OPEN", "INVESTIGATING", "ESCALATED", "MAINT", "SUPPRESSED")
+_TRACKED_FINGERPRINT_SQL = ", ".join(f"'{status}'" for status in TRACKED_INCIDENT_STATUSES)
 
 
 def utcnow() -> datetime:
@@ -192,6 +210,15 @@ class Playrule(Base):
 
 class Incident(Base):
     __tablename__ = "incidents"
+    __table_args__ = (
+        Index(
+            "ux_incidents_active_fingerprint",
+            "fingerprint",
+            unique=True,
+            sqlite_where=text(f"status IN ({_TRACKED_FINGERPRINT_SQL})"),
+            postgresql_where=text(f"status IN ({_TRACKED_FINGERPRINT_SQL})"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     number: Mapped[str] = mapped_column(String(64), unique=True, index=True)
