@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import inspect, text
+from sqlalchemy import func, inspect, text
 from sqlalchemy.engine import Connection, Engine
 
 
@@ -108,6 +108,97 @@ def _ensure_oncall_slots(conn: Connection) -> None:
         conn.execute(text("ALTER TABLE oncall_slots ADD COLUMN phone2 VARCHAR(64) DEFAULT ''"))
     if "surname" not in existing:
         conn.execute(text("ALTER TABLE oncall_slots ADD COLUMN surname VARCHAR(255) DEFAULT ''"))
+
+
+ACTIVE_FINGERPRINT_INDEX = "ux_incidents_active_fingerprint"
+
+
+def _tracked_fingerprint_sql() -> str:
+    from app.models import TRACKED_INCIDENT_STATUSES
+
+    return ", ".join(f"'{status}'" for status in TRACKED_INCIDENT_STATUSES)
+
+
+def _collapse_duplicate_active_fingerprints(conn: Connection) -> int:
+    """Keep MAX(id) per active fingerprint; older tracked rows become RESOLVED. No deletes."""
+    inspector = inspect(conn)
+    if "incidents" not in set(inspector.get_table_names()):
+        return 0
+    if "fingerprint" not in {col["name"] for col in inspector.get_columns("incidents")}:
+        return 0
+    from sqlalchemy.orm import Session
+
+    from app.history import apply_status_fields
+    from app.journal import report
+    from app.models import Incident, TRACKED_INCIDENT_STATUSES, utcnow
+    from app.services import append_timeline
+
+    session = Session(bind=conn)
+    collapsed = 0
+    now = utcnow()
+    groups = (
+        session.query(Incident.fingerprint)
+        .filter(Incident.status.in_(TRACKED_INCIDENT_STATUSES))
+        .group_by(Incident.fingerprint)
+        .having(func.count(Incident.id) > 1)
+        .all()
+    )
+    for (fingerprint,) in groups:
+        rows = (
+            session.query(Incident)
+            .filter(
+                Incident.fingerprint == fingerprint,
+                Incident.status.in_(TRACKED_INCIDENT_STATUSES),
+            )
+            .order_by(Incident.id.desc())
+            .all()
+        )
+        if len(rows) < 2:
+            continue
+        keep = rows[0]
+        for older in rows[1:]:
+            apply_status_fields(older, "RESOLVED", "system")
+            older.status = "RESOLVED"
+            older.ended_at = now
+            older.resolved_at = now
+            older.resolved_by = "system"
+            append_timeline(
+                older,
+                "collapse",
+                "COLLAPSED",
+                f"Collapsed duplicate active incident; kept {keep.number}",
+            )
+            collapsed += 1
+    if collapsed:
+        report(
+            session,
+            "incident",
+            "migrate",
+            "ok",
+            summary=f"Collapsed {collapsed} duplicate active incident(s)",
+            detail=f"index={ACTIVE_FINGERPRINT_INDEX}",
+            object_type="incident",
+            object_id=ACTIVE_FINGERPRINT_INDEX,
+            commit=False,
+        )
+        session.flush()
+    return collapsed
+
+
+def _ensure_active_fingerprint_unique(conn: Connection) -> None:
+    inspector = inspect(conn)
+    if "incidents" not in set(inspector.get_table_names()):
+        return
+    if "fingerprint" not in {col["name"] for col in inspector.get_columns("incidents")}:
+        return
+    _collapse_duplicate_active_fingerprints(conn)
+    statuses = _tracked_fingerprint_sql()
+    conn.execute(
+        text(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS {ACTIVE_FINGERPRINT_INDEX} "
+            f"ON incidents (fingerprint) WHERE status IN ({statuses})"
+        )
+    )
 
 
 def _ensure_lookup_indexes(conn: Connection) -> None:
@@ -401,3 +492,4 @@ def migrate(engine: Engine) -> None:
                 "ON asset_playrule_mutes (asset_id)"
             )
         )
+        _ensure_active_fingerprint_unique(conn)

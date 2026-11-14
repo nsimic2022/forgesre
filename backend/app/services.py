@@ -7,6 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func, or_
 
@@ -787,6 +788,29 @@ def match_alert_asset(
     return None
 
 
+def _insert_open_incident(db: Session, incident: Incident) -> Incident | None:
+    """Flush a new OPEN incident. On active-fingerprint conflict, return the existing row."""
+    fingerprint = incident.fingerprint
+    try:
+        with db.begin_nested():
+            db.add(incident)
+            db.flush()
+        return incident
+    except IntegrityError:
+        log.warning("active incident already exists fingerprint=%s", fingerprint)
+        try:
+            db.expunge(incident)
+        except Exception:
+            pass
+        return (
+            db.query(Incident)
+            .options(joinedload(Incident.asset), selectinload(Incident.evidence))
+            .filter(Incident.fingerprint == fingerprint, Incident.status.in_(tracked_incident_statuses()))
+            .order_by(Incident.id.desc())
+            .first()
+        )
+
+
 def alert_fingerprint(alert: dict[str, Any]) -> str:
     labels = alert.get("labels") or {}
     forge = alert.get("forge") if isinstance(alert.get("forge"), dict) else {}
@@ -937,57 +961,72 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
                 alert_payload=alert,
                 timeline=[],
             )
-            db.add(incident)
-            db.flush()
-            if asset is not None:
-                incident.asset = asset
-            if classified == "zabbix":
-                fired = f"{alertname} fired in Zabbix"
-            elif classified == "librenms":
-                fired = f"{alertname} fired in LibreNMS"
-            elif classified == "snmp":
-                fired = f"{alertname} fired via SNMP"
+            inserted = _insert_open_incident(db, incident)
+            if inserted is None:
+                report(
+                    db,
+                    "incident",
+                    "ingest",
+                    "error",
+                    summary=f"Webhook ingest failed to open {alertname}",
+                    detail=f"duplicate active fingerprint={fingerprint}",
+                    object_type="incident",
+                    object_id=fingerprint[:64],
+                    commit=False,
+                )
+                continue
+            if inserted is not incident:
+                incident = inserted
             else:
-                fired = f"{alertname} fired"
-            append_timeline(incident, "alert", "ALERT", fired)
-            append_timeline(incident, "incident", "INCIDENT", f"{incident.number} created")
-            if previous_resolved is not None:
-                append_timeline(
-                    incident,
-                    "refire",
-                    "RE-FIRED",
-                    f"Same alert fired again after {previous_resolved.number} was RESOLVED",
-                )
-                append_timeline(
-                    previous_resolved,
-                    "refire",
-                    "RE-FIRED",
-                    f"Fired again as {incident.number}",
-                )
-            if rule:
-                via = " (custom alarm)" if playrule_from_asset(rule, asset) else ""
-                append_timeline(incident, "playrule", "PLAYRULE", f"{rule.name}{via}")
-            book_name = ""
-            if incident.playbook_id:
-                from app.models import Playbook
+                if asset is not None:
+                    incident.asset = asset
+                if classified == "zabbix":
+                    fired = f"{alertname} fired in Zabbix"
+                elif classified == "librenms":
+                    fired = f"{alertname} fired in LibreNMS"
+                elif classified == "snmp":
+                    fired = f"{alertname} fired via SNMP"
+                else:
+                    fired = f"{alertname} fired"
+                append_timeline(incident, "alert", "ALERT", fired)
+                append_timeline(incident, "incident", "INCIDENT", f"{incident.number} created")
+                if previous_resolved is not None:
+                    append_timeline(
+                        incident,
+                        "refire",
+                        "RE-FIRED",
+                        f"Same alert fired again after {previous_resolved.number} was RESOLVED",
+                    )
+                    append_timeline(
+                        previous_resolved,
+                        "refire",
+                        "RE-FIRED",
+                        f"Fired again as {incident.number}",
+                    )
+                if rule:
+                    via = " (custom alarm)" if playrule_from_asset(rule, asset) else ""
+                    append_timeline(incident, "playrule", "PLAYRULE", f"{rule.name}{via}")
+                book_name = ""
+                if incident.playbook_id:
+                    from app.models import Playbook
 
-                book = db.get(Playbook, incident.playbook_id)
-                book_name = book.name if book is not None else ""
-            if book_name:
-                append_timeline(incident, "playbook", "PLAYBOOK", book_name)
-            db.add(IncidentEvent(incident_id=incident.id, kind="created", data=labels))
-            audit(
-                db,
-                action="incident.create",
-                object_type="incident",
-                object_id=incident.number,
-                data={
-                    "alertname": alertname,
-                    **({"source": classified} if classified != "prometheus" else {}),
-                    **({"refire_of": previous_resolved.number} if previous_resolved is not None else {}),
-                },
-            )
-            created.append(incident)
+                    book = db.get(Playbook, incident.playbook_id)
+                    book_name = book.name if book is not None else ""
+                if book_name:
+                    append_timeline(incident, "playbook", "PLAYBOOK", book_name)
+                db.add(IncidentEvent(incident_id=incident.id, kind="created", data=labels))
+                audit(
+                    db,
+                    action="incident.create",
+                    object_type="incident",
+                    object_id=incident.number,
+                    data={
+                        "alertname": alertname,
+                        **({"source": classified} if classified != "prometheus" else {}),
+                        **({"refire_of": previous_resolved.number} if previous_resolved is not None else {}),
+                    },
+                )
+                created.append(incident)
         opened = incident in created
         skip_mail = _quiet_mail(db, incident, asset, alertname, opened=opened)
         if incident.id and not db.query(Evidence.id).filter_by(incident_id=incident.id).first():
