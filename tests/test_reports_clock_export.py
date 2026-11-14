@@ -310,7 +310,7 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert ">Problem<" not in recent and ">Ack<" not in recent and "info-tip" not in head
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     collapse = css.split(".nav-collapse {", 1)[1].split("}", 1)[0]
-    assert "position: fixed" in collapse and "left: 220px" in collapse
+    assert "position: fixed" in collapse and "left: 230px" in collapse
     appliance = css.split(".appliance-clock {", 1)[1].split("}", 1)[0]
     assert "padding:" in appliance and "14cqi" in appliance and "2.55rem" in appliance
     assert "5.4rem" not in appliance
@@ -329,5 +329,5 @@ def test_dashboard_clock_columns_checkbox_hit_and_admin_cards():
     assert "height: 100%" in css.split(".admin-user-split > .admin-user-pane", 1)[1].split("}", 1)[0]
     assert "margin: 2.25rem 0 0.7rem" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-65" in base and "app.js?v=v09-T" in base
+    assert "app.css?v=v09-66" in base and "app.js?v=v09-T" in base
     db.close()

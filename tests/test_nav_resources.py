@@ -111,7 +111,7 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "form.nav-logout" in css
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-65" in base
+    assert "app.css?v=v09-66" in base
     assert "app.js?v=v09-T" in base
     assert "bindInfoTips" in js
     assert "ops-report-actions" in css
@@ -136,7 +136,7 @@ def test_nav_hides_cubes_clock_and_has_collapse_arrow():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     collapse = css.split(".nav-collapse {", 1)[1].split("}", 1)[0]
     assert "position: fixed" in collapse
-    assert "left: 220px" in collapse
+    assert "left: 230px" in collapse
     assert "html[data-nav-collapsed] .nav" in css
     assert "translateX(-100%)" in css
     assert "html[data-nav-collapsed] .content { margin-left: 0; }" in css

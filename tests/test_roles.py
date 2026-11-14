@@ -84,7 +84,7 @@ def test_nav_foot_prints_role_once_and_theme_switcher():
     assert login.text.count("data-theme-toggle") == 1
     assert 'class="theme-toggle"' in login.text
     assert "secondary theme-toggle" not in login.text
-    assert 'data-theme="light"' in login.text
+    assert 'data-theme="dark"' in login.text
     assert "forgesre-theme" in login.text
     assert "prefers-color-scheme" not in login.text
     client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
