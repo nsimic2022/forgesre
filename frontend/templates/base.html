@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,10 +8,10 @@
     (function () {
       var key = "forgesre-theme";
       var allowed = { light: 1, dark: 1, system: 1, contrast: 1 };
-      var theme = "light";
-      try { theme = localStorage.getItem(key) || "light"; } catch (e) {}
+      var theme = "dark";
+      try { theme = localStorage.getItem(key) || "dark"; } catch (e) {}
       if (theme === "high-contrast") theme = "dark";
-      if (!allowed[theme]) theme = "light";
+      if (!allowed[theme]) theme = "dark";
       document.documentElement.setAttribute("data-theme", theme);
       try {
         if (localStorage.getItem("forgesre-nav") === "hidden") {
@@ -20,7 +20,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v09-65">
+  <link rel="stylesheet" href="/static/app.css?v=v09-66">
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
   <script src="/static/app.js?v=v09-T" defer></script>

@@ -4,7 +4,7 @@ const THEME_KEY = "forgesre-theme";
 
 function normalizeTheme(theme) {
   if (theme === "high-contrast") return "dark";
-  return THEMES.includes(theme) ? theme : "light";
+  return THEMES.includes(theme) ? theme : "dark";
 }
 
 function currentTheme() {

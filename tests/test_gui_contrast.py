@@ -9,9 +9,9 @@ BASE = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8
 DARK = {
     "--text": "#f8fafc",
     "--muted": "#cbd5e1",
-    "--ok": "#34d399",
-    "--warn": "#fbbf24",
-    "--crit": "#fda4af",
+    "--ok": "#12d4a0",
+    "--warn": "#f59e0b",
+    "--crit": "#f87171",
     "--heading": "#ffffff",
     "--tip": "#ffffff",
     "--check-edge": "#cbd5e1",
@@ -25,9 +25,9 @@ DARK = {
     "--pill-crit-bg": "#881337",
     "--pill-crit": "#ffe4e6",
     "--btn-danger-text": "#4c0519",
-    "--line": "#334155",
-    "--bg": "#0f172a",
-    "--panel": "#1e293b",
+    "--line": "#1f2937",
+    "--bg": "#090d16",
+    "--panel": "#111827",
 }
 
 LIGHT = {
@@ -79,7 +79,7 @@ CONTRAST = {
 
 
 def test_cache_bust_is_v09_s_for_css_only():
-    assert "app.css?v=v09-65" in BASE
+    assert "app.css?v=v09-66" in BASE
     assert "app.js?v=v09-T" in BASE
     assert "app.css?v=v09-W" not in BASE
 

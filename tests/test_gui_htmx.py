@@ -38,7 +38,7 @@ def test_vendor_htmx_and_alpine_are_offline():
 
 
 def test_cache_bust_and_boost_chrome():
-    assert "app.css?v=v09-65" in BASE
+    assert "app.css?v=v09-66" in BASE
     assert "app.js?v=v09-T" in BASE
     assert 'hx-boost="true"' in BASE
     assert 'hx-indicator="#hx-progress"' in BASE
@@ -83,7 +83,7 @@ def test_js_is_boost_safe():
 
 
 def test_design_tokens_do_not_replace_locked_hexes():
-    assert "--radius-sm: 8px;" in CSS
+    assert "--radius-sm: 6px;" in CSS
     assert "--shadow:" in CSS
     assert "[x-cloak]" in CSS
     assert ".hx-progress" in CSS
@@ -93,9 +93,9 @@ def test_design_tokens_do_not_replace_locked_hexes():
     assert "--bg: #f9fafb;" in light
     assert "--text: #0f172a;" in light
     assert "--ok: #059669;" in light
-    assert "--bg: #0f172a;" in dark
+    assert "--bg: #090d16;" in dark
     assert "--text: #f8fafc;" in dark
-    assert "--ok: #34d399;" in dark
+    assert "--ok: #12d4a0;" in dark
     big = CSS.split(".stat-row-big .stat {", 1)[1].split("}", 1)[0]
     assert "aspect-ratio: 1" in big
     assert "@keyframes heat-pulse-crit" in CSS
