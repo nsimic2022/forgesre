@@ -111,7 +111,7 @@ def test_system_resources_requires_login_and_returns_this_appliance():
     assert "form.nav-logout" in css
     assert "margin-left: auto" in css
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-67" in base
+    assert "app.css?v=v09-68" in base
     assert "app.js?v=v09-T" in base
     assert "bindInfoTips" in js
     assert "ops-report-actions" in css
@@ -137,11 +137,16 @@ def test_nav_hides_cubes_clock_and_has_collapse_arrow():
     collapse = css.split(".nav-collapse {", 1)[1].split("}", 1)[0]
     assert "position: fixed" in collapse
     assert "left: 230px" in collapse
+    assert "transition: none" in collapse
+    assert "var(--ease" not in collapse
     assert "html[data-nav-collapsed] .nav" in css
     assert "width: 56px" in css.split("html[data-nav-collapsed] .nav {", 1)[1].split("}", 1)[0]
     assert "html[data-nav-collapsed] .content { margin-left: 56px; }" in css
+    assert "transition: none" in css.split(".content {", 1)[1].split("}", 1)[0]
+    assert "var(--ease" not in css.split(".content {", 1)[1].split("}", 1)[0]
     assert ".nav-ico" in css
     assert "left: 56px" in css.split("html[data-nav-collapsed] .nav-collapse {", 1)[1].split("}", 1)[0]
+    assert ".nav > .nav-collapse" in css
     assert ".nav-status {" not in css
     assert ".nav a.nav-clock" not in css
     assert ".nav a.nav-cube" not in css
