@@ -2101,15 +2101,16 @@ def assets_matching(
 def asset_tiles(rows: list[Asset]) -> list[dict]:
     """Dashboard inventory tiles. Each count is the length of the /assets list behind its link.
 
-    Lab forge-demo-* / 10.20.30.41 rows are excluded here (``lab=0``). They stay on
-    /assets with a DEMO pill. In problem = an OPEN / INVESTIGATING / ESCALATED
-    incident on that asset (``flag=in-problem``). Unreachable = the existing ICMP /
-    probe-down flag, not an incident count.
+    Lab forge-demo-* / 10.20.30.41 rows are included (same as /assets). They keep
+    the DEMO pill on the list. ``/assets?lab=0`` still drops them. In problem =
+    an OPEN / INVESTIGATING / ESCALATED incident on that asset
+    (``flag=in-problem``). Unreachable = the existing ICMP / probe-down flag,
+    not an incident count.
     """
     specs = [
-        ("Assets", "", {"lab": "0"}, "/assets?lab=0", "assets"),
-        ("In problem", "warn", {"flag": PROBLEM_FLAG, "lab": "0"}, f"/assets?flag={PROBLEM_FLAG}&lab=0", "problem"),
-        ("Unreachable", "crit", {"flag": "unreachable", "lab": "0"}, "/assets?flag=unreachable&lab=0", "unreachable"),
+        ("Assets", "", {}, "/assets", "assets"),
+        ("In problem", "warn", {"flag": PROBLEM_FLAG}, f"/assets?flag={PROBLEM_FLAG}", "problem"),
+        ("Unreachable", "crit", {"flag": "unreachable"}, "/assets?flag=unreachable", "unreachable"),
     ]
     return [
         {

@@ -176,9 +176,9 @@ def test_dashboard_incident_tiles_match_the_list_behind_the_click():
     alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
     tiles = _tile_counts(alarms)
     assert set(tiles) == {"critical", "warning", "escalated"}
-    assert tiles["critical"][0] == "/incidents?status=active&amp;severity=critical&amp;demo=0"
-    assert tiles["warning"][0] == "/incidents?status=active&amp;severity=warning&amp;demo=0"
-    assert tiles["escalated"][0] == "/incidents?status=ESCALATED&amp;demo=0"
+    assert tiles["critical"][0] == "/incidents?status=active&amp;severity=critical"
+    assert tiles["warning"][0] == "/incidents?status=active&amp;severity=warning"
+    assert tiles["escalated"][0] == "/incidents?status=ESCALATED"
     assert 'data-tile="investigating"' not in alarms and 'data-tile="resolved"' not in alarms
     assert ">Investigating<" not in alarms and ">Resolved<" not in alarms
     assert 'class="stat crit' in alarms and 'class="stat warn' in alarms
@@ -231,9 +231,9 @@ def test_dashboard_asset_tiles_match_assets_filters():
     infra = home.text.split("dash-tiles-infra", 1)[1].split("</section>", 1)[0]
     tiles = _tile_counts(infra)
     assert set(tiles) == {"assets", "problem", "unreachable"}
-    assert tiles["assets"][0] == "/assets?lab=0"
-    assert tiles["problem"][0] == "/assets?flag=in-problem&amp;lab=0"
-    assert tiles["unreachable"][0] == "/assets?flag=unreachable&amp;lab=0"
+    assert tiles["assets"][0] == "/assets"
+    assert tiles["problem"][0] == "/assets?flag=in-problem"
+    assert tiles["unreachable"][0] == "/assets?flag=unreachable"
     assert ">Assets<" in infra and ">In problem<" in infra and ">Unreachable<" in infra
     for gone in ("No owner email", "Assets without incident", "No open incident", 'href="/assets?flag=no-email"', ">Open<"):
         assert gone not in infra, gone
