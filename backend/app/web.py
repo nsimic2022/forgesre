@@ -233,7 +233,6 @@ from app.history import (
     per_page_param,
     reported_to_for,
 )
-from app.host_resources import RESOURCE_CRIT_PERCENT, RESOURCE_WARN_PERCENT
 from rca.catalog import PLAYRULE_PRESETS
 from app.settings import settings
 
@@ -671,8 +670,8 @@ def ctx(request: Request, user: User | None, **extra):
         "interface_facts": interface_facts,
         "urlquote": lambda value: quote(str(value or ""), safe=""),
     }
-    # Doctor probes stay on GET / (dashboard stack), GET /health-ui, and
-    # POST /health-ui/refresh — not on every logged-in TemplateResponse.
+    # Doctor probes stay on GET /health-ui and POST /health-ui/refresh —
+    # not on every logged-in TemplateResponse.
     data["can_send_ops"] = can_send_ops(user) if user else False
     data["is_lab_inventory_row"] = is_lab_inventory_row
     data.update(extra)
@@ -802,22 +801,16 @@ def dashboard(
     include_lab = demo_raw in {"1", "yes", "include"}
     recent, total = list_history(db, days=None, open_only=False, limit=size, page=page, exclude_demo=not include_lab)
     pager = pager_state(page, total=total, size=size)
-    stack = enrich_components(doctor_payload().get("components") or {}, request.headers.get("host") or "localhost")
     return render(
         request,
         "dashboard.html",
         user,
-        stack=stack,
         asset_tiles=asset_rows,
         incident_tiles=incident_rows,
         incident_heat=incident_heat(incident_rows),
-        resource_warn=RESOURCE_WARN_PERCENT,
-        resource_crit=RESOURCE_CRIT_PERCENT,
         recent=recent,
         pager=pager,
         include_lab=include_lab,
-        oncall=current_oncall(db),
-        insights=insight_panel(db),
         activity=list_investigation_runs(db)[:24],
     )
 

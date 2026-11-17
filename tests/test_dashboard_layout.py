@@ -247,11 +247,17 @@ def test_dashboard_order_tiles_appliance_sections_without_banners():
     top = html.index('class="dash-top"')
     incidents_tile = html.index("data-incident-tile")
     infra = html.index("dash-tiles-infra")
-    appliance = html.index("data-appliance-card")
     recent = html.index("<h2>Recent incidents</h2>")
     graphs = html.index("data-dash-graphs")
     insights = html.index("data-forgeai-insights")
-    assert title < top < incidents_tile < infra < insights < appliance < recent < graphs
+    assert title < top < incidents_tile < infra < insights < recent < graphs
+    assert "data-appliance-card" not in html
+    assert "data-oncall" not in html
+    health = _client().get("/health-ui").text
+    appliance = health.index("data-appliance-card")
+    assert health.index("<h1>System Health") < appliance < health.index("health-grid")
+    assert "data-stack-cubes" not in health
+    assert "On duty" not in health
     assert "Recent journal" not in html
     assert "Layout journal error" not in html
     for gone in ('class="dash-banners"', 'id="host-down-banner"', "data-host-down-banner", "HOST DOWN",
@@ -259,7 +265,7 @@ def test_dashboard_order_tiles_appliance_sections_without_banners():
         assert gone not in html, gone
     assert 'class="banner' not in html
     assert html.count("stat-row-big") == 2
-    card = html[appliance : html.index("</aside>", appliance)]
+    card = health[appliance : health.index("</aside>", appliance)]
     assert "data-clock" not in card
     assert "appliance-clock" not in card
     for key in ("cpu", "ram", "hdd"):
@@ -307,11 +313,11 @@ def test_dashboard_tiles_bigger_and_thick_fill():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     big = css.split(".stat-row-big .stat {", 1)[1].split("}", 1)[0]
     assert "border-left-width: 8px" in big
-    assert "aspect-ratio: 1" in big
-    assert "font-size: 3.0rem" in css
+    assert "min-height: 5rem" in big
+    assert "minmax(7.4rem, 8.75rem)" in css
     assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-68" in base
+    assert "app.css?v=v09-70" in base
 
 
 def test_dashboard_recent_has_no_production_lab_chips():
@@ -363,82 +369,60 @@ def _card(html: str) -> str:
     return html[start : html.index("</aside>", start)]
 
 
-def test_dashboard_card_titled_forgesre_with_health_cubes(monkeypatch):
+def test_health_card_titled_forgesre_without_stack_cubes(monkeypatch):
     import app.web as web
 
     monkeypatch.setattr(web, "doctor_payload", _fake_doctor)
     _db().close()
-    html = _client().get("/").text
+    html = _client().get("/health-ui").text
     card = _card(html)
     assert "<h2>ForgeSRE</h2>" in card
     assert "This appliance" not in html
     assert 'data-metric="net"' in card and "data-clock" not in card
-    assert card.index('data-metric="net"') < card.index("data-stack-cubes")
-    assert '<a class="stack-cubes" href="/health-ui"' in card
-    cubes = {cid: css for css, cid in re.findall(r'<span class="stack-cube (\w+)" data-cube="(\w+)"', card)}
-    expected = {
-        "core": "ok",
-        "postgres": "ok",
-        "prometheus": "ok",
-        "alertmanager": "crit",
-        "grafana": "warn",
-        "snmp": "warn",
-        "loki": "ok",
-        "alloy": "ok",
-        "llm": "warn",
-        "netbox": "ok",
-        "librenms": "warn",
-        "zabbix": "warn",
-        "discovery": "ok",
-        "mailpit": "ok",
-    }
-    assert cubes == expected
-    for short in ("Core", "Postgres", "Prom", "Alertmgr", "Grafana", "Loki", "NetBox", "LNMS", "LLM", "Discovery", "Mailpit"):
-        assert f">{short}<span" in card
-    assert 'title="Alertmanager: down"' in card
+    assert "data-stack-cubes" not in card
+    assert "stack-cube" not in card
+    assert "On duty" not in html
+    assert "appliance-oncall" not in html
+    for key in ("cpu", "ram", "hdd", "net"):
+        assert f'data-metric="{key}"' in card
 
 
-def test_dashboard_cubes_match_health_page_tones(monkeypatch):
+def test_health_grid_matches_health_table_tones(monkeypatch):
     import app.web as web
 
     monkeypatch.setattr(web, "doctor_payload", _fake_doctor)
     _db().close()
-    client = _client()
-    card = _card(client.get("/").text)
-    health = client.get("/health-ui").text
-    dash = re.findall(r'class="stack-cube (\w+)" data-cube="\w+" title="([^":]+):', card)
+    health = _client().get("/health-ui").text
+    block = health.split("health-grid", 1)[1].split("table-scroll", 1)[0]
+    grid = re.findall(r'class="stat (\w+)"[^>]*>\s*<span>([^<]+)</span>', block)
     rows = re.findall(r'<tr class="health-(\w+)">\s*<td>\s*(?:<a [^>]+>)?([^<\n]+?)\s*(?:</a>)?\s*</td>', health)
-    assert dash and rows
-    assert [(label, css) for css, label in dash] == [(label, css) for css, label in rows]
+    assert grid and rows
+    assert [(label.strip(), css) for css, label in grid] == [(label.strip(), css) for css, label in rows]
 
 
-def test_dashboard_card_has_no_container_controls(monkeypatch):
+def test_health_card_has_no_container_controls(monkeypatch):
     import app.web as web
 
     monkeypatch.setattr(web, "doctor_payload", _fake_doctor)
     _db().close()
-    card = _card(_client().get("/").text).lower()
+    card = _card(_client().get("/health-ui").text).lower()
     body = card.split("</h2>", 1)[1]
-    stack = body.split("appliance-oncall", 1)[0]
-    assert "<form" not in stack and "<button" not in stack
-    assert "appliance-oncall" in card
-    assert "i'm on duty now" in body
+    assert "<form" not in body and "<button" not in body
+    assert "appliance-oncall" not in card
+    assert "i'm on duty now" not in body
     for word in ("start", "stop", "restart", "docker", ">on<", ">off<"):
-        assert word not in stack, word
+        assert word not in body, word
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".stack-cube.ok { background: var(--ok)" in css
     assert ".stack-cube.warn { background: var(--warn)" in css
     assert ".stack-cube.crit { background: var(--crit)" in css
 
 
-def test_on_duty_reserved_slots_are_name_only():
-    cube = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8").split("appliance-oncall", 1)[1]
-    assert "oncall.person or oncall.name" in cube
-    assert "oncall.email" not in cube
-    assert "oncall.phone" not in cube
-    assert "oncall.window" not in cube
-    assert "oncall-actions" in cube
-    assert "I'm on duty now" in cube
+def test_on_duty_lives_on_escalation_not_dashboard():
+    dash = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
+    assert "appliance-oncall" not in dash
+    assert "I'm on duty now" not in dash
+    assert "data-appliance-card" not in dash
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".form-grid.person-grid" in css
     assert ".slot-row.end" in css

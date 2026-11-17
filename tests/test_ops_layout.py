@@ -61,7 +61,7 @@ def test_ticker_api_lists_fresh_production_incidents():
     assert "items" in data and "heat" in data and "fresh" in data
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "data-alarm-ticker" in base
-    assert "app.css?v=v09-68" in base and "app.js?v=v09-T" in base
+    assert "app.css?v=v09-70" in base and "app.js?v=v09-T" in base
     js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
     ticker = js.split("(function bindAlarmTicker() {", 1)[1].split("\n})();", 1)[0]
     assert "forgesre-ticker-seen" in ticker
@@ -155,15 +155,18 @@ def test_admin_split_and_cli_example():
     assert "grid-template-columns: 1fr 1fr" in css.split(".admin-user-split {", 1)[1].split("}", 1)[0]
     assert "minmax(16rem, 1fr) minmax(22rem, 2fr)" in css
     assert ".admin-mid" in css
-    assert "grid-template-areas: \"inc ai app\" \"infra ai app\"" in css.replace("\n", " ") or 'grid-template-areas: "inc ai app" "infra ai app"' in css
+    assert "dash-tile-row" in css
+    assert "minmax(7.4rem, 8.75rem)" in css.split(".dash-tiles-incidents .stat-row.stat-row-big,", 1)[1].split("}", 1)[0]
 
 
 def test_dashboard_forgeai_cube_and_on_duty():
     html = _client().get("/").text
     top = html.split('class="dash-top"', 1)[1].split('class="dash-band"', 1)[0]
+    assert "dash-tile-row" in top
+    assert top.index("dash-tiles-incidents") < top.index("dash-tiles-infra") < top.index("dash-ai-cube")
     assert "dash-ai-cube" in top
-    assert "data-appliance-card" in top
-    assert "appliance-oncall" in top
-    assert "On duty" in top
+    assert "data-appliance-card" not in top
+    assert "appliance-oncall" not in top
+    assert "On duty" not in top
     assert "data-forgeai-insights" in top
     assert html.index("data-forgeai-insights") < html.index("<h2>Recent incidents</h2>")

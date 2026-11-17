@@ -38,7 +38,7 @@ def test_vendor_htmx_and_alpine_are_offline():
 
 
 def test_cache_bust_and_boost_chrome():
-    assert "app.css?v=v09-68" in BASE
+    assert "app.css?v=v09-70" in BASE
     assert "app.js?v=v09-T" in BASE
     assert 'hx-boost="true"' in BASE
     assert 'hx-indicator="#hx-progress"' in BASE
@@ -97,7 +97,7 @@ def test_design_tokens_do_not_replace_locked_hexes():
     assert "--text: #f8fafc;" in dark
     assert "--ok: #12d4a0;" in dark
     big = CSS.split(".stat-row-big .stat {", 1)[1].split("}", 1)[0]
-    assert "aspect-ratio: 1" in big
+    assert "min-height: 5rem" in big
     assert "@keyframes heat-pulse-crit" in CSS
     assert ".stack-cube.ok { background: var(--ok)" in CSS
 
@@ -145,7 +145,7 @@ def test_incident_lists_open_the_incident_page():
     incidents = (ROOT / "frontend" / "templates" / "incidents.html").read_text(encoding="utf-8")
     assert 'data-list-view="/incidents/{{ item.number }}"' in dash
     assert 'data-list-view="/incidents/{{ item.number }}"' in incidents
-    assert "On-call" in dash
+    assert "On-call" not in dash
     assert "Roster" not in dash
     assert "metric-toolbar" not in dash
     assert "data-dash-graph-host" not in dash
@@ -155,8 +155,8 @@ def test_incident_lists_open_the_incident_page():
     assert "grid-template-columns: minmax(0, 1fr)" in CSS.split(".dash-graphs .dash-graph-list {", 1)[1]
     assert "height: 9.25rem" in CSS
     top = CSS.split(".dash-top {", 1)[1].split("}", 1)[0]
-    assert "minmax(0, var(--dash-tile-band))" in top
-    assert "minmax(24rem, 2.6fr)" in top
+    assert "flex-direction: column" in top
+    assert "dash-tile-row" in CSS
     band = CSS.split(".dash-incidents {", 1)[1].split("}", 1)[0]
     assert "minmax(0, 2fr) minmax(0, 1fr)" in band
     graphs = JS.split("(function bindDashGraphs() {", 1)[1].split("\n})();", 1)[0]
@@ -171,7 +171,7 @@ def test_edit_one_incident_opens_clean_detail_url():
     home = client.get("/")
     assert home.status_code == 200
     assert 'hx-boost="false"' in home.text
-    assert "On-call" in home.text
+    assert "On-call" not in home.text
     demo = client.get("/?demo=1")
     listed = client.get("/incidents")
     assert listed.status_code == 200
