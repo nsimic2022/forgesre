@@ -20,7 +20,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v09-67">
+  <link rel="stylesheet" href="/static/app.css?v=v09-68">
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
   <script src="/static/app.js?v=v09-T" defer></script>
@@ -81,11 +81,11 @@
         <form class="nav-logout" method="post" action="/logout" hx-boost="false"><button type="submit" class="secondary" title="Logout"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-logout"></use></svg></span><span class="nav-label">Logout</span></button></form>
       </div>
     </div>
+    <button type="button" class="nav-collapse" data-nav-toggle aria-controls="app-nav" aria-expanded="true" title="Hide menu">
+      <span class="nav-collapse-icon" aria-hidden="true"></span>
+      <span class="sr-only">Hide menu</span>
+    </button>
   </aside>
-  <button type="button" class="nav-collapse" data-nav-toggle aria-controls="app-nav" aria-expanded="true" title="Hide menu">
-    <span class="nav-collapse-icon" aria-hidden="true"></span>
-    <span class="sr-only">Hide menu</span>
-  </button>
   <main class="content">
     <div class="alarm-ticker" data-alarm-ticker hidden role="status">
       <a data-ticker-link href="/"></a>

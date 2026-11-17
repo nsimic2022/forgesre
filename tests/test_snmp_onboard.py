@@ -312,7 +312,7 @@ def test_snmp_page_requires_login():
 
 def test_cache_pin_bumped():
     base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-67" in base
+    assert "app.css?v=v09-68" in base
     assert "app.js?v=v09-T" in base
 
 
