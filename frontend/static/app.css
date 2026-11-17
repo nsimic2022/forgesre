@@ -235,7 +235,8 @@ a { color: var(--accent); }
   color: var(--shell-text);
   z-index: 40;
   border-right: 1px solid var(--shell-line); padding: 1.25rem 1rem; display: flex; flex-direction: column; gap: 0.35rem;
-  transition: transform 160ms var(--ease, ease);
+  overflow: hidden;
+  transition: width 200ms var(--ease, ease), padding 200ms var(--ease, ease);
 }
 html[data-theme="dark"] .nav {
   --shell-bg: #0d1320;
@@ -267,9 +268,36 @@ html[data-theme="contrast"] .nav {
   --shell-accent: #00e676;
 }
 .nav :focus-visible { outline-color: var(--shell-accent); }
-.brand { font-weight: 700; letter-spacing: 0.04em; margin-bottom: 2rem; color: var(--shell-text); }
+.nav-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+.nav-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 1.15rem;
+  width: 1.15rem;
+  height: 1.15rem;
+}
+.nav-svg { width: 100%; height: 100%; display: block; }
+.nav-label { min-width: 0; }
+.brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; letter-spacing: 0.04em; margin-bottom: 2rem; color: var(--shell-text); white-space: nowrap; }
 .brand span { color: var(--shell-muted); font-weight: 500; font-size: 0.8rem; }
-.nav a { color: var(--shell-text); text-decoration: none; padding: 0.45rem 0.55rem; border-radius: 6px; }
+.brand .nav-ico { color: var(--shell-text); font-size: 1rem; font-weight: 700; }
+.nav a {
+  color: var(--shell-text);
+  text-decoration: none;
+  padding: 0.45rem 0.55rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 34px;
+  white-space: nowrap;
+}
 .nav a:hover { background: var(--shell-hover); }
 .nav a.active {
   background: var(--shell-active);
@@ -296,6 +324,7 @@ html[data-theme="contrast"] .nav {
   color: var(--shell-muted, var(--muted));
   box-shadow: none;
   cursor: pointer;
+  transition: left 200ms var(--ease, ease);
 }
 .nav-collapse:hover {
   color: var(--shell-text, var(--text));
@@ -310,19 +339,65 @@ html[data-theme="contrast"] .nav {
   border-right: 0.38rem solid currentColor;
 }
 html[data-nav-collapsed] .nav {
-  transform: translateX(-100%);
-  pointer-events: none;
+  width: 56px;
+  padding: 1.25rem 0.4rem;
+  pointer-events: auto;
 }
 html[data-nav-collapsed] .nav-collapse {
-  left: 0;
-  transform: translate(0, -50%);
-  border-radius: 0 999px 999px 0;
+  left: 56px;
+  transform: translate(-50%, -50%);
 }
 html[data-nav-collapsed] .nav-collapse-icon {
   border-right: 0;
   border-left: 0.38rem solid currentColor;
 }
+html[data-nav-collapsed] .nav-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+html[data-nav-collapsed] .brand {
+  justify-content: center;
+  margin-bottom: 1.1rem;
+  gap: 0;
+  font-size: 0;
+}
+html[data-nav-collapsed] .brand .nav-ico { font-size: 1rem; }
+html[data-nav-collapsed] .nav a {
+  justify-content: center;
+  gap: 0;
+  padding: 0.45rem 0.2rem;
+}
+html[data-nav-collapsed] .nav-foot-actions {
+  flex-direction: column;
+  align-items: center;
+}
+html[data-nav-collapsed] .nav-foot-actions form.nav-logout {
+  margin-left: 0;
+  padding-left: 0;
+}
+html[data-nav-collapsed] .nav button.secondary {
+  min-width: 0;
+  width: 2.1rem;
+  padding: 0;
+}
+html[data-nav-collapsed] .nav button.theme-toggle {
+  max-width: 3.1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .who { color: var(--shell-muted); font-size: 0.8rem; margin-bottom: 1.25rem; overflow-wrap: anywhere; }
+html[data-nav-collapsed] .nav-foot .who {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .who-name, .who-role { display: block; }
 .who-name + .who-role { margin-top: 0.15rem; }
 .nav-foot-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
@@ -332,6 +407,9 @@ html[data-nav-collapsed] .nav-collapse-icon {
 .nav button.secondary {
   background: var(--shell-hover);
   color: var(--shell-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 .nav button.theme-toggle { color: var(--shell-muted); }
 .nav button.theme-toggle:hover { color: var(--shell-text); }
@@ -366,9 +444,9 @@ html[data-theme="contrast"] .theme-toggle .theme-label-contrast { display: inlin
   overflow-x: auto;
   font-family: inherit;
   font-size: inherit;
-  transition: margin-left 160ms var(--ease, ease);
+  transition: margin-left 200ms var(--ease, ease);
 }
-html[data-nav-collapsed] .content { margin-left: 0; }
+html[data-nav-collapsed] .content { margin-left: 56px; }
 h1, h2, h3 { font-weight: 600; letter-spacing: 0.01em; }
 h1 { margin: 0 0 0.75rem; font-size: 1.55rem; }
 h2 { margin: 1.15rem 0 0.55rem; font-size: 1.12rem; }
@@ -2403,6 +2481,28 @@ td.ops-report-actions .row-actions a.button {
   .nav { position: static; width: auto; transform: none; pointer-events: auto; }
   .content { margin-left: 0; }
   .nav-collapse { display: none; }
+  html[data-nav-collapsed] .nav {
+    width: auto;
+    padding: 1.25rem 1rem;
+  }
+  html[data-nav-collapsed] .content { margin-left: 0; }
+  html[data-nav-collapsed] .nav-label,
+  html[data-nav-collapsed] .nav-foot .who {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+  html[data-nav-collapsed] .nav a {
+    justify-content: flex-start;
+    gap: 0.55rem;
+    padding: 0.45rem 0.55rem;
+  }
+  html[data-nav-collapsed] .brand { justify-content: flex-start; gap: 0.5rem; font-size: inherit; }
+  html[data-nav-collapsed] .nav-foot-actions { flex-direction: row; }
+  html[data-nav-collapsed] .nav-foot-actions form.nav-logout { margin-left: auto; padding-left: 0.85rem; }
+  html[data-nav-collapsed] .nav button.secondary { width: auto; padding: 0 0.9rem; }
   .mail-providers { grid-template-columns: 1fr; }
   .demo-scenarios { grid-template-columns: 1fr; }
   .split { grid-template-columns: 1fr; }
