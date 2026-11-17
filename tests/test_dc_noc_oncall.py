@@ -136,14 +136,13 @@ def test_l1_oncall_mails_the_current_address_and_dashboard_shows_them():
     client = _client()
     dash = client.get("/")
     assert dash.status_code == 200
-    assert 'data-oncall' in dash.text
-    cube = dash.text.split('data-oncall', 1)[1].split("</aside>", 1)[0]
+    assert "data-oncall" not in dash.text
+    assert "I'm on duty now" not in dash.text
+    page = client.get("/escalation")
+    assert "Dana" in page.text
+    assert f"dana-{token}@dc.local" in page.text
+    cube = page.text.split("data-oncall-now", 1)[1].split("</p>", 1)[0]
     assert "Dana" in cube
-    assert f"dana-{token}@dc.local" not in cube
-    assert "+381-11-300" not in cube
-    assert "00:00" not in cube
-    assert 'href="/escalation#oncall"' in dash.text
-    assert f"dana-{token}@dc.local" in client.get("/escalation").text
     page = client.get("/escalation")
     assert page.status_code == 200
     assert 'id="oncall"' in page.text

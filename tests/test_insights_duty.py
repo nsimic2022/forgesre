@@ -84,10 +84,12 @@ def test_take_duty_copies_surname_onto_dashboard():
     assert slot["person"] == "Admin Kovač"
     db.close()
     client = _client()
-    cube = client.get("/").text.split("data-oncall", 1)[1].split("</aside>", 1)[0]
+    home = client.get("/").text
+    assert "data-oncall" not in home
+    assert "I'm on duty now" not in home
+    cube = client.get("/escalation").text.split("data-oncall-now", 1)[1].split("</p>", 1)[0]
     assert "Admin Kovač" in cube
-    assert "admin@forgesre.local" not in cube
-    assert "oncall-actions" in cube
+    assert "I'm on duty now" in client.get("/escalation").text
     tidy = _db()
     admin_row = tidy.query(User).filter_by(email="admin@forgesre.local").one()
     admin_row.surname = ""
@@ -123,18 +125,18 @@ def test_later_take_duty_wins_and_dashboard_shows_the_button():
     client = _client()
     home = client.get("/")
     assert home.status_code == 200
-    assert "I'm on duty now" in home.text
-    assert 'action="/escalation/oncall/take"' in home.text
-    assert admin.email in home.text or "On duty" in home.text
-    took = client.post("/escalation/oncall/take", data={"next": "/"}, follow_redirects=False)
+    assert "I'm on duty now" not in home.text
+    assert "data-oncall" not in home.text
+    esc = client.get("/escalation")
+    assert "I'm on duty now" in esc.text
+    assert 'action="/escalation/oncall/take"' in esc.text
+    took = client.post("/escalation/oncall/take", data={"next": "/escalation"}, follow_redirects=False)
     assert took.status_code == 303
-    assert took.headers["location"] == "/"
-    again = client.get("/")
-    cube = again.text.split('data-oncall', 1)[1].split("</aside>", 1)[0]
+    assert took.headers["location"].startswith("/escalation")
+    again = client.get("/escalation")
+    cube = again.text.split("data-oncall-now", 1)[1].split("</p>", 1)[0]
     assert "Admin" in cube
-    assert admin.email not in cube
-    assert "oncall-actions" in cube
-    assert "I'm on duty now" in cube
+    assert "I'm on duty now" in again.text
 
     viewer = _user(_db(), "viewer")
     denied = _client(viewer.email)
@@ -220,8 +222,9 @@ def test_dashboard_forgeai_strip_and_report_export():
     assert "Ask ForgeAI" not in cube
     assert "Open Investigations" not in cube
     assert 'action="/insights/refresh"' not in cube
-    assert "data-appliance-card" in html
-    assert "On duty" in html
+    assert "data-forgeai-insights" in html
+    assert "On duty" not in html
+    assert "data-appliance-card" not in html
     exported = client.post("/insights/export", data={"format": "txt"})
     assert exported.status_code == 200
     assert 'filename="forgeai-digest.txt"' in exported.headers["content-disposition"]

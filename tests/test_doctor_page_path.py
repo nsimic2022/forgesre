@@ -1,4 +1,4 @@
-"""Doctor probes stay off list pages; /health-ui and dashboard still run them."""
+"""Doctor probes stay off list pages and the Dashboard; /health-ui still runs them."""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ def test_health_ui_still_runs_doctor(monkeypatch):
     assert calls["n"] == 1
 
 
-def test_dashboard_runs_doctor_once(monkeypatch):
+def test_dashboard_does_not_run_doctor(monkeypatch):
     import app.api as api_mod
 
     _db().close()
@@ -89,7 +89,7 @@ def test_dashboard_runs_doctor_once(monkeypatch):
     _clear_doctor()
     client = _login()
     assert client.get("/").status_code == 200
-    assert calls["n"] == 1
+    assert calls["n"] == 0
 
 
 def test_overlapping_doctor_force_shares_one_probe(monkeypatch):

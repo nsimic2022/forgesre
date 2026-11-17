@@ -37,21 +37,24 @@ def _ip() -> str:
 def test_dashboard_tiles_are_square_and_share_one_group_width():
     css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
     band = css.split(".dash-tiles-incidents,", 1)[1].split("}", 1)[0]
-    assert "justify-self: start" in band
-    assert "width: min(100%, var(--dash-tile-band))" in band
-    assert "--dash-tile-band: 19.2rem" in css
+    assert "max-width: var(--dash-tile-band)" in band
+    assert "flex: 1 1 0" in band
+    assert "--dash-tile-band: 29.25rem" in css
     tile = css.split(".stat-row-big .stat {", 1)[1].split("}", 1)[0]
-    assert "aspect-ratio: 1" in tile
+    assert "min-height: 5rem" in tile
     assert "width: 100%" in tile
-    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in css
-    assert "repeat(5, minmax(0, 1fr))" not in css.split("/* Dashboard layout pass:", 1)[1].split("/* Incidents tile only:", 1)[0]
-    assert "minmax(24rem, 2.6fr)" in css
+    assert "minmax(7.4rem, 8.75rem)" in css
+    assert "repeat(5, minmax(0, 1fr))" not in css.split("/* Dashboard:", 1)[1].split("/* Incidents tile only:", 1)[0]
+    assert "dash-tile-row" in css
+    row_flex = css.split(".dash-tile-row {", 1)[1].split("}", 1)[0]
+    assert "flex-wrap: nowrap" in row_flex
+    assert "min-height: 0" not in css.split(".dash-top > section,", 1)[1].split(".dash-tile-row", 1)[0]
+    assert "min-height: 12rem" in css.split(".dash-top > .dash-ai-cube {", 1)[1].split("}", 1)[0]
     group = css.split(".tile-group {", 1)[1].split("}", 1)[0]
     assert "display: flex" in group
     assert "flex-direction: column" in group
     row = css.split(".dash-tiles-incidents .stat-row.stat-row-big,", 1)[1].split("}", 1)[0]
-    assert "align-items: center" in row
-    assert "align-content: center" in row
+    assert "minmax(7.4rem, 8.75rem)" in row
     clock = css.split(".appliance-clock {", 1)[1].split("}", 1)[0]
     assert "padding:" in clock
     assert "clamp(1.85rem, 14cqi, 2.55rem)" in clock

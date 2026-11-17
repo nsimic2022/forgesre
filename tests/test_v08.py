@@ -117,7 +117,7 @@ def test_version_is_0_9_on_product_surfaces():
     base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert "<span>v1.0</span>" in base
     assert "v0.8" not in base
-    assert "app.css?v=v09-68" in base
+    assert "app.css?v=v09-70" in base
     assert "app.js?v=v09-T" in base
     for rel in ("scripts/install.sh", "scripts/render-monitoring.sh", "scripts/forgesre"):
         text = (ROOT / rel).read_text(encoding="utf-8")
@@ -207,7 +207,7 @@ def test_net_ipv6_default_route_when_no_ipv4(tmp_path):
 def test_dashboard_has_net_dash_and_api_level():
     _db().close()
     client = _client()
-    home = client.get("/")
+    home = client.get("/health-ui")
     card = home.text.split("data-appliance-card", 1)[1].split("</aside>", 1)[0]
     for key in ("cpu", "ram", "hdd", "net"):
         assert f'data-metric="{key}"' in card
