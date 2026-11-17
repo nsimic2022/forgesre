@@ -31,13 +31,15 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
     client.post("/login", data={"email": email, "password": password}, follow_redirects=False)
 
 
-def test_asset_tiles_exclude_lab_and_list_shows_demo_pill():
+def test_asset_tiles_count_lab_and_list_shows_demo_pill():
     db = _db()
     live = create_manual_asset(db, hostname=f"prod-{uuid4().hex[:6]}", ip="10.55.1.8", actor="tester")
     tiles = {tile["key"]: tile for tile in asset_tiles(db.query(Asset).all())}
-    assert tiles["assets"]["href"] == "/assets?lab=0"
+    assert tiles["assets"]["href"] == "/assets"
     lab_only = [row for row in db.query(Asset).all() if is_lab_inventory_row(row)]
-    assert tiles["assets"]["count"] == db.query(Asset).count() - len(lab_only)
+    assert lab_only
+    assert tiles["assets"]["count"] == db.query(Asset).count()
+    assert tiles["assets"]["count"] >= len(lab_only)
     client = TestClient(app)
     _login(client)
     listed = client.get("/assets?per_page=100")
@@ -49,14 +51,21 @@ def test_asset_tiles_exclude_lab_and_list_shows_demo_pill():
     db.close()
 
 
-def test_dashboard_incident_tiles_exclude_demo_href():
+def test_dashboard_tiles_include_lab_hrefs():
+    db = _db()
+    db.close()
     client = TestClient(app)
     _login(client)
     home = client.get("/")
     alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
-    assert "demo=0" in alarms
+    assert "demo=0" not in alarms
     infra = home.text.split("dash-tiles-infra", 1)[1].split("</section>", 1)[0]
-    assert "lab=0" in infra
+    assert "lab=0" not in infra
+    assert 'href="/assets"' in infra
+    assert 'data-tile="assets"' in infra
+    assert ">forge-demo-01<" not in alarms
+    assets_n = int(infra.split('data-tile="assets"', 1)[1].split("<strong>", 1)[1].split("</strong>", 1)[0])
+    assert assets_n >= 1
     assert 'href="/ops"' in home.text
 
 

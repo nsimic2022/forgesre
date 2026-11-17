@@ -451,15 +451,16 @@ def incident_neighbors(db: Session, incident: Incident, filters: dict[str, Any] 
 def dashboard_incident_tiles(db: Session) -> list[dict[str, Any]]:
     """Alarm cubes. Each count is the Incidents list behind the click.
 
-    Critical / Warning are active (not RESOLVED or CLOSED). Escalated is the exact
-    status after a ladder climb. Investigating and Resolved stay on the Incidents
+    Counts every incident, including lab DEMO rows (forge-demo-*). Critical /
+    Warning are active (not RESOLVED or CLOSED). Escalated is the exact status
+    after a ladder climb. Investigating and Resolved stay on the Incidents
     list — every incident is already investigated, and Resolved is history, not
     live monitoring. Open (unacked) is a filter on Incidents, not a cube.
     """
     specs = [
-        ("Critical", "crit", {"open_only": True, "critical_only": True}, "/incidents?status=active&severity=critical&demo=0"),
-        ("Warning", "warn", {"open_only": True, "warning_only": True}, "/incidents?status=active&severity=warning&demo=0"),
-        ("Escalated", "warn", {"status": "ESCALATED"}, "/incidents?status=ESCALATED&demo=0"),
+        ("Critical", "crit", {"open_only": True, "critical_only": True}, "/incidents?status=active&severity=critical"),
+        ("Warning", "warn", {"open_only": True, "warning_only": True}, "/incidents?status=active&severity=warning"),
+        ("Escalated", "warn", {"status": "ESCALATED"}, "/incidents?status=ESCALATED"),
     ]
     tiles = []
     for label, tone, filters, href in specs:
@@ -468,7 +469,7 @@ def dashboard_incident_tiles(db: Session) -> list[dict[str, Any]]:
                 "label": label,
                 "tone": tone,
                 "href": href,
-                "count": incident_query(db, exclude_demo=True, **filters).count(),
+                "count": incident_query(db, **filters).count(),
                 "key": label.lower(),
             }
         )
