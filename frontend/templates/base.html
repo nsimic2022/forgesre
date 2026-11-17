@@ -20,7 +20,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css?v=v09-66">
+  <link rel="stylesheet" href="/static/app.css?v=v09-67">
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
   <script src="/static/app.js?v=v09-T" defer></script>
@@ -38,24 +38,38 @@
   {%- endmacro %}
   {% if user %}
   <aside class="nav" id="app-nav">
-    <div class="brand">ForgeSRE <span>v1.0</span></div>
-    <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
+    <svg class="nav-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+      <symbol id="nav-dash" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M2.5 2.5h5v5h-5zM8.5 2.5h5v3h-5zM8.5 7.5h5v6h-5zM2.5 9.5h5v4h-5z"/></symbol>
+      <symbol id="nav-invest" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="m10.2 10.2 3.3 3.3"/></symbol>
+      <symbol id="nav-assets" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M3 4.5h10v8.5H3zM5.5 4.5V3h5v1.5M6 8h4M6 10.5h2.5"/></symbol>
+      <symbol id="nav-discover" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5"/></symbol>
+      <symbol id="nav-incidents" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M8 2.5 14 13.5H2z"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M8 6.5v3M8 11.5v.5"/></symbol>
+      <symbol id="nav-rules" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M3 4.5h10M3 8h10M3 11.5h10"/><circle cx="6" cy="4.5" r="1.1" fill="currentColor"/><circle cx="10" cy="8" r="1.1" fill="currentColor"/><circle cx="7.5" cy="11.5" r="1.1" fill="currentColor"/></symbol>
+      <symbol id="nav-play" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M4 2.5h6.5L13 5v8.5H4z"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M6.5 8h3M6.5 10.5h3"/></symbol>
+      <symbol id="nav-esc" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M3 13h3V10h3V7h3V3"/></symbol>
+      <symbol id="nav-health" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M1.5 8h3l1.5-3 2.5 6 1.5-3h4.5"/></symbol>
+      <symbol id="nav-ops" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M2.5 4.5h11v8h-11z"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="m2.5 4.5 5.5 4.5 5.5-4.5"/></symbol>
+      <symbol id="nav-admin" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.5"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M8 2.2v1.4M8 12.4v1.4M2.2 8h1.4M12.4 8h1.4M3.9 3.9l1 1M11.1 11.1l1 1M12.1 3.9l-1 1M4.9 11.1l-1 1"/></symbol>
+      <symbol id="nav-logout" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M7 2.5H3.5v11H7M7 8h6M10.5 5.5 13 8l-2.5 2.5"/></symbol>
+    </svg>
+    <div class="brand"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-dash"></use></svg></span>ForgeSRE <span>v1.0</span></div>
+    <a href="/" class="{% if request.url.path == '/' %}active{% endif %}" title="Dashboard"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-dash"></use></svg></span><span class="nav-label">Dashboard</span></a>
     {% if can('read_ai') %}
-    <a href="/investigations" class="{% if request.url.path.startswith('/investigations') or request.url.path.startswith('/forgeai') %}active{% endif %}">Investigations</a>
+    <a href="/investigations" class="{% if request.url.path.startswith('/investigations') or request.url.path.startswith('/forgeai') %}active{% endif %}" title="Investigations"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-invest"></use></svg></span><span class="nav-label">Investigations</span></a>
     {% endif %}
-    <a href="/assets" class="{% if request.url.path.startswith('/assets') %}active{% endif %}">Assets</a>
+    <a href="/assets" class="{% if request.url.path.startswith('/assets') %}active{% endif %}" title="Assets"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-assets"></use></svg></span><span class="nav-label">Assets</span></a>
     {% if can('write_assets') %}
-    <a href="/discovery" class="{% if request.url.path.startswith('/discovery') %}active{% endif %}">Discovery</a>
+    <a href="/discovery" class="{% if request.url.path.startswith('/discovery') %}active{% endif %}" title="Discovery"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-discover"></use></svg></span><span class="nav-label">Discovery</span></a>
     {% endif %}
-    <a href="/incidents" class="{% if request.url.path.startswith('/incidents') %}active{% endif %}">Incidents</a>
+    <a href="/incidents" class="{% if request.url.path.startswith('/incidents') %}active{% endif %}" title="Incidents"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-incidents"></use></svg></span><span class="nav-label">Incidents</span></a>
     {% if can('read_play') %}
-    <a href="/playrules" class="{% if request.url.path.startswith('/playrules') %}active{% endif %}">Rules</a>
-    <a href="/playbooks" class="{% if request.url.path.startswith('/playbooks') %}active{% endif %}">Playbooks</a>
-    <a href="/escalation" class="{% if request.url.path.startswith('/escalation') %}active{% endif %}">Escalation</a>
+    <a href="/playrules" class="{% if request.url.path.startswith('/playrules') %}active{% endif %}" title="Rules"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-rules"></use></svg></span><span class="nav-label">Rules</span></a>
+    <a href="/playbooks" class="{% if request.url.path.startswith('/playbooks') %}active{% endif %}" title="Playbooks"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-play"></use></svg></span><span class="nav-label">Playbooks</span></a>
+    <a href="/escalation" class="{% if request.url.path.startswith('/escalation') %}active{% endif %}" title="Escalation"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-esc"></use></svg></span><span class="nav-label">Escalation</span></a>
     {% endif %}
-    <a href="/health-ui" class="{% if request.url.path.startswith('/health-ui') %}active{% endif %}">System Health</a>
-    {% if can_send_ops %}<a href="/ops" class="{% if request.url.path.startswith('/ops') %}active{% endif %}">Email &amp; reports</a>{% endif %}
-    {% if can('admin') %}<a href="/admin" class="{% if request.url.path.startswith('/admin') %}active{% endif %}">Administration</a>{% endif %}
+    <a href="/health-ui" class="{% if request.url.path.startswith('/health-ui') %}active{% endif %}" title="System Health"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-health"></use></svg></span><span class="nav-label">System Health</span></a>
+    {% if can_send_ops %}<a href="/ops" class="{% if request.url.path.startswith('/ops') %}active{% endif %}" title="Email &amp; reports"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-ops"></use></svg></span><span class="nav-label">Email &amp; reports</span></a>{% endif %}
+    {% if can('admin') %}<a href="/admin" class="{% if request.url.path.startswith('/admin') %}active{% endif %}" title="Administration"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-admin"></use></svg></span><span class="nav-label">Administration</span></a>{% endif %}
     <div class="nav-foot">
       <div class="who">
         {% set display_name = distinct_who_name(user.name, user.role, user.surname) %}
@@ -64,7 +78,7 @@
       </div>
       <div class="nav-foot-actions">
         {{ theme_toggle() }}
-        <form class="nav-logout" method="post" action="/logout" hx-boost="false"><button type="submit" class="secondary">Logout</button></form>
+        <form class="nav-logout" method="post" action="/logout" hx-boost="false"><button type="submit" class="secondary" title="Logout"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-logout"></use></svg></span><span class="nav-label">Logout</span></button></form>
       </div>
     </div>
   </aside>
