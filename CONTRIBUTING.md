@@ -39,3 +39,5 @@ On an installed VM, `./forgesre test` is the live appliance report (`data/report
 ## Code style
 
 Prefer readable Python over clever abstractions. New services need a design note in `docs/`.
+
+Docstrings, non-blocking calls, roles and pull-request rules: see [AGENTS.md](AGENTS.md).
