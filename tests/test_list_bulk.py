@@ -188,7 +188,7 @@ def test_bulk_delete_of_a_scheduled_report_stops_the_scheduler():
     assert db.get(ScheduledReport, report_id) is None
     assert db.query(Notification).filter_by(target=f"bulk-{token}@example.local", step_key="report").count() == 0
     page = client.get("/ops").text
-    assert 'class="onoff' in Path("/workspace/frontend/templates/ops.html").read_text(encoding="utf-8")
+    assert 'class="onoff' in Path(__file__).resolve().parents[1].joinpath("frontend/templates/ops.html").read_text(encoding="utf-8")
     assert ">Toggle<" not in page
     assert ">Disable<" not in page.split('id="reports"', 1)[1]
     db.close()
@@ -283,6 +283,6 @@ def test_audit_exports_and_has_no_delete_for_anyone():
     assert admin.post("/admin/audit/bulk-delete", data={"selected": str(row.id)}, follow_redirects=False).status_code == 404
     analyst = _client(_user(db, "analyst"))
     assert analyst.post("/admin/audit/export", data={"selected": str(row.id)}, follow_redirects=False).status_code == 403
-    assert "backup-row-actions" in Path("/workspace/frontend/templates/admin.html").read_text(encoding="utf-8")
-    assert ".backup-row-actions" in Path("/workspace/frontend/static/app.css").read_text(encoding="utf-8")
+    assert "backup-row-actions" in Path(__file__).resolve().parents[1].joinpath("frontend/templates/admin.html").read_text(encoding="utf-8")
+    assert ".backup-row-actions" in Path(__file__).resolve().parents[1].joinpath("frontend/static/app.css").read_text(encoding="utf-8")
     db.close()

@@ -47,6 +47,8 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     journal_error_ack_id: Mapped[int] = mapped_column(Integer, default=0)
+    # Bumped on logout / password change; session cookies carry it and must match.
+    session_version: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class Asset(Base):

@@ -29,3 +29,16 @@ sys.path.insert(0, str(ROOT / "agents"))
 
 if db_path.exists():
     db_path.unlink()
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_throttle():
+    """Every test starts with a clean failed-sign-in counter (all TestClients share one IP)."""
+    from app.security import login_throttle
+
+    login_throttle.reset()
+    yield
+    login_throttle.reset()
