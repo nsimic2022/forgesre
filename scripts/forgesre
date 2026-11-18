@@ -78,6 +78,7 @@ Commands:
   status             docker compose ps
   logs [service]     Container logs (default: last 100 lines)
   config             Print config/forgesre.yml
+  settings           Settings page from the shell: list, get, set, test, set-secret
   assets             List inventory with # (alias: inventory)
   inventory          Same as assets
   snmp               snmp_exporter health + SNMP HTTP SD targets
@@ -352,6 +353,26 @@ logs — docker compose logs --tail 100.
   ./forgesre logs core
   ./forgesre logs snmp-exporter
   ./forgesre logs prometheus
+EOF
+      ;;
+    settings)
+      cat <<'EOF'
+settings — the Settings page from the shell (Admin).
+
+  ./forgesre settings                    all settings by group; secrets show set / NOT SET
+  ./forgesre settings integrations       one group (general, network, integrations,
+                                         discovery, notifications, ai)
+  ./forgesre settings get ai.enabled     one setting as JSON
+  ./forgesre settings set ai.enabled true
+                                         change a config/forgesre.yml value (validated,
+                                         audited, live at once)
+  ./forgesre settings test               test every service and integration
+  ./forgesre settings test zabbix        test one
+  ./forgesre settings set-secret ZABBIX_API_TOKEN
+                                         prompt for a token, write secrets/secrets.env,
+                                         restart Core
+
+Ports and service URLs are set by the installer in .env; change them there.
 EOF
       ;;
     config)
@@ -1000,6 +1021,20 @@ case "$cmd" in
     ;;
   config)
     cat config/forgesre.yml
+    ;;
+  settings)
+    need_env
+    if [[ "${1:-}" == "set-secret" ]]; then
+      key="${2:-}"
+      [[ -n "$key" ]] || { echo "usage: ./forgesre settings set-secret KEY" >&2; exit 2; }
+      if [[ -t 0 ]]; then read -r -s -p "New value for $key: " value; echo; else read -r value; fi
+      printf '%s\n' "$value" | run_cli_ops set-secret "$key" "$ROOT/secrets/secrets.env"
+      unset value
+      echo "Saved $key in secrets/secrets.env. Restarting Core so it reads the new value."
+      docker compose up -d --force-recreate core
+    else
+      run_cli_ops settings "$@"
+    fi
     ;;
   assets|inventory)
     need_env

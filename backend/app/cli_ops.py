@@ -574,6 +574,115 @@ def _verify_with_jar(port: str, jar: Path, *, selector: str, timeout: float, inc
     raise SystemExit(verify_exit(results))
 
 
+def put_json(port: str, jar: Path, path: str, payload: dict[str, Any]) -> tuple[int, Any]:
+    """PUT JSON; returns (HTTP status, parsed body) so callers can show a 400 reason."""
+    result = subprocess.run(
+        [
+            "curl", "-sS", "--max-time", "30", "-c", str(jar), "-b", str(jar),
+            "-H", "Content-Type: application/json", "-X", "PUT", "-d", json.dumps(payload),
+            "-w", "\n%{http_code}", f"http://127.0.0.1:{port}{path}",
+        ],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=CURL_TIMEOUT,
+    )
+    body, _, code = result.stdout.decode("utf-8", "replace").rpartition("\n")
+    try:
+        parsed = json.loads(body) if body.strip() else {}
+    except json.JSONDecodeError:
+        parsed = {"detail": body.strip()}
+    return int(code or 0), parsed
+
+
+# Secrets the host CLI may write into secrets/secrets.env. Must match the "secret"
+# entries in app/system_settings.py (tests/test_system_settings.py checks it).
+SETTABLE_SECRETS = (
+    "ALERTMANAGER_WEBHOOK_TOKEN", "GLPI_APP_TOKEN", "GLPI_USER_TOKEN", "ZABBIX_API_TOKEN",
+    "LIBRENMS_API_TOKEN", "NETBOX_API_TOKEN", "SMTP_USERNAME", "SMTP_PASSWORD",
+)
+
+
+def write_secret(path: Path, key: str, value: str) -> None:
+    """Set KEY=value in a dotenv file, keeping every other line and mode 600."""
+    if key not in SETTABLE_SECRETS:
+        raise SystemExit(f"{key} is not a settable secret. Choose one of: {', '.join(SETTABLE_SECRETS)}")
+    value = value.rstrip("\n")
+    if any(ch in value for ch in "\n\r") or not value.strip():
+        raise SystemExit("value must be one non-empty line")
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    out, done = [], False
+    for line in lines:
+        if line.split("=", 1)[0].strip() == key and not line.lstrip().startswith("#"):
+            if not done:
+                out.append(f"{key}={value.strip()}")
+                done = True
+            continue
+        out.append(line)
+    if not done:
+        out.append(f"{key}={value.strip()}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    path.chmod(0o600)
+
+
+def format_settings(data: dict[str, Any]) -> str:
+    """Settings grouped like the Settings page; secrets as set / NOT SET, never their value."""
+    groups = dict(data.get("groups") or {})
+    rows = list(data.get("settings") or [])
+    lines: list[str] = []
+    for gid, title in groups.items():
+        mine = [r for r in rows if r.get("group") == gid]
+        if not mine:
+            continue
+        lines.append(title)
+        for r in mine:
+            if r.get("store") == "secret":
+                shown = "set" if r.get("set") else "NOT SET"
+            else:
+                value = r.get("effective") if r.get("effective") not in (None, "") else r.get("value")
+                shown = ", ".join(map(str, value)) if isinstance(value, list) else ("—" if value in (None, "") else str(value))
+            tag = {"secret": " (secret)", "env": " (installer)"}.get(str(r.get("store")), "")
+            lines.append(f"  {r.get('key'):<36} {shown}{tag}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def cmd_settings(port: str, args: list[str]) -> None:
+    """./forgesre settings [group] | get KEY | set KEY VALUE | test [COMPONENT|all]"""
+    jar, _me = ensure_jar(port)
+    try:
+        sub = args[0] if args else ""
+        if sub == "get" and len(args) == 2:
+            data = get_json(port, jar, "/api/v1/settings")
+            row = next((r for r in data.get("settings", []) if r.get("key") == args[1]), None)
+            if row is None:
+                raise SystemExit(f"unknown setting {args[1]}")
+            sys.stdout.write(json.dumps(row, indent=2) + "\n")
+        elif sub == "set" and len(args) >= 3:
+            code, body = put_json(port, jar, f"/api/v1/settings/{args[1]}", {"value": " ".join(args[2:])})
+            if code != 200:
+                raise SystemExit(f"not saved ({code}): {body.get('detail', body)}")
+            sys.stdout.write(f"{args[1]} = {body.get('value')}\n")
+        elif sub == "test":
+            names = args[1:] or ["all"]
+            if names == ["all"]:
+                data = get_json(port, jar, "/api/v1/settings")
+                names = sorted({r["test"] for r in data.get("settings", []) if r.get("test")})
+            bad = 0
+            for name in names:
+                result = post_json(port, jar, f"/api/v1/settings/test/{name}", {})
+                status = str(result.get("status", "?"))
+                why = result.get("why") or result.get("detail") or ""
+                bad += status not in {"ok", "disabled", "skipped"}
+                sys.stdout.write(f"  {name:<14} {status:<9} {why}\n")
+            if bad:
+                raise SystemExit(1)
+        else:
+            data = get_json(port, jar, "/api/v1/settings" + (f"?group={args[0]}" if args else ""))
+            sys.stdout.write(format_settings(data))
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def format_jobs(rows: list[dict[str, Any]], counts: dict[str, int] | None = None) -> str:
     """Queue summary plus the newest jobs, one line each; errors keep their message."""
     counts = counts or {}
@@ -610,7 +719,7 @@ def cmd_jobs(port: str) -> None:
 def main(argv: list[str] | None = None) -> None:
     argv = list(argv if argv is not None else sys.argv[1:])
     if len(argv) < 2:
-        raise SystemExit("usage: cli_ops <port> <incidents|history|jobs|whoami|login|logout|numbers|assets|asset-refs|ping|probe|verify> [args]")
+        raise SystemExit("usage: cli_ops <port> <incidents|history|jobs|settings|set-secret|whoami|login|logout|numbers|assets|asset-refs|ping|probe|verify> [args]")
     port, command, *rest = argv
     if command == "incidents":
         cmd_incidents(port, rest)
@@ -630,6 +739,12 @@ def main(argv: list[str] | None = None) -> None:
         cmd_whoami(port)
     elif command == "jobs":
         cmd_jobs(port)
+    elif command == "settings":
+        cmd_settings(port, rest)
+    elif command == "set-secret":
+        if len(rest) != 2:
+            raise SystemExit("usage: cli_ops <port> set-secret <KEY> <secrets.env path>  (value on stdin)")
+        write_secret(Path(rest[1]), rest[0], sys.stdin.readline())
     elif command == "logout":
         cmd_logout()
     elif command == "login":
