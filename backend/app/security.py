@@ -12,73 +12,40 @@ from sqlalchemy.orm import Session
 from app.models import User
 from app.settings import settings
 
-ROLES = ["super_admin", "admin", "engineer", "analyst", "viewer"]
-CREATABLE_ROLES = ["analyst", "engineer", "admin", "viewer"]
+# Four roles on one ladder: each has every permission of the role before it (AGENTS.md §3).
+ROLES = ["viewer", "analyst", "engineer", "admin"]
+CREATABLE_ROLES = list(ROLES)
+# Roles from before V1.0 that now mean "admin". migrate() rewrites them in the database;
+# role_key() also maps them so an un-migrated row never loses access.
+LEGACY_ADMIN_ROLES = {"super_admin", "system_admin"}
 
 ROLE_LABELS = {
-    "super_admin": "Super admin",
-    "admin": "System admin",
-    "system_admin": "System admin",
+    "viewer": "Viewer",
     "analyst": "Analyst",
     "engineer": "Engineer",
-    "viewer": "Viewer",
+    "admin": "Admin",
 }
 
-PERMISSIONS = {
-    "viewer": {"read_dashboard", "read_assets", "read_incidents"},
-    "analyst": {
-        "read_dashboard",
-        "read_assets",
-        "read_incidents",
-        "read_ai",
-        "ack_incidents",
-        "write_incidents",
-        "read_play",
-        "write_play",
-        "write_assets",
-    },
-    "engineer": {
-        "read_dashboard",
-        "read_assets",
-        "read_incidents",
-        "read_ai",
-        "ack_incidents",
-        "read_play",
-        "read_evidence",
-        "investigate",
-        "write_incidents",
-        "write_assets",
-    },
-    "admin": {
-        "read_dashboard",
-        "read_assets",
-        "read_incidents",
-        "read_ai",
-        "ack_incidents",
-        "read_play",
-        "read_evidence",
-        "investigate",
-        "write_incidents",
-        "write_play",
-        "write_assets",
-        "admin",
-    },
-    "super_admin": {
-        "read_dashboard",
-        "read_assets",
-        "read_incidents",
-        "read_ai",
-        "ack_incidents",
-        "read_play",
-        "read_evidence",
-        "investigate",
-        "write_incidents",
-        "write_play",
-        "write_assets",
-        "admin",
-        "super_admin",
-    },
+ROLE_HELP = {
+    "viewer": "Viewer — read only (wall screen, management)",
+    "analyst": "Analyst — NOC operator: acknowledge, notes, checklists, local ForgeAI",
+    "engineer": "Engineer — changes inventory, rules, playbooks, escalation for every team",
+    "admin": "Admin — also settings, integrations, users, backup",
 }
+
+_VIEWER = {"read_dashboard", "read_assets", "read_incidents"}
+_ANALYST = _VIEWER | {"read_ai", "ack_incidents", "write_incidents", "read_play", "read_evidence", "investigate"}
+_ENGINEER = _ANALYST | {"write_assets", "write_play", "ai_cloud", "run_checks"}
+_ADMIN = _ENGINEER | {"admin"}
+
+PERMISSIONS = {"viewer": _VIEWER, "analyst": _ANALYST, "engineer": _ENGINEER, "admin": _ADMIN}
+
+
+def role_key(role: str | None) -> str:
+    """Normalise a stored role: legacy admin roles become "admin", unknown roles get nothing."""
+    value = (role or "").strip().lower()
+    return "admin" if value in LEGACY_ADMIN_ROLES else value
+
 
 serializer = URLSafeTimedSerializer(settings.secret_key, salt="forgesre-session")
 
@@ -231,8 +198,9 @@ def authenticate(db: Session, email: str, password: str, ip: str) -> tuple[User 
 
 
 def role_label(role: str) -> str:
-    if role in ROLE_LABELS:
-        return ROLE_LABELS[role]
+    key = role_key(role)
+    if key in ROLE_LABELS:
+        return ROLE_LABELS[key]
     pretty = (role or "").replace("_", " ").strip()
     return pretty.title() if pretty else "Unknown"
 
@@ -249,9 +217,10 @@ def distinct_who_name(name: str | None, role: str | None, surname: str | None = 
 
 
 def can(user: User | None, permission: str) -> bool:
+    """Server-side permission check used by every route; the UI only hides what this denies."""
     if user is None:
         return False
-    return permission in PERMISSIONS.get(user.role, set())
+    return permission in PERMISSIONS.get(role_key(user.role), set())
 
 
 def can_send_ops(user: User | None) -> bool:

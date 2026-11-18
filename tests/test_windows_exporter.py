@@ -125,7 +125,7 @@ def test_assets_ui_offers_windows_server_and_http_sd():
             email="analyst-win@forgesre.local",
             name="Ana",
             password_hash=hash_password("testpass"),
-            role="analyst",
+            role="engineer",
         )
     )
     db.commit()

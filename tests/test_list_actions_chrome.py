@@ -446,7 +446,7 @@ def test_edit_with_zero_or_two_rows_stays_on_the_list():
     none_reports = client.post("/ops/reports/open-clone", data={"stay": "https://evil.example/ops"}, follow_redirects=False)
     assert none_reports.headers["location"] == "/ops?edit_note=select-one#reports"
 
-    engineer = _client(_user(db, "engineer"))
+    engineer = _client(_user(db, "analyst"))
     for path, selected in (
         ("/playrules/open-edit", rule_ids[0]),
         ("/playbooks/open-edit", book_ids[0]),

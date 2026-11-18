@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from app.models import Asset, Incident, MaintenanceWindow, OncallSlot, User, utcnow
-from app.security import ROLE_LABELS, role_label
+from app.security import LEGACY_ADMIN_ROLES, ROLE_LABELS, role_label
 
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 from app.settings import settings
@@ -371,6 +371,9 @@ def oncall_person_name(name: str | None, email: str | None = "", role: str | Non
     labels = {value.casefold() for value in ROLE_LABELS.values()}
     labels.update(key.casefold() for key in ROLE_LABELS)
     labels.update(key.replace("_", " ").casefold() for key in ROLE_LABELS)
+    # Names seeded before V1.0 ("Super Admin", "System admin") are role phrases too.
+    labels.update(key.replace("_", " ").casefold() for key in LEGACY_ADMIN_ROLES)
+    labels.update(LEGACY_ADMIN_ROLES)
     if role:
         labels.add(role_label(str(role)).casefold())
         labels.add(str(role).replace("_", " ").casefold())

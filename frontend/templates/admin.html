@@ -23,7 +23,7 @@
             <div class="row-actions">
             <a class="button" href="/admin?selected={{ u.id }}{{ pager_keep(pager) }}">Edit</a>
             <a class="button" href="/admin?clone={{ u.id }}{{ pager_keep(pager) }}">Clone</a>
-            {% if not (u.id == user.id or u.role == "super_admin") %}
+            {% if u.id != user.id %}
             <form method="post" action="/admin/users/{{ u.id }}/delete" onsubmit="return confirm('Remove {{ u.email }}? They will not be able to sign in.');" hx-boost="false">
               <button type="submit" class="danger">Remove</button>
 </form>
@@ -43,9 +43,6 @@
     <h2>Edit user</h2>
     <div class="card admin-user-pane">
     <form method="post" action="/admin/users/{{ selected.id }}" class="form-grid person-grid" id="edit-user-form" hx-boost="false">
-      {% if not can_edit_selected %}
-      <p class="muted wide">The install super admin can only be edited by that account.</p>
-      {% endif %}
       <label>Name <input name="name" required value="{{ selected.name }}" {% if not can_edit_selected %}readonly{% endif %}></label>
       <label>Surname <input name="surname" value="{{ selected.surname }}" {% if not can_edit_selected %}readonly{% endif %}></label>
       <label>Phone 1 <input name="phone" value="{{ selected.phone }}" placeholder="+381-11-000-0000" {% if not can_edit_selected %}readonly{% endif %}></label>
@@ -54,19 +51,13 @@
       <label>Email 2 <input name="email2" type="email" value="{{ selected.email2 }}" {% if not can_edit_selected %}readonly{% endif %}></label>
       <label class="wide">New password <input name="password" type="password" placeholder="leave blank to keep" {% if not can_edit_selected %}disabled{% endif %}></label>
       <label class="wide"><span class="label-line">Role</span>
-        <select name="role" {% if not can_edit_selected or selected.role == 'super_admin' %}disabled{% endif %}>
-          <option value="analyst" {% if selected.role == "analyst" %}selected{% endif %}>Analyst — incidents, inventory, playrules, playbooks</option>
-          <option value="engineer" {% if selected.role == "engineer" %}selected{% endif %}>Engineer — detailed RCA, inventory</option>
-          <option value="admin" {% if selected.role == "admin" %}selected{% endif %}>System admin — users and appliance</option>
-          <option value="viewer" {% if selected.role == "viewer" %}selected{% endif %}>Viewer — read only</option>
-          {% if selected.role == "super_admin" %}
-          <option value="super_admin" selected>Super admin (install — cannot change)</option>
-          {% endif %}
+        <select name="role" {% if not can_edit_selected %}disabled{% endif %}>
+          <option value="viewer" {% if selected.role == "viewer" %}selected{% endif %}>Viewer — read only (wall screen, management)</option>
+          <option value="analyst" {% if selected.role == "analyst" %}selected{% endif %}>Analyst — NOC operator: acknowledge, notes, checklists, local ForgeAI</option>
+          <option value="engineer" {% if selected.role == "engineer" %}selected{% endif %}>Engineer — changes inventory, rules, playbooks, escalation for every team</option>
+          <option value="admin" {% if selected.role == "admin" %}selected{% endif %}>Admin — also settings, integrations, users, backup</option>
 </select>
 </label>
-      {% if selected.role == "super_admin" %}
-      <input type="hidden" name="role" value="super_admin">
-      {% endif %}
 </form>
     <div class="row-actions user-actions">
       {% if can_edit_selected %}
@@ -80,8 +71,8 @@
       {% else %}
         {% if selected.id == user.id %}
         <p class="muted">You cannot remove the account you are signed in as.</p>
-        {% elif selected.role == "super_admin" %}
-        <p class="muted">The install super admin cannot be removed.</p>
+        {% else %}
+        <p class="muted">The last admin cannot be removed.</p>
         {% endif %}
       {% endif %}
 </div>
@@ -100,10 +91,10 @@
       <label class="wide">Password <input name="password" type="password" required></label>
       <label class="wide"><span class="label-line">Role</span>
         <select name="role">
-          <option value="analyst" {% if clone_role == "analyst" %}selected{% endif %}>Analyst — incidents, inventory, playrules, playbooks</option>
-          <option value="engineer" {% if clone_role == "engineer" %}selected{% endif %}>Engineer — detailed RCA, inventory</option>
-          <option value="admin" {% if clone_role == "admin" %}selected{% endif %}>System admin — users and appliance</option>
-          <option value="viewer" {% if clone_role == "viewer" %}selected{% endif %}>Viewer — read only</option>
+          <option value="viewer" {% if clone_role == "viewer" %}selected{% endif %}>Viewer — read only (wall screen, management)</option>
+          <option value="analyst" {% if clone_role == "analyst" %}selected{% endif %}>Analyst — NOC operator: acknowledge, notes, checklists, local ForgeAI</option>
+          <option value="engineer" {% if clone_role == "engineer" %}selected{% endif %}>Engineer — changes inventory, rules, playbooks, escalation for every team</option>
+          <option value="admin" {% if clone_role == "admin" %}selected{% endif %}>Admin — also settings, integrations, users, backup</option>
 </select>
 </label>
       <div class="row-actions wide asset-form-actions">
@@ -125,10 +116,10 @@
       <label class="wide">Password <input name="password" type="password" required></label>
       <label class="wide"><span class="label-line">Role</span>
         <select name="role">
-          <option value="analyst">Analyst — incidents, inventory, playrules, playbooks</option>
-          <option value="engineer">Engineer — detailed RCA, inventory</option>
-          <option value="admin">System admin — users and appliance</option>
-          <option value="viewer">Viewer — read only</option>
+          <option value="viewer">Viewer — read only (wall screen, management)</option>
+          <option value="analyst" selected>Analyst — NOC operator: acknowledge, notes, checklists, local ForgeAI</option>
+          <option value="engineer">Engineer — changes inventory, rules, playbooks, escalation for every team</option>
+          <option value="admin">Admin — also settings, integrations, users, backup</option>
 </select>
 </label>
       <div class="row-actions wide asset-form-actions">

@@ -2130,7 +2130,7 @@ def health_page(
 
 
 @router.post("/health-ui/refresh")
-def health_refresh(user: User = Depends(require_page("admin", "investigate"))):
+def health_refresh(user: User = Depends(require_page("run_checks"))):
     """Force a System Health probe. Viewer (and analyst) get 403; GET /health-ui stays login-only."""
     del user
     doctor_payload(force=True)
@@ -2535,7 +2535,7 @@ def admin_page(
         clone_of=clone_of,
         clone_role=(clone_of.role if clone_of and clone_of.role in CREATABLE_ROLES else "analyst") if clone_of else "",
         can_edit_selected=bool(chosen) and not edit_blocked(user, chosen),
-        can_delete_selected=bool(chosen) and not delete_blocked(user, chosen),
+        can_delete_selected=bool(chosen) and not delete_blocked(user, chosen, db),
         backups=backups,
         backup_choices=backup_choices,
         backup_files_writable=lay.files_writable,

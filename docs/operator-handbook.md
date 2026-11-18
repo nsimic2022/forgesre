@@ -84,7 +84,7 @@ Seeded on first start:
 
 | Object | What it is |
 |---|---|
-| User `FORGESRE_ADMIN_EMAIL` | `super_admin` from `secrets/secrets.env` |
+| User `FORGESRE_ADMIN_EMAIL` | Admin, from `secrets/secrets.env` |
 | Asset `forge-demo-01` | Demo Linux host `10.10.10.20` with owner contacts (`platform@forgesre.local`, phone) and a closed HighCPU history row |
 | Asset `forge-demo-win-01` | Seeded Windows lab host `10.10.10.21` (not scraped; real Windows uses windows_exporter :9182) |
 | Asset `forge-demo-sw-01` | Seeded network lab switch `10.10.10.22` (not a live SNMP walk) |
@@ -125,19 +125,19 @@ curl -fsS -X POST http://127.0.0.1:9090/-/reload
 
 ## 3. Roles and who can click what
 
-Three operating roles, plus a read-only viewer. The install user is `super_admin`.
+Four roles, each building on the one before: a role can do everything the roles above it in this table can.
+The install user is an **Admin**. Before V1.0 there were also `super_admin` and
+`system_admin`; Core rewrites both to `admin` at startup.
 
-| Role in UI | Job | Can do | Cannot |
-|---|---|---|---|
-| **Super admin** | Maintain the appliance | Everything, including users | — (created only by `./install.sh`) |
-| **System admin** (`admin`) | Deputy for the box | Users, inventory, discovery, demos, doctor | Cannot create another super_admin |
-| **Analyst** | Watch incidents, keep inventory, write the workflow | Ack/resolve incidents, **add/edit assets**, run AI (analyst view), **create playrules and playbooks** | PromQL/LogQL, Administration |
-| **Engineer** | Deep RCA | Inventory, discovery Approve, full AI page (queries, evidence, history), resolve | Create playrules/playbooks, Administration |
-| Viewer | Read-only | Dashboard, assets, incidents, System Health | Rules, Playbooks, Escalation, Email & reports (`/ops`), Journal, Discovery (403), any writes |
+| Role | Job | Adds |
+|---|---|---|
+| **Viewer** | Wall screen, management | Read dashboard, assets, incidents, System Health |
+| **Analyst** | NOC operator | Acknowledge, assign, notes, resolve, playbook checklists, AI investigation with evidence (PromQL, LogQL, hashes) |
+| **Engineer** | Runs the operation for every team | Add and edit assets, discovery approve, playrules, playbooks, escalation, on-call, reports, ForgeAI with a cloud model, Run doctor |
+| **Admin** | Owns the box | Administration: users, backup, restore, settings, integrations, demos |
 
-Analyst vs engineer on **AI Investigation**: same facts and likely cause. Engineer additionally sees PromQL, LogQL, evidence hashes, and similar-incident history on that page. Similar-incident history for an asset is on the **asset page** for every role that can read assets.
-
-The UI **Create user** form cannot make another `super_admin`. Create an **Analyst** for rules/plays **and** adding hosts, an **Engineer** for deep RCA.
+The last active Admin cannot be removed or demoted, and nobody can remove themselves.
+Permissions are checked on the server for every write; hidden buttons are only a convenience.
 
 Login session lasts **12 hours** (httponly cookie).
 
@@ -161,7 +161,7 @@ Left nav follows the OpenSRE-inspired theme (white slate in Light, slate-900 in 
 | AI Investigation | `/ai/INC-…` | ForgeRCA (green) then ForgeAI (green/yellow/red). Facts, anomalies, hypotheses. Device syslog is evidence only when Loki has lines for that asset hostname or IP. Demo Core logs stay on `forge-demo-01`. |
 | Rules | `/playrules` | Match `alertname` after ingest and attach a Playbook plus the default escalation. `alerts.yml` is PromQL (shown read-only as **Fires when**); Alarms are the mute-only overlay. Create / **Edit** / Toggle / **Remove** (analyst). |
 | Playbooks | `/playbooks` | Human checklist the operator follows on the incident. Five narrower cards per row; **Edit** then **Clone** on each card. |
-| Escalation | `/escalation` | Left nav, under Playbooks. Four same-style cards in one row: **Default escalation**, **Create / Edit escalation policy**, **Add on-call** (narrowest), **On call** roster (widest). Add on-call is typed: weekday / from / until, then name / email / phone / phone 2. Typing **Name** suggests Administration **Users** (person names, not Super Admin / Analyst); picking one fills email and phones. Roster columns: When, **Name** (the person, not a login role), **Email** (phone then email, stacked), Enabled. Pager **Edit / Remove** and a per-row **ON / OFF** — no Clone or Export on this list. **I'm on duty now** (analyst+) is on this page, not the Dashboard. |
+| Escalation | `/escalation` | Left nav, under Playbooks. Four same-style cards in one row: **Default escalation**, **Create / Edit escalation policy**, **Add on-call** (narrowest), **On call** roster (widest). Add on-call is typed: weekday / from / until, then name / email / phone / phone 2. Typing **Name** suggests Administration **Users** (person names, not Admin / Analyst); picking one fills email and phones. Roster columns: When, **Name** (the person, not a login role), **Email** (phone then email, stacked), Enabled. Pager **Edit / Remove** and a per-row **ON / OFF** — no Clone or Export on this list. **I'm on duty now** (analyst+) is on this page, not the Dashboard. |
 | System Health | `/health-ui` | After Overall, a **ForgeSRE** card with CPU / RAM / HDD / NET for this appliance (green dash below 80 %, yellow 80–94 %, red 95 %+ or no reading; **NET** green = this VM has a default route on a non-docker interface whose link is up, red = no usable default route or that interface is down — no ping, no internet probe, so an air-gapped LAN with a gateway is green). No small stack cubes and no On duty on that card. Then the same checks as `./forgesre doctor`, then the full **Journal** list (search, pager, export / delete) under a gap. `/journal` redirects here (`#journal`). **Open Grafana** lives here. Alarm path: Prometheus → Alertmanager → Core. Grafana down is yellow (graphs). Prom/AM errors name `:9090` / `:9093`. Loki green means `/ready`. Alloy green means the process is up and syslog is listening on UDP/TCP 514; Alloy up but 514 closed is yellow. One Core worker thread (Postgres `jobs` table). **NetBox** UI up with API 403 is **warn** (yellow) — Core uses `NETBOX_API_TOKEN` on the NetBox superuser. **SNMP exporter** with no Network device + IP is **paused (no SNMP targets)** (yellow — idle). |
 | Email & reports | `/ops` | Address book, send, **the** mail outbox (`#mail`), scheduled reports with **Edit / Clone / Remove / Enable**. Grafana is on System Health. |
 | Administration | `/admin` | Users: click a row to **edit** or **remove**. **Backup**, then **Import / restore** (left) beside a **ForgeSRE CLI** command list (right). Audit log. No browser PTY — SSH or `./forgesre` / `./forgesre shell` |
@@ -179,15 +179,15 @@ Credentials are in `installation-report.md` and `secrets/secrets.env`:
 - `FORGESRE_ADMIN_EMAIL` (default `admin@forgesre.local`)
 - `FORGESRE_ADMIN_PASSWORD`
 
-That account is `super_admin`. Do **not** re-run `./install.sh` on a live box unless you intend to regenerate passwords.
+That account is an Admin. Do **not** re-run `./install.sh` on a live box unless you intend to regenerate passwords.
 
 ### Add an admin (or any user)
 
-1. Sign in as admin / super_admin.
+1. Sign in as an Admin.
 2. Open **Administration** (`/admin`).
-3. Fill **Create user**: name, phone, phone 2 (optional second number), email, password, role (Analyst / Engineer / System admin / Viewer). On-call people are typed by hand on Escalation — a login account is not required.
+3. Fill **Create user**: name, phone, phone 2 (optional second number), email, password, role (Viewer / Analyst / Engineer / Admin). On-call people are typed by hand on Escalation — a login account is not required.
 4. **Create**. The new user signs in at `/login`.
-5. To change name, role, or password later: click that user in the table (left). **Save**. Empty password keeps the current one. **Remove user** deletes the account (not yourself, not the install super admin).
+5. To change name, role, or password later: click that user in the table (left). **Save**. Empty password keeps the current one. **Remove user** deletes the account (not yourself, not the last Admin).
 
 Same action via API (session cookie after UI login, or as the installer does):
 
@@ -210,7 +210,7 @@ Audit rows for `user.create`, `user.update`, `user.delete`, `backup.create` / `b
 
 ### Platform backup and restore
 
-Archives are `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (`$FORGESRE_DATA/backups/`; one folder per run, plus `MANIFEST.txt`). The directory is gitignored, mode `700`; each tar is mode `600`. Administration (admin / super_admin only) has **Backup** and **Import / restore** on the left, with a **ForgeSRE CLI** cheatsheet on the right. `./forgesre backup` writes the same archive; `./forgesre update` also backups first as a safety net. GUI/Core uses SQLAlchemy; the host CLI dumps Postgres with `docker compose exec postgres` (do not pip-install sqlalchemy on the VM). Host `./forgesre verify` likewise must not import sqlalchemy.
+Archives are `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (`$FORGESRE_DATA/backups/`; one folder per run, plus `MANIFEST.txt`). The directory is gitignored, mode `700`; each tar is mode `600`. Administration (Admin only) has **Backup** and **Import / restore** on the left, with a **ForgeSRE CLI** cheatsheet on the right. `./forgesre backup` writes the same archive; `./forgesre update` also backups first as a safety net. GUI/Core uses SQLAlchemy; the host CLI dumps Postgres with `docker compose exec postgres` (do not pip-install sqlalchemy on the VM). Host `./forgesre verify` likewise must not import sqlalchemy.
 
 **In the archive:** `config/forgesre.yml`, `.env`, `secrets/secrets.env` (omit with `./forgesre backup --no-secrets`), a logical database dump (users, incidents, assets, playbooks, playrules, journal, audit, jobs), compressed `data/logs/`, `monitoring/alerts.local.yml` if present, `data/generated/`, `config/examples/`.
 
@@ -869,7 +869,7 @@ V0.9 on one Ubuntu VM, Docker Compose, host networking:
 - **Network** — snmp_exporter `if_mib` on UDP/161: `up`, interface-down. After Approve, SNMP *polling* stays on snmp_exporter.
 - **Syslog** — Alloy UDP/TCP 514 → Loki, shown on the incident.
 - **Incidents** — Prometheus → Alertmanager → Core. Grafana (`:3000`) is extra graphs from System Health.
-- **Playbooks** — checklists the operator follows. Assets, users (except the install super admin and yourself), and escalation policies (email steps) are edited in the UI.
+- **Playbooks** — checklists the operator follows. Assets, users (except yourself and the last Admin), and escalation policies (email steps) are edited in the UI.
 - **Discovery** — TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, confirmed YAML `discovery.cidrs` only (suggested primary IPv4 `/24`; empty list skips the probe), **256 hosts/CIDR** and **1024 total**. SNMP GET uses UDP/161.
 - **Roles** — Viewer reads Dashboard, assets, incidents, and System Health. Playrules, Playbooks, Escalation, Email & reports (`/ops`), Console, and Discovery stay at 403 for that role.
 - **NetBox** — bundled UI on `:8001`. Core reads devices with `NETBOX_API_TOKEN`.
@@ -941,7 +941,7 @@ Eight small tools for a data-center NOC. Same V0.9 appliance: one Core, Postgres
 2. **Parent.** Edit → Identity → Parent (one upstream device, for example the switch). While that parent has an active down or unreachable incident, a new host-down or interface-down alert on the child is status **SUPPRESSED** and linked to the parent. The parent still pages. CPU, disk, and memory are not suppressed. After the parent incident clears, the next firing can email.
 3. **Interface.** Network incidents show **ifName**, **ifIndex**, and **ifAlias** from the alert labels. An SNMP asset lists the same fields from `if_mib` when Prometheus has the series.
 4. **Syslog.** The incident page shows up to 20 Loki lines from 30 minutes before `started_at` until 30 minutes after (hostname, then IP, `job=syslog`), on the Engineer evidence cube. No asset or no lines: the block is omitted. The demo asset may use `job=forgesre`. A real host never gets `forge-demo-01` lines.
-5. **On call.** Escalation (`/escalation`, left nav under Playbooks): four cards in one row. Add on-call is the third (narrowest) card — type weekday / from / until (appliance timezone, inclusive), then the person's name / email / phone / phone 2. Typing Name suggests Administration Users (active accounts; a role-as-name becomes the email local-part). Picking a suggestion fills email and phones; a name that is not on the list is still saved as typed. The roster Name column is that person (not Analyst / Engineer / Super admin). The Email column stacks phone, then email. Pager is **Edit / Remove** only (no Clone or Export). Per-row **ON / OFF** (OFF stays stored and is skipped). The **On call** card shows who is on call now. **I'm on duty now** (analyst+) writes today's remaining window as the logged-in user (including their phones); if the account name is a role label, Name uses the email local-part instead. If two slots overlap, the later start wins. An escalation step with the role `oncall` mails that address. Empty roster = no-recipient.
+5. **On call.** Escalation (`/escalation`, left nav under Playbooks): four cards in one row. Add on-call is the third (narrowest) card — type weekday / from / until (appliance timezone, inclusive), then the person's name / email / phone / phone 2. Typing Name suggests Administration Users (active accounts; a role-as-name becomes the email local-part). Picking a suggestion fills email and phones; a name that is not on the list is still saved as typed. The roster Name column is that person (not Analyst / Engineer / Admin). The Email column stacks phone, then email. Pager is **Edit / Remove** only (no Clone or Export). Per-row **ON / OFF** (OFF stays stored and is skipped). The **On call** card shows who is on call now. **I'm on duty now** (analyst+) writes today's remaining window as the logged-in user (including their phones); if the account name is a role label, Name uses the email local-part instead. If two slots overlap, the later start wins. An escalation step with the role `oncall` mails that address. Empty roster = no-recipient.
 6. **Capacity.** Asset page, under the charts: about 30 days of disk % and interface receive when those series exist. “~N days to full” only when the disk slope is usable (at least two climbing points). Otherwise the 30-day spark, or **Not scraped.** No invented forecast.
 7. **SNMP.** `monitoring/snmp.yml` stays the working `if_mib` module (ifName / ifAlias / ifOperStatus / counters / sysUpTime). No extra vendor MIB was added. Those series are what the interface list and sysUpTime line use.
 8. **Row and Rack.** Text fields on the asset (Identity), filtered on Assets the same way as Site and VLAN. Incidents can filter by the same Row and Rack. Not a floor-plan drawing.

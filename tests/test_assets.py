@@ -35,14 +35,14 @@ def test_seeded_demo_asset_has_contacts_and_similar_history():
     db.close()
 
 
-def test_analyst_can_create_and_edit_asset_contacts():
+def test_engineer_can_create_and_edit_asset_contacts():
     db = _db()
     db.add(
         User(
             email="analyst@forgesre.local",
             name="Ana",
             password_hash=hash_password("testpass"),
-            role="analyst",
+            role="engineer",
         )
     )
     db.add(
@@ -214,11 +214,11 @@ def test_run_demo_keeps_similar_history_and_notifies_owner():
     db.close()
 
 
-def test_role_labels_mention_analyst_inventory():
+def test_inventory_edits_need_engineer():
     from app.security import can, role_label
 
-    analyst = SimpleNamespace(role="analyst")
-    assert can(analyst, "write_assets")
+    assert not can(SimpleNamespace(role="analyst"), "write_assets")
+    assert can(SimpleNamespace(role="engineer"), "write_assets")
     assert role_label("analyst") == "Analyst"
 
 
@@ -230,7 +230,7 @@ def test_assets_list_shows_edit_clone_remove():
             email="ana-inv@forgesre.local",
             name="Ana",
             password_hash=hash_password("testpass"),
-            role="analyst",
+            role="engineer",
         )
     )
     db.commit()
@@ -905,7 +905,7 @@ def test_html_add_posts_asset_id_edit_keeps_it():
             email="id-first@forgesre.local",
             name="Ida",
             password_hash=hash_password("testpass"),
-            role="analyst",
+            role="engineer",
         )
     )
     db.commit()
