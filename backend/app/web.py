@@ -153,6 +153,7 @@ from app.models import (
     ScheduledReport,
     User,
 )
+from app.webui import web_ui_available
 from app.netbox import is_local_netbox_url, status_label, sync_cta, token_presence
 from app.security import (
     CREATABLE_ROLES,
@@ -631,6 +632,7 @@ def ctx(request: Request, user: User | None, **extra):
         "role_label": role_label,
         "distinct_who_name": distinct_who_name,
         "grafana_url": settings.grafana_public_url,
+        "web_ui": web_ui_available(),
         "grafana_enabled": settings.grafana_enabled,
         "ai_enabled": settings.ai_enabled,
         "health_class": health_class,

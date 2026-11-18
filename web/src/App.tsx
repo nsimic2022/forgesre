@@ -1,0 +1,39 @@
+import { useEffect, useState } from "react";
+import { Route, Routes } from "react-router-dom";
+import { Shell } from "./components/Shell";
+import { getJson, type Me } from "./lib/api";
+import { NocContext, NocPage, useNocPoll } from "./pages/Noc";
+import { Pending } from "./pages/Pending";
+
+export function App() {
+  const [me, setMe] = useState<Me | null>(null);
+  useEffect(() => {
+    getJson<Me>("/api/v1/me").then(setMe).catch(() => setMe(null));
+  }, []);
+  return (
+    <ShellWithAi me={me}>
+      <Routes>
+        <Route path="/" element={<NocPage />} />
+        <Route path="/incidents/*" element={<Pending title="Incidents" classic="/incidents" />} />
+        <Route path="/inventory/*" element={<Pending title="Inventory" classic="/assets" />} />
+        <Route path="/automation/*" element={<Pending title="Automation" classic="/playrules" />} />
+        <Route path="/investigations/*" element={<Pending title="Investigations" classic="/investigations" />} />
+        <Route path="/reports/*" element={<Pending title="Reports" classic="/ops" />} />
+        <Route path="/settings/*" element={<Pending title="Settings" classic="/admin" />} />
+        <Route path="*" element={<Pending title="Not found" classic="/" />} />
+      </Routes>
+    </ShellWithAi>
+  );
+}
+
+function ShellWithAi({ me, children }: { me: Me | null; children: React.ReactNode }) {
+  // One poll of /api/v1/noc for the whole app: the home page and the sidebar's ForgeAI chip.
+  const noc = useNocPoll();
+  return (
+    <NocContext.Provider value={noc}>
+      <Shell me={me} forgeai={noc.data?.ai.forgeai ?? "off"}>
+        {children}
+      </Shell>
+    </NocContext.Provider>
+  );
+}

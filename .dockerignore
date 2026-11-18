@@ -11,3 +11,5 @@ docs
 tests
 *.md
 !backend/requirements.txt
+web/node_modules
+web/dist

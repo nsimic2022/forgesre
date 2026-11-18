@@ -70,6 +70,7 @@
     <a href="/health-ui" class="{% if request.url.path.startswith('/health-ui') %}active{% endif %}" title="System Health"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-health"></use></svg></span><span class="nav-label">System Health</span></a>
     {% if can_send_ops %}<a href="/ops" class="{% if request.url.path.startswith('/ops') %}active{% endif %}" title="Email &amp; reports"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-ops"></use></svg></span><span class="nav-label">Email &amp; reports</span></a>{% endif %}
     {% if can('admin') %}<a href="/admin" class="{% if request.url.path.startswith('/admin') %}active{% endif %}" title="Administration"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-admin"></use></svg></span><span class="nav-label">Administration</span></a>{% endif %}
+    {% if web_ui %}<a href="/app/" title="New UI (preview)"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-dash"></use></svg></span><span class="nav-label">New UI (preview)</span></a>{% endif %}
     <div class="nav-foot">
       <div class="who">
         {% set display_name = distinct_who_name(user.name, user.role, user.surname) %}

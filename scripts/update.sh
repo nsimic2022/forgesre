@@ -47,7 +47,8 @@ fi
 core_inputs_hash() {
   (
     cd "$ROOT"
-    find backend/Dockerfile backend/requirements.txt backend/app agents frontend -type f 2>/dev/null \
+    find backend/Dockerfile backend/requirements.txt backend/app agents frontend web \
+      \( -path web/node_modules -o -path web/dist \) -prune -o -type f -print 2>/dev/null \
       | sort \
       | xargs -r sha256sum
   ) | sha256sum | awk '{print $1}'
@@ -74,7 +75,7 @@ cur="$(core_inputs_hash)"
 need_build=1
 if [[ -f "$STAMP" ]] && [[ "$(cat "$STAMP" 2>/dev/null || true)" == "$cur" ]]; then
   need_build=0
-  echo "Core image inputs unchanged (Dockerfile/backend/agents/frontend); skipping --build."
+  echo "Core image inputs unchanged (Dockerfile/backend/agents/frontend/web); skipping --build."
 fi
 
 IMG_STAMP="$ROOT/data/.compose-images.stamp"
