@@ -100,6 +100,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `incidents [INC-…]` | Short colored board, or one incident |
 | `history` | 90-day CLI lookback (`--days`, `--status`, `--asset`, `INC-…`). The GUI list is Incidents; `/history` redirects there. |
 | `jobs` | Job queue: counts per status, newest 20 jobs, error text for failed ones |
+| `settings` | Settings from the shell: list, get, set, test, set-secret ([settings.md](settings.md)) |
 | `journal [module]` | Internal console reports (JSON) |
 | `demo` / `demo-rca` / `demo-reset` | Demo HighCPU path / filesystem RCA demo / lower the demo gauges |
 | `backup` | One folder per run under `data/backups` (`--no-secrets`, `--include-models`) |

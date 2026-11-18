@@ -2152,3 +2152,41 @@ def _playbook(item: Playbook) -> dict[str, Any]:
         "description": item.description,
         "steps": item.steps,
     }
+
+
+class SettingBody(BaseModel):
+    value: Any
+
+
+@router.get("/settings")
+def settings_list(group: str = "", user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Every setting an Admin can see, grouped. Secrets show only whether they are set."""
+    from app.system_settings import GROUPS, list_settings
+
+    return {"groups": GROUPS, "settings": list_settings(group or None)}
+
+
+@router.put("/settings/{key:path}")
+def settings_update(
+    key: str, body: SettingBody, db: Session = Depends(get_db), user: User = Depends(require("admin"))
+) -> dict[str, Any]:
+    """Change one YAML setting; 400 with the reason when the value or the key is not accepted."""
+    from app.system_settings import set_setting
+
+    try:
+        return set_setting(db, key, body.value, actor=user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"could not write config: {exc}") from exc
+
+
+@router.post("/settings/test/{component}")
+def settings_test(component: str, user: User = Depends(require("run_checks"))) -> dict[str, Any]:
+    """Check one service or integration now (each check has its own timeout)."""
+    from app.system_settings import test_connection
+
+    try:
+        return test_connection(component)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

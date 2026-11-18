@@ -10,9 +10,10 @@ Each step ships as its own pull request, merged when CI is green (AGENTS.md).
    process for ForgeAI, discovery, syncs, reports and backups; a timeout on every
    external call. Move the sign-in throttle and session state to the database so Core
    can run several web workers.
-3. Settings module: network, services, integrations, notification channels, AI, stored
-   in the database, written by the installer, editable in the UI, readable with
-   `./forgesre settings`. Secrets write-only.
+3. ~~Settings module, backend and CLI~~ (done: [settings.md](settings.md)). Live values in
+   `config/forgesre.yml`, secrets via `./forgesre settings set-secret`, connection tests.
+   The Settings page itself comes with the new UI. Later: notification channels for Slack,
+   Teams and Discord, and secrets editable from the UI through a host-side helper.
 
 ## Phase 2 — new UI, page by page
 
@@ -28,6 +29,40 @@ monthly, cron) by email, Slack, Teams, Discord.
 ## Phase 4 — enterprise
 
 LDAP / AD and OIDC sign-in, air-gapped install bundle, high availability.
+
+## ForgeAI 2 — how investigation should work
+
+Agreed direction, after the new Investigations page exists (it shows ratings and accuracy).
+
+- **ForgeRCA stays the fact collector, in Python.** Specialists run in parallel with a
+  timeout each: metrics, logs, inventory, history (today), plus network/topology (SNMP and
+  LibreNMS neighbours, uplinks), changes (maintenance windows, GLPI changes) and
+  trend/capacity (time to full, error growth). No LLM in collection.
+- **One ForgeAI investigator, not a chat of many LLM agents.** Local models take 20–60 s
+  per call; a chain of agents would take minutes and invent more. The investigator gets
+  read-only tools (Prometheus range query, Loki search, interface status, asset card,
+  similar incidents), at most about six steps and a time budget, and must answer in a fixed
+  structure: cause, confidence, evidence ids for every claim, next steps. Code checks that
+  every cited evidence id exists; an answer that cites missing evidence is rejected or
+  flagged. A second "critic" pass only in cloud mode. No automatic remediation.
+- **Knowledge base, all local, in Postgres with pgvector** and a local embedding model:
+  1. own incidents with the analyst-confirmed cause (most valuable, grows daily);
+  2. playbooks and runbooks;
+  3. uploaded vendor documents (manuals, syslog message catalogues);
+  4. topology from NetBox / LibreNMS for blast radius (no Neo4j).
+  Similar incidents: exact match first (alert, device type, vendor, syslog message id),
+  then semantic search; the model gets the 3–5 closest with their confirmed fixes.
+- **Learning loop.** On resolve, the analyst confirms the cause and rates ForgeRCA and
+  ForgeAI (correct / partly / wrong). Ratings feed similar-incident search and the
+  accuracy figures on the Investigations page.
+- **Measuring.** Replay the last 100 resolved incidents and compare with the confirmed
+  cause. Microsoft OpenRCA (telemetry from lab micro-service systems with labelled root
+  causes, no fixes, nothing about switches, UPS, RAID or ESXi) is a test bench only:
+  installed apart under `/opt/forgesre/datasets/openrca` and run by `./forgesre rca-bench`,
+  never searched at incident time.
+- **Hardware.** A 24 GB GPU runs a mid-size local model well enough for the investigator.
+  Without a GPU: ForgeRCA plus a small model for the summary, and the tool-using
+  investigator only in cloud mode (masked, Critical/High, on request).
 
 ## Backlog
 
