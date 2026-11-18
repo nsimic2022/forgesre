@@ -208,21 +208,84 @@ def unlinked_pages(app: Any, report: Report) -> list[str]:
     return sorted(set(out))
 
 
+class _Response:
+    def __init__(self, status_code: int, text: str, headers: dict[str, str]) -> None:
+        self.status_code = status_code
+        self.text = text
+        self.headers = headers
+
+
+class StdlibClient:
+    """Tiny cookie-keeping HTTP client on the standard library, so the script runs on a
+    bare appliance host (httpx lives only inside the Core container)."""
+
+    def __init__(self, base: str, timeout: float = 30) -> None:
+        import http.cookiejar
+        import ssl
+        import urllib.request
+
+        self.base = base.rstrip("/")
+        self.timeout = timeout
+        self.cookies = http.cookiejar.CookieJar()
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE  # appliances often use a self-signed certificate
+
+        class _NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *args, **kwargs):  # noqa: ANN002, ANN003
+                return None
+
+        handlers = [urllib.request.HTTPCookieProcessor(self.cookies), urllib.request.HTTPSHandler(context=ctx)]
+        self._follow = urllib.request.build_opener(*handlers)
+        self._stay = urllib.request.build_opener(*handlers, _NoRedirect())
+
+    def _open(self, req, follow: bool) -> _Response:
+        import urllib.error
+
+        opener = self._follow if follow else self._stay
+        try:
+            resp = opener.open(req, timeout=self.timeout)
+        except urllib.error.HTTPError as err:
+            resp = err
+        body = resp.read() or b""
+        headers = {k.lower(): v for k, v in resp.headers.items()}
+        charset = resp.headers.get_content_charset() or "utf-8"
+        return _Response(resp.status if hasattr(resp, "status") else resp.code, body.decode(charset, "replace"), headers)
+
+    def get(self, url: str, follow_redirects: bool = True) -> _Response:
+        import urllib.request
+
+        return self._open(urllib.request.Request(self.base + url), follow_redirects)
+
+    def post_form(self, url: str, data: dict[str, str]) -> _Response:
+        import urllib.parse
+        import urllib.request
+
+        body = urllib.parse.urlencode(data).encode()
+        return self._open(urllib.request.Request(self.base + url, data=body, method="POST"), False)
+
+    def has_cookie(self, name: str) -> bool:
+        return any(c.name == name for c in self.cookies)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base-url", required=True)
     ap.add_argument("--email", required=True)
     ap.add_argument("--password", required=True)
     args = ap.parse_args(argv)
-    import httpx
 
     base = args.base_url.rstrip("/")
-    with httpx.Client(base_url=base, timeout=30, verify=False) as client:
-        login = client.post("/login", data={"email": args.email, "password": args.password})
-        if "forgesre_session" not in client.cookies:
-            print(f"sign-in failed (HTTP {login.status_code})", file=sys.stderr)
-            return 2
-        report = crawl(client, base=base)
+    client = StdlibClient(base)
+    try:
+        login = client.post_form("/login", {"email": args.email, "password": args.password})
+    except OSError as exc:
+        print(f"cannot reach {base}: {exc}", file=sys.stderr)
+        return 2
+    if not client.has_cookie("forgesre_session"):
+        print(f"sign-in failed (HTTP {login.status_code}): check the email and password", file=sys.stderr)
+        return 2
+    report = crawl(client, base=base)
     print(f"{len(report.pages)} pages visited, {len(report.problems)} problems")
     for p in sorted(report.problems, key=lambda p: (p.kind, p.url)):
         print("  " + p.line())
