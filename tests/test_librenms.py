@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import subprocess
 import sys
@@ -445,9 +446,18 @@ def test_ensure_librenms_app_key_quotes_base64_and_repairs_broken_dotenv(tmp_pat
     )
     (appliance / "secrets" / "secrets.env").write_text("LIBRENMS_APP_KEY=\n", encoding="utf-8")
     (appliance / ".env").write_text("LIBRENMS_URL=\n", encoding="utf-8")
+    # The script chowns the data dir to the container user (1000) and falls back to sudo.
+    # On a CI runner with passwordless sudo that would hand the file to another uid and
+    # the reads below would fail, so shadow sudo with one that always refuses.
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    (fake_bin / "sudo").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    (fake_bin / "sudo").chmod(0o755)
+    env = {**os.environ, "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}"}
     result = subprocess.run(
         ["bash", str(appliance / "scripts" / "ensure-librenms-secrets.sh")],
         cwd=appliance,
+        env=env,
         check=True,
         capture_output=True,
         text=True,

@@ -962,7 +962,6 @@ def playrule_choices(db: Session) -> list[dict]:
 
 def asset_playrules(db: Session, asset: Asset | None) -> list[Playrule]:
     """Custom alarms saved on this asset, in saved order. Missing ids are skipped."""
-    from app.asset_extras import asset_playrule_ids
 
     ids = asset_playrule_ids(asset)
     if not ids:
@@ -2564,7 +2563,6 @@ def admin_create_user(
 ):
     if not can(user, "admin"):
         raise HTTPException(status_code=403)
-    from app.journal import report
     from app.users import create_user
 
     try:
@@ -2606,7 +2604,6 @@ def admin_update_user(
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status_code=404)
-    from app.journal import report
     from app.users import update_user
 
     try:
@@ -2645,7 +2642,6 @@ def admin_delete_user(
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status_code=404)
-    from app.journal import report
     from app.users import delete_user
 
     try:
@@ -2672,7 +2668,6 @@ def admin_create_backup(
 ):
     _require_admin(user)
     from app.backup import create_backup
-    from app.journal import report
 
     result = create_backup(include_secrets=include_secrets != "0", include_models=bool(include_models))
     audit(db, "backup.create", actor=user.email, object_type="backup", object_id=result.name, ip=request.client.host if request.client else "")
@@ -2716,7 +2711,6 @@ async def admin_import_backup(
 ):
     _require_admin(user)
     from app.backup import backup_ident, save_upload
-    from app.journal import report
 
     data = await archive.read()
     try:
@@ -2739,7 +2733,6 @@ def admin_remove_backup(
 ):
     _require_admin(user)
     from app.backup import delete_backup
-    from app.journal import report
 
     try:
         deleted = delete_backup(name)
@@ -2764,7 +2757,6 @@ def admin_bulk_delete_backups(
     """Delete the checkbox-selected backup folders. Admin only. Per-row Remove is unchanged."""
     _require_admin(user)
     from app.backup import delete_backup
-    from app.journal import report
 
     names: list[str] = []
     for item in selected:
@@ -2810,7 +2802,6 @@ def admin_restore_backup(
 ):
     _require_admin(user)
     from app.backup import CONFIRM_WORD, backup_ident, restore_archive, resolve_archive
-    from app.journal import report
 
     if acknowledged != "1" or confirm.strip() != CONFIRM_WORD:
         raise HTTPException(

@@ -374,7 +374,7 @@ def test_audit_and_api_investigation():
 
     from app.db import Base, SessionLocal, engine
     from app.main import app
-    from app.models import AuditLog, Incident
+    from app.models import AuditLog
     from app.seed import seed
     from app.services import close_open_incidents, ingest_alertmanager
 

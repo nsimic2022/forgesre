@@ -20,7 +20,6 @@ from app.models import Asset
 from app.seed import seed
 from app.snmp_families import (
     ALL_FAMILIES,
-    HOST_FAMILIES,
     families_from_form,
     host_metrics_on,
     http_source_label,
