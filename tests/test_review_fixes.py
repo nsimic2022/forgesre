@@ -115,7 +115,7 @@ def test_doctor_discovery_is_not_a_checkbox(monkeypatch):
 def test_jobs_loop_runs_reports_before_pending_jobs():
     text = (ROOT / "backend" / "app" / "main.py").read_text(encoding="utf-8")
     loop = text[text.index("def _jobs_loop") : text.index("def _escalation_loop")]
-    assert loop.index("process_scheduled_reports(db)") < loop.index("run_pending_jobs(db)")
+    assert loop.index("process_scheduled_reports(db)") < loop.index("run_pending_jobs(db")
 
 
 def test_next_pending_job_prefers_builtin_rca_over_llm():

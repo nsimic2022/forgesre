@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import threading
-import time
-from collections import deque
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -109,60 +107,81 @@ def revoke_sessions(user: User) -> None:
 
 
 class LoginThrottle:
-    """Count failed sign-ins in a sliding window, in memory (Core runs one uvicorn process).
+    """Count failed sign-ins in a sliding window, stored in the database.
 
-    Two keys are tracked: (client IP, email) and client IP alone. A key is blocked once it
-    reaches its limit inside the window; a successful sign-in clears the (IP, email) key.
+    Two keys per failure: (client IP, email) and client IP alone. A key is blocked once
+    it reaches its limit inside the window; a successful sign-in clears the (IP, email)
+    key. Rows live in ``login_failures`` so every Core worker sees the same counts.
     """
 
     def __init__(self, *, per_account: int = 5, per_ip: int = 30, window_seconds: int = 15 * 60) -> None:
         self.per_account = per_account
         self.per_ip = per_ip
         self.window = window_seconds
-        self._fails: dict[str, deque[float]] = {}
-        self._lock = threading.Lock()
 
     @staticmethod
     def _keys(ip: str, email: str) -> tuple[str, str]:
-        return f"acct:{ip}|{(email or '').strip().lower()}", f"ip:{ip}"
+        return f"acct:{ip}|{(email or '').strip().lower()}"[:320], f"ip:{ip}"[:320]
 
-    def _recent(self, key: str, now: float) -> deque[float]:
-        bucket = self._fails.get(key)
-        if bucket is None:
-            return deque()
-        while bucket and now - bucket[0] >= self.window:
-            bucket.popleft()
-        if not bucket:
-            self._fails.pop(key, None)
-        return bucket
+    @staticmethod
+    def _now(now: datetime | None) -> datetime:
+        return now or datetime.now(timezone.utc)
 
-    def retry_after(self, ip: str, email: str, now: float | None = None) -> int:
+    def _since(self, now: datetime) -> datetime:
+        return now - timedelta(seconds=self.window)
+
+    def retry_after(self, db: Session, ip: str, email: str, now: datetime | None = None) -> int:
         """Seconds until another attempt is allowed; 0 when not blocked."""
-        now = time.monotonic() if now is None else now
-        acct, ip_key = self._keys(ip, email)
+        from app.models import LoginFailure
+
+        now = self._now(now)
         wait = 0.0
-        with self._lock:
-            for key, limit in ((acct, self.per_account), (ip_key, self.per_ip)):
-                bucket = self._recent(key, now)
-                if len(bucket) >= limit:
-                    wait = max(wait, self.window - (now - bucket[0]))
+        for key, limit in zip(self._keys(ip, email), (self.per_account, self.per_ip)):
+            rows = (
+                db.query(LoginFailure.at)
+                .filter(LoginFailure.key == key, LoginFailure.at > self._since(now))
+                .order_by(LoginFailure.at)
+                .all()
+            )
+            if len(rows) >= limit:
+                oldest = rows[0][0]
+                if oldest.tzinfo is None:  # SQLite returns naive datetimes
+                    oldest = oldest.replace(tzinfo=timezone.utc)
+                wait = max(wait, self.window - (now - oldest).total_seconds())
         return int(wait) + 1 if wait > 0 else 0
 
-    def failure(self, ip: str, email: str, now: float | None = None) -> None:
-        now = time.monotonic() if now is None else now
-        with self._lock:
-            for key in self._keys(ip, email):
-                self._recent(key, now)
-                self._fails.setdefault(key, deque()).append(now)
+    def failure(self, db: Session, ip: str, email: str, now: datetime | None = None) -> None:
+        from app.models import LoginFailure
 
-    def success(self, ip: str, email: str) -> None:
+        now = self._now(now)
+        keys = self._keys(ip, email)
+        # Rows older than the window are useless; drop them for these keys as we go.
+        db.query(LoginFailure).filter(LoginFailure.key.in_(keys), LoginFailure.at <= self._since(now)).delete(
+            synchronize_session=False
+        )
+        db.add_all([LoginFailure(key=key, at=now) for key in keys])
+        db.commit()
+
+    def success(self, db: Session, ip: str, email: str) -> None:
+        from app.models import LoginFailure
+
         acct, _ip_key = self._keys(ip, email)
-        with self._lock:
-            self._fails.pop(acct, None)
+        db.query(LoginFailure).filter(LoginFailure.key == acct).delete(synchronize_session=False)
+        db.commit()
 
-    def reset(self) -> None:
-        with self._lock:
-            self._fails.clear()
+    def reset(self, db: Session | None = None) -> None:
+        """Forget every failure (tests, or an admin unlocking everyone)."""
+        from app.db import SessionLocal
+        from app.models import LoginFailure
+
+        own = db is None
+        db = db or SessionLocal()
+        try:
+            db.query(LoginFailure).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            if own:
+                db.close()
 
 
 login_throttle = LoginThrottle()
@@ -180,7 +199,7 @@ def _dummy_hash() -> str:
 def authenticate(db: Session, email: str, password: str, ip: str) -> tuple[User | None, int]:
     """Check a sign-in. Returns (user, 0) on success, (None, 0) on bad credentials,
     (None, retry_after_seconds) when this IP / account is temporarily blocked."""
-    wait = login_throttle.retry_after(ip, email)
+    wait = login_throttle.retry_after(db, ip, email)
     if wait:
         return None, wait
     clean = (email or "").strip().lower()
@@ -188,12 +207,12 @@ def authenticate(db: Session, email: str, password: str, ip: str) -> tuple[User 
     if user is None:
         # Spend the same bcrypt time as a real check so unknown emails are not told apart.
         verify_password(password, _dummy_hash())
-        login_throttle.failure(ip, email)
+        login_throttle.failure(db, ip, email)
         return None, 0
     if not verify_password(password, user.password_hash) or not user.is_active:
-        login_throttle.failure(ip, email)
+        login_throttle.failure(db, ip, email)
         return None, 0
-    login_throttle.success(ip, email)
+    login_throttle.success(db, ip, email)
     return user, 0
 
 

@@ -99,7 +99,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `sd` | Prometheus HTTP SD (Linux / Windows) and SNMP HTTP SD |
 | `incidents [INC-…]` | Short colored board, or one incident |
 | `history` | 90-day CLI lookback (`--days`, `--status`, `--asset`, `INC-…`). The GUI list is Incidents; `/history` redirects there. |
-| `jobs` | Background job queue (RCA, discovery scans) |
+| `jobs` | Job queue: counts per status, newest 20 jobs, error text for failed ones |
 | `journal [module]` | Internal console reports (JSON) |
 | `demo` / `demo-rca` / `demo-reset` | Demo HighCPU path / filesystem RCA demo / lower the demo gauges |
 | `backup` | One folder per run under `data/backups` (`--no-secrets`, `--include-models`) |
@@ -200,7 +200,7 @@ Classes are universal, not SKUs: Linux, Windows, Network SNMP, Unknown. Unknown 
 
 `verify` accepts **all of**: asset number `#`, Asset ID, hostname, and IP. Same keys work for `./forgesre ping`. TAB completes numbers and ids (hostnames too). One key dumps what ForgeSRE already knows (inventory) plus the live checks. Same action: Assets → **Verify** (analyst / engineer / admin). Viewers are read-only.
 
-`./forgesre jobs` is the Postgres job table. There is **no Celery**. One worker thread in Core runs scheduled reports then pending jobs (`investigate` and `discovery_scan`). Discovery **Confirm & scan** / **Scan now** enqueue `discovery_scan` (`status=pending`); the worker runs `run_scan` in try/except so a probe crash becomes `job.error` + Journal, not a Core 500. An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds`. Scheduled `/ops#reports` jobs are a different table (`scheduled_reports`): **Edit / Clone / Remove** on the row, **Cancel** next to Save on the form, **Enabled** = fire at Next (off = stored, skipped). Same SMTP send path as Compose.
+`./forgesre jobs` shows the Postgres job table: counts per status (pending, running, error, done), then the newest 20 jobs with the first line of each error. There is **no Celery**. The leader Core process runs two job threads: one for scheduled reports and non-LLM jobs (`investigate`, `discovery_scan`), one for ForgeAI rewrites. Discovery **Confirm & scan** / **Scan now** enqueue `discovery_scan`; a probe crash becomes `job.error` + Journal, not a Core 500. Scheduled `/ops#reports` jobs are a different table (`scheduled_reports`): **Edit / Clone / Remove** on the row, **Cancel** next to Save on the form, **Enabled** = fire at Next (off = stored, skipped). Same SMTP send path as Compose.
 
 ---
 

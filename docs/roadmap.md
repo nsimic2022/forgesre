@@ -6,7 +6,7 @@ Each step ships as its own pull request, merged when CI is green (AGENTS.md).
 ## Phase 1 — backend foundation
 
 1. ~~Four roles: Viewer, Analyst, Engineer, Admin~~ (done, #148).
-2. Background jobs and timeouts: a Postgres-backed job queue and a separate worker
+2. ~~Background jobs and timeouts~~ (done: one leader process, atomic claim, LLM lane, DB sign-in throttle). Remaining: a Postgres-backed job queue and a separate worker
    process for ForgeAI, discovery, syncs, reports and backups; a timeout on every
    external call. Move the sign-in throttle and session state to the database so Core
    can run several web workers.

@@ -18,6 +18,7 @@ from app.db import Base, SessionLocal, engine
 from app.journal import maybe_prune_old, prune_older_than, report
 from app.inventory import run_scan, seed_demo_candidate, sync_netbox
 from app.jobs import recover_interrupted_jobs, start_infrastructure_scheduler
+from app.leader import leader
 from app.metrics import metrics_response
 from app.migrate import migrate
 from app.models import Asset
@@ -64,7 +65,7 @@ def _discovery_loop(stop: threading.Event) -> None:
         if stop.wait(delay):
             break
         mark_discovery_loop_alive()
-        if loop_disabled:
+        if loop_disabled or not leader.ensure():
             continue
         db = SessionLocal()
         try:
@@ -92,16 +93,18 @@ def _discovery_loop(stop: threading.Event) -> None:
 
 
 def _jobs_loop(stop: threading.Event) -> None:
-    from app.jobs import run_pending_jobs
+    """Leader only: scheduled reports, non-LLM jobs, Zabbix poll, journal pruning, every 2 s."""
+    from app.jobs import LANE_DEFAULT, run_pending_jobs
     from app.services import process_scheduled_reports
     from app.zabbix_sync import maybe_poll
 
     while not stop.wait(2):
+        if not leader.ensure():
+            continue
         db = SessionLocal()
         try:
-            # Reports first so an LLM rewrite cannot hold /ops mail for the timeout.
             process_scheduled_reports(db)
-            run_pending_jobs(db)
+            run_pending_jobs(db, lane=LANE_DEFAULT)
             maybe_poll(db)
             maybe_prune_old(db)
         except Exception as exc:
@@ -111,10 +114,30 @@ def _jobs_loop(stop: threading.Event) -> None:
             db.close()
 
 
+def _llm_jobs_loop(stop: threading.Event) -> None:
+    """Leader only: ForgeAI rewrites in their own thread, one at a time, so a slow model
+    never delays RCA, discovery or report mail."""
+    from app.jobs import LANE_LLM, run_pending_jobs
+
+    while not stop.wait(2):
+        if not leader.ensure():
+            continue
+        db = SessionLocal()
+        try:
+            run_pending_jobs(db, limit=1, lane=LANE_LLM)
+        except Exception as exc:
+            log.exception("llm jobs loop failed")
+            report(db, "rca", "llm-jobs", "error", summary="ForgeAI job worker failed", detail=str(exc))
+        finally:
+            db.close()
+
+
 def _escalation_loop(stop: threading.Event) -> None:
     from app.services import process_escalations
 
     while not stop.wait(30):
+        if not leader.ensure():
+            continue
         db = SessionLocal()
         try:
             process_escalations(db)
@@ -139,7 +162,9 @@ def create_app() -> FastAPI:
         try:
             seed(db)
             seed_demo_candidate(db)
-            recover_interrupted_jobs(db)
+            # Only the leader may reset "running" jobs: in another process they may be live.
+            if leader.ensure():
+                recover_interrupted_jobs(db)
             report(
                 db,
                 "core",
@@ -166,6 +191,7 @@ def create_app() -> FastAPI:
         log.info("ForgeSRE core started timezone=%s ai=%s", settings.timezone, settings.ai_enabled)
         threading.Thread(target=_escalation_loop, args=(stop,), daemon=True).start()
         threading.Thread(target=_jobs_loop, args=(stop,), daemon=True).start()
+        threading.Thread(target=_llm_jobs_loop, args=(stop,), daemon=True).start()
         threading.Thread(target=_discovery_loop, args=(stop,), daemon=True).start()
         app.state.escalation_stop = stop
         infra_stop = asyncio.Event()
@@ -178,6 +204,7 @@ def create_app() -> FastAPI:
         if infra_task is not None:
             infra_task.cancel()
         stop.set()
+        leader.release()
 
     app = FastAPI(title="ForgeSRE", version="0.9.0", lifespan=lifespan)
     static_dir = settings.frontend_dir / "static"

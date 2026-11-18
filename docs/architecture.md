@@ -35,12 +35,26 @@ Compose starts **one** `core` service: one uvicorn process.
 Inside that process:
 
 - The HTTP server serves the UI and the API.
-- One **jobs thread** claims rows from the Postgres `jobs` table (RCA, discovery scan, scheduled reports). Claim is pending-then-running.
-- The same process runs the escalation loop and the discovery loop as threads. Those threads use sync SQLAlchemy; CMDB / Prom / Loki HTTP from them goes through `AsyncClient` + `run_sync` (not `urllib` / `httpx.Client` on the FastAPI loop). Discovery scan ICMP/TCP may occupy the jobs thread. Infra scan is an asyncio task with `_infrastructure_scan_lock`. Async incident loads use `selectinload` for `asset` / `evidence` — no lazy-load from `AsyncSession`. `models.py` stays sync ORM.
+- **One leader runs the background loops.** At startup each Core process tries a Postgres
+  advisory lock (`app/leader.py`); the holder runs the escalation, jobs, ForgeAI, discovery
+  and infrastructure-scan loops, the others only serve requests and retry every loop
+  interval. When the leader dies, Postgres drops the lock and another process takes over.
+  SQLite (tests) is always leader.
+- **Two job lanes.** The jobs thread runs scheduled reports, then pending non-LLM jobs (RCA,
+  discovery scan, digests). A second thread runs ForgeAI rewrites one at a time, so a slow
+  model never holds RCA or report mail.
+- **Atomic claim.** A job moves from pending to running with a conditional `UPDATE ... WHERE
+  status = 'pending'` (`claim_job`); a second process that races for it gets nothing.
+- The loops use sync SQLAlchemy; CMDB / Prom / Loki HTTP from them goes through `AsyncClient`
+  + `run_sync`. Discovery ICMP/TCP may occupy the jobs thread. The infra scan is an asyncio
+  task with `_infrastructure_scan_lock`. Async incident loads use `selectinload` for `asset` /
+  `evidence` — no lazy-load from `AsyncSession`; `models.py` stays sync ORM.
+- **Sign-in throttle state is in the database** (`login_failures`), so every process counts the
+  same failures. Session cookies are signed and checked against `users.session_version`.
 
-Keep a **single** Core replica. A second process would run a second escalation loop and send the same mail twice. The same applies to extra uvicorn workers: each worker would run those loops. Throughput is bounded by scrape and syslog volume (see [Scale](#7-scale)).
-
-An LLM rewrite can occupy the jobs thread until `ai.llm.timeout_seconds`. That is why reports are claimed before an LLM job.
+Core still ships with one uvicorn worker. Loops, job claims and sign-in throttling are now safe
+with more; a few System Health "alive" markers are still per-process, so keep one worker until
+they move to the database too.
 
 Request-path HTTP (Prometheus, LibreNMS, Loki, System Health probes) uses `httpx.AsyncClient` with a 5s read timeout. Mail uses `aiosmtplib`. llama.cpp streams tokens as an `AsyncGenerator`. Sync FastAPI routes and pytest call the same coroutines through `run_sync` (a worker thread when a loop is already running). The infrastructure scan holds `_infrastructure_scan_lock` and skips seeded `forge-demo-*` rows so Education Mode never spends ICMP or SNMP on lab assets.
 
