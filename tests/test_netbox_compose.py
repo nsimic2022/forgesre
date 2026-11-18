@@ -1037,7 +1037,9 @@ def test_compose_and_mailbox_image_pins():
     assert "v4.4-3.2.0" not in images.values()
     assert "build" in data["services"]["core"]
     dockerfile = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
-    assert dockerfile.splitlines()[0] == "FROM python:3.12-slim"
+    froms = [line for line in dockerfile.splitlines() if line.startswith("FROM ")]
+    # Node only builds the new UI; the runtime image is the pinned Python one.
+    assert froms == ["FROM node:22-slim AS web", "FROM python:3.12-slim"]
     assert "iputils-ping" in dockerfile
     mailbox = (ROOT / "scripts" / "mailbox.sh").read_text(encoding="utf-8")
     assert 'DMS_IMAGE="ghcr.io/docker-mailserver/docker-mailserver:15.1.0"' in mailbox

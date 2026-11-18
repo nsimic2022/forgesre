@@ -2190,3 +2190,11 @@ def settings_test(component: str, user: User = Depends(require("run_checks"))) -
         return test_connection(component)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/noc")
+def noc_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict[str, Any]:
+    """NOC overview for the new UI: counts, incidents by tab, health by group, on-call, AI mode."""
+    from app.noc import noc_overview
+
+    return noc_overview(db)

@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ from app.journal import maybe_prune_old, prune_older_than, report
 from app.inventory import run_scan, seed_demo_candidate, sync_netbox
 from app.jobs import recover_interrupted_jobs, start_infrastructure_scheduler
 from app.leader import leader
+from app.webui import web_dist_dir
 from app.metrics import metrics_response
 from app.migrate import migrate
 from app.models import Asset
@@ -148,6 +149,26 @@ def _escalation_loop(stop: threading.Event) -> None:
             db.close()
 
 
+def _mount_web_app(app: FastAPI) -> None:
+    """Serve the new React UI under /app when it has been built; every unknown /app/* path
+    returns index.html so client-side routes survive a reload. Data comes from /api/v1."""
+    dist = web_dist_dir()
+    index = dist / "index.html"
+    if not index.is_file():
+        log.info("new UI not built (%s missing); /app is off", index)
+        return
+    if (dist / "assets").is_dir():
+        app.mount("/app/assets", StaticFiles(directory=str(dist / "assets")), name="web-assets")
+
+    @app.get("/app", include_in_schema=False)
+    @app.get("/app/{rest:path}", include_in_schema=False)
+    def web_app(rest: str = "") -> Response:
+        target = (dist / rest).resolve()
+        if rest and target.is_file() and dist.resolve() in target.parents:
+            return FileResponse(target)
+        return FileResponse(index, headers={"Cache-Control": "no-store"})
+
+
 def create_app() -> FastAPI:
     assert_runtime_secrets()
     configure_logging()
@@ -210,6 +231,7 @@ def create_app() -> FastAPI:
     static_dir = settings.frontend_dir / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    _mount_web_app(app)
     app.include_router(api_router)
     app.include_router(web_router)
     app.include_router(bulk_router)

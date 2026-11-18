@@ -65,7 +65,8 @@ Check permissions on the server for every write, not only by hiding buttons.
 
 ## 5. Before a pull request
 
-- `pytest` passes; CI (`.github/workflows/ci.yml`) must be green before merge.
+- `pytest` passes; for `web/` changes also `npm run typecheck && npm test && npm run build`.
+  CI (`.github/workflows/ci.yml`) must be green before merge.
 - New behaviour has a test. No absolute paths such as `/workspace/...` in tests: build
   paths from `Path(__file__)`.
 - `scripts/gui_crawl.py` walks the UI; `tests/test_gui_crawl.py` must stay green.
