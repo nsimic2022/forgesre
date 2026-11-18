@@ -33,7 +33,7 @@ from app.history import (
     notification_as_dict,
     notifications_for,
 )
-from app.security import can, user_from_session, verify_password
+from app.security import authenticate, can, user_from_session
 from app.inventory import (
     approve_candidate,
     clone_prefill,
@@ -231,10 +231,17 @@ def create_journal(
 
 @router.post("/auth/login")
 def api_login(body: LoginBody, request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
-    user = db.query(User).filter_by(email=body.email).first()
-    if user is None or not verify_password(body.password, user.password_hash):
+    ip = request.client.host if request.client else ""
+    user, wait = authenticate(db, body.email, body.password, ip)
+    if wait:
+        raise HTTPException(
+            status_code=429,
+            detail="too many failed sign-in attempts",
+            headers={"Retry-After": str(wait)},
+        )
+    if user is None:
         raise HTTPException(status_code=401, detail="invalid credentials")
-    audit(db, "login", actor=user.email, ip=request.client.host if request.client else "", commit=True)
+    audit(db, "login", actor=user.email, ip=ip, commit=True)
     return {"email": user.email, "role": user.role, "name": user.name}
 
 

@@ -238,6 +238,8 @@ def migrate(engine: Engine) -> None:
             statements.append("ALTER TABLE users ADD COLUMN surname VARCHAR(255) DEFAULT ''")
         if "email2" not in existing:
             statements.append("ALTER TABLE users ADD COLUMN email2 VARCHAR(255) DEFAULT ''")
+        if "session_version" not in existing:
+            statements.append("ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 0")
     if "assets" in tables:
         existing = {col["name"] for col in inspector.get_columns("assets")}
         if "source" not in existing:

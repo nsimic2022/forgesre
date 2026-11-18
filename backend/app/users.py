@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.models import User
-from app.security import CREATABLE_ROLES, can, hash_password
+from app.security import CREATABLE_ROLES, can, hash_password, revoke_sessions
 
 
 def clean_phone(value: str | None) -> str:
@@ -125,6 +125,7 @@ def update_user(
         target.phone2 = clean_phone(phone2)
     if password:
         target.password_hash = hash_password(password)
+        revoke_sessions(target)
     if role is not None:
         if target.role == "super_admin":
             if role != "super_admin":

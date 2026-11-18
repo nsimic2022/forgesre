@@ -159,10 +159,11 @@ from app.security import (
     can,
     can_send_ops,
     distinct_who_name,
+    authenticate,
     make_session_token,
+    revoke_sessions,
     role_label,
     user_from_session,
-    verify_password,
 )
 from app.api import doctor_payload, run_asset_verify, verify_assets
 from app.asset_metrics import safe_asset_metric_panel
@@ -762,25 +763,43 @@ def login_submit(
     email: str = Form(...),
     password: str = Form(...),
 ):
-    user = db.query(User).filter_by(email=email).first()
-    if user is None or not verify_password(password, user.password_hash):
+    ip = request.client.host if request.client else ""
+    user, wait = authenticate(db, email, password, ip)
+    if wait:
+        minutes = max(1, (wait + 59) // 60)
+        response = render(
+            request,
+            "login.html",
+            None,
+            error=f"Too many failed sign-in attempts. Try again in {minutes} min.",
+        )
+        response.status_code = 429
+        response.headers["Retry-After"] = str(wait)
+        return response
+    if user is None:
         return render(request, "login.html", None, error="Invalid email or password.")
-    audit(db, "login", actor=user.email, ip=request.client.host if request.client else "", commit=True)
+    audit(db, "login", actor=user.email, ip=ip, commit=True)
     response = RedirectResponse("/", status_code=302)
+    _set_session_cookie(response, user)
+    return response
+
+
+def _set_session_cookie(response, user: User) -> None:
     response.set_cookie(
         "forgesre_session",
-        make_session_token(user.id),
+        make_session_token(user.id, user.session_version),
         httponly=True,
         samesite="lax",
         secure=settings.cookie_secure,
         max_age=60 * 60 * 12,
     )
-    return response
 
 
 @router.post("/logout")
 def logout(request: Request, db: Session = Depends(get_db), user: User | None = Depends(get_user)):
     if user:
+        # Kill this cookie server-side too (and any copy of it), not only in the browser.
+        revoke_sessions(user)
         audit(db, "logout", actor=user.email, ip=request.client.host if request.client else "", commit=True)
     response = RedirectResponse("/login", status_code=302)
     response.delete_cookie("forgesre_session")
@@ -2608,7 +2627,11 @@ def admin_update_user(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()
     report(db, "core", "user.update", "ok", summary=f"Updated {target.email}", object_type="user", object_id=target.email)
-    return RedirectResponse(f"/admin?selected={target.id}", status_code=303)
+    response = RedirectResponse(f"/admin?selected={target.id}", status_code=303)
+    if password and target.id == user.id:
+        # A new password signs out every other browser; keep this one signed in.
+        _set_session_cookie(response, target)
+    return response
 
 
 @router.post("/admin/users/{user_id}/delete")
