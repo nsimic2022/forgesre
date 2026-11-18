@@ -67,7 +67,7 @@ def _run(app: Path, env: dict, *args: str) -> subprocess.CompletedProcess:
 
 def test_admin_login_sends_password_on_curl_stdin(tmp_path):
     app, env, log = _appliance(tmp_path)
-    result = _run(app, env, "jobs")
+    result = _run(app, env, "journal")
     assert result.returncode == 0, result.stderr
     argv = Path(f"{log}.argv").read_text()
     assert "/login" in argv
@@ -97,7 +97,7 @@ def test_config_prints_the_whole_file(tmp_path):
 def test_cli_ops_login_posts_password_on_stdin(monkeypatch, tmp_path):
     seen: list[tuple[list[str], bytes | None]] = []
 
-    def fake_run(args, check=True, input=None, stdout=None, stderr=None):
+    def fake_run(args, check=True, input=None, stdout=None, stderr=None, timeout=None):
         seen.append((list(args), input))
         return subprocess.CompletedProcess(args, 0, stdout=b"302", stderr=b"")
 

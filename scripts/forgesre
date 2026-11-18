@@ -497,10 +497,12 @@ EOF
       ;;
     jobs)
       cat <<'EOF'
-jobs — list background RCA jobs (pending / running / done / error).
+jobs — background job queue: counts per status, then the newest jobs.
 
-Alertmanager webhooks enqueue investigate; a worker thread runs them
-so the webhook does not wait on the LLM.
+RCA, discovery scans and digests run on one worker thread; ForgeAI
+rewrites on a second one, so a slow model never holds the rest.
+Failed jobs show their error. Uses the ./forgesre login session,
+else the install admin from secrets.env.
 
   ./forgesre jobs
 EOF
@@ -953,13 +955,7 @@ case "$cmd" in
     ;;
   jobs)
     need_env
-    PORT="$(port_from_env)"
-    load_secrets
-    jar="$(mktemp)"
-    admin_login "$jar"
-    curl -fsS -c "$jar" -b "$jar" "http://127.0.0.1:${PORT}/api/v1/jobs"
-    echo
-    rm -f "$jar"
+    run_cli_ops jobs "$@"
     ;;
   secrets-check)
     need_env

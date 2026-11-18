@@ -1381,11 +1381,14 @@ def ticker(db: Session = Depends(get_db), user: User = Depends(require_user)) ->
     return alarm_ticker(db)
 
 
-@router.get("/jobs")
-def list_jobs_api(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> list[dict]:
-    from app.jobs import list_jobs
+@router.get("/jobs", response_model=None)
+def list_jobs_api(
+    with_counts: int = 0, db: Session = Depends(get_db), user: User = Depends(require("read_play"))
+) -> list[dict] | dict:
+    """Newest 50 jobs. ``with_counts=1`` wraps them as {"counts": {status: n}, "jobs": [...]}."""
+    from app.jobs import job_counts, list_jobs
 
-    return [
+    rows = [
         {
             "id": row.id,
             "kind": row.kind,
@@ -1394,10 +1397,14 @@ def list_jobs_api(db: Session = Depends(get_db), user: User = Depends(require("r
             "error": row.error,
             "attempts": row.attempts,
             "created_at": row.created_at.isoformat() if row.created_at else None,
+            "started_at": row.started_at.isoformat() if row.started_at else None,
             "finished_at": row.finished_at.isoformat() if row.finished_at else None,
         }
         for row in list_jobs(db)
     ]
+    if with_counts:
+        return {"counts": job_counts(db), "jobs": rows}
+    return rows
 
 
 @router.post("/demo-reset")

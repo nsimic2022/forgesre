@@ -37,8 +37,10 @@ import pytest  # noqa: E402
 @pytest.fixture(autouse=True)
 def _reset_login_throttle():
     """Every test starts with a clean failed-sign-in counter (all TestClients share one IP)."""
+    from app.db import Base, engine
     from app.security import login_throttle
 
+    Base.metadata.create_all(bind=engine)
     login_throttle.reset()
     yield
     login_throttle.reset()

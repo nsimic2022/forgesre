@@ -12,7 +12,7 @@ import logging
 import os
 from typing import Any, Callable
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.journal import report
@@ -145,9 +145,22 @@ def job_is_llm(row: Job) -> bool:
     return payload.get("use_llm", True) is not False
 
 
-def next_pending_job(db: Session) -> Job | None:
-    """FIFO among pending jobs, but builtin RCA (use_llm=false) before LLM rewrite."""
+LANE_DEFAULT = "default"
+LANE_LLM = "llm"
+
+
+def next_pending_job(db: Session, lane: str | None = None) -> Job | None:
+    """Oldest pending job for this lane.
+
+    lane "llm" = ForgeAI rewrites only, lane "default" = everything else, None = both
+    (builtin RCA before LLM). The LLM lane has its own thread so a slow model never
+    holds RCA, discovery or reports.
+    """
     pending = db.query(Job).filter_by(status="pending").order_by(Job.id).limit(32).all()
+    if lane == LANE_LLM:
+        return next((row for row in pending if job_is_llm(row)), None)
+    if lane == LANE_DEFAULT:
+        return next((row for row in pending if not job_is_llm(row)), None)
     if not pending:
         return None
     for row in pending:
@@ -156,22 +169,43 @@ def next_pending_job(db: Session) -> Job | None:
     return pending[0]
 
 
-def run_pending_jobs(db: Session, limit: int = 8) -> int:
-    """Claim and run pending jobs. Safe for sqlite tests (single-threaded)."""
+def claim_job(db: Session, row: Job) -> bool:
+    """Atomically move one job from pending to running.
+
+    A conditional UPDATE, so when several Core processes poll the same table only one
+    of them gets the job; the others see rowcount 0 and skip it.
+    """
+    result = db.execute(
+        update(Job)
+        .where(Job.id == row.id, Job.status == "pending")
+        .values(status="running", started_at=utcnow(), attempts=Job.attempts + 1)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+    if result.rowcount != 1:
+        return False
+    db.refresh(row)
+    return True
+
+
+def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> int:
+    """Claim and run up to ``limit`` pending jobs of one lane (see next_pending_job).
+
+    Each job is claimed with claim_job, so running this from several processes is safe.
+    A failing job is marked "error" and reported to the journal; the loop goes on.
+    """
     from app.services import queue_llm_rewrite, run_investigation
 
     done = 0
     for _ in range(limit):
-        row = next_pending_job(db)
+        row = next_pending_job(db, lane)
         if row is None:
             break
-        if job_is_llm(row) and done > 0:
-            # Leave the rewrite pending so the jobs loop can send /ops reports first.
+        if lane is None and job_is_llm(row) and done > 0:
+            # Single-lane mode: leave the rewrite pending so reports go out first.
             break
-        row.status = "running"
-        row.started_at = utcnow()
-        row.attempts = int(row.attempts or 0) + 1
-        db.commit()
+        if not claim_job(db, row):
+            continue
         try:
             use_llm = False
             incident = None
@@ -248,6 +282,14 @@ def run_pending_jobs(db: Session, limit: int = 8) -> int:
                 object_id=row.object_id,
             )
     return done
+
+
+def job_counts(db: Session) -> dict[str, int]:
+    """Number of jobs per status, for the CLI and System Health."""
+    from sqlalchemy import func
+
+    rows = db.query(Job.status, func.count(Job.id)).group_by(Job.status).all()
+    return {str(status): int(count) for status, count in rows}
 
 
 def list_jobs(db: Session, limit: int = 50) -> list[Job]:
@@ -441,6 +483,11 @@ async def start_infrastructure_scheduler(
                 pass
         else:
             await asyncio.sleep(interval)
+        from app.leader import leader
+
+        # Blocking DB call: keep it off the event loop. Non-leaders do not scan.
+        if not await asyncio.to_thread(leader.ensure):
+            continue
         if _infrastructure_scan_lock.locked():
             log.warning("infrastructure scan still running; skip this cycle")
             continue

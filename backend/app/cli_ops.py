@@ -50,8 +50,14 @@ def _secrets() -> dict[str, str]:
     return env
 
 
+# Upper bound for one curl call; Core answers in well under a second when healthy.
+CURL_TIMEOUT = 60
+
+
 def _curl(args: list[str], *, check: bool = True, stdin: bytes | None = None) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(args, check=check, input=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return subprocess.run(
+        args, check=check, input=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=CURL_TIMEOUT
+    )
 
 
 def _login(port: str, jar: Path, email: str, password: str) -> None:
@@ -135,7 +141,8 @@ def who_line(me: dict[str, Any] | None) -> str:
 
 def get_json(port: str, jar: Path, path: str) -> Any:
     raw = subprocess.check_output(
-        ["curl", "-fsS", "-c", str(jar), "-b", str(jar), f"http://127.0.0.1:{port}{path}"]
+        ["curl", "-fsS", "--max-time", "30", "-c", str(jar), "-b", str(jar), f"http://127.0.0.1:{port}{path}"],
+        timeout=CURL_TIMEOUT,
     )
     return json.loads(raw)
 
@@ -145,6 +152,8 @@ def post_json(port: str, jar: Path, path: str, payload: dict[str, Any]) -> Any:
         [
             "curl",
             "-fsS",
+            "--max-time",
+            "30",
             "-c",
             str(jar),
             "-b",
@@ -156,7 +165,8 @@ def post_json(port: str, jar: Path, path: str, payload: dict[str, Any]) -> Any:
             "-d",
             json.dumps(payload),
             f"http://127.0.0.1:{port}{path}",
-        ]
+        ],
+        timeout=CURL_TIMEOUT,
     )
     if not raw:
         return {}
@@ -564,10 +574,43 @@ def _verify_with_jar(port: str, jar: Path, *, selector: str, timeout: float, inc
     raise SystemExit(verify_exit(results))
 
 
+def format_jobs(rows: list[dict[str, Any]], counts: dict[str, int] | None = None) -> str:
+    """Queue summary plus the newest jobs, one line each; errors keep their message."""
+    counts = counts or {}
+    if not counts:
+        for row in rows:
+            counts[str(row.get("status"))] = counts.get(str(row.get("status")), 0) + 1
+    order = ["pending", "running", "error", "done"]
+    head = "  ".join(f"{name} {counts.get(name, 0)}" for name in order)
+    lines = [f"Jobs  {head}", ""]
+    if not rows:
+        lines.append("No jobs yet.")
+    for row in rows[:20]:
+        when = str(row.get("finished_at") or row.get("started_at") or row.get("created_at") or "")[:19].replace("T", " ")
+        line = f"#{row.get('id'):<6} {str(row.get('status')):<8} {str(row.get('kind')):<16} {str(row.get('object_id')):<28} {when}"
+        if row.get("status") == "error" and row.get("error"):
+            line += f"\n         {str(row.get('error')).splitlines()[0][:110]}"
+        lines.append(line)
+    return "\n".join(lines) + "\n"
+
+
+def cmd_jobs(port: str) -> None:
+    jar, _me = ensure_jar(port)
+    try:
+        data = get_json(port, jar, "/api/v1/jobs?with_counts=1")
+        if isinstance(data, dict):
+            sys.stdout.write(format_jobs(list(data.get("jobs") or []), dict(data.get("counts") or {})))
+        else:
+            sys.stdout.write(format_jobs(list(data or [])))
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = list(argv if argv is not None else sys.argv[1:])
     if len(argv) < 2:
-        raise SystemExit("usage: cli_ops <port> <incidents|history|whoami|login|logout|numbers|assets|asset-refs|ping|probe|verify> [args]")
+        raise SystemExit("usage: cli_ops <port> <incidents|history|jobs|whoami|login|logout|numbers|assets|asset-refs|ping|probe|verify> [args]")
     port, command, *rest = argv
     if command == "incidents":
         cmd_incidents(port, rest)
@@ -585,6 +628,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_verify(port, rest)
     elif command == "whoami":
         cmd_whoami(port)
+    elif command == "jobs":
+        cmd_jobs(port)
     elif command == "logout":
         cmd_logout()
     elif command == "login":

@@ -419,6 +419,16 @@ class DiscoveryCandidate(Base):
     asset_id: Mapped[str] = mapped_column(String(64), default="")
 
 
+class LoginFailure(Base):
+    """One failed sign-in, kept for the throttle window. Shared by every Core process."""
+
+    __tablename__ = "login_failures"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(320), index=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
 class Job(Base):
     """Background work (RCA, discovery scan). Not a message broker — one table, one worker thread."""
 

@@ -73,16 +73,34 @@ def test_successful_login_clears_the_account_counter():
 
 
 def test_throttle_window_expires_and_ip_limit_covers_many_emails():
+    from datetime import datetime, timedelta, timezone
+
+    db = _db()
+    t0 = datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc)
+    at = lambda sec: t0 + timedelta(seconds=sec)  # noqa: E731
     throttle = LoginThrottle(per_account=2, per_ip=3, window_seconds=60)
-    throttle.failure("10.0.0.1", "a@x", now=0)
-    throttle.failure("10.0.0.1", "a@x", now=1)
-    assert throttle.retry_after("10.0.0.1", "A@X", now=2) > 0
-    assert throttle.retry_after("10.0.0.1", "a@x", now=61) == 0
-    throttle.reset()
+    throttle.failure(db, "10.0.0.1", "a@x", now=at(0))
+    throttle.failure(db, "10.0.0.1", "a@x", now=at(1))
+    assert throttle.retry_after(db, "10.0.0.1", "A@X", now=at(2)) > 0
+    assert throttle.retry_after(db, "10.0.0.1", "a@x", now=at(61)) == 0
+    throttle.reset(db)
     for i in range(3):
-        throttle.failure("10.0.0.2", f"u{i}@x", now=i)
-    assert throttle.retry_after("10.0.0.2", "someone-else@x", now=4) > 0
-    assert throttle.retry_after("10.0.0.3", "someone-else@x", now=4) == 0
+        throttle.failure(db, "10.0.0.2", f"u{i}@x", now=at(i))
+    assert throttle.retry_after(db, "10.0.0.2", "someone-else@x", now=at(4)) > 0
+    assert throttle.retry_after(db, "10.0.0.3", "someone-else@x", now=at(4)) == 0
+    db.close()
+
+
+def test_throttle_is_shared_between_processes():
+    """Two throttle objects (two Core workers) see the same failures through the database."""
+    db = _db()
+    worker_a, worker_b = LoginThrottle(per_account=2), LoginThrottle(per_account=2)
+    worker_a.failure(db, "10.9.9.9", "shared@x")
+    worker_b.failure(db, "10.9.9.9", "shared@x")
+    assert worker_a.retry_after(db, "10.9.9.9", "shared@x") > 0
+    worker_b.success(db, "10.9.9.9", "shared@x")
+    assert worker_a.retry_after(db, "10.9.9.9", "shared@x") == 0
+    db.close()
 
 
 def test_email_is_case_insensitive_at_login():
