@@ -185,7 +185,7 @@ wget -O data/models/model.gguf \
 | `/ops` | Email & reports: address book, send, outbox, scheduled reports (Edit / Clone / Remove / Enable) |
 | `/admin` | Users: click a row to edit or remove; platform backup / import; audit |
 
-Roles: super admin (install user), system admin, analyst (inventory + playrules), engineer (deep RCA), viewer.
+Roles: viewer, analyst (NOC operator), engineer (inventory, rules, playbooks, escalation), admin (settings, users, backup). Details: [handbook §3](docs/operator-handbook.md#3-roles-and-who-can-click-what).
 
 ---
 

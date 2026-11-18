@@ -441,7 +441,7 @@ def test_api_detect_and_auto_form(monkeypatch):
             email="detect-ui@forgesre.local",
             name="Det",
             password_hash=hash_password("testpass"),
-            role="analyst",
+            role="engineer",
         )
     )
     db.commit()

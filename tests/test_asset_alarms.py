@@ -27,7 +27,7 @@ def _login(email: str, password: str = "testpass") -> TestClient:
     db = SessionLocal()
     seed(db)
     if db.query(User).filter_by(email=email).first() is None:
-        db.add(User(email=email, name="Test", password_hash=hash_password(password), role="analyst"))
+        db.add(User(email=email, name="Test", password_hash=hash_password(password), role="engineer"))
         db.commit()
     db.close()
     client = TestClient(app)

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.models import User
-from app.security import CREATABLE_ROLES, can, hash_password, revoke_sessions
+from app.security import CREATABLE_ROLES, can, hash_password, revoke_sessions, role_key
 
 
 def clean_phone(value: str | None) -> str:
@@ -29,22 +29,29 @@ def find_email(db: Session, email: str, *, exclude_id: int | None = None) -> Use
     return q.first()
 
 
+def is_last_admin(db: Session, target: User) -> bool:
+    """True when target is the only active Admin left; it must not be removed or demoted."""
+    if role_key(target.role) != "admin" or not target.is_active:
+        return False
+    admins = [u for u in db.query(User).filter(User.is_active.is_(True)).all() if role_key(u.role) == "admin"]
+    return len(admins) <= 1
+
+
 def edit_blocked(actor: User, target: User) -> str:
     if not can(actor, "admin"):
         return "forbidden"
-    if target.role == "super_admin" and actor.role != "super_admin":
-        return "cannot edit the install super admin"
     return ""
 
 
-def delete_blocked(actor: User, target: User) -> str:
+def delete_blocked(actor: User, target: User, db: Session | None = None) -> str:
+    """Why actor may not remove target ("" when allowed): not yourself, not the last Admin."""
     reason = edit_blocked(actor, target)
     if reason:
         return reason
     if actor.id == target.id:
         return "cannot remove yourself"
-    if target.role == "super_admin":
-        return "cannot remove the install super admin"
+    if db is not None and is_last_admin(db, target):
+        return "cannot remove the last admin"
     return ""
 
 
@@ -127,19 +134,18 @@ def update_user(
         target.password_hash = hash_password(password)
         revoke_sessions(target)
     if role is not None:
-        if target.role == "super_admin":
-            if role != "super_admin":
-                raise ValueError("cannot change the install super admin role")
-        elif role not in CREATABLE_ROLES:
+        role = role_key(role)
+        if role not in CREATABLE_ROLES:
             raise ValueError("invalid role")
-        else:
-            target.role = role
+        if role != "admin" and is_last_admin(db, target):
+            raise ValueError("cannot demote the last admin")
+        target.role = role
     audit(db, "user.update", actor=actor.email, object_type="user", object_id=target.email)
     return target
 
 
 def delete_user(db: Session, actor: User, target: User) -> str:
-    reason = delete_blocked(actor, target)
+    reason = delete_blocked(actor, target, db)
     if reason:
         raise ValueError(reason)
     email = target.email

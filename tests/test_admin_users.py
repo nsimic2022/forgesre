@@ -87,7 +87,7 @@ def test_admin_blank_password_keeps_hash():
     db.close()
 
 
-def test_admin_cannot_remove_self_or_super_admin():
+def test_admin_cannot_remove_self():
     db = _db()
     client = TestClient(app)
     _login(client)
@@ -249,4 +249,54 @@ def test_admin_create_user_phones_and_manual_oncall():
     assert "analyst" not in body.lower()
     assert "+381-11-555-0200" in body
     assert "+381-11-555-0201" in body
+    db.close()
+
+
+def test_last_admin_cannot_be_demoted_or_removed():
+    from app.users import delete_blocked, is_last_admin, update_user
+
+    db = _db()
+    for row in db.query(User).filter(User.role.in_(["admin", "super_admin"])).all():
+        if row.email != "admin@forgesre.local":
+            row.role = "viewer"
+    db.commit()
+    admin = db.query(User).filter_by(email="admin@forgesre.local").one()
+    other = User(email="ops-last@dc.local", name="Ops", password_hash="x", role="admin")
+    db.add(other)
+    db.commit()
+    assert not is_last_admin(db, admin)
+    assert delete_blocked(admin, other, db) == ""
+    other.role = "engineer"
+    db.commit()
+    assert is_last_admin(db, admin)
+    try:
+        update_user(db, admin, admin, role="engineer")
+    except ValueError as exc:
+        assert "last admin" in str(exc)
+    else:
+        raise AssertionError("demoting the last admin must fail")
+    db.delete(other)
+    db.commit()
+    db.close()
+
+
+def test_migrate_merges_super_admin_into_admin():
+    from sqlalchemy import text
+
+    from app.migrate import migrate
+
+    db = _db()
+    db.add(User(email="legacy-root@dc.local", name="Super Admin", password_hash="x", role="super_admin"))
+    db.add(User(email="legacy-sys@dc.local", name="Sys", password_hash="x", role="system_admin"))
+    db.commit()
+    migrate(engine)
+    db.expire_all()
+    rows = {u.email: u for u in db.query(User).filter(User.email.like("legacy-%")).all()}
+    assert rows["legacy-root@dc.local"].role == "admin"
+    assert rows["legacy-root@dc.local"].name == "Admin"
+    assert rows["legacy-sys@dc.local"].role == "admin"
+    assert db.execute(text("SELECT COUNT(*) FROM users WHERE role IN ('super_admin', 'system_admin')")).scalar() == 0
+    for row in rows.values():
+        db.delete(row)
+    db.commit()
     db.close()

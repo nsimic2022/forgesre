@@ -260,9 +260,9 @@ def seed(db: Session) -> None:
         db.add(
             User(
                 email=settings.admin_email,
-                name="Super Admin",
+                name="Admin",
                 password_hash=hash_password(settings.admin_password),
-                role="super_admin",
+                role="admin",
             )
         )
 

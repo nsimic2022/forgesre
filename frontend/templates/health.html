@@ -7,7 +7,7 @@
     {% if grafana_enabled %}
     <a class="button-link" href="{{ grafana_open }}" target="_blank" rel="noreferrer">Open Grafana</a>
     {% endif %}
-    {% if can('admin') or can('investigate') %}
+    {% if can('run_checks') %}
     <form method="post" action="/health-ui/refresh" hx-boost="false">
       <button type="submit">Run doctor</button>
 </form>

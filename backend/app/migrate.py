@@ -212,6 +212,14 @@ def _ensure_lookup_indexes(conn: Connection) -> None:
         conn.execute(text(f"CREATE INDEX IF NOT EXISTS ix_{table}_{column} ON {table} ({column})"))
 
 
+def _merge_admin_roles(conn: Connection) -> None:
+    """V1.0: super_admin / system_admin become admin; the seeded "Super Admin" name follows."""
+    if "users" not in set(inspect(conn).get_table_names()):
+        return
+    conn.execute(text("UPDATE users SET name = 'Admin' WHERE role = 'super_admin' AND name = 'Super Admin'"))
+    conn.execute(text("UPDATE users SET role = 'admin' WHERE role IN ('super_admin', 'system_admin')"))
+
+
 def migrate(engine: Engine) -> None:
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -363,6 +371,7 @@ def migrate(engine: Engine) -> None:
         _ensure_oncall_slots(conn)
         _backfill_asset_numbers(conn)
         _ensure_lookup_indexes(conn)
+        _merge_admin_roles(conn)
         if "evidence" in tables:
             conn.execute(
                 text("UPDATE evidence SET evidence_id = 'EV-LEGACY-' || id WHERE evidence_id IS NULL OR evidence_id = ''")

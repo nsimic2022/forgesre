@@ -238,8 +238,8 @@ def test_asset_discovery_playrule_and_journal_bulk_are_role_safe():
     db.expire_all()
     assert db.get(DiscoveryCandidate, found_id) is None
 
-    engineer = _client(_user(db, "engineer"))
-    assert engineer.post("/playrules/bulk-delete", data={"selected": str(rule_id)}, follow_redirects=False).status_code == 403
+    analyst = _client(_user(db, "analyst"))
+    assert analyst.post("/playrules/bulk-delete", data={"selected": str(rule_id)}, follow_redirects=False).status_code == 403
     assert db.get(Playrule, rule_id) is not None
     assert admin.post("/playrules/bulk-delete", data={"selected": str(rule_id)}, follow_redirects=False).status_code == 303
     db.expire_all()
