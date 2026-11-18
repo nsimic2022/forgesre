@@ -1,6 +1,5 @@
 """Class-based metric tiles on asset detail. No live Prometheus required."""
 
-import re
 
 from fastapi.testclient import TestClient
 

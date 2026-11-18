@@ -13,7 +13,7 @@ from app.asset_alarms import bundled_alert_skip_reason
 from app.db import Base, SessionLocal, engine
 from app.ladder_cubes import asset_ladder_cubes, incident_ladder_cubes
 from app.main import app
-from app.models import Asset, AssetPlayruleMute, Incident, Playrule
+from app.models import Asset, AssetPlayruleMute, Playrule
 from app.seed import seed
 from app.services import ingest_alertmanager, match_playrule, process_escalations, utcnow
 

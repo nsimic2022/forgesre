@@ -13,7 +13,7 @@ from app.inventory import run_scan, upsert_candidate
 from app.jobs import DISCOVERY_SCAN_KIND, run_pending_jobs
 from app.main import app
 from app.migrate import migrate
-from app.models import DiscoveryCandidate, Job
+from app.models import Job
 from app.seed import seed
 from app.settings import settings
 from discovery import (

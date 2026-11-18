@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 from app.db import Base, SessionLocal, engine
 from app.history import add_note
 from app.inventory import create_manual_asset
-from app.journal import report
 from app.main import app
 from app.models import AuditLog, DiscoveryCandidate, Incident, JournalEntry, Notification, Playbook, Playrule, ScheduledReport, utcnow
 from app.seed import seed
