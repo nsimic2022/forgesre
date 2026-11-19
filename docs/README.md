@@ -48,3 +48,4 @@ What each release shipped:
 
 **Session handoff** (next coding agent / contributor): [continuation.md](continuation.md).
 - [mcp.md](mcp.md): read-only MCP server for AI clients (off by default; what leaves the appliance).
+- [kubernetes.md](kubernetes.md): Kubernetes, OpenShift and k3s: cluster Alertmanager to ForgeSRE, read-only cluster reader.

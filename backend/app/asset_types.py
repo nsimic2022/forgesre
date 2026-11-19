@@ -21,6 +21,7 @@ ASSET_TYPE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Servers", ("Linux Server", "Windows Server", "Hypervisor")),
     ("Network", ("Network device", "Switch", "Router", "Firewall")),
     ("Storage", ("Storage", "QNAP/NAS")),
+    ("Kubernetes", ("Kubernetes cluster", "Kubernetes node", "Kubernetes workload")),
     ("Other", ("Web/appliance", "Printer", "Other")),
 )
 ASSET_TYPE_CHOICES: list[str] = [name for _group, names in ASSET_TYPE_GROUPS for name in names]

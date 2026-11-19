@@ -250,6 +250,13 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                     actor=str(payload.get("actor") or "system"),
                     name=str(payload.get("name") or "forgeai-digest"),
                 )
+            elif row.kind == "k8s_sync":
+                from app.kubernetes import sync_all
+
+                # Read-only GETs to every configured cluster, 10 s timeout each.
+                payload = dict(row.payload or {})
+                payload["result"] = sync_all(db)
+                row.payload = payload
             elif row.kind == "health_checks":
                 from app.health_checks import run_checks
 

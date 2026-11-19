@@ -91,6 +91,7 @@ Commands:
   jobs               Background RCA job queue
   checks             Certificates, backup age, heartbeats
   slo                SLOs: availability, error budget, burn rate
+  kubernetes         Kubernetes / OpenShift clusters
   incidents          Short colored board (red/yellow/green); INC-… for one row
   history            90-day incident history (filters; INC-… for mail/audit/notes)
   login              Sign in as a ForgeSRE user (engineer / analyst / …)
@@ -516,6 +517,17 @@ demo-reset — set demo CPU/disk gauges back to 12% / 35%.
 Use after ./forgesre demo so HighCPU does not stay firing forever.
 
   ./forgesre demo-reset
+EOF
+      ;;
+    kubernetes)
+      cat <<'EOF'
+kubernetes — Kubernetes / OpenShift / k3s clusters (read-only): nodes, workloads, open incidents.
+
+Clusters are listed in config/forgesre.yml (kubernetes.clusters); each needs a token:
+  ./forgesre settings set-secret K8S_TOKEN_<NAME>
+
+  ./forgesre kubernetes          one line per cluster
+  ./forgesre kubernetes sync     read every cluster now (background)
 EOF
       ;;
     slo)
@@ -1006,6 +1018,10 @@ case "$cmd" in
   slo)
     need_env
     run_cli_ops slo "$@"
+    ;;
+  kubernetes)
+    need_env
+    run_cli_ops kubernetes "$@"
     ;;
   secrets-check)
     need_env
