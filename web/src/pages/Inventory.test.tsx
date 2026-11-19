@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AssetCard, InventoryPage as Page } from "../lib/api";
+import type { AssetCard, AssetFormOptions, InventoryPage as Page } from "../lib/api";
 import { InventoryPage } from "./Inventory";
 
 const rowA = { asset_id: "A1", number: 1, hostname: "esx-prod-03", ip: "10.10.20.13", type: "ESXi host", environment: "prod", site: "DC Beograd", row: "A", rack: "A07", customer: "", owner: "Compute", state: "down" as const, sources: ["Prometheus", "GLPI"], open: 1 };
@@ -14,17 +14,28 @@ const page: Page = {
     customers: [],
     views: [{ key: "down", name: "Down now", count: 1 }],
   },
-  total: 2, all: 2, offset: 0, limit: 50, rows: [rowA, rowB],
+  total: 2, all: 2, offset: 0, limit: 50, rows: [rowA, rowB], can_edit: true,
 };
-const card: AssetCard = { ...rowA, monitoring_profile: "linux", contact_name: "Marko", owner_email: "", owner_phone: "", notes: "", glpi_id: "1182", zabbix_hostid: "", scrape_address: "10.10.20.13:9100", parent: "sw-acc-07", details: [{ key: "contract", label: "License / contract / SLA", value: "ProSupport to 2027" }], incidents: [{ number: "INC-0412", title: "HostDown", severity: "CRITICAL", status: "OPEN", started_at: null }], can_edit: true };
+const options: AssetFormOptions = {
+  types: [{ group: "Servers", names: ["Linux Server", "Hypervisor"] }, { group: "Network", names: ["Switch"] }],
+  extra_fields: [{ key: "site", label: "Site / DC / room", max: 255 }, { key: "rack", label: "Rack", max: 64 }, { key: "contract", label: "License / contract / SLA", max: 500 }],
+  environments: ["Production"], owners: ["Compute"], sites: ["DC Beograd"], can_edit: true,
+};
+const card: AssetCard = { ...rowA, monitoring_profile: "linux", contact_name: "Marko", owner_email: "", owner_phone: "", notes: "", glpi_id: "1182", zabbix_hostid: "", scrape_address: "10.10.20.13:9100", parent: "sw-acc-07", details: [{ key: "contract", label: "License / contract / SLA", value: "ProSupport to 2027" }], incidents: [{ number: "INC-0412", title: "HostDown", severity: "CRITICAL", status: "OPEN", started_at: null }], can_edit: true, extras: { site: "DC Beograd", rack: "A07", contract: "ProSupport to 2027", support: "yes", snmp_community_set: true } };
 
 describe("Inventory", () => {
   let urls: string[];
+  let posts: { url: string; body: Record<string, unknown> }[];
   beforeEach(() => {
     urls = [];
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    posts = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       urls.push(url);
-      const body = url.startsWith("/api/v1/inventory/") ? card : page;
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body)) });
+        return new Response(JSON.stringify({ asset_id: "A9" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      const body = url === "/api/v1/inventory-form" ? options : url.startsWith("/api/v1/inventory/") ? card : page;
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
     }));
   });
@@ -46,6 +57,47 @@ describe("Inventory", () => {
     expect(await screen.findByText("ProSupport to 2027")).toBeTruthy();
     expect(screen.getByText("HostDown")).toBeTruthy();
     expect(screen.getByText("sw-acc-07")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Edit (classic)" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeTruthy();
+  });
+
+  it("adds an asset with location extras", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "New asset" }));
+    fireEvent.change(await screen.findByLabelText("Hostname"), { target: { value: "db-new-01" } });
+    fireEvent.change(screen.getByLabelText("IP address"), { target: { value: "10.0.0.5" } });
+    fireEvent.change(screen.getByLabelText("Type"), { target: { value: "Linux Server" } });
+    fireEvent.change(screen.getByLabelText("Rack"), { target: { value: "B02" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add asset" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(posts[0].url).toBe("/api/v1/assets");
+    expect(posts[0].body).toMatchObject({ hostname: "db-new-01", ip: "10.0.0.5", type: "Linux Server", extras: { rack: "B02" } });
+    expect(await screen.findByText("Asset added.")).toBeTruthy();
+  });
+
+  it("edits an asset and keeps saved extras the form does not show", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "esx-prod-03" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const rack = await screen.findByLabelText("Rack");
+    expect((rack as HTMLInputElement).value).toBe("A07");
+    fireEvent.change(rack, { target: { value: "A09" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(posts[0].url).toBe("/api/v1/assets/A1");
+    const extras = posts[0].body.extras as Record<string, string>;
+    expect(extras).toMatchObject({ rack: "A09", site: "DC Beograd", support: "yes" });
+    expect(extras.snmp_community_set).toBeUndefined();
+    expect(posts[0].body.asset_id).toBeUndefined();
+  });
+
+  it("asks before deleting an asset", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "esx-prod-03" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete asset" }));
+    expect(posts.length).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }));
+    await waitFor(() => expect(posts.map((p) => p.url)).toEqual(["/api/v1/assets/A1/delete"]));
+    expect(await screen.findByText("Asset deleted.")).toBeTruthy();
   });
 });

@@ -262,3 +262,30 @@ def test_reports_overview_and_csv():
     assert "attachment" in csv_resp.headers["content-disposition"]
     assert csv_resp.text.splitlines()[0].startswith("number,severity,status,title,asset")
     assert f"rep-{tag}" in csv_resp.text
+
+
+def test_inventory_form_and_asset_edit_roles():
+    """The new UI's asset form: options for everyone, writes only for Engineer and up."""
+    tag = uuid4().hex[:6]
+    viewer = _signed_in("analyst")
+    form = viewer.get("/api/v1/inventory-form").json()
+    assert any(g["group"] == "Servers" and "Linux Server" in g["names"] for g in form["types"])
+    assert {"key": "rack", "label": "Rack", "max": 64} in form["extra_fields"]
+    assert "Production" in form["environments"] and form["can_edit"] is False
+    assert viewer.get("/api/v1/inventory").json()["can_edit"] is False
+    denied = viewer.post("/api/v1/assets", json={"hostname": f"ui-{tag}", "ip": "10.66.0.1", "type": "Linux Server"})
+    assert denied.status_code == 403
+
+    eng = _signed_in("engineer")
+    assert eng.get("/api/v1/inventory-form").json()["can_edit"] is True
+    made = eng.post("/api/v1/assets", json={"hostname": f"ui-{tag}", "ip": "10.66.0.1", "type": "Linux Server",
+                                           "extras": {"site": f"DC-{tag}", "rack": "B02", "support": "yes"}})
+    assert made.status_code == 200, made.text
+    asset_id = made.json()["asset_id"]
+    saved = eng.post(f"/api/v1/assets/{asset_id}", json={"owner": "Compute", "extras": {"site": f"DC-{tag}", "rack": "B03", "support": "yes"}})
+    assert saved.status_code == 200, saved.text
+    card = eng.get(f"/api/v1/inventory/{asset_id}").json()
+    assert card["owner"] == "Compute" and card["rack"] == "B03" and card["extras"]["support"] == "yes"
+    assert f"DC-{tag}" in eng.get("/api/v1/inventory-form").json()["sites"]
+    assert eng.post(f"/api/v1/assets/{asset_id}/delete", json={}).status_code == 200
+    assert eng.get(f"/api/v1/inventory/{asset_id}").status_code == 404

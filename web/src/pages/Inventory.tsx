@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { AssetEditor, type EditorMode } from "../components/AssetEditor";
 import { Card, Chip, Dot } from "../components/ui";
-import { getJson, type AssetCard, type InventoryPage, type InventoryRow } from "../lib/api";
+import { getJson, type AssetCard, type AssetFormOptions, type InventoryPage, type InventoryRow } from "../lib/api";
 import { clock, severityTone, type Tone } from "../lib/format";
 
 const PAGE = 50;
@@ -56,7 +57,7 @@ function Library({ data, filters, set }: { data: InventoryPage["library"]; filte
   );
 }
 
-function AssetPanel({ assetId, onClose }: { assetId: string; onClose: () => void }) {
+function AssetPanel({ assetId, onClose, onEdit }: { assetId: string; onClose: () => void; onEdit: (mode: EditorMode, card: AssetCard) => void }) {
   const [card, setCard] = useState<AssetCard | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -108,7 +109,13 @@ function AssetPanel({ assetId, onClose }: { assetId: string; onClose: () => void
       ))}
       {card.notes ? <p className="small muted" style={{ margin: 0 }}>{card.notes}</p> : null}
       <div className="row">
-        {card.can_edit ? <a className="btn" href={`/assets/${encodeURIComponent(card.asset_id)}`}>Edit (classic)</a> : null}
+        {card.can_edit ? (
+          <>
+            <button className="btn primary" type="button" onClick={() => onEdit("edit", card)}>Edit</button>
+            <button className="btn" type="button" onClick={() => onEdit("clone", card)}>Clone</button>
+            <a className="btn" href={`/assets/${encodeURIComponent(card.asset_id)}`}>SNMP and more (classic)</a>
+          </>
+        ) : null}
       </div>
     </Card>
   );
@@ -121,6 +128,28 @@ export function InventoryPage() {
   const [data, setData] = useState<InventoryPage | null>(null);
   const [selected, setSelected] = useState("");
   const [error, setError] = useState("");
+  const [editor, setEditor] = useState<{ mode: EditorMode; card: AssetCard | null } | null>(null);
+  const [options, setOptions] = useState<AssetFormOptions | null>(null);
+  const [reload, setReload] = useState(0);
+  const [notice, setNotice] = useState("");
+
+  const openEditor = (mode: EditorMode, card: AssetCard | null) => {
+    setNotice("");
+    if (options) return setEditor({ mode, card });
+    getJson<AssetFormOptions>("/api/v1/inventory-form")
+      .then((o) => (setOptions(o), setEditor({ mode, card })))
+      .catch((e: Error) => setError(e.message));
+  };
+  const closeEditor = (savedId: string | null) => {
+    const mode = editor?.mode;
+    setEditor(null);
+    if (savedId) {
+      setNotice(mode === "edit" ? "Asset saved." : "Asset added.");
+      setSelected("");
+      setReload((n) => n + 1);
+      window.setTimeout(() => setSelected(savedId), 0);
+    }
+  };
 
   useEffect(() => {
     const params = new URLSearchParams({ ...filters, q: query, limit: String(PAGE), offset: String(offset) });
@@ -130,7 +159,7 @@ export function InventoryPage() {
         .catch((e: Error) => setError(e.message));
     }, query ? 250 : 0);
     return () => window.clearTimeout(timer);
-  }, [filters, query, offset]);
+  }, [filters, query, offset, reload]);
 
   const set = (next: Filters) => (setFilters(next), setOffset(0));
   return (
@@ -142,10 +171,22 @@ export function InventoryPage() {
         </div>
         <div className="row">
           <a className="btn" href="/discovery">Discovery (classic)</a>
-          <a className="btn" href="/assets">Add or import (classic)</a>
+          {data?.can_edit ? <button className="btn primary" type="button" onClick={() => openEditor("new", null)}>New asset</button> : null}
+          <a className="btn" href="/assets">Import (classic)</a>
         </div>
       </header>
       {error ? <div className="banner error" role="alert">{error}</div> : null}
+      {notice ? <div className="banner" role="status" style={{ background: "var(--ok-bg)" }}>{notice}</div> : null}
+      {editor && options ? (
+        <AssetEditor
+          key={`${editor.mode}-${editor.card?.asset_id ?? "new"}`}
+          mode={editor.mode}
+          card={editor.card}
+          options={options}
+          onDone={closeEditor}
+          onDeleted={() => (setEditor(null), setSelected(""), setNotice("Asset deleted."), setReload((n) => n + 1))}
+        />
+      ) : null}
       <div className="cols">
         {data ? <Library data={data.library} filters={filters} set={set} /> : null}
         <div style={{ flex: "999 1 560px", minWidth: 0 }}>
@@ -207,7 +248,7 @@ export function InventoryPage() {
         </div>
         {selected ? (
           <div style={{ flex: "1 1 340px", minWidth: 0 }}>
-            <AssetPanel assetId={selected} onClose={() => setSelected("")} />
+            <AssetPanel key={`${selected}-${reload}`} assetId={selected} onClose={() => setSelected("")} onEdit={openEditor} />
           </div>
         ) : null}
       </div>
