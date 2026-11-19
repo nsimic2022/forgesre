@@ -171,3 +171,35 @@ def test_inventory_library_filters_and_card():
     assert {"key": "contract", "label": "License / contract / SLA", "value": "ProSupport"} in card["details"]
     assert card["can_edit"] is False
     assert client.get("/api/v1/inventory/nope").status_code == 404
+
+
+def test_automation_overview_and_simulator():
+    from datetime import timedelta as _td
+
+    from app.models import Asset, MaintenanceWindow
+
+    db = _db()
+    tag = uuid4().hex[:6]
+    asset = Asset(asset_id=f"AUT-{tag}", hostname=f"aut-{tag}", ip="10.88.0.1", type="Linux Server")
+    db.add(asset)
+    db.add(MaintenanceWindow(asset_ref=f"AUT-{tag}", summary="Backup window", starts_at=utcnow() + _td(hours=1), ends_at=utcnow() + _td(hours=3)))
+    db.commit()
+    db.close()
+
+    client = _signed_in("analyst")
+    data = client.get("/api/v1/automation").json()
+    assert any(r["name"] == "high-cpu" and r["playbook"] for r in data["rules"])
+    assert any(p["steps"] for p in data["policies"])
+    assert any(w["asset"] == f"aut-{tag}" and w["active"] is False for w in data["maintenance"])
+    assert data["can_edit"] is False
+
+    hit = client.post("/api/v1/automation/simulate", json={"alertname": "HighCPU", "asset": f"aut-{tag}", "value": "95"}).json()
+    assert hit["outcome"] == "incident" and hit["rule"] == "high-cpu" and hit["steps"]
+    below = client.post("/api/v1/automation/simulate", json={"alertname": "HighCPU", "asset": f"aut-{tag}", "value": "10"}).json()
+    assert below["rule"] is None
+    later = (utcnow() + _td(hours=2)).isoformat()
+    muted = client.post("/api/v1/automation/simulate", json={"alertname": "HighCPU", "asset": f"aut-{tag}", "value": "95", "at": later}).json()
+    assert muted["outcome"] == "muted" and "Backup window" in muted["trace"][-1]
+    assert client.post("/api/v1/automation/simulate", json={"alertname": " "}).status_code == 400
+    assert client.post("/api/v1/automation/simulate", json={"alertname": "X", "at": "tomorrow"}).status_code == 400
+    assert _signed_in("viewer").get("/api/v1/automation").status_code == 403
