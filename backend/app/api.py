@@ -2394,6 +2394,148 @@ def automation_playbook_delete(book_id: int, db: Session = Depends(get_db), user
     return {"removed": book_id}
 
 
+class PolicyEditBody(BaseModel):
+    name: str
+    slug: str = ""
+    levels: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class OncallBody(BaseModel):
+    weekday: int
+    start: str
+    end: str
+    name: str = ""
+    surname: str = ""
+    email: str = ""
+    phone: str = ""
+    phone2: str = ""
+
+
+def _policy_or_404(db: Session, policy_id: int) -> EscalationPolicy:
+    row = db.get(EscalationPolicy, policy_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="escalation policy not found")
+    return row
+
+
+def _policy_out(row: EscalationPolicy) -> dict[str, Any]:
+    return {"id": row.id, "slug": row.slug, "name": row.name, "steps": row.steps or []}
+
+
+@router.post("/automation/policies")
+def automation_policy_create(body: PolicyEditBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: create an escalation policy from L1–L4 levels."""
+    from app.automation_edit import save_policy
+
+    try:
+        return _policy_out(save_policy(db, body.model_dump(), user.email))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/automation/policies/{policy_id}")
+def automation_policy_update(policy_id: int, body: PolicyEditBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: change a policy's name and L1–L4 levels (the slug stays)."""
+    from app.automation_edit import save_policy
+
+    try:
+        return _policy_out(save_policy(db, body.model_dump(), user.email, _policy_or_404(db, policy_id)))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/automation/policies/{policy_id}")
+def automation_policy_delete(policy_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: remove a policy; its rules move to default-warning."""
+    from app.automation_edit import delete_policy
+
+    try:
+        return {"removed": policy_id, "rules_moved": delete_policy(db, _policy_or_404(db, policy_id), user.email)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/oncall-week")
+def oncall_week_api(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> dict[str, Any]:
+    """New UI: the weekly on-call roster and who is on call now."""
+    from app.oncall_view import oncall_week
+
+    return oncall_week(db, user)
+
+
+def _slot_or_404(db: Session, slot_id: int):
+    from app.models import OncallSlot
+
+    row = db.get(OncallSlot, slot_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="on-call slot not found")
+    return row
+
+
+@router.post("/oncall-slots")
+def oncall_slot_create(body: OncallBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: add one weekday window to the roster."""
+    from app.dc_noc import add_oncall_slot, oncall_slot_view
+
+    try:
+        row = add_oncall_slot(db, **body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "oncall.add", actor=user.email, object_type="oncall", object_id=row.email, data={"weekday": row.weekday, "name": row.name})
+    db.commit()
+    return oncall_slot_view(row)
+
+
+@router.put("/oncall-slots/{slot_id}")
+def oncall_slot_update(slot_id: int, body: OncallBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: rewrite one roster window; on/off stays on the toggle."""
+    from app.dc_noc import oncall_slot_view, update_oncall_slot
+
+    row = _slot_or_404(db, slot_id)
+    try:
+        update_oncall_slot(db, row, **body.model_dump())
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "oncall.update", actor=user.email, object_type="oncall", object_id=str(slot_id), data={"name": row.name})
+    db.commit()
+    return oncall_slot_view(row)
+
+
+@router.post("/oncall-slots/{slot_id}/toggle")
+def oncall_slot_toggle(slot_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: switch a roster window on or off."""
+    from app.dc_noc import oncall_slot_view, toggle_oncall_slot
+
+    row = toggle_oncall_slot(_slot_or_404(db, slot_id))
+    audit(db, "oncall.toggle", actor=user.email, object_type="oncall", object_id=str(slot_id), data={"enabled": bool(row.enabled)})
+    db.commit()
+    return oncall_slot_view(row)
+
+
+@router.delete("/oncall-slots/{slot_id}")
+def oncall_slot_delete(slot_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: remove a roster window."""
+    db.delete(_slot_or_404(db, slot_id))
+    audit(db, "oncall.remove", actor=user.email, object_type="oncall", object_id=str(slot_id))
+    db.commit()
+    return {"removed": slot_id}
+
+
+@router.post("/oncall-slots/take")
+def oncall_take(db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: cover the rest of today as the signed-in user."""
+    from app.dc_noc import take_duty
+
+    try:
+        slot = take_duty(db, user)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "oncall.take", actor=user.email, object_type="oncall", object_id=user.email, data={"name": slot.get("name")})
+    db.commit()
+    return slot
+
+
 @router.get("/automation")
 def automation_api(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> dict[str, Any]:
     """Automation page of the new UI: pipeline counts, rules, playbooks, policies, maintenance."""

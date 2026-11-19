@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.asset_ladder import policy_ladder_slots
 from app.models import Asset, EscalationPolicy, Incident, MaintenanceWindow, Notification, Playbook, Playrule, utcnow
 
 
@@ -105,7 +106,8 @@ def automation_overview(db: Session, now: datetime | None = None) -> dict[str, A
             for b in db.query(Playbook).order_by(Playbook.name).all()
         ],
         "policies": [
-            {"id": p.id, "name": p.name, "steps": _steps(p), "rules": used_policies.get(p.id, 0)}
+            {"id": p.id, "slug": p.slug, "name": p.name, "steps": _steps(p), "rules": used_policies.get(p.id, 0),
+             "levels": policy_ladder_slots(p.steps)}
             for p in db.query(EscalationPolicy).order_by(EscalationPolicy.name).all()
         ],
         "maintenance": [

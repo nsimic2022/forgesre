@@ -138,3 +138,58 @@ export function RemoveButton({ url, what, onRemoved }: { url: string; what: stri
     </span>
   );
 }
+
+type Policy = Automation["policies"][number];
+const LEVELS: { level: number; label: string; minutes: number; target: string }[] = [
+  { level: 1, label: "L1 NOC", minutes: 0, target: "team" },
+  { level: 2, label: "L2 Shift", minutes: 15, target: "team-lead" },
+  { level: 3, label: "L3 Engineer", minutes: 30, target: "engineer" },
+  { level: 4, label: "L4 Manager", minutes: 60, target: "manager" },
+];
+
+export function PolicyForm({ policy, onDone }: { policy: Policy | null; onDone: (saved: boolean) => void }) {
+  const [name, setName] = useState(policy?.name ?? "");
+  const [levels, setLevels] = useState(() =>
+    LEVELS.map((d) => {
+      const saved = policy?.levels?.find((l) => l.level === d.level);
+      return { level: d.level, label: d.label, on: saved ? saved.on : !policy && d.level <= 2, minutes: String(saved?.minutes ?? d.minutes), target: saved?.target ?? d.target };
+    }),
+  );
+  const [error, setError] = useState("");
+  const setLevel = (i: number, patch: Partial<(typeof levels)[number]>) => setLevels(levels.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const save = (e: FormEvent) => {
+    e.preventDefault();
+    const body = { name: name.trim(), levels: levels.map((l) => ({ level: l.level, on: l.on, minutes: Number(l.minutes || 0), target: l.target.trim() })) };
+    const call = policy ? putJson(`/api/v1/automation/policies/${policy.id}`, body) : postJson("/api/v1/automation/policies", body);
+    call.then(() => onDone(true)).catch((err: Error) => setError(err.message));
+  };
+  return (
+    <Card title={policy ? `Edit escalation · ${policy.name}` : "New escalation policy"}>
+      <form onSubmit={save} className="cell-stack" style={{ gap: 12 }}>
+        <Field label="Name"><input className="search" style={{ minWidth: 0 }} value={name} onChange={(e) => setName(e.target.value)} placeholder="Database critical" /></Field>
+        <p className="small faint" style={{ margin: 0 }}>
+          Each level is mailed when the incident is still not acknowledged after its minutes. A recipient is a role (team, team-lead, engineer, manager, oncall) or an email address.
+        </p>
+        <table className="data">
+          <thead><tr><th style={{ width: 70 }}>On</th><th style={{ width: 140 }}>Level</th><th style={{ width: 140 }}>After (min)</th><th>Recipient</th></tr></thead>
+          <tbody>
+            {levels.map((l, i) => (
+              <tr key={l.level}>
+                <td><input type="checkbox" aria-label={`${l.label} on`} checked={l.on} onChange={(e) => setLevel(i, { on: e.target.checked })} /></td>
+                <td>{l.label}</td>
+                <td><input className="search" style={{ minWidth: 0, width: 100 }} type="number" min={0} aria-label={`${l.label} minutes`} value={l.minutes} disabled={!l.on} onChange={(e) => setLevel(i, { minutes: e.target.value })} /></td>
+                <td><input className="search" style={{ minWidth: 0, width: "100%" }} list="policy-roles" aria-label={`${l.label} recipient`} value={l.target} disabled={!l.on} onChange={(e) => setLevel(i, { target: e.target.value })} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <datalist id="policy-roles">{["team", "team-lead", "engineer", "manager", "oncall"].map((r) => <option key={r} value={r} />)}</datalist>
+        {error ? <div className="banner error" role="alert">{error}</div> : null}
+        <div className="row">
+          <button className="btn primary" type="submit" disabled={!name.trim()}>Save policy</button>
+          <button className="btn" type="button" onClick={() => onDone(false)}>Cancel</button>
+        </div>
+      </form>
+    </Card>
+  );
+}

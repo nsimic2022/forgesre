@@ -108,3 +108,67 @@ def delete_playbook(db: Session, book: Playbook, actor: str) -> None:
     db.delete(book)
     audit(db, "playbook.remove", actor=actor, object_type="playbook", object_id=slug)
     db.commit()
+
+
+DEFAULT_POLICY_SLUG = "default-warning"
+
+
+def policy_steps(levels: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """L1–L4 rows ``{level, on, minutes, target}`` to stored steps. Raises ValueError with every problem."""
+    from app.asset_ladder import LADDER_LEVELS, policy_steps_from_levels
+    from app.services import policy_steps_problems
+
+    by_level = {int(row.get("level") or 0): row for row in levels or []}
+    rows = [by_level.get(level, {}) for level, _label in LADDER_LEVELS]
+    ons = ["1" if row.get("on") else "" for row in rows]
+    steps = policy_steps_from_levels(ons, [row.get("minutes") for row in rows], [row.get("target") for row in rows])
+    problems = policy_steps_problems(steps)
+    problems += [f"{label} is on but has no recipient." for (level, label), row in zip(LADDER_LEVELS, rows)
+                 if row.get("on") and not str(row.get("target") or "").strip()]
+    if not steps and not problems:
+        problems.append("Turn on at least one level (L1–L4).")
+    if problems:
+        raise ValueError(" ".join(problems))
+    return steps
+
+
+def save_policy(db: Session, data: dict[str, Any], actor: str, policy: EscalationPolicy | None = None) -> EscalationPolicy:
+    """Create an escalation policy (slug from the name when empty) or update ``policy``'s name and steps."""
+    name = str(data.get("name") or "").strip()
+    if not name:
+        raise ValueError("name is required")
+    steps = policy_steps(data.get("levels") or [])
+    row = policy
+    if row is None:
+        base = str(data.get("slug") or name).strip().lower()
+        slug = "-".join("".join(ch if ch.isalnum() else " " for ch in base).split())
+        if not slug:
+            raise ValueError("slug is required")
+        if db.query(EscalationPolicy).filter_by(slug=slug).first() is not None:
+            raise ValueError(f"slug {slug} already exists; edit that policy or pick another name")
+        row = EscalationPolicy(slug=slug)
+        db.add(row)
+    row.name = name
+    row.steps = steps
+    audit(db, "escalation.update" if policy else "escalation.create", actor=actor, object_type="escalation_policy", object_id=row.slug)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def delete_policy(db: Session, policy: EscalationPolicy, actor: str) -> int:
+    """Remove a policy; its rules move to default-warning. The default policy itself cannot be removed."""
+    if policy.slug == DEFAULT_POLICY_SLUG:
+        raise ValueError("default-warning is used by new rules and cannot be removed; edit its steps instead")
+    fallback = db.query(EscalationPolicy).filter_by(slug=DEFAULT_POLICY_SLUG).first()
+    moved = (
+        db.query(Playrule)
+        .filter(Playrule.escalation_policy_id == policy.id)
+        .update({Playrule.escalation_policy_id: fallback.id if fallback else None}, synchronize_session=False)
+    )
+    slug = policy.slug
+    db.delete(policy)
+    audit(db, "escalation.remove", actor=actor, object_type="escalation_policy", object_id=slug,
+          data={"playrules_moved": int(moved or 0), "to": fallback.slug if fallback else ""})
+    db.commit()
+    return int(moved or 0)
