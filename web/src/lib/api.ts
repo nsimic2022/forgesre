@@ -90,6 +90,28 @@ export interface Noc {
   ai: { forgerca: boolean; forgeai: "off" | "local" | "external" };
 }
 
+export interface TopoNode {
+  asset_id: string;
+  hostname: string;
+  type: string;
+  ip: string;
+  alarm: boolean;
+  network: boolean;
+  behind: number;
+  children: TopoNode[];
+}
+
+export interface Topology {
+  roots: TopoNode[];
+  unlinked: TopoNode[];
+  assets: number;
+  with_parent: number;
+  links: number;
+  last_sync: string | null;
+  suggestions: { asset_id: string; hostname: string; parent_asset_id: string; parent_hostname: string; current_parent: string; protocol: string; port: string }[];
+  can_edit: boolean;
+}
+
 export interface ClockHour {
   start: string;
   hour: number;

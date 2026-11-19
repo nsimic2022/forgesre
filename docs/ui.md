@@ -16,6 +16,25 @@ the home page back.
   `/login`. Each page reads one compact endpoint (NOC: `GET /api/v1/noc`, polled every 10 s).
 - The classic sidebar shows **New UI** when the build is present; the new UI links to **Open classic UI** (`/classic`).
 
+## Dependency map
+
+**Inventory › Dependency map** (`/app/inventory/map`) shows who sits behind whom. The parent
+pointer on each asset is what parent-down suppression uses: while a parent has an open down
+incident, alarms from the assets behind it do not mail anyone, so a dead access switch gives
+one incident instead of one per server. Those child incidents still exist and open if they
+keep failing after the parent is back.
+
+- **Sync from LibreNMS** (Engineer) reads LLDP/CDP neighbours in the background
+  (`topology_sync` job) and matches both ends to assets by hostname, sysName or IP.
+- **Suggested parents**: only where exactly one end of a link is a network device (Switch,
+  Router, Firewall, Network device). The other end gets it as parent. Switch-to-switch links
+  are not guessed, because the direction towards the core is not known. Accept one, or all.
+- **Tree**: largest first, red for an open alarm, "N behind it", and **Change parent** with a
+  loop check.
+
+API: `GET /api/v1/topology`, `POST /api/v1/topology/sync`, `POST /api/v1/topology/parent`
+`{asset_id, parent_asset_id}` (empty clears). Writes need Engineer.
+
 ## TV mode (wall screen)
 
 `/app/tv` (button **Wall screen (TV mode)** on the NOC page) is built for a screen on the wall:

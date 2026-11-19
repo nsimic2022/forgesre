@@ -123,7 +123,7 @@ function AssetPanel({ assetId, onClose, onEdit }: { assetId: string; onClose: ()
 
 export function InventoryPage() {
   const [filters, setFilters] = useState<Filters>(EMPTY);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState<InventoryPage | null>(null);
   const [selected, setSelected] = useState("");
@@ -171,6 +171,7 @@ export function InventoryPage() {
         </div>
         <div className="row">
           <a className="btn" href="/discovery">Discovery (classic)</a>
+          <Link className="btn" to="/inventory/map">Dependency map</Link>
           {data?.can_edit ? <button className="btn primary" type="button" onClick={() => openEditor("new", null)}>New asset</button> : null}
           <a className="btn" href="/assets">Import (classic)</a>
         </div>

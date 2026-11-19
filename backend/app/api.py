@@ -2773,6 +2773,50 @@ def maintenance_clear_api(asset_id: str, db: Session = Depends(get_db), user: Us
         raise HTTPException(status_code=404, detail="asset not found") from exc
 
 
+class ParentBody(BaseModel):
+    asset_id: str
+    parent_asset_id: str = ""
+
+
+@router.get("/topology")
+def topology_api(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> dict[str, Any]:
+    """New UI Inventory › Dependency map: the parent tree and parent suggestions from LLDP/CDP."""
+    from app.topology import suggestions, tree
+
+    data = tree(db)
+    data["suggestions"] = suggestions(db)
+    data["can_edit"] = can(user, "write_assets")
+    return data
+
+
+@router.post("/topology/sync")
+def topology_sync_api(db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict[str, Any]:
+    """New UI: read LLDP/CDP links from LibreNMS in the background."""
+    from app.jobs import enqueue
+
+    job = enqueue(db, "topology_sync", "librenms", object_type="topology")
+    audit(db, "topology.sync", actor=user.email, object_type="topology", object_id=f"job-{job.id}")
+    db.commit()
+    return {"job": job.id, "status": job.status}
+
+
+@router.post("/topology/parent")
+def topology_parent_api(body: ParentBody, db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict[str, Any]:
+    """New UI: set or clear one asset's parent (loops refused). Parent-down suppression uses it at once."""
+    from app.dc_noc import set_asset_parent
+
+    asset = db.query(Asset).filter_by(asset_id=body.asset_id).first()
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    try:
+        set_asset_parent(db, asset, body.parent_asset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "asset.parent", actor=user.email, object_type="asset", object_id=asset.asset_id, data={"parent": body.parent_asset_id})
+    db.commit()
+    return {"asset_id": asset.asset_id, "parent_asset_id": body.parent_asset_id}
+
+
 @router.get("/automation")
 def automation_api(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> dict[str, Any]:
     """Automation page of the new UI: pipeline counts, rules, playbooks, policies, maintenance."""
