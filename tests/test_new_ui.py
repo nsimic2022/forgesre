@@ -79,3 +79,66 @@ def test_app_is_off_when_not_built(tmp_path, monkeypatch):
     monkeypatch.setenv("WEB_DIST", str(tmp_path / "missing"))
     client = TestClient(create_app())
     assert client.get("/app").status_code == 404
+
+
+def _signed_in(role: str = "admin"):
+    from app.models import User
+    from app.security import hash_password
+
+    db = _db()
+    email = f"{role}-{uuid4().hex[:6]}@dc.local"
+    db.add(User(email=email, name=role, password_hash=hash_password("pw"), role=role))
+    db.commit()
+    db.close()
+    client = TestClient(create_app())
+    client.post("/login", data={"email": email, "password": "pw"})
+    return client
+
+
+def test_incidents_page_tabs_search_and_paging():
+    db = _db()
+    open_row = _incident(db)
+    _incident(db, severity="HIGH", ack_at=utcnow(), ack_by="a@dc.local")
+    db.commit()
+    host = open_row.asset.hostname
+    db.close()
+    client = _signed_in("viewer")
+    page = client.get("/api/v1/incidents-page", params={"tab": "active", "q": host}).json()
+    assert [r["number"] for r in page["rows"]] == [open_row.number]
+    assert page["counts"]["active"] == 1 and page["counts"]["all"] == 1
+    paged = client.get("/api/v1/incidents-page", params={"tab": "all", "limit": 1, "offset": 0}).json()
+    assert len(paged["rows"]) == 1 and paged["total"] >= 2
+
+
+def test_incident_view_checklist_and_queued_investigation():
+    from app.models import Job, Playbook
+
+    db = _db()
+    book = Playbook(name="T-Book", slug=f"t-book-{uuid4().hex[:6]}", steps=[{"title": "Ping it"}, {"title": "Call owner"}])
+    db.add(book)
+    db.flush()
+    row = _incident(db, playbook_id=book.id)
+    db.commit()
+    number = row.number
+    db.close()
+
+    analyst = _signed_in("analyst")
+    view = analyst.get(f"/api/v1/incidents/{number}/view").json()
+    assert view["playbook"] == {"name": "T-Book", "steps": ["Ping it", "Call owner"], "done": []}
+    assert view["can"] == {"work": True, "investigate": True, "cloud": False}
+    assert analyst.post(f"/api/v1/incidents/{number}/checklist", json={"step": 1, "done": True}).json() == {"done": [1]}
+    assert analyst.post(f"/api/v1/incidents/{number}/checklist", json={"step": 9, "done": True}).status_code == 400
+    assert analyst.get(f"/api/v1/incidents/{number}/view").json()["playbook"]["done"] == [1]
+
+    # Re-running the analysis is queued, never run inside the request.
+    queued = analyst.post(f"/api/v1/incidents/{number}/investigate").json()
+    assert queued["queued"] is True
+    db = SessionLocal()
+    assert db.query(Job).filter_by(kind="investigate", object_id=number, status="pending").count() == 1
+    db.query(Job).filter_by(object_id=number).delete()
+    db.commit()
+    db.close()
+
+    viewer = _signed_in("viewer")
+    assert viewer.post(f"/api/v1/incidents/{number}/checklist", json={"step": 0, "done": True}).status_code == 403
+    assert viewer.get(f"/api/v1/incidents/{number}/view").json()["can"]["work"] is False

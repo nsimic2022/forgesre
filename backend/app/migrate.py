@@ -356,6 +356,10 @@ def migrate(engine: Engine) -> None:
             extras = {
                 "resolved_by": "ALTER TABLE incidents ADD COLUMN resolved_by VARCHAR(255) DEFAULT ''",
                 "source": "ALTER TABLE incidents ADD COLUMN source VARCHAR(32) DEFAULT 'prometheus'",
+                # V1.0 new UI: playbook steps ticked on this incident (list of step indexes).
+                "checklist": "ALTER TABLE incidents ADD COLUMN checklist JSONB DEFAULT '[]'"
+                if engine.dialect.name == "postgresql"
+                else "ALTER TABLE incidents ADD COLUMN checklist JSON DEFAULT '[]'",
                 "resolved_at": "ALTER TABLE incidents ADD COLUMN resolved_at TIMESTAMPTZ"
                 if engine.dialect.name == "postgresql"
                 else "ALTER TABLE incidents ADD COLUMN resolved_at DATETIME",

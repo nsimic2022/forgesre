@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Noc } from "../lib/api";
 import { NocContext, NocPage } from "./Noc";
@@ -25,9 +26,11 @@ const data: Noc = {
 
 function renderPage() {
   return render(
-    <NocContext.Provider value={{ data, error: "" }}>
-      <NocPage />
-    </NocContext.Provider>,
+    <MemoryRouter>
+      <NocContext.Provider value={{ data, error: "" }}>
+        <NocPage />
+      </NocContext.Provider>
+    </MemoryRouter>,
   );
 }
 

@@ -25,6 +25,14 @@ export async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+export async function postJson<T>(path: string, body: unknown): Promise<T> {
+  return getJson<T>(path, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export type Role = "viewer" | "analyst" | "engineer" | "admin";
 
 export interface Me {
@@ -72,4 +80,74 @@ export interface Noc {
   health: { group: string; up: number; total: number }[];
   oncall: { name: string; email: string; phone: string } | null;
   ai: { forgerca: boolean; forgeai: "off" | "local" | "external" };
+}
+
+export interface IncidentPage {
+  tab: string;
+  counts: Record<"active" | "acknowledged" | "resolved" | "all", number>;
+  total: number;
+  offset: number;
+  limit: number;
+  rows: NocIncident[];
+}
+
+export interface Fact {
+  id: string;
+  text: string;
+  kind?: string;
+}
+
+export interface Hypothesis {
+  id: string;
+  summary: string;
+  confidence: number;
+  rank: number;
+  evidence_count?: number;
+}
+
+export interface IncidentView {
+  number: string;
+  title: string;
+  severity: string;
+  status: string;
+  source: string;
+  summary: string;
+  started_at: string | null;
+  ack_at: string | null;
+  ack_by: string;
+  resolved_at: string | null;
+  resolved_by: string;
+  level: string;
+  levels: { level: number; tone: string; title: string }[];
+  asset: null | {
+    hostname: string;
+    ip: string;
+    type: string;
+    environment: string;
+    owner: string;
+    contact_name: string;
+    owner_email: string;
+    owner_phone: string;
+    notes: string;
+    glpi_id: string;
+    zabbix_hostid: string;
+  };
+  playrule: string | null;
+  playbook: null | { name: string; steps: string[]; done: number[] };
+  forgerca: null | {
+    cause: string;
+    summary: string;
+    confidence: number;
+    facts: Fact[];
+    hypotheses: Hypothesis[];
+    actions: string[];
+    limitations: string[];
+    at: string | null;
+  };
+  forgeai: { mode: string; text: string; cause: string; action: string; model: string; at: string | null };
+  evidence: { id: string; source: string; title: string; query: string }[];
+  timeline: { at?: string; event?: string; text?: string; [key: string]: unknown }[];
+  notifications: { id: number; target: string; subject: string; status: string; step_key: string; channel: string; created_at: string | null; error: string }[];
+  notes: { id: number; at: string | null; actor: string; body: string }[];
+  can: { work: boolean; investigate: boolean; cloud: boolean };
 }

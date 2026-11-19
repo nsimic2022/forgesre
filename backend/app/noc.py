@@ -84,6 +84,29 @@ def _row(incident: Incident, sent: dict[int, int], llm_jobs: dict[str, str], mod
     }
 
 
+def _sent_counts(db: Session, ids: list[int]) -> dict[int, int]:
+    """Notifications sent per incident id."""
+    sent: dict[int, int] = defaultdict(int)
+    if ids:
+        for incident_id, count in (
+            db.query(Notification.incident_id, func.count(Notification.id))
+            .filter(Notification.incident_id.in_(ids))
+            .group_by(Notification.incident_id)
+            .all()
+        ):
+            sent[int(incident_id)] = int(count)
+    return sent
+
+
+def _llm_jobs(db: Session) -> dict[str, str]:
+    """Incident number -> pending/running ForgeAI job status."""
+    return {
+        row.object_id: row.status
+        for row in db.query(Job).filter(Job.kind == "investigate", Job.status.in_(("pending", "running"))).all()
+        if (row.payload or {}).get("use_llm", True) is not False
+    }
+
+
 def _minutes(deltas: list[timedelta]) -> float | None:
     if not deltas:
         return None
@@ -106,21 +129,8 @@ def noc_overview(db: Session, now: datetime | None = None) -> dict[str, Any]:
         .limit(100)
         .all()
     )
-    ids = [i.id for i in active + resolved_today]
-    sent: dict[int, int] = defaultdict(int)
-    if ids:
-        for incident_id, count in (
-            db.query(Notification.incident_id, func.count(Notification.id))
-            .filter(Notification.incident_id.in_(ids))
-            .group_by(Notification.incident_id)
-            .all()
-        ):
-            sent[int(incident_id)] = int(count)
-    llm_jobs = {
-        row.object_id: row.status
-        for row in db.query(Job).filter(Job.kind == "investigate", Job.status.in_(("pending", "running"))).all()
-        if (row.payload or {}).get("use_llm", True) is not False
-    }
+    sent = _sent_counts(db, [i.id for i in active + resolved_today])
+    llm_jobs = _llm_jobs(db)
     mode = forgeai_mode()
     rows_active = [_row(i, sent, llm_jobs, mode, db) for i in active]
     not_acked = [r for r in rows_active if not r["ack_at"]]

@@ -241,6 +241,8 @@ class Incident(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     timeline: Mapped[list] = mapped_column(JSONType, default=list)
     alert_payload: Mapped[dict] = mapped_column(JSONType, default=dict)
+    # Playbook steps the operator ticked on this incident (indexes into playbook.steps).
+    checklist: Mapped[list] = mapped_column(JSONType, default=list)
 
     asset: Mapped[Asset | None] = relationship(back_populates="incidents")
     playrule: Mapped[Playrule | None] = relationship()
