@@ -2344,11 +2344,13 @@ def settings_test(component: str, user: User = Depends(require("run_checks"))) -
 
 @router.get("/tv")
 def tv_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict[str, Any]:
-    """Wall screen: the NOC overview plus the 12-hour incident clock. Viewer is enough."""
+    """Wall screen: the NOC overview, the 12-hour incident clock and 14 days of incidents per day."""
     from app.noc import incident_clock, noc_overview
+    from app.reports_view import incidents_per_day
 
     data = noc_overview(db)
     data["clock"] = incident_clock(db)
+    data["daily"] = incidents_per_day(db, 14)
     return data
 
 

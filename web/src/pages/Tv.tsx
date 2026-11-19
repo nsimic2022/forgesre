@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { DailyBars } from "../components/DailyBars";
 import { IncidentClock } from "../components/IncidentClock";
 import { getJson, type NocIncident, type TvData } from "../lib/api";
+import { shortNumber, tierLabel } from "../lib/format";
 
 const REFRESH_MS = 30_000;
 const STALE_MS = 90_000;
@@ -64,6 +66,12 @@ export function TvPage() {
           </section>
           <section aria-label="Incidents in the last 12 hours">
             <IncidentClock clock={data.clock} open={c!.open} critical={c!.critical} />
+            {data.daily?.length ? (
+              <div className="cell-stack" style={{ gap: 8, marginTop: 24 }} aria-label="Incidents per day, last 14 days">
+                <span className="tv-label">Incidents per day · 14 days</span>
+                <DailyBars daily={data.daily} height={120} />
+              </div>
+            ) : null}
           </section>
           <section className="cell-stack" style={{ gap: 16 }}>
             <div className="tv-kpi">
@@ -81,7 +89,7 @@ export function TvPage() {
                     {i.ack_by ? <span className="faint">· {i.ack_by}</span> : <span style={{ color: "var(--crit)" }}>· not acked</span>}
                   </span>
                   <span style={{ fontWeight: 600 }}>{i.title}</span>
-                  <span className="muted small">{[i.asset?.hostname, i.number, i.level].filter(Boolean).join(" · ")}</span>
+                  <span className="muted small">{[i.asset?.hostname, shortNumber(i.number), tierLabel(i.level)].filter(Boolean).join(" · ")}</span>
                 </div>
               ))}
             </div>

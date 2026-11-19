@@ -56,6 +56,25 @@ def _period(db: Session, start: datetime, end: datetime) -> list[Incident]:
     )
 
 
+def _daily(rows: list[Incident], start: datetime, now: datetime) -> list[dict[str, Any]]:
+    per_day: dict[str, Counter] = defaultdict(Counter)
+    for i in rows:
+        per_day[_aware(i.started_at).date().isoformat()][(i.severity or "WARNING").upper()] += 1
+    daily = []
+    for n in range((now.date() - start.date()).days + 1):
+        day = (start + timedelta(days=n)).date().isoformat()
+        c = per_day.get(day, Counter())
+        daily.append({"day": day, "critical": c.get("CRITICAL", 0), "high": c.get("HIGH", 0), "other": sum(c.values()) - c.get("CRITICAL", 0) - c.get("HIGH", 0)})
+    return daily
+
+
+def incidents_per_day(db: Session, days: int = 14, now: datetime | None = None) -> list[dict[str, Any]]:
+    """Incidents started per day by severity for the last ``days`` (today included), for the TV screen."""
+    now = _aware(now) or utcnow()
+    start = (now - timedelta(days=max(1, days) - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return _daily(_period(db, start, now + timedelta(seconds=1)), start, now)
+
+
 def reports_overview(db: Session, days: int = 30, now: datetime | None = None) -> dict[str, Any]:
     """KPIs for the last ``days`` against the ``days`` before, incidents per day by severity,
     by asset type, noisiest assets, most frequent alerts, host-down time, scheduled reports."""
@@ -65,14 +84,7 @@ def reports_overview(db: Session, days: int = 30, now: datetime | None = None) -
     rows = _period(db, start, now)
     previous = _period(db, start - timedelta(days=days), start)
 
-    per_day: dict[str, Counter] = defaultdict(Counter)
-    for i in rows:
-        per_day[_aware(i.started_at).date().isoformat()][(i.severity or "WARNING").upper()] += 1
-    daily = []
-    for n in range((now.date() - start.date()).days + 1):
-        day = (start + timedelta(days=n)).date().isoformat()
-        c = per_day.get(day, Counter())
-        daily.append({"day": day, "critical": c.get("CRITICAL", 0), "high": c.get("HIGH", 0), "other": sum(c.values()) - c.get("CRITICAL", 0) - c.get("HIGH", 0)})
+    daily = _daily(rows, start, now)
 
     by_type: dict[str, list[Incident]] = defaultdict(list)
     for i in rows:

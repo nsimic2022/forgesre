@@ -98,6 +98,7 @@ no menu, large type, refresh every 30 seconds.
   hand and the dot on the rim show the time now; the empty slice right after the hand
   separates the newest hour from the oldest. Incidents kept quiet by maintenance or noise
   filters are not counted. Hover a slice for its numbers; screen readers get a table.
+- Under the clock: incidents per day for the last 14 days, the same chart as on Reports.
 - Right: who is on call now, and up to eight open incidents, critical first.
 - If updates stop for 90 seconds, a red **No updates** banner appears, so an old picture never
   passes for a calm night.
@@ -143,7 +144,7 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
 | Incidents: list, detail, checklist, notes | done |
 | On-call | done: who is on call now, the week grid, add (also on several days at once), edit, copy, turn off, remove, take the rest of today |
 | Inventory: library (site › rack, type, environment, customer, views), table, asset card, add / edit / clone / delete | done; SNMP version and credentials, discovery and imports still on the classic pages |
-| Automation: pipeline, noise filters (create, edit, remove), routing rules, escalation, playbooks, maintenance windows, "Try an alarm" | done, including creating, editing, turning off and removing rules and playbooks, escalation policies (L1–L4) and maintenance windows (several assets at once, End now) |
+| Automation: pipeline, noise filters (create, edit, remove), routing rules, escalation, playbooks, maintenance windows, "Try an alarm" | done, including creating, editing, turning off and removing rules and playbooks, escalation policies (Tier 1–3 and Manager) and maintenance windows (several assets at once, End now) |
 | Investigations: resolved incidents with confirmed cause and ratings, accuracy, recurring causes; review card on the incident page | done |
 | Reports: period KPIs vs previous, incidents per day, by asset type, noisiest assets, frequent alerts, host-down time, scheduled reports (create, edit, on/off, remove; presets, custom interval, cron, once), CSV | done |
 | Settings: groups from the registry with inline editing, secret status, connection tests, services and health | done, including Users and roles (create, edit, role, password, remove; yourself and the last Admin are protected) and Backup (background backup, download, upload, remove; restore stays a confirmed step on the classic Admin page) |
@@ -177,3 +178,9 @@ pip install playwright && playwright install chromium
 python scripts/screenshots.py --base http://127.0.0.1:8080 --email admin@forgesre.local --password '…'
 python scripts/screenshots.py --only noc,incident     # just a few pages
 ```
+
+## Escalation names
+
+The new UI names escalation steps the way most NOCs do: **Tier 1** (NOC), **Tier 2** (shift
+lead), **Tier 3** (engineer), then **Manager**, which is not a support tier. The database and
+the classic UI keep levels 1–4 (L1–L4); `tierLabel()` in `web/src/lib/format.ts` maps them.

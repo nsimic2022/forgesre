@@ -142,7 +142,7 @@ export interface IncidentClockData {
   total: number;
 }
 
-export type TvData = Noc & { clock: IncidentClockData };
+export type TvData = Noc & { clock: IncidentClockData; daily?: { day: string; critical: number; high: number; other: number }[] };
 
 export interface IncidentPage {
   tab: string;

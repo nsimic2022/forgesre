@@ -3,7 +3,7 @@ import { MaintenanceForm, PlaybookForm, PolicyForm, RemoveButton, RuleForm, rule
 import { NoiseFilters } from "../components/NoiseFilters";
 import { Card, Chip } from "../components/ui";
 import { getJson, postJson, putJson, type Automation, type PolicyStep, type Simulation } from "../lib/api";
-import { clock } from "../lib/format";
+import { clock, tierLabel } from "../lib/format";
 
 type Tab = "filters" | "rules" | "escalation" | "playbooks" | "maintenance";
 const TABS: { key: Tab; label: string }[] = [
@@ -30,7 +30,7 @@ function Steps({ steps }: { steps: PolicyStep[] }) {
       {steps.map((s, i) => (
         <li key={i} style={{ display: "grid", gridTemplateColumns: "110px minmax(0,1fr) auto", gap: 10, padding: "8px 0", borderTop: "1px solid var(--border)", alignItems: "center" }}>
           <span className="mono faint">{s.after_minutes === 0 ? "at once" : `+${s.after_minutes} min`}</span>
-          <span>{s.level ? `L${s.level} · ` : ""}{s.target}</span>
+          <span>{s.level ? `${tierLabel(s.level)} · ` : ""}{s.target}</span>
           <Chip tone="info">{s.channel}</Chip>
         </li>
       ))}
