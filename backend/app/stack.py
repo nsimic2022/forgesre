@@ -26,6 +26,7 @@ COMPONENT_LABELS = {
     "zabbix": "Zabbix",
     "glpi": "GLPI",
     "librenms": "LibreNMS",
+    "chat": "Chat (Slack / Teams / Discord)",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -44,6 +45,7 @@ COMPONENT_SHORT = {
     "glpi": "GLPI",
     "librenms": "LNMS",
     "discovery": "Discovery",
+    "chat": "Chat",
     "redis": "Redis",
     "mailpit": "Mailpit",
 }

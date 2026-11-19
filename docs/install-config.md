@@ -386,6 +386,7 @@ Do **not** treat `FORGESRE_ADMIN_PASSWORD` or `NETBOX_SUPERUSER_PASSWORD` in the
 | ForgeSRE Core | `FORGESRE_ADMIN_EMAIL`, `FORGESRE_ADMIN_PASSWORD`, `SECRET_KEY`, `ALERTMANAGER_WEBHOOK_TOKEN` | First-boot admin seed, sessions, HTTP SD / webhook |
 | Grafana | `GRAFANA_ADMIN_PASSWORD` | Bundled Grafana admin |
 | SMTP | `SMTP_USERNAME`, `SMTP_PASSWORD` (+ optional mailbox bind keys) | Email when YAML enables it |
+| Chat | `SLACK_WEBHOOK_URL`, `TEAMS_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL` (empty = off) | Incident messages when `notifications.chat.<channel>.enabled` is true ([settings.md](settings.md#chat-channels-slack-microsoft-teams-discord)) |
 | SNMP | `SNMP_COMMUNITY` | Discovery + snmp_exporter |
 | NetBox | `NETBOX_SUPERUSER_*`, `NETBOX_DB_PASSWORD`, `NETBOX_REDIS_PASSWORD`, `NETBOX_SECRET_KEY`, `NETBOX_API_TOKEN`, `SUPERUSER_API_TOKEN`, `NETBOX_API_TOKEN_PEPPER`, `API_TOKEN_PEPPER_1` | Bundled NetBox UI/API |
 | Zabbix | `ZABBIX_URL`, `ZABBIX_API_TOKEN`, `ZABBIX_WEBHOOK_TOKEN` | Optional read-only host import + webhook ([zabbix.md](zabbix.md)) |

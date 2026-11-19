@@ -114,6 +114,19 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("notifications.email.tls", "notifications", "STARTTLS", "bool", effective=lambda: settings.smtp_tls),
     _s("SMTP_USERNAME", "notifications", "SMTP user"),
     _s("SMTP_PASSWORD", "notifications", "SMTP password"),
+    # Chat (Slack / Teams / Discord). Messages leave the server: only the incident line is sent.
+    _y("notifications.chat.slack.enabled", "notifications", "Slack enabled", "bool", test="slack",
+       help="Posts when an incident opens, escalates and resolves. Set SLACK_WEBHOOK_URL first."),
+    _y("notifications.chat.slack.min_severity", "notifications", "Slack minimum severity", "enum", choices=("critical", "high", "warning")),
+    _s("SLACK_WEBHOOK_URL", "notifications", "Slack incoming webhook URL"),
+    _y("notifications.chat.teams.enabled", "notifications", "Microsoft Teams enabled", "bool", test="teams",
+       help="Use a Teams Workflows webhook (\"When a Teams webhook request is received\"). Set TEAMS_WEBHOOK_URL first."),
+    _y("notifications.chat.teams.min_severity", "notifications", "Teams minimum severity", "enum", choices=("critical", "high", "warning")),
+    _s("TEAMS_WEBHOOK_URL", "notifications", "Teams webhook URL"),
+    _y("notifications.chat.discord.enabled", "notifications", "Discord enabled", "bool", test="discord",
+       help="Channel settings › Integrations › Webhooks. Set DISCORD_WEBHOOK_URL first."),
+    _y("notifications.chat.discord.min_severity", "notifications", "Discord minimum severity", "enum", choices=("critical", "high", "warning")),
+    _s("DISCORD_WEBHOOK_URL", "notifications", "Discord webhook URL"),
     # AI
     _y("ai.enabled", "ai", "ForgeAI enabled", "bool", effective=lambda: settings.ai_enabled, test="llm"),
     _y("ai.llm.mode", "ai", "ForgeAI model", "enum", choices=("disabled", "bundled", "external"), help="bundled = local llama.cpp; external = an OpenAI-compatible URL."),
@@ -274,6 +287,12 @@ def set_setting(db: Session, key: str, raw: Any, actor: str) -> dict[str, Any]:
 # --- testing ---------------------------------------------------------------------------
 
 
+def _chat_test(channel: str) -> dict[str, Any]:
+    from app.chat import send_test
+
+    return send_test(channel)
+
+
 def test_connection(component: str) -> dict[str, Any]:
     """Run the System Health check for one component now (bypassing the cache).
 
@@ -295,6 +314,9 @@ def test_connection(component: str) -> dict[str, Any]:
         "glpi": api._glpi_check,
         "librenms": api._librenms_check,
         "discovery": api._discovery_check,
+        "slack": lambda: _chat_test("slack"),
+        "teams": lambda: _chat_test("teams"),
+        "discord": lambda: _chat_test("discord"),
     }
     check = checks.get(component)
     if check is None:

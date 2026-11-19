@@ -146,6 +146,9 @@ def _escalation_loop(stop: threading.Event) -> None:
             # Open quiet incidents whose noise filter stopped applying, then escalate.
             promote_filtered(db)
             process_escalations(db)
+            from app.chat import sweep_resolved
+
+            sweep_resolved(db)
         except Exception as exc:
             log.exception("escalation loop failed")
             report(db, "escalation", "loop", "error", summary="Escalation loop failed", detail=str(exc))
