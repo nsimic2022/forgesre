@@ -39,6 +39,7 @@ Current product: V0.9 · License: [Apache-2.0](LICENSE) · Code lives on [`main`
 | **On-call and escalation** | Weekly on-call slots, escalation steps by minutes and level, mail through your SMTP (Gmail, Outlook or on-box). |
 | **Investigations** | ForgeRCA facts and hypotheses, ForgeAI summary, evidence from Prometheus and Loki, and a review step to rate the root cause. |
 | **Reports** | Incident trends, noisiest assets, top alerts, downtime; CSV export and scheduled mail reports. |
+| **Kubernetes** | Optional read-only cluster reader for Kubernetes, OpenShift and k3s: nodes and workloads in the inventory, basic alerts, deploys as changes; cluster Alertmanagers post to ForgeSRE ([docs/kubernetes.md](docs/kubernetes.md)) |
 | **AI clients** | Optional read-only MCP server at `/mcp` for Claude, Cursor and others ([docs/mcp.md](docs/mcp.md)); off by default |
 | **Operations** | System Health (`/health-ui`) and `./forgesre doctor`, a journal per module, background jobs, backup and restore. |
 

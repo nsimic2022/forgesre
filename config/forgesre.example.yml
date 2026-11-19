@@ -90,3 +90,13 @@ notifications:
 # Which UI opens at / after sign-in: new (the React UI at /app) or classic. /classic always works.
 ui:
   home: new
+
+# Kubernetes / OpenShift / k3s clusters, read-only (docs/kubernetes.md). Token per cluster:
+#   ./forgesre settings set-secret K8S_TOKEN_<NAME>
+kubernetes:
+  clusters: []
+  # - name: prod
+  #   url: https://10.0.0.10:6443
+  #   ca_pem: |
+  #     -----BEGIN CERTIFICATE-----
+  #     ...

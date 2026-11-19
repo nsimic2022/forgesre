@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -603,7 +604,7 @@ SETTABLE_SECRETS = (
 
 def write_secret(path: Path, key: str, value: str) -> None:
     """Set KEY=value in a dotenv file, keeping every other line and mode 600."""
-    if key not in SETTABLE_SECRETS:
+    if key not in SETTABLE_SECRETS and not re.fullmatch(r"K8S_TOKEN_[A-Z0-9_]+", key):
         raise SystemExit(f"{key} is not a settable secret. Choose one of: {', '.join(SETTABLE_SECRETS)}")
     value = value.rstrip("\n")
     if any(ch in value for ch in "\n\r") or not value.strip():
@@ -743,6 +744,30 @@ def format_slos(rows: list[dict]) -> str:
     return "\n".join(out) + "\n"
 
 
+def format_k8s(rows: list[dict]) -> str:
+    """One line per cluster."""
+    if not rows:
+        return "No cluster configured. See docs/kubernetes.md (kubernetes.clusters + K8S_TOKEN_<NAME>).\n"
+    out = [f"{'CLUSTER':<16} {'TOKEN':<6} {'NODES':>5} {'WORKLOADS':>9} {'OPEN INC':>8}  VERSION"]
+    for r in rows:
+        out.append(f"{r['name'][:16]:<16} {'yes' if r['token_set'] else 'NO':<6} {r['nodes']:>5} {r['workloads']:>9} {r['open_incidents']:>8}  {r['version']}")
+    return "\n".join(out) + "\n"
+
+
+def cmd_k8s(port: str, rest: list[str]) -> None:
+    """./forgesre kubernetes [sync]"""
+    jar, _me = ensure_jar(port)
+    try:
+        if rest[:1] == ["sync"]:
+            post_json(port, jar, "/api/v1/kubernetes/sync", {})
+            sys.stdout.write("Cluster sync queued: ./forgesre kubernetes in a minute.\n")
+        else:
+            sys.stdout.write(format_k8s(list(get_json(port, jar, "/api/v1/kubernetes").get("clusters") or [])))
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def cmd_slo(port: str) -> None:
     jar, _me = ensure_jar(port)
     try:
@@ -797,6 +822,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_checks(port, rest)
     elif command == "slo":
         cmd_slo(port)
+    elif command == "kubernetes":
+        cmd_k8s(port, rest)
     elif command == "settings":
         cmd_settings(port, rest)
     elif command == "set-secret":

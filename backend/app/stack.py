@@ -29,6 +29,7 @@ COMPONENT_LABELS = {
     "chat": "Chat (Slack / Teams / Discord)",
     "checks": "Checks (certificates, backups, heartbeats)",
     "mcp": "MCP (read-only, for AI clients)",
+    "kubernetes": "Kubernetes / OpenShift",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -50,6 +51,7 @@ COMPONENT_SHORT = {
     "chat": "Chat",
     "checks": "Checks",
     "mcp": "MCP",
+    "kubernetes": "Kubernetes",
     "redis": "Redis",
     "mailpit": "Mailpit",
 }

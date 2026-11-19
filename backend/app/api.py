@@ -1706,6 +1706,28 @@ def _chat_check() -> dict[str, Any]:
         return {"status": "error", "detail": str(exc)[:200]}
 
 
+def _k8s_check() -> dict[str, Any]:
+    """Configured clusters, and whether the last sync could read each one."""
+    from app.db import SessionLocal
+    from app.kubernetes import clusters, token_key
+
+    names = [c["name"] for c in clusters()]
+    if not names:
+        return {"status": "disabled", "why": "no cluster in kubernetes.clusters"}
+    missing = [token_key(n) for n in names if not settings._secret(token_key(n))]
+    if missing:
+        return {"status": "warn", "why": "no token: " + ", ".join(missing)}
+    try:
+        db = SessionLocal()
+        try:
+            down = [i.asset.hostname for i in db.query(Incident).filter(Incident.title.like("%KubeApiUnreachable%"), Incident.status.notin_(["RESOLVED", "CLOSED"])).all() if i.asset]
+        finally:
+            db.close()
+    except Exception as exc:
+        return {"status": "error", "why": str(exc)[:200]}
+    return {"status": "warn", "why": "API unreachable: " + ", ".join(down)} if down else {"status": "ok", "why": ", ".join(names)}
+
+
 def _mcp_check() -> dict[str, Any]:
     """Read-only MCP endpoint: off, or on with a token."""
     from app.mcp_server import enabled, token
@@ -1751,6 +1773,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "chat": _chat_check(),
         "checks": _checks_check(),
         "mcp": _mcp_check(),
+        "kubernetes": _k8s_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)
@@ -3025,6 +3048,35 @@ def slo_delete_api(slo_id: int, db: Session = Depends(get_db), user: User = Depe
     db.delete(row)
     db.commit()
     return {"removed": slo_id}
+
+
+@router.get("/kubernetes")
+def kubernetes_api(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> dict[str, Any]:
+    """Configured clusters with node and workload counts and open Kubernetes incidents."""
+    from app.kubernetes import CLUSTER, NODE, WORKLOAD, clusters, token_key
+    from app.services import ACTIVE_INCIDENT_STATUSES
+
+    out = []
+    for c in clusters():
+        root = db.query(Asset).filter_by(asset_id=f"k8s-{c['name']}").first()
+        kids = db.query(Asset).filter(Asset.parent_id == root.id).all() if root else []
+        ids = [root.id] + [k.id for k in kids] if root else []
+        open_ = db.query(Incident).filter(Incident.asset_id.in_(ids or [-1]), Incident.status.in_(ACTIVE_INCIDENT_STATUSES)).count()
+        out.append({"name": c["name"], "url": c["url"], "token_set": bool(settings._secret(token_key(c["name"]))),
+                    "token_key": token_key(c["name"]), "version": root.notes if root else "",
+                    "nodes": sum(1 for k in kids if k.type == NODE), "workloads": sum(1 for k in kids if k.type == WORKLOAD),
+                    "open_incidents": open_, "seen": root is not None and root.type == CLUSTER})
+    return {"clusters": out, "can_edit": can(user, "write_assets")}
+
+
+@router.post("/kubernetes/sync")
+def kubernetes_sync_api(db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict[str, Any]:
+    """Read every cluster now, in the background."""
+    from app.jobs import enqueue
+
+    job = enqueue(db, "k8s_sync", "clusters", object_type="kubernetes")
+    db.commit()
+    return {"job": job.id, "status": job.status}
 
 
 @router.get("/automation")

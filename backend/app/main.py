@@ -151,6 +151,7 @@ def _escalation_loop(stop: threading.Event) -> None:
 
             sweep_resolved(db)
             _queue_health_checks(db)
+            _queue_k8s_sync(db)
         except Exception as exc:
             log.exception("escalation loop failed")
             report(db, "escalation", "loop", "error", summary="Escalation loop failed", detail=str(exc))
@@ -171,6 +172,24 @@ def _queue_health_checks(db: Session) -> None:
 
     _health_last = time.monotonic()
     enqueue(db, "health_checks", "appliance", object_type="checks")
+    db.commit()
+
+
+_K8S_EVERY = 5 * 60
+_k8s_last = 0.0
+
+
+def _queue_k8s_sync(db: Session) -> None:
+    """Leader only: read configured Kubernetes / OpenShift clusters every 5 minutes."""
+    global _k8s_last
+    from app.kubernetes import clusters
+
+    if not clusters() or time.monotonic() - _k8s_last < _K8S_EVERY:
+        return
+    from app.jobs import enqueue
+
+    _k8s_last = time.monotonic()
+    enqueue(db, "k8s_sync", "clusters", object_type="kubernetes")
     db.commit()
 
 
