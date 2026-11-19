@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import func
@@ -2357,3 +2357,25 @@ def investigations_page_api(
     from app.investigations_view import investigations_page
 
     return investigations_page(db, days=days, q=q, only_ai=only_ai, only_reviewed=only_reviewed, limit=limit, offset=offset)
+
+
+@router.get("/reports-page")
+def reports_page_api(days: int = 30, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict[str, Any]:
+    """Reports page of the new UI: period KPIs vs the previous period, breakdowns, scheduled reports."""
+    from app.reports_view import reports_overview
+
+    data = reports_overview(db, days=days)
+    data["can_edit"] = can(user, "write_play")
+    return data
+
+
+@router.get("/reports/incidents.csv")
+def reports_csv_api(days: int = 30, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> Response:
+    """Incidents of the last ``days`` as a CSV download."""
+    from app.reports_view import incidents_csv
+
+    return Response(
+        incidents_csv(db, days=days),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="forgesre-incidents-{max(1, min(days, 365))}d.csv"'},
+    )

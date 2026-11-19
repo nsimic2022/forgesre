@@ -270,3 +270,28 @@ export interface Simulation {
   policy: string | null;
   steps: PolicyStep[];
 }
+
+export interface PeriodStats {
+  incidents: number;
+  critical: number;
+  high: number;
+  warning: number;
+  mtta_min: number | null;
+  mttr_min: number | null;
+  reviewed: number;
+}
+
+export interface Reports {
+  days: number;
+  from: string;
+  to: string;
+  current: PeriodStats;
+  previous: PeriodStats;
+  daily: { day: string; critical: number; high: number; other: number }[];
+  by_type: ({ group: string } & PeriodStats)[];
+  noisy_assets: { asset: string; incidents: number }[];
+  top_alerts: { alert: string; incidents: number }[];
+  host_down: { asset: string; minutes: number }[];
+  scheduled: { id: number; name: string; kind: string; recipients: string[]; schedule: string; enabled: boolean; last_run_at: string | null; next_run_at: string | null }[];
+  can_edit: boolean;
+}

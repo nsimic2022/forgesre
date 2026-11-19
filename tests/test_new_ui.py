@@ -238,3 +238,27 @@ def test_review_accuracy_and_recurring_causes():
     acc = page["accuracy"]["forgerca"]
     assert acc["rated"] >= 3 and 0 <= acc["score"] <= 100
     assert _signed_in("viewer").post(f"/api/v1/incidents/{numbers[0][0]}/review", json={"root_cause": "x"}).status_code == 403
+
+
+def test_reports_overview_and_csv():
+    db = _db()
+    tag = uuid4().hex[:6]
+    row = _incident(db, status="RESOLVED", resolved_at=utcnow(), ack_at=utcnow() - timedelta(minutes=2))
+    row.title = "NodeExporterDown"
+    # Down for ~5 days so it leads the top-10 host-down list even in a busy shared test DB.
+    row.started_at = utcnow() - timedelta(days=5)
+    row.asset.hostname = f"rep-{tag}"
+    db.commit()
+    db.close()
+    client = _signed_in("viewer")
+    data = client.get("/api/v1/reports-page", params={"days": 7}).json()
+    assert data["current"]["incidents"] >= 1 and data["current"]["mttr_min"] is not None
+    assert len(data["daily"]) >= 7 and {"day", "critical", "high", "other"} <= set(data["daily"][0])
+    assert any(r["asset"] == f"rep-{tag}" for r in data["host_down"])
+    assert data["top_alerts"] and all({"alert", "incidents"} <= set(r) for r in data["top_alerts"])
+    assert isinstance(data["scheduled"], list) and data["can_edit"] is False
+    csv_resp = client.get("/api/v1/reports/incidents.csv", params={"days": 7})
+    assert csv_resp.headers["content-type"].startswith("text/csv")
+    assert "attachment" in csv_resp.headers["content-disposition"]
+    assert csv_resp.text.splitlines()[0].startswith("number,severity,status,title,asset")
+    assert f"rep-{tag}" in csv_resp.text
