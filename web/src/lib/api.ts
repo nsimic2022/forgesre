@@ -203,3 +203,39 @@ export interface AssetCard extends InventoryRow {
   incidents: { number: string; title: string; severity: string; status: string; started_at: string | null }[];
   can_edit: boolean;
 }
+
+export interface PolicyStep {
+  after_minutes: number;
+  target: string;
+  channel: string;
+  level?: number | null;
+}
+
+export interface Automation {
+  pipeline: { incidents_today: number; muted_today: number; routed_today: number; notifications_today: number };
+  rules: {
+    id: number;
+    name: string;
+    description: string;
+    enabled: boolean;
+    severity: string;
+    condition: { alertname?: string; metric?: string; operator?: string; value?: number | string };
+    playbook: string | null;
+    policy: string | null;
+    hits_30d: number;
+  }[];
+  playbooks: { id: number; name: string; description: string; steps: string[]; rules: number }[];
+  policies: { id: number; name: string; steps: PolicyStep[]; rules: number }[];
+  maintenance: { asset: string; summary: string; starts_at: string | null; ends_at: string | null; active: boolean }[];
+  can_edit: boolean;
+}
+
+export interface Simulation {
+  outcome: "incident" | "muted";
+  trace: string[];
+  rule: string | null;
+  severity?: string;
+  playbook: string | null;
+  policy: string | null;
+  steps: PolicyStep[];
+}

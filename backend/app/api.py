@@ -2279,3 +2279,42 @@ def inventory_card_api(asset_id: str, db: Session = Depends(get_db), user: User 
     if item is None:
         raise HTTPException(status_code=404, detail="asset not found")
     return asset_card(db, item, user)
+
+
+class SimulateBody(BaseModel):
+    alertname: str
+    asset: str = ""
+    value: str = ""
+    at: str = ""
+
+
+@router.get("/automation")
+def automation_api(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> dict[str, Any]:
+    """Automation page of the new UI: pipeline counts, rules, playbooks, policies, maintenance."""
+    from app.automation_view import automation_overview
+
+    data = automation_overview(db)
+    data["can_edit"] = can(user, "write_play")
+    return data
+
+
+@router.post("/automation/simulate")
+def automation_simulate_api(body: SimulateBody, db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> dict[str, Any]:
+    """Try an alarm: what would match and who would be called. Read-only."""
+    from datetime import datetime as _dt
+
+    from app.automation_view import simulate_alarm
+
+    at = None
+    if body.at.strip():
+        try:
+            at = _dt.fromisoformat(body.at.strip())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="time must be ISO 8601, e.g. 2026-11-19T01:30") from exc
+        if at.tzinfo is None:
+            from app.dc_noc import _zone
+
+            at = at.replace(tzinfo=_zone())
+    if not body.alertname.strip():
+        raise HTTPException(status_code=400, detail="alertname is required")
+    return simulate_alarm(db, body.alertname.strip(), asset_ref=body.asset, value=body.value, at=at)

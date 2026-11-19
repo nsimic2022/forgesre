@@ -42,8 +42,9 @@ the proxy.
 | Incidents: list, detail, checklist, notes | done |
 | On-call | who is on call now; the week grid comes with the escalation rework |
 | Inventory: library (site › rack, type, environment, customer, views), table, asset card | done; editing still on the classic page |
-| Automation | next |
-| Investigations, Reports, Settings | planned |
+| Automation: pipeline, routing rules, escalation, playbooks, maintenance windows, "Try an alarm" | done; editing still on the classic pages |
+| Investigations | next |
+| Reports, Settings | planned |
 
 ## API used by the new pages
 
@@ -52,4 +53,5 @@ the proxy.
 | NOC overview | `GET /api/v1/noc` | — |
 | Incidents list | `GET /api/v1/incidents-page?tab=&severity=&q=&limit=&offset=` | — |
 | Inventory | `GET /api/v1/inventory?q=&site=&rack=&type=&environment=&customer=&view=` · `GET /api/v1/inventory/{asset_id}` | classic asset page for now |
+| Automation | `GET /api/v1/automation` | `POST /api/v1/automation/simulate` `{alertname, asset, value, at}` (read-only test) |
 | Incident detail | `GET /api/v1/incidents/{number}/view` | `POST …/status` (acknowledge = `INVESTIGATING`, `ESCALATED`, `RESOLVED`), `POST …/notes`, `POST …/checklist` `{step, done}`, `POST …/investigate` (queues ForgeRCA, then ForgeAI) |
