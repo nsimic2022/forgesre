@@ -32,14 +32,16 @@ fi
 echo "Rendering Prometheus / Alertmanager / snmp_exporter / Alloy / Loki config..."
 # Secrets added after the first install: create them once so existing appliances get them too.
 SECRETS_FILE="$ROOT/secrets/secrets.env"
-if [[ -f "$SECRETS_FILE" ]] && ! grep -q '^CHANGES_WEBHOOK_TOKEN=.\+' "$SECRETS_FILE"; then
-  if { sed -i '/^CHANGES_WEBHOOK_TOKEN=/d' "$SECRETS_FILE" &&
-       printf 'CHANGES_WEBHOOK_TOKEN=%s\n' "$(openssl rand -hex 24)" >> "$SECRETS_FILE"; } 2>/dev/null; then
-    echo "Created CHANGES_WEBHOOK_TOKEN in secrets/secrets.env (bearer for POST /api/v1/changes)."
-  else
-    echo "Could not write secrets/secrets.env; set it later: ./forgesre settings set-secret CHANGES_WEBHOOK_TOKEN"
+for key in CHANGES_WEBHOOK_TOKEN MCP_TOKEN; do
+  if [[ -f "$SECRETS_FILE" ]] && ! grep -q "^${key}=.\+" "$SECRETS_FILE"; then
+    if { sed -i "/^${key}=/d" "$SECRETS_FILE" &&
+         printf '%s=%s\n' "$key" "$(openssl rand -hex 24)" >> "$SECRETS_FILE"; } 2>/dev/null; then
+      echo "Created ${key} in secrets/secrets.env."
+    else
+      echo "Could not write secrets/secrets.env; set it later: ./forgesre settings set-secret ${key}"
+    fi
   fi
-fi
+done
 
 "$ROOT/scripts/render-monitoring.sh"
 echo "Ensuring bundled NetBox secrets and data dirs..."

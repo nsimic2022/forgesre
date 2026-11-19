@@ -47,3 +47,4 @@ What each release shipped:
 [V0.3 implementation plan](V03_IMPLEMENTATION_PLAN.md) is a design note from that slice. [Architecture](architecture.md) is the running V0.9 appliance.
 
 **Session handoff** (next coding agent / contributor): [continuation.md](continuation.md).
+- [mcp.md](mcp.md): read-only MCP server for AI clients (off by default; what leaves the appliance).
