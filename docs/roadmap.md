@@ -18,7 +18,7 @@ Each step ships as its own pull request, merged when CI is green (AGENTS.md).
 ## Phase 2 — new UI, page by page
 
 React + TypeScript in `web/`, served at `/app` ([ui.md](ui.md)). Order: ~~NOC overview~~
-(done) → ~~Incidents~~ (done; on-call week grid with Phase 3) → ~~Inventory~~ (done; editing next) → ~~Automation~~ (done; noise filters in Phase 3) → Investigations → Reports →
+(done) → ~~Incidents~~ (done; on-call week grid with Phase 3) → ~~Inventory~~ (done; editing next) → ~~Automation~~ (done; noise filters in Phase 3) → ~~Investigations~~ (done, with analyst reviews) → Reports →
 Settings. The classic UI stays until each page is replaced, then moves to `/classic`.
 
 ## Phase 3 — automation and reports
@@ -53,8 +53,8 @@ Agreed direction, after the new Investigations page exists (it shows ratings and
   4. topology from NetBox / LibreNMS for blast radius (no Neo4j).
   Similar incidents: exact match first (alert, device type, vendor, syslog message id),
   then semantic search; the model gets the 3–5 closest with their confirmed fixes.
-- **Learning loop.** On resolve, the analyst confirms the cause and rates ForgeRCA and
-  ForgeAI (correct / partly / wrong). Ratings feed similar-incident search and the
+- **Learning loop.** The analyst confirms the cause and rates ForgeRCA and ForgeAI
+  (correct / partly / wrong); stored on the incident since the Investigations page. Ratings feed similar-incident search and the
   accuracy figures on the Investigations page.
 - **Measuring.** Replay the last 100 resolved incidents and compare with the confirmed
   cause. Microsoft OpenRCA (telemetry from lab micro-service systems with labelled root

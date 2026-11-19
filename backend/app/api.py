@@ -2318,3 +2318,42 @@ def automation_simulate_api(body: SimulateBody, db: Session = Depends(get_db), u
     if not body.alertname.strip():
         raise HTTPException(status_code=400, detail="alertname is required")
     return simulate_alarm(db, body.alertname.strip(), asset_ref=body.asset, value=body.value, at=at)
+
+
+class ReviewBody(BaseModel):
+    root_cause: str
+    rca_rating: str = ""
+    ai_rating: str = ""
+
+
+@router.post("/incidents/{number}/review")
+def incident_review_api(
+    number: str, body: ReviewBody, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))
+) -> dict[str, Any]:
+    """Analyst confirms the cause and rates ForgeRCA / ForgeAI (correct, partly, wrong)."""
+    from app.investigations_view import review_incident
+
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    try:
+        return review_incident(db, item, user.email, body.root_cause, body.rca_rating, body.ai_rating)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/investigations-page")
+def investigations_page_api(
+    days: int = 90,
+    q: str = "",
+    only_ai: bool = False,
+    only_reviewed: bool = False,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_incidents")),
+) -> dict[str, Any]:
+    """Investigations page: resolved incidents with analyses and reviews, accuracy, recurring causes."""
+    from app.investigations_view import investigations_page
+
+    return investigations_page(db, days=days, q=q, only_ai=only_ai, only_reviewed=only_reviewed, limit=limit, offset=offset)

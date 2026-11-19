@@ -360,6 +360,14 @@ def migrate(engine: Engine) -> None:
                 "checklist": "ALTER TABLE incidents ADD COLUMN checklist JSONB DEFAULT '[]'"
                 if engine.dialect.name == "postgresql"
                 else "ALTER TABLE incidents ADD COLUMN checklist JSON DEFAULT '[]'",
+                # V1.0 analyst review (Investigations page, ForgeAI 2 knowledge base).
+                "root_cause": "ALTER TABLE incidents ADD COLUMN root_cause TEXT DEFAULT ''",
+                "rca_rating": "ALTER TABLE incidents ADD COLUMN rca_rating VARCHAR(16) DEFAULT ''",
+                "ai_rating": "ALTER TABLE incidents ADD COLUMN ai_rating VARCHAR(16) DEFAULT ''",
+                "reviewed_by": "ALTER TABLE incidents ADD COLUMN reviewed_by VARCHAR(255) DEFAULT ''",
+                "reviewed_at": "ALTER TABLE incidents ADD COLUMN reviewed_at TIMESTAMPTZ"
+                if engine.dialect.name == "postgresql"
+                else "ALTER TABLE incidents ADD COLUMN reviewed_at DATETIME",
                 "resolved_at": "ALTER TABLE incidents ADD COLUMN resolved_at TIMESTAMPTZ"
                 if engine.dialect.name == "postgresql"
                 else "ALTER TABLE incidents ADD COLUMN resolved_at DATETIME",

@@ -149,7 +149,38 @@ export interface IncidentView {
   timeline: { at?: string; event?: string; text?: string; [key: string]: unknown }[];
   notifications: { id: number; target: string; subject: string; status: string; step_key: string; channel: string; created_at: string | null; error: string }[];
   notes: { id: number; at: string | null; actor: string; body: string }[];
+  review: Review;
   can: { work: boolean; investigate: boolean; cloud: boolean };
+}
+
+export type Rating = "" | "correct" | "partly" | "wrong";
+
+export interface Review {
+  root_cause: string;
+  rca_rating: Rating;
+  ai_rating: Rating;
+  reviewed_by: string;
+  reviewed_at: string | null;
+}
+
+export interface Accuracy {
+  rated: number;
+  correct: number;
+  partly: number;
+  wrong: number;
+  score: number | null;
+}
+
+export interface InvestigationsPage {
+  days: number;
+  total: number;
+  offset: number;
+  limit: number;
+  rows: ({ number: string; title: string; severity: string; started_at: string | null; minutes: number | null; host: string; forgerca: string; forgeai: boolean } & Review)[];
+  accuracy: { forgerca: Accuracy; forgeai: Accuracy };
+  reviewed: number;
+  resolved: number;
+  recurring: { cause: string; count: number; hosts: string[] }[];
 }
 
 export interface LibraryItem {
