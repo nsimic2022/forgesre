@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ReportSchedules } from "../components/ReportSchedules";
+import { SloCard } from "../components/SloCard";
 import { Card } from "../components/ui";
 import { getJson, type PeriodStats, type Reports } from "../lib/api";
 import { clock, minutesLabel } from "../lib/format";
@@ -74,6 +75,7 @@ export function ReportsPage() {
           </div>
         </div>
       ) : null}
+      <SloCard />
       {data ? (
         <div className="cols">
           <div style={{ flex: "999 1 640px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>

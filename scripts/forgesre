@@ -90,6 +90,7 @@ Commands:
   demo-reset         Lower demo CPU/disk gauges (stops the demo HighCPU fire)
   jobs               Background RCA job queue
   checks             Certificates, backup age, heartbeats
+  slo                SLOs: availability, error budget, burn rate
   incidents          Short colored board (red/yellow/green); INC-… for one row
   history            90-day incident history (filters; INC-… for mail/audit/notes)
   login              Sign in as a ForgeSRE user (engineer / analyst / …)
@@ -515,6 +516,14 @@ demo-reset — set demo CPU/disk gauges back to 12% / 35%.
 Use after ./forgesre demo so HighCPU does not stay firing forever.
 
   ./forgesre demo-reset
+EOF
+      ;;
+    slo)
+      cat <<'EOF'
+slo — service level objectives: availability against target, error budget left,
+burn rate over the last 24 h (1.0x = spending the budget evenly over the window).
+
+  ./forgesre slo
 EOF
       ;;
     checks)
@@ -993,6 +1002,10 @@ case "$cmd" in
   checks)
     need_env
     run_cli_ops checks "$@"
+    ;;
+  slo)
+    need_env
+    run_cli_ops slo "$@"
     ;;
   secrets-check)
     need_env

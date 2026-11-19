@@ -732,6 +732,26 @@ def format_checks(data: dict) -> str:
     return "\n".join(out) + "\n"
 
 
+def format_slos(rows: list[dict]) -> str:
+    """One line per SLO: status, availability against target, budget left, 24 h burn."""
+    if not rows:
+        return "No SLO defined. Add one under Reports › SLOs in the UI.\n"
+    out = [f"{'STATUS':<9} {'SLO':<28} {'AVAIL':>9} {'TARGET':>8} {'BUDGET LEFT':>12} {'BURN 24H':>9}"]
+    for r in rows:
+        out.append(f"{r['status'].upper():<9} {r['name'][:28]:<28} {r['availability']:>8.3f}% {r['target']:>7g}% "
+                   f"{r['budget_left_min']:>8.0f} min {r['burn_rate_24h']:>8.1f}x")
+    return "\n".join(out) + "\n"
+
+
+def cmd_slo(port: str) -> None:
+    jar, _me = ensure_jar(port)
+    try:
+        sys.stdout.write(format_slos(list(get_json(port, jar, "/api/v1/slos").get("slos") or [])))
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def cmd_checks(port: str, rest: list[str]) -> None:
     """./forgesre checks [run | ping NAME [EVERY_HOURS]]"""
     jar, _me = ensure_jar(port)
@@ -775,6 +795,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_jobs(port)
     elif command == "checks":
         cmd_checks(port, rest)
+    elif command == "slo":
+        cmd_slo(port)
     elif command == "settings":
         cmd_settings(port, rest)
     elif command == "set-secret":
