@@ -13,7 +13,8 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.asset_extras import EXTRA_LABELS, normalize_extras
+from app.asset_extras import EXTRA_FIELDS, EXTRA_LABELS, normalize_extras
+from app.asset_types import ASSET_TYPE_GROUPS
 from app.inventory import is_snmp_asset
 from app.models import Asset, Incident, User
 from app.noc import ACTIVE
@@ -180,6 +181,7 @@ def asset_card(db: Session, asset: Asset, user: User) -> dict[str, Any]:
             "open": open_count,
             "details": [{"key": k, "label": EXTRA_LABELS.get(k, k), "value": v} for k, v in extras.items() if k in EXTRA_LABELS],
             "parent": asset.parent.hostname if asset.parent else "",
+            **{key: extras.get(key, "") for key in ("site", "row", "rack", "customer")},
             "incidents": [
                 {
                     "number": i.number,
@@ -194,3 +196,26 @@ def asset_card(db: Session, asset: Asset, user: User) -> dict[str, Any]:
         }
     )
     return data
+
+
+def asset_form_options(db: Session, user: User) -> dict[str, Any]:
+    """Choices for the new UI's asset form: type groups, extra fields, known environments, sites, owners."""
+    environments = {"Production", "Staging", "Test", "Development"}
+    owners: set[str] = set()
+    sites: set[str] = set()
+    for asset in db.query(Asset).all():
+        if asset.environment:
+            environments.add(asset.environment)
+        if asset.owner:
+            owners.add(asset.owner)
+        site = normalize_extras(asset.extras).get("site")
+        if site:
+            sites.add(site)
+    return {
+        "types": [{"group": group, "names": list(names)} for group, names in ASSET_TYPE_GROUPS],
+        "extra_fields": [{"key": key, "label": label, "max": limit} for key, label, limit in EXTRA_FIELDS],
+        "environments": sorted(environments),
+        "owners": sorted(owners),
+        "sites": sorted(sites),
+        "can_edit": can(user, "write_assets"),
+    }

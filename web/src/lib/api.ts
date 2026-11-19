@@ -226,6 +226,7 @@ export interface InventoryPage {
   offset: number;
   limit: number;
   rows: InventoryRow[];
+  can_edit?: boolean;
 }
 
 export interface AssetCard extends InventoryRow {
@@ -240,6 +241,17 @@ export interface AssetCard extends InventoryRow {
   parent: string;
   details: { key: string; label: string; value: string }[];
   incidents: { number: string; title: string; severity: string; status: string; started_at: string | null }[];
+  can_edit: boolean;
+  snmp_port?: number;
+  extras?: Record<string, string | boolean>;
+}
+
+export interface AssetFormOptions {
+  types: { group: string; names: string[] }[];
+  extra_fields: { key: string; label: string; max: number }[];
+  environments: string[];
+  owners: string[];
+  sites: string[];
   can_edit: boolean;
 }
 

@@ -2265,9 +2265,19 @@ def inventory_api(
     """Inventory page of the new UI: library counts plus one filtered page of assets."""
     from app.inventory_view import inventory_page
 
-    return inventory_page(
+    data = inventory_page(
         db, q=q, site=site, rack=rack, type_=type, environment=environment, customer=customer, view=view, limit=limit, offset=offset
     )
+    data["can_edit"] = can(user, "write_assets")
+    return data
+
+
+@router.get("/inventory-form")
+def inventory_form_api(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> dict[str, Any]:
+    """Choices for the asset form in the new UI."""
+    from app.inventory_view import asset_form_options
+
+    return asset_form_options(db, user)
 
 
 @router.get("/inventory/{asset_id}")
