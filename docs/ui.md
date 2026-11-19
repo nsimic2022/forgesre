@@ -165,3 +165,14 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
 
 All seven pages exist and do their own editing. Still on classic pages: discovery, asset
 SNMP versions and credentials, and restoring a backup. The new UI becomes the home page next.
+
+## Screenshots for the docs
+
+`docs/images/ui-*.png` come from `scripts/screenshots.py` (Playwright, 1440 px wide). Run it
+against a demo install with some incidents, then commit the new images:
+
+```bash
+pip install playwright && playwright install chromium
+python scripts/screenshots.py --base http://127.0.0.1:8080 --email admin@forgesre.local --password '…'
+python scripts/screenshots.py --only noc,incident     # just a few pages
+```

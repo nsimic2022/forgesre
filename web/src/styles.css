@@ -2,6 +2,7 @@
    dot grid, monospace uppercase labels, large tabular numbers, one cyan accent. Severity colours
    also differ in lightness (critical darkest, warning lightest) so they read without hue. */
 :root {
+  color-scheme: dark;
   --bg: #0a0b0d;
   --grid-dot: #1a1d23;
   --s1: #111317;
@@ -112,7 +113,7 @@ table.data td { padding: 11px 12px; border-bottom: 1px solid var(--border); vert
 
 .bar { height: 6px; background: var(--s3); border-radius: 3px; overflow: hidden; }
 .bar > span { display: block; height: 6px; }
-input.search { background: var(--s2); border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+input.search, textarea.search, select.search { background: var(--s2); border: 1px solid var(--border); border-radius: 8px; color: var(--text);
   min-height: 34px; padding: 0 12px; font: inherit; font-size: 13.5px; min-width: 240px; }
 .banner { border-radius: 10px; padding: 10px 14px; font-size: 13.5px; }
 .banner.error { background: var(--crit-bg); color: var(--text); border: 1px solid #6a2e35; }
@@ -128,3 +129,8 @@ td .mono, .stat .mono { font-variant-numeric: tabular-nums; }
 .tv-kpi .value { font-size: 56px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
 .tv-label { font-family: var(--mono); font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
 @media (max-width: 1100px) { .tv-grid { grid-template-columns: 1fr; } }
+
+/* Form controls share the console surface (textareas and selects used to fall back to the browser's grey). */
+textarea.search { font: inherit; line-height: 1.5; resize: vertical; padding: 10px 12px; }
+select.search { padding: 0 10px; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
