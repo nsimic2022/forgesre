@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, useLocation } from "react-router-dom";
 import { Shell } from "./components/Shell";
 import { getJson, type Me } from "./lib/api";
 import { NocContext, NocPage, useNocPoll } from "./pages/Noc";
@@ -12,12 +12,16 @@ import { OnCallPage } from "./pages/OnCall";
 import { Pending } from "./pages/Pending";
 import { ReportsPage } from "./pages/Reports";
 import { SettingsPage } from "./pages/Settings";
+import { TvPage } from "./pages/Tv";
 
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
+  const location = useLocation();
   useEffect(() => {
     getJson<Me>("/api/v1/me").then(setMe).catch(() => setMe(null));
   }, []);
+  // The wall screen has no menu and polls its own endpoint.
+  if (location.pathname === "/tv") return <TvPage />;
   return (
     <ShellWithAi me={me}>
       <Routes>

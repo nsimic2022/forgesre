@@ -90,6 +90,25 @@ export interface Noc {
   ai: { forgerca: boolean; forgeai: "off" | "local" | "external" };
 }
 
+export interface ClockHour {
+  start: string;
+  hour: number;
+  critical: number;
+  high: number;
+  warning: number;
+}
+
+export interface IncidentClockData {
+  now: string;
+  hour: number;
+  minute: number;
+  timezone: string;
+  hours: ClockHour[];
+  total: number;
+}
+
+export type TvData = Noc & { clock: IncidentClockData };
+
 export interface IncidentPage {
   tab: string;
   counts: Record<"active" | "acknowledged" | "resolved" | "all", number>;

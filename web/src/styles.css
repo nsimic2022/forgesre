@@ -103,3 +103,14 @@ input.search { background: var(--s2); border: 1px solid var(--border); border-ra
   min-height: 34px; padding: 0 12px; font: inherit; font-size: 13.5px; min-width: 240px; }
 .banner { border-radius: 10px; padding: 10px 14px; font-size: 13.5px; }
 .banner.error { background: var(--crit-bg); color: var(--text); border: 1px solid #6a2e35; }
+
+/* Visually hidden, still read by screen readers. */
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* TV mode: wall screen, read from across the room. */
+.tv { min-height: 100vh; padding: 28px 36px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px; font-size: 18px; }
+.tv-grid { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(420px, 1.6fr) minmax(300px, 1.2fr); gap: 28px; align-items: start; }
+.tv-kpi { background: var(--s1); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; }
+.tv-kpi .value { font-size: 56px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tv-label { font-family: var(--mono); font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+@media (max-width: 1100px) { .tv-grid { grid-template-columns: 1fr; } }
