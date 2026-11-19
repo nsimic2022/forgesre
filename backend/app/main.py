@@ -141,6 +141,10 @@ def _escalation_loop(stop: threading.Event) -> None:
             continue
         db = SessionLocal()
         try:
+            from app.noise_filters import promote_filtered
+
+            # Open quiet incidents whose noise filter stopped applying, then escalate.
+            promote_filtered(db)
             process_escalations(db)
         except Exception as exc:
             log.exception("escalation loop failed")

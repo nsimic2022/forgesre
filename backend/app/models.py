@@ -473,6 +473,36 @@ class OncallSlot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class NoiseFilter(Base):
+    """Known noise: an alarm that matches is recorded but nobody is notified while it applies.
+
+    See docs/alerting.md and app/noise_filters.py. Window minutes are in the appliance
+    time zone; end < start means the window crosses midnight.
+    """
+
+    __tablename__ = "noise_filters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    alertnames: Mapped[list] = mapped_column(JSONType, default=list)  # empty = any alert
+    scope: Mapped[str] = mapped_column(String(16), default="all")  # all | asset | type | site
+    scope_value: Mapped[str] = mapped_column(String(255), default="")
+    days: Mapped[list] = mapped_column(JSONType, default=list)  # weekdays 0=Mon..6; empty = every day
+    start_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_value: Mapped[float | None] = mapped_column(Float, nullable=True)  # only below this sample
+    action: Mapped[str] = mapped_column(String(16), default="quiet")  # quiet | delay
+    delay_minutes: Mapped[int] = mapped_column(Integer, default=5)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    owner: Mapped[str] = mapped_column(String(255), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    hits: Mapped[int] = mapped_column(Integer, default=0)
+    last_hit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class MaintenanceWindow(Base):
     __tablename__ = "maintenance_windows"
 

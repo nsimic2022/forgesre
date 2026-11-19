@@ -26,7 +26,8 @@ React + TypeScript in `web/`, served at `/app` ([ui.md](ui.md)). Order: ~~NOC ov
 Follows [alerting.md](alerting.md): severities by urgency, predictive disk alerts, one
 incident per problem.
 
-Noise filters (windows, short spikes, known issues, upstream dependency), routing,
+~~Noise filters (windows, short spikes, known issues; upstream dependency already
+existed)~~ (done, [alerting.md](alerting.md#noise-filters)), routing,
 escalation policies, the "try an alarm" simulator, scheduled reports (daily, weekly,
 monthly, cron) by email, Slack, Teams, Discord.
 

@@ -65,9 +65,15 @@ def automation_overview(db: Session, now: datetime | None = None) -> dict[str, A
         .limit(100)
         .all()
     )
+    from app.models import NoiseFilter
+    from app.noise_filters import as_dict as filter_dict
+
+    filtered = sum(1 for i in today if any(str(t.get("id") or "").startswith("noise-") for t in i.timeline or []))
     return {
+        "filters": [filter_dict(f) for f in db.query(NoiseFilter).order_by(NoiseFilter.id).all()],
         "pipeline": {
             "incidents_today": len(today),
+            "filtered_today": filtered,
             "muted_today": muted,
             "routed_today": routed,
             "notifications_today": notified,
@@ -139,6 +145,17 @@ def simulate_alarm(db: Session, alertname: str, asset_ref: str = "", value: str 
     if windows:
         trace.append(f"In maintenance: {windows[0].get('summary') or 'window'} until {windows[0].get('ends_at')}.")
         return {"outcome": "muted", "trace": trace, "rule": None, "playbook": None, "policy": None, "steps": []}
+    from app.noise_filters import describe, matching_filter
+
+    try:
+        sample = float(value) if str(value).strip() else None
+    except ValueError:
+        sample = None
+    noise = matching_filter(db, alertname, asset, sample, at, at)
+    if noise is not None:
+        trace.append(describe(noise) + ".")
+        outcome = "delayed" if noise.action == "delay" else "filtered"
+        return {"outcome": outcome, "trace": trace, "rule": None, "playbook": None, "policy": None, "steps": [], "filter": noise.name}
     labels = {"alertname": alertname}
     annotations = {"value": value} if str(value).strip() else {}
     rule = match_playrule(db, alertname, labels=labels, asset=asset, annotations=annotations)

@@ -1,17 +1,19 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { NoiseFilters } from "../components/NoiseFilters";
 import { Card, Chip } from "../components/ui";
 import { getJson, postJson, type Automation, type PolicyStep, type Simulation } from "../lib/api";
 import { clock } from "../lib/format";
 
-type Tab = "rules" | "escalation" | "playbooks" | "maintenance";
+type Tab = "filters" | "rules" | "escalation" | "playbooks" | "maintenance";
 const TABS: { key: Tab; label: string }[] = [
+  { key: "filters", label: "Noise filters" },
   { key: "rules", label: "Routing rules" },
   { key: "escalation", label: "Escalation" },
   { key: "playbooks", label: "Playbooks" },
   { key: "maintenance", label: "Maintenance windows" },
 ];
 // Classic pages that still do the editing.
-const EDIT: Record<Tab, string> = { rules: "/playrules", escalation: "/escalation", playbooks: "/playbooks", maintenance: "/assets" };
+const EDIT: Record<Tab, string> = { filters: "", rules: "/playrules", escalation: "/escalation", playbooks: "/playbooks", maintenance: "/assets" };
 
 function condition(c: Automation["rules"][number]["condition"]): string {
   const base = c.alertname ?? "any alert";
@@ -63,7 +65,9 @@ function Simulator() {
       {result ? (
         <div className="cell-stack" aria-live="polite">
           <div className="row">
-            <Chip tone={result.outcome === "muted" ? "off" : "high"}>{result.outcome === "muted" ? "Muted, nobody notified" : "Incident opens"}</Chip>
+            <Chip tone={result.outcome === "incident" ? "high" : "off"}>
+              {{ muted: "Muted by maintenance", filtered: "Filtered as noise, nobody notified", delayed: "Waits, opens only if it does not clear", incident: "Incident opens" }[result.outcome]}
+            </Chip>
             {result.playbook ? <Chip tone="info">Playbook {result.playbook}</Chip> : null}
           </div>
           <ol style={{ margin: 0, paddingLeft: 20 }}>
@@ -80,16 +84,17 @@ function Simulator() {
 
 export function AutomationPage() {
   const [data, setData] = useState<Automation | null>(null);
-  const [tab, setTab] = useState<Tab>("rules");
+  const [tab, setTab] = useState<Tab>("filters");
   const [error, setError] = useState("");
+  const load = () => getJson<Automation>("/api/v1/automation").then(setData).catch((e: Error) => setError(e.message));
   useEffect(() => {
-    getJson<Automation>("/api/v1/automation").then(setData).catch((e: Error) => setError(e.message));
+    load();
   }, []);
   const p = data?.pipeline;
   const steps: [string, string, string][] = p
     ? [
         ["Collect", "Alertmanager · Zabbix · LibreNMS · syslog", `${p.incidents_today} incidents today`],
-        ["Filter noise", "Maintenance windows", `${p.muted_today} muted`],
+        ["Filter noise", "Noise filters, maintenance, parent down", `${p.filtered_today} filtered · ${p.muted_today} quiet in total`],
         ["Route", "Rules pick playbook and escalation", `${p.routed_today} matched a rule`],
         ["Escalate and notify", "Policies, on-call, channels", `${p.notifications_today} messages sent`],
       ]
@@ -101,7 +106,7 @@ export function AutomationPage() {
           <h1>Automation</h1>
           <span className="muted">What happens between an alarm and someone’s phone</span>
         </div>
-        {data?.can_edit ? <a className="btn" href={EDIT[tab]}>Edit in classic UI</a> : null}
+        {data?.can_edit && EDIT[tab] ? <a className="btn" href={EDIT[tab]}>Edit in classic UI</a> : null}
       </header>
       {error ? <div className="banner error" role="alert">{error}</div> : null}
       {p ? (
@@ -122,6 +127,7 @@ export function AutomationPage() {
           </button>
         ))}
       </div>
+      {data && tab === "filters" ? <NoiseFilters filters={data.filters} canEdit={data.can_edit} onChanged={load} /> : null}
       {data && tab === "rules" ? (
         <Card title="Routing rules · first match wins" actions={<span className="small faint">Asset-specific rules are tried before global ones</span>}>
           <div className="table-wrap">
