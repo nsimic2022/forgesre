@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { PlaybookForm, RemoveButton, RuleForm, ruleBody, ruleDraft } from "../components/AutomationEditors";
 import { NoiseFilters } from "../components/NoiseFilters";
 import { Card, Chip } from "../components/ui";
-import { getJson, postJson, type Automation, type PolicyStep, type Simulation } from "../lib/api";
+import { getJson, postJson, putJson, type Automation, type PolicyStep, type Simulation } from "../lib/api";
 import { clock } from "../lib/format";
 
 type Tab = "filters" | "rules" | "escalation" | "playbooks" | "maintenance";
@@ -13,7 +14,9 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "maintenance", label: "Maintenance windows" },
 ];
 // Classic pages that still do the editing.
-const EDIT: Record<Tab, string> = { filters: "", rules: "/playrules", escalation: "/escalation", playbooks: "/playbooks", maintenance: "/assets" };
+const EDIT: Record<Tab, string> = { filters: "", rules: "", escalation: "/escalation", playbooks: "", maintenance: "/assets" };
+type Rule = Automation["rules"][number];
+type Book = Automation["playbooks"][number];
 
 function condition(c: Automation["rules"][number]["condition"]): string {
   const base = c.alertname ?? "any alert";
@@ -86,7 +89,13 @@ export function AutomationPage() {
   const [data, setData] = useState<Automation | null>(null);
   const [tab, setTab] = useState<Tab>("filters");
   const [error, setError] = useState("");
+  const [ruleEdit, setRuleEdit] = useState<{ rule: Rule | null } | null>(null);
+  const [bookEdit, setBookEdit] = useState<{ book: Book | null; copy: boolean } | null>(null);
   const load = () => getJson<Automation>("/api/v1/automation").then(setData).catch((e: Error) => setError(e.message));
+  const closeRule = (saved: boolean) => (setRuleEdit(null), saved && load());
+  const closeBook = (saved: boolean) => (setBookEdit(null), saved && load());
+  const toggle = (r: Rule) =>
+    putJson(`/api/v1/automation/rules/${r.id}`, ruleBody({ ...ruleDraft(r), enabled: !r.enabled })).then(load).catch((e: Error) => setError(e.message));
   useEffect(() => {
     load();
   }, []);
@@ -129,11 +138,13 @@ export function AutomationPage() {
       </div>
       {data && tab === "filters" ? <NoiseFilters filters={data.filters} canEdit={data.can_edit} onChanged={load} /> : null}
       {data && tab === "rules" ? (
-        <Card title="Routing rules · first match wins" actions={<span className="small faint">Asset-specific rules are tried before global ones</span>}>
+        <>
+        {ruleEdit ? <RuleForm key={ruleEdit.rule?.id ?? "new"} rule={ruleEdit.rule} data={data} onDone={closeRule} /> : null}
+        <Card title="Routing rules · first match wins" actions={<><span className="small faint">Asset-specific rules are tried before global ones</span>{data.can_edit ? <button className="btn primary" type="button" onClick={() => setRuleEdit({ rule: null })}>New rule</button> : null}</>}>
           <div className="table-wrap">
             <table className="data" style={{ minWidth: 860 }}>
               <thead>
-                <tr><th style={{ width: 160 }}>Rule</th><th>When the alarm is</th><th style={{ width: 90 }}>Severity</th><th style={{ width: 150 }}>Playbook</th><th style={{ width: 160 }}>Escalation</th><th style={{ width: 90 }}>Hits 30 d</th><th style={{ width: 70 }}>On</th></tr>
+                <tr><th style={{ width: 160 }}>Rule</th><th>When the alarm is</th><th style={{ width: 90 }}>Severity</th><th style={{ width: 150 }}>Playbook</th><th style={{ width: 160 }}>Escalation</th><th style={{ width: 90 }}>Hits 30 d</th><th style={{ width: 70 }}>On</th>{data.can_edit ? <th style={{ width: 230 }}>Change</th> : null}</tr>
               </thead>
               <tbody>
                 {data.rules.map((r) => (
@@ -145,12 +156,22 @@ export function AutomationPage() {
                     <td>{r.policy ?? <span className="faint">—</span>}</td>
                     <td className="muted">{r.hits_30d}</td>
                     <td><Chip tone={r.enabled ? "ok" : "off"}>{r.enabled ? "On" : "Off"}</Chip></td>
+                    {data.can_edit ? (
+                      <td>
+                        <div className="row" style={{ gap: 6 }}>
+                          <button className="btn" type="button" onClick={() => setRuleEdit({ rule: r })} aria-label={`Edit rule ${r.name}`}>Edit</button>
+                          <button className="btn" type="button" onClick={() => toggle(r)} aria-label={`${r.enabled ? "Turn off" : "Turn on"} rule ${r.name}`}>{r.enabled ? "Turn off" : "Turn on"}</button>
+                          <RemoveButton url={`/api/v1/automation/rules/${r.id}`} what={r.name} onRemoved={load} />
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </Card>
+        </>
       ) : null}
       {data && tab === "escalation" ? (
         <div className="cols">
@@ -162,14 +183,29 @@ export function AutomationPage() {
         </div>
       ) : null}
       {data && tab === "playbooks" ? (
+        <>
+        {bookEdit ? <PlaybookForm key={`${bookEdit.book?.id ?? "new"}-${bookEdit.copy}`} book={bookEdit.book} copy={bookEdit.copy} onDone={closeBook} /> : null}
+        {data.can_edit ? <div className="row"><button className="btn primary" type="button" onClick={() => setBookEdit({ book: null, copy: false })}>New playbook</button></div> : null}
         <div className="cols">
           {data.playbooks.map((book) => (
-            <Card key={book.id} title={book.name} actions={<span className="small faint">{book.rules} rules</span>}>
+            <Card key={book.id} title={book.name} actions={
+              <>
+                <span className="small faint">{book.rules} rules</span>
+                {data.can_edit ? (
+                  <>
+                    <button className="btn" type="button" onClick={() => setBookEdit({ book, copy: false })} aria-label={`Edit playbook ${book.name}`}>Edit</button>
+                    <button className="btn" type="button" onClick={() => setBookEdit({ book, copy: true })} aria-label={`Copy playbook ${book.name}`}>Copy</button>
+                    <RemoveButton url={`/api/v1/automation/playbooks/${book.id}`} what={book.name} onRemoved={load} />
+                  </>
+                ) : null}
+              </>
+            }>
               {book.description ? <span className="small muted">{book.description}</span> : null}
               <ol style={{ margin: 0, paddingLeft: 20 }}>{book.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
             </Card>
           ))}
         </div>
+        </>
       ) : null}
       {data && tab === "maintenance" ? (
         <Card title="Maintenance windows" actions={<span className="small faint">Alarms on these assets are muted while a window is open</span>}>

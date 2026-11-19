@@ -87,7 +87,9 @@ def automation_overview(db: Session, now: datetime | None = None) -> dict[str, A
                 "severity": r.severity,
                 "condition": r.condition or {},
                 "playbook": r.playbook.name if r.playbook else None,
+                "playbook_id": r.playbook_id,
                 "policy": r.escalation_policy.name if r.escalation_policy else None,
+                "policy_id": r.escalation_policy_id,
                 "hits_30d": per_rule.get(r.id, 0),
             }
             for r in rules

@@ -6,7 +6,7 @@ import { AutomationPage } from "./Automation";
 const data: Automation = {
   filters: [{ id: 4, name: "Backup window", enabled: true, alertnames: ["DiskUsage"], scope: "type", scope_value: "Oracle DB", days: [], start_minute: 60, end_minute: 180, max_value: 97, action: "quiet", delay_minutes: 5, expires_at: null, owner: "dba", note: "nightly backup", hits: 41, last_hit_at: null, created_by: "x" }],
   pipeline: { incidents_today: 12, filtered_today: 2, muted_today: 3, routed_today: 9, notifications_today: 7 },
-  rules: [{ id: 1, name: "high-cpu", description: "CPU above 80%", enabled: true, severity: "warning", condition: { alertname: "HighCPU", metric: "cpu_usage", operator: ">", value: 80 }, playbook: "cpu", policy: "Default warning", hits_30d: 4 }],
+  rules: [{ id: 1, name: "high-cpu", description: "CPU above 80%", enabled: true, severity: "warning", condition: { alertname: "HighCPU", metric: "cpu_usage", operator: ">", value: 80 }, playbook: "cpu", playbook_id: 1, policy: "Default warning", policy_id: 1, hits_30d: 4 }],
   playbooks: [{ id: 1, name: "cpu", description: "", steps: ["Check top processes"], rules: 1 }],
   policies: [{ id: 1, name: "Default warning", steps: [{ after_minutes: 0, target: "team", channel: "email", level: 1 }, { after_minutes: 15, target: "team-lead", channel: "email", level: 2 }], rules: 1 }],
   maintenance: [],
@@ -16,10 +16,13 @@ const sim: Simulation = { outcome: "incident", trace: ["Rule “high-cpu” matc
 
 describe("Automation", () => {
   let bodies: string[];
+  let calls: { url: string; method: string; body: unknown }[];
   beforeEach(() => {
     bodies = [];
+    calls = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.body) bodies.push(init.body as string);
+      calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : null });
       return new Response(JSON.stringify(url.endsWith("/simulate") ? sim : data), { status: 200, headers: { "Content-Type": "application/json" } });
     }));
   });
@@ -54,5 +57,41 @@ describe("Automation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Run test" }));
     expect(await screen.findByText("Rule “high-cpu” matches (warning).")).toBeTruthy();
     await waitFor(() => expect(JSON.parse(bodies[0]).value).toBe("96"));
+  });
+
+  it("creates a rule, turns one off and removes it after asking", async () => {
+    render(<AutomationPage />);
+    await screen.findByText("12 incidents today");
+    fireEvent.click(screen.getByRole("tab", { name: "Routing rules" }));
+    fireEvent.click(screen.getByRole("button", { name: "New rule" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "disk-db" } });
+    fireEvent.change(screen.getByLabelText("Alert name (empty = rule name)"), { target: { value: "NodeFilesystemUsageHigh" } });
+    fireEvent.change(screen.getByLabelText("Threshold"), { target: { value: "90" } });
+    fireEvent.change(screen.getByLabelText("Playbook"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save rule" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url === "/api/v1/automation/rules")).toBe(true));
+    const made = calls.find((c) => c.method === "POST" && c.url === "/api/v1/automation/rules")!.body;
+    expect(made).toMatchObject({ name: "disk-db", alertname: "NodeFilesystemUsageHigh", value: 90, playbook_id: 1, escalation_policy_id: null });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Turn off rule high-cpu" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.url === "/api/v1/automation/rules/1")).toBe(true));
+    expect(calls.find((c) => c.method === "PUT")!.body).toMatchObject({ enabled: false, alertname: "HighCPU", metric: "cpu_usage", value: 80 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm remove high-cpu" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.url === "/api/v1/automation/rules/1")).toBe(true));
+  });
+
+  it("edits and copies a playbook", async () => {
+    render(<AutomationPage />);
+    await screen.findByText("12 incidents today");
+    fireEvent.click(screen.getByRole("tab", { name: "Playbooks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy playbook cpu" }));
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("cpu (copy)");
+    fireEvent.change(screen.getByLabelText("Checklist steps, one per line"), { target: { value: "Check top processes\n\nCall the owner" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save playbook" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url === "/api/v1/automation/playbooks")).toBe(true));
+    expect(calls.find((c) => c.url === "/api/v1/automation/playbooks")!.body).toMatchObject({ name: "cpu (copy)", steps: ["Check top processes", "Call the owner"] });
   });
 });

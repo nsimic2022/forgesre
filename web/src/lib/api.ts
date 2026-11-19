@@ -294,7 +294,9 @@ export interface Automation {
     severity: string;
     condition: { alertname?: string; metric?: string; operator?: string; value?: number | string };
     playbook: string | null;
+    playbook_id: number | null;
     policy: string | null;
+    policy_id: number | null;
     hits_30d: number;
   }[];
   playbooks: { id: number; name: string; description: string; steps: string[]; rules: number }[];
