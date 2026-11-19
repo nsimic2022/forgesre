@@ -153,7 +153,7 @@ from app.models import (
     ScheduledReport,
     User,
 )
-from app.webui import web_ui_available
+from app.webui import home_redirect, web_ui_available
 from app.netbox import is_local_netbox_url, status_label, sync_cta, token_presence
 from app.security import (
     CREATABLE_ROLES,
@@ -815,12 +815,17 @@ def logout(request: Request, db: Session = Depends(get_db), user: User | None = 
 
 
 @router.get("/", response_class=HTMLResponse)
+@router.get("/classic", response_class=HTMLResponse)
 def dashboard(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(login_required),
     page: str = "1",
 ):
+    """Home. Opens the new UI when it is built and ui.home is "new"; /classic always shows this dashboard."""
+    target = home_redirect() if request.url.path == "/" else None
+    if target:
+        return RedirectResponse(target, status_code=303)
     asset_rows = asset_tiles(db.query(Asset).all())
     incident_rows = dashboard_incident_tiles(db)
     size = per_page(request)

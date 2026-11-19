@@ -86,3 +86,7 @@ notifications:
     discord:
       enabled: false
       min_severity: high
+
+# Which UI opens at / after sign-in: new (the React UI at /app) or classic. /classic always works.
+ui:
+  home: new
