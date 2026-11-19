@@ -1,8 +1,10 @@
 # New UI (ForgeSRE 2)
 
 React + TypeScript in `web/`, built by Vite into `web/dist` and served by Core at `/app`.
-The classic UI keeps working at its current paths until each page is replaced; then the
-new UI moves to `/` and the classic one to `/classic`.
+It is the home page: `/` sends a signed-in user to `/app/` when the build is present and
+`ui.home` is `new` (the default). The classic dashboard is always at `/classic`, and the
+other classic pages keep their paths. `./forgesre settings set ui.home classic` switches
+the home page back.
 
 ## How it runs on the appliance
 
@@ -12,7 +14,7 @@ new UI moves to `/` and the classic one to `/classic`.
   nothing leaves the appliance.
 - Data comes from `/api/v1/*` with the normal session cookie. A 401 sends the browser to
   `/login`. Each page reads one compact endpoint (NOC: `GET /api/v1/noc`, polled every 10 s).
-- The classic sidebar shows **New UI (preview)** when the build is present.
+- The classic sidebar shows **New UI** when the build is present; the new UI links to **Open classic UI** (`/classic`).
 
 ## Developing
 

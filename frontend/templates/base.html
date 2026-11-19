@@ -53,7 +53,7 @@
       <symbol id="nav-logout" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M7 2.5H3.5v11H7M7 8h6M10.5 5.5 13 8l-2.5 2.5"/></symbol>
     </svg>
     <div class="brand"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-dash"></use></svg></span>ForgeSRE <span>v1.0</span></div>
-    <a href="/" class="{% if request.url.path == '/' %}active{% endif %}" title="Dashboard"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-dash"></use></svg></span><span class="nav-label">Dashboard</span></a>
+    <a href="/classic" class="{% if request.url.path in ('/', '/classic') %}active{% endif %}" title="Dashboard"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-dash"></use></svg></span><span class="nav-label">Dashboard</span></a>
     {% if can('read_ai') %}
     <a href="/investigations" class="{% if request.url.path.startswith('/investigations') or request.url.path.startswith('/forgeai') %}active{% endif %}" title="Investigations"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-invest"></use></svg></span><span class="nav-label">Investigations</span></a>
     {% endif %}
@@ -70,7 +70,7 @@
     <a href="/health-ui" class="{% if request.url.path.startswith('/health-ui') %}active{% endif %}" title="System Health"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-health"></use></svg></span><span class="nav-label">System Health</span></a>
     {% if can_send_ops %}<a href="/ops" class="{% if request.url.path.startswith('/ops') %}active{% endif %}" title="Email &amp; reports"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-ops"></use></svg></span><span class="nav-label">Email &amp; reports</span></a>{% endif %}
     {% if can('admin') %}<a href="/admin" class="{% if request.url.path.startswith('/admin') %}active{% endif %}" title="Administration"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-admin"></use></svg></span><span class="nav-label">Administration</span></a>{% endif %}
-    {% if web_ui %}<a href="/app/" title="New UI (preview)"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-dash"></use></svg></span><span class="nav-label">New UI (preview)</span></a>{% endif %}
+    {% if web_ui %}<a href="/app/" title="New UI"><span class="nav-ico" aria-hidden="true"><svg class="nav-svg"><use href="#nav-dash"></use></svg></span><span class="nav-label">New UI</span></a>{% endif %}
     <div class="nav-foot">
       <div class="who">
         {% set display_name = distinct_who_name(user.name, user.role, user.surname) %}

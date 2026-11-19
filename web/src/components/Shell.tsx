@@ -40,7 +40,7 @@ export function Shell({ me, forgeai, children }: { me: Me | null; forgeai: strin
             <span>ForgeAI</span>
             <Chip tone={forgeai === "off" ? "off" : "info"}>{forgeai === "off" ? "Off" : forgeai === "external" ? "External" : "Local"}</Chip>
           </div>
-          <a className="small" href="/">Open classic UI</a>
+          <a className="small" href="/classic">Open classic UI</a>
         </div>
         {me ? (
           <div className="nav-user">
