@@ -11,7 +11,9 @@ cloud service unless you turn that on.
 
 Current product: V0.9 · License: [Apache-2.0](LICENSE) · Code lives on [`main`](https://github.com/nsimic2022/forgesre).
 
-![Dashboard — incidents, infrastructure, host metrics](docs/images/dashboard.png)
+![NOC overview: open incidents, who has them, health by group, who is on call](docs/images/ui-noc.png)
+
+New here? Read the [guide](docs/README.md#guide): six short chapters with screenshots.
 
 ---
 
@@ -47,7 +49,7 @@ Four roles: Viewer, Analyst (NOC operator), Engineer (changes everything operati
 (settings, integrations, users, backup). Permissions are checked on the server for every write.
 Details: [handbook §3](docs/operator-handbook.md#3-roles-and-who-can-click-what).
 
-![Incidents list](docs/images/incidents.png)
+![An incident: what changed before it, ForgeRCA, the asset, notifications and notes](docs/images/ui-incident.png)
 
 ---
 

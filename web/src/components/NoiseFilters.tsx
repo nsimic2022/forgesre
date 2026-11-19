@@ -140,7 +140,7 @@ export function NoiseFilters({ filters, canEdit, onChanged }: { filters: NoiseFi
               {filters.map((f) => (
                 <tr key={f.id}>
                   <td><div className="cell-stack"><span style={{ fontWeight: 600 }}>{f.name}</span>{f.note ? <span className="small muted">{f.note}</span> : null}</div></td>
-                  <td className="mono small">{f.alertnames.length ? f.alertnames.join(", ") : "any"}</td>
+                  <td className="mono small" style={{ wordBreak: "break-word", maxWidth: 200 }}>{f.alertnames.length ? f.alertnames.join(", ") : "any"}</td>
                   <td className="small">{f.scope === "all" ? "All assets" : `${f.scope}: ${f.scope_value}`}</td>
                   <td className="small">{when(f)}</td>
                   <td className="small muted">{f.max_value ?? "—"}</td>

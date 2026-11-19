@@ -1,0 +1,65 @@
+# 4. Alarms, noise and escalation
+
+Every alarm takes the same short path. Knowing it is how you make ForgeSRE call people
+only when it matters.
+
+```
+alarm (Prometheus, Zabbix, a check)
+  → noise filter?        record quietly, or wait N minutes
+  → maintenance?         open, but notify nobody
+  → parent down?         open, but notify nobody
+  → routing rule         severity, playbook, escalation policy
+  → incident             notify L1, then L2, L3, L4 until someone acknowledges
+```
+
+All of it lives under **Automation** and needs an Engineer to change. The exact rules
+and the runbook format are in [alerting.md](../alerting.md).
+
+## Noise filters
+
+![Noise filters](../images/ui-automation-filters.png)
+
+A noise filter catches alarms you know are not worth a person's time: a flapping test
+port, a nightly backup that always spikes the CPU. Match by alarm name, asset or group,
+days and hours, and a maximum value. Then choose: **record, notify nobody**, or **wait
+before opening** (the alarm only becomes an incident if it lasts longer than N minutes).
+Give it an owner and an expiry date so it does not outlive its reason. Each filter shows
+how often it matched.
+
+## Routing rules
+
+![Routing rules](../images/ui-automation-rules.png)
+
+A rule says: for this alarm (optionally above this value), use this severity, this
+playbook and this escalation policy. Asset-specific rules win over global ones. With no
+matching rule the incident still opens, just without a playbook.
+
+**Try an alarm** sends a pretend alarm through the whole path and shows what would happen,
+without opening anything. Use it before saving a new rule.
+
+## Escalation
+
+![Escalation](../images/ui-automation-escalation.png)
+
+A policy has up to four levels. Each says who to tell (on-call, a team, a person), how
+(email, chat) and after how many minutes without an acknowledgement. Acknowledging stops
+it; **Escalate** on the incident jumps a level now.
+
+The *default-warning* policy cannot be removed; rules from a deleted policy fall back to it.
+
+## Chat notifications
+
+Slack, Microsoft Teams and Discord can get a line for each incident, with a link to it.
+Turn them on in Settings › Notifications and store the webhook with
+`./forgesre settings set-secret`. Messages are sent in the background, so a slow chat
+service never delays an alarm. Only the incident line leaves the server.
+
+## Checks ForgeSRE runs itself
+
+Some problems never raise a metric. Every 15 minutes ForgeSRE checks:
+
+- **TLS certificates** you listed: warning 14 days before expiry, critical at 3
+- **Backup age**: the newest ForgeSRE backup is older than 36 hours
+- **Heartbeats**: a cron job or script that should call in every N minutes went silent
+
+See them with `./forgesre checks`. Setup: [alerting.md](../alerting.md).
