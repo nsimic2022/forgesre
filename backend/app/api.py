@@ -2246,3 +2246,36 @@ def incident_checklist_api(
         return {"done": set_checklist_step(db, item, body.step, body.done, actor=user.email)}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/inventory")
+def inventory_api(
+    q: str = "",
+    site: str = "",
+    rack: str = "",
+    type: str = "",
+    environment: str = "",
+    customer: str = "",
+    view: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_assets")),
+) -> dict[str, Any]:
+    """Inventory page of the new UI: library counts plus one filtered page of assets."""
+    from app.inventory_view import inventory_page
+
+    return inventory_page(
+        db, q=q, site=site, rack=rack, type_=type, environment=environment, customer=customer, view=view, limit=limit, offset=offset
+    )
+
+
+@router.get("/inventory/{asset_id}")
+def inventory_card_api(asset_id: str, db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> dict[str, Any]:
+    """Asset card of the new UI."""
+    from app.inventory_view import asset_card
+
+    item = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    return asset_card(db, item, user)

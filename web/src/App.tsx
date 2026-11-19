@@ -5,6 +5,7 @@ import { getJson, type Me } from "./lib/api";
 import { NocContext, NocPage, useNocPoll } from "./pages/Noc";
 import { IncidentDetailPage } from "./pages/IncidentDetail";
 import { IncidentsPage } from "./pages/Incidents";
+import { InventoryPage } from "./pages/Inventory";
 import { OnCallPage } from "./pages/OnCall";
 import { Pending } from "./pages/Pending";
 
@@ -20,7 +21,7 @@ export function App() {
         <Route path="/incidents" element={<IncidentsPage />} />
         <Route path="/incidents/on-call" element={<OnCallPage />} />
         <Route path="/incidents/:number" element={<IncidentDetailPage />} />
-        <Route path="/inventory/*" element={<Pending title="Inventory" classic="/assets" />} />
+        <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/automation/*" element={<Pending title="Automation" classic="/playrules" />} />
         <Route path="/investigations/*" element={<Pending title="Investigations" classic="/investigations" />} />
         <Route path="/reports/*" element={<Pending title="Reports" classic="/ops" />} />

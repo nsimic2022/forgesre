@@ -151,3 +151,55 @@ export interface IncidentView {
   notes: { id: number; at: string | null; actor: string; body: string }[];
   can: { work: boolean; investigate: boolean; cloud: boolean };
 }
+
+export interface LibraryItem {
+  name: string;
+  count: number;
+}
+
+export interface InventoryRow {
+  asset_id: string;
+  number: number;
+  hostname: string;
+  ip: string;
+  type: string;
+  environment: string;
+  site: string;
+  row: string;
+  rack: string;
+  customer: string;
+  owner: string;
+  state: "down" | "alarm" | "up" | "unknown";
+  sources: string[];
+  open: number;
+}
+
+export interface InventoryPage {
+  library: {
+    sites: (LibraryItem & { racks: LibraryItem[] })[];
+    types: LibraryItem[];
+    environments: LibraryItem[];
+    customers: LibraryItem[];
+    views: (LibraryItem & { key: string })[];
+  };
+  total: number;
+  all: number;
+  offset: number;
+  limit: number;
+  rows: InventoryRow[];
+}
+
+export interface AssetCard extends InventoryRow {
+  monitoring_profile: string;
+  contact_name: string;
+  owner_email: string;
+  owner_phone: string;
+  notes: string;
+  glpi_id: string;
+  zabbix_hostid: string;
+  scrape_address: string;
+  parent: string;
+  details: { key: string; label: string; value: string }[];
+  incidents: { number: string; title: string; severity: string; status: string; started_at: string | null }[];
+  can_edit: boolean;
+}
