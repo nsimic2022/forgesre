@@ -9,7 +9,7 @@ quiet periods for maintenance and known noise, and a read-only investigation tha
 probably happened. An optional local LLM (ForgeAI) writes the summary; nothing is sent to a
 cloud service unless you turn that on.
 
-Current product: V0.9 · License: [Apache-2.0](LICENSE) · Code lives on [`main`](https://github.com/nsimic2022/forgesre).
+Current product: V2.0 · License: [Apache-2.0](LICENSE) · Code lives on [`main`](https://github.com/nsimic2022/forgesre).
 
 ![NOC overview: open incidents, who has them, health by group, who is on call](docs/images/ui-noc.png)
 

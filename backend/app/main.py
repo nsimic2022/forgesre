@@ -275,7 +275,7 @@ def create_app() -> FastAPI:
         stop.set()
         leader.release()
 
-    app = FastAPI(title="ForgeSRE", version="0.9.0", lifespan=lifespan)
+    app = FastAPI(title="ForgeSRE", version="2.0.0", lifespan=lifespan)
     static_dir = settings.frontend_dir / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")

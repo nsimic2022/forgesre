@@ -322,7 +322,7 @@ write_files() {
   else
     : > "$ROOT/.env"
   fi
-  set_kv "$ROOT/.env" FORGESRE_VERSION "0.9.0"
+  set_kv "$ROOT/.env" FORGESRE_VERSION "2.0.0"
   set_kv "$ROOT/.env" FORGESRE_DOMAIN "forgesre.local"
   set_kv "$ROOT/.env" FORGESRE_DATA "${DATA_DIR}"
   set_kv "$ROOT/.env" FORGESRE_TIMEZONE "${TIMEZONE}"
@@ -408,7 +408,7 @@ EOF
   cat > "$ROOT/installation-report.md" <<EOF
 # ForgeSRE installation report
 
-- Version: 0.9.0
+- Version: 2.0.0
 - Profile: ${PROFILE}
 - Timezone: ${TIMEZONE}
 - Data: ${DATA_DIR}

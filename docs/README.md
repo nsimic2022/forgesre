@@ -34,7 +34,7 @@ refreshed after a UI change.
 - [Roadmap](roadmap.md)
 
 Release notes: [V0.1](v0.1.md) · [V0.2](v0.2.md) · [V0.3](v0.3.md) · [V0.4](v0.4.md) · [V0.5](v0.5.md) ·
-[V0.6](v0.6.md) · [V0.7](v0.7.md) · [V0.8](v0.8.md) · [V0.9](v0.9.md) (current)
+[V0.6](v0.6.md) · [V0.7](v0.7.md) · [V0.8](v0.8.md) · [V0.9](v0.9.md) · [V2.0](v2.0.md) (current)
 
 ## For developers
 
