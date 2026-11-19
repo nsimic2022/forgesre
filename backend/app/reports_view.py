@@ -86,7 +86,7 @@ def reports_overview(db: Session, days: int = 30, now: datetime | None = None) -
             stop = _aware(i.resolved_at or i.ended_at) or now
             down[i.asset.hostname] += max(0.0, (stop - _aware(i.started_at)).total_seconds() / 60)
 
-    from app.services import report_kind, report_recipients, schedule_label
+    from app.services import report_kind, report_recipients, report_schedule, schedule_label
 
     scheduled = [
         {
@@ -95,6 +95,8 @@ def reports_overview(db: Session, days: int = 30, now: datetime | None = None) -
             "kind": report_kind(r),
             "recipients": report_recipients(r),
             "schedule": schedule_label(r),
+            "spec": report_schedule(r),
+            "asset_ids": list(r.asset_ids or []),
             "enabled": bool(r.enabled),
             "last_run_at": _aware(r.last_run_at).isoformat() if r.last_run_at else None,
             "next_run_at": _aware(r.next_run_at).isoformat() if r.next_run_at else None,

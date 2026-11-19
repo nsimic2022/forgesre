@@ -2293,6 +2293,9 @@ def report_schedule(row: ScheduledReport) -> dict[str, Any]:
     if every <= 0:
         every = max(1, int(getattr(row, "interval_hours", None) or 6)) * 60
     days = _weekday_list(raw.get("weekdays"))
+    cron = " ".join(str(raw.get("cron") or "").split())
+    if repeat and cron:
+        return {"repeat": True, "every_minutes": every, "weekdays": list(range(7)), "preset": "cron", "cron": cron}
     if not repeat:
         preset = "once"
         every = 0
@@ -2303,6 +2306,10 @@ def report_schedule(row: ScheduledReport) -> dict[str, Any]:
 
 def schedule_label(row: ScheduledReport) -> str:
     sch = report_schedule(row)
+    if sch.get("cron"):
+        from app.cron import describe
+
+        return describe(sch["cron"])
     if not sch["repeat"]:
         return "Once"
     minutes = int(sch["every_minutes"] or 0)
@@ -2328,9 +2335,19 @@ def build_schedule(
     every_unit: str = "minutes",
     weekdays: list[str] | None = None,
     interval_hours: int = 0,
+    cron: str = "",
 ) -> dict[str, Any]:
-    """One schedule control: presets, a custom interval, or once. Weekdays apply only when it repeats."""
+    """One schedule control: presets, a custom interval, a cron expression, or once.
+
+    Weekdays apply only to presets and custom intervals; a cron expression carries its own days.
+    """
     choice = (schedule or "").strip().lower()
+    if choice == "cron":
+        from app.cron import next_after
+
+        expr = " ".join((cron or "").split())
+        next_after(expr, utcnow())  # raises ValueError with the reason
+        return {"repeat": True, "every_minutes": 1440, "weekdays": list(range(7)), "preset": "cron", "interval_hours": 24, "cron": expr}
     if not choice:
         hours = int(interval_hours or 6)
         if hours < 1:
@@ -2399,7 +2416,7 @@ def initial_next_run(now: datetime, schedule: dict[str, Any]) -> datetime | None
 
 
 def weekday_allowed(when: datetime, schedule: dict[str, Any]) -> bool:
-    if not schedule.get("repeat", True):
+    if not schedule.get("repeat", True) or schedule.get("cron"):
         return True
     days = schedule.get("weekdays") or list(range(7))
     if len(days) >= 7:
@@ -2408,9 +2425,13 @@ def weekday_allowed(when: datetime, schedule: dict[str, Any]) -> bool:
 
 
 def advance_next_run(after: datetime, schedule: dict[str, Any]) -> datetime | None:
-    """Next fire after a send. Once does not reschedule."""
+    """Next fire after a send. Once does not reschedule; cron goes to its next matching minute."""
     if not schedule.get("repeat", True):
         return None
+    if schedule.get("cron"):
+        from app.cron import next_after
+
+        return next_after(str(schedule["cron"]), after, settings.timezone or "UTC")
     minutes = max(1, int(schedule.get("every_minutes") or 60))
     return _align_weekday(after + timedelta(minutes=minutes), schedule, after=after)
 
