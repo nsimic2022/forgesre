@@ -473,6 +473,27 @@ class OncallSlot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class Slo(Base):
+    """Availability objective: e.g. 99.9 % of the last 30 days without a critical incident.
+
+    Scope works like noise filters: all, one asset, an asset type or a site. For a group the
+    downtime is the union of its incidents (the service is down while any member is).
+    """
+
+    __tablename__ = "slos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    scope: Mapped[str] = mapped_column(String(16), default="all")
+    scope_value: Mapped[str] = mapped_column(String(255), default="")
+    target: Mapped[float] = mapped_column(Float, default=99.9)
+    window_days: Mapped[int] = mapped_column(Integer, default=30)
+    severities: Mapped[list] = mapped_column(JSONType, default=lambda: ["CRITICAL"])
+    owner: Mapped[str] = mapped_column(String(255), default="")
+    created_by: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class CheckResult(Base):
     """Latest result of one appliance check (TLS certificate, ForgeSRE backup, heartbeat).
 

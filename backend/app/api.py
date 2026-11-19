@@ -2959,6 +2959,64 @@ def heartbeat_delete_api(name: str, db: Session = Depends(get_db), user: User = 
     return {"removed": name}
 
 
+class SloBody(BaseModel):
+    name: str
+    scope: str = "all"
+    scope_value: str = ""
+    target: float = 99.9
+    window_days: int = 30
+    severities: list[str] = Field(default_factory=lambda: ["CRITICAL"])
+    owner: str = ""
+
+
+def _slo_or_404(db: Session, slo_id: int):
+    from app.models import Slo
+
+    row = db.get(Slo, slo_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="SLO not found")
+    return row
+
+
+@router.get("/slos")
+def slos_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict[str, Any]:
+    """Every SLO with availability, error budget and 24 h burn rate (also ./forgesre slo)."""
+    from app.slo import evaluate_all
+
+    return {"slos": evaluate_all(db), "can_edit": can(user, "write_play")}
+
+
+@router.post("/slos")
+def slo_create_api(body: SloBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict[str, Any]:
+    """New SLO (Engineer+)."""
+    from app.slo import evaluate, save
+
+    try:
+        return evaluate(db, save(db, body.model_dump(), user.email))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/slos/{slo_id}")
+def slo_update_api(slo_id: int, body: SloBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict[str, Any]:
+    """Change an SLO; history is recomputed from incidents, nothing is stored per day."""
+    from app.slo import evaluate, save
+
+    try:
+        return evaluate(db, save(db, body.model_dump(), user.email, _slo_or_404(db, slo_id)))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/slos/{slo_id}")
+def slo_delete_api(slo_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict[str, Any]:
+    row = _slo_or_404(db, slo_id)
+    audit(db, "slo.remove", actor=user.email, object_type="slo", object_id=row.name)
+    db.delete(row)
+    db.commit()
+    return {"removed": slo_id}
+
+
 @router.get("/automation")
 def automation_api(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> dict[str, Any]:
     """Automation page of the new UI: pipeline counts, rules, playbooks, policies, maintenance."""

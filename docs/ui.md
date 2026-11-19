@@ -39,6 +39,24 @@ how long before the alarm it happened. Two sources are merged:
 - **ForgeSRE's audit log**: edits to the asset, its parent and its maintenance, and any change
   to routing rules, playbooks, escalation, noise filters and settings.
 
+## SLOs and error budget
+
+**Reports › SLOs** (Engineer edits, everyone reads). An SLO is a target availability over a
+window, e.g. 99.9 % over 30 days, for all assets, one asset, an asset type or a site, counting
+incidents of the chosen severities (critical by default).
+
+- **Availability**: the share of the window without such an open incident. For a group the
+  incidents are merged, so two servers down at the same time count once (the service was
+  down while any member was).
+- **Error budget**: what the target allows (99.9 % of 30 days = 43 minutes), used and left.
+  Over 75 % used is *at risk*, 100 % is *spent*.
+- **Burn 24 h**: downtime in the last day compared with spending the budget evenly; above
+  1.0x the budget runs out before the window ends.
+- Maintenance windows and noise-filtered incidents do not burn budget.
+
+Nothing is stored per day: changing an SLO recomputes it from incident history.
+`GET /api/v1/slos`, `POST/PUT/DELETE /api/v1/slos[/{id}]`, and `./forgesre slo`.
+
 ## Postmortem draft
 
 **Postmortem** on the incident page builds a Markdown draft for the review meeting from the
