@@ -717,6 +717,39 @@ def cmd_jobs(port: str) -> None:
             jar.unlink(missing_ok=True)
 
 
+def format_checks(data: dict) -> str:
+    """Certificates, backup age and heartbeats, one line each, failing first."""
+    rows = sorted(data.get("results") or [], key=lambda r: (r.get("status") == "ok", r.get("kind"), r.get("target")))
+    if not rows:
+        return "No check has run yet. Add TLS endpoints with ./forgesre settings set checks.tls_targets host:443, then ./forgesre checks run\n"
+    out = [f"{'STATUS':<9} {'CHECK':<10} {'TARGET':<34} DETAIL"]
+    for r in rows:
+        out.append(f"{str(r.get('status', '')).upper():<9} {r.get('kind', ''):<10} {str(r.get('target', ''))[:34]:<34} {r.get('detail', '')}")
+    beats = data.get("heartbeats") or []
+    if beats:
+        out.append("")
+        out.append("Heartbeats: " + ", ".join(f"{b['name']} every {b['every_hours']:g} h" for b in beats))
+    return "\n".join(out) + "\n"
+
+
+def cmd_checks(port: str, rest: list[str]) -> None:
+    """./forgesre checks [run | ping NAME [EVERY_HOURS]]"""
+    jar, _me = ensure_jar(port)
+    try:
+        if rest[:1] == ["run"]:
+            post_json(port, jar, "/api/v1/checks/run", {})
+            sys.stdout.write("Checks queued; results in a few seconds: ./forgesre checks\n")
+        elif rest[:1] == ["ping"] and len(rest) >= 2:
+            query = f"?every_hours={rest[2]}" if len(rest) >= 3 else ""
+            post_json(port, jar, f"/api/v1/heartbeats/{rest[1]}{query}", {})
+            sys.stdout.write(f"Heartbeat {rest[1]} recorded.\n")
+        else:
+            sys.stdout.write(format_checks(get_json(port, jar, "/api/v1/checks")))
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = list(argv if argv is not None else sys.argv[1:])
     if len(argv) < 2:
@@ -740,6 +773,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_whoami(port)
     elif command == "jobs":
         cmd_jobs(port)
+    elif command == "checks":
+        cmd_checks(port, rest)
     elif command == "settings":
         cmd_settings(port, rest)
     elif command == "set-secret":
