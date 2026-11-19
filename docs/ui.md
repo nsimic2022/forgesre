@@ -16,6 +16,29 @@ the home page back.
   `/login`. Each page reads one compact endpoint (NOC: `GET /api/v1/noc`, polled every 10 s).
 - The classic sidebar shows **New UI** when the build is present; the new UI links to **Open classic UI** (`/classic`).
 
+## What changed before an incident
+
+The incident page has a **What changed before** card: everything recorded in the 24 hours
+before the alarm on this asset, on its parent, or with no asset (global), newest first, with
+how long before the alarm it happened. Two sources are merged:
+
+- **Posted changes**: deploys, config pushes and change tickets. CI/CD, scripts or GLPI
+  webhooks post them with the `CHANGES_WEBHOOK_TOKEN` bearer (install generates it; read it
+  on the host with `grep CHANGES_WEBHOOK_TOKEN secrets/secrets.env`), or a signed-in Engineer
+  posts one:
+
+  ```bash
+  curl -sS -X POST https://forgesre.example/api/v1/changes \
+    -H "Authorization: Bearer $CHANGES_WEBHOOK_TOKEN" -H 'Content-Type: application/json' \
+    -d '{"title":"erp-api 4.2.1","kind":"deploy","source":"gitlab","asset":"db-ora-02","url":"https://ci.example/pipelines/812"}'
+  ```
+
+  `kind` is deploy, config, change, ticket, maintenance or other; `asset` is a hostname, asset
+  id or IP (unknown names keep the change global and note the name); `at` (ISO time) is
+  optional. `GET /api/v1/changes` lists the latest.
+- **ForgeSRE's audit log**: edits to the asset, its parent and its maintenance, and any change
+  to routing rules, playbooks, escalation, noise filters and settings.
+
 ## Dependency map
 
 **Inventory › Dependency map** (`/app/inventory/map`) shows who sits behind whom. The parent

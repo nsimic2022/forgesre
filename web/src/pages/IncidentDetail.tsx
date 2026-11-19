@@ -1,3 +1,4 @@
+import { ChangesCard } from "../components/ChangesCard";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ReviewCard } from "../components/ReviewCard";
@@ -150,6 +151,7 @@ export function IncidentDetailPage() {
           ) : null}
         </div>
         <div style={{ flex: "1 1 340px", display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
+          <ChangesCard changes={data.changes ?? []} />
           <ReviewCard number={data.number} review={data.review} canEdit={data.can.work} hasAi={Boolean(data.forgeai.text)} onSaved={load} />
           {data.asset ? (
             <Card title="Asset">

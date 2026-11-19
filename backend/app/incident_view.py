@@ -91,6 +91,8 @@ def _playbook_steps(incident: Incident) -> list[str]:
 
 
 def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]:
+    from app.changes import changes_before
+
     """Everything the incident detail page shows. Evidence queries only for read_evidence."""
     from app.api import _asset
 
@@ -145,6 +147,7 @@ def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]
         if see_evidence
         else [],
         "timeline": incident.timeline or [],
+        "changes": changes_before(db, incident),
         "notifications": [notification_as_dict(row) for row in notifications_for(db, incident)],
         "notes": [note_as_dict(row) for row in notes_for(db, incident)],
         "audit": [audit_as_dict(row) for row in audit_for(db, incident.number)],

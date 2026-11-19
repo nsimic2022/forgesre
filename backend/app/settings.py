@@ -444,6 +444,11 @@ class Settings(BaseSettings):
         return self._secret("ZABBIX_WEBHOOK_TOKEN")
 
     @property
+    def changes_webhook_token(self) -> str:
+        """Bearer for POST /api/v1/changes (CI/CD deploys, GLPI changes). Empty = only signed-in Engineers."""
+        return self._secret("CHANGES_WEBHOOK_TOKEN")
+
+    @property
     def zabbix_enabled(self) -> bool:
         """On when URL and API token are both set, unless inventory.zabbix.enabled is false."""
         if self._zabbix_yaml().get("enabled") is False:

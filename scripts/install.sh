@@ -254,6 +254,7 @@ write_files() {
   set_kv "$ROOT/secrets/secrets.env" FORGESRE_ADMIN_PASSWORD "$admin_pass"
   set_kv "$ROOT/secrets/secrets.env" GRAFANA_ADMIN_PASSWORD "$gf_pass"
   set_kv "$ROOT/secrets/secrets.env" ALERTMANAGER_WEBHOOK_TOKEN "$webhook"
+  set_kv "$ROOT/secrets/secrets.env" CHANGES_WEBHOOK_TOKEN "$(openssl rand -hex 24)"
   set_kv "$ROOT/secrets/secrets.env" SECRET_KEY "$secret"
   set_kv "$ROOT/secrets/secrets.env" SMTP_USERNAME ""
   set_kv "$ROOT/secrets/secrets.env" SMTP_PASSWORD ""
