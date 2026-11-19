@@ -180,10 +180,10 @@ def doctor_check(db: Session | None = None) -> dict[str, Any]:
     """Doctor row: which channels are on, and whether the last message to each was delivered."""
     on = [c for c in CHANNELS if channel_config(c)["enabled"]]
     if not on:
-        return {"status": "disabled", "detail": "no chat channel turned on"}
+        return {"status": "disabled", "why": "no chat channel turned on"}
     missing = [c for c in on if not webhook_url(c)]
     if missing:
-        return {"status": "error", "detail": "on but no webhook URL: " + ", ".join(CHANNELS[c] for c in missing)}
+        return {"status": "error", "why": "on but no webhook URL: " + ", ".join(CHANNELS[c] for c in missing)}
     failed = []
     if db is not None:
         for c in on:
@@ -191,5 +191,5 @@ def doctor_check(db: Session | None = None) -> dict[str, Any]:
             if last is not None and last.status == "failed":
                 failed.append(f"{LABELS[c]}: {last.error}")
     if failed:
-        return {"status": "error", "detail": "; ".join(failed)[:300]}
-    return {"status": "ok", "detail": ", ".join(LABELS[c] for c in on)}
+        return {"status": "error", "why": "; ".join(failed)[:300]}
+    return {"status": "ok", "why": ", ".join(LABELS[c] for c in on)}

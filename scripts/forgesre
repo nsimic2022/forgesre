@@ -89,6 +89,7 @@ Commands:
   demo-rca           Filesystem RCA demo gauge (read-only)
   demo-reset         Lower demo CPU/disk gauges (stops the demo HighCPU fire)
   jobs               Background RCA job queue
+  checks             Certificates, backup age, heartbeats
   incidents          Short colored board (red/yellow/green); INC-… for one row
   history            90-day incident history (filters; INC-… for mail/audit/notes)
   login              Sign in as a ForgeSRE user (engineer / analyst / …)
@@ -514,6 +515,17 @@ demo-reset — set demo CPU/disk gauges back to 12% / 35%.
 Use after ./forgesre demo so HighCPU does not stay firing forever.
 
   ./forgesre demo-reset
+EOF
+      ;;
+    checks)
+      cat <<'EOF'
+checks — TLS certificate expiry, ForgeSRE backup age and heartbeats.
+
+Runs every 15 minutes on the appliance; failures open incidents like any alert.
+
+  ./forgesre checks                 latest results, failing first
+  ./forgesre checks run             run now (background)
+  ./forgesre checks ping NAME [H]   record a heartbeat (H = expected every H hours)
 EOF
       ;;
     jobs)
@@ -977,6 +989,10 @@ case "$cmd" in
   jobs)
     need_env
     run_cli_ops jobs "$@"
+    ;;
+  checks)
+    need_env
+    run_cli_ops checks "$@"
     ;;
   secrets-check)
     need_env

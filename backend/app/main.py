@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -149,11 +150,28 @@ def _escalation_loop(stop: threading.Event) -> None:
             from app.chat import sweep_resolved
 
             sweep_resolved(db)
+            _queue_health_checks(db)
         except Exception as exc:
             log.exception("escalation loop failed")
             report(db, "escalation", "loop", "error", summary="Escalation loop failed", detail=str(exc))
         finally:
             db.close()
+
+
+_HEALTH_EVERY = 15 * 60
+_health_last = 0.0
+
+
+def _queue_health_checks(db: Session) -> None:
+    """Leader only (called from the escalation loop): queue TLS / backup / heartbeat checks every 15 min."""
+    global _health_last
+    if time.monotonic() - _health_last < _HEALTH_EVERY:
+        return
+    from app.jobs import enqueue
+
+    _health_last = time.monotonic()
+    enqueue(db, "health_checks", "appliance", object_type="checks")
+    db.commit()
 
 
 def _mount_web_app(app: FastAPI) -> None:

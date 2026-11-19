@@ -1706,6 +1706,21 @@ def _chat_check() -> dict[str, Any]:
         return {"status": "error", "detail": str(exc)[:200]}
 
 
+def _checks_check() -> dict[str, Any]:
+    """Certificates, ForgeSRE backup age, heartbeats: any failing check makes this row red."""
+    from app.db import SessionLocal
+    from app.health_checks import doctor_check
+
+    try:
+        db = SessionLocal()
+        try:
+            return doctor_check(db)
+        finally:
+            db.close()
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)[:200]}
+
+
 def _doctor_payload_fresh() -> dict[str, Any]:
     components = {
         # Machine key "core" = compose service. Display: Core (container).
@@ -1725,6 +1740,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "librenms": _librenms_check(),
         "discovery": _discovery_check(),
         "chat": _chat_check(),
+        "checks": _checks_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)
@@ -2873,6 +2889,74 @@ def changes_list_api(db: Session = Depends(get_db), user: User = Depends(require
     from app.changes import recent
 
     return {"changes": recent(db), "can_add": can(user, "write_assets")}
+
+
+def _token_or_engineer(request: Request, db: Session) -> str:
+    """Actor for machine-or-human writes: CHANGES_WEBHOOK_TOKEN bearer, else an Engineer session."""
+    auth = (request.headers.get("authorization") or "").replace("Bearer ", "").strip()
+    expected = settings.changes_webhook_token
+    if auth and expected and hmac.compare_digest(auth.encode(), expected.encode()):
+        return "token"
+    user = current_user(request, db)
+    if user is None or not can(user, "write_assets"):
+        raise HTTPException(status_code=401, detail="needs CHANGES_WEBHOOK_TOKEN or an Engineer session")
+    return user.email
+
+
+@router.get("/checks")
+def checks_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict[str, Any]:
+    """Latest TLS, backup and heartbeat results (the CLI's ./forgesre checks reads this too)."""
+    from app.health_checks import results
+
+    data = results(db)
+    data["can_edit"] = can(user, "write_assets")
+    return data
+
+
+@router.post("/checks/run")
+def checks_run_api(db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict[str, Any]:
+    """Run the checks now in the background instead of waiting for the 15-minute round."""
+    from app.jobs import enqueue
+
+    job = enqueue(db, "health_checks", "appliance", object_type="checks")
+    db.commit()
+    return {"job": job.id, "status": job.status}
+
+
+@router.post("/heartbeats/{name}")
+def heartbeat_ping_api(name: str, request: Request, every_hours: float | None = None, asset: str = "", note: str = "",
+                       db: Session = Depends(get_db)) -> dict[str, Any]:
+    """A backup or cron job calls this after each success. First call creates the heartbeat."""
+    from app.health_checks import ping
+
+    _token_or_engineer(request, db)
+    try:
+        row = ping(db, name, every_hours=every_hours, asset=asset, note=note)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"name": row.name, "every_hours": row.every_hours, "last_at": row.last_at.isoformat()}
+
+
+@router.delete("/heartbeats/{name}")
+def heartbeat_delete_api(name: str, db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict[str, Any]:
+    """Stop watching a heartbeat and resolve its alarm."""
+    from app.models import CheckResult, Heartbeat
+
+    row = db.query(Heartbeat).filter_by(name=name).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="heartbeat not found")
+    from app.health_checks import _alert
+    from app.services import ingest_alertmanager
+
+    asset = row.asset_ref
+    db.delete(row)
+    db.query(CheckResult).filter_by(kind="heartbeat", target=name).delete()
+    audit(db, "heartbeat.remove", actor=user.email, object_type="heartbeat", object_id=name)
+    db.commit()
+    # Close its alarm now; nothing will check it again.
+    ingest_alertmanager(db, {"status": "resolved", "alerts": [_alert("heartbeat", name, "ok", "heartbeat removed", asset)]})
+    db.commit()
+    return {"removed": name}
 
 
 @router.get("/automation")

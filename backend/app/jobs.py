@@ -250,6 +250,13 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                     actor=str(payload.get("actor") or "system"),
                     name=str(payload.get("name") or "forgeai-digest"),
                 )
+            elif row.kind == "health_checks":
+                from app.health_checks import run_checks
+
+                # TLS handshakes (10 s timeout each), backup age, heartbeats; alerts via ingest.
+                payload = dict(row.payload or {})
+                payload["result"] = run_checks(db)
+                row.payload = payload
             elif row.kind == "topology_sync":
                 from app.topology import sync_librenms
 

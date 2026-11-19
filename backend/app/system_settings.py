@@ -58,6 +58,7 @@ def _e(key, group, label, effective=None, **kw) -> SettingDef:
 
 GROUPS = {
     "general": "General",
+    "checks": "Checks (certificates, backups, heartbeats)",
     "network": "Network and services",
     "integrations": "Integrations",
     "discovery": "Discovery",
@@ -69,6 +70,10 @@ REGISTRY: tuple[SettingDef, ...] = (
     # General
     _y("system.timezone", "general", "Time zone", help="FORGESRE_TIMEZONE in .env wins when set.", effective=lambda: settings.timezone),
     _y("system.log_level", "general", "Log level", "enum", choices=("debug", "info", "warning", "error")),
+    _y("checks.tls_targets", "checks", "TLS endpoints to watch", help="Comma separated host, host:port or https://host. Expiry is checked every 15 min."),
+    _y("checks.tls_warn_days", "checks", "Certificate warning (days)", "int"),
+    _y("checks.tls_critical_days", "checks", "Certificate critical (days)", "int"),
+    _y("checks.backup_max_age_hours", "checks", "ForgeSRE backup max age (hours)", "int"),
     _y("system.public_url", "general", "Public address", help="How people reach ForgeSRE, e.g. https://forgesre.dc.local. Used for links in mail and chat (incident, one-click acknowledge). Empty = no links."),
     _y("ui.home", "general", "Home page", "enum", choices=("new", "classic"),
        help="new = the new UI at /app opens after sign-in; classic = the old dashboard. /classic always works."),

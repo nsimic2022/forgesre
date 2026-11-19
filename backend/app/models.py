@@ -473,6 +473,38 @@ class OncallSlot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class CheckResult(Base):
+    """Latest result of one appliance check (TLS certificate, ForgeSRE backup, heartbeat).
+
+    One row per (kind, target), overwritten on every run. ``status`` is ok | warning | critical
+    | error; alarms go through the normal alert path, this row is what the UI and CLI show.
+    """
+
+    __tablename__ = "check_results"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), index=True)
+    target: Mapped[str] = mapped_column(String(255), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="ok")
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    detail: Mapped[str] = mapped_column(String(500), default="")
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Heartbeat(Base):
+    """Dead-man switch: a backup or cron job pings after each success; silence past ``every_hours`` alarms."""
+
+    __tablename__ = "heartbeats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    asset_ref: Mapped[str] = mapped_column(String(255), default="")
+    every_hours: Mapped[float] = mapped_column(Float, default=24.0)
+    last_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_note: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class ChangeEvent(Base):
     """Something that changed outside ForgeSRE: a deploy, a config push, a GLPI change ticket.
 

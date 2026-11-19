@@ -43,6 +43,25 @@ services, USE (utilisation, saturation, errors) for hosts and network devices.
 CI checks every change to `monitoring/alerts.yml` with `promtool check rules` from the same
 Prometheus image the appliance runs.
 
+## Appliance checks: certificates, backups, heartbeats
+
+Core runs these every 15 minutes (`health_checks` job on the leader) and sends the results
+through the same intake as Alertmanager, so rules, noise filters, maintenance and escalation
+apply. Labels: `job=forgesre-checks`, `check`, `target`, `asset`.
+
+| Alert | Fires when | Severity |
+|---|---|---|
+| `TlsCertificateExpiring` | a `checks.tls_targets` endpoint's certificate expires in under `tls_warn_days` (14) / `tls_critical_days` (3) days; handshake failure | warning / critical / high |
+| `ForgeSreBackupMissing` | the newest ForgeSRE backup is older than `backup_max_age_hours` (36), or there is none | critical |
+| `HeartbeatMissing` | a heartbeat has not pinged within its `every_hours` plus 10 % | critical |
+
+Certificates are read without verification on purpose: an internal CA or a self-signed
+certificate still expires. A heartbeat is a dead-man switch for anything ForgeSRE cannot see
+(Veeam, rsync, database dumps): the job calls `POST /api/v1/heartbeats/{name}?every_hours=24&asset=nas-01`
+with the `CHANGES_WEBHOOK_TOKEN` bearer after each success; the first call creates it. Results:
+Settings › Checks, `GET /api/v1/checks`, `./forgesre checks`, and the **Checks** row in
+`./forgesre doctor`.
+
 ## Noise filters
 
 Automation › Noise filters (Engineer+), API `/api/v1/noise-filters`. A filter matches on

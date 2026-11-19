@@ -1,4 +1,5 @@
 import { BackupPanel, UsersPanel } from "../components/AdminPanels";
+import { ChecksPanel } from "../components/ChecksPanel";
 import { useEffect, useState } from "react";
 import { Card, Chip } from "../components/ui";
 import { ApiError, getJson, postJson, putJson, type Doctor, type SettingRow, type SettingsData } from "../lib/api";
@@ -169,6 +170,7 @@ export function SettingsPage() {
                 <span className="small faint">Every change is written to config/forgesre.yml, applied at once and kept in the audit log. Same as <code className="mono">./forgesre settings set KEY VALUE</code>.</span>
               </Card>
             )}
+            {group === "checks" ? <ChecksPanel /> : null}
           </div>
         </div>
       ) : null}
