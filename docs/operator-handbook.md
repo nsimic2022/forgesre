@@ -951,3 +951,14 @@ Eight small tools for a data-center NOC. Same V0.9 appliance: one Core, Postgres
 6. **Capacity.** Asset page, under the charts: about 30 days of disk % and interface receive when those series exist. “~N days to full” only when the disk slope is usable (at least two climbing points). Otherwise the 30-day spark, or **Not scraped.** No invented forecast.
 7. **SNMP.** `monitoring/snmp.yml` stays the working `if_mib` module (ifName / ifAlias / ifOperStatus / counters / sysUpTime). No extra vendor MIB was added. Those series are what the interface list and sysUpTime line use.
 8. **Row and Rack.** Text fields on the asset (Identity), filtered on Assets the same way as Site and VLAN. Incidents can filter by the same Row and Rack. Not a floor-plan drawing.
+
+
+### One-click acknowledge from mail
+
+When **Settings › General › Public address** (`system.public_url`, e.g.
+`https://forgesre.dc.local`) is set, every escalation mail starts with an **Acknowledge** link.
+The link is signed for that incident and that recipient and works for 24 hours. Opening it
+shows a small page with an **Acknowledge** button. The link itself never acknowledges, because
+mail scanners such as Outlook Safe Links open every link they see. Pressing the button
+acknowledges as the recipient the mail went to, and escalation stops. An expired link, or a
+link for a resolved incident, says so and points to ForgeSRE.

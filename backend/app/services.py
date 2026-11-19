@@ -1769,8 +1769,11 @@ def ensure_notification(
     recipient = escalation_recipient(incident, policy_role, db=db)
     stored_target = recipient or policy_role
     subject = incident_alarm_subject(incident)
-    body = build_escalation_body(incident, step_key, policy_role)
-    html_body = build_escalation_html(incident, step_key, policy_role)
+    from app.ack_links import ack_url
+
+    link = ack_url(incident.id, recipient) if recipient and not incident.ack_at else ""
+    body = build_escalation_body(incident, step_key, policy_role, link)
+    html_body = build_escalation_html(incident, step_key, policy_role, link)
     row = Notification(
         incident_id=incident.id,
         channel="email",

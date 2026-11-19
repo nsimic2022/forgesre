@@ -69,6 +69,7 @@ REGISTRY: tuple[SettingDef, ...] = (
     # General
     _y("system.timezone", "general", "Time zone", help="FORGESRE_TIMEZONE in .env wins when set.", effective=lambda: settings.timezone),
     _y("system.log_level", "general", "Log level", "enum", choices=("debug", "info", "warning", "error")),
+    _y("system.public_url", "general", "Public address", help="How people reach ForgeSRE, e.g. https://forgesre.dc.local. Used for links in mail and chat (incident, one-click acknowledge). Empty = no links."),
     _y("ui.home", "general", "Home page", "enum", choices=("new", "classic"),
        help="new = the new UI at /app opens after sign-in; classic = the old dashboard. /classic always works."),
     _y("system.cookie_secure", "general", "Secure cookies (HTTPS only)", "bool", effective=lambda: settings.cookie_secure),

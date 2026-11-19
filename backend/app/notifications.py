@@ -30,13 +30,15 @@ def _demo(incident: Incident) -> tuple[bool, str]:
     return False, ""
 
 
-def build_escalation_body(incident: Incident, step_key: str, policy_role: str) -> str:
+def build_escalation_body(incident: Incident, step_key: str, policy_role: str, ack_link: str = "") -> str:
     """Plain-text escalation notice. Kept as the text/plain MIME part and outbox body."""
     asset = incident.asset
     demo, demo_line = _demo(incident)
     lines = []
     if demo:
         lines.append(demo_line)
+    if ack_link:
+        lines.extend([f"Acknowledge (stops further escalation): {ack_link}", ""])
     lines.extend(
         [
             f"Incident: {incident.number}",
@@ -67,12 +69,14 @@ def build_escalation_body(incident: Incident, step_key: str, policy_role: str) -
     return "\n".join(lines) + "\n"
 
 
-def build_escalation_html(incident: Incident, step_key: str, policy_role: str) -> str:
+def build_escalation_html(incident: Incident, step_key: str, policy_role: str, ack_link: str = "") -> str:
     """HTML alternative for the same facts as build_escalation_body."""
     asset = incident.asset
     demo, demo_line = _demo(incident)
     meta = incident_header_rows(incident, asset)
     meta.append(("Escalation step", esc(f"{step_key} (policy role: {policy_role})")))
+    if ack_link:
+        meta.insert(0, ("Acknowledge", f'<a href="{esc(ack_link)}">Acknowledge this incident</a> (stops further escalation)'))
     details: list[tuple[str, str]] = [
         ("Asset", esc(asset.hostname if asset else "unknown")),
         ("Playbook", esc(incident.playbook.name if incident.playbook else "n/a")),

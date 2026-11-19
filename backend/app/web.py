@@ -757,6 +757,41 @@ def require_page(*permissions: str):
     return _inner
 
 
+def _ack_target(db: Session, token: str) -> tuple[Incident | None, str, str]:
+    """(incident, recipient, error) for a one-click acknowledge link."""
+    from app.ack_links import read_token
+
+    try:
+        data = read_token(token)
+    except ValueError as exc:
+        return None, "", "This link has expired. Open ForgeSRE to acknowledge." if str(exc) == "expired" else "This link is not valid."
+    incident = db.get(Incident, data["incident_id"])
+    if incident is None:
+        return None, "", "This incident no longer exists."
+    if (incident.status or "").upper() in {"RESOLVED", "CLOSED"}:
+        return None, "", f"{incident.number} is already resolved."
+    return incident, data["recipient"], ""
+
+
+@router.get("/ack/{token}", response_class=HTMLResponse)
+def ack_page(token: str, request: Request, db: Session = Depends(get_db)):
+    """Confirmation page for a mailed acknowledge link. A GET never acknowledges (mail scanners open links)."""
+    incident, who, error = _ack_target(db, token)
+    return render(request, "ack.html", None, incident=incident, who=who, error=error, token=token, done=False)
+
+
+@router.post("/ack/{token}", response_class=HTMLResponse)
+def ack_submit(token: str, request: Request, db: Session = Depends(get_db)):
+    """Acknowledge as the recipient the link was mailed to; same effect as the Ack button."""
+    incident, who, error = _ack_target(db, token)
+    if incident is not None and not incident.ack_at:
+        acknowledge(incident, who or "mail link")
+        audit(db, "incident.ack", actor=who or "mail link", object_type="incident", object_id=incident.number,
+              ip=request.client.host if request.client else "", data={"via": "mail link"})
+        db.commit()
+    return render(request, "ack.html", None, incident=incident, who=who, error=error, token=token, done=incident is not None)
+
+
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, user: User | None = Depends(get_user)):
     if user:
