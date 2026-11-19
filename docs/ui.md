@@ -46,6 +46,15 @@ npm run typecheck && npm test && npm run build
 Sign in once on the Core address, then open the Vite address; the cookie is shared through
 the proxy.
 
+## Style
+
+The "Signal" style approved on the design canvas: near-black console (`--bg #0a0b0d`) with a
+faint dot grid, cards on `--s1`, monospace uppercase labels for sections, stats and table
+headers, large tabular numbers, one cyan accent (`--accent #4fc3f7`). Severity colours also
+differ in lightness, so critical, high and warning read apart without colour. Every token is
+in `web/src/styles.css`; components use the tokens, never raw colours, and motion stops for
+`prefers-reduced-motion`.
+
 ## Layout
 
 - `src/components/Shell.tsx`: sidebar menu in the order of the designs.
