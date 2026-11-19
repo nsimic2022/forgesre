@@ -336,8 +336,9 @@ export interface Automation {
   }[];
   playbooks: { id: number; name: string; description: string; steps: string[]; rules: number }[];
   policies: { id: number; slug?: string; name: string; steps: PolicyStep[]; rules: number; levels?: PolicyLevel[] }[];
-  maintenance: { asset: string; summary: string; starts_at: string | null; ends_at: string | null; active: boolean }[];
+  maintenance: { asset: string; asset_id?: string; summary: string; starts_at: string | null; ends_at: string | null; active: boolean }[];
   can_edit: boolean;
+  can_edit_maintenance?: boolean;
 }
 
 export interface Simulation {

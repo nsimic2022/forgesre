@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { PlaybookForm, PolicyForm, RemoveButton, RuleForm, ruleBody, ruleDraft } from "../components/AutomationEditors";
+import { MaintenanceForm, PlaybookForm, PolicyForm, RemoveButton, RuleForm, ruleBody, ruleDraft } from "../components/AutomationEditors";
 import { NoiseFilters } from "../components/NoiseFilters";
 import { Card, Chip } from "../components/ui";
 import { getJson, postJson, putJson, type Automation, type PolicyStep, type Simulation } from "../lib/api";
@@ -14,7 +14,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "maintenance", label: "Maintenance windows" },
 ];
 // Classic pages that still do the editing.
-const EDIT: Record<Tab, string> = { filters: "", rules: "", escalation: "", playbooks: "", maintenance: "/assets" };
+const EDIT: Record<Tab, string> = { filters: "", rules: "", escalation: "", playbooks: "", maintenance: "" };
 type Rule = Automation["rules"][number];
 type Book = Automation["playbooks"][number];
 type Policy = Automation["policies"][number];
@@ -93,6 +93,7 @@ export function AutomationPage() {
   const [ruleEdit, setRuleEdit] = useState<{ rule: Rule | null } | null>(null);
   const [bookEdit, setBookEdit] = useState<{ book: Book | null; copy: boolean } | null>(null);
   const [policyEdit, setPolicyEdit] = useState<{ policy: Policy | null } | null>(null);
+  const [maintNew, setMaintNew] = useState(false);
   const load = () => getJson<Automation>("/api/v1/automation").then(setData).catch((e: Error) => setError(e.message));
   const closeRule = (saved: boolean) => (setRuleEdit(null), saved && load());
   const closeBook = (saved: boolean) => (setBookEdit(null), saved && load());
@@ -225,7 +226,9 @@ export function AutomationPage() {
         </>
       ) : null}
       {data && tab === "maintenance" ? (
-        <Card title="Maintenance windows" actions={<span className="small faint">Alarms on these assets are muted while a window is open</span>}>
+        <>
+        {maintNew ? <MaintenanceForm onDone={(saved) => (setMaintNew(false), saved && load())} /> : null}
+        <Card title="Maintenance windows" actions={<><span className="small faint">Alarms on these assets are muted while a window is open</span>{data.can_edit_maintenance ? <button className="btn primary" type="button" onClick={() => setMaintNew(true)}>New window</button> : null}</>}>
           {data.maintenance.length === 0 ? <span className="muted">No current or upcoming windows.</span> : null}
           {data.maintenance.map((w, i) => (
             <div key={i} className="row" style={{ justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: 8 }}>
@@ -233,10 +236,17 @@ export function AutomationPage() {
               <span className="row small">
                 {clock(w.starts_at)} – {clock(w.ends_at)}
                 <Chip tone={w.active ? "warn" : "off"}>{w.active ? "Active" : "Planned"}</Chip>
+                {data.can_edit_maintenance && w.asset_id ? (
+                  <button className="btn" type="button" aria-label={`End maintenance on ${w.asset}`}
+                    onClick={() => getJson(`/api/v1/maintenance/${encodeURIComponent(w.asset_id!)}`, { method: "DELETE" }).then(load).catch((e: Error) => setError(e.message))}>
+                    {w.active ? "End now" : "Cancel"}
+                  </button>
+                ) : null}
               </span>
             </div>
           ))}
         </Card>
+        </>
       ) : null}
       <Simulator />
     </>
