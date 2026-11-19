@@ -1612,6 +1612,21 @@ def doctor_payload(*, force: bool = False) -> dict[str, Any]:
             done.set()
 
 
+def _chat_check() -> dict[str, Any]:
+    """Slack / Teams / Discord: configured, and whether the last message to each went through."""
+    from app.chat import doctor_check
+    from app.db import SessionLocal
+
+    try:
+        db = SessionLocal()
+        try:
+            return doctor_check(db)
+        finally:
+            db.close()
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)[:200]}
+
+
 def _doctor_payload_fresh() -> dict[str, Any]:
     components = {
         # Machine key "core" = compose service. Display: Core (container).
@@ -1630,6 +1645,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "glpi": _glpi_check(),
         "librenms": _librenms_check(),
         "discovery": _discovery_check(),
+        "chat": _chat_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)
