@@ -1,0 +1,12 @@
+ForgeSRE
+Copyright 2026 The ForgeSRE authors (https://github.com/nsimic2022/forgesre)
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+"ForgeSRE", "ForgeRCA" and "ForgeAI" are names of this project. The Apache License does not
+grant permission to use them for a fork or a derived product in a way that suggests it is the
+original project or is endorsed by it (Apache-2.0, section 6).
+
+ForgeSRE runs third-party software in separate containers (PostgreSQL, Prometheus,
+Alertmanager, snmp_exporter, Loki, Grafana Alloy, Grafana, llama.cpp, NetBox, LibreNMS and
+others). Each is distributed under its own license by its own authors.
