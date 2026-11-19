@@ -10,6 +10,7 @@ import { InventoryPage } from "./pages/Inventory";
 import { InvestigationsPage } from "./pages/Investigations";
 import { OnCallPage } from "./pages/OnCall";
 import { Pending } from "./pages/Pending";
+import { ReportsPage } from "./pages/Reports";
 
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -26,7 +27,7 @@ export function App() {
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/automation" element={<AutomationPage />} />
         <Route path="/investigations" element={<InvestigationsPage />} />
-        <Route path="/reports/*" element={<Pending title="Reports" classic="/ops" />} />
+        <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings/*" element={<Pending title="Settings" classic="/admin" />} />
         <Route path="*" element={<Pending title="Not found" classic="/" />} />
       </Routes>

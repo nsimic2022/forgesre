@@ -44,8 +44,8 @@ the proxy.
 | Inventory: library (site › rack, type, environment, customer, views), table, asset card | done; editing still on the classic page |
 | Automation: pipeline, routing rules, escalation, playbooks, maintenance windows, "Try an alarm" | done; editing still on the classic pages |
 | Investigations: resolved incidents with confirmed cause and ratings, accuracy, recurring causes; review card on the incident page | done |
-| Reports | next |
-| Settings | planned |
+| Reports: period KPIs vs previous, incidents per day, by asset type, noisiest assets, frequent alerts, host-down time, scheduled reports, CSV | done; schedule editing on the classic page until Phase 3 |
+| Settings | next |
 
 ## API used by the new pages
 
@@ -56,4 +56,5 @@ the proxy.
 | Inventory | `GET /api/v1/inventory?q=&site=&rack=&type=&environment=&customer=&view=` · `GET /api/v1/inventory/{asset_id}` | classic asset page for now |
 | Automation | `GET /api/v1/automation` | `POST /api/v1/automation/simulate` `{alertname, asset, value, at}` (read-only test) |
 | Investigations | `GET /api/v1/investigations-page?days=&q=&only_ai=&only_reviewed=` | `POST /api/v1/incidents/{number}/review` `{root_cause, rca_rating, ai_rating}` (correct / partly / wrong) |
+| Reports | `GET /api/v1/reports-page?days=` · `GET /api/v1/reports/incidents.csv?days=` | — |
 | Incident detail | `GET /api/v1/incidents/{number}/view` | `POST …/status` (acknowledge = `INVESTIGATING`, `ESCALATED`, `RESOLVED`), `POST …/notes`, `POST …/checklist` `{step, done}`, `POST …/investigate` (queues ForgeRCA, then ForgeAI) |
