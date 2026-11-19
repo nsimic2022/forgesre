@@ -1,4 +1,5 @@
 import { ChangesCard } from "../components/ChangesCard";
+import { PostmortemPanel } from "../components/PostmortemPanel";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ReviewCard } from "../components/ReviewCard";
@@ -16,6 +17,7 @@ export function IncidentDetailPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
+  const [postmortem, setPostmortem] = useState(false);
 
   const load = useCallback(
     () =>
@@ -64,16 +66,20 @@ export function IncidentDetailPage() {
             {[data.source, data.asset?.hostname, data.asset?.type, data.started_at ? `opened ${clock(data.started_at)} (${duration(data.started_at)} ago)` : ""].filter(Boolean).join(" · ")}
           </span>
         </div>
+        <div className="row">
+          <button className="btn" type="button" onClick={() => setPostmortem(!postmortem)} aria-expanded={postmortem}>Postmortem</button>
         {data.can.work && open ? (
-          <div className="row">
+          <>
             {!data.ack_at ? (
               <button className="btn primary" disabled={Boolean(busy)} onClick={() => setStatus("INVESTIGATING")}>Acknowledge</button>
             ) : null}
             <button className="btn" disabled={Boolean(busy)} onClick={() => setStatus("ESCALATED")}>Escalate</button>
             <button className="btn" disabled={Boolean(busy)} onClick={() => setStatus("RESOLVED")}>Resolve</button>
-          </div>
+          </>
         ) : null}
+        </div>
       </header>
+      {postmortem ? <PostmortemPanel number={data.number} onClose={() => setPostmortem(false)} /> : null}
       {error ? <div className="banner error" role="alert">{error}</div> : null}
       <div className="banner" style={{ background: open ? "var(--high-bg)" : "var(--ok-bg)", border: "1px solid var(--border)" }}>
         <strong>{data.status}</strong>
