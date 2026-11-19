@@ -14,6 +14,7 @@ const view: IncidentView = {
   forgerca: { cause: "Uplink failure on sw-acc-07", summary: "", confidence: 86, facts: [{ id: "f1", text: "node_exporter up = 0" }], hypotheses: [{ id: "h1", summary: "Uplink failure", confidence: 0.86, rank: 1 }], actions: ["Check the SFP."], limitations: [], at: null },
   forgeai: { mode: "local", text: "The host went dark after its uplink dropped.", cause: "", action: "", model: "local", at: null },
   evidence: [], timeline: [], notifications: [], notes: [],
+  review: { root_cause: "", rca_rating: "", ai_rating: "", reviewed_by: "", reviewed_at: null },
   can: { work: true, investigate: true, cloud: false },
 };
 
@@ -56,5 +57,15 @@ describe("Incident detail", () => {
     await waitFor(() => expect(calls.some((c) => c.url.endsWith("/status") && c.body === JSON.stringify({ status: "INVESTIGATING" }))).toBe(true));
     fireEvent.click(screen.getByRole("checkbox", { name: "Check upstream switch port" }));
     await waitFor(() => expect(calls.some((c) => c.url.endsWith("/checklist") && c.body === JSON.stringify({ step: 1, done: true }))).toBe(true));
+  });
+
+  it("saves the analyst review", async () => {
+    renderPage();
+    fireEvent.change(await screen.findByLabelText("What really caused it"), { target: { value: "Failing SFP" } });
+    fireEvent.click(screen.getAllByRole("radio", { name: "Correct" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Save review" }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.url.endsWith("/review") && c.body === JSON.stringify({ root_cause: "Failing SFP", rca_rating: "correct", ai_rating: "" }))).toBe(true),
+    );
   });
 });

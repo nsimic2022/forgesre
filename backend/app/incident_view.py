@@ -148,6 +148,13 @@ def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]
         "notifications": [notification_as_dict(row) for row in notifications_for(db, incident)],
         "notes": [note_as_dict(row) for row in notes_for(db, incident)],
         "audit": [audit_as_dict(row) for row in audit_for(db, incident.number)],
+        "review": {
+            "root_cause": incident.root_cause or "",
+            "rca_rating": incident.rca_rating or "",
+            "ai_rating": incident.ai_rating or "",
+            "reviewed_by": incident.reviewed_by or "",
+            "reviewed_at": incident.reviewed_at.isoformat() if incident.reviewed_at else None,
+        },
         "can": {
             "work": can(user, "write_incidents"),
             "investigate": can(user, "investigate"),

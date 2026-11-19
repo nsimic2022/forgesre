@@ -203,3 +203,38 @@ def test_automation_overview_and_simulator():
     assert client.post("/api/v1/automation/simulate", json={"alertname": " "}).status_code == 400
     assert client.post("/api/v1/automation/simulate", json={"alertname": "X", "at": "tomorrow"}).status_code == 400
     assert _signed_in("viewer").get("/api/v1/automation").status_code == 403
+
+
+def test_review_accuracy_and_recurring_causes():
+    from app.models import Investigation
+
+    db = _db()
+    tag = uuid4().hex[:6]
+    numbers = []
+    for i, (rca, ai) in enumerate([("correct", "correct"), ("partly", "wrong"), ("wrong", "")]):
+        row = _incident(db, status="RESOLVED", resolved_at=utcnow())
+        row.title = f"Review-{tag}-{i}"
+        db.add(Investigation(incident_id=row.id, summary="s", likely_cause=f"rules cause {i}", provider="builtin-analyst"))
+        if ai:
+            db.add(Investigation(incident_id=row.id, summary="ai", likely_cause="ai", provider="forgerca-llm"))
+        numbers.append((row.number, rca, ai))
+    db.commit()
+    db.close()
+
+    analyst = _signed_in("analyst")
+    for number, rca, ai in numbers:
+        saved = analyst.post(f"/api/v1/incidents/{number}/review", json={"root_cause": f"SFP failure {tag}", "rca_rating": rca, "ai_rating": ai})
+        assert saved.status_code == 200, saved.text
+    assert analyst.post(f"/api/v1/incidents/{numbers[0][0]}/review", json={"root_cause": " "}).status_code == 400
+    assert analyst.post(f"/api/v1/incidents/{numbers[0][0]}/review", json={"root_cause": "x", "rca_rating": "maybe"}).status_code == 400
+    assert analyst.get(f"/api/v1/incidents/{numbers[0][0]}/view").json()["review"]["root_cause"] == f"SFP failure {tag}"
+
+    page = analyst.get("/api/v1/investigations-page", params={"q": tag}).json()
+    assert {r["number"] for r in page["rows"]} == {n for n, _, _ in numbers}
+    assert all(r["forgerca"].startswith("rules cause") for r in page["rows"])
+    assert any(r["cause"] == f"SFP failure {tag}" and r["count"] == 3 for r in page["recurring"])
+    ai_only = analyst.get("/api/v1/investigations-page", params={"q": tag, "only_ai": "true"}).json()
+    assert len(ai_only["rows"]) == 2
+    acc = page["accuracy"]["forgerca"]
+    assert acc["rated"] >= 3 and 0 <= acc["score"] <= 100
+    assert _signed_in("viewer").post(f"/api/v1/incidents/{numbers[0][0]}/review", json={"root_cause": "x"}).status_code == 403

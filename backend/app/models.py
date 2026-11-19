@@ -243,6 +243,12 @@ class Incident(Base):
     alert_payload: Mapped[dict] = mapped_column(JSONType, default=dict)
     # Playbook steps the operator ticked on this incident (indexes into playbook.steps).
     checklist: Mapped[list] = mapped_column(JSONType, default=list)
+    # Analyst review: the confirmed cause and how ForgeRCA / ForgeAI did (correct, partly, wrong).
+    root_cause: Mapped[str] = mapped_column(Text, default="")
+    rca_rating: Mapped[str] = mapped_column(String(16), default="")
+    ai_rating: Mapped[str] = mapped_column(String(16), default="")
+    reviewed_by: Mapped[str] = mapped_column(String(255), default="")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     asset: Mapped[Asset | None] = relationship(back_populates="incidents")
     playrule: Mapped[Playrule | None] = relationship()
