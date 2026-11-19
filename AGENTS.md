@@ -73,7 +73,12 @@ Check permissions on the server for every write, not only by hiding buttons.
 - Work on a branch and open a pull request; never push to `main` directly.
 - When tests pass locally and CI is green, merge the pull request without waiting.
 
-## 6. Documentation
+## 6. Alerts and runbooks
+
+New or changed alert rules, playrules and noise filters follow
+[docs/alerting.md](docs/alerting.md); playbooks and runbooks use its runbook format.
+
+## 7. Documentation
 
 Docs are in English, short and aimed at the person who installs, runs or changes
 ForgeSRE. Update the doc in the same pull request as the change it describes.

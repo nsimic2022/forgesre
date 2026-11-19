@@ -23,6 +23,9 @@ React + TypeScript in `web/`, served at `/app` ([ui.md](ui.md)). Order: ~~NOC ov
 
 ## Phase 3 — automation and reports
 
+Follows [alerting.md](alerting.md): severities by urgency, predictive disk alerts, one
+incident per problem.
+
 Noise filters (windows, short spikes, known issues, upstream dependency), routing,
 escalation policies, the "try an alarm" simulator, scheduled reports (daily, weekly,
 monthly, cron) by email, Slack, Teams, Discord.
@@ -64,6 +67,14 @@ Agreed direction, after the new Investigations page exists (it shows ratings and
 - **Hardware.** A 24 GB GPU runs a mid-size local model well enough for the investigator.
   Without a GPU: ForgeRCA plus a small model for the summary, and the tool-using
   investigator only in cloud mode (masked, Critical/High, on request).
+
+### ForgeSRE MCP server (read-only)
+
+The tools the ForgeAI 2 investigator uses (incident, asset card, Prometheus range query,
+Loki search, interface status, similar incidents) are also served as a Model Context
+Protocol server, so an assistant the operator chooses can query the NOC with the same
+rules: sign-in with a ForgeSRE account and its role, read-only, local network only, every
+call audited. Built once for both.
 
 ## Backlog
 
@@ -109,4 +120,6 @@ Fix:
 - Rewrite and shorten the English docs page by page with each UI change.
 - TV mode: full-screen NOC view for a wall screen on a Viewer account.
 - OpenRCA as a test bench for ForgeRCA / ForgeAI accuracy, not a knowledge base.
-- Analyst rating of each analysis (correct / partly / wrong) to measure accuracy.
+- ~~Analyst rating of each analysis~~ (done with the Investigations page).
+- SLO per business service (for example ERP 99.9%) with error budget on the Reports page,
+  once services are recorded on assets.
