@@ -1,70 +1,58 @@
 # ForgeSRE
 
-Self-hosted SRE console for a **physical data center**.
+**Self-hosted NOC and SRE console for physical data centers.** One Ubuntu VM, Docker Compose,
+your data stays on your server.
 
-One Ubuntu VM (a vCenter guest is the usual lab). Docker Compose, host networking, offline-friendly. Prometheus scrapes the exporters; Alertmanager opens incidents in ForgeSRE with an owner, a playbook checklist, escalation mail, and a read-only investigation.
+ForgeSRE turns the alarms from Prometheus, Alertmanager and (optionally) Zabbix into incidents
+that someone owns: a playbook checklist, an escalation ladder with mail to the right person,
+quiet periods for maintenance and known noise, and a read-only investigation that says what
+probably happened. An optional local LLM (ForgeAI) writes the summary; nothing is sent to a
+cloud service unless you turn that on.
 
-ForgeSRE monitors:
+Current product: V0.9 · License: [Apache-2.0](LICENSE) · Code lives on [`main`](https://github.com/nsimic2022/forgesre).
 
-- **Linux servers** — `node_exporter` on `:9100` (CPU, memory, disk, `up`)
-- **Windows servers** — `windows_exporter` on `:9182` (CPU, memory, volume, `up`)
-- **Network devices** — bundled `snmp_exporter`, SNMP `UDP/161` (`if_mib`: interface status, counters, sysUpTime)
-- **Device syslog** — Alloy on `UDP/TCP 514`, stored in Loki, shown as incident evidence
-- **Optional Zabbix** — read-only host import, webhook problems, `trend.get` graphs
-
-Playbooks are operator checklists. ForgeRCA (Python) collects facts on the incident; optional on-box ForgeAI rewrites the prose.
-
-**Code lives on [`main`](https://github.com/nsimic2022/forgesre).** Current product: V0.9.
-
-![Dashboard — incidents, infrastructure, Host metrics](docs/images/dashboard.png)
-
-*V0.9 UI, seeded demo host `forge-demo-01`. On a live appliance the ForgeSRE card reads CPU / RAM / HDD from this VM’s node_exporter.*
+![Dashboard — incidents, infrastructure, host metrics](docs/images/dashboard.png)
 
 ---
 
-## What the system tracks
+## Why ForgeSRE
 
-When a Linux server, a Windows server, or a switch is in inventory and monitoring is wired, the path is:
+- **Built for on-prem.** Servers, switches, racks and sites in your own rooms, not only Kubernetes
+  in someone else's cloud.
+- **Your data stays home.** The UI loads nothing from the internet (fonts are bundled, no CDN).
+  The LLM runs on the box by default; a cloud model is opt-in, per investigation, and secrets are
+  stripped first.
+- **Less noise, not more dashboards.** Noise filters, maintenance windows and playrules decide
+  which alarm becomes an incident and which is expected (a 95 % disk during the nightly backup).
+- **Explainable investigations.** ForgeRCA collects facts and hypotheses with plain Python rules,
+  always first. ForgeAI only rewrites them into prose, so you can see why it says what it says.
+- **Runs over SSH.** Everything the UI shows about health can be checked with `./forgesre`.
 
-```
-Find or enter a host
-        ↓
-   Assets (who owns it, how to scrape it)
-        ↓
-   Prometheus  — Linux: node_exporter :9100
-               — Windows: windows_exporter :9182
-   snmp_exporter — network: UDP/161
-        ↓
-   Alert → incident
-        ↓
-   Playrule picks a playbook + escalation
-        ↓
-   Who to call  +  ForgeRCA (facts / hypotheses / evidence)
-```
+## What it does
 
-| Piece | Role |
+| Area | What you get |
 |---|---|
-| **Discovery** | Light probe: TCP 22/80/443/9100/9182 plus SNMP GET on UDP/161, then HTTP `/metrics` on :9182/:9100 to default Windows vs Linux. Approve or Ignore. Optional read-sync from bundled NetBox (`:8001`) or `--netbox-url`. |
-| **Inventory** | Hostname, IP, type (default **Auto (detect exporter)**), owner email/phone. Analysts can add and edit. |
-| **Monitoring** | Prometheus HTTP SD for Linux (`node_exporter` :9100) and Windows (`windows_exporter` :9182). Bundled snmp_exporter for network devices. Grafana for extra graphs (`:3000`, opened from System Health). Alloy receives device syslog (UDP/TCP 514) into Loki for incident logs. |
-| **Zabbix (optional)** | Read-only: **Discovery → Sync hosts** imports hosts (Auto, empty scrape), the Zabbix webhook opens incidents with a **Zabbix** pill, and `trend.get` graphs cover hosts Prometheus has no samples for. Operator cookbook (both machines, checklist): [docs/zabbix.md](docs/zabbix.md) (summary in [handbook §18](docs/operator-handbook.md#18-zabbix-read-only-source)). |
-| **Incidents** | `/incidents` — all incidents, newest first, with Ack and Resolved by. Alertmanager opens `INC-0134_16.08.2026_09:13`. Fingerprint is alert + asset. A resolved alert sets `RESOLVED`; the same alert firing again opens a new incident. Mail, audit, and notes stay on the incident. `/history` redirects here. |
-| **Playrules / playbooks** | Deterministic mapping by `alertname`: this alert → this checklist. Thresholds live in Prometheus `alerts.yml`. Operators run the checklist. |
-| **Escalation** | Generated mail to the **asset owner** (or an address written on the policy step; empty owner email = `no-recipient`). SMTP optional: Gmail, Outlook, or later the off-by-default mailbox profile. |
-| **ForgeRCA / ForgeAI** | Read-only investigation. ForgeRCA (Python builtin) always first; ForgeAI is the optional local LLM rewrite. |
-| **Journal** | On **System Health** (`/health-ui#journal`) — per-module ok/warn/error process log. `/journal` redirects there. |
+| **Monitoring** | Linux (`node_exporter :9100`), Windows (`windows_exporter :9182`), network devices over SNMP (bundled `snmp_exporter`), device syslog into Loki (Alloy on 514). Predictive disk alerts. |
+| **Inventory** | One asset list with owners, sites, racks and types. Sources: manual entry, discovery, NetBox, LibreNMS, Zabbix and GLPI (read-only imports). |
+| **Incidents** | Alertmanager opens `INC-…` incidents with an owner, severity, timeline and notes. Ack, assign, resolve. The list shows 10 per page with filters and search. |
+| **Automation** | Playrules map an alert to a playbook and an escalation policy; noise filters and maintenance windows keep expected alarms quiet; a simulator shows what an alarm would do. |
+| **On-call and escalation** | Weekly on-call slots, escalation steps by minutes and level, mail through your SMTP (Gmail, Outlook or on-box). |
+| **Investigations** | ForgeRCA facts and hypotheses, ForgeAI summary, evidence from Prometheus and Loki, and a review step to rate the root cause. |
+| **Reports** | Incident trends, noisiest assets, top alerts, downtime; CSV export and scheduled mail reports. |
+| **Operations** | System Health (`/health-ui`) and `./forgesre doctor`, a journal per module, background jobs, backup and restore. |
 
-Demo asset `forge-demo-01` is seeded so the first hour is visible without a real customer VM.
+Four roles: Viewer, Analyst (NOC operator), Engineer (changes everything operational), Admin
+(settings, integrations, users, backup). Permissions are checked on the server for every write.
+Details: [handbook §3](docs/operator-handbook.md#3-roles-and-who-can-click-what).
 
 ![Incidents list](docs/images/incidents.png)
-
-*Incidents list: hostname, alert title, status, L1–L4, When. IDs look like `INC-0002_16.10.2026_17:24`.*
 
 ---
 
 ## Quick start
 
-Host needs Docker, Docker Compose, Bash, and Git.
+You need an Ubuntu VM (4 GB RAM without the LLM, ~16 GB with it) with Docker, Docker Compose,
+Bash and Git.
 
 ```bash
 git clone https://github.com/nsimic2022/forgesre.git
@@ -72,171 +60,114 @@ cd forgesre
 ./install.sh --non-interactive --profile standard --port 8080
 ```
 
-Sign in at `http://<VM-IP>:8080` with the credentials in `installation-report.md` (also `secrets/secrets.env`). Dashboard → **Run demo** (admin, top right) → `forge-demo-01`. Then:
+Sign in at `http://<VM-IP>:8080` with the credentials in `installation-report.md`, then change
+the admin password. A demo host, `forge-demo-01`, is seeded so you can see a full incident in the
+first hour:
 
 ```bash
-./forgesre demo          # live HighCPU + mail to the asset owner
-./forgesre demo-reset    # lower the demo gauges when you are done
-./forgesre doctor        # short health lights
-./forgesre test          # detailed report → data/reports/
-./forgesre help
-./forgesre secrets-check
+./forgesre demo          # live HighCPU incident + mail to the asset owner
+./forgesre demo-reset    # calm the demo host down again
+./forgesre doctor        # health lights: the first command when something is wrong
 ```
 
-On a running appliance, update with:
+`./install.sh` is for the first install only. On a running box:
 
 ```bash
 git pull origin main
-./forgesre update
+./forgesre update        # backup, render monitoring, images, compose up, doctor
+./forgesre restart       # just bounce the running containers
 ```
 
-`./install.sh` is the **first** install only. It writes `secrets/secrets.env`; a second run regenerates passwords.
+Full Ubuntu / vCenter manual: [docs/install-config.md](docs/install-config.md).
 
-To bounce the running containers without pulling, re-rendering, or touching `.env` / `secrets/`: `./forgesre restart`.
+### Optional local LLM
 
-`./forgesre update` is the full path after `git pull` (backup, render-monitoring, images, compose up, SNMP auths, doctor). `./forgesre restart` restarts the containers that already exist — use it when a service is wedged.
-
-Network gear: Assets → type **Network device** + IP, then `./forgesre snmp`. Linux uses node_exporter `:9100`. Windows uses windows_exporter `:9182`.
-
-### SNMP (network devices)
-
-- **Version per asset:** Assets → Edit → *Comms / monitoring* → **SNMP version** v1 / v2c / v3. v1 / v2c use **Community** *Default* (`SNMP_COMMUNITY` in `secrets/secrets.env`) or *Custom*; v3 uses a USM user (security level, auth + privacy protocol and passwords). Secrets are shown once at Save.
-- **`./forgesre snmp-auths`** writes Custom community / v3 auths (`forgesre_<asset id>`) into `data/generated/snmp.yml` and reloads snmp_exporter. Run it after saving a Custom / v3 asset; `update` and `render-monitoring` run it too. Until then the asset page shows *pending* and polling uses the default `public_v2` auth.
-- **VLAN** on the asset is an inventory note (filter / search). SNMP polling still uses the asset’s SNMP port, version, and community / v3 user.
-- **snmp_exporter after update:** `snmp.yml` ships a valid snmp_exporter v0.26 `if_mib` module. `render-monitoring` always reloads the exporter; if it was silent, `docker compose restart snmp-exporter`. With the exporter up, **SnmpDeviceUnreachable** means the **device** did not answer (UDP/161, ACL, community or v3 user).
-
-Details: [handbook §7](docs/operator-handbook.md#network-device-snmp_exporter).
-
----
-
-## Install / config
-
-| When | Command |
-|---|---|
-| **New box** | `./install.sh` (once). Guided wizard, or `--non-interactive --profile standard --port 8080`. |
-| **Live box** | `git pull origin main && ./forgesre update`. |
-
-`./install.sh` writes the live files. If you are building the files by hand, copy the template:
-
-```bash
-cp config/forgesre.example.yml config/forgesre.yml
-```
-
-Live `config/forgesre.yml`, `.env`, and `secrets/secrets.env` are **gitignored**. Keep passwords, tokens, and SMTP secrets off git. Core reads `config/forgesre.yml`. After YAML edits: `docker compose up -d --force-recreate core`.
-
-Longer Ubuntu / vCenter manual: [docs/install-config.md](docs/install-config.md).
-
-### Optional local LLM (download + activate)
-
-ForgeRCA (Python) always investigates. The GGUF is **optional** — skip this on a 4 GB VM. Default pin is **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB on disk; ~16 GB RAM with the rest of the stack). Stored under `data/models/model.gguf`, outside git. The bundled engine is llama.cpp (`COMPOSE_PROFILES=ai`). Mailbox stays opt-in (`./forgesre mailbox`); leave that profile off when you only want AI.
-
-**Where the file lands:** `$FORGESRE_DATA/models/model.gguf` (default **`./data/models/model.gguf`**). The filename **must** be `model.gguf`.
-
-Usual path on an existing install (`scripts/fetch-llm.sh`):
+ForgeRCA works without a model. To add ForgeAI on the box (default Qwen2.5-14B-Instruct Q4_K_M,
+~9 GB on disk, served by llama.cpp on `127.0.0.1:8088`):
 
 ```bash
 ./forgesre fetch-llm
 ```
 
-That downloads into `data/models/model.gguf` (unless a file larger than 1 GB is already there), sets `COMPOSE_PROFILES=ai` in `.env`, writes `ai.enabled: true` and `ai.llm.mode: bundled` in `config/forgesre.yml`, and starts Compose service `llm` (`127.0.0.1:8088`). Then wait until llama.cpp answers and check doctor:
+Smaller models, offline copies and cloud models: [docs/llm.md](docs/llm.md).
 
-```bash
-curl -fsS http://127.0.0.1:8088/v1/models
-./forgesre doctor          # llm: ok
-```
+### Network devices and integrations
 
-First load after `up -d llm` takes minutes (GGUF mmap). Use `./forgesre fetch-llm` to add the model on a live box.
-
-If you only downloaded (`./forgesre fetch-llm --download-only`) or copied a GGUF yourself, **activate**:
-
-1. `.env`: `COMPOSE_PROFILES=ai` (or `ai,mailbox` only if the mailbox profile is already on).
-2. `config/forgesre.yml` (copy keys from `config/forgesre.example.yml` if the `ai:` block is missing): `ai.enabled: true`, `ai.llm.mode: bundled`. Timeout default is `timeout_seconds: 90` (lab 4B; raise toward 600 only for slow 14B CPU).
-3. `docker compose --profile ai up -d llm` then `docker compose up -d --force-recreate core`.
-4. Wait for `http://127.0.0.1:8088/v1/models`, then `./forgesre doctor`.
-
-**Lab / 8 GB RAM** — Qwen3-4B Q4_K_M (~2.5 GB), still documented in `scripts/fetch-llm.sh --help`:
-
-```bash
-mkdir -p data/models
-wget -O data/models/model.gguf \
-  https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf
-./forgesre fetch-llm --offline
-```
-
-`--offline` skips Hugging Face; the file must already exist at `data/models/model.gguf` and be larger than 1 GB. Details: [docs/llm.md](docs/llm.md).
+- **SNMP:** add the device under Assets as *Network device* with its IP, then `./forgesre snmp`.
+  Custom communities and SNMPv3 users: save the asset, then `./forgesre snmp-auths`.
+  Details: [handbook §7](docs/operator-handbook.md#network-device-snmp_exporter).
+- **Zabbix (read-only):** [docs/zabbix.md](docs/zabbix.md), summary in
+  [handbook §18](docs/operator-handbook.md#18-zabbix-read-only-source).
+- **GLPI (read-only):** [docs/glpi.md](docs/glpi.md).
 
 ---
 
-## UI
+## The interface
 
-![Assets inventory](docs/images/assets.png)
+The classic UI is at `/`. The new UI (React, served by Core at `/app`) is in preview and is
+becoming the default page by page: NOC, Incidents, On-call, Inventory, Automation,
+Investigations, Reports and Settings. See [docs/ui.md](docs/ui.md).
 
-*Inventory: Linux `:9100`, Windows `:9182`, network SNMP. Seeded demo rows are labeled DEMO in incidents; they are lab hosts.*
-
-| URL | What you do |
+| Page | What you do there |
 |---|---|
-| `/` | Dashboard: On call, incident / infrastructure counts, ForgeSRE card (CPU / RAM / HDD / NET for this VM), Recent incidents + Host metrics, **ForgeAI** digest, **Run demo** (admin). Full doctor grid is **System Health**. |
-| `/assets` | Inventory and owner contacts |
-| `/discovery` | Prefills primary IPv4 `/24`; **Confirm & scan** writes `discovery.cidrs` and queues a background probe; **Scan now** after confirm (empty CIDR list skips the probe) / Approve / Ignore. One row of five cubes: Scan now · LibreNMS (API token + Identify) · **Sync NetBox** · Zabbix · GLPI (admin). Empty NetBox = yellow. |
-| `/incidents` | All incidents by default, newest first (**10 per page**). Filters: status (including **Not acknowledged**), site, customer, time window, search. Columns include Ack and Resolved by. `/history` redirects here. |
-| `/ai/INC-…` | Read-only RCA (ForgeRCA first, ForgeAI rewrite) |
-| `/playrules` `/playbooks` `/escalation` | Workflow |
-| `/health-ui` | System Health (`./forgesre doctor`) and the journal list below it. `/journal` redirects to `#journal`. Open Grafana / Prometheus Targets / … |
-| `/ops` | Email & reports: address book, send, outbox, scheduled reports (Edit / Clone / Remove / Enable) |
-| `/admin` | Users: click a row to edit or remove; platform backup / import; audit |
-
-Roles: viewer, analyst (NOC operator), engineer (inventory, rules, playbooks, escalation), admin (settings, users, backup). Details: [handbook §3](docs/operator-handbook.md#3-roles-and-who-can-click-what).
-
----
+| NOC (`/app`) | Active incidents, levels, what was sent, ForgeAI state |
+| Incidents | Active, open and resolved incidents with filters; one page per incident with checklist, timeline and investigation |
+| Inventory | Assets library grouped by site, rack, type and owner; views for down, alarming and unowned |
+| Automation | Noise filters, playrules, playbooks, escalation, maintenance, alarm simulator |
+| Reports | Trends, CSV export, scheduled reports |
+| Settings | IPs, ports, integrations and tokens (secrets are write-only), with a test button per integration |
+| System Health | Doctor grid and journal (`/health-ui`) |
 
 ## CLI
 
-`./forgesre help` lists every command. `./forgesre help snmp` (or any command) has examples. Full list: [docs/cli.md](docs/cli.md#all-commands); the same list is on **Administration → ForgeSRE CLI**.
-
-Type `./forgesre` with no arguments for a prompt, then `journal`, `incidents`, `history` — you stay in the prompt. Leave with `quit`, `exit`, or Ctrl-D (`./forgesre help quit`). TAB completes command names, `logs snmp-exporter`, and incident ids. `./f` is the same CLI with a shorter name (`./f journal`). SSH to the VM first; `./forgesre login` is the ForgeSRE engineer/analyst user (the Linux account is separate).
+`./forgesre help` lists every command (`./f` is the same CLI with a shorter name). A few you will
+use daily:
 
 ```bash
-./forgesre                 # prompt; then: incidents … quit
-./forgesre help quit
-./forgesre login
-./forgesre incidents
-./forgesre incidents INC-000012
-./f journal
-./forgesre doctor
-./forgesre test
-./forgesre verify              # live chain for inventory: exporter → prometheus → alertmanager → core
-./forgesre ping                # ICMP + exporter /metrics (alias: probe)
-./forgesre assets
-./forgesre snmp
-./forgesre snmp-auths          # per-asset Custom community / v3 → snmp.yml, reload snmp_exporter
-./forgesre sd
-./forgesre history
-./forgesre jobs
-./forgesre logs core
-./forgesre journal
-./forgesre update              # after git pull: backup, render, images, compose up, doctor
-./forgesre restart             # bounce existing containers only (no pull / render / secrets)
-./forgesre render-monitoring   # refresh Prometheus/SNMP/alerts without the rest of update
-./forgesre backup
-./forgesre backup --no-secrets
-./forgesre backup --include-models
-./forgesre restore data/backups/backup_YYYYMMDDTHHMMSSZ --yes
-./forgesre fetch-llm           # optional ~9 GB → data/models/model.gguf
-./forgesre mailbox             # optional Roundcube later; Core SMTP unchanged
+./forgesre incidents           # open incidents; ./forgesre incidents INC-000012 for one
+./forgesre journal             # module log
+./forgesre jobs                # background jobs and queues
+./forgesre settings            # view settings; settings set-secret for tokens
+./forgesre verify              # exporter → Prometheus → Alertmanager → Core, per asset
+./forgesre backup              # ./forgesre restore <dir> --yes to restore
 ```
 
+All commands: [docs/cli.md](docs/cli.md).
+
+## Architecture
+
+One Core process (Python 3.12, FastAPI, SQLAlchemy) with PostgreSQL, next to Prometheus,
+Alertmanager, snmp_exporter, Loki, Grafana Alloy and Grafana, all in Docker Compose on host
+networking. Optional: llama.cpp, bundled NetBox and LibreNMS, an on-box mailbox. Slow work
+(investigations, discovery, syncs, reports) runs as background jobs; only one Core worker runs
+the background loops at a time. More: [docs/architecture.md](docs/architecture.md).
+
+Configuration lives in `config/forgesre.yml` (behaviour), `.env` (ports and paths) and
+`secrets/secrets.env` (passwords and tokens). The last two and `data/` are never committed.
+
 ---
 
-## Stack
+## Roadmap
 
-Python 3.12 + FastAPI + Jinja2 (one Core process), PostgreSQL, Prometheus, Alertmanager, snmp_exporter, Loki, Grafana Alloy, Grafana. Optional llama.cpp. Optional on-box mailbox (docker-mailserver + Roundcube) via Compose profile `mailbox` — off until `./forgesre mailbox`. Gmail/Outlook SMTP in `config/forgesre.yml` stays as configured. Default Compose services use **host networking**; the mailbox profile uses a bridge network and publishes 25 / 993 / Roundcube.
+Next: editing everything in the new UI and making it the default, Slack / Teams / Discord
+notifications, discovery through LibreNMS, one merged asset list from all sources, a second
+generation of ForgeAI, a read-only MCP server and SLOs. See [docs/roadmap.md](docs/roadmap.md).
 
-Config: `config/forgesre.yml` (behavior), `.env` (ports/paths), `secrets/secrets.env` (passwords, SNMP community, tokens). Keep the last two and `data/` off git.
+## Contributing
 
----
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, then
+[AGENTS.md](AGENTS.md) for how code is written here. Please follow the
+[Code of Conduct](CODE_OF_CONDUCT.md). Security problems go through a private report, not a
+public issue: [SECURITY.md](SECURITY.md).
 
 ## Docs
 
-Install / config (including optional LLM) is in this README above. Longer Ubuntu manual: [docs/install-config.md](docs/install-config.md). Learning path: [docs/README.md](docs/README.md). Why/when: [handbook](docs/operator-handbook.md). Commands: [cli.md](docs/cli.md). LLM details: [docs/llm.md](docs/llm.md). Zabbix: [docs/zabbix.md](docs/zabbix.md).
+[Docs index](docs/README.md) · [Operator handbook](docs/operator-handbook.md) ·
+[Install and config](docs/install-config.md) · [CLI](docs/cli.md) · [Alerting](docs/alerting.md) ·
+[Settings](docs/settings.md) · [LLM](docs/llm.md) · [Architecture](docs/architecture.md)
 
-How the V0.9 appliance is put together: [architecture.md](docs/architecture.md). Security notes: [SECURITY.md](SECURITY.md). License: [Apache-2.0](LICENSE).
+## License
+
+ForgeSRE is licensed under the [Apache License 2.0](LICENSE). "ForgeSRE" is the name of this
+project; please do not use it for a fork or a derived product in a way that suggests it is the
+original. See [NOTICE](NOTICE).

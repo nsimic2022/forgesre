@@ -21,4 +21,6 @@ Any future remediation feature must be a separate, off-by-default, audited subsy
 
 ## Reporting
 
-If you find a vulnerability, open a private report with the project maintainers. Do not file a public issue with exploit details.
+If you find a vulnerability, report it privately through GitHub: **Security → Report a vulnerability** on the repository (<https://github.com/nsimic2022/forgesre/security/advisories/new>). Do not file a public issue with exploit details. We aim to reply within a week; please give us time to ship a fix before you publish.
+
+Security fixes go to the latest release on `main`.

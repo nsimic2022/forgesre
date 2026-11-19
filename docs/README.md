@@ -1,6 +1,6 @@
 # Docs
 
-The GitHub README is the product summary (what ForgeSRE monitors, first install, **optional LLM** download into `data/models/model.gguf`). This folder is how you **operate** the appliance.
+The GitHub README is the product summary (what ForgeSRE does, first install, **optional LLM** via `./forgesre fetch-llm`). Longer install steps, including the LLM, are in [install-config.md](install-config.md). This folder is how you **operate** the appliance.
 
 **Why / when:** [operator handbook](operator-handbook.md) (source of truth for running the box).  
 **Commands:** [cli.md](cli.md).  
