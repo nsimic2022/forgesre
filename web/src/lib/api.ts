@@ -33,6 +33,14 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+export async function putJson<T>(path: string, body: unknown): Promise<T> {
+  return getJson<T>(path, {
+    method: "PUT",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export type Role = "viewer" | "analyst" | "engineer" | "admin";
 
 export interface Me {
@@ -294,4 +302,30 @@ export interface Reports {
   host_down: { asset: string; minutes: number }[];
   scheduled: { id: number; name: string; kind: string; recipients: string[]; schedule: string; enabled: boolean; last_run_at: string | null; next_run_at: string | null }[];
   can_edit: boolean;
+}
+
+export interface SettingRow {
+  key: string;
+  group: string;
+  label: string;
+  kind: "str" | "bool" | "int" | "enum" | "list" | "url";
+  store: "yaml" | "secret" | "env";
+  editable: boolean;
+  help: string;
+  test: string;
+  choices?: string[];
+  value?: unknown;
+  effective?: unknown;
+  set?: boolean;
+}
+
+export interface SettingsData {
+  groups: Record<string, string>;
+  settings: SettingRow[];
+}
+
+export interface Doctor {
+  overall: string;
+  components: Record<string, { status: string; label?: string; why?: string; detail?: string }>;
+  failed: string[];
 }
