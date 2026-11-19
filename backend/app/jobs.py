@@ -250,6 +250,13 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                     actor=str(payload.get("actor") or "system"),
                     name=str(payload.get("name") or "forgeai-digest"),
                 )
+            elif row.kind == "topology_sync":
+                from app.topology import sync_librenms
+
+                # LibreNMS LLDP/CDP links; the client has its own timeouts and backoff.
+                payload = dict(row.payload or {})
+                payload["result"] = sync_librenms(db)
+                row.payload = payload
             elif row.kind == "backup_create":
                 from app.backup import create_backup
                 from app.journal import report as journal_report

@@ -473,6 +473,27 @@ class OncallSlot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class TopologyLink(Base):
+    """One LLDP/CDP neighbour seen by LibreNMS, matched to our assets where possible.
+
+    Rows are replaced on every sync from the same source. They feed parent suggestions; the
+    parent pointer on Asset stays the one source of truth for parent-down suppression.
+    """
+
+    __tablename__ = "topology_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source: Mapped[str] = mapped_column(String(32), default="librenms", index=True)
+    local_asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=True, index=True)
+    remote_asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=True, index=True)
+    local_name: Mapped[str] = mapped_column(String(255), default="")
+    remote_name: Mapped[str] = mapped_column(String(255), default="")
+    local_port: Mapped[str] = mapped_column(String(128), default="")
+    remote_port: Mapped[str] = mapped_column(String(128), default="")
+    protocol: Mapped[str] = mapped_column(String(16), default="")
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class NoiseFilter(Base):
     """Known noise: an alarm that matches is recorded but nobody is notified while it applies.
 
