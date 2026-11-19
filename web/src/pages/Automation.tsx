@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { PlaybookForm, RemoveButton, RuleForm, ruleBody, ruleDraft } from "../components/AutomationEditors";
+import { PlaybookForm, PolicyForm, RemoveButton, RuleForm, ruleBody, ruleDraft } from "../components/AutomationEditors";
 import { NoiseFilters } from "../components/NoiseFilters";
 import { Card, Chip } from "../components/ui";
 import { getJson, postJson, putJson, type Automation, type PolicyStep, type Simulation } from "../lib/api";
@@ -14,9 +14,10 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "maintenance", label: "Maintenance windows" },
 ];
 // Classic pages that still do the editing.
-const EDIT: Record<Tab, string> = { filters: "", rules: "", escalation: "/escalation", playbooks: "", maintenance: "/assets" };
+const EDIT: Record<Tab, string> = { filters: "", rules: "", escalation: "", playbooks: "", maintenance: "/assets" };
 type Rule = Automation["rules"][number];
 type Book = Automation["playbooks"][number];
+type Policy = Automation["policies"][number];
 
 function condition(c: Automation["rules"][number]["condition"]): string {
   const base = c.alertname ?? "any alert";
@@ -91,9 +92,11 @@ export function AutomationPage() {
   const [error, setError] = useState("");
   const [ruleEdit, setRuleEdit] = useState<{ rule: Rule | null } | null>(null);
   const [bookEdit, setBookEdit] = useState<{ book: Book | null; copy: boolean } | null>(null);
+  const [policyEdit, setPolicyEdit] = useState<{ policy: Policy | null } | null>(null);
   const load = () => getJson<Automation>("/api/v1/automation").then(setData).catch((e: Error) => setError(e.message));
   const closeRule = (saved: boolean) => (setRuleEdit(null), saved && load());
   const closeBook = (saved: boolean) => (setBookEdit(null), saved && load());
+  const closePolicy = (saved: boolean) => (setPolicyEdit(null), saved && load());
   const toggle = (r: Rule) =>
     putJson(`/api/v1/automation/rules/${r.id}`, ruleBody({ ...ruleDraft(r), enabled: !r.enabled })).then(load).catch((e: Error) => setError(e.message));
   useEffect(() => {
@@ -174,13 +177,27 @@ export function AutomationPage() {
         </>
       ) : null}
       {data && tab === "escalation" ? (
+        <>
+        {policyEdit ? <PolicyForm key={policyEdit.policy?.id ?? "new"} policy={policyEdit.policy} onDone={closePolicy} /> : null}
+        {data.can_edit ? <div className="row"><button className="btn primary" type="button" onClick={() => setPolicyEdit({ policy: null })}>New policy</button><a className="btn" href="/app/incidents/on-call">On-call week</a></div> : null}
         <div className="cols">
           {data.policies.map((policy) => (
-            <Card key={policy.id} title={policy.name} actions={<span className="small faint">{policy.rules} rules</span>}>
+            <Card key={policy.id} title={policy.name} actions={
+              <>
+                <span className="small faint">{policy.rules} rules</span>
+                {data.can_edit ? (
+                  <>
+                    <button className="btn" type="button" onClick={() => setPolicyEdit({ policy })} aria-label={`Edit policy ${policy.name}`}>Edit</button>
+                    {policy.slug !== "default-warning" ? <RemoveButton url={`/api/v1/automation/policies/${policy.id}`} what={policy.name} onRemoved={load} /> : null}
+                  </>
+                ) : null}
+              </>
+            }>
               <Steps steps={policy.steps} />
             </Card>
           ))}
         </div>
+        </>
       ) : null}
       {data && tab === "playbooks" ? (
         <>

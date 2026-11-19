@@ -8,7 +8,7 @@ const data: Automation = {
   pipeline: { incidents_today: 12, filtered_today: 2, muted_today: 3, routed_today: 9, notifications_today: 7 },
   rules: [{ id: 1, name: "high-cpu", description: "CPU above 80%", enabled: true, severity: "warning", condition: { alertname: "HighCPU", metric: "cpu_usage", operator: ">", value: 80 }, playbook: "cpu", playbook_id: 1, policy: "Default warning", policy_id: 1, hits_30d: 4 }],
   playbooks: [{ id: 1, name: "cpu", description: "", steps: ["Check top processes"], rules: 1 }],
-  policies: [{ id: 1, name: "Default warning", steps: [{ after_minutes: 0, target: "team", channel: "email", level: 1 }, { after_minutes: 15, target: "team-lead", channel: "email", level: 2 }], rules: 1 }],
+  policies: [{ id: 1, slug: "default-warning", name: "Default warning", levels: [{ level: 1, label: "L1 NOC", on: true, minutes: 0, target: "team" }, { level: 2, label: "L2 Shift", on: true, minutes: 15, target: "team-lead" }, { level: 3, label: "L3 Engineer", on: false, minutes: 30, target: "engineer" }, { level: 4, label: "L4 Manager", on: false, minutes: 60, target: "manager" }], steps: [{ after_minutes: 0, target: "team", channel: "email", level: 1 }, { after_minutes: 15, target: "team-lead", channel: "email", level: 2 }], rules: 1 }],
   maintenance: [],
   can_edit: true,
 };
@@ -93,5 +93,21 @@ describe("Automation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save playbook" }));
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url === "/api/v1/automation/playbooks")).toBe(true));
     expect(calls.find((c) => c.url === "/api/v1/automation/playbooks")!.body).toMatchObject({ name: "cpu (copy)", steps: ["Check top processes", "Call the owner"] });
+  });
+
+  it("edits escalation levels and does not offer to remove the default policy", async () => {
+    render(<AutomationPage />);
+    await screen.findByText("12 incidents today");
+    fireEvent.click(screen.getByRole("tab", { name: "Escalation" }));
+    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit policy Default warning" }));
+    expect((screen.getByLabelText("L3 Engineer minutes") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText("L3 Engineer on"));
+    fireEvent.change(screen.getByLabelText("L3 Engineer recipient"), { target: { value: "dba@dc.local" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.url === "/api/v1/automation/policies/1")).toBe(true));
+    const levels = (calls.find((c) => c.url === "/api/v1/automation/policies/1")!.body as { levels: unknown[] }).levels;
+    expect(levels[2]).toEqual({ level: 3, on: true, minutes: 30, target: "dba@dc.local" });
+    expect(levels[3]).toMatchObject({ level: 4, on: false });
   });
 });

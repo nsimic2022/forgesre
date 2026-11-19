@@ -262,6 +262,41 @@ export interface PolicyStep {
   level?: number | null;
 }
 
+export interface PolicyLevel {
+  level: number;
+  label: string;
+  on: boolean;
+  minutes: number | string;
+  target: string;
+}
+
+export interface OncallSlot {
+  id: number;
+  weekday: number;
+  day: string;
+  start: string;
+  end: string;
+  start_minute: number;
+  end_minute: number;
+  name: string;
+  surname: string;
+  person: string;
+  email: string;
+  phone: string;
+  phone2: string;
+  enabled: boolean;
+  window: string;
+}
+
+export interface OncallWeek {
+  weekdays: string[];
+  slots: OncallSlot[];
+  now: OncallSlot | null;
+  timezone: string;
+  people: { name: string; surname: string; label: string; email: string; phone: string; phone2: string }[];
+  can_edit: boolean;
+}
+
 export interface NoiseFilter {
   id: number;
   name: string;
@@ -300,7 +335,7 @@ export interface Automation {
     hits_30d: number;
   }[];
   playbooks: { id: number; name: string; description: string; steps: string[]; rules: number }[];
-  policies: { id: number; name: string; steps: PolicyStep[]; rules: number }[];
+  policies: { id: number; slug?: string; name: string; steps: PolicyStep[]; rules: number; levels?: PolicyLevel[] }[];
   maintenance: { asset: string; summary: string; starts_at: string | null; ends_at: string | null; active: boolean }[];
   can_edit: boolean;
 }

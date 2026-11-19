@@ -337,3 +337,50 @@ def test_automation_rule_and_playbook_editing():
     kept = db.query(Incident).filter_by(number=number).one()
     assert kept.playrule_id is None and kept.playbook_id is None
     db.close()
+
+
+def test_escalation_policy_and_oncall_editing():
+    """Escalation L1–L4 and the on-call week from the new UI: Engineer+, validated like the classic page."""
+    tag = uuid4().hex[:6]
+    analyst = _signed_in("analyst")
+    week = analyst.get("/api/v1/oncall-week").json()
+    assert week["weekdays"][0] == "Monday" and week["can_edit"] is False and week["people"] == []
+    assert analyst.post("/api/v1/oncall-slots", json={"weekday": 0, "start": "08:00", "end": "16:00", "email": "a@dc.local"}).status_code == 403
+    assert analyst.post("/api/v1/automation/policies", json={"name": "x"}).status_code == 403
+
+    eng = _signed_in("engineer")
+    levels = [{"level": 1, "on": True, "minutes": 0, "target": "team"}, {"level": 2, "on": True, "minutes": 20, "target": f"lead-{tag}@dc.local"},
+              {"level": 3, "on": False, "minutes": 30, "target": "engineer"}]
+    assert eng.post("/api/v1/automation/policies", json={"name": f"P {tag}", "levels": []}).status_code == 400
+    bad = eng.post("/api/v1/automation/policies", json={"name": f"P {tag}", "levels": [{"level": 1, "on": True, "minutes": 0, "target": ""}]})
+    assert bad.status_code == 400 and "no recipient" in bad.json()["detail"]
+    made = eng.post("/api/v1/automation/policies", json={"name": f"P {tag}", "levels": levels})
+    assert made.status_code == 200, made.text
+    policy = made.json()
+    assert policy["slug"] == f"p-{tag}"
+    assert [(s["level"], s["after_minutes"], s["target"]) for s in policy["steps"]] == [(1, 0, "team"), (2, 20, f"lead-{tag}@dc.local")]
+    assert eng.post("/api/v1/automation/policies", json={"name": f"P {tag}", "levels": levels}).status_code == 400  # same slug
+    listed = next(p for p in eng.get("/api/v1/automation").json()["policies"] if p["id"] == policy["id"])
+    assert [lv["on"] for lv in listed["levels"]] == [True, True, False, False]
+
+    rule = eng.post("/api/v1/automation/rules", json={"name": f"pr-{tag}", "escalation_policy_id": policy["id"]}).json()
+    removed = eng.delete(f"/api/v1/automation/policies/{policy['id']}").json()
+    assert removed["rules_moved"] == 1
+    moved = next(r for r in eng.get("/api/v1/automation").json()["rules"] if r["id"] == rule["id"])
+    assert moved["policy"] and moved["policy_id"] != policy["id"]
+    default = next(p for p in eng.get("/api/v1/automation").json()["policies"] if p["slug"] == "default-warning")
+    assert eng.delete(f"/api/v1/automation/policies/{default['id']}").status_code == 400
+
+    slot_body = {"weekday": 2, "start": "08:00", "end": "16:00", "name": "Ana", "email": f"ana-{tag}@dc.local", "phone": "+381 60 1"}
+    assert eng.post("/api/v1/oncall-slots", json={**slot_body, "end": "07:00"}).status_code == 400
+    slot = eng.post("/api/v1/oncall-slots", json=slot_body)
+    assert slot.status_code == 200, slot.text
+    sid = slot.json()["id"]
+    assert eng.put(f"/api/v1/oncall-slots/{sid}", json={**slot_body, "end": "18:00"}).json()["end"] == "18:00"
+    assert eng.post(f"/api/v1/oncall-slots/{sid}/toggle").json()["enabled"] is False
+    week = eng.get("/api/v1/oncall-week").json()
+    row = next(s for s in week["slots"] if s["id"] == sid)
+    assert row["start_minute"] == 480 and row["end_minute"] == 1080 and row["enabled"] is False
+    assert week["can_edit"] is True
+    assert eng.delete(f"/api/v1/oncall-slots/{sid}").status_code == 200
+    assert eng.delete(f"/api/v1/oncall-slots/{sid}").status_code == 404
