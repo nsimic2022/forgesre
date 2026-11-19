@@ -14,6 +14,11 @@ export const NAV = [
   { to: "/settings", label: "Settings" },
 ];
 
+/** "2.0.0" → "2.0": the menu shows major.minor, like the release notes. */
+export function shortVersion(v: string): string {
+  return v.split(".").slice(0, 2).join(".");
+}
+
 const ROLE_LABEL: Record<string, string> = { viewer: "Viewer", analyst: "Analyst", engineer: "Engineer", admin: "Admin" };
 
 export function Shell({ me, forgeai, children }: { me: Me | null; forgeai: string; children: ReactNode }) {
@@ -22,7 +27,7 @@ export function Shell({ me, forgeai, children }: { me: Me | null; forgeai: strin
       <nav className="nav" aria-label="Main">
         <div className="nav-brand">
           <span className="nav-logo" aria-hidden="true">F/</span>
-          ForgeSRE {me?.version ? <span className="small faint">v{me.version}</span> : null}
+          ForgeSRE {me?.version ? <span className="small faint">{shortVersion(me.version)}</span> : null}
         </div>
         <div className="nav-links">
           {NAV.map((item) => (

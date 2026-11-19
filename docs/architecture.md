@@ -1,8 +1,8 @@
-# ForgeSRE architecture (V0.9 appliance)
+# ForgeSRE architecture (V2.0 appliance)
 
 How the appliance **runs today** on one Ubuntu VM: Docker Compose, host networking, one Core process.
 
-Operators: [operator-handbook.md](operator-handbook.md) and [cli.md](cli.md). Install and update: [install-config.md](install-config.md). What this version added: [v0.9.md](v0.9.md).
+Operators: [operator-handbook.md](operator-handbook.md) and [cli.md](cli.md). Install and update: [install-config.md](install-config.md). What this version added: [v2.0.md](v2.0.md).
 
 ---
 

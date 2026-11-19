@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. ForgeSRE (current product: V0.9) is a small appliance for people who run real data centers; every
+Thanks for helping. ForgeSRE (current product: V2.0) is a small appliance for people who run real data centers; every
 new part has to earn its place. Please keep it that way.
 
 ## How to contribute

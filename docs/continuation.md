@@ -2,7 +2,7 @@
 
 This file is a **session handoff for the next coding agent or contributor**. It is not an operator manual. Operators start at [install and config](install-config.md) and the [operator handbook](operator-handbook.md).
 
-Product on `main`: **V0.9**. Repository: https://github.com/nsimic2022/forgesre.
+Product on `main`: **V2.0** (`2.0.0`). Repository: https://github.com/nsimic2022/forgesre.
 
 **14 October 2026 (current).** Branch `cursor/dash-export-csv-05f8` (PR against `main`): Dashboard cube clock removed; Host metrics title above the cube; incident column **Incident**; Export **TXT + CSV UTF-8** on every list; On call links to `/escalation#oncall` plus **I'm on duty now** (later start wins; taking duty closes the previous rest-of-day window); Dashboard **ForgeAI** digest (SQL facts, optional LLM sentences, Report / Send report). Pytest **829 passed, 2 skipped** twice. Docs updated: handbook screen map §4 / §5 / §13 / §14, [llm.md](llm.md), [v0.9.md](v0.9.md), [architecture.md](architecture.md), [docs/README.md](README.md), root README. Never `./install.sh` on a live box. Replies to N in Serbian; OSS docs English.
 
@@ -61,7 +61,7 @@ git pull origin main && ./forgesre update
 
 SHA: **`872bd41`**. Open **Discovery**. Review suggested `/24`, **Confirm & scan**, wait for the background job (`./forgesre jobs`). **Sync NetBox** sits beside Scan now (read-only). Approve / Ignore as before; manual Assets stay SoT.
 
-`./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: device syslog on UDP/TCP 514, labeled by hostname and sender IP; demo Core logs stay `forge-demo-01`. [architecture.md](architecture.md) describes the **V0.9 appliance** (Compose, one Core worker, alarm path). Celery and a Go/Kubernetes rewrite are **not shipped**.
+`./forgesre test` is the appliance report. `./forgesre ping` is ICMP + exporter. `./forgesre verify` is the live inventory path. Those three are different. Optional LLM: [docs/llm.md](llm.md). Jobs: **one worker thread** (no Celery). Loki: device syslog on UDP/TCP 514, labeled by hostname and sender IP; demo Core logs stay `forge-demo-01`. [architecture.md](architecture.md) describes the **V2.0 appliance** (Compose, one Core worker, alarm path). Celery and a Go/Kubernetes rewrite are **not shipped**.
 
 NetBox: keep the **full v2 token** (shown once at create, not the 12-character key) in `NETBOX_API_TOKEN`. Recreate **core** only if secrets changed. Never print the token.
 

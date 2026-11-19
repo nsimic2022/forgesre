@@ -11,7 +11,7 @@ Local LLM (ForgeAI): [`llm.md`](llm.md).
 Connecting Zabbix (optional, read-only): [`zabbix.md`](zabbix.md).  
 Connecting GLPI (optional, read-only inventory): [`glpi.md`](glpi.md).
 
-Version notes (`v0.1.md` … `v0.9.md`) explain *what shipped*. This document explains *how you run the product*. Commands live in [`cli.md`](cli.md). Learning order: [`docs/README.md`](README.md).
+Version notes (`v0.1.md` … `v2.0.md`) explain *what shipped*. This document explains *how you run the product*. Commands live in [`cli.md`](cli.md). Learning order: [`docs/README.md`](README.md).
 
 Code: https://github.com/nsimic2022/forgesre (`main`). UI: `http://<VM-IP>:8080`.
 
@@ -107,7 +107,7 @@ Three places. Do not mix them.
 | **`config/forgesre.yml`** | Discovery CIDRs, NetBox URL, AI/LLM, SMTP on/off, Loki/Grafana | File on the VM |
 | **Repo / generated files** | Prometheus *alert expressions*, scrape jobs, Alertmanager webhook | `monitoring/alerts.yml`, `.env`, `secrets/secrets.env` |
 
-YAML under `config/examples/` is the **future spec** (Playrule/Playbook/Escalation as files). V0.9 does **not** import those files. Live playrules and playbooks are created in the UI (or API) and stored in Postgres.
+YAML under `config/examples/` is the **future spec** (Playrule/Playbook/Escalation as files). V2.0 does **not** import those files. Live playrules and playbooks are created in the UI (or API) and stored in Postgres.
 
 After editing `config/forgesre.yml`, recreate Core:
 
@@ -868,7 +868,7 @@ Root wrappers `./doctor.sh`, `./test.sh`, `./backup.sh`, `./update.sh`, `./insta
 
 ## 17. What this version monitors
 
-V0.9 on one Ubuntu VM, Docker Compose, host networking:
+V2.0 on one Ubuntu VM, Docker Compose, host networking:
 
 - **Linux** — `node_exporter` `:9100`: exporter down, disk **90%**, **memory 90%**, CPU 95% (`monitoring/alerts.yml`). Extra rules go in `alerts.local.yml`.
 - **Windows** — `windows_exporter` `:9182`: exporter down, volume **90%**, **memory 90%**, CPU 90%.
@@ -941,7 +941,7 @@ Optional `inventory.glpi.auto_sync: true` imports with the 6 h discovery loop. T
 
 ## 20. DC-NOC shortcuts
 
-Eight small tools for a data-center NOC. Same V0.9 appliance: one Core, Postgres jobs, Grafana from System Health, NetBox, Zabbix and GLPI as read sources.
+Eight small tools for a data-center NOC. Same V2.0 appliance: one Core, Postgres jobs, Grafana from System Health, NetBox, Zabbix and GLPI as read sources.
 
 1. **Maintenance.** Edit → Support → Maintenance from / until (appliance timezone). Both empty = not in maintenance. A new alert during the window is still an incident with status **MAINT** (visible, escalation mail does not start). After until, the next firing can email. This is not Standard-alarm mute: mute drops the alert; maintenance keeps a quiet incident.
 2. **Parent.** Edit → Identity → Parent (one upstream device, for example the switch). While that parent has an active down or unreachable incident, a new host-down or interface-down alert on the child is status **SUPPRESSED** and linked to the parent. The parent still pages. CPU, disk, and memory are not suppressed. After the parent incident clears, the next firing can email.

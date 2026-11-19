@@ -526,7 +526,7 @@ def test_new_ui_is_home_when_built(monkeypatch, tmp_path):
 
 
 def test_me_reports_appliance_version_for_the_menu(monkeypatch):
-    monkeypatch.setenv("FORGESRE_VERSION", "0.9.0")
+    monkeypatch.setenv("FORGESRE_VERSION", "2.0.0")
     client = TestClient(create_app())
     client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"})
-    assert client.get("/api/v1/me").json()["version"] == "0.9.0"
+    assert client.get("/api/v1/me").json()["version"] == "2.0.0"
