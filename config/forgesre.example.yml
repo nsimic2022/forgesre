@@ -74,3 +74,15 @@ notifications:
     # Outlook / M365:   host smtp.office365.com port 587 tls true + SMTP_* secrets
     # Own domain later: Compose profile mailbox (./forgesre mailbox) — does not rewrite this block
     # Host postfix:     host 127.0.0.1 (optional; Core can submit to local Postfix)
+  # Chat: posts when an incident opens, escalates and resolves (only the incident line).
+  # Webhook URLs are secrets: ./forgesre settings set-secret SLACK_WEBHOOK_URL (and TEAMS_, DISCORD_).
+  chat:
+    slack:
+      enabled: false
+      min_severity: high
+    teams:
+      enabled: false
+      min_severity: high
+    discord:
+      enabled: false
+      min_severity: high

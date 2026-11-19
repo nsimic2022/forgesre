@@ -250,6 +250,11 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                     actor=str(payload.get("actor") or "system"),
                     name=str(payload.get("name") or "forgeai-digest"),
                 )
+            elif row.kind == "chat_post":
+                from app.chat import deliver
+
+                # Slack / Teams / Discord webhook, 10 s timeout; the result is on the Notification row.
+                deliver(db, int(row.object_id))
             else:
                 raise RuntimeError(f"unknown job kind {row.kind}")
             row.status = "done"

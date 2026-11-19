@@ -21,7 +21,7 @@ the commented reference.
 ## Groups
 
 General · Network and services · Integrations (GLPI, Zabbix, LibreNMS, NetBox) · Discovery ·
-Notification channels (SMTP) · AI (ForgeRCA / ForgeAI). The full list with types and limits
+Notification channels (SMTP, Slack, Microsoft Teams, Discord) · AI (ForgeRCA / ForgeAI). The full list with types and limits
 is `REGISTRY` in `system_settings.py`.
 
 ## Commands
@@ -35,6 +35,36 @@ is `REGISTRY` in `system_settings.py`.
 ./forgesre settings test zabbix
 ./forgesre settings set-secret ZABBIX_API_TOKEN   # prompts, writes secrets.env, restarts Core
 ```
+
+## Chat channels: Slack, Microsoft Teams, Discord
+
+Chat is an extra channel next to email. When a channel is on, ForgeSRE posts one line when
+an incident opens, at each escalation step and when it resolves, for incidents at or above
+the channel's minimum severity (default `high`).
+
+Chat messages leave the server. They carry the severity, title, host and incident number
+(and a link when `system.public_url` is set), never logs, evidence or ForgeAI text.
+
+1. Create an incoming webhook:
+   - Slack: an app with *Incoming Webhooks*, one channel.
+   - Teams: a Workflows flow *When a Teams webhook request is received* that posts to a
+     channel (it receives an Adaptive Card).
+   - Discord: channel settings › Integrations › Webhooks.
+2. Store the URL on the host. Only `https://` URLs are accepted:
+   ```bash
+   ./forgesre settings set-secret SLACK_WEBHOOK_URL     # or TEAMS_WEBHOOK_URL, DISCORD_WEBHOOK_URL
+   ```
+3. Turn it on and send a test message:
+   ```bash
+   ./forgesre settings set notifications.chat.slack.enabled true
+   ./forgesre settings set notifications.chat.slack.min_severity critical   # optional
+   ./forgesre settings test slack
+   ```
+
+Messages are sent by the background jobs worker with a 10-second timeout, so a slow chat
+service never holds up alerts or the UI. Each message is a row in the incident's
+notifications (channel `slack`, `teams` or `discord`) with `sent` or `failed` and the reason.
+`./forgesre doctor` shows a **Chat** row: off, OK, or the last delivery error.
 
 ## API (Admin; tests need Engineer)
 

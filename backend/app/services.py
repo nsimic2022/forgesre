@@ -1819,6 +1819,9 @@ def ensure_notification(
         object_type="incident",
         object_id=incident.number,
     )
+    from app.chat import queue_step
+
+    queue_step(db, incident, step_key, stored_target, after_minutes)
     return row
 
 
