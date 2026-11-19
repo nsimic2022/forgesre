@@ -142,3 +142,32 @@ def test_incident_view_checklist_and_queued_investigation():
     viewer = _signed_in("viewer")
     assert viewer.post(f"/api/v1/incidents/{number}/checklist", json={"step": 0, "done": True}).status_code == 403
     assert viewer.get(f"/api/v1/incidents/{number}/view").json()["can"]["work"] is False
+
+
+def test_inventory_library_filters_and_card():
+    from app.models import Asset
+
+    db = _db()
+    tag = uuid4().hex[:6]
+    down = Asset(asset_id=f"INV-{tag}-1", hostname=f"inv-{tag}-esx", ip="10.77.0.1", type="ESXi host", ping_status="red",
+                 extras={"site": f"DC-{tag}", "rack": "A07", "contract": "ProSupport"}, glpi_id="1182", scrape_address="10.77.0.1:9100")
+    bare = Asset(asset_id=f"INV-{tag}-2", hostname=f"inv-{tag}-sw", ip="10.77.0.2", type="Linux Server", scrape_address="",
+                 extras={"site": f"DC-{tag}", "rack": "A08"})
+    db.add_all([down, bare])
+    db.commit()
+    db.close()
+    client = _signed_in("viewer")
+    page = client.get("/api/v1/inventory", params={"site": f"DC-{tag}"}).json()
+    assert {r["hostname"] for r in page["rows"]} == {f"inv-{tag}-esx", f"inv-{tag}-sw"}
+    site = next(s for s in page["library"]["sites"] if s["name"] == f"DC-{tag}")
+    assert site["count"] == 2 and {r["name"] for r in site["racks"]} == {"A07", "A08"}
+    rack = client.get("/api/v1/inventory", params={"site": f"DC-{tag}", "rack": "A07"}).json()
+    assert [r["hostname"] for r in rack["rows"]] == [f"inv-{tag}-esx"]
+    row = rack["rows"][0]
+    assert row["state"] == "down" and row["sources"] == ["Prometheus", "GLPI"]
+    nosrc = client.get("/api/v1/inventory", params={"view": "no_source", "q": tag}).json()
+    assert [r["hostname"] for r in nosrc["rows"]] == [f"inv-{tag}-sw"]
+    card = client.get(f"/api/v1/inventory/INV-{tag}-1").json()
+    assert {"key": "contract", "label": "License / contract / SLA", "value": "ProSupport"} in card["details"]
+    assert card["can_edit"] is False
+    assert client.get("/api/v1/inventory/nope").status_code == 404
