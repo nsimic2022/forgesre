@@ -104,9 +104,10 @@ Smaller models, offline copies and cloud models: [docs/llm.md](docs/llm.md).
 
 ## The interface
 
-The classic UI is at `/`. The new UI (React, served by Core at `/app`) is in preview and is
-becoming the default page by page: NOC, Incidents, On-call, Inventory, Automation,
-Investigations, Reports and Settings. See [docs/ui.md](docs/ui.md).
+After sign-in you land in the new UI (React, served by Core at `/app`): NOC, Incidents,
+On-call, Inventory, Automation, Investigations, Reports and Settings, each with its own
+editing. The classic UI stays at `/classic`, and `ui.home: classic` makes it the home page
+again. See [docs/ui.md](docs/ui.md).
 
 | Page | What you do there |
 |---|---|

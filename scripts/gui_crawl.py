@@ -102,7 +102,7 @@ def _route_matcher(routes: Iterable[tuple[str, str]] | None):
     return has
 
 
-def crawl(client: Any, start: str = "/", routes: Iterable[tuple[str, str]] | None = None,
+def crawl(client: Any, start: str = "/classic", routes: Iterable[tuple[str, str]] | None = None,
           base: str = "http://testserver") -> Report:
     """``client`` needs ``get(url, follow_redirects=...)`` returning ``.status_code``, ``.text``,
     ``.headers``. ``routes`` lets broken form actions be detected without submitting them."""

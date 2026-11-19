@@ -470,3 +470,25 @@ def test_users_page_and_backup_api_are_admin_only(monkeypatch, tmp_path):
     db.close()
     assert made == [{"include_secrets": False, "include_models": False}]
     assert admin.delete("/api/v1/backups/not-a-backup").status_code == 404
+
+
+def test_new_ui_is_home_when_built(monkeypatch, tmp_path):
+    """/ opens the new UI when it is built and ui.home is new; /classic always shows the old dashboard."""
+    from app.settings import settings
+
+    client = _signed_in("viewer")
+    old = settings.yaml
+    monkeypatch.setenv("WEB_DIST", str(tmp_path))
+    try:
+        settings.yaml = {**(old or {}), "ui": {"home": "new"}}
+        first = client.get("/", follow_redirects=False)
+        assert first.status_code == 200  # not built yet: classic dashboard
+        (tmp_path / "index.html").write_text("<!doctype html><div id=root></div>")
+        home = client.get("/", follow_redirects=False)
+        assert home.status_code == 303 and home.headers["location"] == "/app/"
+        classic = client.get("/classic", follow_redirects=False)
+        assert classic.status_code == 200 and 'href="/classic"' in classic.text
+        settings.yaml = {**(old or {}), "ui": {"home": "classic"}}
+        assert client.get("/", follow_redirects=False).status_code == 200
+    finally:
+        settings.yaml = old
