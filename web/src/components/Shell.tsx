@@ -21,7 +21,7 @@ export function Shell({ me, forgeai, children }: { me: Me | null; forgeai: strin
     <div className="shell">
       <nav className="nav" aria-label="Main">
         <div className="nav-brand">
-          <span className="nav-logo" aria-hidden="true">F</span>
+          <span className="nav-logo" aria-hidden="true">F/</span>
           ForgeSRE <span className="small faint">2.0</span>
         </div>
         <div className="nav-links">

@@ -55,7 +55,16 @@ export function NocPage() {
   return (
     <>
       <header className="page-head">
-        <div>
+        <div className="cell-stack" style={{ gap: 6 }}>
+          <span className="row" style={{ gap: 8 }}>
+            <span className="label">NOC</span>
+            {c ? (
+              <span className="label row" style={{ gap: 6, color: error ? "var(--crit)" : "var(--ok)" }}>
+                <span aria-hidden="true" className={error ? "dot" : "dot pulse"} style={{ background: "currentColor", width: 7, height: 7 }} />
+                {error ? "Stale" : "Live"}
+              </span>
+            ) : null}
+          </span>
           <h1>NOC overview</h1>
           <span className="muted">
             {c ? `${c.hosts_total} assets · updated ${clock(data!.generated_at)}` : "Loading…"}
