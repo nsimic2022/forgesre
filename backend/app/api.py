@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import func
@@ -1414,6 +1414,84 @@ def demo_reset(user: User = Depends(require("admin"))) -> dict:
     return {"ok": True, "cpu": 12, "disk": 35}
 
 
+class BackupBody(BaseModel):
+    include_secrets: bool = True
+    include_models: bool = False
+
+
+@router.get("/backups")
+def backups_api(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """New UI Settings › Backup: archives on disk (newest first) and any backup job still running."""
+    from app.backup import list_archives
+    from app.models import Job
+
+    running = db.query(Job).filter(Job.kind == "backup_create", Job.status.in_(["pending", "running"])).first()
+    last = db.query(Job).filter(Job.kind == "backup_create").order_by(Job.id.desc()).first()
+    return {
+        "archives": list_archives(),
+        "running": bool(running),
+        "last_job": None if last is None else {"status": last.status, "error": last.error or "", "result": (last.payload or {}).get("result", "")},
+    }
+
+
+@router.post("/backups")
+def backup_create_api(body: BackupBody, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """New UI: start a backup as a background job (it can take minutes); the list shows it when done."""
+    from app.jobs import enqueue
+
+    job = enqueue(db, "backup_create", "backup", object_type="backup",
+                  payload={"include_secrets": body.include_secrets, "include_models": body.include_models, "actor": user.email})
+    audit(db, "backup.create", actor=user.email, object_type="backup", object_id=f"job-{job.id}")
+    db.commit()
+    return {"job": job.id, "status": job.status}
+
+
+@router.delete("/backups/{name}")
+def backup_delete_api(name: str, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """New UI: remove one backup archive from disk."""
+    from app.backup import delete_backup
+
+    try:
+        deleted = delete_backup(name)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail="backup not found") from exc
+    audit(db, "backup.remove", actor=user.email, object_type="backup", object_id=deleted.name)
+    db.commit()
+    return {"removed": deleted.name}
+
+
+@router.post("/backups/import")
+async def backup_import_api(archive: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """New UI: upload a backup archive from another appliance. Restoring stays a separate, confirmed step."""
+    from app.backup import backup_ident, save_upload
+
+    try:
+        path = save_upload(await archive.read(), archive.filename or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    ident = backup_ident(path)
+    audit(db, "backup.import", actor=user.email, object_type="backup", object_id=ident)
+    db.commit()
+    return {"imported": ident}
+
+
+@router.get("/users-page")
+def users_page_api(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """New UI Settings › Users: every account, its role, and why it cannot be removed (if so)."""
+    from app.security import ROLE_HELP, ROLE_LABELS, ROLES, role_key
+    from app.users import delete_blocked, is_last_admin
+
+    rows = []
+    for row in db.query(User).order_by(User.email).all():
+        rows.append({
+            "id": row.id, "email": row.email, "email2": row.email2 or "", "name": row.name, "surname": row.surname or "",
+            "phone": row.phone or "", "phone2": row.phone2 or "", "role": role_key(row.role), "active": bool(row.is_active),
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "me": row.id == user.id, "last_admin": is_last_admin(db, row), "delete_blocked": delete_blocked(user, row, db),
+        })
+    return {"users": rows, "roles": [{"key": r, "label": ROLE_LABELS[r], "help": ROLE_HELP[r]} for r in ROLES]}
+
+
 @router.post("/users")
 def create_user(body: UserBody, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
     from app.users import create_user as add_user
@@ -2656,6 +2734,35 @@ def scheduled_report_delete(report_id: int, db: Session = Depends(get_db), user:
     return {"removed": report_id}
 
 
+class MaintenanceBody(BaseModel):
+    assets: list[str] = Field(default_factory=list)
+    starts_at: str = ""
+    ends_at: str = ""
+
+
+@router.post("/maintenance")
+def maintenance_set_api(body: MaintenanceBody, db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
+    """New UI: put one or more assets in maintenance (all or nothing)."""
+    from app.maintenance_edit import set_window
+
+    try:
+        rows = set_window(db, body.assets, body.starts_at, body.ends_at, user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"assets": [r.asset_id for r in rows]}
+
+
+@router.delete("/maintenance/{asset_id}")
+def maintenance_clear_api(asset_id: str, db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
+    """New UI: end an asset's maintenance window now."""
+    from app.maintenance_edit import clear_window
+
+    try:
+        return clear_window(db, asset_id, user.email)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="asset not found") from exc
+
+
 @router.get("/automation")
 def automation_api(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> dict[str, Any]:
     """Automation page of the new UI: pipeline counts, rules, playbooks, policies, maintenance."""
@@ -2663,6 +2770,7 @@ def automation_api(db: Session = Depends(get_db), user: User = Depends(require("
 
     data = automation_overview(db)
     data["can_edit"] = can(user, "write_play")
+    data["can_edit_maintenance"] = can(user, "write_assets")
     return data
 
 

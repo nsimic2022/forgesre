@@ -193,3 +193,55 @@ export function PolicyForm({ policy, onDone }: { policy: Policy | null; onDone: 
     </Card>
   );
 }
+
+/** datetime-local value for a Date in the browser's time zone. */
+export function localInput(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function MaintenanceForm({ onDone }: { onDone: (saved: boolean) => void }) {
+  const now = new Date();
+  const [assets, setAssets] = useState("");
+  const [from, setFrom] = useState(localInput(now));
+  const [until, setUntil] = useState(localInput(new Date(now.getTime() + 2 * 3600_000)));
+  const [error, setError] = useState("");
+  const quick = (hours: number) => (setFrom(localInput(new Date())), setUntil(localInput(new Date(Date.now() + hours * 3600_000))));
+  const tonight = () => {
+    const start = new Date();
+    start.setHours(22, 0, 0, 0);
+    const end = new Date(start.getTime() + 8 * 3600_000);
+    setFrom(localInput(start));
+    setUntil(localInput(end));
+  };
+  const save = (e: FormEvent) => {
+    e.preventDefault();
+    postJson("/api/v1/maintenance", { assets: assets.split(/[,\s]+/).filter(Boolean), starts_at: from, ends_at: until })
+      .then(() => onDone(true))
+      .catch((err: Error) => setError(err.message));
+  };
+  return (
+    <Card title="New maintenance window">
+      <form onSubmit={save} className="cell-stack" style={{ gap: 12 }}>
+        <Field label="Assets (hostname, id or IP; several separated by commas)" grow="1 1 auto">
+          <input className="search" style={{ minWidth: 0 }} value={assets} onChange={(e) => setAssets(e.target.value)} placeholder="db-ora-02, db-ora-03" />
+        </Field>
+        <div className="row" style={{ alignItems: "flex-end" }}>
+          <Field label="From"><input className="search" style={{ minWidth: 0 }} type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+          <Field label="Until"><input className="search" style={{ minWidth: 0 }} type="datetime-local" value={until} onChange={(e) => setUntil(e.target.value)} /></Field>
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          <button className="btn" type="button" onClick={() => quick(1)}>Next hour</button>
+          <button className="btn" type="button" onClick={() => quick(4)}>Next 4 hours</button>
+          <button className="btn" type="button" onClick={tonight}>Tonight 22:00–06:00</button>
+        </div>
+        <p className="small faint" style={{ margin: 0 }}>Times are the appliance time zone. While the window is open, alarms on these assets still open incidents, but nobody is mailed or messaged.</p>
+        {error ? <div className="banner error" role="alert">{error}</div> : null}
+        <div className="row">
+          <button className="btn primary" type="submit" disabled={!assets.trim()}>Start maintenance</button>
+          <button className="btn" type="button" onClick={() => onDone(false)}>Cancel</button>
+        </div>
+      </form>
+    </Card>
+  );
+}

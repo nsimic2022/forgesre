@@ -1,3 +1,4 @@
+import { BackupPanel, UsersPanel } from "../components/AdminPanels";
 import { useEffect, useState } from "react";
 import { Card, Chip } from "../components/ui";
 import { ApiError, getJson, postJson, putJson, type Doctor, type SettingRow, type SettingsData } from "../lib/api";
@@ -130,7 +131,7 @@ export function SettingsPage() {
   const replace = (next: SettingRow) => setData((d) => (d ? { ...d, settings: d.settings.map((r) => (r.key === next.key ? next : r)) } : d));
   const rows = data?.settings.filter((r) => r.group === group) ?? [];
   const tests = Array.from(new Set(rows.map((r) => r.test).filter(Boolean)));
-  const sections = data ? [...Object.entries(data.groups), ["services", "Services and health"]] : [];
+  const sections = data ? [...Object.entries(data.groups), ["services", "Services and health"], ["users", "Users and roles"], ["backup", "Backup, import, export"]] : [];
   return (
     <>
       <header className="page-head">
@@ -154,11 +155,14 @@ export function SettingsPage() {
                 {title}
               </button>
             ))}
-            <a className="nav-link" href="/admin">Users, roles, backup (classic)</a>
           </nav>
           <div style={{ flex: "999 1 640px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
             {group === "services" ? (
               <Services />
+            ) : group === "users" ? (
+              <UsersPanel />
+            ) : group === "backup" ? (
+              <BackupPanel />
             ) : (
               <Card title={data.groups[group]} actions={tests.map((t) => <TestButton key={t} component={t} />)}>
                 {rows.map((row) => (row.editable ? <SettingField key={row.key} row={row} onSaved={replace} /> : <ReadOnlyRow key={row.key} row={row} />))}

@@ -113,6 +113,7 @@ def automation_overview(db: Session, now: datetime | None = None) -> dict[str, A
         "maintenance": [
             {
                 "asset": hostnames.get(w.asset_ref, w.asset_ref),
+                "asset_id": w.asset_ref,
                 "summary": w.summary,
                 "starts_at": _iso(w.starts_at),
                 "ends_at": _iso(w.ends_at),

@@ -384,3 +384,89 @@ def test_escalation_policy_and_oncall_editing():
     assert week["can_edit"] is True
     assert eng.delete(f"/api/v1/oncall-slots/{sid}").status_code == 200
     assert eng.delete(f"/api/v1/oncall-slots/{sid}").status_code == 404
+
+
+def test_maintenance_windows_from_the_new_ui():
+    """Several assets at once, all or nothing, mirrored to maintenance_windows; End now clears it."""
+    from app.models import MaintenanceWindow
+
+    tag = uuid4().hex[:6]
+    db = _db()
+    for n in (1, 2):
+        db.add(Asset(asset_id=f"mw-{tag}-{n}", hostname=f"mw-{tag}-{n}", ip=f"10.44.0.{n}", type="Linux Server"))
+    db.commit()
+    db.close()
+    analyst = _signed_in("analyst")
+    start = (utcnow() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+    end = (utcnow() + timedelta(days=1, hours=4)).strftime("%Y-%m-%dT%H:%M")
+    before = (utcnow() + timedelta(hours=20)).strftime("%Y-%m-%dT%H:%M")
+    window = {"assets": [f"mw-{tag}-1"], "starts_at": start, "ends_at": end}
+    assert analyst.post("/api/v1/maintenance", json=window).status_code == 403
+    eng = _signed_in("engineer")
+    assert eng.post("/api/v1/maintenance", json={**window, "ends_at": before}).status_code == 400
+    missing = eng.post("/api/v1/maintenance", json={**window, "assets": [f"mw-{tag}-1", "nope-host"]})
+    assert missing.status_code == 400 and "nope-host" in missing.json()["detail"]
+    db = _db()
+    assert db.query(MaintenanceWindow).filter(MaintenanceWindow.asset_ref.like(f"mw-{tag}-%")).count() == 0
+    db.close()
+    ok = eng.post("/api/v1/maintenance", json={**window, "assets": [f"mw-{tag}-1", "10.44.0.2"]})
+    assert ok.status_code == 200 and ok.json()["assets"] == [f"mw-{tag}-1", f"mw-{tag}-2"]
+    db = _db()
+    rows = db.query(MaintenanceWindow).filter(MaintenanceWindow.asset_ref.like(f"mw-{tag}-%")).all()
+    assert len(rows) == 2 and all(r.ends_at > r.starts_at for r in rows)
+    db.close()
+    listed = [w for w in eng.get("/api/v1/automation").json()["maintenance"] if w["asset_id"] == f"mw-{tag}-1"]
+    assert listed and eng.get("/api/v1/automation").json()["can_edit_maintenance"] is True
+    assert eng.delete(f"/api/v1/maintenance/mw-{tag}-1").json()["cleared"] is True
+    db = _db()
+    assert db.query(MaintenanceWindow).filter_by(asset_ref=f"mw-{tag}-1").count() == 0
+    assert "maint_from" not in (db.query(Asset).filter_by(asset_id=f"mw-{tag}-1").one().extras or {})
+    db.close()
+    assert eng.delete("/api/v1/maintenance/nope").status_code == 404
+
+
+def test_users_page_and_backup_api_are_admin_only(monkeypatch, tmp_path):
+    """Users list with removal guards; backup runs as a background job, never inside the request."""
+    from app import backup as backup_mod
+    from app.jobs import run_pending_jobs
+    from app.models import Job
+
+    eng = _signed_in("engineer")
+    assert eng.get("/api/v1/users-page").status_code == 403
+    assert eng.get("/api/v1/backups").status_code == 403
+    assert eng.post("/api/v1/backups", json={}).status_code == 403
+
+    admin = _signed_in("admin")
+    page = admin.get("/api/v1/users-page").json()
+    me = next(u for u in page["users"] if u["me"])
+    assert me["delete_blocked"] == "cannot remove yourself"
+    assert [r["key"] for r in page["roles"]] == ["viewer", "analyst", "engineer", "admin"]
+
+    made = []
+
+    class Result:
+        name = "backup_20261119T100000Z"
+
+    def fake_backup(**kw):
+        made.append(kw)
+        return Result()
+
+    monkeypatch.setattr(backup_mod, "create_backup", fake_backup)
+    started = admin.post("/api/v1/backups", json={"include_secrets": False})
+    assert started.status_code == 200 and started.json()["status"] == "pending"
+    # The request only queues the job (a background worker of another test app may pick it up at once).
+    db = _db()
+    # Older tests may leave pending jobs in the shared database; park them so only ours runs.
+    others = db.query(Job).filter(Job.status == "pending", Job.id != started.json()["job"]).all()
+    for row in others:
+        row.status = "parked"
+    db.commit()
+    run_pending_jobs(db, limit=5)
+    for row in others:
+        row.status = "pending"
+    db.commit()
+    job = db.query(Job).filter_by(id=started.json()["job"]).one()
+    assert job.status == "done" and job.payload["result"] == "backup_20261119T100000Z"
+    db.close()
+    assert made == [{"include_secrets": False, "include_models": False}]
+    assert admin.delete("/api/v1/backups/not-a-backup").status_code == 404

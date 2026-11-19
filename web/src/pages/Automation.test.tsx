@@ -9,8 +9,9 @@ const data: Automation = {
   rules: [{ id: 1, name: "high-cpu", description: "CPU above 80%", enabled: true, severity: "warning", condition: { alertname: "HighCPU", metric: "cpu_usage", operator: ">", value: 80 }, playbook: "cpu", playbook_id: 1, policy: "Default warning", policy_id: 1, hits_30d: 4 }],
   playbooks: [{ id: 1, name: "cpu", description: "", steps: ["Check top processes"], rules: 1 }],
   policies: [{ id: 1, slug: "default-warning", name: "Default warning", levels: [{ level: 1, label: "L1 NOC", on: true, minutes: 0, target: "team" }, { level: 2, label: "L2 Shift", on: true, minutes: 15, target: "team-lead" }, { level: 3, label: "L3 Engineer", on: false, minutes: 30, target: "engineer" }, { level: 4, label: "L4 Manager", on: false, minutes: 60, target: "manager" }], steps: [{ after_minutes: 0, target: "team", channel: "email", level: 1 }, { after_minutes: 15, target: "team-lead", channel: "email", level: 2 }], rules: 1 }],
-  maintenance: [],
+  maintenance: [{ asset: "db-ora-02", asset_id: "db-ora-02", summary: "Asset maintenance window", starts_at: null, ends_at: null, active: true }],
   can_edit: true,
+  can_edit_maintenance: true,
 };
 const sim: Simulation = { outcome: "incident", trace: ["Rule “high-cpu” matches (warning)."], rule: "high-cpu", playbook: "cpu", policy: "Default warning", steps: data.policies[0].steps };
 
@@ -109,5 +110,20 @@ describe("Automation", () => {
     const levels = (calls.find((c) => c.url === "/api/v1/automation/policies/1")!.body as { levels: unknown[] }).levels;
     expect(levels[2]).toEqual({ level: 3, on: true, minutes: 30, target: "dba@dc.local" });
     expect(levels[3]).toMatchObject({ level: 4, on: false });
+  });
+
+  it("starts maintenance for several assets and ends one now", async () => {
+    render(<AutomationPage />);
+    await screen.findByText("12 incidents today");
+    fireEvent.click(screen.getByRole("tab", { name: "Maintenance windows" }));
+    fireEvent.click(screen.getByRole("button", { name: "New window" }));
+    fireEvent.change(screen.getByLabelText(/^Assets/), { target: { value: "db-ora-02, db-ora-03" } });
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-11-20T22:00" } });
+    fireEvent.change(screen.getByLabelText("Until"), { target: { value: "2026-11-21T02:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start maintenance" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url === "/api/v1/maintenance")).toBe(true));
+    expect(calls.find((c) => c.url === "/api/v1/maintenance")!.body).toEqual({ assets: ["db-ora-02", "db-ora-03"], starts_at: "2026-11-20T22:00", ends_at: "2026-11-21T02:00" });
+    fireEvent.click(await screen.findByRole("button", { name: "End maintenance on db-ora-02" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.url === "/api/v1/maintenance/db-ora-02")).toBe(true));
   });
 });

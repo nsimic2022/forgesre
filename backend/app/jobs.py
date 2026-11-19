@@ -250,6 +250,16 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                     actor=str(payload.get("actor") or "system"),
                     name=str(payload.get("name") or "forgeai-digest"),
                 )
+            elif row.kind == "backup_create":
+                from app.backup import create_backup
+                from app.journal import report as journal_report
+
+                payload = dict(row.payload or {})
+                result = create_backup(include_secrets=payload.get("include_secrets", True) is not False,
+                                       include_models=bool(payload.get("include_models")))
+                payload["result"] = result.name
+                row.payload = payload
+                journal_report(db, "backup", "create", "ok", summary=f"Wrote {result.name}", object_type="backup", object_id=result.name)
             elif row.kind == "chat_post":
                 from app.chat import deliver
 
