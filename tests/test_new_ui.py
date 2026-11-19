@@ -289,3 +289,51 @@ def test_inventory_form_and_asset_edit_roles():
     assert f"DC-{tag}" in eng.get("/api/v1/inventory-form").json()["sites"]
     assert eng.post(f"/api/v1/assets/{asset_id}/delete", json={}).status_code == 200
     assert eng.get(f"/api/v1/inventory/{asset_id}").status_code == 404
+
+
+def test_automation_rule_and_playbook_editing():
+    """Rules and playbooks from the new UI: Engineer+ only, unique names, removal keeps incidents."""
+    tag = uuid4().hex[:6]
+    analyst = _signed_in("analyst")
+    assert analyst.post("/api/v1/automation/rules", json={"name": f"r-{tag}"}).status_code == 403
+    assert analyst.post("/api/v1/automation/playbooks", json={"name": "x", "steps": ["a"]}).status_code == 403
+
+    eng = _signed_in("engineer")
+    assert eng.post("/api/v1/automation/playbooks", json={"name": f"Book {tag}", "steps": []}).status_code == 400
+    book = eng.post("/api/v1/automation/playbooks", json={"name": f"Book {tag}", "steps": ["Check disk", " ", "Call owner"]})
+    assert book.status_code == 200, book.text
+    book_id = book.json()["id"]
+    assert [s["title"] for s in book.json()["steps"]] == ["Check disk", "Call owner"]
+
+    body = {"name": f"r-{tag}", "alertname": f"Alert{tag}", "metric": "disk", "operator": ">=", "value": 90,
+            "severity": "high", "playbook_id": book_id}
+    rule = eng.post("/api/v1/automation/rules", json=body)
+    assert rule.status_code == 200, rule.text
+    rule_id = rule.json()["id"]
+    assert eng.post("/api/v1/automation/rules", json=body).status_code == 400  # duplicate name
+    assert eng.post("/api/v1/automation/rules", json={**body, "name": f"r2-{tag}", "operator": "~"}).status_code == 400
+    assert eng.post("/api/v1/automation/rules", json={**body, "name": f"r3-{tag}", "severity": "panic"}).status_code == 400
+
+    listed = next(r for r in eng.get("/api/v1/automation").json()["rules"] if r["id"] == rule_id)
+    assert listed["condition"] == {"alertname": f"Alert{tag}", "metric": "disk", "operator": ">=", "value": 90.0}
+    assert listed["playbook_id"] == book_id and listed["policy_id"] and listed["severity"] == "high"
+
+    off = eng.put(f"/api/v1/automation/rules/{rule_id}", json={**body, "enabled": False})
+    assert off.status_code == 200 and off.json()["enabled"] is False
+    renamed = eng.put(f"/api/v1/automation/playbooks/{book_id}", json={"name": f"Book {tag} v2", "steps": ["Only step"]})
+    assert renamed.json()["name"] == f"Book {tag} v2"
+
+    db = _db()
+    row = _incident(db)
+    row.playrule_id = rule_id
+    row.playbook_id = book_id
+    db.commit()
+    number = row.number
+    db.close()
+    assert eng.delete(f"/api/v1/automation/playbooks/{book_id}").status_code == 200
+    assert eng.delete(f"/api/v1/automation/rules/{rule_id}").status_code == 200
+    assert eng.delete(f"/api/v1/automation/rules/{rule_id}").status_code == 404
+    db = _db()
+    kept = db.query(Incident).filter_by(number=number).one()
+    assert kept.playrule_id is None and kept.playbook_id is None
+    db.close()

@@ -2298,6 +2298,102 @@ class SimulateBody(BaseModel):
     at: str = ""
 
 
+class RuleEditBody(BaseModel):
+    name: str
+    description: str = ""
+    enabled: bool = True
+    severity: str = "warning"
+    alertname: str = ""
+    metric: str = ""
+    operator: str = ">"
+    value: float | str | None = None
+    playbook_id: int | None = None
+    escalation_policy_id: int | None = None
+
+
+class PlaybookEditBody(BaseModel):
+    name: str
+    slug: str = ""
+    description: str = ""
+    steps: list[str] = Field(default_factory=list)
+
+
+def _rule_or_404(db: Session, rule_id: int) -> Playrule:
+    row = db.get(Playrule, rule_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="playrule not found")
+    return row
+
+
+def _book_or_404(db: Session, book_id: int) -> Playbook:
+    row = db.get(Playbook, book_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="playbook not found")
+    return row
+
+
+@router.post("/automation/rules")
+def automation_rule_create(body: RuleEditBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: create a playrule (alert → playbook + escalation)."""
+    from app.automation_edit import save_playrule
+
+    try:
+        return _playrule(save_playrule(db, body.model_dump(), user.email))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/automation/rules/{rule_id}")
+def automation_rule_update(rule_id: int, body: RuleEditBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: update a playrule."""
+    from app.automation_edit import save_playrule
+
+    try:
+        return _playrule(save_playrule(db, body.model_dump(), user.email, _rule_or_404(db, rule_id)))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/automation/rules/{rule_id}")
+def automation_rule_delete(rule_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: remove a playrule; incidents keep their playbook."""
+    from app.automation_edit import delete_playrule
+
+    delete_playrule(db, _rule_or_404(db, rule_id), user.email)
+    return {"removed": rule_id}
+
+
+@router.post("/automation/playbooks")
+def automation_playbook_create(body: PlaybookEditBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: create a playbook from a list of step titles."""
+    from app.automation_edit import save_playbook
+
+    try:
+        return _playbook(save_playbook(db, body.model_dump(), user.email))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/automation/playbooks/{book_id}")
+def automation_playbook_update(book_id: int, body: PlaybookEditBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: update a playbook's name, description and steps (the slug stays)."""
+    from app.automation_edit import save_playbook
+
+    try:
+        return _playbook(save_playbook(db, body.model_dump(), user.email, _book_or_404(db, book_id)))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/automation/playbooks/{book_id}")
+def automation_playbook_delete(book_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New UI: remove a playbook; rules and incidents that used it lose the checklist link."""
+    from app.automation_edit import delete_playbook
+
+    delete_playbook(db, _book_or_404(db, book_id), user.email)
+    return {"removed": book_id}
+
+
 @router.get("/automation")
 def automation_api(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> dict[str, Any]:
     """Automation page of the new UI: pipeline counts, rules, playbooks, policies, maintenance."""
