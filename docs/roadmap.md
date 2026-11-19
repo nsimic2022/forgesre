@@ -19,7 +19,7 @@ Each step ships as its own pull request, merged when CI is green (AGENTS.md).
 
 React + TypeScript in `web/`, served at `/app` ([ui.md](ui.md)). Order: ~~NOC overview~~
 (done) → ~~Incidents~~ (done; on-call week grid with Phase 3) → ~~Inventory~~ (done; editing next) → ~~Automation~~ (done; noise filters in Phase 3) → ~~Investigations~~ (done, with analyst reviews) → ~~Reports~~ (done; cron schedules in Phase 3) →
-Settings. The classic UI stays until each page is replaced, then moves to `/classic`.
+~~Settings~~ (done). The classic UI stays until each page is replaced, then moves to `/classic`.
 
 ## Phase 3 — automation and reports
 

@@ -11,6 +11,7 @@ import { InvestigationsPage } from "./pages/Investigations";
 import { OnCallPage } from "./pages/OnCall";
 import { Pending } from "./pages/Pending";
 import { ReportsPage } from "./pages/Reports";
+import { SettingsPage } from "./pages/Settings";
 
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -28,7 +29,7 @@ export function App() {
         <Route path="/automation" element={<AutomationPage />} />
         <Route path="/investigations" element={<InvestigationsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/settings/*" element={<Pending title="Settings" classic="/admin" />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Pending title="Not found" classic="/" />} />
       </Routes>
     </ShellWithAi>

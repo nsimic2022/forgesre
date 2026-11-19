@@ -45,7 +45,7 @@ the proxy.
 | Automation: pipeline, routing rules, escalation, playbooks, maintenance windows, "Try an alarm" | done; editing still on the classic pages |
 | Investigations: resolved incidents with confirmed cause and ratings, accuracy, recurring causes; review card on the incident page | done |
 | Reports: period KPIs vs previous, incidents per day, by asset type, noisiest assets, frequent alerts, host-down time, scheduled reports, CSV | done; schedule editing on the classic page until Phase 3 |
-| Settings | next |
+| Settings: groups from the registry with inline editing, secret status, connection tests, services and health | done; users, roles and backup still on the classic Admin page |
 
 ## API used by the new pages
 
@@ -57,4 +57,11 @@ the proxy.
 | Automation | `GET /api/v1/automation` | `POST /api/v1/automation/simulate` `{alertname, asset, value, at}` (read-only test) |
 | Investigations | `GET /api/v1/investigations-page?days=&q=&only_ai=&only_reviewed=` | `POST /api/v1/incidents/{number}/review` `{root_cause, rca_rating, ai_rating}` (correct / partly / wrong) |
 | Reports | `GET /api/v1/reports-page?days=` · `GET /api/v1/reports/incidents.csv?days=` | — |
+| Settings | `GET /api/v1/settings` (Admin) · `GET /api/v1/system/doctor` | `PUT /api/v1/settings/{key}` `{value}` · `POST /api/v1/settings/test/{component}` |
 | Incident detail | `GET /api/v1/incidents/{number}/view` | `POST …/status` (acknowledge = `INVESTIGATING`, `ESCALATED`, `RESOLVED`), `POST …/notes`, `POST …/checklist` `{step, done}`, `POST …/investigate` (queues ForgeRCA, then ForgeAI) |
+
+## Next
+
+All seven pages exist. Before the new UI becomes the home page (`/`, classic at `/classic`),
+the editing that still opens classic pages moves over: assets and discovery, rules,
+playbooks, escalation and on-call, scheduled reports, users and backup.
