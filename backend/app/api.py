@@ -19,7 +19,7 @@ from app.audit import audit
 from app.journal import MODULES, entry_as_dict, list_entries, module_counts, report
 from app.db import get_db, get_db_session
 from app.metrics import reset_demo_gauges, set_demo_cpu, set_demo_disk
-from app.models import Asset, DiscoveryCandidate, EscalationPolicy, Evidence, Incident, Investigation, Playbook, Playrule, User
+from app.models import Asset, DiscoveryCandidate, EscalationPolicy, Evidence, Incident, Investigation, Playbook, Playrule, User, utcnow
 from app.history import (
     acknowledge,
     add_note,
@@ -2552,6 +2552,110 @@ def oncall_take(db: Session = Depends(get_db), user: User = Depends(require("wri
     return slot
 
 
+class ScheduledReportBody(BaseModel):
+    name: str
+    recipients: list[str] = Field(default_factory=list)
+    schedule: str = "24h"
+    every_n: str = ""
+    every_unit: str = "minutes"
+    weekdays: list[int] = Field(default_factory=list)
+    cron: str = ""
+    asset_ids: list[str] = Field(default_factory=list)
+
+
+def _report_writer(user: User) -> None:
+    from app.security import can_send_ops
+
+    if not can_send_ops(user):
+        raise HTTPException(status_code=403, detail="needs Analyst or higher")
+
+
+def _report_or_404(db: Session, report_id: int):
+    from app.models import ScheduledReport
+
+    row = db.get(ScheduledReport, report_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="scheduled report not found")
+    return row
+
+
+def _parsed_report(db: Session, body: ScheduledReportBody, actor: str) -> dict:
+    from app.web import parse_scheduled_report_form
+
+    return parse_scheduled_report_form(
+        db, name=body.name, to_email=list(body.recipients), new_email="", interval_hours=0, asset_id=list(body.asset_ids),
+        actor=actor, schedule=body.schedule, every_n=body.every_n, every_unit=body.every_unit,
+        weekday=[str(d) for d in body.weekdays], cron=body.cron,
+    )
+
+
+def _report_out(row) -> dict[str, Any]:
+    from app.services import report_recipients, report_schedule, schedule_label
+
+    return {"id": row.id, "name": row.name, "recipients": report_recipients(row), "schedule": schedule_label(row),
+            "spec": report_schedule(row), "enabled": bool(row.enabled), "asset_ids": list(row.asset_ids or []),
+            "next_run_at": row.next_run_at.isoformat() if row.next_run_at else None}
+
+
+@router.post("/scheduled-reports")
+def scheduled_report_create(body: ScheduledReportBody, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """New UI: schedule a performance report by preset, interval, cron expression or once."""
+    from app.models import ScheduledReport
+    from app.services import initial_next_run
+
+    _report_writer(user)
+    parsed = _parsed_report(db, body, user.email)
+    row = ScheduledReport(
+        name=parsed["name"], kind="performance", to_email=parsed["email"], recipients=parsed["emails"],
+        interval_hours=parsed["hours"], schedule=parsed["schedule"], asset_ids=parsed["ids"], enabled=True,
+        created_by=user.email, next_run_at=initial_next_run(utcnow(), parsed["schedule"]),
+    )
+    db.add(row)
+    audit(db, "report.create", actor=user.email, object_type="report", object_id=row.name, data={"to": parsed["emails"], "schedule": parsed["schedule"]})
+    db.commit()
+    return _report_out(row)
+
+
+@router.put("/scheduled-reports/{report_id}")
+def scheduled_report_update(report_id: int, body: ScheduledReportBody, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """New UI: change a scheduled report; a new schedule recomputes the next run."""
+    from app.services import initial_next_run
+
+    _report_writer(user)
+    row = _report_or_404(db, report_id)
+    parsed = _parsed_report(db, body, user.email)
+    changed = (row.schedule or {}) != parsed["schedule"]
+    row.name, row.to_email, row.recipients = parsed["name"], parsed["email"], parsed["emails"]
+    row.interval_hours, row.schedule, row.asset_ids = parsed["hours"], parsed["schedule"], parsed["ids"]
+    if changed:
+        row.next_run_at = initial_next_run(utcnow(), parsed["schedule"])
+    audit(db, "report.update", actor=user.email, object_type="report", object_id=str(row.id), data={"name": row.name, "schedule": parsed["schedule"]})
+    db.commit()
+    return _report_out(row)
+
+
+@router.post("/scheduled-reports/{report_id}/toggle")
+def scheduled_report_toggle(report_id: int, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """New UI: switch a scheduled report on or off (off = kept, not sent)."""
+    _report_writer(user)
+    row = _report_or_404(db, report_id)
+    row.enabled = not bool(row.enabled)
+    audit(db, "report.toggle", actor=user.email, object_type="report", object_id=str(row.id), data={"enabled": bool(row.enabled)})
+    db.commit()
+    return _report_out(row)
+
+
+@router.delete("/scheduled-reports/{report_id}")
+def scheduled_report_delete(report_id: int, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """New UI: remove a scheduled report. Mail already in the outbox stays."""
+    _report_writer(user)
+    row = _report_or_404(db, report_id)
+    audit(db, "report.delete", actor=user.email, object_type="report", object_id=str(row.id), data={"name": row.name})
+    db.delete(row)
+    db.commit()
+    return {"removed": report_id}
+
+
 @router.get("/automation")
 def automation_api(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> dict[str, Any]:
     """Automation page of the new UI: pipeline counts, rules, playbooks, policies, maintenance."""
@@ -2628,8 +2732,10 @@ def reports_page_api(days: int = 30, db: Session = Depends(get_db), user: User =
     """Reports page of the new UI: period KPIs vs the previous period, breakdowns, scheduled reports."""
     from app.reports_view import reports_overview
 
+    from app.security import can_send_ops
+
     data = reports_overview(db, days=days)
-    data["can_edit"] = can(user, "write_play")
+    data["can_edit"] = can_send_ops(user)
     return data
 
 

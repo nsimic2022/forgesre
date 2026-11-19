@@ -342,6 +342,7 @@ def parse_scheduled_report_form(
     every_n: str = "",
     every_unit: str = "minutes",
     weekday: list[str] | None = None,
+    cron: str = "",
 ) -> dict:
     """Name, recipients, schedule, asset ids. SMTP path unchanged. Legacy interval_hours still works."""
     from app.services import build_schedule
@@ -353,6 +354,7 @@ def parse_scheduled_report_form(
             every_unit=every_unit,
             weekdays=list(weekday or []),
             interval_hours=int(interval_hours or 0),
+            cron=cron,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -371,6 +373,7 @@ def parse_scheduled_report_form(
             "every_minutes": int(built["every_minutes"]),
             "weekdays": list(built["weekdays"]),
             "preset": str(built["preset"]),
+            **({"cron": built["cron"]} if built.get("cron") else {}),
         },
     }
 
@@ -402,6 +405,8 @@ def _enabled_report_twin(
         if int(sch["every_minutes"] or 0) != int(schedule.get("every_minutes") or 0):
             continue
         if sorted(int(day) for day in sch["weekdays"]) != wanted_days:
+            continue
+        if (sch.get("cron") or "") != (schedule.get("cron") or ""):
             continue
         if sorted(str(item) for item in (row.asset_ids or [])) != wanted:
             continue
@@ -443,6 +448,7 @@ def scheduled_report_form_values(row: ScheduledReport | None = None, *, clone: b
         "every_n": every_n,
         "every_unit": every_unit,
         "weekdays": list(sch["weekdays"]),
+        "cron": sch.get("cron", ""),
         "asset_ids": list(row.asset_ids or []),
     }
 
@@ -1886,6 +1892,7 @@ def _save_forgeai_cron(
     weekday: list[str],
     interval_hours: int,
     row: ScheduledReport | None = None,
+    cron: str = "",
 ) -> ScheduledReport:
     from app.services import initial_next_run, utcnow
 
@@ -1899,6 +1906,7 @@ def _save_forgeai_cron(
         every_n=every_n,
         every_unit=every_unit,
         weekday=list(weekday or []),
+        cron=cron,
         interval_hours=interval_hours,
         asset_id=[],
         actor=user.email,
@@ -1952,6 +1960,7 @@ def forgeai_cron_create(
     every_n: str = Form(""),
     every_unit: str = Form("minutes"),
     weekday: Annotated[list[str], Form()] = [],
+    cron: str = Form(""),
     interval_hours: int = Form(0),
 ):
     if not can_send_ops(user):
@@ -1967,6 +1976,7 @@ def forgeai_cron_create(
         every_unit=every_unit,
         weekday=weekday,
         interval_hours=interval_hours,
+        cron=cron,
     )
     return RedirectResponse("/forgeai#cron", status_code=303)
 
@@ -1983,6 +1993,7 @@ def forgeai_cron_update(
     every_n: str = Form(""),
     every_unit: str = Form("minutes"),
     weekday: Annotated[list[str], Form()] = [],
+    cron: str = Form(""),
     interval_hours: int = Form(0),
 ):
     if not can_send_ops(user):
@@ -2001,6 +2012,7 @@ def forgeai_cron_update(
         every_unit=every_unit,
         weekday=weekday,
         interval_hours=interval_hours,
+        cron=cron,
         row=row,
     )
     return RedirectResponse("/forgeai#cron", status_code=303)
@@ -2273,6 +2285,7 @@ def ops_create_report(
     every_n: str = Form(""),
     every_unit: str = Form("minutes"),
     weekday: Annotated[list[str], Form()] = [],
+    cron: str = Form(""),
     interval_hours: int = Form(0),
     asset_id: Annotated[list[str], Form()] = [],
 ):
@@ -2290,6 +2303,7 @@ def ops_create_report(
         every_n=every_n,
         every_unit=every_unit,
         weekday=list(weekday or []),
+        cron=cron,
         interval_hours=interval_hours,
         asset_id=asset_id,
         actor=user.email,
@@ -2403,6 +2417,7 @@ def ops_update_report(
     every_n: str = Form(""),
     every_unit: str = Form("minutes"),
     weekday: Annotated[list[str], Form()] = [],
+    cron: str = Form(""),
     interval_hours: int = Form(0),
     asset_id: Annotated[list[str], Form()] = [],
 ):
@@ -2423,6 +2438,7 @@ def ops_update_report(
         every_n=every_n,
         every_unit=every_unit,
         weekday=list(weekday or []),
+        cron=cron,
         interval_hours=interval_hours,
         asset_id=asset_id,
         actor=user.email,

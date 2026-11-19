@@ -126,9 +126,11 @@
             <option value="12h" {% if preset == '12h' %}selected{% endif %}>12 hours</option>
             <option value="24h" {% if preset == '24h' %}selected{% endif %}>24 hours</option>
             <option value="custom" {% if preset == 'custom' %}selected{% endif %}>Custom interval</option>
+            <option value="cron" {% if preset == 'cron' %}selected{% endif %}>Cron expression</option>
             <option value="once" {% if preset == 'once' %}selected{% endif %}>Once (no repeat)</option>
           </select>
         </label>
+        <label>Cron (minute hour day month weekday, local time) <input name="cron" value="{{ rf.cron or '' }}" placeholder="0 7 * * 1 = Mondays 07:00"></label>
         <div class="custom-interval" data-custom-interval {% if preset != 'custom' %}hidden{% endif %}>
           <label>Amount <input name="every_n" type="number" min="1" max="10080" value="{{ rf.every_n or '' }}" placeholder="90"></label>
           <label>Unit

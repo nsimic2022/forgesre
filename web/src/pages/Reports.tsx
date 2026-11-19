@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Card, Chip } from "../components/ui";
+import { ReportSchedules } from "../components/ReportSchedules";
+import { Card } from "../components/ui";
 import { getJson, type PeriodStats, type Reports } from "../lib/api";
 import { clock, minutesLabel } from "../lib/format";
 
@@ -37,9 +38,11 @@ export function ReportsPage() {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<Reports | null>(null);
   const [error, setError] = useState("");
+  const [tick, setTick] = useState(0);
+  const reload = () => setTick((n) => n + 1);
   useEffect(() => {
     getJson<Reports>(`/api/v1/reports-page?days=${days}`).then((d) => (setData(d), setError(""))).catch((e: Error) => setError(e.message));
-  }, [days]);
+  }, [days, tick]);
   const c: PeriodStats | undefined = data?.current;
   const p: PeriodStats | undefined = data?.previous;
   const peak = Math.max(1, ...(data?.daily ?? []).map((d) => d.critical + d.high + d.other));
@@ -106,21 +109,7 @@ export function ReportsPage() {
             </Card>
           </div>
           <div style={{ flex: "1 1 340px", minWidth: 0 }}>
-            <Card title="Scheduled reports" actions={data.can_edit ? <a className="btn" href="/ops#reports">Edit (classic)</a> : null}>
-              {data.scheduled.length === 0 ? <span className="muted">No scheduled reports.</span> : null}
-              {data.scheduled.map((r) => (
-                <div key={r.id} className="cell-stack" style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
-                  <div className="row" style={{ justifyContent: "space-between" }}>
-                    <span style={{ fontWeight: 600 }}>{r.name}</span>
-                    <Chip tone={r.enabled ? "ok" : "off"}>{r.enabled ? r.kind : "Off"}</Chip>
-                  </div>
-                  <span className="small muted">{r.schedule}</span>
-                  <span className="small faint">{r.recipients.join(", ")}</span>
-                  <span className="small faint">Next {clock(r.next_run_at)} · last {clock(r.last_run_at)}</span>
-                </div>
-              ))}
-              <span className="small faint">Daily / weekly / monthly / cron schedules and the NOC summary report come with Phase 3.</span>
-            </Card>
+            <ReportSchedules rows={data.scheduled} canEdit={data.can_edit} onChanged={reload} />
           </div>
         </div>
       ) : null}

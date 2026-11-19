@@ -372,8 +372,29 @@ export interface Reports {
   noisy_assets: { asset: string; incidents: number }[];
   top_alerts: { alert: string; incidents: number }[];
   host_down: { asset: string; minutes: number }[];
-  scheduled: { id: number; name: string; kind: string; recipients: string[]; schedule: string; enabled: boolean; last_run_at: string | null; next_run_at: string | null }[];
+  scheduled: ScheduledReport[];
   can_edit: boolean;
+}
+
+export interface ScheduleSpec {
+  repeat: boolean;
+  every_minutes: number;
+  weekdays: number[];
+  preset: string;
+  cron?: string;
+}
+
+export interface ScheduledReport {
+  id: number;
+  name: string;
+  kind: string;
+  recipients: string[];
+  schedule: string;
+  spec?: ScheduleSpec;
+  asset_ids?: string[];
+  enabled: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
 }
 
 export interface SettingRow {

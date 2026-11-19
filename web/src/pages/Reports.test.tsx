@@ -39,4 +39,19 @@ describe("Reports", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Last 7 days" }));
     await waitFor(() => expect(urls).toContain("/api/v1/reports-page?days=7"));
   });
+
+  it("creates a cron schedule from an example", async () => {
+    const calls: { url: string; method: string; body: Record<string, unknown> | null }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : null });
+      return new Response(JSON.stringify({ ...data, can_edit: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    render(<ReportsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "New schedule" }));
+    fireEvent.change(screen.getByLabelText("Recipients (comma separated)"), { target: { value: "noc@dc.local, boss@dc.local" } });
+    fireEvent.click(screen.getByRole("button", { name: "1st of the month 08:00" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url === "/api/v1/scheduled-reports")).toBe(true));
+    expect(calls.find((c) => c.method === "POST")!.body).toMatchObject({ schedule: "cron", cron: "0 8 1 * *", recipients: ["noc@dc.local", "boss@dc.local"] });
+  });
 });

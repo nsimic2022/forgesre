@@ -676,6 +676,12 @@ Compose profile **`mailbox`** (Postfix + Dovecot + Roundcube `:8081`) is off at 
 
 Rows are Postgres `scheduled_reports`. Analyst / engineer / admin can **Edit** (same create form; **Save** updates that row; **Cancel** next to Save discards and returns to the list), **Clone** (draft copy until Save), and **Remove** (confirm; outbox mail already generated stays). **Enabled** means the job fires at **Next**; **Disable** keeps the row stored and the scheduler skips it. Send now and incident **Send report** are unchanged.
 
+**When** can be a preset (15 min to 24 h), a custom interval, **once**, or a **cron expression**
+(`minute hour day month weekday`, appliance time zone): `0 7 * * 1` is Mondays 07:00,
+`0 8 1 * *` the 1st of each month at 08:00, `30 6 * * 1-5` weekdays at 06:30. The new UI
+(**Reports › Scheduled reports**) has the same form with these examples one click away. A cron
+schedule carries its own days, so the weekday boxes are not used with it.
+
 ---
 
 ## 12. Incident workflow
