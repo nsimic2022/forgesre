@@ -60,7 +60,7 @@ export function TvPage() {
             <div className="tv-kpi"><span className="tv-label">Open incidents</span><span className="value">{c!.open}</span><span className="muted">{c!.critical} critical · {c!.high} high · {c!.warning} warning</span></div>
             <div className="tv-kpi"><span className="tv-label">Not acknowledged</span><span className="value" style={{ color: c!.not_acked ? "var(--crit)" : "var(--text)" }}>{c!.not_acked}</span></div>
             <div className="tv-kpi"><span className="tv-label">Hosts down</span><span className="value" style={{ color: c!.hosts_down ? "var(--crit)" : "var(--ok)" }}>{c!.hosts_down}</span><span className="muted">of {c!.hosts_total}{c!.hosts_down_names.length ? ` · ${c!.hosts_down_names.join(", ")}` : ""}</span></div>
-            <div className="tv-kpi"><span className="tv-label">MTTA today</span><span className="value">{c!.mtta_today_min ?? "–"}<span style={{ fontSize: 24 }}> min</span></span></div>
+            <div className="tv-kpi"><span className="tv-label">MTTA today</span><span className="value">{c!.mtta_today_min ?? "–"}{c!.mtta_today_min !== null ? <span style={{ fontSize: 24 }}> min</span> : null}</span>{c!.mtta_today_min === null ? <span className="muted">no acknowledged incident today</span> : null}</div>
           </section>
           <section aria-label="Incidents in the last 12 hours">
             <IncidentClock clock={data.clock} open={c!.open} critical={c!.critical} />
