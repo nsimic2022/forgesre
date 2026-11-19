@@ -42,6 +42,8 @@ BUNDLED_ALERT_CLASS = {
     "WindowsMemoryHigh": "windows",
     "WindowsExporterDown": "windows",
     "SnmpDeviceUnreachable": "network",
+    "NodeFilesystemFillingUp": "linux",
+    "WindowsFilesystemFillingUp": "windows",
 }
 
 _PERCENT = re.compile(r"(\d+(?:\.\d+)?)\s*%")

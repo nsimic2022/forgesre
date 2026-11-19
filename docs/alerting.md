@@ -34,11 +34,14 @@ services, USE (utilisation, saturation, errors) for hosts and network devices.
 
 | Finding | Change | When |
 |---|---|---|
-| Every rule is `warning`, including `NodeExporterDown`, `WindowsExporterDown`, `SnmpDeviceUnreachable` | Host-down rules become `critical`; NOC sorting and escalation follow urgency | Phase 3, with noise filters |
-| Disk rules use only a static 90% | Add `predict_linear(...[6h], 6*3600) < 0` "full within 6 h" as `high` | Phase 3 |
+| Every rule was `warning`, including `NodeExporterDown`, `WindowsExporterDown`, `SnmpDeviceUnreachable` | Host-down rules are `critical` | done |
+| Disk rules used only a static 90% | `NodeFilesystemFillingUp` / `WindowsFilesystemFillingUp` (`high`): full within 6 h at the last 6 h rate, only above 70% used, `for: 30m` | done |
 | CPU and memory are pages | Keep as `warning` with `for: 10m`; they are evidence for ForgeRCA more than pages | Phase 3 |
 | Demo rules fire after 10 s | Fine: demo only (`forgesre_demo_*`) | — |
 | Backup windows, short spikes, hosts behind a down switch | Noise filters (below); parent-down suppression already existed | done |
+
+CI checks every change to `monitoring/alerts.yml` with `promtool check rules` from the same
+Prometheus image the appliance runs.
 
 ## Noise filters
 
