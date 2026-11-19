@@ -198,6 +198,9 @@ def create_app() -> FastAPI:
     assert_runtime_secrets()
     configure_logging()
     stop = threading.Event()
+    from app.mcp_server import asgi_app, build_server
+
+    mcp = build_server()  # one per app: its session manager runs inside this app's lifespan
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -245,7 +248,8 @@ def create_app() -> FastAPI:
         if not os.environ.get("PYTEST_CURRENT_TEST"):
             infra_task = asyncio.create_task(start_infrastructure_scheduler(stop=infra_stop))
         app.state.infra_scan_stop = infra_stop
-        yield
+        async with mcp.session_manager.run():
+            yield
         infra_stop.set()
         if infra_task is not None:
             infra_task.cancel()
@@ -257,6 +261,7 @@ def create_app() -> FastAPI:
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     _mount_web_app(app)
+    app.mount("/mcp", asgi_app(mcp))  # read-only MCP; 404 until mcp.enabled and MCP_TOKEN are set
     app.include_router(api_router)
     app.include_router(web_router)
     app.include_router(bulk_router)

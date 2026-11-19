@@ -28,6 +28,7 @@ COMPONENT_LABELS = {
     "librenms": "LibreNMS",
     "chat": "Chat (Slack / Teams / Discord)",
     "checks": "Checks (certificates, backups, heartbeats)",
+    "mcp": "MCP (read-only, for AI clients)",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -48,6 +49,7 @@ COMPONENT_SHORT = {
     "discovery": "Discovery",
     "chat": "Chat",
     "checks": "Checks",
+    "mcp": "MCP",
     "redis": "Redis",
     "mailpit": "Mailpit",
 }

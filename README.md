@@ -39,6 +39,7 @@ Current product: V0.9 · License: [Apache-2.0](LICENSE) · Code lives on [`main`
 | **On-call and escalation** | Weekly on-call slots, escalation steps by minutes and level, mail through your SMTP (Gmail, Outlook or on-box). |
 | **Investigations** | ForgeRCA facts and hypotheses, ForgeAI summary, evidence from Prometheus and Loki, and a review step to rate the root cause. |
 | **Reports** | Incident trends, noisiest assets, top alerts, downtime; CSV export and scheduled mail reports. |
+| **AI clients** | Optional read-only MCP server at `/mcp` for Claude, Cursor and others ([docs/mcp.md](docs/mcp.md)); off by default |
 | **Operations** | System Health (`/health-ui`) and `./forgesre doctor`, a journal per module, background jobs, backup and restore. |
 
 Four roles: Viewer, Analyst (NOC operator), Engineer (changes everything operational), Admin
@@ -166,7 +167,7 @@ public issue: [SECURITY.md](SECURITY.md).
 
 [Docs index](docs/README.md) · [Operator handbook](docs/operator-handbook.md) ·
 [Install and config](docs/install-config.md) · [CLI](docs/cli.md) · [Alerting](docs/alerting.md) ·
-[Settings](docs/settings.md) · [LLM](docs/llm.md) · [Architecture](docs/architecture.md)
+[Settings](docs/settings.md) · [LLM](docs/llm.md) · [MCP](docs/mcp.md) · [Architecture](docs/architecture.md)
 
 ## License
 

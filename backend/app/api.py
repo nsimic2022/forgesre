@@ -1706,6 +1706,15 @@ def _chat_check() -> dict[str, Any]:
         return {"status": "error", "detail": str(exc)[:200]}
 
 
+def _mcp_check() -> dict[str, Any]:
+    """Read-only MCP endpoint: off, or on with a token."""
+    from app.mcp_server import enabled, token
+
+    if not enabled():
+        return {"status": "disabled", "why": "mcp.enabled is false"}
+    return {"status": "ok", "why": "/mcp on (bearer MCP_TOKEN)"} if token() else {"status": "warn", "why": "mcp.enabled but MCP_TOKEN is empty"}
+
+
 def _checks_check() -> dict[str, Any]:
     """Certificates, ForgeSRE backup age, heartbeats: any failing check makes this row red."""
     from app.db import SessionLocal
@@ -1741,6 +1750,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "discovery": _discovery_check(),
         "chat": _chat_check(),
         "checks": _checks_check(),
+        "mcp": _mcp_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)

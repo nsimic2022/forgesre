@@ -70,7 +70,7 @@ def test_health_service_cubes_share_one_size_and_split_even_counts():
     assert count_attr == str(count)
     expected_cols = count // 2 if count % 2 == 0 else count // 2 + 1
     assert cols_attr == style_cols == str(expected_cols)
-    assert count == 16 and cols_attr == "8"
+    assert count == 17 and cols_attr == "9"
     assert ">discovery</span>" in grid
     discovery = grid.split(">discovery</span>", 1)[0]
     assert 'class="stat ' in discovery[-180:]
