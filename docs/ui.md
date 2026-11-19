@@ -39,6 +39,17 @@ how long before the alarm it happened. Two sources are merged:
 - **ForgeSRE's audit log**: edits to the asset, its parent and its maintenance, and any change
   to routing rules, playbooks, escalation, noise filters and settings.
 
+## Postmortem draft
+
+**Postmortem** on the incident page builds a Markdown draft for the review meeting from the
+facts ForgeSRE has: summary table (times to acknowledge and resolve, highest level, rule and
+playbook), impact (assets behind it in the dependency map), the review's root cause (or
+ForgeRCA's suggestion, marked as not confirmed), what changed before, a timeline of alarm,
+escalation steps, notifications, notes, ack and resolve, ForgeRCA's facts, the playbook
+checklist, and follow-up actions. Nothing is invented: every gap is `[to fill]`, counted in
+the panel. **Copy Markdown** or **Download .md**
+(`GET /api/v1/incidents/{number}/postmortem?download=1`), then paste it into your wiki.
+
 ## Dependency map
 
 **Inventory › Dependency map** (`/app/inventory/map`) shows who sits behind whom. The parent

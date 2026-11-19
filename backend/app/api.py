@@ -2326,6 +2326,21 @@ def incidents_page_api(
     return incidents_page(db, tab=tab, severity=severity, q=q, limit=limit, offset=offset)
 
 
+@router.get("/incidents/{number}/postmortem")
+def incident_postmortem_api(number: str, download: int = 0, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))):
+    """Postmortem draft (Markdown) from the incident's facts. ``download=1`` returns the .md file."""
+    from app.postmortem import postmortem_markdown
+
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    text = postmortem_markdown(db, item, user)
+    name = f"postmortem-{item.number}.md"
+    if download:
+        return Response(text, media_type="text/markdown; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+    return {"markdown": text, "filename": name}
+
+
 @router.get("/incidents/{number}/view")
 def incident_view_api(number: str, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict[str, Any]:
     """Incident detail page of the new UI in one call."""
