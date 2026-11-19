@@ -39,5 +39,15 @@ the proxy.
 | Page | New UI |
 |---|---|
 | NOC overview | done |
-| Incidents, on-call | next |
-| Inventory, Automation, Investigations, Reports, Settings | planned |
+| Incidents: list, detail, checklist, notes | done |
+| On-call | who is on call now; the week grid comes with the escalation rework |
+| Inventory | next |
+| Automation, Investigations, Reports, Settings | planned |
+
+## API used by the new pages
+
+| Page | Read | Write |
+|---|---|---|
+| NOC overview | `GET /api/v1/noc` | — |
+| Incidents list | `GET /api/v1/incidents-page?tab=&severity=&q=&limit=&offset=` | — |
+| Incident detail | `GET /api/v1/incidents/{number}/view` | `POST …/status` (acknowledge = `INVESTIGATING`, `ESCALATED`, `RESOLVED`), `POST …/notes`, `POST …/checklist` `{step, done}`, `POST …/investigate` (queues ForgeRCA, then ForgeAI) |

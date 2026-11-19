@@ -3,6 +3,9 @@ import { Route, Routes } from "react-router-dom";
 import { Shell } from "./components/Shell";
 import { getJson, type Me } from "./lib/api";
 import { NocContext, NocPage, useNocPoll } from "./pages/Noc";
+import { IncidentDetailPage } from "./pages/IncidentDetail";
+import { IncidentsPage } from "./pages/Incidents";
+import { OnCallPage } from "./pages/OnCall";
 import { Pending } from "./pages/Pending";
 
 export function App() {
@@ -14,7 +17,9 @@ export function App() {
     <ShellWithAi me={me}>
       <Routes>
         <Route path="/" element={<NocPage />} />
-        <Route path="/incidents/*" element={<Pending title="Incidents" classic="/incidents" />} />
+        <Route path="/incidents" element={<IncidentsPage />} />
+        <Route path="/incidents/on-call" element={<OnCallPage />} />
+        <Route path="/incidents/:number" element={<IncidentDetailPage />} />
         <Route path="/inventory/*" element={<Pending title="Inventory" classic="/assets" />} />
         <Route path="/automation/*" element={<Pending title="Automation" classic="/playrules" />} />
         <Route path="/investigations/*" element={<Pending title="Investigations" classic="/investigations" />} />

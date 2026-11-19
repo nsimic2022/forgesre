@@ -656,13 +656,13 @@ def investigate_incident(
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
         raise HTTPException(status_code=404, detail="incident not found")
-    from app.services import queue_llm_rewrite, run_investigation
+    from app.jobs import enqueue
 
-    run_investigation(db, item, actor=user.email, force=True, use_llm=False)
-    queue_llm_rewrite(db, item, actor=user.email)
-    db.refresh(item)
+    # Runs on the jobs thread, never in the request (AGENTS.md §2); the ForgeAI rewrite
+    # is queued by the job when ForgeRCA finishes.
+    enqueue(db, "investigate", item.number, payload={"use_llm": False, "force": True, "actor": user.email})
     data = _incident(item, include_evidence=can(user, "read_evidence"))
-    data["queued"] = bool(settings.ai_enabled and settings.llm_url)
+    data["queued"] = True
     return data
 
 
@@ -2198,3 +2198,51 @@ def noc_api(db: Session = Depends(get_db), user: User = Depends(require("read_da
     from app.noc import noc_overview
 
     return noc_overview(db)
+
+
+class ChecklistBody(BaseModel):
+    step: int
+    done: bool
+
+
+@router.get("/incidents-page")
+def incidents_page_api(
+    tab: str = "active",
+    severity: str = "",
+    q: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_incidents")),
+) -> dict[str, Any]:
+    """Incident list for the new UI: one tab, paged, with counts for every tab."""
+    from app.incident_view import incidents_page
+
+    return incidents_page(db, tab=tab, severity=severity, q=q, limit=limit, offset=offset)
+
+
+@router.get("/incidents/{number}/view")
+def incident_view_api(number: str, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict[str, Any]:
+    """Incident detail page of the new UI in one call."""
+    from app.incident_view import incident_view
+
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    return incident_view(db, item, user)
+
+
+@router.post("/incidents/{number}/checklist")
+def incident_checklist_api(
+    number: str, body: ChecklistBody, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))
+) -> dict[str, Any]:
+    """Tick or untick one playbook step on this incident."""
+    from app.incident_view import set_checklist_step
+
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    try:
+        return {"done": set_checklist_step(db, item, body.step, body.done, actor=user.email)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
