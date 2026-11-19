@@ -2286,6 +2286,16 @@ def settings_test(component: str, user: User = Depends(require("run_checks"))) -
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.get("/tv")
+def tv_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict[str, Any]:
+    """Wall screen: the NOC overview plus the 12-hour incident clock. Viewer is enough."""
+    from app.noc import incident_clock, noc_overview
+
+    data = noc_overview(db)
+    data["clock"] = incident_clock(db)
+    return data
+
+
 @router.get("/noc")
 def noc_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict[str, Any]:
     """NOC overview for the new UI: counts, incidents by tab, health by group, on-call, AI mode."""

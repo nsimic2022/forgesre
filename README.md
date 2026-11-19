@@ -112,6 +112,7 @@ again. See [docs/ui.md](docs/ui.md).
 | Page | What you do there |
 |---|---|
 | NOC (`/app`) | Active incidents, levels, what was sent, ForgeAI state |
+| TV mode (`/app/tv`) | Wall screen: big numbers, a 12-hour incident clock, on call now, what is burning |
 | Incidents | Active, open and resolved incidents with filters; one page per incident with checklist, timeline and investigation |
 | Inventory | Assets library grouped by site, rack, type and owner; views for down, alarming and unowned |
 | Automation | Noise filters, playrules, playbooks, escalation, maintenance, alarm simulator |

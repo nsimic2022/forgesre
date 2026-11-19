@@ -61,6 +61,7 @@ export function NocPage() {
             {c ? `${c.hosts_total} assets · updated ${clock(data!.generated_at)}` : "Loading…"}
           </span>
         </div>
+        <a className="btn" href="/app/tv">Wall screen (TV mode)</a>
       </header>
       {error ? <div className="banner error" role="alert">Could not refresh: {error}. Showing the last data.</div> : null}
       {c ? (

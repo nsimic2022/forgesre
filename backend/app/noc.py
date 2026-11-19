@@ -178,3 +178,42 @@ def noc_overview(db: Session, now: datetime | None = None) -> dict[str, Any]:
         "oncall": {k: oncall.get(k) for k in ("name", "email", "phone")} if oncall else None,
         "ai": {"forgerca": True, "forgeai": mode},
     }
+
+
+QUIET_STATUSES = ("MAINT", "SUPPRESSED")
+
+
+def incident_clock(db: Session, now: datetime | None = None, hours: int = 12, tz: str | None = None) -> dict[str, Any]:
+    """Incidents opened per local hour for the last ``hours`` hours (oldest first), by severity.
+
+    The newest bucket is the current, partial hour. Quiet incidents (maintenance, noise
+    filters) are left out: the clock shows what reached people. Times use the appliance zone.
+    """
+    from zoneinfo import ZoneInfo
+
+    zone = ZoneInfo(tz or settings.timezone or "UTC")
+    now = _aware(now or utcnow())
+    local_now = now.astimezone(zone)
+    top = local_now.replace(minute=0, second=0, microsecond=0)
+    starts = [top - timedelta(hours=hours - 1 - i) for i in range(hours)]
+    buckets = [{"start": s.isoformat(), "hour": s.hour, "critical": 0, "high": 0, "warning": 0} for s in starts]
+    since = starts[0].astimezone(timezone.utc)
+    rows = (
+        db.query(Incident.started_at, Incident.severity)
+        .filter(Incident.started_at >= since, Incident.status.notin_(QUIET_STATUSES))
+        .all()
+    )
+    for started_at, severity in rows:
+        local = _aware(started_at).astimezone(zone)
+        index = int((local - starts[0]).total_seconds() // 3600)
+        if 0 <= index < hours:
+            key = {"CRITICAL": "critical", "HIGH": "high"}.get(str(severity or "").upper(), "warning")
+            buckets[index][key] += 1
+    return {
+        "now": local_now.isoformat(),
+        "hour": local_now.hour,
+        "minute": local_now.minute,
+        "timezone": str(zone),
+        "hours": buckets,
+        "total": sum(b["critical"] + b["high"] + b["warning"] for b in buckets),
+    }

@@ -472,6 +472,37 @@ def test_users_page_and_backup_api_are_admin_only(monkeypatch, tmp_path):
     assert admin.delete("/api/v1/backups/not-a-backup").status_code == 404
 
 
+def test_incident_clock_buckets_last_12_local_hours():
+    """Clock: 12 buckets oldest first, current hour partial, quiet incidents left out, appliance time."""
+    from datetime import datetime, timezone
+
+    from app.noc import incident_clock
+
+    now = datetime(2026, 11, 19, 17, 4, tzinfo=timezone.utc)  # 18:04 in Belgrade
+    db = _db()
+    tag = uuid4().hex[:6]
+    for minutes, sev, status in [(2, "CRITICAL", "OPEN"), (30, "HIGH", "RESOLVED"), (65, "WARNING", "OPEN"),
+                                 (11 * 60 - 10, "HIGH", "OPEN"), (13 * 60, "CRITICAL", "OPEN"), (5, "CRITICAL", "MAINT")]:
+        db.add(Incident(number=f"INC-K{tag}{minutes}", title="clock", severity=sev, status=status,
+                        fingerprint=f"clock:{tag}:{minutes}", started_at=now - timedelta(minutes=minutes)))
+    db.commit()
+    clock = incident_clock(db, now, tz="Europe/Belgrade")
+    db.close()
+    assert (clock["hour"], clock["minute"]) == (18, 4)
+    hours = clock["hours"]
+    assert [h["hour"] for h in hours] == [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+    mine = {h["hour"]: (h["critical"], h["high"], h["warning"]) for h in hours}
+    assert mine[18][0] >= 1  # 18:02 critical; the MAINT one is not counted
+    assert mine[17][1] >= 1 and mine[16][2] >= 1  # 17:34 high, 16:59 warning
+    assert mine[7][1] >= 1  # 07:14 local high is the oldest bucket; 05:04 local is outside the window
+
+
+def test_tv_endpoint_is_for_viewers():
+    viewer = _signed_in("viewer")
+    data = viewer.get("/api/v1/tv").json()
+    assert len(data["clock"]["hours"]) == 12 and "counts" in data and "oncall" in data
+
+
 def test_new_ui_is_home_when_built(monkeypatch, tmp_path):
     """/ opens the new UI when it is built and ui.home is new; /classic always shows the old dashboard."""
     from app.settings import settings

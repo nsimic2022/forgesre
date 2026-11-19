@@ -16,6 +16,24 @@ the home page back.
   `/login`. Each page reads one compact endpoint (NOC: `GET /api/v1/noc`, polled every 10 s).
 - The classic sidebar shows **New UI** when the build is present; the new UI links to **Open classic UI** (`/classic`).
 
+## TV mode (wall screen)
+
+`/app/tv` (button **Wall screen (TV mode)** on the NOC page) is built for a screen on the wall:
+no menu, large type, refresh every 30 seconds.
+
+- Left: open incidents, not acknowledged, hosts down, MTTA today.
+- Middle: the **incident clock**, the last 12 hours on a wall-clock dial. Each hour sits where
+  it is on a real clock, stacked by severity (critical inside, then high, then warning). The
+  hand and the dot on the rim show the time now; the empty slice right after the hand
+  separates the newest hour from the oldest. Incidents kept quiet by maintenance or noise
+  filters are not counted. Hover a slice for its numbers; screen readers get a table.
+- Right: who is on call now, and up to eight open incidents, critical first.
+- If updates stop for 90 seconds, a red **No updates** banner appears, so an old picture never
+  passes for a calm night.
+
+A Viewer account is enough: sign the wall computer in with one that cannot change anything.
+Data: `GET /api/v1/tv` (the NOC overview plus `clock`).
+
 ## Developing
 
 ```bash
