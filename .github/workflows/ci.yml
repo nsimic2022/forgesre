@@ -22,6 +22,13 @@ jobs:
       - run: ruff check --select E9,F63,F7,F82,F811 backend agents tests scripts
       - run: ruff check --select F401 tests
 
+  rules:
+    # Prometheus alert rules must parse: same promtool as the image the appliance runs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker run --rm -v "$PWD/monitoring:/m:ro" --entrypoint promtool prom/prometheus:v2.54.1 check rules /m/alerts.yml
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
