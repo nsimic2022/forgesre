@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Acknowledge · ForgeSRE{% endblock %}
+{% block login %}
+<section class="card login-card">
+  <h1>ForgeSRE</h1>
+  {% if error %}
+    <p class="error">{{ error }}</p>
+  {% elif done %}
+    <p><strong>{{ incident.number }}</strong> is acknowledged by {{ who }}. Escalation has stopped.</p>
+    <p><a href="/app/incidents/{{ incident.number }}">Open the incident</a></p>
+  {% else %}
+    <p><strong>{{ incident.number }}</strong> · {{ incident.severity }}</p>
+    <p>{{ incident.title }}{% if incident.asset %} · {{ incident.asset.hostname }}{% endif %}</p>
+    {% if incident.ack_at %}
+      <p>Already acknowledged by {{ incident.ack_by }}.</p>
+    {% else %}
+      <form method="post" action="/ack/{{ token }}" hx-boost="false">
+        <p>Acknowledging stops further escalation mail. It is recorded as <strong>{{ who }}</strong>.</p>
+        <button type="submit">Acknowledge</button>
+      </form>
+    {% endif %}
+  {% endif %}
+</section>
+{% endblock %}
