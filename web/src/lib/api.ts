@@ -250,8 +250,30 @@ export interface PolicyStep {
   level?: number | null;
 }
 
+export interface NoiseFilter {
+  id: number;
+  name: string;
+  enabled: boolean;
+  alertnames: string[];
+  scope: "all" | "asset" | "type" | "site";
+  scope_value: string;
+  days: number[];
+  start_minute: number | null;
+  end_minute: number | null;
+  max_value: number | null;
+  action: "quiet" | "delay";
+  delay_minutes: number;
+  expires_at: string | null;
+  owner: string;
+  note: string;
+  hits: number;
+  last_hit_at: string | null;
+  created_by: string;
+}
+
 export interface Automation {
-  pipeline: { incidents_today: number; muted_today: number; routed_today: number; notifications_today: number };
+  filters: NoiseFilter[];
+  pipeline: { incidents_today: number; filtered_today: number; muted_today: number; routed_today: number; notifications_today: number };
   rules: {
     id: number;
     name: string;
@@ -270,7 +292,8 @@ export interface Automation {
 }
 
 export interface Simulation {
-  outcome: "incident" | "muted";
+  outcome: "incident" | "muted" | "filtered" | "delayed";
+  filter?: string;
   trace: string[];
   rule: string | null;
   severity?: string;

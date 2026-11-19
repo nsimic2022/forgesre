@@ -38,7 +38,24 @@ services, USE (utilisation, saturation, errors) for hosts and network devices.
 | Disk rules use only a static 90% | Add `predict_linear(...[6h], 6*3600) < 0` "full within 6 h" as `high` | Phase 3 |
 | CPU and memory are pages | Keep as `warning` with `for: 10m`; they are evidence for ForgeRCA more than pages | Phase 3 |
 | Demo rules fire after 10 s | Fine: demo only (`forgesre_demo_*`) | — |
-| Backup windows, short spikes, hosts behind a down switch | ForgeSRE noise filters (Automation page) | Phase 3 |
+| Backup windows, short spikes, hosts behind a down switch | Noise filters (below); parent-down suppression already existed | done |
+
+## Noise filters
+
+Automation › Noise filters (Engineer+), API `/api/v1/noise-filters`. A filter matches on
+alert names (empty = any), scope (all, one asset, asset type, site), optional "only below"
+value, and either:
+
+- **Record, notify nobody** during given weekdays and a time window (appliance time zone;
+  23:00–03:00 crosses midnight), optionally until an end date; or
+- **Wait before opening**: the first N minutes of each alarm are quiet, so a spike that
+  clears on its own never pages.
+
+A matching alarm opens the incident as `SUPPRESSED` with a timeline line naming the filter;
+the filter's hit count goes up. Every 30 s the leader re-checks quiet incidents: when the
+filter no longer applies and the alarm is still firing, the incident opens and escalation
+starts. Removing or disabling a filter does the same. "Try an alarm" on the Automation page
+shows which filter would catch an alarm. An always-on quiet filter must be confirmed.
 
 ## Runbook format
 

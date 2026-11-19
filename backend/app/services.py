@@ -1296,10 +1296,23 @@ def _quiet_mail(db: Session, incident: Incident, asset: Asset | None, alertname:
         parent_inc = parent_down_incident(db, asset)
         if parent_inc is not None:
             reason = ("SUPPRESSED", parent_suppress_detail(asset, parent_inc), parent_inc)
+    noise = None
+    if reason is None:
+        from app.noise_filters import describe, incident_alert, matching_filter, record_hit
+
+        _name, sample = incident_alert(incident)
+        noise = matching_filter(db, alertname, asset, sample, utcnow(), incident.started_at)
+        if noise is not None:
+            reason = ("SUPPRESSED", describe(noise), None)
     if reason is not None and (opened or status in QUIET_INCIDENT_STATUSES):
         code, detail, parent_inc = reason
         incident.status = code
-        node = "maintenance" if code == "MAINT" else "parent"
+        if noise is not None:
+            node = f"noise-{noise.id}"
+            if opened:
+                record_hit(noise)
+        else:
+            node = "maintenance" if code == "MAINT" else "parent"
         append_timeline(incident, node, code, detail)
         if parent_inc is not None:
             host = asset.hostname if asset is not None else "child"
@@ -1310,12 +1323,13 @@ def _quiet_mail(db: Session, incident: Incident, asset: Asset | None, alertname:
                 f"{host} {alertname} linked here — child mail ladder not started",
             )
         db.flush()
+        kind = "noise" if noise is not None else ("maintenance" if code == "MAINT" else "parent")
         report(
             db,
             "incident",
-            "maintenance" if code == "MAINT" else "parent",
+            kind,
             "ok",
-            summary=f"{incident.number} {'maintenance' if code == 'MAINT' else 'parent'} — mail suppressed",
+            summary=f"{incident.number} {kind} — mail suppressed",
             detail=detail,
             object_type="incident",
             object_id=incident.number,

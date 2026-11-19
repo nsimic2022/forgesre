@@ -2379,3 +2379,63 @@ def reports_csv_api(days: int = 30, db: Session = Depends(get_db), user: User = 
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="forgesre-incidents-{max(1, min(days, 365))}d.csv"'},
     )
+
+
+@router.get("/noise-filters")
+def noise_filters_list(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> list[dict[str, Any]]:
+    """Every noise filter with hit counts."""
+    from app.models import NoiseFilter
+    from app.noise_filters import as_dict
+
+    return [as_dict(f) for f in db.query(NoiseFilter).order_by(NoiseFilter.id).all()]
+
+
+@router.post("/noise-filters")
+def noise_filters_create(body: dict[str, Any], db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict[str, Any]:
+    """Create a noise filter (Engineer+); audited. 400 with the reason when invalid."""
+    from app.models import NoiseFilter
+    from app.noise_filters import apply_fields, as_dict
+
+    try:
+        row = apply_fields(NoiseFilter(created_by=user.email), body)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.add(row)
+    db.flush()
+    audit(db, "noise_filter.create", actor=user.email, object_type="noise_filter", object_id=str(row.id), data=as_dict(row))
+    db.commit()
+    return as_dict(row)
+
+
+@router.put("/noise-filters/{filter_id}")
+def noise_filters_update(
+    filter_id: int, body: dict[str, Any], db: Session = Depends(get_db), user: User = Depends(require("write_play"))
+) -> dict[str, Any]:
+    """Change a noise filter (Engineer+); audited."""
+    from app.models import NoiseFilter
+    from app.noise_filters import apply_fields, as_dict
+
+    row = db.get(NoiseFilter, filter_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="noise filter not found")
+    try:
+        apply_fields(row, body)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "noise_filter.update", actor=user.email, object_type="noise_filter", object_id=str(row.id), data=as_dict(row))
+    db.commit()
+    return as_dict(row)
+
+
+@router.delete("/noise-filters/{filter_id}")
+def noise_filters_delete(filter_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict[str, Any]:
+    """Remove a noise filter. Incidents it quieted open on the next promotion pass if still firing."""
+    from app.models import NoiseFilter
+
+    row = db.get(NoiseFilter, filter_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="noise filter not found")
+    audit(db, "noise_filter.delete", actor=user.email, object_type="noise_filter", object_id=str(row.id), data={"name": row.name})
+    db.delete(row)
+    db.commit()
+    return {"deleted": filter_id}

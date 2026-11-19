@@ -42,7 +42,7 @@ the proxy.
 | Incidents: list, detail, checklist, notes | done |
 | On-call | who is on call now; the week grid comes with the escalation rework |
 | Inventory: library (site › rack, type, environment, customer, views), table, asset card | done; editing still on the classic page |
-| Automation: pipeline, routing rules, escalation, playbooks, maintenance windows, "Try an alarm" | done; editing still on the classic pages |
+| Automation: pipeline, noise filters (create, edit, remove), routing rules, escalation, playbooks, maintenance windows, "Try an alarm" | done; rules, playbooks and escalation editing still on the classic pages |
 | Investigations: resolved incidents with confirmed cause and ratings, accuracy, recurring causes; review card on the incident page | done |
 | Reports: period KPIs vs previous, incidents per day, by asset type, noisiest assets, frequent alerts, host-down time, scheduled reports, CSV | done; schedule editing on the classic page until Phase 3 |
 | Settings: groups from the registry with inline editing, secret status, connection tests, services and health | done; users, roles and backup still on the classic Admin page |
@@ -54,7 +54,7 @@ the proxy.
 | NOC overview | `GET /api/v1/noc` | — |
 | Incidents list | `GET /api/v1/incidents-page?tab=&severity=&q=&limit=&offset=` | — |
 | Inventory | `GET /api/v1/inventory?q=&site=&rack=&type=&environment=&customer=&view=` · `GET /api/v1/inventory/{asset_id}` | classic asset page for now |
-| Automation | `GET /api/v1/automation` | `POST /api/v1/automation/simulate` `{alertname, asset, value, at}` (read-only test) |
+| Automation | `GET /api/v1/automation`, `GET /api/v1/noise-filters` | `POST/PUT/DELETE /api/v1/noise-filters[/{id}]` (Engineer+), `POST /api/v1/automation/simulate` `{alertname, asset, value, at}` (read-only test) |
 | Investigations | `GET /api/v1/investigations-page?days=&q=&only_ai=&only_reviewed=` | `POST /api/v1/incidents/{number}/review` `{root_cause, rca_rating, ai_rating}` (correct / partly / wrong) |
 | Reports | `GET /api/v1/reports-page?days=` · `GET /api/v1/reports/incidents.csv?days=` | — |
 | Settings | `GET /api/v1/settings` (Admin) · `GET /api/v1/system/doctor` | `PUT /api/v1/settings/{key}` `{value}` · `POST /api/v1/settings/test/{component}` |
