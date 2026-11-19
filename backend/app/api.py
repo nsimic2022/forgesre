@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+from datetime import datetime
 import logging
 import os
 import threading
@@ -2815,6 +2816,48 @@ def topology_parent_api(body: ParentBody, db: Session = Depends(get_db), user: U
     audit(db, "asset.parent", actor=user.email, object_type="asset", object_id=asset.asset_id, data={"parent": body.parent_asset_id})
     db.commit()
     return {"asset_id": asset.asset_id, "parent_asset_id": body.parent_asset_id}
+
+
+class ChangeBody(BaseModel):
+    title: str
+    source: str = "api"
+    kind: str = "change"
+    detail: str = ""
+    url: str = ""
+    asset: str = ""
+    actor: str = ""
+    at: datetime | None = None
+
+
+@router.post("/changes")
+def changes_post_api(body: ChangeBody, request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Record a deploy or change. Bearer CHANGES_WEBHOOK_TOKEN (CI/CD, GLPI) or a signed-in Engineer."""
+    from app.changes import record
+
+    auth = (request.headers.get("authorization") or "").replace("Bearer ", "").strip()
+    expected = settings.changes_webhook_token
+    actor = body.actor
+    if auth and expected and hmac.compare_digest(auth.encode(), expected.encode()):
+        source = body.source or "api"
+    else:
+        user = current_user(request, db)
+        if user is None or not can(user, "write_assets"):
+            raise HTTPException(status_code=401, detail="needs CHANGES_WEBHOOK_TOKEN or an Engineer session")
+        source, actor = "manual", user.email
+    try:
+        row = record(db, title=body.title, source=source, kind=body.kind, detail=body.detail, url=body.url,
+                     actor=actor, asset_ref=body.asset, at=body.at)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"id": row.id, "asset_matched": row.asset_id is not None}
+
+
+@router.get("/changes")
+def changes_list_api(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict[str, Any]:
+    """Latest recorded changes (deploys, config pushes, tickets)."""
+    from app.changes import recent
+
+    return {"changes": recent(db), "can_add": can(user, "write_assets")}
 
 
 @router.get("/automation")

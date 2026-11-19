@@ -90,6 +90,18 @@ export interface Noc {
   ai: { forgerca: boolean; forgeai: "off" | "local" | "external" };
 }
 
+export interface ChangeRow {
+  at: string;
+  before_min: number;
+  source: string;
+  kind: string;
+  title: string;
+  detail: string;
+  url: string;
+  actor: string;
+  asset: string;
+}
+
 export interface TopoNode {
   asset_id: string;
   hostname: string;
@@ -196,6 +208,7 @@ export interface IncidentView {
   forgeai: { mode: string; text: string; cause: string; action: string; model: string; at: string | null };
   evidence: { id: string; source: string; title: string; query: string }[];
   timeline: { at?: string; event?: string; text?: string; [key: string]: unknown }[];
+  changes?: ChangeRow[];
   notifications: { id: number; target: string; subject: string; status: string; step_key: string; channel: string; created_at: string | null; error: string }[];
   notes: { id: number; at: string | null; actor: string; body: string }[];
   review: Review;

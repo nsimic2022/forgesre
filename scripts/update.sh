@@ -30,6 +30,17 @@ else
   echo "Run ./forgesre backup later if you need an archive from before this update."
 fi
 echo "Rendering Prometheus / Alertmanager / snmp_exporter / Alloy / Loki config..."
+# Secrets added after the first install: create them once so existing appliances get them too.
+SECRETS_FILE="$ROOT/secrets/secrets.env"
+if [[ -f "$SECRETS_FILE" ]] && ! grep -q '^CHANGES_WEBHOOK_TOKEN=.\+' "$SECRETS_FILE"; then
+  if { sed -i '/^CHANGES_WEBHOOK_TOKEN=/d' "$SECRETS_FILE" &&
+       printf 'CHANGES_WEBHOOK_TOKEN=%s\n' "$(openssl rand -hex 24)" >> "$SECRETS_FILE"; } 2>/dev/null; then
+    echo "Created CHANGES_WEBHOOK_TOKEN in secrets/secrets.env (bearer for POST /api/v1/changes)."
+  else
+    echo "Could not write secrets/secrets.env; set it later: ./forgesre settings set-secret CHANGES_WEBHOOK_TOKEN"
+  fi
+fi
+
 "$ROOT/scripts/render-monitoring.sh"
 echo "Ensuring bundled NetBox secrets and data dirs..."
 "$ROOT/scripts/ensure-netbox-secrets.sh"

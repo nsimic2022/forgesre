@@ -121,6 +121,7 @@ REGISTRY: tuple[SettingDef, ...] = (
        help="Posts when an incident opens, escalates and resolves. Set SLACK_WEBHOOK_URL first."),
     _y("notifications.chat.slack.min_severity", "notifications", "Slack minimum severity", "enum", choices=("critical", "high", "warning")),
     _s("SLACK_WEBHOOK_URL", "notifications", "Slack incoming webhook URL"),
+    _s("CHANGES_WEBHOOK_TOKEN", "notifications", "Changes webhook token (deploys, GLPI changes)"),
     _y("notifications.chat.teams.enabled", "notifications", "Microsoft Teams enabled", "bool", test="teams",
        help="Use a Teams Workflows webhook (\"When a Teams webhook request is received\"). Set TEAMS_WEBHOOK_URL first."),
     _y("notifications.chat.teams.min_severity", "notifications", "Teams minimum severity", "enum", choices=("critical", "high", "warning")),

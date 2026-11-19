@@ -473,6 +473,27 @@ class OncallSlot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ChangeEvent(Base):
+    """Something that changed outside ForgeSRE: a deploy, a config push, a GLPI change ticket.
+
+    Posted by CI/CD or scripts to POST /api/v1/changes (bearer CHANGES_WEBHOOK_TOKEN) or added
+    by a person in the UI. Incidents show the changes on their asset, its parent, or global
+    ones (no asset) from the hours before they started.
+    """
+
+    __tablename__ = "change_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    source: Mapped[str] = mapped_column(String(32), default="manual")
+    kind: Mapped[str] = mapped_column(String(32), default="change")
+    title: Mapped[str] = mapped_column(String(255))
+    detail: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str] = mapped_column(String(500), default="")
+    actor: Mapped[str] = mapped_column(String(255), default="")
+    asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id", ondelete="SET NULL"), nullable=True, index=True)
+
+
 class TopologyLink(Base):
     """One LLDP/CDP neighbour seen by LibreNMS, matched to our assets where possible.
 
