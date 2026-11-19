@@ -128,7 +128,8 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
 
 ## Layout
 
-- `src/components/Shell.tsx`: sidebar menu in the order of the designs.
+- `src/components/Shell.tsx`: sidebar menu in the order of the designs; the version next to
+  the name is `FORGESRE_VERSION` from `.env`, served by `GET /api/v1/me`.
 - `src/components/ui.tsx`: Chip, Card, Stat, Bar, Dot.
 - `src/styles.css`: design tokens (colours, radius, fonts) and base styles.
 - `src/pages/*`: one file per page; pages not rebuilt yet link to their classic page.

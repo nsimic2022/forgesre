@@ -22,7 +22,7 @@ export function Shell({ me, forgeai, children }: { me: Me | null; forgeai: strin
       <nav className="nav" aria-label="Main">
         <div className="nav-brand">
           <span className="nav-logo" aria-hidden="true">F/</span>
-          ForgeSRE <span className="small faint">2.0</span>
+          ForgeSRE {me?.version ? <span className="small faint">v{me.version}</span> : null}
         </div>
         <div className="nav-links">
           {NAV.map((item) => (

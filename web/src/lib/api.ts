@@ -47,6 +47,7 @@ export interface Me {
   email: string;
   role: Role;
   name: string;
+  version?: string;
 }
 
 export type Severity = "CRITICAL" | "HIGH" | "WARNING" | string;

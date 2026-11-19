@@ -248,7 +248,13 @@ def api_login(body: LoginBody, request: Request, db: Session = Depends(get_db)) 
 
 @router.get("/me")
 def me(user: User = Depends(require_user)) -> dict[str, Any]:
-    return {"email": user.email, "role": user.role, "name": user.name}
+    """The signed-in user, plus the appliance version from .env (FORGESRE_VERSION) for the UI."""
+    return {
+        "email": user.email,
+        "role": user.role,
+        "name": user.name,
+        "version": os.environ.get("FORGESRE_VERSION", "").strip().strip('"'),
+    }
 
 
 @router.get("/assets")
