@@ -143,7 +143,7 @@ def _json_safe(value: Any) -> Any:
 
 def job_is_llm(row: Job) -> bool:
     """True when this investigate job will wait on llama.cpp."""
-    if row.kind in (FORGEAI_DIGEST_KIND, "forgeai"):
+    if row.kind in (FORGEAI_DIGEST_KIND, "forgeai", "llm_download"):
         return True
     if row.kind != "investigate":
         return False
@@ -290,6 +290,12 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload["result"] = result.name
                 row.payload = payload
                 journal_report(db, "backup", "create", "ok", summary=f"Wrote {result.name}", object_type="backup", object_id=result.name)
+            elif row.kind == "llm_download":
+                from app.llm_models import run_download
+
+                # A model download (minutes to an hour) on the LLM lane: alarms and reports keep running.
+                result = run_download(db, row)
+                row.payload = {**(row.payload or {}), "result": result}
             elif row.kind == "forgeai":
                 from app import forgeai
 

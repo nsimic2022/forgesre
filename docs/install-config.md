@@ -147,7 +147,7 @@ Guided wizard:
 | Flag | Meaning |
 |---|---|
 | `--non-interactive` | No prompts; use flags/defaults |
-| `--profile standard\|full-ai` | Standard = no LLM download. `full-ai` downloads ~9 GB GGUF and starts llama.cpp |
+| `--profile standard\|full-ai` | Standard = no LLM download. `full-ai` downloads Qwen3 4B (2.5 GB) and starts llama.cpp |
 | `--timezone ZONE` | Default `Europe/Belgrade` |
 | `--data-dir PATH` | Default `./data` |
 | `--port N` | Core UI/API port (default `8080`) |
@@ -495,7 +495,7 @@ Platform backup files: `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (o
 
 ForgeRCA (Python) always runs. The local model only **rewrites prose**. Skip this on a 4 GB VM. Full implementation guide (hardware, jobs, debug CLI, external `/v1`): [`llm.md`](llm.md).
 
-Not stored in git. Default pin is **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB). Ollama is not the product default. There is no GGUF catalog or Health model switcher. Mailbox stays opt-in (`./forgesre mailbox`); `COMPOSE_PROFILES=ai` does not turn mail on.
+Not stored in git. Default is **Qwen3 4B Q4_K_M** (2.5 GB). Settings › ForgeRCA / ForgeAI has a catalog (Qwen3 4B/8B, Llama 3.1 8B, Qwen2.5 7B/14B), Hugging Face links, file import and the switch between installed models; `./forgesre fetch-llm --model ID` does the same from the shell. Ollama is not the product default. Mailbox stays opt-in (`./forgesre mailbox`); `COMPOSE_PROFILES=ai` does not turn mail on.
 
 ### Where the file lands
 
@@ -540,7 +540,7 @@ wget -O data/models/model.gguf \
 
 `--offline` skips Hugging Face; the file must already exist and be larger than 1 GB. Override URL: `FORGESRE_LLM_URL='https://…' ./forgesre fetch-llm`.
 
-Need **~16 GB RAM** for the default 14B, or **~8 GB** for the 4B lab wget. Do not re-run `./install.sh` just to add AI.
+Need **~6 GB RAM** free for the default 4B, ~10 GB for 8B models, ~16 GB for 14B. Do not re-run `./install.sh` just to add AI.
 
 ### Activate
 

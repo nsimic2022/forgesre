@@ -30,6 +30,10 @@ the ForgeAI model): status, last sync, **Open** to go to its own web page, **Tes
 **Sync now** and its settings. A failing integration shows its error on its card and in the
 journal, but never stops alarms coming in.
 
+**ForgeRCA / ForgeAI** shows whether the local model answers and lets you download another one
+from Hugging Face (Qwen3 4B is the fast default; 8B and 14B models answer better but slower),
+import a `.gguf` file, and switch between installed models without a shell.
+
 **Appearance** sets the colour theme for your browser: Signal (dark), Light, Midnight, High
 contrast, or follow the computer.
 

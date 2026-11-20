@@ -11,20 +11,31 @@ cd "$ROOT"
 DOWNLOAD_ONLY=0
 APPLY=1
 OFFLINE=0
+# MODEL_ID = one of the catalog models below (same list as Settings › ForgeRCA / ForgeAI).
+MODEL_ID="qwen3-4b"
+MODEL_SET=0
 # Parse command-line flags one at a time.
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --download-only) DOWNLOAD_ONLY=1; APPLY=0; shift ;;
     --apply) APPLY=1; shift ;;
     --offline) OFFLINE=1; shift ;;
+    --model) MODEL_ID="${2:-}"; MODEL_SET=1; shift 2 ;;
+    --model=*) MODEL_ID="${1#--model=}"; MODEL_SET=1; shift ;;
     -h|--help)
       cat <<'EOF'
-Usage: ./forgesre fetch-llm [--download-only] [--offline]
+Usage: ./forgesre fetch-llm [--model ID] [--download-only] [--offline]
 
-Default download: Qwen2.5-14B-Instruct Q4_K_M (~9 GB)
-  → $FORGESRE_DATA/models/model.gguf (gitignored).
+Models (the same list as Settings › ForgeRCA / ForgeAI, where you can also switch):
+  qwen3-4b      Qwen3 4B Q4_K_M, 2.5 GB, 6 GB RAM, 30-90 s per answer (default)
+  qwen3-8b      Qwen3 8B Q4_K_M, 5 GB, 10 GB RAM
+  llama3.1-8b   Llama 3.1 8B Instruct Q4_K_M, 4.9 GB, 10 GB RAM
+  qwen2.5-7b    Qwen2.5 7B Instruct Q4_K_M, 4.7 GB in 2 files, 10 GB RAM
+  qwen2.5-14b   Qwen2.5 14B Instruct Q4_K_M, 9 GB in 3 files, 16 GB RAM, minutes per answer
 
-Override URL with FORGESRE_LLM_URL. Lab (8 GB RAM), Qwen3-4B Q4_K_M:
+Files go to $FORGESRE_DATA/models/ (gitignored) and data/models/active names the one to run.
+
+Any other single-file GGUF with FORGESRE_LLM_URL (saved as model.gguf), or by hand:
 
   mkdir -p data/models
   wget -O data/models/model.gguf https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf
@@ -33,7 +44,8 @@ Override URL with FORGESRE_LLM_URL. Lab (8 GB RAM), Qwen3-4B Q4_K_M:
   # or:
   FORGESRE_LLM_URL='https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf' ./forgesre fetch-llm
 
-The file must be named model.gguf under data/models/ (not the clone root).
+A file you copy yourself must be named model.gguf under data/models/ (not the clone root),
+or be picked in Settings.
 
 Without --download-only, also sets COMPOSE_PROFILES=ai, enables bundled LLM in
 config/forgesre.yml, and starts the llama.cpp container.
@@ -57,15 +69,40 @@ fi
 
 MODEL_DIR="$DATA_DIR/models"
 MODEL_PATH="$MODEL_DIR/model.gguf"
-# Official Qwen GGUF, single-file Q4_K_M (~9 GB). Not committed to git.
-DEFAULT_URL="https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m.gguf"
-URL="${FORGESRE_LLM_URL:-$DEFAULT_URL}"
+HF="https://huggingface.co"
+# Catalog: file URLs per model (checked on huggingface.co). Split models list every part.
+case "$MODEL_ID" in
+  qwen3-4b) FILES=("$HF/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf") ;;
+  qwen3-8b) FILES=("$HF/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf") ;;
+  llama3.1-8b) FILES=("$HF/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf") ;;
+  qwen2.5-7b) FILES=("$HF/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf"
+                     "$HF/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf") ;;
+  qwen2.5-14b) FILES=("$HF/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m-00001-of-00003.gguf"
+                      "$HF/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m-00002-of-00003.gguf"
+                      "$HF/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m-00003-of-00003.gguf") ;;
+  *) echo "Unknown --model $MODEL_ID (see ./forgesre fetch-llm --help)" >&2; exit 1 ;;
+esac
+URL="${FORGESRE_LLM_URL:-}"
 
 mkdir -p "$MODEL_DIR"
 
 # A real GGUF is > 1 GB; smaller means a failed or partial download.
+big() { [[ -f "$1" && "$(stat -c%s "$1" 2>/dev/null || echo 0)" -gt 1000000000 ]]; }
 have_model() {
-  [[ -f "$MODEL_PATH" && "$(stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)" -gt 1000000000 ]]
+  # No --model: any model already there (model.gguf or the active one) is enough.
+  if [[ -z "$URL" && "$OFFLINE" -eq 0 && "$MODEL_SET" -eq 1 ]]; then
+    big "$MODEL_DIR/$(basename "${FILES[0]}")"
+  else
+    big "$MODEL_PATH" || { [[ -s "$MODEL_DIR/active" ]] && big "$MODEL_DIR/$(head -n1 "$MODEL_DIR/active")"; }
+  fi
+}
+
+# One file: download to .partial (curl -C - resumes it), rename only when complete.
+fetch_one() {
+  local url="$1" dest="$2"
+  local tmp="${dest}.partial"
+  curl -fL --retry 5 --retry-delay 4 -C - -A "forgesre-fetch-llm" --progress-bar -o "$tmp" "$url"
+  mv "$tmp" "$dest"
 }
 
 download_model() {
@@ -82,20 +119,24 @@ download_model() {
     echo "curl is required to download the GGUF." >&2
     exit 1
   fi
-  echo "Downloading local LLM (~9 GB). This is not stored in git."
-  echo "URL: $URL"
-  echo "Dest: $MODEL_PATH"
-  # Download to .partial (curl -C - resumes it) and rename only when complete.
-  local tmp="${MODEL_PATH}.partial"
-  curl -fL --retry 5 --retry-delay 4 -C - \
-    -A "forgesre-fetch-llm" \
-    --progress-bar \
-    -o "$tmp" \
-    "$URL"
-  mv "$tmp" "$MODEL_PATH"
-  if ! have_model; then
-    echo "Download looks too small; delete $MODEL_PATH and retry." >&2
-    exit 1
+  if [[ -n "$URL" ]]; then
+    echo "Downloading $URL"
+    echo "Dest: $MODEL_PATH"
+    fetch_one "$URL" "$MODEL_PATH"
+    if ! big "$MODEL_PATH"; then
+      echo "Download looks too small; delete $MODEL_PATH and retry." >&2
+      exit 1
+    fi
+    printf 'model.gguf\n' > "$MODEL_DIR/active"
+  else
+    echo "Downloading $MODEL_ID (${#FILES[@]} file(s)). Not stored in git."
+    local f
+    for f in "${FILES[@]}"; do
+      echo "  $f"
+      fetch_one "$f" "$MODEL_DIR/$(basename "$f")"
+    done
+    MODEL_PATH="$MODEL_DIR/$(basename "${FILES[0]}")"
+    printf '%s\n' "$(basename "${FILES[0]}")" > "$MODEL_DIR/active"
   fi
   echo "Saved $MODEL_PATH ($(du -h "$MODEL_PATH" | awk '{print $1}'))"
 }

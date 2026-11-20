@@ -29,7 +29,7 @@ Usage: ./install.sh [--offline] [--non-interactive] [options]
 Options:
   --offline              Do not pull images
   --non-interactive      Use flags/defaults, no prompts
-  --profile standard|full-ai   full-ai downloads ~9 GB GGUF (not stored in git)
+  --profile standard|full-ai   full-ai downloads Qwen3 4B GGUF, 2.5 GB (not stored in git)
   --timezone ZONE
   --data-dir PATH
   --port N
@@ -169,9 +169,9 @@ wizard() {
   explain "Loki" "Local logs used as incident evidence." "no" "Incidents still work; log evidence degrades."
   read -r -p "Enable Loki? [Y/n]: " ans || true
   [[ "${ans:-Y}" =~ ^[Nn] ]] && ENABLE_LOKI="no"
-  explain "AI / LLM" "Read-only wording on ForgeRCA. Downloads ~9 GB GGUF to data/models/ (not git)." "no" "Incidents and ForgeRCA still work without a model."
+  explain "AI / LLM" "Read-only wording on ForgeRCA. Downloads a 2.5 GB GGUF to data/models/ (not git); bigger models from Settings." "no" "Incidents and ForgeRCA still work without a model."
   if [[ "$PROFILE" == "full-ai" ]]; then ENABLE_AI="yes"; fi
-  echo "Enable local LLM (downloads Qwen2.5-14B Instruct Q4_K_M, ~9 GB)?"
+  echo "Enable local LLM (downloads Qwen3 4B Q4_K_M, 2.5 GB)?"
   echo "  1) Yes"
   echo "  2) No"
   read -r -p "Select [1-2] default $([[ $ENABLE_AI == yes ]] && echo 1 || echo 2): " ans || true
