@@ -29,7 +29,7 @@ Discord, the ForgeAI morning digest, 30-day capacity on the asset card.
 
 ## Phase 4 — enterprise
 
-~~LDAP / AD and OIDC sign-in~~ (done, [sign-in.md](sign-in.md)), air-gapped install bundle, high availability.
+~~LDAP / AD and OIDC sign-in~~ (done, [sign-in.md](sign-in.md)), ~~air-gapped install bundle~~ (done, [offline.md](offline.md)), high availability (documented active / standby on a shared Postgres, [high-availability.md](high-availability.md); not an automated cluster).
 
 ## ForgeAI 2 — how investigation should work
 

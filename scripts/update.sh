@@ -109,6 +109,10 @@ if [[ "$need_pull" -eq 1 ]]; then
   fi
 fi
 
+if [[ "$OFFLINE" -eq 1 && -f "$ROOT/data/.offline-bundle" ]]; then
+  # Core image came from ./load-bundle.sh; building it would need pip and the internet.
+  need_build=0
+fi
 if [[ "$need_build" -eq 1 ]]; then
   "${DC[@]}" up -d --build --pull never
   printf '%s\n' "$cur" > "$STAMP"

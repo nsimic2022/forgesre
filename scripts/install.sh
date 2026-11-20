@@ -454,8 +454,14 @@ start_stack() {
   if [[ "$OFFLINE" -eq 1 ]]; then
     pull_flag=(--pull never)
   fi
-  echo "Building and starting containers..."
-  dc up -d --build "${pull_flag[@]}"
+  if [[ "$OFFLINE" -eq 1 && -f "$ROOT/data/.offline-bundle" ]]; then
+    # Images came from ./load-bundle.sh: building Core would need pip and the internet.
+    echo "Starting containers from the loaded bundle..."
+    dc up -d "${pull_flag[@]}"
+  else
+    echo "Building and starting containers..."
+    dc up -d --build "${pull_flag[@]}"
+  fi
   if [[ "$OFFLINE" -ne 1 ]]; then
     mkdir -p "$ROOT/data"
     awk '/^[[:space:]]+image:/{print}' "$ROOT/docker-compose.yml" | sha256sum | awk '{print $1}' > "$ROOT/data/.compose-images.stamp"

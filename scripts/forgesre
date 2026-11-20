@@ -110,6 +110,7 @@ Commands:
   remove             Delete one backup folder (tar + MANIFEST); confirm with --yes or typed yes
   update             Backup, render monitoring, refresh images, restart, doctor
   restart            Restart running stack containers only (no git pull, install, or secrets)
+  bundle             One file with code and every image, for an appliance without internet
   mailbox            Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)
   tls                How to put optional HTTPS (Caddy) in front of Core
   completion         Print a `source …completion.bash` line for ~/.bashrc
@@ -636,6 +637,19 @@ Do not re-run ./install.sh to add the model. ForgeRCA works without a GGUF.
 Guide: docs/llm.md
 EOF
       ;;
+    bundle)
+      cat <<'EOF'
+bundle — everything an appliance without internet needs, in one file. Run it on a
+machine with internet and Docker, in a ForgeSRE checkout:
+
+  ./forgesre bundle                    code + every image (Core built here)
+  ./forgesre bundle --include-models   also the ForgeAI model files
+
+Writes data/bundles/forgesre-bundle-<version>-<commit>.tar. On the offline host:
+  tar -xf forgesre-bundle-….tar load-bundle.sh && ./load-bundle.sh forgesre-bundle-….tar
+then ./install.sh --offline (new) or ./forgesre update --offline. See docs/offline.md.
+EOF
+      ;;
     backup)
       cat <<'EOF'
 backup — one folder per run under $FORGESRE_DATA/backups (default ./data/backups).
@@ -1067,6 +1081,9 @@ case "$cmd" in
   forgeai)
     need_env
     run_cli_ops forgeai "$@"
+    ;;
+  bundle)
+    exec "$ROOT/scripts/bundle.sh" "$@"
     ;;
   capacity)
     need_env
