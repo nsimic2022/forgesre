@@ -1,4 +1,5 @@
 import { ChangesCard } from "../components/ChangesCard";
+import { IncidentMetrics, IncidentStory, SimilarBefore, SyslogCard, WhoToCall } from "../components/IncidentPanels";
 import { PostmortemPanel } from "../components/PostmortemPanel";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -123,7 +124,20 @@ export function IncidentDetailPage() {
                     ))}
                   </>
                 ) : null}
-                {rca.actions.length ? <p style={{ margin: 0 }}><span className="faint">Suggested: </span>{rca.actions.join(" ")}</p> : null}
+                {rca.actions.length ? (
+                  <>
+                    <h3 className="small faint" style={{ margin: 0, textTransform: "uppercase", letterSpacing: ".05em" }}>What to do next</h3>
+                    <ol style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+                      {rca.actions.map((a, i) => <li key={i}>{a}</li>)}
+                    </ol>
+                  </>
+                ) : null}
+                {rca.limitations.length ? (
+                  <details>
+                    <summary className="small faint" style={{ cursor: "pointer" }}>What ForgeRCA could not check ({rca.limitations.length})</summary>
+                    <ul className="small muted" style={{ margin: "6px 0 0", paddingLeft: 18 }}>{rca.limitations.map((l, i) => <li key={i}>{l}</li>)}</ul>
+                  </details>
+                ) : null}
               </>
             ) : (
               <span className="muted">No analysis yet.</span>
@@ -140,6 +154,9 @@ export function IncidentDetailPage() {
               <span className="muted">{data.forgeai.mode === "off" ? "ForgeAI is off in Settings." : "No ForgeAI opinion yet; it is written after ForgeRCA finishes."}</span>
             )}
           </Card>
+          {data.asset ? <IncidentMetrics assetId={data.asset.asset_id} number={data.number} /> : null}
+          {data.events?.length ? <IncidentStory events={data.events} /> : null}
+          {data.asset && data.can.investigate ? <SyslogCard number={data.number} /> : null}
           {data.evidence.length ? (
             <Card title="Evidence">
               <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
@@ -157,11 +174,13 @@ export function IncidentDetailPage() {
           ) : null}
         </div>
         <div style={{ flex: "1 1 340px", display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
+          <WhoToCall people={data.who_to_call ?? []} />
           <ChangesCard changes={data.changes ?? []} />
+          <SimilarBefore rows={data.similar ?? []} />
           <ReviewCard number={data.number} review={data.review} canEdit={data.can.work} hasAi={Boolean(data.forgeai.text)} onSaved={load} />
           {data.asset ? (
             <Card title="Asset">
-              <a href={`/assets?q=${encodeURIComponent(data.asset.hostname)}`} style={{ fontWeight: 700, fontSize: 15 }}>{data.asset.hostname}</a>
+              <Link to={`/inventory?q=${encodeURIComponent(data.asset.hostname)}`} style={{ fontWeight: 700, fontSize: 15 }}>{data.asset.hostname}</Link>
               <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "110px minmax(0,1fr)", gap: "6px 12px", fontSize: 13 }}>
                 <dt className="faint">IP</dt><dd style={{ margin: 0 }} className="mono">{data.asset.ip || "—"}</dd>
                 <dt className="faint">Type</dt><dd style={{ margin: 0 }}>{data.asset.type}</dd>

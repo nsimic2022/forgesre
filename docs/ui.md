@@ -201,3 +201,12 @@ the classic UI keep levels 1–4 (L1–L4); `tierLabel()` in `web/src/lib/format
 - `snmp_apply` (`app/snmp_apply.py`) writes per-asset SNMP auths into the generated snmp.yml
   that Core mounts at `/host-generated` and POSTs `/-/reload` to snmp_exporter. Saving an asset
   queues it, and the leader queues it every 5 minutes while an auth is pending (classic edits).
+
+## Incident page, more
+
+`GET /api/v1/incidents/{number}/view` also returns `who_to_call` (on call now, asset contact,
+backup contact, vendor support), `similar` (earlier incidents with the same title on the same
+asset, with the confirmed cause and minutes to resolve) and `events` (alarm, timeline, mails and
+chat, notes, playbook ticks, ack and resolve, in time order). Host metrics come from `GET
+/api/v1/assets/{id}/metrics?incident=…`; syslog from `GET /api/v1/incidents/{number}/syslog`
+(Analyst and up, Loki, 30 minutes either side of the start, loaded only when asked).

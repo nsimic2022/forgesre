@@ -32,15 +32,24 @@ Click a row to open it.
    tickets and edits made in ForgeSRE in the 24 hours before the alarm, on this asset or
    the one it hangs from. Most outages start with a change; this card is usually the
    fastest clue.
-3. **Read ForgeRCA.** It collects facts (metrics, logs, similar past incidents) and offers
-   hypotheses. It never touches the system; it only reads.
+3. **Read ForgeRCA.** It collects facts (metrics, logs, similar past incidents), offers
+   hypotheses and **what to do next**, and says what it could not check. It never touches the
+   system; it only reads.
+   Next to it: **Host metrics** from an hour before the alarm to now (the grey line is the
+   start), **Happened before on this asset** with the cause that was confirmed last time, and
+   **Syslog around the start** from the device's own log.
 4. **Follow the playbook**, if the alarm has one: tick the steps as you go so the next
    person sees where you are.
 5. **Write notes** as you work. They end up in the timeline and the postmortem.
 6. **Resolve** when it is fixed, then fill *Confirm the cause*: what really caused it, and
    whether ForgeRCA was right. These reviews make the similar-incident search better.
 
-Need help? **Escalate** moves it to the next level now instead of waiting.
+Need help? **Who to call** lists the on-call person, the asset's contact and backup (phone
+numbers are links) and the vendor's support line. **Escalate** moves it to the next tier now
+instead of waiting.
+
+**Who did what** tells the whole story in order: the alarm, every mail and chat message (and
+whether it was delivered), the acknowledgement, notes, playbook steps and the resolve.
 
 ## The incident list
 
