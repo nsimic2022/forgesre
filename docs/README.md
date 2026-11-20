@@ -24,6 +24,8 @@ refreshed after a UI change.
 - [CLI](cli.md): every `./forgesre` command
 - [Settings](settings.md): the Settings page and `./forgesre settings`
 - [Sign-in with LDAP / Active Directory or OIDC single sign-on](sign-in.md)
+- [Appliance without internet (offline bundle)](offline.md)
+- [High availability: two appliances on one Postgres](high-availability.md)
 - [Alerting](alerting.md): alert rules, playrules, noise filters, appliance checks, runbook format
 - [New UI](ui.md): pages, API endpoints, TV mode, dependency map, postmortem
 - [Architecture](architecture.md): containers, the alarm path, background jobs

@@ -25,7 +25,8 @@ services:
       - .env
       - secrets/secrets.env
     environment: &core_env
-      DATABASE_URL: postgresql+psycopg2://forgesre:${POSTGRES_PASSWORD}@127.0.0.1:5432/forgesre
+      # FORGESRE_DATABASE_URL: an external (replicated) Postgres for two appliances, docs/high-availability.md
+      DATABASE_URL: ${FORGESRE_DATABASE_URL:-postgresql+psycopg2://forgesre:${POSTGRES_PASSWORD}@127.0.0.1:5432/forgesre}
       FORGESRE_CONFIG: /config/forgesre.yml
       FORGESRE_LOG_FILE: /logs/forgesre.log
       FRONTEND_DIR: /frontend
