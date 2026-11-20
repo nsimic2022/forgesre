@@ -182,6 +182,7 @@ export interface IncidentView {
   level: string;
   levels: { level: number; tone: string; title: string }[];
   asset: null | {
+    asset_id: string;
     hostname: string;
     ip: string;
     type: string;
@@ -212,6 +213,9 @@ export interface IncidentView {
   changes?: ChangeRow[];
   notifications: { id: number; target: string; subject: string; status: string; step_key: string; channel: string; created_at: string | null; error: string }[];
   notes: { id: number; at: string | null; actor: string; body: string }[];
+  events?: { at: string; kind: string; who: string; text: string }[];
+  who_to_call?: { role: string; name: string; phone: string; email: string; note?: string }[];
+  similar?: { number: string; status: string; started_at: string | null; minutes: number | null; root_cause: string; resolved_by: string }[];
   review: Review;
   can: { work: boolean; investigate: boolean; cloud: boolean };
 }

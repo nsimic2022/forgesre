@@ -103,6 +103,9 @@ def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]
     mode = forgeai_mode()
     steps = _playbook_steps(incident)
     done = sorted({int(i) for i in (incident.checklist or []) if isinstance(i, int) and 0 <= i < len(steps)})
+    notifications = [notification_as_dict(row) for row in notifications_for(db, incident)]
+    notes = [note_as_dict(row) for row in notes_for(db, incident)]
+    audits = [audit_as_dict(row) for row in audit_for(db, incident.number)]
     return {
         "number": incident.number,
         "title": incident.title,
@@ -148,9 +151,12 @@ def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]
         else [],
         "timeline": incident.timeline or [],
         "changes": changes_before(db, incident),
-        "notifications": [notification_as_dict(row) for row in notifications_for(db, incident)],
-        "notes": [note_as_dict(row) for row in notes_for(db, incident)],
-        "audit": [audit_as_dict(row) for row in audit_for(db, incident.number)],
+        "notifications": notifications,
+        "notes": notes,
+        "audit": audits,
+        "events": events(incident, notifications, notes, audits),
+        "who_to_call": who_to_call(db, incident),
+        "similar": similar_before(db, incident),
         "review": {
             "root_cause": incident.root_cause or "",
             "rca_rating": incident.rca_rating or "",
@@ -164,6 +170,82 @@ def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]
             "cloud": can(user, "ai_cloud"),
         },
     }
+
+
+def who_to_call(db: Session, incident: Incident) -> list[dict[str, str]]:
+    """People to ring for this incident, in order: on call now, the asset contact, its backup, support."""
+    from app.asset_extras import normalize_extras, support_status
+    from app.dc_noc import current_oncall
+
+    out: list[dict[str, str]] = []
+    person = current_oncall(db) or {}
+    if person.get("name") or person.get("email"):
+        out.append({"role": "On call now", "name": str(person.get("name") or ""), "phone": str(person.get("phone") or ""), "email": str(person.get("email") or "")})
+    asset = incident.asset
+    if asset is not None:
+        if asset.contact_name or asset.owner_phone or asset.owner_email:
+            out.append({"role": f"Asset contact{f' · {asset.owner}' if asset.owner else ''}", "name": asset.contact_name or "", "phone": asset.owner_phone or "", "email": asset.owner_email or ""})
+        extras = normalize_extras(asset.extras)
+        if extras.get("backup_name") or extras.get("backup_phone"):
+            out.append({"role": "Backup contact", "name": extras.get("backup_name", ""), "phone": extras.get("backup_phone", ""), "email": extras.get("backup_email", "")})
+        support = support_status(asset)
+        if support.get("state") != "unknown":
+            out.append({"role": "Vendor support", "name": str(support.get("label") or ""), "phone": "", "email": "", "note": str(support.get("call_note") or "")})
+    return out
+
+
+def similar_before(db: Session, incident: Incident, limit: int = 5) -> list[dict[str, Any]]:
+    """Earlier incidents with the same alert on the same asset, newest first, with what fixed them."""
+    if incident.asset_id is None:
+        return []
+    rows = (
+        db.query(Incident)
+        .filter(Incident.asset_id == incident.asset_id, Incident.id != incident.id, Incident.title == incident.title)
+        .order_by(Incident.started_at.desc())
+        .limit(limit)
+        .all()
+    )
+    out = []
+    for row in rows:
+        end = row.resolved_at or row.ended_at
+        minutes = int((end - row.started_at).total_seconds() // 60) if end and row.started_at else None
+        out.append({
+            "number": row.number, "status": row.status, "started_at": row.started_at.isoformat() if row.started_at else None,
+            "minutes": minutes, "root_cause": row.root_cause or "", "resolved_by": row.resolved_by or "",
+        })
+    return out
+
+
+_AUDIT_TEXT = {
+    "incident.checklist": lambda d: f"{'ticked' if d.get('done') else 'unticked'} playbook step: {d.get('title', '')}",
+    "incident.review": lambda d: "saved the review" + (f": {d.get('root_cause')}" if d.get("root_cause") else ""),
+}
+
+
+def events(incident: Incident, notifications: list[dict], notes: list[dict], audits: list[dict]) -> list[dict[str, str]]:
+    """One time-ordered story of the incident: alarm, mails and chat, ack, escalation, notes, playbook, resolve."""
+    rows: list[dict[str, str]] = []
+    if incident.started_at:
+        rows.append({"at": incident.started_at.isoformat(), "kind": "alarm", "who": incident.source or "alarm", "text": f"Alarm fired: {incident.title}"})
+    for item in incident.timeline or []:
+        title = str(item.get("title") or "")
+        if title and item.get("at"):
+            rows.append({"at": str(item["at"]), "kind": "system", "who": "ForgeSRE", "text": f"{title}{': ' + str(item.get('detail')) if item.get('detail') else ''}"[:300]})
+    for n in notifications:
+        status = n.get("status") or ""
+        rows.append({"at": n.get("created_at") or "", "kind": "notify", "who": n.get("channel") or "email",
+                     "text": f"{n.get('channel') or 'email'} to {n.get('target')} · {status}{' · ' + n['error'] if n.get('error') else ''}"})
+    for note in notes:
+        rows.append({"at": note.get("at") or "", "kind": "note", "who": note.get("actor") or "", "text": note.get("body") or ""})
+    for a in audits:
+        render = _AUDIT_TEXT.get(a.get("action") or "")
+        if render is not None:
+            rows.append({"at": a.get("at") or "", "kind": "work", "who": a.get("actor") or "", "text": render(a.get("data") or {})})
+    if incident.ack_at:
+        rows.append({"at": incident.ack_at.isoformat(), "kind": "ack", "who": incident.ack_by or "", "text": "Acknowledged"})
+    if incident.resolved_at:
+        rows.append({"at": incident.resolved_at.isoformat(), "kind": "resolve", "who": incident.resolved_by or "system", "text": "Resolved"})
+    return sorted((r for r in rows if r["at"]), key=lambda r: r["at"])
 
 
 def set_checklist_step(db: Session, incident: Incident, step: int, done: bool, actor: str) -> list[int]:

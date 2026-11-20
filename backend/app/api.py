@@ -14,7 +14,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Re
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.audit import audit
 from app.journal import MODULES, entry_as_dict, list_entries, module_counts, report
@@ -2507,6 +2507,18 @@ def incident_postmortem_api(number: str, download: int = 0, db: Session = Depend
     if download:
         return Response(text, media_type="text/markdown; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{name}"'})
     return {"markdown": text, "filename": name}
+
+
+@router.get("/incidents/{number}/syslog")
+def incident_syslog_api(number: str, db: Session = Depends(get_db), user: User = Depends(require("read_evidence"))) -> dict[str, Any]:
+    """Up to 20 syslog lines from Loki for the incident's asset, 30 minutes either side of the start."""
+    from app.dc_noc import incident_syslog_lines
+
+    incident = db.query(Incident).options(joinedload(Incident.asset)).filter_by(number=number).first()
+    if incident is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    lines = incident_syslog_lines(incident)
+    return {"lines": lines or [], "note": "" if lines else "No syslog lines from this asset around the start (or the device does not send syslog to port 514)."}
 
 
 @router.get("/incidents/{number}/view")
