@@ -45,6 +45,19 @@ back to them.
 
 **By hand**: **New asset by hand** opens the full form, SNMP credentials included.
 
+**From a CSV file**: **Import CSV** reads one asset per line; the first line names the columns
+(`hostname` is required; `ip`, `type`, `environment`, `owner`, contact fields, `site`, `row`,
+`rack`, `customer`, `parent` and the other card fields are optional; comma or semicolon). **Check
+file** shows each line as Add, Already there or Problem with the reason, and writes nothing.
+**Add** then creates the accepted lines in the background. Assets already in the inventory
+(same id or IP) are skipped, never changed. SNMP communities and passwords are not read from a
+file; set them on the asset afterwards. **Download a template** gives every column.
+
+**Capacity**: the asset card shows the last 30 days of disk use and interface receive. When disk
+use keeps climbing it says **~N days to full** (red at 30 days or less). ForgeSRE reads it from
+Prometheus, or from Zabbix trends when Prometheus has no disk series, in the background and
+keeps it 15 minutes. From the shell: `./forgesre capacity <host>`.
+
 From the shell: `./forgesre ping <host>` checks that an address answers and exports metrics,
 `./forgesre verify <host>` runs the same live chain, and `./forgesre snmp-auths` writes SNMP
 credentials now instead of waiting for ForgeSRE (it does so within 5 minutes on its own).

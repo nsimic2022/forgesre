@@ -1129,7 +1129,7 @@ class IdentifyBody(BaseModel):
     snmp: dict[str, Any] = Field(default_factory=dict)
 
 
-ONBOARD_JOBS = ("onboard_identify", "asset_verify", "snmp_apply", "discovery_scan")
+ONBOARD_JOBS = ("onboard_identify", "asset_verify", "snmp_apply", "discovery_scan", "asset_import")
 
 
 @router.post("/onboard/identify")
@@ -1413,6 +1413,53 @@ async def create_asset_api(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     _queue_snmp_apply(db, asset, user.email)
     return _asset(asset)
+
+
+class AssetImportBody(BaseModel):
+    csv: str
+
+
+@router.get("/assets/import/template")
+def asset_import_template(user: User = Depends(require("write_assets"))) -> Response:
+    """Empty CSV with every column Import CSV reads, plus one example row."""
+    del user
+    from app.asset_import import COLUMNS
+
+    example = {"hostname": "web-01", "ip": "10.0.0.11", "type": "Linux Server", "environment": "Production",
+               "owner": "platform", "site": "DC1", "rack": "A07"}
+    body = ",".join(COLUMNS) + "\n" + ",".join(example.get(c, "") for c in COLUMNS) + "\n"
+    return Response(body, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="forgesre-assets-template.csv"'})
+
+
+@router.post("/assets/import/preview")
+def asset_import_preview(body: AssetImportBody, db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
+    """Check a CSV against the Add asset rules; writes nothing."""
+    del user
+    from app.asset_import import preview, public
+
+    try:
+        return public(preview(db, body.csv))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/assets/import")
+def asset_import_start(body: AssetImportBody, db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
+    """Check the CSV again on the server, then add the accepted rows in the asset_import job."""
+    from app.asset_import import IMPORT_KIND, preview
+    from app.jobs import enqueue
+
+    try:
+        result = preview(db, body.csv)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    rows = [r for r in result["rows"] if r["action"] == "create"]
+    if not rows:
+        raise HTTPException(status_code=400, detail="Nothing to add: every row already exists or has an error.")
+    job = enqueue(db, IMPORT_KIND, f"csv-{int(time.time() * 1000)}", object_type="asset",
+                  payload={"actor": user.email, "rows": rows})
+    return {"job": job.id if job else None, "counts": result["counts"]}
 
 
 def _queue_snmp_apply(db: Session, asset: Any, actor: str) -> None:
