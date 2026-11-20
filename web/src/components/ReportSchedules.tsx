@@ -10,13 +10,19 @@ const PRESETS: [string, string][] = [["15m", "Every 15 minutes"], ["60m", "Every
 const CRON_EXAMPLES: [string, string][] = [["0 7 * * *", "every day 07:00"], ["0 7 * * 1", "Mondays 07:00"], ["0 8 1 * *", "1st of the month 08:00"], ["30 6 * * 1-5", "weekdays 06:30"]];
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-type Draft = { name: string; recipients: string; schedule: string; every_n: string; every_unit: string; weekdays: number[]; cron: string };
+type Draft = { name: string; kind: string; recipients: string; schedule: string; every_n: string; every_unit: string; weekdays: number[]; cron: string };
+
+export const KINDS: [string, string, string][] = [
+  ["performance", "NOC summary", "Incidents of the period against the one before, what is open, frequent alerts, noisiest assets, then each asset's metrics."],
+  ["forgeai", "ForgeAI digest", "The morning mail: incidents of the last day (up to a week), what is open and who has it, then ForgeAI's shift summary from those facts."],
+];
+const kindLabel = (k: string) => KINDS.find(([v]) => v === k)?.[1] ?? k;
 
 function toDraft(r: ScheduledReport | null): Draft {
   const s = r?.spec;
   const minutes = s?.every_minutes ?? 0;
   return {
-    name: r?.name ?? "Weekly NOC summary", recipients: (r?.recipients ?? []).join(", "), schedule: s?.preset || (r ? "24h" : "cron"),
+    name: r?.name ?? "Weekly NOC summary", kind: r?.kind ?? "performance", recipients: (r?.recipients ?? []).join(", "), schedule: s?.preset || (r ? "24h" : "cron"),
     every_n: s?.preset === "custom" ? String(minutes % 60 === 0 ? minutes / 60 : minutes) : "", every_unit: s?.preset === "custom" && minutes % 60 === 0 ? "hours" : "minutes",
     weekdays: s && s.weekdays.length < 7 ? s.weekdays : [], cron: s?.cron ?? (r ? "" : "0 7 * * 1"),
   };
@@ -36,6 +42,13 @@ function ScheduleForm({ report, onDone }: { report: ScheduledReport | null; onDo
   return (
     <form onSubmit={save} className="cell-stack" style={{ gap: 10, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
       <label className="cell-stack small faint">Name<input className="search" style={{ minWidth: 0 }} value={d.name} onChange={(e) => set({ name: e.target.value })} /></label>
+      <label className="cell-stack small faint">
+        What
+        <select className="search" style={{ minWidth: 0 }} value={d.kind} onChange={(e) => set({ kind: e.target.value, ...(report ? {} : e.target.value === "forgeai" ? { name: "Morning ForgeAI digest", schedule: "cron", cron: "0 7 * * *" } : { name: "Weekly NOC summary", cron: "0 7 * * 1" }) })}>
+          {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        <span>{KINDS.find(([v]) => v === d.kind)?.[2]}</span>
+      </label>
       <label className="cell-stack small faint">Recipients (comma separated)<input className="search" style={{ minWidth: 0 }} value={d.recipients} onChange={(e) => set({ recipients: e.target.value })} placeholder="noc@dc.local, boss@dc.local" /></label>
       <label className="cell-stack small faint">
         When
@@ -98,6 +111,7 @@ export function ReportSchedules({ rows, canEdit, onChanged }: { rows: ScheduledR
         A scheduled report is mailed <strong>automatically</strong> to its recipients at each time it is due: no one has to press anything.
         It opens with the period at a glance (incidents against the period before, time to acknowledge and resolve), incidents per day,
         what is still open, the most frequent alerts and the noisiest assets. Then each asset (the ones picked for the report, or all of them) with its current metrics. It looks back one schedule interval: a day for a daily report, a week for a weekly one, a month for a monthly one.
+        A <strong>ForgeAI digest</strong> is the morning mail instead: the incidents of the last day, what is open and who has it, then ForgeAI&apos;s shift summary written from those facts (left out, with the reason, when ForgeAI is off or its answer fails the checks).
         <strong> Preview</strong> shows the mail with today&apos;s data; <strong>Send now</strong> mails it once without moving the schedule.
       </p>
       <div className="row"><button className="btn" type="button" onClick={() => show(null)}>Preview a weekly report</button></div>
@@ -109,7 +123,7 @@ export function ReportSchedules({ rows, canEdit, onChanged }: { rows: ScheduledR
         <div key={r.id} className="cell-stack" style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
             <span style={{ fontWeight: 600 }}>{r.name}</span>
-            <Chip tone={r.enabled ? "ok" : "off"}>{r.enabled ? r.kind : "Off"}</Chip>
+            <Chip tone={r.enabled ? "ok" : "off"}>{r.enabled ? kindLabel(r.kind) : "Off"}</Chip>
           </div>
           <span className="small muted mono">{r.schedule}</span>
           <span className="small faint">{r.recipients.join(", ")}</span>

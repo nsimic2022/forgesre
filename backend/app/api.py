@@ -3375,6 +3375,7 @@ class ScheduledReportBody(BaseModel):
     weekdays: list[int] = Field(default_factory=list)
     cron: str = ""
     asset_ids: list[str] = Field(default_factory=list)
+    kind: str = "performance"  # "performance" (NOC summary) or "forgeai" (ForgeAI digest)
 
 
 def _report_writer(user: User) -> None:
@@ -3406,21 +3407,23 @@ def _parsed_report(db: Session, body: ScheduledReportBody, actor: str) -> dict:
 def _report_out(row) -> dict[str, Any]:
     from app.services import report_recipients, report_schedule, schedule_label
 
-    return {"id": row.id, "name": row.name, "recipients": report_recipients(row), "schedule": schedule_label(row),
+    from app.services import report_kind
+
+    return {"id": row.id, "name": row.name, "kind": report_kind(row), "recipients": report_recipients(row), "schedule": schedule_label(row),
             "spec": report_schedule(row), "enabled": bool(row.enabled), "asset_ids": list(row.asset_ids or []),
             "next_run_at": row.next_run_at.isoformat() if row.next_run_at else None}
 
 
 @router.post("/scheduled-reports")
 def scheduled_report_create(body: ScheduledReportBody, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
-    """New UI: schedule a performance report by preset, interval, cron expression or once."""
+    """New UI: schedule a NOC summary or a ForgeAI digest by preset, interval, cron expression or once."""
     from app.models import ScheduledReport
     from app.services import initial_next_run
 
     _report_writer(user)
     parsed = _parsed_report(db, body, user.email)
     row = ScheduledReport(
-        name=parsed["name"], kind="performance", to_email=parsed["email"], recipients=parsed["emails"],
+        name=parsed["name"], kind="forgeai" if body.kind == "forgeai" else "performance", to_email=parsed["email"], recipients=parsed["emails"],
         interval_hours=parsed["hours"], schedule=parsed["schedule"], asset_ids=parsed["ids"], enabled=True,
         created_by=user.email, next_run_at=initial_next_run(utcnow(), parsed["schedule"]),
     )
@@ -3441,6 +3444,7 @@ def scheduled_report_update(report_id: int, body: ScheduledReportBody, db: Sessi
     changed = (row.schedule or {}) != parsed["schedule"]
     row.name, row.to_email, row.recipients = parsed["name"], parsed["email"], parsed["emails"]
     row.interval_hours, row.schedule, row.asset_ids = parsed["hours"], parsed["schedule"], parsed["ids"]
+    row.kind = "forgeai" if body.kind == "forgeai" else "performance"
     if changed:
         row.next_run_at = initial_next_run(utcnow(), parsed["schedule"])
     audit(db, "report.update", actor=user.email, object_type="report", object_id=str(row.id), data={"name": row.name, "schedule": parsed["schedule"]})
@@ -3494,9 +3498,17 @@ def scheduled_report_send(report_id: int, db: Session = Depends(get_db), user: U
     """Send this report now, in the background (``report_send`` job). The schedule does not move."""
     from app.jobs import enqueue
 
+    from app.services import _report_days, report_kind, report_recipients
+
     _report_writer(user)
     row = _report_or_404(db, report_id)
-    job = enqueue(db, "report_send", str(row.id), object_type="report", payload={"actor": user.email})
+    if report_kind(row) == "forgeai":
+        # The digest asks the model: LLM lane, same job and dedupe key as the scheduler.
+        job = enqueue(db, "forgeai_digest", f"report-{row.id}", object_type="report",
+                      payload={"actor": user.email, "recipients": report_recipients(row), "name": row.name,
+                               "hours": min(_report_days(row), 7) * 24})
+    else:
+        job = enqueue(db, "report_send", str(row.id), object_type="report", payload={"actor": user.email})
     audit(db, "report.send_now", actor=user.email, object_type="report", object_id=str(row.id), data={"name": row.name})
     db.commit()
     return {"queued": True, "job": getattr(job, "id", None)}

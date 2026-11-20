@@ -245,7 +245,7 @@ def _shift_context(db: Session, hours: int = 12) -> dict[str, Any]:
          "acknowledged_by": i.ack_by or "", "confirmed_cause": i.root_cause or ""} for i in rows]}
 
 
-def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Incident | None) -> tuple[str, str]:
+def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Incident | None, *, hours: int = 12) -> tuple[str, str]:
     """(system, user) exactly as sent: fixed rules + task shape + skill instructions, and the context JSON."""
     from rca.sanitize import sanitize
 
@@ -253,7 +253,7 @@ def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Inciden
     include = {**INCLUDE_DEFAULT, **(skill.include or {})}
     if task == "postmortem":
         include["postmortem"] = True
-    context = _shift_context(db) if task == "shift" else _incident_context(db, incident, include)
+    context = _shift_context(db, hours) if task == "shift" else _incident_context(db, incident, include)
     system = BASE_RULES.format(shape=spec["shape"]) + "\nInstructions for this kind of work:\n" + (skill.instructions or "").strip()
     context = json.loads(_short(json.dumps(sanitize(context), ensure_ascii=False, default=str)))
     user = json.dumps(context, ensure_ascii=False, default=str)
@@ -310,9 +310,9 @@ def _provider():
 
 
 def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug: str = "", actor: str = "system",
-        trial: bool = False, instructions: str | None = None) -> ForgeAiCall:
+        trial: bool = False, instructions: str | None = None, hours: int = 12) -> ForgeAiCall:
     """Ask the model once and record the exchange. ``trial`` (skill test) never becomes the incident's answer;
-    ``instructions`` tries unsaved skill text. An incident answer that passes the checks is stored as a
+    ``instructions`` tries unsaved skill text; ``hours`` is the shift summary window. An incident answer that passes the checks is stored as a
     ``forgerca-llm`` Investigation so the incident page and reports show it."""
     from app.journal import report
     from app.settings import settings
@@ -325,7 +325,7 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
     if instructions is not None:
         # unsaved text from the skill editor: a transient copy, never added to the session
         skill = ForgeAiSkill(slug=skill.slug, name=skill.name, task=skill.task, include=skill.include, version=skill.version, instructions=instructions)
-    system, user = build_prompts(db, task, skill, incident)
+    system, user = build_prompts(db, task, skill, incident, hours=hours)
     call = ForgeAiCall(incident_id=incident.id if incident is not None else None, task=task, skill_slug=skill.slug,
                        skill_version=skill.version or 0, system_prompt=system, user_prompt=user, actor=actor,
                        endpoint=(settings.llm_url or "") if settings.ai_enabled else "")

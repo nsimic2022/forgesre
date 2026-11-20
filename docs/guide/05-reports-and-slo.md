@@ -20,6 +20,15 @@ per day, what is still open, the most frequent alerts and the noisiest assets. T
 (the ones picked, or all) with its current metrics. **Preview** shows the mail with today's
 data; **Send now** mails it once in the background without moving the schedule.
 
+**What** picks the kind of mail. *NOC summary* is the report above. *ForgeAI digest* is the
+morning mail (it starts as every day at 07:00): the incidents of the last day (up to a week for
+a weekly digest; DEMO lab incidents left out), what is still open and who has it, the assets with
+the most incidents, then ForgeAI's shift summary written from those facts with the *shift
+summary* skill. The summary passes the same checks as every ForgeAI answer and is in the
+ForgeAI log (`./forgesre forgeai`). When ForgeAI is off or its answer fails the checks, the mail
+says why and the facts stand on their own. Preview shows the facts; the ForgeAI part is written
+only when it is sent.
+
 ## Mail and chat outbox
 
 The bottom of Reports lists every mail and chat message ForgeSRE produced, for alarms and
