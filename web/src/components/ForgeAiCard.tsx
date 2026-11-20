@@ -23,7 +23,7 @@ export type Call = {
 };
 
 const STATUS_TONE: Record<string, "ok" | "crit" | "warn" | "off"> = { used: "ok", rejected: "warn", error: "crit", trial: "off" };
-const TASK: Record<string, string> = { incident: "Cause and first checks", investigate: "Investigation with tools", explain: "Explain for Tier 1", postmortem: "Postmortem summary", shift: "Shift summary" };
+const TASK: Record<string, string> = { incident: "Cause and first checks", investigate: "Investigation with tools", explain: "Explain for Tier 1", postmortem: "Postmortem summary", ask: "Your question", shift: "Shift summary" };
 
 function pretty(text = ""): string {
   try {

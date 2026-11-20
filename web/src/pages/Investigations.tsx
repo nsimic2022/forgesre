@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { AskForgeAi } from "../components/AskForgeAi";
 import type { Skill } from "../components/ForgeAiSkills";
 import { RATING_LABEL, RATING_TONE } from "../components/ReviewCard";
 import { Bar, Card, Chip } from "../components/ui";
@@ -29,6 +30,8 @@ export function InvestigationsPage() {
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
+  const [picked, setPicked] = useState("");
+  const [typed, setTyped] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams({ days: String(days), q: query, only_ai: String(onlyAi), only_reviewed: String(onlyReviewed), limit: String(PAGE), offset: String(offset) });
@@ -60,7 +63,7 @@ export function InvestigationsPage() {
               <button className="btn" aria-pressed={onlyReviewed} onClick={() => reset(() => setOnlyReviewed(!onlyReviewed))}>Only confirmed cause</button>
             </div>
             <div className="table-wrap">
-              <table className="data" style={{ minWidth: 1040 }}>
+              <table className="data" style={{ minWidth: 1110 }}>
                 <thead>
                   <tr>
                     <th style={{ width: 110 }}>Incident</th>
@@ -72,6 +75,7 @@ export function InvestigationsPage() {
                     <th style={{ width: 160 }}>ForgeRCA said</th>
                     <th style={{ width: 96 }}>ForgeRCA</th>
                     <th style={{ width: 96 }}>ForgeAI</th>
+                    <th style={{ width: 70 }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -86,6 +90,10 @@ export function InvestigationsPage() {
                       <td className="small muted">{r.forgerca || "—"}</td>
                       <td><Chip tone={RATING_TONE[r.rca_rating]}>{RATING_LABEL[r.rca_rating]}</Chip></td>
                       <td>{r.forgeai ? <Chip tone={RATING_TONE[r.ai_rating]}>{RATING_LABEL[r.ai_rating]}</Chip> : <span className="faint">—</span>}</td>
+                      <td>
+                        <button className="btn" type="button" aria-pressed={picked === r.number} title="Ask ForgeAI about this incident below"
+                          onClick={() => (setPicked(r.number), setTyped(r.number), window.setTimeout(() => document.getElementById("ask-forgeai")?.scrollIntoView({ behavior: "smooth" }), 50))}>Ask</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -126,6 +134,19 @@ export function InvestigationsPage() {
           <SkillUsefulness />
         </div>
       </div>
+      <section id="ask-forgeai" className="cell-stack" style={{ gap: 12, marginTop: 20 }}>
+        <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          <div className="cell-stack">
+            <h2 style={{ margin: 0 }}>Ask ForgeAI</h2>
+            <span className="small muted">See what it was asked, ask again with another skill, or ask your own question. Skills and model settings stay in Automation and Settings.</span>
+          </div>
+          <form className="row" onSubmit={(e) => (e.preventDefault(), setPicked(typed.trim()))}>
+            <input className="search" aria-label="Incident number" placeholder="INC-… (any incident)" value={typed} onChange={(e) => setTyped(e.target.value)} style={{ width: 240, minWidth: 0 }} />
+            <button className="btn" type="submit" disabled={!typed.trim()}>Open</button>
+          </form>
+        </div>
+        {picked ? <AskForgeAi number={picked} /> : <Card><span className="muted">Press <strong>Ask</strong> on a row above, or type an incident number (open ones too).</span></Card>}
+      </section>
     </>
   );
 }

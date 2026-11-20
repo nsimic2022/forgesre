@@ -1,4 +1,5 @@
 import { ChangesCard } from "../components/ChangesCard";
+import { AskForgeAi } from "../components/AskForgeAi";
 import { ForgeAiCard } from "../components/ForgeAiCard";
 import { IncidentMetrics, IncidentStory, SimilarBefore, SyslogCard, WhoToCall } from "../components/IncidentPanels";
 import { PostmortemPanel } from "../components/PostmortemPanel";
@@ -149,6 +150,12 @@ export function IncidentDetailPage() {
             )}
           </Card>
           <ForgeAiCard number={data.number} view={data.forgeai} canAsk={data.can.investigate} onChanged={load} />
+          {data.can.investigate ? (
+            <details className="card" style={{ padding: "12px 16px" }}>
+              <summary style={{ cursor: "pointer", fontWeight: 600 }}>Ask ForgeAI · compare skills, your own question</summary>
+              <div style={{ paddingTop: 12 }}><AskForgeAi number={data.number} /></div>
+            </details>
+          ) : null}
           {data.asset ? <IncidentMetrics assetId={data.asset.asset_id} number={data.number} /> : null}
           {data.events?.length ? <IncidentStory events={data.events} /> : null}
           {data.asset && data.can.investigate ? <SyslogCard number={data.number} /> : null}
