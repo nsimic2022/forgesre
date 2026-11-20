@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from app import forgeai
 from app.db import Base, SessionLocal, engine
 from app.main import create_app
-from app.models import Asset, ForgeAiCall, Incident, Investigation, Job, User, utcnow
+from app.models import Asset, Incident, Investigation, Job, User, utcnow
 from app.security import hash_password
 from app.seed import seed
 
