@@ -141,7 +141,7 @@ REGISTRY: tuple[SettingDef, ...] = (
     _s("DISCORD_WEBHOOK_URL", "notifications", "Discord webhook URL"),
     # AI
     _y("ai.enabled", "ai", "ForgeAI enabled", "bool", effective=lambda: settings.ai_enabled, test="llm"),
-    _y("ai.llm.mode", "ai", "ForgeAI model", "enum", choices=("disabled", "bundled", "external"), help="bundled = local llama.cpp; external = an OpenAI-compatible URL."),
+    _y("ai.llm.mode", "ai", "Where the model runs", "enum", choices=("disabled", "bundled", "external"), help="bundled = local llama.cpp; external = an OpenAI-compatible URL."),
     _y("ai.llm.url", "ai", "Model URL", "url", effective=lambda: settings.llm_url),
     _y("ai.llm.model", "ai", "Model name", effective=lambda: settings.llm_model),
     _y("ai.llm.timeout_seconds", "ai", "Model timeout (s)", "int", minimum=10, maximum=900, effective=lambda: settings.llm_timeout),

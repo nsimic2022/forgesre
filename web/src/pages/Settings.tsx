@@ -76,6 +76,8 @@ export function SettingsPage() {
             ))}
           </nav>
           <div style={{ flex: "999 1 640px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
+            {/* ForgeAI: status and models first, the raw settings below them */}
+            {group === "ai" ? <><ForgeAiStatus /><ForgeAiModels /></> : null}
             {group === "journal" ? (
               <JournalPanel />
             ) : group === "audit" ? (
@@ -99,7 +101,6 @@ export function SettingsPage() {
               </Card>
             )}
             {group === "checks" ? <ChecksPanel /> : null}
-            {group === "ai" ? <><ForgeAiStatus /><ForgeAiModels /></> : null}
           </div>
         </div>
       ) : null}
