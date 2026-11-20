@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.audit import audit
 from app.models import Asset, Incident, Slo, utcnow
 
-SCOPES = ("all", "asset", "type", "site")
+SCOPES = ("all", "asset", "type", "site", "service")
 QUIET = ("MAINT", "SUPPRESSED")
 
 
@@ -88,6 +88,18 @@ def evaluate(db: Session, slo: Slo, now: datetime | None = None) -> dict[str, An
         "incidents": len(spans), "status": status,
         "worst": [{"asset": k, "downtime_min": round(v, 1)} for k, v in sorted(worst.items(), key=lambda kv: -kv[1])[:5]],
     }
+
+
+def business_services(db: Session) -> list[str]:
+    """Every business service named on an asset (extras ``service``, comma separated), for SLO pickers."""
+    from app.asset_extras import normalize_extras
+
+    names: dict[str, str] = {}
+    for (extras,) in db.query(Asset.extras).all():
+        for item in normalize_extras(extras).get("service", "").split(","):
+            if item.strip():
+                names.setdefault(item.strip().lower(), item.strip())
+    return sorted(names.values(), key=str.lower)
 
 
 def evaluate_all(db: Session, now: datetime | None = None) -> list[dict[str, Any]]:

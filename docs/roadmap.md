@@ -114,5 +114,4 @@ Moving network discovery to LibreNMS (SNMP only) stays open under Asset sources.
 - ~~TV mode~~ (done, with the incident clock).
 - OpenRCA as a test bench for ForgeRCA / ForgeAI accuracy, not a knowledge base.
 - ~~Analyst rating of each analysis~~ (done with the Investigations page).
-- SLO per business service (for example ERP 99.9%): SLOs and error budgets exist
-  (`./forgesre slo`); the per-service view needs services recorded on assets.
+- ~~SLO per business service~~ (done: *Business service* on assets, SLO and noise filter scope `service`).

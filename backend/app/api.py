@@ -3830,9 +3830,9 @@ def _slo_or_404(db: Session, slo_id: int):
 @router.get("/slos")
 def slos_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict[str, Any]:
     """Every SLO with availability, error budget and 24 h burn rate (also ./forgesre slo)."""
-    from app.slo import evaluate_all
+    from app.slo import business_services, evaluate_all
 
-    return {"slos": evaluate_all(db), "can_edit": can(user, "write_play")}
+    return {"slos": evaluate_all(db), "can_edit": can(user, "write_play"), "services": business_services(db)}
 
 
 @router.post("/slos")

@@ -38,8 +38,12 @@ the mail was written but not sent. Analysts and up see it.
 
 ## SLOs and error budget
 
-An SLO is a promise such as "99.9 % available over 30 days" for one asset, an asset type,
-a site, or everything. ForgeSRE works it out from incident history:
+An SLO is a promise such as "99.9 % available over 30 days" for a business service, one
+asset, an asset type, a site, or everything. A **business service** (ERP, Payroll, Web shop) is
+named on its assets: the asset card's *Business service* field, several separated by commas, or
+the `service` column of a CSV import. The SLO for "ERP" then counts every asset that serves ERP,
+the database and the application servers together. Noise filters can cover a service the same
+way. ForgeSRE works it out from incident history:
 
 - **Availability**: the share of the window without an open incident of the chosen
   severity. For a group, overlapping outages count once.
