@@ -577,6 +577,10 @@ def probe_target(
 ) -> AssetProbe:
     kind = asset_kind(str(item.get("type") or ""), str(item.get("monitoring_profile") or ""))
     host, port, scrape = resolve_probe(item)
+    if host:
+        from app.printer_guard import note_type
+
+        note_type(host, str(item.get("type") or ""))  # a printer row is never sent anything on 9100
     icmp = probe_icmp(host, timeout, runner=ping_runner)
     extra: list[CheckResult] = []
     probe_both = str(item.get("_probe_both") or "") == "1"

@@ -39,6 +39,14 @@ watched, whichever way it got into the inventory.
 12345 and SNMP with the default community) in the background and lists what answered.
 Nothing becomes an asset until you press **Add**; then the monitoring check runs for it.
 
+**Printers are never sent anything on TCP 9100.** On a printer that port is the raw print port:
+whatever arrives is printed. Before ForgeSRE connects to 9100 anywhere (scan, Identify, Auto
+detect, the monitoring check, `./forgesre ping`), it asks: a printer in the inventory or a printer
+answer over SNMP blocks it; an open IPP (631) or LPD (515) port blocks it; with no SNMP answer it
+needs SSH (22) open before it tries node_exporter. A Linux server with neither SNMP nor SSH
+reachable is not guessed: set its type to **Linux Server** and it is scraped. Printers never go
+into Prometheus' node_exporter job; they are monitored over SNMP.
+
 **From another system**: NetBox, Zabbix, GLPI and LibreNMS are read every 6 hours when turned
 on, or now with **Sync now** on their card in Settings › Integrations. ForgeSRE never writes
 back to them.

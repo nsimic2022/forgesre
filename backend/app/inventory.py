@@ -177,6 +177,8 @@ def sd_targets(db: Session, core_address: str | None = None) -> list[dict]:
         address = (asset.scrape_address or "").strip()
         if not address or address in seen:
             continue
+        if "printer" in (asset.type or "").lower() and address.endswith(":9100"):
+            continue  # raw print port: a scrape would print a page every interval; printers go over SNMP
         seen.add(address)
         profile = asset.monitoring_profile or default_monitoring_profile(asset.type or "")
         targets.append(
