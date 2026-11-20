@@ -327,6 +327,13 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload = dict(row.payload or {})
                 payload["result"] = _json_safe(verify(db, row.object_id))
                 row.payload = payload
+            elif row.kind == "asset_import":
+                from app.asset_import import run_import
+
+                # CSV rows checked by the preview; the create arguments are dropped once done.
+                payload = dict(row.payload or {})
+                payload["result"] = _json_safe(run_import(db, list(payload.pop("rows", None) or []), str(payload.get("actor") or "system")))
+                row.payload = payload
             elif row.kind == "asset_capacity":
                 from app.asset_capacity import run_capacity
 

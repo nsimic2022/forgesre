@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AssetEditor, type EditorMode } from "../components/AssetEditor";
 import { CapacityCard } from "../components/CapacityCard";
+import { ImportCsv } from "../components/ImportCsv";
 import { Card, Chip, Dot } from "../components/ui";
 import { getJson, type AssetCard, type AssetFormOptions, type InventoryPage, type InventoryRow } from "../lib/api";
 import { clock, severityTone, type Tone } from "../lib/format";
@@ -136,6 +137,7 @@ export function InventoryPage() {
   const [options, setOptions] = useState<AssetFormOptions | null>(null);
   const [reload, setReload] = useState(0);
   const [notice, setNotice] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const openEditor = (mode: EditorMode, card: AssetCard | null) => {
     setNotice("");
@@ -176,11 +178,13 @@ export function InventoryPage() {
         <div className="row">
           <Link className="btn" to="/inventory/map">Dependency map</Link>
           {data?.can_edit ? <button className="btn" type="button" onClick={() => openEditor("new", null)}>New asset by hand</button> : null}
+          {data?.can_edit ? <button className="btn" type="button" onClick={() => (setNotice(""), setImporting(true))}>Import CSV</button> : null}
           {data?.can_edit ? <Link className="btn primary" to="/inventory/add">Add devices</Link> : null}
         </div>
       </header>
       {error ? <div className="banner error" role="alert">{error}</div> : null}
       {notice ? <div className="banner" role="status" style={{ background: "var(--ok-bg)" }}>{notice}</div> : null}
+      {importing ? <ImportCsv onClose={() => setImporting(false)} onImported={(n) => n && setReload((r) => r + 1)} /> : null}
       {editor && options ? (
         <AssetEditor
           key={`${editor.mode}-${editor.card?.asset_id ?? "new"}`}
