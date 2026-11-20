@@ -327,6 +327,13 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload = dict(row.payload or {})
                 payload["result"] = _json_safe(verify(db, row.object_id))
                 row.payload = payload
+            elif row.kind == "demo_run":
+                from app.demo_view import run_scenario
+
+                # Lab incident on a forge-demo-* asset: ForgeRCA and the first escalation step (mail has its timeout).
+                payload = dict(row.payload or {})
+                payload["result"] = run_scenario(db, row.object_id)
+                row.payload = payload
             elif row.kind == "incident_mail":
                 from app.incident_mail import run_mail
 

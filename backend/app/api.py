@@ -1737,6 +1737,42 @@ async def librenms_webhook(request: Request, background_tasks: BackgroundTasks) 
     }
 
 
+class DemoRunBody(BaseModel):
+    scenario: str
+
+
+@router.get("/demo/scenarios")
+def demo_scenarios(user: User = Depends(require("admin"))) -> dict:
+    """Lab scenarios for Settings › Demo."""
+    del user
+    from app.demo_view import scenario_list
+
+    return {"scenarios": scenario_list()}
+
+
+@router.post("/demo/run")
+def demo_run(body: DemoRunBody, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    """Queue one lab scenario as the demo_run job; poll GET /api/v1/demo/jobs/{id} for the incident number."""
+    from app.demo_view import DEMO_KIND, scenario_list
+    from app.jobs import enqueue
+
+    if body.scenario not in {s["key"] for s in scenario_list()}:
+        raise HTTPException(status_code=400, detail="unknown demo scenario")
+    job = enqueue(db, DEMO_KIND, body.scenario, object_type="demo", payload={"actor": user.email})
+    return {"job": job.id if job else None}
+
+
+@router.get("/demo/jobs/{job_id}")
+def demo_job(job_id: int, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    del user
+    from app.models import Job
+
+    row = db.get(Job, job_id)
+    if row is None or row.kind != "demo_run":
+        raise HTTPException(status_code=404, detail="job not found")
+    return {"id": row.id, "status": row.status, "error": row.error or "", "result": (row.payload or {}).get("result")}
+
+
 @router.post("/demo")
 def demo(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
     seed(db)

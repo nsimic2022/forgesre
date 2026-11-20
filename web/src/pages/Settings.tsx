@@ -6,6 +6,7 @@ import { IntegrationsPanel } from "../components/IntegrationsPanel";
 import { MessagePreviews } from "../components/MessagePreviews";
 import { BackupPanel, UsersPanel } from "../components/AdminPanels";
 import { ChecksPanel } from "../components/ChecksPanel";
+import { DemoPanel } from "../components/DemoPanel";
 import { useEffect, useState } from "react";
 import { Card, Chip } from "../components/ui";
 import { ApiError, getJson, type Doctor, type SettingRow, type SettingsData } from "../lib/api";
@@ -49,7 +50,7 @@ export function SettingsPage() {
   const replace = (next: SettingRow) => setData((d) => (d ? { ...d, settings: d.settings.map((r) => (r.key === next.key ? next : r)) } : d));
   const rows = data?.settings.filter((r) => r.group === group) ?? [];
   const tests = Array.from(new Set(rows.map((r) => r.test).filter(Boolean)));
-  const sections = data ? [...Object.entries(data.groups), ["messages", "Messages and templates"], ["appearance", "Appearance"], ["services", "Services and health"], ["journal", "Journal"], ["audit", "Audit log"], ["users", "Users and roles"], ["backup", "Backup, import, export"]] : [];
+  const sections = data ? [...Object.entries(data.groups), ["messages", "Messages and templates"], ["appearance", "Appearance"], ["services", "Services and health"], ["journal", "Journal"], ["audit", "Audit log"], ["users", "Users and roles"], ["backup", "Backup, import, export"], ["demo", "Demo"]] : [];
   return (
     <>
       <header className="page-head">
@@ -94,6 +95,8 @@ export function SettingsPage() {
               <UsersPanel />
             ) : group === "backup" ? (
               <BackupPanel />
+            ) : group === "demo" ? (
+              <DemoPanel />
             ) : (
               <Card title={data.groups[group]} actions={tests.map((t) => <TestButton key={t} component={t} />)}>
                 {rows.map((row) => (row.editable ? <SettingField key={row.key} row={row} onSaved={replace} /> : <ReadOnlyRow key={row.key} row={row} />))}
