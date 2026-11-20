@@ -23,13 +23,10 @@ React + TypeScript in `web/`, served at `/app` ([ui.md](ui.md)). Order: ~~NOC ov
 
 ## Phase 3 — automation and reports
 
-Follows [alerting.md](alerting.md): severities by urgency, predictive disk alerts, one
-incident per problem.
-
-~~Noise filters (windows, short spikes, known issues; upstream dependency already
-existed)~~ (done, [alerting.md](alerting.md#noise-filters)), routing,
-escalation policies, the "try an alarm" simulator, scheduled reports (daily, weekly,
-monthly, cron) by email, Slack, Teams, Discord.
+Done ([alerting.md](alerting.md)): severities by urgency, predictive disk alerts, one incident
+per problem, noise filters, routing rules, escalation policies (Tier 1–3, Manager), the "try an
+alarm" simulator, scheduled reports (presets, interval, cron, once) by email, Slack, Teams and
+Discord, the ForgeAI morning digest, 30-day capacity on the asset card.
 
 ## Phase 4 — enterprise
 
@@ -96,31 +93,19 @@ Grafana / Alloy. Target design:
 - Each source shows last sync, counts and errors on its Settings card and in
   `./forgesre status`.
 
-### Discovery must never print on printers (known bug)
+### ~~Discovery must never print on printers~~ (fixed)
 
-Cause: discovery probes TCP 9100 and sends `GET /metrics` to `http://<ip>:9100`
-(`exporter_detect.py`, `asset_probe.py`) to recognise node_exporter. On a network
-printer, TCP 9100 is the raw print port (JetDirect): the printer prints whatever
-arrives, so every probe prints the HTTP request as a page, in large type, again on
-each scan. A Prometheus scrape job pointed at a printer IP would do the same every
-scrape interval.
-
-Fix:
-
-- Network discovery moves to LibreNMS (SNMP only). ForgeSRE stops sweeping subnets
-  with TCP connects.
-- Before any HTTP to :9100, ask SNMP first; skip devices whose sysObjectID or
-  hrDeviceType is a printer, and devices already in inventory as printers.
-- Never put a printer into a Prometheus node_exporter job; printers are monitored by
-  SNMP (Printer-MIB: toner, paper, errors).
-- A test that a printer-like target never receives a TCP connection on 9100.
+TCP 9100 is a printer's raw print port. Every connect or HTTP request to 9100 now goes through
+`app/printer_guard.py`: inventory printer or SNMP printer answer → never; no SNMP answer → only
+with SSH open; printers never enter the node_exporter job. Tested in `tests/test_printer_guard.py`.
+Moving network discovery to LibreNMS (SNMP only) stays open under Asset sources.
 
 ### Other items
 
 - Docstrings module by module as code is reorganised (AGENTS.md §1).
 - Rewrite and shorten the English docs page by page with each UI change.
-- TV mode: full-screen NOC view for a wall screen on a Viewer account.
+- ~~TV mode~~ (done, with the incident clock).
 - OpenRCA as a test bench for ForgeRCA / ForgeAI accuracy, not a knowledge base.
 - ~~Analyst rating of each analysis~~ (done with the Investigations page).
-- SLO per business service (for example ERP 99.9%) with error budget on the Reports page,
-  once services are recorded on assets.
+- SLO per business service (for example ERP 99.9%): SLOs and error budgets exist
+  (`./forgesre slo`); the per-service view needs services recorded on assets.

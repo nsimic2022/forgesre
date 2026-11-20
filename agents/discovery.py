@@ -595,6 +595,14 @@ def _ber(tag: int, payload: bytes) -> bytes:
 
 def _open_tcp(ip: str, port: int, timeout: float) -> bool:
     try:
+        from app.printer_guard import blocked
+    except ImportError:  # agents used alone: never touch 9100 without the guard
+        if int(port) == 9100:
+            return False
+    else:
+        if blocked(ip, port):
+            return False  # possibly a printer's raw print port
+    try:
         with socket.create_connection((ip, port), timeout=timeout):
             return True
     except OSError:

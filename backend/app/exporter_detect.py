@@ -34,6 +34,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 from urllib.parse import urlsplit
 
+from app import printer_guard
+
 LINUX_EXPORTER_PORT = 9100
 WINDOWS_EXPORTER_PORT = 9182
 DETECT_TIMEOUT = 3.0
@@ -154,6 +156,8 @@ async def check_tcp_port(ip: str, port: int, timeout: float = PORT_CHECK_TIMEOUT
     ip = (ip or "").strip()
     if not ip or not port:
         return False
+    if await asyncio.to_thread(printer_guard.blocked, ip, port):
+        return False  # possibly a printer's raw print port: never connect
     writer = None
     try:
         _reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, int(port)), timeout=timeout)
@@ -264,6 +268,9 @@ async def fetch_metrics_async(
     path = parts.path or METRICS_PATH
     if not host:
         return None, "", "no host"
+    refused = await asyncio.to_thread(printer_guard.blocked, host, port)
+    if refused:
+        return None, "", f"not probed: {refused}"
     writer = None
     try:
         reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=timeout)
@@ -299,6 +306,9 @@ def fetch_metrics(
     *,
     user_agent: str = "forgesre-detect/1",
 ) -> tuple[int | None, str, str]:
+    refused = printer_guard.blocked_url(url)
+    if refused:
+        return None, "", f"not probed: {refused}"
     request = urllib.request.Request(
         url,
         method="GET",

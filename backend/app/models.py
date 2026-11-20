@@ -664,3 +664,15 @@ class MaintenanceWindow(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+@event.listens_for(Asset, "after_insert")
+@event.listens_for(Asset, "after_update")
+@event.listens_for(Asset, "after_delete")
+def _asset_changed_forget_print_verdict(_mapper, _connection, target: Asset) -> None:
+    """A new or changed asset type decides again whether its TCP 9100 may be probed (printer guard)."""
+    from app.printer_guard import forget
+
+    for name in (target.ip, target.hostname):
+        if name:
+            forget(name)
