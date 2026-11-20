@@ -64,9 +64,10 @@ function FilterForm({ initial, id, onDone }: { initial: Draft; id: number | null
               <option value="asset">One asset</option>
               <option value="type">Asset type</option>
               <option value="site">Site</option>
+              <option value="service">Business service</option>
             </select>
           </label>
-          {d.scope !== "all" ? text("scope_value", d.scope === "asset" ? "Hostname, id or IP" : d.scope === "type" ? "Type" : "Site") : null}
+          {d.scope !== "all" ? text("scope_value", d.scope === "asset" ? "Hostname, id or IP" : d.scope === "type" ? "Type" : d.scope === "service" ? "Business service" : "Site") : null}
           {text("max_value", "Only below value (optional)", "97", "number")}
         </div>
         <fieldset style={{ border: 0, padding: 0, margin: 0 }}>

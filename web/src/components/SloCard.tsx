@@ -10,7 +10,7 @@ export type SloRow = {
 const STATUS = { ok: ["ok", "Within budget"], at_risk: ["high", "Over 75 % used"], breached: ["crit", "Budget spent"] } as const;
 const mins = (m: number) => (Math.abs(m) < 60 ? `${Math.round(m)} min` : `${(m / 60).toFixed(1)} h`);
 
-function SloForm({ row, onDone }: { row: SloRow | null; onDone: (saved: boolean) => void }) {
+function SloForm({ row, services, onDone }: { row: SloRow | null; services: string[]; onDone: (saved: boolean) => void }) {
   const [d, setD] = useState({ name: row?.name ?? "", scope: row?.scope ?? "all", scope_value: row?.scope_value ?? "", target: String(row?.target ?? 99.9), window_days: String(row?.window_days ?? 30), severities: row?.severities ?? ["CRITICAL"], owner: row?.owner ?? "" });
   const [error, setError] = useState("");
   const save = (e: FormEvent) => {
@@ -27,10 +27,15 @@ function SloForm({ row, onDone }: { row: SloRow | null; onDone: (saved: boolean)
         {field("name", "Name", { placeholder: "ERP database" })}
         <label className="cell-stack small faint" style={{ flex: "1 1 130px" }}>Covers
           <select className="search" style={{ minWidth: 0 }} value={d.scope} onChange={(e) => setD({ ...d, scope: e.target.value })}>
-            <option value="all">All assets</option><option value="asset">One asset</option><option value="type">Asset type</option><option value="site">Site</option>
+            <option value="all">All assets</option><option value="service">Business service</option><option value="asset">One asset</option><option value="type">Asset type</option><option value="site">Site</option>
           </select>
         </label>
-        {d.scope !== "all" ? field("scope_value", d.scope === "asset" ? "Hostname, id or IP" : d.scope === "type" ? "Type (e.g. Oracle DB)" : "Site") : null}
+        {d.scope === "service" ? (
+          <label className="cell-stack small faint" style={{ flex: "1 1 150px" }}>Business service
+            <input className="search" style={{ minWidth: 0 }} list="slo-services" value={d.scope_value} onChange={(e) => setD({ ...d, scope_value: e.target.value })} placeholder="ERP" />
+            <datalist id="slo-services">{services.map((x) => <option key={x} value={x} />)}</datalist>
+          </label>
+        ) : d.scope !== "all" ? field("scope_value", d.scope === "asset" ? "Hostname, id or IP" : d.scope === "type" ? "Type (e.g. Oracle DB)" : "Site") : null}
       </div>
       <div className="row" style={{ alignItems: "flex-end" }}>
         {field("target", "Target %", { type: "number", step: "0.01", min: 50, max: 99.999 })}
@@ -56,9 +61,10 @@ function SloForm({ row, onDone }: { row: SloRow | null; onDone: (saved: boolean)
 export function SloCard() {
   const [rows, setRows] = useState<SloRow[] | null>(null);
   const [canEdit, setCanEdit] = useState(false);
+  const [services, setServices] = useState<string[]>([]);
   const [edit, setEdit] = useState<{ row: SloRow | null } | null>(null);
   const [error, setError] = useState("");
-  const load = () => getJson<{ slos: SloRow[]; can_edit: boolean }>("/api/v1/slos").then((d) => (setRows(d.slos), setCanEdit(d.can_edit))).catch((e: Error) => setError(e.message));
+  const load = () => getJson<{ slos: SloRow[]; can_edit: boolean; services?: string[] }>("/api/v1/slos").then((d) => (setRows(d.slos), setCanEdit(d.can_edit), setServices(d.services ?? []))).catch((e: Error) => setError(e.message));
   useEffect(() => {
     load();
   }, []);
@@ -66,15 +72,15 @@ export function SloCard() {
   return (
     <Card title="SLOs · error budget" actions={canEdit ? <button className="btn primary" type="button" onClick={() => setEdit({ row: null })}>New SLO</button> : null}>
       {error ? <div className="banner error" role="alert">{error}</div> : null}
-      {edit && edit.row === null ? <SloForm row={null} onDone={done} /> : null}
-      {rows && rows.length === 0 ? <span className="muted">No SLO yet. A good first one: 99.9 % over 30 days for the systems people use, counting critical incidents.</span> : null}
+      {edit && edit.row === null ? <SloForm row={null} services={services} onDone={done} /> : null}
+      {rows && rows.length === 0 ? <span className="muted">No SLO yet. A good first one: 99.9 % over 30 days for a business service people use (name it on its assets: Business service), counting critical incidents.</span> : null}
       {(rows ?? []).map((r) => {
         const [tone, label] = STATUS[r.status];
         const used = Math.min(100, Math.max(0, r.budget_used_pct));
         return (
           <div key={r.id} className="cell-stack" style={{ borderTop: "1px solid var(--border)", paddingTop: 12, gap: 6 }}>
             <div className="row" style={{ justifyContent: "space-between" }}>
-              <span className="row" style={{ gap: 8 }}><strong>{r.name}</strong><span className="small faint">{r.scope === "all" ? "all assets" : `${r.scope}: ${r.scope_value}`} · {r.window_days} d · {r.severities.join(", ").toLowerCase()}</span></span>
+              <span className="row" style={{ gap: 8 }}><strong>{r.name}</strong><span className="small faint">{r.scope === "all" ? "all assets" : r.scope === "service" ? `service ${r.scope_value}` : `${r.scope}: ${r.scope_value}`} · {r.window_days} d · {r.severities.join(", ").toLowerCase()}</span></span>
               <Chip tone={tone}>{label}</Chip>
             </div>
             <div className="row" style={{ gap: 18 }}>
@@ -90,7 +96,7 @@ export function SloCard() {
                 <button className="btn" type="button" onClick={() => getJson(`/api/v1/slos/${r.id}`, { method: "DELETE" }).then(load)} aria-label={`Remove SLO ${r.name}`}>Remove</button>
               </div>
             ) : null}
-            {edit?.row?.id === r.id ? <SloForm row={r} onDone={done} /> : null}
+            {edit?.row?.id === r.id ? <SloForm row={r} services={services} onDone={done} /> : null}
           </div>
         );
       })}

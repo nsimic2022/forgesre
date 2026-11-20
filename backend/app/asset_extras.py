@@ -28,6 +28,7 @@ OUTAGES_KEY = "outages"
 # key, English label, max length
 EXTRA_FIELDS: tuple[tuple[str, str, int], ...] = (
     ("customer", "Customer / domain", 255),
+    ("service", "Business service (comma separated, e.g. ERP, Payroll)", 255),
     ("site", "Site / DC / room", 255),
     ("vlan", "VLAN", 64),
     ("row", "Row", 64),

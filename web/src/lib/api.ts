@@ -362,7 +362,7 @@ export interface NoiseFilter {
   name: string;
   enabled: boolean;
   alertnames: string[];
-  scope: "all" | "asset" | "type" | "site";
+  scope: "all" | "asset" | "type" | "site" | "service";
   scope_value: string;
   days: number[];
   start_minute: number | null;

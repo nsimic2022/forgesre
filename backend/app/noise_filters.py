@@ -25,7 +25,7 @@ from app.models import Asset, Incident, NoiseFilter, utcnow
 
 log = logging.getLogger("forgesre")
 
-SCOPES = ("all", "asset", "type", "site")
+SCOPES = ("all", "asset", "type", "site", "service")
 ACTIONS = ("quiet", "delay")
 NODE_PREFIX = "noise-"
 
@@ -64,10 +64,13 @@ def in_scope(flt: NoiseFilter, asset: Asset | None) -> bool:
         return want in {(asset.hostname or "").lower(), (asset.asset_id or "").lower(), (asset.ip or "").lower()}
     if flt.scope == "type":
         return want == (asset.type or "").lower()
-    if flt.scope == "site":
+    if flt.scope in {"site", "service"}:
         from app.asset_extras import normalize_extras
 
-        return want == normalize_extras(asset.extras).get("site", "").lower()
+        value = normalize_extras(asset.extras).get(flt.scope, "")
+        if flt.scope == "service":  # an asset can serve several business services
+            return want in {s.strip().lower() for s in value.split(",") if s.strip()}
+        return want == value.lower()
     return False
 
 
