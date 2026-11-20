@@ -37,6 +37,8 @@ an operator can ask again with another one. Every prompt is built as:
    ForgeRCA facts and hypotheses, playbook, earlier incidents on the asset with a confirmed cause,
    changes before, syslog when the skill asks for it.
 
+**Tuning a skill.** `GET /api/v1/forgeai/skills/{slug}/tuning` (Analyst+) returns the skill's used answers next to `Incident.root_cause` and `ai_rating` from the review card (worst first), grouped rejection and error reasons, and thumbs. `POST …/replay` `{limit ≤ 20, instructions?}` (Engineer+) queues `forgeai_replay` on the LLM lane: one `forgeai.run(trial=True)` per resolved incident with a confirmed cause (matching the skill's patterns), newest first, within 15 minutes. The result has the earlier used answer and the new one with a word-overlap hint against the confirmed cause; it never becomes an incident's answer. Code: `backend/app/forgeai_tuning.py`; CLI `./forgesre forgeai tuning [skill]`.
+
 **Editing skills: Automation › ForgeAI skills** (Engineer and up). Each skill shows how it did in
 the last 30 days (questions, used, rejected, no answer, average time, 👍 / 👎). The editor has its
 name, the alarm-name patterns and asset types it applies to, its order, what ForgeAI is given

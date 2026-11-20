@@ -959,11 +959,54 @@ def forgeai_job(job_id: int, db: Session = Depends(get_db), user: User = Depends
     from app.models import Job
 
     row = db.get(Job, job_id)
-    if row is None or row.kind not in ("forgeai", "investigate"):
+    if row is None or row.kind not in ("forgeai", "investigate", "forgeai_replay"):
         raise HTTPException(status_code=404, detail="job not found")
     payload = row.payload or {}
     call_id = (payload.get("result") or {}).get("call_id") or payload.get("call_id")
-    return {"id": row.id, "status": row.status, "error": row.error or "", "call_id": call_id}
+    out = {"id": row.id, "status": row.status, "error": row.error or "", "call_id": call_id}
+    if row.kind == "forgeai_replay":
+        out["result"] = payload.get("result")
+    return out
+
+
+@router.get("/forgeai/skills/{slug}/tuning")
+def forgeai_skill_tuning(slug: str, days: int = 60, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """A skill's answers next to the analysts' confirmed causes, ratings and rejection reasons."""
+    del user
+    from app.forgeai_tuning import tuning_report
+
+    try:
+        return tuning_report(db, slug, days=max(7, min(int(days or 60), 365)))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+class ReplayBody(BaseModel):
+    limit: int = 10
+    instructions: str | None = None
+
+
+@router.post("/forgeai/skills/{slug}/replay")
+def forgeai_skill_replay(slug: str, body: ReplayBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Ask the skill again (saved or unsaved text) on the last confirmed incidents, as trials (Engineer+)."""
+    from app.forgeai_tuning import REPLAY_KIND
+    from app.jobs import enqueue
+    from app.models import ForgeAiSkill
+    from app.settings import settings
+
+    skill = db.query(ForgeAiSkill).filter_by(slug=slug).first()
+    if skill is None:
+        raise HTTPException(status_code=404, detail="skill not found")
+    if skill.task != "incident":
+        raise HTTPException(status_code=400, detail="replay is for skills that answer incidents")
+    if not (settings.ai_enabled and settings.llm_url):
+        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
+    text = body.instructions.strip() if body.instructions else None
+    if text is not None and len(text) < 20:
+        raise HTTPException(status_code=400, detail="instructions need at least a sentence")
+    job = enqueue(db, REPLAY_KIND, slug, object_type="forgeai",
+                  payload={"limit": max(1, min(body.limit, 20)), "instructions": text, "actor": user.email})
+    return {"queued": True, "job": getattr(job, "id", None)}
 
 
 @router.post("/incidents/{number}/investigate")
