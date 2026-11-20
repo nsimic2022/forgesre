@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError, getJson, postJson, putJson } from "../lib/api";
 import { clock } from "../lib/format";
 import { CallLog, type Call } from "./ForgeAiCard";
+import { ForgeAiTuning } from "./ForgeAiTuning";
 import { Card, Chip } from "./ui";
 
 type Stats = { calls: number; used: number; rejected: number; errors: number; up: number; down: number; avg_s: number };
@@ -70,6 +71,7 @@ function Editor({ skill, canEdit, onSaved }: { skill: Skill; canEdit: boolean; o
   const split = (v: string) => v.split(",").map((x) => x.trim()).filter(Boolean);
   const changed = d.instructions !== skill.instructions;
   return (
+    <>
     <Card title={`${skill.name} · v${skill.version}`} actions={<Chip tone={skill.enabled ? "ok" : "off"}>{skill.enabled ? "On" : "Off"}</Chip>}>
       <StatLine s={skill.stats} />
       <span className="small faint">{skill.builtin ? "Shipped with ForgeSRE" : "Added here"} · last change {clock(skill.updated_at)} by {skill.updated_by}</span>
@@ -134,6 +136,8 @@ function Editor({ skill, canEdit, onSaved }: { skill: Skill; canEdit: boolean; o
         </details>
       ) : null}
     </Card>
+    <ForgeAiTuning slug={skill.slug} instructions={d.instructions} changed={changed} canEdit={canEdit} />
+    </>
   );
 }
 

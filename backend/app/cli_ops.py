@@ -833,10 +833,29 @@ def format_forgeai(status: dict, calls: list[dict] | None = None) -> str:
     return "\n".join(out) + "\n"
 
 
+def format_tuning(r: dict[str, Any]) -> str:
+    """One skill: counts, analyst ratings, rejection reasons and the worst-rated answers next to the confirmed cause."""
+    ratings = ", ".join(f"{v} {k}" for k, v in (r.get("ratings") or {}).items()) or "no analyst ratings yet"
+    out = [f"{r['skill']} (v{r['version']}, last {r['days']} days): {r['calls']} questions, {r['used']} used, "
+           f"{r['rejected']} rejected, {r['errors']} no answer; {ratings}"]
+    for reason in r.get("reject_reasons") or []:
+        out.append(f"  rejected {reason['count']}x: {reason['reason']}")
+    for e in (r.get("examples") or [])[:5]:
+        out.append(f"  {e['incident']} [{e.get('rating') or 'not rated'}] said: {e['said'][:90]}")
+        if e.get("confirmed"):
+            out.append(f"  {'':{len(e['incident'])}} confirmed: {e['confirmed'][:90]}")
+    return "\n".join(out) + "\n\n"
+
+
 def cmd_forgeai(port: str, rest: list[str]) -> None:
-    """./forgesre forgeai [INC-…]"""
+    """./forgesre forgeai [INC-… | tuning [skill]]"""
     jar, _me = ensure_jar(port)
     try:
+        if rest[:1] == ["tuning"]:
+            skills = get_json(port, jar, "/api/v1/forgeai/skills").get("skills") or []
+            slugs = rest[1:2] or [s["slug"] for s in skills if s.get("task") == "incident"]
+            sys.stdout.write("".join(format_tuning(get_json(port, jar, f"/api/v1/forgeai/skills/{quote(s)}/tuning")) for s in slugs))
+            return
         status = get_json(port, jar, "/api/v1/forgeai/status")
         calls = get_json(port, jar, f"/api/v1/incidents/{rest[0]}/forgeai")["calls"] if rest else None
         sys.stdout.write(format_forgeai(status, calls))

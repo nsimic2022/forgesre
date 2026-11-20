@@ -77,6 +77,12 @@ change, try on a real incident before saving, and roll back. The safety rules (u
 no commands, no invented numbers) are added by ForgeSRE and cannot be edited away. Investigations
 shows which skills operators found useful. Details: [llm.md](../llm.md).
 
+**Tuning**, under each skill, puts its answers next to what the analysts confirmed on the
+incident review card, worst-rated first, with why answers were rejected. Change the
+instructions, then **Replay** asks the model again on the last ten resolved incidents with a
+confirmed cause and shows the old and new answer side by side. Replays are trials: nothing on the
+incidents changes. Over SSH: `./forgesre forgeai tuning`.
+
 ## Checks ForgeSRE runs itself
 
 Some problems never raise a metric. Every 15 minutes ForgeSRE checks:

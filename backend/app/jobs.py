@@ -143,7 +143,7 @@ def _json_safe(value: Any) -> Any:
 
 def job_is_llm(row: Job) -> bool:
     """True when this investigate job will wait on llama.cpp."""
-    if row.kind in (FORGEAI_DIGEST_KIND, "forgeai", "llm_download"):
+    if row.kind in (FORGEAI_DIGEST_KIND, "forgeai", "llm_download", "forgeai_replay"):
         return True
     if row.kind != "investigate":
         return False
@@ -328,6 +328,14 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
 
                 payload = dict(row.payload or {})
                 payload["result"] = _json_safe(verify(db, row.object_id))
+                row.payload = payload
+            elif row.kind == "forgeai_replay":
+                from app.forgeai_tuning import replay
+
+                # One model call per incident, one at a time, within a 15 minute budget; every answer is a trial.
+                payload = dict(row.payload or {})
+                payload["result"] = replay(db, row.object_id, limit=int(payload.get("limit") or 10),
+                                           instructions=payload.pop("instructions", None), actor=str(payload.get("actor") or "system"))
                 row.payload = payload
             elif row.kind == "demo_run":
                 from app.demo_view import run_scenario
