@@ -100,3 +100,27 @@ def test_report_days_follow_the_schedule():
     assert report_days(row({"repeat": True, "cron": "0 8 1 * *"})) == 30
     assert report_days(row({"repeat": True, "every_minutes": 1440, "preset": "24h"})) == 1
     assert report_days(None) == 7
+
+
+def test_report_send_job_mails_once_and_keeps_the_schedule(monkeypatch):
+    from app import services
+    from app.jobs import enqueue, run_pending_jobs
+
+    _client("engineer")
+    db = SessionLocal()
+    for job in db.query(Job).filter(Job.status == "pending").all():
+        db.delete(job)
+    row = ScheduledReport(name=f"daily-{uuid4().hex[:4]}", to_email="noc@dc.local", enabled=True,
+                          schedule={"repeat": True, "cron": "0 7 * * *"})
+    db.add(row)
+    db.commit()
+    nxt = row.next_run_at
+    sent = []
+    monkeypatch.setattr(services, "send_performance_report", lambda db, **kw: sent.append(kw["to_email"]))
+    enqueue(db, "report_send", str(row.id), object_type="report", payload={"actor": "ana@dc.local"})
+    db.commit()
+    run_pending_jobs(db, limit=5)
+    db.refresh(row)
+    assert sent == ["noc@dc.local"] and row.next_run_at == nxt
+    assert db.query(Job).filter_by(kind="report_send", object_id=str(row.id)).one().status == "done"
+    db.close()

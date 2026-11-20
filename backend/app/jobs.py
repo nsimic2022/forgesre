@@ -286,10 +286,10 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 from app.services import _report_job, _send_report_job
 
                 # "Send now" from Reports: SMTP and Prometheus have their own timeouts; Next is not moved.
-                report = db.get(ScheduledReport, int(row.object_id))
-                if report is None:
+                scheduled = db.get(ScheduledReport, int(row.object_id))
+                if scheduled is None:
                     raise RuntimeError(f"report {row.object_id} not found")
-                _send_report_job(db, _report_job(report), str((row.payload or {}).get("actor") or "system"))
+                _send_report_job(db, _report_job(scheduled), str((row.payload or {}).get("actor") or "system"))
             elif row.kind == "chat_post":
                 from app.chat import deliver
 
