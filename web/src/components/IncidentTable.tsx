@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import type { NocIncident } from "../lib/api";
-import { FORGEAI_LABEL, clock, duration, severityLabel, severityTone } from "../lib/format";
+import { FORGEAI_LABEL, clock, duration, severityLabel, severityTone, shortNumber, tierLabel } from "../lib/format";
 import { Chip, Dot } from "./ui";
 
 // Incident table shared by the NOC overview and the Incidents page (design: two-line cells).
@@ -30,7 +30,7 @@ function IncidentRow({ row }: { row: NocIncident }) {
       <td>
         <div className="cell-stack">
           <Link to={`/incidents/${encodeURIComponent(row.number)}`} style={{ color: "var(--text)", fontWeight: 600 }}>
-            {row.title} <span className="mono faint">{row.number}</span>
+            {row.title} <span className="mono faint" title={row.number}>{shortNumber(row.number)}</span>
           </Link>
           {row.detail ? <span className="small muted">{row.detail}</span> : null}
         </div>
@@ -48,7 +48,7 @@ function IncidentRow({ row }: { row: NocIncident }) {
           <span className="small" style={{ color: `var(--${tone === "crit" ? "crit" : "high"})`, fontWeight: 600 }}>Not acked</span>
         )}
       </td>
-      <td><Chip tone="off">{row.level}</Chip></td>
+      <td><Chip tone="off">{tierLabel(row.level)}</Chip></td>
       <td className="small muted">{row.messages} sent</td>
       <td className="small muted">{row.forgerca || "—"}</td>
       <td><Chip tone={ai.tone}>{ai.text}</Chip></td>
@@ -68,7 +68,7 @@ export function IncidentTable({ rows, loaded }: { rows: NocIncident[]; loaded: b
             <th>Problem</th>
             <th style={{ width: 90 }}>Source</th>
             <th style={{ width: 96 }}>Ack</th>
-            <th style={{ width: 70 }}>Level</th>
+            <th style={{ width: 80 }}>Tier</th>
             <th style={{ width: 80 }}>Messages</th>
             <th style={{ width: 170 }}>ForgeRCA</th>
             <th style={{ width: 128 }}>ForgeAI</th>

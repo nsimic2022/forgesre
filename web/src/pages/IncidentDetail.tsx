@@ -5,7 +5,7 @@ import { Link, useParams } from "react-router-dom";
 import { ReviewCard } from "../components/ReviewCard";
 import { Bar, Card, Chip } from "../components/ui";
 import { getJson, postJson, type IncidentView } from "../lib/api";
-import { clock, duration, severityLabel, severityTone } from "../lib/format";
+import { clock, duration, severityLabel, severityTone, tierLabel } from "../lib/format";
 
 const ACTIVE = ["OPEN", "INVESTIGATING", "ESCALATED", "ACK", "ACKNOWLEDGED"];
 
@@ -85,7 +85,7 @@ export function IncidentDetailPage() {
         <strong>{data.status}</strong>
         {data.ack_at ? ` · acknowledged by ${data.ack_by} at ${clock(data.ack_at)}` : open ? " · not acknowledged" : ""}
         {data.resolved_at ? ` · resolved by ${data.resolved_by || "system"} at ${clock(data.resolved_at)}` : ""}
-        {` · escalation ${data.level}`}
+        {` · escalation ${tierLabel(data.level)}`}
       </div>
       <div className="cols">
         <div style={{ flex: "999 1 620px", display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>

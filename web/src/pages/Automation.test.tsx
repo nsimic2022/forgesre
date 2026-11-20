@@ -102,9 +102,9 @@ describe("Automation", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Escalation" }));
     expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Edit policy Default warning" }));
-    expect((screen.getByLabelText("L3 Engineer minutes") as HTMLInputElement).disabled).toBe(true);
-    fireEvent.click(screen.getByLabelText("L3 Engineer on"));
-    fireEvent.change(screen.getByLabelText("L3 Engineer recipient"), { target: { value: "dba@dc.local" } });
+    expect((screen.getByLabelText("Tier 3 · Engineer minutes") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText("Tier 3 · Engineer on"));
+    fireEvent.change(screen.getByLabelText("Tier 3 · Engineer recipient"), { target: { value: "dba@dc.local" } });
     fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
     await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.url === "/api/v1/automation/policies/1")).toBe(true));
     const levels = (calls.find((c) => c.url === "/api/v1/automation/policies/1")!.body as { levels: unknown[] }).levels;

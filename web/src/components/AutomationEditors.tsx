@@ -141,10 +141,10 @@ export function RemoveButton({ url, what, onRemoved }: { url: string; what: stri
 
 type Policy = Automation["policies"][number];
 const LEVELS: { level: number; label: string; minutes: number; target: string }[] = [
-  { level: 1, label: "L1 NOC", minutes: 0, target: "team" },
-  { level: 2, label: "L2 Shift", minutes: 15, target: "team-lead" },
-  { level: 3, label: "L3 Engineer", minutes: 30, target: "engineer" },
-  { level: 4, label: "L4 Manager", minutes: 60, target: "manager" },
+  { level: 1, label: "Tier 1 · NOC", minutes: 0, target: "team" },
+  { level: 2, label: "Tier 2 · Shift lead", minutes: 15, target: "team-lead" },
+  { level: 3, label: "Tier 3 · Engineer", minutes: 30, target: "engineer" },
+  { level: 4, label: "Manager", minutes: 60, target: "manager" },
 ];
 
 export function PolicyForm({ policy, onDone }: { policy: Policy | null; onDone: (saved: boolean) => void }) {
@@ -168,10 +168,10 @@ export function PolicyForm({ policy, onDone }: { policy: Policy | null; onDone: 
       <form onSubmit={save} className="cell-stack" style={{ gap: 12 }}>
         <Field label="Name"><input className="search" style={{ minWidth: 0 }} value={name} onChange={(e) => setName(e.target.value)} placeholder="Database critical" /></Field>
         <p className="small faint" style={{ margin: 0 }}>
-          Each level is mailed when the incident is still not acknowledged after its minutes. A recipient is a role (team, team-lead, engineer, manager, oncall) or an email address.
+          Each step is mailed when the incident is still not acknowledged after its minutes. A recipient is a role (team, team-lead, engineer, manager, oncall) or an email address.
         </p>
         <table className="data">
-          <thead><tr><th style={{ width: 70 }}>On</th><th style={{ width: 140 }}>Level</th><th style={{ width: 140 }}>After (min)</th><th>Recipient</th></tr></thead>
+          <thead><tr><th style={{ width: 70 }}>On</th><th style={{ width: 160 }}>Step</th><th style={{ width: 140 }}>After (min)</th><th>Recipient</th></tr></thead>
           <tbody>
             {levels.map((l, i) => (
               <tr key={l.level}>

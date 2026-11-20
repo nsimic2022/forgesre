@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ReportSchedules } from "../components/ReportSchedules";
 import { SloCard } from "../components/SloCard";
 import { Card } from "../components/ui";
+import { DailyBars } from "../components/DailyBars";
 import { getJson, type PeriodStats, type Reports } from "../lib/api";
 import { clock, minutesLabel } from "../lib/format";
 
@@ -46,7 +47,6 @@ export function ReportsPage() {
   }, [days, tick]);
   const c: PeriodStats | undefined = data?.current;
   const p: PeriodStats | undefined = data?.previous;
-  const peak = Math.max(1, ...(data?.daily ?? []).map((d) => d.critical + d.high + d.other));
   return (
     <>
       <header className="page-head">
@@ -80,20 +80,7 @@ export function ReportsPage() {
         <div className="cols">
           <div style={{ flex: "999 1 640px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
             <Card title="Incidents per day">
-              <div role="img" aria-label={`Incidents per day over ${data.days} days, highest ${peak}`} style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 150, borderBottom: "1px solid var(--border)" }}>
-                {data.daily.map((d) => (
-                  <div key={d.day} title={`${d.day}: ${d.critical} critical, ${d.high} high, ${d.other} other`} style={{ flex: "1 1 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%" }}>
-                    <div style={{ height: `${(d.other / peak) * 100}%`, background: "var(--accent)" }} />
-                    <div style={{ height: `${(d.high / peak) * 100}%`, background: "var(--high)" }} />
-                    <div style={{ height: `${(d.critical / peak) * 100}%`, background: "var(--crit)" }} />
-                  </div>
-                ))}
-              </div>
-              <div className="row small muted">
-                <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: "var(--crit)" }} />Critical</span>
-                <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: "var(--high)" }} />High</span>
-                <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: "var(--accent)" }} />Other</span>
-              </div>
+              <DailyBars daily={data.daily} />
             </Card>
             <Card title="By asset type">
               <Table head={["Type", "Incidents", "Critical", "MTTA", "MTTR"]} rows={data.by_type.map((t) => [t.group, t.incidents, t.critical, minutesLabel(t.mtta_min), minutesLabel(t.mttr_min)])} />

@@ -9,7 +9,7 @@ alarm (Prometheus, Zabbix, a check)
   → maintenance?         open, but notify nobody
   → parent down?         open, but notify nobody
   → routing rule         severity, playbook, escalation policy
-  → incident             notify L1, then L2, L3, L4 until someone acknowledges
+  → incident             notify Tier 1, 2, 3, then the manager, until someone acknowledges
 ```
 
 All of it lives under **Automation** and needs an Engineer to change. The exact rules
@@ -41,7 +41,8 @@ without opening anything. Use it before saving a new rule.
 
 ![Escalation](../images/ui-automation-escalation.png)
 
-A policy has up to four levels. Each says who to tell (on-call, a team, a person), how
+A policy has up to four steps: Tier 1 (NOC), Tier 2 (shift lead), Tier 3 (engineer) and the
+manager, the usual support-tier model. Each says who to tell (on-call, a team, a person), how
 (email, chat) and after how many minutes without an acknowledgement. Acknowledging stops
 it; **Escalate** on the incident jumps a level now.
 

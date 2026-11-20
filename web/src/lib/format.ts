@@ -48,3 +48,16 @@ export const FORGEAI_LABEL: Record<string, { text: string; tone: Tone }> = {
   off: { text: "Off", tone: "off" },
   none: { text: "—", tone: "off" },
 };
+
+/** "INC-0012_14.10.2026_22:15" → "INC-0012": tables already show the date in a column of their own. */
+export function shortNumber(number: string): string {
+  return number.split("_")[0];
+}
+
+/** Escalation step names in the new UI: three support tiers, then the manager (not a tier).
+ *  The backend keeps levels 1–4 (classic shows L1–L4). Accepts 2 or "L2". */
+export function tierLabel(level: number | string | null | undefined): string {
+  const n = typeof level === "number" ? level : Number(String(level ?? "").replace(/^L/i, ""));
+  if (!n) return String(level ?? "");
+  return n >= 4 ? "Manager" : `Tier ${n}`;
+}

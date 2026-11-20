@@ -501,6 +501,7 @@ def test_tv_endpoint_is_for_viewers():
     viewer = _signed_in("viewer")
     data = viewer.get("/api/v1/tv").json()
     assert len(data["clock"]["hours"]) == 12 and "counts" in data and "oncall" in data
+    assert len(data["daily"]) == 14 and set(data["daily"][0]) == {"day", "critical", "high", "other"}
 
 
 def test_new_ui_is_home_when_built(monkeypatch, tmp_path):

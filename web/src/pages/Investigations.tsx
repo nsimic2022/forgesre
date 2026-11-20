@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { RATING_LABEL, RATING_TONE } from "../components/ReviewCard";
 import { Bar, Card, Chip } from "../components/ui";
 import { getJson, type Accuracy, type InvestigationsPage as Page } from "../lib/api";
-import { clock } from "../lib/format";
+import { clock, shortNumber } from "../lib/format";
 
 const PAGE = 50;
 
@@ -76,7 +76,7 @@ export function InvestigationsPage() {
                 <tbody>
                   {(data?.rows ?? []).map((r) => (
                     <tr key={r.number}>
-                      <td><Link className="mono" to={`/incidents/${encodeURIComponent(r.number)}`}>{r.number}</Link></td>
+                      <td><Link className="mono" to={`/incidents/${encodeURIComponent(r.number)}`} title={r.number}>{shortNumber(r.number)}</Link></td>
                       <td className="small muted">{clock(r.started_at)}</td>
                       <td style={{ fontWeight: 600 }}>{r.host || "—"}</td>
                       <td>{r.title}</td>

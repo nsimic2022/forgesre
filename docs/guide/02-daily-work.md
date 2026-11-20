@@ -12,8 +12,9 @@ nobody has taken yet, hosts down, and how fast the team reacts (MTTA today, MTTR
 days).
 
 Below them, the incidents nobody has acknowledged, newest first. Switch tabs for the ones
-already taken or resolved today, filter by severity, or type a host name or IP. **Level**
-shows how far escalation has gone (L1 is the first person, L4 is the last); **Messages**
+already taken or resolved today, filter by severity, or type a host name or IP. **Tier**
+shows how far escalation has gone (Tier 1 is the NOC, Tier 2 the shift lead, Tier 3 the
+engineer, then the manager); **Messages**
 shows how many notifications were sent.
 
 At the bottom: health per asset group and who is on call now.

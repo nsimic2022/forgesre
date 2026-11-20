@@ -14,6 +14,7 @@ const tv: TvData = {
   },
   health: [], oncall: { name: "Ana P.", email: "ana@dc.local", phone: "+381 60 1" }, ai: { forgerca: true, forgeai: "local" },
   clock: { now: "2026-11-19T18:04:00+01:00", hour: 18, minute: 4, timezone: "Europe/Belgrade", hours, total: 18 },
+  daily: [{ day: "2026-11-18", critical: 1, high: 2, other: 3 }, { day: "2026-11-19", critical: 0, high: 1, other: 0 }],
 };
 
 describe("TV mode", () => {
@@ -34,5 +35,7 @@ describe("TV mode", () => {
     expect(screen.getByText("· not acked")).toBeTruthy();
     expect(screen.getByText("now 18:04 · 18 in 12 h")).toBeTruthy();
     expect(screen.getAllByRole("row").length).toBe(13);
+    expect(screen.getByRole("img", { name: "Incidents per day over 2 days: 7 in total, highest 6 in one day" })).toBeTruthy();
+    expect(screen.getByText("esx-prod-03 · INC-0412 · Tier 2")).toBeTruthy();
   });
 });
