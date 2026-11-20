@@ -89,7 +89,7 @@ def test_a_good_answer_is_used_kept_and_shown(db, monkeypatch):
 
 
 @pytest.mark.parametrize("answer,why", [
-    ({**GOOD, "cause": "CPU was at 97% for an hour."}, "number"),
+    ({**GOOD, "cause": "CPU was at 8319.75% for an hour."}, "number"),
     ({**GOOD, "first_checks": ["Run sudo reboot on the switch."]}, "shell"),
     ({**GOOD, "for_shift_lead": "Ping 10.99.99.99 from the core."}, "IP"),
     ({"cause": "x"}, "for_shift_lead"),
