@@ -714,6 +714,7 @@ def forgeai_calls(number: str, db: Session = Depends(get_db), user: User = Depen
 class ForgeAiQuestion(BaseModel):
     skill: str = ""
     question: str = Field(default="", max_length=500)
+    cloud: bool = False
 
 
 ASK_PENDING_MAX = 3
@@ -734,7 +735,15 @@ def forgeai_ask_trial(number: str, body: ForgeAiQuestion, db: Session = Depends(
     from app.models import ForgeAiSkill, Job
     from app.settings import settings
 
-    if not (settings.ai_enabled and settings.llm_url):
+    if body.cloud:
+        from app.cloud_llm import not_ready
+
+        if not can(user, "ai_cloud"):
+            raise HTTPException(status_code=403, detail="only Engineers and Admins may send a question to the cloud model")
+        why = not_ready()
+        if why:
+            raise HTTPException(status_code=409, detail=f"cloud model not available: {why}")
+    elif not (settings.ai_enabled and settings.llm_url):
         raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
@@ -757,9 +766,10 @@ def forgeai_ask_trial(number: str, body: ForgeAiQuestion, db: Session = Depends(
         raise HTTPException(status_code=429, detail=f"{len(waiting)} of your questions are still waiting; try again when one is answered")
     job = enqueue(db, JOB_KIND, f"{item.number}#ask-{uuid4().hex[:8]}", object_type="incident",
                   payload={"task": task, "skill": body.skill if body.skill else ("ask-generic" if task == "ask" else ""),
-                           "question": question, "trial": True, "actor": user.email})
-    audit(db, "forgeai.ask", actor=user.email, object_type="incident", object_id=item.number,
-          data={"task": task, "skill": body.skill, "question": question[:200]}, commit=True)
+                           "question": question, "trial": True, "actor": user.email, "cloud": body.cloud})
+    audit(db, "forgeai.cloud" if body.cloud else "forgeai.ask", actor=user.email, object_type="incident", object_id=item.number,
+          data={"task": task, "skill": body.skill, "question": question[:200],
+                **({"provider": settings.cloud_provider, "model": settings.cloud_model} if body.cloud else {})}, commit=True)
     return {"queued": True, "job": getattr(job, "id", None), "task": task}
 
 
@@ -862,10 +872,13 @@ def forgeai_docs_search(q: str, db: Session = Depends(get_db), user: User = Depe
 
 @router.get("/forgeai/status")
 def forgeai_status(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
-    """Is ForgeAI on, does the model answer, how did the last week of calls go."""
+    """Is ForgeAI on, does the model answer, how did the last week of calls go; the optional cloud model."""
+    from app.cloud_llm import info
     from app.forgeai import status
 
-    return status(db)
+    out = status(db)
+    out["cloud"] = {**info(), "can_use": can(user, "ai_cloud")}
+    return out
 
 
 class ForgeAiTrial(BaseModel):
@@ -2450,6 +2463,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "snmp": _snmp_check(),
         "llm": _llm_check(),
         "embed": _embed_check(),
+        "cloud": _cloud_check(),
         "netbox": _netbox_check(),
         "zabbix": _zabbix_check(),
         "glpi": _glpi_check(),
@@ -2875,6 +2889,18 @@ def _llm_check() -> dict[str, str]:
     elif row.get("status") == "error":
         row["fix"] = "The external model server does not answer: check ai.llm.url in Settings › ForgeRCA / ForgeAI"
     return row
+
+
+def _cloud_check() -> dict[str, str]:
+    """The optional paid cloud model: configuration only; doctor never sends anything out."""
+    from app.cloud_llm import not_ready
+
+    if not settings.cloud_enabled:
+        return _ok("disabled")
+    why = not_ready()
+    if why:
+        return {"status": "warn", "why": why, "fix": "Settings › ForgeRCA / ForgeAI, or ./forgesre settings set-secret CLOUD_LLM_API_KEY"}
+    return {"status": "ok", "why": f"{settings.cloud_provider} {settings.cloud_model} configured; Settings › Test sends one tiny request"}
 
 
 def _embed_check() -> dict[str, str]:

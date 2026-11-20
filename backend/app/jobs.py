@@ -319,7 +319,8 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                         raise RuntimeError(f"incident {row.object_id} not found")
                 call = forgeai.run(db, str(payload.get("task") or "incident"), target, skill_slug=str(payload.get("skill") or ""),
                                    actor=str(payload.get("actor") or "system"), trial=bool(payload.get("trial")),
-                                   instructions=payload.get("instructions"), question=str(payload.get("question") or ""))
+                                   instructions=payload.get("instructions"), question=str(payload.get("question") or ""),
+                                   cloud=bool(payload.get("cloud")))
                 payload.pop("instructions", None)
                 payload["result"] = {"call_id": call.id, "status": call.status}
                 row.payload = payload

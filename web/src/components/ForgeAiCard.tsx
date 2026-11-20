@@ -18,7 +18,7 @@ export type ForgeAiView = {
 };
 export type Call = {
   id: number; at: string | null; task: string; skill: string; skill_version: number; model: string; status: string; reason: string;
-  duration_ms: number; answer: Record<string, unknown>; rating: number; actor: string;
+  duration_ms: number; answer: Record<string, unknown>; rating: number; actor: string; cloud?: boolean;
   system_prompt?: string; user_prompt?: string; raw_response?: string;
 };
 
@@ -53,7 +53,7 @@ export function CallLog({ calls }: { calls: Call[] }) {
       {calls.map((c) => (
         <details key={c.id} style={{ borderTop: "1px solid var(--border)", paddingTop: 6 }}>
           <summary style={{ cursor: "pointer" }} className="small">
-            <Chip tone={STATUS_TONE[c.status] ?? "off"}>{c.status}</Chip> {TASK[c.task] ?? c.task} · skill {c.skill} v{c.skill_version} · {c.model || "no model"} ·{" "}
+            <Chip tone={STATUS_TONE[c.status] ?? "off"}>{c.status}</Chip> {c.cloud ? <Chip tone="warn">cloud</Chip> : null} {TASK[c.task] ?? c.task} · skill {c.skill} v{c.skill_version} · {c.model || "no model"} ·{" "}
             {(c.duration_ms / 1000).toFixed(1)} s · {clock(c.at)}{c.reason ? ` · ${c.reason}` : ""}
           </summary>
           {c.system_prompt !== undefined ? (
