@@ -110,8 +110,9 @@ def inventory_page(
     view: str = "",
     limit: int = 50,
     offset: int = 0,
+    everything: bool = False,
 ) -> dict[str, Any]:
-    """Library counts (unfiltered), then one page of assets matching every given filter."""
+    """Library counts (unfiltered), then one page of assets matching every given filter (all of them with ``everything``)."""
     open_counts = _open_counts(db)
     rows = []
     for asset in db.query(Asset).order_by(Asset.hostname).all():
@@ -152,6 +153,8 @@ def inventory_page(
         return True
 
     filtered = [row for row in rows if keep(row)]
+    if everything:
+        return {"rows": filtered}
     limit = max(1, min(int(limit), 200))
     offset = max(0, int(offset))
     return {
@@ -228,3 +231,29 @@ def asset_form_options(db: Session, user: User) -> dict[str, Any]:
         "sites": sorted(sites),
         "can_edit": can(user, "write_assets"),
     }
+
+
+def inventory_csv(db: Session, **filters: Any) -> str:
+    """The filtered inventory as CSV with the same columns Import CSV reads, so a file can go back in."""
+    import csv
+    import io
+
+    from app.asset_import import COLUMNS
+
+    ids = [r["asset_id"] for r in inventory_page(db, everything=True, **filters)["rows"]]
+    by_id = {a.asset_id: a for a in db.query(Asset).filter(Asset.asset_id.in_(ids)).all()} if ids else {}
+    parents = {a.id: a.asset_id for a in db.query(Asset.id, Asset.asset_id).all()}
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(COLUMNS)
+    for asset_id in ids:
+        a = by_id.get(asset_id)
+        if a is None:
+            continue
+        extras = normalize_extras(a.extras)
+        base = {"hostname": a.hostname, "ip": a.ip, "type": a.type, "environment": a.environment, "owner": a.owner,
+                "contact_name": a.contact_name, "owner_email": a.owner_email, "owner_phone": a.owner_phone, "notes": a.notes,
+                "monitoring_profile": a.monitoring_profile, "scrape_address": a.scrape_address, "asset_id": a.asset_id,
+                "parent": parents.get(a.parent_id, "") if a.parent_id else ""}
+        writer.writerow([base.get(c, extras.get(c, "")) or "" for c in COLUMNS])
+    return "\ufeff" + out.getvalue()  # BOM: Excel opens UTF-8 with the right letters

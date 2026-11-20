@@ -13,7 +13,8 @@ type Found = {
   snmp_note: string; watch: string;
   suggested: { hostname: string; type: string; monitoring_profile: string; scrape_address: string; vendor: string; location: string };
 };
-type Candidate = { id: number; ip: string; hostname: string; proposed_role: string; open_ports: number[]; snmp_ok: boolean; status: string; asset_id: string; seen_at: string | null };
+type Candidate = { id: number; ip: string; hostname: string; proposed_role: string; open_ports: number[]; snmp_ok: boolean; status: string; asset_id: string; seen_at: string | null; source?: string };
+const FROM: Record<string, string> = { scan: "Scan", glpi: "GLPI", zabbix: "Zabbix", netbox: "NetBox", librenms: "LibreNMS" };
 type Status = { cidrs: string[]; suggested: string[]; mode: string; scan: { id: number; status: string } | null; counts: Record<string, number> };
 
 const PORT_NAME: Record<number, string> = { 22: "SSH", 80: "HTTP", 443: "HTTPS", 161: "SNMP", 9100: "node_exporter", 9182: "windows_exporter", 10050: "Zabbix agent", 12345: "Alloy" };
@@ -213,12 +214,13 @@ function ScanNetwork() {
         {rows.length === 0 ? <span className="muted">Nothing found yet. Scan a range above.</span> : null}
         {rows.length ? (
           <div className="table-wrap"><table className="data" style={{ minWidth: 760 }}>
-            <thead><tr><th>Address</th><th>Name</th><th>Looks like</th><th>Answers on</th><th>Seen</th><th style={{ width: 170 }}></th></tr></thead>
+            <thead><tr><th>Address</th><th>Name</th><th>From</th><th>Looks like</th><th>Answers on</th><th>Seen</th><th style={{ width: 170 }}></th></tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td className="mono">{r.ip}</td>
                   <td>{r.hostname || <span className="faint">—</span>}</td>
+                  <td className="small">{FROM[r.source ?? ""] ?? r.source ?? ""}</td>
                   <td className="small">{r.proposed_role}</td>
                   <td className="small muted">{r.open_ports.map((p) => PORT_NAME[p] ?? p).join(", ") || "—"}</td>
                   <td className="small faint">{clock(r.seen_at)}</td>
@@ -266,7 +268,7 @@ export function AddDevicesPage() {
           <span className="small muted">
             NetBox, Zabbix, GLPI and LibreNMS are read in the background (every 6 hours when turned on). To read one now, an Admin presses
             <strong> Sync now</strong> on its card in <Link to="/settings">Settings › Integrations</Link>. Imported assets then show up in the
-            inventory, where <strong>Check monitoring</strong> proves they are watched. A CSV import is still on the <a href="/assets">classic page</a>.
+            inventory, where <strong>Check monitoring</strong> proves they are watched. Many at once: <strong>Import CSV</strong> on the Inventory page.
           </span>
         </Card>
       ) : null}

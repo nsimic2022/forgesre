@@ -1962,11 +1962,19 @@ def backups_api(db: Session = Depends(get_db), user: User = Depends(require("adm
     from app.backup import list_archives
     from app.models import Job
 
+    from app.models import JournalEntry
+
     running = db.query(Job).filter(Job.kind == "backup_create", Job.status.in_(["pending", "running"])).first()
     last = db.query(Job).filter(Job.kind == "backup_create").order_by(Job.id.desc()).first()
+    restoring = db.query(Job).filter(Job.kind == "backup_restore", Job.status.in_(["pending", "running"])).first()
+    # the restored database has no row for the job that restored it: the journal line written after it is the answer
+    restored = db.query(JournalEntry).filter_by(module="backup", action="restore").order_by(JournalEntry.id.desc()).first()
     return {
         "archives": list_archives(),
         "running": bool(running),
+        "restoring": bool(restoring),
+        "last_restore": None if restored is None else {"at": restored.at.isoformat() if restored.at else None, "status": restored.status,
+                                                       "summary": restored.summary, "detail": restored.detail},
         "last_job": None if last is None else {"status": last.status, "error": last.error or "", "result": (last.payload or {}).get("result", "")},
     }
 
@@ -1995,6 +2003,44 @@ def backup_delete_api(name: str, db: Session = Depends(get_db), user: User = Dep
     audit(db, "backup.remove", actor=user.email, object_type="backup", object_id=deleted.name)
     db.commit()
     return {"removed": deleted.name}
+
+
+@router.get("/backups/{name}/download")
+def backup_download_api(name: str, request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    """Download one backup archive (Admin). Audited."""
+    from fastapi.responses import FileResponse
+
+    from app.backup import download_name, resolve_archive
+
+    try:
+        path = resolve_archive(name)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail="backup not found") from exc
+    audit(db, "backup.download", actor=user.email, object_type="backup", object_id=name, ip=request.client.host if request.client else "", commit=True)
+    return FileResponse(path, filename=download_name(path), media_type="application/gzip")
+
+
+class RestoreBody(BaseModel):
+    confirm: str = ""
+    acknowledged: bool = False
+
+
+@router.post("/backups/{name}/restore")
+def backup_restore_api(name: str, body: RestoreBody, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Restore a backup over this appliance (Admin), in the background. Needs the warning ticked and RESTORE typed."""
+    from app.backup import CONFIRM_WORD, resolve_archive
+    from app.jobs import enqueue
+
+    if not body.acknowledged or body.confirm.strip() != CONFIRM_WORD:
+        raise HTTPException(status_code=400, detail=f"Restore refused. Tick the warning and type {CONFIRM_WORD}.")
+    try:
+        resolve_archive(name)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail="backup not found") from exc
+    audit(db, "backup.restore.start", actor=user.email, object_type="backup", object_id=name)
+    db.commit()
+    job = enqueue(db, "backup_restore", name, object_type="backup", payload={"actor": user.email})
+    return {"job": job.id if job else None}
 
 
 @router.post("/backups/import")
@@ -3164,6 +3210,44 @@ def inventory_api(
     return data
 
 
+@router.get("/inventory.csv")
+def inventory_csv_api(
+    q: str = "", site: str = "", rack: str = "", type: str = "", environment: str = "", customer: str = "", view: str = "",
+    db: Session = Depends(get_db), user: User = Depends(require("read_assets")),
+) -> Response:
+    """The filtered inventory as CSV, in the columns Import CSV reads."""
+    del user
+    from app.inventory_view import inventory_csv
+
+    body = inventory_csv(db, q=q, site=site, rack=rack, type_=type, environment=environment, customer=customer, view=view)
+    return Response(body, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="forgesre-inventory.csv"'})
+
+
+class BulkAssets(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+
+
+@router.post("/inventory/bulk-delete")
+def assets_bulk_delete(body: BulkAssets, db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict[str, Any]:
+    """Remove several assets (Engineer+). Database only; an asset that may not be removed is listed with the reason."""
+    ids = list(dict.fromkeys(i for i in body.ids if i))[:200]
+    if not ids:
+        raise HTTPException(status_code=400, detail="pick at least one asset")
+    removed, refused = [], []
+    for asset_id in ids:
+        item = db.query(Asset).filter_by(asset_id=asset_id).first()
+        if item is None:
+            refused.append({"asset_id": asset_id, "reason": "not found"})
+            continue
+        try:
+            delete_asset(db, item, actor=user.email)
+            removed.append(asset_id)
+        except ValueError as exc:
+            db.rollback()
+            refused.append({"asset_id": asset_id, "reason": str(exc)})
+    return {"removed": removed, "refused": refused}
+
+
 @router.get("/inventory-form")
 def inventory_form_api(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> dict[str, Any]:
     """Choices for the asset form in the new UI."""
@@ -3211,6 +3295,34 @@ def inventory_card_api(asset_id: str, db: Session = Depends(get_db), user: User 
     if item is None:
         raise HTTPException(status_code=404, detail="asset not found")
     return asset_card(db, item, user)
+
+
+@router.get("/automation/export")
+def automation_export(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> Response:
+    """Routing rules, playbooks, escalation policies, noise filters, on-call, SLOs and ForgeAI skills as one JSON file,
+    for review and safekeeping. Read only; secrets are not part of any of these."""
+    import json
+
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.forgeai import seed_skills
+    from app.models import ForgeAiSkill, NoiseFilter, OncallSlot, Slo
+
+    seed_skills(db)  # built-in skills exist even before anyone opened the skills page
+
+    def rows(model) -> list[dict[str, Any]]:
+        cols = [c.key for c in sa_inspect(model).mapper.column_attrs]
+        return [{c: getattr(r, c) for c in cols} for r in db.query(model).order_by(model.id).all()]
+
+    data = {
+        "forgesre": "2.0.0", "exported_at": utcnow().isoformat(), "exported_by": user.email,
+        "routing_rules": rows(Playrule), "playbooks": rows(Playbook), "escalation_policies": rows(EscalationPolicy),
+        "noise_filters": rows(NoiseFilter), "oncall": rows(OncallSlot), "slos": rows(Slo), "forgeai_skills": rows(ForgeAiSkill),
+    }
+    audit(db, "automation.export", actor=user.email, object_type="automation", object_id="all", commit=True)
+    body = json.dumps(data, ensure_ascii=False, indent=2, default=str)
+    return Response(body, media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="forgesre-automation-{utcnow():%Y%m%d}.json"'})
 
 
 class SimulateBody(BaseModel):

@@ -20,8 +20,10 @@ remove them can be made item by item. Nothing here is removed until that decisio
 
 ## Before classic can go
 
-1. Port the four small gaps: inventory bulk delete + CSV export, the found-devices list (Approve /
-   Ignore), restore with confirmation, one JSON export for automation.
+1. ~~Port the four small gaps~~ (done): Inventory **Remove selected** and **Export CSV** (the
+   columns Import CSV reads), the found-devices list in Add devices with where each came from,
+   **Restore** on Settings › Backup (warning ticked, RESTORE typed, runs in the background), and
+   **Export (JSON)** on Automation.
 2. Point the remaining links (`More (classic)` on the asset card, Restore on Settings › Backup) at
    the new pages.
 3. Keep `/classic` one more release behind `ui.home: classic`, then remove the templates, the
