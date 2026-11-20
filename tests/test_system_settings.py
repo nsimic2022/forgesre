@@ -89,11 +89,13 @@ def test_secrets_and_installer_values_are_not_written_by_core(tmp_config):
     assert env.status_code == 400 and ".env" in env.json()["detail"]
 
 
-def test_discovery_ranges_use_the_discovery_normaliser(tmp_config):
+def test_discovery_has_no_ranges_and_mode_is_saved(tmp_config):
+    """Ranges belong to LibreNMS now; ForgeSRE only keeps how new LibreNMS devices are handled."""
     client = _client()
-    saved = client.put("/api/v1/settings/discovery.cidrs", json={"value": "10.10.0.0/24, 10.20.0.0/24"})
+    assert client.put("/api/v1/settings/discovery.cidrs", json={"value": "10.10.0.0/24"}).status_code in {400, 404}
+    saved = client.put("/api/v1/settings/discovery.mode", json={"value": "automatic"})
     assert saved.status_code == 200, saved.text
-    assert settings.discovery_cidrs == ["10.10.0.0/24", "10.20.0.0/24"]
+    assert settings.discovery_mode == "automatic"
 
 
 def test_connection_test_runs_one_check(monkeypatch, tmp_config):

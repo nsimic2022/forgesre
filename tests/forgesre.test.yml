@@ -19,7 +19,6 @@ inventory:
 discovery:
   enabled: true
   mode: semi-automatic # manual | semi-automatic | automatic
-  cidrs: []
 
 monitoring:
   snmp:

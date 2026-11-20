@@ -37,8 +37,8 @@ inventory:
 
 discovery:
   enabled: true
-  mode: semi-automatic # manual | semi-automatic | automatic
-  cidrs: []
+  # Devices come from LibreNMS (ForgeSRE never scans networks). Ranges: ./forgesre discovery nets CIDR
+  mode: semi-automatic # manual | semi-automatic (list in Add devices) | automatic (add at once)
 
 monitoring:
   snmp:

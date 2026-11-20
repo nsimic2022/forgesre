@@ -100,6 +100,7 @@ def test_doctor_core_probes_health_url(monkeypatch):
 
 def test_doctor_discovery_is_not_a_checkbox(monkeypatch):
     monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
+    monkeypatch.setattr("app.librenms_discovery.not_ready", lambda: "")
     monkeypatch.setattr("app.journal.list_entries", lambda *a, **k: [])
     monkeypatch.setattr("app.inventory.discovery_loop_age_seconds", lambda: None)
     monkeypatch.setattr("app.loop_beats.age_seconds", lambda name: None)  # no beat in the database either
@@ -111,6 +112,9 @@ def test_doctor_discovery_is_not_a_checkbox(monkeypatch):
     payload = doctor_payload(force=True)
     assert payload["components"]["discovery"]["status"] == "ok"
     assert "alive" in (payload["components"]["discovery"].get("why") or "").lower()
+    monkeypatch.setattr("app.librenms_discovery.not_ready", lambda: "LibreNMS has no API token yet")
+    blocked = doctor_payload(force=True)["components"]["discovery"]
+    assert blocked["status"] == "warn" and "LibreNMS" in blocked["why"]
 
 
 def test_jobs_loop_runs_reports_before_pending_jobs():

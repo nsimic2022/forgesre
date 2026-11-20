@@ -97,6 +97,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `assets` / `inventory` | Inventory with `#` |
 | `bundle [--include-models]` | One file with the code and every image for an appliance without internet ([offline.md](offline.md)) |
 | `sources` | GLPI / Zabbix / NetBox / LibreNMS: on or off, last sync, linked assets, open conflicts (decided in Inventory › Sources) |
+| `discovery` | Devices come from LibreNMS: `status`, `read` (now, in the background), `nets CIDR…` (ranges LibreNMS discovers), `scan` (LibreNMS snmp-scan, then read). ForgeSRE never scans networks itself |
 | `capacity ASSET` | About 30 days of disk use and interface receive, `~N days to full` (`!` at 30 days or less); `--refresh` reads again (cached 15 min) |
 | `snmp` | snmp_exporter health + SNMP HTTP SD targets |
 | `sd` | Prometheus HTTP SD (Linux / Windows) and SNMP HTTP SD |
@@ -149,7 +150,7 @@ quit                       # or: exit    or Ctrl-D
 
 ---
 
-`./forgesre config` shows the live YAML path. Discovery **Confirm & scan** on `/discovery` writes `discovery.cidrs` there (suggested management `/24` from this VM’s primary IPv4; empty cidrs = no scan). Do not re-run `./install.sh` just to change CIDRs.
+`./forgesre config` shows the live YAML path. Discovery ranges are LibreNMS's (`./forgesre discovery nets`). Do not re-run `./install.sh` just to change CIDRs.
 
 ---
 
@@ -311,7 +312,7 @@ sudo systemctl enable --now open-vm-tools
 systemctl status vmtoolsd
 ```
 
-`config/forgesre.yml` is local to the VM (gitignored). Discovery **Confirm & scan** writes `discovery.cidrs` there (suggested primary IPv4 `/24`; empty = no scan). Change other keys, then recreate Core. Do not commit the live file. The committed template is `config/forgesre.example.yml`.
+`config/forgesre.yml` is local to the VM (gitignored). Change other keys, then recreate Core. Do not commit the live file. The committed template is `config/forgesre.example.yml`.
 
 ---
 

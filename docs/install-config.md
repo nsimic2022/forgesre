@@ -153,7 +153,7 @@ Guided wizard:
 | `--port N` | Core UI/API port (default `8080`) |
 | `--enable-ai yes\|no` | `yes` downloads the GGUF. ForgeRCA still works without it |
 | `--enable-discovery yes\|no` | Default yes |
-| `--discovery-cidrs 10.20.30.0/24,10.10.0.0/24` | Optional YAML CIDRs. Empty = no scan until Confirm. GUI suggests primary IPv4 `/24`. TCP 22/80/443/9100/9182 + SNMP GET UDP/161 + HTTP /metrics on :9182/:9100 when a host is alive |
+| `--discovery-cidrs 10.20.30.0/24,10.10.0.0/24` | Ranges LibreNMS may discover (`lnms config nets`). ForgeSRE never scans networks itself; see [discovery.md](discovery.md) |
 | `--netbox-url URL` | Point Core at an **external** NetBox; bundled still starts unless you stop it |
 | `--offline` | Do not pull images |
 
@@ -292,8 +292,7 @@ inventory:
 
 discovery:
   enabled: true
-  mode: semi-automatic
-  cidrs: []   # empty = no scan; Confirm & scan writes suggested primary IPv4 /24 here
+  mode: semi-automatic   # new LibreNMS devices: listed (semi-automatic), added (automatic), manual
 
 monitoring:
   snmp:
@@ -328,9 +327,9 @@ notifications:
     # Gmail: smtp.gmail.com  Outlook/M365: smtp.office365.com
 ```
 
-- **Discovery** probes TCP **22 / 80 / 443 / 9100 / 9182** and SNMPv2c GET on **UDP/161**. Alive hosts also get HTTP GET `/metrics` on **:9182** and **:9100** so the default type/port is Windows vs Linux from exporter text, not “always Linux :9100”.
+- **Discovery** reads LibreNMS's device list; ForgeSRE does not scan networks ([discovery.md](discovery.md)). Only **Add devices › One device** asks the one address typed.
 - **RCA** works with `ai.enabled: false`. Set `ai.enabled: true` only with a local OpenAI-compatible endpoint or a GGUF.
-- Changing `cidrs` via Discovery **Scan now** writes live YAML (no Core recreate). Hand-edited YAML still applies on next Core reload/recreate — not a reinstall.
+- Discovery ranges live in LibreNMS: `./forgesre discovery nets CIDR …`.
 - Changing `SNMP_COMMUNITY` needs `./forgesre render-monitoring`.
 
 ---

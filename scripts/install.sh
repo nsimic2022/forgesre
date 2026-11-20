@@ -35,7 +35,7 @@ Options:
   --port N
   --enable-ai yes|no     Download GGUF and start llama.cpp (yes). RCA works without it.
   --enable-discovery yes|no
-  --discovery-cidrs CIDR[,CIDR]
+  --discovery-cidrs CIDR[,CIDR]  Ranges LibreNMS may discover (ForgeSRE never scans itself)
   --netbox-url URL      External NetBox; bundled still starts unless you stop it
 EOF
 }
@@ -183,7 +183,7 @@ wizard() {
   read -r -p "Enable discovery? [Y/n]: " ans || true
   [[ "${ans:-Y}" =~ ^[Nn] ]] && ENABLE_DISCOVERY="no"
   if [[ "$ENABLE_DISCOVERY" == "yes" ]]; then
-    read -r -p "CIDRs to scan, comma-separated [${DISCOVERY_CIDRS:-none}]: " ans || true
+    read -r -p "Networks LibreNMS may discover (CIDR, comma-separated) [${DISCOVERY_CIDRS:-none}]: " ans || true
     DISCOVERY_CIDRS="${ans:-$DISCOVERY_CIDRS}"
   fi
   explain "NetBox" "Bundled DCIM/IPAM container (default on). Core read-syncs devices; it never writes NetBox. First boot runs migrations and can take several minutes." "yes" "Point --netbox-url at an existing instance; local inventory still works."
@@ -293,7 +293,7 @@ write_files() {
     fi
   fi
 
-  local discovery_enabled="true" netbox_enabled="true" cidrs_yaml="[]"
+  local discovery_enabled="true" netbox_enabled="true"
   [[ "$ENABLE_DISCOVERY" == "yes" ]] || discovery_enabled="false"
   if [[ "${NETBOX_MODE}" == "external" && -n "${NETBOX_URL}" ]]; then
     ENABLE_NETBOX="yes"
@@ -302,19 +302,6 @@ write_files() {
   if [[ "${NETBOX_MODE}" != "external" ]]; then
     NETBOX_MODE="bundled"
     NETBOX_URL="${NETBOX_URL:-http://127.0.0.1:8001}"
-  fi
-  if [[ -n "${DISCOVERY_CIDRS}" ]]; then
-    cidrs_yaml="["
-    local first=1 part
-    IFS=',' read -ra _cidrs <<< "$DISCOVERY_CIDRS"
-    for part in "${_cidrs[@]}"; do
-      part="${part#"${part%%[![:space:]]*}"}"
-      part="${part%"${part##*[![:space:]]}"}"
-      [[ -z "$part" ]] && continue
-      if [[ $first -eq 1 ]]; then first=0; else cidrs_yaml+=", "; fi
-      cidrs_yaml+="\"${part}\""
-    done
-    cidrs_yaml+="]"
   fi
 
   if [[ -f "$ROOT/.env.example" ]]; then
@@ -374,7 +361,6 @@ inventory:
 discovery:
   enabled: ${discovery_enabled}
   mode: semi-automatic
-  cidrs: ${cidrs_yaml}
 monitoring:
   snmp:
     enabled: true
@@ -424,7 +410,7 @@ EOF
 - LLM mode: ${llm_mode}
 - Loki enabled: ${loki_enabled}
 - Discovery enabled: ${discovery_enabled}
-- Discovery CIDRs: ${cidrs_yaml}
+- Discovery: from LibreNMS; ranges for LibreNMS: ${DISCOVERY_CIDRS:-none yet (./forgesre discovery nets CIDR)}
 - NetBox enabled: ${netbox_enabled} (mode ${NETBOX_MODE}, url ${NETBOX_URL})
 - NetBox first boot: migrations can take several minutes; doctor stays yellow until http://127.0.0.1:8001/login/ answers
 - LibreNMS first boot: MariaDB migrations; doctor stays yellow until http://127.0.0.1:8000/login answers and LIBRENMS_API_TOKEN is set
@@ -514,6 +500,11 @@ if [[ "$ENABLE_AI" == "yes" ]]; then
 fi
 write_files
 start_stack
+if [[ -n "${DISCOVERY_CIDRS}" ]]; then
+  # LibreNMS discovers devices; give it the ranges (it may still be migrating on first boot).
+  "$ROOT/forgesre" discovery nets ${DISCOVERY_CIDRS//,/ } \
+    || echo "LibreNMS not ready yet: run ./forgesre discovery nets ${DISCOVERY_CIDRS//,/ } later."
+fi
 "$ROOT/scripts/doctor.sh" || true
 post_install_journal || true
 echo

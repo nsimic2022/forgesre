@@ -457,6 +457,48 @@ def cmd_sources(port: str) -> None:
             jar.unlink(missing_ok=True)
 
 
+def format_discovery(data: dict[str, Any]) -> str:
+    """Discovery state: LibreNMS reachable, mode, running and last read, found devices."""
+    lines = [f"Discovery source: LibreNMS ({data.get('librenms_url') or '?'})"]
+    lines.append(f"Ready: {'yes' if data.get('ready') else 'no — ' + str(data.get('why') or '')}")
+    lines.append(f"Mode: {data.get('mode')} (discovery.mode), enabled: {'yes' if data.get('enabled') else 'no'}")
+    scan = data.get("scan")
+    if scan:
+        lines.append(f"Reading now: job #{scan.get('id')} {scan.get('status')}")
+    last = data.get("last")
+    if last:
+        result = last.get("result") or {}
+        line = f"Last read: {str(last.get('at') or '')[:16]} {last.get('status')}"
+        if last.get("status") == "error":
+            line += f" — {last.get('error')}"
+        elif result:
+            line += (f" — {result.get('devices', 0)} devices, {result.get('known', 0)} known, "
+                     f"{result.get('found', 0)} new, {result.get('added', 0)} added, {result.get('links', 0)} links")
+        lines.append(line)
+    else:
+        lines.append("Last read: never")
+    counts = data.get("counts") or {}
+    lines.append("Found list: " + (", ".join(f"{k} {v}" for k, v in sorted(counts.items())) or "empty"))
+    return "\n".join(lines) + "\n"
+
+
+def cmd_discovery(port: str, args: list[str]) -> None:
+    """./forgesre discovery [read]: LibreNMS discovery state, or queue a read of its devices now."""
+    jar, _me = ensure_jar(port)
+    try:
+        if args and args[0] == "read":
+            queued = post_json(port, jar, "/api/v1/discovery/scan", {})
+            sys.stdout.write(f"LibreNMS read queued (job #{queued.get('job_id')}, {queued.get('status')}). "
+                             "New devices show in Inventory > Add devices > From LibreNMS.\n")
+            return
+        sys.stdout.write(format_discovery(get_json(port, jar, "/api/v1/discovery/status")))
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as exc:
+        raise SystemExit(f"could not read discovery: {exc}") from exc
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def cmd_ping(port: str, args: list[str]) -> None:
     selector = ""
     timeout = DEFAULT_TIMEOUT
@@ -942,6 +984,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_assets(port, rest)
     elif command == "sources":
         cmd_sources(port)
+    elif command == "discovery":
+        cmd_discovery(port, rest)
     elif command == "capacity":
         cmd_capacity(port, rest)
     elif command in {"asset-refs", "asset_refs"}:

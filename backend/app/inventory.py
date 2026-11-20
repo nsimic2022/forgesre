@@ -5,7 +5,6 @@ import logging
 import os
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from sqlalchemy import func, or_, select
@@ -48,7 +47,6 @@ CANDIDATE_ROLE_CHOICES = [
     "Unknown device",
 ]
 # Probes are socket waits (TCP connect, SNMP UDP, /metrics). DB writes stay on the scan thread.
-DISCOVERY_PROBE_WORKERS = 32
 RENDER_MONITORING = Path(__file__).resolve().parents[2] / "scripts" / "render-monitoring.sh"
 
 
@@ -402,160 +400,6 @@ def discovery_loop_age_seconds() -> float | None:
     if _discovery_loop_mono <= 0:
         return None
     return time.monotonic() - _discovery_loop_mono
-
-
-def run_scan(
-    db: Session,
-    cidrs: list[str] | None = None,
-    *,
-    merge_auto: bool = False,
-    ip_output: str | None = None,
-) -> dict:
-    """Probe hosts from confirmed YAML ``discovery.cidrs`` only.
-
-    Empty cidrs = no scan (does not silently scan all VLANs). ``merge_auto`` is
-    ignored (kept for call-site compatibility with the job worker).
-    """
-    from discovery import SCAN_PORT_ORDER, ZABBIX_AGENT_PORT, normalize_cidrs, probe_host, scan_plan
-
-    _ = (merge_auto, ip_output)
-    yaml_side = list(cidrs) if cidrs is not None else list(settings.discovery_cidrs)
-    cleaned = normalize_cidrs(yaml_side)
-    plan = scan_plan(cleaned)
-    resolved = {
-        "cidrs": cleaned,
-        "yaml": cleaned,
-        "auto": [],
-        "source": "yaml" if cleaned else "none",
-        "warnings": list(plan["warnings"]),
-        "hosts": list(plan["hosts"]),
-        "host_count": int(plan["total"]),
-        "truncated": bool(plan["truncated"]),
-    }
-    targets = list(resolved.get("cidrs") or [])
-    hosts = list(resolved.get("hosts") or [])
-    warnings = list(resolved.get("warnings") or [])
-    if not targets:
-        log.info("discovery scan skipped: empty discovery.cidrs")
-        report(
-            db,
-            "discovery",
-            "scan",
-            "warn",
-            summary="Scan skipped: no discovery.cidrs (Confirm a management /24 first)",
-            detail="empty cidrs — not scanning all VLANs",
-        )
-        return {
-            "found": 0,
-            "skipped": 0,
-            "already": 0,
-            "cidrs": [],
-            "yaml": [],
-            "auto": [],
-            "source": "none",
-            "warnings": warnings,
-            "skipped_reason": "empty_cidrs",
-            "hosts_planned": 0,
-            "truncated": False,
-            "ports": [],
-        }
-    found = 0
-    already = 0
-    known_by_ip = {item.ip: item for item in db.query(Asset).all() if item.ip}
-    known_ips = set(known_by_ip)
-    skipped = 0
-    ports_seen: set[int] = set()
-
-    def _probe(ip: str) -> dict | None:
-        try:
-            return probe_host(ip)
-        except Exception:
-            log.exception("discovery probe_host failed ip=%s", ip)
-            return None
-
-    def _note(result: dict | None) -> None:
-        if not result:
-            return
-        for port in result.get("open_ports") or []:
-            try:
-                ports_seen.add(int(port))
-            except (TypeError, ValueError):
-                continue
-        if result.get("snmp_ok"):
-            ports_seen.add(161)
-
-    workers = max(1, min(DISCOVERY_PROBE_WORKERS, len(hosts) or 1))
-    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="discovery-probe") as pool:
-        results = list(pool.map(_probe, hosts))
-    for ip, result in zip(hosts, results):
-        _note(result)
-        existing = known_by_ip.get(ip)
-        alive = bool(result and result.get("alive"))
-        if not alive and existing is None:
-            continue
-        kind = str((result or {}).get("exporter_kind") or "")
-        role = str((result or {}).get("proposed_role") or "") or (
-            existing.type if existing is not None else "Unknown device"
-        )
-        ports = list((result or {}).get("open_ports") or [])
-        row = upsert_candidate(
-            db,
-            ip,
-            role,
-            ports,
-            snmp_ok=bool((result or {}).get("snmp_ok")),
-            node_exporter=kind == "linux",
-            windows_exporter=kind == "windows",
-        )
-        if existing is not None:
-            row.asset_id = existing.asset_id
-            row.hostname = row.hostname or existing.hostname
-            row.status = "approved"
-            already += 1
-            skipped += 1
-        else:
-            found += 1
-    known_hit = [ip for ip in hosts if ip in known_ips]
-    if known_hit:
-        for asset in db.query(Asset).filter(Asset.ip.in_(known_hit)).all():
-            scrape = str(asset.scrape_address or "")
-            if scrape.endswith(":9100"):
-                ports_seen.add(9100)
-            if scrape.endswith(":9182"):
-                ports_seen.add(9182)
-            if snmp_port_for(asset) > 0:
-                ports_seen.add(161)
-            if asset_in_zabbix(asset):
-                ports_seen.add(ZABBIX_AGENT_PORT)
-    if settings.discovery_mode == "automatic":
-        for row in db.query(DiscoveryCandidate).filter_by(status="new").all():
-            approve_candidate(db, row, actor="system-automatic")
-    db.commit()
-    log.info("discovery scan cidrs=%s found=%s skipped=%s source=%s", targets, found, skipped, resolved.get("source"))
-    detail = f"cidrs={targets} source={resolved.get('source')}"
-    if warnings:
-        detail = detail + f" warnings={warnings}"
-    report(
-        db,
-        "discovery",
-        "scan",
-        "ok" if not warnings else "warn",
-        summary=f"Scan finished found={found} skipped={skipped}",
-        detail=detail,
-    )
-    return {
-        "found": found,
-        "skipped": skipped,
-        "cidrs": targets,
-        "yaml": list(resolved.get("yaml") or []),
-        "auto": list(resolved.get("auto") or []),
-        "source": str(resolved.get("source") or ""),
-        "warnings": warnings,
-        "hosts_planned": int(resolved.get("host_count") or len(hosts)),
-        "truncated": bool(resolved.get("truncated")),
-        "ports": [port for port in SCAN_PORT_ORDER if port in ports_seen],
-        "already": already,
-    }
 
 
 def find_conflicting_asset(
@@ -1311,6 +1155,10 @@ def candidate_inventory_guess(row: DiscoveryCandidate) -> tuple[str, str, str]:
             else ""
         )
         return "Linux Server", "linux-standard", scrape
+    if role in {"Firewall", "Router", "Switch"}:
+        return role, "network-switch", ""
+    if role in {"Printer", "Storage", "Other"}:
+        return role, "", ""
     if bool(getattr(row, "snmp_ok", False)) or "network" in role.lower():
         return "Network device", "network-switch", ""
     if "pick OS" in role:
@@ -1411,7 +1259,7 @@ def approve_candidate(db: Session, row: DiscoveryCandidate, actor: str) -> Asset
             status="healthy",
             monitoring_profile=profile,
             owner="platform",
-            source="discovery",
+            source="librenms" if row.source == "librenms" else "discovery",
             scrape_address=scrape,
             notes=notes,
         )

@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.api import router as api_router
 from app.db import Base, SessionLocal, engine
 from app.journal import maybe_prune_old, prune_older_than, report
-from app.inventory import run_scan, seed_demo_candidate, sync_netbox
+from app.inventory import seed_demo_candidate, sync_netbox
 from app.jobs import recover_interrupted_jobs, start_infrastructure_scheduler
 from app.leader import leader
 from app.loop_beats import beat
@@ -73,8 +73,8 @@ def _discovery_loop(stop: threading.Event) -> None:
 
     from app.inventory import mark_discovery_loop_alive
 
-    # Pytest sets FORGESRE_DISCOVERY_AUTO=0 — skip background scans (tests mutate
-    # discovery.cidrs in-process; a 30s loop would pollute shared sqlite).
+    # Pytest sets FORGESRE_DISCOVERY_AUTO=0 — skip background syncs (a 30 s loop would
+    # pollute the shared sqlite database).
     auto_raw = os.environ.get("FORGESRE_DISCOVERY_AUTO", "1").strip().lower()
     loop_disabled = auto_raw in {"0", "false", "off", "no"}
 
@@ -92,11 +92,15 @@ def _discovery_loop(stop: threading.Event) -> None:
         beat("discovery")
         db = SessionLocal()
         try:
-            # Scan is ICMP/TCP/SNMP in this thread (may hold the worker). CMDB
-            # HTTP is AsyncClient + run_sync — asyncio.run here, not urllib on
-            # the FastAPI loop.
+            # Discovery is LibreNMS's: queue a read of its devices (the jobs loop runs it).
+            # CMDB HTTP below is AsyncClient + run_sync, not urllib on the FastAPI loop.
             if settings.discovery_enabled and settings.discovery_mode != "manual":
-                run_scan(db)
+                from app.jobs import enqueue_discovery_scan
+                from app.librenms_discovery import not_ready
+
+                if not not_ready():
+                    enqueue_discovery_scan(db)
+                    db.commit()
             if settings.netbox_enabled and settings.netbox_auto_sync:
                 sync_netbox(db)
             if settings.zabbix_enabled and settings.zabbix_auto_sync:

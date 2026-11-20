@@ -218,8 +218,19 @@ if [[ "$wrote_lnms" -eq 1 ]]; then
   echo "Recreating core so it reads the new LIBRENMS_API_TOKEN."
   "${DC[@]}" up -d --no-deps --force-recreate core || true
 fi
+# 2.0: ForgeSRE no longer scans networks. Ranges once kept in discovery.cidrs go to LibreNMS.
+old_cidrs="$(awk '/^discovery:/{d=1;next} /^[^ #]/{d=0} d && /^  cidrs:/{c=1;sub(/^  cidrs:[ ]*/,"");print;next} d && c && /^ *- /{sub(/^ *- */,"");print;next} {c=0}' \
+  "$ROOT/config/forgesre.yml" 2>/dev/null | tr -d '[]"'"'"' ' | tr ',\n' '  ')"
+if [[ -n "${old_cidrs// /}" ]]; then
+  echo "discovery.cidrs (${old_cidrs}) is no longer used: LibreNMS discovers devices now."
+  if "$ROOT/forgesre" discovery nets ${old_cidrs}; then
+    sed -i '/^discovery:/,/^[^ #]/{/^  cidrs:/,/^  [a-z]/{/^  cidrs:/d;/^ *- /d}}' "$ROOT/config/forgesre.yml" || true
+  else
+    echo "Could not hand them to LibreNMS yet: ./forgesre discovery nets ${old_cidrs}"
+  fi
+fi
 "$ROOT/scripts/doctor.sh" || echo "Doctor still reports warnings (see above)."
 echo "Update finished."
 echo "SNMP:     ./forgesre snmp"
 echo "NetBox:   http://127.0.0.1:${NB_PORT}  (admin / secrets/secrets.env NETBOX_SUPERUSER_*)"
-echo "LibreNMS: http://127.0.0.1:8000  (Identify on Discovery SNMP; polling off after add)"
+echo "LibreNMS: http://127.0.0.1:8000  (it discovers devices: ./forgesre discovery nets CIDR, then ./forgesre discovery)"

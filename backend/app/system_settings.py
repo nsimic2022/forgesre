@@ -137,9 +137,10 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("inventory.netbox.auto_sync", "integrations", "NetBox sync every 6 h", "bool", effective=lambda: settings.netbox_auto_sync),
     _s("NETBOX_API_TOKEN", "integrations", "NetBox API token"),
     # Discovery
-    _y("discovery.enabled", "discovery", "Discovery enabled", "bool", effective=lambda: settings.discovery_enabled, test="discovery"),
-    _y("discovery.mode", "discovery", "Mode", "enum", choices=("manual", "semi-automatic", "automatic"), effective=lambda: settings.discovery_mode),
-    _y("discovery.cidrs", "discovery", "Ranges to scan", "list", help="Comma separated CIDRs.", effective=lambda: settings.discovery_cidrs),
+    _y("discovery.enabled", "discovery", "Read new devices from LibreNMS", "bool", effective=lambda: settings.discovery_enabled, test="discovery",
+       help="ForgeSRE does not scan networks; LibreNMS finds devices (./forgesre discovery nets CIDR …)."),
+    _y("discovery.mode", "discovery", "New LibreNMS devices", "enum", choices=("manual", "semi-automatic", "automatic"), effective=lambda: settings.discovery_mode,
+       help="semi-automatic: read every 6 h, list in Add devices · automatic: add to the inventory · manual: only on Read now."),
     # Notifications
     _y("notifications.email.enabled", "notifications", "Email enabled", "bool", effective=lambda: settings.email_enabled),
     _y("notifications.email.host", "notifications", "SMTP server", effective=lambda: settings.smtp_host),
@@ -300,8 +301,6 @@ def set_setting(db: Session, key: str, raw: Any, actor: str) -> dict[str, Any]:
     """Validate and store one YAML setting, reload config, audit old -> new. Returns the new row.
 
     Secrets and installer-owned values raise ValueError: they are not written by Core.
-    Discovery CIDRs go through Settings.set_discovery_cidrs so they are normalised the same
-    way as on the Discovery page.
     """
     item = BY_KEY.get(key)
     if item is None:
@@ -312,11 +311,8 @@ def set_setting(db: Session, key: str, raw: Any, actor: str) -> dict[str, Any]:
         raise ValueError(f"{key} is set by the installer in .env: change it there and restart Core")
     value = parse_value(item, raw)
     old = _yaml_get(settings.yaml or {}, key)
-    if key == "discovery.cidrs":
-        value = settings.set_discovery_cidrs(value)
-    else:
-        _write_yaml(key, value)
-        settings.reload_yaml()
+    _write_yaml(key, value)
+    settings.reload_yaml()
     audit(db, "settings.update", actor=actor, object_type="setting", object_id=key, data={"old": old, "new": value}, commit=True)
     log.info("setting %s changed by %s", key, actor)
     return describe(item)

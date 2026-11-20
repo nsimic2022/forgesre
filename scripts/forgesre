@@ -83,6 +83,7 @@ Commands:
   inventory          Same as assets
   capacity           30-day disk / interface history of one asset, days to full
   sources            GLPI / Zabbix / NetBox / LibreNMS: last sync, linked assets, conflicts
+  discovery          LibreNMS discovery: status, read now, nets CIDR..., scan
   snmp               snmp_exporter health + SNMP HTTP SD targets
   render-monitoring  Rewrite Prometheus / Alertmanager / snmp.yml / Alloy / Loki config
   snmp-auths         Write per-asset SNMP auths (Custom community / v3) into snmp.yml
@@ -536,6 +537,18 @@ Clusters are listed in config/forgesre.yml (kubernetes.clusters); each needs a t
   ./forgesre kubernetes sync     read every cluster now (background)
 EOF
       ;;
+    discovery)
+      cat <<'EOF'
+discovery — devices come from LibreNMS; ForgeSRE never scans a network itself.
+  ./forgesre discovery            LibreNMS ready?, discovery.mode, last read, found list
+  ./forgesre discovery read       read LibreNMS's devices and links now (background job)
+  ./forgesre discovery nets 10.20.30.0/24 10.20.40.0/24
+                                  set the ranges LibreNMS may discover (lnms config nets)
+  ./forgesre discovery scan       run LibreNMS's snmp-scan on those ranges, then read
+New devices wait in Inventory > Add devices > From LibreNMS (semi-automatic), or are
+added at once with discovery.mode automatic.
+EOF
+      ;;
     sources)
       cat <<'EOF'
 sources — the systems that feed the inventory (GLPI, Zabbix, NetBox, LibreNMS):
@@ -937,6 +950,58 @@ cmd_snmp() {
   echo "Alerts: SnmpDeviceUnreachable (up{job=\"forgesre-snmp\"}==0 for 2m)."
 }
 
+# Discovery is LibreNMS's. ForgeSRE never sweeps a network; LibreNMS does, with its own
+# ranges (nets) and snmp-scan.py. Every docker call has a timeout.
+cmd_discovery() {
+  local sub="${1:-status}"
+  case "$sub" in
+    nets)
+      shift
+      if [[ $# -eq 0 ]]; then
+        timeout 60 "${DC[@]}" exec -T librenms lnms config:get nets
+        return
+      fi
+      local json="[" first=1 cidr
+      for cidr in ${*//,/ }; do
+        if ! python3 -c 'import ipaddress,sys; ipaddress.ip_network(sys.argv[1], strict=False)' "$cidr" 2>/dev/null; then
+          echo "Not a network: $cidr (use CIDR, for example 10.20.30.0/24)" >&2
+          return 2
+        fi
+        if [[ $first -eq 1 ]]; then first=0; else json+=","; fi
+        json+="\"$cidr\""
+      done
+      json+="]"
+      timeout 60 "${DC[@]}" exec -T librenms lnms config:set nets "$json"
+      echo "LibreNMS ranges set to $json. LibreNMS adds what answers SNMP; ForgeSRE reads it every 6 hours."
+      echo "Scan them now: ./forgesre discovery scan"
+      ;;
+    scan)
+      shift
+      echo "LibreNMS snmp-scan of ${*:-its configured ranges} (up to 30 minutes)..."
+      timeout 1800 "${DC[@]}" exec -T --user librenms librenms /opt/librenms/snmp-scan.py "$@" || {
+        echo "snmp-scan did not finish cleanly. Check: ./forgesre discovery nets ; ./forgesre logs librenms" >&2
+        return 1
+      }
+      run_cli_ops discovery read
+      ;;
+    read)
+      run_cli_ops discovery read
+      ;;
+    status)
+      run_cli_ops discovery
+      ;;
+    *)
+      echo "Usage: ./forgesre discovery [status|read|nets [CIDR ...]|scan [CIDR ...]]"
+      echo "  status   where discovery stands (LibreNMS ready, mode, last read, found list)"
+      echo "  read     read LibreNMS's devices now (background job)"
+      echo "  nets     show or set the ranges LibreNMS discovers (lnms config nets)"
+      echo "  scan     run LibreNMS's snmp-scan now, then read its devices"
+      echo "ForgeSRE does not scan networks itself; LibreNMS does."
+      [[ "$sub" == "help" || "$sub" == "-h" || "$sub" == "--help" ]] || return 2
+      ;;
+  esac
+}
+
 cmd_shell() {
   echo "ForgeSRE shell — same commands as ./forgesre, without typing ./forgesre each time."
   echo "Examples: journal    incidents    incidents INC-000012    history    doctor    quit"
@@ -1092,6 +1157,10 @@ case "$cmd" in
   sources)
     need_env
     run_cli_ops sources "$@"
+    ;;
+  discovery)
+    need_env
+    cmd_discovery "$@"
     ;;
   kubernetes)
     need_env
