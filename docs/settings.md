@@ -70,6 +70,23 @@ service never holds up alerts or the UI. Each message is a row in the incident's
 notifications (channel `slack`, `teams` or `discord`) with `sent` or `failed` and the reason.
 `./forgesre doctor` shows a **Chat** row: off, OK, or the last delivery error.
 
+## Integrations
+
+**Settings › Integrations** shows one card per source (Zabbix, GLPI, LibreNMS, NetBox,
+Kubernetes, MCP) and per part of the monitoring stack (Prometheus, Alertmanager, Loki, Alloy,
+SNMP exporter, Grafana, the ForgeAI model). Each card has the doctor status and reason, the last
+sync from the journal, **Open** links to the service's own page, **Test connection**, **Sync now**
+(Zabbix, GLPI, NetBox, LibreNMS; a background `integration_sync` job) and its settings in place.
+Services that listen only on 127.0.0.1 show the SSH tunnel to use instead of a link. Tokens are
+still set only on the server with `./forgesre settings set-secret`.
+`GET /api/v1/integrations`, `POST /api/v1/integrations/{zabbix|glpi|netbox|librenms}/sync` (Admin).
+
+## Appearance
+
+Five themes: Signal (dark, default), Light, Midnight, High contrast and Follow the computer.
+The choice is kept in the browser (`localStorage`), so a wall screen and a desk can differ.
+Users who are not Admins find the theme picker on the Settings page too.
+
 ## Messages and templates
 
 **Settings › Messages and templates** renders, for any incident (the newest by default, a

@@ -24,15 +24,48 @@
   --ok-bg: #0f2e19;
   --off: #8a93a0;
   --off-bg: #1e222a;
+  --accent-hover: #9be0ff;
+  --on-accent: #06212c;
+  --crit-border: #6a2e35;
   --radius: 14px;
   --mono: "JetBrains Mono", ui-monospace, monospace;
   color-scheme: dark;
+}
+/* Other themes (Settings › Appearance, per browser). Same tokens, so every page follows. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f8; --grid-dot: #e3e7ec; --s1: #ffffff; --s2: #eef1f5; --s3: #e3e8ee; --border: #d5dbe3;
+  --text: #0f172a; --muted: #475569; --faint: #5b6678;
+  --accent: #0369a1; --accent-bg: #e0f0fa; --accent-hover: #075985; --on-accent: #ffffff;
+  --crit: #c62828; --crit-bg: #fdecea; --crit-border: #f2b8b5; --high: #c2410c; --high-bg: #fff1e6;
+  --warn: #8a6d00; --warn-bg: #fff7d6; --ok: #2b7a3b; --ok-bg: #e5f5e9; --off: #5b6678; --off-bg: #eceff3;
+}
+:root[data-theme="midnight"] {
+  --bg: #0a0f1f; --grid-dot: #151c33; --s1: #0f1629; --s2: #141d36; --s3: #1a2443; --border: #24304f;
+  --text: #e8ecf7; --muted: #aab4cd; --faint: #8b95b0;
+  --accent: #8ab4ff; --accent-bg: #172648; --accent-hover: #b4cfff; --on-accent: #0a1430;
+}
+:root[data-theme="contrast"] {
+  --bg: #000000; --grid-dot: #000000; --s1: #0a0a0a; --s2: #161616; --s3: #222222; --border: #6b6b6b;
+  --text: #ffffff; --muted: #e6e6e6; --faint: #cccccc;
+  --accent: #00e5ff; --accent-bg: #00303a; --accent-hover: #7ff2ff; --on-accent: #000000;
+  --crit: #ff5c5c; --high: #ffad5c; --warn: #ffe45c; --ok: #5cff8f; --off: #cccccc;
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    color-scheme: light;
+    --bg: #f4f6f8; --grid-dot: #e3e7ec; --s1: #ffffff; --s2: #eef1f5; --s3: #e3e8ee; --border: #d5dbe3;
+    --text: #0f172a; --muted: #475569; --faint: #5b6678;
+    --accent: #0369a1; --accent-bg: #e0f0fa; --accent-hover: #075985; --on-accent: #ffffff;
+    --crit: #c62828; --crit-bg: #fdecea; --crit-border: #f2b8b5; --high: #c2410c; --high-bg: #fff1e6;
+    --warn: #8a6d00; --warn-bg: #fff7d6; --ok: #2b7a3b; --ok-bg: #e5f5e9; --off: #5b6678; --off-bg: #eceff3;
+  }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background-color: var(--bg); color: var(--text); font: 14px/1.45 Inter, system-ui, sans-serif; }
 body { background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px); background-size: 28px 28px; }
 a { color: var(--accent); text-decoration: none; }
-a:hover { color: #9be0ff; }
+a:hover { color: var(--accent-hover); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Small monospace caps used for section and stat labels. */
 .label, .card-head h2, .stat-label, table.data th { font-family: var(--mono); font-size: 11px; font-weight: 500;
@@ -78,8 +111,8 @@ button { font: inherit; }
 .btn { background: var(--s2); color: var(--text); border: 1px solid var(--border); padding: 6px 12px; min-height: 32px;
   border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .btn:hover { border-color: var(--accent); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #06212c; }
-.btn.primary:hover { background: #7dd3fa; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .btn[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); }
 
@@ -116,7 +149,7 @@ table.data td { padding: 11px 12px; border-bottom: 1px solid var(--border); vert
 input.search, textarea.search, select.search { background: var(--s2); border: 1px solid var(--border); border-radius: 8px; color: var(--text);
   min-height: 34px; padding: 0 12px; font: inherit; font-size: 13.5px; min-width: 240px; }
 .banner { border-radius: 10px; padding: 10px 14px; font-size: 13.5px; }
-.banner.error { background: var(--crit-bg); color: var(--text); border: 1px solid #6a2e35; }
+.banner.error { background: var(--crit-bg); color: var(--text); border: 1px solid var(--crit-border); }
 td .mono, .stat .mono { font-variant-numeric: tabular-nums; }
 
 /* Visually hidden, still read by screen readers. */
