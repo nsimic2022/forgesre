@@ -111,3 +111,5 @@ not move).
 - `GET /api/v1/settings[?group=ai]`
 - `PUT /api/v1/settings/{key}` with `{"value": ...}`; 400 with the reason when rejected
 - `POST /api/v1/settings/test/{component}`: runs that System Health check now
+
+Sign-in with LDAP / Active Directory or OIDC single sign-on: [sign-in.md](sign-in.md).

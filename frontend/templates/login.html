@@ -5,8 +5,8 @@
   <h1>ForgeSRE</h1>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <form method="post" action="/login" hx-boost="false">
-    <label><span class="label-line">Email</span>
-      <input type="email" name="email" value="admin@forgesre.local" required></label>
+    <label><span class="label-line">Email or directory user name</span>
+      <input type="text" name="email" value="admin@forgesre.local" autocomplete="username" required></label>
     <label>Password
       <span class="password-field" x-data="{ show: false }">
         <input :type="show ? 'text' : 'password'" type="password" name="password" required>
@@ -15,5 +15,7 @@
 </label>
     <button type="submit">Login</button>
 </form>
+  {% if sso %}<p class="muted" style="text-align:center">or</p>
+  <a class="button" href="/auth/oidc/login" style="display:block;text-align:center">{{ sso }}</a>{% endif %}
 </section>
 {% endblock %}

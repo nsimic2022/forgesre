@@ -477,6 +477,46 @@ class Settings(BaseSettings):
             raw = 4.0
         return max(2.0, min(5.0, raw))
 
+    def _auth_yaml(self, kind: str) -> dict[str, Any]:
+        raw = ((self.yaml.get("auth") or {}).get(kind)) or {}
+        return raw if isinstance(raw, dict) else {}
+
+    @property
+    def ldap(self) -> dict[str, Any]:
+        """auth.ldap: enabled, url, bind_dn, base_dn, user_filter, groups {admin, engineer, analyst, viewer},
+        default_role, timeout_seconds. The bind password is the LDAP_BIND_PASSWORD secret."""
+        raw = self._auth_yaml("ldap")
+        groups = raw.get("groups") if isinstance(raw.get("groups"), dict) else {}
+        return {
+            "enabled": str(raw.get("enabled", False)).strip().lower() in {"1", "true", "yes", "on"},
+            "url": str(raw.get("url") or "").strip(),
+            "bind_dn": str(raw.get("bind_dn") or "").strip(),
+            "bind_password": self._secret("LDAP_BIND_PASSWORD"),
+            "base_dn": str(raw.get("base_dn") or "").strip(),
+            "user_filter": str(raw.get("user_filter") or "(|(mail={login})(userPrincipalName={login})(sAMAccountName={login}))"),
+            "groups": {k: str(groups.get(k) or "").strip() for k in ("admin", "engineer", "analyst", "viewer")},
+            "default_role": str(raw.get("default_role") or "").strip().lower(),
+            "timeout": max(2.0, min(float(raw.get("timeout_seconds") or 5), 10.0)),
+        }
+
+    @property
+    def oidc(self) -> dict[str, Any]:
+        """auth.oidc: enabled, issuer, client_id, scopes, groups_claim, groups {role: comma list}, default_role,
+        button_label. The client secret is the OIDC_CLIENT_SECRET secret."""
+        raw = self._auth_yaml("oidc")
+        groups = raw.get("groups") if isinstance(raw.get("groups"), dict) else {}
+        return {
+            "enabled": str(raw.get("enabled", False)).strip().lower() in {"1", "true", "yes", "on"},
+            "issuer": str(raw.get("issuer") or "").strip().rstrip("/"),
+            "client_id": str(raw.get("client_id") or "").strip(),
+            "client_secret": self._secret("OIDC_CLIENT_SECRET"),
+            "scopes": str(raw.get("scopes") or "openid email profile groups").strip(),
+            "groups_claim": str(raw.get("groups_claim") or "groups").strip(),
+            "groups": {k: [g.strip() for g in str(groups.get(k) or "").split(",") if g.strip()] for k in ("admin", "engineer", "analyst", "viewer")},
+            "default_role": str(raw.get("default_role") or "").strip().lower(),
+            "button_label": str(raw.get("button_label") or "Sign in with single sign-on").strip(),
+        }
+
     @property
     def inventory_new_from_sources(self) -> str:
         """inventory.new_from_sources: add (default) puts new GLPI / Zabbix / NetBox devices in the
