@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import type { Skill } from "../components/ForgeAiSkills";
 import { RATING_LABEL, RATING_TONE } from "../components/ReviewCard";
 import { Bar, Card, Chip } from "../components/ui";
 import { getJson, type Accuracy, type InvestigationsPage as Page } from "../lib/api";
@@ -122,8 +123,30 @@ export function InvestigationsPage() {
               ))}
             </Card>
           ) : null}
+          <SkillUsefulness />
         </div>
       </div>
     </>
+  );
+}
+
+/** Which ForgeAI skills help, from the last 30 days of answers and 👍 / 👎. */
+function SkillUsefulness() {
+  const [skills, setSkills] = useState<Skill[] | null>(null);
+  useEffect(() => void getJson<{ skills: Skill[] }>("/api/v1/forgeai/skills").then((d) => setSkills(d.skills.filter((s) => s.stats?.calls))).catch(() => setSkills([])), []);
+  if (!skills) return null;
+  return (
+    <Card title="ForgeAI skills · 30 days" actions={<Link className="small" to="/automation">Edit skills</Link>}>
+      {skills.length === 0 ? <span className="muted">ForgeAI has not answered anything in the last 30 days.</span> : null}
+      {skills.map((s) => (
+        <div key={s.slug} className="cell-stack" style={{ gap: 2, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span>{s.name}</span>
+            <span className="small">👍 {s.stats.up ?? 0} · 👎 {s.stats.down ?? 0}</span>
+          </div>
+          <span className="small faint">{s.stats.calls} questions · {s.stats.used} used · {s.stats.rejected} rejected by the checks · {s.stats.avg_s} s</span>
+        </div>
+      ))}
+    </Card>
   );
 }
