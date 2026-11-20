@@ -171,6 +171,7 @@ def open_conflict(db: Session, asset: Asset | None, rec: SourceRecord, kind: str
 
 
 def remember(db: Session, asset: Asset, rec: SourceRecord) -> AssetIdentity:
+    """Upsert what this source says about the asset (one row per source and asset); flushed at once."""
     row = None
     if rec.source_id:
         row = db.query(AssetIdentity).filter_by(source=rec.source, source_id=rec.source_id).first()
@@ -260,6 +261,7 @@ def resolve(db: Session, conflict: AssetConflict, action: str, actor: str) -> As
 
 
 def conflict_rows(db: Session, *, status: str = "open", limit: int = 200) -> list[dict[str, Any]]:
+    """Conflicts for Inventory › Sources and ./forgesre sources, newest first, with the asset named."""
     rows = (db.query(AssetConflict).filter(AssetConflict.status == status)
             .order_by(AssetConflict.seen_at.desc()).limit(limit).all())
     assets = {a.id: a for a in db.query(Asset).filter(Asset.id.in_([r.asset_id for r in rows if r.asset_id])).all()}

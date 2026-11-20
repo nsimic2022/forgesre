@@ -73,6 +73,7 @@ def _asset_dict(asset) -> dict[str, Any]:
 
 
 def initial_evidence(db: Session, incident: Incident) -> Evidence:
+    """E1… before any tool: the alarm, ForgeRCA facts and guess, changes before, the playbook, similar confirmed incidents."""
     from app.changes import changes_before
     from app.forgeai import _when
     from app.knowledge import playbooks_for, similar_confirmed
