@@ -223,3 +223,78 @@ def test_context_uses_short_numbers_and_readable_times(db, monkeypatch):
     from app.incident_view import _forgeai_last
 
     assert _forgeai_last(db, row)["status"] == view.status
+
+
+def _run_only(db, job_id: int) -> None:
+    """Run the queue with other tests' pending jobs parked, so only ``job_id`` runs."""
+    from app.jobs import run_pending_jobs
+
+    others = db.query(Job).filter(Job.status == "pending", Job.id != job_id).all()
+    for row in others:
+        row.status = "parked"
+    db.commit()
+    try:
+        run_pending_jobs(db, limit=3)
+    finally:
+        for row in others:
+            row.status = "pending"
+        db.commit()
+
+
+def test_operator_question_is_a_trial_with_the_question_in_the_facts(db, monkeypatch):
+    from app.settings import settings
+
+    row = _incident(db)
+    analyst, viewer = _client("analyst"), _client("viewer")
+    monkeypatch.setattr(settings, "yaml", {**settings.yaml, "ai": {"enabled": True, "llm": {"url": "http://127.0.0.1:8088/v1"}}})
+    assert viewer.post(f"/api/v1/incidents/{row.number}/forgeai/ask", json={"question": "why?"}).status_code == 403
+    assert analyst.post(f"/api/v1/incidents/{row.number}/forgeai/ask", json={}).status_code == 400
+    queued = analyst.post(f"/api/v1/incidents/{row.number}/forgeai/ask", json={"question": "Could the backup at 02:00 have caused this?"}).json()
+    assert queued["task"] == "ask"
+    fake = FakeLLM({"answer": "The facts show no backup before the alarm.", "not_in_facts": ["backup schedule"]})
+    monkeypatch.setattr(forgeai, "_provider", lambda: fake)
+    _run_only(db, queued["job"])
+    state = analyst.get(f"/api/v1/forgeai/jobs/{queued['job']}").json()
+    assert state["status"] == "done", state
+    call = analyst.get(f"/api/v1/forgeai/calls/{state['call_id']}").json()
+    assert call["task"] == "ask" and call["status"] == "trial" and call["skill"] == "ask-generic"
+    assert json.loads(fake.calls[0][1])["operator_question"] == "Could the backup at 02:00 have caused this?"
+    assert call["answer"]["not_in_facts"] == ["backup schedule"]
+    db.expire_all()
+    assert not db.query(Investigation).filter_by(incident_id=row.id, provider="forgerca-llm").count()
+
+
+def test_compare_skill_then_engineer_uses_the_trial(db, monkeypatch):
+    from app.settings import settings
+
+    row = _incident(db)
+    analyst, engineer = _client("analyst"), _client("engineer")
+    monkeypatch.setattr(settings, "yaml", {**settings.yaml, "ai": {"enabled": True, "llm": {"url": "http://127.0.0.1:8088/v1"}}})
+    assert analyst.post(f"/api/v1/incidents/{row.number}/forgeai/ask", json={"skill": "explain-generic"}).status_code == 400
+    queued = analyst.post(f"/api/v1/incidents/{row.number}/forgeai/ask", json={"skill": "linux-disk"}).json()
+    assert queued["task"] == "incident"
+    monkeypatch.setattr(forgeai, "_provider", lambda: FakeLLM(GOOD))
+    _run_only(db, queued["job"])
+    call_id = analyst.get(f"/api/v1/forgeai/jobs/{queued['job']}").json()["call_id"]
+    assert analyst.get(f"/api/v1/forgeai/calls/{call_id}").json()["status"] == "trial"
+    db.expire_all()
+    assert not db.query(Investigation).filter_by(incident_id=row.id, provider="forgerca-llm").count()
+    assert analyst.post(f"/api/v1/forgeai/calls/{call_id}/use").status_code == 403
+    used = engineer.post(f"/api/v1/forgeai/calls/{call_id}/use")
+    assert used.status_code == 200 and used.json()["status"] == "used"
+    assert engineer.post(f"/api/v1/forgeai/calls/{call_id}/use").status_code == 400  # only once
+    db.expire_all()
+    inv = db.query(Investigation).filter_by(incident_id=row.id, provider="forgerca-llm").one()
+    assert inv.likely_cause == GOOD["cause"] and inv.result["skill"] == "linux-disk"
+
+
+def test_one_person_cannot_fill_the_llm_lane(db, monkeypatch):
+    from app.settings import settings
+
+    row = _incident(db)
+    analyst = _client("analyst")
+    monkeypatch.setattr(settings, "yaml", {**settings.yaml, "ai": {"enabled": True, "llm": {"url": "http://127.0.0.1:8088/v1"}}})
+    jobs = [analyst.post(f"/api/v1/incidents/{row.number}/forgeai/ask", json={"question": f"q{i}"}) for i in range(4)]
+    assert [j.status_code for j in jobs] == [200, 200, 200, 429]
+    db.query(Job).filter(Job.id.in_([j.json()["job"] for j in jobs[:3]])).delete(synchronize_session=False)
+    db.commit()

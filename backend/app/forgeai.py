@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models import ForgeAiCall, ForgeAiSkill, Incident, Investigation, utcnow
 
 JOB_KIND = "forgeai"
+QUESTION_MAX = 500
 # ~1 200 tokens: Qwen3-4B on CPU reads about 25 tokens/s before it writes (docs/llm.md)
 CONTEXT_MAX = 4500
 
@@ -72,6 +73,13 @@ TASKS: dict[str, dict[str, Any]] = {
         "shape": '{"paragraph": "one paragraph, 4-7 sentences"}',
         "fields": {"paragraph": 1400},
         "lists": {},
+        "max_tokens": 500,
+    },
+    "ask": {
+        "label": "Your question",
+        "shape": '{"answer": "2-6 sentences", "not_in_facts": ["what the facts do not show"]}',
+        "fields": {"answer": 1500},
+        "lists": {"not_in_facts": (4, 200)},
         "max_tokens": 500,
     },
     "shift": {
@@ -131,6 +139,10 @@ BUILTIN: list[tuple[str, str, str, list[str], list[str], int, dict[str, bool], s
      "Write the summary paragraph of a blameless postmortem: what happened, when, impact, how it was "
      "found and fixed, and the confirmed cause if there is one. Use the notes and the timeline. Mark "
      "anything not in the facts as unknown."),
+    ("ask-generic", "Operator question", "ask", [], [], 1000, {},
+     "An operator asks one question about this incident; it is in operator_question. Answer only that "
+     "question from the facts, in plain words. If the facts cannot answer it, say so and list what is "
+     "missing in not_in_facts. Do not repeat the whole incident."),
     ("shift-generic", "Shift handover", "shift", [], [], 1000, {},
      "Summarise the last hours for the next shift: what happened, what is still open and who has it, "
      "and what to keep an eye on. Most important first. Do not repeat every incident."),
@@ -257,8 +269,12 @@ def _shift_context(db: Session, hours: int = 12) -> dict[str, Any]:
          "acknowledged_by": i.ack_by or "", "confirmed_cause": i.root_cause or ""} for i in rows]}
 
 
-def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Incident | None, *, hours: int = 12) -> tuple[str, str]:
-    """(system, user) exactly as sent: fixed rules + task shape + skill instructions, and the context JSON."""
+def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Incident | None, *, hours: int = 12,
+                  question: str = "") -> tuple[str, str]:
+    """(system, user) exactly as sent: fixed rules + task shape + skill instructions, and the context JSON.
+
+    ``question`` (task ask) goes first in the context as operator_question and is never trimmed away.
+    """
     from rca.sanitize import sanitize
 
     spec = TASKS[task]
@@ -267,6 +283,8 @@ def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Inciden
         include["postmortem"] = True
     context = _shift_context(db, hours) if task == "shift" else _incident_context(db, incident, include)
     system = BASE_RULES.format(shape=spec["shape"]) + "\nInstructions for this kind of work:\n" + (skill.instructions or "").strip()
+    if task == "ask":
+        context = {"operator_question": " ".join(question.split())[:QUESTION_MAX], **context}
     context = json.loads(_short(json.dumps(sanitize(context), ensure_ascii=False, default=str)))
     user = json.dumps(context, ensure_ascii=False, default=str)
     # Too long: drop the least useful parts first, so the JSON stays whole instead of being cut.
@@ -322,7 +340,7 @@ def _provider():
 
 
 def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug: str = "", actor: str = "system",
-        trial: bool = False, instructions: str | None = None, hours: int = 12) -> ForgeAiCall:
+        trial: bool = False, instructions: str | None = None, hours: int = 12, question: str = "") -> ForgeAiCall:
     """Ask the model once and record the exchange. ``trial`` (skill test) never becomes the incident's answer;
     ``instructions`` tries unsaved skill text; ``hours`` is the shift summary window. An incident answer that passes the checks is stored as a
     ``forgerca-llm`` Investigation so the incident page and reports show it."""
@@ -331,6 +349,10 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
 
     if task not in TASKS:
         raise ValueError(f"unknown task {task}")
+    if task == "ask":
+        if incident is None or not question.strip():
+            raise ValueError("a question needs an incident and some text")
+        trial = True  # an operator's question is never the incident's answer by itself
     if task == "investigate":
         # several steps with read-only tools; see forgeai_investigator
         from app.forgeai_investigator import investigate
@@ -344,7 +366,7 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
     if instructions is not None:
         # unsaved text from the skill editor: a transient copy, never added to the session
         skill = ForgeAiSkill(slug=skill.slug, name=skill.name, task=skill.task, include=skill.include, version=skill.version, instructions=instructions)
-    system, user = build_prompts(db, task, skill, incident, hours=hours)
+    system, user = build_prompts(db, task, skill, incident, hours=hours, question=question)
     call = ForgeAiCall(incident_id=incident.id if incident is not None else None, task=task, skill_slug=skill.slug,
                        skill_version=skill.version or 0, system_prompt=system, user_prompt=user, actor=actor,
                        endpoint=(settings.llm_url or "") if settings.ai_enabled else "")
@@ -366,21 +388,46 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
     db.add(call)
     db.flush()
     if call.status == "used" and task == "incident" and incident is not None:
-        a = call.answer
-        db.add(Investigation(
-            incident_id=incident.id, summary=a["for_shift_lead"], likely_cause=a["cause"],
-            # provider name kept from V0.x: reports and the incident view read "forgerca-llm"
-            recommended_action="\n".join(a.get("first_checks") or []), provider="forgerca-llm", engine="forgeai",
-            engine_version="2.0", model=call.model, requested_by=actor, confidence=0,
-            result={"answer": a, "call_id": call.id, "skill": skill.slug, "skill_name": skill.name},
-            disclaimer="ForgeAI wrote this from ForgeRCA facts; it has not changed anything.",
-        ))
+        store_incident_answer(db, incident, call, skill, actor)
     db.commit()
     report(db, "forgeai", task, "ok" if call.status in {"used", "trial"} else "error",
            summary=f"{(incident.number.split('_')[0] + ' ') if incident is not None else ''}{task} with {skill.slug}: {call.status}"
                    f"{' (' + call.reason + ')' if call.reason else ''} in {call.duration_ms} ms",
            object_type="incident" if incident is not None else "forgeai", object_id=incident.number if incident is not None else task)
     return call
+
+
+def store_incident_answer(db: Session, incident: Incident, call: ForgeAiCall, skill: ForgeAiSkill | None, actor: str) -> Investigation:
+    """Make a checked "cause and first checks" answer the incident's ForgeAI answer (an Investigation row)."""
+    a = call.answer
+    row = Investigation(
+        incident_id=incident.id, summary=a["for_shift_lead"], likely_cause=a["cause"],
+        # provider name kept from V0.x: reports and the incident view read "forgerca-llm"
+        recommended_action="\n".join(a.get("first_checks") or []), provider="forgerca-llm", engine="forgeai",
+        engine_version="2.0", model=call.model, requested_by=actor, confidence=0,
+        result={"answer": a, "call_id": call.id, "skill": call.skill_slug, "skill_name": skill.name if skill else call.skill_slug},
+        disclaimer="ForgeAI wrote this from ForgeRCA facts; it has not changed anything.",
+    )
+    db.add(row)
+    return row
+
+
+def use_trial_answer(db: Session, call: ForgeAiCall, actor: str) -> Investigation:
+    """An Engineer picks a trial "cause and first checks" answer (another skill) as the incident's answer.
+
+    Only a trial that passed the checks qualifies; the call becomes "used" and the choice is audited.
+    """
+    from app.audit import audit
+
+    if call.task != "incident" or call.status != "trial" or call.incident_id is None:
+        raise ValueError("only a checked trial answer of 'cause and first checks' can be used")
+    incident = db.get(Incident, call.incident_id)
+    skill = db.query(ForgeAiSkill).filter_by(slug=call.skill_slug).first()
+    row = store_incident_answer(db, incident, call, skill, actor)
+    call.status, call.reason = "used", f"chosen by {actor}"
+    audit(db, "forgeai.use", actor=actor, object_type="incident", object_id=incident.number, data={"call_id": call.id, "skill": call.skill_slug})
+    db.commit()
+    return row
 
 
 def call_as_dict(call: ForgeAiCall, *, prompts: bool) -> dict[str, Any]:

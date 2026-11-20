@@ -682,7 +682,7 @@ def forgeai_ask(number: str, body: ForgeAiAsk, db: Session = Depends(get_db), us
     from app.jobs import enqueue
     from app.settings import settings
 
-    if body.task not in TASKS or body.task == "shift":
+    if body.task not in TASKS or body.task in {"shift", "ask"}:
         raise HTTPException(status_code=400, detail="task is incident, investigate, explain or postmortem")
     if not (settings.ai_enabled and settings.llm_url):
         raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
@@ -711,6 +711,74 @@ def forgeai_calls(number: str, db: Session = Depends(get_db), user: User = Depen
     return {"calls": [call_as_dict(c, prompts=can(user, "read_evidence")) for c in rows]}
 
 
+class ForgeAiQuestion(BaseModel):
+    skill: str = ""
+    question: str = Field(default="", max_length=500)
+
+
+ASK_PENDING_MAX = 3
+
+
+@router.post("/incidents/{number}/forgeai/ask")
+def forgeai_ask_trial(number: str, body: ForgeAiQuestion, db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """Ask again with another skill, or ask your own question, in the background (Analyst and up).
+
+    With ``question`` the task is "ask"; without it the chosen skill re-runs "cause and first checks".
+    The answer is kept as a trial: it never replaces the incident's answer unless an Engineer picks it.
+    At most ASK_PENDING_MAX questions per person wait at once, so one operator cannot fill the LLM lane.
+    """
+    from uuid import uuid4
+
+    from app.forgeai import JOB_KIND
+    from app.jobs import enqueue
+    from app.models import ForgeAiSkill, Job
+    from app.settings import settings
+
+    if not (settings.ai_enabled and settings.llm_url):
+        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    question = " ".join(body.question.split())
+    task = "ask" if question else "incident"
+    if body.skill:
+        skill = db.query(ForgeAiSkill).filter_by(slug=body.skill).first()
+        if skill is None:
+            raise HTTPException(status_code=404, detail="skill not found")
+        if skill.task not in {"incident", "ask"}:
+            raise HTTPException(status_code=400, detail="pick a 'cause and first checks' or 'question' skill")
+        if not question and skill.task == "ask":
+            raise HTTPException(status_code=400, detail="type a question for this skill")
+    elif not question:
+        raise HTTPException(status_code=400, detail="pick a skill or type a question")
+    waiting = [j for j in db.query(Job).filter(Job.kind == JOB_KIND, Job.status.in_(["pending", "running"]), Job.object_id.like("%#ask-%")).all()
+               if (j.payload or {}).get("actor") == user.email]
+    if len(waiting) >= ASK_PENDING_MAX:
+        raise HTTPException(status_code=429, detail=f"{len(waiting)} of your questions are still waiting; try again when one is answered")
+    job = enqueue(db, JOB_KIND, f"{item.number}#ask-{uuid4().hex[:8]}", object_type="incident",
+                  payload={"task": task, "skill": body.skill if body.skill else ("ask-generic" if task == "ask" else ""),
+                           "question": question, "trial": True, "actor": user.email})
+    audit(db, "forgeai.ask", actor=user.email, object_type="incident", object_id=item.number,
+          data={"task": task, "skill": body.skill, "question": question[:200]}, commit=True)
+    return {"queued": True, "job": getattr(job, "id", None), "task": task}
+
+
+@router.post("/forgeai/calls/{call_id}/use")
+def forgeai_use_call(call_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Engineer: make a checked trial answer (another skill) this incident's ForgeAI answer."""
+    from app.forgeai import use_trial_answer
+    from app.models import ForgeAiCall
+
+    row = db.get(ForgeAiCall, call_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        use_trial_answer(db, row, user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"id": row.id, "status": row.status}
+
+
 @router.get("/forgeai/status")
 def forgeai_status(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
     """Is ForgeAI on, does the model answer, how did the last week of calls go."""
@@ -724,6 +792,7 @@ class ForgeAiTrial(BaseModel):
     task: str = "incident"
     skill: str = ""
     instructions: str | None = None
+    question: str = Field(default="", max_length=500)
 
 
 @router.post("/forgeai/trial")
@@ -749,7 +818,9 @@ def forgeai_trial(body: ForgeAiTrial, db: Session = Depends(get_db), user: User 
 
     # a unique object id: each trial (new text) is its own job, not deduplicated into a pending one
     job = enqueue(db, JOB_KIND, f"{target}#trial-{uuid4().hex[:8]}", object_type="forgeai",
-                  payload={"task": body.task, "skill": body.skill, "trial": True, "instructions": body.instructions, "actor": user.email})
+                  payload={"task": body.task, "skill": body.skill, "trial": True, "instructions": body.instructions, "actor": user.email,
+                           # a question skill is tried with the operator's text, or a plain default question
+                           "question": body.question or ("What most likely caused this, and what should be checked first?" if body.task == "ask" else "")})
     return {"queued": True, "job": getattr(job, "id", None), "incident": None if target == "shift" else target}
 
 
