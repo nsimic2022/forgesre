@@ -327,6 +327,14 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload = dict(row.payload or {})
                 payload["result"] = _json_safe(verify(db, row.object_id))
                 row.payload = payload
+            elif row.kind == "incident_mail":
+                from app.incident_mail import run_mail
+
+                # One incident report per address; SMTP has its own timeout. Each is an outbox row.
+                payload = dict(row.payload or {})
+                payload["result"] = run_mail(db, row.object_id.split("#", 1)[0], payload)
+                payload.pop("body", None)
+                row.payload = payload
             elif row.kind == "asset_import":
                 from app.asset_import import run_import
 

@@ -5,6 +5,7 @@ import { PostmortemPanel } from "../components/PostmortemPanel";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ReviewCard } from "../components/ReviewCard";
+import { SendReport } from "../components/SendReport";
 import { Bar, Card, Chip } from "../components/ui";
 import { getJson, postJson, type IncidentView } from "../lib/api";
 import { clock, duration, severityLabel, severityTone, tierLabel } from "../lib/format";
@@ -20,6 +21,7 @@ export function IncidentDetailPage() {
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
   const [postmortem, setPostmortem] = useState(false);
+  const [mail, setMail] = useState(false);
 
   const load = useCallback(
     () =>
@@ -70,6 +72,7 @@ export function IncidentDetailPage() {
         </div>
         <div className="row">
           <button className="btn" type="button" onClick={() => setPostmortem(!postmortem)} aria-expanded={postmortem}>Postmortem</button>
+          {data.can.work ? <button className="btn" type="button" onClick={() => setMail(!mail)} aria-expanded={mail}>Send report</button> : null}
         {data.can.work && open ? (
           <>
             {!data.ack_at ? (
@@ -82,6 +85,7 @@ export function IncidentDetailPage() {
         </div>
       </header>
       {postmortem ? <PostmortemPanel number={data.number} onClose={() => setPostmortem(false)} /> : null}
+      {mail ? <SendReport number={data.number} onClose={() => setMail(false)} /> : null}
       {error ? <div className="banner error" role="alert">{error}</div> : null}
       <div className="banner" style={{ background: open ? "var(--high-bg)" : "var(--ok-bg)", border: "1px solid var(--border)" }}>
         <strong>{data.status}</strong>

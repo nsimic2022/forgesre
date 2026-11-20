@@ -71,6 +71,13 @@ a Markdown draft from what it knows: timeline, impact (what sits behind the asse
 changed, notes, the confirmed cause, the playbook. It invents nothing: every gap is marked
 `[to fill]`. Copy it or download the `.md` and paste it into your wiki.
 
+## Send report
+
+**Send report** on the incident mails the report to whoever needs it: the asset owner, a
+manager, a supplier. Pick from the suggested addresses or type them (up to 10), change the text
+if you like, and press **Send**. Each address shows sent or failed with the reason; every mail
+is also in the Outbox on the Reports page.
+
 ## On call
 
 ![On call](../images/ui-oncall.png)
