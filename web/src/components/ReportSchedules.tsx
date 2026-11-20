@@ -107,6 +107,8 @@ export function ReportSchedules({ rows, canEdit, onChanged }: { rows: ScheduledR
   const done = (saved: boolean) => (setEditing(null), saved && onChanged());
   return (
     <Card title="Scheduled reports" actions={canEdit ? <button className="btn primary" type="button" onClick={() => setEditing({ report: null })}>New schedule</button> : null}>
+      <details className="explain">
+      <summary>How scheduled reports work</summary>
       <p className="small muted" style={{ margin: 0 }}>
         A scheduled report is mailed <strong>automatically</strong> to its recipients at each time it is due: no one has to press anything.
         It opens with the period at a glance (incidents against the period before, time to acknowledge and resolve), incidents per day,
@@ -114,6 +116,7 @@ export function ReportSchedules({ rows, canEdit, onChanged }: { rows: ScheduledR
         A <strong>ForgeAI digest</strong> is the morning mail instead: the incidents of the last day, what is open and who has it, then ForgeAI&apos;s shift summary written from those facts (left out, with the reason, when ForgeAI is off or its answer fails the checks).
         <strong> Preview</strong> shows the mail with today&apos;s data; <strong>Send now</strong> mails it once without moving the schedule.
       </p>
+      </details>
       <div className="row"><button className="btn" type="button" onClick={() => show(null)}>Preview a weekly report</button></div>
       {preview && preview.id === null ? <PreviewBox preview={preview.data} onClose={() => setPreview(null)} /> : null}
       {error ? <div className="banner error" role="alert">{error}</div> : null}

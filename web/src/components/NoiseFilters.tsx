@@ -133,9 +133,9 @@ export function NoiseFilters({ filters, canEdit, onChanged }: { filters: NoiseFi
       <Card title="Noise filters" actions={canEdit ? <button className="btn primary" onClick={() => setEditing({ id: null, draft: EMPTY })}>New filter</button> : null}>
         <span className="small muted">A filtered alarm is still stored and shown on its incident, but nobody is notified while the filter applies. When it stops applying and the alarm is still firing, the incident opens and escalation starts.</span>
         <div className="table-wrap">
-          <table className="data" style={{ minWidth: 980 }}>
+          <table className="data" style={{ minWidth: 1180 }}>
             <thead>
-              <tr><th style={{ width: 180 }}>Name</th><th style={{ width: 160 }}>Alerts</th><th style={{ width: 150 }}>Applies to</th><th>When</th><th style={{ width: 90 }}>Below</th><th style={{ width: 120 }}>Owner</th><th style={{ width: 70 }}>Hits</th><th style={{ width: 60 }}>On</th>{canEdit ? <th style={{ width: 140 }} /> : null}</tr>
+              <tr><th style={{ width: 180 }}>Name</th><th style={{ width: 160 }}>Alerts</th><th style={{ width: 150 }}>Applies to</th><th style={{ width: 170 }}>When</th><th style={{ width: 90 }}>Below</th><th style={{ width: 120 }}>Owner</th><th style={{ width: 70 }}>Hits</th><th style={{ width: 60 }}>On</th>{canEdit ? <th style={{ width: 140 }} /> : null}</tr>
             </thead>
             <tbody>
               {filters.map((f) => (

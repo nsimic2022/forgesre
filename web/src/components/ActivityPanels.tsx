@@ -4,7 +4,7 @@ import { ApiError, getJson } from "../lib/api";
 import { clock } from "../lib/format";
 import { Card, Chip } from "./ui";
 
-const PAGE = 50;
+const PAGE = 15;
 type Outbox = { total: number; rows: { id: number; at: string | null; channel: string; target: string; subject: string; status: string; error: string; step: string; incident: string }[] };
 type Journal = { modules: { module: string; count: number }[]; entries: { id: number; at: string | null; module: string; action: string; status: string; summary: string; detail: string }[] };
 type Audit = { total: number; rows: { id: number; at: string | null; actor: string; action: string; object: string; ip: string; data: Record<string, unknown> }[] };
@@ -52,7 +52,7 @@ export function OutboxCard() {
               <td className="small" style={{ wordBreak: "break-word" }}>{r.target}</td>
               <td className="small">
                 {r.incident ? <Link className="mono" to={`/incidents/${encodeURIComponent(r.incident)}`}>{r.incident.split("_")[0]}</Link> : null} {r.subject}
-                {r.error ? <div className="small" style={{ color: "var(--crit)" }}>{r.error}</div> : null}
+                {r.error ? <span className="small one-line" style={{ color: "var(--crit)" }} title={r.error}>{r.error}</span> : null}
               </td>
               <td><Chip tone={sentTone(r.status)}>{r.status}</Chip></td>
             </tr>

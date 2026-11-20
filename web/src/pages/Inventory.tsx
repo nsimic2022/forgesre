@@ -262,7 +262,7 @@ export function InventoryPage() {
                         {data?.can_edit ? (
                           <td><input type="checkbox" aria-label={`Select ${row.hostname}`} checked={picked.includes(row.asset_id)} onChange={(e) => setPicked(e.target.checked ? [...picked, row.asset_id] : picked.filter((id) => id !== row.asset_id))} /></td>
                         ) : null}
-                        <td><span className="row" style={{ gap: 8 }}><Dot tone={st.tone} /><span className="small muted">{st.label}</span></span></td>
+                        <td><span className="row nowrap" style={{ gap: 8 }}><Dot tone={st.tone} /><span className="small muted">{st.label}</span></span></td>
                         <td>
                           <button type="button" onClick={() => setSelected(row.asset_id)} style={{ background: "none", border: 0, padding: 0, color: "var(--text)", fontWeight: 600, cursor: "pointer", font: "inherit" }}>
                             {row.hostname}

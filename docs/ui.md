@@ -96,6 +96,15 @@ keep failing after the parent is back.
 API: `GET /api/v1/topology`, `POST /api/v1/topology/sync`, `POST /api/v1/topology/parent`
 `{asset_id, parent_asset_id}` (empty clears). Writes need Engineer.
 
+## Keyboard and accessibility
+
+- <kbd>/</kbd> puts the cursor in the page's search box; <kbd>?</kbd> lists the shortcuts.
+- <kbd>g</kbd> then a letter opens a page: <kbd>n</kbd> NOC, <kbd>i</kbd> Incidents, <kbd>o</kbd> On-call,
+  <kbd>v</kbd> Inventory, <kbd>a</kbd> Automation, <kbd>t</kbd> Investigations, <kbd>r</kbd> Reports,
+  <kbd>s</kbd> Settings, <kbd>w</kbd> wall screen. Keys are ignored while you type in a field.
+- **Skip to content** is the first stop for the Tab key; the browser tab is named after the page
+  ("Inventory · ForgeSRE", "INC-0412 · ForgeSRE"). Code: `web/src/components/Shortcuts.tsx`.
+
 ## TV mode (wall screen)
 
 `/app/tv` (button **Wall screen (TV mode)** on the NOC page) is built for a screen on the wall, in

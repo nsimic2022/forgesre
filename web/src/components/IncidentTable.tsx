@@ -18,7 +18,7 @@ function IncidentRow({ row }: { row: NocIncident }) {
       <td>
         <div className="cell-stack">
           <span className="mono">{clock(row.started_at)}</span>
-          <span className="small muted">{duration(row.started_at, row.resolved_at ? new Date(row.resolved_at) : new Date())}</span>
+          <span className="small muted nowrap">{duration(row.started_at, row.resolved_at ? new Date(row.resolved_at) : new Date())}</span>
         </div>
       </td>
       <td>
