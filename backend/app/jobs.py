@@ -327,6 +327,13 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload = dict(row.payload or {})
                 payload["result"] = _json_safe(verify(db, row.object_id))
                 row.payload = payload
+            elif row.kind == "asset_capacity":
+                from app.asset_capacity import run_capacity
+
+                # ~30 days of disk and interface receive; 3 s per Prometheus query, Zabbix its own timeout.
+                payload = dict(row.payload or {})
+                payload["result"] = _json_safe(run_capacity(db, row.object_id))
+                row.payload = payload
             elif row.kind == "snmp_apply":
                 from app.snmp_apply import apply_auths
 

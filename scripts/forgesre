@@ -81,6 +81,7 @@ Commands:
   settings           Settings page from the shell: list, get, set, test, set-secret
   assets             List inventory with # (alias: inventory)
   inventory          Same as assets
+  capacity           30-day disk / interface history of one asset, days to full
   snmp               snmp_exporter health + SNMP HTTP SD targets
   render-monitoring  Rewrite Prometheus / Alertmanager / snmp.yml / Alloy / Loki config
   snmp-auths         Write per-asset SNMP auths (Custom community / v3) into snmp.yml
@@ -531,6 +532,17 @@ Clusters are listed in config/forgesre.yml (kubernetes.clusters); each needs a t
 
   ./forgesre kubernetes          one line per cluster
   ./forgesre kubernetes sync     read every cluster now (background)
+EOF
+      ;;
+    capacity)
+      cat <<'EOF'
+capacity — about 30 days of disk use and interface receive for one asset, with
+"~N days to full" when disk use keeps climbing (! marks 30 days or less).
+
+  ./forgesre capacity web-01
+  ./forgesre capacity 12 --refresh     read Prometheus / Zabbix again now
+
+Read in the background jobs worker and cached for 15 minutes.
 EOF
       ;;
     slo)
@@ -1041,6 +1053,10 @@ case "$cmd" in
   forgeai)
     need_env
     run_cli_ops forgeai "$@"
+    ;;
+  capacity)
+    need_env
+    run_cli_ops capacity "$@"
     ;;
   kubernetes)
     need_env

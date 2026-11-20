@@ -502,6 +502,23 @@ def asset_metrics_api(
     return metric_panel_with_zabbix(item, safe_asset_metric_panel(item, **bounds))
 
 
+@router.get("/assets/{asset_id}/capacity")
+def asset_capacity_api(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require("read_assets")),
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """30-day disk and interface history with days-to-full. Read in a background job; poll while pending."""
+    del user
+    from app.asset_capacity import capacity_view
+
+    item = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    return capacity_view(db, item, refresh=refresh)
+
+
 @router.get("/assets/{asset_id}/verify")
 def verify_one_asset_api(
     asset_id: str,
