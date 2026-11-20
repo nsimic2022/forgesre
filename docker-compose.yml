@@ -72,33 +72,6 @@ services:
       retries: 15
     restart: unless-stopped
 
-  # Optional: background loops (escalation, reports, jobs, ForgeAI, discovery, syncs) in their own
-  # process. COMPOSE_PROFILES=...,worker and FORGESRE_CORE_ROLE=web in .env; see docs/architecture.md.
-  worker:
-    profiles: ["worker"]
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    network_mode: host
-    env_file:
-      - .env
-      - secrets/secrets.env
-    environment:
-      <<: *core_env
-      FORGESRE_ROLE: worker
-    volumes: *core_volumes
-    command: python -m app.worker
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import sys; from app.loop_beats import age_seconds; a = age_seconds('jobs'); sys.exit(0 if a is not None and a < 180 else 1)"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
-    restart: unless-stopped
-
   prometheus:
     image: prom/prometheus:v2.54.1
     user: "0"
@@ -461,6 +434,33 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    restart: unless-stopped
+
+  # Optional: background loops (escalation, reports, jobs, ForgeAI, discovery, syncs) in their own
+  # process. COMPOSE_PROFILES=...,worker and FORGESRE_CORE_ROLE=web in .env; see docs/architecture.md.
+  worker:
+    profiles: ["worker"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    network_mode: host
+    env_file:
+      - .env
+      - secrets/secrets.env
+    environment:
+      <<: *core_env
+      FORGESRE_ROLE: worker
+    volumes: *core_volumes
+    command: python -m app.worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; from app.loop_beats import age_seconds; a = age_seconds('jobs'); sys.exit(0 if a is not None and a < 180 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
     restart: unless-stopped
 
   mailserver:
