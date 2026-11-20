@@ -204,3 +204,22 @@ def test_doctor_says_how_to_install_or_start_the_bundled_model(monkeypatch):
     assert "./forgesre fetch-llm" in row["fix"] and "--profile ai up -d llm" in row["fix"]
     monkeypatch.setattr(settings, "yaml", {**settings.yaml, "ai": {"enabled": False}})
     assert api._llm_check()["status"] in {"ok", "disabled"}
+
+
+def test_context_uses_short_numbers_and_readable_times(db, monkeypatch):
+    from datetime import datetime, timezone
+
+    fake = FakeLLM({"paragraph": "Short summary of what happened on the switch."})
+    monkeypatch.setattr(forgeai, "_provider", lambda: fake)
+    row = _incident(db)
+    row.number = f"INC-0{uuid4().int % 1000:03d}_09.11.2026_12:01"
+    row.timeline = [{"at": "2026-11-09T11:16:22.756511+00:00", "title": f"Escalated {row.number}"}]
+    db.commit()
+    forgeai.run(db, "postmortem", row)
+    user = fake.calls[0][1]
+    assert "_09.11.2026_12:01" not in user and ".756511" not in user
+    assert forgeai._when(datetime(2026, 11, 9, 11, 16, tzinfo=timezone.utc)) in user
+    view = forgeai.run(db, "incident", row)
+    from app.incident_view import _forgeai_last
+
+    assert _forgeai_last(db, row)["status"] == view.status

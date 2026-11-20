@@ -7,6 +7,7 @@ export type ForgeAiView = {
   mode: string; text: string; cause: string; action: string; model: string; at: string | null;
   answer?: { cause: string; first_checks: string[]; for_shift_lead: string } | null;
   skill?: string; call_id?: number | null;
+  last?: { status: string; reason: string; at: string | null; skill: string } | null;
   skills?: { slug: string; name: string }[];
   extras?: { explain?: { answer: { explanation: string; why_it_matters: string }; call_id: number }; postmortem?: { answer: { paragraph: string }; call_id: number } };
 };
@@ -113,7 +114,15 @@ export function ForgeAiCard({ number, view, canAsk, onChanged }: { number: strin
       ) : view.text ? (
         <p style={{ margin: 0, lineHeight: 1.6 }}>{view.text}</p>
       ) : (
-        <span className="muted">{off ? "ForgeAI is off in Settings." : "No ForgeAI opinion yet; it is written after ForgeRCA finishes (30–90 s on the local model)."}</span>
+        <span className="muted">
+          {off
+            ? "ForgeAI is off in Settings."
+            : view.last && view.last.status !== "used"
+              ? `Last question (${clock(view.last.at)}, skill ${view.last.skill}) was ${view.last.status === "rejected" ? "rejected" : "not answered"}: ${view.last.reason}. Ask again, or see what it was asked below.`
+              : view.last
+                ? "ForgeAI is writing its opinion (30–90 s on the local model)."
+                : "ForgeAI has not been asked about this incident yet. New incidents get an answer on their own after ForgeRCA; press Ask ForgeAI for this one."}
+        </span>
       )}
       {a || view.text ? (
         <div className="row small faint" style={{ justifyContent: "space-between" }}>
