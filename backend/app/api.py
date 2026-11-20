@@ -779,6 +779,87 @@ def forgeai_use_call(call_id: int, db: Session = Depends(get_db), user: User = D
     return {"id": row.id, "status": row.status}
 
 
+@router.get("/forgeai/docs")
+def forgeai_docs(db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """Uploaded vendor documents with their indexing state, and whether search can run (Analyst and up)."""
+    from app import embeddings
+    from app.doc_search import doc_as_dict, vector_ready
+    from app.models import DocFile
+
+    rows = db.query(DocFile).order_by(DocFile.id.desc()).all()
+    return {"docs": [doc_as_dict(d) for d in rows], "embedder": embeddings.available(), "embed_url": settings.embed_url or "",
+            "model": embeddings.model_name(), "pgvector": vector_ready(db), "can_edit": can(user, "write_play")}
+
+
+@router.post("/forgeai/docs")
+def forgeai_docs_upload(file: UploadFile = File(...), title: str = "", db: Session = Depends(get_db),
+                        user: User = Depends(require("write_play"))) -> dict:
+    """Engineer: upload a PDF, text, Markdown or HTML file; the doc_index job reads and embeds it."""
+    from pathlib import Path
+
+    from app.doc_search import MAX_BYTES, SUFFIXES, doc_as_dict
+    from app.jobs import enqueue
+    from app.models import DocFile
+
+    name = Path(file.filename or "").name[:255]
+    if not name.lower().endswith(SUFFIXES):
+        raise HTTPException(status_code=400, detail="upload a .pdf, .txt, .md or .html file")
+    data = file.file.read(MAX_BYTES + 1)
+    if len(data) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail=f"files up to {MAX_BYTES // (1024 * 1024)} MB")
+    if not data:
+        raise HTTPException(status_code=400, detail="the file is empty")
+    doc = DocFile(name=name, title=(title or Path(name).stem)[:255], size=len(data), raw=data, uploaded_by=user.email)
+    db.add(doc)
+    db.flush()
+    enqueue(db, "doc_index", str(doc.id), object_type="doc", payload={"actor": user.email})
+    audit(db, "forgeai.doc.upload", actor=user.email, object_type="doc", object_id=str(doc.id), data={"name": name, "size": len(data)}, commit=True)
+    return doc_as_dict(doc)
+
+
+@router.post("/forgeai/docs/{doc_id}/reindex")
+def forgeai_docs_reindex(doc_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Engineer: run indexing again (after the embedding server was down). Needs the upload still waiting."""
+    from app.jobs import enqueue
+    from app.models import DocFile
+
+    doc = db.get(DocFile, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    if doc.raw is None:
+        raise HTTPException(status_code=400, detail="already indexed; upload the file again to re-read it")
+    doc.status, doc.error = "pending", ""
+    job = enqueue(db, "doc_index", str(doc.id), object_type="doc", payload={"actor": user.email})
+    db.commit()
+    return {"queued": True, "job": getattr(job, "id", None)}
+
+
+@router.delete("/forgeai/docs/{doc_id}")
+def forgeai_docs_delete(doc_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Engineer: remove a document and its chunks; ForgeAI stops citing it at once."""
+    from app.models import DocChunk, DocFile
+
+    doc = db.get(DocFile, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    db.query(DocChunk).filter_by(doc_id=doc.id).delete(synchronize_session=False)
+    db.delete(doc)
+    audit(db, "forgeai.doc.delete", actor=user.email, object_type="doc", object_id=str(doc_id), data={"name": doc.name}, commit=True)
+    return {"deleted": doc_id}
+
+
+@router.get("/forgeai/docs/search")
+def forgeai_docs_search(q: str, db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """Try the search: the 5 closest excerpts for a phrase (one short local embedding call, 10 s timeout)."""
+    from app.doc_search import search
+    from app.embeddings import EmbeddingError
+
+    try:
+        return {"hits": search(db, q, k=5, min_score=0.0)}
+    except EmbeddingError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @router.get("/forgeai/status")
 def forgeai_status(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
     """Is ForgeAI on, does the model answer, how did the last week of calls go."""
@@ -2368,6 +2449,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "grafana": _grafana_check(),
         "snmp": _snmp_check(),
         "llm": _llm_check(),
+        "embed": _embed_check(),
         "netbox": _netbox_check(),
         "zabbix": _zabbix_check(),
         "glpi": _glpi_check(),
@@ -2792,6 +2874,27 @@ def _llm_check() -> dict[str, str]:
         )
     elif row.get("status") == "error":
         row["fix"] = "The external model server does not answer: check ai.llm.url in Settings › ForgeRCA / ForgeAI"
+    return row
+
+
+def _embed_check() -> dict[str, str]:
+    """The embedding server for document search. Down only matters once documents are uploaded."""
+    if not settings.embed_url:
+        return _ok("disabled")
+    row = _http(settings.embed_url.rstrip("/").removesuffix("/v1") + "/health", "GET")
+    if row.get("status") == "error":
+        from app.db import SessionLocal
+        from app.models import DocFile
+
+        db = SessionLocal()
+        try:
+            has_docs = db.query(DocFile.id).first() is not None
+        finally:
+            db.close()
+        fix = "./forgesre fetch-llm (downloads the ~150 MB embedding model), then docker compose --profile ai up -d embed"
+        if not has_docs:
+            return {"status": "paused", "why": "No documents uploaded yet; the embedding server is not needed.", "fix": fix}
+        row["fix"] = fix
     return row
 
 

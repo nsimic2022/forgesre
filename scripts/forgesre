@@ -583,6 +583,7 @@ EOF
 forgeai — the local language model and what ForgeSRE asked it.
 
   ./forgesre forgeai              on/off, loaded model, last week, last questions
+  ./forgesre forgeai docs         uploaded vendor documents and whether document search works
   ./forgesre forgeai INC-0412     every question for that incident with the exact
                                   prompts and the model's answer word for word
   ./forgesre forgeai tuning       per incident skill: answers next to the analysts'

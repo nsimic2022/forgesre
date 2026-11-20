@@ -1,5 +1,6 @@
 import { AuditPanel, JournalPanel } from "../components/ActivityPanels";
 import { AppearancePanel } from "../components/AppearancePanel";
+import { ForgeAiDocs } from "../components/ForgeAiDocs";
 import { ForgeAiModels } from "../components/ForgeAiModels";
 import { ForgeAiStatus } from "../components/ForgeAiStatus";
 import { IntegrationsPanel } from "../components/IntegrationsPanel";
@@ -78,7 +79,7 @@ export function SettingsPage() {
           </nav>
           <div style={{ flex: "999 1 640px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
             {/* ForgeAI: status and models first, the raw settings below them */}
-            {group === "ai" ? <><ForgeAiStatus /><ForgeAiModels /></> : null}
+            {group === "ai" ? <><ForgeAiStatus /><ForgeAiModels /><ForgeAiDocs /></> : null}
             {group === "journal" ? (
               <JournalPanel />
             ) : group === "audit" ? (

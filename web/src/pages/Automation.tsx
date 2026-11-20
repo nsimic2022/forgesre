@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { MaintenanceForm, PlaybookForm, PolicyForm, RemoveButton, RuleForm, ruleBody, ruleDraft } from "../components/AutomationEditors";
+import { ForgeAiDocs } from "../components/ForgeAiDocs";
 import { ForgeAiSkills } from "../components/ForgeAiSkills";
 import { NoiseFilters } from "../components/NoiseFilters";
 import { Card, Chip } from "../components/ui";
@@ -141,7 +142,7 @@ export function AutomationPage() {
           </button>
         ))}
       </div>
-      {tab === "forgeai" ? <ForgeAiSkills /> : null}
+      {tab === "forgeai" ? <><ForgeAiSkills /><ForgeAiDocs /></> : null}
       {data && tab === "filters" ? <NoiseFilters filters={data.filters} canEdit={data.can_edit} onChanged={load} /> : null}
       {data && tab === "rules" ? (
         <>

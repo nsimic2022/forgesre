@@ -253,6 +253,19 @@ class Settings(BaseSettings):
             return 90.0
 
     @property
+    def embed_url(self) -> str | None:
+        """Local embedding server for document search (llama.cpp --embedding). None when ForgeAI is off."""
+        ai = self.yaml.get("ai") or {}
+        embed = ai.get("embed") or {}
+        if not ai.get("enabled") or embed.get("enabled") is False:
+            return None
+        return str(embed.get("url") or os.environ.get("EMBED_URL") or "http://127.0.0.1:8089/v1")
+
+    @property
+    def embed_model(self) -> str:
+        return str(((self.yaml.get("ai") or {}).get("embed") or {}).get("model") or "nomic-embed-text-v1.5")
+
+    @property
     def rca_engine(self) -> str:
         return "forgerca"
 

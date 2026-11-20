@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     JSON,
     Boolean,
+    LargeBinary,
     DateTime,
     Float,
     ForeignKey,
@@ -330,6 +331,39 @@ class ForgeAiSkill(Base):
     history: Mapped[list] = mapped_column(JSONType, default=list)
     updated_by: Mapped[str] = mapped_column(String(255), default="system")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DocFile(Base):
+    """A vendor manual or runbook uploaded for ForgeAI (RAG). The upload waits in ``raw`` until the
+    ``doc_index`` job has cut it into chunks; then ``raw`` is cleared and only the text is kept."""
+
+    __tablename__ = "doc_files"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    title: Mapped[str] = mapped_column(String(255), default="")
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    pages: Mapped[int] = mapped_column(Integer, default=0)
+    chunks: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    error: Mapped[str] = mapped_column(Text, default="")
+    model: Mapped[str] = mapped_column(String(128), default="")
+    raw: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    uploaded_by: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DocChunk(Base):
+    """A few paragraphs of one document with their embedding (JSON; also a pgvector column on Postgres)."""
+
+    __tablename__ = "doc_chunks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    doc_id: Mapped[int] = mapped_column(ForeignKey("doc_files.id", ondelete="CASCADE"), index=True)
+    n: Mapped[int] = mapped_column(Integer, default=0)
+    page: Mapped[int] = mapped_column(Integer, default=0)
+    text: Mapped[str] = mapped_column(Text, default="")
+    embedding: Mapped[list] = mapped_column(JSONType, default=list)
 
 
 class ForgeAiCall(Base):

@@ -1,6 +1,7 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # postgres:16-alpine plus pgvector (ForgeAI document search); built locally, same data directory.
+    build: ./postgres
     network_mode: host
     environment:
       POSTGRES_USER: forgesre
@@ -432,6 +433,24 @@ services:
       - ./scripts/llm-run.sh:/forgesre/llm-run.sh:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8088/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  embed:
+    # Local embeddings for ForgeAI document search (nomic-embed-text, ~150 MB) on 127.0.0.1:8089.
+    image: ghcr.io/ggml-org/llama.cpp:server-b11718
+    profiles: ["ai"]
+    network_mode: host
+    entrypoint: ["/bin/sh", "/forgesre/embed-run.sh"]
+    environment:
+      EMBED_THREADS: "${FORGESRE_EMBED_THREADS:-2}"
+    volumes:
+      - ${FORGESRE_DATA:-./data}/models/embed:/models:ro
+      - ./scripts/embed-run.sh:/forgesre/embed-run.sh:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8089/health"]
       interval: 30s
       timeout: 10s
       retries: 5
