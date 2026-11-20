@@ -91,6 +91,7 @@ Commands:
   jobs               Background RCA job queue
   checks             Certificates, backup age, heartbeats
   slo                SLOs: availability, error budget, burn rate
+  forgeai            ForgeAI model status, last questions; with INC-… the exact prompts
   kubernetes         Kubernetes / OpenShift clusters
   incidents          Short colored board (red/yellow/green); INC-… for one row
   history            90-day incident history (filters; INC-… for mail/audit/notes)
@@ -538,6 +539,17 @@ slo — service level objectives: availability against target, error budget left
 burn rate over the last 24 h (1.0x = spending the budget evenly over the window).
 
   ./forgesre slo
+EOF
+      ;;
+    forgeai)
+      cat <<'EOF'
+forgeai — the local language model and what ForgeSRE asked it.
+
+  ./forgesre forgeai              on/off, loaded model, last week, last questions
+  ./forgesre forgeai INC-0412     every question for that incident with the exact
+                                  prompts and the model's answer word for word
+
+Skills (the editable instructions) are in Automation › ForgeAI skills.
 EOF
       ;;
     checks)
@@ -1020,6 +1032,10 @@ case "$cmd" in
   slo)
     need_env
     run_cli_ops slo "$@"
+    ;;
+  forgeai)
+    need_env
+    run_cli_ops forgeai "$@"
     ;;
   kubernetes)
     need_env

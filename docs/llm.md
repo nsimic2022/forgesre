@@ -13,11 +13,38 @@ Two names in the UI:
 | Pill | Engine | When |
 |---|---|---|
 | **ForgeRCA** | Deterministic Python (`agents/rca/`) | Always. Facts, anomalies, hypotheses, evidence IDs, confidence score |
-| **ForgeAI** | Local llama.cpp (or another OpenAI-compatible HTTP server) | Optional. Rewrites **prose only**: (1) incident summary / likely cause / recommended action; (2) Dashboard **ForgeAI** digest sentences from SQL facts |
+| **ForgeAI** | Local llama.cpp (or another OpenAI-compatible HTTP server) | Optional. Answers one narrow question per task, from ForgeRCA's facts |
 
-ForgeAI rewrites short prose from a **compact** sanitized context (facts, CPU/mem/disk snapshots, short logs). The GGUF lives in `data/models/model.gguf`. Core talks HTTP to `ai.llm.url` (`POST …/chat/completions`, `GET …/models`).
+**Tasks** (fixed in code, each with an exact JSON answer shape):
 
-If the rewrite fails or times out, the incident keeps the ForgeRCA result and records why (`LLM unreachable; used ForgeRCA…`).
+| Task | When | Answer |
+|---|---|---|
+| Cause and first checks | automatically after ForgeRCA, or **Ask again** on the incident | likely cause, up to 3 first checks, one line for the shift lead |
+| Explain for Tier 1 | button on the incident | what the alarm means in plain words, why it matters |
+| Postmortem summary | button on the incident | one paragraph; goes into the Postmortem draft as "In short" |
+| Shift handover | button on the NOC page | the last 12 hours, what is still open, what to watch |
+
+**Skills** are the editable part: when a skill applies (alert name patterns, asset types) and its
+instructions, written like a note to a colleague. ForgeSRE ships twelve (any incident, Linux disk,
+CPU/memory, host down, network link, Windows service, database, Kubernetes, appliance checks,
+explain, postmortem, shift). For an incident the matching skill is picked by alert and asset type;
+an operator can ask again with another one. Every prompt is built as:
+
+1. fixed rules (read only, use only the facts, no invented numbers, hosts, IPs or log lines, no
+   shell commands, JSON only) and the task's answer shape; these cannot be edited;
+2. the skill's instructions;
+3. the facts as JSON, secrets removed (`rca.sanitize`), at most 4 500 characters: incident, asset,
+   ForgeRCA facts and hypotheses, playbook, earlier incidents on the asset with a confirmed cause,
+   changes before, syslog when the skill asks for it.
+
+**Checks on the answer.** The JSON shape and lengths; no number and no IP that is not in the facts;
+no shell command. A failing answer is **rejected**: operators never see it, and the reason is kept.
+
+**Every question is kept** (`forgeai_calls`): exact system prompt, what the model was given, its
+answer word for word, model, time, outcome (used, rejected, error, trial) and the operator's
+👍 / 👎. See it under **What was ForgeAI asked?** on the incident (Analysts and up), in
+**Settings › ForgeRCA / ForgeAI** (status, last week, test on the newest incident) and with
+`./forgesre forgeai [INC-…]`.
 
 **Dashboard digest.** `/` `#forgeai` is the short teaser. The full page is **`/forgeai`**: Setup, Ask (optional question), Digest with filters, Jobs, Reports, and a digest Cron (not `/ops` performance mail). Core runs **SQL first** (repeats, hot group, parent–child, aging open, last 30 days). DEMO incidents stay out of the digest. **Ask ForgeAI** sends a compact JSON of those counts (capped, 20 s timeout) and asks for 3–5 sentences. Off or failed rewrite keeps the same cards and the canned English conclusions. **Report** is TXT or CSV UTF-8 of the facts. **Send report** is the mail outbox (`step_key=report`). Due Cron rows enqueue `forgeai_digest` so the one worker can mail after other `/ops` reports. Alarms still follow Prometheus → Alertmanager → Core.
 
@@ -255,14 +282,12 @@ docker compose --profile ai up -d --force-recreate llm
 There is **no Celery**. Core has **one worker thread** (Postgres `jobs` table, loop every 2s) for `investigate` and `discovery_scan`. An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds` (example.yml default 90). `/ops` scheduled reports run first in the same loop so mail is not stuck behind llama.cpp. Discovery **Confirm & scan** / **Scan now** enqueue `discovery_scan` and always redirect; the worker runs the probe in try/except.
 
 1. Core runs **ForgeRCA immediately** (`use_llm=false`) and shows the builtin report.
-2. If `ai.enabled` and `ai.llm.url` are set, Core **enqueues** a background job (`./forgesre jobs`) with `use_llm=true`.
-3. The worker calls llama.cpp. The model must return **JSON only** with keys:
-   - `summary`
-   - `likely_cause`
-   - `recommended_action`
-   - `limitations` (array of strings)
-4. Shell-like strings in the action (`sudo`, `ssh`, `rm -`, …) are rewritten to **RECOMMENDED ACTION (not executed)**.
-5. Provider becomes `forgerca-llm`. Refresh `/ai/INC-…`. ForgeAI pill goes **green**. Yellow = still running (minutes on CPU). Red = off or failed.
+2. If `ai.enabled` and `ai.llm.url` are set, Core **enqueues** an `investigate` job with
+   `use_llm=true` on the LLM lane (`./forgesre jobs`).
+3. The worker picks the skill, builds the prompt (section 1), calls llama.cpp once and checks the answer.
+4. A used answer is stored as an investigation with provider `forgerca-llm` (the name the classic
+   pages and reports read) and shown in the ForgeAI card. Explain, postmortem and shift run as
+   `forgeai` jobs on the same lane.
 
 Alertmanager ingest also enqueues investigate; the webhook does **not** wait on the LLM.
 

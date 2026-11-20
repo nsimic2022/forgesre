@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { ShiftSummary } from "../components/ShiftSummary";
 import { Bar, Card, Stat } from "../components/ui";
 import { getJson, type Noc as NocData } from "../lib/api";
 import { clock, minutesLabel, severityLabel } from "../lib/format";
@@ -114,7 +116,7 @@ export function NocPage() {
               </div>
             ))}
           </Card>
-          <Card title="On call now" actions={<a className="small" href="/escalation">Schedule</a>}>
+          <Card title="On call now" actions={<Link className="small" to="/incidents/on-call">Schedule</Link>}>
             {data.oncall ? (
               <div className="cell-stack">
                 <span style={{ fontWeight: 600 }}>{data.oncall.name}</span>
@@ -126,6 +128,7 @@ export function NocPage() {
           </Card>
         </div>
       ) : null}
+      {data && data.ai.forgeai !== "off" ? <ShiftSummary /> : null}
     </>
   );
 }

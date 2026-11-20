@@ -143,7 +143,7 @@ def _json_safe(value: Any) -> Any:
 
 def job_is_llm(row: Job) -> bool:
     """True when this investigate job will wait on llama.cpp."""
-    if row.kind == FORGEAI_DIGEST_KIND:
+    if row.kind in (FORGEAI_DIGEST_KIND, "forgeai"):
         return True
     if row.kind != "investigate":
         return False
@@ -226,13 +226,16 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                     raise RuntimeError(f"incident {row.object_id} not found")
                 payload = row.payload or {}
                 use_llm = payload.get("use_llm", True) is not False
-                run_investigation(
-                    db,
-                    incident,
-                    actor=str(payload.get("actor") or "system"),
-                    force=bool(payload.get("force")),
-                    use_llm=use_llm,
-                )
+                actor = str(payload.get("actor") or "system")
+                if use_llm:
+                    # ForgeRCA stays rule-based; ForgeAI then asks the model once with the matching skill.
+                    from app import forgeai
+
+                    run_investigation(db, incident, actor=actor, force=False, use_llm=False)
+                    call = forgeai.run(db, "incident", incident, skill_slug=str(payload.get("skill") or ""), actor=actor)
+                    row.payload = {**payload, "call_id": call.id, "status": call.status}
+                else:
+                    run_investigation(db, incident, actor=actor, force=bool(payload.get("force")), use_llm=False)
             elif row.kind == DISCOVERY_SCAN_KIND:
                 from app.inventory import run_scan
 
@@ -287,6 +290,23 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload["result"] = result.name
                 row.payload = payload
                 journal_report(db, "backup", "create", "ok", summary=f"Wrote {result.name}", object_type="backup", object_id=result.name)
+            elif row.kind == "forgeai":
+                from app import forgeai
+
+                # Explain, postmortem, shift summary or a skill trial; one model call with its own timeout.
+                payload = dict(row.payload or {})
+                target = None
+                if payload.get("task") != "shift":
+                    number = row.object_id.split("#", 1)[0]
+                    target = db.query(Incident).options(joinedload(Incident.asset)).filter_by(number=number).first()
+                    if target is None:
+                        raise RuntimeError(f"incident {row.object_id} not found")
+                call = forgeai.run(db, str(payload.get("task") or "incident"), target, skill_slug=str(payload.get("skill") or ""),
+                                   actor=str(payload.get("actor") or "system"), trial=bool(payload.get("trial")),
+                                   instructions=payload.get("instructions"))
+                payload.pop("instructions", None)
+                payload["result"] = {"call_id": call.id, "status": call.status}
+                row.payload = payload
             elif row.kind == "onboard_identify":
                 from app.onboarding import identify
 

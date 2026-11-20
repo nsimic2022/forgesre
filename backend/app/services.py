@@ -1572,10 +1572,13 @@ def run_investigation(
     force: bool = False,
     use_llm: bool = True,
 ) -> Investigation:
-    """Run ForgeRCA. Pass use_llm=False for an immediate builtin result in the UI."""
+    """Run ForgeRCA. Pass use_llm=False for an immediate builtin result in the UI.
+
+    Works on the latest rule-based row; ForgeAI answers (provider ``forgerca-llm``) are separate rows.
+    """
     latest = (
         db.query(Investigation)
-        .filter_by(incident_id=incident.id)
+        .filter(Investigation.incident_id == incident.id, ~Investigation.provider.like("%-llm"))
         .order_by(Investigation.id.desc())
         .first()
     )
@@ -1703,7 +1706,7 @@ def queue_llm_rewrite(db: Session, incident: Incident, actor: str = "system") ->
         .order_by(Investigation.id.desc())
         .first()
     )
-    if latest is not None and latest.provider == "forgerca-llm":
+    if latest is not None and (latest.provider or "").endswith("-llm"):
         return
     busy = (
         db.query(Job)

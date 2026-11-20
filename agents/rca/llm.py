@@ -77,6 +77,8 @@ class LLMProvider(Protocol):
 
 class NullLLM:
     last_error = ""
+    last_raw = ""
+    last_ms = 0
 
     def get_name(self) -> str:
         return "none"
@@ -84,11 +86,14 @@ class NullLLM:
     def get_model(self) -> str:
         return ""
 
-    def complete_json(self, system: str, user: str) -> dict[str, Any] | None:
+    def complete_json(self, system: str, user: str, max_tokens: int = 512) -> dict[str, Any] | None:
         return None
 
 
 class OpenAICompatibleLLM:
+    last_raw = ""
+    last_ms = 0
+
     def __init__(self, url: str, model: str = "local", timeout: float = 180.0) -> None:
         self.url = url.rstrip("/")
         self.model = model
@@ -125,8 +130,14 @@ class OpenAICompatibleLLM:
             pass
         return configured
 
-    async def complete_json_async(self, system: str, user: str) -> dict[str, Any] | None:
+    async def complete_json_async(self, system: str, user: str, max_tokens: int = 512) -> dict[str, Any] | None:
+        """One chat completion parsed as JSON. ``last_raw``, ``last_ms`` and ``last_error`` say what
+        came back and how long it took, so ForgeSRE can show the exact exchange."""
+        import time
+
         self.last_error = ""
+        self.last_raw = ""
+        started = time.monotonic()
         endpoint = self._endpoint()
         try:
             async with httpx.AsyncClient(timeout=self._http_timeout()) as client:
@@ -143,7 +154,7 @@ class OpenAICompatibleLLM:
                             {"role": "user", "content": user},
                         ],
                         "temperature": 0.1,
-                        "max_tokens": 512,
+                        "max_tokens": max_tokens,
                     }
                     payload.update(extra)
                     response = await client.post(endpoint, json=payload)
@@ -154,19 +165,23 @@ class OpenAICompatibleLLM:
                     choice = (response.json().get("choices") or [{}])[0]
                     message = choice.get("message") or {}
                     content = message.get("content") or message.get("reasoning_content") or choice.get("text") or ""
+                    self.last_raw = str(content)[:20000]
+                    self.last_ms = int((time.monotonic() - started) * 1000)
                     parsed = extract_json(content)
                     if parsed:
                         self.model = model
                         return parsed
                     last_why = "LLM returned text that was not JSON"
                 self.last_error = last_why or "LLM unreachable"
+                self.last_ms = int((time.monotonic() - started) * 1000)
                 return None
         except Exception as exc:
             self.last_error = str(exc)[:200]
+            self.last_ms = int((time.monotonic() - started) * 1000)
             return None
 
-    def complete_json(self, system: str, user: str) -> dict[str, Any] | None:
-        return _run_sync(self.complete_json_async(system, user))
+    def complete_json(self, system: str, user: str, max_tokens: int = 512) -> dict[str, Any] | None:
+        return _run_sync(self.complete_json_async(system, user, max_tokens))
 
     async def stream_completion(self, system: str, user: str) -> AsyncGenerator[str, None]:
         """Token-by-token SSE from llama.cpp / OpenAI-compatible ``stream: true``."""

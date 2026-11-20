@@ -82,9 +82,12 @@ def postmortem_markdown(db: Session, incident: Incident, user: User) -> str:
         f"| Highest escalation level | {v['level'] or '—'} |",
         f"| Rule / playbook | {v['playrule'] or '—'} / {(v['playbook'] or {}).get('name') or '—'} |",
         "",
-        "## Impact",
-        "",
     ]
+    written = ((v.get("forgeai") or {}).get("extras") or {}).get("postmortem")
+    if written and (written.get("answer") or {}).get("paragraph"):
+        out += ["## In short", "", f"{written['answer']['paragraph']}", "",
+                "*Written by ForgeAI from the facts, notes and timeline above; check it before the meeting.*", ""]
+    out += ["## Impact", ""]
     behind = _behind(db, incident)
     if behind:
         out.append(f"- {behind} asset(s) sit behind {asset.get('hostname')} in the dependency map; their alarms were held back while it was down.")

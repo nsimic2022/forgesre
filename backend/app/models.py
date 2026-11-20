@@ -304,6 +304,63 @@ class Investigation(Base):
     incident: Mapped[Incident] = relationship(back_populates="investigations")
 
 
+class ForgeAiSkill(Base):
+    """One ForgeAI prompt for one kind of work (task) and one kind of incident (match).
+
+    ``instructions`` is the editable part; the fixed safety rules and the JSON shape of the task
+    are added by app.forgeai and cannot be edited. Built-in skills keep ``default_instructions``
+    so "Reset to default" works.
+    """
+
+    __tablename__ = "forgeai_skills"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    task: Mapped[str] = mapped_column(String(32), default="incident", index=True)
+    match_alerts: Mapped[list] = mapped_column(JSONType, default=list)
+    match_types: Mapped[list] = mapped_column(JSONType, default=list)
+    priority: Mapped[int] = mapped_column(Integer, default=100)
+    instructions: Mapped[str] = mapped_column(Text, default="")
+    default_instructions: Mapped[str] = mapped_column(Text, default="")
+    include: Mapped[dict] = mapped_column(JSONType, default=dict)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    builtin: Mapped[bool] = mapped_column(Boolean, default=False)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    history: Mapped[list] = mapped_column(JSONType, default=list)
+    updated_by: Mapped[str] = mapped_column(String(255), default="system")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ForgeAiCall(Base):
+    """Every question ForgeSRE put to the language model: exact prompt, raw answer, outcome, time.
+
+    ``status``: used (shown to operators), rejected (failed a check, see ``reason``), error (no
+    answer), trial (a skill test; never shown as the incident's answer).
+    """
+
+    __tablename__ = "forgeai_calls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    incident_id: Mapped[int | None] = mapped_column(ForeignKey("incidents.id"), nullable=True, index=True)
+    task: Mapped[str] = mapped_column(String(32), default="incident", index=True)
+    skill_slug: Mapped[str] = mapped_column(String(64), default="", index=True)
+    skill_version: Mapped[int] = mapped_column(Integer, default=0)
+    model: Mapped[str] = mapped_column(String(128), default="")
+    endpoint: Mapped[str] = mapped_column(String(255), default="")
+    system_prompt: Mapped[str] = mapped_column(Text, default="")
+    user_prompt: Mapped[str] = mapped_column(Text, default="")
+    raw_response: Mapped[str] = mapped_column(Text, default="")
+    answer: Mapped[dict] = mapped_column(JSONType, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="error", index=True)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    actor: Mapped[str] = mapped_column(String(255), default="system")
+    rating: Mapped[int] = mapped_column(Integer, default=0)
+    rated_by: Mapped[str] = mapped_column(String(255), default="")
+
+
 class IncidentEvent(Base):
     __tablename__ = "incident_events"
 

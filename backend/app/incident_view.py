@@ -125,6 +125,28 @@ def _split_investigations(incident: Incident) -> tuple[Any, Any]:
     return rca, ai
 
 
+def _incident_skills(db: Session) -> list[dict[str, str]]:
+    from app.forgeai import seed_skills
+    from app.models import ForgeAiSkill
+
+    seed_skills(db)
+    rows = db.query(ForgeAiSkill).filter_by(task="incident", enabled=True).order_by(ForgeAiSkill.priority).all()
+    return [{"slug": r.slug, "name": r.name} for r in rows]
+
+
+def _forgeai_extras(db: Session, incident: Incident) -> dict[str, Any]:
+    """Latest used explain / postmortem answers for this incident."""
+    from app.models import ForgeAiCall
+
+    out: dict[str, Any] = {}
+    for task in ("explain", "postmortem"):
+        row = (db.query(ForgeAiCall).filter_by(incident_id=incident.id, task=task, status="used")
+               .order_by(ForgeAiCall.id.desc()).first())
+        if row is not None:
+            out[task] = {"answer": row.answer, "call_id": row.id, "at": row.created_at.isoformat() if row.created_at else None}
+    return out
+
+
 def _playbook_steps(incident: Incident) -> list[str]:
     steps = []
     for step in (incident.playbook.steps if incident.playbook else None) or []:
@@ -186,6 +208,11 @@ def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]
             "action": ai.recommended_action if ai else "",
             "model": ai.model if ai else "",
             "at": ai.created_at.isoformat() if ai and ai.created_at else None,
+            "answer": (ai.result or {}).get("answer") if ai else None,
+            "skill": (ai.result or {}).get("skill_name") if ai else "",
+            "call_id": (ai.result or {}).get("call_id") if ai else None,
+            "skills": _incident_skills(db),
+            "extras": _forgeai_extras(db, incident),
         },
         "evidence": [
             {"id": ev.evidence_id, "source": ev.source or ev.kind, "title": ev.title, "query": ev.query}
