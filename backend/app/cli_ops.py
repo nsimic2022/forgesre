@@ -719,7 +719,7 @@ SETTABLE_SECRETS = (
     "ALERTMANAGER_WEBHOOK_TOKEN", "GLPI_APP_TOKEN", "GLPI_USER_TOKEN", "ZABBIX_API_TOKEN",
     "LIBRENMS_API_TOKEN", "NETBOX_API_TOKEN", "SMTP_USERNAME", "SMTP_PASSWORD",
     "SLACK_WEBHOOK_URL", "TEAMS_WEBHOOK_URL", "DISCORD_WEBHOOK_URL", "CHANGES_WEBHOOK_TOKEN", "MCP_TOKEN",
-    "LDAP_BIND_PASSWORD", "OIDC_CLIENT_SECRET",
+    "LDAP_BIND_PASSWORD", "OIDC_CLIENT_SECRET", "CLOUD_LLM_API_KEY",
 )
 
 
@@ -863,8 +863,14 @@ def format_forgeai(status: dict, calls: list[dict] | None = None) -> str:
         f"ForgeAI: {'on' if status.get('enabled') else 'off'} · model {model or '-'} · {reach}",
         f"Last 7 days: {w.get('calls', 0)} questions, {w.get('used', 0)} used, {w.get('rejected', 0)} rejected, "
         f"{w.get('errors', 0)} without answer, avg {w.get('avg_ms', 0) / 1000:.1f} s, up {w.get('thumbs_up', 0)} / down {w.get('thumbs_down', 0)}",
-        "",
     ]
+    cloud = status.get("cloud") or {}
+    if cloud.get("enabled"):
+        out.append(f"Cloud model: {cloud.get('provider')} {cloud.get('model')} · "
+                   + ("ready (Engineers choose it per question)" if cloud.get("ready") else f"not ready: {cloud.get('why')}"))
+    else:
+        out.append("Cloud model: off (optional, ai.cloud.enabled)")
+    out.append("")
     rows = calls if calls is not None else status.get("last") or []
     for c in rows:
         out.append(f"{str(c.get('at') or '')[:16]}  {str(c.get('status', '')).upper():<8} {c.get('task', ''):<10} {c.get('skill', ''):<18} "

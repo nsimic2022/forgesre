@@ -252,6 +252,43 @@ class Settings(BaseSettings):
         except (TypeError, ValueError):
             return 90.0
 
+    def _cloud_yaml(self) -> dict[str, Any]:
+        raw = (self.yaml.get("ai") or {}).get("cloud") or {}
+        return raw if isinstance(raw, dict) else {}
+
+    @property
+    def cloud_enabled(self) -> bool:
+        """Paid cloud model, opt-in (ai.cloud.enabled). Only an Engineer's explicit choice uses it."""
+        return bool(self._cloud_yaml().get("enabled"))
+
+    @property
+    def cloud_provider(self) -> str:
+        """openai, anthropic, azure or openai-compatible."""
+        value = str(self._cloud_yaml().get("provider") or "openai").strip().lower()
+        return value if value in {"openai", "anthropic", "azure", "openai-compatible"} else "openai"
+
+    @property
+    def cloud_model(self) -> str:
+        defaults = {"openai": "gpt-4o-mini", "anthropic": "claude-sonnet-5-5", "azure": "", "openai-compatible": ""}
+        return str(self._cloud_yaml().get("model") or defaults.get(self.cloud_provider, ""))
+
+    @property
+    def cloud_url(self) -> str:
+        defaults = {"openai": "https://api.openai.com/v1", "anthropic": "https://api.anthropic.com/v1"}
+        return str(self._cloud_yaml().get("url") or defaults.get(self.cloud_provider, "")).rstrip("/")
+
+    @property
+    def cloud_api_key(self) -> str:
+        """CLOUD_LLM_API_KEY from secrets/secrets.env; never shown."""
+        return self._secret("CLOUD_LLM_API_KEY")
+
+    @property
+    def cloud_timeout(self) -> float:
+        try:
+            return max(10.0, min(600.0, float(self._cloud_yaml().get("timeout_seconds") or 120)))
+        except (TypeError, ValueError):
+            return 120.0
+
     @property
     def embed_url(self) -> str | None:
         """Local embedding server for document search (llama.cpp --embedding). None when ForgeAI is off."""

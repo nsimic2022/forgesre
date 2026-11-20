@@ -298,3 +298,48 @@ def test_one_person_cannot_fill_the_llm_lane(db, monkeypatch):
     assert [j.status_code for j in jobs] == [200, 200, 200, 429]
     db.query(Job).filter(Job.id.in_([j.json()["job"] for j in jobs[:3]])).delete(synchronize_session=False)
     db.commit()
+
+
+def test_cloud_model_is_opt_in_engineer_only_and_logged(db, monkeypatch):
+    from app import cloud_llm
+    from app.models import AuditLog, ForgeAiCall
+    from app.settings import settings
+
+    row = _incident(db)
+    analyst, engineer = _client("analyst"), _client("engineer")
+    monkeypatch.setattr(settings, "yaml", {**settings.yaml, "ai": {"enabled": False}})
+    assert engineer.post(f"/api/v1/incidents/{row.number}/forgeai/ask", json={"question": "why?", "cloud": True}).status_code == 409
+    assert engineer.get("/api/v1/forgeai/status").json()["cloud"]["enabled"] is False
+    monkeypatch.setattr(settings, "yaml", {**settings.yaml, "ai": {"enabled": False, "cloud": {"enabled": True, "provider": "anthropic", "model": "claude-test"}}})
+    monkeypatch.setattr(type(settings), "cloud_api_key", property(lambda self: "sk-secret-value"))
+    status = engineer.get("/api/v1/forgeai/status").json()["cloud"]
+    assert status["ready"] and status["host"] == "api.anthropic.com" and "sk-secret" not in json.dumps(status)
+    assert analyst.post(f"/api/v1/incidents/{row.number}/forgeai/ask", json={"question": "why?", "cloud": True}).status_code == 403
+    queued = engineer.post(f"/api/v1/incidents/{row.number}/forgeai/ask", json={"question": "Was it the backup?", "cloud": True}).json()
+    fake = FakeLLM({"answer": "Nothing in the facts points at a backup.", "not_in_facts": []})
+    monkeypatch.setattr(cloud_llm, "provider", lambda: fake)
+    _run_only(db, queued["job"])
+    db.expire_all()
+    call = db.query(ForgeAiCall).filter_by(incident_id=row.id, task="ask").one()
+    assert call.status == "trial" and call.endpoint.startswith("cloud:anthropic")
+    assert fake.calls and "operator_question" in fake.calls[0][1]
+    assert engineer.get(f"/api/v1/forgeai/calls/{call.id}").json()["cloud"] is True
+    assert db.query(AuditLog).filter_by(action="forgeai.cloud", object_id=row.number).count() == 1
+
+
+def test_anthropic_provider_shapes_the_request(monkeypatch):
+    import httpx
+
+    from rca.llm import AnthropicLLM
+
+    seen = {}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        seen.update(url=url, headers=headers, body=json)
+        return httpx.Response(200, json={"content": [{"type": "text", "text": '{"answer": "ok"}'}]}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    model = AnthropicLLM("sk-x", "claude-test")
+    assert model.complete_json("rules", "facts", 50) == {"answer": "ok"}
+    assert seen["url"] == "https://api.anthropic.com/v1/messages" and seen["headers"]["x-api-key"] == "sk-x"
+    assert seen["body"]["system"] == "rules" and seen["body"]["messages"][0]["content"] == "facts"

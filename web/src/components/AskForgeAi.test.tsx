@@ -37,4 +37,27 @@ describe("Ask ForgeAI", () => {
     expect((await screen.findAllByText("The facts show no backup before the alarm.")).length).toBeGreaterThan(0);
     expect(screen.getByText(/“was it the backup\?”/)).toBeTruthy();
   });
+
+  it("offers the cloud model only when it is ready, and sends the choice", async () => {
+    const posts: { url: string; body: { cloud?: boolean } }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") posts.push({ url, body: JSON.parse(String(init.body)) });
+      const body =
+        url === "/api/v1/me" ? { email: "e@dc.local", role: "engineer", name: "E" }
+        : url === "/api/v1/forgeai/status" ? { cloud: { enabled: true, ready: true, why: "", provider: "anthropic", model: "claude-test", host: "api.anthropic.com", can_use: true } }
+        : url === "/api/v1/forgeai/skills" ? { skills: [] }
+        : url.endsWith("/forgeai/ask") ? { job: 9 }
+        : url === "/api/v1/forgeai/jobs/9" ? { status: "done", error: "", call_id: null }
+        : { calls: [] };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    render(<AskForgeAi number="INC-0002" />);
+    const box = await screen.findByLabelText("Use the cloud model");
+    expect(screen.getByText(/nothing leaves this server/)).toBeTruthy();
+    fireEvent.click(box);
+    expect(screen.getByText(/to api.anthropic.com/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Your question"), { target: { value: "why?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask ForgeAI" }));
+    await waitFor(() => expect(posts.at(-1)?.body.cloud).toBe(true));
+  });
 });

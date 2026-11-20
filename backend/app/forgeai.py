@@ -349,7 +349,8 @@ def _provider():
 
 
 def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug: str = "", actor: str = "system",
-        trial: bool = False, instructions: str | None = None, hours: int = 12, question: str = "") -> ForgeAiCall:
+        trial: bool = False, instructions: str | None = None, hours: int = 12, question: str = "",
+        cloud: bool = False) -> ForgeAiCall:
     """Ask the model once and record the exchange. ``trial`` (skill test) never becomes the incident's answer;
     ``instructions`` tries unsaved skill text; ``hours`` is the shift summary window. An incident answer that passes the checks is stored as a
     ``forgerca-llm`` Investigation so the incident page and reports show it."""
@@ -379,7 +380,15 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
     call = ForgeAiCall(incident_id=incident.id if incident is not None else None, task=task, skill_slug=skill.slug,
                        skill_version=skill.version or 0, system_prompt=system, user_prompt=user, actor=actor,
                        endpoint=(settings.llm_url or "") if settings.ai_enabled else "")
-    provider = _provider()
+    if cloud:
+        # An Engineer chose the paid cloud model for this one question (app.cloud_llm); the prompt
+        # above is exactly what leaves the server.
+        from app.cloud_llm import provider as cloud_provider
+
+        provider = cloud_provider()
+        call.endpoint = f"cloud:{settings.cloud_provider} {settings.cloud_url}"
+    else:
+        provider = _provider()
     if provider.get_name() == "none":
         call.status, call.reason = "error", "ForgeAI is off (Settings › ForgeRCA / ForgeAI)"
     else:
@@ -443,7 +452,8 @@ def call_as_dict(call: ForgeAiCall, *, prompts: bool) -> dict[str, Any]:
     """One exchange for the UI; ``prompts`` adds the exact prompts and raw answer (Analyst and up)."""
     out = {"id": call.id, "at": call.created_at.isoformat() if call.created_at else None, "task": call.task,
            "skill": call.skill_slug, "skill_version": call.skill_version, "model": call.model, "status": call.status,
-           "reason": call.reason, "duration_ms": call.duration_ms, "answer": call.answer or {}, "rating": call.rating, "actor": call.actor}
+           "reason": call.reason, "duration_ms": call.duration_ms, "answer": call.answer or {}, "rating": call.rating, "actor": call.actor,
+           "cloud": (call.endpoint or "").startswith("cloud:")}
     if prompts:
         out.update(system_prompt=call.system_prompt, user_prompt=call.user_prompt, raw_response=call.raw_response)
     return out

@@ -5,6 +5,7 @@ import { CallLog, Rate, type Call } from "./ForgeAiCard";
 import { Card, Chip } from "./ui";
 
 type SkillRow = { slug: string; name: string; task: string; enabled: boolean };
+type Cloud = { enabled: boolean; ready: boolean; why: string; provider: string; model: string; host: string; can_use: boolean };
 const ROLE_RANK: Record<string, number> = { viewer: 0, analyst: 1, engineer: 2, admin: 3 };
 
 /** The answer of one call as readable text, whatever the task. */
@@ -64,10 +65,13 @@ export function AskForgeAi({ number }: { number: string }) {
   const [error, setError] = useState("");
   const [compareId, setCompareId] = useState<number | null>(null);
   const [askedId, setAskedId] = useState<number | null>(null);
+  const [cloud, setCloud] = useState<Cloud | null>(null);
+  const [useCloud, setUseCloud] = useState(false);
 
   const load = () =>
     getJson<{ calls: Call[] }>(`/api/v1/incidents/${encodeURIComponent(number)}/forgeai`).then((d) => setCalls(d.calls)).catch((e: Error) => (setCalls([]), setError(e.message)));
   useEffect(() => void getJson<Me>("/api/v1/me").then(setMe).catch(() => setMe(null)), []);
+  useEffect(() => void getJson<{ cloud?: Cloud }>("/api/v1/forgeai/status").then((s) => setCloud(s.cloud ?? null)).catch(() => setCloud(null)), []);
   useEffect(() => void getJson<{ skills: SkillRow[] }>("/api/v1/forgeai/skills").then((d) => setSkills(d.skills.filter((s) => s.enabled && (s.task === "incident" || s.task === "ask")))).catch(() => setSkills([])), []);
   useEffect(() => {
     setCalls(null);
@@ -85,11 +89,11 @@ export function AskForgeAi({ number }: { number: string }) {
   const asked = (calls ?? []).find((c) => c.id === askedId) ?? null;
   const history = (calls ?? []).filter((c) => c.status === "trial" || c.task === "ask" || c.reason.startsWith("chosen by"));
 
-  const send = async (body: { skill: string; question: string }, label: string, done: (id: number | null) => void) => {
+  const send = async (body: { skill: string; question: string; cloud?: boolean }, label: string, done: (id: number | null) => void) => {
     setBusy(label);
     setError("");
     try {
-      const { job } = await postJson<{ job: number }>(`/api/v1/incidents/${encodeURIComponent(number)}/forgeai/ask`, body);
+      const { job } = await postJson<{ job: number }>(`/api/v1/incidents/${encodeURIComponent(number)}/forgeai/ask`, { ...body, cloud: useCloud });
       done(await waitForCall(job));
       await load();
     } catch (e) {
@@ -102,8 +106,22 @@ export function AskForgeAi({ number }: { number: string }) {
     postJson(`/api/v1/forgeai/calls/${id}/use`, {}).then(load).catch((e: Error) => setError(e.message));
 
   const incidentSkills = skills.filter((s) => s.task === "incident");
+  const cloudOk = Boolean(cloud?.enabled && cloud.ready && cloud.can_use);
   return (
     <div className="cell-stack" style={{ gap: 16 }}>
+      {cloudOk ? (
+        <label className="row banner" style={{ gap: 10, alignItems: "flex-start", background: useCloud ? "var(--warn-bg)" : "var(--s2)", border: "1px solid var(--border)" }}>
+          <input type="checkbox" checked={useCloud} onChange={(e) => setUseCloud(e.target.checked)} aria-label="Use the cloud model" />
+          <span className="cell-stack" style={{ gap: 2 }}>
+            <strong>Use the cloud model: {cloud!.provider} · {cloud!.model}</strong>
+            <span className="small muted">
+              {useCloud
+                ? `The next question sends this incident's facts (secrets removed; exactly the prompt in the log) to ${cloud!.host}. It costs money and is audited.`
+                : "Off: questions go to the local model and nothing leaves this server."}
+            </span>
+          </span>
+        </label>
+      ) : null}
       <div className="cols">
         <div style={{ flex: "1 1 420px", minWidth: 0 }}>
           <Card title="1 · What ForgeAI was asked on its own">

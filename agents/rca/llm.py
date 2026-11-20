@@ -94,21 +94,25 @@ class OpenAICompatibleLLM:
     last_raw = ""
     last_ms = 0
 
-    def __init__(self, url: str, model: str = "local", timeout: float = 180.0) -> None:
+    def __init__(self, url: str, model: str = "local", timeout: float = 180.0, *, api_key: str = "",
+                 key_header: str = "Authorization", name: str = "openai-compatible") -> None:
         self.url = url.rstrip("/")
         self.model = model
         self.timeout = timeout
         self.last_error = ""
+        self.name = name
+        # Cloud providers: OpenAI-style "Authorization: Bearer", Azure OpenAI "api-key". Never logged.
+        self._headers = {} if not api_key else {key_header: f"Bearer {api_key}" if key_header == "Authorization" else api_key}
 
     def get_name(self) -> str:
-        return "openai-compatible"
+        return self.name
 
     def get_model(self) -> str:
         return self.model
 
     def _endpoint(self) -> str:
         endpoint = self.url
-        if not endpoint.endswith("/chat/completions"):
+        if "/chat/completions" not in endpoint:  # Azure URLs carry ?api-version= after it
             endpoint = endpoint + "/chat/completions"
         return endpoint
 
@@ -140,7 +144,7 @@ class OpenAICompatibleLLM:
         started = time.monotonic()
         endpoint = self._endpoint()
         try:
-            async with httpx.AsyncClient(timeout=self._http_timeout()) as client:
+            async with httpx.AsyncClient(timeout=self._http_timeout(), headers=self._headers) as client:
                 model = await self._resolve_model(client)
                 last_why = ""
                 # Qwen2.5 (bundled GGUF) wants a plain OpenAI body. Extra
@@ -183,6 +187,7 @@ class OpenAICompatibleLLM:
     def complete_json(self, system: str, user: str, max_tokens: int = 512) -> dict[str, Any] | None:
         return _run_sync(self.complete_json_async(system, user, max_tokens))
 
+
     async def stream_completion(self, system: str, user: str) -> AsyncGenerator[str, None]:
         """Token-by-token SSE from llama.cpp / OpenAI-compatible ``stream: true``."""
         self.last_error = ""
@@ -214,6 +219,57 @@ class OpenAICompatibleLLM:
         except httpx.RequestError as exc:
             self.last_error = str(exc)[:200]
             return
+
+
+
+class AnthropicLLM:
+    """Anthropic Messages API (paid cloud model). Same interface as OpenAICompatibleLLM."""
+
+    last_raw = ""
+    last_ms = 0
+
+    def __init__(self, api_key: str, model: str, timeout: float = 120.0, url: str = "https://api.anthropic.com/v1") -> None:
+        self.url = (url or "https://api.anthropic.com/v1").rstrip("/")
+        self.model = model
+        self.timeout = timeout
+        self.last_error = ""
+        self._key = api_key
+
+    def get_name(self) -> str:
+        return "anthropic"
+
+    def get_model(self) -> str:
+        return self.model
+
+    def complete_json(self, system: str, user: str, max_tokens: int = 512) -> dict[str, Any] | None:
+        import time
+
+        self.last_error = ""
+        self.last_raw = ""
+        started = time.monotonic()
+        try:
+            response = httpx.post(
+                f"{self.url}/messages",
+                headers={"x-api-key": self._key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                json={"model": self.model, "max_tokens": max_tokens, "temperature": 0.1, "system": system,
+                      "messages": [{"role": "user", "content": user}]},
+                timeout=httpx.Timeout(max(1.0, float(self.timeout)), connect=10.0),
+            )
+            self.last_ms = int((time.monotonic() - started) * 1000)
+            if response.status_code >= 400:
+                self.last_error = f"HTTP {response.status_code}: {response.text[:200]}"
+                return None
+            blocks = response.json().get("content") or []
+            content = "".join(b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text")
+            self.last_raw = content[:20000]
+            parsed = extract_json(content)
+            if not parsed:
+                self.last_error = "the model returned text that was not JSON"
+            return parsed
+        except Exception as exc:  # noqa: BLE001 — network errors become last_error, never a crash
+            self.last_error = str(exc)[:200]
+            self.last_ms = int((time.monotonic() - started) * 1000)
+            return None
 
 
 def make_provider(url: str | None, model: str = "local", timeout: float = 180.0) -> LLMProvider:
