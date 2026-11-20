@@ -182,3 +182,30 @@ def simulate_alarm(db: Session, alertname: str, asset_ref: str = "", value: str 
         "policy": rule.escalation_policy.name if rule.escalation_policy else None,
         "steps": _steps(rule.escalation_policy),
     }
+
+
+def automation_export(db) -> dict:
+    """Rules, playbooks, escalation policies, noise filters and ForgeAI skills as plain JSON, for review or backup."""
+    from datetime import datetime
+
+    from app.models import EscalationPolicy, ForgeAiSkill, NoiseFilter, Playbook, Playrule
+    from app.forgeai import seed_skills
+    from app.settings import settings
+
+    seed_skills(db)  # built-in skills exist once ForgeAI was used; the export lists them anyway
+
+    def rows(model) -> list[dict]:
+        out = []
+        for row in db.query(model).order_by(model.id).all():
+            item = {}
+            for column in row.__table__.columns:
+                value = getattr(row, column.name)
+                item[column.name] = value.isoformat() if isinstance(value, datetime) else value
+            out.append(item)
+        return out
+
+    return {
+        "forgesre_version": "2.0.0", "exported_at": datetime.now().astimezone().isoformat(), "timezone": settings.timezone,
+        "routing_rules": rows(Playrule), "playbooks": rows(Playbook), "escalation_policies": rows(EscalationPolicy),
+        "noise_filters": rows(NoiseFilter), "forgeai_skills": rows(ForgeAiSkill),
+    }

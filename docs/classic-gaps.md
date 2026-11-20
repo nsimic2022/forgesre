@@ -18,6 +18,14 @@ remove them can be made item by item. Nothing here is removed until that decisio
 | Health `/health-ui` | Settings › Services and health, `./forgesre doctor` | — | drop |
 | Admin `/admin` | Settings › Users and roles, Backup, Demo, Audit log | **restore a backup** (confirmed step), audit export, the CLI command list | port restore with a typed confirmation; the CLI list moves to docs/cli.md only |
 
+## Ported (November 2026)
+
+Inventory **Export CSV** (the Import CSV columns, with the page's filters) and **select → Delete
+selected**; the found-devices list in Add devices with **New / Ignored / All** and where each came
+from (scan, GLPI, Zabbix, NetBox), Add also for ignored ones; Settings › Backup **Download** and
+**Restore** after typing RESTORE (runs in the background, progress from the journal);
+Automation **Export (JSON)** with rules, playbooks, policies, noise filters and ForgeAI skills.
+
 ## Before classic can go
 
 1. Port the four small gaps: inventory bulk delete + CSV export, the found-devices list (Approve /

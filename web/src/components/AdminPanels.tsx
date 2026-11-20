@@ -107,14 +107,17 @@ export function UsersPanel() {
 }
 
 type Archive = { name: string; size: number; mtime: string; label: string };
-type BackupData = { archives: Archive[]; running: boolean; last_job: null | { status: string; error: string; result: string } };
+type BackupData = { archives: Archive[]; running: boolean; last_job: null | { status: string; error: string; result: string }; restore?: null | { status: string; summary: string; detail: string; at: string | null } };
 
-/** Settings › Backup (Admin): make a backup in the background, download, upload, remove. Restore stays a confirmed step on the classic page. */
+/** Settings › Backup (Admin): make a backup in the background, download, upload, remove, and restore
+ *  after typing RESTORE. A restore replaces the database; its progress comes from the journal. */
 export function BackupPanel() {
   const [data, setData] = useState<BackupData | null>(null);
   const [secrets, setSecrets] = useState(true);
   const [models, setModels] = useState(false);
   const [asking, setAsking] = useState("");
+  const [restoring, setRestoring] = useState("");
+  const [word, setWord] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const load = () => getJson<BackupData>("/api/v1/backups").then(setData).catch((e: Error) => setError(e.message));
@@ -122,7 +125,7 @@ export function BackupPanel() {
     load();
   }, []);
   useEffect(() => {
-    if (!data?.running) return;
+    if (!data?.running && data?.restore?.status !== "running") return;
     const timer = window.setTimeout(load, 3000);
     return () => window.clearTimeout(timer);
   }, [data]);
@@ -133,9 +136,13 @@ export function BackupPanel() {
     form.append("archive", file);
     getJson<{ imported: string }>("/api/v1/backups/import", { method: "POST", body: form }).then((r) => (setNotice(`Imported ${r.imported}.`), load())).catch((e: Error) => setError(e.message));
   };
+  const restore = (name: string) =>
+    postJson(`/api/v1/backups/${encodeURIComponent(name)}/restore`, { confirm: word })
+      .then(() => (setRestoring(""), setWord(""), setNotice("Restore started. The database is replaced; sign in again if you are signed out."), load()))
+      .catch((e: Error) => setError(e.message));
   const remove = (name: string) => getJson(`/api/v1/backups/${encodeURIComponent(name)}`, { method: "DELETE" }).then(() => (setAsking(""), load())).catch((e: Error) => setError(e.message));
   return (
-    <Card title="Backup, import, export" actions={<a className="btn" href="/admin#backup">Restore (classic, asks to confirm)</a>}>
+    <Card title="Backup, import, export">
       <div className="row">
         <label className="row small"><input type="checkbox" checked={secrets} onChange={(e) => setSecrets(e.target.checked)} /> Include secrets (keep the file on trusted storage)</label>
         <label className="row small"><input type="checkbox" checked={models} onChange={(e) => setModels(e.target.checked)} /> Include the LLM model (large)</label>
@@ -145,6 +152,11 @@ export function BackupPanel() {
       {notice ? <div className="banner" role="status" style={{ background: "var(--ok-bg)" }}>{notice}</div> : null}
       {error ? <div className="banner error" role="alert">{error}</div> : null}
       {data?.last_job?.status === "error" ? <div className="banner error" role="alert">Last backup failed: {data.last_job.error}</div> : null}
+      {data?.restore ? (
+        <div className={`banner${data.restore.status === "error" ? " error" : ""}`} role="status" style={data.restore.status === "ok" ? { background: "var(--ok-bg)" } : data.restore.status === "running" ? { background: "var(--warn-bg)" } : undefined}>
+          {data.restore.status === "running" ? "Restore running: " : "Last restore: "}{data.restore.summary} · {clock(data.restore.at)}
+        </div>
+      ) : null}
       <div className="table-wrap">
         <table className="data">
           <thead><tr><th>Backup</th><th style={{ width: 170 }}>Made</th><th style={{ width: 240 }}>Change</th></tr></thead>
@@ -155,7 +167,8 @@ export function BackupPanel() {
                 <td className="small muted">{clock(a.mtime)}</td>
                 <td>
                   <div className="row" style={{ gap: 6 }}>
-                    <a className="btn" href={`/admin/backups/${encodeURIComponent(a.name)}`}>Download</a>
+                    <a className="btn" href={`/api/v1/backups/${encodeURIComponent(a.name)}/download`}>Download</a>
+                    <button className="btn" type="button" onClick={() => (setRestoring(a.name), setWord(""))} aria-label={`Restore backup ${a.name}`}>Restore</button>
                     {asking === a.name ? (
                       <>
                         <button className="btn" type="button" style={{ borderColor: "var(--crit)", color: "var(--crit)" }} onClick={() => remove(a.name)}>Yes, remove</button>
@@ -172,6 +185,17 @@ export function BackupPanel() {
         </table>
         {data && data.archives.length === 0 ? <div className="empty">No backups yet.</div> : null}
       </div>
+      {restoring ? (
+        <div className="banner" role="alertdialog" aria-label="Confirm restore" style={{ background: "var(--warn-bg)" }}>
+          <strong>Restore {restoring}?</strong> The whole database (incidents, assets, rules, users, journal) is replaced with the backup;
+          what happened since it was made is lost. Make a backup first if unsure.
+          <div className="row" style={{ marginTop: 8 }}>
+            <input className="search" aria-label="Type RESTORE" placeholder="Type RESTORE" value={word} onChange={(e) => setWord(e.target.value)} />
+            <button className="btn" type="button" style={{ borderColor: "var(--crit)", color: "var(--crit)" }} disabled={word !== "RESTORE"} onClick={() => restore(restoring)}>Restore</button>
+            <button className="btn" type="button" onClick={() => setRestoring("")}>Cancel</button>
+          </div>
+        </div>
+      ) : null}
       <span className="small faint">Same as <code className="mono">./forgesre backup</code> and <code className="mono">./forgesre restore</code> on the host.</span>
     </Card>
   );
