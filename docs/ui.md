@@ -152,11 +152,11 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
 | NOC overview | done |
 | Incidents: list, detail, checklist, notes, Send report by mail | done |
 | On-call | done: who is on call now, the week grid, add (also on several days at once), edit, copy, turn off, remove, take the rest of today |
-| Inventory: library (site › rack, type, environment, customer, views), table, asset card with 30-day capacity (disk days to full, interface receive), add / edit / clone / delete, Import CSV (check first, then add in a background job; existing assets are skipped) | done; discovery still on the classic pages |
+| Inventory: library (site › rack, type, environment, customer, views), table, asset card with 30-day capacity (disk days to full, interface receive), add / edit / clone / delete, Import CSV (check first, then add in a background job; existing assets are skipped), Export CSV with the page's filters, select and delete several | done |
 | Automation: pipeline, noise filters (create, edit, remove), routing rules, escalation, playbooks, maintenance windows, "Try an alarm" | done, including creating, editing, turning off and removing rules and playbooks, escalation policies (Tier 1–3 and Manager) and maintenance windows (several assets at once, End now) |
 | Investigations: resolved incidents with confirmed cause and ratings, accuracy, recurring causes; review card on the incident page | done |
 | Reports: period KPIs vs previous, incidents per day, by asset type, noisiest assets, frequent alerts, host-down time, scheduled reports (create, edit, on/off, remove; presets, custom interval, cron, once), CSV | done |
-| Settings: groups from the registry with inline editing, secret status, connection tests, services and health | done, including Users and roles (create, edit, role, password, remove; yourself and the last Admin are protected) and Backup (background backup, download, upload, remove; restore stays a confirmed step on the classic Admin page) and Demo (lab scenarios as the `demo_run` job, Lower demo gauges) |
+| Settings: groups from the registry with inline editing, secret status, connection tests, services and health | done, including Users and roles (create, edit, role, password, remove; yourself and the last Admin are protected) and Backup (background backup, download, upload, remove, restore after typing RESTORE) and Demo (lab scenarios as the `demo_run` job, Lower demo gauges) |
 
 ## API used by the new pages
 

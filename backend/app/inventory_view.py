@@ -110,8 +110,9 @@ def inventory_page(
     view: str = "",
     limit: int = 50,
     offset: int = 0,
+    cap: int = 200,
 ) -> dict[str, Any]:
-    """Library counts (unfiltered), then one page of assets matching every given filter."""
+    """Library counts (unfiltered), then one page of assets matching every given filter (``cap`` = largest page)."""
     open_counts = _open_counts(db)
     rows = []
     for asset in db.query(Asset).order_by(Asset.hostname).all():
@@ -152,7 +153,7 @@ def inventory_page(
         return True
 
     filtered = [row for row in rows if keep(row)]
-    limit = max(1, min(int(limit), 200))
+    limit = max(1, min(int(limit), cap))
     offset = max(0, int(offset))
     return {
         "library": library,
@@ -228,3 +229,52 @@ def asset_form_options(db: Session, user: User) -> dict[str, Any]:
         "sites": sorted(sites),
         "can_edit": can(user, "write_assets"),
     }
+
+
+def inventory_csv(db: Session, **filters: str) -> str:
+    """The filtered inventory as CSV with the Import CSV columns, so an export can be edited and imported elsewhere."""
+    import csv
+    import io
+
+    from app.asset_import import COLUMNS
+
+    ids = [r["asset_id"] for r in inventory_page(db, limit=100000, cap=100000, **filters)["rows"]]
+    assets = {a.asset_id: a for a in db.query(Asset).filter(Asset.asset_id.in_(ids)).all()} if ids else {}
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(COLUMNS)
+    for asset_id in ids:
+        a = assets.get(asset_id)
+        if a is None:
+            continue
+        extras = normalize_extras(a.extras)
+        base = {"hostname": a.hostname, "ip": a.ip, "type": a.type, "environment": a.environment, "owner": a.owner,
+                "contact_name": a.contact_name, "owner_email": a.owner_email, "owner_phone": a.owner_phone, "notes": a.notes,
+                "monitoring_profile": a.monitoring_profile, "scrape_address": a.scrape_address, "asset_id": a.asset_id,
+                "parent": a.parent.asset_id if a.parent is not None else ""}
+        writer.writerow([base.get(c, extras.get(c, "")) or "" for c in COLUMNS])
+    return "\ufeff" + out.getvalue()  # BOM: Excel opens UTF-8 with the right letters
+
+
+def delete_many(db: Session, asset_ids: list[str], actor: str) -> dict[str, Any]:
+    """Remove several assets with the same rules as one (delete_blocked); each one blocked is reported, the rest go."""
+    from app.inventory import delete_asset, delete_blocked
+
+    removed, kept = [], []
+    for asset_id in dict.fromkeys(str(i) for i in asset_ids):
+        asset = db.query(Asset).filter_by(asset_id=asset_id).first()
+        if asset is None:
+            kept.append({"asset_id": asset_id, "reason": "not found"})
+            continue
+        reason = delete_blocked(asset)
+        if reason:
+            kept.append({"asset_id": asset_id, "reason": reason})
+            continue
+        try:
+            delete_asset(db, asset, actor=actor)
+        except ValueError as exc:
+            db.rollback()
+            kept.append({"asset_id": asset_id, "reason": str(exc)})
+            continue
+        removed.append(asset_id)
+    return {"removed": removed, "kept": kept}

@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
@@ -1464,6 +1465,20 @@ class AssetImportBody(BaseModel):
     csv: str
 
 
+class BulkDeleteBody(BaseModel):
+    asset_ids: list[str] = Field(default_factory=list, max_length=200)
+
+
+@router.post("/assets/bulk-delete")
+def assets_bulk_delete_api(body: BulkDeleteBody, db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict[str, Any]:
+    """Remove up to 200 assets at once (Engineer+). Incidents stay; each one that cannot go says why."""
+    from app.inventory_view import delete_many
+
+    if not body.asset_ids:
+        raise HTTPException(status_code=400, detail="no assets selected")
+    return delete_many(db, body.asset_ids, user.email)
+
+
 @router.get("/assets/import/template")
 def asset_import_template(user: User = Depends(require("write_assets"))) -> Response:
     """Empty CSV with every column Import CSV reads, plus one example row."""
@@ -1964,8 +1979,11 @@ def backups_api(db: Session = Depends(get_db), user: User = Depends(require("adm
 
     running = db.query(Job).filter(Job.kind == "backup_create", Job.status.in_(["pending", "running"])).first()
     last = db.query(Job).filter(Job.kind == "backup_create").order_by(Job.id.desc()).first()
+    from app.backup_restore import restore_state
+
     return {
         "archives": list_archives(),
+        "restore": restore_state(db),
         "running": bool(running),
         "last_job": None if last is None else {"status": last.status, "error": last.error or "", "result": (last.payload or {}).get("result", "")},
     }
@@ -1995,6 +2013,42 @@ def backup_delete_api(name: str, db: Session = Depends(get_db), user: User = Dep
     audit(db, "backup.remove", actor=user.email, object_type="backup", object_id=deleted.name)
     db.commit()
     return {"removed": deleted.name}
+
+
+@router.get("/backups/{name}/download")
+def backup_download_api(name: str, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> FileResponse:
+    """Download one backup archive (Admin). Audited."""
+    from app.backup import download_name, resolve_archive
+
+    try:
+        path = resolve_archive(name)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail="backup not found") from exc
+    audit(db, "backup.download", actor=user.email, object_type="backup", object_id=name, commit=True)
+    return FileResponse(path, filename=download_name(path), media_type="application/gzip")
+
+
+class RestoreBody(BaseModel):
+    confirm: str = ""
+
+
+@router.post("/backups/{name}/restore")
+def backup_restore_api(name: str, body: RestoreBody, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Restore a backup (Admin, typed RESTORE). It replaces the database, so it runs in a background thread and
+    reports in the journal (backup.restore), which the Backup panel polls; a job row would be replaced by the restore."""
+    from app.backup import CONFIRM_WORD, backup_ident, resolve_archive
+    from app.backup_restore import start_restore
+
+    if body.confirm.strip() != CONFIRM_WORD:
+        raise HTTPException(status_code=400, detail="Type RESTORE to confirm.")
+    try:
+        path = resolve_archive(name)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail="backup not found") from exc
+    audit(db, "backup.restore", actor=user.email, object_type="backup", object_id=backup_ident(path), commit=True)
+    if not start_restore(path, user.email):
+        raise HTTPException(status_code=409, detail="A restore is already running.")
+    return {"started": backup_ident(path)}
 
 
 @router.post("/backups/import")
@@ -3164,6 +3218,18 @@ def inventory_api(
     return data
 
 
+@router.get("/inventory.csv")
+def inventory_csv_api(q: str = "", site: str = "", rack: str = "", type: str = "", environment: str = "", customer: str = "",
+                      view: str = "", db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> Response:
+    """The inventory with the page's filters as CSV (the Import CSV columns)."""
+    del user
+    from app.inventory_view import inventory_csv
+
+    body = inventory_csv(db, q=q, site=site, rack=rack, type_=type, environment=environment, customer=customer, view=view)
+    return Response(body, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="forgesre-inventory.csv"'})
+
+
 @router.get("/inventory-form")
 def inventory_form_api(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> dict[str, Any]:
     """Choices for the asset form in the new UI."""
@@ -3904,6 +3970,19 @@ def automation_api(db: Session = Depends(get_db), user: User = Depends(require("
     data["can_edit"] = can(user, "write_play")
     data["can_edit_maintenance"] = can(user, "write_assets")
     return data
+
+
+@router.get("/automation/export")
+def automation_export_api(db: Session = Depends(get_db), user: User = Depends(require("read_play"))) -> Response:
+    """Download every rule, playbook, policy, noise filter and ForgeAI skill as one JSON file."""
+    import json as _json
+
+    from app.automation_view import automation_export
+
+    audit(db, "automation.export", actor=user.email, object_type="automation", object_id="all", commit=True)
+    body = _json.dumps(automation_export(db), ensure_ascii=False, indent=2, default=str)
+    return Response(body, media_type="application/json",
+                    headers={"Content-Disposition": 'attachment; filename="forgesre-automation.json"'})
 
 
 @router.post("/automation/simulate")

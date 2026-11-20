@@ -13,7 +13,8 @@ type Found = {
   snmp_note: string; watch: string;
   suggested: { hostname: string; type: string; monitoring_profile: string; scrape_address: string; vendor: string; location: string };
 };
-type Candidate = { id: number; ip: string; hostname: string; proposed_role: string; open_ports: number[]; snmp_ok: boolean; status: string; asset_id: string; seen_at: string | null };
+type Candidate = { id: number; ip: string; hostname: string; proposed_role: string; open_ports: number[]; snmp_ok: boolean; status: string; source?: string; asset_id: string; seen_at: string | null };
+const SOURCE_NAME: Record<string, string> = { scan: "Scan", glpi: "GLPI", zabbix: "Zabbix", netbox: "NetBox", librenms: "LibreNMS" };
 type Status = { cidrs: string[]; suggested: string[]; mode: string; scan: { id: number; status: string } | null; counts: Record<string, number> };
 
 const PORT_NAME: Record<number, string> = { 22: "SSH", 80: "HTTP", 443: "HTTPS", 161: "SNMP", 9100: "node_exporter", 9182: "windows_exporter", 10050: "Zabbix agent", 12345: "Alloy" };
@@ -170,6 +171,7 @@ function ScanNetwork() {
   const [cidrs, setCidrs] = useState("");
   const [error, setError] = useState("");
   const [checking, setChecking] = useState("");
+  const [show, setShow] = useState<"new" | "ignored" | "all">("new");
   const load = () => {
     getJson<Status>("/api/v1/discovery/status").then((s) => (setStatus(s), setCidrs((c) => c || (s.cidrs.length ? s.cidrs : s.suggested).join(", ")))).catch((e: Error) => setError(e.message));
     getJson<Candidate[]>("/api/v1/discovery/candidates").then(setRows).catch((e: Error) => setError(e.message));
@@ -190,6 +192,7 @@ function ScanNetwork() {
       .then((r) => (what === "approve" && r.asset_id ? setChecking(r.asset_id) : null, load()))
       .catch((err: Error) => setError(err.message));
   const fresh = rows.filter((r) => r.status === "new");
+  const visible = rows.filter((r) => show === "all" || r.status === show);
   return (
     <>
       <Card title="Scan a network">
@@ -209,24 +212,33 @@ function ScanNetwork() {
       {checking ? (
         <Card title={`Added ${checking}`}><MonitoringCheck assetId={checking} auto /></Card>
       ) : null}
-      <Card title={`Found · ${fresh.length} new`}>
+      <Card title={`Found · ${fresh.length} new`} actions={
+        <div className="row" style={{ gap: 4 }} role="group" aria-label="Show">
+          {([["new", "New"], ["ignored", "Ignored"], ["all", "All"]] as const).map(([v, l]) => (
+            <button key={v} className="btn" type="button" aria-pressed={show === v} onClick={() => setShow(v)}>{l}</button>
+          ))}
+        </div>
+      }>
+        <span className="small faint">From a scan here, or from GLPI, Zabbix and NetBox when Settings › Integrations › New devices is set to review.</span>
         {rows.length === 0 ? <span className="muted">Nothing found yet. Scan a range above.</span> : null}
-        {rows.length ? (
-          <div className="table-wrap"><table className="data" style={{ minWidth: 760 }}>
-            <thead><tr><th>Address</th><th>Name</th><th>Looks like</th><th>Answers on</th><th>Seen</th><th style={{ width: 170 }}></th></tr></thead>
+        {rows.length && !visible.length ? <span className="muted">Nothing in this list.</span> : null}
+        {visible.length ? (
+          <div className="table-wrap"><table className="data" style={{ minWidth: 820 }}>
+            <thead><tr><th>Address</th><th>Name</th><th>Looks like</th><th>Answers on</th><th>From</th><th>Seen</th><th style={{ width: 170 }}></th></tr></thead>
             <tbody>
-              {rows.map((r) => (
+              {visible.map((r) => (
                 <tr key={r.id}>
                   <td className="mono">{r.ip}</td>
                   <td>{r.hostname || <span className="faint">—</span>}</td>
                   <td className="small">{r.proposed_role}</td>
                   <td className="small muted">{r.open_ports.map((p) => PORT_NAME[p] ?? p).join(", ") || "—"}</td>
+                  <td className="small">{SOURCE_NAME[r.source ?? "scan"] ?? r.source}</td>
                   <td className="small faint">{clock(r.seen_at)}</td>
                   <td>
-                    {r.status === "new" ? (
+                    {r.status === "new" || r.status === "ignored" ? (
                       <div className="row" style={{ gap: 6 }}>
                         <button className="btn primary" type="button" onClick={() => act(r.id, "approve")}>Add</button>
-                        <button className="btn" type="button" onClick={() => act(r.id, "ignore")}>Ignore</button>
+                        {r.status === "new" ? <button className="btn" type="button" onClick={() => act(r.id, "ignore")}>Ignore</button> : <Chip tone="off">ignored</Chip>}
                       </div>
                     ) : r.asset_id ? <Link to={`/inventory?q=${encodeURIComponent(r.asset_id)}`}>{r.asset_id}</Link> : <Chip tone="off">{r.status}</Chip>}
                   </td>
@@ -266,7 +278,7 @@ export function AddDevicesPage() {
           <span className="small muted">
             NetBox, Zabbix, GLPI and LibreNMS are read in the background (every 6 hours when turned on). To read one now, an Admin presses
             <strong> Sync now</strong> on its card in <Link to="/settings">Settings › Integrations</Link>. Imported assets then show up in the
-            inventory, where <strong>Check monitoring</strong> proves they are watched. A CSV import is still on the <a href="/assets">classic page</a>.
+            inventory, where <strong>Check monitoring</strong> proves they are watched. Many at once: <strong>Import CSV</strong> on the Inventory page.
           </span>
         </Card>
       ) : null}
