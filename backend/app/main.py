@@ -20,6 +20,7 @@ from app.journal import maybe_prune_old, prune_older_than, report
 from app.inventory import run_scan, seed_demo_candidate, sync_netbox
 from app.jobs import recover_interrupted_jobs, start_infrastructure_scheduler
 from app.leader import leader
+from app.loop_beats import beat
 from app.webui import web_dist_dir
 from app.metrics import metrics_response
 from app.migrate import migrate
@@ -49,6 +50,25 @@ def configure_logging() -> None:
     )
 
 
+def process_role() -> str:
+    """FORGESRE_ROLE: all (default: web and background loops), web (requests only) or worker (loops only)."""
+    role = os.environ.get("FORGESRE_ROLE", "all").strip().lower()
+    return role if role in {"all", "web", "worker"} else "all"
+
+
+def runs_loops() -> bool:
+    return process_role() in {"all", "worker"}
+
+
+def start_loops(stop: threading.Event) -> None:
+    """Escalation, jobs, ForgeAI jobs and discovery threads. Each runs its work only while this
+    process holds the leader lock, so any number of processes can call this safely."""
+    threading.Thread(target=_escalation_loop, args=(stop,), daemon=True, name="escalation").start()
+    threading.Thread(target=_jobs_loop, args=(stop,), daemon=True, name="jobs").start()
+    threading.Thread(target=_llm_jobs_loop, args=(stop,), daemon=True, name="llm-jobs").start()
+    threading.Thread(target=_discovery_loop, args=(stop,), daemon=True, name="discovery").start()
+
+
 def _discovery_loop(stop: threading.Event) -> None:
     import os
 
@@ -61,6 +81,7 @@ def _discovery_loop(stop: threading.Event) -> None:
 
     first = True
     mark_discovery_loop_alive()
+    beat("discovery", leader=leader.ensure())
     while not stop.is_set():
         delay = 30 if first else 6 * 60 * 60
         first = False
@@ -69,6 +90,7 @@ def _discovery_loop(stop: threading.Event) -> None:
         mark_discovery_loop_alive()
         if loop_disabled or not leader.ensure():
             continue
+        beat("discovery")
         db = SessionLocal()
         try:
             # Scan is ICMP/TCP/SNMP in this thread (may hold the worker). CMDB
@@ -103,6 +125,7 @@ def _jobs_loop(stop: threading.Event) -> None:
     while not stop.wait(2):
         if not leader.ensure():
             continue
+        beat("jobs")
         db = SessionLocal()
         try:
             process_scheduled_reports(db)
@@ -124,6 +147,7 @@ def _llm_jobs_loop(stop: threading.Event) -> None:
     while not stop.wait(2):
         if not leader.ensure():
             continue
+        beat("llm-jobs")
         db = SessionLocal()
         try:
             run_pending_jobs(db, limit=1, lane=LANE_LLM)
@@ -140,6 +164,7 @@ def _escalation_loop(stop: threading.Event) -> None:
     while not stop.wait(30):
         if not leader.ensure():
             continue
+        beat("escalation")
         db = SessionLocal()
         try:
             from app.noise_filters import promote_filtered
@@ -278,16 +303,14 @@ def create_app() -> FastAPI:
             raise
         finally:
             db.close()
-        log.info("ForgeSRE core started timezone=%s ai=%s", settings.timezone, settings.ai_enabled)
-        threading.Thread(target=_escalation_loop, args=(stop,), daemon=True).start()
-        threading.Thread(target=_jobs_loop, args=(stop,), daemon=True).start()
-        threading.Thread(target=_llm_jobs_loop, args=(stop,), daemon=True).start()
-        threading.Thread(target=_discovery_loop, args=(stop,), daemon=True).start()
+        log.info("ForgeSRE core started timezone=%s ai=%s role=%s", settings.timezone, settings.ai_enabled, process_role())
         app.state.escalation_stop = stop
         infra_stop = asyncio.Event()
         infra_task = None
-        if not os.environ.get("PYTEST_CURRENT_TEST"):
-            infra_task = asyncio.create_task(start_infrastructure_scheduler(stop=infra_stop))
+        if runs_loops():
+            start_loops(stop)
+            if not os.environ.get("PYTEST_CURRENT_TEST"):
+                infra_task = asyncio.create_task(start_infrastructure_scheduler(stop=infra_stop))
         app.state.infra_scan_stop = infra_stop
         async with mcp.session_manager.run():
             yield

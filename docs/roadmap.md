@@ -6,10 +6,9 @@ Each step ships as its own pull request, merged when CI is green (AGENTS.md).
 ## Phase 1 — backend foundation
 
 1. ~~Four roles: Viewer, Analyst, Engineer, Admin~~ (done, #148).
-2. ~~Background jobs and timeouts~~ (done: one leader process, atomic claim, LLM lane, DB sign-in throttle). Remaining: a Postgres-backed job queue and a separate worker
-   process for ForgeAI, discovery, syncs, reports and backups; a timeout on every
-   external call. Move the sign-in throttle and session state to the database so Core
-   can run several web workers.
+2. ~~Background jobs and timeouts~~ (done: Postgres job queue with atomic claim, leader lock,
+   LLM lane, sign-in throttle and loop heartbeats in the database, several web workers
+   (`FORGESRE_WEB_WORKERS`) and an optional separate worker process (`worker` profile)).
 3. ~~Settings module, backend and CLI~~ (done: [settings.md](settings.md)). Live values in
    `config/forgesre.yml`, secrets via `./forgesre settings set-secret`, connection tests.
    The Settings page itself comes with the new UI. Later: notification channels for Slack,

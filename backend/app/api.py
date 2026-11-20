@@ -2306,6 +2306,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "glpi": _glpi_check(),
         "librenms": _librenms_check(),
         "discovery": _discovery_check(),
+        "worker": _worker_check(),
         "chat": _chat_check(),
         "checks": _checks_check(),
         "mcp": _mcp_check(),
@@ -2385,6 +2386,18 @@ def _core_check() -> dict[str, str]:
     return result
 
 
+def _worker_check() -> dict[str, Any]:
+    """Background loops (jobs, ForgeAI, escalation, discovery): age of each beat and the process running them."""
+    from app.loop_beats import status
+
+    try:
+        row = status()
+    except Exception as exc:
+        return {"status": "warn", "why": f"Could not read loop heartbeats: {exc}", "fix": "./forgesre logs core"}
+    row["test"] = "loop_beats table: last beat of each background loop"
+    return row
+
+
 def _discovery_check() -> dict[str, str]:
     """Last scan / journal / loop heartbeat — not a checkbox."""
     if not settings.discovery_enabled:
@@ -2392,9 +2405,13 @@ def _discovery_check() -> dict[str, str]:
     from app.db import SessionLocal
     from app.inventory import discovery_loop_age_seconds
     from app.journal import list_entries
+    from app.loop_beats import age_seconds
 
     test = "journal module=discovery; discovery loop heartbeat"
-    age = discovery_loop_age_seconds()
+    # the loop may run in another process (web workers, separate worker): the beat in the database counts
+    age = age_seconds("discovery")
+    if age is None:
+        age = discovery_loop_age_seconds()
     last = None
     try:
         db = SessionLocal()
