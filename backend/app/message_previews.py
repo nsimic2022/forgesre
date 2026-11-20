@@ -98,9 +98,12 @@ def scheduled_report(db: Session, report_id: int | None = None) -> dict[str, Any
     if report_id and row is None:
         raise LookupError("report not found")
     if row is not None and report_kind(row) == "forgeai":
+        from app.morning_digest import digest_facts, digest_message
+
+        subject, text, html = digest_message(row.name, digest_facts(db, min(report_days(row), 7) * 24), None)
         return {
-            "subject": f"ForgeAI digest {row.name}", "html": "", "text": "",
-            "note": "The ForgeAI digest is written by the model when it is sent, so there is no preview.",
+            "subject": subject, "html": html, "text": text,
+            "note": "The facts are today's. ForgeAI writes its summary when the mail is sent, so it is not in the preview.",
             "recipients": report_recipients(row), "schedule": schedule_label(row),
         }
     name = row.name if row is not None else "weekly NOC"

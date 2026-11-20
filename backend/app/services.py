@@ -2201,45 +2201,12 @@ def send_forgeai_digest(
     actor: str = "system",
     name: str = "forgeai-digest",
     rewrite: bool = True,
+    hours: int = 24,
 ) -> Notification | None:
-    """Mail the current ForgeAI digest. Optional LLM rewrite first. Not a performance snapshot."""
-    from app.insights import insight_facts, insight_panel, insights_text, rewrite_insights
-    from app.settings import settings
+    """Mail the ForgeAI digest: database facts plus one ForgeAI shift summary (``rewrite`` asks the model)."""
+    from app.morning_digest import send_digest
 
-    addresses = [str(item).strip() for item in (recipients or []) if str(item).strip()]
-    if not addresses:
-        raise ValueError("Need a valid email address")
-    if rewrite and settings.ai_enabled and settings.llm_url:
-        rewrite_insights(db, insight_facts(db), actor=actor)
-    panel = insight_panel(db)
-    body = "\n".join(insights_text(panel))
-    last: Notification | None = None
-    problems: list[str] = []
-    for email in addresses:
-        try:
-            last = send_outbound_mail(
-                db,
-                target=email,
-                subject=f"ForgeSRE ForgeAI digest — {name}",
-                body=body,
-                actor=actor,
-                step_key="report",
-            )
-        except Exception as exc:
-            problems.append(f"{email}: {exc}")
-    report(
-        db,
-        "insights",
-        "cron",
-        "error" if problems else "ok",
-        summary=f"ForgeAI digest mailed to {len(addresses) - len(problems)}/{len(addresses)} by {actor}",
-        detail=body[:2000] if not problems else "; ".join(problems)[:2000],
-        object_type="insights",
-        object_id=name,
-    )
-    if problems:
-        raise RuntimeError("; ".join(problems)[:400])
-    return last
+    return send_digest(db, recipients=recipients, actor=actor, name=name, hours=max(1, min(int(hours or 24), 168)), ask=rewrite)
 
 
 def send_incident_report(
@@ -2537,6 +2504,7 @@ def _send_report_job(db: Session, job: dict[str, Any], actor: str) -> Notificati
             recipients=recipients,
             actor=actor,
             name=str(job.get("name") or "forgeai-digest"),
+            hours=min(int(job.get("days") or 1), 7) * 24,
         )
     subject, body, html = performance_report_message(
         db, list(job.get("asset_ids") or []), str(job.get("name") or "report"), days=int(job.get("days") or 7)
@@ -2665,6 +2633,7 @@ def process_scheduled_reports(db: Session) -> int:
                         "actor": "scheduler",
                         "recipients": list(job.get("recipients") or []),
                         "name": job.get("name") or "forgeai-digest",
+                        "hours": min(int(job.get("days") or 1), 7) * 24,
                     },
                 )
             else:

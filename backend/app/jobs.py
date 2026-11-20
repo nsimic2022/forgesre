@@ -252,12 +252,14 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
             elif row.kind == FORGEAI_DIGEST_KIND:
                 from app.services import send_forgeai_digest
 
+                # Facts from the database, then one ForgeAI shift summary; LLM lane, SMTP has its own timeout.
                 payload = row.payload or {}
                 send_forgeai_digest(
                     db,
                     recipients=list(payload.get("recipients") or []),
                     actor=str(payload.get("actor") or "system"),
                     name=str(payload.get("name") or "forgeai-digest"),
+                    hours=int(payload.get("hours") or 24),
                 )
             elif row.kind == "k8s_sync":
                 from app.kubernetes import sync_all
