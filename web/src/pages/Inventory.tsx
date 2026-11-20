@@ -2,6 +2,7 @@ import { MonitoringCheck } from "../components/MonitoringCheck";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AssetEditor, type EditorMode } from "../components/AssetEditor";
+import { CapacityCard } from "../components/CapacityCard";
 import { Card, Chip, Dot } from "../components/ui";
 import { getJson, type AssetCard, type AssetFormOptions, type InventoryPage, type InventoryRow } from "../lib/api";
 import { clock, severityTone, type Tone } from "../lib/format";
@@ -100,6 +101,7 @@ function AssetPanel({ assetId, onClose, onEdit }: { assetId: string; onClose: ()
       <h3 className="small faint" style={{ margin: 0, textTransform: "uppercase", letterSpacing: ".05em" }}>Monitoring sources</h3>
       <div className="row">{card.sources.length ? card.sources.map((s) => <Chip key={s} tone="ok">{s}</Chip>) : <span className="muted">None: nothing watches this asset.</span>}</div>
       {dl([["Scrape", card.scrape_address], ["Profile", card.monitoring_profile], ["SNMP", card.snmp ? `${card.snmp.snmp_version}${card.snmp.snmp_version === "v3" ? ` · user ${card.snmp.snmp_v3_user}` : card.snmp.snmp_community_mode === "custom" ? " · own community" : " · default community"}${card.snmp.pending ? " · being written to snmp_exporter" : ""}` : ""], ["GLPI", card.glpi_id && `#${card.glpi_id}`], ["Zabbix", card.zabbix_hostid]])}
+      <CapacityCard assetId={card.asset_id} />
       <h3 className="small faint" style={{ margin: 0, textTransform: "uppercase", letterSpacing: ".05em" }}>Recent incidents</h3>
       {card.incidents.length === 0 ? <span className="muted">None.</span> : null}
       {card.incidents.map((i) => (

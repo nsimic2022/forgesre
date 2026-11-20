@@ -379,6 +379,53 @@ def cmd_assets(port: str, args: list[str]) -> None:
     print("Live path:    ./forgesre verify (exporter → prometheus → alertmanager → core; not ./forgesre test)")
 
 
+def format_capacity(asset_id: str, data: dict[str, Any]) -> str:
+    """Capacity rows as text: label, note (forecast or history), samples."""
+    if data.get("state") == "error":
+        return f"{asset_id}: capacity read failed: {data.get('error') or 'unknown error'}\n"
+    lines = [f"{asset_id} — last 30 days"]
+    for row in data.get("rows") or []:
+        days = row.get("forecast_days")
+        mark = "!" if days is not None and int(days) <= 30 else " "
+        lines.append(f" {mark} {str(row.get('label') or ''):<20} {str(row.get('note') or ''):<28} {row.get('points') or 0} samples")
+    if data.get("measured_at"):
+        lines.append(f"Read at {data['measured_at']}; cached 15 min (--refresh reads again).")
+    return "\n".join(lines) + "\n"
+
+
+def cmd_capacity(port: str, args: list[str]) -> None:
+    """./forgesre capacity ASSET [--refresh]: 30-day disk / interface history and days to full."""
+    import time
+
+    usage = "usage: ./forgesre capacity [--refresh] number-or-id-or-hostname-or-ip"
+    refresh = "--refresh" in args
+    names = [a for a in args if not a.startswith("-")]
+    if any(a in {"-h", "--help"} for a in args) or len(names) != 1:
+        raise SystemExit(usage)
+    jar, _me = ensure_jar(port)
+    try:
+        rows = get_json(port, jar, "/api/v1/assets")
+        hits = [r for r in rows if isinstance(r, dict) and asset_selector_hit(r, names[0])] if isinstance(rows, list) else []
+        if not hits:
+            raise SystemExit(f"no asset matching {names[0]!r}. Try ./forgesre assets")
+        asset_id = str(hits[0].get("asset_id"))
+        path = f"/api/v1/assets/{quote(asset_id)}/capacity"
+        data = get_json(port, jar, path + ("?refresh=true" if refresh else ""))
+        for _ in range(40):  # the jobs worker reads Prometheus / Zabbix; about a minute at most
+            if data.get("state") != "pending":
+                break
+            time.sleep(1.5)
+            data = get_json(port, jar, path)
+        if data.get("state") == "pending":
+            raise SystemExit("still reading; check ./forgesre jobs and try again")
+        sys.stdout.write(format_capacity(asset_id, data))
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as exc:
+        raise SystemExit(f"could not read capacity: {exc}") from exc
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def cmd_ping(port: str, args: list[str]) -> None:
     selector = ""
     timeout = DEFAULT_TIMEOUT
@@ -842,6 +889,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_numbers(port)
     elif command in {"assets", "inventory"}:
         cmd_assets(port, rest)
+    elif command == "capacity":
+        cmd_capacity(port, rest)
     elif command in {"asset-refs", "asset_refs"}:
         cmd_asset_refs(port)
     elif command in {"ping", "probe"}:
