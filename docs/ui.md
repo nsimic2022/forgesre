@@ -184,3 +184,20 @@ python scripts/screenshots.py --only noc,incident     # just a few pages
 The new UI names escalation steps the way most NOCs do: **Tier 1** (NOC), **Tier 2** (shift
 lead), **Tier 3** (engineer), then **Manager**, which is not a support tier. The database and
 the classic UI keep levels 1–4 (L1–L4); `tierLabel()` in `web/src/lib/format.ts` maps them.
+
+## Add devices
+
+`/app/inventory/add` (Engineer). Three tabs: one device, scan a network, from another system.
+
+- `POST /api/v1/onboard/identify` `{ip, snmp_port, snmp: {snmp_version, snmp_community_mode,
+  snmp_community | snmp_v3_*}}` queues an `onboard_identify` job: TCP and exporter probes, and a
+  v1/v2c SNMP GET of sysDescr, sysObjectID, sysName, sysLocation (`app/snmp_get.py`, stdlib).
+  The SNMP secrets are dropped from the job when it finishes or fails.
+- `POST /api/v1/assets/{id}/verify-job` queues `asset_verify` (the live chain as a checklist,
+  `app/onboarding.py`) and, when the asset's SNMP auth is not in snmp.yml yet, `snmp_apply`.
+- `GET /api/v1/onboard/jobs/{id}`: status and result of those jobs.
+- `GET /api/v1/discovery/status`: saved ranges, a suggestion from this VM's networks, the
+  running scan. Scanning and adding found addresses use the existing discovery endpoints.
+- `snmp_apply` (`app/snmp_apply.py`) writes per-asset SNMP auths into the generated snmp.yml
+  that Core mounts at `/host-generated` and POSTs `/-/reload` to snmp_exporter. Saving an asset
+  queues it, and the leader queues it every 5 minutes while an auth is pending (classic edits).

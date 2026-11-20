@@ -62,7 +62,7 @@ describe("Inventory", () => {
 
   it("adds an asset with location extras", async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "New asset" }));
+    fireEvent.click(await screen.findByRole("button", { name: "New asset by hand" }));
     fireEvent.change(await screen.findByLabelText("Hostname"), { target: { value: "db-new-01" } });
     fireEvent.change(screen.getByLabelText("IP address"), { target: { value: "10.0.0.5" } });
     fireEvent.change(screen.getByLabelText("Type"), { target: { value: "Linux Server" } });

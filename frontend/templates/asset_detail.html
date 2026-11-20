@@ -135,7 +135,7 @@
       · Default community (config)
     {% endif %}
     · exporter auth <code>{{ snmp_auth.effective }}</code>
-    {% if snmp_auth.pending %}<span class="pill warn" data-snmp-auth-pending title="snmp.yml does not have {{ snmp_auth.desired }} yet">pending</span> <span class="muted">run <code>./forgesre snmp-auths</code> to write <code>{{ snmp_auth.desired }}</code></span>{% endif %}
+    {% if snmp_auth.pending %}<span class="pill warn" data-snmp-auth-pending title="snmp.yml does not have {{ snmp_auth.desired }} yet">pending</span> <span class="muted">ForgeSRE writes <code>{{ snmp_auth.desired }}</code> into snmp.yml within 5 minutes; <code>./forgesre snmp-auths</code> does it now</span>{% endif %}
 </dd>
   {% endif %}
   {% if snmp_view.show %}

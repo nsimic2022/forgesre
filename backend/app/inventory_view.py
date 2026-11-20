@@ -193,9 +193,18 @@ def asset_card(db: Session, asset: Asset, user: User) -> dict[str, Any]:
                 for i in recent
             ],
             "can_edit": can(user, "write_assets"),
+            "snmp": _snmp_view(asset),
         }
     )
     return data
+
+
+def _snmp_view(asset: Asset) -> dict[str, Any] | None:
+    """SNMP version and which snmp_exporter auth is in use (``pending`` until snmp.yml has it). No secrets."""
+    from app.asset_snmp import auth_status
+    from app.inventory import is_snmp_asset
+
+    return auth_status(asset) if is_snmp_asset(asset) else None
 
 
 def asset_form_options(db: Session, user: User) -> dict[str, Any]:

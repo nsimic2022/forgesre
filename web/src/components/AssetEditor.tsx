@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { postJson, type AssetCard, type AssetFormOptions } from "../lib/api";
+import { SnmpFields, snmpPayload, type Snmp } from "./SnmpFields";
 import { Card } from "./ui";
 
 export type EditorMode = "new" | "edit" | "clone";
@@ -53,6 +54,10 @@ export function AssetEditor({ mode, card, options, onDone, onDeleted }: {
   onDeleted?: () => void;
 }) {
   const [d, setD] = useState<Draft>(() => toDraft(mode, card));
+  const [snmpV, setSnmpV] = useState<Snmp>(() => {
+    const saved = Object.entries(card?.extras ?? {}).filter(([k, v]) => k.startsWith("snmp_") && typeof v === "string") as [string, string][];
+    return saved.length ? Object.fromEntries(saved) : { snmp_version: "v2c", snmp_community_mode: "default" };
+  });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -65,7 +70,9 @@ export function AssetEditor({ mode, card, options, onDone, onDeleted }: {
     setError("");
     const id = card ? encodeURIComponent(card.asset_id) : "";
     const url = mode === "new" ? "/api/v1/assets" : mode === "edit" ? `/api/v1/assets/${id}` : `/api/v1/assets/${id}/clone`;
-    postJson<{ asset_id: string }>(url, toBody(d, card, mode))
+    const body = toBody(d, card, mode);
+    if (SNMP_TYPES.test(d.type)) body.extras = { ...(body.extras as Record<string, string>), ...snmpPayload(snmpV) };
+    postJson<{ asset_id: string }>(url, body)
       .then((saved) => onDone(saved.asset_id))
       .catch((err: Error) => setError(err.message))
       .finally(() => setBusy(false));
@@ -153,7 +160,7 @@ export function AssetEditor({ mode, card, options, onDone, onDeleted }: {
           {field("scrape_address", "Scrape address", { placeholder: "empty = default port for the type" })}
           {snmp ? field("snmp_port", "SNMP port", { type: "number", placeholder: "161" }) : null}
         </div>
-        <p className="small faint" style={{ margin: 0 }}>SNMP version, community and v3 users are set on the classic asset page for now.</p>
+        {snmp ? <SnmpFields value={snmpV} onChange={setSnmpV} saved={mode === "edit" ? card?.extras ?? {} : {}} /> : null}
         {heading("Support")}
         <div className="row" style={{ alignItems: "flex-end" }}>
           {extra("support_hours", "Mon–Fri 08–16")}

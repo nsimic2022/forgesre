@@ -3,6 +3,7 @@ import { Route, Routes, useLocation } from "react-router-dom";
 import { Shell } from "./components/Shell";
 import { getJson, type Me } from "./lib/api";
 import { NocContext, NocPage, useNocPoll } from "./pages/Noc";
+import { AddDevicesPage } from "./pages/AddDevices";
 import { AutomationPage } from "./pages/Automation";
 import { DependencyMapPage } from "./pages/DependencyMap";
 import { IncidentDetailPage } from "./pages/IncidentDetail";
@@ -32,6 +33,7 @@ export function App() {
         <Route path="/incidents/:number" element={<IncidentDetailPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/inventory/map" element={<DependencyMapPage />} />
+        <Route path="/inventory/add" element={<AddDevicesPage />} />
         <Route path="/automation" element={<AutomationPage />} />
         <Route path="/investigations" element={<InvestigationsPage />} />
         <Route path="/reports" element={<ReportsPage />} />

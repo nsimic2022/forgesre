@@ -446,7 +446,9 @@ snmp-auths — write per-asset snmp_exporter auths into data/generated/snmp.yml.
 Assets → Edit → Comms / monitoring stores SNMP version (v1 / v2c / v3),
 Default or Custom community, and v3 USM user / auth / privacy. v2c Default
 uses public_v2 and v1 Default uses public_v1 (both SNMP_COMMUNITY). A Custom
-community or v3 needs its own auth (forgesre_<asset id>) in snmp.yml:
+community or v3 needs its own auth (forgesre_<asset id>) in snmp.yml.
+Core writes it on its own when the asset is saved (and every 5 minutes while
+one is pending); this command does the same now from the shell:
 
   ./forgesre snmp-auths
 

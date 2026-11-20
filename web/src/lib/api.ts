@@ -299,6 +299,7 @@ export interface AssetCard extends InventoryRow {
   can_edit: boolean;
   snmp_port?: number;
   extras?: Record<string, string | boolean>;
+  snmp?: { snmp_version: string; snmp_community_mode: string; snmp_v3_user: string; desired: string; effective: string; pending: boolean } | null;
 }
 
 export interface AssetFormOptions {
