@@ -72,28 +72,14 @@ def _item_extras(item: dict[str, Any]) -> dict[str, str]:
     return out
 
 
-def _fill_extras(asset: Asset, item: dict[str, Any]) -> bool:
-    proposed = _item_extras(item)
-    if not proposed:
-        return False
-    current = dict(asset.extras or {}) if isinstance(asset.extras, dict) else {}
-    changed = False
-    for key, value in proposed.items():
-        if not str(current.get(key) or "").strip():
-            current[key] = value
-            changed = True
-    if changed:
-        asset.extras = current
-    return changed
-
-
 def sync_glpi(db: Session, *, force: bool = False) -> dict[str, Any]:
     """Computer / NetworkEquipment → assets. Never writes to GLPI.
 
-    New item: type Auto, empty scrape, source=glpi, glpi_id set, no owner.
-    Existing asset (matched by glpi_id, then IP, then hostname): only glpi_id,
-    an empty IP, and empty customer/site extras are filled — owner, contact,
-    email, phone, notes and other extras are never touched.
+    New item: type Auto, empty scrape, source=glpi, glpi_id set, no owner (or, with
+    inventory.new_from_sources: review, a Discovery row instead). Existing asset is matched
+    by GLPI id, serial, MAC, name, then IP (app.asset_sources); empty IP / site / customer /
+    contract are filled, GLPI-owned fields follow GLPI until a person changes them, every other
+    difference becomes a conflict to review. Owner, contact, email, phone and notes are never touched.
     """
     if not settings.glpi_enabled:
         return {"synced": 0, "skipped": True}
@@ -115,43 +101,34 @@ def sync_glpi(db: Session, *, force: bool = False) -> dict[str, Any]:
             report(db, "glpi", "sync", "error", summary=summary, detail=detail)
         return {"synced": 0, "error": detail}
 
-    rows = db.query(Asset).order_by(Asset.id).all()
-    by_glpi: dict[str, Asset] = {}
-    by_ip: dict[str, Asset] = {}
-    by_name: dict[str, Asset] = {}
-    for asset in rows:
-        if is_lab_inventory_row(asset):
-            continue
-        if (getattr(asset, "glpi_id", "") or "").strip():
-            by_glpi.setdefault(asset.glpi_id.strip(), asset)
-        ip = (asset.ip or "").strip()
-        if ip and not _loopback(ip):
-            by_ip.setdefault(ip, asset)
-        for key in (asset.hostname, asset.asset_id):
-            if (key or "").strip():
-                by_name.setdefault(key.strip().lower(), asset)
+    from app.asset_sources import SourceRecord, build_index, hold_for_review, match, new_device_mode, reconcile
 
-    created = linked = skipped = 0
+    index = build_index(db)
+    review = new_device_mode() == "review"
+    created = linked = skipped = held = conflicts = 0
     for item in items:
         glpi_id = str(item.get("glpi_id") or "").strip()
         ip = str(item.get("ip") or "").strip()
         name = str(item.get("name") or "").strip()
-        asset = by_glpi.get(glpi_id) if glpi_id else None
-        if asset is None and ip and not _loopback(ip):
-            asset = by_ip.get(ip)
-        if asset is None:
-            for key in (name, glpi_asset_id(name, glpi_id)):
-                asset = by_name.get(str(key or "").strip().lower())
-                if asset is not None:
-                    break
-        if asset is not None and (getattr(asset, "glpi_id", "") or "").strip() and asset.glpi_id != glpi_id:
+        rec = SourceRecord(source="glpi", source_id=glpi_id, name=name, ip="" if _loopback(ip) else ip,
+                           serial=str(item.get("serial") or ""), fields=_item_extras(item))
+        asset, disagreement = match(index, rec)
+        if asset is not None and (getattr(asset, "glpi_id", "") or "").strip() and glpi_id and asset.glpi_id != glpi_id:
+            # Same IP / name / serial as an asset already linked to another GLPI item: review, never merge.
+            from app.asset_sources import open_conflict
+
+            if open_conflict(db, None, rec, "match", detail=f"looks like {asset.asset_id}, which is already GLPI {asset.glpi_id}"):
+                conflicts += 1
             skipped += 1
             continue
         if asset is None:
+            if review and hold_for_review(db, rec, f"From GLPI: {name or glpi_id}"):
+                held += 1
+                continue
             asset = Asset(
                 asset_id=_unique_asset_id(db, glpi_asset_id(name, glpi_id)),
                 hostname=name,
-                ip=ip,
+                ip=rec.ip,
                 type=AUTO_ASSET_TYPE,
                 environment="Production",
                 status="offline" if item.get("offline") else "unknown",
@@ -161,33 +138,24 @@ def sync_glpi(db: Session, *, force: bool = False) -> dict[str, Any]:
                 glpi_id=glpi_id,
                 scrape_address="",
                 notes=glpi_notes(item),
-                extras=_item_extras(item),
+                extras={},
             )
             db.add(asset)
             db.flush()
             created += 1
         else:
-            if glpi_id and not (getattr(asset, "glpi_id", "") or "").strip():
-                asset.glpi_id = glpi_id
-            if ip and not (asset.ip or "").strip():
-                asset.ip = ip
             if not (asset.source or "").strip():
                 asset.source = "glpi"
-            _fill_extras(asset, item)
             linked += 1
-        if glpi_id:
-            by_glpi[glpi_id] = asset
-        if ip and not _loopback(ip):
-            by_ip.setdefault(ip, asset)
-        if name:
-            by_name.setdefault(name.lower(), asset)
+        conflicts += reconcile(db, index, asset, rec, disagreement=disagreement)["conflicts"]
     db.commit()
     report(
         db,
         "glpi",
         "sync",
         "ok",
-        summary=f"GLPI sync: {created} new, {linked} linked, {skipped} skipped",
+        summary=f"GLPI sync: {created} new, {linked} linked, {skipped} skipped"
+                + (f", {held} waiting in Discovery" if held else "") + (f", {conflicts} to review" if conflicts else ""),
         detail=(
             "New items: type Auto, no scrape address, source=glpi. Owner, contact, email, phone, "
             "notes and filled extras on existing assets are never changed. Skipped = a second GLPI "
@@ -195,7 +163,7 @@ def sync_glpi(db: Session, *, force: bool = False) -> dict[str, Any]:
         ),
         duration_ms=int((time.monotonic() - started) * 1000),
     )
-    return {"synced": created + linked, "created": created, "linked": linked, "skipped": skipped}
+    return {"synced": created + linked, "created": created, "linked": linked, "skipped": skipped, "held": held, "conflicts": conflicts}
 
 
 def last_sync_entry(db: Session) -> JournalEntry | None:

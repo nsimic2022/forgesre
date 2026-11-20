@@ -477,6 +477,13 @@ class Settings(BaseSettings):
             raw = 4.0
         return max(2.0, min(5.0, raw))
 
+    @property
+    def inventory_new_from_sources(self) -> str:
+        """inventory.new_from_sources: add (default) puts new GLPI / Zabbix / NetBox devices in the
+        inventory; review lists them in Discovery for an Engineer to approve."""
+        value = str((self.yaml.get("inventory") or {}).get("new_from_sources") or "add").strip().lower()
+        return "review" if value == "review" else "add"
+
     def _glpi_yaml(self) -> dict[str, Any]:
         raw = (self.yaml.get("inventory") or {}).get("glpi") or {}
         return raw if isinstance(raw, dict) else {}

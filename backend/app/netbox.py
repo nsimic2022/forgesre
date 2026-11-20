@@ -332,6 +332,8 @@ async def list_devices_async(url: str, token: str, timeout: float = 10.0) -> lis
                     "type": ((row.get("device_type") or {}).get("model")) or "device",
                     "status": (row.get("status") or {}).get("value") or "active",
                 }
+                if str(row.get("serial") or "").strip():
+                    device["serial"] = str(row["serial"]).strip()
                 extras = {
                     "site": (row.get("site") or {}).get("name") or "",
                     "tenant": (row.get("tenant") or {}).get("name") or "",

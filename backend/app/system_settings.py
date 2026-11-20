@@ -91,6 +91,9 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("monitoring.snmp.module", "network", "Default SNMP module", effective=lambda: settings.snmp_module),
     _s("ALERTMANAGER_WEBHOOK_TOKEN", "network", "Alertmanager webhook token"),
     # Integrations
+    _y("inventory.new_from_sources", "integrations", "New devices from GLPI / Zabbix / NetBox", "enum", choices=("add", "review"),
+       help="add: straight into the inventory. review: listed in Discovery until an Engineer approves them.",
+       effective=lambda: settings.inventory_new_from_sources),
     _y("inventory.glpi.enabled", "integrations", "GLPI enabled", "bool", effective=lambda: settings.glpi_enabled, test="glpi"),
     _y("inventory.glpi.url", "integrations", "GLPI URL", "url", effective=lambda: settings.glpi_url),
     _y("inventory.glpi.auto_sync", "integrations", "GLPI sync every 6 h", "bool"),

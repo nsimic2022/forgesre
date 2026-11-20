@@ -208,7 +208,7 @@ def test_sync_creates_auto_asset_with_empty_scrape(zbx):
     db = _db()
     try:
         result = sync_zabbix(db, force=True)
-        assert result == {"synced": 1, "created": 1, "linked": 0, "skipped": 0}
+        assert {k: result[k] for k in ("synced", "created", "linked", "skipped")} == {"synced": 1, "created": 1, "linked": 0, "skipped": 0}
         asset = db.query(Asset).filter_by(asset_id="zt-web-01").one()
         assert asset.type == AUTO_ASSET_TYPE
         assert asset.scrape_address == ""
@@ -287,7 +287,7 @@ def test_sync_dedups_by_hostname_and_never_clones_linked_asset(zbx):
             _host("50004", "zt-app-02-clone", "10.77.0.13"),
         ]
         result = sync_zabbix(db, force=True)
-        assert result == {"synced": 1, "created": 0, "linked": 1, "skipped": 1}
+        assert {k: result[k] for k in ("synced", "created", "linked", "skipped")} == {"synced": 1, "created": 0, "linked": 1, "skipped": 1}
         asset = db.query(Asset).filter_by(asset_id="zt-app-02").one()
         assert asset.zabbix_hostid == "50003"
         assert asset.ip == "10.77.0.13"

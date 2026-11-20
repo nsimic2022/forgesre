@@ -106,28 +106,14 @@ def zabbix_notes(host: dict[str, Any]) -> str:
     return f"{head} Type is Auto and nothing is scraped yet — use Detect or Edit to pick the exporter."
 
 
-def _fill_extras(asset: Asset, groups: list[str]) -> bool:
-    proposed = group_extras(groups)
-    if not proposed:
-        return False
-    current = dict(asset.extras or {}) if isinstance(asset.extras, dict) else {}
-    changed = False
-    for key, value in proposed.items():
-        if not str(current.get(key) or "").strip():
-            current[key] = value
-            changed = True
-    if changed:
-        asset.extras = current
-    return changed
-
-
 def sync_zabbix(db: Session, *, force: bool = False) -> dict[str, Any]:
     """host.get → assets. Never writes to Zabbix.
 
     New host: type Auto, empty scrape, source=zabbix, zabbix_hostid set, no owner.
-    Existing asset (matched by zabbix_hostid, then IP, then hostname): only
-    zabbix_hostid, an empty IP, empty customer/site extras and the agent pill are
-    filled — owner, contact, email, phone, notes and other extras are never touched.
+    Existing asset is matched by Zabbix host id, serial, MAC, name, then IP (app.asset_sources):
+    empty IP / site / customer are filled and the agent pill updated; any other difference is a
+    conflict to review. Owner, contact, email, phone and notes are never touched. With
+    inventory.new_from_sources: review a new host waits in Discovery instead.
     """
     if not settings.zabbix_enabled:
         return {"synced": 0, "skipped": True}
@@ -145,43 +131,33 @@ def sync_zabbix(db: Session, *, force: bool = False) -> dict[str, Any]:
             report(db, "zabbix", "sync", "error", summary=summary, detail=detail)
         return {"synced": 0, "error": detail}
 
-    rows = db.query(Asset).order_by(Asset.id).all()
-    by_hostid: dict[str, Asset] = {}
-    by_ip: dict[str, Asset] = {}
-    by_name: dict[str, Asset] = {}
-    for asset in rows:
-        if is_lab_inventory_row(asset):
-            continue
-        if (asset.zabbix_hostid or "").strip():
-            by_hostid.setdefault(asset.zabbix_hostid.strip(), asset)
-        ip = (asset.ip or "").strip()
-        if ip and not _loopback(ip):
-            by_ip.setdefault(ip, asset)
-        for key in (asset.hostname, asset.asset_id):
-            if (key or "").strip():
-                by_name.setdefault(key.strip().lower(), asset)
+    from app.asset_sources import SourceRecord, build_index, hold_for_review, match, new_device_mode, open_conflict, reconcile
 
-    created = linked = skipped = 0
+    index = build_index(db)
+    review = new_device_mode() == "review"
+    created = linked = skipped = held = conflicts = 0
     for host in hosts:
         hostid = host["hostid"]
         ip = str(host.get("ip") or "").strip()
         technical = str(host.get("host") or "").strip()
-        asset = by_hostid.get(hostid)
-        if asset is None and ip and not _loopback(ip):
-            asset = by_ip.get(ip)
+        rec = SourceRecord(source="zabbix", source_id=hostid, name=technical, sys_name=str(host.get("name") or ""),
+                           ip="" if _loopback(ip) else ip, fields=group_extras(host.get("groups") or []))
+        asset, disagreement = match(index, rec)
         if asset is None:
-            for key in (technical, host.get("name"), zabbix_asset_id(technical, hostid)):
-                asset = by_name.get(str(key or "").strip().lower())
-                if asset is not None:
-                    break
+            asset = index.name.get(zabbix_asset_id(technical, hostid))
         if asset is not None and (asset.zabbix_hostid or "").strip() and asset.zabbix_hostid != hostid:
+            if open_conflict(db, None, rec, "match", detail=f"looks like {asset.asset_id}, which is already Zabbix host {asset.zabbix_hostid}"):
+                conflicts += 1
             skipped += 1
             continue
         if asset is None:
+            if review and hold_for_review(db, rec, f"From Zabbix: {technical or hostid}"):
+                held += 1
+                continue
             asset = Asset(
                 asset_id=_unique_asset_id(db, zabbix_asset_id(technical, hostid)),
                 hostname=technical,
-                ip=ip,
+                ip=rec.ip,
                 type=AUTO_ASSET_TYPE,
                 environment="Production",
                 status="healthy" if host.get("monitored", True) else "offline",
@@ -192,25 +168,17 @@ def sync_zabbix(db: Session, *, force: bool = False) -> dict[str, Any]:
                 zabbix_agent=host.get("agent") or "unknown",
                 scrape_address="",
                 notes=zabbix_notes(host),
-                extras=group_extras(host.get("groups") or []),
+                extras={},
             )
             db.add(asset)
             db.flush()
             created += 1
         else:
-            if not (asset.zabbix_hostid or "").strip():
-                asset.zabbix_hostid = hostid
-            if ip and not (asset.ip or "").strip():
-                asset.ip = ip
             if not (asset.source or "").strip():
                 asset.source = "zabbix"
-            _fill_extras(asset, host.get("groups") or [])
             asset.zabbix_agent = host.get("agent") or "unknown"
             linked += 1
-        by_hostid[hostid] = asset
-        if ip and not _loopback(ip):
-            by_ip.setdefault(ip, asset)
-        by_name.setdefault(technical.lower(), asset)
+        conflicts += reconcile(db, index, asset, rec, disagreement=disagreement)["conflicts"]
     db.commit()
     _poll_state["agents"] = time.monotonic()
     report(
@@ -218,7 +186,8 @@ def sync_zabbix(db: Session, *, force: bool = False) -> dict[str, Any]:
         "zabbix",
         "sync",
         "ok",
-        summary=f"Zabbix sync: {created} new, {linked} linked, {skipped} skipped",
+        summary=f"Zabbix sync: {created} new, {linked} linked, {skipped} skipped"
+                + (f", {held} waiting in Discovery" if held else "") + (f", {conflicts} to review" if conflicts else ""),
         detail=(
             "New hosts: type Auto, no scrape address, source=zabbix. Owner, contact, email, phone, "
             "notes and filled extras on existing assets are never changed. Skipped = a second Zabbix "
@@ -226,7 +195,7 @@ def sync_zabbix(db: Session, *, force: bool = False) -> dict[str, Any]:
         ),
         duration_ms=int((time.monotonic() - started) * 1000),
     )
-    return {"synced": created + linked, "created": created, "linked": linked, "skipped": skipped}
+    return {"synced": created + linked, "created": created, "linked": linked, "skipped": skipped, "held": held, "conflicts": conflicts}
 
 
 def last_sync_entry(db: Session) -> JournalEntry | None:
