@@ -2021,15 +2021,16 @@ def _incident_line(row: Incident) -> str:
 def _performance_plain(
     pairs: list[tuple[Asset, dict[str, Any]]],
     happenings: dict[int, list[Incident]] | None = None,
+    lead: list[str] | None = None,
 ) -> str:
     lines = [
-        "ForgeSRE performance report",
+        "ForgeSRE report",
         f"Generated: {compact_when_text(utcnow())}",
-        "Not an incident. Read-only snapshot from Prometheus / demo gauges.",
+        "Not an incident. Sent automatically on the schedule set in Reports.",
         "",
-    ]
+    ] + list(lead or [])
     if not pairs:
-        lines.append("No assets selected.")
+        lines.append("No assets selected for a per-asset snapshot." if lead else "No assets selected.")
         return "\n".join(lines) + "\n"
     open_n = 0
     for asset, _sample in pairs:
@@ -2066,8 +2067,10 @@ def _performance_html(
     pairs: list[tuple[Asset, dict[str, Any]]],
     name: str,
     happenings: dict[int, list[Incident]] | None = None,
+    lead: list[tuple[str, str, bool]] | None = None,
+    open_now: int | None = None,
 ) -> str:
-    """Gmail-style HTML: one section per asset, same shell as incident mail."""
+    """Gmail-style HTML: the period summary (``lead``), then one section per asset, same shell as incident mail."""
     from app.email_html import DASH, esc, meta_table, render_email
 
     sections: list[tuple[str, str, bool]] = []
@@ -2100,16 +2103,17 @@ def _performance_html(
         else:
             heading = str(asset.hostname or asset.asset_id or "Asset")
         sections.append((heading, meta_table(rows), True))
-    if not sections:
+    if not sections and not lead:
         sections.append(("Assets", esc("No assets selected."), False))
+    sections = list(lead or []) + sections
     return render_email(
         kicker="Report",
         heading=report_mail_subject(name),
         meta_rows=[
             ("Generated", esc(compact_when_text(utcnow()))),
-            ("Kind", "Performance snapshot"),
-            ("Assets", esc(str(len(pairs)))),
-            ("Open now", esc(str(open_n))),
+            ("Kind", "Summary and asset snapshot" if lead else "Performance snapshot"),
+            ("Assets", esc(str(len(pairs)) if pairs or not lead else "none picked")),
+            ("Open now", esc(str(open_n if open_now is None else open_now))),
         ],
         sections=sections,
         footer="",
@@ -2117,11 +2121,28 @@ def _performance_html(
     )
 
 
-def performance_report_message(db: Session, asset_ids: list[str], name: str) -> tuple[str, str, str]:
-    """Subject, plain body, and HTML alternative. Built once so every recipient gets the same mail."""
+def performance_report_message(db: Session, asset_ids: list[str], name: str, days: int | None = None) -> tuple[str, str, str]:
+    """Subject, plain body, and HTML alternative. Built once so every recipient gets the same mail.
+
+    With ``days`` the mail opens with the period summary (at a glance, per day, still open, top
+    alerts and assets); the per-asset Prometheus snapshot follows for the selected assets.
+    """
     pairs = _performance_pairs(db, asset_ids)
     happenings = _recent_asset_incidents(db, [asset for asset, _sample in pairs])
-    return report_mail_subject(name), _performance_plain(pairs, happenings), _performance_html(pairs, name, happenings)
+    lead_html: list[tuple[str, str, bool]] | None = None
+    open_now: int | None = None
+    lead_text: list[str] | None = None
+    if days:
+        from app.report_mail import summary, summary_lines, summary_sections
+
+        data = summary(db, days)
+        lead_html, lead_text = summary_sections(data), summary_lines(data)
+        open_now = len(data["open"])
+    return (
+        report_mail_subject(name),
+        _performance_plain(pairs, happenings, lead_text),
+        _performance_html(pairs, name, happenings, lead_html, open_now),
+    )
 
 
 def build_performance_report(db: Session, asset_ids: list[str]) -> str:
@@ -2489,9 +2510,16 @@ def _report_job(row: ScheduledReport) -> dict[str, Any]:
         "recipients": recipients,
         "asset_ids": list(row.asset_ids or []),
         "hours": 0 if not sch["repeat"] else hours,
+        "days": _report_days(row),
         "schedule": sch,
         "label": schedule_label(row),
     }
+
+
+def _report_days(row: ScheduledReport) -> int:
+    from app.message_previews import report_days
+
+    return report_days(row)
 
 
 def _send_report_job(db: Session, job: dict[str, Any], actor: str) -> Notification | None:
@@ -2507,7 +2535,9 @@ def _send_report_job(db: Session, job: dict[str, Any], actor: str) -> Notificati
             actor=actor,
             name=str(job.get("name") or "forgeai-digest"),
         )
-    subject, body, html = performance_report_message(db, list(job.get("asset_ids") or []), str(job.get("name") or "report"))
+    subject, body, html = performance_report_message(
+        db, list(job.get("asset_ids") or []), str(job.get("name") or "report"), days=int(job.get("days") or 7)
+    )
     last: Notification | None = None
     problems: list[str] = []
     for email in recipients:

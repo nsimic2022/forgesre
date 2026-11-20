@@ -76,7 +76,11 @@ def build_escalation_html(incident: Incident, step_key: str, policy_role: str, a
     meta = incident_header_rows(incident, asset)
     meta.append(("Escalation step", esc(f"{step_key} (policy role: {policy_role})")))
     if ack_link:
-        meta.insert(0, ("Acknowledge", f'<a href="{esc(ack_link)}">Acknowledge this incident</a> (stops further escalation)'))
+        meta.insert(0, ("Acknowledge", (
+            f'<a href="{esc(ack_link)}" style="display:inline-block;padding:9px 16px;border-radius:6px;'
+            f'background:#0f172a;color:#ffffff;font-weight:700;text-decoration:none;">Acknowledge this incident</a>'
+            '<br><span style="font-weight:400;font-size:12px;color:#64748b;">Stops further escalation. One click, no sign-in.</span>'
+        )))
     details: list[tuple[str, str]] = [
         ("Asset", esc(asset.hostname if asset else "unknown")),
         ("Playbook", esc(incident.playbook.name if incident.playbook else "n/a")),

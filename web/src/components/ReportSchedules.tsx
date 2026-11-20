@@ -1,7 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { getJson, postJson, putJson, type ScheduledReport } from "../lib/api";
 import { clock } from "../lib/format";
+import { MailFrame } from "./MessagePreviews";
 import { Card, Chip } from "./ui";
+
+type Preview = { subject: string; text: string; html: string; note: string; recipients: string[]; schedule: string };
 
 const PRESETS: [string, string][] = [["15m", "Every 15 minutes"], ["60m", "Every hour"], ["6h", "Every 6 hours"], ["12h", "Every 12 hours"], ["24h", "Every day"], ["custom", "Custom interval"], ["cron", "Cron expression"], ["once", "Once"]];
 const CRON_EXAMPLES: [string, string][] = [["0 7 * * *", "every day 07:00"], ["0 7 * * 1", "Mondays 07:00"], ["0 8 1 * *", "1st of the month 08:00"], ["30 6 * * 1-5", "weekdays 06:30"]];
@@ -79,10 +82,26 @@ export function ReportSchedules({ rows, canEdit, onChanged }: { rows: ScheduledR
   const [editing, setEditing] = useState<{ report: ScheduledReport | null } | null>(null);
   const [asking, setAsking] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [preview, setPreview] = useState<{ id: number | null; data: Preview | null } | null>(null);
+  const [sent, setSent] = useState<number | null>(null);
+  const show = (id: number | null) => {
+    setPreview({ id, data: null });
+    getJson<Preview>(id === null ? "/api/v1/scheduled-reports/preview" : `/api/v1/scheduled-reports/${id}/preview`)
+      .then((data) => setPreview({ id, data }))
+      .catch((e: Error) => (setPreview(null), setError(e.message)));
+  };
   const act = (call: Promise<unknown>) => call.then(() => (setAsking(null), onChanged())).catch((e: Error) => setError(e.message));
   const done = (saved: boolean) => (setEditing(null), saved && onChanged());
   return (
     <Card title="Scheduled reports" actions={canEdit ? <button className="btn primary" type="button" onClick={() => setEditing({ report: null })}>New schedule</button> : null}>
+      <p className="small muted" style={{ margin: 0 }}>
+        A scheduled report is mailed <strong>automatically</strong> to its recipients at each time it is due: no one has to press anything.
+        It opens with the period at a glance (incidents against the period before, time to acknowledge and resolve), incidents per day,
+        what is still open, the most frequent alerts and the noisiest assets. Then each asset (the ones picked for the report, or all of them) with its current metrics. It looks back one schedule interval: a day for a daily report, a week for a weekly one, a month for a monthly one.
+        <strong> Preview</strong> shows the mail with today&apos;s data; <strong>Send now</strong> mails it once without moving the schedule.
+      </p>
+      <div className="row"><button className="btn" type="button" onClick={() => show(null)}>Preview a weekly report</button></div>
+      {preview && preview.id === null ? <PreviewBox preview={preview.data} onClose={() => setPreview(null)} /> : null}
       {error ? <div className="banner error" role="alert">{error}</div> : null}
       {editing && editing.report === null ? <ScheduleForm report={null} onDone={done} /> : null}
       {rows.length === 0 ? <span className="muted">No scheduled reports.</span> : null}
@@ -95,6 +114,15 @@ export function ReportSchedules({ rows, canEdit, onChanged }: { rows: ScheduledR
           <span className="small muted mono">{r.schedule}</span>
           <span className="small faint">{r.recipients.join(", ")}</span>
           <span className="small faint">Next {clock(r.next_run_at)} · last {clock(r.last_run_at)}</span>
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn" type="button" onClick={() => show(r.id)} aria-label={`Preview ${r.name}`}>Preview</button>
+            {canEdit ? (
+              <button className="btn" type="button" disabled={sent === r.id} onClick={() => act(postJson(`/api/v1/scheduled-reports/${r.id}/send`, {}).then(() => setSent(r.id)))}>
+                {sent === r.id ? "Queued, sending…" : "Send now"}
+              </button>
+            ) : null}
+          </div>
+          {preview?.id === r.id ? <PreviewBox preview={preview.data} onClose={() => setPreview(null)} /> : null}
           {canEdit ? (
             <div className="row" style={{ gap: 6 }}>
               <button className="btn" type="button" onClick={() => setEditing({ report: r })} aria-label={`Edit schedule ${r.name}`}>Edit</button>
@@ -113,5 +141,18 @@ export function ReportSchedules({ rows, canEdit, onChanged }: { rows: ScheduledR
         </div>
       ))}
     </Card>
+  );
+}
+
+function PreviewBox({ preview, onClose }: { preview: Preview | null; onClose: () => void }) {
+  return (
+    <div className="cell-stack" style={{ gap: 8, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <span className="small faint">{preview ? `${preview.schedule}${preview.recipients.length ? ` · to ${preview.recipients.join(", ")}` : ""}` : "Building the preview…"}</span>
+        <button className="btn" type="button" onClick={onClose}>Close preview</button>
+      </div>
+      {preview?.note ? <span className="small muted">{preview.note}</span> : null}
+      {preview && (preview.html || preview.text) ? <MailFrame mail={preview} title="Scheduled report preview" /> : null}
+    </div>
   );
 }

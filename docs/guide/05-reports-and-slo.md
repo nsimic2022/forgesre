@@ -13,6 +13,13 @@ acknowledge and to resolve), incidents per day, by asset type, the noisiest asse
 most frequent alerts and host-down time. **Export CSV** gives the raw list.
 **New schedule** mails a report to a list of people, for example every Monday at 08:00.
 
+Scheduled reports are sent **automatically** when they are due; nobody has to press anything.
+The mail looks back one schedule interval (a day, a week or a month) and opens with the period
+at a glance (incidents against the period before, time to acknowledge and resolve), incidents
+per day, what is still open, the most frequent alerts and the noisiest assets. Then each asset
+(the ones picked, or all) with its current metrics. **Preview** shows the mail with today's
+data; **Send now** mails it once in the background without moving the schedule.
+
 ## SLOs and error budget
 
 An SLO is a promise such as "99.9 % available over 30 days" for one asset, an asset type,

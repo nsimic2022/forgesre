@@ -48,9 +48,20 @@ it; **Escalate** on the incident jumps a level now.
 
 The *default-warning* policy cannot be removed; rules from a deleted policy fall back to it.
 
+## What people receive
+
+**Settings › Messages and templates** shows, for any incident, exactly what goes out: the
+alert mail (subject, the one-click **Acknowledge** button, the asset's owner, contact and
+phone), the Slack, Teams and Discord card for *opened*, *escalated* and *resolved*, and the
+longer incident report an operator can mail from the incident page. Nothing is sent from
+there. Set **General › Public address** first: without it mails have no Acknowledge button
+and chat cards have no link.
+
 ## Chat notifications
 
-Slack, Microsoft Teams and Discord can get a line for each incident, with a link to it.
+Slack, Microsoft Teams and Discord get a card for each incident event: a colour bar for the
+severity (green when resolved), host, incident number, severity, start time and an
+**Open incident** button.
 Turn them on in Settings › Notifications and store the webhook with
 `./forgesre settings set-secret`. Messages are sent in the background, so a slow chat
 service never delays an alarm. Only the incident line leaves the server.
