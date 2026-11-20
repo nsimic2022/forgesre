@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { duration, severityLabel, severityTone, shortNumber, tierLabel } from "./format";
+import { duration, severityLabel, severityTone, shortNumber, tierLabel, tierRole } from "./format";
 
 describe("format", () => {
   it("shows durations the way the NOC reads them", () => {
@@ -22,6 +22,7 @@ describe("format", () => {
     expect(shortNumber("INC-5100")).toBe("INC-5100");
     expect(tierLabel("L1")).toBe("Tier 1");
     expect(tierLabel(3)).toBe("Tier 3");
-    expect(tierLabel(4)).toBe("Manager");
+    expect(tierLabel(4)).toBe("Tier 4");
+    expect(tierRole(4)).toBe("Manager");
   });
 });
