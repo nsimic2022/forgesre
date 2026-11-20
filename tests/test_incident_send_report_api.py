@@ -62,11 +62,12 @@ def test_send_report_queues_a_job_and_writes_one_outbox_row_per_address(monkeypa
     db = SessionLocal()
     run_pending_jobs(db, limit=10)
     assert db.get(Job, edited).payload.get("body") is None
-    rows = db.query(Notification).filter(Notification.step_key == "incident-report", Notification.target.in_(["ops@dc.local", "boss@dc.local"])).all()
+    incident_id = db.query(Incident.id).filter_by(number=number).scalar()
+    rows = db.query(Notification).filter(Notification.incident_id == incident_id, Notification.step_key == "incident-report").all()
     db.close()
     assert [s[0] for s in sent] == ["ops@dc.local", "lead@dc.local", "boss@dc.local"]
     assert sent[0][2] is True and sent[2][0] == "boss@dc.local" and "Short note for the boss." in sent[2][1] and sent[2][2] is False
-    assert {r.status for r in rows} == {"sent"}
+    assert len(rows) == 3 and {r.status for r in rows} == {"sent"}
 
     status = client.get(f"/api/v1/incidents/{number}/mail/{job}").json()
     assert status["status"] == "done" and [r["to"] for r in status["result"]] == ["ops@dc.local", "lead@dc.local"]
