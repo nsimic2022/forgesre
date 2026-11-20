@@ -683,7 +683,7 @@ def forgeai_ask(number: str, body: ForgeAiAsk, db: Session = Depends(get_db), us
     from app.settings import settings
 
     if body.task not in TASKS or body.task == "shift":
-        raise HTTPException(status_code=400, detail="task is incident, explain or postmortem")
+        raise HTTPException(status_code=400, detail="task is incident, investigate, explain or postmortem")
     if not (settings.ai_enabled and settings.llm_url):
         raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
     item = db.query(Incident).filter_by(number=number).first()
@@ -692,7 +692,9 @@ def forgeai_ask(number: str, body: ForgeAiAsk, db: Session = Depends(get_db), us
     if body.task == "incident":
         job = enqueue(db, "investigate", item.number, payload={"use_llm": True, "skill": body.skill, "actor": user.email})
     else:
-        job = enqueue(db, JOB_KIND, item.number, object_type="incident", payload={"task": body.task, "skill": body.skill, "actor": user.email})
+        # one pending job per incident and task: an explain request does not swallow an investigation
+        job = enqueue(db, JOB_KIND, f"{item.number}#{body.task}", object_type="incident",
+                      payload={"task": body.task, "skill": body.skill, "actor": user.email})
     return {"queued": True, "job": getattr(job, "id", None)}
 
 
@@ -997,7 +999,7 @@ def forgeai_skill_replay(slug: str, body: ReplayBody, db: Session = Depends(get_
     skill = db.query(ForgeAiSkill).filter_by(slug=slug).first()
     if skill is None:
         raise HTTPException(status_code=404, detail="skill not found")
-    if skill.task != "incident":
+    if skill.task not in {"incident", "investigate"}:
         raise HTTPException(status_code=400, detail="replay is for skills that answer incidents")
     if not (settings.ai_enabled and settings.llm_url):
         raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")

@@ -89,7 +89,7 @@ def tuning_report(db: Session, slug: str, days: int = 60) -> dict[str, Any]:
         "reject_reasons": [{"reason": r, "count": n} for r, n in reasons.most_common(6)],
         "error_reasons": [{"reason": r, "count": n} for r, n in errors.most_common(4)],
         "examples": examples[:25],
-        "replay_candidates": len(_confirmed(db, REPLAY_MAX, skill)) if skill.task == "incident" else 0,
+        "replay_candidates": len(_confirmed(db, REPLAY_MAX, skill)) if skill.task in {"incident", "investigate"} else 0,
     }
 
 
@@ -100,17 +100,17 @@ def replay(db: Session, slug: str, *, limit: int = 10, instructions: str | None 
     skill = db.query(ForgeAiSkill).filter_by(slug=slug).first()
     if skill is None:
         raise LookupError("skill not found")
-    if skill.task != "incident":
-        raise ValueError("replay needs a skill for incident answers (cause and first checks)")
+    if skill.task not in {"incident", "investigate"}:
+        raise ValueError("replay needs a skill that answers incidents")
     started = time.monotonic()
     rows: list[dict[str, Any]] = []
     for inc in _confirmed(db, max(1, min(int(limit or 10), REPLAY_MAX)), skill):
         if time.monotonic() - started > REPLAY_BUDGET_S:
             rows.append({"incident": inc.number.split("_")[0], "status": "skipped", "reason": "time budget used up"})
             continue
-        call = forgeai.run(db, "incident", inc, skill_slug=slug, actor=actor, trial=True, instructions=instructions)
+        call = forgeai.run(db, skill.task, inc, skill_slug=slug, actor=actor, trial=True, instructions=instructions)
         said = str((call.answer or {}).get("cause") or "")
-        before = (db.query(ForgeAiCall).filter(ForgeAiCall.incident_id == inc.id, ForgeAiCall.status == "used")
+        before = (db.query(ForgeAiCall).filter(ForgeAiCall.incident_id == inc.id, ForgeAiCall.status == "used", ForgeAiCall.task == skill.task)
                   .order_by(ForgeAiCall.id.desc()).first())
         rows.append({
             "incident": inc.number.split("_")[0], "title": inc.title, "confirmed": inc.root_cause, "rating": inc.ai_rating or "",

@@ -145,6 +145,13 @@ def _forgeai_last(db: Session, incident: Incident) -> dict[str, Any] | None:
     return {"status": row.status, "reason": row.reason, "at": row.created_at.isoformat() if row.created_at else None, "skill": row.skill_slug}
 
 
+def _forgeai_deep(db: Session, incident: Incident) -> dict[str, Any] | None:
+    """The latest investigation with tools, with the evidence it cited."""
+    from app.forgeai_investigator import latest
+
+    return latest(db, incident)
+
+
 def _forgeai_extras(db: Session, incident: Incident) -> dict[str, Any]:
     """Latest used explain / postmortem answers for this incident."""
     from app.models import ForgeAiCall
@@ -225,6 +232,7 @@ def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]
             "skills": _incident_skills(db),
             "extras": _forgeai_extras(db, incident),
             "last": _forgeai_last(db, incident),
+            "deep": _forgeai_deep(db, incident),
         },
         "evidence": [
             {"id": ev.evidence_id, "source": ev.source or ev.kind, "title": ev.title, "query": ev.query}
