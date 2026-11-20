@@ -81,6 +81,13 @@ Services that listen only on 127.0.0.1 show the SSH tunnel to use instead of a l
 still set only on the server with `./forgesre settings set-secret`.
 `GET /api/v1/integrations`, `POST /api/v1/integrations/{zabbix|glpi|netbox|librenms}/sync` (Admin).
 
+## Journal and audit log
+
+**Settings › Journal** is the platform's own report (every sync, job, delivery and check with
+its result), filterable by module and errors; `GET /api/v1/journal` (Analyst and up), same as
+`./forgesre journal`. **Settings › Audit log** lists who changed what (`GET /api/v1/audit`,
+Admin). The mail and chat outbox is on Reports (`GET /api/v1/outbox`, Analyst and up).
+
 ## Appearance
 
 Five themes: Signal (dark, default), Light, Midnight, High contrast and Follow the computer.

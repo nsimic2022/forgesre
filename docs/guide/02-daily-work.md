@@ -55,8 +55,9 @@ whether it was delivered), the acknowledgement, notes, playbook steps and the re
 
 ![Incidents](../images/ui-incidents.png)
 
-All incidents, open and closed, with search and filters. Ten per page; use it to find
-"didn't this happen last month too?".
+All incidents, open and closed, with search, severity and a **From / To** day range. Ten
+per page; use it to find "didn't this happen last month too?". **Export CSV** downloads the
+list with the same filters (UTF-8, opens in Excel with the right letters).
 
 ## Postmortem
 

@@ -13,7 +13,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.audit import audit
@@ -2485,13 +2485,85 @@ def incidents_page_api(
     q: str = "",
     limit: int = 50,
     offset: int = 0,
+    date_from: str = "",
+    date_to: str = "",
     db: Session = Depends(get_db),
     user: User = Depends(require("read_incidents")),
 ) -> dict[str, Any]:
-    """Incident list for the new UI: one tab, paged, with counts for every tab."""
+    """Incident list for the new UI: one tab, paged, with counts for every tab. Days are YYYY-MM-DD, local."""
     from app.incident_view import incidents_page
 
-    return incidents_page(db, tab=tab, severity=severity, q=q, limit=limit, offset=offset)
+    try:
+        return incidents_page(db, tab=tab, severity=severity, q=q, limit=limit, offset=offset, date_from=date_from, date_to=date_to)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="dates are YYYY-MM-DD") from exc
+
+
+@router.get("/incidents-page.csv")
+def incidents_page_csv(
+    tab: str = "all", severity: str = "", q: str = "", date_from: str = "", date_to: str = "",
+    db: Session = Depends(get_db), user: User = Depends(require("read_incidents")),
+) -> Response:
+    """The incident list with the same filters as CSV (UTF-8 with BOM)."""
+    from app.incident_view import incidents_csv
+
+    try:
+        body = incidents_csv(db, tab=tab, severity=severity, q=q, date_from=date_from, date_to=date_to)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="dates are YYYY-MM-DD") from exc
+    return Response(body, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="forgesre-incidents.csv"'})
+
+
+@router.get("/outbox")
+def outbox_api(
+    status: str = "", q: str = "", limit: int = 50, offset: int = 0,
+    db: Session = Depends(get_db), user: User = Depends(require("read_play")),
+) -> dict[str, Any]:
+    """Every mail and chat message ForgeSRE produced (alarms, reports), newest first, with its delivery status."""
+    from app.models import Notification
+
+    query = db.query(Notification).outerjoin(Incident, Notification.incident_id == Incident.id)
+    if status == "failed":
+        query = query.filter(Notification.status.notin_(("sent", "generated", "queued")))
+    elif status:
+        query = query.filter(Notification.status == status)
+    if q.strip():
+        like = f"%{q.strip()}%"
+        query = query.filter(or_(Notification.target.ilike(like), Notification.subject.ilike(like), Incident.number.ilike(like)))
+    total = query.count()
+    rows = query.order_by(Notification.id.desc()).offset(max(0, offset)).limit(max(1, min(limit, 200))).all()
+    numbers = {i.id: i.number for i in db.query(Incident.id, Incident.number).filter(Incident.id.in_([r.incident_id for r in rows if r.incident_id])).all()}
+    return {
+        "total": total,
+        "rows": [
+            {"id": r.id, "at": r.created_at.isoformat() if r.created_at else None, "channel": r.channel, "target": r.target,
+             "subject": r.subject, "status": r.status, "error": r.error or "", "step": r.step_key or "", "incident": numbers.get(r.incident_id, "")}
+            for r in rows
+        ],
+    }
+
+
+@router.get("/audit")
+def audit_api(
+    q: str = "", action: str = "", limit: int = 50, offset: int = 0,
+    db: Session = Depends(get_db), user: User = Depends(require("admin")),
+) -> dict[str, Any]:
+    """Who changed what: rules, settings, users, assets, incidents. Admin only."""
+    from app.models import AuditLog
+
+    query = db.query(AuditLog)
+    if action:
+        query = query.filter(AuditLog.action.ilike(f"{action}%"))
+    if q.strip():
+        like = f"%{q.strip()}%"
+        query = query.filter(or_(AuditLog.actor.ilike(like), AuditLog.object_id.ilike(like), AuditLog.action.ilike(like)))
+    total = query.count()
+    rows = query.order_by(AuditLog.id.desc()).offset(max(0, offset)).limit(max(1, min(limit, 200))).all()
+    return {
+        "total": total,
+        "rows": [{"id": r.id, "at": r.at.isoformat() if r.at else None, "actor": r.actor, "action": r.action,
+                  "object": f"{r.object_type}:{r.object_id}" if r.object_type else r.object_id, "ip": r.ip or "", "data": r.data or {}} for r in rows],
+    }
 
 
 @router.get("/incidents/{number}/postmortem")

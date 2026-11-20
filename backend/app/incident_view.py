@@ -32,14 +32,28 @@ def _tab_filter(query, tab: str):
     return query
 
 
-def incidents_page(
-    db: Session, tab: str = "active", severity: str = "", q: str = "", limit: int = 50, offset: int = 0
-) -> dict[str, Any]:
-    """One page of the incident list plus the count of every tab (with the same filters)."""
-    tab = tab if tab in TABS else "active"
-    limit = max(1, min(int(limit), 200))
-    offset = max(0, int(offset))
+def _local_day(day: str, *, end: bool = False):
+    """Start of ``day`` (YYYY-MM-DD) in the appliance time zone, as UTC; ``end`` = start of the next day."""
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+
+    from app.settings import settings
+
+    try:
+        zone = ZoneInfo(settings.timezone or "UTC")
+    except Exception:
+        zone = ZoneInfo("UTC")
+    start = datetime.strptime(day.strip(), "%Y-%m-%d").replace(tzinfo=zone)
+    return (start + timedelta(days=1) if end else start).astimezone(timezone.utc)
+
+
+def filtered_incidents(db: Session, severity: str = "", q: str = "", date_from: str = "", date_to: str = ""):
+    """Incident query with the list filters: severity, text (number, title, host, IP) and a day range."""
     base = db.query(Incident).outerjoin(Asset, Incident.asset_id == Asset.id)
+    if date_from:
+        base = base.filter(Incident.started_at >= _local_day(date_from))
+    if date_to:
+        base = base.filter(Incident.started_at < _local_day(date_to, end=True))
     if severity:
         base = base.filter(Incident.severity.ilike(severity))
     text = q.strip()
@@ -48,6 +62,18 @@ def incidents_page(
         base = base.filter(
             or_(Incident.number.ilike(like), Incident.title.ilike(like), Asset.hostname.ilike(like), Asset.ip.ilike(like))
         )
+    return base
+
+
+def incidents_page(
+    db: Session, tab: str = "active", severity: str = "", q: str = "", limit: int = 50, offset: int = 0,
+    date_from: str = "", date_to: str = "",
+) -> dict[str, Any]:
+    """One page of the incident list plus the count of every tab (with the same filters)."""
+    tab = tab if tab in TABS else "active"
+    limit = max(1, min(int(limit), 200))
+    offset = max(0, int(offset))
+    base = filtered_incidents(db, severity, q, date_from, date_to)
     counts = {name: _tab_filter(base, name).count() for name in TABS}
     rows = (
         _tab_filter(base, tab)
@@ -68,6 +94,24 @@ def incidents_page(
         "limit": limit,
         "rows": [_row(r, sent, jobs, mode, db) for r in rows],
     }
+
+
+def incidents_csv(db: Session, tab: str = "all", **filters: str) -> str:
+    """The filtered list as CSV with a UTF-8 BOM (Excel opens it with the right letters), newest first, max 10 000."""
+    import csv
+    import io
+
+    rows = _tab_filter(filtered_incidents(db, **filters), tab if tab in TABS else "all").options(joinedload(Incident.asset)).order_by(Incident.started_at.desc()).limit(10000).all()
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["number", "severity", "status", "title", "asset", "ip", "source", "started_at", "ack_at", "ack_by", "resolved_at", "resolved_by", "root_cause"])
+    for i in rows:
+        writer.writerow([
+            i.number, (i.severity or "").upper(), i.status, i.title, i.asset.hostname if i.asset else "", i.asset.ip if i.asset else "",
+            i.source or "", i.started_at.isoformat() if i.started_at else "", i.ack_at.isoformat() if i.ack_at else "", i.ack_by or "",
+            i.resolved_at.isoformat() if i.resolved_at else "", i.resolved_by or "", i.root_cause or "",
+        ])
+    return "\ufeff" + out.getvalue()
 
 
 def _split_investigations(incident: Incident) -> tuple[Any, Any]:

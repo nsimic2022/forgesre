@@ -20,6 +20,13 @@ per day, what is still open, the most frequent alerts and the noisiest assets. T
 (the ones picked, or all) with its current metrics. **Preview** shows the mail with today's
 data; **Send now** mails it once in the background without moving the schedule.
 
+## Mail and chat outbox
+
+The bottom of Reports lists every mail and chat message ForgeSRE produced, for alarms and
+reports, with whether it was delivered and the error when it was not. Filter **Not
+delivered** when someone says the alarm never reached them. *generated* means SMTP is off:
+the mail was written but not sent. Analysts and up see it.
+
 ## SLOs and error budget
 
 An SLO is a promise such as "99.9 % available over 30 days" for one asset, an asset type,

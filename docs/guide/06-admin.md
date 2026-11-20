@@ -68,7 +68,8 @@ restarts and runs `doctor`. `./forgesre restart` only restarts what is running.
 
 1. `./forgesre doctor`: one line per component with the reason.
 2. `./forgesre logs core` (or another service name).
-3. `./forgesre journal`: errors from integrations and background jobs.
+3. `./forgesre journal`, or **Settings › Journal**: errors from integrations, syncs,
+   deliveries and background jobs. **Settings › Audit log** shows who changed what.
 4. `./forgesre test`: the full end-to-end report.
 
 All commands: [cli.md](../cli.md). Common failures: [install-config.md](../install-config.md#16-troubleshooting).
