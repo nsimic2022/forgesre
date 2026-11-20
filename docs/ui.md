@@ -210,3 +210,11 @@ asset, with the confirmed cause and minutes to resolve) and `events` (alarm, tim
 chat, notes, playbook ticks, ack and resolve, in time order). Host metrics come from `GET
 /api/v1/assets/{id}/metrics?incident=…`; syslog from `GET /api/v1/incidents/{number}/syslog`
 (Analyst and up, Loki, 30 minutes either side of the start, loaded only when asked).
+
+## Lists and activity
+
+- `GET /api/v1/incidents-page` takes `date_from` / `date_to` (YYYY-MM-DD, appliance time zone);
+  `GET /api/v1/incidents-page.csv` returns the same filtered list as CSV with a UTF-8 BOM.
+- `GET /api/v1/outbox?status=failed|sent&q=` (Analyst and up), `GET /api/v1/audit?q=` (Admin),
+  `GET /api/v1/journal` (Analyst and up) back the outbox on Reports and Settings › Journal and
+  Audit log.

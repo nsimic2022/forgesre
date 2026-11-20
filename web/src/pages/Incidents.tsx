@@ -32,19 +32,22 @@ export function IncidentsPage() {
   const [tab, setTab] = useState<Tab>("active");
   const [severity, setSeverity] = useState("");
   const [query, setQuery] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState<IncidentPage | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const params = new URLSearchParams({ tab, severity, q: query, limit: String(PAGE), offset: String(offset) });
+    const params = new URLSearchParams({ tab, severity, q: query, date_from: from, date_to: to, limit: String(PAGE), offset: String(offset) });
     const timer = window.setTimeout(() => {
       getJson<IncidentPage>(`/api/v1/incidents-page?${params}`)
         .then((next) => (setData(next), setError("")))
         .catch((err: Error) => setError(err.message));
     }, query ? 250 : 0); // debounce typing
     return () => window.clearTimeout(timer);
-  }, [tab, severity, query, offset]);
+  }, [tab, severity, query, from, to, offset]);
+  const csv = `/api/v1/incidents-page.csv?${new URLSearchParams({ tab, severity, q: query, date_from: from, date_to: to })}`;
 
   const pick = (next: () => void) => {
     next();
@@ -76,6 +79,12 @@ export function IncidentsPage() {
             </button>
           ))}
           <input className="search" type="search" aria-label="Search incidents" placeholder="Number, title, host, IP…" value={query} onChange={(e) => pick(() => setQuery(e.target.value))} />
+        </div>
+        <div className="row small">
+          <label className="row" style={{ gap: 6 }}>From <input className="search" type="date" aria-label="From day" value={from} onChange={(e) => pick(() => setFrom(e.target.value))} /></label>
+          <label className="row" style={{ gap: 6 }}>To <input className="search" type="date" aria-label="To day" value={to} onChange={(e) => pick(() => setTo(e.target.value))} /></label>
+          {from || to ? <button className="btn" type="button" onClick={() => pick(() => (setFrom(""), setTo("")))}>Any day</button> : null}
+          <a className="btn" href={csv} download>Export CSV</a>
         </div>
         <IncidentTable rows={data?.rows ?? []} loaded={Boolean(data)} />
         {data && data.total > PAGE ? (

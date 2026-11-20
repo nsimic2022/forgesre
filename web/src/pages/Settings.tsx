@@ -1,3 +1,4 @@
+import { AuditPanel, JournalPanel } from "../components/ActivityPanels";
 import { AppearancePanel } from "../components/AppearancePanel";
 import { IntegrationsPanel } from "../components/IntegrationsPanel";
 import { MessagePreviews } from "../components/MessagePreviews";
@@ -46,7 +47,7 @@ export function SettingsPage() {
   const replace = (next: SettingRow) => setData((d) => (d ? { ...d, settings: d.settings.map((r) => (r.key === next.key ? next : r)) } : d));
   const rows = data?.settings.filter((r) => r.group === group) ?? [];
   const tests = Array.from(new Set(rows.map((r) => r.test).filter(Boolean)));
-  const sections = data ? [...Object.entries(data.groups), ["messages", "Messages and templates"], ["appearance", "Appearance"], ["services", "Services and health"], ["users", "Users and roles"], ["backup", "Backup, import, export"]] : [];
+  const sections = data ? [...Object.entries(data.groups), ["messages", "Messages and templates"], ["appearance", "Appearance"], ["services", "Services and health"], ["journal", "Journal"], ["audit", "Audit log"], ["users", "Users and roles"], ["backup", "Backup, import, export"]] : [];
   return (
     <>
       <header className="page-head">
@@ -73,7 +74,11 @@ export function SettingsPage() {
             ))}
           </nav>
           <div style={{ flex: "999 1 640px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
-            {group === "integrations" ? (
+            {group === "journal" ? (
+              <JournalPanel />
+            ) : group === "audit" ? (
+              <AuditPanel />
+            ) : group === "integrations" ? (
               <IntegrationsPanel rows={data.settings} onSaved={replace} />
             ) : group === "appearance" ? (
               <AppearancePanel />
