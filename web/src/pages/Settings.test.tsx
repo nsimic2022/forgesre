@@ -17,6 +17,12 @@ function respond(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+const forgeai = {
+  enabled: true, url: "http://127.0.0.1:8088/v1", model: "local", timeout_s: 180, reachable: true, loaded_model: "qwen3-4b", why: "",
+  week: { calls: 12, used: 9, rejected: 2, errors: 1, avg_ms: 41000, thumbs_up: 4, thumbs_down: 1 },
+  last: [{ id: 3, at: null, task: "incident", skill: "linux-disk", skill_version: 1, model: "qwen3-4b", status: "rejected", reason: "the answer has a number that is not in the facts", duration_ms: 38000, answer: {}, rating: 0, actor: "system" }],
+};
+
 describe("Settings", () => {
   let calls: { url: string; method?: string; body?: string }[];
   beforeEach(() => {
@@ -26,6 +32,7 @@ describe("Settings", () => {
       if (url.startsWith("/api/v1/settings/test/")) return respond({ component: "llm", status: "error", why: "connection refused" });
       if (init?.method === "PUT") return respond({ ...data.settings[1], value: 300, effective: 300 });
       if (url === "/api/v1/system/doctor") return respond({ overall: "HEALTHY", components: {}, failed: [] });
+      if (url === "/api/v1/forgeai/status") return respond(forgeai);
       return respond(data);
     }));
   });
@@ -41,6 +48,9 @@ describe("Settings", () => {
     expect(screen.getByText("./forgesre settings set-secret SMTP_PASSWORD")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Test llm" }));
     expect(await screen.findByText("connection refused")).toBeTruthy();
+    expect(await screen.findByText("Model loaded: qwen3-4b")).toBeTruthy();
+    expect(screen.getByText(/12 questions · 9 used · 2 rejected/)).toBeTruthy();
+    expect(screen.getByText("the answer has a number that is not in the facts")).toBeTruthy();
   });
 
   it("tells non-admins settings are for Admins", async () => {

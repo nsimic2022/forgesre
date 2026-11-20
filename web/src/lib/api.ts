@@ -207,7 +207,7 @@ export interface IncidentView {
     limitations: string[];
     at: string | null;
   };
-  forgeai: { mode: string; text: string; cause: string; action: string; model: string; at: string | null };
+  forgeai: import("../components/ForgeAiCard").ForgeAiView;
   evidence: { id: string; source: string; title: string; query: string }[];
   timeline: { at?: string; event?: string; text?: string; [key: string]: unknown }[];
   changes?: ChangeRow[];

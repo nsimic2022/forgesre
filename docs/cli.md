@@ -102,6 +102,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `jobs` | Job queue: counts per status, newest 20 jobs, error text for failed ones |
 | `kubernetes` | Kubernetes / OpenShift clusters: token set, nodes, workloads, open incidents; `kubernetes sync` reads them now |
 | `slo` | SLOs: availability against target, error budget left, 24 h burn rate |
+| `forgeai` | ForgeAI: model status, last questions; `forgeai INC-…` shows the exact prompts and answers |
 | `checks` | Certificate expiry, ForgeSRE backup age and heartbeats, failing first; `checks run` runs now, `checks ping NAME [HOURS]` records a heartbeat |
 | `settings` | Settings from the shell: list, get, set, test, set-secret ([settings.md](settings.md)) |
 | `journal [module]` | Internal console reports (JSON) |

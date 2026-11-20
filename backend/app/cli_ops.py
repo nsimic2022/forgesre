@@ -733,6 +733,40 @@ def format_checks(data: dict) -> str:
     return "\n".join(out) + "\n"
 
 
+def format_forgeai(status: dict, calls: list[dict] | None = None) -> str:
+    """ForgeAI on/off, model, last week; with an incident, each question and the exact prompts."""
+    w = status.get("week") or {}
+    model = status.get("loaded_model") or status.get("model") or ""
+    reach = "answering" if status.get("reachable") else ("NOT answering: " + str(status.get("why") or "")) if status.get("enabled") else "off"
+    out = [
+        f"ForgeAI: {'on' if status.get('enabled') else 'off'} · model {model or '-'} · {reach}",
+        f"Last 7 days: {w.get('calls', 0)} questions, {w.get('used', 0)} used, {w.get('rejected', 0)} rejected, "
+        f"{w.get('errors', 0)} without answer, avg {w.get('avg_ms', 0) / 1000:.1f} s, up {w.get('thumbs_up', 0)} / down {w.get('thumbs_down', 0)}",
+        "",
+    ]
+    rows = calls if calls is not None else status.get("last") or []
+    for c in rows:
+        out.append(f"{str(c.get('at') or '')[:16]}  {str(c.get('status', '')).upper():<8} {c.get('task', ''):<10} {c.get('skill', ''):<18} "
+                   f"{(c.get('duration_ms') or 0) / 1000:5.1f} s  {c.get('reason') or ''}")
+        if calls is not None and c.get("system_prompt") is not None:
+            out += ["  --- system prompt ---", *("  " + line for line in str(c["system_prompt"]).splitlines()),
+                    "  --- given to the model ---", "  " + str(c.get("user_prompt") or ""),
+                    "  --- model answered ---", "  " + str(c.get("raw_response") or "(nothing)"), ""]
+    return "\n".join(out) + "\n"
+
+
+def cmd_forgeai(port: str, rest: list[str]) -> None:
+    """./forgesre forgeai [INC-…]"""
+    jar, _me = ensure_jar(port)
+    try:
+        status = get_json(port, jar, "/api/v1/forgeai/status")
+        calls = get_json(port, jar, f"/api/v1/incidents/{rest[0]}/forgeai")["calls"] if rest else None
+        sys.stdout.write(format_forgeai(status, calls))
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def format_slos(rows: list[dict]) -> str:
     """One line per SLO: status, availability against target, budget left, 24 h burn."""
     if not rows:
@@ -822,6 +856,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_checks(port, rest)
     elif command == "slo":
         cmd_slo(port)
+    elif command == "forgeai":
+        cmd_forgeai(port, rest)
     elif command == "kubernetes":
         cmd_k8s(port, rest)
     elif command == "settings":

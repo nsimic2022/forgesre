@@ -35,6 +35,11 @@ Click a row to open it.
 3. **Read ForgeRCA.** It collects facts (metrics, logs, similar past incidents), offers
    hypotheses and **what to do next**, and says what it could not check. It never touches the
    system; it only reads.
+   **ForgeAI** (when it is on) then asks the local model once, with the skill that fits the
+   alarm, for the likely cause, the first three checks and a line for the shift lead. Answers
+   that contain a number, IP or command not in the facts are thrown away. **Explain for Tier 1**
+   and **Postmortem summary** ask for more; **What was ForgeAI asked?** shows the exact prompt
+   and the model's answer word for word. 👍 / 👎 tells the team which skills work.
    Next to it: **Host metrics** from an hour before the alarm to now (the grey line is the
    start), **Happened before on this asset** with the cause that was confirmed last time, and
    **Syslog around the start** from the device's own log.
@@ -72,6 +77,11 @@ changed, notes, the confirmed cause, the playbook. It invents nothing: every gap
 
 Open it with **Schedule** on the NOC page's *On call now* card. It shows who is on call now
 and next; an Engineer adds, edits or copies windows here. Escalation calls this person first.
+
+## Shift handover
+
+**Write the handover** on the NOC page (ForgeAI on) summarises the last 12 hours for the next
+shift: what happened, what is still open, what to keep an eye on.
 
 ## The wall screen
 

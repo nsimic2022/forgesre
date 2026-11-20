@@ -1,5 +1,6 @@
 import { AuditPanel, JournalPanel } from "../components/ActivityPanels";
 import { AppearancePanel } from "../components/AppearancePanel";
+import { ForgeAiStatus } from "../components/ForgeAiStatus";
 import { IntegrationsPanel } from "../components/IntegrationsPanel";
 import { MessagePreviews } from "../components/MessagePreviews";
 import { BackupPanel, UsersPanel } from "../components/AdminPanels";
@@ -97,6 +98,7 @@ export function SettingsPage() {
               </Card>
             )}
             {group === "checks" ? <ChecksPanel /> : null}
+            {group === "ai" ? <ForgeAiStatus /> : null}
           </div>
         </div>
       ) : null}

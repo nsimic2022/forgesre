@@ -1,4 +1,5 @@
 import { ChangesCard } from "../components/ChangesCard";
+import { ForgeAiCard } from "../components/ForgeAiCard";
 import { IncidentMetrics, IncidentStory, SimilarBefore, SyslogCard, WhoToCall } from "../components/IncidentPanels";
 import { PostmortemPanel } from "../components/PostmortemPanel";
 import { useCallback, useEffect, useState } from "react";
@@ -143,17 +144,7 @@ export function IncidentDetailPage() {
               <span className="muted">No analysis yet.</span>
             )}
           </Card>
-          <Card title="ForgeAI · opinion" actions={<Chip tone={data.forgeai.mode === "off" ? "off" : "info"}>{data.forgeai.mode === "off" ? "Off" : data.forgeai.mode === "external" ? "External model" : "Local model"}</Chip>}>
-            {data.forgeai.text ? (
-              <>
-                <p style={{ margin: 0, lineHeight: 1.6 }}>{data.forgeai.text}</p>
-                {data.forgeai.action ? <p style={{ margin: 0 }}><span className="faint">Next step: </span>{data.forgeai.action}</p> : null}
-                <span className="small faint">Advisory opinion. Facts above come from ForgeRCA.{data.forgeai.model ? ` Model: ${data.forgeai.model}.` : ""}</span>
-              </>
-            ) : (
-              <span className="muted">{data.forgeai.mode === "off" ? "ForgeAI is off in Settings." : "No ForgeAI opinion yet; it is written after ForgeRCA finishes."}</span>
-            )}
-          </Card>
+          <ForgeAiCard number={data.number} view={data.forgeai} canAsk={data.can.investigate} onChanged={load} />
           {data.asset ? <IncidentMetrics assetId={data.asset.asset_id} number={data.number} /> : null}
           {data.events?.length ? <IncidentStory events={data.events} /> : null}
           {data.asset && data.can.investigate ? <SyslogCard number={data.number} /> : null}

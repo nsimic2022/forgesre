@@ -652,6 +652,143 @@ def set_status(
     return _incident(item, include_evidence=True)
 
 
+class ForgeAiAsk(BaseModel):
+    task: str = "incident"
+    skill: str = ""
+
+
+@router.post("/incidents/{number}/forgeai")
+def forgeai_ask(number: str, body: ForgeAiAsk, db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """Ask ForgeAI about this incident in the background: cause and first checks (optionally with another
+    skill), explain the alarm, or the postmortem paragraph. Analyst and up; the model is local."""
+    from app.forgeai import JOB_KIND, TASKS
+    from app.jobs import enqueue
+    from app.settings import settings
+
+    if body.task not in TASKS or body.task == "shift":
+        raise HTTPException(status_code=400, detail="task is incident, explain or postmortem")
+    if not (settings.ai_enabled and settings.llm_url):
+        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    if body.task == "incident":
+        job = enqueue(db, "investigate", item.number, payload={"use_llm": True, "skill": body.skill, "actor": user.email})
+    else:
+        job = enqueue(db, JOB_KIND, item.number, object_type="incident", payload={"task": body.task, "skill": body.skill, "actor": user.email})
+    return {"queued": True, "job": getattr(job, "id", None)}
+
+
+@router.get("/incidents/{number}/forgeai")
+def forgeai_calls(number: str, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """ForgeAI answers for this incident, newest first; Analysts and up also get the exact prompts."""
+    from app.forgeai import call_as_dict
+    from app.models import ForgeAiCall
+
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    rows = db.query(ForgeAiCall).filter_by(incident_id=item.id).order_by(ForgeAiCall.id.desc()).limit(20).all()
+    return {"calls": [call_as_dict(c, prompts=can(user, "read_evidence")) for c in rows]}
+
+
+@router.get("/forgeai/status")
+def forgeai_status(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """Is ForgeAI on, does the model answer, how did the last week of calls go."""
+    from app.forgeai import status
+
+    return status(db)
+
+
+class ForgeAiTrial(BaseModel):
+    incident: str = ""
+    task: str = "incident"
+    skill: str = ""
+    instructions: str | None = None
+
+
+@router.post("/forgeai/trial")
+def forgeai_trial(body: ForgeAiTrial, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Try a skill (saved or unsaved text) on an incident, newest by default. The answer is kept as a
+    trial and never shown as the incident's answer. Engineer and up."""
+    from app.forgeai import JOB_KIND, TASKS
+    from app.jobs import enqueue
+    from app.settings import settings
+
+    if body.task not in TASKS:
+        raise HTTPException(status_code=400, detail="unknown task")
+    if not (settings.ai_enabled and settings.llm_url):
+        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
+    target = "shift"
+    if body.task != "shift":
+        q = db.query(Incident)
+        item = q.filter_by(number=body.incident).first() if body.incident else q.order_by(Incident.started_at.desc()).first()
+        if item is None:
+            raise HTTPException(status_code=404, detail="no incident to try it on")
+        target = item.number
+    from uuid import uuid4
+
+    # a unique object id: each trial (new text) is its own job, not deduplicated into a pending one
+    job = enqueue(db, JOB_KIND, f"{target}#trial-{uuid4().hex[:8]}", object_type="forgeai",
+                  payload={"task": body.task, "skill": body.skill, "trial": True, "instructions": body.instructions, "actor": user.email})
+    return {"queued": True, "job": getattr(job, "id", None), "incident": None if target == "shift" else target}
+
+
+@router.post("/forgeai/shift-summary")
+def forgeai_shift(db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """Queue a shift handover summary (last 12 hours). Poll GET /api/v1/forgeai/calls/{id} via the job result."""
+    from app.forgeai import JOB_KIND
+    from app.jobs import enqueue
+    from app.settings import settings
+
+    if not (settings.ai_enabled and settings.llm_url):
+        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
+    job = enqueue(db, JOB_KIND, "shift", object_type="forgeai", payload={"task": "shift", "actor": user.email})
+    return {"queued": True, "job": getattr(job, "id", None)}
+
+
+@router.get("/forgeai/calls/{call_id}")
+def forgeai_call(call_id: int, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    from app.forgeai import call_as_dict
+    from app.models import ForgeAiCall
+
+    row = db.get(ForgeAiCall, call_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return call_as_dict(row, prompts=can(user, "read_evidence"))
+
+
+class ForgeAiRate(BaseModel):
+    value: int = Field(ge=-1, le=1)
+
+
+@router.post("/forgeai/calls/{call_id}/rate")
+def forgeai_rate(call_id: int, body: ForgeAiRate, db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """Thumbs up (1), down (-1) or clear (0) on one ForgeAI answer; counted per skill."""
+    from app.models import ForgeAiCall
+
+    row = db.get(ForgeAiCall, call_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="not found")
+    row.rating, row.rated_by = body.value, user.email
+    audit(db, "forgeai.rate", actor=user.email, object_type="forgeai_call", object_id=str(call_id), data={"value": body.value, "skill": row.skill_slug})
+    db.commit()
+    return {"id": row.id, "rating": row.rating}
+
+
+@router.get("/forgeai/jobs/{job_id}")
+def forgeai_job(job_id: int, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """State of a ForgeAI job and, when done, its call id."""
+    from app.models import Job
+
+    row = db.get(Job, job_id)
+    if row is None or row.kind not in ("forgeai", "investigate"):
+        raise HTTPException(status_code=404, detail="job not found")
+    payload = row.payload or {}
+    call_id = (payload.get("result") or {}).get("call_id") or payload.get("call_id")
+    return {"id": row.id, "status": row.status, "error": row.error or "", "call_id": call_id}
+
+
 @router.post("/incidents/{number}/investigate")
 def investigate_incident(
     number: str,

@@ -1,0 +1,372 @@
+"""ForgeAI: put one narrow question to the language model, check the answer, keep the exchange.
+
+How it works, for the next developer:
+
+* A **task** says what is asked and the exact JSON shape of the answer (incident: cause, first
+  checks, a line for the shift lead; explain; postmortem; shift summary). Tasks are code.
+* A **skill** (``ForgeAiSkill`` row) is the editable part: when it applies (alert names, asset
+  types) and the instructions, written like a note to a colleague. The fixed safety rules and the
+  JSON shape always wrap it, so an edited skill cannot switch them off.
+* The **context** is built from the database only: the incident, the asset, ForgeRCA facts and
+  hypotheses, the playbook, earlier incidents with a confirmed cause, changes before; syslog when
+  the skill asks for it. Secrets are stripped (rca.sanitize) before the prompt is built.
+* The answer is **checked**: JSON shape, lengths, no number or IP that is not in the context, no
+  shell commands. A failed check keeps the answer out of the UI and says why.
+* Every exchange is a ``ForgeAiCall`` row: exact prompts, raw answer, model, time, outcome.
+
+Runs only in the jobs worker (LLM lane); the model call has the configured timeout.
+"""
+
+from __future__ import annotations
+
+import fnmatch
+import json
+import re
+import time
+from datetime import timedelta
+from typing import Any
+
+from sqlalchemy.orm import Session, joinedload
+
+from app.models import ForgeAiCall, ForgeAiSkill, Incident, Investigation, utcnow
+
+JOB_KIND = "forgeai"
+# ~1 200 tokens: Qwen3-4B on CPU reads about 25 tokens/s before it writes (docs/llm.md)
+CONTEXT_MAX = 4500
+
+BASE_RULES = (
+    "You are ForgeAI, the assistant inside ForgeSRE, a NOC appliance. You only read; you never act.\n"
+    "Rules you must follow:\n"
+    "- Use only the facts in the user message. If something is not there, say it is unknown.\n"
+    "- Never invent numbers, host names, IP addresses or log lines.\n"
+    "- Never give shell commands and never tell anyone to restart, delete or change something; "
+    "say what to check instead.\n"
+    "- Plain English, short sentences, for a NOC operator at 3 am.\n"
+    "- Answer with JSON only, exactly this shape: {shape}\n"
+)
+
+TASKS: dict[str, dict[str, Any]] = {
+    "incident": {
+        "label": "Cause and first checks",
+        "shape": '{"cause": "one sentence", "first_checks": ["check 1", "check 2", "check 3"], "for_shift_lead": "one sentence"}',
+        "fields": {"cause": 300, "for_shift_lead": 300},
+        "lists": {"first_checks": (3, 200)},
+        "max_tokens": 400,
+    },
+    "explain": {
+        "label": "Explain the alarm",
+        "shape": '{"explanation": "2-4 sentences", "why_it_matters": "one sentence"}',
+        "fields": {"explanation": 700, "why_it_matters": 300},
+        "lists": {},
+        "max_tokens": 350,
+    },
+    "postmortem": {
+        "label": "Postmortem summary",
+        "shape": '{"paragraph": "one paragraph, 4-7 sentences"}',
+        "fields": {"paragraph": 1400},
+        "lists": {},
+        "max_tokens": 500,
+    },
+    "shift": {
+        "label": "Shift summary",
+        "shape": '{"summary": "3-5 sentences", "still_open": ["item"], "watch": ["item"]}',
+        "fields": {"summary": 1200},
+        "lists": {"still_open": (8, 200), "watch": (5, 200)},
+        "max_tokens": 500,
+    },
+}
+
+INCLUDE_DEFAULT = {"facts": True, "playbook": True, "similar": True, "changes": True, "syslog": False}
+
+# Built-in skills: slug, name, task, alert patterns, asset types, priority, include overrides, instructions.
+BUILTIN: list[tuple[str, str, str, list[str], list[str], int, dict[str, bool], str]] = [
+    ("incident-generic", "Any incident", "incident", [], [], 1000, {},
+     "Read the facts and the hypotheses. Pick the most likely cause the facts support and say how sure "
+     "you are in plain words. First checks go from quickest and safest to slower ones. If an earlier "
+     "incident on the same asset had a confirmed cause, say whether this one looks the same."),
+    ("linux-disk", "Linux disk full", "incident", ["*disk*", "*filesystem*", "*inode*", "*/u0*", "*/var*"], ["Linux Server", "Oracle DB", "PostgreSQL"], 100, {},
+     "A filesystem is filling. Name the mount point from the facts. Typical causes: logs or archive logs "
+     "not rotated, a backup or dump written locally, a runaway temp file. First checks: what grew in the "
+     "last hours, whether log rotation and archive purge jobs ran, whether a backup wrote to this disk."),
+    ("cpu-memory", "CPU or memory high", "incident", ["*cpu*", "*memory*", "*load*", "*swap*", "*oom*"], [], 200, {},
+     "Resource pressure. Say whether it is a spike or a steady climb from the facts. Look for a deploy or "
+     "config change just before, a batch job at that hour, or the same pattern in earlier incidents."),
+    ("host-down", "Host or service down", "incident", ["*down*", "*unreachable*", "*instancedown*", "*no data*"], [], 150, {"syslog": True},
+     "The host or its exporter stopped answering. Separate 'the machine is down' from 'only the exporter "
+     "or the path to it is down': use ping, the exporter port and the parent device in the facts. If the "
+     "parent switch or hypervisor also has an alarm, say that it is probably the real cause."),
+    ("network-link", "Network link or interface", "incident", ["*interface*", "*link*", "*port*", "*bgp*", "*ospf*", "*if*down*"], ["Switch", "Router", "Firewall", "Network device"], 90, {"syslog": True},
+     "A network interface or neighbour went down. Use the syslog lines (LINK-DOWN, err-disable, flapping) "
+     "if present. Name the interface from the facts. First checks: the far end, the cable or optic, "
+     "errors on the port, and any change made to the device before the alarm."),
+    ("windows-service", "Windows service", "incident", ["*service*", "*windows*"], ["Windows Server"], 120, {},
+     "A Windows service or server problem. Say which service if the facts name it. First checks: the "
+     "service state and its last restart, Windows updates or a reboot before the alarm, disk and memory."),
+    ("database", "Database", "incident", ["*oracle*", "*postgres*", "*mysql*", "*sql*", "*db*", "*tablespace*", "*replication*"], ["Oracle DB", "PostgreSQL", "MySQL", "MSSQL"], 110, {},
+     "A database problem. Say which part (space, sessions, replication, availability) the facts point to. "
+     "First checks: space and archive logs, long-running sessions or locks, replication lag, and recent "
+     "deploys of applications that use this database."),
+    ("kubernetes", "Kubernetes workload", "incident", ["*pod*", "*crashloop*", "*kube*", "*node*notready*"], ["Kubernetes Cluster"], 80, {},
+     "A Kubernetes node or workload problem. Say whether it is one pod, one deployment or a node. First "
+     "checks: recent rollouts, restarts and the reason Kubernetes gives, and the node's state."),
+    ("appliance-checks", "Certificate, backup or heartbeat", "incident", ["*certificate*", "*tls*", "*backup*", "*heartbeat*"], [], 70, {},
+     "One of ForgeSRE's own checks. Say plainly what expires or went silent and by when it matters. "
+     "First checks: who owns the certificate, job or script, and when it last succeeded."),
+    ("explain-generic", "Explain for Tier 1", "explain", [], [], 1000, {"similar": False, "changes": False},
+     "Explain to a new Tier 1 operator what this alarm means on this kind of asset, without jargon. Say "
+     "why it matters for users and how urgent it is from the severity. Do not guess the cause."),
+    ("postmortem-generic", "Postmortem summary", "postmortem", [], [], 1000, {"syslog": False},
+     "Write the summary paragraph of a blameless postmortem: what happened, when, impact, how it was "
+     "found and fixed, and the confirmed cause if there is one. Use the notes and the timeline. Mark "
+     "anything not in the facts as unknown."),
+    ("shift-generic", "Shift handover", "shift", [], [], 1000, {},
+     "Summarise the last hours for the next shift: what happened, what is still open and who has it, "
+     "and what to keep an eye on. Most important first. Do not repeat every incident."),
+]
+
+
+def seed_skills(db: Session) -> None:
+    """Add missing built-in skills; edited ones keep their text, defaults are refreshed."""
+    existing = {s.slug: s for s in db.query(ForgeAiSkill).all()}
+    for slug, name, task, alerts, types, prio, include, text in BUILTIN:
+        row = existing.get(slug)
+        if row is None:
+            db.add(ForgeAiSkill(slug=slug, name=name, task=task, match_alerts=alerts, match_types=types, priority=prio,
+                                instructions=text, default_instructions=text, include={**INCLUDE_DEFAULT, **include}, builtin=True))
+        else:
+            row.default_instructions = text
+    db.flush()
+
+
+def _matches(patterns: list[str], value: str) -> bool:
+    value = (value or "").lower()
+    return any(fnmatch.fnmatch(value, str(p).lower()) or str(p).lower().strip("*") in value for p in patterns if str(p).strip())
+
+
+def pick_skill(db: Session, task: str, incident: Incident | None, slug: str = "") -> ForgeAiSkill | None:
+    """The named skill, else the enabled skill for ``task`` whose alert and type patterns match, lowest priority first."""
+    seed_skills(db)
+    if slug:
+        return db.query(ForgeAiSkill).filter_by(slug=slug).first()
+    rows = db.query(ForgeAiSkill).filter_by(task=task, enabled=True).order_by(ForgeAiSkill.priority, ForgeAiSkill.id).all()
+    title = (incident.title if incident else "") or ""
+    # fingerprint is "alertname:asset" for Prometheus alarms
+    alert = (incident.fingerprint or "").split(":", 1)[0] if incident is not None else ""
+    atype = incident.asset.type if incident is not None and incident.asset is not None else ""
+    for row in rows:
+        alert_ok = not row.match_alerts or _matches(row.match_alerts, title) or _matches(row.match_alerts, alert)
+        type_ok = not row.match_types or atype in row.match_types
+        if (row.match_alerts or row.match_types) and alert_ok and type_ok:
+            return row
+    return next((r for r in rows if not r.match_alerts and not r.match_types), rows[0] if rows else None)
+
+
+def _incident_context(db: Session, incident: Incident, include: dict[str, Any]) -> dict[str, Any]:
+    from app.changes import changes_before
+    from app.incident_view import similar_before
+
+    asset = incident.asset
+    ctx: dict[str, Any] = {
+        "incident": {"number": incident.number.split("_")[0], "title": incident.title, "severity": incident.severity,
+                     "status": incident.status, "started_at": incident.started_at.isoformat() if incident.started_at else "",
+                     "acknowledged_by": incident.ack_by or "", "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else ""},
+        "asset": {"hostname": asset.hostname, "ip": asset.ip, "type": asset.type, "environment": asset.environment,
+                  "owner": asset.owner} if asset else None,
+    }
+    rca = (db.query(Investigation).filter(Investigation.incident_id == incident.id, ~Investigation.provider.like("%-llm"))
+           .order_by(Investigation.id.desc()).first())
+    if include.get("facts", True) and rca is not None:
+        result = rca.result or {}
+        ctx["forgerca"] = {
+            "likely_cause": rca.likely_cause, "confidence_percent": int(rca.confidence or 0),
+            "facts": [f.get("text") for f in result.get("facts") or [] if isinstance(f, dict)][:12],
+            "hypotheses": [h.get("summary") for h in result.get("hypotheses") or [] if isinstance(h, dict)][:4],
+        }
+    if include.get("playbook", True) and incident.playbook is not None:
+        ctx["playbook"] = [str(s.get("title") if isinstance(s, dict) else s) for s in incident.playbook.steps or []][:10]
+    if include.get("similar", True):
+        ctx["earlier_on_this_asset"] = [{"started_at": s["started_at"], "confirmed_cause": s["root_cause"], "minutes": s["minutes"]}
+                                        for s in similar_before(db, incident) if s["root_cause"]]
+    if include.get("changes", True):
+        ctx["changes_before"] = [{"title": c.get("title"), "kind": c.get("kind"), "minutes_before": c.get("before_min")}
+                                 for c in changes_before(db, incident)[:6]]
+    if include.get("notes", False) or include.get("postmortem", False):
+        from app.history import note_as_dict, notes_for
+
+        ctx["notes"] = [n["body"] for n in (note_as_dict(r) for r in notes_for(db, incident))][:15]
+        ctx["confirmed_cause"] = incident.root_cause or ""
+        ctx["timeline"] = [f"{i.get('at', '')} {i.get('title', '')}" for i in (incident.timeline or [])][:20]
+    if include.get("syslog", False):
+        from app.dc_noc import incident_syslog_lines
+
+        ctx["syslog"] = (incident_syslog_lines(incident) or [])[:20]
+    return ctx
+
+
+def _shift_context(db: Session, hours: int = 12) -> dict[str, Any]:
+    since = utcnow() - timedelta(hours=hours)
+    rows = (db.query(Incident).options(joinedload(Incident.asset))
+            .filter((Incident.started_at >= since) | Incident.status.in_(("OPEN", "ACK", "INVESTIGATING", "ESCALATED")))
+            .order_by(Incident.started_at.desc()).limit(40).all())
+    return {"hours": hours, "incidents": [
+        {"number": i.number.split("_")[0], "title": i.title, "severity": i.severity, "status": i.status,
+         "host": i.asset.hostname if i.asset else "", "started_at": i.started_at.isoformat() if i.started_at else "",
+         "acknowledged_by": i.ack_by or "", "confirmed_cause": i.root_cause or ""} for i in rows]}
+
+
+def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Incident | None) -> tuple[str, str]:
+    """(system, user) exactly as sent: fixed rules + task shape + skill instructions, and the context JSON."""
+    from rca.sanitize import sanitize
+
+    spec = TASKS[task]
+    include = {**INCLUDE_DEFAULT, **(skill.include or {})}
+    if task == "postmortem":
+        include["postmortem"] = True
+    context = _shift_context(db) if task == "shift" else _incident_context(db, incident, include)
+    system = BASE_RULES.format(shape=spec["shape"]) + "\nInstructions for this kind of work:\n" + (skill.instructions or "").strip()
+    context = sanitize(context)
+    user = json.dumps(context, ensure_ascii=False, default=str)
+    # Too long: drop the least useful parts first, so the JSON stays whole instead of being cut.
+    for key in ("syslog", "timeline", "changes_before", "earlier_on_this_asset", "playbook", "notes"):
+        if len(user) <= CONTEXT_MAX:
+            break
+        context.pop(key, None)
+        user = json.dumps(context, ensure_ascii=False, default=str)
+    while len(user) > CONTEXT_MAX and len(context.get("incidents") or []) > 1:
+        context["incidents"].pop()  # shift summary: the oldest go first
+        context["more_incidents_not_shown"] = context.get("more_incidents_not_shown", 0) + 1
+        user = json.dumps(context, ensure_ascii=False, default=str)
+    return system, user[:CONTEXT_MAX]
+
+
+IP = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+SHELL = re.compile(r"(^|[\s`'\"])(sudo|rm\s+-|systemctl\s|service\s+\S+\s+(restart|stop)|kill\s|reboot|shutdown|mkfs|dd\s+if=|docker\s|kubectl\s+delete)", re.I)
+
+
+def check_answer(task: str, parsed: dict[str, Any] | None, context: str) -> tuple[dict[str, Any], str]:
+    """(clean answer, reason) — reason is empty when the answer may be shown."""
+    from rca.llm import invented_numbers
+
+    if not isinstance(parsed, dict):
+        return {}, "the model did not return JSON"
+    spec = TASKS[task]
+    answer: dict[str, Any] = {}
+    for key, limit in spec["fields"].items():
+        value = " ".join(str(parsed.get(key) or "").split())
+        if not value:
+            return {}, f"the answer has no {key}"
+        answer[key] = value[:limit]
+    for key, (count, limit) in spec["lists"].items():
+        items = parsed.get(key) or []
+        items = [items] if isinstance(items, str) else items
+        answer[key] = [" ".join(str(i).split())[:limit] for i in items if str(i).strip()][:count]
+    text = " ".join([*(v for v in answer.values() if isinstance(v, str)), *(i for v in answer.values() if isinstance(v, list) for i in v)])
+    if set(IP.findall(text)) - set(IP.findall(context)):
+        return {}, "the answer names an IP address that is not in the facts"
+    if invented_numbers(text, context):
+        return {}, "the answer has a number that is not in the facts"
+    if SHELL.search(text):
+        return {}, "the answer contains a shell command"
+    return answer, ""
+
+
+def _provider():
+    from rca.llm import make_provider
+
+    from app.settings import settings
+
+    return make_provider(settings.llm_url if settings.ai_enabled else None, settings.llm_model, timeout=settings.llm_timeout)
+
+
+def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug: str = "", actor: str = "system",
+        trial: bool = False, instructions: str | None = None) -> ForgeAiCall:
+    """Ask the model once and record the exchange. ``trial`` (skill test) never becomes the incident's answer;
+    ``instructions`` tries unsaved skill text. An incident answer that passes the checks is stored as a
+    ``forgerca-llm`` Investigation so the incident page and reports show it."""
+    from app.journal import report
+    from app.settings import settings
+
+    if task not in TASKS:
+        raise ValueError(f"unknown task {task}")
+    skill = pick_skill(db, task, incident, skill_slug)
+    if skill is None:
+        raise LookupError("no ForgeAI skill for this task")
+    if instructions is not None:
+        # unsaved text from the skill editor: a transient copy, never added to the session
+        skill = ForgeAiSkill(slug=skill.slug, name=skill.name, task=skill.task, include=skill.include, version=skill.version, instructions=instructions)
+    system, user = build_prompts(db, task, skill, incident)
+    call = ForgeAiCall(incident_id=incident.id if incident is not None else None, task=task, skill_slug=skill.slug,
+                       skill_version=skill.version or 0, system_prompt=system, user_prompt=user, actor=actor,
+                       endpoint=(settings.llm_url or "") if settings.ai_enabled else "")
+    provider = _provider()
+    if provider.get_name() == "none":
+        call.status, call.reason = "error", "ForgeAI is off (Settings › ForgeRCA / ForgeAI)"
+    else:
+        started = time.monotonic()
+        parsed = provider.complete_json(system, user, TASKS[task]["max_tokens"])
+        call.duration_ms = int(getattr(provider, "last_ms", 0) or (time.monotonic() - started) * 1000)
+        call.raw_response = str(getattr(provider, "last_raw", "") or "")
+        call.model = provider.get_model() or ""
+        if parsed is None:
+            call.status, call.reason = "error", str(getattr(provider, "last_error", "") or "no answer")
+        else:
+            answer, why = check_answer(task, parsed, user)
+            call.answer = answer or parsed
+            call.status, call.reason = ("rejected", why) if why else ("trial" if trial else "used", "")
+    db.add(call)
+    db.flush()
+    if call.status == "used" and task == "incident" and incident is not None:
+        a = call.answer
+        db.add(Investigation(
+            incident_id=incident.id, summary=a["for_shift_lead"], likely_cause=a["cause"],
+            # provider name kept from V0.x: classic, insights and reports read "forgerca-llm"
+            recommended_action="\n".join(a.get("first_checks") or []), provider="forgerca-llm", engine="forgeai",
+            engine_version="2.0", model=call.model, requested_by=actor, confidence=0,
+            result={"answer": a, "call_id": call.id, "skill": skill.slug, "skill_name": skill.name},
+            disclaimer="ForgeAI wrote this from ForgeRCA facts; it has not changed anything.",
+        ))
+    db.commit()
+    report(db, "forgeai", task, "ok" if call.status in {"used", "trial"} else "error",
+           summary=f"{(incident.number.split('_')[0] + ' ') if incident is not None else ''}{task} with {skill.slug}: {call.status}"
+                   f"{' (' + call.reason + ')' if call.reason else ''} in {call.duration_ms} ms",
+           object_type="incident" if incident is not None else "forgeai", object_id=incident.number if incident is not None else task)
+    return call
+
+
+def call_as_dict(call: ForgeAiCall, *, prompts: bool) -> dict[str, Any]:
+    """One exchange for the UI; ``prompts`` adds the exact prompts and raw answer (Analyst and up)."""
+    out = {"id": call.id, "at": call.created_at.isoformat() if call.created_at else None, "task": call.task,
+           "skill": call.skill_slug, "skill_version": call.skill_version, "model": call.model, "status": call.status,
+           "reason": call.reason, "duration_ms": call.duration_ms, "answer": call.answer or {}, "rating": call.rating, "actor": call.actor}
+    if prompts:
+        out.update(system_prompt=call.system_prompt, user_prompt=call.user_prompt, raw_response=call.raw_response)
+    return out
+
+
+def status(db: Session) -> dict[str, Any]:
+    """Settings › ForgeAI: is it on, does llama.cpp answer and with which model, and how the last calls went."""
+    import httpx
+
+    from app.settings import settings
+
+    out: dict[str, Any] = {"enabled": settings.ai_enabled, "url": settings.llm_url or "", "model": settings.llm_model,
+                           "timeout_s": settings.llm_timeout, "reachable": None, "loaded_model": "", "why": ""}
+    if settings.ai_enabled and settings.llm_url:
+        try:
+            r = httpx.get(settings.llm_url.rstrip("/") + "/models", timeout=3.0)
+            r.raise_for_status()
+            rows = r.json().get("data") or []
+            out["reachable"], out["loaded_model"] = True, str(rows[0].get("id")) if rows else ""
+        except Exception as exc:  # status page: never raise
+            out["reachable"], out["why"] = False, str(exc)[:200]
+    since = utcnow() - timedelta(days=7)
+    recent = db.query(ForgeAiCall).filter(ForgeAiCall.created_at >= since).all()
+    done = [c.duration_ms for c in recent if c.status in {"used", "trial", "rejected"} and c.duration_ms]
+    out["week"] = {
+        "calls": len(recent), "used": sum(c.status == "used" for c in recent), "rejected": sum(c.status == "rejected" for c in recent),
+        "errors": sum(c.status == "error" for c in recent), "avg_ms": int(sum(done) / len(done)) if done else 0,
+        "thumbs_up": sum(c.rating > 0 for c in recent), "thumbs_down": sum(c.rating < 0 for c in recent),
+    }
+    last = db.query(ForgeAiCall).order_by(ForgeAiCall.id.desc()).limit(10).all()
+    out["last"] = [call_as_dict(c, prompts=False) for c in last]
+    return out
