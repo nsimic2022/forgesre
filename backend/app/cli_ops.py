@@ -426,6 +426,37 @@ def cmd_capacity(port: str, args: list[str]) -> None:
             jar.unlink(missing_ok=True)
 
 
+def format_sources(data: dict[str, Any]) -> str:
+    """Feeders with last sync and open conflicts, then the conflicts themselves."""
+    lines = [f"New devices from sources: {data.get('new_devices', 'add')} (inventory.new_from_sources)", ""]
+    lines.append(f"{'SOURCE':<10} {'ON':<4} {'LINKED':>6} {'CONFLICTS':>9}  LAST SYNC")
+    for row in data.get("sources") or []:
+        last = row.get("last") or {}
+        when = f"{str(last.get('at') or '')[:16]} {last.get('status') or ''} {last.get('summary') or ''}".strip() or "never"
+        lines.append(f"{row['source']:<10} {'yes' if row.get('enabled') else 'no':<4} {row.get('linked', 0):>6} {row.get('conflicts', 0):>9}  {when}")
+    conflicts = data.get("conflicts") or []
+    lines.append("")
+    lines.append(f"{len(conflicts)} open conflict(s)" + (":" if conflicts else ". Every source agrees with the inventory."))
+    for c in conflicts:
+        who = c.get("hostname") or c.get("source_id") or "?"
+        lines.append(f"  #{c['id']} {c['source']} {who}: {c.get('detail') or (c.get('field', '') + ' ' + c.get('ours', '') + ' -> ' + c.get('theirs', ''))}")
+    if conflicts:
+        lines.append("Decide in the UI: Inventory > Sources (keep ours or take theirs).")
+    return "\n".join(lines) + "\n"
+
+
+def cmd_sources(port: str) -> None:
+    """./forgesre sources: GLPI / Zabbix / NetBox / LibreNMS sync state and open conflicts."""
+    jar, _me = ensure_jar(port)
+    try:
+        sys.stdout.write(format_sources(get_json(port, jar, "/api/v1/inventory/sources")))
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as exc:
+        raise SystemExit(f"could not read sources: {exc}") from exc
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def cmd_ping(port: str, args: list[str]) -> None:
     selector = ""
     timeout = DEFAULT_TIMEOUT
@@ -889,6 +920,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_numbers(port)
     elif command in {"assets", "inventory"}:
         cmd_assets(port, rest)
+    elif command == "sources":
+        cmd_sources(port)
     elif command == "capacity":
         cmd_capacity(port, rest)
     elif command in {"asset-refs", "asset_refs"}:

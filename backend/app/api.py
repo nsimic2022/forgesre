@@ -3110,6 +3110,36 @@ def inventory_form_api(db: Session = Depends(get_db), user: User = Depends(requi
     return asset_form_options(db, user)
 
 
+class ConflictDecision(BaseModel):
+    action: str  # ours | theirs
+
+
+@router.get("/inventory/sources")
+def inventory_sources_api(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> dict[str, Any]:
+    """Each feeder (GLPI, Zabbix, NetBox, LibreNMS): last sync, linked assets, open conflicts; and the open conflicts."""
+    from app.asset_sources import conflict_rows, sources_view
+
+    return {"sources": sources_view(db), "conflicts": conflict_rows(db), "can_edit": can(user, "write_assets"),
+            "new_devices": settings.inventory_new_from_sources}
+
+
+@router.post("/inventory/conflicts/{conflict_id}")
+def inventory_conflict_decide(conflict_id: int, body: ConflictDecision, db: Session = Depends(get_db),
+                              user: User = Depends(require("write_assets"))) -> dict[str, Any]:
+    """Keep the inventory value (ours) or take the source's (theirs). Audited."""
+    from app.asset_sources import resolve
+    from app.models import AssetConflict
+
+    row = db.get(AssetConflict, conflict_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="conflict not found")
+    try:
+        resolve(db, row, body.action, user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"id": row.id, "status": row.status}
+
+
 @router.get("/inventory/{asset_id}")
 def inventory_card_api(asset_id: str, db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> dict[str, Any]:
     """Asset card of the new UI."""

@@ -1606,19 +1606,29 @@ def sync_netbox(db: Session) -> dict:
         log.warning("netbox sync failed: %s", detail)
         report(db, "netbox", "sync", "error", summary=summary, detail=detail)
         return {"synced": 0, "error": detail}
-    created = 0
-    linked = 0
+    from app.asset_sources import SourceRecord, build_index, hold_for_review, match, new_device_mode, open_conflict, reconcile
+
+    index = build_index(db)
+    review = new_device_mode() == "review"
+    created = linked = held = conflicts = 0
     for device in devices:
         netbox_id = str(device.get("netbox_id") or "")
         name = str(device.get("name") or "").strip()
         slug = netbox_asset_id(name, netbox_id)
-        asset = None
-        if netbox_id:
-            asset = db.query(Asset).filter(Asset.netbox_id == netbox_id).first()
-        if asset is None:
-            asset = db.query(Asset).filter(Asset.asset_id == slug).first()
         ip = str(device.get("ip") or "").strip()
+        fields = {k: str(device.get(src) or "") for k, src in (("site", "site"), ("customer", "tenant")) if device.get(src)}
+        rec = SourceRecord(source="netbox", source_id=netbox_id, name=name, ip=ip, serial=str(device.get("serial") or ""), fields=fields)
+        asset, disagreement = match(index, rec)
         if asset is None:
+            asset = index.name.get(slug)
+        if asset is not None and (asset.netbox_id or "").strip() and netbox_id and asset.netbox_id != netbox_id:
+            if open_conflict(db, None, rec, "match", detail=f"looks like {asset.asset_id}, which is already NetBox device {asset.netbox_id}"):
+                conflicts += 1
+            continue
+        if asset is None:
+            if review and hold_for_review(db, rec, f"From NetBox: {name or netbox_id}"):
+                held += 1
+                continue
             asset = Asset(
                 asset_id=slug,
                 hostname=name or slug,
@@ -1636,24 +1646,22 @@ def sync_netbox(db: Session) -> dict:
             db.add(asset)
             db.flush()
             created += 1
-            continue
-        if netbox_id and not (asset.netbox_id or "").strip():
-            asset.netbox_id = netbox_id
-        if not (asset.source or "").strip():
-            asset.source = "netbox"
-        if ip and (not (asset.ip or "").strip() or asset.source == "netbox"):
-            asset.ip = ip
-        linked += 1
+        else:
+            if not (asset.source or "").strip():
+                asset.source = "netbox"
+            linked += 1
+        conflicts += reconcile(db, index, asset, rec, disagreement=disagreement)["conflicts"]
     db.commit()
     report(
         db,
         "netbox",
         "sync",
         "ok",
-        summary=f"NetBox sync: {created} new, {linked} already linked",
+        summary=f"NetBox sync: {created} new, {linked} already linked"
+                + (f", {held} waiting in Discovery" if held else "") + (f", {conflicts} to review" if conflicts else ""),
         detail="New devices: type Auto, status unknown until Verify or a probe, no scrape address. Owner, contact, email, and notes on existing assets are never changed.",
     )
-    return {"synced": created + linked, "created": created, "linked": linked}
+    return {"synced": created + linked, "created": created, "linked": linked, "held": held, "conflicts": conflicts}
 
 
 def netbox_asset_id(name: str, netbox_id: str = "") -> str:
@@ -2173,6 +2181,10 @@ def delete_asset(db: Session, asset: Asset, actor: str = "system") -> dict:
     db.query(Asset).filter(Asset.parent_id == pk).update({Asset.parent_id: None}, synchronize_session=False)
     db.query(AssetLadderStep).filter(AssetLadderStep.asset_id == pk).delete(synchronize_session=False)
     db.query(AssetPlayruleMute).filter(AssetPlayruleMute.asset_id == pk).delete(synchronize_session=False)
+    from app.models import AssetConflict, AssetIdentity
+
+    db.query(AssetIdentity).filter(AssetIdentity.asset_id == pk).delete(synchronize_session=False)
+    db.query(AssetConflict).filter(AssetConflict.asset_id == pk).delete(synchronize_session=False)
     db.flush()
     db.delete(asset)
     audit(

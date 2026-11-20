@@ -76,7 +76,10 @@ call audited. Built once for both.
 
 ## Backlog
 
-### Asset sources: one inventory, many feeders
+### ~~Asset sources: one inventory, many feeders~~ (done, `app/asset_sources.py`)
+
+Still open: moving network discovery to LibreNMS only (SNMP), instead of ForgeSRE's own scan.
+
 
 Assets can come from manual entry, GLPI, Zabbix, LibreNMS, Prometheus targets and
 Grafana / Alloy. Target design:

@@ -82,6 +82,7 @@ Commands:
   assets             List inventory with # (alias: inventory)
   inventory          Same as assets
   capacity           30-day disk / interface history of one asset, days to full
+  sources            GLPI / Zabbix / NetBox / LibreNMS: last sync, linked assets, conflicts
   snmp               snmp_exporter health + SNMP HTTP SD targets
   render-monitoring  Rewrite Prometheus / Alertmanager / snmp.yml / Alloy / Loki config
   snmp-auths         Write per-asset SNMP auths (Custom community / v3) into snmp.yml
@@ -532,6 +533,16 @@ Clusters are listed in config/forgesre.yml (kubernetes.clusters); each needs a t
 
   ./forgesre kubernetes          one line per cluster
   ./forgesre kubernetes sync     read every cluster now (background)
+EOF
+      ;;
+    sources)
+      cat <<'EOF'
+sources — the systems that feed the inventory (GLPI, Zabbix, NetBox, LibreNMS):
+on or off, last sync, how many assets each is linked to, and the open conflicts
+(a source disagrees with the inventory; nothing is overwritten until an Engineer
+decides in Inventory > Sources).
+
+  ./forgesre sources
 EOF
       ;;
     capacity)
@@ -1057,6 +1068,10 @@ case "$cmd" in
   capacity)
     need_env
     run_cli_ops capacity "$@"
+    ;;
+  sources)
+    need_env
+    run_cli_ops sources "$@"
     ;;
   kubernetes)
     need_env

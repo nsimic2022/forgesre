@@ -51,6 +51,18 @@ into Prometheus' node_exporter job; they are monitored over SNMP.
 on, or now with **Sync now** on their card in Settings › Integrations. ForgeSRE never writes
 back to them.
 
+All of them feed **one** inventory. A device is matched by the source's own id, then serial,
+MAC, name (hostname or sysName) and IP, so the switch GLPI knows by its serial and LibreNMS by
+its sysName is one asset, not two. Empty fields are filled. A field a source owns (GLPI's site,
+customer and contract) follows that source until someone changes it in ForgeSRE. Anything else
+that differs, a different IP, a value you edited, two keys pointing at two assets, is never
+written by a sync: it waits in **Inventory › Sources**, where an Engineer keeps the inventory
+value or takes the source's. The same page shows each source's last sync and how many assets it
+is linked to (`./forgesre sources` over SSH). Owner, contact, phone, notes and type are never
+written by a source. **Settings › Integrations › New devices from GLPI / Zabbix / NetBox**:
+*add* puts a new device straight into the inventory, *review* lists it in Discovery until an
+Engineer approves it.
+
 **By hand**: **New asset by hand** opens the full form, SNMP credentials included.
 
 **From a CSV file**: **Import CSV** reads one asset per line; the first line names the columns

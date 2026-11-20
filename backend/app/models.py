@@ -484,6 +484,48 @@ class DiscoveryCandidate(Base):
     asset_id: Mapped[str] = mapped_column(String(64), default="")
 
 
+class AssetIdentity(Base):
+    """What one outside source (GLPI, Zabbix, NetBox, LibreNMS) says about one asset.
+
+    Used to match the next sync by serial, MAC, name or IP, and to know which values a source
+    wrote (``fields``), so it may update them later without overwriting a person's edit.
+    """
+
+    __tablename__ = "asset_identities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), index=True)
+    source: Mapped[str] = mapped_column(String(32), index=True)
+    source_id: Mapped[str] = mapped_column(String(128), default="", index=True)
+    name: Mapped[str] = mapped_column(String(255), default="")
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    serial: Mapped[str] = mapped_column(String(128), default="", index=True)
+    mac: Mapped[str] = mapped_column(String(64), default="", index=True)
+    fields: Mapped[dict] = mapped_column(JSONType, default=dict)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AssetConflict(Base):
+    """A source disagrees with the inventory. Never applied silently; an Engineer keeps ours or takes theirs."""
+
+    __tablename__ = "asset_conflicts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(32))
+    source_id: Mapped[str] = mapped_column(String(128), default="")
+    kind: Mapped[str] = mapped_column(String(32))  # field, ip, match
+    field: Mapped[str] = mapped_column(String(64), default="")
+    ours: Mapped[str] = mapped_column(Text, default="")
+    theirs: Mapped[str] = mapped_column(Text, default="")
+    detail: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="open", index=True)  # open, ours, theirs
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    decided_by: Mapped[str] = mapped_column(String(255), default="")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class LoginFailure(Base):
     """One failed sign-in, kept for the throttle window. Shared by every Core process."""
 

@@ -10,6 +10,7 @@ system:
 
 inventory:
   provider: local # local inventory is SoT; NetBox is read-sync
+  new_from_sources: add # add = new GLPI / Zabbix / NetBox devices go straight into inventory; review = listed in Discovery first
   netbox:
     enabled: true
     mode: bundled # only "disabled" is read: it turns NetBox sync off

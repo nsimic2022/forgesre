@@ -84,9 +84,30 @@ def sync_librenms(db: Session) -> dict[str, int]:
             remote_name=str(link.get("remote_hostname") or "")[:255], local_port=str(link.get("local_port_id") or "")[:128],
             remote_port=str(link.get("remote_port") or "")[:128], protocol=str(link.get("protocol") or "")[:16], seen_at=utcnow(),
         ))
-    report(db, "inventory", "topology.sync", "ok", summary=f"LibreNMS: {len(links)} links, {matched} between known assets")
+    known = _remember_devices(db, devices)
+    report(db, "inventory", "topology.sync", "ok",
+           summary=f"LibreNMS: {len(links)} links, {matched} between known assets, {known} devices matched to assets")
     db.commit()
     return {"links": len(links), "matched": matched, "devices": len(devices)}
+
+
+def _remember_devices(db: Session, devices: list[dict[str, Any]]) -> int:
+    """Record what LibreNMS knows (sysName, serial, IP) on matching assets. Never adds an asset.
+
+    The serial then lets a GLPI or NetBox record match the same device; a different IP is a conflict.
+    """
+    from app.asset_sources import SourceRecord, build_index, match, reconcile
+
+    index = build_index(db)
+    known = 0
+    for dev in devices:
+        rec = SourceRecord(source="librenms", source_id=str(dev.get("device_id") or ""), name=str(dev.get("hostname") or ""),
+                           sys_name=str(dev.get("sysName") or ""), ip=str(dev.get("ip") or ""), serial=str(dev.get("serial") or ""))
+        asset, disagreement = match(index, rec)
+        if asset is not None:
+            reconcile(db, index, asset, rec, disagreement=disagreement)
+            known += 1
+    return known
 
 
 def suggestions(db: Session) -> list[dict[str, Any]]:
