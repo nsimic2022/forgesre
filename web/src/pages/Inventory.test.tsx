@@ -33,7 +33,8 @@ describe("Inventory", () => {
       urls.push(url);
       if (init?.method === "POST") {
         posts.push({ url, body: JSON.parse(String(init.body)) });
-        return new Response(JSON.stringify({ asset_id: "A9" }), { status: 200, headers: { "Content-Type": "application/json" } });
+        const body = url.endsWith("/bulk-delete") ? { removed: ["A1"], refused: [] } : { asset_id: "A9" };
+        return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       const body = url === "/api/v1/inventory-form" ? options : url.startsWith("/api/v1/inventory/") ? card : page;
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -99,5 +100,15 @@ describe("Inventory", () => {
     fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }));
     await waitFor(() => expect(posts.map((p) => p.url)).toEqual(["/api/v1/assets/A1/delete"]));
     expect(await screen.findByText("Asset deleted.")).toBeTruthy();
+  });
+
+  it("removes the selected assets and exports the filtered list", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Select esx-prod-03" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove selected" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes, remove" }));
+    await waitFor(() => expect(posts.some((p) => p.url === "/api/v1/inventory/bulk-delete" && JSON.stringify(p.body) === JSON.stringify({ ids: ["A1"] }))).toBe(true));
+    expect(await screen.findByText(/Removed 1 asset\./)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Export CSV" }).getAttribute("href")).toContain("/api/v1/inventory.csv");
   });
 });

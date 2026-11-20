@@ -6,7 +6,7 @@ import { CapacityCard } from "../components/CapacityCard";
 import { ImportCsv } from "../components/ImportCsv";
 import { SourcesPanel } from "../components/SourcesPanel";
 import { Card, Chip, Dot } from "../components/ui";
-import { getJson, type AssetCard, type AssetFormOptions, type InventoryPage, type InventoryRow } from "../lib/api";
+import { getJson, postJson, type AssetCard, type AssetFormOptions, type InventoryPage, type InventoryRow } from "../lib/api";
 import { clock, severityTone, type Tone } from "../lib/format";
 
 const PAGE = 50;
@@ -140,6 +140,8 @@ export function InventoryPage() {
   const [notice, setNotice] = useState("");
   const [importing, setImporting] = useState(false);
   const [sources, setSources] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [askDelete, setAskDelete] = useState(false);
 
   const openEditor = (mode: EditorMode, card: AssetCard | null) => {
     setNotice("");
@@ -170,6 +172,16 @@ export function InventoryPage() {
   }, [filters, query, offset, reload]);
 
   const set = (next: Filters) => (setFilters(next), setOffset(0));
+  const removePicked = () =>
+    postJson<{ removed: string[]; refused: { asset_id: string; reason: string }[] }>("/api/v1/inventory/bulk-delete", { ids: picked })
+      .then((r) => {
+        setNotice(`Removed ${r.removed.length} asset${r.removed.length === 1 ? "" : "s"}.${r.refused.length ? ` Not removed: ${r.refused.map((x) => `${x.asset_id} (${x.reason})`).join("; ")}` : ""}`);
+        setPicked([]);
+        setAskDelete(false);
+        setSelected("");
+        setReload((n) => n + 1);
+      })
+      .catch((e: Error) => setError(e.message));
   return (
     <>
       <header className="page-head">
@@ -182,6 +194,7 @@ export function InventoryPage() {
           <button className="btn" type="button" onClick={() => setSources(!sources)} aria-expanded={sources}>Sources</button>
           {data?.can_edit ? <button className="btn" type="button" onClick={() => openEditor("new", null)}>New asset by hand</button> : null}
           {data?.can_edit ? <button className="btn" type="button" onClick={() => (setNotice(""), setImporting(true))}>Import CSV</button> : null}
+          <a className="btn" href={`/api/v1/inventory.csv?${new URLSearchParams({ ...filters, q: query })}`}>Export CSV</a>
           {data?.can_edit ? <Link className="btn primary" to="/inventory/add">Add devices</Link> : null}
         </div>
       </header>
@@ -209,10 +222,29 @@ export function InventoryPage() {
                 <button key={k} className="btn" onClick={() => set({ ...filters, [k]: "" })} aria-label={`Remove filter ${k}`}>{v} ×</button>
               ))}
             </div>
+            {data?.can_edit && picked.length ? (
+              <div className="row" role="group" aria-label="Selected assets">
+                <span className="small">{picked.length} selected</span>
+                {askDelete ? (
+                  <>
+                    <span className="small" style={{ color: "var(--crit)" }}>Remove {picked.length} asset{picked.length === 1 ? "" : "s"}? Their incidents stay, without the asset.</span>
+                    <button className="btn" type="button" style={{ borderColor: "var(--crit)", color: "var(--crit)" }} onClick={removePicked}>Yes, remove</button>
+                    <button className="btn" type="button" onClick={() => setAskDelete(false)}>Keep</button>
+                  </>
+                ) : <button className="btn" type="button" onClick={() => setAskDelete(true)}>Remove selected</button>}
+                <button className="btn" type="button" onClick={() => (setPicked([]), setAskDelete(false))}>Clear</button>
+              </div>
+            ) : null}
             <div className="table-wrap">
               <table className="data" style={{ minWidth: 980 }}>
                 <thead>
                   <tr>
+                    {data?.can_edit ? (
+                      <th style={{ width: 36 }}>
+                        <input type="checkbox" aria-label="Select all on this page" checked={Boolean(data.rows.length) && data.rows.every((r) => picked.includes(r.asset_id))}
+                          onChange={(e) => setPicked(e.target.checked ? Array.from(new Set([...picked, ...data.rows.map((r) => r.asset_id)])) : picked.filter((id) => !data.rows.some((r) => r.asset_id === id)))} />
+                      </th>
+                    ) : null}
                     <th style={{ width: 100 }}>State</th>
                     <th style={{ width: 170 }}>Hostname</th>
                     <th style={{ width: 130 }}>IP</th>
@@ -228,6 +260,9 @@ export function InventoryPage() {
                     const st = STATE[row.state];
                     return (
                       <tr key={row.asset_id} style={selected === row.asset_id ? { background: "var(--accent-bg)" } : undefined}>
+                        {data?.can_edit ? (
+                          <td><input type="checkbox" aria-label={`Select ${row.hostname}`} checked={picked.includes(row.asset_id)} onChange={(e) => setPicked(e.target.checked ? [...picked, row.asset_id] : picked.filter((id) => id !== row.asset_id))} /></td>
+                        ) : null}
                         <td><span className="row" style={{ gap: 8 }}><Dot tone={st.tone} /><span className="small muted">{st.label}</span></span></td>
                         <td>
                           <button type="button" onClick={() => setSelected(row.asset_id)} style={{ background: "none", border: 0, padding: 0, color: "var(--text)", fontWeight: 600, cursor: "pointer", font: "inherit" }}>

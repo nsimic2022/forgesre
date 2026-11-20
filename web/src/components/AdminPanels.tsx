@@ -107,14 +107,41 @@ export function UsersPanel() {
 }
 
 type Archive = { name: string; size: number; mtime: string; label: string };
-type BackupData = { archives: Archive[]; running: boolean; last_job: null | { status: string; error: string; result: string } };
+type BackupData = {
+  archives: Archive[]; running: boolean; last_job: null | { status: string; error: string; result: string };
+  restoring?: boolean; last_restore?: null | { at: string | null; status: string; summary: string; detail: string };
+};
 
-/** Settings › Backup (Admin): make a backup in the background, download, upload, remove. Restore stays a confirmed step on the classic page. */
+/** Restore one backup over this appliance: the warning ticked and RESTORE typed, then a background job. */
+function RestoreBox({ name, onDone }: { name: string; onDone: (started: boolean, error?: string) => void }) {
+  const [ack, setAck] = useState(false);
+  const [word, setWord] = useState("");
+  const go = () =>
+    postJson(`/api/v1/backups/${encodeURIComponent(name)}/restore`, { confirm: word, acknowledged: ack })
+      .then(() => onDone(true))
+      .catch((e: Error) => onDone(false, e.message));
+  return (
+    <div className="cell-stack" style={{ gap: 8, border: "1px solid var(--crit)", borderRadius: 8, padding: 10 }}>
+      <label className="row small" style={{ alignItems: "flex-start" }}>
+        <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+        <span>Restoring <span className="mono">{name}</span> replaces incidents, assets, users, rules and settings with what the backup holds. Everything since then is lost. Make a backup first if unsure.</span>
+      </label>
+      <div className="row">
+        <input className="search" aria-label="Type RESTORE" placeholder="Type RESTORE" value={word} onChange={(e) => setWord(e.target.value)} style={{ width: 160, minWidth: 0 }} />
+        <button className="btn" type="button" disabled={!ack || word.trim() !== "RESTORE"} style={{ borderColor: "var(--crit)", color: "var(--crit)" }} onClick={go}>Restore now</button>
+        <button className="btn" type="button" onClick={() => onDone(false)}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/** Settings › Backup (Admin): make a backup in the background, download, upload, remove, restore (confirmed). */
 export function BackupPanel() {
   const [data, setData] = useState<BackupData | null>(null);
   const [secrets, setSecrets] = useState(true);
   const [models, setModels] = useState(false);
   const [asking, setAsking] = useState("");
+  const [restoring, setRestoring] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const load = () => getJson<BackupData>("/api/v1/backups").then(setData).catch((e: Error) => setError(e.message));
@@ -122,7 +149,7 @@ export function BackupPanel() {
     load();
   }, []);
   useEffect(() => {
-    if (!data?.running) return;
+    if (!data?.running && !data?.restoring) return;
     const timer = window.setTimeout(load, 3000);
     return () => window.clearTimeout(timer);
   }, [data]);
@@ -135,7 +162,7 @@ export function BackupPanel() {
   };
   const remove = (name: string) => getJson(`/api/v1/backups/${encodeURIComponent(name)}`, { method: "DELETE" }).then(() => (setAsking(""), load())).catch((e: Error) => setError(e.message));
   return (
-    <Card title="Backup, import, export" actions={<a className="btn" href="/admin#backup">Restore (classic, asks to confirm)</a>}>
+    <Card title="Backup, import, export">
       <div className="row">
         <label className="row small"><input type="checkbox" checked={secrets} onChange={(e) => setSecrets(e.target.checked)} /> Include secrets (keep the file on trusted storage)</label>
         <label className="row small"><input type="checkbox" checked={models} onChange={(e) => setModels(e.target.checked)} /> Include the LLM model (large)</label>
@@ -145,9 +172,15 @@ export function BackupPanel() {
       {notice ? <div className="banner" role="status" style={{ background: "var(--ok-bg)" }}>{notice}</div> : null}
       {error ? <div className="banner error" role="alert">{error}</div> : null}
       {data?.last_job?.status === "error" ? <div className="banner error" role="alert">Last backup failed: {data.last_job.error}</div> : null}
+      {data?.restoring ? <div className="banner" role="status" style={{ background: "var(--warn-bg)" }}>Restoring… ForgeSRE is replacing its data. Sign in again if the page asks.</div> : null}
+      {data?.last_restore ? (
+        <span className="small" style={{ color: data.last_restore.status === "error" ? "var(--crit)" : "var(--muted)" }}>
+          Last restore {clock(data.last_restore.at)}: {data.last_restore.summary}{data.last_restore.status === "error" && data.last_restore.detail ? ` — ${data.last_restore.detail.slice(0, 200)}` : ""}
+        </span>
+      ) : null}
       <div className="table-wrap">
         <table className="data">
-          <thead><tr><th>Backup</th><th style={{ width: 170 }}>Made</th><th style={{ width: 240 }}>Change</th></tr></thead>
+          <thead><tr><th>Backup</th><th style={{ width: 170 }}>Made</th><th style={{ width: 340 }}>Change</th></tr></thead>
           <tbody>
             {(data?.archives ?? []).map((a) => (
               <tr key={a.name}>
@@ -155,7 +188,8 @@ export function BackupPanel() {
                 <td className="small muted">{clock(a.mtime)}</td>
                 <td>
                   <div className="row" style={{ gap: 6 }}>
-                    <a className="btn" href={`/admin/backups/${encodeURIComponent(a.name)}`}>Download</a>
+                    <a className="btn" href={`/api/v1/backups/${encodeURIComponent(a.name)}/download`}>Download</a>
+                    <button className="btn" type="button" onClick={() => setRestoring(restoring === a.name ? "" : a.name)} aria-label={`Restore backup ${a.name}`}>Restore</button>
                     {asking === a.name ? (
                       <>
                         <button className="btn" type="button" style={{ borderColor: "var(--crit)", color: "var(--crit)" }} onClick={() => remove(a.name)}>Yes, remove</button>
@@ -165,6 +199,9 @@ export function BackupPanel() {
                       <button className="btn" type="button" onClick={() => setAsking(a.name)} aria-label={`Remove backup ${a.name}`}>Remove</button>
                     )}
                   </div>
+                  {restoring === a.name ? (
+                    <RestoreBox name={a.name} onDone={(started, err) => (setRestoring(""), err ? setError(err) : started ? (setNotice("Restore started in the background."), load()) : undefined)} />
+                  ) : null}
                 </td>
               </tr>
             ))}

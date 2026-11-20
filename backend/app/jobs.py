@@ -292,6 +292,23 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload["result"] = result.name
                 row.payload = payload
                 journal_report(db, "backup", "create", "ok", summary=f"Wrote {result.name}", object_type="backup", object_id=result.name)
+            elif row.kind == "backup_restore":
+                from app.backup import CONFIRM_WORD, backup_ident, restore_archive, resolve_archive
+                from app.journal import report as journal_report
+
+                # Replaces the database: this job row may not exist afterwards, so the outcome goes to the journal.
+                path = resolve_archive(row.object_id)
+                actor = str((row.payload or {}).get("actor") or "system")
+                try:
+                    outcome = restore_archive(path, confirm=CONFIRM_WORD, stop_core=False)
+                except Exception as exc:
+                    db.rollback()
+                    journal_report(db, "backup", "restore", "error", summary=f"Restore of {row.object_id} failed", detail=str(exc)[:2000])
+                    raise
+                db.rollback()
+                journal_report(db, "backup", "restore", "ok", summary=f"Restored {backup_ident(path)} (by {actor})",
+                               detail="\n".join(outcome.get("notes") or []), object_type="backup", object_id=backup_ident(path))
+                continue
             elif row.kind == "llm_download":
                 from app.llm_models import run_download
 

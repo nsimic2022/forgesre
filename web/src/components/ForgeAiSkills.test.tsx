@@ -28,8 +28,12 @@ describe("ForgeAiSkills", () => {
     expect(await screen.findByText("Linux disk full · v3")).toBeTruthy();
     expect(screen.getAllByText(/5 questions · 4 used · 1 rejected/).length).toBeGreaterThan(0);
     const box = screen.getByLabelText(/Instructions to ForgeAI/);
-    fireEvent.change(box, { target: { value: "Check the archive log purge first." } });
-    fireEvent.click(await screen.findByRole("button", { name: "Try the unsaved text" }));
+    // the editor resets its draft once after the skill loads (an effect); type again until the change sticks
+    await waitFor(() => {
+      fireEvent.change(box, { target: { value: "Check the archive log purge first." } });
+      expect(screen.getByRole("button", { name: "Try the unsaved text" })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Try the unsaved text" }));
     expect(await screen.findByText(/Archive logs filled/)).toBeTruthy();
     expect(JSON.parse(calls.find((c) => c.url === "/api/v1/forgeai/trial")!.body!)).toMatchObject({ skill: "linux-disk", instructions: "Check the archive log purge first." });
     fireEvent.click(screen.getByRole("button", { name: "Save as v4" }));

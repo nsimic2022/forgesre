@@ -16,7 +16,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "forgeai", label: "ForgeAI skills" },
 ];
 // Classic pages that still do the editing.
-const EDIT: Record<Tab, string> = { filters: "", rules: "", escalation: "", playbooks: "", maintenance: "", forgeai: "" };
 type Rule = Automation["rules"][number];
 type Book = Automation["playbooks"][number];
 type Policy = Automation["policies"][number];
@@ -121,7 +120,7 @@ export function AutomationPage() {
           <h1>Automation</h1>
           <span className="muted">What happens between an alarm and someone’s phone</span>
         </div>
-        {data?.can_edit && EDIT[tab] ? <a className="btn" href={EDIT[tab]}>Edit in classic UI</a> : null}
+        <a className="btn" href="/api/v1/automation/export" title="Rules, playbooks, escalation, noise filters, on-call, SLOs and ForgeAI skills as one JSON file">Export (JSON)</a>
       </header>
       {error ? <div className="banner error" role="alert">{error}</div> : null}
       {p ? (
