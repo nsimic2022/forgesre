@@ -22,6 +22,8 @@ demoted, so you cannot lock yourself out.
 One section per area: general, checks, network, integrations, discovery, notification
 channels, ForgeRCA / ForgeAI, messages and templates, appearance, services, users, backup.
 
+![Integrations](../images/ui-settings-integrations.png)
+
 **Integrations** has a card for each source (Zabbix, GLPI, LibreNMS, NetBox, Kubernetes) and
 each part of the monitoring stack (Prometheus, Alertmanager, Loki, Alloy, Grafana, SNMP exporter,
 the ForgeAI model): status, last sync, **Open** to go to its own web page, **Test connection**,

@@ -12,6 +12,8 @@ Engineer.
 **Inventory › Add devices** is the way in. It does not stop at "saved": it shows you that
 metrics and alarms really arrive.
 
+![Add devices](../images/ui-inventory-add.png)
+
 **One device**
 
 1. Enter the IP. For switches, routers, firewalls and storage, give the SNMP credentials:

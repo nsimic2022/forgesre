@@ -35,7 +35,11 @@ PAGES = [
     ("automation-escalation", "/app/automation", "role=tab[name='Escalation']"),
     ("investigations", "/app/investigations", None),
     ("reports", "/app/reports", None),
+    ("inventory-add", "/app/inventory/add", None),
     ("settings", "/app/settings", None),
+    ("settings-integrations", "/app/settings", "role=button[name='Integrations']"),
+    ("settings-messages", "/app/settings", "role=button[name='Messages and templates']"),
+    ("settings-appearance", "/app/settings", "role=button[name='Appearance']"),
 ]
 
 
