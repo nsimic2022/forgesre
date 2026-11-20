@@ -95,6 +95,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `verify [asset]` | Live chain: exporter → prometheus → alertmanager → core |
 | `ping [asset]` / `probe` | ICMP + exporter `/metrics` from this host |
 | `assets` / `inventory` | Inventory with `#` |
+| `capacity ASSET` | About 30 days of disk use and interface receive, `~N days to full` (`!` at 30 days or less); `--refresh` reads again (cached 15 min) |
 | `snmp` | snmp_exporter health + SNMP HTTP SD targets |
 | `sd` | Prometheus HTTP SD (Linux / Windows) and SNMP HTTP SD |
 | `incidents [INC-…]` | Short colored board, or one incident |
