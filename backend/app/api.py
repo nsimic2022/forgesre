@@ -2342,6 +2342,28 @@ def settings_test(component: str, user: User = Depends(require("run_checks"))) -
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.get("/integrations")
+def integrations_api(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Settings › Integrations: status, web UI links, last sync and settings per integration."""
+    from app.integrations_view import integrations
+
+    return integrations(db, request.headers.get("host", ""))
+
+
+@router.post("/integrations/{target}/sync")
+def integrations_sync(target: str, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Sync one integration now in the background (``integration_sync`` job). The result lands in the journal."""
+    from app.integrations_view import SYNC_KINDS
+    from app.jobs import enqueue
+
+    if target not in SYNC_KINDS:
+        raise HTTPException(status_code=404, detail="nothing to sync for this integration")
+    job = enqueue(db, "integration_sync", target, object_type="integration", payload={"actor": user.email})
+    audit(db, "integration.sync", actor=user.email, object_type="integration", object_id=target)
+    db.commit()
+    return {"queued": True, "job": getattr(job, "id", None)}
+
+
 @router.get("/tv")
 def tv_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict[str, Any]:
     """Wall screen: the NOC overview, the 12-hour incident clock and 14 days of incidents per day."""

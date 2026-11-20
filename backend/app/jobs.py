@@ -135,6 +135,12 @@ def recover_interrupted_jobs(db: Session) -> dict[str, int]:
     return {"requeued": requeued, "failed": failed}
 
 
+def _json_safe(value: Any) -> Any:
+    import json
+
+    return json.loads(json.dumps(value, default=str))
+
+
 def job_is_llm(row: Job) -> bool:
     """True when this investigate job will wait on llama.cpp."""
     if row.kind == FORGEAI_DIGEST_KIND:
@@ -281,6 +287,13 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload["result"] = result.name
                 row.payload = payload
                 journal_report(db, "backup", "create", "ok", summary=f"Wrote {result.name}", object_type="backup", object_id=result.name)
+            elif row.kind == "integration_sync":
+                from app.integrations_view import run_sync
+
+                # Zabbix / GLPI / NetBox / LibreNMS read with their own client timeouts.
+                payload = dict(row.payload or {})
+                payload["result"] = _json_safe(run_sync(db, row.object_id))
+                row.payload = payload
             elif row.kind == "report_send":
                 from app.models import ScheduledReport
                 from app.services import _report_job, _send_report_job

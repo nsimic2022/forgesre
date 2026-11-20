@@ -19,9 +19,17 @@ demoted, so you cannot lock yourself out.
 
 ![Settings](../images/ui-settings.png)
 
-One card per area: mail, chat, discovery, integrations (NetBox, LibreNMS, GLPI, Zabbix,
-Kubernetes), ForgeAI, retention. Each card has **Test**; a failing integration shows its
-error on its card and in the journal, but never stops alarms coming in.
+One section per area: general, checks, network, integrations, discovery, notification
+channels, ForgeRCA / ForgeAI, messages and templates, appearance, services, users, backup.
+
+**Integrations** has a card for each source (Zabbix, GLPI, LibreNMS, NetBox, Kubernetes) and
+each part of the monitoring stack (Prometheus, Alertmanager, Loki, Alloy, Grafana, SNMP exporter,
+the ForgeAI model): status, last sync, **Open** to go to its own web page, **Test connection**,
+**Sync now** and its settings. A failing integration shows its error on its card and in the
+journal, but never stops alarms coming in.
+
+**Appearance** sets the colour theme for your browser: Signal (dark), Light, Midnight, High
+contrast, or follow the computer.
 
 The same from the shell:
 
