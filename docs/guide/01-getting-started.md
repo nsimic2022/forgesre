@@ -64,6 +64,11 @@ This raises a fake high-CPU alarm on a demo host. Within a minute an incident ap
 the NOC page, the owner gets an email (if mail is set up) and ForgeRCA adds its first
 findings. `./forgesre demo-reset` calms it down again.
 
+The same from the browser: **Settings › Demo** (Admin) has a **Run** button for each lab
+scenario (high CPU, disk filling, host down, Linux NodeCPUHigh, Windows CPU, network device
+down) and **Lower demo gauges**. Each opens a DEMO-tagged incident on a forge-demo-* asset and
+links to it; real hosts are never touched.
+
 ## Next
 
 - Add your first servers and switches: [Assets and dependencies](03-assets.md)
