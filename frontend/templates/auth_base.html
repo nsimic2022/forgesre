@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ForgeSRE{% endblock %}</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0a0b0d; --s1: #111317; --s2: #181b21; --border: #22262e; --text: #eceff3;
+            --muted: #a7b0bc; --accent: #4fc3f7; --on-accent: #06202c; --crit: #ff6b6b; }
+    @media (prefers-color-scheme: light) {
+      :root { color-scheme: light; --bg: #f4f6f8; --s1: #ffffff; --s2: #eef1f5; --border: #d5dbe3; --text: #0f172a;
+              --muted: #475569; --accent: #0369a1; --on-accent: #ffffff; --crit: #b91c1c; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--text);
+           font: 15px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; padding: 16px; }
+    .card { width: 100%; max-width: 380px; background: var(--s1); border: 1px solid var(--border); border-radius: 12px; padding: 28px; }
+    h1 { margin: 0 0 18px; font-size: 20px; letter-spacing: .02em; }
+    h1 span { color: var(--accent); }
+    label { display: block; margin-bottom: 14px; color: var(--muted); font-size: 13px; }
+    input { display: block; width: 100%; margin-top: 6px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+            background: var(--s2); color: var(--text); font: inherit; }
+    button, .button { display: block; width: 100%; padding: 10px 12px; border: 0; border-radius: 8px; background: var(--accent);
+                      color: var(--on-accent); font: inherit; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; }
+    .button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .error { color: var(--crit); margin: 0 0 14px; overflow-wrap: anywhere; }
+    .muted { color: var(--muted); }
+    .or { text-align: center; color: var(--muted); margin: 14px 0; font-size: 13px; }
+    a { color: var(--accent); }
+    p { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1><span>F/</span> ForgeSRE</h1>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

@@ -13,18 +13,3 @@ def web_dist_dir() -> Path:
 
 def web_ui_available() -> bool:
     return (web_dist_dir() / "index.html").is_file()
-
-
-def ui_home() -> str:
-    """Which UI opens at /: "new" (default when the new UI is built) or "classic" (ui.home in forgesre.yml)."""
-    from app.settings import settings
-
-    value = str(((settings.yaml or {}).get("ui") or {}).get("home") or "new").strip().lower()
-    return "classic" if value == "classic" else "new"
-
-
-def home_redirect() -> str | None:
-    """Where / should send a signed-in user, or None to render the classic dashboard."""
-    if ui_home() == "new" and web_ui_available():
-        return "/app/"
-    return None

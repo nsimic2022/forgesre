@@ -680,20 +680,6 @@ def test_demo_lab_skips_target_and_series():
     assert "DEMO" in text
 
 
-def test_verify_templates_show_chain_hops():
-    root = Path(__file__).resolve().parents[1]
-    one = (root / "frontend" / "templates" / "asset_verify.html").read_text(encoding="utf-8")
-    many = (root / "frontend" / "templates" / "assets_verify.html").read_text(encoding="utf-8")
-    assert "exporter → prometheus → alertmanager → core" in one
-    assert "Prom target" in one
-    assert "Series present" in one
-    assert "Alertmanager" in one
-    assert "Core (this asset)" in one
-    assert 'class="info-tip"' not in many
-    assert "Target" in many
-    assert "Series" in many
-
-
 def test_cli_help_verify_mentions_chain():
     import subprocess
 

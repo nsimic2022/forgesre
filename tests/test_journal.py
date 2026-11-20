@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.journal import KEEP_DAYS, KEEP_PER_MODULE, list_entries, next_error_ack_id, prune_module, prune_older_than, report
-from app.main import app
 from app.models import JournalEntry, utcnow
 from app.seed import seed
 
@@ -40,67 +39,6 @@ def test_journal_prunes_old_rows_per_module():
     db.close()
 
 
-def test_journal_redirects_to_health_and_nav_has_no_journal_item():
-    client = TestClient(app)
-    login = client.post(
-        "/login",
-        data={"email": "admin@forgesre.local", "password": "testpass"},
-        follow_redirects=False,
-    )
-    assert login.status_code in {302, 303}
-    bounced = client.get("/journal?status=error&q=smtp", follow_redirects=False)
-    assert bounced.status_code == 302
-    assert bounced.headers["location"] == "/health-ui?status=error&q=smtp#journal"
-    health = client.get("/health-ui")
-    assert health.status_code == 200
-    assert 'id="journal"' in health.text
-    section = health.text.split('id="journal"', 1)[1]
-    assert "Journal modules" not in section
-    assert "any status" not in section
-    assert 'placeholder="Search module, status, summary, netbox, warn' in section
-    assert 'name="status"' not in section.split("<form", 1)[1].split("</form>", 1)[0]
-    assert 'name="selected"' in section
-    assert 'action="/journal/export"' in section
-    assert 'action="/journal/bulk-delete"' in section
-    assert 'class="pager-bar"' in section
-    nav = health.text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
-    assert ">Journal<" not in nav
-    assert 'href="/journal"' not in nav
-    assert 'href="/health-ui"' in nav
-
-
-def test_console_page_and_api():
-    client = TestClient(app)
-    login = client.post(
-        "/login",
-        data={"email": "admin@forgesre.local", "password": "testpass"},
-        follow_redirects=False,
-    )
-    assert login.status_code in {302, 303}
-    page = client.get("/journal")
-    assert page.status_code == 200
-    assert b"Journal" in page.content
-    home = client.get("/")
-    assert b"Recent incidents" in home.content
-    assert b"Recent journal" not in home.content
-    data = client.get("/api/v1/journal").json()
-    assert "entries" in data
-    assert "modules" in data
-    created = client.post(
-        "/api/v1/journal",
-        json={
-            "module": "install",
-            "action": "install",
-            "status": "ok",
-            "summary": "Install finished profile=standard port=8080",
-        },
-    )
-    assert created.status_code == 200
-    assert created.json()["module"] == "install"
-    filtered = client.get("/api/v1/journal?module=install").json()
-    assert any(item["action"] == "install" for item in filtered["entries"])
-
-
 def test_keep_default_is_small():
     assert KEEP_PER_MODULE == 200
     assert KEEP_DAYS == 30
@@ -133,24 +71,3 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
     assert login.status_code in {302, 303}
 
 
-def test_dashboard_has_no_journal_error_banner():
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    seed(db)
-    report(db, "notification", "smtp.send", "error", summary="SMTP send failed no-dash-banner")
-    db.close()
-
-    client = TestClient(app)
-    _login(client)
-    home = client.get("/")
-    assert home.status_code == 200
-    assert b'id="journal-error-banner"' not in home.content
-    assert b"banner-short" not in home.content
-    assert b"/dashboard/journal-ack" not in home.content
-    assert b"Recent incidents" in home.content
-    assert b"Recent journal" not in home.content
-    assert b"SMTP send failed no-dash-banner" not in home.content
-    health = client.get("/health-ui")
-    assert health.status_code == 200
-    assert b'SMTP send failed no-dash-banner' in health.content.split(b'id="journal"', 1)[1]
-    assert client.post("/dashboard/journal-ack", data={"until_id": "1"}, follow_redirects=False).status_code in {404, 405}

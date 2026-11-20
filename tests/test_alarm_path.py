@@ -362,12 +362,6 @@ def test_automatic_rca_is_not_an_ack_and_escalation_keeps_going():
     assert incident.id in _unacked_ids(db)
     assert _unacked_count(db) == tile_before
 
-    client = _login()
-    page = client.get(f"/incidents/{incident.number}")
-    assert 'value="INVESTIGATING" class="todo">Acknowledge' in page.text
-    listed = client.get("/incidents?status=unacked&per_page=100")
-    assert listed.status_code == 200
-    assert f"/incidents/{incident.number}?status=unacked" in listed.text
 
     incident.started_at = utcnow() - timedelta(minutes=16)
     db.commit()
@@ -387,16 +381,14 @@ def test_human_acknowledge_sets_ack_at_and_stops_the_ladder():
     run_investigation(db, incident, actor="system", use_llm=False)
     tile_before = _unacked_count(db)
     client = _login()
-    posted = client.post(f"/incidents/{incident.number}/status", data={"status": "INVESTIGATING"}, follow_redirects=False)
-    assert posted.status_code == 302
+    posted = client.post(f"/api/v1/incidents/{incident.number}/status", json={"status": "INVESTIGATING"})
+    assert posted.status_code == 200
     db.expire_all()
     incident = db.get(Incident, incident.id)
     assert incident.status == "INVESTIGATING"
     assert incident.ack_at is not None and incident.ack_by == "admin@forgesre.local"
     assert incident.id not in _unacked_ids(db)
     assert _unacked_count(db) == tile_before - 1
-    page = client.get(f"/incidents/{incident.number}")
-    assert 'value="INVESTIGATING" class="done">Acknowledge' in page.text
 
     incident.started_at = utcnow() - timedelta(minutes=40)
     db.commit()
@@ -416,14 +408,12 @@ def test_acknowledge_on_escalated_keeps_escalated():
     incident = db.get(Incident, incident.id)
     assert incident.status == "ESCALATED" and incident.ack_at is None
     client = _login()
-    assert 'value="INVESTIGATING" class="todo">Acknowledge' in client.get(f"/incidents/{incident.number}").text
-    client.post(f"/incidents/{incident.number}/status", data={"status": "INVESTIGATING"}, follow_redirects=False)
+    assert client.post(f"/api/v1/incidents/{incident.number}/status", json={"status": "INVESTIGATING"}).status_code == 200
     db.expire_all()
     incident = db.get(Incident, incident.id)
     assert incident.status == "ESCALATED"
     assert incident.ack_at is not None and incident.ack_by == "admin@forgesre.local"
     assert incident.id not in _unacked_ids(db)
-    assert 'value="INVESTIGATING" class="done">Acknowledge' in client.get(f"/incidents/{incident.number}").text
     db.close()
 
 
@@ -434,7 +424,7 @@ def test_acknowledge_on_resolved_does_not_reopen():
     incident = ingest_alertmanager(db, _group(_series(name, host.asset_id, "firing")))[0]
     ingest_alertmanager(db, _group(_series(name, host.asset_id, "resolved")))
     client = _login()
-    client.post(f"/incidents/{incident.number}/status", data={"status": "INVESTIGATING"}, follow_redirects=False)
+    client.post(f"/api/v1/incidents/{incident.number}/status", json={"status": "INVESTIGATING"})
     db.expire_all()
     incident = db.get(Incident, incident.id)
     assert incident.status == "RESOLVED"
@@ -472,22 +462,14 @@ def test_unacked_filter_counts_every_active_status_without_an_open_cube():
     assert {rows["open"], rows["inv"], rows["esc"]} <= unacked
     assert rows["inv-acked"] not in unacked and rows["res"] not in unacked
     assert _unacked_count(db) == len(unacked)
-    client = _login()
-    home = client.get("/")
-    alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
-    assert 'data-tile="open"' not in home.text
-    assert 'data-tile="escalated"' in alarms
-    assert 'href="/incidents?status=ESCALATED"' in alarms
-    assert "demo=0" not in alarms
-    assert ">Open<" not in alarms and ">Escalated<" in alarms
-    listed = client.get("/incidents?status=unacked&per_page=100").text
-    assert f"ap tile inv {token}" in listed
-    assert f"ap tile inv-acked {token}" not in listed
-    assert '<option value="unacked" selected>Not acknowledged</option>' in listed
     db.close()
 
 
 # --- B4: jobs after Core restart ---------------------------------------------------
+
+
+def llm_job_pending(db, number: str) -> bool:
+    return db.query(Job).filter(Job.kind == "investigate", Job.object_id == number, Job.status.in_(["pending", "running"])).first() is not None
 
 
 def _running(db, kind: str, object_id: str, *, attempts: int = 1, payload: dict | None = None) -> Job:
@@ -498,8 +480,6 @@ def _running(db, kind: str, object_id: str, *, attempts: int = 1, payload: dict 
 
 
 def test_recover_interrupted_jobs_requeues_or_fails_running_rows():
-    from app.web import llm_job_pending
-
     db = _db()
     number = f"INC-AP-{uuid4().hex[:6]}"
     llm = _running(db, "investigate", number, payload={"actor": "system", "force": True, "use_llm": True})
@@ -533,8 +513,6 @@ def test_recover_interrupted_jobs_requeues_or_fails_running_rows():
 
 
 def test_requeued_rca_job_runs_and_rerun_can_queue():
-    from app.web import llm_job_pending
-
     db = _db()
     host = _host(db, "ap-job")
     incident = ingest_alertmanager(db, _group(_series(f"ApJob{uuid4().hex[:6]}", host.asset_id, "firing")))[0]

@@ -27,7 +27,6 @@ from app.migrate import migrate
 from app.models import Asset
 from app.seed import DEMO_ASSET, seed, seed_summary
 from app.settings import assert_runtime_secrets, settings
-from app.bulk import router as bulk_router
 from app.web import NotAuthenticated, router as web_router
 
 log = logging.getLogger("forgesre")
@@ -224,7 +223,7 @@ _snmp_last = 0.0
 
 
 def _queue_snmp_apply(db: Session) -> None:
-    """Leader only: every 5 minutes, write pending per-asset SNMP auths (also edits made in classic)."""
+    """Leader only: every 5 minutes, write pending per-asset SNMP auths."""
     global _snmp_last
     if time.monotonic() - _snmp_last < _SNMP_EVERY:
         return
@@ -321,14 +320,10 @@ def create_app() -> FastAPI:
         leader.release()
 
     app = FastAPI(title="ForgeSRE", version="2.0.0", lifespan=lifespan)
-    static_dir = settings.frontend_dir / "static"
-    if static_dir.exists():
-        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     _mount_web_app(app)
     app.mount("/mcp", asgi_app(mcp))  # read-only MCP; 404 until mcp.enabled and MCP_TOKEN are set
     app.include_router(api_router)
     app.include_router(web_router)
-    app.include_router(bulk_router)
     from app.api import librenms_webhook, zabbix_webhook
 
     # Short aliases for media types typed by hand (same handlers as /api/v1/webhooks/...).

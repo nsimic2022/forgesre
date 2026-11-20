@@ -223,7 +223,7 @@ EOF
       ;;
     doctor)
       cat <<'EOF'
-doctor — same checks as /health-ui. Overall HEALTHY or DEGRADED.
+doctor — same checks as Settings › Services and health. Overall HEALTHY or DEGRADED.
 
   ./forgesre doctor
   ./doctor.sh

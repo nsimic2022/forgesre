@@ -36,7 +36,19 @@ def test_demo_scenario_opens_a_lab_incident_in_a_job():
     job = admin.post("/api/v1/demo/run", json={"scenario": "network"}).json()["job"]
     assert admin.get(f"/api/v1/demo/jobs/{job}").json()["status"] == "pending"
     db = SessionLocal()
-    run_pending_jobs(db, limit=10)
+    # Other tests share this database; park their pending jobs so only the demo job runs.
+    from app.models import Job
+
+    others = db.query(Job).filter(Job.status == "pending", Job.id != job).all()
+    for row in others:
+        row.status = "parked"
+    db.commit()
+    try:
+        run_pending_jobs(db, limit=10)
+    finally:
+        for row in others:
+            row.status = "pending"
+        db.commit()
     done = admin.get(f"/api/v1/demo/jobs/{job}").json()
     assert done["status"] == "done", done
     incident = db.query(Incident).filter_by(number=done["result"]["incident"]).one()

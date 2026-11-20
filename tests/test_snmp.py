@@ -104,41 +104,6 @@ def test_snmp_playrule_and_playbook_seeded():
     db.close()
 
 
-def test_asset_page_and_api_mark_snmp_target():
-    db = _db()
-    db.add(
-        Asset(
-            asset_id="edge-sw-01",
-            hostname="edge-sw-01",
-            ip="10.50.1.1",
-            type="Network device",
-            monitoring_profile="network-switch",
-            scrape_address="",
-        )
-    )
-    db.commit()
-    client = TestClient(app)
-    login = client.post(
-        "/login",
-        data={"email": "admin@forgesre.local", "password": "testpass"},
-        follow_redirects=False,
-    )
-    assert login.status_code in {302, 303}
-    stale = client.get("/assets/edge-sw-01", follow_redirects=False)
-    assert stale.status_code == 303
-    assert stale.headers["location"] == "/assets?edit=edge-sw-01"
-    page = client.get("/assets?edit=edge-sw-01")
-    assert page.status_code == 200
-    assert b'name="snmp_port"' in page.content or b"SNMP" in page.content
-    data = client.get("/api/v1/assets/edge-sw-01").json()
-    assert data["snmp"] is True
-    demo = client.get("/api/v1/assets/forge-demo-01").json()
-    assert demo["snmp"] is False
-    doctor = client.get("/api/v1/system/doctor", headers={"Authorization": "Bearer forgesre-dev-webhook-token"}).json()
-    assert "snmp" in doctor["components"]
-    db.close()
-
-
 def test_cli_help_documents_snmp_and_assets():
     import subprocess
     from pathlib import Path

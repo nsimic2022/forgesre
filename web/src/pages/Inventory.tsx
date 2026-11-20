@@ -118,7 +118,6 @@ function AssetPanel({ assetId, onClose, onEdit }: { assetId: string; onClose: ()
           <>
             <button className="btn primary" type="button" onClick={() => onEdit("edit", card)}>Edit</button>
             <button className="btn" type="button" onClick={() => onEdit("clone", card)}>Clone</button>
-            <a className="btn" href={`/assets/${encodeURIComponent(card.asset_id)}`}>More (classic)</a>
           </>
         ) : null}
       </div>

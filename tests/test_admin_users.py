@@ -18,124 +18,6 @@ def _login(client: TestClient, email: str = "admin@forgesre.local", password: st
     client.post("/login", data={"email": email, "password": password}, follow_redirects=False)
 
 
-def test_admin_lists_users_and_selects_one():
-    db = _db()
-    client = TestClient(app)
-    _login(client)
-    created = client.post(
-        "/admin/users",
-        data={"email": "ops@dc.local", "name": "Ops", "password": "ops-pass", "role": "analyst"},
-        follow_redirects=False,
-    )
-    assert created.status_code == 303
-    row = db.query(User).filter_by(email="ops@dc.local").one()
-    assert row.password_hash.startswith("$2")
-    assert row.password_hash != "ops-pass"
-    assert verify_password("ops-pass", row.password_hash)
-    page = client.get(f"/admin?selected={row.id}")
-    assert page.status_code == 200
-    assert "Edit user" in page.text
-    assert ">Remove<" in page.text
-    assert "Clone" in page.text
-    assert "user-actions" in page.text
-    assert f'action="/admin/users/{row.id}"' in page.text
-    assert "ops@dc.local" in page.text
-    db.close()
-
-
-def test_admin_edit_user_name_role_and_password():
-    db = _db()
-    client = TestClient(app)
-    _login(client)
-    client.post(
-        "/admin/users",
-        data={"email": "eng@dc.local", "name": "Eng", "password": "old-pass", "role": "engineer"},
-        follow_redirects=False,
-    )
-    row = db.query(User).filter_by(email="eng@dc.local").one()
-    saved = client.post(
-        f"/admin/users/{row.id}",
-        data={"email": "eng@dc.local", "name": "Engineer One", "password": "new-pass", "role": "analyst"},
-        follow_redirects=False,
-    )
-    assert saved.status_code == 303
-    db.refresh(row)
-    assert row.name == "Engineer One"
-    assert row.role == "analyst"
-    assert verify_password("new-pass", row.password_hash)
-    db.close()
-
-
-def test_admin_blank_password_keeps_hash():
-    db = _db()
-    client = TestClient(app)
-    _login(client)
-    client.post(
-        "/admin/users",
-        data={"email": "keep@dc.local", "name": "Keep", "password": "keep-pass", "role": "viewer"},
-        follow_redirects=False,
-    )
-    row = db.query(User).filter_by(email="keep@dc.local").one()
-    old = row.password_hash
-    client.post(
-        f"/admin/users/{row.id}",
-        data={"email": "keep@dc.local", "name": "Keep", "password": "", "role": "viewer"},
-        follow_redirects=False,
-    )
-    db.refresh(row)
-    assert row.password_hash == old
-    db.close()
-
-
-def test_admin_cannot_remove_self():
-    db = _db()
-    client = TestClient(app)
-    _login(client)
-    admin = db.query(User).filter_by(email="admin@forgesre.local").one()
-    denied = client.post(f"/admin/users/{admin.id}/delete", follow_redirects=False)
-    assert denied.status_code == 400
-    assert db.get(User, admin.id) is not None
-    page = client.get(f"/admin?selected={admin.id}")
-    assert "cannot be removed" in page.text.lower() or "cannot remove" in page.text.lower()
-    db.close()
-
-
-def test_admin_remove_other_user():
-    db = _db()
-    client = TestClient(app)
-    _login(client)
-    client.post(
-        "/admin/users",
-        data={"email": "gone@dc.local", "name": "Gone", "password": "x", "role": "viewer"},
-        follow_redirects=False,
-    )
-    row = db.query(User).filter_by(email="gone@dc.local").one()
-    deleted = client.post(f"/admin/users/{row.id}/delete", follow_redirects=False)
-    assert deleted.status_code == 303
-    assert deleted.headers["location"] == "/admin"
-    assert db.query(User).filter_by(email="gone@dc.local").first() is None
-    db.close()
-
-
-def test_duplicate_email_rejected():
-    db = _db()
-    client = TestClient(app)
-    _login(client)
-    first = client.post(
-        "/admin/users",
-        data={"email": "dup@dc.local", "name": "A", "password": "x", "role": "viewer"},
-        follow_redirects=False,
-    )
-    assert first.status_code == 303
-    second = client.post(
-        "/admin/users",
-        data={"email": "DUP@dc.local", "name": "B", "password": "y", "role": "viewer"},
-        follow_redirects=False,
-    )
-    assert second.status_code == 400
-    db.close()
-
-
 def test_api_update_and_delete_user():
     db = _db()
     client = TestClient(app)
@@ -156,99 +38,6 @@ def test_api_update_and_delete_user():
     assert gone.status_code == 200
     db.expire_all()
     assert db.query(User).filter_by(id=user_id).first() is None
-    db.close()
-
-
-def test_admin_create_user_phones_and_manual_oncall():
-    db = _db()
-    client = TestClient(app)
-    _login(client)
-    page = client.get("/admin")
-    assert page.status_code == 200
-    create = page.text.split("Create user", 1)[1]
-    assert (
-        create.index('name="name"')
-        < create.index('name="surname"')
-        < create.index('name="phone"')
-        < create.index('name="phone2"')
-        < create.index('name="email"')
-        < create.index('name="email2"')
-        < create.index('name="password"')
-        < create.index('name="role"')
-    )
-    assert 'class="form-grid person-grid"' in page.text
-    assert ">Surname<" in page.text
-    users_head = page.text.split('class="user-table"', 1)[1].split("</thead>", 1)[0]
-    assert users_head.index(">Email<") < users_head.index(">Name<") < users_head.index(">Surname<") < users_head.index(">Phone<")
-    created = client.post(
-        "/admin/users",
-        data={
-            "email": "noc@dc.local",
-            "email2": "noc-alt@dc.local",
-            "name": "Noc",
-            "surname": "One",
-            "password": "noc-pass",
-            "role": "analyst",
-            "phone": "+381-11-555-0100",
-            "phone2": "+381-11-555-0101",
-        },
-        follow_redirects=False,
-    )
-    assert created.status_code == 303
-    row = db.query(User).filter_by(email="noc@dc.local").one()
-    assert row.phone == "+381-11-555-0100"
-    assert row.phone2 == "+381-11-555-0101"
-    assert row.surname == "One"
-    assert row.email2 == "noc-alt@dc.local"
-    listed = client.get("/admin")
-    assert "+381-11-555-0100" in listed.text
-    assert "+381-11-555-0101" in listed.text
-    assert ">One<" in listed.text or "One" in listed.text
-    saved = client.post(
-        f"/admin/users/{row.id}",
-        data={
-            "email": "noc@dc.local",
-            "email2": "noc-desk@dc.local",
-            "name": "Noc",
-            "surname": "One",
-            "password": "",
-            "role": "analyst",
-            "phone": "+381-11-555-0200",
-            "phone2": "+381-11-555-0201",
-        },
-        follow_redirects=False,
-    )
-    assert saved.status_code == 303
-    db.refresh(row)
-    assert row.phone == "+381-11-555-0200"
-    assert row.phone2 == "+381-11-555-0201"
-    assert row.email2 == "noc-desk@dc.local"
-    esc = client.get("/escalation")
-    assert esc.status_code == 200
-    assert 'data-oncall-person' not in esc.text
-    assert 'data-oncall-name' in esc.text
-    assert "Noc One" in esc.text.split('id="oncall-people"', 1)[1]
-    slot = client.post(
-        "/escalation/oncall",
-        data={
-            "weekday": "0",
-            "start": "08:00",
-            "end": "16:00",
-            "name": "Noc",
-            "surname": "One",
-            "email": "noc@dc.local",
-            "phone": "+381-11-555-0200",
-            "phone2": "+381-11-555-0201",
-        },
-        follow_redirects=False,
-    )
-    assert slot.status_code in {302, 303}
-    roster = client.get("/escalation")
-    body = roster.text.split('data-oncall-roster', 1)[1].split("</table>", 1)[0]
-    assert "Noc One" in body
-    assert "analyst" not in body.lower()
-    assert "+381-11-555-0200" in body
-    assert "+381-11-555-0201" in body
     db.close()
 
 
@@ -299,4 +88,56 @@ def test_migrate_merges_super_admin_into_admin():
     for row in rows.values():
         db.delete(row)
     db.commit()
+    db.close()
+
+
+def _create(client: TestClient, **fields) -> int:
+    made = client.post("/api/v1/users", json=fields)
+    assert made.status_code == 200, made.text
+    return made.json()["id"]
+
+
+def test_api_create_hashes_password_and_keeps_phones():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    user_id = _create(
+        client, email="noc@dc.local", email2="noc-alt@dc.local", name="Noc", surname="One",
+        password="noc-pass", role="analyst", phone="+381-11-555-0100", phone2="+381-11-555-0101",
+    )
+    row = db.get(User, user_id)
+    assert row.password_hash.startswith("$2") and verify_password("noc-pass", row.password_hash)
+    assert (row.surname, row.email2, row.phone, row.phone2) == ("One", "noc-alt@dc.local", "+381-11-555-0100", "+381-11-555-0101")
+    listed = client.get("/api/v1/users-page").json()
+    assert "noc@dc.local" in str(listed)
+    db.close()
+
+
+def test_api_edit_changes_password_and_blank_keeps_hash():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    user_id = _create(client, email="eng@dc.local", name="Eng", password="old-pass", role="engineer")
+    assert client.post(f"/api/v1/users/{user_id}", json={"name": "Engineer One", "password": "new-pass", "role": "analyst"}).status_code == 200
+    row = db.get(User, user_id)
+    db.refresh(row)
+    assert (row.name, row.role) == ("Engineer One", "analyst")
+    assert verify_password("new-pass", row.password_hash)
+    old = row.password_hash
+    assert client.post(f"/api/v1/users/{user_id}", json={"password": "", "phone": "+381-11-555-0200"}).status_code == 200
+    db.refresh(row)
+    assert row.password_hash == old and row.phone == "+381-11-555-0200"
+    db.close()
+
+
+def test_api_cannot_remove_self_and_rejects_duplicate_email():
+    db = _db()
+    client = TestClient(app)
+    _login(client)
+    admin = db.query(User).filter_by(email="admin@forgesre.local").one()
+    denied = client.post(f"/api/v1/users/{admin.id}/delete")
+    assert denied.status_code == 400
+    assert db.get(User, admin.id) is not None
+    _create(client, email="dup@dc.local", name="A", password="x", role="viewer")
+    assert client.post("/api/v1/users", json={"email": "DUP@dc.local", "name": "B", "password": "y", "role": "viewer"}).status_code == 400
     db.close()

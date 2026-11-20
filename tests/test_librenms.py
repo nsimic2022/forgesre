@@ -185,30 +185,6 @@ def test_get_devices_many_gathers_without_raising(monkeypatch):
     assert "error" in by["10.1.1.2"]
 
 
-def test_identify_post_uses_librenms_not_ber(monkeypatch):
-    seen: dict[str, str] = {}
-
-    def fake_discover(ip, **kwargs):
-        seen["community"] = kwargs.get("community") or ""
-        seen["ip"] = ip
-        assert kwargs.get("disable_polling") is True
-        return _inventory()
-
-    monkeypatch.setattr("app.librenms.discover_device", fake_discover)
-    client = _client()
-    response = client.post(
-        "/discovery/snmp",
-        data={"action": "identify", "ip": "10.8.8.8", "port": "161", "version": "v2c", "community": SECRET, "timeout": "0.8"},
-    )
-    assert response.status_code == 200
-    assert seen["community"] == SECRET
-    assert "Cisco" in response.text
-    assert "ifNumber" in response.text
-    assert "LibreNMS" in response.text
-    assert SECRET not in response.text
-    assert "recommend" in response.text
-
-
 def test_onboard_config_has_no_secrets():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()

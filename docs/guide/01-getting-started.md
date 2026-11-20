@@ -51,8 +51,7 @@ You land on the **NOC overview**: the page your team will look at all day.
 
 Along the left: NOC, Incidents, Inventory, Automation, Investigations, Reports and
 Settings. At the bottom, whether ForgeRCA (rule-based analysis, always on) and ForgeAI
-(the optional language model) are running, and a link to the classic UI for the few pages
-that still live there.
+(the optional language model) are running.
 
 ## See it work in two minutes
 

@@ -65,8 +65,6 @@ answer word for word, model, time, outcome (used, rejected, error, trial) and th
 
 **ForgeAI digest mail (V2).** A scheduled report of kind *ForgeAI digest* (Reports › New schedule › What) runs the `forgeai_digest` job on the LLM lane: database facts for the report's interval (one day, at most a week; DEMO left out), then one `shift` call through `forgeai.run` with that window, checked like any answer and logged as a ForgeAI call. Off, error or rejected → the mail carries the reason and the facts only. Code: `backend/app/morning_digest.py`.
 
-**Dashboard digest (classic).** `/` `#forgeai` is the short teaser. The full page is **`/forgeai`**: Setup, Ask (optional question), Digest with filters, Jobs, Reports, and a digest Cron (not `/ops` performance mail). Core runs **SQL first** (repeats, hot group, parent–child, aging open, last 30 days). DEMO incidents stay out of the digest. **Ask ForgeAI** sends a compact JSON of those counts (capped, 20 s timeout) and asks for 3–5 sentences. Off or failed rewrite keeps the same cards and the canned English conclusions. **Report** is TXT or CSV UTF-8 of the facts. **Send report** is the mail outbox (`step_key=report`). Due Cron rows enqueue `forgeai_digest` so the one worker can mail after other `/ops` reports. Alarms still follow Prometheus → Alertmanager → Core.
-
 **Prompt size.** llama.cpp **prompt processing (prefill)** is not generation. Qwen3-4B on CPU is often ~25–29 tok/s for prefill; a ~6000-token user message is ~4 minutes before the first output token. `timeout_seconds: 300` then leaves almost no time to generate, and llama.cpp logs `cancel task`. ForgeSRE therefore **does not dump Prom/Loki blobs** into the LLM: `prompt_context` is capped at **5000 characters** (was 12000, which is ~3–6k tokens) and keeps name/value/unit snapshots (for example CPU 92% / mem 81% / disk 74%). Builtin ForgeRCA still stores the full facts, anomalies, evidence IDs, and PromQL on the incident. Do **not** switch to a smaller GGUF to fix a cancel — shrink was the prompt, not the model. Node exporter does not talk to the LLM (Node Exporter → Prometheus → ForgeRCA evidence → compact prompt → Qwen).
 
 ---
@@ -298,14 +296,14 @@ docker compose --profile ai up -d --force-recreate llm
 
 ## 6. What happens when you click Open ForgeRCA
 
-There is **no Celery**. Core has **one worker thread** (Postgres `jobs` table, loop every 2s) for `investigate` and `discovery_scan`. An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds` (example.yml default 90). `/ops` scheduled reports run first in the same loop so mail is not stuck behind llama.cpp. Discovery **Confirm & scan** / **Scan now** enqueue `discovery_scan` and always redirect; the worker runs the probe in try/except.
+There is **no Celery**. Core has **one worker thread** (Postgres `jobs` table, loop every 2s) for `investigate` and `discovery_scan`. An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds` (example.yml default 90). Scheduled reports run first in the same loop so mail is not stuck behind llama.cpp. **Scan a network** (Inventory › Add devices) enqueues `discovery_scan`; the worker runs the probe in try/except.
 
 1. Core runs **ForgeRCA immediately** (`use_llm=false`) and shows the builtin report.
 2. If `ai.enabled` and `ai.llm.url` are set, Core **enqueues** an `investigate` job with
    `use_llm=true` on the LLM lane (`./forgesre jobs`).
 3. The worker picks the skill, builds the prompt (section 1), calls llama.cpp once and checks the answer.
-4. A used answer is stored as an investigation with provider `forgerca-llm` (the name the classic
-   pages and reports read) and shown in the ForgeAI card. Explain, postmortem and shift run as
+4. A used answer is stored as an investigation with provider `forgerca-llm` (the name reports
+   and the API read) and shown in the ForgeAI card. Explain, postmortem and shift run as
    `forgeai` jobs on the same lane.
 
 Alertmanager ingest also enqueues investigate; the webhook does **not** wait on the LLM.

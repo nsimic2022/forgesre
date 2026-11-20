@@ -126,37 +126,3 @@ def test_parent_down_suppresses_child_ladder_until_parent_clears():
     db.close()
 
 
-def test_parent_picker_on_the_asset_form_and_list():
-    db = _db()
-    token = uuid4().hex[:8]
-    parent = _host(db, token, "sw", "parent-owner@dc.local")
-    child = _host(db, token + "e", "srv", "child-owner@dc.local")
-    client = _client()
-    page = client.get(f"/assets?edit={child.asset_id}")
-    assert page.status_code == 200
-    assert 'name="parent_asset_id"' in page.text
-    assert parent.asset_id in page.text
-    saved = client.post(
-        f"/assets/{child.asset_id}/update",
-        data={
-            "hostname": child.hostname,
-            "ip": child.ip,
-            "type": "Linux Server",
-            "parent_asset_id": parent.asset_id,
-            "owner_email": "child-owner@dc.local",
-        },
-        follow_redirects=False,
-    )
-    assert saved.status_code in {302, 303}
-    db.expire_all()
-    row = db.query(type(child)).filter_by(asset_id=child.asset_id).first()
-    assert row.parent_id == parent.id
-    listed = client.get(f"/assets?q={child.asset_id}").text
-    assert "data-parent-host" in listed
-    assert parent.hostname in listed
-    stale = client.get(f"/assets/{child.asset_id}", follow_redirects=False)
-    assert stale.status_code == 303
-    assert stale.headers["location"] == f"/assets?edit={child.asset_id}"
-    edit = client.get(f"/assets?edit={child.asset_id}").text
-    assert f'value="{parent.asset_id}"' in edit and "selected" in edit
-    db.close()

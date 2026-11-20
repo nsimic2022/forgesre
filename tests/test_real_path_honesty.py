@@ -7,11 +7,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
-from app.demo_ids import is_lab_inventory_row
-from app.inventory import asset_tiles, create_manual_asset
-from app.main import app
-from app.models import Asset, Playbook, Playrule, User
-from app.security import hash_password
+from app.models import Playbook, Playrule
 from app.seed import seed
 from app.services import match_playrule
 from rca.analysis import detect_anomalies
@@ -29,58 +25,6 @@ def _db():
 
 def _login(client: TestClient, email: str = "admin@forgesre.local", password: str = "testpass") -> None:
     client.post("/login", data={"email": email, "password": password}, follow_redirects=False)
-
-
-def test_asset_tiles_count_lab_and_list_shows_demo_pill():
-    db = _db()
-    live = create_manual_asset(db, hostname=f"prod-{uuid4().hex[:6]}", ip="10.55.1.8", actor="tester")
-    tiles = {tile["key"]: tile for tile in asset_tiles(db.query(Asset).all())}
-    assert tiles["assets"]["href"] == "/assets"
-    lab_only = [row for row in db.query(Asset).all() if is_lab_inventory_row(row)]
-    assert lab_only
-    assert tiles["assets"]["count"] == db.query(Asset).count()
-    assert tiles["assets"]["count"] >= len(lab_only)
-    client = TestClient(app)
-    _login(client)
-    listed = client.get("/assets?per_page=100")
-    assert 'class="pill demo">DEMO</span>' in listed.text
-    assert "forge-demo-01" in listed.text
-    production = client.get(f"/assets?lab=0&q={live.asset_id}")
-    assert "forge-demo-01" not in production.text
-    assert live.asset_id in production.text
-    db.close()
-
-
-def test_dashboard_tiles_include_lab_hrefs():
-    db = _db()
-    db.close()
-    client = TestClient(app)
-    _login(client)
-    home = client.get("/")
-    alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
-    assert "demo=0" not in alarms
-    infra = home.text.split("dash-tiles-infra", 1)[1].split("</section>", 1)[0]
-    assert "lab=0" not in infra
-    assert 'href="/assets"' in infra
-    assert 'data-tile="assets"' in infra
-    assert ">forge-demo-01<" not in alarms
-    assets_n = int(infra.split('data-tile="assets"', 1)[1].split("<strong>", 1)[1].split("</strong>", 1)[0])
-    assert assets_n >= 1
-    assert 'href="/ops"' in home.text
-
-
-def test_viewer_forbidden_on_ops_and_insights_export():
-    db = _db()
-    email = f"view-{uuid4().hex[:6]}@forgesre.local"
-    db.add(User(email=email, name="V", password_hash=hash_password("testpass"), role="viewer"))
-    db.commit()
-    client = TestClient(app)
-    _login(client, email)
-    home = client.get("/")
-    assert 'href="/ops"' not in home.text
-    assert client.get("/ops").status_code == 403
-    assert client.post("/insights/export", data={"format": "txt"}).status_code == 403
-    db.close()
 
 
 def test_match_playrule_uses_firing_sample_when_threshold_set():
@@ -251,39 +195,6 @@ def test_facts_state_missing_process_and_ifoper_lists():
     )
     texts = [fact["text"] for fact in facts_from(switch)]
     assert any("No per-interface SNMP ifOperStatus list" in text for text in texts)
-
-
-def test_dashboard_recent_hides_lab_demo():
-    from app.models import Incident
-    from app.services import next_incident_number
-
-    db = _db()
-    demo = db.query(Asset).filter_by(asset_id="forge-demo-01").one()
-    row = Incident(
-        number=next_incident_number(db),
-        title=f"lab-recent-{uuid4().hex[:6]}",
-        severity="WARNING",
-        status="OPEN",
-        fingerprint=f"lab-recent:{uuid4().hex}",
-        asset_id=demo.id,
-    )
-    db.add(row)
-    db.commit()
-    title = row.title
-    db.close()
-    client = TestClient(app)
-    _login(client)
-    home = client.get("/")
-    recent = home.text.split("<h2>Recent incidents</h2>", 1)[1].split("dash-graphs", 1)[0]
-    assert "filter-chips" not in recent
-    assert "Lab DEMO" not in recent
-    assert ">Production<" not in recent
-    assert title not in recent
-    lab = client.get("/?demo=1")
-    shown = lab.text.split("<h2>Recent incidents</h2>", 1)[1].split("dash-graphs", 1)[0]
-    assert title in shown
-    assert "forge-demo-01" in shown
-    assert "filter-chips" not in shown
 
 
 def test_force_investigation_overwrites_latest_row():

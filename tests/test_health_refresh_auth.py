@@ -29,38 +29,6 @@ def _client(db, role: str) -> TestClient:
     return client
 
 
-def test_viewer_gets_403_on_health_refresh_but_can_open_health_ui():
-    db = _db()
-    client = _client(db, "viewer")
-    page = client.get("/health-ui")
-    assert page.status_code == 200
-    assert "Run doctor" not in page.text
-    posted = client.post("/health-ui/refresh", follow_redirects=False)
-    assert posted.status_code == 403
-    db.close()
-
-
-def test_analyst_cannot_force_health_refresh():
-    db = _db()
-    client = _client(db, "analyst")
-    assert client.get("/health-ui").status_code == 200
-    assert client.post("/health-ui/refresh", follow_redirects=False).status_code == 403
-    db.close()
-
-
-def test_engineer_and_admin_can_force_health_refresh():
-    db = _db()
-    for role in ("engineer", "admin"):
-        client = _client(db, role)
-        page = client.get("/health-ui")
-        assert page.status_code == 200
-        assert "Run doctor" in page.text
-        posted = client.post("/health-ui/refresh", follow_redirects=False)
-        assert posted.status_code == 303
-        assert posted.headers["location"] == "/health-ui"
-    db.close()
-
-
 def test_health_refresh_does_not_change_metrics_or_probes():
     db = _db()
     viewer = _client(db, "viewer")

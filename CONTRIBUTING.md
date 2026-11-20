@@ -35,7 +35,7 @@ If there is no good answer, do not add it.
 ## Stack
 
 - Python 3.12, FastAPI, SQLAlchemy (backend)
-- Jinja2 templates (classic UI, `frontend/`)
+- Jinja2 templates for sign-in and the mail acknowledge page only (`frontend/templates`)
 - React + TypeScript + Vite (new UI, `web/`)
 - Bash (install, doctor, backup, update)
 - Docker Compose for runtime dependencies

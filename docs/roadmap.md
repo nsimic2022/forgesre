@@ -18,7 +18,7 @@ Each step ships as its own pull request, merged when CI is green (AGENTS.md).
 
 React + TypeScript in `web/`, served at `/app` ([ui.md](ui.md)). Order: ~~NOC overview~~
 (done) → ~~Incidents~~ (done; on-call week grid with Phase 3) → ~~Inventory~~ (done; editing next) → ~~Automation~~ (done; noise filters in Phase 3) → ~~Investigations~~ (done, with analyst reviews) → ~~Reports~~ (done; cron schedules in Phase 3) →
-~~Settings~~ (done). The classic UI stays until each page is replaced, then moves to `/classic`.
+~~Settings~~ (done). The classic UI was removed once every page was replaced.
 
 ## Phase 3 — automation and reports
 
@@ -109,8 +109,8 @@ Moving network discovery to LibreNMS (SNMP only) stays open under Asset sources.
 
 ### Classic UI
 
-Stays until the owner decides. What is still only there, with a proposal per page:
-[classic-gaps.md](classic-gaps.md).
+Removed. Its last pages were ported or dropped as listed in [classic-gaps.md](classic-gaps.md);
+old addresses redirect into `/app`.
 
 ### Other items
 

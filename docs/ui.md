@@ -1,10 +1,10 @@
 # New UI (ForgeSRE 2)
 
 React + TypeScript in `web/`, built by Vite into `web/dist` and served by Core at `/app`.
-It is the home page: `/` sends a signed-in user to `/app/` when the build is present and
-`ui.home` is `new` (the default). The classic dashboard is always at `/classic`, and the
-other classic pages keep their paths. `./forgesre settings set ui.home classic` switches
-the home page back.
+It is the only UI: `/` sends a signed-in user to `/app/`. The old server-rendered pages are
+gone; their addresses (`/incidents`, `/assets`, `/admin`, `/classic`, …) redirect to the
+matching `/app` page so bookmarks keep working. Only sign-in (`/login`) and the mail
+acknowledge link (`/ack/…`) are still rendered by Core (`frontend/templates`).
 
 ## How it runs on the appliance
 
@@ -14,7 +14,7 @@ the home page back.
   nothing leaves the appliance.
 - Data comes from `/api/v1/*` with the normal session cookie. A 401 sends the browser to
   `/login`. Each page reads one compact endpoint (NOC: `GET /api/v1/noc`, polled every 10 s).
-- The classic sidebar shows **New UI** when the build is present; the new UI links to **Open classic UI** (`/classic`).
+- Without a built UI (`web/dist` missing), `/` and the old addresses go to `/login`; run `./forgesre update` or `docker compose build core`.
 
 ## What changed before an incident
 
@@ -142,7 +142,7 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
   the name is `FORGESRE_VERSION` from `.env`, served by `GET /api/v1/me`.
 - `src/components/ui.tsx`: Chip, Card, Stat, Bar, Dot.
 - `src/styles.css`: design tokens (colours, radius, fonts) and base styles.
-- `src/pages/*`: one file per page; pages not rebuilt yet link to their classic page.
+- `src/pages/*`: one file per page; unknown addresses show `NotFound`.
 - `src/lib/api.ts`: fetch wrapper and the API types.
 
 ## Status
@@ -152,7 +152,7 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
 | NOC overview | done |
 | Incidents: list, detail, checklist, notes, Send report by mail | done |
 | On-call | done: who is on call now, the week grid, add (also on several days at once), edit, copy, turn off, remove, take the rest of today |
-| Inventory: library (site › rack, type, environment, customer, views), table, asset card with 30-day capacity (disk days to full, interface receive), add / edit / clone / delete, Import CSV (check first, then add in a background job; existing assets are skipped) | done; discovery still on the classic pages |
+| Inventory: library (site › rack, type, environment, customer, views), table, asset card with 30-day capacity (disk days to full, interface receive), add / edit / clone / delete, Import CSV (check first, then add in a background job; existing assets are skipped) | done |
 | Automation: pipeline, noise filters (create, edit, remove), routing rules, escalation, playbooks, maintenance windows, "Try an alarm" | done, including creating, editing, turning off and removing rules and playbooks, escalation policies (Tier 1–3 and Manager) and maintenance windows (several assets at once, End now) |
 | Investigations: resolved incidents with confirmed cause and ratings, accuracy, recurring causes; review card on the incident page | done |
 | Reports: period KPIs vs previous, incidents per day, by asset type, noisiest assets, frequent alerts, host-down time, scheduled reports (create, edit, on/off, remove; presets, custom interval, cron, once), CSV | done |
@@ -174,8 +174,8 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
 
 ## Next
 
-All seven pages exist and do their own editing. Still on classic pages: discovery, asset
-SNMP versions and credentials, and restoring a backup. The new UI becomes the home page next.
+All pages exist and do their own editing; the classic UI was removed. Network discovery
+moves to LibreNMS (SNMP only) next.
 
 ## Screenshots for the docs
 
@@ -192,7 +192,7 @@ python scripts/screenshots.py --only noc,incident     # just a few pages
 
 The new UI names escalation steps the way most NOCs do: **Tier 1** (NOC), **Tier 2** (shift
 lead), **Tier 3** (engineer), then **Manager**, which is not a support tier. The database and
-the classic UI keep levels 1–4 (L1–L4); `tierLabel()` in `web/src/lib/format.ts` maps them.
+the API keep levels 1–4 (L1–L4); `tierLabel()` in `web/src/lib/format.ts` maps them.
 
 ## Add devices
 
@@ -209,7 +209,7 @@ the classic UI keep levels 1–4 (L1–L4); `tierLabel()` in `web/src/lib/format
   running scan. Scanning and adding found addresses use the existing discovery endpoints.
 - `snmp_apply` (`app/snmp_apply.py`) writes per-asset SNMP auths into the generated snmp.yml
   that Core mounts at `/host-generated` and POSTs `/-/reload` to snmp_exporter. Saving an asset
-  queues it, and the leader queues it every 5 minutes while an auth is pending (classic edits).
+  queues it, and the leader queues it every 5 minutes while an auth is pending.
 
 ## Incident page, more
 

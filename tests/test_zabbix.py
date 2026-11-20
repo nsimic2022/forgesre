@@ -15,9 +15,7 @@ from app import api as api_mod
 from app import zabbix as zabbix_mod
 from app.asset_metrics import metric_panel_with_zabbix
 from app.db import Base, SessionLocal, engine
-from app.email_html import render_email
 from app.exporter_detect import AUTO_ASSET_TYPE
-from app.inventory import assets_matching
 from app.main import app
 from app.models import Asset, Incident, JournalEntry, Notification, utcnow
 from app.seed import seed
@@ -632,117 +630,7 @@ def test_zabbix_down_does_not_break_dashboard_or_health(zbx):
         db.close()
 
 
-def test_zabbix_cube_disabled_when_not_configured(monkeypatch):
-    _set_zabbix(monkeypatch, url="", token="")
-    _reset_caches()
-    client = _client()
-    component = client.get("/api/v1/system/doctor").json()["components"]["zabbix"]
-    assert component["status"] == "disabled"
-    page = client.get("/discovery").text
-    assert "data-zabbix-block" in page
-    assert "Not configured" in page
-    assert 'action="/discovery/zabbix-sync"' not in page
-
-
-def test_no_zabbix_iframe_anywhere():
-    for path in list(TEMPLATES.rglob("*.html")) + [ROOT / "frontend" / "static" / "app.js"]:
-        assert "<iframe" not in path.read_text(encoding="utf-8").lower(), path.name
-
-
 # --- Discovery block, Assets filters, pills ---------------------------------------
-
-
-def test_discovery_block_sync_button_and_last_error(zbx):
-    zbx.hosts = [_host("50081", "zt-disc-01", "10.77.0.81")]
-    client = _client()
-    page = client.get("/discovery").text
-    assert "data-zabbix-block" in page
-    assert 'action="/discovery/zabbix-sync"' in page
-    assert "Sync hosts" in page
-    assert "Connected" in page
-    assert ZBX_URL not in page
-    assert "webhook on" not in page
-    assert "<iframe" not in page.lower()
-
-    response = client.post("/discovery/zabbix-sync", follow_redirects=False)
-    assert response.status_code in {302, 303}
-    page = client.get("/discovery").text
-    assert "Last sync:" in page and "1 new" in page
-
-    zbx.down = True
-    zabbix_mod.reset_state()
-    client.post("/discovery/zabbix-sync", follow_redirects=False)
-    page = client.get("/discovery").text
-    assert "data-zabbix-last-error" in page
-    assert "unreachable" in page.lower()
-
-
-def test_assets_source_and_agent_filters(zbx):
-    zbx.hosts = [
-        _host("50091", "zt-up-01", "10.77.0.91", available="1"),
-        _host("50092", "zt-down-01", "10.77.0.92", available="2"),
-    ]
-    db = _db()
-    try:
-        db.add(Asset(asset_id="zt-manual-01", hostname="zt-manual-01", ip="10.77.0.93", source="manual"))
-        db.commit()
-        sync_zabbix(db, force=True)
-        rows = db.query(Asset).filter(Asset.asset_id.like("zt-%")).all()
-        assert {row.asset_id for row in assets_matching(rows, "", "", "", source="zabbix")} == {"zt-up-01", "zt-down-01"}
-        assert {row.asset_id for row in assets_matching(rows, "", "", "", source="zabbix", agent="down")} == {"zt-down-01"}
-    finally:
-        db.close()
-    client = _client()
-    page = client.get("/assets?source=zabbix&q=zt-").text
-    table = page.split('<table class="asset-table"', 1)[1].split("</tbody>", 1)[0]
-    assert "zt-up-01" in table and "zt-down-01" in table and "zt-manual-01" not in table
-    assert 'data-zabbix-filter="down"' in page
-    assert 'data-zabbix-agent="up"' in page
-    down = client.get("/assets?source=zabbix&agent=down&q=zt-").text
-    down_table = down.split('<table class="asset-table"', 1)[1].split("</tbody>", 1)[0]
-    assert "zt-down-01" in down_table and "zt-up-01" not in down_table
-    api_rows = client.get("/api/v1/assets?source=zabbix&agent=down").json()
-    items = api_rows["items"] if isinstance(api_rows, dict) else api_rows
-    found = [row for row in items if row["asset_id"].startswith("zt-")]
-    assert [row["asset_id"] for row in found] == ["zt-down-01"]
-    assert found[0]["zabbix_hostid"] == "50092" and found[0]["zabbix_agent"] == "down"
-
-
-def test_incident_source_pills_on_list_detail_and_mail(zbx):
-    db = _db()
-    try:
-        db.add(Asset(asset_id="zt-pill-01", hostname="zt-pill-01", ip="10.77.0.101"))
-        db.commit()
-        prom = ingest_alertmanager(
-            db, {"alerts": [{"status": "firing", "labels": {"alertname": "ztPromPill", "asset": "zt-pill-01"}}]}
-        )[0]
-        prom_number = prom.number
-    finally:
-        db.close()
-    client = _client()
-    zbx_number = _hook(client, _problem("70101", "zt-pill-01")).json()["incidents"][0]
-
-    listing = client.get("/incidents?q=zt").text
-    assert 'class="src-pill src-zabbix"' in listing
-    assert 'class="src-pill src-prometheus"' in listing
-
-    detail = client.get(f"/incidents/{zbx_number}").text
-    assert 'data-source="zabbix"' in detail
-    assert "data-incident-graphs" in detail
-    assert 'data-source="prometheus"' in client.get(f"/incidents/{prom_number}").text
-
-    html = render_email(kicker="Incident report", heading="x", severity="CRITICAL", status="OPEN", source="Zabbix")
-    assert 'class="source-badge"' in html and "Zabbix" in html
-    assert 'class="source-badge"' not in render_email(kicker="Incident report", heading="x")
-    db = SessionLocal()
-    try:
-        from app.notifications import build_escalation_body, notification_html
-
-        incident = db.query(Incident).filter_by(fingerprint="zabbix:70101:zt-pill-01").one()
-        assert "Source: Zabbix" in build_escalation_body(incident, "L1", "owner")
-        assert "source-badge" in notification_html(incident, "L1", "owner")
-    finally:
-        db.close()
 
 
 # --- C. trends --------------------------------------------------------------------
@@ -833,14 +721,6 @@ def test_metrics_api_uses_zabbix_trends_for_unscraped_asset(zbx):
     cpu = next(tile for tile in panel["tiles"] if tile["key"] == "cpu_percent")
     assert cpu["value"] == 42.5 and len(cpu["series"]) == 4
     assert "trend.get" in zbx.calls
-
-
-def test_incident_graph_js_and_zabbix_label():
-    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
-    assert "function graphPane(" in js
-    assert "function bindIncidentGraphs(" in js
-    assert "Zabbix trends" in js
-    assert "No samples yet" in js
 
 
 def test_handbook_and_secrets_example_document_zabbix():

@@ -1,13 +1,11 @@
 """Asset detail: quarter fact column, equal actions, host chart grid from real series."""
 
 from pathlib import Path
-from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from app.asset_metrics import asset_metric_panel, metric_class_for
 from app.db import Base, SessionLocal, engine
-from app.inventory import create_manual_asset
 from app.main import app
 from app.seed import seed
 from rca.collector import promql_queries_for
@@ -28,66 +26,6 @@ def _login() -> TestClient:
     )
     assert login.status_code in {302, 303}
     return client
-
-
-def test_layout_is_a_quarter_fact_column_and_a_chart_grid():
-    html = (ROOT / "frontend" / "templates" / "asset_detail.html").read_text(encoding="utf-8")
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
-    base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "asset-detail-col-1-4" in html and "asset-detail-col-2-3" in html
-    rule = css.split(".asset-detail-split {", 1)[1].split("}", 1)[0]
-    assert "minmax(0, 25%)" in rule and "minmax(0, 1fr)" in rule
-    assert "repeat(5, minmax(0, 1fr))" in css
-    assert "data-asset-graph-grid" in html
-    assert "host_chart(tile.key" in html
-    assert "host_chart('up'" not in html
-    assert "Not scraped." in html
-    assert "No samples yet" not in html
-    assert "grafana" not in html.lower() and "iframe" not in html.lower()
-    assert "request rate" not in html.lower() and "5xx" not in html.lower()
-    assert "Math.sin" not in js
-    assert 'data.collecting === false ? "Not scraped." : "No samples yet."' in js
-    assert "app.css?v=v09-70" in base and "app.js?v=v09-T" in base
-    asset_js = js.split("(function bindAssetGraphs() {", 1)[1].split("\n})();", 1)[0]
-    assert "?incident=" not in asset_js
-    incident = (ROOT / "frontend" / "templates" / "incident_detail.html").read_text(encoding="utf-8")
-    assert "Host metrics" in incident
-    assert "data-incident-graphs" in incident
-    assert "data-asset-graph-grid" not in (ROOT / "frontend" / "templates" / "assets.html").read_text(encoding="utf-8")
-
-
-def test_action_buttons_are_separate_and_only_remove_is_danger():
-    db = SessionLocal()
-    Base.metadata.create_all(bind=engine)
-    seed(db)
-    token = uuid4().hex[:8]
-    asset = create_manual_asset(
-        db,
-        hostname=f"grid-act-{token}",
-        asset_id=f"grid-act-{token}",
-        ip=f"10.88.{int(token[:2], 16) % 200}.{1 + int(token[2:4], 16) % 200}",
-        type="Linux Server",
-        actor="tester",
-    )
-    asset_id = asset.asset_id
-    db.close()
-    client = _login()
-    stale = client.get(f"/assets/{asset_id}", follow_redirects=False)
-    assert stale.status_code == 303
-    assert stale.headers["location"] == f"/assets?edit={asset_id}"
-    page = client.get(f"/assets?edit={asset_id}")
-    assert page.status_code == 200
-    actions = page.text.split("asset-form-actions", 1)[1].split("</div>", 1)[0]
-    assert ">Save<" in actions
-    assert ">Cancel<" in actions
-    assert ">Verify<" in actions
-    assert ">Remove<" in actions
-    assert "Detect OS" in actions
-    assert actions.count('class="danger"') == 1
-    assert "asset-edit-graphs" in page.text
-    form = page.text.split("asset-form-row-2", 1)[1]
-    assert form.index(">Escalation<") < form.index(">Notes<")
 
 
 def test_linux_network_is_two_real_lines_and_snmp_skips_cpu():
@@ -146,24 +84,3 @@ def test_linux_network_is_two_real_lines_and_snmp_skips_cpu():
     assert "ifHCInOctets" not in linux_alert["cpu_percent"][0]
 
 
-def test_export_button_downloads_this_asset():
-    db = SessionLocal()
-    Base.metadata.create_all(bind=engine)
-    seed(db)
-    token = uuid4().hex[:8]
-    host = f"grid-exp-{token}"
-    asset = create_manual_asset(
-        db,
-        hostname=host,
-        asset_id=host,
-        ip=f"10.89.{int(token[:2], 16) % 200}.{1 + int(token[2:4], 16) % 200}",
-        type="Linux Server",
-        actor="tester",
-    )
-    asset_id = asset.asset_id
-    db.close()
-    client = _login()
-    exported = client.post("/assets/export", data={"selected": asset_id})
-    assert exported.status_code == 200
-    assert asset_id in exported.text
-    assert host in exported.text

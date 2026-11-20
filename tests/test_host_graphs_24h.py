@@ -114,15 +114,3 @@ def test_disk_tile_keeps_four_mounts_as_colored_lines():
     assert [line["className"] for line in disk["lines"]] == ["disk-0", "disk-1", "disk-2"]
 
 
-def test_markup_has_fill_grid_online_and_no_default_escalation_link():
-    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    form = (ROOT / "frontend" / "templates" / "_asset_form.html").read_text(encoding="utf-8")
-    assert "dash-chart-fill" in js and "dash-chart-grid-minor" in js
-    assert "paintOnline" in js
-    assert 'tile.key !== "up"' in js
-    assert 'tile.key !== "network"' not in js.split("function graphPane(", 1)[1].split("\n}\n", 1)[0]
-    assert ".dash-chart-fill" in css and ".dash-chart-fill.disk-0" in css
-    assert "data-asset-online" not in form
-    assert 'href="/escalation">Default escalation</a>' not in form
-    assert "ladder-default" not in form

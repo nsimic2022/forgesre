@@ -4,6 +4,12 @@ How to **operate** ForgeSRE after it is installed: users, servers, monitoring, p
 
 ForgeSRE is the SRE console on top of Prometheus, Grafana, Loki, and NetBox. It tracks Linux (`node_exporter` `:9100`), Windows (`windows_exporter` `:9182`), and network SNMP (`UDP/161`), turns alerts into incidents with an owner, and runs ForgeRCA on those facts. Optional ForgeAI rewrites the investigation prose.
 
+> **V2.0:** the classic pages named below were replaced by the new UI and removed. Their old
+> addresses redirect: Dashboard → NOC (`/app`), Assets and Discovery → Inventory (`/app/inventory`,
+> Add devices), Playrules / Playbooks / Escalation → Automation, Ops → Reports, System Health,
+> Journal and Administration → Settings. What moved where: [classic-gaps.md](classic-gaps.md);
+> the pages themselves: [ui.md](ui.md). This handbook is being rewritten page by page.
+
 Install, host packages, `./forgesre test`, and configuration files: [`install-config.md`](install-config.md).  
 CLI reference (everyday + advanced): [`cli.md`](cli.md).  
 Verification report: [`verify.md`](verify.md).  
@@ -841,7 +847,7 @@ If the incident has no asset, the alert `asset` / `instance` label did not match
 | Bounce containers only (no pull / install / secrets change) | `./forgesre restart` |
 | Re-render Prometheus / Alertmanager / snmp.yml only | `./forgesre render-monitoring` |
 | Saved a Custom community / SNMPv3 asset | `./forgesre snmp-auths` |
-| Stack lights (same as `/health-ui`) | `./forgesre doctor` |
+| Stack lights (same as Settings › Services and health) | `./forgesre doctor` |
 | Appliance report → `data/reports/` | `./forgesre test` |
 | Live inventory path (exporter → Prom → AM → Core) | `./forgesre verify` / `./forgesre ping` |
 | SNMP targets JSON | `./forgesre snmp` |

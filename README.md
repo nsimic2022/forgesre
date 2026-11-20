@@ -110,8 +110,8 @@ Smaller models, offline copies and cloud models: [docs/llm.md](docs/llm.md).
 
 After sign-in you land in the new UI (React, served by Core at `/app`): NOC, Incidents,
 On-call, Inventory, Automation, Investigations, Reports and Settings, each with its own
-editing. The classic UI stays at `/classic`, and `ui.home: classic` makes it the home page
-again. See [docs/ui.md](docs/ui.md).
+editing. Old addresses from the classic UI (removed in 2.0) redirect into `/app`. See
+[docs/ui.md](docs/ui.md).
 
 | Page | What you do there |
 |---|---|

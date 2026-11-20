@@ -50,27 +50,6 @@ def test_assets_page_does_not_run_fresh_doctor(monkeypatch):
     assert calls["n"] == 0
 
 
-def test_health_ui_still_runs_doctor(monkeypatch):
-    import app.api as api_mod
-
-    _db().close()
-    calls = {"n": 0}
-
-    def counting():
-        calls["n"] += 1
-        return {
-            "overall": "HEALTHY",
-            "components": {"core": {"status": "ok", "why": ""}},
-            "failed": [],
-        }
-
-    monkeypatch.setattr(api_mod, "_doctor_payload_fresh", counting)
-    _clear_doctor()
-    client = _login()
-    assert client.get("/health-ui").status_code == 200
-    assert calls["n"] == 1
-
-
 def test_dashboard_does_not_run_doctor(monkeypatch):
     import app.api as api_mod
 

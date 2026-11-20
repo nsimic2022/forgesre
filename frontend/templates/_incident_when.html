@@ -1,2 +1,0 @@
-{% set when = incident_when(item) %}
-<td class="inc-when" title="{{ when.title }}" data-when="{{ 'live' if when.live else 'done' }}"><span class="inc-age{% if when.live %} inc-age-live{% endif %}"{% if when.duration %} aria-label="{{ when.verb }} {{ when.duration }}"{% endif %}>{{ when.primary }}</span>{% if when.secondary %}<span class="inc-wall">{{ when.secondary }}</span>{% endif %}</td>

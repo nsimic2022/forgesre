@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -15,14 +14,12 @@ from app.db import Base, SessionLocal, engine
 from app.history import (
     PAGE_SIZE,
     PAGE_SIZE_CHOICES,
-    dashboard_incident_tiles,
     incident_heat,
     paginate,
     pager_state,
     parse_per_page,
     per_page_param,
 )
-from app.journal import report
 from app.main import app
 from app.models import AuditLog, DiscoveryCandidate, Incident, JournalEntry, Notification, ScheduledReport
 from app.seed import seed
@@ -131,150 +128,6 @@ def test_paginate_honors_size_and_clamps():
     assert pager_state("1", total=11)["show_size"] is True
 
 
-def test_incidents_per_page_query_param():
-    db = _db()
-    _add_incidents(db, 60)
-    client = _client()
-    default = client.get("/incidents")
-    assert default.status_code == 200
-    assert _rows(default.text) == 10
-    twenty = client.get("/incidents?per_page=20")
-    assert _rows(twenty.text) == 20
-    assert '<option value="20" selected>' in twenty.text
-    assert 'name="per_page"' in twenty.text
-    assert "per_page=20" in twenty.text.split('class="pager"', 1)[1]
-    filters = twenty.text.split('class="list-filters incidents-filters"', 1)[1].split("</form>", 1)[0]
-    assert '<input type="hidden" name="per_page" value="20">' in filters
-    assert _rows(client.get("/incidents?per_page=junk").text) == 10
-    assert _rows(client.get("/incidents?per_page=0").text) == 10
-    big = client.get("/incidents?per_page=1000")
-    assert 60 <= _rows(big.text) <= 100
-    assert '<option value="100" selected>' in big.text
-    page_two = client.get("/incidents?per_page=20&page=2")
-    assert _rows(page_two.text) == 20
-    db.close()
-
-
-def test_pager_select_bottom_right_on_every_listed_surface():
-    db = _db()
-    _add_incidents(db, 12)
-    token = uuid4().hex[:8]
-    for i in range(25):
-        report(db, "jobs", "layout", "ok", summary=f"Layout journal {token} {i}")
-        db.add(Notification(target=f"l{i}@example.local", subject=f"Layout {token} {i}", body="x", status="generated", step_key="layout"))
-        db.add(ScheduledReport(name=f"layout-{token}-{i}", to_email="ops@example.local", interval_hours=6))
-        db.add(DiscoveryCandidate(ip=f"10.66.{i}.{(int(token[:2], 16) % 200) + 1}", proposed_role="Unknown device", status="new", source="scan"))
-        db.add(AuditLog(action="layout.test", actor="tester", object_type="layout", object_id=str(i)))
-    db.commit()
-    client = _client()
-    for path, key in [
-        ("/", "per_page"),
-        ("/incidents", "per_page"),
-        ("/discovery", "per_page"),
-        ("/journal", "per_page"),
-        ("/admin", "audit_per_page"),
-    ]:
-        page = client.get(path)
-        assert page.status_code == 200, path
-        assert 'class="pager-bar"' in page.text, path
-        assert f'name="{key}"' in page.text, path
-        assert "data-pager-size" in page.text, path
-    ops = client.get("/ops")
-    mail = ops.text.split('id="mail"', 1)[1].split('id="reports"', 1)[0]
-    reports = ops.text.split('id="reports"', 1)[1]
-    assert 'name="per_page"' in mail and 'action="/ops#mail"' in mail
-    assert 'name="reports_per_page"' in reports and 'action="/ops#reports"' in reports
-    split = client.get("/ops?reports_per_page=20")
-    mail = split.text.split('id="mail"', 1)[1].split('id="reports"', 1)[0]
-    reports = split.text.split('id="reports"', 1)[1]
-    assert _rows(mail) == 10
-    assert _rows(reports) == 20
-    assert "<th>When</th><th>To</th><th>Subject</th><th>Status</th><th>Body</th>" in mail
-    audit = client.get("/admin?audit_per_page=20")
-    table = audit.text.split("<h2>Audit log</h2>", 1)[1]
-    assert _rows(table) == 20
-    db.close()
-
-
-def test_row_checkboxes_named_selected_on_list_surfaces():
-    db = _db()
-    _add_incidents(db, 2)
-    db.add(Notification(target="sel@example.local", subject="Layout select", body="x", status="generated", step_key="layout"))
-    db.add(ScheduledReport(name=f"layout-sel-{uuid4().hex[:6]}", to_email="ops@example.local", interval_hours=6))
-    db.commit()
-    client = _client()
-    for path in ["/", "/incidents", "/assets", "/discovery", "/playrules", "/playbooks", "/ops", "/admin"]:
-        page = client.get(path)
-        assert page.status_code == 200, path
-        assert 'name="selected"' in page.text, path
-        assert "data-select-page" in page.text, path
-        assert "data-select-row" in page.text, path
-    incidents = client.get("/incidents").text
-    head = incidents.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert head.index("data-select-page") < head.index(">Incident<") < head.index(">Hostname<")
-    assert ">Acknowledged<" not in head and "col-ack" not in head
-    assert "Resolved by" in head and ">Notes<" in head
-    assert ">Ack<" not in head and "info-tip" not in head
-    assert head.index(">Status<") < head.index(">L1–L4<") < head.index(">When<") < head.index(">Resolved by<") < head.index(">Notes<")
-    assert "delete-selected" not in incidents
-    admin = (TEMPLATES / "admin.html").read_text(encoding="utf-8")
-    backup_table = admin.split("{% for b in backups %}", 1)[1].split("</tr>", 1)[0]
-    assert "sel.cell(b.name)" in backup_table
-    assert 'name="selected"' in (TEMPLATES / "_select.html").read_text(encoding="utf-8")
-    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
-    assert "bindRowSelect" in js and "bindPagerScroll" in js
-
-
-def test_dashboard_order_tiles_appliance_sections_without_banners():
-    db = _db()
-    db.add(
-        Incident(
-            number=next_incident_number(db),
-            title="Layout host down",
-            severity="CRITICAL",
-            status="OPEN",
-            fingerprint=f"NodeExporterDown:layout-{uuid4().hex[:6]}",
-            started_at=datetime.now(timezone.utc),
-        )
-    )
-    db.commit()
-    report(db, "jobs", "layout", "error", summary="Layout journal error")
-    if not db.query(DiscoveryCandidate).filter_by(status="new").count():
-        db.add(DiscoveryCandidate(ip="10.66.250.9", proposed_role="Unknown device", status="new", source="scan"))
-        db.commit()
-    html = _client().get("/").text
-    title = html.index("<h1>Dashboard")
-    top = html.index('class="dash-top"')
-    incidents_tile = html.index("data-incident-tile")
-    infra = html.index("dash-tiles-infra")
-    recent = html.index("<h2>Recent incidents</h2>")
-    graphs = html.index("data-dash-graphs")
-    insights = html.index("data-forgeai-insights")
-    assert title < top < incidents_tile < infra < insights < recent < graphs
-    assert "data-appliance-card" not in html
-    assert "data-oncall" not in html
-    health = _client().get("/health-ui").text
-    appliance = health.index("data-appliance-card")
-    assert health.index("<h1>System Health") < appliance < health.index("health-grid")
-    assert "data-stack-cubes" not in health
-    assert "On duty" not in health
-    assert "Recent journal" not in html
-    assert "Layout journal error" not in html
-    for gone in ('class="dash-banners"', 'id="host-down-banner"', "data-host-down-banner", "HOST DOWN",
-                 "NEW DEVICE DETECTED", 'id="journal-error-banner"', "/dashboard/journal-ack"):
-        assert gone not in html, gone
-    assert 'class="banner' not in html
-    assert html.count("stat-row-big") == 2
-    card = health[appliance : health.index("</aside>", appliance)]
-    assert "data-clock" not in card
-    assert "appliance-clock" not in card
-    for key in ("cpu", "ram", "hdd"):
-        assert f'data-metric="{key}"' in card
-    assert "metric-dash" in card
-    assert "<h2>ForgeSRE</h2>" in card
-    db.close()
-
-
 def test_incident_heat_levels():
     def tiles(**counts):
         return [{"key": key, "count": counts.get(key, 0)} for key in ("critical", "warning", "escalated")]
@@ -285,62 +138,6 @@ def test_incident_heat_levels():
     assert incident_heat(tiles(escalated=2)) == "warn"
     assert incident_heat(tiles(critical=1)) == "crit"
     assert incident_heat(tiles(warning=3, critical=1)) == "crit"
-
-
-def test_dashboard_heat_class_only_on_incidents_tile():
-    db = _db()
-    _add_incidents(db, 1, severity="CRITICAL")
-    assert incident_heat(dashboard_incident_tiles(db)) == "crit"
-    html = _client().get("/").text
-    match = re.search(r'<div class="tile-group([^"]*)" data-incident-tile data-incident-heat="([^"]+)"', html)
-    assert match is not None
-    assert match.group(1).strip() == "heat-crit"
-    assert match.group(2) == "crit"
-    assert html.count("heat-crit") == 1
-    assert "heat-" not in html.split("dash-tiles-infra", 1)[1].split("</section>", 1)[0]
-    assert "heat-" not in _tbody(html.split("<h2>Recent incidents</h2>", 1)[1])
-    template = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
-    assert "heat-{{ incident_heat }}" in template
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "@keyframes heat-pulse-crit" in css
-    assert "@keyframes heat-pulse-warn" in css
-    reduced = css.split("@media (prefers-reduced-motion: reduce)", 1)[1].split("}\n}", 1)[0]
-    assert "heat-crit::before" in reduced and "animation: none" in reduced
-    db.close()
-
-
-def test_dashboard_tiles_bigger_and_thick_fill():
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    big = css.split(".stat-row-big .stat {", 1)[1].split("}", 1)[0]
-    assert "border-left-width: 8px" in big
-    assert "min-height: 5rem" in big
-    assert "minmax(7.4rem, 8.75rem)" in css
-    assert ".stat-row-big .stat.crit { background: var(--pill-crit-bg)" in css
-    base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-70" in base
-
-
-def test_dashboard_recent_has_no_production_lab_chips():
-    template = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
-    assert "filter-chips" not in template
-    assert "Recent incident filters" not in template
-    html = _client().get("/").text
-    recent = html.split("<h2>Recent incidents</h2>", 1)[1].split("dash-graphs", 1)[0]
-    assert "filter-chips" not in recent
-    assert "Lab DEMO" not in recent
-    assert ">Production<" not in recent
-
-
-def test_dashboard_banner_block_gone_from_template_js_css():
-    template = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
-    for gone in ("dash-banners", "host-down-banner", "journal-error-banner", "NEW DEVICE DETECTED", "down_incidents", "journal_error"):
-        assert gone not in template, gone
-    js = (ROOT / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
-    assert "bindHostDownBanner" not in js and "data-host-down-banner" not in js
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    for gone in (".banner-crit", ".banner-list", ".banner-short", ".banner-ack"):
-        assert gone not in css, gone
-    assert ".banner {" in css
 
 
 def _fake_doctor(**_kw):
@@ -369,67 +166,3 @@ def _card(html: str) -> str:
     return html[start : html.index("</aside>", start)]
 
 
-def test_health_card_titled_forgesre_without_stack_cubes(monkeypatch):
-    import app.web as web
-
-    monkeypatch.setattr(web, "doctor_payload", _fake_doctor)
-    _db().close()
-    html = _client().get("/health-ui").text
-    card = _card(html)
-    assert "<h2>ForgeSRE</h2>" in card
-    assert "This appliance" not in html
-    assert 'data-metric="net"' in card and "data-clock" not in card
-    assert "data-stack-cubes" not in card
-    assert "stack-cube" not in card
-    assert "On duty" not in html
-    assert "appliance-oncall" not in html
-    for key in ("cpu", "ram", "hdd", "net"):
-        assert f'data-metric="{key}"' in card
-
-
-def test_health_grid_matches_health_table_tones(monkeypatch):
-    import app.web as web
-
-    monkeypatch.setattr(web, "doctor_payload", _fake_doctor)
-    _db().close()
-    health = _client().get("/health-ui").text
-    block = health.split("health-grid", 1)[1].split("table-scroll", 1)[0]
-    grid = re.findall(r'class="stat (\w+)"[^>]*>\s*<span>([^<]+)</span>', block)
-    rows = re.findall(r'<tr class="health-(\w+)">\s*<td>\s*(?:<a [^>]+>)?([^<\n]+?)\s*(?:</a>)?\s*</td>', health)
-    assert grid and rows
-    assert [(label.strip(), css) for css, label in grid] == [(label.strip(), css) for css, label in rows]
-
-
-def test_health_card_has_no_container_controls(monkeypatch):
-    import app.web as web
-
-    monkeypatch.setattr(web, "doctor_payload", _fake_doctor)
-    _db().close()
-    card = _card(_client().get("/health-ui").text).lower()
-    body = card.split("</h2>", 1)[1]
-    assert "<form" not in body and "<button" not in body
-    assert "appliance-oncall" not in card
-    assert "i'm on duty now" not in body
-    for word in ("start", "stop", "restart", "docker", ">on<", ">off<"):
-        assert word not in body, word
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".stack-cube.ok { background: var(--ok)" in css
-    assert ".stack-cube.warn { background: var(--warn)" in css
-    assert ".stack-cube.crit { background: var(--crit)" in css
-
-
-def test_on_duty_lives_on_escalation_not_dashboard():
-    dash = (TEMPLATES / "dashboard.html").read_text(encoding="utf-8")
-    assert "appliance-oncall" not in dash
-    assert "I'm on duty now" not in dash
-    assert "data-appliance-card" not in dash
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".form-grid.person-grid" in css
-    assert ".slot-row.end" in css
-    admin = (TEMPLATES / "admin.html").read_text(encoding="utf-8")
-    assert ">Surname<" in admin
-    assert 'name="email2"' in admin
-    assert 'class="form-grid person-grid"' in admin
-    esc = (TEMPLATES / "escalation.html").read_text(encoding="utf-8")
-    assert 'name="surname"' in esc
-    assert "data-oncall-surname" in esc

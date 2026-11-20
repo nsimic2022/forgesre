@@ -12,15 +12,13 @@ from app.db import Base, SessionLocal, engine
 from app.exporter_detect import AUTO_ASSET_TYPE
 from app.inventory import (
     approve_candidate,
-    asset_missing_email,
     create_manual_asset,
     delete_candidate,
     netbox_asset_id,
     seed_demo_candidate,
     sync_netbox,
 )
-from app.main import app
-from app.models import Asset, AuditLog, DiscoveryCandidate, EscalationPolicy, Incident, Notification, Playrule
+from app.models import Asset, AuditLog, DiscoveryCandidate, EscalationPolicy, Notification, Playrule
 from app.seed import seed
 from app.services import (
     NO_RECIPIENT_STATUS,
@@ -144,173 +142,10 @@ def _tile_counts(html: str) -> dict[str, tuple[str, int]]:
     return {key: (href, count) for key, (href, count) in out.items()}
 
 
-def test_dashboard_incident_tiles_match_the_list_behind_the_click():
-    db = _db()
-    host = _host(db, f"tiles-{uuid4().hex[:6]}")
-    token = uuid4().hex[:6]
-    for status, severity in [
-        ("OPEN", "CRITICAL"),
-        ("INVESTIGATING", "WARNING"),
-        ("ESCALATED", "CRITICAL"),
-        ("RESOLVED", "CRITICAL"),
-        ("CLOSED", "WARNING"),
-    ]:
-        from app.services import next_incident_number
-
-        db.add(
-            Incident(
-                number=next_incident_number(db),
-                title=f"tile {status} {token}",
-                severity=severity,
-                status=status,
-                fingerprint=f"tile:{token}:{status}",
-                asset_id=host.id,
-            )
-        )
-        db.flush()
-    db.commit()
-    client = TestClient(app)
-    _login(client)
-    home = client.get("/")
-    assert home.status_code == 200
-    alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
-    tiles = _tile_counts(alarms)
-    assert set(tiles) == {"critical", "warning", "escalated"}
-    assert tiles["critical"][0] == "/incidents?status=active&amp;severity=critical"
-    assert tiles["warning"][0] == "/incidents?status=active&amp;severity=warning"
-    assert tiles["escalated"][0] == "/incidents?status=ESCALATED"
-    assert 'data-tile="investigating"' not in alarms and 'data-tile="resolved"' not in alarms
-    assert ">Investigating<" not in alarms and ">Resolved<" not in alarms
-    assert 'class="stat crit' in alarms and 'class="stat warn' in alarms
-    for gone in ('data-tile="open"', ">Open<", "No owner email", "Assets without incident"):
-        assert gone not in alarms, gone
-    assert "No owner email" not in home.text
-    assert 'href="/assets?flag=no-email"' not in home.text
-    for key, (href, count) in tiles.items():
-        listed = client.get(href.replace("&amp;", "&"))
-        assert listed.status_code == 200
-        shown = re.search(r'class="muted list-count">(\d+) incident', listed.text)
-        assert shown is not None, key
-        assert int(shown.group(1)) == count, key
-    critical = client.get("/incidents?status=active&severity=critical&demo=0")
-    body = critical.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
-    assert f"tile OPEN {token}" in body
-    assert f"tile ESCALATED {token}" in body
-    assert f"tile RESOLVED {token}" not in body
-    assert f"tile INVESTIGATING {token}" not in body
-    warning = client.get("/incidents?status=active&severity=warning&demo=0")
-    warn_body = warning.text.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
-    assert f"tile INVESTIGATING {token}" in warn_body
-    assert f"tile CLOSED {token}" not in warn_body
-    assert f"tile OPEN {token}" not in warn_body
-    assert '<option value="warning" selected>Warning</option>' in warning.text
-    default = client.get("/incidents")
-    assert f"tile CLOSED {token}" in default.text
-    db.close()
-
-
 def _asset_total(html: str) -> int:
     shown = re.search(r"Showing (?:all |\d+–\d+ of )(\d+)", html)
     assert shown is not None, html[html.find("pager-meta") : html.find("pager-meta") + 80]
     return int(shown.group(1))
-
-
-def test_dashboard_asset_tiles_match_assets_filters():
-    db = _db()
-    host = _host(db, f"noemail-{uuid4().hex[:6]}")
-    assert asset_missing_email(host)
-    host.ping_status = "red"
-    host.exporter_status = "red"
-    db.commit()
-    from app.services import ingest_alertmanager
-
-    ingest_alertmanager(db, _alert(f"Prob{uuid4().hex[:6]}", host.asset_id, severity="warning"))
-    client = TestClient(app)
-    _login(client)
-    home = client.get("/")
-    infra = home.text.split("dash-tiles-infra", 1)[1].split("</section>", 1)[0]
-    tiles = _tile_counts(infra)
-    assert set(tiles) == {"assets", "problem", "unreachable"}
-    assert tiles["assets"][0] == "/assets"
-    assert tiles["problem"][0] == "/assets?flag=in-problem"
-    assert tiles["unreachable"][0] == "/assets?flag=unreachable"
-    assert ">Assets<" in infra and ">In problem<" in infra and ">Unreachable<" in infra
-    for gone in ("No owner email", "Assets without incident", "No open incident", 'href="/assets?flag=no-email"', ">Open<"):
-        assert gone not in infra, gone
-    for key, (href, count) in tiles.items():
-        listed = client.get(href.replace("&amp;", "&"))
-        assert listed.status_code == 200, key
-        assert _asset_total(listed.text) == count, key
-    problem = client.get(f"/assets?flag=in-problem&q={host.asset_id}")
-    assert host.asset_id in problem.text
-    down = client.get(f"/assets?flag=unreachable&q={host.asset_id}")
-    assert host.asset_id in down.text
-    # The Assets chip still names hosts with no owner email. The dashboard cube does not.
-    emailed = client.get(f"/assets?flag=no-email&q={host.asset_id}")
-    assert host.asset_id in emailed.text
-    assert "No owner email" in emailed.text
-    db.close()
-
-
-def test_playrules_edit_delete_and_promql_preview():
-    db = _db()
-    client = TestClient(app)
-    _login(client)
-    page = client.get("/playrules")
-    assert page.status_code == 200
-    assert "forgesre_demo_cpu_percent &gt; 80" in page.text
-    assert "firing Alertmanager sample" in page.text
-    assert "cannot fire earlier than the Prometheus rule" not in page.text
-    name = f"pr-{uuid4().hex[:6]}"
-    created = client.post(
-        "/playrules",
-        data={"name": name, "alertname": "NoSuchAlert", "metric": "", "severity": "warning", "playbook_id": "", "escalation_policy_id": ""},
-        follow_redirects=False,
-    )
-    assert created.status_code == 302
-    db.expire_all()
-    row = db.query(Playrule).filter_by(name=name).one()
-    assert row.condition == {"alertname": "NoSuchAlert"}
-    assert row.escalation_policy_id is not None
-    listed = client.get("/playrules")
-    assert "No Prometheus rule" in listed.text
-    edit = client.get(f"/playrules?edit={row.id}")
-    assert f'action="/playrules/{row.id}/update"' in edit.text
-    updated = client.post(
-        f"/playrules/{row.id}/update",
-        data={"name": name, "alertname": "NodeCPUHigh", "metric": "cpu_usage", "operator": ">", "value": "85", "severity": "critical"},
-        follow_redirects=False,
-    )
-    assert updated.status_code == 302
-    db.expire_all()
-    row = db.get(Playrule, row.id)
-    assert row.condition["alertname"] == "NodeCPUHigh"
-    assert row.condition["metric"] == "cpu_usage"
-    assert row.severity == "critical"
-    removed = client.post(f"/playrules/{row.id}/delete", follow_redirects=False)
-    assert removed.status_code == 302
-    db.expire_all()
-    assert db.query(Playrule).filter_by(name=name).first() is None
-    db.close()
-
-
-def test_playrule_delete_keeps_incidents():
-    db = _db()
-    name = f"del-{uuid4().hex[:6]}"
-    alertname = f"DelAlert{uuid4().hex[:6]}"
-    db.add(Playrule(name=name, enabled=True, severity="warning", condition={"alertname": alertname}))
-    db.commit()
-    host = _host(db, f"del-{uuid4().hex[:6]}")
-    incident = ingest_alertmanager(db, _alert(alertname, host.asset_id))[0]
-    assert incident.playrule_id is not None
-    client = TestClient(app)
-    _login(client)
-    rule = db.query(Playrule).filter_by(name=name).one()
-    assert client.post(f"/playrules/{rule.id}/delete", follow_redirects=False).status_code == 302
-    db.expire_all()
-    kept = db.query(Incident).filter_by(number=incident.number).one()
-    assert kept.playrule_id is None
-    db.close()
 
 
 def test_netbox_sync_does_not_guess_linux_or_overwrite_contacts(monkeypatch):
@@ -454,32 +289,3 @@ def test_removed_demo_candidate_is_not_reseeded():
     db.close()
 
 
-def test_analyst_templates_say_the_honest_thing(monkeypatch):
-    db = _db()
-    client = TestClient(app)
-    _login(client)
-    esc = client.get("/escalation")
-    assert "does not invent" not in esc.text
-    assert "no-recipient" not in esc.text
-    assert "falls back to" not in esc.text
-    assert 'class="info-tip"' not in esc.text
-    monkeypatch.setattr("app.settings.Settings.netbox_enabled", True)
-    monkeypatch.setattr("app.settings.Settings.netbox_auto_sync", True)
-    disc = client.get("/discovery")
-    assert "API token" in disc.text
-    assert "Auto" in disc.text
-    monkeypatch.setattr("app.settings.Settings.netbox_auto_sync", False)
-    assert "Automatic:" not in client.get("/discovery").text
-    assert "Manual only" not in client.get("/discovery").text
-    incident = db.query(Incident).filter(Incident.playbook_id.isnot(None)).order_by(Incident.id.desc()).first()
-    if incident is not None:
-        page = client.get(f"/incidents/{incident.number}")
-        assert "Guidance only" not in page.text
-        assert "playbook-guide" in page.text
-        assert 'class="info-tip"' not in page.text
-    base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-70" in base
-    for name in ["incident_detail.html", "asset_detail.html", "_asset_form.html", "escalation.html"]:
-        text = (ROOT / "frontend" / "templates" / name).read_text(encoding="utf-8")
-        assert "falls back to policy role@forgesre.local" not in text
-    db.close()
