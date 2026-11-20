@@ -776,6 +776,82 @@ def forgeai_rate(call_id: int, body: ForgeAiRate, db: Session = Depends(get_db),
     return {"id": row.id, "rating": row.rating}
 
 
+@router.get("/forgeai/skills")
+def forgeai_skills(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """All skills with their last-30-day results; ``can_edit`` for Engineers and up."""
+    from app.forgeai import TASKS, seed_skills, skill_as_dict, skill_stats
+    from app.models import ForgeAiSkill
+
+    seed_skills(db)
+    db.commit()
+    stats = skill_stats(db)
+    rows = db.query(ForgeAiSkill).order_by(ForgeAiSkill.task, ForgeAiSkill.priority, ForgeAiSkill.id).all()
+    return {"skills": [skill_as_dict(s, stats.get(s.slug)) for s in rows], "tasks": {k: v["label"] for k, v in TASKS.items()},
+            "can_edit": can(user, "write_play")}
+
+
+@router.post("/forgeai/skills")
+def forgeai_skill_create(body: dict[str, Any], db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """New skill (Engineer and up)."""
+    from app.forgeai import create_skill, skill_as_dict
+
+    try:
+        skill = create_skill(db, body, user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "forgeai.skill.create", actor=user.email, object_type="forgeai_skill", object_id=skill.slug, data={"task": skill.task})
+    db.commit()
+    return skill_as_dict(skill)
+
+
+@router.put("/forgeai/skills/{slug}")
+def forgeai_skill_save(slug: str, body: dict[str, Any], db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Save a skill: a new version; the old one stays in its history and in the audit log."""
+    from app.forgeai import save_skill, skill_as_dict
+
+    try:
+        skill = save_skill(db, slug, body, user.email)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "forgeai.skill.update", actor=user.email, object_type="forgeai_skill", object_id=slug,
+          data={"version": skill.version, "fields": sorted(k for k in body if k != "instructions") + (["instructions"] if "instructions" in body else [])})
+    db.commit()
+    return skill_as_dict(skill)
+
+
+@router.post("/forgeai/skills/{slug}/reset")
+def forgeai_skill_reset(slug: str, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Back to the shipped instructions (built-in skills only), as a new version."""
+    from app.forgeai import save_skill, skill_as_dict
+    from app.models import ForgeAiSkill
+
+    row = db.query(ForgeAiSkill).filter_by(slug=slug).first()
+    if row is None or not row.builtin:
+        raise HTTPException(status_code=404, detail="only built-in skills have a default")
+    skill = save_skill(db, slug, {"instructions": row.default_instructions}, user.email)
+    audit(db, "forgeai.skill.reset", actor=user.email, object_type="forgeai_skill", object_id=slug, data={"version": skill.version})
+    db.commit()
+    return skill_as_dict(skill)
+
+
+@router.delete("/forgeai/skills/{slug}")
+def forgeai_skill_delete(slug: str, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Remove a skill you added. Built-in skills can only be turned off."""
+    from app.models import ForgeAiSkill
+
+    row = db.query(ForgeAiSkill).filter_by(slug=slug).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="skill not found")
+    if row.builtin:
+        raise HTTPException(status_code=400, detail="built-in skills can be turned off, not removed")
+    db.delete(row)
+    audit(db, "forgeai.skill.delete", actor=user.email, object_type="forgeai_skill", object_id=slug)
+    db.commit()
+    return {"deleted": slug}
+
+
 @router.get("/forgeai/jobs/{job_id}")
 def forgeai_job(job_id: int, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
     """State of a ForgeAI job and, when done, its call id."""

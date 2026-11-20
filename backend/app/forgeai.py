@@ -370,3 +370,98 @@ def status(db: Session) -> dict[str, Any]:
     last = db.query(ForgeAiCall).order_by(ForgeAiCall.id.desc()).limit(10).all()
     out["last"] = [call_as_dict(c, prompts=False) for c in last]
     return out
+
+
+EDITABLE = ("name", "match_alerts", "match_types", "priority", "instructions", "include", "enabled")
+
+
+def skill_as_dict(skill: ForgeAiSkill, stats: dict[str, Any] | None = None) -> dict[str, Any]:
+    return {
+        "slug": skill.slug, "name": skill.name, "task": skill.task, "task_label": TASKS.get(skill.task, {}).get("label", skill.task),
+        "match_alerts": list(skill.match_alerts or []), "match_types": list(skill.match_types or []), "priority": skill.priority,
+        "instructions": skill.instructions, "default_instructions": skill.default_instructions if skill.builtin else "",
+        "include": {**INCLUDE_DEFAULT, **(skill.include or {})}, "enabled": skill.enabled, "builtin": skill.builtin,
+        "version": skill.version, "updated_by": skill.updated_by, "updated_at": skill.updated_at.isoformat() if skill.updated_at else None,
+        "history": list(skill.history or [])[-20:], "stats": stats or {},
+    }
+
+
+def skill_stats(db: Session, days: int = 30) -> dict[str, dict[str, int]]:
+    """Per skill over ``days``: questions, used, rejected, errors, thumbs up and down, average seconds."""
+    since = utcnow() - timedelta(days=days)
+    out: dict[str, dict[str, int]] = {}
+    for c in db.query(ForgeAiCall).filter(ForgeAiCall.created_at >= since, ForgeAiCall.status != "trial").all():
+        s = out.setdefault(c.skill_slug, {"calls": 0, "used": 0, "rejected": 0, "errors": 0, "up": 0, "down": 0, "ms": 0})
+        s["calls"] += 1
+        s["used"] += c.status == "used"
+        s["rejected"] += c.status == "rejected"
+        s["errors"] += c.status == "error"
+        s["up"] += c.rating > 0
+        s["down"] += c.rating < 0
+        s["ms"] += c.duration_ms or 0
+    for s in out.values():
+        s["avg_s"] = round(s.pop("ms") / max(1, s["calls"]) / 1000, 1)
+    return out
+
+
+def _clean(data: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if "name" in data:
+        out["name"] = " ".join(str(data["name"]).split())[:128] or "Skill"
+    for key in ("match_alerts", "match_types"):
+        if key in data:
+            items = data[key] if isinstance(data[key], list) else str(data[key]).split(",")
+            out[key] = [str(i).strip()[:80] for i in items if str(i).strip()][:20]
+    if "priority" in data:
+        out["priority"] = max(1, min(10000, int(data["priority"])))
+    if "instructions" in data:
+        text = str(data["instructions"]).strip()
+        if len(text) < 20:
+            raise ValueError("instructions need at least a sentence")
+        out["instructions"] = text[:3000]
+    if "include" in data and isinstance(data["include"], dict):
+        out["include"] = {k: bool(data["include"].get(k)) for k in INCLUDE_DEFAULT}
+    if "enabled" in data:
+        out["enabled"] = bool(data["enabled"])
+    return out
+
+
+def save_skill(db: Session, slug: str, data: dict[str, Any], actor: str) -> ForgeAiSkill:
+    """Update a skill; the old version goes to ``history`` (last 20) and the audit log."""
+    seed_skills(db)
+    skill = db.query(ForgeAiSkill).filter_by(slug=slug).first()
+    if skill is None:
+        raise LookupError("skill not found")
+    changes = _clean(data)
+    if not changes:
+        return skill
+    if skill.task in {"explain", "postmortem", "shift"} and (changes.get("match_alerts") or changes.get("match_types")):
+        changes.pop("match_alerts", None)
+        changes.pop("match_types", None)
+    skill.history = [*(skill.history or []), {
+        "version": skill.version, "instructions": skill.instructions, "match_alerts": skill.match_alerts, "match_types": skill.match_types,
+        "include": skill.include, "by": skill.updated_by, "at": skill.updated_at.isoformat() if skill.updated_at else None,
+    }][-20:]
+    for key, value in changes.items():
+        setattr(skill, key, value)
+    skill.version = (skill.version or 1) + 1
+    skill.updated_by, skill.updated_at = actor, utcnow()
+    return skill
+
+
+def create_skill(db: Session, data: dict[str, Any], actor: str) -> ForgeAiSkill:
+    """A new incident skill. Its slug comes from the name; built-ins keep theirs."""
+    seed_skills(db)
+    clean = _clean({**data, "instructions": data.get("instructions", "")})
+    base = re.sub(r"[^a-z0-9]+", "-", clean.get("name", "skill").lower()).strip("-")[:48] or "skill"
+    slug, n = base, 2
+    while db.query(ForgeAiSkill).filter_by(slug=slug).first() is not None:
+        slug, n = f"{base}-{n}", n + 1
+    task = str(data.get("task") or "incident")
+    if task not in TASKS:
+        raise ValueError("unknown task")
+    skill = ForgeAiSkill(slug=slug, task=task, builtin=False, default_instructions="", updated_by=actor,
+                         include={**INCLUDE_DEFAULT, **clean.pop("include", {})}, **{"priority": 50, **clean})
+    db.add(skill)
+    db.flush()
+    return skill

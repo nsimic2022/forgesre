@@ -37,6 +37,17 @@ an operator can ask again with another one. Every prompt is built as:
    ForgeRCA facts and hypotheses, playbook, earlier incidents on the asset with a confirmed cause,
    changes before, syslog when the skill asks for it.
 
+**Editing skills: Automation › ForgeAI skills** (Engineer and up). Each skill shows how it did in
+the last 30 days (questions, used, rejected, no answer, average time, 👍 / 👎). The editor has its
+name, the alarm-name patterns and asset types it applies to, its order, what ForgeAI is given
+(facts, playbook, earlier incidents, changes, syslog) and the instructions. **Try it** runs the
+saved or the unsaved text on an incident (the newest by default) and shows the answer, the exact
+prompt and what the model said, without touching the incident. **Save** makes a new version; the
+last 20 versions stay in the skill and every change is in the audit log. Built-in skills have
+**Reset to default** and can be turned off but not removed; skills you add can be removed.
+API: `GET/POST /api/v1/forgeai/skills`, `PUT /api/v1/forgeai/skills/{slug}`,
+`POST …/{slug}/reset`, `DELETE …/{slug}`, `POST /api/v1/forgeai/trial`.
+
 **Checks on the answer.** The JSON shape and lengths; no number and no IP that is not in the facts;
 no shell command. A failing answer is **rejected**: operators never see it, and the reason is kept.
 

@@ -170,3 +170,25 @@ def test_api_queues_jobs_shows_prompts_by_role_and_rates(db, monkeypatch):
     assert analyst.post("/api/v1/forgeai/trial", json={}).status_code == 403
     status = analyst.get("/api/v1/forgeai/status").json()
     assert status["enabled"] and status["week"]["thumbs_down"] >= 1
+
+
+def test_skills_api_versions_history_reset_and_rights(db, monkeypatch):
+    analyst, engineer = _client("analyst"), _client("engineer")
+    listed = analyst.get("/api/v1/forgeai/skills").json()
+    assert not listed["can_edit"] and {s["slug"] for s in listed["skills"]} >= {"incident-generic", "linux-disk", "shift-generic"}
+    assert analyst.put("/api/v1/forgeai/skills/linux-disk", json={"instructions": "x" * 30}).status_code == 403
+    before = next(s for s in listed["skills"] if s["slug"] == "linux-disk")
+    saved = engineer.put("/api/v1/forgeai/skills/linux-disk", json={"instructions": "Look at /u02 first and the archive log purge job.", "include": {"syslog": True}}).json()
+    assert saved["version"] == before["version"] + 1 and saved["include"]["syslog"] is True
+    assert saved["history"][-1]["instructions"] == before["instructions"]
+    assert engineer.put("/api/v1/forgeai/skills/linux-disk", json={"instructions": "short"}).status_code == 400
+    reset = engineer.post("/api/v1/forgeai/skills/linux-disk/reset").json()
+    assert reset["instructions"] == reset["default_instructions"] and reset["version"] == saved["version"] + 1
+    new = engineer.post("/api/v1/forgeai/skills", json={"name": "Printer toner", "match_alerts": ["*toner*"], "instructions": "Say which tray and how much toner is left."}).json()
+    assert new["slug"] == "printer-toner" and not new["builtin"]
+    assert engineer.delete("/api/v1/forgeai/skills/linux-disk").status_code == 400
+    assert engineer.delete("/api/v1/forgeai/skills/printer-toner").json() == {"deleted": "printer-toner"}
+    monkeypatch.setattr(forgeai, "_provider", lambda: FakeLLM(GOOD))
+    call = forgeai.run(db, "incident", _incident(db, "Disk /var 91%", "Linux Server", "DiskFull"))
+    stats = engineer.get("/api/v1/forgeai/skills").json()
+    assert next(s for s in stats["skills"] if s["slug"] == call.skill_slug)["stats"]["calls"] >= 1

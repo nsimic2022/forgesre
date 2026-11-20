@@ -1,20 +1,22 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { MaintenanceForm, PlaybookForm, PolicyForm, RemoveButton, RuleForm, ruleBody, ruleDraft } from "../components/AutomationEditors";
+import { ForgeAiSkills } from "../components/ForgeAiSkills";
 import { NoiseFilters } from "../components/NoiseFilters";
 import { Card, Chip } from "../components/ui";
 import { getJson, postJson, putJson, type Automation, type PolicyStep, type Simulation } from "../lib/api";
 import { clock, tierLabel } from "../lib/format";
 
-type Tab = "filters" | "rules" | "escalation" | "playbooks" | "maintenance";
+type Tab = "filters" | "rules" | "escalation" | "playbooks" | "maintenance" | "forgeai";
 const TABS: { key: Tab; label: string }[] = [
   { key: "filters", label: "Noise filters" },
   { key: "rules", label: "Routing rules" },
   { key: "escalation", label: "Escalation" },
   { key: "playbooks", label: "Playbooks" },
   { key: "maintenance", label: "Maintenance windows" },
+  { key: "forgeai", label: "ForgeAI skills" },
 ];
 // Classic pages that still do the editing.
-const EDIT: Record<Tab, string> = { filters: "", rules: "", escalation: "", playbooks: "", maintenance: "" };
+const EDIT: Record<Tab, string> = { filters: "", rules: "", escalation: "", playbooks: "", maintenance: "", forgeai: "" };
 type Rule = Automation["rules"][number];
 type Book = Automation["playbooks"][number];
 type Policy = Automation["policies"][number];
@@ -140,6 +142,7 @@ export function AutomationPage() {
           </button>
         ))}
       </div>
+      {tab === "forgeai" ? <ForgeAiSkills /> : null}
       {data && tab === "filters" ? <NoiseFilters filters={data.filters} canEdit={data.can_edit} onChanged={load} /> : null}
       {data && tab === "rules" ? (
         <>
