@@ -107,6 +107,11 @@ TCP 9100 is a printer's raw print port. Every connect or HTTP request to 9100 no
 with SSH open; printers never enter the node_exporter job. Tested in `tests/test_printer_guard.py`.
 Moving network discovery to LibreNMS (SNMP only) stays open under Asset sources.
 
+### Classic UI
+
+Stays until the owner decides. What is still only there, with a proposal per page:
+[classic-gaps.md](classic-gaps.md).
+
 ### Other items
 
 - Docstrings module by module as code is reorganised (AGENTS.md §1).
