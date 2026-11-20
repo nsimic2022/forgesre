@@ -287,6 +287,27 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload["result"] = result.name
                 row.payload = payload
                 journal_report(db, "backup", "create", "ok", summary=f"Wrote {result.name}", object_type="backup", object_id=result.name)
+            elif row.kind == "onboard_identify":
+                from app.onboarding import identify
+
+                # One address: TCP and exporter probes (0.5 s each), one SNMP GET (1.5 s).
+                payload = dict(row.payload or {})
+                snmp = payload.pop("snmp", None) or {}
+                payload["result"] = _json_safe(identify(str(payload.get("ip") or ""), snmp, int(payload.get("snmp_port") or 161)))
+                row.payload = payload  # the SNMP community / v3 passwords are not kept on the job
+            elif row.kind == "asset_verify":
+                from app.onboarding import verify
+
+                payload = dict(row.payload or {})
+                payload["result"] = _json_safe(verify(db, row.object_id))
+                row.payload = payload
+            elif row.kind == "snmp_apply":
+                from app.snmp_apply import apply_auths
+
+                # Rewrites the auth block in the generated snmp.yml, then POST /-/reload (5 s timeout).
+                payload = dict(row.payload or {})
+                payload["result"] = apply_auths(db)
+                row.payload = payload
             elif row.kind == "integration_sync":
                 from app.integrations_view import run_sync
 
@@ -323,6 +344,8 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 )
         except Exception as exc:
             log.exception("job %s %s failed", row.kind, row.object_id)
+            if row.kind == "onboard_identify":
+                row.payload = {k: v for k, v in (row.payload or {}).items() if k != "snmp"}  # never keep SNMP secrets
             row.status = "error"
             row.finished_at = utcnow()
             row.error = str(exc)[:2000]

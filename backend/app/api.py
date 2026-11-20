@@ -809,6 +809,80 @@ def snmp_sd_auths(request: Request, db: Session = Depends(get_db)) -> dict:
     return {"auths": snmp_auths(db)}
 
 
+class IdentifyBody(BaseModel):
+    ip: str
+    snmp_port: int = 161
+    snmp: dict[str, Any] = Field(default_factory=dict)
+
+
+ONBOARD_JOBS = ("onboard_identify", "asset_verify", "snmp_apply", "discovery_scan")
+
+
+@router.post("/onboard/identify")
+def onboard_identify(body: IdentifyBody, db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
+    """Probe one address in the background; poll GET /api/v1/onboard/jobs/{id}. Nothing is saved."""
+    from uuid import uuid4
+
+    from app.asset_snmp import normalize_snmp
+    from app.jobs import enqueue
+    from app.onboarding import IDENTIFY_KIND, _check_ip
+
+    try:
+        ip = _check_ip(body.ip)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    job = enqueue(db, IDENTIFY_KIND, f"{ip}#{uuid4().hex[:8]}", object_type="address",
+                  payload={"ip": ip, "snmp_port": body.snmp_port, "snmp": normalize_snmp(body.snmp), "actor": user.email})
+    return {"job": job.id if job else None}
+
+
+@router.post("/assets/{asset_id}/verify-job")
+def onboard_verify(asset_id: str, db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
+    """Check monitoring for one asset in the background (address → exporter/SNMP → Prometheus → Alertmanager → Core)."""
+    from app.jobs import enqueue
+    from app.onboarding import VERIFY_KIND
+    from app.snmp_apply import queue_if_needed
+
+    asset = db.query(Asset).filter_by(asset_id=asset_id).first()
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    applying = queue_if_needed(db, asset, actor=user.email)
+    job = enqueue(db, VERIFY_KIND, asset_id, object_type="asset", payload={"actor": user.email})
+    return {"job": job.id if job else None, "snmp_apply": applying}
+
+
+@router.get("/onboard/jobs/{job_id}")
+def onboard_job(job_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
+    """Status and result of an identify, verify, SNMP apply or scan job."""
+    from app.models import Job
+
+    row = db.get(Job, job_id)
+    if row is None or row.kind not in ONBOARD_JOBS:
+        raise HTTPException(status_code=404, detail="job not found")
+    payload = row.payload or {}
+    return {"id": row.id, "kind": row.kind, "status": row.status, "error": row.error or "",
+            "result": payload.get("result"), "object_id": row.object_id}
+
+
+@router.get("/discovery/status")
+def discovery_status(db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
+    """Add devices › Scan: saved ranges, a suggestion from this VM's networks, and the running scan."""
+    from discovery import suggested_connected_cidrs
+
+    from app.jobs import active_discovery_scan
+
+    job = active_discovery_scan(db)
+    try:
+        suggested = list(suggested_connected_cidrs() or [])
+    except Exception:
+        suggested = []
+    counts: dict[str, int] = {}
+    for (status,) in db.query(DiscoveryCandidate.status).all():
+        counts[status] = counts.get(status, 0) + 1
+    return {"cidrs": list(settings.discovery_cidrs), "suggested": suggested, "mode": settings.discovery_mode,
+            "scan": {"id": job.id, "status": job.status} if job else None, "counts": counts}
+
+
 @router.get("/discovery/candidates")
 def list_candidates(db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> list[dict]:
     rows = db.query(DiscoveryCandidate).order_by(DiscoveryCandidate.id.desc()).all()
@@ -1023,7 +1097,20 @@ async def create_asset_api(
             )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _queue_snmp_apply(db, asset, user.email)
     return _asset(asset)
+
+
+def _queue_snmp_apply(db: Session, asset: Any, actor: str) -> None:
+    """A saved custom community / v3 user reaches snmp_exporter without ./forgesre snmp-auths."""
+    from app.snmp_apply import queue_if_needed
+
+    try:
+        fresh = db.query(Asset).filter_by(asset_id=asset.asset_id).first()
+        if fresh is not None:
+            queue_if_needed(db, fresh, actor=actor)
+    except Exception:
+        log.exception("could not queue snmp_apply for %s", getattr(asset, "asset_id", "?"))
 
 
 @router.post("/assets/{asset_id}")
@@ -1064,6 +1151,7 @@ def update_asset_api(
         playrule_off=body.playrule_off,
         snmp_port=body.snmp_port,
     )
+    _queue_snmp_apply(db, asset, user.email)
     return _asset(asset)
 
 
@@ -2118,6 +2206,7 @@ def _candidate(item: DiscoveryCandidate) -> dict[str, Any]:
         "status": item.status,
         "source": item.source,
         "asset_id": item.asset_id,
+        "seen_at": item.seen_at.isoformat() if item.seen_at else None,
     }
 
 

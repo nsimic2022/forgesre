@@ -152,6 +152,7 @@ def _escalation_loop(stop: threading.Event) -> None:
             sweep_resolved(db)
             _queue_health_checks(db)
             _queue_k8s_sync(db)
+            _queue_snmp_apply(db)
         except Exception as exc:
             log.exception("escalation loop failed")
             report(db, "escalation", "loop", "error", summary="Escalation loop failed", detail=str(exc))
@@ -191,6 +192,27 @@ def _queue_k8s_sync(db: Session) -> None:
     _k8s_last = time.monotonic()
     enqueue(db, "k8s_sync", "clusters", object_type="kubernetes")
     db.commit()
+
+
+_SNMP_EVERY = 5 * 60
+_snmp_last = 0.0
+
+
+def _queue_snmp_apply(db: Session) -> None:
+    """Leader only: every 5 minutes, write pending per-asset SNMP auths (also edits made in classic)."""
+    global _snmp_last
+    if time.monotonic() - _snmp_last < _SNMP_EVERY:
+        return
+    from app.asset_snmp import auth_status
+    from app.inventory import is_snmp_asset
+    from app.jobs import enqueue
+    from app.models import Asset
+    from app.snmp_apply import JOB_KIND
+
+    _snmp_last = time.monotonic()
+    if any(is_snmp_asset(a) and auth_status(a).get("pending") for a in db.query(Asset).all()):
+        enqueue(db, JOB_KIND, "snmp", object_type="snmp", payload={"actor": "system"})
+        db.commit()
 
 
 def _mount_web_app(app: FastAPI) -> None:

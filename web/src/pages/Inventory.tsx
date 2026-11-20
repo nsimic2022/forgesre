@@ -1,3 +1,4 @@
+import { MonitoringCheck } from "../components/MonitoringCheck";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AssetEditor, type EditorMode } from "../components/AssetEditor";
@@ -98,7 +99,7 @@ function AssetPanel({ assetId, onClose, onEdit }: { assetId: string; onClose: ()
       ) : null}
       <h3 className="small faint" style={{ margin: 0, textTransform: "uppercase", letterSpacing: ".05em" }}>Monitoring sources</h3>
       <div className="row">{card.sources.length ? card.sources.map((s) => <Chip key={s} tone="ok">{s}</Chip>) : <span className="muted">None: nothing watches this asset.</span>}</div>
-      {dl([["Scrape", card.scrape_address], ["Profile", card.monitoring_profile], ["GLPI", card.glpi_id && `#${card.glpi_id}`], ["Zabbix", card.zabbix_hostid]])}
+      {dl([["Scrape", card.scrape_address], ["Profile", card.monitoring_profile], ["SNMP", card.snmp ? `${card.snmp.snmp_version}${card.snmp.snmp_version === "v3" ? ` · user ${card.snmp.snmp_v3_user}` : card.snmp.snmp_community_mode === "custom" ? " · own community" : " · default community"}${card.snmp.pending ? " · being written to snmp_exporter" : ""}` : ""], ["GLPI", card.glpi_id && `#${card.glpi_id}`], ["Zabbix", card.zabbix_hostid]])}
       <h3 className="small faint" style={{ margin: 0, textTransform: "uppercase", letterSpacing: ".05em" }}>Recent incidents</h3>
       {card.incidents.length === 0 ? <span className="muted">None.</span> : null}
       {card.incidents.map((i) => (
@@ -113,10 +114,11 @@ function AssetPanel({ assetId, onClose, onEdit }: { assetId: string; onClose: ()
           <>
             <button className="btn primary" type="button" onClick={() => onEdit("edit", card)}>Edit</button>
             <button className="btn" type="button" onClick={() => onEdit("clone", card)}>Clone</button>
-            <a className="btn" href={`/assets/${encodeURIComponent(card.asset_id)}`}>SNMP and more (classic)</a>
+            <a className="btn" href={`/assets/${encodeURIComponent(card.asset_id)}`}>More (classic)</a>
           </>
         ) : null}
       </div>
+      {card.can_edit ? <MonitoringCheck key={card.asset_id} assetId={card.asset_id} /> : null}
     </Card>
   );
 }
@@ -170,10 +172,9 @@ export function InventoryPage() {
           <span className="muted">One record per asset · {data ? `${data.all} assets` : "loading…"}</span>
         </div>
         <div className="row">
-          <a className="btn" href="/discovery">Discovery (classic)</a>
           <Link className="btn" to="/inventory/map">Dependency map</Link>
-          {data?.can_edit ? <button className="btn primary" type="button" onClick={() => openEditor("new", null)}>New asset</button> : null}
-          <a className="btn" href="/assets">Import (classic)</a>
+          {data?.can_edit ? <button className="btn" type="button" onClick={() => openEditor("new", null)}>New asset by hand</button> : null}
+          {data?.can_edit ? <Link className="btn primary" to="/inventory/add">Add devices</Link> : null}
         </div>
       </header>
       {error ? <div className="banner error" role="alert">{error}</div> : null}

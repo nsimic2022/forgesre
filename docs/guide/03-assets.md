@@ -9,18 +9,43 @@ Engineer.
 
 ![Inventory](../images/ui-inventory.png)
 
-Three ways to fill it:
+**Inventory › Add devices** is the way in. It does not stop at "saved": it shows you that
+metrics and alarms really arrive.
 
-- **By hand**: **New asset**, enter host name and IP, pick a type. Edit any row in place.
-- **Discovery**: ForgeSRE scans the networks you allowed (Settings › Discovery) and offers
-  what it finds. In the default *manual* mode you confirm each one; *semi-automatic* and
-  *automatic* add more on their own.
-- **Sync**: from NetBox (bundled or your own), LibreNMS, GLPI or Zabbix. These are read-only:
-  ForgeSRE never writes back to them.
+**One device**
 
-Linux and Windows servers report through node_exporter / windows_exporter; network devices
-through SNMP. `./forgesre ping <host>` checks that a new asset answers and exports metrics;
-`./forgesre verify <host>` follows the whole path from exporter to incident.
+1. Enter the IP. For switches, routers, firewalls and storage, give the SNMP credentials:
+   v2c with the appliance default community or the device's own, or a v3 user with its
+   passwords. Servers need none.
+2. **Identify** asks the address in the background: which ports answer, whether
+   node_exporter (Linux, 9100) or windows_exporter (Windows, 9182) gives metrics, and over SNMP
+   the device's name, model and location. You get a suggested host name and type, and a line
+   saying how ForgeSRE will watch it.
+3. Check the name, type, owner and contact, then **Add and start monitoring**. ForgeSRE tells
+   Prometheus about the new target (it asks every 30 seconds) and, for a device with its own
+   community or a v3 user, writes the credentials into snmp_exporter and reloads it. There is
+   no shell step any more.
+4. **Is it really monitored?** runs the live chain and shows each step: the address answers,
+   the exporter or SNMP answers, the right metrics come back, Prometheus has the target and
+   scrapes it (up = 1), samples are stored, Alertmanager is up, alarms reach ForgeSRE. A red
+   step says what to fix. **Check again** after a minute.
+
+Every asset card has the same **Check monitoring** button, so you can prove any asset is
+watched, whichever way it got into the inventory.
+
+**Scan a network** probes up to 256 addresses per range (TCP 22, 80, 443, 9100, 9182, 10050,
+12345 and SNMP with the default community) in the background and lists what answered.
+Nothing becomes an asset until you press **Add**; then the monitoring check runs for it.
+
+**From another system**: NetBox, Zabbix, GLPI and LibreNMS are read every 6 hours when turned
+on, or now with **Sync now** on their card in Settings › Integrations. ForgeSRE never writes
+back to them.
+
+**By hand**: **New asset by hand** opens the full form, SNMP credentials included.
+
+From the shell: `./forgesre ping <host>` checks that an address answers and exports metrics,
+`./forgesre verify <host>` runs the same live chain, and `./forgesre snmp-auths` writes SNMP
+credentials now instead of waiting for ForgeSRE (it does so within 5 minutes on its own).
 
 ## Dependency map
 
