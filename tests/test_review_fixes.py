@@ -102,11 +102,12 @@ def test_doctor_discovery_is_not_a_checkbox(monkeypatch):
     monkeypatch.setattr("app.api._http", lambda url, method: {"status": "ok"})
     monkeypatch.setattr("app.journal.list_entries", lambda *a, **k: [])
     monkeypatch.setattr("app.inventory.discovery_loop_age_seconds", lambda: None)
+    monkeypatch.setattr("app.loop_beats.age_seconds", lambda name: None)  # no beat in the database either
     payload = doctor_payload(force=True)
     disc = payload["components"]["discovery"]
     assert disc["status"] == "warn"
     assert "loop" in (disc.get("why") or "").lower() or "reported" in (disc.get("why") or "").lower()
-    monkeypatch.setattr("app.inventory.discovery_loop_age_seconds", lambda: 4.0)
+    monkeypatch.setattr("app.loop_beats.age_seconds", lambda name: 4.0)
     payload = doctor_payload(force=True)
     assert payload["components"]["discovery"]["status"] == "ok"
     assert "alive" in (payload["components"]["discovery"].get("why") or "").lower()

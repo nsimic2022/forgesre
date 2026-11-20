@@ -52,9 +52,16 @@ Inside that process:
 - **Sign-in throttle state is in the database** (`login_failures`), so every process counts the
   same failures. Session cookies are signed and checked against `users.session_version`.
 
-Core still ships with one uvicorn worker. Loops, job claims and sign-in throttling are now safe
-with more; a few System Health "alive" markers are still per-process, so keep one worker until
-they move to the database too.
+**Web workers and the worker process.** Sessions, the sign-in throttle, job claims, the leader
+lock and the loop heartbeats (`loop_beats`) are all in Postgres, so Core can run several web
+processes: `FORGESRE_WEB_WORKERS=4` in `.env`, then `./forgesre update`. The background loops
+(escalation, scheduled reports, the job queue, ForgeAI jobs, discovery and syncs) run in the
+process that holds the leader lock. To keep them away from the web processes, run them in their own
+container: add `worker` to `COMPOSE_PROFILES` and set `FORGESRE_CORE_ROLE=web` in `.env`, then
+`./forgesre update`. `FORGESRE_ROLE` is `all` (default), `web` or `worker` (`python -m app.worker`).
+System Health and `./forgesre doctor` show **Background loops**: the age of each loop's last beat and
+the process running it, so a stopped worker shows within minutes. Integration back-off timers
+(Zabbix, GLPI, LibreNMS) are per process on purpose: they only avoid hammering a dead system.
 
 Request-path HTTP (Prometheus, LibreNMS, Loki, System Health probes) uses `httpx.AsyncClient` with a 5s read timeout. Mail uses `aiosmtplib`. llama.cpp streams tokens as an `AsyncGenerator`. Sync FastAPI routes and pytest call the same coroutines through `run_sync` (a worker thread when a loop is already running). The infrastructure scan holds `_infrastructure_scan_lock` and skips seeded `forge-demo-*` rows so Education Mode never spends ICMP or SNMP on lab assets.
 

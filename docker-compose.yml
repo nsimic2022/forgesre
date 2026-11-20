@@ -24,7 +24,7 @@ services:
     env_file:
       - .env
       - secrets/secrets.env
-    environment:
+    environment: &core_env
       DATABASE_URL: postgresql+psycopg2://forgesre:${POSTGRES_PASSWORD}@127.0.0.1:5432/forgesre
       FORGESRE_CONFIG: /config/forgesre.yml
       FORGESRE_LOG_FILE: /logs/forgesre.log
@@ -45,7 +45,9 @@ services:
       FORGESRE_MODELS_DIR: /host-models
       FORGESRE_LOGS_DIR: /logs
       FORGESRE_FILES_WRITABLE: "0"
-    volumes:
+      # all = web + background loops; web = requests only (run the worker profile for the loops)
+      FORGESRE_ROLE: ${FORGESRE_CORE_ROLE:-all}
+    volumes: &core_volumes
       # rw: Discovery Confirm & scan persists discovery.cidrs. :ro was EROFS → HTTP 500.
       - ./config/forgesre.yml:/config/forgesre.yml
       - ${FORGESRE_DATA:-./data}/logs:/logs
@@ -58,7 +60,8 @@ services:
       - ${FORGESRE_DATA:-./data}/generated:/host-generated
       # read-write: Settings › ForgeAI models downloads, imports and picks the active model
       - ${FORGESRE_DATA:-./data}/models:/host-models
-    command: uvicorn app.main:app --host 0.0.0.0 --port ${FORGESRE_HTTP_PORT:-8080}
+    # FORGESRE_WEB_WORKERS > 1: several web processes; sessions, throttles, jobs and loop beats are in Postgres.
+    command: uvicorn app.main:app --host 0.0.0.0 --port ${FORGESRE_HTTP_PORT:-8080} --workers ${FORGESRE_WEB_WORKERS:-1}
     depends_on:
       postgres:
         condition: service_healthy
@@ -431,6 +434,33 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    restart: unless-stopped
+
+  # Optional: background loops (escalation, reports, jobs, ForgeAI, discovery, syncs) in their own
+  # process. COMPOSE_PROFILES=...,worker and FORGESRE_CORE_ROLE=web in .env; see docs/architecture.md.
+  worker:
+    profiles: ["worker"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    network_mode: host
+    env_file:
+      - .env
+      - secrets/secrets.env
+    environment:
+      <<: *core_env
+      FORGESRE_ROLE: worker
+    volumes: *core_volumes
+    command: python -m app.worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; from app.loop_beats import age_seconds; a = age_seconds('jobs'); sys.exit(0 if a is not None and a < 180 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
     restart: unless-stopped
 
   mailserver:

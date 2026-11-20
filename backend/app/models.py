@@ -526,6 +526,17 @@ class AssetConflict(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class LoopBeat(Base):
+    """Last time a background loop ran, and in which process. Shared by every Core and worker process."""
+
+    __tablename__ = "loop_beats"
+
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    process: Mapped[str] = mapped_column(String(128), default="")
+    leader: Mapped[bool] = mapped_column(Boolean, default=False)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class LoginFailure(Base):
     """One failed sign-in, kept for the throttle window. Shared by every Core process."""
 
