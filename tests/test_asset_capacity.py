@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.main import create_app
-from app.models import Asset, Job, User
+from app.models import Job, User
 from app.security import hash_password
 from app.seed import seed
 
@@ -28,12 +28,12 @@ def _client(role: str) -> TestClient:
 
 
 def _asset() -> str:
+    """The seeded demo host, with no capacity jobs yet. New assets would shift asset numbers for other tests."""
     db = SessionLocal()
-    asset_id = f"cap-{uuid4().hex[:6]}"
-    db.add(Asset(asset_id=asset_id, hostname=asset_id, ip="10.9.9.9", type="Linux server"))
+    db.query(Job).filter_by(kind="asset_capacity", object_id="forge-demo-01").delete()
     db.commit()
     db.close()
-    return asset_id
+    return "forge-demo-01"
 
 
 def test_capacity_is_read_in_a_job_then_served_from_it(monkeypatch):
