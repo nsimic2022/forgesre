@@ -192,3 +192,15 @@ def test_skills_api_versions_history_reset_and_rights(db, monkeypatch):
     call = forgeai.run(db, "incident", _incident(db, "Disk /var 91%", "Linux Server", "DiskFull"))
     stats = engineer.get("/api/v1/forgeai/skills").json()
     assert next(s for s in stats["skills"] if s["slug"] == call.skill_slug)["stats"]["calls"] >= 1
+
+
+def test_doctor_says_how_to_install_or_start_the_bundled_model(monkeypatch):
+    import app.api as api
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "yaml", {**settings.yaml, "ai": {"enabled": True, "llm": {"mode": "bundled", "url": "http://127.0.0.1:9/v1"}}})
+    monkeypatch.setattr(api, "_http", lambda url, method: {"status": "error", "why": f"{url}: Connection refused", "test": "", "fix": "x"})
+    row = api._llm_check()
+    assert "./forgesre fetch-llm" in row["fix"] and "--profile ai up -d llm" in row["fix"]
+    monkeypatch.setattr(settings, "yaml", {**settings.yaml, "ai": {"enabled": False}})
+    assert api._llm_check()["status"] in {"ok", "disabled"}

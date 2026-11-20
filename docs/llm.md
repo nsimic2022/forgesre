@@ -476,3 +476,11 @@ docker compose exec -T core python -c "import sys; print('\n'.join(sys.path))"
 - No multi-model picker in the UI
 - No cloud provider as a supported product path
 - AI never executes the recommended action
+
+## Doctor says `llm ✗ Connection refused`
+
+Nothing listens on 127.0.0.1:8088, so the llama.cpp container is not running. ForgeAI can be on in
+Settings while the model was never installed: check `ls -lh data/models/` and
+`grep COMPOSE_PROFILES .env`. Empty folder or no `ai` in the profiles: `./forgesre fetch-llm`
+(downloads the model, turns on profile `ai`, starts llama.cpp). Model present: `docker compose
+--profile ai up -d llm` and read `docker compose logs --tail 40 llm`. Doctor's Fix line says the same.
