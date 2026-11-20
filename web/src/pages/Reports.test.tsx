@@ -54,4 +54,22 @@ describe("Reports", () => {
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url === "/api/v1/scheduled-reports")).toBe(true));
     expect(calls.find((c) => c.method === "POST")!.body).toMatchObject({ schedule: "cron", cron: "0 8 1 * *", recipients: ["noc@dc.local", "boss@dc.local"] });
   });
+
+  it("previews a scheduled report and sends it now in the background", async () => {
+    const calls: { url: string; method: string }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, method: init?.method ?? "GET" });
+      const body = url.endsWith("/preview")
+        ? { subject: "Report Weekly NOC", text: "", html: "<html>at a glance</html>", note: "", recipients: ["noc@dc.local"], schedule: "Every Monday 08:00" }
+        : url.endsWith("/send") ? { queued: true } : { ...data, can_edit: true };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    render(<ReportsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Preview Weekly NOC" }));
+    expect(await screen.findByTitle("Scheduled report preview")).toBeTruthy();
+    expect(screen.getByText("Every Monday 08:00 · to noc@dc.local")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Send now" }));
+    expect(await screen.findByRole("button", { name: "Queued, sending…" })).toBeTruthy();
+    expect(calls.some((c) => c.method === "POST" && c.url === "/api/v1/scheduled-reports/1/send")).toBe(true);
+  });
 });

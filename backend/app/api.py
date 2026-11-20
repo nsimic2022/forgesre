@@ -2817,6 +2817,57 @@ def scheduled_report_delete(report_id: int, db: Session = Depends(get_db), user:
     return {"removed": report_id}
 
 
+@router.get("/scheduled-reports/preview")
+def scheduled_report_sample_preview(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """What a weekly report mail looks like with today's data. Nothing is sent."""
+    from app.message_previews import scheduled_report
+
+    return scheduled_report(db)
+
+
+@router.get("/scheduled-reports/{report_id}/preview")
+def scheduled_report_preview(report_id: int, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """The mail this scheduled report would send now, with its recipients. Nothing is sent."""
+    from app.message_previews import scheduled_report
+
+    try:
+        return scheduled_report(db, report_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="report not found") from exc
+
+
+@router.post("/scheduled-reports/{report_id}/send")
+def scheduled_report_send(report_id: int, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """Send this report now, in the background (``report_send`` job). The schedule does not move."""
+    from app.jobs import enqueue
+
+    _report_writer(user)
+    row = _report_or_404(db, report_id)
+    job = enqueue(db, "report_send", str(row.id), object_type="report", payload={"actor": user.email})
+    audit(db, "report.send_now", actor=user.email, object_type="report", object_id=str(row.id), data={"name": row.name})
+    db.commit()
+    return {"queued": True, "job": getattr(job, "id", None)}
+
+
+@router.get("/message-previews")
+def message_previews_api(incident: str = "", db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """Settings › Messages: the alert mail, chat messages and incident report for one incident
+    (the newest when none is named, a sample on an empty appliance). Rendered only, never sent."""
+    from app import message_previews as mp
+
+    from app.ack_links import public_url
+
+    row, sample = mp.pick_incident(db, incident)
+    return {
+        "incident": None if sample else row.number,
+        "public_url": public_url(),
+        "note": mp.SAMPLE_NOTE if sample else "",
+        "alert_email": mp.alert_email(row),
+        "chat": mp.chat_messages(row),
+        "incident_report": mp.incident_report(db, row),
+    }
+
+
 class MaintenanceBody(BaseModel):
     assets: list[str] = Field(default_factory=list)
     starts_at: str = ""

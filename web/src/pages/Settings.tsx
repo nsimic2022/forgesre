@@ -1,3 +1,4 @@
+import { MessagePreviews } from "../components/MessagePreviews";
 import { BackupPanel, UsersPanel } from "../components/AdminPanels";
 import { ChecksPanel } from "../components/ChecksPanel";
 import { useEffect, useState } from "react";
@@ -132,7 +133,7 @@ export function SettingsPage() {
   const replace = (next: SettingRow) => setData((d) => (d ? { ...d, settings: d.settings.map((r) => (r.key === next.key ? next : r)) } : d));
   const rows = data?.settings.filter((r) => r.group === group) ?? [];
   const tests = Array.from(new Set(rows.map((r) => r.test).filter(Boolean)));
-  const sections = data ? [...Object.entries(data.groups), ["services", "Services and health"], ["users", "Users and roles"], ["backup", "Backup, import, export"]] : [];
+  const sections = data ? [...Object.entries(data.groups), ["messages", "Messages and templates"], ["services", "Services and health"], ["users", "Users and roles"], ["backup", "Backup, import, export"]] : [];
   return (
     <>
       <header className="page-head">
@@ -158,7 +159,9 @@ export function SettingsPage() {
             ))}
           </nav>
           <div style={{ flex: "999 1 640px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
-            {group === "services" ? (
+            {group === "messages" ? (
+              <MessagePreviews />
+            ) : group === "services" ? (
               <Services />
             ) : group === "users" ? (
               <UsersPanel />

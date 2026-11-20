@@ -70,30 +70,76 @@ def message_text(incident: Incident, event: str, detail: str = "") -> str:
     return text
 
 
-def payload(channel: str, text: str) -> dict[str, Any]:
-    """Body each service expects from an incoming webhook."""
+COLORS = {"CRITICAL": "#dc2626", "HIGH": "#ea580c", "WARNING": "#ca8a04", "resolved": "#16a34a"}
+
+
+def _incident_link(incident: Incident) -> str:
+    base = (settings.yaml.get("system") or {}).get("public_url") or ""
+    return f"{str(base).rstrip('/')}/app/incidents/{incident.number}" if base else ""
+
+
+def _facts(incident: Incident) -> list[tuple[str, str]]:
+    asset = incident.asset
+    started = incident.started_at.strftime("%Y-%m-%d %H:%M UTC") if incident.started_at else ""
+    rows = [("Host", asset.hostname if asset is not None else ""), ("Incident", incident.number),
+            ("Severity", (incident.severity or "").title()), ("Started", started)]
+    return [(k, v) for k, v in rows if v]
+
+
+def payload(channel: str, text: str, incident: Incident | None = None, event: str = "") -> dict[str, Any]:
+    """Body each service expects from an incoming webhook.
+
+    With the incident, a card in the severity colour (green when resolved) with host, number,
+    severity, start time and an "Open incident" link when system.public_url is set; ``text``
+    stays as the notification fallback. Only those fields leave the server.
+    """
+    if incident is None:
+        if channel == "slack":
+            return {"text": text}
+        if channel == "discord":
+            return {"content": text[:1900], "allowed_mentions": {"parse": []}}
+        return _teams(text, [], "", "default")
+    first = text.splitlines()[0]
+    head = first.split(" · ", 1)[0] + (" — " + first.split(" — ", 1)[1] if " — " in first else "")
+    link = _incident_link(incident)
+    facts = _facts(incident)
+    color = COLORS["resolved"] if event == "resolved" else COLORS.get((incident.severity or "").upper(), COLORS["WARNING"])
     if channel == "slack":
-        return {"text": text}
+        blocks: list[dict[str, Any]] = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": f"*{head}*"}},
+            {"type": "section", "fields": [{"type": "mrkdwn", "text": f"*{k}*\n{v}"} for k, v in facts]},
+        ]
+        if link:
+            blocks.append({"type": "actions", "elements": [{"type": "button", "text": {"type": "plain_text", "text": "Open incident"}, "url": link}]})
+        return {"text": text, "attachments": [{"color": color, "blocks": blocks}]}
     if channel == "discord":
-        return {"content": text[:1900], "allowed_mentions": {"parse": []}}
+        embed: dict[str, Any] = {"title": head[:256], "color": int(color[1:], 16),
+                                 "fields": [{"name": k, "value": v[:1024], "inline": True} for k, v in facts]}
+        if link:
+            embed["url"] = link
+        return {"content": "", "embeds": [embed], "allowed_mentions": {"parse": []}}
+    tone = "good" if event == "resolved" else ("attention" if (incident.severity or "").upper() == "CRITICAL" else "warning")
+    return _teams(head, facts, link, tone)
+
+
+def _teams(head: str, facts: list[tuple[str, str]], link: str, tone: str) -> dict[str, Any]:
     # Teams Workflows ("When a Teams webhook request is received") takes an Adaptive Card.
-    return {
-        "type": "message",
-        "attachments": [
-            {
-                "contentType": "application/vnd.microsoft.card.adaptive",
-                "content": {
-                    "type": "AdaptiveCard",
-                    "version": "1.4",
-                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                    "body": [{"type": "TextBlock", "text": text, "wrap": True}],
-                },
-            }
-        ],
-    }
+    body: list[dict[str, Any]] = [{"type": "TextBlock", "text": head, "wrap": True, "weight": "Bolder", "color": tone}]
+    if facts:
+        body.append({"type": "FactSet", "facts": [{"title": k, "value": v} for k, v in facts]})
+    card: dict[str, Any] = {"type": "AdaptiveCard", "version": "1.4",
+                            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json", "body": body}
+    if link:
+        card["actions"] = [{"type": "Action.OpenUrl", "title": "Open incident", "url": link}]
+    return {"type": "message", "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "content": card}]}
 
 
-def post(channel: str, text: str, timeout: float = TIMEOUT) -> tuple[bool, str]:
+def _event_of(text: str) -> str:
+    head = text.split("] ", 1)[-1].split(":", 1)[0].strip().lower()
+    return head if head in {"opened", "escalated", "resolved"} else ""
+
+
+def post(channel: str, text: str, timeout: float = TIMEOUT, incident: Incident | None = None) -> tuple[bool, str]:
     """POST one message. Never raises: returns (ok, detail). The URL is never logged (it is a secret)."""
     url = webhook_url(channel)
     if not url:
@@ -101,7 +147,7 @@ def post(channel: str, text: str, timeout: float = TIMEOUT) -> tuple[bool, str]:
     if not url.lower().startswith("https://"):
         return False, f"{CHANNELS[channel]} must be an https:// URL"
     try:
-        response = httpx.post(url, json=payload(channel, text), timeout=timeout)
+        response = httpx.post(url, json=payload(channel, text, incident=incident, event=_event_of(text)), timeout=timeout)
     except httpx.HTTPError as exc:
         return False, f"{type(exc).__name__}: could not reach {LABELS[channel]}"
     if 200 <= response.status_code < 300:
@@ -160,7 +206,8 @@ def deliver(db: Session, notification_id: int) -> bool:
     row = db.get(Notification, notification_id)
     if row is None or row.channel not in CHANNELS:
         raise RuntimeError(f"chat notification {notification_id} not found")
-    ok, detail = post(row.channel, row.body)
+    incident = db.get(Incident, row.incident_id) if row.incident_id else None
+    ok, detail = post(row.channel, row.body, incident=incident)
     row.status = "sent" if ok else "failed"
     row.error = "" if ok else detail
     db.commit()

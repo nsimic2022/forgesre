@@ -20,8 +20,9 @@ the commented reference.
 
 ## Groups
 
-General · Network and services · Integrations (GLPI, Zabbix, LibreNMS, NetBox) · Discovery ·
-Notification channels (SMTP, Slack, Microsoft Teams, Discord) · AI (ForgeRCA / ForgeAI). The full list with types and limits
+General · Checks · Network and services · Integrations (GLPI, Zabbix, LibreNMS, NetBox) · Discovery ·
+Notification channels (SMTP, Slack, Microsoft Teams, Discord) · ForgeRCA / ForgeAI. The page adds
+Messages and templates, Services and health, Users and roles, and Backup. The full list with types and limits
 is `REGISTRY` in `system_settings.py`.
 
 ## Commands
@@ -38,9 +39,12 @@ is `REGISTRY` in `system_settings.py`.
 
 ## Chat channels: Slack, Microsoft Teams, Discord
 
-Chat is an extra channel next to email. When a channel is on, ForgeSRE posts one line when
+Chat is an extra channel next to email. When a channel is on, ForgeSRE posts a card when
 an incident opens, at each escalation step and when it resolves, for incidents at or above
-the channel's minimum severity (default `high`).
+the channel's minimum severity (default `high`): a colour bar for the severity (green when
+resolved), the headline, host, incident number, severity, start time and an **Open incident**
+button. Slack gets Block Kit in an attachment, Teams an Adaptive Card, Discord an embed; the
+plain line stays as the notification text.
 
 Chat messages leave the server. They carry the severity, title, host and incident number
 (and a link when `system.public_url` is set), never logs, evidence or ForgeAI text.
@@ -65,6 +69,18 @@ Messages are sent by the background jobs worker with a 10-second timeout, so a s
 service never holds up alerts or the UI. Each message is a row in the incident's
 notifications (channel `slack`, `teams` or `discord`) with `sent` or `failed` and the reason.
 `./forgesre doctor` shows a **Chat** row: off, OK, or the last delivery error.
+
+## Messages and templates
+
+**Settings › Messages and templates** renders, for any incident (the newest by default, a
+sample on an empty appliance), the alert mail, the chat card for each event and channel (with
+the exact JSON that is posted) and the incident report. It uses the same builders as a real
+send and sends nothing. `GET /api/v1/message-previews[?incident=INC-…]` (any signed-in user).
+
+Scheduled reports have **Preview** (`GET /api/v1/scheduled-reports/{id}/preview`, or
+`/scheduled-reports/preview` for a sample) and **Send now** (`POST
+/api/v1/scheduled-reports/{id}/send`, Engineer, queues a `report_send` job; the schedule does
+not move).
 
 ## API (Admin; tests need Engineer)
 

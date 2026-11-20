@@ -43,6 +43,20 @@ def _incident(db, severity="HIGH") -> Incident:
     return row
 
 
+def test_rich_payloads_carry_only_the_incident_line():
+    from app.models import Asset, Incident
+
+    incident = Incident(number="INC-9", title="Host down", severity="CRITICAL", status="OPEN", source="prometheus",
+                        asset=Asset(asset_id="a-9", hostname="esx-9", ip="10.0.0.9", type="Hypervisor"))
+    text = chat.message_text(incident, "resolved")
+    discord = chat.payload("discord", text, incident=incident, event="resolved")["embeds"][0]
+    assert discord["color"] == int(chat.COLORS["resolved"][1:], 16) and discord["title"] == "[CRITICAL] Resolved: Host down"
+    teams = chat.payload("teams", text, incident=incident, event="opened")["attachments"][0]["content"]
+    assert teams["body"][0]["color"] == "attention"
+    assert {"title": "Host", "value": "esx-9"} in teams["body"][1]["facts"]
+    assert "10.0.0.9" not in str(teams)  # no IP, logs or evidence leave the server
+
+
 def test_payload_shapes():
     assert chat.payload("slack", "hi") == {"text": "hi"}
     discord = chat.payload("discord", "x" * 3000)
@@ -90,7 +104,11 @@ def test_step_queues_a_job_and_delivery_records_the_result(chat_on, monkeypatch)
     monkeypatch.setattr(chat.httpx, "post", fake_post)
     assert chat.deliver(db, row.id) is True
     db.refresh(row)
-    assert row.status == "sent" and sent[0][1] == {"text": row.body} and sent[0][2] == chat.TIMEOUT
+    body = sent[0][1]
+    assert row.status == "sent" and body["text"] == row.body and sent[0][2] == chat.TIMEOUT
+    card = body["attachments"][0]
+    assert card["color"] == chat.COLORS["HIGH"] and card["blocks"][0]["text"]["text"] == "*[HIGH] Opened: Disk /u02 92%*"
+    assert {"type": "mrkdwn", "text": f"*Incident*\n{incident.number}"} in card["blocks"][1]["fields"]
 
     chat.queue_step(db, incident, "15m", "lead@dc.local", 15)
     later = db.query(Notification).filter_by(incident_id=incident.id, step_key="chat:slack:15m").one()
