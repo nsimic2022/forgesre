@@ -68,6 +68,15 @@ checklist, and follow-up actions. Nothing is invented: every gap is `[to fill]`,
 the panel. **Copy Markdown** or **Download .md**
 (`GET /api/v1/incidents/{number}/postmortem?download=1`), then paste it into your wiki.
 
+## Send report
+
+**Send report** on the incident page (Analyst+) mails the incident report. The box is filled
+with the subject (`Alarm <host>`) and the generated report; buttons add the asset owner, earlier
+recipients of this incident and the address book. Left as it is, the report goes as text and
+formatted HTML; edited, as plain text. The `incident_mail` job sends one mail per address, so
+the page never waits on SMTP, and each one is a row in the Outbox (Reports page) with status
+sent, failed (with the SMTP error) or generated when SMTP is off.
+
 ## Dependency map
 
 **Inventory › Dependency map** (`/app/inventory/map`) shows who sits behind whom. The parent
@@ -141,7 +150,7 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
 | Page | New UI |
 |---|---|
 | NOC overview | done |
-| Incidents: list, detail, checklist, notes | done |
+| Incidents: list, detail, checklist, notes, Send report by mail | done |
 | On-call | done: who is on call now, the week grid, add (also on several days at once), edit, copy, turn off, remove, take the rest of today |
 | Inventory: library (site › rack, type, environment, customer, views), table, asset card with 30-day capacity (disk days to full, interface receive), add / edit / clone / delete, Import CSV (check first, then add in a background job; existing assets are skipped) | done; discovery still on the classic pages |
 | Automation: pipeline, noise filters (create, edit, remove), routing rules, escalation, playbooks, maintenance windows, "Try an alarm" | done, including creating, editing, turning off and removing rules and playbooks, escalation policies (Tier 1–3 and Manager) and maintenance windows (several assets at once, End now) |
@@ -161,7 +170,7 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
 | Reports | `GET /api/v1/reports-page?days=` · `GET /api/v1/reports/incidents.csv?days=` | `POST /api/v1/scheduled-reports` `{name, recipients, schedule, every_n, every_unit, weekdays, cron, asset_ids}`, `PUT …/{id}`, `POST …/{id}/toggle`, `DELETE …/{id}` (Analyst+) |
 | Settings | `GET /api/v1/settings` (Admin) · `GET /api/v1/system/doctor` · `GET /api/v1/users-page` · `GET /api/v1/backups` | `PUT /api/v1/settings/{key}` `{value}` · `POST /api/v1/settings/test/{component}` · `POST /api/v1/users`, `POST /api/v1/users/{id}`, `POST …/{id}/delete` · `POST /api/v1/backups` (queues a `backup_create` job), `POST /api/v1/backups/import`, `DELETE /api/v1/backups/{name}` (all Admin) |
 | On-call | `GET /api/v1/oncall-week` | `POST /api/v1/oncall-slots` `{weekday, start, end, name, surname, email, phone, phone2}`, `PUT …/{id}`, `POST …/{id}/toggle`, `DELETE …/{id}`, `POST /api/v1/oncall-slots/take` (Engineer+) |
-| Incident detail | `GET /api/v1/incidents/{number}/view` | `POST …/status` (acknowledge = `INVESTIGATING`, `ESCALATED`, `RESOLVED`), `POST …/notes`, `POST …/checklist` `{step, done}`, `POST …/investigate` (queues ForgeRCA, then ForgeAI) |
+| Incident detail | `GET /api/v1/incidents/{number}/view` | `POST …/status` (acknowledge = `INVESTIGATING`, `ESCALATED`, `RESOLVED`), `POST …/notes`, `POST …/checklist` `{step, done}`, `POST …/investigate` (queues ForgeRCA, then ForgeAI), `GET …/mail` (subject, generated report, address suggestions, earlier sends) and `POST …/mail` `{to, subject, body}` (Analyst+, up to 10 addresses; queues `incident_mail`; poll `GET …/mail/{job}`) |
 
 ## Next
 

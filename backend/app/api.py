@@ -2875,6 +2875,52 @@ def incidents_page_api(
         raise HTTPException(status_code=400, detail="dates are YYYY-MM-DD") from exc
 
 
+class IncidentMailBody(BaseModel):
+    to: str | list[str]
+    subject: str = ""
+    body: str = ""
+
+
+def _incident_or_404(db: Session, number: str) -> Incident:
+    item = db.query(Incident).options(joinedload(Incident.asset)).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    return item
+
+
+@router.get("/incidents/{number}/mail")
+def incident_mail_draft(number: str, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """Subject, generated report and address suggestions for Send report (Analyst+)."""
+    del user
+    from app.incident_mail import mail_draft
+
+    return mail_draft(db, _incident_or_404(db, number))
+
+
+@router.post("/incidents/{number}/mail")
+def incident_mail_send(number: str, body: IncidentMailBody, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """Queue the incident report to up to 10 addresses; the incident_mail job sends them."""
+    from app.incident_mail import queue_mail
+
+    try:
+        job = queue_mail(db, _incident_or_404(db, number), body.to, body.subject, body.body, user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"job": job.id if job else None}
+
+
+@router.get("/incidents/{number}/mail/{job_id}")
+def incident_mail_job(number: str, job_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """Status of a Send report job: per address sent, failed (with the SMTP error) or generated (SMTP off)."""
+    del user
+    from app.models import Job
+
+    row = db.get(Job, job_id)
+    if row is None or row.kind != "incident_mail" or not row.object_id.startswith(f"{number}#"):
+        raise HTTPException(status_code=404, detail="job not found")
+    return {"id": row.id, "kind": row.kind, "status": row.status, "error": row.error or "", "result": (row.payload or {}).get("result")}
+
+
 @router.get("/incidents-page.csv")
 def incidents_page_csv(
     tab: str = "all", severity: str = "", q: str = "", date_from: str = "", date_to: str = "",
