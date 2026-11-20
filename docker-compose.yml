@@ -56,7 +56,8 @@ services:
       # rw: Discovery SNMP Apply splices forgesre_onboard into generated snmp.yml (same file
       # snmp_exporter reads). :ro made Apply/MIB upload fail with EROFS on the live VM.
       - ${FORGESRE_DATA:-./data}/generated:/host-generated
-      - ${FORGESRE_DATA:-./data}/models:/host-models:ro
+      # read-write: Settings › ForgeAI models downloads, imports and picks the active model
+      - ${FORGESRE_DATA:-./data}/models:/host-models
     command: uvicorn app.main:app --host 0.0.0.0 --port ${FORGESRE_HTTP_PORT:-8080}
     depends_on:
       postgres:
@@ -416,19 +417,15 @@ services:
     image: ghcr.io/ggml-org/llama.cpp:server-b11718
     profiles: ["ai"]
     network_mode: host
-    command:
-      - -m
-      - /models/model.gguf
-      - --host
-      - 127.0.0.1
-      - --port
-      - "8088"
-      - -c
-      - "8192"
-      - -t
-      - "${FORGESRE_LLM_THREADS:-8}"
+    # scripts/llm-run.sh starts llama-server with the model chosen in Settings (data/models/active)
+    # and restarts it when the choice changes.
+    entrypoint: ["/bin/sh", "/forgesre/llm-run.sh"]
+    environment:
+      LLM_CTX: "8192"
+      LLM_THREADS: "${FORGESRE_LLM_THREADS:-8}"
     volumes:
       - ${FORGESRE_DATA:-./data}/models:/models:ro
+      - ./scripts/llm-run.sh:/forgesre/llm-run.sh:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8088/v1/models"]
       interval: 30s

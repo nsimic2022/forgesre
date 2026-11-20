@@ -66,7 +66,7 @@ def test_llm_guide_and_fetch_llm_help():
     script_help = subprocess.check_output(
         ["bash", str(ROOT / "scripts" / "fetch-llm.sh"), "--help"], text=True
     )
-    assert "Qwen2.5-14B-Instruct" in script_help
+    assert "qwen2.5-14b" in script_help and "qwen3-4b" in script_help
     assert "Qwen3-4B" in script_help
     assert "Do not re-run ./install.sh" in script_help
 

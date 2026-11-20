@@ -852,6 +852,90 @@ def forgeai_skill_delete(slug: str, db: Session = Depends(get_db), user: User = 
     return {"deleted": slug}
 
 
+class ModelDownload(BaseModel):
+    catalog_id: str = ""
+    url: str = ""
+
+
+@router.get("/llm/models")
+def llm_models_api(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    """Settings › ForgeAI models: installed, active, catalog, disk and RAM, running downloads (Admin)."""
+    from app.llm_models import overview
+
+    return overview(db)
+
+
+@router.post("/llm/models/download")
+def llm_models_download(body: ModelDownload, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    """Download a catalog model or a Hugging Face .gguf link in the background (``llm_download`` job)."""
+    from app.llm_models import queue_download
+
+    try:
+        job = queue_download(db, catalog_id=body.catalog_id, url=body.url, actor=user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "forgeai.model.download", actor=user.email, object_type="model", object_id=body.catalog_id or body.url[:200], commit=True)
+    return {"queued": True, "job": job}
+
+
+@router.post("/llm/downloads/{job_id}/cancel")
+def llm_models_cancel(job_id: int, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    """Stop a download; the part already fetched stays as .partial so Download again resumes."""
+    from app.models import Job
+
+    row = db.get(Job, job_id)
+    if row is None or row.kind != "llm_download":
+        raise HTTPException(status_code=404, detail="download not found")
+    if row.status == "pending":
+        row.status, row.error = "error", "cancelled"
+    row.payload = {**(row.payload or {}), "cancel": True}
+    db.commit()
+    return {"cancelled": True}
+
+
+@router.post("/llm/models/{name}/activate")
+def llm_models_activate(name: str, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    """Run this model; llama.cpp restarts with it within a few seconds."""
+    from app.llm_models import activate
+
+    try:
+        result = activate(db, name, user.email)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "forgeai.model.activate", actor=user.email, object_type="model", object_id=name, commit=True)
+    return result
+
+
+@router.delete("/llm/models/{name}")
+def llm_models_remove(name: str, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    from app.llm_models import remove
+
+    try:
+        gone = remove(name)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "forgeai.model.remove", actor=user.email, object_type="model", object_id=name, commit=True)
+    return {"removed": gone}
+
+
+@router.post("/llm/models/upload")
+async def llm_models_upload(request: Request, file: UploadFile, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
+    """Import a .gguf from the browser (streamed to disk). For very large files, copying into
+    data/models on the VM is faster; it shows up here the same way."""
+    from app.llm_models import save_upload
+
+    try:
+        saved = await save_upload(file, size_hint=int(request.headers.get("content-length") or 0))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "forgeai.model.upload", actor=user.email, object_type="model", object_id=saved["name"], commit=True)
+    return saved
+
+
 @router.get("/forgeai/jobs/{job_id}")
 def forgeai_job(job_id: int, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
     """State of a ForgeAI job and, when done, its call id."""

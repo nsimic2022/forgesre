@@ -26,10 +26,10 @@ COMPONENT_LABELS = {
     "zabbix": "Zabbix",
     "glpi": "GLPI",
     "librenms": "LibreNMS",
-    "chat": "Chat (Slack / Teams / Discord)",
-    "checks": "Checks (certificates, backups, heartbeats)",
-    "mcp": "MCP (read-only, for AI clients)",
-    "kubernetes": "Kubernetes / OpenShift",
+    "chat": "Chat",
+    "checks": "Checks",
+    "mcp": "MCP",
+    "kubernetes": "Kubernetes",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.

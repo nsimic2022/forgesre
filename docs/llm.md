@@ -477,6 +477,25 @@ docker compose exec -T core python -c "import sys; print('\n'.join(sys.path))"
 - No cloud provider as a supported product path
 - AI never executes the recommended action
 
+## Models from Settings
+
+**Settings › ForgeRCA / ForgeAI › ForgeAI models** (Admin):
+
+- **On this appliance**: every model in `data/models` (split models shown once), which one is
+  active, **Use this model** and **Delete** (not the active one).
+- **Download from Hugging Face**: Qwen3 4B (default, 2.5 GB, 30–90 s per answer), Qwen3 8B,
+  Llama 3.1 8B Instruct, Qwen2.5 7B Instruct, Qwen2.5 14B Instruct (9 GB, minutes per answer),
+  each with the RAM it needs; or any `https://huggingface.co/…/resolve/…/*.gguf` link. Downloads
+  are `llm_download` jobs on the LLM lane (ForgeAI questions wait meanwhile), resume after a stop,
+  and refuse to leave less than 2 GB of disk.
+- **Import a file**: upload a `.gguf` from the browser (header checked), or copy it into
+  `data/models` on the VM.
+
+`data/models/active` names the model to run. `scripts/llm-run.sh`, the llm container's entrypoint,
+checks it every 5 s and restarts llama-server when it changes; activating a catalog model also
+sets `ai.llm.timeout_seconds` to fit it. From the shell: `./forgesre fetch-llm --model qwen3-8b`.
+The llm container still has to be on (profile `ai`): `./forgesre fetch-llm` once does that.
+
 ## Doctor says `llm ✗ Connection refused`
 
 Nothing listens on 127.0.0.1:8088, so the llama.cpp container is not running. ForgeAI can be on in

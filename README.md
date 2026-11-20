@@ -86,8 +86,8 @@ Full Ubuntu / vCenter manual: [docs/install-config.md](docs/install-config.md).
 
 ### Optional local LLM
 
-ForgeRCA works without a model. To add ForgeAI on the box (default Qwen2.5-14B-Instruct Q4_K_M,
-~9 GB on disk, served by llama.cpp on `127.0.0.1:8088`):
+ForgeRCA works without a model. To add ForgeAI on the box (default Qwen3 4B Q4_K_M, 2.5 GB,
+served by llama.cpp on `127.0.0.1:8088`; bigger models from Settings › ForgeRCA / ForgeAI):
 
 ```bash
 ./forgesre fetch-llm

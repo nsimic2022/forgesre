@@ -29,7 +29,7 @@ generates every password. When it is done it writes **`installation-report.md`**
 the code: the addresses to open and where each password lives. Only root on the VM can
 read it.
 
-Want the local AI assistant too? Add `--profile full-ai` (downloads about 9 GB), or later
+Want the local AI assistant too? Add `--profile full-ai` (downloads a 2.5 GB model), or later
 run `./forgesre fetch-llm`. Everything else works without it.
 
 ## Check it is healthy
