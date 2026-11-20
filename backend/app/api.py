@@ -2071,7 +2071,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "alloy": _alloy_check(),
         "grafana": _grafana_check(),
         "snmp": _snmp_check(),
-        "llm": _http((settings.llm_url or "").rstrip("/") + "/models", "GET") if settings.llm_url else _ok("disabled"),
+        "llm": _llm_check(),
         "netbox": _netbox_check(),
         "zabbix": _zabbix_check(),
         "glpi": _glpi_check(),
@@ -2459,6 +2459,21 @@ async def _http_async(url: str, method: str) -> dict[str, str]:
             "test": test,
             "fix": "Confirm the service is running: ./doctor.sh",
         }
+
+
+def _llm_check() -> dict[str, str]:
+    """ForgeAI's model server. When it does not answer, say how to install or start it, not just "running?"."""
+    if not settings.llm_url:
+        return _ok("disabled")
+    row = _http(settings.llm_url.rstrip("/") + "/models", "GET")
+    if row.get("status") == "error" and settings.llm_mode == "bundled":
+        row["fix"] = (
+            "llama.cpp is not running. Never installed (data/models/ empty, COMPOSE_PROFILES without ai): "
+            "./forgesre fetch-llm. Installed: docker compose --profile ai up -d llm, then docker compose logs --tail 40 llm"
+        )
+    elif row.get("status") == "error":
+        row["fix"] = "The external model server does not answer: check ai.llm.url in Settings › ForgeRCA / ForgeAI"
+    return row
 
 
 def _http(url: str, method: str) -> dict[str, str]:

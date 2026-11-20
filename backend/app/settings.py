@@ -233,6 +233,11 @@ class Settings(BaseSettings):
         return str(url) if url else None
 
     @property
+    def llm_mode(self) -> str:
+        """bundled (llama.cpp container on this VM), external, or disabled."""
+        return str(((self.yaml.get("ai") or {}).get("llm") or {}).get("mode") or "bundled")
+
+    @property
     def llm_model(self) -> str:
         return str((self.yaml.get("ai") or {}).get("llm", {}).get("model") or "local")
 
