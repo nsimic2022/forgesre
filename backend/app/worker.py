@@ -19,6 +19,7 @@ log = logging.getLogger("forgesre")
 
 
 def main() -> None:
+    """Create tables, take part in the leader election and run the loops until SIGTERM."""
     os.environ.setdefault("FORGESRE_ROLE", "worker")
     from app.db import Base, SessionLocal, engine
     from app.jobs import recover_interrupted_jobs, start_infrastructure_scheduler

@@ -197,5 +197,6 @@ def forget(host: str = "") -> None:
 
 
 def status() -> dict[str, Any]:
+    """Cached verdicts in this process, for debugging which hosts are kept off TCP 9100."""
     with _lock:
         return {"cached": len(_cache), "blocked": sorted(h for h, (_t, r) in _cache.items() if r)}

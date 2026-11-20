@@ -75,6 +75,7 @@ def start() -> tuple[str, str]:
 
 
 def role_from_claims(claims: dict[str, Any], cfg: dict[str, Any]) -> str:
+    """Highest role whose groups appear in the groups claim, else the default role (may be '')."""
     raw = claims.get(cfg["groups_claim"]) or []
     have = {str(g).strip().lower() for g in (raw if isinstance(raw, list) else [raw])}
     for role in ROLE_ORDER:
