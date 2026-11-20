@@ -125,9 +125,9 @@ export function AutomationPage() {
       </header>
       {error ? <div className="banner error" role="alert">{error}</div> : null}
       {p ? (
-        <div className="row" style={{ alignItems: "stretch" }} role="list" aria-label="Pipeline">
+        <div className="pipeline" role="list" aria-label="Pipeline">
           {steps.map(([title, detail, count], i) => (
-            <div key={title} role="listitem" className="card" style={{ flex: "1 1 200px", gap: 4, padding: 14 }}>
+            <div key={title} role="listitem" className="card" style={{ gap: 4, padding: 14 }}>
               <span style={{ fontWeight: 650 }}>{i + 1} · {title}</span>
               <span className="small muted">{detail}</span>
               <span style={{ fontWeight: 600 }}>{count}</span>

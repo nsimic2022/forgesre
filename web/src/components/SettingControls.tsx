@@ -34,7 +34,7 @@ export function SettingField({ row, onSaved, compact = false }: { row: SettingRo
     input = <input id={id} type="checkbox" checked={Boolean(value)} onChange={(e) => setValue(e.target.checked)} style={{ width: 18, height: 18, accentColor: "var(--accent)" }} />;
   } else if (row.kind === "enum") {
     input = (
-      <select id={id} className="search" value={String(value)} onChange={(e) => setValue(e.target.value)}>
+      <select id={id} className="search" value={String(value)} onChange={(e) => setValue(e.target.value)} style={{ width: "100%", minWidth: 0 }}>
         {(row.choices ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
       </select>
     );

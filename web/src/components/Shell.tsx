@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import type { Me } from "../lib/api";
+import { Shortcuts } from "./Shortcuts";
 import { Chip } from "./ui";
 
 // Main menu of the new UI, in the order of the approved designs.
@@ -24,6 +25,8 @@ const ROLE_LABEL: Record<string, string> = { viewer: "Viewer", analyst: "Analyst
 export function Shell({ me, forgeai, children }: { me: Me | null; forgeai: string; children: ReactNode }) {
   return (
     <div className="shell">
+      <a className="skip-link" href="#main">Skip to content</a>
+      <Shortcuts />
       <nav className="nav" aria-label="Main">
         <div className="nav-brand">
           <span className="nav-logo" aria-hidden="true">F/</span>
@@ -46,6 +49,7 @@ export function Shell({ me, forgeai, children }: { me: Me | null; forgeai: strin
             <Chip tone={forgeai === "off" ? "off" : "info"}>{forgeai === "off" ? "Off" : forgeai === "external" ? "External" : "Local"}</Chip>
           </div>
         </div>
+        <span className="small faint nav-hint">Press <kbd>?</kbd> for keyboard shortcuts</span>
         {me ? (
           <div className="nav-user">
             <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -58,7 +62,7 @@ export function Shell({ me, forgeai, children }: { me: Me | null; forgeai: strin
           </div>
         ) : null}
       </nav>
-      <main className="main">{children}</main>
+      <main className="main" id="main" tabIndex={-1}>{children}</main>
     </div>
   );
 }

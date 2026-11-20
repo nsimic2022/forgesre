@@ -9,7 +9,7 @@ import { ReviewCard } from "../components/ReviewCard";
 import { SendReport } from "../components/SendReport";
 import { Bar, Card, Chip } from "../components/ui";
 import { getJson, postJson, type IncidentView } from "../lib/api";
-import { clock, duration, severityLabel, severityTone, tierLabel } from "../lib/format";
+import { clock, duration, severityLabel, severityTone, tierLabel, shortNumber } from "../lib/format";
 
 const ACTIVE = ["OPEN", "INVESTIGATING", "ESCALATED", "ACK", "ACKNOWLEDGED"];
 
@@ -61,7 +61,7 @@ export function IncidentDetailPage() {
       <header className="page-head">
         <div className="cell-stack" style={{ gap: 6 }}>
           <span className="small faint">
-            <Link to="/incidents">Incidents</Link> / <span className="mono">{data.number}</span>
+            <Link to="/incidents">Incidents</Link> / <span className="mono" title={data.number}>{shortNumber(data.number)}</span>
           </span>
           <div className="row">
             <Chip tone={tone}>{severityLabel(data.severity)}</Chip>
@@ -150,7 +150,7 @@ export function IncidentDetailPage() {
             )}
           </Card>
           <ForgeAiCard number={data.number} view={data.forgeai} canAsk={data.can.investigate} onChanged={load} />
-          {data.can.investigate ? (
+          {data.can.investigate && data.forgeai.mode !== "off" ? (
             <details className="card" style={{ padding: "12px 16px" }}>
               <summary style={{ cursor: "pointer", fontWeight: 600 }}>Ask ForgeAI · compare skills, your own question</summary>
               <div style={{ paddingTop: 12 }}><AskForgeAi number={data.number} /></div>

@@ -126,7 +126,7 @@ button { font: inherit; }
 .tone-off { background: var(--off-bg); color: var(--off); }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
 
-.strip { display: flex; flex-wrap: wrap; gap: 14px; }
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
 .stat { flex: 1 1 170px; min-width: 0; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px;
   background: var(--s1); border: 1px solid var(--border); border-radius: var(--radius); }
 .stat-value { font-size: 32px; line-height: 1; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
@@ -232,3 +232,18 @@ td .mono, .stat .mono { font-variant-numeric: tabular-nums; }
 textarea.search { font: inherit; line-height: 1.5; resize: vertical; padding: 10px 12px; }
 select.search { padding: 0 10px; }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+
+/* Polish pass: utilities, skip link, keyboard shortcuts dialog. */
+.nowrap { white-space: nowrap; flex-wrap: nowrap !important; }
+.skip-link { position: absolute; left: -9999px; top: 8px; z-index: 100; background: var(--accent); color: var(--on-accent); padding: 8px 14px; border-radius: 8px; }
+.skip-link:focus { left: 12px; }
+.main:focus { outline: none; }
+kbd { font-family: var(--mono); font-size: 12px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; background: var(--s2); color: var(--text); }
+.nav-hint { padding: 0 6px; }
+.shortcuts-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+.shortcuts { width: min(460px, 100%); max-height: 90vh; overflow: auto; }
+.pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+input.search[type="search"] { min-width: min(300px, 100%); }
+.one-line { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+details.explain > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+details.explain[open] > summary { margin-bottom: 6px; }
