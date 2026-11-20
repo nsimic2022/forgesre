@@ -60,6 +60,13 @@ TASKS: dict[str, dict[str, Any]] = {
         "lists": {},
         "max_tokens": 350,
     },
+    "investigate": {
+        "label": "Investigation with tools",
+        "shape": '{"cause": "one or two sentences", "confidence": "low|medium|high", "evidence": ["E1"], "next_steps": ["check"]}',
+        "fields": {"cause": 400},
+        "lists": {"next_steps": (4, 200)},
+        "max_tokens": 500,
+    },
     "postmortem": {
         "label": "Postmortem summary",
         "shape": '{"paragraph": "one paragraph, 4-7 sentences"}',
@@ -112,6 +119,11 @@ BUILTIN: list[tuple[str, str, str, list[str], list[str], int, dict[str, bool], s
     ("appliance-checks", "Certificate, backup or heartbeat", "incident", ["*certificate*", "*tls*", "*backup*", "*heartbeat*"], [], 70, {},
      "One of ForgeSRE's own checks. Say plainly what expires or went silent and by when it matters. "
      "First checks: who owns the certificate, job or script, and when it last succeeded."),
+    ("investigate-generic", "Deeper investigation", "investigate", [], [], 1000, {},
+     "Find the most likely cause. Start from the ForgeRCA facts and the changes before the alarm. Use a "
+     "tool only to confirm or rule out one idea: the metric that should have moved, log lines with the "
+     "error word, interfaces on a network device, similar incidents. Prefer a low-confidence answer that "
+     "cites real evidence over a confident guess."),
     ("explain-generic", "Explain for Tier 1", "explain", [], [], 1000, {"similar": False, "changes": False},
      "Explain to a new Tier 1 operator what this alarm means on this kind of asset, without jargon. Say "
      "why it matters for users and how urgent it is from the severity. Do not guess the cause."),
@@ -319,6 +331,13 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
 
     if task not in TASKS:
         raise ValueError(f"unknown task {task}")
+    if task == "investigate":
+        # several steps with read-only tools; see forgeai_investigator
+        from app.forgeai_investigator import investigate
+
+        if incident is None:
+            raise ValueError("an investigation needs an incident")
+        return investigate(db, incident, actor=actor, skill_slug=skill_slug, trial=trial, instructions=instructions)
     skill = pick_skill(db, task, incident, skill_slug)
     if skill is None:
         raise LookupError("no ForgeAI skill for this task")

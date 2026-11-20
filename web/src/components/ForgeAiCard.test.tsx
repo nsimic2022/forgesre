@@ -38,3 +38,20 @@ describe("ForgeAiCard", () => {
     expect(screen.getByText("You are ForgeAI…")).toBeTruthy();
   });
 });
+
+describe("ForgeAiCard investigation", () => {
+  it("shows the investigation's cause with the evidence it cited", () => {
+    const deep: ForgeAiView = {
+      ...view,
+      deep: {
+        call_id: 9, status: "used", reason: "", at: null, model: "qwen3-4b", seconds: 95, evidence_count: 7,
+        answer: { cause: "Backups filled /data.", confidence: "medium", evidence: ["E3"], next_steps: ["Check the backup job."] },
+        cited: [{ id: "E3", source: "metric", text: "disk_percent around the alarm: max 97.0" }],
+      },
+    };
+    render(<ForgeAiCard number="INC-0412" view={deep} canAsk onChanged={() => undefined} />);
+    expect(screen.getByText("Backups filled /data.")).toBeTruthy();
+    expect(screen.getByText("disk_percent around the alarm: max 97.0")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Investigate with tools" })).toBeTruthy();
+  });
+});

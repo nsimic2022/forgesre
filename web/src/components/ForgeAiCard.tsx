@@ -8,6 +8,11 @@ export type ForgeAiView = {
   answer?: { cause: string; first_checks: string[]; for_shift_lead: string } | null;
   skill?: string; call_id?: number | null;
   last?: { status: string; reason: string; at: string | null; skill: string } | null;
+  deep?: {
+    call_id: number; status: string; reason: string; at: string | null; model: string; seconds: number; evidence_count: number;
+    answer: { cause?: string; confidence?: string; evidence?: string[]; next_steps?: string[] };
+    cited: { id: string; source: string; text: string }[];
+  } | null;
   skills?: { slug: string; name: string }[];
   extras?: { explain?: { answer: { explanation: string; why_it_matters: string }; call_id: number }; postmortem?: { answer: { paragraph: string }; call_id: number } };
 };
@@ -18,7 +23,7 @@ export type Call = {
 };
 
 const STATUS_TONE: Record<string, "ok" | "crit" | "warn" | "off"> = { used: "ok", rejected: "warn", error: "crit", trial: "off" };
-const TASK: Record<string, string> = { incident: "Cause and first checks", explain: "Explain for Tier 1", postmortem: "Postmortem summary", shift: "Shift summary" };
+const TASK: Record<string, string> = { incident: "Cause and first checks", investigate: "Investigation with tools", explain: "Explain for Tier 1", postmortem: "Postmortem summary", shift: "Shift summary" };
 
 function pretty(text = ""): string {
   try {
@@ -83,7 +88,7 @@ export function ForgeAiCard({ number, view, canAsk, onChanged }: { number: strin
     setError("");
     try {
       const { job } = await postJson<{ job: number }>(`/api/v1/incidents/${encodeURIComponent(number)}/forgeai`, { task, skill: task === "incident" ? skill : "" });
-      for (let i = 0; i < 120; i++) {
+      for (let i = 0; i < (task === "investigate" ? 160 : 120); i++) {
         const state = await getJson<{ status: string; error: string }>(`/api/v1/forgeai/jobs/${job}`);
         if (state.status === "done" || state.status === "error") {
           if (state.status === "error") setError(state.error || "ForgeAI failed.");
@@ -143,6 +148,27 @@ export function ForgeAiCard({ number, view, canAsk, onChanged }: { number: strin
           <span>{view.extras.postmortem.answer.paragraph}</span>
         </div>
       ) : null}
+      {view.deep ? (
+        <div className="cell-stack" style={{ gap: 4, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+          <span className="small faint">
+            Investigation with tools · {clock(view.deep.at)} · {view.deep.seconds} s · {view.deep.evidence_count} pieces of evidence
+          </span>
+          {view.deep.status === "used" && view.deep.answer.cause ? (
+            <>
+              <span><Chip tone={view.deep.answer.confidence === "high" ? "ok" : view.deep.answer.confidence === "medium" ? "info" : "warn"}>{view.deep.answer.confidence} confidence</Chip> {view.deep.answer.cause}</span>
+              <ul className="small muted" style={{ margin: 0, paddingLeft: 18 }}>
+                {view.deep.cited.map((e) => <li key={e.id}><span className="mono">{e.id}</span> {e.text}</li>)}
+              </ul>
+              {view.deep.answer.next_steps?.length ? (
+                <ol style={{ margin: 0, paddingLeft: 18 }}>{view.deep.answer.next_steps.map((n, i) => <li key={i}>{n}</li>)}</ol>
+              ) : null}
+              {canAsk ? <div className="row" style={{ justifyContent: "flex-end" }}><Rate callId={view.deep.call_id} /></div> : null}
+            </>
+          ) : (
+            <span className="small muted">Not used ({view.deep.status}): {view.deep.reason}</span>
+          )}
+        </div>
+      ) : null}
       {canAsk && !off ? (
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           <select className="search" aria-label="Skill" value={skill} onChange={(e) => setSkill(e.target.value)} style={{ minWidth: 0 }}>
@@ -150,6 +176,7 @@ export function ForgeAiCard({ number, view, canAsk, onChanged }: { number: strin
             {(view.skills ?? []).map((s) => <option key={s.slug} value={s.slug}>{s.name}</option>)}
           </select>
           <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => ask("incident", "Asking…")}>{busy === "Asking…" ? busy : a ? "Ask again" : "Ask ForgeAI"}</button>
+          <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => ask("investigate", "Investigating…")} title="Several steps with read-only tools: metrics, logs, interfaces, similar incidents (1–4 min)">{busy === "Investigating…" ? busy : "Investigate with tools"}</button>
           <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => ask("explain", "Explaining…")}>{busy === "Explaining…" ? busy : "Explain for Tier 1"}</button>
           <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => ask("postmortem", "Writing…")}>{busy === "Writing…" ? busy : "Postmortem summary"}</button>
         </div>

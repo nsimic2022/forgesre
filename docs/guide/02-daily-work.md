@@ -40,6 +40,10 @@ Click a row to open it.
    that contain a number, IP or command not in the facts are thrown away. **Explain for Tier 1**
    and **Postmortem summary** ask for more; **What was ForgeAI asked?** shows the exact prompt
    and the model's answer word for word. 👍 / 👎 tells the team which skills work.
+   **Investigate with tools** goes further (1–4 minutes): ForgeAI may look at a metric, the
+   host's logs, the device's interfaces and similar incidents, then gives the cause with a
+   confidence and the numbered evidence it rests on. An answer that cites evidence it was never
+   shown is thrown away.
    Next to it: **Host metrics** from an hour before the alarm to now (the grey line is the
    start), **Happened before on this asset** with the cause that was confirmed last time, and
    **Syslog around the start** from the device's own log.

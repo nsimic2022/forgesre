@@ -78,7 +78,7 @@ export function ForgeAiTuning({ slug, instructions, changed, canEdit }: { slug: 
           </table>
         </div>
       ) : <span className="small faint">No used answers in this period yet.</span>}
-      {report.task === "incident" && canEdit ? (
+      {(report.task === "incident" || report.task === "investigate") && canEdit ? (
         <div className="row">
           <button className="btn" type="button" disabled={Boolean(busy) || report.replay_candidates === 0} onClick={() => void run()}>
             {changed ? "Replay the unsaved text" : "Replay"} on the last {Math.min(10, report.replay_candidates)} confirmed incidents
