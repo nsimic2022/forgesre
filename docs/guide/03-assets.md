@@ -35,12 +35,14 @@ metrics and alarms really arrive.
 Every asset card has the same **Check monitoring** button, so you can prove any asset is
 watched, whichever way it got into the inventory.
 
-**Scan a network** probes up to 256 addresses per range (TCP 22, 80, 443, 9100, 9182, 10050,
-12345 and SNMP with the default community) in the background and lists what answered.
-Nothing becomes an asset until you press **Add**; then the monitoring check runs for it.
+**From LibreNMS** lists the devices LibreNMS discovered that are not in the inventory yet.
+ForgeSRE does not scan networks itself: give LibreNMS its ranges with
+`./forgesre discovery nets 10.20.30.0/24`, then **Read now**. Nothing becomes an asset until you
+press **Add** (or set `discovery.mode: automatic`); then the monitoring check runs for it.
+See [Discovery](../discovery.md).
 
 **Printers are never sent anything on TCP 9100.** On a printer that port is the raw print port:
-whatever arrives is printed. Before ForgeSRE connects to 9100 anywhere (scan, Identify, Auto
+whatever arrives is printed. Before ForgeSRE connects to 9100 anywhere (Identify, Auto
 detect, the monitoring check, `./forgesre ping`), it asks: a printer in the inventory or a printer
 answer over SNMP blocks it; an open IPP (631) or LPD (515) port blocks it; with no SNMP answer it
 needs SSH (22) open before it tries node_exporter. A Linux server with neither SNMP nor SSH

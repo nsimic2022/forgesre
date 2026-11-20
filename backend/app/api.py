@@ -1225,21 +1225,22 @@ def onboard_job(job_id: int, db: Session = Depends(get_db), user: User = Depends
 
 @router.get("/discovery/status")
 def discovery_status(db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
-    """Add devices › Scan: saved ranges, a suggestion from this VM's networks, and the running scan."""
-    from discovery import suggested_connected_cidrs
-
-    from app.jobs import active_discovery_scan
+    """Add devices › From LibreNMS: whether LibreNMS can be read, the running and last read, found counts."""
+    from app.jobs import active_discovery_scan, latest_discovery_scan
+    from app.librenms_discovery import not_ready
 
     job = active_discovery_scan(db)
-    try:
-        suggested = list(suggested_connected_cidrs() or [])
-    except Exception:
-        suggested = []
+    last = latest_discovery_scan(db)
     counts: dict[str, int] = {}
     for (status,) in db.query(DiscoveryCandidate.status).all():
         counts[status] = counts.get(status, 0) + 1
-    return {"cidrs": list(settings.discovery_cidrs), "suggested": suggested, "mode": settings.discovery_mode,
-            "scan": {"id": job.id, "status": job.status} if job else None, "counts": counts}
+    last_out = None
+    if last is not None:
+        last_out = {"status": last.status, "at": last.finished_at.isoformat() if last.finished_at else None,
+                    "error": (last.error or "")[:300], "result": (last.payload or {}).get("result")}
+    return {"source": "librenms", "ready": not not_ready(), "why": not_ready(), "librenms_url": settings.librenms_url,
+            "mode": settings.discovery_mode, "enabled": settings.discovery_enabled,
+            "scan": {"id": job.id, "status": job.status} if job else None, "last": last_out, "counts": counts}
 
 
 @router.get("/discovery/candidates")
@@ -1249,76 +1250,19 @@ def list_candidates(db: Session = Depends(get_db), user: User = Depends(require(
 
 
 @router.post("/discovery/scan")
-def discovery_scan(
-    db: Session = Depends(get_db),
-    user: User = Depends(require("write_assets")),
-    cidrs: list[str] | None = None,
-) -> dict:
-    """Queue discovery probe of confirmed discovery.cidrs. No run_scan on request thread."""
-    from discovery import normalize_cidrs
-    from app.jobs import enqueue_discovery_scan, active_discovery_scan
+def discovery_scan(db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
+    """Queue a read of LibreNMS's devices and links. ForgeSRE does not sweep networks itself."""
+    from app.jobs import active_discovery_scan, enqueue_discovery_scan
+    from app.librenms_discovery import not_ready
 
-    try:
-        parsed = normalize_cidrs(cidrs or [])
-        if parsed:
-            try:
-                settings.set_discovery_cidrs(parsed)
-            except OSError:
-                log.exception("API discovery.cidrs persist failed")
-                raise HTTPException(
-                    status_code=500,
-                    detail="Could not write discovery.cidrs",
-                )
-        saved = list(settings.discovery_cidrs)
-        if not saved:
-            raise HTTPException(
-                status_code=400,
-                detail="No discovery.cidrs. Confirm a management /24 first (empty = no scan).",
-            )
-        already = active_discovery_scan(db) is not None
-        job = enqueue_discovery_scan(
-            db,
-            actor=user.email,
-            cidrs=saved,
-            saved=bool(parsed),
-        )
-        audit(
-            db,
-            "discovery.scan",
-            actor=user.email,
-            data={
-                "queued": True,
-                "job_id": job.id if job else None,
-                "cidrs": saved,
-                "saved": bool(parsed),
-                "already": already,
-            },
-            commit=True,
-        )
-        return {
-            "queued": True,
-            "already": already,
-            "job_id": job.id if job else None,
-            "status": job.status if job else "pending",
-            "kind": "discovery_scan",
-            "saved": bool(parsed),
-            "cidrs": saved,
-        }
-    except HTTPException:
-        raise
-    except Exception as exc:
-        log.exception("API discovery scan failed")
-        report(
-            db,
-            "discovery",
-            "scan",
-            "error",
-            summary="Could not queue discovery scan",
-            detail=str(exc),
-        )
-        raise HTTPException(status_code=500, detail=f"Could not queue scan: {type(exc).__name__}") from exc
-
-
+    why = not_ready()
+    if why:
+        raise HTTPException(status_code=400, detail=why)
+    already = active_discovery_scan(db) is not None
+    job = enqueue_discovery_scan(db, actor=user.email)
+    audit(db, "discovery.scan", actor=user.email, data={"queued": True, "job_id": job.id if job else None, "already": already}, commit=True)
+    return {"queued": True, "already": already, "job_id": job.id if job else None,
+            "status": job.status if job else "pending", "kind": "discovery_scan"}
 
 
 @router.post("/discovery/candidates/{candidate_id}/approve")
@@ -2451,9 +2395,15 @@ def _worker_check() -> dict[str, Any]:
 
 
 def _discovery_check() -> dict[str, str]:
-    """Last scan / journal / loop heartbeat — not a checkbox."""
+    """Discovery reads LibreNMS: is it reachable with a token, last journal row, loop heartbeat."""
     if not settings.discovery_enabled:
         return _ok("disabled")
+    from app.librenms_discovery import not_ready
+
+    blocked = not_ready()
+    if blocked:
+        return {"status": "warn", "why": blocked, "test": "LibreNMS URL and API token",
+                "fix": "./forgesre settings set-secret LIBRENMS_API_TOKEN (or turn LibreNMS on), then ./forgesre discovery read"}
     from app.db import SessionLocal
     from app.inventory import discovery_loop_age_seconds
     from app.journal import list_entries
@@ -2489,7 +2439,7 @@ def _discovery_check() -> dict[str, str]:
     if age is None:
         return {
             "status": "warn",
-            "why": "Discovery loop has not reported yet (first scan waits ~30s, then every 6 hours).",
+            "why": "Discovery loop has not reported yet (first LibreNMS read waits ~30s, then every 6 hours).",
             "test": test,
             "fix": "Watch ./forgesre journal discovery after Core is up.",
         }
@@ -2504,7 +2454,7 @@ def _discovery_check() -> dict[str, str]:
     if last is not None:
         why = f"{why} Last journal: {last.action} {last.status} — {last.summary}"
     else:
-        why = f"{why} No scan journal yet."
+        why = f"{why} No LibreNMS read in the journal yet."
     return {"status": "ok", "why": why, "test": test}
 
 

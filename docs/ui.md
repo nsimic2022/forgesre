@@ -175,7 +175,7 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
 ## Next
 
 All pages exist and do their own editing; the classic UI was removed. Network discovery
-moves to LibreNMS (SNMP only) next.
+comes from LibreNMS ([discovery.md](discovery.md)).
 
 ## Screenshots for the docs
 
@@ -196,7 +196,7 @@ the API keep levels 1–4 (L1–L4); `tierLabel()` in `web/src/lib/format.ts` ma
 
 ## Add devices
 
-`/app/inventory/add` (Engineer). Three tabs: one device, scan a network, from another system.
+`/app/inventory/add` (Engineer). Three tabs: one device, from LibreNMS (ForgeSRE never scans networks; see [discovery.md](discovery.md)), from another system.
 
 - `POST /api/v1/onboard/identify` `{ip, snmp_port, snmp: {snmp_version, snmp_community_mode,
   snmp_community | snmp_v3_*}}` queues an `onboard_identify` job: TCP and exporter probes, and a
@@ -205,8 +205,9 @@ the API keep levels 1–4 (L1–L4); `tierLabel()` in `web/src/lib/format.ts` ma
 - `POST /api/v1/assets/{id}/verify-job` queues `asset_verify` (the live chain as a checklist,
   `app/onboarding.py`) and, when the asset's SNMP auth is not in snmp.yml yet, `snmp_apply`.
 - `GET /api/v1/onboard/jobs/{id}`: status and result of those jobs.
-- `GET /api/v1/discovery/status`: saved ranges, a suggestion from this VM's networks, the
-  running scan. Scanning and adding found addresses use the existing discovery endpoints.
+- `GET /api/v1/discovery/status`: LibreNMS ready (or why not), mode, the running and last read,
+  found counts. `POST /api/v1/discovery/scan` queues a LibreNMS read (`discovery_scan` job);
+  `POST /api/v1/discovery/candidates/{id}/approve|ignore` decide a found device.
 - `snmp_apply` (`app/snmp_apply.py`) writes per-asset SNMP auths into the generated snmp.yml
   that Core mounts at `/host-generated` and POSTs `/-/reload` to snmp_exporter. Saving an asset
   queues it, and the leader queues it every 5 minutes while an auth is pending.

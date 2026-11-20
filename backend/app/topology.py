@@ -3,8 +3,10 @@
 The parent pointer on each asset drives parent-down suppression (one incident for the switch,
 the servers behind it stay quiet). This module helps fill those pointers in:
 
-- ``sync_librenms`` (background job ``topology_sync``) copies LLDP/CDP neighbours from
-  LibreNMS into topology_links and matches both ends to assets by hostname, sysName or IP.
+- ``sync_librenms`` (background jobs ``topology_sync`` and ``discovery_scan``) reads LibreNMS:
+  its devices go through ``librenms_discovery.apply_devices`` (known assets updated, new ones
+  listed in Add devices), and LLDP/CDP neighbours go into topology_links, both ends matched to
+  assets by hostname, sysName or IP.
 - ``suggestions`` proposes a parent where exactly one end of a link is a network device: the
   server or appliance gets the switch as parent. Switch-to-switch links are listed but not
   guessed, because the direction towards the core is not known.
@@ -84,30 +86,14 @@ def sync_librenms(db: Session) -> dict[str, int]:
             remote_name=str(link.get("remote_hostname") or "")[:255], local_port=str(link.get("local_port_id") or "")[:128],
             remote_port=str(link.get("remote_port") or "")[:128], protocol=str(link.get("protocol") or "")[:16], seen_at=utcnow(),
         ))
-    known = _remember_devices(db, devices)
-    report(db, "inventory", "topology.sync", "ok",
-           summary=f"LibreNMS: {len(links)} links, {matched} between known assets, {known} devices matched to assets")
+    from app.librenms_discovery import apply_devices, summary
+    from app.settings import settings
+
+    counts = apply_devices(db, devices, mode=settings.discovery_mode, enabled=settings.discovery_enabled)
+    report(db, "discovery", "librenms", "ok", summary=summary(counts, links=len(links)),
+           detail=f"{len(devices)} devices, {matched} links between known assets")
     db.commit()
-    return {"links": len(links), "matched": matched, "devices": len(devices)}
-
-
-def _remember_devices(db: Session, devices: list[dict[str, Any]]) -> int:
-    """Record what LibreNMS knows (sysName, serial, IP) on matching assets. Never adds an asset.
-
-    The serial then lets a GLPI or NetBox record match the same device; a different IP is a conflict.
-    """
-    from app.asset_sources import SourceRecord, build_index, match, reconcile
-
-    index = build_index(db)
-    known = 0
-    for dev in devices:
-        rec = SourceRecord(source="librenms", source_id=str(dev.get("device_id") or ""), name=str(dev.get("hostname") or ""),
-                           sys_name=str(dev.get("sysName") or ""), ip=str(dev.get("ip") or ""), serial=str(dev.get("serial") or ""))
-        asset, disagreement = match(index, rec)
-        if asset is not None:
-            reconcile(db, index, asset, rec, disagreement=disagreement)
-            known += 1
-    return known
+    return {"links": len(links), "matched": matched, "devices": len(devices), **counts}
 
 
 def suggestions(db: Session) -> list[dict[str, Any]]:

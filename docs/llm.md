@@ -296,7 +296,7 @@ docker compose --profile ai up -d --force-recreate llm
 
 ## 6. What happens when you click Open ForgeRCA
 
-There is **no Celery**. Core has **one worker thread** (Postgres `jobs` table, loop every 2s) for `investigate` and `discovery_scan`. An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds` (example.yml default 90). Scheduled reports run first in the same loop so mail is not stuck behind llama.cpp. **Scan a network** (Inventory › Add devices) enqueues `discovery_scan`; the worker runs the probe in try/except.
+There is **no Celery**. Core has **one worker thread** (Postgres `jobs` table, loop every 2s) for `investigate` and `discovery_scan` (a LibreNMS read). An LLM rewrite can occupy that thread up to `ai.llm.timeout_seconds` (example.yml default 90). Scheduled reports run first in the same loop so mail is not stuck behind llama.cpp. **Read now** (Inventory › Add devices › From LibreNMS) enqueues `discovery_scan`.
 
 1. Core runs **ForgeRCA immediately** (`use_llm=false`) and shows the builtin report.
 2. If `ai.enabled` and `ai.llm.url` are set, Core **enqueues** an `investigate` job with

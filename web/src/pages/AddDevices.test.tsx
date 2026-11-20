@@ -52,4 +52,26 @@ describe("Add devices", () => {
       .toEqual({ snmp_version: "v3", snmp_v3_user: "noc", snmp_v3_level: "authNoPriv", snmp_v3_auth_proto: "SHA", snmp_v3_auth_pass: "12345678" });
     expect(snmpPayload({ snmp_version: "v2c", snmp_community_mode: "default", snmp_community: "x" })).toEqual({ snmp_version: "v2c", snmp_community_mode: "default" });
   });
+
+  it("reads LibreNMS instead of scanning, and lists what it found", async () => {
+    const posts: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") posts.push(url);
+      const body =
+        url === "/api/v1/discovery/status" ? { ready: true, why: "", librenms_url: "http://127.0.0.1:8000", mode: "semi-automatic", enabled: true, scan: null,
+          last: { status: "done", at: null, error: "", result: { devices: 3, known: 2, found: 1, links: 4 } }, counts: { new: 1 } }
+        : url === "/api/v1/discovery/candidates" ? [{ id: 9, ip: "10.0.0.9", hostname: "sw-edge-09", proposed_role: "Network device", open_ports: [], snmp_ok: true, status: "new", asset_id: "", seen_at: null, source: "librenms" }]
+        : url === "/api/v1/discovery/scan" ? { queued: true, job_id: 5, status: "pending" }
+        : url === "/api/v1/inventory-form" ? { types: [], extra_fields: [], environments: [], owners: [], sites: [], can_edit: true }
+        : {};
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    render(<MemoryRouter><AddDevicesPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("tab", { name: "From LibreNMS" }));
+    expect(await screen.findByText("sw-edge-09")).toBeTruthy();
+    expect(screen.getByText(/3 devices, 2 known, 1 new/)).toBeTruthy();
+    expect(screen.queryByText(/Ranges \(CIDR/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Read now" }));
+    await waitFor(() => expect(posts).toContain("/api/v1/discovery/scan"));
+  });
 });

@@ -105,7 +105,7 @@ Grafana / Alloy. Target design:
 TCP 9100 is a printer's raw print port. Every connect or HTTP request to 9100 now goes through
 `app/printer_guard.py`: inventory printer or SNMP printer answer → never; no SNMP answer → only
 with SSH open; printers never enter the node_exporter job. Tested in `tests/test_printer_guard.py`.
-Moving network discovery to LibreNMS (SNMP only) stays open under Asset sources.
+Network discovery moved to LibreNMS (SNMP only): [discovery.md](discovery.md).
 
 ### Classic UI
 

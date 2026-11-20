@@ -19,8 +19,8 @@ def test_settings_is_frozen_pydantic_singleton():
     with pytest.raises(ValueError, match="read-only"):
         settings.database_url = "sqlite:///blocked.db"
     original = dict(settings.yaml)
-    settings.yaml = {"discovery": {"cidrs": ["10.9.9.0/24"]}}
-    assert settings.discovery_cidrs == ["10.9.9.0/24"]
+    settings.yaml = {"discovery": {"mode": "automatic"}}
+    assert settings.discovery_mode == "automatic"
     settings.yaml = original
 
 

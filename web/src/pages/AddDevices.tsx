@@ -14,8 +14,14 @@ type Found = {
   suggested: { hostname: string; type: string; monitoring_profile: string; scrape_address: string; vendor: string; location: string };
 };
 type Candidate = { id: number; ip: string; hostname: string; proposed_role: string; open_ports: number[]; snmp_ok: boolean; status: string; asset_id: string; seen_at: string | null; source?: string };
-const FROM: Record<string, string> = { scan: "Scan", glpi: "GLPI", zabbix: "Zabbix", netbox: "NetBox", librenms: "LibreNMS" };
-type Status = { cidrs: string[]; suggested: string[]; mode: string; scan: { id: number; status: string } | null; counts: Record<string, number> };
+const FROM: Record<string, string> = { scan: "Scan (before 2.0)", glpi: "GLPI", zabbix: "Zabbix", netbox: "NetBox", librenms: "LibreNMS" };
+type ReadResult = { devices?: number; known?: number; found?: number; added?: number; links?: number };
+type Status = {
+  ready: boolean; why: string; librenms_url: string; mode: string; enabled: boolean;
+  scan: { id: number; status: string } | null;
+  last: { status: string; at: string | null; error: string; result: ReadResult | null } | null;
+  counts: Record<string, number>;
+};
 
 const PORT_NAME: Record<number, string> = { 22: "SSH", 80: "HTTP", 443: "HTTPS", 161: "SNMP", 9100: "node_exporter", 9182: "windows_exporter", 10050: "Zabbix agent", 12345: "Alloy" };
 const SNMP_TYPES = /network|switch|router|firewall|storage|nas|printer/i;
@@ -164,15 +170,14 @@ function OneDevice({ options }: { options: AssetFormOptions | null }) {
   );
 }
 
-/** Scan ranges in the background, then add or ignore what was found. */
-function ScanNetwork() {
+/** New devices come from LibreNMS (ForgeSRE never scans networks): read it, then add or ignore what it found. */
+function FromLibreNMS() {
   const [status, setStatus] = useState<Status | null>(null);
   const [rows, setRows] = useState<Candidate[]>([]);
-  const [cidrs, setCidrs] = useState("");
   const [error, setError] = useState("");
   const [checking, setChecking] = useState("");
   const load = () => {
-    getJson<Status>("/api/v1/discovery/status").then((s) => (setStatus(s), setCidrs((c) => c || (s.cidrs.length ? s.cidrs : s.suggested).join(", ")))).catch((e: Error) => setError(e.message));
+    getJson<Status>("/api/v1/discovery/status").then(setStatus).catch((e: Error) => setError(e.message));
     getJson<Candidate[]>("/api/v1/discovery/candidates").then(setRows).catch((e: Error) => setError(e.message));
   };
   useEffect(load, []);
@@ -181,29 +186,38 @@ function ScanNetwork() {
     const t = setTimeout(load, 4000);
     return () => clearTimeout(t);
   }, [status]);
-  const scan = (e: FormEvent) => {
-    e.preventDefault();
+  const read = () => {
     setError("");
-    postJson("/api/v1/discovery/scan", cidrs.split(/[,\s]+/).filter(Boolean)).then(load).catch((err: Error) => setError(err.message));
+    postJson("/api/v1/discovery/scan", {}).then(load).catch((err: Error) => setError(err.message));
   };
   const act = (id: number, what: "approve" | "ignore") =>
     postJson<{ asset_id?: string }>(`/api/v1/discovery/candidates/${id}/${what}`, {})
       .then((r) => (what === "approve" && r.asset_id ? setChecking(r.asset_id) : null, load()))
       .catch((err: Error) => setError(err.message));
   const fresh = rows.filter((r) => r.status === "new");
+  const last = status?.last;
+  const res = last?.result;
   return (
     <>
-      <Card title="Scan a network">
-        <form className="row" style={{ gap: 10, alignItems: "flex-end" }} onSubmit={scan}>
-          <label className="cell-stack small faint" style={{ flex: "1 1 320px" }}>
-            Ranges (CIDR, comma separated, up to 256 addresses each)
-            <input className="search" style={{ minWidth: 0 }} value={cidrs} onChange={(e) => setCidrs(e.target.value)} placeholder="10.10.20.0/24" />
-          </label>
-          <button className="btn primary" type="submit" disabled={Boolean(status?.scan)}>{status?.scan ? `Scanning (${status.scan.status})…` : "Scan now"}</button>
-        </form>
+      <Card title="From LibreNMS">
+        <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          {status ? <Chip tone={status.ready ? "ok" : "warn"}>{status.ready ? "LibreNMS ready" : "LibreNMS not ready"}</Chip> : null}
+          <button className="btn primary" type="button" onClick={read} disabled={!status?.ready || Boolean(status?.scan)}>
+            {status?.scan ? `Reading (${status.scan.status})…` : "Read now"}
+          </button>
+          <span className="small muted">
+            {last
+              ? last.status === "error"
+                ? `Last read failed: ${last.error}`
+                : `Last read ${clock(last.at)}: ${res?.devices ?? 0} devices, ${res?.known ?? 0} known, ${res?.found ?? 0} new${res?.added ? `, ${res.added} added` : ""}`
+              : "Not read yet."}
+          </span>
+        </div>
+        {status && !status.ready ? <span className="small">{status.why}</span> : null}
         <span className="small faint">
-          Each address is asked on TCP 22, 80, 443, 9100, 9182, 10050, 12345 and SNMP UDP/161 with the default community. What answers is listed
-          below as found; nothing becomes an asset until you add it. Mode: {status?.mode ?? "…"}.
+          ForgeSRE does not scan networks. LibreNMS finds devices on the ranges you give it (<span className="mono">./forgesre discovery nets 10.20.30.0/24</span>,
+          then <span className="mono">./forgesre discovery scan</span>) and through LLDP/CDP neighbours; ForgeSRE reads that list every 6 hours.
+          New devices wait here until you add them (mode: {status?.mode ?? "…"}; <em>automatic</em> adds them at once).
         </span>
       </Card>
       {error ? <div className="banner error" role="alert">{error}</div> : null}
@@ -211,7 +225,7 @@ function ScanNetwork() {
         <Card title={`Added ${checking}`}><MonitoringCheck assetId={checking} auto /></Card>
       ) : null}
       <Card title={`Found · ${fresh.length} new`}>
-        {rows.length === 0 ? <span className="muted">Nothing found yet. Scan a range above.</span> : null}
+        {rows.length === 0 ? <span className="muted">Nothing found yet. Read LibreNMS above.</span> : null}
         {rows.length ? (
           <div className="table-wrap"><table className="data" style={{ minWidth: 760 }}>
             <thead><tr><th>Address</th><th>Name</th><th>From</th><th>Looks like</th><th>Answers on</th><th>Seen</th><th style={{ width: 170 }}></th></tr></thead>
@@ -242,7 +256,7 @@ function ScanNetwork() {
   );
 }
 
-const TABS = [["one", "One device"], ["scan", "Scan a network"], ["import", "From another system"]] as const;
+const TABS = [["one", "One device"], ["librenms", "From LibreNMS"], ["import", "From another system"]] as const;
 
 /** Inventory › Add devices. */
 export function AddDevicesPage() {
@@ -262,7 +276,7 @@ export function AddDevicesPage() {
         {TABS.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className="btn" aria-pressed={tab === k} onClick={() => setTab(k)}>{l}</button>)}
       </div>
       {tab === "one" ? <OneDevice options={options} /> : null}
-      {tab === "scan" ? <ScanNetwork /> : null}
+      {tab === "librenms" ? <FromLibreNMS /> : null}
       {tab === "import" ? (
         <Card title="From another system">
           <span className="small muted">
