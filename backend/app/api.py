@@ -3105,13 +3105,17 @@ def integrations_sync(target: str, db: Session = Depends(get_db), user: User = D
 
 @router.get("/tv")
 def tv_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict[str, Any]:
-    """Wall screen: the NOC overview, the 12-hour incident clock and 14 days of incidents per day."""
+    """Wall screen: the NOC overview, the incident clock, 14 days per day, and the day cards, 24-hour
+    curve and tiles of the weather-style layout (app.tv_view)."""
     from app.noc import incident_clock, noc_overview
     from app.reports_view import incidents_per_day
+
+    from app.tv_view import tv_overview
 
     data = noc_overview(db)
     data["clock"] = incident_clock(db)
     data["daily"] = incidents_per_day(db, 14)
+    data.update(tv_overview(db))
     return data
 
 

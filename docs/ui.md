@@ -98,22 +98,31 @@ API: `GET /api/v1/topology`, `POST /api/v1/topology/sync`, `POST /api/v1/topolog
 
 ## TV mode (wall screen)
 
-`/app/tv` (button **Wall screen (TV mode)** on the NOC page) is built for a screen on the wall:
-no menu, large type, refresh every 30 seconds.
+`/app/tv` (button **Wall screen (TV mode)** on the NOC page) is built for a screen on the wall, in
+the style of a weather report: navy panels, large type, refresh every 30 seconds.
 
-- Left: open incidents, not acknowledged, hosts down, MTTA today.
-- Middle: the **incident clock**, the last 12 hours on a wall-clock dial. Each hour sits where
-  it is on a real clock, stacked by severity (critical inside, then high, then warning). The
-  hand and the dot on the rim show the time now; the empty slice right after the hand
-  separates the newest hour from the oldest. Incidents kept quiet by maintenance or noise
-  filters are not counted. Hover a slice for its numbers; screen readers get a table.
-- Under the clock: incidents per day for the last 14 days, the same chart as on Reports.
-- Right: who is on call now, and up to eight open incidents, critical first.
-- If updates stop for 90 seconds, a red **No updates** banner appears, so an old picture never
-  passes for a calm night.
+- Top: open, not acknowledged, hosts down and who is on call, then the tabs **Overview**,
+  **Burning now**, **12-hour clock** and **Hosts**. **Rotate** (or `/app/tv?rotate=1`) walks the
+  tabs every 30 seconds for a wall; on a monitor you pick one.
+- Overview, day cards: the last 7 days like a forecast strip. The "weather icon" is the worst
+  incident of the day (sun = quiet, cloud = warning, storm = high or critical), the big number
+  is incidents that day and the small one criticals.
+- Overview, **Last 24 hours**: incidents open per hour as a shaded curve, every two hours an icon
+  and the new incidents, maintenance windows as blue bands, and at the bottom the share of new
+  incidents acknowledged within 15 minutes (hatched = none in that slot).
+- Overview, tiles: time to acknowledge (24 h, target 15 min), time to resolve (7 days), the
+  error budget of the worst SLO, the shift as a sun arc (start, end, time left), the last
+  backup, the noisiest assets, ForgeAI, hosts answering and new devices from LibreNMS. Each tile
+  has a status word with a trend badge and one sentence; click it for the detail.
+- Burning now: up to nine open incidents, critical first. 12-hour clock: the incident clock
+  (each hour where it is on a real clock, stacked by severity) and incidents per day for 14 days.
+  Hosts: up and total per asset type.
+- Quiet incidents (maintenance, noise filters) are not counted. If updates stop for 90 seconds,
+  a red **No updates** banner appears, so an old picture never passes for a calm night.
 
 A Viewer account is enough: sign the wall computer in with one that cannot change anything.
-Data: `GET /api/v1/tv` (the NOC overview plus `clock`).
+Data: `GET /api/v1/tv` (the NOC overview plus `clock`, and `days`, `hours`, `tiles` from
+`backend/app/tv_view.py`; database reads only, no other system is called).
 
 ## Developing
 
