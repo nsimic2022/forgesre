@@ -142,7 +142,19 @@ export interface IncidentClockData {
   total: number;
 }
 
-export type TvData = Noc & { clock: IncidentClockData; daily?: { day: string; critical: number; high: number; other: number }[] };
+export type TvDay = { date: string; label: string; day: number; incidents: number; critical: number; high: number; worst: string; mttr_min: number | null };
+export type TvHour = { at: string; hour: number; open: number; new: number; critical: number; high: number; acked_fast_pct: number | null };
+export type TvTile = {
+  key: string; title: string; value: number | string; unit: string; word: string; trend: "up" | "down" | "steady"; sentence: string;
+  tone: "ok" | "warn" | "crit" | "info" | "off"; gauge: number | null; detail: string[]; start?: string; end?: string;
+  bars?: { label: string; value: number }[];
+};
+export type TvData = Noc & {
+  clock: IncidentClockData; daily?: { day: string; critical: number; high: number; other: number }[];
+  days?: TvDay[];
+  hours?: { from: string; to: string; points: TvHour[]; maintenance: { from: string; to: string; asset: string; summary: string }[] };
+  tiles?: TvTile[];
+};
 
 export interface IncidentPage {
   tab: string;
