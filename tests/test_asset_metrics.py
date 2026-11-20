@@ -5,12 +5,11 @@ from fastapi.testclient import TestClient
 
 from app.asset_metrics import asset_metric_panel, bundled_thresholds, metric_class_for, safe_asset_metric_panel
 from app.db import Base, SessionLocal, engine
-from app.inventory import create_manual_asset
 from app.main import app
 from app.metrics import reset_demo_gauges, set_demo_cpu, set_demo_disk
 from app.models import User
 from app.security import hash_password
-from app.seed import DEMO_ASSET, DEMO_SW_ASSET, DEMO_WIN_ASSET, seed
+from app.seed import DEMO_ASSET, seed
 from rca.collector import promql_queries_for
 
 
@@ -486,106 +485,6 @@ def test_sparkline_stays_small_when_range_exists():
     assert cpu["spark"].count(",") >= 3
 
 
-def test_metrics_api_and_detail_html(monkeypatch):
-    db = _db()
-    create_manual_asset(
-        db,
-        hostname="app-lab-metrics",
-        ip="10.44.77.91",
-        type="Linux Server",
-        actor="tester",
-    )
-    db.close()
-
-    def fake_query(expr: str, timeout: float = 5.0) -> dict:
-        del timeout
-        if "node_cpu" in expr:
-            return {"value": 22.0, "query": expr}
-        if "node_memory" in expr:
-            return {"value": None, "query": expr}
-        if "node_filesystem" in expr:
-            return {"value": 97.0, "query": expr}
-        if "up{" in expr or expr.strip() == "up":
-            return {"value": 1.0, "query": expr}
-        return {"value": None, "query": expr}
-
-    monkeypatch.setattr("app.services.query_prometheus_expr", fake_query)
-    monkeypatch.setattr("app.services.query_prometheus_range", lambda *args, **kwargs: {"values": []})
-
-    client = _login("admin@forgesre.local")
-    api = client.get("/api/v1/assets/app-lab-metrics/metrics")
-    assert api.status_code == 200
-    body = api.json()
-    assert body["class"] == "linux"
-    assert body["demo"] is False
-    cpu = next(tile for tile in body["tiles"] if tile["key"] == "cpu_percent")
-    assert cpu["display"] == "22%"
-    assert cpu["tone"] == "ok"
-
-    stale = client.get("/assets/app-lab-metrics", follow_redirects=False)
-    assert stale.status_code == 303
-    assert stale.headers["location"] == "/assets?edit=app-lab-metrics"
-    page = client.get("/assets?edit=app-lab-metrics")
-    assert page.status_code == 200
-    text = page.text
-    assert "asset-edit-graphs" in text
-    assert "data-asset-graphs" in text
-    assert "data-asset-online" not in text
-    assert "data-asset-online-pill" not in text
-    assert 'data-asset="app-lab-metrics"' in text
-    assert "data-dash-graph-list" in text
-    assert "data-asset-graph-grid" not in text
-    assert "asset-detail-split" not in text
-    actions = text.split("asset-form-actions", 1)[1].split("</div>", 1)[0]
-    assert ">Save<" in actions and ">Verify<" in actions and ">Remove<" in actions
-    assert actions.count('class="danger"') == 1
-    assert "Detect OS" in actions
-
-
-def test_asset_detail_compact_metric_row_css():
-    from pathlib import Path
-
-    css = Path("frontend/static/app.css").read_text()
-    row = css.split(".metric-row {", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns" in row and "border-bottom" in row
-    cube = css.split(".metric-cube {", 1)[1].split("}", 1)[0]
-    assert "border-radius: 2px" in cube
-    for tone in ("ok", "warn", "crit"):
-        assert f".metric-cube.{tone} {{ background: var(--{tone})" in css
-    assert ".metric-bar" not in css and ".metric-swatch" not in css
-
-
-def test_asset_detail_css_quarter_column():
-    from pathlib import Path
-
-    css = Path("frontend/static/app.css").read_text()
-    rule = css.split(".asset-detail-split {", 1)[1].split("}", 1)[0]
-    assert "minmax(0, 25%)" in rule
-    assert "minmax(0, 1fr)" in rule
-    assert "asset-detail-col-1-4" in css and "asset-detail-col-2-3" in css
-    assert "repeat(5, minmax(0, 1fr))" in css
-    assert "minmax(0, 1.35fr)" not in css
-
-
-def test_demo_edit_page_has_demo_label_when_prom_down():
-    reset_demo_gauges()
-    client = _login("admin@forgesre.local")
-    stale = client.get(f"/assets/{DEMO_ASSET}", follow_redirects=False)
-    assert stale.status_code == 303
-    page = client.get(f"/assets?edit={DEMO_ASSET}")
-    assert page.status_code == 200
-    assert "DEMO" in page.text
-    assert "asset-edit-graphs" in page.text
-    assert "data-asset-graphs" in page.text
-    assert "data-asset-graph-grid" not in page.text
-    win = client.get(f"/assets?edit={DEMO_WIN_ASSET}")
-    assert win.status_code == 200
-    assert "DEMO" in win.text
-    sw = client.get(f"/assets?edit={DEMO_SW_ASSET}")
-    assert sw.status_code == 200
-    assert "DEMO" in sw.text
-
-
 def test_metrics_api_survives_prometheus_down():
     reset_demo_gauges()
     client = _login("admin@forgesre.local")
@@ -600,33 +499,3 @@ def test_metrics_api_survives_prometheus_down():
     assert cpu["tone"] == "ok"
 
 
-def test_viewer_can_read_metrics_api():
-    db = _db()
-    if db.query(User).filter_by(email="viewer-metrics@forgesre.local").first() is None:
-        db.add(
-            User(
-                email="viewer-metrics@forgesre.local",
-                name="View",
-                password_hash=hash_password("testpass"),
-                role="viewer",
-            )
-        )
-        db.commit()
-    db.close()
-    client = TestClient(app)
-    login = client.post(
-        "/login",
-        data={"email": "viewer-metrics@forgesre.local", "password": "testpass"},
-        follow_redirects=False,
-    )
-    assert login.status_code in {302, 303}
-    api = client.get(f"/api/v1/assets/{DEMO_ASSET}/metrics")
-    assert api.status_code == 200
-    stale = client.get(f"/assets/{DEMO_ASSET}", follow_redirects=False)
-    assert stale.status_code == 303
-    page = client.get(f"/assets?edit={DEMO_ASSET}")
-    assert page.status_code == 200
-    assert "View asset" in page.text
-    assert 'id="asset-form"' in page.text
-    assert "data-asset-graphs" in page.text
-    assert ">Save<" not in page.text.split("asset-form-actions", 1)[1]

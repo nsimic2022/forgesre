@@ -1,8 +1,11 @@
-# What is still only on the classic UI
+# How the classic UI was retired
 
-The new UI (`/app`) is home since V2.0; the classic pages (`/classic`, `/assets`, `/ops` …) still
-work. This list is what an operator can do **only** on the classic pages today, so the decision to
-remove them can be made item by item. Nothing here is removed until that decision is made.
+The classic server-rendered pages (`/classic`, `/assets`, `/ops` …) were removed in V2.0. The
+new UI (`/app`) is the only UI. Old addresses redirect to the matching `/app` page
+(`backend/app/web.py`, `REDIRECTS`), so bookmarks and links in old mails keep working. Core still
+renders two pages itself: sign-in (`/login`) and the mail acknowledge link (`/ack/…`).
+
+What each classic page had, and where it went:
 
 | Classic page | In the new UI | Only in classic | Proposal |
 |---|---|---|---|
@@ -18,13 +21,12 @@ remove them can be made item by item. Nothing here is removed until that decisio
 | Health `/health-ui` | Settings › Services and health, `./forgesre doctor` | — | drop |
 | Admin `/admin` | Settings › Users and roles, Backup, Demo, Audit log | **restore a backup** (confirmed step), audit export, the CLI command list | port restore with a typed confirmation; the CLI list moves to docs/cli.md only |
 
-## Before classic can go
+## What was done
 
-1. ~~Port the four small gaps~~ (done): Inventory **Remove selected** and **Export CSV** (the
-   columns Import CSV reads), the found-devices list in Add devices with where each came from,
-   **Restore** on Settings › Backup (warning ticked, RESTORE typed, runs in the background), and
-   **Export (JSON)** on Automation.
-2. Point the remaining links (`More (classic)` on the asset card, Restore on Settings › Backup) at
-   the new pages.
-3. Keep `/classic` one more release behind `ui.home: classic`, then remove the templates, the
-   classic routes in `web.py`, `web_*.py`, `bulk.py` and `frontend/`, with their tests.
+1. Ported: Inventory **Remove selected** and **Export CSV** (the columns Import CSV reads), the
+   found-devices list in Add devices with where each came from, **Restore** on Settings › Backup
+   (warning ticked, RESTORE typed, runs in the background), and **Export (JSON)** on Automation.
+2. Removed: the templates except sign-in and acknowledge, `frontend/static`, the classic routes
+   in `web.py`, `web_assets.py`, `web_discovery.py`, `web_incidents.py`, `bulk.py`,
+   `insights.py`, the `ui.home` setting, and their tests. `scripts/gui_crawl.py` now walks the
+   `/app` pages and every `/api/v1` read instead.

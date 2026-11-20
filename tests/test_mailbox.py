@@ -7,13 +7,8 @@ import subprocess
 from pathlib import Path
 
 from app.services import smtp_ssl_context
-from app.web import smtp_provider_id
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def test_smtp_provider_id_is_off_when_yaml_email_disabled():
-    assert smtp_provider_id() == "off"
 
 
 def test_smtp_ssl_skips_verify_only_for_loopback():

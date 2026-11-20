@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.parse import unquote
 
-import yaml
 from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.inventory import run_scan, upsert_candidate
-from app.jobs import DISCOVERY_SCAN_KIND, run_pending_jobs
 from app.main import app
 from app.migrate import migrate
-from app.models import Job
 from app.seed import seed
 from app.settings import settings
 from discovery import (
@@ -101,97 +97,6 @@ def test_run_scan_skips_when_cidrs_empty(monkeypatch):
     assert result["found"] == 0
     assert result["cidrs"] == []
     db.close()
-
-
-def test_confirm_and_scan_writes_yaml_and_page_layout(tmp_path, monkeypatch):
-    db = _db()
-    db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
-    db.commit()
-    db.close()
-    cfg = tmp_path / "forgesre.yml"
-    cfg.write_text(
-        yaml.safe_dump(
-            {
-                "schema_version": 1,
-                "discovery": {"enabled": True, "mode": "semi-automatic", "cidrs": []},
-                "inventory": {"provider": "local", "netbox": {"enabled": False, "mode": "disabled"}},
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(settings, "config_path", cfg)
-    original_yaml = dict(settings.yaml)
-    settings.yaml = yaml.safe_load(cfg.read_text(encoding="utf-8"))
-    monkeypatch.setattr("discovery.suggested_management_cidr", lambda: "10.55.0.0/24")
-    monkeypatch.setattr(
-        "app.inventory.run_scan",
-        lambda db, cidrs=None, **kwargs: {"found": 0, "skipped": 0, "cidrs": cidrs or []},
-    )
-    try:
-        client = _login()
-        page = client.get("/discovery")
-        assert page.status_code == 200
-        assert "discovery-actions" in page.text
-        assert "Confirm &amp; scan" not in page.text and "Confirm & scan" not in page.text
-        assert ">Scan now<" in page.text
-        assert "Proposed role" not in page.text.split("<h2>Found assets</h2>", 1)[1].split("</thead>", 1)[0]
-        assert ">Type<" in page.text.split("<h2>Found assets</h2>", 1)[1].split("</thead>", 1)[0]
-        assert "10.55.0.0/24" in page.text
-        assert 'name="cidrs"' in page.text
-        assert page.text.find("Scan now") < page.text.find("<h2>LibreNMS") < page.text.find("NetBox sync")
-
-        empty = client.post("/discovery/scan", data={"confirm": "1", "cidrs": ""}, follow_redirects=False)
-        assert empty.status_code == 302
-        assert "Confirm" in unquote(empty.headers.get("location") or "")
-
-        confirmed = client.post(
-            "/discovery/scan",
-            data={"confirm": "1", "cidrs": "10.55.0.0/24"},
-            follow_redirects=False,
-        )
-        assert confirmed.status_code == 302
-        loc = unquote(confirmed.headers.get("location") or "")
-        assert "queued" in loc.lower() or "Confirmed" in loc
-        written = yaml.safe_load(cfg.read_text(encoding="utf-8"))
-        assert written["discovery"]["cidrs"] == ["10.55.0.0/24"]
-        assert settings.discovery_cidrs == ["10.55.0.0/24"]
-
-        scan_now = client.post("/discovery/scan", data={"cidrs": "10.55.0.0/24"}, follow_redirects=False)
-        assert scan_now.status_code == 302
-        assert "queued" in unquote(scan_now.headers.get("location") or "").lower()
-        db = SessionLocal()
-        run_pending_jobs(db)
-        db.query(Job).filter_by(kind=DISCOVERY_SCAN_KIND).delete(synchronize_session=False)
-        db.commit()
-        db.close()
-    finally:
-        settings.yaml = original_yaml
-
-
-def test_discovery_template_side_by_side_and_columns():
-    html = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "discovery-actions" in html
-    assert "discovery-actions" in css
-    assert "Confirm &amp; scan" not in html
-    assert ">Scan now<" in html
-    assert "Management CIDR" not in html
-    assert (
-        html.find("Scan now")
-        < html.find("<h2>LibreNMS")
-        < html.find("NetBox sync")
-        < html.find("<h2>Zabbix")
-        < html.find("<h2>GLPI")
-    )
-    assert "app.css?v=v09-70" in base
-    assert "Mode:" not in html.split("<h1>", 1)[1].split("discovery-actions", 1)[0]
-    assert "repeat(4, minmax(0, 1fr))" in css
-    handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
-    assert "primary IPv4" in handbook
-    assert "Scan now" in handbook
-    assert "256" in handbook and "1024" in handbook
 
 
 def test_candidate_api_exposes_flags():

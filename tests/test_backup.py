@@ -6,15 +6,11 @@ from fastapi.testclient import TestClient
 from app.backup import (
     ARCHIVE_RE,
     BackupLayout,
-    CONFIRM_WORD,
     FOLDER_RE,
     INNER_ARCHIVE,
     archive_file,
-    backup_compact,
-    backup_picker_label,
     create_backup,
     delete_backup,
-    format_size,
     inspect_archive,
     list_archives,
     restore_archive,
@@ -23,7 +19,6 @@ from app.backup import (
     save_upload,
 )
 from app.db import Base, SessionLocal, engine
-from app.main import app
 from app.models import User
 from app.seed import seed
 from app.security import hash_password
@@ -172,229 +167,6 @@ def _forgesre_overview_names() -> set[str]:
             for part in left.split(" / "):
                 names.add(part.split()[0])
     return names
-
-
-def test_admin_backup_buttons_before_cli_cheatsheet(tmp_path, monkeypatch):
-    db = _db()
-    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(tmp_path / "backups"))
-    monkeypatch.setenv("FORGESRE_RESTORE_STOP_CORE", "0")
-    client = TestClient(app)
-    _login(client)
-    page = client.get("/admin")
-    assert page.status_code == 200
-    text = page.text
-    assert "History backup" in text
-    assert "Create new backup" in text
-    assert "Platform backup" not in text
-    assert ">Backup<" in text
-    assert ">Import<" in text
-    assert "ForgeSRE CLI" in text
-    assert "Appliance shell" not in text
-    assert "admin-backup-cli" in text
-    assert "admin-restore-pane" in text
-    assert "admin-create-backup-pane" in text
-    assert "admin-cli-pane" in text
-    assert text.index("admin-create-backup-pane") < text.index("admin-restore-pane") < text.index("admin-cli-pane")
-    assert text.index("Create new backup") < text.index("Import / restore") < text.index("ForgeSRE CLI")
-    assert text.index("History backup") < text.index("Create new backup")
-    assert text.index(">Backup<") < text.index("ForgeSRE CLI")
-    history = text.split("<h2>History backup", 1)[1].split("admin-backup-cli", 1)[0]
-    assert "include_models" not in history
-    assert ">Backup<" not in history
-    create = text.split("<h2>Create new backup", 1)[1].split("Import / restore", 1)[0]
-    assert 'name="include_models"' in create
-    assert ">Backup<" in create
-    assert 'action="/admin/backups"' in create
-    assert "no terminal in this browser" not in text.lower()
-    assert "./forgesre" in text
-    assert ">shell<" in text.lower() or "<code>shell</code>" in text
-    assert "xterm" not in text.lower()
-    assert "mailpit" not in text.lower()
-    overview = _forgesre_overview_names()
-    start = text.index("cli-cheatsheet")
-    chunk = text[start : text.index("</table>", start)]
-    shown = []
-    for part in chunk.split("<code>")[1:]:
-        shown.append(part.split("</code>", 1)[0])
-    assert shown
-    for label in shown:
-        assert label.split()[0] in overview, label
-    assert "update" in shown
-    assert "test" in shown
-    assert "verify" in shown
-    assert "ping" in shown
-    assert "backup" in shown
-    assert "restore" in shown
-    assert "import" in shown
-    assert "remove backup" in shown
-    assert "doctor" in shown
-    assert "snmp" in shown
-    assert "mailbox" in shown
-    assert "fetch-llm" in shown
-    assert "demo" in shown
-    assert "help" in shown
-    assert "quit" in shown
-    created = client.post("/admin/backups", data={}, follow_redirects=False)
-    assert created.status_code == 303
-    name = created.headers["location"].split("backup=", 1)[1]
-    page = client.get("/admin")
-    text = page.text
-    assert 'select name="name"' in text
-    assert "Backup folder (newest first)" in text
-    assert 'placeholder="RESTORE"' in text
-    assert name in text
-    select = text.split('<select name="name"', 1)[1].split("</select>", 1)[0]
-    option_body = select.split("</option>", 1)[0].rsplit(">", 1)[-1]
-    assert "UTC —" not in select
-    assert "UTC" not in option_body
-    assert name not in option_body
-    assert name in select
-    assert "SECRET_KEY" not in text
-    assert ">Download</a>" in text
-    assert 'action="/admin/backups/remove"' in text
-    backups = text[text.index("History backup") :]
-    assert backups.index(">Download</a>") < backups.index(">Remove<")
-    assert "/admin/backups/remove" in text
-    assert "onsubmit=" in text
-    assert "confirm(" in text
-    db.close()
-
-
-def test_admin_restore_picker_uses_compact_stamps_and_inline_confirm(tmp_path, monkeypatch):
-    """Dropdown labels are the list's compact dates. First option is the newest real backup.
-    The restore checkbox is the sibling before the confirm sentence.
-    """
-    import re
-    from html import unescape
-
-    db = _db()
-    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(tmp_path / "backups"))
-    newer = "backup_20261009T060041Z"
-    older = "backup_20261008T030100Z"
-    (tmp_path / "backups" / newer).mkdir(parents=True)
-    (tmp_path / "backups" / newer / INNER_ARCHIVE).write_bytes(b"n" * 400_000)
-    (tmp_path / "backups" / older).mkdir(parents=True)
-    (tmp_path / "backups" / older / INNER_ARCHIVE).write_bytes(b"o" * 1_200)
-    client = TestClient(app)
-    _login(client)
-    text = client.get("/admin").text
-    rows = list_archives()
-    assert [row["name"] for row in rows] == [newer, older]
-    select = text.split('<select name="name"', 1)[1].split("</select>", 1)[0]
-    found = re.findall(r"<option([^>]*)>(.*?)</option>", select, flags=re.S)
-    assert len(found) == len(rows)
-    parsed = []
-    for attrs, body in found:
-        value = re.search(r'value="([^"]*)"', attrs)
-        title = re.search(r'title="([^"]*)"', attrs)
-        assert value and title
-        parsed.append(
-            {
-                "value": unescape(value.group(1)),
-                "title": unescape(title.group(1)),
-                "text": unescape(re.sub(r"\s+", " ", body)).strip(),
-                "selected": bool(re.search(r"(?:^|\s)selected(?:\s|$)", attrs)),
-            }
-        )
-    assert [item["value"] for item in parsed] == [row["name"] for row in rows]
-    assert parsed[0]["selected"] is True
-    assert parsed[1]["selected"] is False
-    assert parsed[0]["value"] == newer
-    table = text.split("<h2>History backup", 1)[1].split("admin-backup-cli", 1)[0]
-    for row, opt in zip(rows, parsed):
-        compact = backup_compact(row)
-        label = backup_picker_label(row)
-        assert compact["date"] and compact["time"]
-        assert label == f"{compact['date']} {compact['time']} ({format_size(row['size'])})"
-        assert opt["text"] == label
-        assert opt["value"] == row["name"]
-        assert opt["title"] == row["name"]
-        assert row["name"] not in opt["text"]
-        assert "UTC" not in opt["text"]
-        assert "—" not in opt["text"]
-        assert compact["date"] in table and compact["time"] in table
-    assert 'title="backup_20261009T060041Z"' in table
-    ack = re.search(
-        r'<label class="inline-check">\s*'
-        r'<input type="checkbox" name="acknowledged" value="1" required>\s*'
-        r"<span>I understand this overwrites users, incidents, and playbooks on this live box</span>",
-        text,
-    )
-    assert ack, "checkbox must be the sibling before the confirm sentence"
-    between = text[text.index('name="acknowledged"') : text.index("I understand this overwrites")]
-    assert "</label>" not in between
-    assert "<br" not in between.lower()
-    css = Path(__file__).resolve().parents[1].joinpath("frontend/static/app.css").read_text(encoding="utf-8")
-    stack_at = css.index(".stack label, form label")
-    rule_at = css.index("form label.inline-check")
-    assert rule_at > stack_at
-    body = css[rule_at:].split("{", 1)[1].split("}", 1)[0]
-    assert "flex-direction: row" in body
-    assert 'placeholder="RESTORE"' in text
-    assert ">Download</a>" in text and ">Remove<" in text
-    db.close()
-
-
-def test_admin_create_and_download_backup_is_admin_only(tmp_path, monkeypatch):
-    db = _db()
-    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(tmp_path / "backups"))
-    monkeypatch.setenv("FORGESRE_RESTORE_STOP_CORE", "0")
-    client = TestClient(app)
-    anon = client.get("/admin/backups/forgesre-20200101T000000Z.tar.gz", follow_redirects=False)
-    assert anon.status_code in {302, 401, 404}
-    _login(client)
-    created = client.post("/admin/backups", data={}, follow_redirects=False)
-    assert created.status_code == 303
-    assert "backup=" in created.headers["location"]
-    name = created.headers["location"].split("backup=", 1)[1]
-    down = client.get(f"/admin/backups/{name}")
-    assert down.status_code == 200
-    assert down.headers.get("content-type", "").startswith("application/gzip") or "gzip" in down.headers.get("content-type", "")
-    assert down.headers.get("cache-control") == "no-store"
-    assert down.content[:2] == b"\x1f\x8b" or len(down.content) > 20
-    traversal = client.get("/admin/backups/../secrets.env", follow_redirects=False)
-    assert traversal.status_code == 404
-    db.add(
-        User(
-            email="ana@dc.local",
-            name="Ana",
-            password_hash=hash_password("ana-pass"),
-            role="analyst",
-        )
-    )
-    db.commit()
-    other = TestClient(app)
-    other.post("/login", data={"email": "ana@dc.local", "password": "ana-pass"}, follow_redirects=False)
-    denied = other.post("/admin/backups", data={}, follow_redirects=False)
-    assert denied.status_code == 403
-    denied_get = other.get(f"/admin/backups/{name}", follow_redirects=False)
-    assert denied_get.status_code == 403
-    db.close()
-
-
-def test_admin_restore_requires_typed_confirm(tmp_path, monkeypatch):
-    db = _db()
-    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(tmp_path / "backups"))
-    monkeypatch.setenv("FORGESRE_RESTORE_STOP_CORE", "0")
-    monkeypatch.setenv("FORGESRE_FILES_WRITABLE", "0")
-    client = TestClient(app)
-    _login(client)
-    created = client.post("/admin/backups", data={}, follow_redirects=False)
-    name = created.headers["location"].split("backup=", 1)[1]
-    refused = client.post(
-        "/admin/backups/restore",
-        data={"name": name, "confirm": "please", "acknowledged": "1"},
-        follow_redirects=False,
-    )
-    assert refused.status_code == 400
-    ok = client.post(
-        "/admin/backups/restore",
-        data={"name": name, "confirm": CONFIRM_WORD, "acknowledged": "1"},
-        follow_redirects=False,
-    )
-    assert ok.status_code == 303
-    assert "restored=" in ok.headers["location"]
-    db.close()
 
 
 def test_resolve_archive_rejects_bad_names(tmp_path):
@@ -955,55 +727,6 @@ def test_delete_backup_cannot_escape_dir(tmp_path):
     assert (outside / "keep.txt").is_file()
     assert (lay.backup_dir / "backup_20260824T120000Z").is_dir()
     assert lay.backup_dir.is_dir()
-
-
-def test_admin_remove_backup_is_admin_only(tmp_path, monkeypatch):
-    db = _db()
-    monkeypatch.setenv("FORGESRE_BACKUP_DIR", str(tmp_path / "backups"))
-    monkeypatch.setenv("FORGESRE_RESTORE_STOP_CORE", "0")
-    client = TestClient(app)
-    anon = client.post("/admin/backups/remove", data={"name": "backup_x"}, follow_redirects=False)
-    assert anon.status_code in {302, 401, 403, 404, 422}
-    _login(client)
-    first = client.post("/admin/backups", data={}, follow_redirects=False)
-    name = first.headers["location"].split("backup=", 1)[1]
-    other_dir = tmp_path / "backups" / "backup_20200101T000000Z"
-    other_dir.mkdir()
-    (other_dir / INNER_ARCHIVE).write_bytes(b"x" * 40)
-    page = client.get("/admin")
-    text = page.text
-    assert ">Download</a>" in text
-    assert 'action="/admin/backups/remove"' in text
-    assert "onsubmit=" in text
-    assert "confirm(" in text
-    backups = text[text.index("History backup") :]
-    assert backups.index(">Download</a>") < backups.index(">Remove<")
-    traversal = client.post(
-        "/admin/backups/remove",
-        data={"name": "../secrets.env"},
-        follow_redirects=False,
-    )
-    assert traversal.status_code == 404
-    db.add(
-        User(
-            email="ana-remove@dc.local",
-            name="Ana Remove",
-            password_hash=hash_password("ana-pass"),
-            role="analyst",
-        )
-    )
-    db.commit()
-    analyst = TestClient(app)
-    analyst.post("/login", data={"email": "ana-remove@dc.local", "password": "ana-pass"}, follow_redirects=False)
-    denied = analyst.post("/admin/backups/remove", data={"name": name}, follow_redirects=False)
-    assert denied.status_code == 403
-    removed = client.post("/admin/backups/remove", data={"name": name}, follow_redirects=False)
-    assert removed.status_code == 303
-    assert f"removed={name}" in removed.headers["location"]
-    listed = [row["name"] for row in list_archives()]
-    assert name not in listed
-    assert "backup_20200101T000000Z" in listed
-    db.close()
 
 
 def test_cli_remove_without_path_lists_numbered_picker(tmp_path, monkeypatch, capsys):

@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.incident_report_mail import build_incident_report, incident_report_html
-from app.main import app
 from app.models import Asset, Incident
 from app.notifications import build_escalation_html
 from app.seed import seed
@@ -75,120 +74,6 @@ def _when_cell(row_html: str) -> str:
     return '<td class="inc-when"' + row_html.split('<td class="inc-when"', 1)[1].split("</td>", 1)[0] + "</td>"
 
 
-def test_every_row_when_leads_with_duration_then_clock():
-    db = _db()
-    now = datetime.now(timezone.utc)
-    live = _add(
-        db,
-        status="OPEN",
-        severity="CRITICAL",
-        started=now - timedelta(hours=2, minutes=14, seconds=10),
-        title=f"Live disk {uuid4().hex[:6]}",
-        labels={"instance": "10.20.30.40:9100"},
-    )
-    done = _add(
-        db,
-        status="CLOSED",
-        severity="WARNING",
-        started=now - timedelta(days=2, hours=1),
-        resolved_at=now - timedelta(days=2),
-        title=f"Closed cpu {uuid4().hex[:6]}",
-    )
-    resolved = _add(
-        db,
-        status="RESOLVED",
-        severity="CRITICAL",
-        started=now - timedelta(hours=3),
-        resolved_at=now - timedelta(minutes=46),
-        title=f"Resolved mem {uuid4().hex[:6]}",
-    )
-    client = TestClient(app)
-    _login(client)
-    home = client.get("/")
-    assert home.status_code == 200
-    dash = home.text.split("Recent incidents", 1)[1]
-    live_row = _row(dash, live.number)
-    live_when = _when_cell(live_row)
-    assert re.search(r'title="Open for 2h 1[45]m · started [^"]+"', live_when)
-    assert 'data-when="stamp"' in live_when
-    assert "inc-age" not in live_when
-    assert re.search(r'<span class="stamp-date">\d{2} \w{3} \d{4}</span><span class="stamp-time">' + WALL_RE + "</span>", live_when)
-    assert 'class="inc-title sev-crit"' in live_row
-    assert 'class="inc-host"' in live_row and "10.20.30.40" in live_row
-    assert "ack-dot" not in live_row
-    assert "status-ack" not in live_row
-    head = dash.split("</thead>", 1)[0]
-    assert head.index(">Incident<") < head.index(">Hostname<") < head.index(">Status<") < head.index(">L1–L4<")
-    assert head.index(">When<") < head.index(">Severity<") < head.index(">Resolved by<")
-    assert ">Acknowledged<" not in head
-    assert head.index(">When<") < head.index(">Resolved by<")
-    assert ">Problem<" not in head and ">Ack<" not in head and "info-tip" not in head
-    done_row = _row(dash, done.number)
-    done_when = _when_cell(done_row)
-    assert re.search(r'title="Lasted 1h · started [^"]+ · ended [^"]+"', done_when)
-    assert 'data-when="stamp"' in done_when
-    assert "inc-age" not in done_when
-    assert "admin@forgesre.local" in done_row
-    res_row = _row(dash, resolved.number)
-    assert "inc-row-done" in res_row
-    assert re.search(r'<span class="stamp-time">' + WALL_RE + "</span>", _when_cell(res_row))
-
-    listed = client.get("/incidents")
-    assert listed.status_code == 200
-    inc_head = listed.text.split("<thead>", 1)[1].split("</thead>", 1)[0]
-    assert inc_head.index(">Incident<") < inc_head.index(">Hostname<")
-    assert ">Acknowledged<" not in inc_head and "col-ack" not in inc_head
-    assert "Resolved by" in inc_head and ">Notes<" in inc_head
-    assert 'class="col-status">Status</th>' in inc_head
-    assert ">Ack<" not in inc_head and "info-tip" not in inc_head
-    live_row = _row(listed.text, live.number)
-    live_when = _when_cell(live_row)
-    assert re.search(r'title="Open for 2h 1[45]m · started [^"]+"', live_when)
-    assert 'data-when="stamp"' in live_when
-    assert "inc-age" not in live_when
-    assert "INC-" not in live_when
-    assert re.search(r'<span class="stamp-date">\d{2} \w{3} \d{4}</span><span class="stamp-time">' + WALL_RE + "</span>", live_when)
-    assert 'class="inc-title sev-crit"' in live_row
-    assert 'class="col-host"' in live_row and "10.20.30.40" in live_row
-    assert '<span class="inc-host">· 10.20.30.40</span>' not in live_row
-    assert "ack-dot" not in live_row
-    assert "status-ack" not in live_row
-    assert 'class="col-status"' in live_row and ">OPEN<" in live_row
-    done_row = _row(listed.text, done.number)
-    done_when = _when_cell(done_row)
-    assert re.search(r'title="Lasted 1h · started [^"]+ · ended [^"]+"', done_when)
-    assert 'data-when="stamp"' in done_when
-    assert "inc-age" not in done_when
-    assert "admin@forgesre.local" in done_row
-    res_row = _row(listed.text, resolved.number)
-    assert "inc-row-done" in res_row
-    assert 'class="inc-title sev-crit"' in res_row
-    assert re.search(r'<span class="stamp-time">' + WALL_RE + "</span>", _when_cell(res_row))
-    db.close()
-
-
-def test_incidents_default_all_shows_duration_for_resolved_without_filter():
-    db = _db()
-    now = datetime.now(timezone.utc)
-    row = _add(
-        db,
-        status="RESOLVED",
-        severity="WARNING",
-        started=now - timedelta(minutes=58),
-        resolved_at=now - timedelta(minutes=40),
-        title=f"Default view {uuid4().hex[:6]}",
-    )
-    client = TestClient(app)
-    _login(client)
-    page = client.get("/incidents")
-    assert page.status_code == 200
-    when = _when_cell(_row(page.text, row.number))
-    assert 'title="Lasted 18m' in when
-    assert re.search(r'<span class="stamp-date">\d{2} \w{3} \d{4}</span><span class="stamp-time">' + WALL_RE + "</span>", when)
-    assert "18m" not in when.split(">", 1)[1]
-    db.close()
-
-
 def test_closed_without_end_stamp_uses_last_timeline_step():
     start = datetime(2026, 10, 5, 8, 0, tzinfo=timezone.utc)
     row = Incident(
@@ -250,51 +135,6 @@ def test_incident_host_prefers_asset_then_labels():
     assert incident_host(Incident(alert_payload={})) == ""
 
 
-def test_detail_header_strip_has_first_and_duration():
-    db = _db()
-    now = datetime.now(timezone.utc)
-    asset = db.query(Asset).filter_by(asset_id="forge-demo-01").one()
-    row = _add(
-        db,
-        status="INVESTIGATING",
-        severity="CRITICAL",
-        started=now - timedelta(minutes=18, seconds=5),
-        title="Strip check",
-        asset=asset,
-    )
-    client = TestClient(app)
-    _login(client)
-    page = client.get(f"/incidents/{row.number}")
-    assert page.status_code == 200
-    identity = page.text.split("data-incident-identity", 1)[1].split("</table>", 1)[0]
-    assert "Strip check" in identity
-    assert ">Notes<" in identity
-    assert identity.index(">Incident<") < identity.index(">Hostname<") < identity.index(">Status<") < identity.index(">L1–L4<")
-    assert identity.index(">When<") < identity.index(">Severity<") < identity.index(">Resolved by<") < identity.index(">Notes<")
-    assert ">IP<" not in identity
-    assert ">Owner<" not in identity
-    assert ">Contact<" not in identity
-    assert 'class="inc-host"' in identity
-    assert 'class="pill investigating"' in identity or "INVESTIGATING" in identity
-    assert 'class="pill crit"' in identity
-    assert page.text.index('class="incident-head"') < page.text.index("data-incident-identity")
-    assert page.text.index("data-incident-identity") < page.text.index("class=\"incident-actions\"")
-    assert page.text.index("class=\"incident-actions\"") < page.text.index("<h2>What happened")
-    assert 'class="card incident-actions"' not in page.text
-    assert 'class="incident-status"' in page.text
-    assert 'class="incident-rca"' in page.text
-    assert page.text.index("<h2>What happened") < page.text.index("<h2>Workflow")
-    assert page.text.index("<h2>Workflow") < page.text.index("<h2>Similar on this asset")
-    assert page.text.index("<h2>Similar on this asset") < page.text.index("<h2>Host metrics")
-    assert page.text.index("<h2>Host metrics") < page.text.index("<h2>Who to call")
-    assert page.text.index("<h2>Who to call") < page.text.index('id="evidence"')
-    assert page.text.index('id="evidence"') < page.text.index('id="audit"')
-    assert page.text.index('id="audit"') < page.text.index('id="notes"')
-    assert "Resolved is not Closed" not in page.text
-    assert 'class="card-scroll"' in page.text
-    db.close()
-
-
 def test_report_and_escalation_html_lead_with_header_facts():
     db = _db()
     now = datetime.now(timezone.utc)
@@ -338,12 +178,3 @@ def test_report_and_escalation_html_lead_with_header_facts():
     assert "+00:00" not in report.split("Details", 1)[0]
 
 
-def test_stack_cube_font_bumped_box_unchanged():
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    block = css.split(".stack-cube {", 1)[1].split("}", 1)[0]
-    size = float(re.search(r"font-size:\s*([\d.]+)rem", block).group(1))
-    assert size > 0.7
-    assert "padding: 0.28rem" in block
-    assert "line-height: 0.77rem" in block
-    assert "minmax(3.9rem, 1fr)" in css.split(".stack-cubes {", 1)[1].split("}", 1)[0]
-    assert "app.css?v=v09-70" in (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")

@@ -108,7 +108,7 @@ def test_email_is_case_insensitive_at_login():
     row = _user(db)
     client = TestClient(app)
     assert _login(client, "  " + row.email.upper() + " ", "user-pass").status_code == 302
-    assert client.get("/", follow_redirects=False).status_code == 200
+    assert client.get("/api/v1/me").status_code == 200
 
 
 def test_inactive_user_gets_no_cookie_and_no_login_audit():
@@ -132,7 +132,7 @@ def test_logout_revokes_a_copied_cookie():
 
     thief = TestClient(app)
     thief.cookies.set("forgesre_session", stolen)
-    assert thief.get("/", follow_redirects=False).status_code in (302, 303, 401)
+    assert thief.get("/api/v1/me").status_code == 401
 
 
 def test_password_change_signs_out_other_browsers_but_keeps_the_admin_signed_in():
@@ -142,14 +142,10 @@ def test_password_change_signs_out_other_browsers_but_keeps_the_admin_signed_in(
     phone = TestClient(app)
     assert _login(laptop, row.email, "old-pass").status_code == 302
     assert _login(phone, row.email, "old-pass").status_code == 302
-    changed = laptop.post(
-        f"/admin/users/{row.id}",
-        data={"email": row.email, "name": "Sec", "password": "new-pass", "role": "admin"},
-        follow_redirects=False,
-    )
-    assert changed.status_code == 303
-    assert laptop.get("/", follow_redirects=False).status_code == 200
-    assert phone.get("/", follow_redirects=False).status_code in (302, 303, 401)
+    changed = laptop.post(f"/api/v1/users/{row.id}", json={"name": "Sec", "password": "new-pass", "role": "admin"})
+    assert changed.status_code == 200
+    assert laptop.get("/api/v1/me").status_code == 200
+    assert phone.get("/api/v1/me").status_code == 401
 
 
 def test_cookie_from_before_the_upgrade_still_works():
@@ -160,6 +156,6 @@ def test_cookie_from_before_the_upgrade_still_works():
     row = _user(db)
     client = TestClient(app)
     client.cookies.set("forgesre_session", serializer.dumps({"uid": row.id}))
-    assert client.get("/", follow_redirects=False).status_code == 200
+    assert client.get("/api/v1/me").status_code == 200
     client.cookies.set("forgesre_session", make_session_token(row.id, 7))
-    assert client.get("/", follow_redirects=False).status_code in (302, 303, 401)
+    assert client.get("/api/v1/me").status_code == 401

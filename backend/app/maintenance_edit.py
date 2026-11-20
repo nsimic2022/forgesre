@@ -1,5 +1,5 @@
 """Maintenance windows from the new UI. A window lives on the asset (extras maint_from / maint_until)
-and is mirrored into maintenance_windows, exactly like the classic asset form.
+and is mirrored into maintenance_windows, exactly like the asset form.
 
 While a window is open, alarms on that asset still open incidents but no mail or chat goes out.
 """

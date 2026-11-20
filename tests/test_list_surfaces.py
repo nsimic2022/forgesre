@@ -6,7 +6,6 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
-from app.main import app
 from app.seed import seed
 from app.services import (
     format_started_at,
@@ -61,91 +60,3 @@ def test_list_helpers_short_id_when_and_severity():
     assert severity_pill("info") == "warn"
 
 
-def test_dashboard_recent_incidents_uses_scan_columns():
-    db = _db()
-    client = TestClient(app)
-    _login(client)
-    home = client.get("/")
-    assert home.status_code == 200
-    section = home.text.split("Recent incidents", 1)[1]
-    headers = _headers(section)
-    assert headers.index(">Incident<") < headers.index(">Hostname<")
-    assert ">Problem<" not in headers
-    assert ">Severity<" in headers
-    assert ">Status<" in headers
-    assert ">When<" in headers
-    assert ">Acknowledged<" not in headers
-    assert headers.index(">When<") < headers.index(">Resolved by<")
-    assert ">Ack<" not in headers and "info-tip" not in headers
-    assert ">Asset<" not in headers
-    assert "Reported to" not in headers
-    assert "inc-cell" in section
-    assert "ack-dot" not in section
-    assert "scan-list" in section
-    assert 'id="host-down-banner"' not in home.text
-    assert "Recent journal" not in home.text
-    kpi = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
-    for label in (">Critical<", ">Warning<", ">Escalated<"):
-        assert label in kpi
-    assert ">Investigating<" not in kpi and ">Resolved<" not in kpi
-    assert ">Open<" not in kpi and 'href="/incidents?status=ESCALATED"' in kpi
-    assert "demo=0" not in kpi
-    db.close()
-
-
-def test_incidents_keeps_ack_resolved_by_and_drops_reported_to():
-    db = _db()
-    client = TestClient(app)
-    _login(client)
-    page = client.get("/incidents")
-    assert page.status_code == 200
-    headers = _headers(page.text)
-    assert headers.index(">Incident<") < headers.index(">Hostname<")
-    assert ">When<" in headers
-    assert ">Acknowledged<" not in headers and "col-ack" not in headers
-    assert ">Ack<" not in headers and "info-tip" not in headers
-    assert headers.index(">Status<") < headers.index(">When<") < headers.index(">Resolved by<") < headers.index(">Notes<")
-    assert "Resolved by" in headers
-    assert "Reported to" not in headers
-    assert ">Asset<" not in headers
-    assert "ack-dot" not in page.text
-    assert 'class="status-cell"' in page.text
-    assert "inc-cell" in page.text
-    assert 'class="stamp"' in page.text
-    html = (ROOT / "frontend" / "templates" / "incidents.html").read_text(encoding="utf-8")
-    tail = (ROOT / "frontend" / "templates" / "_incident_scan_tail.html").read_text(encoding="utf-8")
-    status = (ROOT / "frontend" / "templates" / "_incident_status_cell.html").read_text(encoding="utf-8")
-    assert "show_ack=false" in html and "_incident_scan_tail.html" in html
-    assert "col-ack" not in html
-    assert 'class="status-ack">Acknowledged</span>' in status
-    assert "ack-dot" in tail
-    assert "Reported to" not in html
-    assert "history.html" not in html
-    nav = page.text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
-    assert ">History<" not in nav
-    db.close()
-
-
-def test_mail_outbox_keeps_classic_when_to_subject_columns():
-    db = _db()
-    client = TestClient(app)
-    _login(client)
-    page = client.get("/ops")
-    assert page.status_code == 200
-    mail = page.text.split('id="mail"', 1)[1].split('id="reports"', 1)[0]
-    headers = _headers(mail)
-    assert ">When<" in headers
-    assert ">To<" in headers
-    assert ">Subject<" in headers
-    assert ">Status<" in headers
-    assert ">Body<" in headers
-    assert ">Mail<" not in headers
-    assert "scan-list" not in mail
-    assert "mail-list" not in mail
-    html = (ROOT / "frontend" / "templates" / "ops.html").read_text(encoding="utf-8")
-    assert "scan-list mail-list" not in html
-    assert "<th>When</th><th>To</th><th>Subject</th><th>Status</th><th>Body</th>" in html
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".mail-list" not in css
-    assert ".scan-list tr.inc-ok td:first-child" in css
-    db.close()

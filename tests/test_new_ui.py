@@ -505,25 +505,18 @@ def test_tv_endpoint_is_for_viewers():
 
 
 def test_new_ui_is_home_when_built(monkeypatch, tmp_path):
-    """/ opens the new UI when it is built and ui.home is new; /classic always shows the old dashboard."""
-    from app.settings import settings
-
+    """/ and old classic addresses open the app when it is built; without a build sign-in says why."""
     client = _signed_in("viewer")
-    old = settings.yaml
     monkeypatch.setenv("WEB_DIST", str(tmp_path))
-    try:
-        settings.yaml = {**(old or {}), "ui": {"home": "new"}}
-        first = client.get("/", follow_redirects=False)
-        assert first.status_code == 200  # not built yet: classic dashboard
-        (tmp_path / "index.html").write_text("<!doctype html><div id=root></div>")
-        home = client.get("/", follow_redirects=False)
-        assert home.status_code == 303 and home.headers["location"] == "/app/"
-        classic = client.get("/classic", follow_redirects=False)
-        assert classic.status_code == 200 and 'href="/classic"' in classic.text
-        settings.yaml = {**(old or {}), "ui": {"home": "classic"}}
-        assert client.get("/", follow_redirects=False).status_code == 200
-    finally:
-        settings.yaml = old
+    first = client.get("/", follow_redirects=False)
+    assert first.status_code == 302 and first.headers["location"] == "/login"
+    page = client.get("/login", follow_redirects=False)
+    assert page.status_code == 200 and "not built" in page.text
+    (tmp_path / "index.html").write_text("<!doctype html><div id=root></div>")
+    for old, new in [("/", "/app/"), ("/classic", "/app/"), ("/admin", "/app/settings"), ("/incidents/INC-1", "/app/incidents/INC-1")]:
+        home = client.get(old, follow_redirects=False)
+        assert home.status_code == 302 and home.headers["location"] == new, old
+    assert client.get("/login", follow_redirects=False).headers["location"] == "/app/"
 
 
 def test_me_reports_appliance_version_for_the_menu(monkeypatch):

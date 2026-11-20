@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from ldap3 import MOCK_SYNC, OFFLINE_AD_2012_R2, Connection, Server
 
+from app.web import _home as web_home
 from app import ldap_auth, oidc_auth
 from app.db import Base, SessionLocal, engine
 from app.main import create_app
@@ -112,7 +113,7 @@ def test_oidc_code_flow_signs_in_with_the_group_role(monkeypatch):
     bad = client.get("/auth/oidc/callback", params={"code": "c", "state": "forged"}, follow_redirects=False)
     assert "sso_error" in bad.headers["location"] and "state" in bad.headers["location"]
     done = client.get("/auth/oidc/callback", params={"code": "c", "state": params["state"][0]}, follow_redirects=False)
-    assert done.headers["location"] == "/" and "forgesre_session" in done.headers.get("set-cookie", "")
+    assert done.headers["location"] == web_home() and "forgesre_session" in done.headers.get("set-cookie", "")
     db = SessionLocal()
     user = db.query(User).filter_by(email=f"mila.{tag}@dc.local").one()
     assert user.role == "analyst" and user.password_hash == "!oidc"

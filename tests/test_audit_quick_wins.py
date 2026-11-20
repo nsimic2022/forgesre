@@ -125,23 +125,3 @@ def test_system_status_counts_escalated_apart_from_open(monkeypatch):
     db.close()
 
 
-def test_handbook_report_mode_escalated_cube_and_investigating_tip():
-    script = (ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
-    start = script.index('cat > "$ROOT/installation-report.md"')
-    block = script[start:].split("\nstart_stack()", 1)[0]
-    assert "Admin password: ${admin_pass}" in block
-    assert 'chmod 600 "$ROOT/installation-report.md"' in block
-    assert block.index("EOF") < block.index('chmod 600 "$ROOT/installation-report.md"')
-
-    handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
-    passwords = [line for line in handbook.splitlines() if "installation-report.md" in line and "mode `600`" in line]
-    assert passwords
-    assert "do not show an Open or Escalated cube" not in handbook
-    assert "Dashboard tiles show an **Escalated** cube" in handbook
-    assert "do not show an Open cube" in handbook
-    assert "The Dashboard alarm row includes **Escalated**" in handbook
-
-    dash = (ROOT / "frontend" / "templates" / "dashboard.html").read_text(encoding="utf-8")
-    assert 'include "_info_tip.html"' not in dash
-    assert "RCA work in progress" not in dash
-    assert "<h2>Incidents</h2>" in dash

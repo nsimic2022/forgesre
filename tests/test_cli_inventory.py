@@ -5,11 +5,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from fastapi.testclient import TestClient
 
-from app.db import Base, SessionLocal, engine
-from app.main import app
-from app.seed import seed
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "scripts" / "forgesre"
@@ -114,25 +110,6 @@ def test_help_lists_restart_and_snmp_auths():
     assert "v3" in auths and "forgesre_<asset id>" in auths
     restart = subprocess.check_output(["bash", str(CLI), "help", "restart"], text=True)
     assert "./forgesre update" in restart
-
-
-def test_admin_page_lists_every_cli_command():
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    seed(db)
-    db.close()
-    client = TestClient(app)
-    client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
-    page = client.get("/admin")
-    assert page.status_code == 200
-    shown = _admin_cheatsheet(page.text)
-    for name in NEW_COMMANDS:
-        assert name in shown, name
-    missing = _dispatcher_commands() - shown
-    assert not missing, f"missing from Administration CLI list: {sorted(missing)}"
-    assert shown <= _dispatcher_commands(), sorted(shown - _dispatcher_commands())
-    assert "./forgesre help &lt;command&gt;" not in page.text
-    assert "<code>help</code>" in page.text
 
 
 def test_docs_cli_md_lists_every_command():

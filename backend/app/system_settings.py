@@ -76,8 +76,6 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("checks.tls_critical_days", "checks", "Certificate critical (days)", "int"),
     _y("checks.backup_max_age_hours", "checks", "ForgeSRE backup max age (hours)", "int"),
     _y("system.public_url", "general", "Public address", help="How people reach ForgeSRE, e.g. https://forgesre.dc.local. Used for links in mail and chat (incident, one-click acknowledge). Empty = no links."),
-    _y("ui.home", "general", "Home page", "enum", choices=("new", "classic"),
-       help="new = the new UI at /app opens after sign-in; classic = the old dashboard. /classic always works."),
     _y("system.cookie_secure", "general", "Secure cookies (HTTPS only)", "bool", effective=lambda: settings.cookie_secure),
     # Sign-in: directory and single sign-on. Roles come from groups; the local admin always works.
     _y("auth.ldap.enabled", "auth", "LDAP / Active Directory sign-in", "bool", test="ldap"),

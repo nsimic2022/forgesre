@@ -1,6 +1,5 @@
 """Per-asset alarm checklist + ForgeSRE-side incident filter."""
 
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -8,7 +7,7 @@ from app.asset_alarms import alert_sample_value, bundled_alert_skip_reason, norm
 from app.db import Base, SessionLocal, engine
 from app.inventory import create_manual_asset
 from app.main import app
-from app.models import Asset, Incident, User
+from app.models import Incident, User
 from app.security import hash_password
 from app.seed import seed
 from app.services import ingest_alertmanager
@@ -60,68 +59,6 @@ def test_detect_windows_reports_cpu_family():
     assert result.families["disk"] is True
     assert result.families["memory"] is False
     assert result.families["up"] is True
-
-
-def test_add_form_has_alarm_checklist_not_on_asset_list_columns():
-    client = _login("analyst-alarms@forgesre.local")
-    page = client.get("/discovery")
-    assert page.status_code == 200
-    assert "<legend>Alarms</legend>" not in page.text
-    assert '<fieldset class="alarm-families"' not in page.text
-    assert "alarm-heading" in page.text
-    assert ">Alarms<" in page.text
-    assert 'class="info-tip"' not in page.text
-    assert "Bundled alarms for this asset" not in page.text
-    assert "asset-form-grid" in page.text
-    assert 'name="alarm_disk_threshold"' in page.text
-    assert "Auto (detect exporter)" in page.text
-    form_at = page.text.find('id="asset-form"')
-    host_at = page.text.find('name="hostname"', form_at)
-    id_at = page.text.find('name="asset_id"', form_at)
-    ip_at = page.text.find('name="ip"', form_at)
-    alarm_at = page.text.find("alarm-standard-grid")
-    type_at = page.text.find('name="type" class="nice-select" data-detect-type')
-    left_at = page.text.find("asset-form-left")
-    middle_at = page.text.find("asset-form-middle")
-    right_at = page.text.find("asset-form-right")
-    assert 0 < left_at < id_at < host_at < ip_at < type_at < middle_at < right_at < alarm_at
-    assert 'placeholder="win10-gp"' in page.text
-    assert "Set at add; cannot change" not in page.text
-    table = page.text.split("<table")[1].split("</table>")[0]
-    assert "alarm_disk_threshold" not in table
-    assert ">Cancel</a>" in page.text
-    assert 'href="/discovery">Cancel' in page.text
-    css = Path("frontend/static/app.css").read_text()
-    assert "asset-form-grid" in css
-    assert ".asset-form-split" in css
-    assert ".asset-form-right" in css
-
-
-def test_edit_form_cancel_returns_to_asset():
-    client = _login("analyst-alarms-cancel@forgesre.local")
-    created = client.post(
-        "/assets",
-        data={
-            "hostname": "win-cancel-01",
-            "ip": "10.66.21.90",
-            "type": "Windows Server",
-            "alarms_present": "1",
-            "alarm_up_enabled": "1",
-            "alarm_cpu_enabled": "1",
-            "alarm_cpu_threshold": "90",
-            "alarm_memory_enabled": "1",
-            "alarm_memory_threshold": "90",
-            "alarm_disk_enabled": "1",
-            "alarm_disk_threshold": "90",
-        },
-        follow_redirects=False,
-    )
-    assert created.status_code in {302, 303}
-    page = client.get("/assets?edit=win-cancel-01")
-    assert page.status_code == 200
-    assert 'href="/assets">Cancel</a>' in page.text
-    assert "<legend>Alarms</legend>" not in page.text
-    assert "alarm-heading" in page.text
 
 
 def test_skip_reason_disabled_and_below_threshold():
@@ -290,100 +227,6 @@ def test_ingest_honors_asset_memory_threshold_and_disable():
     db.close()
 
 
-def test_save_edit_persists_custom_disk_threshold():
-    client = _login("analyst-alarms2@forgesre.local")
-    created = client.post(
-        "/assets",
-        data={
-            "hostname": "win-th-01",
-            "ip": "10.66.21.83",
-            "type": "Windows Server",
-            "alarms_present": "1",
-            "alarm_up_enabled": "1",
-            "alarm_cpu_enabled": "1",
-            "alarm_cpu_threshold": "90",
-            "alarm_memory_enabled": "1",
-            "alarm_memory_threshold": "90",
-            "alarm_disk_enabled": "1",
-            "alarm_disk_threshold": "70",
-        },
-        follow_redirects=False,
-    )
-    assert created.status_code in {302, 303}
-    body = client.get("/api/v1/assets/win-th-01")
-    assert body.status_code == 200
-    alarms = body.json()["alarms"]
-    assert alarms["disk_percent"]["threshold"] == 70
-    assert alarms["disk_percent"]["enabled"] is True
-    edited = client.post(
-        "/assets/win-th-01/update",
-        data={
-            "hostname": "win-th-01",
-            "ip": "10.66.21.83",
-            "type": "Windows Server",
-            "scrape_address": "10.66.21.83:9182",
-            "alarms_present": "1",
-            "alarm_up_enabled": "1",
-            "alarm_cpu_enabled": "1",
-            "alarm_cpu_threshold": "90",
-            "alarm_memory_enabled": "1",
-            "alarm_memory_threshold": "90",
-            "alarm_disk_threshold": "92",
-        },
-        follow_redirects=False,
-    )
-    assert edited.status_code in {302, 303}
-    after = client.get("/api/v1/assets/win-th-01").json()["alarms"]
-    assert after["disk_percent"]["enabled"] is False
-    assert after["disk_percent"]["threshold"] == 92
-
-
-def test_save_edit_persists_memory_disable_and_threshold():
-    client = _login("analyst-alarms-mem@forgesre.local")
-    created = client.post(
-        "/assets",
-        data={
-            "hostname": "win-th-mem",
-            "ip": "10.66.21.86",
-            "type": "Windows Server",
-            "alarms_present": "1",
-            "alarm_up_enabled": "1",
-            "alarm_cpu_enabled": "1",
-            "alarm_cpu_threshold": "90",
-            "alarm_memory_enabled": "1",
-            "alarm_memory_threshold": "85",
-            "alarm_disk_enabled": "1",
-            "alarm_disk_threshold": "90",
-        },
-        follow_redirects=False,
-    )
-    assert created.status_code in {302, 303}
-    alarms = client.get("/api/v1/assets/win-th-mem").json()["alarms"]
-    assert alarms["memory_percent"]["threshold"] == 85
-    assert alarms["memory_percent"]["enabled"] is True
-    edited = client.post(
-        "/assets/win-th-mem/update",
-        data={
-            "hostname": "win-th-mem",
-            "ip": "10.66.21.86",
-            "type": "Windows Server",
-            "scrape_address": "10.66.21.86:9182",
-            "alarms_present": "1",
-            "alarm_up_enabled": "1",
-            "alarm_cpu_enabled": "1",
-            "alarm_cpu_threshold": "90",
-            "alarm_memory_threshold": "92",
-            "alarm_disk_enabled": "1",
-            "alarm_disk_threshold": "90",
-        },
-        follow_redirects=False,
-    )
-    assert edited.status_code in {302, 303}
-    after = client.get("/api/v1/assets/win-th-mem").json()["alarms"]
-    assert after["memory_percent"]["enabled"] is False
-    assert after["memory_percent"]["threshold"] == 92
-
-
 def test_normalize_alarms_defaults_windows_cpu_90():
     values = normalize_alarms(None, "windows")
     assert values["cpu_percent"]["enabled"] is True
@@ -395,23 +238,3 @@ def test_normalize_alarms_defaults_windows_cpu_90():
     assert linux["memory_percent"]["threshold"] == 90
 
 
-def test_playrules_mentions_saved_asset_alarms():
-    from app.asset_alarms import saved_alarm_hostnames
-
-    db = _db()
-    host = create_manual_asset(
-        db,
-        hostname="win-play-alarms",
-        ip="10.66.21.91",
-        type="Windows Server",
-        actor="tester",
-        alarms={"disk_percent": {"enabled": True, "threshold": 70}},
-    )
-    names = saved_alarm_hostnames(db.query(Asset).order_by(Asset.hostname).all())
-    assert host.hostname in names
-    db.close()
-    client = _login("analyst-play-alarms@forgesre.local")
-    page = client.get("/playrules")
-    assert page.status_code == 200
-    assert 'class="info-tip"' not in page.text
-    assert "playrule-preset" in page.text

@@ -11,7 +11,7 @@ import { IncidentsPage } from "./pages/Incidents";
 import { InventoryPage } from "./pages/Inventory";
 import { InvestigationsPage } from "./pages/Investigations";
 import { OnCallPage } from "./pages/OnCall";
-import { Pending } from "./pages/Pending";
+import { NotFound } from "./pages/NotFound";
 import { ReportsPage } from "./pages/Reports";
 import { SettingsPage } from "./pages/Settings";
 import { TvPage } from "./pages/Tv";
@@ -38,7 +38,7 @@ export function App() {
         <Route path="/investigations" element={<InvestigationsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="*" element={<Pending title="Not found" classic="/" />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </ShellWithAi>
   );

@@ -369,7 +369,7 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
         a = call.answer
         db.add(Investigation(
             incident_id=incident.id, summary=a["for_shift_lead"], likely_cause=a["cause"],
-            # provider name kept from V0.x: classic, insights and reports read "forgerca-llm"
+            # provider name kept from V0.x: reports and the incident view read "forgerca-llm"
             recommended_action="\n".join(a.get("first_checks") or []), provider="forgerca-llm", engine="forgeai",
             engine_version="2.0", model=call.model, requested_by=actor, confidence=0,
             result={"answer": a, "call_id": call.id, "skill": skill.slug, "skill_name": skill.name},

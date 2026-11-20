@@ -1,6 +1,5 @@
-"""Escalation page create / edit / remove + policy step parser (email only)."""
+"""Escalation policies: create / edit / remove through the API, the step parser (email only)."""
 
-from pathlib import Path
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -32,15 +31,15 @@ def _client() -> TestClient:
     return client
 
 
-def _create(client: TestClient, steps: str, *, name: str = "") -> str:
+def _levels(*steps: tuple[int, str]) -> list[dict]:
+    return [{"level": i, "on": True, "minutes": m, "target": target} for i, (m, target) in enumerate(steps, 1)]
+
+
+def _create(client: TestClient, *steps: tuple[int, str], name: str = "") -> str:
     slug = f"esc-{uuid4().hex[:8]}"
-    posted = client.post(
-        "/escalation",
-        data={"name": name or slug, "slug": slug, "steps": steps},
-        follow_redirects=False,
-    )
-    assert posted.status_code == 302, posted.text
-    return slug
+    posted = client.post("/api/v1/automation/policies", json={"name": name or slug, "slug": slug, "levels": _levels(*steps)})
+    assert posted.status_code == 200, posted.text
+    return posted.json()["slug"]
 
 
 def test_parse_policy_steps_minutes_role():
@@ -56,95 +55,6 @@ def test_parse_policy_steps_empty_uses_default_warning():
     steps = parse_policy_steps("   \n")
     assert [s["after_minutes"] for s in steps] == [0, 15, 30, 60]
     assert steps[3]["target"] == "manager"
-
-
-def test_escalation_page_has_create_cancel_and_saves_policy():
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    seed(db)
-    client = TestClient(app)
-    login = client.post(
-        "/login",
-        data={"email": "admin@forgesre.local", "password": "testpass"},
-        follow_redirects=False,
-    )
-    assert login.status_code in {302, 303}
-    page = client.get("/escalation")
-    assert page.status_code == 200
-    assert 'href="/escalation">Cancel</a>' in page.text
-    assert 'id="escalation-form"' in page.text
-    assert "Default warning" in page.text
-    assert "<title>Escalation · ForgeSRE</title>" in page.text
-    assert 'class="escalation-cols"' in page.text
-    assert "<h2>Create escalation policy</h2>" in page.text
-    assert page.text.index("escalation-policies") < page.text.index("escalation-create") < page.text.index("escalation-oncall-form") < page.text.index("oncall-roster-wrap")
-    assert page.text.index('id="oncall-form"') < page.text.index('id="oncall"')
-    assert page.text.count('class="card escalation-pane') == 4
-    assert "L1 NOC" in page.text and "L4 Manager" in page.text
-    assert 'name="ladder_present"' in page.text
-    assert 'name="ladder_target_4"' in page.text
-    assert 'class="oncall-form-grid"' in page.text
-    assert "oncall-form-when" in page.text and "oncall-form-who" in page.text
-    assert page.text.index("oncall-form-when") < page.text.index("oncall-form-who")
-    assert 'data-oncall-person' not in page.text
-    assert "Pick a user" not in page.text
-    assert 'data-oncall-name' in page.text
-    assert 'data-oncall-surname' in page.text
-    assert 'name="surname"' in page.text
-    assert 'data-oncall-directory' in page.text
-    assert 'id="oncall-people"' in page.text
-    assert 'name="phone2"' in page.text
-    assert 'action="/escalation/open-edit"' in page.text
-    assert 'action="/escalation/bulk-delete"' in page.text
-    assert "Generated notifications" not in page.text
-    assert 'action="/escalation/oncall/open-edit"' in page.text
-    assert 'action="/escalation/oncall/open-clone"' not in page.text
-    assert 'action="/escalation/oncall/export"' not in page.text
-    roster_head = page.text.split('data-oncall-roster', 1)[1].split("</thead>", 1)[0]
-    assert ">Phone<" not in roster_head
-    assert ">Email<" in roster_head
-    assert roster_head.index(">When<") < roster_head.index(">Name<") < roster_head.index(">Email<") < roster_head.index(">Enabled<")
-    assert "oncall-contact" in page.text
-    css = (Path(__file__).resolve().parents[1] / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".content {" in css and "font-size: inherit" in css.split(".content {", 1)[1].split("}", 1)[0]
-    assert "font-size: 0.82rem" in css.split("html, body {", 1)[1].split("}", 1)[0]
-    assert "font-size: 0.82rem" in css.split("th, td {", 1)[1].split("}", 1)[0]
-    assert "font-size: 0.82rem" in css.split(".scan-list > tbody > tr > td {", 1)[1].split("}", 1)[0]
-    assert ".incident-story {" in css
-    assert "repeat(3, minmax(0, 1fr))" in css.split(".incident-story {", 1)[1].split("}", 1)[0]
-    assert "repeat(4, minmax(0, 1fr))" in css.split(".incident-graphs .dash-graph-list {", 1)[1].split("}", 1)[0]
-    assert ".escalation-oncall-form { flex: 0.72" in css
-    assert ".oncall-roster-wrap { flex: 1.55" in css
-    assert "flex-direction: column" in css.split(".oncall-form-grid {", 1)[1]
-    js = (Path(__file__).resolve().parents[1] / "frontend" / "static" / "app.js").read_text(encoding="utf-8")
-    assert "bindOncallDirectory" in js
-    assert "bindOncallPerson" not in js and "data-oncall-person" not in js
-    default = db.query(EscalationPolicy).filter_by(slug="default-warning").one()
-    assert [int(step["after_minutes"]) for step in default.steps] == [0, 15, 30, 60]
-    assert [str(step["target"]) for step in default.steps] == ["team", "team-lead", "engineer", "manager"]
-    created = client.post(
-        "/escalation",
-        data={
-            "name": "Night ladder",
-            "slug": "night-ladder",
-            "steps": "0 team\n45 engineer",
-        },
-        follow_redirects=False,
-    )
-    assert created.status_code in {302, 303}
-    db.expire_all()
-    row = db.query(EscalationPolicy).filter_by(slug="night-ladder").one()
-    assert row.name == "Night ladder"
-    assert row.steps[0]["after_minutes"] == 0
-    assert row.steps[1]["after_minutes"] == 45
-    assert row.steps[1]["target"] == "engineer"
-    again = client.get("/escalation")
-    assert "Night ladder" in again.text
-    play = client.get("/playrules")
-    assert play.status_code == 200
-    assert 'name="escalation_policy_id"' in play.text
-    assert "Night ladder" in play.text
-    db.close()
 
 
 def test_policy_steps_text_round_trips_the_form_format():
@@ -165,96 +75,6 @@ def test_webhook_and_urls_are_refused_not_silently_mailed():
     assert all(step["channel"] == "email" for step in parse_policy_steps("0 team webhook\n5 engineer slack"))
 
 
-def test_create_with_webhook_shows_message_and_saves_nothing():
-    db = _db()
-    client = _client()
-    slug = f"esc-hook-{uuid4().hex[:6]}"
-    posted = client.post(
-        "/escalation",
-        data={"name": "Hook ladder", "slug": slug, "steps": "0 team\n10 engineer webhook"},
-        follow_redirects=False,
-    )
-    assert posted.status_code == 400
-    assert 'class="error" role="alert"' in posted.text
-    assert "webhook is not supported" in posted.text
-    assert "Escalation sends email only" in posted.text
-    assert 'name="ladder_target_1"' in posted.text
-    db.expire_all()
-    assert db.query(EscalationPolicy).filter_by(slug=slug).first() is None
-    db.close()
-
-
-def test_edit_policy_prefills_form_and_saves_new_steps():
-    db = _db()
-    client = _client()
-    slug = _create(client, "0 team\n20 engineer", name="Edit me")
-    row = db.query(EscalationPolicy).filter_by(slug=slug).one()
-    listing = client.get("/escalation")
-    policies = listing.text.split("escalation-policies", 1)[1].split("escalation-create", 1)[0]
-    assert f'data-list-view="/escalation?edit={row.id}#escalation-form"' in policies
-    assert 'action="/escalation/open-edit"' in policies
-    assert f'href="/escalation?edit={row.id}#escalation-form">Edit</a>' not in policies
-    form = client.get(f"/escalation?edit={row.id}")
-    assert form.status_code == 200
-    assert "Edit escalation policy" in form.text
-    assert f'action="/escalation/{row.id}/update"' in form.text
-    assert 'name="ladder_target_1" value="team"' in form.text
-    assert 'name="ladder_minutes_2" value="20"' in form.text or 'value="20"' in form.text
-    assert 'name="ladder_target_2" value="engineer"' in form.text
-    assert f'value="{slug}" readonly' in form.text
-    saved = client.post(
-        f"/escalation/{row.id}/update",
-        data={"name": "Edited ladder", "steps": "0 noc@dc.local\n5 team-lead"},
-        follow_redirects=False,
-    )
-    assert saved.status_code == 302
-    db.expire_all()
-    row = db.query(EscalationPolicy).filter_by(slug=slug).one()
-    assert row.name == "Edited ladder"
-    assert row.steps == [
-        {"after_minutes": 0, "target": "noc@dc.local", "channel": "email", "level": 1},
-        {"after_minutes": 5, "target": "team-lead", "channel": "email", "level": 2},
-    ]
-    refused = client.post(
-        f"/escalation/{row.id}/update",
-        data={"name": "Edited ladder", "steps": "0 noc@dc.local webhook"},
-        follow_redirects=False,
-    )
-    assert refused.status_code == 400
-    assert "webhook is not supported" in refused.text
-    db.expire_all()
-    assert db.query(EscalationPolicy).filter_by(slug=slug).one().steps[0]["target"] == "noc@dc.local"
-    db.close()
-
-
-def test_remove_policy_moves_playrules_to_default_and_default_cannot_be_removed():
-    db = _db()
-    client = _client()
-    slug = _create(client, "0 team")
-    row = db.query(EscalationPolicy).filter_by(slug=slug).one()
-    rule = Playrule(name=f"esc-rule-{uuid4().hex[:6]}", enabled=True, severity="warning", condition={"alertname": "EscRemove"}, escalation_policy_id=row.id)
-    db.add(rule)
-    db.commit()
-    listing = client.get("/escalation")
-    policies = listing.text.split("escalation-policies", 1)[1].split("escalation-create", 1)[0]
-    assert 'action="/escalation/bulk-delete"' in policies
-    assert f'value="{row.id}"' in policies and "data-select-row" in policies
-    assert "Playrules using them move to Default warning" in policies
-    default = db.query(EscalationPolicy).filter_by(slug="default-warning").one()
-    assert f'data-undeletable' in policies
-    assert f'action="/escalation/{default.id}/delete"' not in policies
-    assert f'action="/escalation/{row.id}/delete"' not in policies
-    removed = client.post(f"/escalation/{row.id}/delete", follow_redirects=False)
-    assert removed.status_code == 302
-    db.expire_all()
-    assert db.query(EscalationPolicy).filter_by(slug=slug).first() is None
-    assert db.get(Playrule, rule.id).escalation_policy_id == default.id
-    blocked = client.post(f"/escalation/{default.id}/delete", follow_redirects=False)
-    assert blocked.status_code == 400
-    assert db.query(EscalationPolicy).filter_by(slug="default-warning").first() is not None
-    db.close()
-
-
 def test_ingest_uses_the_edited_policy(monkeypatch):
     db = _db()
     sent: list[str] = []
@@ -262,7 +82,7 @@ def test_ingest_uses_the_edited_policy(monkeypatch):
     monkeypatch.setattr("app.settings.Settings.smtp_host", "smtp.example.test")
     monkeypatch.setattr("app.services._send_smtp", lambda target, *_a, **_k: sent.append(target))
     client = _client()
-    slug = _create(client, "0 before@dc.local")
+    slug = _create(client, (0, "before@dc.local"))
     policy = db.query(EscalationPolicy).filter_by(slug=slug).one()
     alertname = f"EscEdit{uuid4().hex[:6]}"
     db.add(Playrule(name=slug, enabled=True, severity="warning", condition={"alertname": alertname}, escalation_policy_id=policy.id))
@@ -287,39 +107,14 @@ def test_ingest_uses_the_edited_policy(monkeypatch):
         return db.query(Notification).filter_by(incident_id=incident.id, step_key="immediate").one()
 
     assert fire().target == "before@dc.local"
-    saved = client.post(
-        f"/escalation/{policy.id}/update",
-        data={"name": "After edit", "steps": "0 after@dc.local\n15 team-lead"},
-        follow_redirects=False,
-    )
-    assert saved.status_code == 302
+    saved = client.put(f"/api/v1/automation/policies/{policy.id}", json={"name": "After edit", "levels": _levels((0, "after@dc.local"), (15, "team-lead"))})
+    assert saved.status_code == 200, saved.text
     edited = fire()
     assert edited.target == "after@dc.local"
     assert edited.channel == "email"
     assert sent == ["before@dc.local", "after@dc.local"]
     db.query(Job).filter(Job.id > start_job, Job.status == "pending").delete(synchronize_session=False)
     db.commit()
-    db.close()
-
-
-def test_legacy_webhook_step_is_labelled_and_mailed_as_email():
-    db = _db()
-    slug = f"esc-legacy-{uuid4().hex[:6]}"
-    policy = EscalationPolicy(name="Legacy hook", slug=slug, steps=[{"after_minutes": 0, "target": "team", "channel": "webhook"}])
-    db.add(policy)
-    db.commit()
-    rule = Playrule(name=slug, enabled=True, severity="warning", condition={"alertname": "Legacy"}, escalation_policy_id=policy.id)
-    db.add(rule)
-    db.commit()
-
-    class _Incident:
-        playrule = rule
-
-    assert escalation_steps(_Incident())[0]["channel"] == "email"
-    page = _client().get("/escalation?per_page=100")
-    assert "webhook: sent as email" in page.text
-    form = _client().get(f"/escalation?edit={policy.id}")
-    assert 'name="ladder_target_1" value="team"' in form.text
     db.close()
 
 
@@ -340,40 +135,46 @@ def test_seed_adds_l4_to_vanilla_three_step_default():
     db.close()
 
 
-def test_create_policy_posts_l1_l4_fields():
+
+
+def test_api_policy_four_levels_edit_and_remove_moves_rules_to_default():
     db = _db()
     client = _client()
-    slug = f"esc-l4-{uuid4().hex[:6]}"
-    posted = client.post(
-        "/escalation",
-        data={
-            "name": "Four rungs",
-            "slug": slug,
-            "ladder_present": "1",
-            "ladder_on_1": "1",
-            "ladder_minutes_1": "0",
-            "ladder_target_1": "team",
-            "ladder_on_2": "1",
-            "ladder_minutes_2": "15",
-            "ladder_target_2": "team-lead",
-            "ladder_on_3": "1",
-            "ladder_minutes_3": "30",
-            "ladder_target_3": "engineer",
-            "ladder_on_4": "1",
-            "ladder_minutes_4": "60",
-            "ladder_target_4": "duty@dc.local",
-        },
-        follow_redirects=False,
-    )
-    assert posted.status_code == 302, posted.text
+    slug = _create(client, (0, "team"), (15, "team-lead"), (30, "engineer"), (60, "duty@dc.local"), name="Four rungs")
     row = db.query(EscalationPolicy).filter_by(slug=slug).one()
-    assert [(int(step["after_minutes"]), step["target"], int(step["level"])) for step in row.steps] == [
-        (0, "team", 1),
-        (15, "team-lead", 2),
-        (30, "engineer", 3),
-        (60, "duty@dc.local", 4),
+    assert [(int(s["after_minutes"]), s["target"], int(s["level"])) for s in row.steps] == [
+        (0, "team", 1), (15, "team-lead", 2), (30, "engineer", 3), (60, "duty@dc.local", 4),
     ]
-    listing = client.get("/escalation")
-    assert "L4 Manager" in listing.text
-    assert "duty@dc.local" in listing.text
+    saved = client.put(f"/api/v1/automation/policies/{row.id}", json={"name": "Edited ladder", "levels": _levels((0, "noc@dc.local"), (5, "team-lead"))})
+    assert saved.status_code == 200 and saved.json()["slug"] == slug
+    db.expire_all()
+    row = db.query(EscalationPolicy).filter_by(slug=slug).one()
+    assert row.name == "Edited ladder"
+    assert [(int(s["after_minutes"]), s["target"]) for s in row.steps] == [(0, "noc@dc.local"), (5, "team-lead")]
+    rule = Playrule(name=f"esc-rule-{uuid4().hex[:6]}", enabled=True, severity="warning", condition={"alertname": "EscRemove"}, escalation_policy_id=row.id)
+    db.add(rule)
+    db.commit()
+    assert client.delete(f"/api/v1/automation/policies/{row.id}").status_code == 200
+    db.expire_all()
+    default = db.query(EscalationPolicy).filter_by(slug="default-warning").one()
+    assert db.query(EscalationPolicy).filter_by(slug=slug).first() is None
+    assert db.get(Playrule, rule.id).escalation_policy_id == default.id
+    assert client.delete(f"/api/v1/automation/policies/{default.id}").status_code == 400
+    db.close()
+
+
+def test_legacy_webhook_step_is_mailed_as_email():
+    db = _db()
+    slug = f"esc-legacy-{uuid4().hex[:6]}"
+    policy = EscalationPolicy(name="Legacy hook", slug=slug, steps=[{"after_minutes": 0, "target": "team", "channel": "webhook"}])
+    db.add(policy)
+    db.commit()
+    rule = Playrule(name=slug, enabled=True, severity="warning", condition={"alertname": "Legacy"}, escalation_policy_id=policy.id)
+    db.add(rule)
+    db.commit()
+
+    class _Incident:
+        playrule = rule
+
+    assert escalation_steps(_Incident())[0]["channel"] == "email"
     db.close()

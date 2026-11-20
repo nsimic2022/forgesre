@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.parse import unquote
 
 import httpx
 import pytest
@@ -17,8 +16,7 @@ from app.glpi import api_root, list_inventory
 from app.glpi_sync import glpi_asset_id, sync_glpi
 from app.inventory import asset_in_glpi, asset_source_tokens
 from app.main import app
-from app.models import Asset, User
-from app.security import hash_password
+from app.models import Asset
 from app.seed import seed
 from app.settings import settings
 
@@ -196,26 +194,6 @@ def test_sync_links_existing_asset_by_ip(glpi):
     db.close()
 
 
-def test_discovery_page_has_glpi_cube_and_sync_route(glpi):
-    client = _login()
-    page = client.get("/discovery")
-    assert page.status_code == 200
-    assert "<h2>GLPI" in page.text
-    assert 'action="/discovery/glpi-sync"' in page.text
-    assert "Mode:" not in page.text.split("<h1>", 1)[1].split("discovery-actions", 1)[0]
-    assert (
-        page.text.find("Scan now")
-        < page.text.find("<h2>LibreNMS")
-        < page.text.find("NetBox sync")
-        < page.text.find("<h2>Zabbix")
-        < page.text.find("<h2>GLPI")
-    )
-    glpi.computers = [{"id": 1, "name": "lab-pc"}]
-    posted = client.post("/discovery/glpi-sync", follow_redirects=False)
-    assert posted.status_code == 302
-    assert "GLPI sync" in unquote(posted.headers.get("location") or "")
-
-
 def test_api_glpi_sync_and_doctor(glpi):
     glpi.computers = [{"id": 3, "name": "api-pc"}]
     client = _login()
@@ -251,21 +229,3 @@ def test_unconfigured_sync_is_skipped(monkeypatch):
     db.close()
 
 
-def test_viewer_cannot_sync():
-    db = _db()
-    db.add(
-        User(
-            email="view-glpi@dc.local",
-            name="View",
-            password_hash=hash_password("view-pass"),
-            role="viewer",
-        )
-    )
-    db.commit()
-    client = TestClient(app)
-    client.post("/login", data={"email": "view-glpi@dc.local", "password": "view-pass"}, follow_redirects=False)
-    denied = client.post("/discovery/glpi-sync", follow_redirects=False)
-    assert denied.status_code == 403
-    db.query(User).filter_by(email="view-glpi@dc.local").delete()
-    db.commit()
-    db.close()

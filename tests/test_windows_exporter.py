@@ -1,4 +1,3 @@
-from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.inventory import (
@@ -11,9 +10,7 @@ from app.inventory import (
     sd_targets,
     upsert_candidate,
 )
-from app.main import app
-from app.models import Asset, Playbook, Playrule, User
-from app.security import hash_password
+from app.models import Asset, Playbook, Playrule
 from app.seed import DEMO_WIN_ASSET, seed
 from discovery import DEFAULT_PORTS, classify
 from rca.collector import promql_queries_for
@@ -118,58 +115,3 @@ def test_promql_windows_uses_windows_exporter_metrics():
     assert "forgesre_demo_cpu_percent" not in blob
 
 
-def test_assets_ui_offers_windows_server_and_http_sd():
-    db = _db()
-    db.add(
-        User(
-            email="analyst-win@forgesre.local",
-            name="Ana",
-            password_hash=hash_password("testpass"),
-            role="engineer",
-        )
-    )
-    db.commit()
-    client = TestClient(app)
-    client.post(
-        "/login",
-        data={"email": "analyst-win@forgesre.local", "password": "testpass"},
-        follow_redirects=False,
-    )
-    page = client.get("/assets")
-    assert page.status_code == 200
-    assert b"Windows Server" in page.content
-    assert b'placeholder="Search any field"' in page.content
-    add = client.get("/discovery")
-    assert add.status_code == 200
-    assert b"Windows Server" in add.content
-    assert b"Auto (detect exporter)" in add.content
-    created = client.post(
-        "/assets",
-        data={
-            "hostname": "win-ui-01",
-            "ip": "10.88.10.61",
-            "type": "Windows Server",
-            "environment": "Production",
-            "owner": "payments",
-            "owner_email": "payments@dc.local",
-        },
-        follow_redirects=False,
-    )
-    assert created.status_code in {302, 303}
-    stale = client.get("/assets/win-ui-01", follow_redirects=False)
-    assert stale.status_code == 303
-    assert stale.headers["location"] == "/assets?edit=win-ui-01"
-    detail = client.get("/assets?edit=win-ui-01")
-    assert detail.status_code == 200
-    assert b"10.88.10.61:9182" in detail.content
-    sd = client.get(
-        "/api/v1/sd/prometheus",
-        headers={"Authorization": "Bearer forgesre-dev-webhook-token"},
-    )
-    assert sd.status_code == 200
-    body = sd.json()
-    match = next(item for item in body if item["labels"]["asset"] == "win-ui-01")
-    assert match["targets"] == ["10.88.10.61:9182"]
-    assert match["labels"]["job"] == "windows-standard"
-    assert not any(item["labels"]["asset"] == DEMO_WIN_ASSET for item in body)
-    db.close()

@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Walk the ForgeSRE web UI like a signed-in user and report what is broken.
+"""Walk the ForgeSRE UI like a signed-in user and report what is broken.
 
-Follows every same-site <a href> (GET only, never submits a form), and checks that
-every <form action>, <script src> and stylesheet points at something that exists.
+The UI is the React app at /app, which reads everything from /api/v1. The walk:
+
+1. opens every page of the app (they must answer 200 once the app is built);
+2. calls every GET endpoint of /api/v1 that needs no body, filling ids from what the lists return
+   (an incident number, an asset id, a skill), and reports any 5xx;
+3. checks every /api/v1 path the app's source calls exists on the server (frontend and backend in
+   step);
+4. checks the old classic URLs still lead into the app.
 
   Live appliance:  python3 scripts/gui_crawl.py --base-url http://127.0.0.1:8080 \
                        --email admin@forgesre.local --password '...'
-  In tests:        crawl(TestClient(app)) after signing in.
+  In tests:        crawl(TestClient(app), routes=get_routes(app)) after signing in.
 
-Exit code 1 when a page answers 5xx, a link answers 404, or a form posts to no route.
+Exit code 1 when anything answers 5xx, a page is missing, or the app calls a path the server lacks.
 """
 
 from __future__ import annotations
@@ -16,164 +22,38 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from collections import deque
 from dataclasses import dataclass, field
-from html.parser import HTMLParser
+from pathlib import Path
 from typing import Any, Iterable
-from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
-# GETs that change state or leave the UI: never follow them.
-SKIP_PREFIXES = ("/logout", "/api/", "/webhooks/", "/metrics", "/docs", "/redoc", "/openapi.json")
-SKIP_SUFFIXES = ("/export", "/download", "/backup", "/run", "/delete", "/reset")
-MAX_VARIANTS_PER_PATH = 3  # same path, different query strings
-MAX_PAGES = 600
-
-
-class _Links(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.links: list[str] = []
-        self.forms: list[tuple[str, str]] = []
-        self.assets: list[str] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        a = {k: (v or "") for k, v in attrs}
-        if tag == "a" and a.get("href"):
-            self.links.append(a["href"])
-        elif tag == "form":
-            self.forms.append(((a.get("method") or "get").lower(), a.get("action") or ""))
-        elif tag == "script" and a.get("src"):
-            self.assets.append(a["src"])
-        elif tag == "link" and a.get("href") and "stylesheet" in (a.get("rel") or ""):
-            self.assets.append(a["href"])
+ROOT = Path(__file__).resolve().parents[1]
+APP_PAGES = ["/app/", "/app/tv", "/app/incidents", "/app/incidents/on-call", "/app/incidents/{number}", "/app/inventory",
+             "/app/inventory/map", "/app/inventory/add", "/app/automation", "/app/investigations", "/app/reports", "/app/settings"]
+OLD_URLS = ["/", "/classic", "/incidents", "/assets", "/discovery", "/playrules", "/playbooks", "/escalation", "/ops",
+            "/journal", "/health-ui", "/admin", "/investigations", "/forgeai", "/history"]
+# GETs that download, stream, change state or leave the UI.
+SKIP = ("/download", "/export", ".csv", "/template", "/stream", "/events", "/mcp", "/webhooks", "/sd/", "/metrics")
 
 
 @dataclass
 class Problem:
-    kind: str  # page-error | broken-link | broken-form | broken-asset
+    kind: str
     url: str
-    status: int | str
-    found_on: str
+    status: int | None = None
+    found_on: str = ""
 
     def line(self) -> str:
-        return f"{self.kind:13} {str(self.status):>4}  {self.url}  (from {self.found_on})"
+        return f"{self.kind:<14} {self.status or '':<4} {self.url}" + (f"  ({self.found_on})" if self.found_on else "")
 
 
 @dataclass
 class Report:
     pages: dict[str, int] = field(default_factory=dict)
     problems: list[Problem] = field(default_factory=list)
-    form_targets: set[tuple[str, str]] = field(default_factory=set)
 
     @property
     def ok(self) -> bool:
         return not self.problems
-
-
-def _normalize(href: str, base: str) -> str | None:
-    if not href or href.startswith(("#", "mailto:", "tel:", "javascript:", "data:")):
-        return None
-    if "{{" in href or "{%" in href:
-        return None
-    parts = urlsplit(urljoin(base, href))
-    if parts.scheme not in ("", "http", "https") or (parts.netloc and parts.netloc != urlsplit(base).netloc):
-        return None
-    query = urlencode(sorted(parse_qsl(parts.query, keep_blank_values=True)))
-    return parts.path + (f"?{query}" if query else "")
-
-
-def _skip(path: str) -> bool:
-    bare = path.split("?", 1)[0]
-    return bare.startswith(SKIP_PREFIXES) or bare.endswith(SKIP_SUFFIXES) or bare.startswith("/static/")
-
-
-def _route_matcher(routes: Iterable[tuple[str, str]] | None):
-    """(method, path-pattern) pairs, e.g. ('POST', '/assets/{asset_id}/edit')."""
-    if routes is None:
-        return None
-    compiled = []
-    for method, pattern in routes:
-        rx = "^" + re.sub(r"\\\{[^}]+\\\}", "[^/]+", re.escape(pattern)) + "$"
-        compiled.append((method.upper(), re.compile(rx)))
-
-    def has(method: str, path: str) -> bool:
-        return any(m == method.upper() and rx.match(path) for m, rx in compiled)
-
-    return has
-
-
-def crawl(client: Any, start: str = "/classic", routes: Iterable[tuple[str, str]] | None = None,
-          base: str = "http://testserver") -> Report:
-    """``client`` needs ``get(url, follow_redirects=...)`` returning ``.status_code``, ``.text``,
-    ``.headers``. ``routes`` lets broken form actions be detected without submitting them."""
-    has_route = _route_matcher(routes)
-    report = Report()
-    seen: set[str] = set()
-    variants: dict[str, int] = {}
-    assets_checked: dict[str, int] = {}
-    queue: deque[tuple[str, str]] = deque([(start, "(start)")])
-    while queue and len(report.pages) < MAX_PAGES:
-        url, found_on = queue.popleft()
-        if url in seen:
-            continue
-        seen.add(url)
-        bare = url.split("?", 1)[0]
-        variants[bare] = variants.get(bare, 0) + 1
-        if "?" in url and variants[bare] > MAX_VARIANTS_PER_PATH:
-            continue
-        try:
-            resp = client.get(url, follow_redirects=True)
-            status: int | str = resp.status_code
-        except Exception as exc:  # an exception inside the app is a 500 to the user
-            report.pages[url] = 500
-            report.problems.append(Problem("page-error", url, type(exc).__name__, found_on))
-            continue
-        report.pages[url] = int(status)
-        if int(status) >= 500:
-            report.problems.append(Problem("page-error", url, status, found_on))
-            continue
-        if int(status) == 404:
-            report.problems.append(Problem("broken-link", url, status, found_on))
-            continue
-        if "text/html" not in resp.headers.get("content-type", ""):
-            continue
-        parser = _Links()
-        try:
-            parser.feed(resp.text)
-        except Exception:
-            continue
-        here = base + url
-        for href in parser.links:
-            target = _normalize(href, here)
-            if target and not _skip(target) and target not in seen:
-                queue.append((target, url))
-        for method, action in parser.forms:
-            target = _normalize(action, here) if action else url
-            if not target:
-                continue
-            if method not in ("get", "post"):
-                continue  # method="dialog" closes a <dialog>; it never reaches the server
-            path = target.split("?", 1)[0]
-            report.form_targets.add((method.upper(), path))
-            if has_route and not has_route(method, path):
-                report.problems.append(Problem("broken-form", f"{method.upper()} {path}", "no route", url))
-        for src in parser.assets:
-            target = _normalize(src, here)
-            if not target:
-                continue
-            if target not in assets_checked:
-                try:
-                    assets_checked[target] = client.get(target).status_code
-                except Exception:
-                    assets_checked[target] = 500
-            if assets_checked[target] >= 400:
-                report.problems.append(Problem("broken-asset", target, assets_checked[target], url))
-    # One line per problem target.
-    unique: dict[tuple[str, str], Problem] = {}
-    for p in report.problems:
-        unique.setdefault((p.kind, p.url), p)
-    report.problems = list(unique.values())
-    return report
 
 
 def get_routes(app: Any) -> list[tuple[str, str]]:
@@ -197,15 +77,105 @@ def get_routes(app: Any) -> list[tuple[str, str]]:
     return out
 
 
-def unlinked_pages(app: Any, report: Report) -> list[str]:
-    """GET pages with no path parameter that no crawled page links to."""
-    reached = {u.split("?", 1)[0] for u in report.pages}
-    out = []
-    for method, path in get_routes(app):
-        if method != "GET" or "{" in path or _skip(path) or path in reached:
+def _json(resp: Any) -> Any:
+    try:
+        return resp.json() if hasattr(resp, "json") else __import__("json").loads(resp.text)
+    except Exception:
+        return None
+
+
+def _ids(client: Any) -> dict[str, str]:
+    """Real ids to fill path parameters: first incident, asset and ForgeAI skill."""
+    ids: dict[str, str] = {}
+    page = _json(client.get("/api/v1/incidents-page?limit=1"))
+    rows = (page or {}).get("rows") or (page or {}).get("incidents") or []
+    if rows:
+        ids["number"] = str(rows[0].get("number") or "")
+    inv = _json(client.get("/api/v1/inventory?limit=1"))
+    if (inv or {}).get("rows"):
+        ids["asset_id"] = str(inv["rows"][0].get("asset_id") or "")
+    skills = _json(client.get("/api/v1/forgeai/skills"))
+    if (skills or {}).get("skills"):
+        ids["slug"] = str(skills["skills"][0].get("slug") or "")
+    return {k: v for k, v in ids.items() if v}
+
+
+def _fill(path: str, ids: dict[str, str]) -> str | None:
+    names = re.findall(r"{([^}:]+)(?::[^}]*)?}", path)
+    if any(n not in ids for n in names):
+        return None
+    for n in names:
+        path = re.sub(r"{" + n + r"(?::[^}]*)?}", ids[n], path)
+    return path
+
+
+def frontend_api_paths(src: Path = ROOT / "web" / "src") -> set[str]:
+    """Every /api/v1 path the app's source calls, ${…} replaced by {param}."""
+    found: set[str] = set()
+    for file in src.rglob("*.ts*"):
+        if ".test." in file.name:
             continue
-        out.append(path)
-    return sorted(set(out))
+        for raw in re.findall(r"[\"'`](/api/v1/[^\"'`?#\s]*)", file.read_text(encoding="utf-8")):
+            raw = re.sub(r"\$\{[^}]*$", "", raw)  # a ${…} that holds a query string, cut where it starts
+            path = re.sub(r"\$\{[^}]*\}", "{param}", raw).rstrip("/")
+            found.add(path)
+    return found
+
+
+def _known(path: str, routes: Iterable[tuple[str, str]]) -> bool:
+    """True when some route has the same segments, a {param} on either side matching anything."""
+    want = path.strip("/").split("/")
+    for _method, route in routes:
+        have = route.strip("/").split("/")
+        if len(have) == len(want) and all(a == b or a.startswith("{") or b.startswith("{") for a, b in zip(want, have)):
+            return True
+    return False
+
+
+def crawl(client: Any, routes: Iterable[tuple[str, str]] | None = None, **_ignored: Any) -> Report:
+    """Run the walk with a signed-in client (TestClient or StdlibClient)."""
+    report = Report()
+    routes = list(routes or [])
+    ids = _ids(client)
+    # 1. pages of the app
+    first = client.get("/app/")
+    built = first.status_code == 200
+    for page in APP_PAGES:
+        url = _fill(page, ids)
+        if url is None:
+            continue
+        status = client.get(url).status_code
+        report.pages[url] = status
+        if built and status != 200:
+            report.problems.append(Problem("page", url, status))
+    # 2. every GET read of the API
+    for method, path in routes:
+        if method != "GET" or not path.startswith("/api/v1/") or any(x in path for x in SKIP):
+            continue
+        url = _fill(path, ids)
+        if url is None:
+            continue
+        try:
+            status = client.get(url).status_code
+        except Exception as exc:  # a crash inside the app is a 5xx
+            report.problems.append(Problem("crash", url, None, str(exc)[:120]))
+            continue
+        report.pages[url] = status
+        if status >= 500:
+            report.problems.append(Problem("server-error", url, status))
+    # 3. the app only calls paths the server has
+    if routes:
+        for path in sorted(frontend_api_paths()):
+            if not _known(path, routes):
+                report.problems.append(Problem("missing-route", path, None, "called by web/src"))
+    # 4. old classic addresses lead into the app
+    for old in OLD_URLS:
+        resp = client.get(old, follow_redirects=False)
+        target = (getattr(resp, "headers", {}) or {}).get("location", "")
+        report.pages[old] = resp.status_code
+        if resp.status_code not in (301, 302, 303, 307, 308) or not (target.startswith("/app") or target.startswith("/login")):
+            report.problems.append(Problem("old-url", old, resp.status_code, target))
+    return report
 
 
 class _Response:
@@ -285,8 +255,8 @@ def main(argv: list[str] | None = None) -> int:
     if not client.has_cookie("forgesre_session"):
         print(f"sign-in failed (HTTP {login.status_code}): check the email and password", file=sys.stderr)
         return 2
-    report = crawl(client, base=base)
-    print(f"{len(report.pages)} pages visited, {len(report.problems)} problems")
+    report = crawl(client)
+    print(f"{len(report.pages)} pages and API reads visited, {len(report.problems)} problems")
     for p in sorted(report.problems, key=lambda p: (p.kind, p.url)):
         print("  " + p.line())
     return 0 if report.ok else 1

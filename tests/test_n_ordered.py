@@ -40,83 +40,6 @@ def _add_user(db, email: str, role: str) -> None:
         db.commit()
 
 
-def test_demo_html_and_api_require_admin_not_login_only():
-    db = _db()
-    _add_user(db, "eng-demo@forgesre.local", "engineer")
-    _add_user(db, "analyst-demo@forgesre.local", "analyst")
-    db.close()
-    routes = [
-        "/demo",
-        "/demo-rca",
-        "/demo-host",
-        "/demo-windows",
-        "/demo-network",
-        "/demo-nodecpu",
-        "/demo-reset",
-    ]
-    for email in ("eng-demo@forgesre.local", "analyst-demo@forgesre.local"):
-        client = _login(email)
-        for path in routes:
-            posted = client.post(path, follow_redirects=False)
-            assert posted.status_code == 403, path
-            api = client.post(f"/api/v1{path}", follow_redirects=False)
-            assert api.status_code == 403, f"/api/v1{path}"
-    admin = _login("admin@forgesre.local")
-    reset = admin.post("/demo-reset", follow_redirects=False)
-    assert reset.status_code == 303
-
-
-def test_assets_copy_separates_verify_doctor_and_test():
-    db = _db()
-    db.close()
-    page = _login("admin@forgesre.local").get("/assets")
-    assert page.status_code == 200
-    text = page.text.lower()
-    assert "verify" in text
-    assert "./forgesre doctor" not in page.text
-    assert "./forgesre test" not in page.text
-    assert 'class="info-tip"' not in page.text
-
-
-def test_grafana_only_on_health_ui_not_nav_or_incidents():
-    db = _db()
-    db.close()
-    client = _login("admin@forgesre.local")
-    home = client.get("/")
-    nav = home.text.split("<aside", 1)[1].split("</aside>", 1)[0]
-    assert "Grafana" not in nav
-    health = client.get("/health-ui")
-    assert health.status_code == 200
-    assert "Open Grafana" in health.text
-    assert "/d/forgesre-overview/forgesre-overview" in health.text
-    assert "Prometheus" in health.text and "Alertmanager" in health.text and "Core" in health.text
-    assert "Open Grafana" in health.text or "System Health" in health.text
-
-
-def test_discovery_demo_ip_is_labeled_and_netbox_is_separate():
-    db = _db()
-    db.close()
-    client = _login("admin@forgesre.local")
-    page = client.get("/discovery")
-    assert page.status_code == 200
-    html = page.text
-    n = 1
-    while "10.20.30.41" not in html and n < 8:
-        n += 1
-        html = client.get(f"/discovery?page={n}").text
-    assert "10.20.30.41" in html
-    assert 'class="pill demo"' in html
-    assert "lab seed" in html.lower()
-    assert page.text.find("Scan now") < page.text.find("<h2>LibreNMS") < page.text.find("NetBox sync")
-    assert "ports 22, 80, 443, 161" not in page.text
-
-
-def test_discovery_template_does_not_list_tcp_161_as_a_probe_port():
-    html = (ROOT / "frontend" / "templates" / "discovery.html").read_text(encoding="utf-8")
-    assert 'include "_info_tip.html"' not in html
-    assert "ports 22, 80, 443, 161" not in html
-
-
 def test_readme_does_not_claim_dashboard_doctor_or_incidents_200():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "doctor lights" not in text
@@ -125,13 +48,3 @@ def test_readme_does_not_claim_dashboard_doctor_or_incidents_200():
     assert "System Health" in text
 
 
-def test_architecture_doc_describes_the_running_appliance():
-    text = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
-    assert "V2.0" in text
-    assert "host network" in text.lower()
-    assert "Alertmanager" in text
-    handbook = (ROOT / "docs" / "operator-handbook.md").read_text(encoding="utf-8")
-    assert "map `alertname`" in handbook or "maps `alertname`" in handbook
-    play = (ROOT / "frontend" / "templates" / "playrules.html").read_text(encoding="utf-8")
-    assert 'include "_info_tip.html"' not in play
-    assert "alerts.yml" in play

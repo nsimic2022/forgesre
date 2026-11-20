@@ -1,7 +1,5 @@
 from discovery import classify, hosts_from_cidrs
 
-from app.inventory import DEMO_CANDIDATE_IP, approve_candidate, ignore_candidate, sd_targets, seed_demo_candidate
-from app.models import Asset, DiscoveryCandidate
 
 
 def test_classify_roles():
@@ -23,71 +21,3 @@ def test_hosts_from_cidrs_skips_loopback_and_caps():
     assert "10.0.0.1" in hosts
 
 
-def test_approve_ignore_and_http_sd():
-    from fastapi.testclient import TestClient
-
-    from app.db import Base, SessionLocal, engine
-    from app.main import app
-    from app.seed import seed
-
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    seed(db)
-    row = seed_demo_candidate(db)
-    assert row.ip == DEMO_CANDIDATE_IP
-    assert row.status in {"new", "approved"}
-
-    client = TestClient(app)
-    login = client.post(
-        "/login",
-        data={"email": "admin@forgesre.local", "password": "testpass"},
-        follow_redirects=False,
-    )
-    assert login.status_code in {302, 303}
-
-    page = client.get("/discovery")
-    assert page.status_code == 200
-    assert b"Discovery" in page.content
-    blob = page.content
-    n = 1
-    while (b"DEMO" not in blob or DEMO_CANDIDATE_IP.encode() not in blob) and n < 8:
-        n += 1
-        blob = client.get(f"/discovery?page={n}").content
-    assert b"DEMO" in blob
-    if row.status == "new":
-        assert b"NEW DEVICE DETECTED" in page.content
-        assert DEMO_CANDIDATE_IP.encode() in blob
-
-    denied = client.get("/api/v1/sd/prometheus")
-    assert denied.status_code == 401
-
-    db.refresh(row)
-    if row.status == "new":
-        asset = approve_candidate(db, row, actor="tester@forgesre.local")
-    else:
-        asset = db.query(Asset).filter_by(ip=DEMO_CANDIDATE_IP).one()
-    assert asset.asset_id.startswith("disc-")
-    assert asset.ip == DEMO_CANDIDATE_IP
-    assert asset.source == "discovery"
-    assert asset.scrape_address == f"{DEMO_CANDIDATE_IP}:9100"
-    assert "DEMO" in (asset.notes or "")
-    targets = sd_targets(db)
-    assert not any(DEMO_CANDIDATE_IP in item["targets"][0] for item in targets)
-    assert all("127.0.0.1" not in item["targets"][0] for item in targets)
-
-    other = db.query(DiscoveryCandidate).filter_by(ip="10.20.30.99").first()
-    if other is None:
-        other = DiscoveryCandidate(ip="10.20.30.99", proposed_role="Possible web/appliance", open_ports=[80], status="new")
-        db.add(other)
-        db.commit()
-        db.refresh(other)
-    ignore_candidate(db, other, actor="tester@forgesre.local")
-    db.refresh(other)
-    assert other.status == "ignored"
-    assert db.query(Asset).filter_by(ip="10.20.30.99").first() is None
-
-    sd = client.get("/api/v1/sd/prometheus", headers={"Authorization": "Bearer forgesre-dev-webhook-token"})
-    assert sd.status_code == 200
-    body = sd.json()
-    assert not any(DEMO_CANDIDATE_IP in target["targets"][0] for target in body)
-    db.close()

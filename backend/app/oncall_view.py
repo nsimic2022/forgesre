@@ -1,7 +1,7 @@
 """On-call week for the new UI: every roster slot, who is on call now, and the people to pick from.
 
 Writes go through app/dc_noc.py (add_oncall_slot, update_oncall_slot, take_duty), the same
-validation as the classic Escalation page. Times are appliance-local minutes.
+validation everywhere on-call is edited. Times are appliance-local minutes.
 """
 
 from __future__ import annotations

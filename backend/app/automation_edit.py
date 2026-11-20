@@ -1,6 +1,6 @@
 """Create, update and remove playrules and playbooks for the new UI (JSON API).
 
-Same rules as the classic pages in app/web.py: rule names are unique, a rule without an
+Rule names are unique, a rule without an
 escalation policy gets ``default-warning``, removing a rule or playbook clears the link on
 existing incidents instead of deleting them. Every write is audited; callers check
 ``write_play`` first.
@@ -25,7 +25,6 @@ def _policy(db: Session, policy_id: int | None) -> EscalationPolicy | None:
 
 
 def _condition(data: dict[str, Any], name: str) -> dict[str, Any]:
-    from app.web import playrule_condition
 
     operator = str(data.get("operator") or ">").strip()
     if operator not in OPERATORS:
@@ -80,7 +79,6 @@ def delete_playrule(db: Session, rule: Playrule, actor: str) -> None:
 
 def save_playbook(db: Session, data: dict[str, Any], actor: str, book: Playbook | None = None) -> Playbook:
     """Create a playbook (slug made unique from the name) or update ``book``. Steps are one title each."""
-    from app.web import _unique_playbook_slug
 
     name = str(data.get("name") or "").strip()
     if not name:
@@ -172,3 +170,38 @@ def delete_policy(db: Session, policy: EscalationPolicy, actor: str) -> int:
           data={"playrules_moved": int(moved or 0), "to": fallback.slug if fallback else ""})
     db.commit()
     return int(moved or 0)
+
+
+def playrule_condition(alertname: str, name: str, metric: str, operator: str, value: str) -> dict:
+    """alertname is required. metric/operator/value compare the firing Alertmanager sample when set."""
+    condition: dict = {"alertname": (alertname or name).strip()}
+    note_value: float | str | None = None
+    raw = (value or "").strip()
+    if raw:
+        try:
+            note_value = float(raw)
+        except ValueError:
+            note_value = raw
+    if (metric or "").strip():
+        condition["metric"] = metric.strip()
+        condition["operator"] = (operator or ">").strip()
+        if note_value is not None:
+            condition["value"] = note_value
+    return condition
+
+
+def _playbook_slug(raw: str) -> str:
+    slug = "".join(ch if ch.isalnum() or ch == "-" else "-" for ch in (raw or "").strip().lower())
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug.strip("-") or "playbook"
+
+
+def _unique_playbook_slug(db: Session, base: str) -> str:
+    slug = _playbook_slug(base)
+    n = 2
+    candidate = slug
+    while db.query(Playbook).filter_by(slug=candidate).first() is not None:
+        candidate = f"{slug}-{n}"
+        n += 1
+    return candidate

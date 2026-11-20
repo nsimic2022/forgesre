@@ -53,6 +53,3 @@ notifications:
     from: forgesre@example.local
     tls: true
 
-# Tests render the classic dashboard at /; test_new_ui_home covers the redirect.
-ui:
-  home: classic

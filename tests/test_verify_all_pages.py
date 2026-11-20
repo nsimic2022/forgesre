@@ -13,7 +13,6 @@ from app.asset_probe import AssetProbe, CheckResult
 from app.db import Base, SessionLocal, engine
 from app.inventory import create_manual_asset
 from app.main import app
-from app.models import Asset
 from app.seed import seed
 
 PROBE_DELAY = 0.4
@@ -100,38 +99,6 @@ def _setup(count: int) -> tuple[TestClient, list[str]]:
     return client, ids
 
 
-def test_verify_all_probes_only_the_current_page_and_fetches_shared_state_once(monkeypatch):
-    client, ids = _setup(12)
-    calls = _patch(monkeypatch)
-    db = SessionLocal()
-    total = db.query(Asset).count()
-    db.close()
-    assert total > 10
-
-    started = time.monotonic()
-    page = client.get("/assets/verify?per_page=10&page=1")
-    elapsed = time.monotonic() - started
-
-    assert page.status_code == 200
-    assert len(calls.probes) == 10
-    assert calls.targets == 1 and calls.am == 1 and calls.sd == 1
-    assert 1 < calls.peak <= api_mod.VERIFY_PROBE_WORKERS
-    assert elapsed < 10 * PROBE_DELAY, elapsed
-    assert "Showing 1–10 of" in page.text
-
-
-def test_verify_all_page_two_probes_exactly_that_slice(monkeypatch):
-    client, ids = _setup(12)
-    calls = _patch(monkeypatch)
-    db = SessionLocal()
-    ordered = [row.asset_id for row in db.query(Asset).order_by(Asset.hostname).all()]
-    db.close()
-    page = client.get("/assets/verify?per_page=10&page=2&demo=1")
-    assert page.status_code == 200
-    assert sorted(calls.probes) == sorted(ordered[10:20])
-    assert calls.targets == 1 and calls.am == 1 and calls.sd == 1
-
-
 def test_verify_api_shares_targets_and_alertmanager_across_assets(monkeypatch):
     client, ids = _setup(4)
     calls = _patch(monkeypatch)
@@ -143,38 +110,3 @@ def test_verify_api_shares_targets_and_alertmanager_across_assets(monkeypatch):
     assert calls.targets == 1 and calls.am == 1 and calls.sd == 1
 
 
-def test_pager_verify_probes_the_selected_assets_only(monkeypatch):
-    client, ids = _setup(4)
-    calls = _patch(monkeypatch)
-    empty = client.post("/assets/open-verify", data={}, follow_redirects=False)
-    assert empty.status_code == 303
-    assert "edit_note=select-one" in empty.headers["location"]
-    assert calls.probes == []
-
-    picked = ids[:2]
-    posted = client.post("/assets/open-verify", data={"selected": picked}, follow_redirects=False)
-    assert posted.status_code == 303
-    assert posted.headers["location"].startswith("/assets/verify?")
-    assert "edit_note" not in posted.headers["location"]
-    for asset_id in picked:
-        assert f"selected={asset_id}" in posted.headers["location"]
-    page = client.get(posted.headers["location"])
-    assert page.status_code == 200
-    assert sorted(calls.probes) == sorted(picked)
-    for asset_id in ids[2:]:
-        assert asset_id not in calls.probes
-    for asset_id in picked:
-        assert asset_id in page.text
-    assets = client.get("/assets")
-    form = assets.text.split("assets-filters", 1)[1].split("</form>", 1)[0]
-    assert "Verify all" not in form and "Verify all" not in assets.text
-    assert 'data-bulk-verify' in assets.text
-
-
-def test_single_asset_verify_page_still_works(monkeypatch):
-    client, ids = _setup(1)
-    calls = _patch(monkeypatch)
-    page = client.get(f"/assets/{ids[0]}/verify")
-    assert page.status_code == 200
-    assert calls.probes == [ids[0]]
-    assert calls.targets == 1 and calls.am == 1

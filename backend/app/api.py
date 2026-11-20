@@ -2102,9 +2102,13 @@ def create_user(body: UserBody, db: Session = Depends(get_db), user: User = Depe
 def update_user_api(
     user_id: int,
     body: UserUpdateBody,
+    response: Response,
     db: Session = Depends(get_db),
     user: User = Depends(require("admin")),
 ) -> dict:
+    """Save a user. A new password signs that user out everywhere; an Admin who changes
+    their own password gets a fresh cookie so this browser stays signed in."""
+    from app.security import set_session_cookie
     from app.users import update_user as save_user
 
     row = db.get(User, user_id)
@@ -2127,6 +2131,8 @@ def update_user_api(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()
+    if row.id == user.id:
+        set_session_cookie(response, row)
     return {"id": row.id, "email": row.email, "role": row.role}
 
 
@@ -3599,7 +3605,7 @@ def _report_or_404(db: Session, report_id: int):
 
 
 def _parsed_report(db: Session, body: ScheduledReportBody, actor: str) -> dict:
-    from app.web import parse_scheduled_report_form
+    from app.report_forms import parse_scheduled_report_form
 
     return parse_scheduled_report_form(
         db, name=body.name, to_email=list(body.recipients), new_email="", interval_hours=0, asset_id=list(body.asset_ids),

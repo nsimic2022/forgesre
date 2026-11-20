@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.main import app
-from app.models import Asset, AuditLog
+from app.models import Asset
 from app.seed import seed
 from app.asset_extras import merge_extras, normalize_extras
 from app.inventory import sd_snmp_onboard_targets, sd_snmp_targets
@@ -30,7 +30,6 @@ from app.snmp_onboard import (
     profile_for,
     recommend_metrics,
     restore_onboard_module,
-    search_mib_object_types,
     snmp_get,
     snmp_get_packet,
     splice_onboard_module,
@@ -167,155 +166,6 @@ def test_apply_refuses_without_if_mib(tmp_path):
     assert "if_mib" in result["error"]
 
 
-def test_discovery_keeps_cubes_and_snmp_below_add_asset():
-    client = _client()
-    scan = client.get("/discovery")
-    assert scan.status_code == 200
-    html = scan.text
-    assert "discovery-shell" not in html
-    assert "discovery-menu" not in html
-    assert 'class="discovery-actions"' in html
-    assert ">Scan now<" in html and ">LibreNMS<" in html and ">Zabbix<" in html and ">NetBox sync<" in html and ">GLPI<" in html
-    assert ">Add asset<" in html
-    assert 'class="discovery-snmp-break dash-graphs-spacer"' in html
-    assert html.index(">Add asset<") < html.index('class="discovery-snmp-break') < html.index(">SNMP devices<")
-    assert "OID tester" in html
-    assert "Recommendations" in html
-    assert "Identify" in html
-    assert 'id="snmp-identify"' in html
-    assert "/api/v1/webhooks/librenms" in html
-    assert 'name="community"' in html
-    assert SECRET not in html
-    assert f'value="{SECRET}"' not in html
-    assert 'type="password"' in html
-    assert "Apply extra module" in html
-    assert "forgesre_onboard" in html
-    assert "forgesre-snmp-onboard" in html
-    assert "MIB upload" in html
-    assert "Upload MIB" in html
-    assert "walk+indexes" in html
-    bounced = client.get("/discovery/snmp", follow_redirects=False)
-    assert bounced.status_code in {302, 303}
-    assert bounced.headers.get("location", "").endswith("/discovery#snmp")
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".discovery-shell {" not in css
-    assert ".discovery-menu {" not in css
-    break_css = css.split(".discovery-snmp-break {", 1)[1].split("}", 1)[0]
-    assert "2.6em" in break_css
-    assert "3px solid var(--line)" in break_css
-    spacer = css.split(".dash-graphs-spacer {", 1)[1].split("}", 1)[0]
-    assert "2.6em" in spacer
-
-
-def test_identify_post_does_not_echo_community(monkeypatch):
-    def fake_discover(ip, **kwargs):
-        assert kwargs.get("community") == SECRET
-        return {
-            "ok": True,
-            "hostname": ip,
-            "added": True,
-            "disabled_polling": True,
-            "device": {"hostname": ip, "sysDescr": "lab", "sysName": "lab", "os": "ios", "hardware": "C9300", "vendor": "Cisco"},
-            "ports": [{"ifIndex": 1, "ifOperStatus": "up"}],
-            "processors": [],
-            "mempools": [],
-            "storage": [],
-            "temperatures": [],
-        }
-
-    monkeypatch.setattr("app.librenms.discover_device", fake_discover)
-    client = _client()
-    response = client.post(
-        "/discovery/snmp",
-        data={"action": "identify", "ip": "10.8.8.8", "port": "161", "version": "v2c", "community": SECRET, "timeout": "0.8"},
-    )
-    assert response.status_code == 200
-    assert "lab" in response.text
-    assert "ifNumber" in response.text
-    assert SECRET not in response.text
-    assert "recommend" in response.text
-    assert ">Scan now<" in response.text and ">Add asset<" in response.text
-    assert "LibreNMS" in response.text
-    assert 'id="snmp-identify"' in response.text
-    assert "LibreNMS has" in response.text.split('id="snmp-identify"', 1)[1]
-    assert 'data-snmp-focus="identify"' in response.text
-
-
-def test_probe_and_apply_generated_only(monkeypatch, tmp_path):
-    src = (ROOT / "monitoring" / "snmp.yml").read_text(encoding="utf-8")
-    target = tmp_path / "snmp.yml"
-    target.write_text(src, encoding="utf-8")
-    monkeypatch.setenv("FORGESRE_GENERATED_DIR", str(tmp_path))
-    monkeypatch.setattr("app.web_discovery.snmp_get", lambda ip, oid, **k: {"ok": True, "oid": oid, "error": "", "value": "48"})
-    monkeypatch.setattr("app.web_discovery.reload_exporter", lambda *_a, **_k: True)
-    monkeypatch.setattr("app.web_discovery.run_snmp_generator", lambda **_k: {"ok": False, "ran": False, "error": "skipped"})
-    client = _client()
-    db = SessionLocal()
-    db.add(Asset(asset_id="onb-sw-1", hostname="onb-sw-1", ip="10.8.8.8", type="Switch"))
-    db.commit()
-    db.close()
-    probe = client.post(
-        "/discovery/snmp",
-        data={"action": "probe", "ip": "10.8.8.8", "oid": "1.3.6.1.2.1.2.1.0", "version": "v2c", "community": SECRET},
-    )
-    assert probe.status_code == 200
-    assert "48" in probe.text
-    assert SECRET not in probe.text
-    applied = client.post(
-        "/discovery/snmp",
-        data={
-            "action": "apply",
-            "asset_id": "onb-sw-1",
-            "ip": "10.8.8.8",
-            "oid_pick": ["1.3.6.1.2.1.2.1.0", "1.3.6.1.2.1.2.2.1.13"],
-            "version": "v2c",
-        },
-    )
-    assert applied.status_code == 200
-    assert SECRET not in applied.text
-    parsed = yaml.safe_load(target.read_text())
-    assert ONBOARD_MODULE in parsed["modules"]
-    assert "if_mib" in parsed["modules"]
-    onboard = parsed["modules"][ONBOARD_MODULE]
-    assert "1.3.6.1.2.1.2.1.0" in onboard.get("get", [])
-    assert "1.3.6.1.2.1.2.2.1.13" in onboard.get("walk", [])
-    committed = yaml.safe_load((ROOT / "monitoring" / "snmp.yml").read_text())
-    assert set(committed["modules"]) == {"if_mib", "host"}
-    db = SessionLocal()
-    assert db.query(AuditLog).filter_by(action="snmp.onboard.apply").count() >= 1
-    row = db.query(Asset).filter_by(asset_id="onb-sw-1").one()
-    assert "1.3.6.1.2.1.2.1.0" in (row.extras or {}).get(SNMP_ONBOARD_OIDS_KEY, "")
-    db.close()
-    gen = yaml.safe_load((tmp_path / "generator.yml").read_text())
-    assert "forgesre_onboard" in gen["modules"]
-
-
-def test_apply_without_asset_stays_in_gui(monkeypatch, tmp_path):
-    monkeypatch.setenv("FORGESRE_GENERATED_DIR", str(tmp_path))
-    (tmp_path / "snmp.yml").write_text((ROOT / "monitoring" / "snmp.yml").read_text(encoding="utf-8"), encoding="utf-8")
-    client = _client()
-    bounced = client.post(
-        "/discovery/snmp",
-        data={"action": "apply", "ip": "10.8.8.9", "oid_pick": "1.3.6.1.2.1.2.1.0", "version": "v2c"},
-    )
-    assert bounced.status_code == 200
-    assert "Pick an asset" in bounced.text
-    assert ">Add asset<" in bounced.text
-
-
-def test_snmp_page_requires_login():
-    Base.metadata.create_all(bind=engine)
-    guest = TestClient(app)
-    response = guest.get("/discovery/snmp", follow_redirects=False)
-    assert response.status_code in {302, 303}
-
-
-def test_cache_pin_bumped():
-    base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-70" in base
-    assert "app.js?v=v09-T" in base
-
-
 def test_vendor_profile_and_table_indexes():
     assert vendor_from_sysobjectid("1.3.6.1.4.1.9.1.123") == "Cisco"
     assert vendor_from_sysobjectid("1.3.6.1.4.1.318.1.1") == "APC"
@@ -405,53 +255,6 @@ def test_prometheus_onboard_job_bundled():
     assert ONBOARD_JOB == "forgesre-snmp-onboard"
     committed = yaml.safe_load((ROOT / "monitoring" / "snmp.yml").read_text())
     assert set(committed["modules"]) == {"if_mib", "host"}
-
-
-def test_mib_object_type_regex_and_upload(monkeypatch, tmp_path):
-    text = (
-        "IF-MIB DEFINITIONS ::= BEGIN\n"
-        "ifInDiscards OBJECT-TYPE\n"
-        "    SYNTAX Counter32\n"
-        "    ::= { ifEntry 13 }\n"
-        "ifOutErrors OBJECT-TYPE\n"
-        "    SYNTAX Counter32\n"
-        "    ::= { ifEntry 20 }\n"
-        "END\n"
-    )
-    assert search_mib_object_types(text) == ["ifInDiscards", "ifOutErrors"]
-    monkeypatch.setenv("FORGESRE_GENERATED_DIR", str(tmp_path))
-    monkeypatch.setattr("app.web_discovery.run_snmp_generator", lambda **_k: {"ok": False, "ran": False, "error": "image skipped"})
-    client = _client()
-    uploaded = client.post(
-        "/discovery/snmp/mib",
-        data={"ip": "10.8.8.8", "version": "v2c"},
-        files={"mib_file": ("IF-MIB.txt", text.encode(), "text/plain")},
-    )
-    assert uploaded.status_code == 200
-    assert SECRET not in uploaded.text
-    assert "ifInDiscards" in uploaded.text
-    assert (tmp_path / "mibs" / "IF-MIB.txt").is_file()
-    assert (tmp_path / "generator.yml").is_file()
-    db = SessionLocal()
-    assert db.query(AuditLog).filter_by(action="snmp.onboard.mib").count() >= 1
-    db.close()
-
-
-def test_scrape_includes_promql_count(monkeypatch):
-    monkeypatch.setattr(
-        "app.web_discovery.exporter_scrape",
-        lambda *a, **k: {"ok": True, "error": "", "body": "ifInDiscards 1", "module": ONBOARD_MODULE, "auth": "public_v2", "target": "10.8.8.8"},
-    )
-    monkeypatch.setattr(
-        "app.web_discovery.prometheus_onboard_status",
-        lambda *a, **k: {"ok": True, "series": 4, "up": 1, "query": 'count({job="forgesre-snmp-onboard"})', "error": ""},
-    )
-    client = _client()
-    response = client.post("/discovery/snmp", data={"action": "scrape", "ip": "10.8.8.8", "version": "v2c"})
-    assert response.status_code == 200
-    assert "4 series" in response.text
-    assert "forgesre-snmp-onboard" in response.text
-    assert SECRET not in response.text
 
 
 def test_write_generator_yml_numeric_oids(tmp_path):

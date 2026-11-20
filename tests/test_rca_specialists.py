@@ -2,14 +2,9 @@
 
 from pathlib import Path
 
-from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
-from app.insights import list_investigation_runs
-from app.main import app
-from app.models import Incident
 from app.seed import seed
-from app.services import run_investigation
 from rca.engines import ForgeRCA
 from rca.specialists import specialist_brief, specialists_from_evidence
 
@@ -74,61 +69,6 @@ def _db():
     return db
 
 
-def test_investigations_page_lists_runs_and_specialist_cubes():
-    db = _db()
-    incident = db.query(Incident).filter(Incident.asset_id.isnot(None)).first()
-    assert incident is not None
-    run_investigation(db, incident, actor="admin@forgesre.local", force=True, use_llm=False)
-    number = incident.number
-    client = TestClient(app)
-    client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
-    location = f"/ai/{number}"
-    ai = client.get(location)
-    assert ai.status_code == 200
-    assert "case-specialists" in ai.text
-    assert "specialist-row-tall" in ai.text
-    assert ">Metrics<" in ai.text
-    assert ">Logs<" in ai.text
-    assert ">Inventory<" in ai.text
-    assert ">History<" in ai.text
-    incident = client.get(f"/incidents/{number}")
-    assert incident.status_code == 200
-    assert 'class="specialist-row"' in incident.text
-    listing = client.get(f"/investigations?n={number}")
-    assert listing.status_code == 200
-    assert 'id="activity"' in listing.text
-    activity = listing.text.split('id="activity"', 1)[1].split('id="summary"', 1)[0]
-    assert "filter-chips" not in activity
-    assert "Start from an" not in activity
-    assert ">Investigation<" not in activity
-    assert 'class="act-expand"' not in activity
-    assert "case-specialists" in activity
-    assert "specialist-row-tall" in activity
-    assert ">Metrics<" in activity
-    assert ">Logs<" in activity
-    assert ">Inventory<" in activity
-    assert ">History<" in activity
-    assert number in listing.text
-    runs = list_investigation_runs(db)
-    match = next(row for row in runs if row["number"] == number)
-    assert len(match["specialists"]) == 4
-    assert match["writer"]["label"] == "ForgeAI"
-    home = client.get("/").text
-    cube = home.split('id="forgeai"', 1)[1].split("</section>", 1)[0]
-    assert "Recent investigations" in cube
-    assert "Recent activity" not in cube
-    assert "Ask ForgeAI" not in cube
-    assert "Open Investigations" not in cube
-    assert f'href="/investigations?n={number}"' in cube
-    assert 'class="act-case"' in cube
-    assert cube.index(">Inventory<") < cube.index(">Metrics<") < cube.index(">Logs<") < cube.index(">History<")
-    case = client.get(location).text
-    header = case.split("<h1>", 1)[0]
-    assert 'class="case-specialists' in header
-    assert header.index(">Inventory<") < header.index(">Metrics<") < header.index(">Logs<") < header.index(">History<")
-    db.close()
-
-
 def test_writer_uses_specialist_brief_only():
     class _Writer:
         last_error = ""
@@ -177,13 +117,3 @@ def test_writer_uses_specialist_brief_only():
     assert dropped["summary"] == builtin["summary"]
 
 
-def test_cache_bust_is_v09_35():
-    base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert "app.css?v=v09-70" in base
-    assert ".specialist-row" in css
-    assert ".specialist-cube.ok" in css
-    assert ".act-expand" in css
-    assert ".specialist-row-5" in css
-    assert ".specialist-row-tall" in css
-    assert ".act-case-name" in css

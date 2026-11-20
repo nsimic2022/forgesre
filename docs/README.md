@@ -26,7 +26,7 @@ refreshed after a UI change.
 - [Sign-in with LDAP / Active Directory or OIDC single sign-on](sign-in.md)
 - [Appliance without internet (offline bundle)](offline.md)
 - [High availability: two appliances on one Postgres](high-availability.md)
-- [What is still only on the classic UI](classic-gaps.md)
+- [How the classic UI was retired](classic-gaps.md)
 - [Alerting](alerting.md): alert rules, playrules, noise filters, appliance checks, runbook format
 - [New UI](ui.md): pages, API endpoints, TV mode, dependency map, postmortem
 - [Architecture](architecture.md): containers, the alarm path, background jobs

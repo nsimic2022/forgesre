@@ -12,7 +12,7 @@ from app.db import Base, SessionLocal, engine
 from app.inventory import create_manual_asset
 from app.main import app
 from app.migrate import migrate
-from app.models import Asset, AssetLadderStep, EscalationPolicy, Incident, Notification, Playrule
+from app.models import EscalationPolicy, Incident, Notification, Playrule
 from app.seed import seed
 from app.services import ingest_alertmanager, process_escalations, utcnow
 
@@ -107,101 +107,6 @@ def test_ladder_form_parser_keeps_on_levels_and_drops_off_or_blank():
         {"level": 2, "after_minutes": 15, "emails": ["l2@dc.local"], "enabled": True},
     ]
     assert ladder_steps_from_form("", [{"on": "1", "minutes": "0", "emails": ["a@dc.local"], "picks": []}]) is None
-
-
-def test_add_asset_columns_nav_rules_and_escalated_cube():
-    db = _db()
-    client = _client()
-    page = client.get("/discovery")
-    assert page.status_code == 200
-    text = page.text
-    order = [
-        text.index("asset-form-left"),
-        text.index("asset-form-middle"),
-        text.index("asset-form-right"),
-        text.index("asset-form-custom"),
-        text.index("asset-form-ladder"),
-    ]
-    assert order == sorted(order)
-    assert "Identity" in text and ">Ports<" in text
-    assert ">Alarms<" in text and "Custom alarms" in text
-    assert ">Escalation<" in text.split("data-asset-ladder", 1)[1]
-    assert "ladder-levels" in text.split("data-asset-ladder", 1)[1]
-    assert "Client playrules" not in text
-    assert 'href="/escalation">Default escalation</a>' not in text
-    assert "ladder-default" not in text
-    nav = text.split('<aside class="nav"', 1)[1].split("</aside>", 1)[0]
-    assert ">Rules<" in nav and ">Playbooks<" in nav and ">Escalation<" in nav
-    assert ">Playrules<" not in nav
-    assert ">Journal<" not in nav and 'href="/history"' not in nav
-    assert 'href="/playrules"' in nav and 'href="/escalation"' in nav
-    assert nav.index(">Playbooks<") < nav.index(">Escalation<") < nav.index(">System Health<")
-    rules = client.get("/playrules")
-    assert rules.status_code == 200
-    assert "<h1>Rules" in rules.text or ">Rules<" in rules.text.split("<h1>", 1)[1][:40]
-    assert "<title>Rules · ForgeSRE</title>" in rules.text
-    default = client.get("/escalation")
-    assert default.status_code == 200
-    assert "Default warning" in default.text
-    assert "<h1>Escalation" in default.text
-    assert "<h2>Default escalation" in default.text
-    assert "escalation-cols" in default.text
-    home = client.get("/")
-    alarms = home.text.split("dash-tiles-incidents", 1)[1].split("</section>", 1)[0]
-    assert 'data-tile="escalated"' in alarms
-    assert 'href="/incidents?status=ESCALATED"' in alarms
-    assert "demo=0" not in alarms
-    assert ">Open<" not in alarms
-    db.close()
-
-
-def test_ladder_persists_on_save_and_off_level_is_deleted():
-    db = _db()
-    client = _client()
-    asset_id = f"lad-{uuid4().hex[:6]}"
-    created = client.post(
-        "/assets",
-        data=_asset_form(
-            asset_id,
-            ladder_on_1="1",
-            ladder_minutes_1="0",
-            ladder_target_1="l1@dc.local",
-            ladder_on_2="1",
-            ladder_minutes_2="15",
-            ladder_target_2="l2a@dc.local",
-        ),
-        follow_redirects=False,
-    )
-    assert created.status_code in {302, 303}
-    db.expire_all()
-    asset = db.query(Asset).filter_by(asset_id=asset_id).one()
-    rows = {row.level: row for row in db.query(AssetLadderStep).filter_by(asset_id=asset.id)}
-    assert set(rows) == {1, 2}
-    assert rows[1].after_minutes == 0 and rows[1].emails == ["l1@dc.local"]
-    assert rows[2].after_minutes == 15 and rows[2].emails == ["l2a@dc.local"]
-    edit = client.get(f"/assets?edit={asset_id}").text
-    ladder = edit.split("data-asset-ladder", 1)[1].split("</form>", 1)[0]
-    assert 'name="ladder_target_1"' in ladder and "l1@dc.local" in ladder
-    assert ladder.count('name="ladder_target_2"') == 1
-    updated = client.post(
-        f"/assets/{asset_id}/update",
-        data={
-            "hostname": asset_id,
-            "ip": asset.ip,
-            "type": "Linux Server",
-            "ladder_present": "1",
-            "ladder_on_1": "1",
-            "ladder_minutes_1": "5",
-            "ladder_target_1": "l1b@dc.local",
-        },
-        follow_redirects=False,
-    )
-    assert updated.status_code in {302, 303}
-    db.expire_all()
-    rows = {row.level: row for row in db.query(AssetLadderStep).filter_by(asset_id=asset.id)}
-    assert set(rows) == {1}
-    assert rows[1].after_minutes == 5 and rows[1].emails == ["l1b@dc.local"]
-    db.close()
 
 
 def test_asset_ladder_mail_beats_default_and_ack_stops_and_off_is_honored(monkeypatch):

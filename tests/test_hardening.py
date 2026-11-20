@@ -1,15 +1,12 @@
 import os
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal, engine
 from app.inventory import approve_candidate, is_snmp_asset, sd_snmp_targets, upsert_candidate
 from app.jobs import run_pending_jobs
-from app.main import app
 from app.metrics import demo_metric_values, set_demo_cpu
-from app.models import Asset, Evidence, Job, Playbook, Playrule, User
-from app.security import hash_password
+from app.models import Asset, Evidence, Job, Playbook, Playrule
 from app.seed import seed
 from app.services import close_open_incidents, ingest_alertmanager, next_incident_number, query_prometheus
 from app.settings import assert_runtime_secrets
@@ -111,41 +108,6 @@ def test_new_incident_number_increments_legacy_six_digit():
     nxt = next_incident_number(db)
     assert incident_seq(nxt) == legacy + 1
     assert nxt.startswith(f"INC-{legacy + 1:04d}_")
-    db.close()
-
-
-def test_colon_incident_id_is_routable_and_kept_by_cli():
-    from urllib.parse import quote
-
-    from app.cli_ops import _incident_number
-    from app.models import Incident
-
-    number = "INC-0134_16.08.2026_09:13"
-    assert _incident_number([number]) == number
-    assert ":" in quote(number, safe=".-_:")
-    db = _db()
-    db.add(
-        Incident(
-            number=number,
-            title="colon id",
-            severity="WARNING",
-            status="OPEN",
-            fingerprint="colon-id-route-test",
-        )
-    )
-    db.commit()
-    client = TestClient(app)
-    client.post(
-        "/login",
-        data={"email": "admin@forgesre.local", "password": "testpass"},
-        follow_redirects=False,
-    )
-    page = client.get(f"/incidents/{number}")
-    assert page.status_code == 200
-    assert number in page.text
-    api = client.get(f"/api/v1/incidents/{number}")
-    assert api.status_code == 200
-    assert api.json()["number"] == number
     db.close()
 
 
@@ -281,82 +243,6 @@ def test_core_image_requirements_omit_pytest():
     assert "pytest" in dev
     assert "requirements.txt" in dockerfile
     assert "requirements-dev" not in dockerfile
-
-
-def test_ops_console_on_off_nav_and_ai_anchor():
-    db = _db()
-    client = TestClient(app)
-    client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
-    playrules = client.get("/playrules")
-    assert playrules.status_code == 200
-    assert ">ON<" in playrules.text
-    assert "class=\"active\"" in playrules.text
-    assert ">True<" not in playrules.text and ">False<" not in playrules.text
-    assert 'class="secondary"' in client.get("/").text
-    admin = client.get("/admin")
-    assert admin.status_code == 200
-    assert "class=\"active\"" in admin.text
-    discovery = client.get("/discovery")
-    assert discovery.status_code == 200
-    assert "Scan now" in discovery.text
-    assert "Confirm &amp; scan" not in discovery.text
-    assert 'name="confirm" value="1"' in discovery.text
-    assert ">True<" not in discovery.text and ">False<" not in discovery.text
-    close_open_incidents(db, "HighCPU:forge-demo-01")
-    created = ingest_alertmanager(
-        db,
-        {
-            "status": "firing",
-            "alerts": [
-                {
-                    "status": "firing",
-                    "labels": {"alertname": "HighCPU", "severity": "warning", "asset": "forge-demo-01"},
-                    "annotations": {"summary": "High CPU"},
-                }
-            ],
-        },
-    )
-    page = client.get(f"/incidents/{created[0].number}")
-    assert page.status_code == 200
-    assert 'id="ai"' in page.text
-    db.close()
-
-
-def test_viewer_cannot_open_playrules_or_journal():
-    db = _db()
-    if db.query(User).filter_by(email="viewer@forgesre.local").first() is None:
-        db.add(User(email="viewer@forgesre.local", name="V", password_hash=hash_password("testpass"), role="viewer"))
-        db.commit()
-    client = TestClient(app)
-    client.post("/login", data={"email": "viewer@forgesre.local", "password": "testpass"}, follow_redirects=False)
-    assert client.get("/playrules").status_code == 403
-    assert client.get("/journal").status_code == 403
-    assert client.get("/discovery").status_code == 403
-    assert client.get("/").status_code == 200
-    assert client.get("/api/v1/system/doctor").status_code == 200
-    anon = TestClient(app)
-    assert anon.get("/api/v1/health").status_code == 200
-    assert anon.get("/api/v1/health").json()["status"] == "ok"
-    assert anon.get("/api/v1/system/doctor").status_code == 401
-    db.close()
-
-
-def test_system_health_page_has_doctor_button_and_status_pills():
-    db = _db()
-    client = TestClient(app)
-    client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"}, follow_redirects=False)
-    page = client.get("/health-ui")
-    assert page.status_code == 200
-    assert "Run doctor" in page.text
-    assert "Open Grafana" in page.text
-    assert "<th>Open</th>" in page.text
-    assert 'class="pill ok"' in page.text or 'class="pill warn"' in page.text or 'class="pill crit"' in page.text
-    assert "postgres" in page.text
-    assert "Core (container)" in page.text
-    posted = client.post("/health-ui/refresh", follow_redirects=False)
-    assert posted.status_code == 303
-    assert posted.headers["location"] == "/health-ui"
-    db.close()
 
 
 def test_playrule_gets_default_escalation_policy():

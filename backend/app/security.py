@@ -101,6 +101,20 @@ def user_from_session(db: Session, token: str | None) -> User | None:
     return user
 
 
+def set_session_cookie(response, user: User) -> None:
+    """Sign this browser in as ``user`` (also re-issues the cookie after a password change)."""
+    from app.settings import settings
+
+    response.set_cookie(
+        "forgesre_session",
+        make_session_token(user.id, user.session_version),
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        max_age=SESSION_MAX_AGE,
+    )
+
+
 def revoke_sessions(user: User) -> None:
     """Invalidate every cookie already issued to this user (logout, password change)."""
     user.session_version = int(user.session_version or 0) + 1

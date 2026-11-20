@@ -77,38 +77,6 @@ def _audit(html: str) -> str:
     return html[start : html.index("</section>", start)]
 
 
-def test_who_did_what_has_its_own_pager_and_rows_select():
-    number = _incident_with_audit(14)
-    client = _client()
-    audit = _audit(client.get(f"/incidents/{number}").text)
-    assert re.search(r'<div class="table-scroll list-scroll" data-list-scroll>\s*<table class="scan-list audit-table">', audit)
-    assert ">Body<" in audit
-    assert "data-text-open" in audit or "—" in audit
-    assert "Outbox:" not in audit
-    assert 'class="incident-audit-body"' in audit
-    assert audit.count("iaf.step") == 10
-    assert 'class="pager-bar"' in audit and '<div class="pager-left">' in audit
-    assert "Showing 1–10 of 14" in audit
-    assert f"/incidents/{number}?audit_page=2#audit" in audit
-    assert 'name="audit_per_page"' in audit and "data-pager-size" in audit
-    options = re.findall(r'<option value="(\d+)"', audit.split('name="audit_per_page"', 1)[1].split("</select>", 1)[0])
-    assert options == ["10", "20", "50", "100"]
-    assert 'action="/incidents/' + number + '#audit"' in audit
-
-    second = _audit(client.get(f"/incidents/{number}?audit_page=2").text)
-    assert second.count("iaf.step") == 4 and "iaf.step13" in second
-    more = _audit(client.get(f"/incidents/{number}?audit_per_page=20").text)
-    assert more.count("iaf.step") == 14
-
-
-def test_short_who_did_what_shows_rows_without_pager():
-    number = _incident_with_audit(3)
-    audit = _audit(_client().get(f"/incidents/{number}").text)
-    assert audit.count("iaf.step") == 3
-    assert "Previous" not in audit
-    assert f"/incidents/{number}/audit/export" in audit
-
-
 def _asset(asset_id: str, type_: str, source: str, site: str = "", customer: str = "", **extra) -> Asset:
     raw = uuid4().int
     return Asset(
@@ -173,58 +141,3 @@ def test_assets_matching_type_source_site_customer_unit():
     assert options["customers"] == ["Acme", "Globex"]
 
 
-def test_assets_page_search_covers_type_source_site_customer(seeded):
-    client = _client()
-    page = _get(client, "q=Switch")
-    assert _ids(page) == {"iaf-sw1", "iaf-sw2"}
-    form = page.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
-    assert 'data-asset-filter="' not in form
-    assert "<select" not in form
-    assert 'placeholder="Search any field"' in form
-    assert _ids(_get(client, "q=zabbix")) == {"iaf-sw2"}
-    assert _ids(_get(client, "q=netbox")) == {"iaf-sw1", "iaf-fw"}
-    assert _ids(_get(client, "q=DC-East")) == {"iaf-sw1", "iaf-lin"}
-    assert _ids(_get(client, "q=Globex")) == {"iaf-sw2", "iaf-lin"}
-    assert _ids(_get(client, "q=DC-West")) >= {"iaf-sw2", "iaf-ups"}
-
-
-def test_search_and_reset_clears(seeded):
-    client = _client()
-    assert _ids(_get(client, "q=iaf-sw")) == {"iaf-sw1", "iaf-sw2"}
-    page = _get(client, "q=iaf-sw")
-    assert _ids(page) == {"iaf-sw1", "iaf-sw2"}
-    assert _ids(_get(client, "q=Acme")) == {"iaf-sw1", "iaf-ups"}
-    assert _ids(_get(client, "q=nomatch-xyz")) == set()
-    form = page.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
-    assert form.count('<input name="q"') == 1
-    assert form.count("<select") == 0
-    assert 'data-asset-filter="' not in form
-    assert 'href="/assets">Reset</a>' in form
-    assert "list-reset" in form
-    empty = _get(client, "").split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
-    assert 'href="/assets">Reset</a>' in empty
-
-
-def test_edit_link_keeps_search(seeded):
-    client = _client()
-    page = _get(client, "q=DC-East")
-    assert 'name="stay" value="/assets?per_page=100&amp;q=DC-East"' in page
-    opened = client.post(
-        "/assets/open-edit",
-        data={"selected": "iaf-sw1", "stay": "/assets?per_page=100&q=DC-East"},
-        follow_redirects=False,
-    )
-    assert opened.status_code == 303
-    assert "edit=iaf-sw1" in opened.headers["location"]
-    assert "q=DC-East" in opened.headers["location"]
-    form = page.split('<form method="get" action="/assets"', 1)[1].split("</form>", 1)[0]
-    assert "Ping" not in form
-    assert "<select" not in form
-
-
-def test_v08_15_cache_bump_and_compact_select_css():
-    base = (ROOT / "frontend" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "app.css?v=v09-70" in base and "app.js?v=v09-T" in base
-    css = (ROOT / "frontend" / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".list-filters select.filter-select { width: auto;" in css
-    assert ".assets-filters input[name=\"q\"]" in css
