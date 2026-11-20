@@ -204,6 +204,16 @@ def authenticate(db: Session, email: str, password: str, ip: str) -> tuple[User 
         return None, wait
     clean = (email or "").strip().lower()
     user = db.query(User).filter(func.lower(User.email) == clean).first() if clean else None
+    if (user is None or user.password_hash == "!ldap") and settings.ldap["enabled"]:
+        # Directory sign-in: unknown here, or created by an earlier LDAP sign-in. Local accounts never go to LDAP.
+        from app.ldap_auth import sign_in
+
+        found = sign_in(db, email, password)
+        if found is not None:
+            login_throttle.success(db, ip, email)
+            return found, 0
+        login_throttle.failure(db, ip, email)
+        return None, 0
     if user is None:
         # Spend the same bcrypt time as a real check so unknown emails are not told apart.
         verify_password(password, _dummy_hash())

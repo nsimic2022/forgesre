@@ -792,11 +792,59 @@ def ack_submit(token: str, request: Request, db: Session = Depends(get_db)):
     return render(request, "ack.html", None, incident=incident, who=who, error=error, token=token, done=incident is not None)
 
 
+def _sso_label() -> str:
+    """The single sign-on button text when OIDC is set up, else ''."""
+    from app.oidc_auth import ready
+
+    return settings.oidc["button_label"] if not ready() else ""
+
+
 @router.get("/login", response_class=HTMLResponse)
-def login_page(request: Request, user: User | None = Depends(get_user)):
+def login_page(request: Request, user: User | None = Depends(get_user), sso_error: str = ""):
     if user:
         return RedirectResponse("/", status_code=302)
-    return render(request, "login.html", None, error=None)
+    return render(request, "login.html", None, error=sso_error[:200] or None, sso=_sso_label())
+
+
+@router.get("/auth/oidc/login")
+def oidc_login():
+    """Send the browser to the OIDC provider (state, nonce and PKCE verifier in a 10-minute signed cookie)."""
+    from app.oidc_auth import COOKIE, ready, start
+
+    why = ready()
+    if why:
+        return RedirectResponse(f"/login?{urlencode({'sso_error': 'Single sign-on is not set up: ' + why})}", status_code=302)
+    try:
+        url, cookie = start()
+    except Exception as exc:
+        log.warning("oidc start failed: %s", exc)
+        return RedirectResponse(f"/login?{urlencode({'sso_error': 'The sign-on provider did not answer.'})}", status_code=302)
+    response = RedirectResponse(url, status_code=302)
+    response.set_cookie(COOKIE, cookie, httponly=True, samesite="lax", secure=settings.cookie_secure, max_age=600)
+    return response
+
+
+@router.get("/auth/oidc/callback")
+def oidc_callback(request: Request, db: Session = Depends(get_db), code: str = "", state: str = "", error: str = ""):
+    """Finish single sign-on: verify the provider's answer, map groups to a role, start the session."""
+    from app.oidc_auth import COOKIE, finish, sign_in
+
+    ip = request.client.host if request.client else ""
+    if error or not code:
+        return RedirectResponse(f"/login?{urlencode({'sso_error': 'Sign-on was cancelled or refused: ' + (error or 'no code')})}", status_code=302)
+    try:
+        found = finish(code, state, request.cookies.get(COOKIE, ""))
+        user = sign_in(db, found)
+    except Exception as exc:  # every failure is shown on the login page, never a 500
+        audit(db, "login.failed", actor="oidc", ip=ip, data={"why": str(exc)[:200]}, commit=True)
+        return RedirectResponse(f"/login?{urlencode({'sso_error': str(exc)[:200]})}", status_code=302)
+    if user is None:
+        return RedirectResponse(f"/login?{urlencode({'sso_error': 'This account is disabled or is a local account.'})}", status_code=302)
+    audit(db, "login", actor=user.email, ip=ip, data={"via": "oidc"}, commit=True)
+    response = RedirectResponse("/", status_code=302)
+    response.delete_cookie(COOKIE)
+    _set_session_cookie(response, user)
+    return response
 
 
 @router.post("/login")
@@ -815,12 +863,13 @@ def login_submit(
             "login.html",
             None,
             error=f"Too many failed sign-in attempts. Try again in {minutes} min.",
+            sso=_sso_label(),
         )
         response.status_code = 429
         response.headers["Retry-After"] = str(wait)
         return response
     if user is None:
-        return render(request, "login.html", None, error="Invalid email or password.")
+        return render(request, "login.html", None, error="Invalid email or password.", sso=_sso_label())
     audit(db, "login", actor=user.email, ip=ip, commit=True)
     response = RedirectResponse("/", status_code=302)
     _set_session_cookie(response, user)

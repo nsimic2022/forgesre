@@ -101,3 +101,16 @@ kubernetes:
   #   ca_pem: |
   #     -----BEGIN CERTIFICATE-----
   #     ...
+
+# auth:                      # optional sign-in with the directory or single sign-on (docs/sign-in.md)
+#   ldap:
+#     enabled: false
+#     url: "ldaps://dc1.example.local:636"
+#     bind_dn: "CN=svc-forgesre,OU=Service,DC=example,DC=local"   # password: ./forgesre settings set-secret LDAP_BIND_PASSWORD
+#     base_dn: "OU=Staff,DC=example,DC=local"
+#     groups: {admin: "", engineer: "", analyst: "", viewer: ""}
+#   oidc:
+#     enabled: false
+#     issuer: "https://login.microsoftonline.com/<tenant>/v2.0"
+#     client_id: ""                                                # secret: ./forgesre settings set-secret OIDC_CLIENT_SECRET
+#     groups: {admin: "", engineer: "", analyst: "", viewer: ""}
