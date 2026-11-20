@@ -43,6 +43,8 @@ BASE_RULES = (
     "- Never give shell commands and never tell anyone to restart, delete or change something; "
     "say what to check instead.\n"
     "- Plain English, short sentences, for a NOC operator at 3 am.\n"
+    "- vendor_docs (D1, D2…) are excerpts of manuals; use them only when they fit these facts and "
+    "cite them like [D1].\n"
     "- Answer with JSON only, exactly this shape: {shape}\n"
 )
 
@@ -91,7 +93,7 @@ TASKS: dict[str, dict[str, Any]] = {
     },
 }
 
-INCLUDE_DEFAULT = {"facts": True, "playbook": True, "similar": True, "changes": True, "syslog": False}
+INCLUDE_DEFAULT = {"facts": True, "playbook": True, "similar": True, "changes": True, "syslog": False, "docs": True}
 
 # Built-in skills: slug, name, task, alert patterns, asset types, priority, include overrides, instructions.
 BUILTIN: list[tuple[str, str, str, list[str], list[str], int, dict[str, bool], str]] = [
@@ -285,10 +287,17 @@ def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Inciden
     system = BASE_RULES.format(shape=spec["shape"]) + "\nInstructions for this kind of work:\n" + (skill.instructions or "").strip()
     if task == "ask":
         context = {"operator_question": " ".join(question.split())[:QUESTION_MAX], **context}
+    if task != "shift" and incident is not None and include.get("docs", True):
+        from app.doc_search import for_prompt
+
+        asset_type = incident.asset.type if incident.asset is not None else ""
+        docs = for_prompt(db, " ".join(filter(None, [question, incident.title, asset_type])))
+        if docs:
+            context["vendor_docs"] = docs
     context = json.loads(_short(json.dumps(sanitize(context), ensure_ascii=False, default=str)))
     user = json.dumps(context, ensure_ascii=False, default=str)
     # Too long: drop the least useful parts first, so the JSON stays whole instead of being cut.
-    for key in ("syslog", "timeline", "changes_before", "earlier_on_this_asset", "playbook", "notes"):
+    for key in ("syslog", "timeline", "vendor_docs", "changes_before", "earlier_on_this_asset", "playbook", "notes"):
         if len(user) <= CONTEXT_MAX:
             break
         context.pop(key, None)

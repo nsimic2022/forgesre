@@ -60,6 +60,9 @@ ai:
     url: http://127.0.0.1:8088/v1
     model: local
     timeout_seconds: 90 # lab 4B; raise toward 600 only for slow 14B CPU rewrites
+  embed: # document search: local embeddings (nomic-embed-text, ./forgesre fetch-llm)
+    enabled: true
+    url: http://127.0.0.1:8089/v1
   rca:
     window_minutes: 30
     max_log_lines: 20

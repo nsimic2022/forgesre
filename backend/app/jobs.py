@@ -323,6 +323,13 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload.pop("instructions", None)
                 payload["result"] = {"call_id": call.id, "status": call.status}
                 row.payload = payload
+            elif row.kind == "doc_index":
+                from app.doc_search import index_doc
+
+                # Text extraction and local embeddings (each call has its own timeout).
+                payload = dict(row.payload or {})
+                payload["result"] = index_doc(db, int(row.object_id))
+                row.payload = payload
             elif row.kind == "onboard_identify":
                 from app.onboarding import identify
 

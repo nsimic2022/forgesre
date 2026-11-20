@@ -60,7 +60,7 @@ fi
 core_inputs_hash() {
   (
     cd "$ROOT"
-    find backend/Dockerfile backend/requirements.txt backend/app agents frontend web \
+    find backend/Dockerfile backend/requirements.txt backend/app agents frontend web postgres \
       \( -path web/node_modules -o -path web/dist \) -prune -o -type f -print 2>/dev/null \
       | sort \
       | xargs -r sha256sum
@@ -217,6 +217,13 @@ fi
 if [[ "$wrote_lnms" -eq 1 ]]; then
   echo "Recreating core so it reads the new LIBRENMS_API_TOKEN."
   "${DC[@]}" up -d --no-deps --force-recreate core || true
+fi
+# 2.0: ForgeAI document search needs the small embedding model next to the LLM (profile ai).
+if [[ "$OFFLINE" -eq 0 ]] && grep -Eq '^COMPOSE_PROFILES=.*\bai\b' "$ROOT/.env" 2>/dev/null \
+   && ! ls "${FORGESRE_DATA:-$ROOT/data}"/models/embed/*.gguf >/dev/null 2>&1; then
+  echo "Fetching the embedding model for ForgeAI document search (~150 MB)..."
+  "$ROOT/scripts/fetch-llm.sh" --download-only || echo "Embedding model download failed; retry later with ./forgesre fetch-llm"
+  "${DC[@]}" up -d embed || true
 fi
 # 2.0: ForgeSRE no longer scans networks. Ranges once kept in discovery.cidrs go to LibreNMS.
 old_cidrs="$(awk '/^discovery:/{d=1;next} /^[^ #]/{d=0} d && /^  cidrs:/{c=1;sub(/^  cidrs:[ ]*/,"");print;next} d && c && /^ *- /{sub(/^ *- */,"");print;next} {c=0}' \

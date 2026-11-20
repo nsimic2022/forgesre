@@ -684,7 +684,6 @@ def test_docs_say_bundled_netbox_default_on():
 
 # Hub-verified 27 Aug 2026. Dead tag v4.4-3.2.0 is not in this list.
 _COMPOSE_IMAGE_PINS = {
-    "postgres": "postgres:16-alpine",
     "prometheus": "prom/prometheus:v2.54.1",
     "alertmanager": "prom/alertmanager:v0.27.0",
     "snmp-exporter": "prom/snmp-exporter:v0.26.0",
@@ -699,6 +698,7 @@ _COMPOSE_IMAGE_PINS = {
     "librenms": "librenms/librenms:26.10.2",
     "librenms-dispatcher": "librenms/librenms:26.10.2",
     "llm": "ghcr.io/ggml-org/llama.cpp:server-b11718",
+    "embed": "ghcr.io/ggml-org/llama.cpp:server-b11718",
     "mailserver": "ghcr.io/docker-mailserver/docker-mailserver:15.1.0",
     "roundcube": "roundcube/roundcubemail:1.6.11-apache",
 }
@@ -716,6 +716,9 @@ def test_compose_and_mailbox_image_pins():
     assert not images["llm"].endswith(":server")
     assert "v4.4-3.2.0" not in images.values()
     assert "build" in data["services"]["core"]
+    # Postgres is built from postgres:16-alpine with pgvector, so old data directories keep their collation.
+    assert data["services"]["postgres"]["build"] == "./postgres"
+    assert (ROOT / "postgres" / "Dockerfile").read_text(encoding="utf-8").startswith("#") and "FROM postgres:16-alpine" in (ROOT / "postgres" / "Dockerfile").read_text(encoding="utf-8")
     dockerfile = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
     froms = [line for line in dockerfile.splitlines() if line.startswith("FROM ")]
     # Node only builds the new UI; the runtime image is the pinned Python one.

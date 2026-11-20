@@ -516,3 +516,7 @@ def migrate(engine: Engine) -> None:
             )
         )
         _ensure_active_fingerprint_unique(conn)
+    # pgvector for document search (own transaction; optional — the search falls back to Python)
+    from app.doc_search import ensure_vector
+
+    ensure_vector(engine)

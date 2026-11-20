@@ -172,6 +172,9 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("ai.llm.url", "ai", "Model URL", "url", effective=lambda: settings.llm_url),
     _y("ai.llm.model", "ai", "Model name", effective=lambda: settings.llm_model),
     _y("ai.llm.timeout_seconds", "ai", "Model timeout (s)", "int", minimum=10, maximum=900, effective=lambda: settings.llm_timeout),
+    _y("ai.embed.enabled", "ai", "Document search (local embeddings)", "bool", effective=lambda: bool(settings.embed_url), test="embed",
+       help="Vendor manuals uploaded in Settings › ForgeAI documents; searched with a local embedding model."),
+    _y("ai.embed.url", "ai", "Embedding server URL", "url", effective=lambda: settings.embed_url or ""),
     _y("ai.rca.window_minutes", "ai", "ForgeRCA look-back (min)", "int", minimum=5, maximum=1440, effective=lambda: settings.rca_window_minutes),
     _y("ai.rca.max_log_lines", "ai", "ForgeRCA log lines", "int", minimum=1, maximum=500, effective=lambda: settings.rca_max_log_lines),
 )
@@ -348,6 +351,7 @@ def test_connection(component: str) -> dict[str, Any]:
         "glpi": api._glpi_check,
         "librenms": api._librenms_check,
         "discovery": api._discovery_check,
+        "embed": api._embed_check,
         "ldap": lambda: __import__("app.ldap_auth", fromlist=["check"]).check(),
         "oidc": lambda: __import__("app.oidc_auth", fromlist=["check"]).check(),
         "slack": lambda: _chat_test("slack"),

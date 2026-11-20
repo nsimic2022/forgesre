@@ -891,9 +891,20 @@ def format_tuning(r: dict[str, Any]) -> str:
 
 
 def cmd_forgeai(port: str, rest: list[str]) -> None:
-    """./forgesre forgeai [INC-… | tuning [skill]]"""
+    """./forgesre forgeai [INC-… | tuning [skill] | docs]"""
     jar, _me = ensure_jar(port)
     try:
+        if rest[:1] == ["docs"]:
+            data = get_json(port, jar, "/api/v1/forgeai/docs")
+            lines = [f"Document search: {'on' if data.get('embedder') else 'off'} · model {data.get('model')} · "
+                     f"{'pgvector' if data.get('pgvector') else 'search in Python (no pgvector)'}"]
+            for d in data.get("docs") or []:
+                lines.append(f"  #{d['id']:<4} {d['status']:<9} {d['pages']:>4} pages {d['chunks']:>5} chunks  {d['title']}"
+                             + (f"  ({d['error']})" if d.get("error") else ""))
+            if not data.get("docs"):
+                lines.append("  No documents. Upload in Settings › ForgeRCA / ForgeAI › Documents (Engineer).")
+            sys.stdout.write("\n".join(lines) + "\n")
+            return
         if rest[:1] == ["tuning"]:
             skills = get_json(port, jar, "/api/v1/forgeai/skills").get("skills") or []
             slugs = rest[1:2] or [s["slug"] for s in skills if s.get("task") == "incident"]

@@ -31,7 +31,7 @@ command -v git >/dev/null || { echo "git is needed to build a bundle"; exit 1; }
 core_inputs_hash() {
   (
     cd "$ROOT"
-    find backend/Dockerfile backend/requirements.txt backend/app agents frontend web \
+    find backend/Dockerfile backend/requirements.txt backend/app agents frontend web postgres \
       \( -path web/node_modules -o -path web/dist \) -prune -o -type f -print 2>/dev/null \
       | sort \
       | xargs -r sha256sum

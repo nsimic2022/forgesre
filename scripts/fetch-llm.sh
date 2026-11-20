@@ -34,6 +34,7 @@ Models (the same list as Settings › ForgeRCA / ForgeAI, where you can also swi
   qwen2.5-14b   Qwen2.5 14B Instruct Q4_K_M, 9 GB in 3 files, 16 GB RAM, minutes per answer
 
 Files go to $FORGESRE_DATA/models/ (gitignored) and data/models/active names the one to run.
+The embedding model for document search (nomic-embed-text, ~150 MB) goes to data/models/embed/.
 
 Any other single-file GGUF with FORGESRE_LLM_URL (saved as model.gguf), or by hand:
 
@@ -229,11 +230,30 @@ start_llm() {
   [[ -f "$ROOT/.env" ]] && source "$ROOT/.env"
   set +a
   echo "Starting llama.cpp (profile ai) and reloading Core..."
-  "${dc[@]}" --profile ai up -d llm
+  "${dc[@]}" --profile ai up -d llm embed
   "${dc[@]}" up -d --force-recreate core
 }
 
+# The small embedding model for ForgeAI document search (nomic-embed-text v1.5, Q8_0, ~146 MB).
+EMBED_URL="${FORGESRE_EMBED_URL:-https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.Q8_0.gguf}"
+download_embed() {
+  local dir="$MODEL_DIR/embed" dest
+  dest="$dir/$(basename "$EMBED_URL")"
+  mkdir -p "$dir"
+  if [[ -f "$dest" && "$(stat -c%s "$dest" 2>/dev/null || echo 0)" -gt 20000000 ]]; then
+    echo "Embedding model already present: $dest"
+    return 0
+  fi
+  if [[ "$OFFLINE" -eq 1 ]]; then
+    echo "Offline: no embedding model in $dir (document search stays off until one is copied there)."
+    return 0
+  fi
+  echo "Downloading the embedding model for document search (~150 MB)."
+  fetch_one "$EMBED_URL" "$dest" || { echo "Embedding model download failed; document search stays off. Retry: ./forgesre fetch-llm" >&2; return 0; }
+}
+
 download_model
+download_embed
 if [[ "$APPLY" -eq 1 ]]; then
   enable_config
   start_llm
