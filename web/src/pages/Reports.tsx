@@ -100,10 +100,11 @@ export function ReportsPage() {
           </div>
           <div style={{ flex: "1 1 340px", minWidth: 0 }}>
             <ReportSchedules rows={data.scheduled} canEdit={data.can_edit} onChanged={reload} />
-            <OutboxCard />
           </div>
         </div>
       ) : null}
+      {/* full width: the outbox has five columns and long subjects */}
+      {data ? <OutboxCard /> : null}
     </>
   );
 }

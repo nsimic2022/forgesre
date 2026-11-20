@@ -72,7 +72,7 @@ export function ForgeAiStatus() {
       {s?.last.length ? (
         <>
           <strong className="small">Last questions</strong>
-          <table className="data">
+          <div className="table-wrap"><table className="data" style={{ minWidth: 520 }}>
             <thead><tr><th style={{ width: 90 }}>When</th><th>Task · skill</th><th style={{ width: 90 }}>Time</th><th style={{ width: 100 }}>Outcome</th></tr></thead>
             <tbody>
               {s.last.map((c) => (
@@ -84,7 +84,7 @@ export function ForgeAiStatus() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </>
       ) : null}
     </Card>

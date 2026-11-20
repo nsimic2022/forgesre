@@ -170,7 +170,7 @@ export function PolicyForm({ policy, onDone }: { policy: Policy | null; onDone: 
         <p className="small faint" style={{ margin: 0 }}>
           Each step is mailed when the incident is still not acknowledged after its minutes. A recipient is a role (team, team-lead, engineer, manager, oncall) or an email address.
         </p>
-        <table className="data">
+        <div className="table-wrap"><table className="data" style={{ minWidth: 560 }}>
           <thead><tr><th style={{ width: 70 }}>On</th><th style={{ width: 160 }}>Step</th><th style={{ width: 140 }}>After (min)</th><th>Recipient</th></tr></thead>
           <tbody>
             {levels.map((l, i) => (
@@ -182,7 +182,7 @@ export function PolicyForm({ policy, onDone }: { policy: Policy | null; onDone: 
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
         <datalist id="policy-roles">{["team", "team-lead", "engineer", "manager", "oncall"].map((r) => <option key={r} value={r} />)}</datalist>
         {error ? <div className="banner error" role="alert">{error}</div> : null}
         <div className="row">
