@@ -31,11 +31,17 @@ def test_cards_join_status_links_settings_and_last_sync(monkeypatch):
 
     monkeypatch.setattr(api, "doctor_payload", lambda **kw: {"components": {
         "zabbix": {"status": "error", "why": "HTTP 401"}, "grafana": {"status": "ok", "why": ""}}})
+    client = _client("admin")
     db = SessionLocal()
-    db.add(JournalEntry(module="zabbix", action="sync", status="error", summary="Zabbix sync failed"))
+    entry = JournalEntry(module="zabbix", action="sync", status="error", summary="Zabbix sync failed")
+    db.add(entry)
     db.commit()
-    db.close()
-    data = _client("admin").get("/api/v1/integrations", headers={"host": "noc.dc.local:8080"}).json()
+    try:
+        data = client.get("/api/v1/integrations", headers={"host": "noc.dc.local:8080"}).json()
+    finally:
+        db.delete(entry)  # other tests count zabbix sync journal rows
+        db.commit()
+        db.close()
     zabbix = next(c for c in data["sources"] if c["id"] == "zabbix")
     assert zabbix["status"] == "error" and zabbix["why"] == "HTTP 401"
     assert zabbix["last_sync"]["summary"] == "Zabbix sync failed" and zabbix["sync"] == "zabbix" and zabbix["test"] == "zabbix"
