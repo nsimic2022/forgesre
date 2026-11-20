@@ -39,4 +39,15 @@ describe("IntegrationsPanel", () => {
     await waitFor(() => expect(calls).toContain("POST /api/v1/integrations/zabbix/sync"));
     expect(await screen.findByRole("button", { name: "Sync queued" })).toBeTruthy();
   });
+
+  it("does not repeat the card's reason after Test connection", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const body = url === "/api/v1/integrations" ? { sources: [zabbix], stack: [] } : { status: "error", why: "HTTP 401" };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    render(<IntegrationsPanel rows={rows} onSaved={() => undefined} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Test connection" }));
+    await waitFor(() => expect(screen.getAllByText("error")).toHaveLength(2));
+    expect(screen.getAllByText("HTTP 401")).toHaveLength(1);
+  });
 });

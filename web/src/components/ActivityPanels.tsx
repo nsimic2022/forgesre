@@ -42,8 +42,8 @@ export function OutboxCard() {
         <input className="search" type="search" aria-label="Search the outbox" placeholder="Recipient, subject, INC-…" value={q} onChange={(e) => (setQ(e.target.value), setOffset(0))} />
       </div>
       {error ? <span className="small" style={{ color: "var(--crit)" }}>{error}</span> : null}
-      <table className="data">
-        <thead><tr><th style={{ width: 90 }}>When</th><th style={{ width: 80 }}>Channel</th><th>To</th><th>About</th><th style={{ width: 110 }}>Status</th></tr></thead>
+      <div className="table-wrap"><table className="data" style={{ minWidth: 680 }}>
+        <thead><tr><th style={{ width: 90 }}>When</th><th style={{ width: 80 }}>Channel</th><th style={{ width: 200 }}>To</th><th>About</th><th style={{ width: 110 }}>Status</th></tr></thead>
         <tbody>
           {(data?.rows ?? []).map((r) => (
             <tr key={r.id}>
@@ -58,7 +58,7 @@ export function OutboxCard() {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
       {data && !(data.rows ?? []).length ? <span className="muted">Nothing here.</span> : null}
       <Pager total={data?.total ?? 0} offset={offset} setOffset={setOffset} />
       <span className="small faint">“generated” means SMTP is off, so the mail was written but not sent. Same list: <code className="mono">./forgesre journal notification</code>.</span>
@@ -87,19 +87,19 @@ export function JournalPanel() {
         {[["", "All"], ["error", "Errors"]].map(([v, l]) => <button key={v} className="btn" aria-pressed={status === v} onClick={() => setStatus(v)}>{l}</button>)}
       </div>
       {error ? <span className="small" style={{ color: "var(--crit)" }}>{error}</span> : null}
-      <table className="data">
+      <div className="table-wrap"><table className="data" style={{ minWidth: 640 }}>
         <thead><tr><th style={{ width: 90 }}>When</th><th style={{ width: 150 }}>Module</th><th>What happened</th><th style={{ width: 80 }}>Result</th></tr></thead>
         <tbody>
           {(data?.entries ?? []).map((e) => (
             <tr key={e.id}>
               <td className="small muted">{clock(e.at)}</td>
-              <td className="small mono">{e.module}.{e.action}</td>
+              <td className="small mono" style={{ overflowWrap: "anywhere" }}>{e.module}.{e.action}</td>
               <td className="small">{e.summary}{e.detail && e.status === "error" ? <div className="small faint" style={{ wordBreak: "break-word" }}>{e.detail.slice(0, 300)}</div> : null}</td>
               <td><Chip tone={e.status === "ok" ? "ok" : e.status === "error" ? "crit" : "warn"}>{e.status}</Chip></td>
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </Card>
   );
 }
@@ -118,19 +118,19 @@ export function AuditPanel() {
       <span className="small faint">Every change to rules, playbooks, escalation, noise filters, settings, users, assets and incidents, with who made it.</span>
       <input className="search" type="search" aria-label="Search the audit log" placeholder="Person, action, object…" value={q} onChange={(e) => (setQ(e.target.value), setOffset(0))} />
       {error ? <span className="small" style={{ color: "var(--crit)" }}>{error}</span> : null}
-      <table className="data">
+      <div className="table-wrap"><table className="data" style={{ minWidth: 680 }}>
         <thead><tr><th style={{ width: 90 }}>When</th><th style={{ width: 170 }}>Who</th><th style={{ width: 170 }}>Action</th><th>On</th></tr></thead>
         <tbody>
           {(data?.rows ?? []).map((r) => (
             <tr key={r.id}>
               <td className="small muted">{clock(r.at)}</td>
               <td className="small" style={{ wordBreak: "break-word" }}>{r.actor}</td>
-              <td className="small mono">{r.action}</td>
+              <td className="small mono" style={{ overflowWrap: "anywhere" }}>{r.action}</td>
               <td className="small" style={{ wordBreak: "break-word" }}>{r.object}{Object.keys(r.data).length ? <div className="faint">{JSON.stringify(r.data).slice(0, 160)}</div> : null}</td>
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
       <Pager total={data?.total ?? 0} offset={offset} setOffset={setOffset} />
     </Card>
   );

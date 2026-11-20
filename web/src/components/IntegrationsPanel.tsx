@@ -17,13 +17,13 @@ function OneCard({ card, rows, onSaved }: { card: IntegrationCard; rows: Setting
   const mine = card.settings.map((k) => rows.find((r) => r.key === k)).filter((r): r is SettingRow => Boolean(r));
   const runSync = () => postJson(`/api/v1/integrations/${card.sync}/sync`, {}).then(() => setSync("queued")).catch((e: Error) => setSync(e.message));
   return (
-    <section className="card" style={{ gap: 10 }} aria-label={card.label}>
+    <section className="card" style={{ gap: 10, minWidth: 0 }} aria-label={card.label}>
       <div className="row" style={{ justifyContent: "space-between" }}>
         <h3 style={{ margin: 0, fontSize: 15 }}>{card.label}</h3>
         <Chip tone={tone(card.status)}>{card.status}</Chip>
       </div>
       <span className="small muted">{card.role}</span>
-      {card.why ? <span className="small">{card.why}</span> : null}
+      {card.why ? <span className="small" style={{ overflowWrap: "anywhere" }}>{card.why}</span> : null}
       {card.last_sync ? (
         <span className="small faint">
           Last sync {clock(card.last_sync.at)} · <span style={{ color: card.last_sync.status === "ok" ? "var(--ok)" : "var(--crit)" }}>{card.last_sync.status}</span>
@@ -35,7 +35,7 @@ function OneCard({ card, rows, onSaved }: { card: IntegrationCard; rows: Setting
         {card.links.map((l) => (
           <a key={l.url} className="btn" href={l.url} target="_blank" rel="noopener noreferrer">Open {l.label}</a>
         ))}
-        {card.test ? <TestButton component={card.test} label="Test connection" /> : null}
+        {card.test ? <TestButton component={card.test} label="Test connection" known={card.why} /> : null}
         {card.sync ? (
           <button className="btn" type="button" disabled={sync === "queued"} onClick={runSync}>{sync === "queued" ? "Sync queued" : "Sync now"}</button>
         ) : null}
@@ -44,7 +44,7 @@ function OneCard({ card, rows, onSaved }: { card: IntegrationCard; rows: Setting
       {sync !== "idle" && sync !== "queued" ? <span className="small" role="alert" style={{ color: "var(--crit)" }}>{sync}</span> : null}
       {open ? (
         <div>
-          {mine.map((row) => (row.editable ? <SettingField key={row.key} row={row} onSaved={onSaved} /> : <ReadOnlyRow key={row.key} row={row} />))}
+          {mine.map((row) => (row.editable ? <SettingField key={row.key} row={row} onSaved={onSaved} compact /> : <ReadOnlyRow key={row.key} row={row} compact />))}
         </div>
       ) : null}
     </section>

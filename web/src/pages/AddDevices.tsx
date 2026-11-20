@@ -212,7 +212,7 @@ function ScanNetwork() {
       <Card title={`Found · ${fresh.length} new`}>
         {rows.length === 0 ? <span className="muted">Nothing found yet. Scan a range above.</span> : null}
         {rows.length ? (
-          <table className="data">
+          <div className="table-wrap"><table className="data" style={{ minWidth: 760 }}>
             <thead><tr><th>Address</th><th>Name</th><th>Looks like</th><th>Answers on</th><th>Seen</th><th style={{ width: 170 }}></th></tr></thead>
             <tbody>
               {rows.map((r) => (
@@ -233,7 +233,7 @@ function ScanNetwork() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         ) : null}
       </Card>
     </>
