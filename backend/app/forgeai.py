@@ -161,6 +161,37 @@ def pick_skill(db: Session, task: str, incident: Incident | None, slug: str = ""
     return next((r for r in rows if not r.match_alerts and not r.match_types), rows[0] if rows else None)
 
 
+INC_LONG = re.compile(r"\b(INC-\d+)_[\d.]+_[\d:]+")
+
+
+def _short(text: Any) -> str:
+    """INC-0003_09.11.2026_12:01 -> INC-0003, so the model repeats the short number."""
+    return INC_LONG.sub(r"\1", str(text or ""))
+
+
+def _when(value: Any) -> str:
+    """A time as people read it: appliance time zone, minutes only ("09.11. 12:01")."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    from app.settings import settings
+
+    if not value:
+        return ""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return value[:16]
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    try:
+        zone = ZoneInfo(settings.timezone or "UTC")
+    except Exception:
+        zone = ZoneInfo("UTC")
+    return value.astimezone(zone).strftime("%d.%m. %H:%M")
+
+
 def _incident_context(db: Session, incident: Incident, include: dict[str, Any]) -> dict[str, Any]:
     from app.changes import changes_before
     from app.incident_view import similar_before
@@ -168,8 +199,8 @@ def _incident_context(db: Session, incident: Incident, include: dict[str, Any]) 
     asset = incident.asset
     ctx: dict[str, Any] = {
         "incident": {"number": incident.number.split("_")[0], "title": incident.title, "severity": incident.severity,
-                     "status": incident.status, "started_at": incident.started_at.isoformat() if incident.started_at else "",
-                     "acknowledged_by": incident.ack_by or "", "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else ""},
+                     "status": incident.status, "started": _when(incident.started_at),
+                     "acknowledged_by": incident.ack_by or "", "resolved": _when(incident.resolved_at)},
         "asset": {"hostname": asset.hostname, "ip": asset.ip, "type": asset.type, "environment": asset.environment,
                   "owner": asset.owner} if asset else None,
     }
@@ -185,7 +216,7 @@ def _incident_context(db: Session, incident: Incident, include: dict[str, Any]) 
     if include.get("playbook", True) and incident.playbook is not None:
         ctx["playbook"] = [str(s.get("title") if isinstance(s, dict) else s) for s in incident.playbook.steps or []][:10]
     if include.get("similar", True):
-        ctx["earlier_on_this_asset"] = [{"started_at": s["started_at"], "confirmed_cause": s["root_cause"], "minutes": s["minutes"]}
+        ctx["earlier_on_this_asset"] = [{"started": _when(s["started_at"]), "confirmed_cause": s["root_cause"], "minutes": s["minutes"]}
                                         for s in similar_before(db, incident) if s["root_cause"]]
     if include.get("changes", True):
         ctx["changes_before"] = [{"title": c.get("title"), "kind": c.get("kind"), "minutes_before": c.get("before_min")}
@@ -195,7 +226,7 @@ def _incident_context(db: Session, incident: Incident, include: dict[str, Any]) 
 
         ctx["notes"] = [n["body"] for n in (note_as_dict(r) for r in notes_for(db, incident))][:15]
         ctx["confirmed_cause"] = incident.root_cause or ""
-        ctx["timeline"] = [f"{i.get('at', '')} {i.get('title', '')}" for i in (incident.timeline or [])][:20]
+        ctx["timeline"] = [f"{_when(i.get('at'))} {_short(i.get('title'))}" for i in (incident.timeline or [])][:20]
     if include.get("syslog", False):
         from app.dc_noc import incident_syslog_lines
 
@@ -210,7 +241,7 @@ def _shift_context(db: Session, hours: int = 12) -> dict[str, Any]:
             .order_by(Incident.started_at.desc()).limit(40).all())
     return {"hours": hours, "incidents": [
         {"number": i.number.split("_")[0], "title": i.title, "severity": i.severity, "status": i.status,
-         "host": i.asset.hostname if i.asset else "", "started_at": i.started_at.isoformat() if i.started_at else "",
+         "host": i.asset.hostname if i.asset else "", "started": _when(i.started_at),
          "acknowledged_by": i.ack_by or "", "confirmed_cause": i.root_cause or ""} for i in rows]}
 
 
@@ -224,7 +255,7 @@ def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Inciden
         include["postmortem"] = True
     context = _shift_context(db) if task == "shift" else _incident_context(db, incident, include)
     system = BASE_RULES.format(shape=spec["shape"]) + "\nInstructions for this kind of work:\n" + (skill.instructions or "").strip()
-    context = sanitize(context)
+    context = json.loads(_short(json.dumps(sanitize(context), ensure_ascii=False, default=str)))
     user = json.dumps(context, ensure_ascii=False, default=str)
     # Too long: drop the least useful parts first, so the JSON stays whole instead of being cut.
     for key in ("syslog", "timeline", "changes_before", "earlier_on_this_asset", "playbook", "notes"):

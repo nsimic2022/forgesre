@@ -134,6 +134,17 @@ def _incident_skills(db: Session) -> list[dict[str, str]]:
     return [{"slug": r.slug, "name": r.name} for r in rows]
 
 
+def _forgeai_last(db: Session, incident: Incident) -> dict[str, Any] | None:
+    """The latest cause-and-checks question for this incident, so a rejected or failed one is visible."""
+    from app.models import ForgeAiCall
+
+    row = (db.query(ForgeAiCall).filter(ForgeAiCall.incident_id == incident.id, ForgeAiCall.task == "incident",
+                                        ForgeAiCall.status != "trial").order_by(ForgeAiCall.id.desc()).first())
+    if row is None:
+        return None
+    return {"status": row.status, "reason": row.reason, "at": row.created_at.isoformat() if row.created_at else None, "skill": row.skill_slug}
+
+
 def _forgeai_extras(db: Session, incident: Incident) -> dict[str, Any]:
     """Latest used explain / postmortem answers for this incident."""
     from app.models import ForgeAiCall
@@ -213,6 +224,7 @@ def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]
             "call_id": (ai.result or {}).get("call_id") if ai else None,
             "skills": _incident_skills(db),
             "extras": _forgeai_extras(db, incident),
+            "last": _forgeai_last(db, incident),
         },
         "evidence": [
             {"id": ev.evidence_id, "source": ev.source or ev.kind, "title": ev.title, "query": ev.query}
