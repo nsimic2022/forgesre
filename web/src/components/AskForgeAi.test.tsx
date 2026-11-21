@@ -60,4 +60,26 @@ describe("Ask ForgeAI", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ask ForgeAI" }));
     await waitFor(() => expect(posts.at(-1)?.body.cloud).toBe(true));
   });
+
+  it("asks the cloud model for a second opinion and shows its verdict", async () => {
+    const posts: string[] = [];
+    let calls: unknown[] = [auto];
+    const critic = { ...auto, id: 5, task: "critic", status: "trial", model: "gpt-test", answer: { verdict: "partly", why: "The second check is vague.", problems: ["check is vague"], reviews_call: 1 } };
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") posts.push(url);
+      const body =
+        url === "/api/v1/me" ? { email: "e@dc.local", role: "engineer", name: "E" }
+        : url === "/api/v1/forgeai/status" ? { cloud: { enabled: true, ready: true, why: "", provider: "openai", model: "gpt-test", host: "api.openai.com", can_use: true } }
+        : url === "/api/v1/forgeai/skills" ? { skills: [] }
+        : url.endsWith("/critique") ? ((calls = [critic, auto]), { job: 11 })
+        : url === "/api/v1/forgeai/jobs/11" ? { status: "done", error: "", call_id: 5 }
+        : { calls };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    render(<AskForgeAi number="INC-0003" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Second opinion (openai)" }));
+    expect(await screen.findByText("The second check is vague.")).toBeTruthy();
+    expect(posts).toContain("/api/v1/forgeai/calls/1/critique");
+    expect(screen.queryByRole("button", { name: "Second opinion (openai)" })).toBeNull();
+  });
 });

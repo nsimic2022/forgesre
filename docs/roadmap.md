@@ -35,8 +35,9 @@ Discord, the ForgeAI morning digest, 30-day capacity on the asset card.
 
 Status: the investigator with read-only tools and evidence ids, the local knowledge search
 (lexical, own confirmed incidents and playbooks), skill tuning and replay against confirmed causes
-are done ([llm.md](llm.md)). Still open: pgvector semantic search with a local embedding model,
-uploaded vendor documents, the cloud-only critic pass, and the same tools on the MCP server.
+are done ([llm.md](llm.md)), and so are uploaded vendor documents with local embeddings and
+pgvector, the optional cloud model with its second opinion, and the investigator tools on the MCP
+server ([mcp.md](mcp.md)).
 
 Agreed direction, after the new Investigations page exists (it shows ratings and accuracy).
 

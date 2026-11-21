@@ -45,6 +45,7 @@ PROTOCOL = (
     "  interfaces {} - interfaces that are down on this device (LibreNMS)\n"
     "  similar {} - our resolved incidents most like this one, with the confirmed cause\n"
     "  asset {} - the asset, its parent and whether the parent has an open incident\n"
+    '  docs {"query": "words"} - excerpts of uploaded vendor manuals and runbooks\n'
 )
 
 
@@ -165,6 +166,12 @@ def run_tool(db: Session, incident: Incident, name: str, args: dict[str, Any]) -
                 Incident.asset_id == parent.id, Incident.status.in_(ACTIVE_INCIDENT_STATUSES)).count() > 0
             return "asset", (f"{asset.hostname} type {asset.type}, owner {asset.owner or 'unknown'}; parent "
                              + (f"{parent.hostname} ({'has an open incident' if open_parent else 'no open incident'})" if parent else "none recorded"))
+        if name == "docs":
+            from app.doc_search import for_prompt
+
+            query = str(args.get("query") or incident.title or "")[:200]
+            hits = for_prompt(db, query, k=3)
+            return "docs", " | ".join(f"{h['doc']} p.{h['page']}: {h['text'][:300]}" for h in hits) or "no vendor document matches"
     except Exception as exc:  # a broken source is evidence too, not a crash
         return name, f"{name} not available: {str(exc)[:160]}"
     return "tool", f"unknown tool {name!r}"

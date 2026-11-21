@@ -29,7 +29,9 @@ from app.settings import settings
 INSTRUCTIONS = (
     "ForgeSRE is the NOC/SRE console of an on-premise data center. Use noc_overview first to see what is "
     "open, get_incident for one incident (ForgeRCA facts, timeline, what changed before), search_assets "
-    "and asset_dependencies for inventory, on_call_now, slo_status and checks_status. All tools are read-only."
+    "and asset_dependencies for inventory, on_call_now, slo_status and checks_status. To dig into one incident "
+    "use the investigator tools: incident_metric_names then incident_metric, incident_logs, incident_interfaces, "
+    "similar_incidents, and search_vendor_docs. All tools are read-only."
 )
 
 
@@ -158,7 +160,61 @@ def checks_status() -> dict[str, Any]:
     return {"results": data["results"], "heartbeats": [{k: h[k] for k in ("name", "every_hours", "last_at")} for h in data["heartbeats"]]}
 
 
-TOOLS = (noc_overview, list_incidents, get_incident, search_assets, asset_dependencies, on_call_now, slo_status, checks_status)
+def _investigator_tool(number: str, name: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Run one of ForgeAI's investigator tools for an incident (Prometheus, Loki, LibreNMS reads with timeouts)."""
+    from sqlalchemy.orm import joinedload
+
+    from app.forgeai_investigator import run_tool
+
+    with SessionLocal() as db:
+        row = db.query(Incident).options(joinedload(Incident.asset)).filter_by(number=number.strip()).first()
+        if row is None:
+            return {"error": f"no incident {number}"}
+        source, text = run_tool(db, row, name, args)
+    return {"incident": row.number, "source": source, "result": text}
+
+
+def incident_metric_names(number: str) -> dict[str, Any]:
+    """Metric names incident_metric can read for this incident's asset."""
+    from sqlalchemy.orm import joinedload
+
+    from app.forgeai_investigator import metric_names
+
+    with SessionLocal() as db:
+        row = db.query(Incident).options(joinedload(Incident.asset)).filter_by(number=number.strip()).first()
+        return {"error": f"no incident {number}"} if row is None else {"incident": row.number, "metrics": metric_names(row)}
+
+
+def incident_metric(number: str, name: str) -> dict[str, Any]:
+    """One metric of the incident's asset around the alarm: first, min, max, last (Prometheus)."""
+    return _investigator_tool(number, "metric", {"name": name})
+
+
+def incident_logs(number: str, contains: str = "") -> dict[str, Any]:
+    """Up to 15 log lines of the incident's host around the alarm (Loki), optionally containing a word."""
+    return _investigator_tool(number, "logs", {"contains": contains})
+
+
+def incident_interfaces(number: str) -> dict[str, Any]:
+    """Interfaces that are down while enabled on the incident's device (LibreNMS)."""
+    return _investigator_tool(number, "interfaces", {})
+
+
+def similar_incidents(number: str) -> dict[str, Any]:
+    """Resolved incidents most like this one, with the cause a person confirmed."""
+    return _investigator_tool(number, "similar", {})
+
+
+def search_vendor_docs(query: str) -> dict[str, Any]:
+    """Excerpts of uploaded vendor manuals and runbooks closest to the query (local search)."""
+    from app.doc_search import for_prompt
+
+    with SessionLocal() as db:
+        return {"hits": for_prompt(db, query, k=5)}
+
+
+TOOLS = (noc_overview, list_incidents, get_incident, search_assets, asset_dependencies, on_call_now, slo_status, checks_status,
+         incident_metric_names, incident_metric, incident_logs, incident_interfaces, similar_incidents, search_vendor_docs)
 
 
 def build_server() -> MCPServer:

@@ -343,3 +343,29 @@ def test_anthropic_provider_shapes_the_request(monkeypatch):
     assert model.complete_json("rules", "facts", 50) == {"answer": "ok"}
     assert seen["url"] == "https://api.anthropic.com/v1/messages" and seen["headers"]["x-api-key"] == "sk-x"
     assert seen["body"]["system"] == "rules" and seen["body"]["messages"][0]["content"] == "facts"
+
+
+def test_second_opinion_from_the_cloud_model(db, monkeypatch):
+    from app import cloud_llm
+    from app.models import ForgeAiCall
+    from app.settings import settings
+
+    row = _incident(db)
+    analyst, engineer = _client("analyst"), _client("engineer")
+    monkeypatch.setattr(settings, "yaml", {**settings.yaml, "ai": {"enabled": True, "llm": {"url": "http://127.0.0.1:8088/v1"}}})
+    monkeypatch.setattr(forgeai, "_provider", lambda: FakeLLM(GOOD))
+    local = forgeai.run(db, "incident", row, actor="system")
+    assert local.status == "used"
+    assert engineer.post(f"/api/v1/forgeai/calls/{local.id}/critique").status_code == 409  # cloud off
+    monkeypatch.setattr(settings, "yaml", {**settings.yaml, "ai": {"enabled": True, "llm": {"url": "http://127.0.0.1:8088/v1"},
+                                                                    "cloud": {"enabled": True, "provider": "openai", "model": "gpt-test"}}})
+    monkeypatch.setattr(type(settings), "cloud_api_key", property(lambda self: "sk-x"))
+    assert analyst.post(f"/api/v1/forgeai/calls/{local.id}/critique").status_code == 403
+    queued = engineer.post(f"/api/v1/forgeai/calls/{local.id}/critique").json()
+    fake = FakeLLM({"verdict": "Partly", "why": "The cause fits; the second check is vague.", "problems": ["second check is vague"]})
+    monkeypatch.setattr(cloud_llm, "provider", lambda: fake)
+    _run_only(db, queued["job"])
+    db.expire_all()
+    critic = db.query(ForgeAiCall).filter_by(incident_id=row.id, task="critic").one()
+    assert critic.status == "trial" and critic.answer["verdict"] == "partly" and critic.answer["reviews_call"] == local.id
+    assert "answer_under_review" in fake.calls[0][1] and critic.endpoint.startswith("cloud:openai")

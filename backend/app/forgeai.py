@@ -84,6 +84,13 @@ TASKS: dict[str, dict[str, Any]] = {
         "lists": {"not_in_facts": (4, 200)},
         "max_tokens": 500,
     },
+    "critic": {
+        "label": "Second opinion",
+        "shape": '{"verdict": "agree|partly|disagree", "why": "1-3 sentences", "problems": ["claim not supported by the facts"], "better_cause": "only if you disagree"}',
+        "fields": {"verdict": 12, "why": 600},
+        "lists": {"problems": (4, 240)},
+        "max_tokens": 500,
+    },
     "shift": {
         "label": "Shift summary",
         "shape": '{"summary": "3-5 sentences", "still_open": ["item"], "watch": ["item"]}',
@@ -413,6 +420,61 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
                    f"{' (' + call.reason + ')' if call.reason else ''} in {call.duration_ms} ms",
            object_type="incident" if incident is not None else "forgeai", object_id=incident.number if incident is not None else task)
     return call
+
+
+CRITIC_SYSTEM = (
+    "You review another model's answer about one data-center incident. You get the same facts it got "
+    "and its answer under answer_under_review. Judge only against the facts: is the cause supported, "
+    "are the first checks sensible and safe, is anything invented? Do not add new facts.\n"
+    "- verdict: agree (supported and useful), partly (some claims unsupported or checks weak), "
+    "disagree (the cause does not follow from the facts).\n"
+    "- problems: each unsupported or wrong claim, short. better_cause: only when you disagree, from the facts.\n"
+    "- Answer with JSON only, exactly this shape: {shape}"
+)
+
+
+def critique(db: Session, call: ForgeAiCall, *, actor: str) -> ForgeAiCall:
+    """Second opinion: the paid cloud model checks a local "cause and first checks" answer.
+
+    Only an Engineer starts it (one call at a time, audited by the API); it sends the reviewed call's
+    own prompt (already sanitised) plus its answer. The result is a trial ForgeAiCall of task
+    "critic" on the same incident; ``answer.reviews_call`` points at the reviewed call.
+    """
+    from app.cloud_llm import provider as cloud_provider
+    from app.settings import settings
+
+    if call.task != "incident" or not call.answer or call.status not in {"used", "trial"}:
+        raise ValueError("only a checked 'cause and first checks' answer can get a second opinion")
+    spec = TASKS["critic"]
+    system = CRITIC_SYSTEM.replace("{shape}", spec["shape"])
+    reviewed = {k: call.answer.get(k) for k in ("cause", "first_checks", "for_shift_lead")}
+    user = (call.user_prompt or "")[:CONTEXT_MAX] + "\n" + json.dumps({"answer_under_review": reviewed}, ensure_ascii=False)
+    row = ForgeAiCall(incident_id=call.incident_id, task="critic", skill_slug=call.skill_slug, skill_version=call.skill_version,
+                      system_prompt=system, user_prompt=user, actor=actor, endpoint=f"cloud:{settings.cloud_provider} {settings.cloud_url}")
+    model = cloud_provider()
+    started = time.monotonic()
+    parsed = model.complete_json(system, user, spec["max_tokens"])
+    row.duration_ms = int(getattr(model, "last_ms", 0) or (time.monotonic() - started) * 1000)
+    row.raw_response = str(getattr(model, "last_raw", "") or "")
+    row.model = model.get_model() or ""
+    if parsed is None:
+        row.status, row.reason = "error", str(getattr(model, "last_error", "") or "no answer")
+    else:
+        answer, why = check_answer("critic", parsed, user)
+        verdict = str((answer or {}).get("verdict", "")).lower()
+        if not why and verdict not in {"agree", "partly", "disagree"}:
+            why = "the verdict is not agree, partly or disagree"
+        if answer:
+            answer["verdict"] = verdict
+            better = " ".join(str(parsed.get("better_cause") or "").split())[:400]
+            if better and verdict == "disagree":
+                answer["better_cause"] = better
+            answer["reviews_call"] = call.id
+        row.answer = answer or parsed
+        row.status, row.reason = ("rejected", why) if why else ("trial", "")
+    db.add(row)
+    db.commit()
+    return row
 
 
 def store_incident_answer(db: Session, incident: Incident, call: ForgeAiCall, skill: ForgeAiSkill | None, actor: str) -> Investigation:

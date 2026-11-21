@@ -773,6 +773,32 @@ def forgeai_ask_trial(number: str, body: ForgeAiQuestion, db: Session = Depends(
     return {"queued": True, "job": getattr(job, "id", None), "task": task}
 
 
+@router.post("/forgeai/calls/{call_id}/critique")
+def forgeai_critique_call(call_id: int, db: Session = Depends(get_db), user: User = Depends(require("ai_cloud"))) -> dict:
+    """Engineer: ask the paid cloud model for a second opinion on one answer (background job, audited)."""
+    from uuid import uuid4
+
+    from app.cloud_llm import not_ready
+    from app.forgeai import JOB_KIND
+    from app.jobs import enqueue
+    from app.models import ForgeAiCall
+
+    why = not_ready()
+    if why:
+        raise HTTPException(status_code=409, detail=f"cloud model not available: {why}")
+    row = db.get(ForgeAiCall, call_id)
+    if row is None or row.incident_id is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if row.task != "incident" or row.status not in {"used", "trial"}:
+        raise HTTPException(status_code=400, detail="only a checked 'cause and first checks' answer can get a second opinion")
+    incident = db.get(Incident, row.incident_id)
+    job = enqueue(db, JOB_KIND, f"{incident.number}#critic-{uuid4().hex[:8]}", object_type="incident",
+                  payload={"task": "critic", "call_id": row.id, "actor": user.email, "cloud": True, "trial": True})
+    audit(db, "forgeai.cloud", actor=user.email, object_type="incident", object_id=incident.number,
+          data={"task": "critic", "call_id": row.id, "provider": settings.cloud_provider, "model": settings.cloud_model}, commit=True)
+    return {"queued": True, "job": getattr(job, "id", None)}
+
+
 @router.post("/forgeai/calls/{call_id}/use")
 def forgeai_use_call(call_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
     """Engineer: make a checked trial answer (another skill) this incident's ForgeAI answer."""
