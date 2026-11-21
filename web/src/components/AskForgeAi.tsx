@@ -22,6 +22,13 @@ export function AnswerView({ call }: { call: Call }) {
       {list("first_checks").length ? <ol style={{ margin: 0, paddingLeft: 18 }}>{list("first_checks").map((c, i) => <li key={i}>{c}</li>)}</ol> : null}
       {a.for_shift_lead ? <span className="small muted">For the shift lead: {String(a.for_shift_lead)}</span> : null}
       {a.answer ? <span style={{ lineHeight: 1.6 }}>{String(a.answer)}</span> : null}
+      {a.verdict ? (
+        <span>
+          <Chip tone={a.verdict === "agree" ? "ok" : a.verdict === "partly" ? "warn" : "crit"}>{String(a.verdict)}</Chip> {String(a.why ?? "")}
+        </span>
+      ) : null}
+      {list("problems").length ? <ul style={{ margin: 0, paddingLeft: 18 }}>{list("problems").map((c, i) => <li key={i} className="small">{c}</li>)}</ul> : null}
+      {a.better_cause ? <span className="small"><span className="faint">Cause it would suggest: </span>{String(a.better_cause)}</span> : null}
       {list("not_in_facts").length ? (
         <span className="small muted">Not in the facts: {list("not_in_facts").join(" · ")}</span>
       ) : null}
@@ -87,7 +94,7 @@ export function AskForgeAi({ number }: { number: string }) {
   const automatic = (calls ?? []).find((c) => c.task === "incident" && c.status !== "trial") ?? null;
   const compared = (calls ?? []).find((c) => c.id === compareId) ?? null;
   const asked = (calls ?? []).find((c) => c.id === askedId) ?? null;
-  const history = (calls ?? []).filter((c) => c.status === "trial" || c.task === "ask" || c.reason.startsWith("chosen by"));
+  const history = (calls ?? []).filter((c) => c.task !== "critic" && (c.status === "trial" || c.task === "ask" || c.reason.startsWith("chosen by")));
 
   const send = async (body: { skill: string; question: string; cloud?: boolean }, label: string, done: (id: number | null) => void) => {
     setBusy(label);
@@ -102,6 +109,36 @@ export function AskForgeAi({ number }: { number: string }) {
       setBusy("");
     }
   };
+  const critics = (id: number) => (calls ?? []).filter((c) => c.task === "critic" && (c.answer as { reviews_call?: number })?.reviews_call === id);
+  const secondOpinion = async (id: number) => {
+    setBusy(`critic-${id}`);
+    setError("");
+    try {
+      const { job } = await postJson<{ job: number }>(`/api/v1/forgeai/calls/${id}/critique`, {});
+      await waitForCall(job);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+  const Opinion = ({ call }: { call: Call }) => (
+    <>
+      {critics(call.id).map((c) => (
+        <div key={c.id} className="cell-stack" style={{ gap: 4, borderLeft: "3px solid var(--warn)", paddingLeft: 10 }}>
+          <span className="small faint">Second opinion · {c.model} (cloud) · {clock(c.at)}</span>
+          <AnswerView call={c} />
+        </div>
+      ))}
+      {cloudOk && call.status !== "rejected" && call.status !== "error" && !critics(call.id).length ? (
+        <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => void secondOpinion(call.id)}
+          title={`Sends this answer and its facts to ${cloud?.host ?? "the cloud provider"}`}>
+          {busy === `critic-${call.id}` ? "Asking the cloud model…" : `Second opinion (${cloud?.provider ?? "cloud"})`}
+        </button>
+      ) : null}
+    </>
+  );
   const use = (id: number) =>
     postJson(`/api/v1/forgeai/calls/${id}/use`, {}).then(load).catch((e: Error) => setError(e.message));
 
@@ -132,6 +169,7 @@ export function AskForgeAi({ number }: { number: string }) {
                   skill {automatic.skill} · {automatic.model || "no model"} · {(automatic.duration_ms / 1000).toFixed(1)} s · {clock(automatic.at)}
                 </span>
                 <AnswerView call={automatic} />
+                <Opinion call={automatic} />
                 <CallLog calls={[automatic]} />
               </>
             ) : <span className="muted">ForgeAI did not answer this incident on its own (it was off, or the incident is older).</span>}
@@ -154,6 +192,7 @@ export function AskForgeAi({ number }: { number: string }) {
               <div className="cell-stack" style={{ gap: 6, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
                 <span className="small faint">Skill {compared.skill} · {(compared.duration_ms / 1000).toFixed(1)} s · {clock(compared.at)}</span>
                 <AnswerView call={compared} />
+                <Opinion call={compared} />
                 <div className="row" style={{ justifyContent: "space-between" }}>
                   {canUse && compared.status === "trial" ? (
                     <button className="btn" type="button" onClick={() => void use(compared.id)}>Use this answer</button>

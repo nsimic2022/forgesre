@@ -317,10 +317,19 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                     target = db.query(Incident).options(joinedload(Incident.asset)).filter_by(number=number).first()
                     if target is None:
                         raise RuntimeError(f"incident {row.object_id} not found")
-                call = forgeai.run(db, str(payload.get("task") or "incident"), target, skill_slug=str(payload.get("skill") or ""),
-                                   actor=str(payload.get("actor") or "system"), trial=bool(payload.get("trial")),
-                                   instructions=payload.get("instructions"), question=str(payload.get("question") or ""),
-                                   cloud=bool(payload.get("cloud")))
+                if payload.get("task") == "critic":
+                    # second opinion from the cloud model on one earlier answer (forgeai.critique)
+                    from app.models import ForgeAiCall
+
+                    reviewed = db.get(ForgeAiCall, int(payload.get("call_id") or 0))
+                    if reviewed is None:
+                        raise RuntimeError("the answer to review is gone")
+                    call = forgeai.critique(db, reviewed, actor=str(payload.get("actor") or "system"))
+                else:
+                    call = forgeai.run(db, str(payload.get("task") or "incident"), target, skill_slug=str(payload.get("skill") or ""),
+                                       actor=str(payload.get("actor") or "system"), trial=bool(payload.get("trial")),
+                                       instructions=payload.get("instructions"), question=str(payload.get("question") or ""),
+                                       cloud=bool(payload.get("cloud")))
                 payload.pop("instructions", None)
                 payload["result"] = {"call_id": call.id, "status": call.status}
                 row.payload = payload

@@ -49,5 +49,14 @@ To revoke access, set a new token (`./forgesre settings set-secret MCP_TOKEN`) o
 | `on_call_now` | Name and window of the person on call |
 | `slo_status` | SLO availability, error budget, burn rate |
 | `checks_status` | Certificate expiry, ForgeSRE backup age, heartbeats |
+| `incident_metric_names` | Metric names `incident_metric` can read for the incident's asset |
+| `incident_metric` | One metric around the alarm: first, min, max, last (Prometheus) |
+| `incident_logs` | Up to 15 log lines of the host around the alarm, optionally containing a word (Loki) |
+| `incident_interfaces` | Interfaces down while enabled on the device (LibreNMS) |
+| `similar_incidents` | Resolved incidents most like this one, with the confirmed cause |
+| `search_vendor_docs` | Excerpts of uploaded vendor manuals and runbooks (local search) |
+
+The last six are ForgeAI's investigator tools (`app/forgeai_investigator.run_tool`): the same
+reads, with the same timeouts; a source that does not answer comes back as text, not an error.
 
 Built on the official MCP Python SDK, which negotiates the protocol version with the client.

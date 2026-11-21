@@ -60,7 +60,8 @@ def test_tools_are_read_only_and_answer(monkeypatch):
             assert init.status_code == 200 and init.json()["result"]["serverInfo"]["name"] == "forgesre"
             tools = _rpc(client, "tools/list", headers=auth).json()["result"]["tools"]
             names = {t["name"] for t in tools}
-            assert names == {"noc_overview", "list_incidents", "get_incident", "search_assets", "asset_dependencies", "on_call_now", "slo_status", "checks_status"}
+            assert names == {"noc_overview", "list_incidents", "get_incident", "search_assets", "asset_dependencies", "on_call_now", "slo_status", "checks_status",
+                             "incident_metric_names", "incident_metric", "incident_logs", "incident_interfaces", "similar_incidents", "search_vendor_docs"}
             assert all(t["annotations"]["readOnlyHint"] is True for t in tools)
 
             def call(name, args=None):
@@ -76,5 +77,11 @@ def test_tools_are_read_only_and_answer(monkeypatch):
             assert deps["behind"] == [f"mcp-db-{tag}"]
             assert "counts" in call("noc_overview") and "slos" in call("slo_status")
             assert call("get_incident", {"number": "INC-NOPE"}) == {"error": "no incident INC-NOPE"}
+            # investigator tools: same reads as ForgeAI's tool investigation; a missing source is an answer too
+            assert "metrics" in call("incident_metric_names", {"number": f"INC-M{tag}"})
+            assert call("incident_metric", {"number": f"INC-M{tag}", "name": "nope"})["source"] == "metric"
+            assert call("similar_incidents", {"number": f"INC-M{tag}"})["result"]
+            assert call("incident_logs", {"number": "INC-NOPE"}) == {"error": "no incident INC-NOPE"}
+            assert call("search_vendor_docs", {"query": "raid"}) == {"hits": []}
     finally:
         settings.yaml = old
