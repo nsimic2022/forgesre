@@ -59,5 +59,11 @@ export function shortNumber(number: string): string {
 export function tierLabel(level: number | string | null | undefined): string {
   const n = typeof level === "number" ? level : Number(String(level ?? "").replace(/^L/i, ""));
   if (!n) return String(level ?? "");
-  return n >= 4 ? "Manager" : `Tier ${n}`;
+  return `Tier ${n}`;
+}
+
+/** Who a tier reaches by default: Tier 1–3 the on-call ladder, Tier 4 the manager. For tooltips. */
+export function tierRole(level: number | string | null | undefined): string {
+  const n = typeof level === "number" ? level : Number(String(level ?? "").replace(/^L/i, ""));
+  return n >= 4 ? "Manager" : n ? `On-call ladder step ${n}` : "";
 }

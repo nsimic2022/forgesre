@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import type { NocIncident } from "../lib/api";
-import { FORGEAI_LABEL, clock, duration, severityLabel, severityTone, shortNumber, tierLabel } from "../lib/format";
+import { FORGEAI_LABEL, clock, duration, severityLabel, severityTone, shortNumber, tierLabel, tierRole } from "../lib/format";
 import { Chip, Dot } from "./ui";
 
 // Incident table shared by the NOC overview and the Incidents page (design: two-line cells).
@@ -23,24 +23,25 @@ function IncidentRow({ row }: { row: NocIncident }) {
       </td>
       <td>
         <div className="cell-stack">
-          <span style={{ fontWeight: 600 }}>{row.asset?.hostname ?? "—"}</span>
-          <span className="small muted">{row.asset?.type ?? ""}</span>
+          <span style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{row.asset?.hostname ?? "—"}</span>
+          <span className="small muted">{[row.asset?.type, row.source].filter(Boolean).join(" · ")}</span>
         </div>
       </td>
       <td>
         <div className="cell-stack">
           <Link to={`/incidents/${encodeURIComponent(row.number)}`} style={{ color: "var(--text)", fontWeight: 600 }}>
-            {row.title} <span className="mono faint" title={row.number}>{shortNumber(row.number)}</span>
+            {row.title} <span className="mono faint" title={row.number} style={{ whiteSpace: "nowrap" }}>{shortNumber(row.number)}</span>
           </Link>
-          {row.detail ? <span className="small muted">{row.detail}</span> : null}
+          {row.detail ? (
+            <span className="small muted" title={row.detail} style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{row.detail}</span>
+          ) : null}
         </div>
       </td>
-      <td className="small muted">{row.source || "—"}</td>
       <td>
         {row.ack_at ? (
-          <div className="cell-stack">
-            <span className="small" style={{ color: "var(--ok)", fontWeight: 600 }}>Acked</span>
-            <span className="small muted">{row.ack_by}</span>
+          <div className="cell-stack" style={{ minWidth: 0, maxWidth: 110 }}>
+            <span className="small" style={{ color: "var(--ok)", fontWeight: 600 }}>Acknowledged</span>
+            <span className="small muted" title={row.ack_by} style={{ display: "block", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(row.ack_by || "").split("@")[0]}</span>
           </div>
         ) : row.resolved_at ? (
           <span className="small muted">—</span>
@@ -48,9 +49,15 @@ function IncidentRow({ row }: { row: NocIncident }) {
           <span className="small" style={{ color: `var(--${tone === "crit" ? "crit" : "high"})`, fontWeight: 600 }}>Not acked</span>
         )}
       </td>
-      <td><Chip tone="off">{tierLabel(row.level)}</Chip></td>
-      <td className="small muted">{row.messages} sent</td>
-      <td className="small muted">{row.forgerca || "—"}</td>
+      <td>
+        <div className="cell-stack" title={tierRole(row.level)}>
+          <span className="small" style={{ fontWeight: 600 }}>{tierLabel(row.level) || "—"}</span>
+          <span className="small muted">{row.messages} message{row.messages === 1 ? "" : "s"}</span>
+        </div>
+      </td>
+      <td className="small muted">
+        <span title={row.forgerca} style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{row.forgerca || "—"}</span>
+      </td>
       <td><Chip tone={ai.tone}>{ai.text}</Chip></td>
     </tr>
   );
@@ -59,19 +66,17 @@ function IncidentRow({ row }: { row: NocIncident }) {
 export function IncidentTable({ rows, loaded }: { rows: NocIncident[]; loaded: boolean }) {
   return (
     <div className="table-wrap">
-      <table className="data" style={{ minWidth: 1180 }}>
+      <table className="data" style={{ minWidth: 1040 }}>
         <thead>
           <tr>
             <th style={{ width: 100 }}>Severity</th>
             <th style={{ width: 90 }}>Started</th>
-            <th style={{ width: 150 }}>Host</th>
+            <th style={{ width: 170 }} title="Asset, its type and where the alarm came from">Host</th>
             <th>Problem</th>
-            <th style={{ width: 90 }}>Source</th>
-            <th style={{ width: 96 }}>Ack</th>
-            <th style={{ width: 80 }}>Tier</th>
-            <th style={{ width: 80 }}>Messages</th>
+            <th style={{ width: 110 }}>Acknowledged</th>
+            <th style={{ width: 100 }} title="Escalation step reached and messages sent">Escalation</th>
             <th style={{ width: 170 }}>ForgeRCA</th>
-            <th style={{ width: 128 }}>ForgeAI</th>
+            <th style={{ width: 110 }}>ForgeAI</th>
           </tr>
         </thead>
         <tbody>
