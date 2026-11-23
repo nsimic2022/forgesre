@@ -96,6 +96,8 @@ Commands:
   slo                SLOs: availability, error budget, burn rate
   alert-quality      Noisiest alerts: acknowledged vs cleared alone, flapping, advice
   power              UPS, PDU and temperature: on battery, runtime, load, sensors
+  lifecycle          Support / warranty, end of life and licences expiring or expired
+  racks              Rack elevation: devices by rack and U position, overlaps
   handover           Shift handover: show, write "notes", take (next shift confirms)
   actions            Open follow-up actions from incident reviews, overdue first
   sla                SLA: acknowledged / resolved in time per severity
@@ -608,6 +610,29 @@ sla — response (acknowledged in time) and resolve (resolved in time) per sever
   ./forgesre sla 7
 Targets: Settings › SLA (sla.response.*, sla.resolve.*). SLA shows on incidents and reports;
 it does not change escalation.
+EOF
+      ;;
+    lifecycle)
+      cat <<'EOF'
+lifecycle — support / warranty, vendor end of life and licence dates that run out soon.
+
+  ./forgesre lifecycle
+
+Dates are set per asset (Edit › Support: Support until, End of life, Licence expires).
+Support warns the asset's own lead days ahead; end of life and licences warn
+checks.lifecycle_warn_days (30) ahead. The 15-minute checks job fires AssetLifecycleExpiring
+per asset and date (an expired licence is high, the rest warning).
+EOF
+      ;;
+    racks)
+      cat <<'EOF'
+racks — rack elevation: which device sits on which U, per site / row / rack.
+
+  ./forgesre racks
+
+Set on the asset: Location › Rack, Rack position (lowest U) and Height (U). Rack height is
+inventory.rack_units (42). Devices with a rack but no position, and two devices on the same
+U, are listed under the rack. Same data as Inventory › Racks.
 EOF
       ;;
     power)
@@ -1209,6 +1234,10 @@ case "$cmd" in
   power)
     need_env
     run_cli_ops power "$@"
+    ;;
+  lifecycle|racks)
+    need_env
+    run_cli_ops "$cmd" "$@"
     ;;
   handover|actions|sla)
     need_env

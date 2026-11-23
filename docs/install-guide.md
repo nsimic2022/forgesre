@@ -220,7 +220,7 @@ UI is written to the same file and applies at once.
 | Discovery | `discovery.enabled`, `discovery.mode` | `semi-automatic` = a list to approve |
 | Notifications | `notifications.email.*`, `notifications.chat.slack\|teams\|discord.*` | `min_severity: high` |
 | RCA / AI | `ai.*` (sections 8 and 9) | `ai.enabled: true` |
-| Checks | `checks.tls_targets`, `checks.tls_warn_days`, `checks.backup_max_age_hours` | `web01:443` |
+| Checks | `checks.tls_targets`, `checks.tls_warn_days`, `checks.backup_max_age_hours`, `checks.lifecycle_warn_days` | `web01:443` |
 | Kubernetes | `kubernetes.clusters` (file only) | name, URL, `ca_pem` |
 
 Settings › Appearance picks the theme (Signal, Light, Midnight, Navy, High contrast, Follow the

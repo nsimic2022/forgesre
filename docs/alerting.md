@@ -54,6 +54,7 @@ apply. Labels: `job=forgesre-checks`, `check`, `target`, `asset`.
 | `TlsCertificateExpiring` | a `checks.tls_targets` endpoint's certificate expires in under `tls_warn_days` (14) / `tls_critical_days` (3) days; handshake failure | warning / critical / high |
 | `ForgeSreBackupMissing` | the newest ForgeSRE backup is older than `backup_max_age_hours` (36), or there is none | critical |
 | `HeartbeatMissing` | a heartbeat has not pinged within its `every_hours` plus 10 % | critical |
+| `AssetLifecycleExpiring` | an asset's support / warranty end (its own lead days), end of life or licence date (`lifecycle_warn_days`, 30) is near or past; labels `lifecycle=support\|eol\|license` | warning; expired licence high |
 
 Certificates are read without verification on purpose: an internal CA or a self-signed
 certificate still expires. A heartbeat is a dead-man switch for anything ForgeSRE cannot see

@@ -92,6 +92,10 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("checks.tls_warn_days", "checks", "Certificate warning (days)", "int"),
     _y("checks.tls_critical_days", "checks", "Certificate critical (days)", "int"),
     _y("checks.backup_max_age_hours", "checks", "ForgeSRE backup max age (hours)", "int"),
+    _y("checks.lifecycle_warn_days", "checks", "End of life / licence warning (days)", "int", minimum=1, maximum=365,
+       help="AssetLifecycleExpiring fires this many days before an asset's end of life or licence date. Support uses the asset's own lead days."),
+    _y("inventory.rack_units", "general", "Rack height (U)", "int", minimum=10, maximum=60,
+       help="Height of every rack in Inventory › Racks. Default 42."),
     # Alarms (app.alarm_noise): storms and flapping alerts page once instead of every time.
     _y("alerts.storm.enabled", "alarms", "Group alarm storms", "bool",
        effective=lambda: _alarm("storm", "enabled"),

@@ -183,7 +183,7 @@ def test_extras_normalize_and_form_helpers():
     assert playrule_ids_from_form("1", ["3", "x", "3", "-1", "5"]) == [3, 5]
     assert len(normalize_extras({"runbook_note": "a" * 9000})["runbook_note"]) == 4000
     assert set(DISPLAY_KEYS) == {
-        "customer", "service", "site", "vlan", "row", "rack", "backup_name", "backup_phone", "backup_email",
+        "customer", "service", "site", "vlan", "row", "rack", "rack_u", "u_height", "eol_date", "license_to", "backup_name", "backup_phone", "backup_email",
         "support_hours", "timezone", "contract", "runbook_note",
     }
     assert SUPPORT_KEYS == ("support", "support_custom", "support_from", "support_to", "support_lead_days")

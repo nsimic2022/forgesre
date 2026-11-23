@@ -7,7 +7,7 @@ export type EditorMode = "new" | "edit" | "clone";
 
 type Draft = Record<string, string>;
 const BASE = ["hostname", "asset_id", "ip", "type", "environment", "owner", "contact_name", "owner_email", "owner_phone", "scrape_address", "snmp_port", "notes"] as const;
-const SNMP_TYPES = /network|switch|router|firewall|storage|qnap|printer|nas/i;
+const SNMP_TYPES = /network|switch|router|firewall|storage|qnap|printer|nas|\bups\b|\bpdu\b|environment sensor/i;
 
 function toDraft(mode: EditorMode, card: AssetCard | null): Draft {
   const d: Draft = Object.fromEntries(BASE.map((k) => [k, ""]));
@@ -136,6 +136,8 @@ export function AssetEditor({ mode, card, options, onDone, onDeleted }: {
           {extra("site", "DC Beograd", "asset-sites")}
           {extra("row", "A")}
           {extra("rack", "A07")}
+          {extra("rack_u", "12")}
+          {extra("u_height", "1")}
         </div>
         <div className="row" style={{ alignItems: "flex-end" }}>
           {extra("customer", "ERP prod")}
@@ -166,6 +168,11 @@ export function AssetEditor({ mode, card, options, onDone, onDeleted }: {
           {extra("support_hours", "Mon–Fri 08–16")}
           {extra("timezone", "Europe/Belgrade")}
           {extra("contract", "ProSupport to 2027")}
+        </div>
+        <div className="row" style={{ alignItems: "flex-end" }}>
+          {field("x:support_to", "Support / warranty until", { type: "date" })}
+          {field("x:eol_date", labels.eol_date?.label ?? "End of life", { type: "date" })}
+          {field("x:license_to", labels.license_to?.label ?? "Licence expires", { type: "date" })}
         </div>
         <label className="cell-stack small faint">
           {labels.runbook_note?.label ?? "Runbook note"}

@@ -195,6 +195,7 @@ export function InventoryPage() {
         </div>
         <div className="row">
           <Link className="btn" to="/inventory/map">Dependency map</Link>
+          <Link className="btn" to="/inventory/racks">Racks</Link>
           <button className="btn" type="button" onClick={() => setSources(!sources)} aria-expanded={sources}>Sources</button>
           {data?.can_edit ? <button className="btn" type="button" onClick={() => openEditor("new", null)}>New asset by hand</button> : null}
           {data?.can_edit ? <button className="btn" type="button" onClick={() => (setNotice(""), setImporting(true))}>Import CSV</button> : null}

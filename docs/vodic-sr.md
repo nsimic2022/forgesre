@@ -194,7 +194,7 @@ Promena `FORGESRE_ADMIN_PASSWORD` posle prvog pokretanja ne menja lozinku u bazi
 | Discovery | `discovery.enabled`, `discovery.mode` | `semi-automatic` = lista za odobrenje |
 | Notifications | `notifications.email.*`, `notifications.chat.slack\|teams\|discord.*` | `min_severity: high` |
 | RCA / AI | `ai.*` (poglavlja 8 i 9) | `ai.enabled: true` |
-| Checks | `checks.tls_targets`, `checks.tls_warn_days`, `checks.backup_max_age_hours` | `web01:443` |
+| Checks | `checks.tls_targets`, `checks.tls_warn_days`, `checks.backup_max_age_hours`, `checks.lifecycle_warn_days` | `web01:443` |
 | MCP | `mcp.enabled` | U grupi Integrations; isključeno dok ga ne uključiš |
 | Kubernetes | `kubernetes.clusters` (samo u fajlu) | ime, URL, `ca_pem` |
 

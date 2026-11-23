@@ -33,15 +33,22 @@ EXTRA_FIELDS: tuple[tuple[str, str, int], ...] = (
     ("vlan", "VLAN", 64),
     ("row", "Row", 64),
     ("rack", "Rack", 64),
+    ("rack_u", "Rack position (lowest U)", 3),
+    ("u_height", "Height (U)", 2),
     ("backup_name", "Backup on-call name", 255),
     ("backup_phone", "Backup on-call phone", 64),
     ("backup_email", "Backup on-call email", 255),
     ("support_hours", "Support hours", 128),
     ("timezone", "Timezone", 64),
     ("contract", "License / contract / SLA", 500),
+    ("eol_date", "End of life (vendor)", 10),
+    ("license_to", "Licence expires", 10),
     ("runbook_note", "Runbook note", 4000),
 )
 DISPLAY_KEYS = tuple(key for key, _label, _max in EXTRA_FIELDS)
+# Lifecycle dates (ISO) and rack U numbers: anything else is dropped on save.
+DATE_KEYS = ("eol_date", "license_to")
+U_KEYS = {"rack_u": (1, 60), "u_height": (1, 20)}
 SUPPORT_KEYS = ("support", "support_custom", "support_from", "support_to", "support_lead_days")
 EXTRA_KEYS = DISPLAY_KEYS + SUPPORT_KEYS
 EXTRA_LABELS = {key: label for key, label, _max in EXTRA_FIELDS}
@@ -96,6 +103,12 @@ def normalize_extras(raw: Any) -> dict[str, str]:
         if value is None:
             continue
         text = str(value).strip()[:limit]
+        if key in DATE_KEYS:
+            parsed = _iso_date(text)
+            text = parsed.isoformat() if parsed else ""
+        elif key in U_KEYS:
+            low, high = U_KEYS[key]
+            text = text if text.isdigit() and low <= int(text) <= high else ""
         if text:
             out[key] = text
     out.update(_normalize_support(raw))

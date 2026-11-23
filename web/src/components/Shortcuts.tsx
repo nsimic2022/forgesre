@@ -14,7 +14,7 @@ function typing(target: EventTarget | null): boolean {
 /** Page title in the browser tab: "Inventory · ForgeSRE" (incident pages use the number). */
 export function titleFor(path: string): string {
   if (path.startsWith("/incidents/") && path !== "/incidents/on-call") return `${decodeURIComponent(path.split("/")[2] ?? "").split("_")[0]} · ForgeSRE`;
-  const special: Record<string, string> = { "/incidents/on-call": "On-call", "/inventory/add": "Add devices", "/inventory/map": "Dependency map" };
+  const special: Record<string, string> = { "/incidents/on-call": "On-call", "/inventory/add": "Add devices", "/inventory/map": "Dependency map", "/inventory/racks": "Racks" };
   const item = special[path] ?? NAV.find((n) => n.to === path)?.label;
   return item ? `${item} · ForgeSRE` : "ForgeSRE";
 }

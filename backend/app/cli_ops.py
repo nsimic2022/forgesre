@@ -1058,6 +1058,52 @@ def cmd_power(port: str) -> None:
             jar.unlink(missing_ok=True)
 
 
+def format_lifecycle(data: dict) -> str:
+    """Expiring and expired support, end-of-life and licence dates, soonest first."""
+    rows = data.get("rows") or []
+    head = f"{data.get('tracked', 0)} dates tracked; warning {data.get('warn_days', 30)} days ahead (support: per asset)"
+    if not rows:
+        return head + "\nNothing expiring.\n"
+    out = [head, f"{'ASSET':<24} {'WHAT':<20} {'DATE':<10} {'DAYS':>5}  STATUS"]
+    for r in rows:
+        out.append(f"{r['asset'][:24]:<24} {r['label'][:20]:<20} {r['date']:<10} {r['days_left']:>5}  {r['status']}")
+    return "\n".join(out) + "\n"
+
+
+def format_racks(data: dict) -> str:
+    """One block per rack: U positions top-down, then devices without a position and overlaps."""
+    racks = data.get("racks") or []
+    if not racks:
+        return "No asset has a rack. Set Location › Rack (and Rack position) on the asset.\n"
+    out: list[str] = []
+    for r in racks:
+        where = " / ".join(x for x in (r.get("site"), r.get("row"), r.get("rack")) if x)
+        out.append(f"{where}  ({r['used_u']} of {r['units']} U used)")
+        for d in r.get("devices") or []:
+            top = d["u"] + d["height"] - 1
+            pos = f"U{d['u']}" if d["height"] == 1 else f"U{d['u']}-{top}"
+            mark = f"  [{d['incident']}]" if d.get("incident") else ""
+            out.append(f"  {pos:<8} {d['hostname'][:32]:<32} {d['type'][:20]}{mark}")
+        for d in r.get("unplaced") or []:
+            out.append(f"  {'?':<8} {d['hostname'][:32]:<32} no rack position")
+        for o in r.get("overlaps") or []:
+            out.append(f"  overlap {o}")
+    return "\n".join(out) + "\n"
+
+
+def cmd_lifecycle(port: str, command: str) -> None:
+    """./forgesre lifecycle | racks"""
+    jar, _me = ensure_jar(port)
+    try:
+        if command == "racks":
+            sys.stdout.write(format_racks(get_json(port, jar, "/api/v1/racks")))
+        else:
+            sys.stdout.write(format_lifecycle(get_json(port, jar, "/api/v1/lifecycle")))
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def format_handover(rows: list[dict]) -> str:
     """The latest handover first: who, when, notes, open incidents, who took over."""
     if not rows:
@@ -1182,6 +1228,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_alert_quality(port, rest)
     elif command == "power":
         cmd_power(port)
+    elif command in {"lifecycle", "racks"}:
+        cmd_lifecycle(port, command)
     elif command in {"handover", "actions", "sla"}:
         cmd_process(port, command, rest)
     elif command == "forgeai":
