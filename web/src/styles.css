@@ -374,3 +374,11 @@ tr.picked td { background: var(--s2); }
 .stars button.on { color: #f5b301; }
 .stars button:focus-visible { outline: 2px solid var(--accent); border-radius: 3px; }
 .stars .small { margin-left: 6px; }
+
+/* Small label + input grids in cards (IncidentProcess.tsx) */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.form-grid input { font: inherit; }
+.major-banner { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; background: var(--crit-bg); border: 1px solid var(--crit-border, var(--crit));
+  color: var(--text); border-radius: var(--radius); padding: 10px 14px; }
+.major-banner strong { color: var(--crit); }

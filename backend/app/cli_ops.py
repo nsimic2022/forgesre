@@ -1021,6 +1021,66 @@ def cmd_alert_quality(port: str, rest: list[str]) -> None:
             jar.unlink(missing_ok=True)
 
 
+def format_handover(rows: list[dict]) -> str:
+    """The latest handover first: who, when, notes, open incidents, who took over."""
+    if not rows:
+        return "No handover yet. Write one: ./forgesre handover write \"notes\"\n"
+    h = rows[0]
+    out = [f"Handover #{h['id']} by {h['created_by']} at {str(h['created_at'])[:16]}",
+           f"Taken over by {h['taken_by']} at {str(h['taken_at'])[:16]}" if h.get("taken_by") else "NOT TAKEN OVER YET: ./forgesre handover take",
+           "", h.get("notes") or "(no notes)", "", f"Open incidents then ({len(h['open_incidents'])}):"]
+    for i in h["open_incidents"][:20]:
+        out.append(f"  {i['number']:<10} {str(i['severity']).upper():<9} {'acked ' if i.get('acked') else 'NOT ACKED'} {i['title']}")
+    return "\n".join(out) + "\n"
+
+
+def format_actions(rows: list[dict]) -> str:
+    if not rows:
+        return "No open follow-up actions.\n"
+    out = [f"{'DUE':<11} {'OWNER':<24} {'INCIDENT':<10} ACTION"]
+    for a in rows:
+        due = (a["due"] or "-") + (" !" if a.get("overdue") else "")
+        out.append(f"{due:<11} {(a['owner'] or '-')[:24]:<24} {a['incident'].split('_')[0]:<10} {a['text']}")
+    return "\n".join(out) + "\n"
+
+
+def format_sla(data: dict) -> str:
+    if not data.get("enabled"):
+        return "SLA timers are off (sla.enabled).\n"
+    out = [f"Last {data['days']} days    response met/breached    resolve met/breached"]
+    for sev, r in data["by_severity"].items():
+        out.append(f"  {sev:<10} {r['response_met']:>12} / {r['response_breached']:<10} {r['resolve_met']:>10} / {r['resolve_breached']}")
+    t = data.get("targets") or {}
+    if t:
+        out.append("Targets (min): " + ", ".join(f"{s} ack {t['response'][s]} resolve {t['resolve'][s]}" for s in ("critical", "high", "warning")))
+    return "\n".join(out) + "\n"
+
+
+def cmd_process(port: str, command: str, rest: list[str]) -> None:
+    """./forgesre handover [write NOTES | take] · actions · sla [DAYS]"""
+    jar, _me = ensure_jar(port)
+    try:
+        if command == "handover":
+            if rest[:1] == ["write"]:
+                post_json(port, jar, "/api/v1/handover", {"notes": " ".join(rest[1:])})
+            elif rest[:1] == ["take"]:
+                rows = get_json(port, jar, "/api/v1/handover").get("handovers") or []
+                if not rows:
+                    raise SystemExit("no handover to take over")
+                post_json(port, jar, f"/api/v1/handover/{rows[0]['id']}/take", {})
+            sys.stdout.write(format_handover(get_json(port, jar, "/api/v1/handover").get("handovers") or []))
+        elif command == "actions":
+            sys.stdout.write(format_actions(get_json(port, jar, "/api/v1/actions").get("actions") or []))
+        else:
+            days = rest[0] if rest and rest[0].isdigit() else "30"
+            sys.stdout.write(format_sla(get_json(port, jar, f"/api/v1/sla?days={days}")))
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f"refused by ForgeSRE (exit {exc.returncode}); a handover is taken over by the next shift, not its writer") from None
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def cmd_slo(port: str) -> None:
     jar, _me = ensure_jar(port)
     try:
@@ -1083,6 +1143,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_slo(port)
     elif command == "alert-quality":
         cmd_alert_quality(port, rest)
+    elif command in {"handover", "actions", "sla"}:
+        cmd_process(port, command, rest)
     elif command == "forgeai":
         cmd_forgeai(port, rest)
     elif command == "kubernetes":

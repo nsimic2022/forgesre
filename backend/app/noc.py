@@ -82,8 +82,21 @@ def _row(incident: Incident, sent: dict[int, int], llm_jobs: dict[str, str], mod
         "forgerca": (latest.likely_cause or latest.summary or "") if latest else "",
         "forgeai": _forgeai_state(incident, llm_jobs, mode),
         "flap_count": int(incident.flap_count or 0),
+        "sla": _sla_short(incident),
+        "major": bool(incident.major),
         "caused_by": _caused_by(db, incident),
     }
+
+
+def _sla_short(incident: Incident) -> dict[str, Any] | None:
+    """The clock that matters now: response until acknowledged, then resolve."""
+    from app.incident_process import sla_state
+
+    st = sla_state(incident)
+    if st is None:
+        return None
+    kind = "response" if not incident.ack_at else "resolve"
+    return {"kind": kind, **st[kind]}
 
 
 def _caused_by(db: Session, incident: Incident) -> str:
@@ -165,8 +178,13 @@ def noc_overview(db: Session, now: datetime | None = None) -> dict[str, Any]:
             group["up"] += 1
 
     oncall = current_oncall(db, now)
+    from app.incident_process import active_majors, latest_handovers
+
+    handover = latest_handovers(db, 1)
     return {
         "generated_at": now.isoformat(),
+        "major": active_majors(db),
+        "handover": handover[0] if handover else None,
         "counts": {
             "open": len(rows_active),
             "critical": severities.get("CRITICAL", 0),

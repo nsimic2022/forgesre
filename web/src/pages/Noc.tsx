@@ -6,7 +6,8 @@ import { getJson, type Noc as NocData } from "../lib/api";
 import { clock, minutesLabel, severityLabel } from "../lib/format";
 import { IncidentTable } from "../components/IncidentTable";
 import { usePaged } from "../components/Pager";
-import { useRoleRank } from "../lib/me";
+import { useMyEmail, useRoleRank } from "../lib/me";
+import { HandoverCard, MajorBanner } from "../components/Handover";
 
 const REFRESH_MS = 10_000;
 type TabKey = "active" | "acknowledged" | "resolved_today";
@@ -60,6 +61,8 @@ export function NocPage() {
   const c = data?.counts;
   const nocPage = usePaged(rows, "noc", "incidents");
   const canWork = useRoleRank() >= 1;
+  const me = useMyEmail();
+  const refresh = () => window.dispatchEvent(new Event("forgesre:noc-refresh"));
   return (
     <>
       <header className="page-head">
@@ -81,6 +84,7 @@ export function NocPage() {
         <a className="btn" href="/app/tv">Wall screen (TV mode)</a>
       </header>
       {error ? <div className="banner error" role="alert">Could not refresh: {error}. Showing the last data.</div> : null}
+      <MajorBanner majors={data?.major} />
       {c ? (
         <div className="strip" role="group" aria-label="Key numbers">
           <Stat label="Open incidents" value={String(c.open)} detail={`${c.critical} critical · ${c.high} high · ${c.warning} warning`} tone={c.critical ? "crit" : undefined} />
@@ -109,6 +113,7 @@ export function NocPage() {
         <IncidentTable rows={nocPage.page} loaded={Boolean(data)} canWork={canWork} onChanged={() => window.dispatchEvent(new Event("forgesre:noc-refresh"))} />
         {nocPage.pager}
       </Card>
+      <HandoverCard handover={data?.handover} canWork={canWork} me={me} onChanged={refresh} />
       {data ? (
         <div className="cols">
           <Card title="Health by group">

@@ -130,6 +130,27 @@ page what is already loaded. Code: `web/src/components/Pager.tsx`.
 - **Skip to content** is the first stop for the Tab key; the browser tab is named after the page
   ("Inventory · ForgeSRE", "INC-0412 · ForgeSRE"). Code: `web/src/components/Shortcuts.tsx`.
 
+## Running an incident: major incidents, SLA, handover, follow-up actions
+
+- **Major incident** (incident page, Analyst and up): *Declare major incident* with a commander,
+  a bridge call link (`https://` or `tel:`) and an update interval. The card shows the next
+  status update due (red when overdue); *Post status update* saves a note, restarts the timer
+  and sends the update to the chat channels. *Message for management* is filled in from the
+  incident, ready to copy. Major incidents show as a red strip on the NOC page and the wall
+  screen. API: `POST /api/v1/incidents/{n}/major` `{on, commander, bridge_url, update_minutes}`,
+  `POST /api/v1/incidents/{n}/updates` `{text}`.
+- **SLA** (Settings › SLA, `sla.response.*` and `sla.resolve.*` minutes per severity; defaults
+  critical 15/240, high 30/480, warning 120/1440): chips on the incident page (response due /
+  met / breached, then resolve), a *breached* chip in incident lists, and the SLA card on
+  Reports. SLA does not change escalation. `GET /api/v1/sla?days=30`, `./forgesre sla`.
+- **Shift handover** (NOC page): *Write handover* saves notes and the incidents still open;
+  the next person presses *I take over* (not the writer). `GET/POST /api/v1/handover`,
+  `POST /api/v1/handover/{id}/take`, `./forgesre handover`.
+- **Follow-up actions** (incident page, and *Open follow-up actions* on Reports): what must
+  change, owner, due date, ticked off when done; they fill the postmortem draft's table.
+  `POST /api/v1/incidents/{n}/actions`, `PATCH /api/v1/actions/{id}`, `GET /api/v1/actions`,
+  `./forgesre actions`.
+
 ## TV mode (wall screen)
 
 `/app/tv` (button **Wall screen (TV mode)** on the NOC page) is built for a screen on the wall: one

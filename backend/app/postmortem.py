@@ -135,6 +135,9 @@ def postmortem_markdown(db: Session, incident: Incident, user: User) -> str:
             out.append(f"- [{'x' if i in playbook['done'] else ' '}] {step}")
     out += ["", "## What went well", "", f"- {TODO}", "", "## What to improve", "", f"- {TODO}", "", "## Follow-up actions", "",
             "| Action | Owner | Due |", "|---|---|---|"]
+    for item in v.get("actions") or []:
+        done = " *(done)*" if item["done"] else ""
+        out.append(f"| {item['text'].replace('|', '/')}{done} | {item['owner'] or TODO} | {item['due'] or TODO} |")
     for action in (rca.get("actions") or [])[:6]:
         out.append(f"| {str(action).replace('|', '/')} *(ForgeRCA suggestion)* | {TODO} | {TODO} |")
     out.append(f"| {TODO} | {TODO} | {TODO} |")

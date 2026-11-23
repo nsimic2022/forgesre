@@ -634,6 +634,135 @@ def add_incident_note(
     return note_as_dict(row)
 
 
+class MajorBody(BaseModel):
+    on: bool = True
+    commander: str = Field(default="", max_length=255)
+    bridge_url: str = Field(default="", max_length=500)
+    update_minutes: int = Field(default=30, ge=5, le=240)
+
+
+class UpdateBody(BaseModel):
+    text: str = Field(default="", max_length=2000)
+
+
+class ActionBody(BaseModel):
+    text: str | None = Field(default=None, max_length=2000)
+    owner: str | None = Field(default=None, max_length=255)
+    due: str | None = None
+    done: bool | None = None
+
+
+class HandoverBody(BaseModel):
+    notes: str = Field(default="", max_length=4000)
+
+
+def _incident_or_404(db: Session, number: str) -> Incident:
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    return item
+
+
+@router.post("/incidents/{number}/major")
+def incident_major(number: str, body: MajorBody, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """Declare or stand down a major incident (commander, bridge link, update timer). Analyst and up."""
+    from app.incident_process import major_view, set_major
+
+    item = _incident_or_404(db, number)
+    try:
+        set_major(db, item, user.email, on=body.on, commander=body.commander, bridge_url=body.bridge_url, update_minutes=body.update_minutes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return major_view(item)
+
+
+@router.post("/incidents/{number}/updates")
+def incident_status_update(number: str, body: UpdateBody, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """Post a status update: saved as a note, restarts the update timer, goes to the chat channels."""
+    from app.incident_process import major_view, post_update
+
+    item = _incident_or_404(db, number)
+    try:
+        note = post_update(db, item, user.email, body.text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"note": note, "major": major_view(item)}
+
+
+@router.post("/incidents/{number}/actions")
+def incident_action_add(number: str, body: ActionBody, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """Add a follow-up action (what, who, by when) to an incident."""
+    from app.incident_process import action_as_dict, add_action
+
+    item = _incident_or_404(db, number)
+    try:
+        return action_as_dict(add_action(db, item, user.email, body.text or "", body.owner or "", body.due))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.patch("/actions/{action_id}")
+def incident_action_update(action_id: int, body: ActionBody, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """Change or tick off a follow-up action."""
+    from app.incident_process import action_as_dict, update_action
+    from app.models import FollowUpAction
+
+    row = db.get(FollowUpAction, action_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="action not found")
+    try:
+        return action_as_dict(update_action(db, row, user.email, body.model_dump(exclude_unset=True)))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/actions")
+def incident_actions_open(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """Every open follow-up action, overdue and soonest due first."""
+    from app.incident_process import open_actions
+
+    return {"actions": open_actions(db)}
+
+
+@router.get("/sla")
+def sla_summary(days: int = 30, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """SLA met / breached per severity (response = acknowledged in time, resolve = resolved in time)."""
+    from app.incident_process import sla_config, sla_report
+
+    return {**sla_report(db, days), "targets": sla_config()}
+
+
+@router.get("/handover")
+def handover_list(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """The latest shift handovers, newest first."""
+    from app.incident_process import latest_handovers
+
+    return {"handovers": latest_handovers(db)}
+
+
+@router.post("/handover")
+def handover_create(body: HandoverBody, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """Hand the shift over: notes plus a snapshot of the incidents still open."""
+    from app.incident_process import hand_over, handover_as_dict
+
+    return handover_as_dict(hand_over(db, user.email, body.notes))
+
+
+@router.post("/handover/{handover_id}/take")
+def handover_take(handover_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """The next shift confirms it read the handover ("I take over")."""
+    from app.incident_process import handover_as_dict, take_over
+    from app.models import ShiftHandover
+
+    row = db.get(ShiftHandover, handover_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="handover not found")
+    try:
+        return handover_as_dict(take_over(db, row, user.email))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.post("/incidents/{number}/status")
 def set_status(
     number: str,

@@ -56,6 +56,15 @@ def _e(key, group, label, effective=None, **kw) -> SettingDef:
     return SettingDef(key=key, group=group, label=label, kind="str", store="env", effective=effective, **kw)
 
 
+def _sla(*path: str):
+    from app.incident_process import sla_config
+
+    value = sla_config()
+    for part in path:
+        value = value[part]
+    return value
+
+
 def _alarm(kind: str, key: str):
     from app.alarm_noise import config
 
@@ -66,6 +75,7 @@ GROUPS = {
     "general": "General",
     "checks": "Checks",
     "alarms": "Alarms",
+    "sla": "SLA",
     "network": "Network",
     "integrations": "Integrations",
     "discovery": "Discovery",
@@ -97,6 +107,14 @@ REGISTRY: tuple[SettingDef, ...] = (
        effective=lambda: _alarm("flapping", "threshold")),
     _y("alerts.flapping.window_minutes", "alarms", "Flapping: within minutes", "int", minimum=1, maximum=1440,
        effective=lambda: _alarm("flapping", "window_minutes")),
+    # SLA (app.incident_process): targets per severity; shown on incidents and in Reports, escalation unchanged.
+    _y("sla.enabled", "sla", "Show SLA timers", "bool", effective=lambda: _sla("enabled")),
+    _y("sla.response.critical", "sla", "Acknowledge within (critical, min)", "int", minimum=1, maximum=43200, effective=lambda: _sla("response", "critical")),
+    _y("sla.response.high", "sla", "Acknowledge within (high, min)", "int", minimum=1, maximum=43200, effective=lambda: _sla("response", "high")),
+    _y("sla.response.warning", "sla", "Acknowledge within (warning, min)", "int", minimum=1, maximum=43200, effective=lambda: _sla("response", "warning")),
+    _y("sla.resolve.critical", "sla", "Resolve within (critical, min)", "int", minimum=1, maximum=43200, effective=lambda: _sla("resolve", "critical")),
+    _y("sla.resolve.high", "sla", "Resolve within (high, min)", "int", minimum=1, maximum=43200, effective=lambda: _sla("resolve", "high")),
+    _y("sla.resolve.warning", "sla", "Resolve within (warning, min)", "int", minimum=1, maximum=43200, effective=lambda: _sla("resolve", "warning")),
     _y("system.public_url", "general", "Public address", help="How people reach ForgeSRE, e.g. https://forgesre.dc.local. Used for links in mail and chat (incident, one-click acknowledge). Empty = no links."),
     _y("system.cookie_secure", "general", "Secure cookies (HTTPS only)", "bool", effective=lambda: settings.cookie_secure),
     # Sign-in: directory and single sign-on. Roles come from groups; the local admin always works.

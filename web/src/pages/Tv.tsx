@@ -136,6 +136,12 @@ export function TvPage() {
           No update from ForgeSRE since {new Date(lastOk).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}. What you see may be old.
         </div>
       ) : null}
+      {data?.major?.length ? (
+        <div className="major-banner tvw-major" role="alert">
+          <strong>MAJOR INCIDENT</strong>
+          {data.major.map((m) => <span key={m.number}>{m.number.split("_")[0]} {m.title} · commander {m.commander || "not named"}{m.overdue ? " · update overdue" : ""}</span>)}
+        </div>
+      ) : null}
       </div>
       {!data ? <div className="muted">Loading…</div> : (
         <>

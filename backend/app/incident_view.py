@@ -176,6 +176,8 @@ def _playbook_steps(incident: Incident) -> list[str]:
 
 def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]:
     from app.changes import changes_before
+    from app.incident_process import action_as_dict, major_view, sla_state
+    from app.models import FollowUpAction
 
     """Everything the incident detail page shows. Evidence queries only for read_evidence."""
     from app.api import _asset
@@ -249,6 +251,9 @@ def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]
         "who_to_call": who_to_call(db, incident),
         "similar": similar_before(db, incident),
         "links": incident_links(db, incident),
+        "major": major_view(incident),
+        "sla": sla_state(incident),
+        "actions": [action_as_dict(a) for a in db.query(FollowUpAction).filter_by(incident_id=incident.id).order_by(FollowUpAction.id).all()],
         "review": {
             "root_cause": incident.root_cause or "",
             "rca_rating": incident.rca_rating or "",
