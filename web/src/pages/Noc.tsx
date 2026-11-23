@@ -9,6 +9,7 @@ import { usePaged } from "../components/Pager";
 import { useMyEmail, useRoleRank } from "../lib/me";
 import { HandoverCard, MajorBanner } from "../components/Handover";
 import { PowerPanel } from "../components/PowerPanel";
+import { NetworkPanel } from "../components/NetworkPanel";
 
 const REFRESH_MS = 10_000;
 type TabKey = "active" | "acknowledged" | "resolved_today";
@@ -116,6 +117,7 @@ export function NocPage() {
       </Card>
       <HandoverCard handover={data?.handover} canWork={canWork} me={me} onChanged={refresh} />
       <PowerPanel />
+      <NetworkPanel />
       {data ? (
         <div className="cols">
           <Card title="Health by group">

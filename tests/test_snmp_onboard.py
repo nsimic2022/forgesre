@@ -138,7 +138,7 @@ def test_committed_snmp_yml_keeps_two_modules_and_onboard_markers():
     assert tpl.replace("__SNMP_COMMUNITY__", "public") == yml
     assert ONBOARD_BEGIN in yml and ONBOARD_END in yml and ONBOARD_BEGIN in tpl
     parsed = yaml.safe_load(yml.replace("__SNMP_COMMUNITY__", "public"))
-    assert set(parsed["modules"]) == {"if_mib", "host", "power"}
+    assert set(parsed["modules"]) == {"if_mib", "host", "power", "routing"}
     assert ONBOARD_MODULE not in parsed["modules"]
 
 
@@ -156,7 +156,7 @@ def test_splice_apply_restore_rollback(tmp_path):
     assert ONBOARD_MODULE in yaml.safe_load(target.read_text())["modules"]
     restored = restore_onboard_module(path=target)
     assert restored["ok"] is True
-    assert set(yaml.safe_load(target.read_text())["modules"]) == {"if_mib", "host", "power"}
+    assert set(yaml.safe_load(target.read_text())["modules"]) == {"if_mib", "host", "power", "routing"}
 
 
 def test_apply_refuses_without_if_mib(tmp_path):
@@ -255,7 +255,7 @@ def test_prometheus_onboard_job_bundled():
         assert "scrape_interval: 60s" in text
     assert ONBOARD_JOB == "forgesre-snmp-onboard"
     committed = yaml.safe_load((ROOT / "monitoring" / "snmp.yml").read_text())
-    assert set(committed["modules"]) == {"if_mib", "host", "power"}
+    assert set(committed["modules"]) == {"if_mib", "host", "power", "routing"}
 
 
 def test_write_generator_yml_numeric_oids(tmp_path):

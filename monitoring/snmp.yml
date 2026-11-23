@@ -379,5 +379,54 @@ modules:
             labelname: entPhysicalName
             oid: 1.3.6.1.2.1.47.1.1.1.1.7
             type: DisplayString
+  # BGP4-MIB (RFC 4273) peers and OSPF-MIB (RFC 4750) neighbours for routers, firewalls and L3 switches.
+  routing:
+    timeout: 8s
+    retries: 1
+    max_repetitions: 25
+    walk:
+      - 1.3.6.1.2.1.15.3.1.2
+      - 1.3.6.1.2.1.15.3.1.3
+      - 1.3.6.1.2.1.15.3.1.9
+      - 1.3.6.1.2.1.15.3.1.16
+      - 1.3.6.1.2.1.14.10.1.6
+    metrics:
+      - name: bgpPeerState
+        oid: 1.3.6.1.2.1.15.3.1.2
+        type: gauge
+        help: BGP peer state - 1 idle, 2 connect, 3 active, 4 opensent, 5 openconfirm, 6 established.
+        indexes:
+          - labelname: bgpPeerRemoteAddr
+            type: InetAddressIPv4
+      - name: bgpPeerAdminStatus
+        oid: 1.3.6.1.2.1.15.3.1.3
+        type: gauge
+        help: BGP peer admin status - 1 stop, 2 start.
+        indexes:
+          - labelname: bgpPeerRemoteAddr
+            type: InetAddressIPv4
+      - name: bgpPeerRemoteAs
+        oid: 1.3.6.1.2.1.15.3.1.9
+        type: gauge
+        help: Remote autonomous system number of the BGP peer.
+        indexes:
+          - labelname: bgpPeerRemoteAddr
+            type: InetAddressIPv4
+      - name: bgpPeerFsmEstablishedTime
+        oid: 1.3.6.1.2.1.15.3.1.16
+        type: gauge
+        help: Seconds the BGP peer has been in (or was last in) the established state.
+        indexes:
+          - labelname: bgpPeerRemoteAddr
+            type: InetAddressIPv4
+      - name: ospfNbrState
+        oid: 1.3.6.1.2.1.14.10.1.6
+        type: gauge
+        help: OSPF neighbour state - 1 down, 2 attempt, 3 init, 4 twoWay, 5 exchangeStart, 6 exchange, 7 loading, 8 full.
+        indexes:
+          - labelname: ospfNbrIpAddr
+            type: InetAddressIPv4
+          - labelname: ospfNbrAddressLessIndex
+            type: gauge
   # forgesre-onboard-modules begin
   # forgesre-onboard-modules end

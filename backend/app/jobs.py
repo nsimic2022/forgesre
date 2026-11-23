@@ -470,6 +470,11 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 else:
                     result = tickets.run_job(db, row.payload or {}, str((row.payload or {}).get("actor") or "system"))
                 row.payload = {**(row.payload or {}), "result": result}
+            elif row.kind == "oxidized_sync":
+                from app.oxidized import run_job as oxidized_run
+
+                # Oxidized /nodes.json, 5 s timeout; new config versions become changes.
+                row.payload = {**(row.payload or {}), "result": oxidized_run(db)}
             elif row.kind == "chat_post":
                 from app.chat import deliver
 

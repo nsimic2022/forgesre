@@ -35,6 +35,7 @@ COMPONENT_LABELS = {
     "kubernetes": "Kubernetes",
     "power": "Power and environment",
     "blackbox": "Synthetic checks (blackbox)",
+    "oxidized": "Oxidized config changes",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -62,6 +63,7 @@ COMPONENT_SHORT = {
     "kubernetes": "Kubernetes",
     "power": "Power",
     "blackbox": "Blackbox",
+    "oxidized": "Oxidized",
     "redis": "Redis",
     "mailpit": "Mailpit",
 }

@@ -144,6 +144,26 @@ groups:
           summary: "Synthetic check {{ $labels.check }} failing"
           description: "The {{ $labels.kind }} probe of {{ $labels.instance }} has failed for 10 minutes."
 
+  - name: forgesre-routing
+    rules:
+      - alert: BgpPeerDown
+        expr: bgpPeerState{job="forgesre-snmp-routing"} != 6 and bgpPeerAdminStatus{job="forgesre-snmp-routing"} == 2
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "BGP peer {{ $labels.bgpPeerRemoteAddr }} down on {{ $labels.asset }}"
+          description: "The session is enabled but not established (state {{ $value }}; 6 = established) for 5 minutes. Routes from this peer are gone."
+
+      - alert: OspfNeighbourLost
+        expr: count by (asset) (ospfNbrState{job="forgesre-snmp-routing"} >= 4) < max_over_time((count by (asset) (ospfNbrState{job="forgesre-snmp-routing"} >= 4))[1h:5m])
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "OSPF neighbour lost on {{ $labels.asset }}"
+          description: "{{ $labels.asset }} has fewer OSPF neighbours in 2-way or full state than at any point in the last hour."
+
   - name: forgesre-node
     rules:
       - alert: NodeExporterDown

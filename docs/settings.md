@@ -98,6 +98,17 @@ incident (channel `sms`) and is sent by a background job with a 10 s timeout.
   incident's number, title, severity, status, host, IP, times, cause and link, so Jira,
   ServiceNow, n8n or a script can keep their own tickets. Test sends an `event: test`.
 
+## Config changes (Oxidized)
+
+`changes.oxidized.enabled`, `changes.oxidized.url` (e.g. `http://oxidized.dc.local:8888`),
+optional Bearer secret `OXIDIZED_TOKEN` when a reverse proxy protects Oxidized. Every 10 minutes
+job `oxidized_sync` reads `/nodes.json` (5 s timeout). When a device's config version changes
+(`mtime`), a change *Config changed on <device>* (kind `config`, source `oxidized`, link to the
+version list in Oxidized) is stored on the asset with the same name or IP, and shows under
+*Changes before* on every incident that starts in the next 24 h. The first read only records
+where each device is. Test: `./forgesre settings test oxidized`; doctor row *Oxidized config
+changes* also counts failed backups inside Oxidized.
+
 ## Integrations
 
 **Settings › Integrations** shows one card per source (Zabbix, GLPI, LibreNMS, NetBox,

@@ -101,7 +101,7 @@ def test_api_racks_and_lifecycle_for_viewer():
 
 def test_cli_and_docs_know_the_commands():
     cli = (ROOT / "scripts" / "forgesre").read_text(encoding="utf-8")
-    assert "lifecycle|racks|synthetic)" in cli
+    assert "lifecycle|racks|synthetic|network)" in cli
     assert "lifecycle racks" in (ROOT / "scripts" / "forgesre-completion.bash").read_text(encoding="utf-8")
     alerting = (ROOT / "docs" / "alerting.md").read_text(encoding="utf-8")
     assert ALERTNAME in alerting

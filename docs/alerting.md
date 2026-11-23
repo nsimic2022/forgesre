@@ -101,6 +101,21 @@ visible; they only stop their own mail ladder.
 acknowledged, how many cleared by themselves within 10 minutes, flapping and a suggestion (add a
 noise filter, a longer `for:`, a higher threshold, or keep).
 
+## Routing and traffic
+
+Routers, firewalls and *Network device* assets (and any SNMP asset with extras
+`snmp_routing=on`; `off` opts one out) are also polled with SNMP module `routing` (BGP4-MIB
+peers, OSPF-MIB neighbours) by job `forgesre-snmp-routing`. Group `forgesre-routing`:
+
+| Alert | Fires when | Severity |
+|---|---|---|
+| `BgpPeerDown` | an enabled BGP peer is not established for 5 min | high |
+| `OspfNeighbourLost` | fewer OSPF neighbours in 2-way/full than at any time in the last hour, for 5 min | high |
+
+NOC › *Network* and `./forgesre network` show BGP/OSPF sessions that are not up and the ten
+busiest interfaces in and out (if_mib, 5 min rate). Flow data (NetFlow / sFlow top talkers)
+needs a flow collector and is not part of ForgeSRE.
+
 ## Synthetic checks
 
 Settings › Checks › *Synthetic checks* (Engineer) probes services from the appliance the way a
