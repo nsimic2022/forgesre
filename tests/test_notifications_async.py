@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 
 import httpx
@@ -16,7 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_email_service_uses_aiosmtplib_not_smtplib():
     src = (ROOT / "backend" / "app" / "email_service.py").read_text(encoding="utf-8")
     assert "aiosmtplib.send" in src
-    assert "smtplib.SMTP" not in src
+    # the blocking stdlib client must not come back; aiosmtplib.SMTP (async) is fine
+    assert "import smtplib" not in src and not re.search(r"(?<!aio)smtplib\.SMTP", src)
     assert SMTP_TIMEOUT == 5.0
     notes = (ROOT / "backend" / "app" / "notifications.py").read_text(encoding="utf-8")
     assert "send_smtp_async" in notes
