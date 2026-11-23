@@ -10,6 +10,8 @@ so routing rules, noise filters, maintenance and escalation work as for any Prom
 - Backup: the newest ForgeSRE archive must be younger than ``checks.backup_max_age_hours`` (36).
 - Heartbeats: a job calls ``POST /api/v1/heartbeats/{name}`` after each success; no ping within
   its ``every_hours`` (plus 10 % grace) is critical. Used to prove other backups really ran.
+- Lifecycle: support / warranty end, vendor end of life and licence expiry per asset
+  (``app.lifecycle``), alert ``AssetLifecycleExpiring``.
 """
 
 from __future__ import annotations
@@ -136,7 +138,9 @@ def run_checks(db: Session, probe=cert_days_left, archives=None) -> dict[str, in
     """All checks, then one Alertmanager-shaped payload so incidents open and resolve normally."""
     from app.services import ingest_alertmanager
 
-    alerts = check_tls(db, probe) + check_backup(db, archives) + check_heartbeats(db)
+    from app.lifecycle import check_lifecycle
+
+    alerts = check_tls(db, probe) + check_backup(db, archives) + check_heartbeats(db) + check_lifecycle(db)
     db.commit()
     if alerts:
         ingest_alertmanager(db, {"status": "firing", "alerts": alerts}, source="prometheus")

@@ -4,6 +4,7 @@ import { ReportSchedules } from "../components/ReportSchedules";
 import { SloCard } from "../components/SloCard";
 import { AlertQuality } from "../components/AlertQuality";
 import { OpenActionsCard, SlaCard } from "../components/IncidentProcess";
+import { LifecycleCard } from "../components/Racks";
 import { Card } from "../components/ui";
 import { DailyBars } from "../components/DailyBars";
 import { getJson, type PeriodStats, type Reports } from "../lib/api";
@@ -107,6 +108,7 @@ export function ReportsPage() {
       ) : null}
       {data ? <SlaCard days={days} /> : null}
       {data ? <OpenActionsCard /> : null}
+      {data ? <LifecycleCard /> : null}
       {data ? <AlertQuality days={days} /> : null}
       {/* full width: the outbox has five columns and long subjects */}
       {data ? <OutboxCard /> : null}

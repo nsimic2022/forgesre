@@ -9,7 +9,7 @@
 # (keep in sync with the dispatcher in scripts/forgesre), Compose services for
 # `logs`, Journal modules for `journal`, and incident statuses for `history`.
 _forgesre_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-_forgesre_cmds="help shell quit exit install doctor test ping probe verify status logs config settings assets inventory capacity sources discovery snmp snmp-auths render-monitoring journal demo demo-rca demo-reset jobs checks slo alert-quality power handover actions sla forgeai kubernetes incidents history login logout whoami sd version secrets-check fetch-llm backup restore import remove update restart bundle mailbox tls completion"
+_forgesre_cmds="help shell quit exit install doctor test ping probe verify status logs config settings assets inventory capacity sources discovery snmp snmp-auths render-monitoring journal demo demo-rca demo-reset jobs checks slo alert-quality power lifecycle racks handover actions sla forgeai kubernetes incidents history login logout whoami sd version secrets-check fetch-llm backup restore import remove update restart bundle mailbox tls completion"
 _forgesre_services="core postgres prometheus alertmanager snmp-exporter loki alloy grafana netbox netbox-redis netbox-db-init librenms-db librenms-redis librenms librenms-dispatcher llm mailserver roundcube"
 _forgesre_journal="install core seed inventory discovery incident rca escalation notification demo netbox snmp jobs backup"
 _forgesre_status="OPEN INVESTIGATING ESCALATED RESOLVED CLOSED"

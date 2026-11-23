@@ -758,6 +758,22 @@ def power_api(db: Session = Depends(get_db), user: User = Depends(require("read_
     return overview(db)
 
 
+@router.get("/racks")
+def racks_api(site: str = "", db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict:
+    """Rack elevation: devices by site / row / rack and U position, with open incidents."""
+    from app.racks import racks
+
+    return racks(db, site)
+
+
+@router.get("/lifecycle")
+def lifecycle_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict:
+    """Support / warranty, end of life and licence dates that are expiring or expired, soonest first."""
+    from app.lifecycle import overview
+
+    return overview(db)
+
+
 @router.get("/handover")
 def handover_list(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
     """The latest shift handovers, newest first."""

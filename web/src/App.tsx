@@ -7,6 +7,7 @@ import { AddDevicesPage } from "./pages/AddDevices";
 import { AutomationPage } from "./pages/Automation";
 import { DependencyMapPage } from "./pages/DependencyMap";
 import { ForgeAiPage } from "./pages/ForgeAi";
+import { RacksPage } from "./components/Racks";
 import { IncidentDetailPage } from "./pages/IncidentDetail";
 import { IncidentsPage } from "./pages/Incidents";
 import { InventoryPage } from "./pages/Inventory";
@@ -34,6 +35,7 @@ export function App() {
         <Route path="/incidents/:number" element={<IncidentDetailPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/inventory/map" element={<DependencyMapPage />} />
+        <Route path="/inventory/racks" element={<RacksPage />} />
         <Route path="/inventory/add" element={<AddDevicesPage />} />
         <Route path="/automation" element={<AutomationPage />} />
         <Route path="/investigations" element={<InvestigationsPage />} />
