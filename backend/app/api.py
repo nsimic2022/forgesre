@@ -4516,6 +4516,14 @@ def reports_page_api(days: int = 30, db: Session = Depends(get_db), user: User =
     return data
 
 
+@router.get("/reports/alert-quality")
+def alert_quality(days: int = 30, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """Per alert name: incidents, % acknowledged, % that cleared by themselves, flapping, advice."""
+    from app.alert_quality import report
+
+    return report(db, days=days)
+
+
 @router.get("/reports/incidents.csv")
 def reports_csv_api(days: int = 30, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> Response:
     """Incidents of the last ``days`` as a CSV download."""

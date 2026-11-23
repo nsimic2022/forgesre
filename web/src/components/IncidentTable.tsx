@@ -33,6 +33,8 @@ function IncidentRow({ row, picked, onPick }: { row: NocIncident; picked?: boole
         <div className="cell-stack">
           <Link to={`/incidents/${encodeURIComponent(row.number)}`} style={{ color: "var(--text)", fontWeight: 600 }}>
             {row.title} <span className="mono faint" title={row.number}>{shortNumber(row.number)}</span>
+            {row.flap_count ? <> <Chip tone="warn">flapping ×{row.flap_count}</Chip></> : null}
+            {row.caused_by ? <> <span className="small faint" title="Linked to the incident that caused it; this one does not page">↳ {row.caused_by}</span></> : null}
           </Link>
           {row.detail ? <span className="small muted">{row.detail}</span> : null}
         </div>

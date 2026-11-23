@@ -992,6 +992,31 @@ def cmd_k8s(port: str, rest: list[str]) -> None:
             jar.unlink(missing_ok=True)
 
 
+def format_alert_quality(data: dict) -> str:
+    """Noisiest alerts first: incidents, % acknowledged, % that cleared alone, advice."""
+    rows = data.get("rows") or []
+    head = f"Last {data.get('days')} days: {data.get('incidents', 0)} incidents"
+    if data.get("actionable_pct") is not None:
+        head += f", {data['actionable_pct']}% acknowledged by a person"
+    if not rows:
+        return head + "\nNo incidents in this period.\n"
+    out = [head, f"{'ALERT':<32} {'INC':>5} {'ACKED':>6} {'ALONE':>6} {'FLAP':>5}  ADVICE"]
+    for r in rows[:40]:
+        out.append(f"{r['alertname'][:32]:<32} {r['incidents']:>5} {r['acked_pct']:>5}% {r['self_cleared_pct']:>5}% {r['flapping']:>5}  {r['advice']}")
+    return "\n".join(out) + "\n"
+
+
+def cmd_alert_quality(port: str, rest: list[str]) -> None:
+    """./forgesre alert-quality [DAYS]"""
+    jar, _me = ensure_jar(port)
+    try:
+        days = rest[0] if rest and rest[0].isdigit() else "30"
+        sys.stdout.write(format_alert_quality(get_json(port, jar, f"/api/v1/reports/alert-quality?days={days}")))
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def cmd_slo(port: str) -> None:
     jar, _me = ensure_jar(port)
     try:
@@ -1052,6 +1077,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_checks(port, rest)
     elif command == "slo":
         cmd_slo(port)
+    elif command == "alert-quality":
+        cmd_alert_quality(port, rest)
     elif command == "forgeai":
         cmd_forgeai(port, rest)
     elif command == "kubernetes":

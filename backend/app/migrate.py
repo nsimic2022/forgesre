@@ -238,6 +238,8 @@ def migrate(engine: Engine) -> None:
         existing = {col["name"] for col in inspector.get_columns("incidents")}
         if "caused_by_id" not in existing:
             statements.append("ALTER TABLE incidents ADD COLUMN caused_by_id INTEGER REFERENCES incidents(id) ON DELETE SET NULL")
+        if "flap_count" not in existing:
+            statements.append("ALTER TABLE incidents ADD COLUMN flap_count INTEGER DEFAULT 0")
     if "forgeai_calls" in tables:
         existing = {col["name"] for col in inspector.get_columns("forgeai_calls")}
         if "stars" not in existing:

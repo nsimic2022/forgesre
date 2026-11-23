@@ -56,9 +56,16 @@ def _e(key, group, label, effective=None, **kw) -> SettingDef:
     return SettingDef(key=key, group=group, label=label, kind="str", store="env", effective=effective, **kw)
 
 
+def _alarm(kind: str, key: str):
+    from app.alarm_noise import config
+
+    return config(kind)[key]
+
+
 GROUPS = {
     "general": "General",
     "checks": "Checks",
+    "alarms": "Alarms",
     "network": "Network",
     "integrations": "Integrations",
     "discovery": "Discovery",
@@ -75,6 +82,21 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("checks.tls_warn_days", "checks", "Certificate warning (days)", "int"),
     _y("checks.tls_critical_days", "checks", "Certificate critical (days)", "int"),
     _y("checks.backup_max_age_hours", "checks", "ForgeSRE backup max age (hours)", "int"),
+    # Alarms (app.alarm_noise): storms and flapping alerts page once instead of every time.
+    _y("alerts.storm.enabled", "alarms", "Group alarm storms", "bool",
+       effective=lambda: _alarm("storm", "enabled"),
+       help="Many new incidents at once open one Alarm storm incident that pages; the rest link to it."),
+    _y("alerts.storm.threshold", "alarms", "Storm: new incidents", "int", minimum=2, maximum=500,
+       effective=lambda: _alarm("storm", "threshold")),
+    _y("alerts.storm.window_minutes", "alarms", "Storm: within minutes", "int", minimum=1, maximum=1440,
+       effective=lambda: _alarm("storm", "window_minutes")),
+    _y("alerts.flapping.enabled", "alarms", "Stop paging for flapping alerts", "bool",
+       effective=lambda: _alarm("flapping", "enabled"),
+       help="An alert that keeps resolving and firing again stays visible with a counter but stops paging."),
+    _y("alerts.flapping.threshold", "alarms", "Flapping: times fired", "int", minimum=2, maximum=500,
+       effective=lambda: _alarm("flapping", "threshold")),
+    _y("alerts.flapping.window_minutes", "alarms", "Flapping: within minutes", "int", minimum=1, maximum=1440,
+       effective=lambda: _alarm("flapping", "window_minutes")),
     _y("system.public_url", "general", "Public address", help="How people reach ForgeSRE, e.g. https://forgesre.dc.local. Used for links in mail and chat (incident, one-click acknowledge). Empty = no links."),
     _y("system.cookie_secure", "general", "Secure cookies (HTTPS only)", "bool", effective=lambda: settings.cookie_secure),
     # Sign-in: directory and single sign-on. Roles come from groups; the local admin always works.

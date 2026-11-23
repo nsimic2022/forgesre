@@ -81,7 +81,17 @@ def _row(incident: Incident, sent: dict[int, int], llm_jobs: dict[str, str], mod
         "messages": sent.get(incident.id, 0),
         "forgerca": (latest.likely_cause or latest.summary or "") if latest else "",
         "forgeai": _forgeai_state(incident, llm_jobs, mode),
+        "flap_count": int(incident.flap_count or 0),
+        "caused_by": _caused_by(db, incident),
     }
+
+
+def _caused_by(db: Session, incident: Incident) -> str:
+    """Short number of the incident this one is linked to (parent down, alarm storm, by hand)."""
+    if not incident.caused_by_id:
+        return ""
+    cause = db.get(Incident, incident.caused_by_id)
+    return cause.number.split("_")[0] if cause is not None else ""
 
 
 def _sent_counts(db: Session, ids: list[int]) -> dict[int, int]:

@@ -20,8 +20,8 @@ the commented reference.
 
 ## Groups
 
-General · Checks · Network and services · Integrations (GLPI, Zabbix, LibreNMS, NetBox) · Discovery ·
-Notification channels (SMTP, Slack, Microsoft Teams, Discord) · ForgeRCA / ForgeAI. The page adds
+General · Checks · Alarms (storms, flapping) · Network · Integrations (GLPI, Zabbix, LibreNMS, NetBox, MCP) ·
+Discovery · Notifications (SMTP, Slack, Microsoft Teams, Discord) · RCA / AI · Sign-in. The page adds
 Messages and templates, Services and health, Users and roles, and Backup. The full list with types and limits
 is `REGISTRY` in `system_settings.py`.
 

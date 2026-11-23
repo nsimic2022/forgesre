@@ -94,6 +94,7 @@ Commands:
   jobs               Background RCA job queue
   checks             Certificates, backup age, heartbeats
   slo                SLOs: availability, error budget, burn rate
+  alert-quality      Noisiest alerts: acknowledged vs cleared alone, flapping, advice
   forgeai            ForgeAI model status, last questions; with INC-… the exact prompts
   kubernetes         Kubernetes / OpenShift clusters
   incidents          Short colored board (red/yellow/green); INC-… for one row
@@ -1144,6 +1145,10 @@ case "$cmd" in
   slo)
     need_env
     run_cli_ops slo "$@"
+    ;;
+  alert-quality)
+    need_env
+    run_cli_ops alert-quality "$@"
     ;;
   forgeai)
     need_env
