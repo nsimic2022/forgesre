@@ -579,6 +579,18 @@ burn rate over the last 24 h (1.0x = spending the budget evenly over the window)
   ./forgesre slo
 EOF
       ;;
+    alert-quality)
+      cat <<'EOF'
+alert-quality — which alerts page people for nothing, noisiest first.
+
+  ./forgesre alert-quality        last 30 days
+  ./forgesre alert-quality 7      last 7 days
+
+Per alert name: incidents, % acknowledged by a person, % that cleared by themselves within
+10 minutes, flapping incidents and a suggestion (noise filter, longer for:, higher threshold,
+keep). Same table as Reports › Alert quality. Storm and flapping settings: Settings › Alarms.
+EOF
+      ;;
     forgeai)
       cat <<'EOF'
 forgeai — the local language model and what ForgeSRE asked it.
