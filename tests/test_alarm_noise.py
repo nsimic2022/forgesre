@@ -14,6 +14,19 @@ from app.services import ingest_alertmanager
 from test_dc_noc_parent import _client, _db, _fire, _host, _resolve
 
 
+@pytest.fixture(autouse=True)
+def _no_leftover_jobs():
+    """Each new incident queues an RCA job; finish them so later tests' job runs are not crowded."""
+    from app.db import SessionLocal
+    from app.models import Job
+
+    yield
+    db = SessionLocal()
+    db.query(Job).filter(Job.status == "pending", Job.kind == "investigate").update({"status": "done"}, synchronize_session=False)
+    db.commit()
+    db.close()
+
+
 @pytest.fixture()
 def alarms(monkeypatch):
     """Turn storm and flapping detection on with small numbers (tests/forgesre.test.yml has them off)."""
