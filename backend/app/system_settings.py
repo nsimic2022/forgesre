@@ -239,6 +239,8 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("ai.llm.url", "ai", "Model URL", "url", effective=lambda: settings.llm_url),
     _y("ai.llm.model", "ai", "Model name", effective=lambda: settings.llm_model),
     _y("ai.llm.timeout_seconds", "ai", "Model timeout (s)", "int", minimum=10, maximum=900, effective=lambda: settings.llm_timeout),
+    _y("ai.forgeai.language", "ai", "ForgeAI answer language", "enum", choices=("en", "sr"),
+       help="en = English (default, small models answer best in it); sr = Serbian, Latin script. Prompts and checks stay the same."),
     _y("ai.llm.thinking", "ai", "Let the model think first", "bool", effective=lambda: settings.llm_thinking,
        help="Qwen3 and similar can reason before answering; the chat shows the reasoning. Slower on CPU: raise the timeout too."),
     _y("ai.cloud.enabled", "ai", "Paid cloud model (optional)", "bool", effective=lambda: settings.cloud_enabled, test="cloud",

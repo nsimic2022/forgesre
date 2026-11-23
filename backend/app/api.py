@@ -978,6 +978,66 @@ def known_errors_delete(ke_id: int, db: Session = Depends(get_db), user: User = 
     return {"deleted": ke_id}
 
 
+class GoldenBody(BaseModel):
+    number: str
+    expect: str = ""
+
+
+@router.get("/forgeai/golden")
+def golden_list(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict:
+    """ForgeAI golden test set: the incidents and the last runs with their scores."""
+    from app.forgeai_golden import JOB_KIND, overview
+    from app.models import Job
+
+    pending = db.query(Job).filter(Job.kind == JOB_KIND, Job.status.in_(["pending", "running"])).count()
+    return {**overview(db), "running": bool(pending), "can_edit": can(user, "write_play")}
+
+
+@router.post("/forgeai/golden")
+def golden_add(body: GoldenBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Add a resolved incident with a confirmed cause to the golden set (Engineer+)."""
+    from app.forgeai_golden import add_case
+
+    try:
+        row = add_case(db, body.number, body.expect, user.email)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"id": row.id}
+
+
+@router.delete("/forgeai/golden/{case_id}")
+def golden_delete(case_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    from app.models import GoldenCase
+
+    row = db.get(GoldenCase, case_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="case not found")
+    db.delete(row)
+    db.commit()
+    return {"deleted": case_id}
+
+
+class GoldenRunBody(BaseModel):
+    skill: str = ""
+
+
+@router.post("/forgeai/golden/run")
+def golden_run(body: GoldenRunBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Queue a run of the golden set on the local model (LLM lane, background)."""
+    from app.forgeai_golden import JOB_KIND
+    from app.jobs import enqueue
+    from app.models import GoldenCase
+
+    if not db.query(GoldenCase).count():
+        raise HTTPException(status_code=400, detail="the golden set is empty")
+    job = enqueue(db, JOB_KIND, "golden", object_type="forgeai", payload={"skill": body.skill.strip(), "actor": user.email})
+    audit(db, "forgeai.golden.run", actor=user.email, object_type="forgeai", object_id="golden", data={"skill": body.skill})
+    db.commit()
+    return {"job": job.id if job else None}
+
+
 @router.get("/handover")
 def handover_list(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
     """The latest shift handovers, newest first."""

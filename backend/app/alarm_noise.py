@@ -78,6 +78,9 @@ def storm_for(db: Session, incident: Incident) -> tuple[Incident | None, bool]:
                                           Incident.fingerprint != STORM_FINGERPRINT, Incident.caused_by_id.is_(None)).all()):
         row.caused_by_id = inserted.id
     db.flush()
+    from app.forgeai import queue_storm_summary
+
+    queue_storm_summary(db, inserted, opened=True)
     return inserted, True
 
 
@@ -89,6 +92,9 @@ def join_storm(db: Session, incident: Incident, storm: Incident) -> None:
     db.flush()  # the session does not autoflush: count this incident too
     linked = db.query(Incident).filter(Incident.caused_by_id == storm.id).count()
     storm.title = f"Alarm storm: {linked} incidents since {storm.started_at.strftime('%H:%M') if storm.started_at else 'now'}"
+    from app.forgeai import queue_storm_summary
+
+    queue_storm_summary(db, storm)
 
 
 def flap_count(db: Session, incident: Incident) -> int:

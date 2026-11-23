@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { KnownErrorsCard } from "../components/KnownErrors";
+import { GoldenSet } from "../components/GoldenSet";
 import { usePaged } from "../components/Pager";
 import { MaintenanceForm, PlaybookForm, PolicyForm, RemoveButton, RuleForm, ruleBody, ruleDraft } from "../components/AutomationEditors";
 import { ForgeAiDocs } from "../components/ForgeAiDocs";
@@ -148,7 +149,7 @@ export function AutomationPage() {
           </button>
         ))}
       </div>
-      {tab === "forgeai" ? <><ForgeAiSkills /><ForgeAiDocs /></> : null}
+      {tab === "forgeai" ? <><ForgeAiSkills /><GoldenSet /><ForgeAiDocs /></> : null}
       {tab === "known" ? <KnownErrorsCard /> : null}
       {data && tab === "filters" ? <NoiseFilters filters={data.filters} canEdit={data.can_edit} onChanged={load} /> : null}
       {data && tab === "rules" ? (

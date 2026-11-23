@@ -137,7 +137,7 @@ def _json_safe(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
 
 
-LLM_KINDS = (FORGEAI_DIGEST_KIND, "forgeai", "llm_download", "forgeai_replay", "forgeai_chat", "forgeai_ping")
+LLM_KINDS = (FORGEAI_DIGEST_KIND, "forgeai", "llm_download", "forgeai_replay", "forgeai_chat", "forgeai_ping", "forgeai_golden")
 
 
 def job_is_llm(row: Job) -> bool:
@@ -363,6 +363,12 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload.pop("instructions", None)
                 payload["result"] = {"call_id": call.id, "status": call.status}
                 row.payload = payload
+            elif row.kind == "forgeai_golden":
+                from app.forgeai_golden import run as golden_run
+
+                # every golden case once, as trial calls; each has the model's own timeout
+                done = golden_run(db, skill=str((row.payload or {}).get("skill") or ""), actor=str((row.payload or {}).get("actor") or "system"))
+                row.payload = {**(row.payload or {}), "result": {"run_id": done.id, "passed": done.passed, "total": done.total}}
             elif row.kind == "forgeai_ping":
                 from app.forgeai import ping
 
