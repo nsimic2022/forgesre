@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_snmp_yml_still_loads_if_mib_only():
     parsed = yaml.safe_load((ROOT / "monitoring" / "snmp.yml").read_text(encoding="utf-8"))
-    assert set(parsed["modules"]) == {"if_mib", "host"}
+    assert set(parsed["modules"]) == {"if_mib", "host", "power"}
     module = parsed["modules"]["if_mib"]
     assert "lookups" not in module
     names = {metric["name"] for metric in module["metrics"]}

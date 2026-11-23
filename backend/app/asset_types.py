@@ -21,19 +21,23 @@ ASSET_TYPE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Servers", ("Linux Server", "Windows Server", "Hypervisor")),
     ("Network", ("Network device", "Switch", "Router", "Firewall")),
     ("Storage", ("Storage", "QNAP/NAS")),
+    ("Power", ("UPS", "PDU", "Environment sensor")),
     ("Kubernetes", ("Kubernetes cluster", "Kubernetes node", "Kubernetes workload")),
     ("Other", ("Web/appliance", "Printer", "Other")),
 )
 ASSET_TYPE_CHOICES: list[str] = [name for _group, names in ASSET_TYPE_GROUPS for name in names]
 # Operator picked these on purpose: Verify never rewrites them to Linux / Windows.
-PINNED_TYPES = frozenset({"Hypervisor", "Storage", "QNAP/NAS", "Printer", "Other"})
+PINNED_TYPES = frozenset({"Hypervisor", "Storage", "QNAP/NAS", "Printer", "Other", "UPS", "PDU", "Environment sensor"})
+# Power and environment devices: SNMP on, plus the UPS-MIB / ENTITY-SENSOR ``power`` module.
+POWER_TYPES = frozenset({"UPS", "PDU", "Environment sensor"})
 
 _EXPORTER_WORDS = ("windows", "win32", "linux")
-_SNMP_WORDS = re.compile(r"network|switch|router|firewall|storage|qnap|printer|\bnas\b|\bsan\b")
+_SNMP_WORDS = re.compile(r"network|switch|router|firewall|storage|qnap|printer|\bnas\b|\bsan\b|\bups\b|\bpdu\b|environment sensor")
 
 
 def snmp_family(type: str = "", profile: str = "") -> bool:
-    """Network device, Switch, Router, Firewall, Storage, QNAP/NAS, Printer. Not Linux / Windows / Web."""
+    """Network device, Switch, Router, Firewall, Storage, QNAP/NAS, Printer, UPS, PDU, sensor.
+    Not Linux / Windows / Web."""
     if is_auto_asset_type(type):
         return False
     name = (type or "").strip()

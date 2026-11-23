@@ -100,6 +100,23 @@ visible; they only stop their own mail ladder.
 acknowledged, how many cleared by themselves within 10 minutes, flapping and a suggestion (add a
 noise filter, a longer `for:`, a higher threshold, or keep).
 
+## Power and environment
+
+UPS, PDU and environment sensors are polled over SNMP by Prometheus job `forgesre-snmp-power`
+(module `power` in `monitoring/snmp.yml`). Rules are in group `forgesre-power`:
+
+| Alert | Fires when | Severity |
+|---|---|---|
+| `UpsOnBattery` | `upsOutputSource` is 5 (battery) for 1 min | critical |
+| `UpsBatteryLow` | battery status low/depleted, or under 10 minutes of runtime, for 1 min | critical |
+| `UpsLoadHigh` | output load over 80% for 15 min | warning |
+| `PowerTemperatureHigh` | an ENTITY-SENSOR celsius sensor over 32 °C for 10 min | high |
+| `PowerSnmpUnreachable` | the power job cannot read the device for 5 min | high |
+
+The NOC panel uses the same numbers (warning from 32 °C, red from 40 °C, load warning from
+80%). Devices that do not implement UPS-MIB or ENTITY-SENSOR-MIB (some vendor PDUs) need a
+vendor module; add it with SNMP onboarding (Inventory › SNMP › extra OIDs).
+
 ## Runbook format
 
 Playbooks (and runbooks linked from an asset) use one shape, so operators and ForgeAI read

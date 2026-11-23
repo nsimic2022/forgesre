@@ -1022,6 +1022,42 @@ def cmd_alert_quality(port: str, rest: list[str]) -> None:
             jar.unlink(missing_ok=True)
 
 
+def format_power(data: dict) -> str:
+    """UPS rows, then sensors, then power assets that answer nothing."""
+    if data.get("error"):
+        return f"Prometheus did not answer: {data['error']}\n"
+    ups, sensors, silent = data.get("ups") or [], data.get("sensors") or [], data.get("silent") or []
+    if not (ups or sensors or silent):
+        return "No UPS, PDU or environment sensor in inventory. Add one with type UPS, PDU or Environment sensor.\n"
+
+    def fmt(value: object, suffix: str = "") -> str:
+        return "-" if value is None else f"{value:g}{suffix}"
+
+    out: list[str] = []
+    if ups:
+        out.append(f"{'UPS':<20} {'STATE':<9} {'SOURCE':<8} {'BATTERY':<9} {'CHARGE':>6} {'MIN':>5} {'LOAD':>5} {'IN V':>5} ALARMS")
+        for r in ups:
+            out.append(f"{r['asset'][:20]:<20} {r['state']:<9} {r['source']:<8} {r['battery']:<9} {fmt(r['charge'], '%'):>6} "
+                       f"{fmt(r['minutes_left']):>5} {fmt(r['load'], '%'):>5} {fmt(r['input_v']):>5} {r['alarms']}")
+    if sensors:
+        out.append(f"{'SENSOR':<20} {'NAME':<24} {'STATE':<9} VALUE")
+        for s in sensors:
+            out.append(f"{s['asset'][:20]:<20} {s['name'][:24]:<24} {s['state']:<9} {s['value']:g} {s['unit']}")
+    if silent:
+        out.append("No SNMP data from: " + ", ".join(silent))
+    return "\n".join(out) + "\n"
+
+
+def cmd_power(port: str) -> None:
+    """./forgesre power"""
+    jar, _me = ensure_jar(port)
+    try:
+        sys.stdout.write(format_power(get_json(port, jar, "/api/v1/power")))
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def format_handover(rows: list[dict]) -> str:
     """The latest handover first: who, when, notes, open incidents, who took over."""
     if not rows:
@@ -1144,6 +1180,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_slo(port)
     elif command == "alert-quality":
         cmd_alert_quality(port, rest)
+    elif command == "power":
+        cmd_power(port)
     elif command in {"handover", "actions", "sla"}:
         cmd_process(port, command, rest)
     elif command == "forgeai":

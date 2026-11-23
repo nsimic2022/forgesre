@@ -254,5 +254,130 @@ modules:
             labelname: prNames
             oid: 1.3.6.1.4.1.2021.2.1.2
             type: DisplayString
+  # UPS-MIB (RFC 1628) and ENTITY-SENSOR-MIB (RFC 3433): UPS, PDU and environment sensors.
+  power:
+    timeout: 8s
+    retries: 1
+    max_repetitions: 25
+    walk:
+      - 1.3.6.1.2.1.33.1.3.3.1.3
+      - 1.3.6.1.2.1.33.1.4.4.1.5
+      - 1.3.6.1.2.1.99.1.1.1.1
+      - 1.3.6.1.2.1.99.1.1.1.2
+      - 1.3.6.1.2.1.99.1.1.1.3
+      - 1.3.6.1.2.1.99.1.1.1.4
+      - 1.3.6.1.2.1.99.1.1.1.5
+      - 1.3.6.1.2.1.47.1.1.1.1.7
+    get:
+      - 1.3.6.1.2.1.33.1.2.1.0
+      - 1.3.6.1.2.1.33.1.2.2.0
+      - 1.3.6.1.2.1.33.1.2.3.0
+      - 1.3.6.1.2.1.33.1.2.4.0
+      - 1.3.6.1.2.1.33.1.2.7.0
+      - 1.3.6.1.2.1.33.1.4.1.0
+      - 1.3.6.1.2.1.33.1.6.1.0
+    metrics:
+      - name: upsBatteryStatus
+        oid: 1.3.6.1.2.1.33.1.2.1
+        type: gauge
+        help: Battery status - 1 unknown, 2 normal, 3 low, 4 depleted.
+      - name: upsSecondsOnBattery
+        oid: 1.3.6.1.2.1.33.1.2.2
+        type: gauge
+        help: Seconds since the UPS switched to battery, 0 when on utility power.
+      - name: upsEstimatedMinutesRemaining
+        oid: 1.3.6.1.2.1.33.1.2.3
+        type: gauge
+        help: Estimated minutes of battery runtime left at the present load.
+      - name: upsEstimatedChargeRemaining
+        oid: 1.3.6.1.2.1.33.1.2.4
+        type: gauge
+        help: Estimated battery charge left, percent.
+      - name: upsBatteryTemperature
+        oid: 1.3.6.1.2.1.33.1.2.7
+        type: gauge
+        help: Ambient temperature at or near the battery, degrees Celsius.
+      - name: upsOutputSource
+        oid: 1.3.6.1.2.1.33.1.4.1
+        type: gauge
+        help: Output source - 1 other, 2 none, 3 normal, 4 bypass, 5 battery, 6 booster, 7 reducer.
+      - name: upsAlarmsPresent
+        oid: 1.3.6.1.2.1.33.1.6.1
+        type: gauge
+        help: Number of active UPS alarm conditions.
+      - name: upsInputVoltage
+        oid: 1.3.6.1.2.1.33.1.3.3.1.3
+        type: gauge
+        help: Input voltage per input line, volts RMS.
+        indexes:
+          - labelname: upsInputLineIndex
+            type: gauge
+      - name: upsOutputPercentLoad
+        oid: 1.3.6.1.2.1.33.1.4.4.1.5
+        type: gauge
+        help: Output load per output line, percent of rated capacity.
+        indexes:
+          - labelname: upsOutputLineIndex
+            type: gauge
+      - name: entPhySensorType
+        oid: 1.3.6.1.2.1.99.1.1.1.1
+        type: gauge
+        help: Sensor type - 3 voltsAC, 4 voltsDC, 5 amperes, 6 watts, 8 celsius, 9 percentRH, 10 rpm.
+        indexes:
+          - labelname: entPhysicalIndex
+            type: gauge
+        lookups:
+          - labels: [entPhysicalIndex]
+            labelname: entPhysicalName
+            oid: 1.3.6.1.2.1.47.1.1.1.1.7
+            type: DisplayString
+      - name: entPhySensorScale
+        oid: 1.3.6.1.2.1.99.1.1.1.2
+        type: gauge
+        help: Sensor scale - 9 units, 8 milli, 10 kilo.
+        indexes:
+          - labelname: entPhysicalIndex
+            type: gauge
+        lookups:
+          - labels: [entPhysicalIndex]
+            labelname: entPhysicalName
+            oid: 1.3.6.1.2.1.47.1.1.1.1.7
+            type: DisplayString
+      - name: entPhySensorPrecision
+        oid: 1.3.6.1.2.1.99.1.1.1.3
+        type: gauge
+        help: Number of decimal places in entPhySensorValue.
+        indexes:
+          - labelname: entPhysicalIndex
+            type: gauge
+        lookups:
+          - labels: [entPhysicalIndex]
+            labelname: entPhysicalName
+            oid: 1.3.6.1.2.1.47.1.1.1.1.7
+            type: DisplayString
+      - name: entPhySensorValue
+        oid: 1.3.6.1.2.1.99.1.1.1.4
+        type: gauge
+        help: Raw sensor reading; divide by 10^precision for the value.
+        indexes:
+          - labelname: entPhysicalIndex
+            type: gauge
+        lookups:
+          - labels: [entPhysicalIndex]
+            labelname: entPhysicalName
+            oid: 1.3.6.1.2.1.47.1.1.1.1.7
+            type: DisplayString
+      - name: entPhySensorOperStatus
+        oid: 1.3.6.1.2.1.99.1.1.1.5
+        type: gauge
+        help: Sensor status - 1 ok, 2 unavailable, 3 nonoperational.
+        indexes:
+          - labelname: entPhysicalIndex
+            type: gauge
+        lookups:
+          - labels: [entPhysicalIndex]
+            labelname: entPhysicalName
+            oid: 1.3.6.1.2.1.47.1.1.1.1.7
+            type: DisplayString
   # forgesre-onboard-modules begin
   # forgesre-onboard-modules end

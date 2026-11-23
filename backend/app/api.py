@@ -46,6 +46,7 @@ from app.inventory import (
     persist_live_classification,
     sd_targets,
     sd_snmp_host_targets,
+    sd_snmp_power_targets,
     sd_snmp_onboard_targets,
     sd_snmp_targets,
     seed_demo_candidate,
@@ -747,6 +748,14 @@ def sla_summary(days: int = 30, db: Session = Depends(get_db), user: User = Depe
     from app.incident_process import sla_config, sla_report
 
     return {**sla_report(db, days), "targets": sla_config()}
+
+
+@router.get("/power")
+def power_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict:
+    """Power and environment panel: UPS rows, sensor readings, power assets that answer nothing."""
+    from app.power import overview
+
+    return overview(db)
 
 
 @router.get("/handover")
@@ -1707,6 +1716,13 @@ def snmp_host_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
     if not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid sd token")
     return sd_snmp_host_targets(db)
+
+
+@router.get("/sd/snmp-power")
+def snmp_power_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
+    if not _webhook_token_ok(request):
+        raise HTTPException(status_code=401, detail="invalid sd token")
+    return sd_snmp_power_targets(db)
 
 
 @router.get("/sd/snmp-onboard")
@@ -2852,6 +2868,29 @@ def _checks_check() -> dict[str, Any]:
         return {"status": "error", "detail": str(exc)[:200]}
 
 
+def _power_check() -> dict[str, Any]:
+    """UPS / PDU / sensor assets: disabled when none, warn while a forgesre-power alert is open."""
+    from app.db import SessionLocal
+    from app.power import power_metrics_on
+
+    names = ("UpsOnBattery", "UpsBatteryLow", "UpsLoadHigh", "PowerTemperatureHigh", "PowerSnmpUnreachable")
+    try:
+        db = SessionLocal()
+        try:
+            assets = [a.asset_id for a in db.query(Asset).all() if power_metrics_on(a)]
+            if not assets:
+                return {"status": "disabled", "why": "no UPS, PDU or Environment sensor asset"}
+            q = db.query(Incident).filter(Incident.status.notin_(["RESOLVED", "CLOSED"]))
+            open_ = [i.title for i in q.all() if any(n in (i.title or "") for n in names)]
+        finally:
+            db.close()
+    except Exception as exc:
+        return {"status": "error", "why": str(exc)[:200]}
+    if open_:
+        return {"status": "warn", "why": f"{len(open_)} open: " + "; ".join(open_[:3]), "test": "./forgesre power"}
+    return {"status": "ok", "why": f"{len(assets)} power asset(s), job forgesre-snmp-power"}
+
+
 def _doctor_payload_fresh() -> dict[str, Any]:
     components = {
         # Machine key "core" = compose service. Display: Core (container).
@@ -2877,6 +2916,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "checks": _checks_check(),
         "mcp": _mcp_check(),
         "kubernetes": _k8s_check(),
+        "power": _power_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)

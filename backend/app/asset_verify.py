@@ -92,7 +92,7 @@ OS_PLAYBOOK_SLUGS = frozenset(
     }
 )
 SNMP_FLAP_SECONDS = 120  # mirrors monitoring/alerts.yml SnmpDeviceUnreachable for: 2m
-_SNMP_JOBS = ("forgesre-snmp", "forgesre-snmp-host", "forgesre-snmp-onboard")
+_SNMP_JOBS = ("forgesre-snmp", "forgesre-snmp-host", "forgesre-snmp-power", "forgesre-snmp-onboard")
 _LOOPBACK = {"::1", "0.0.0.0", "localhost"}
 
 log = logging.getLogger("forgesre.verify")

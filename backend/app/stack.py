@@ -33,6 +33,7 @@ COMPONENT_LABELS = {
     "checks": "Checks",
     "mcp": "MCP",
     "kubernetes": "Kubernetes",
+    "power": "Power and environment",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -58,6 +59,7 @@ COMPONENT_SHORT = {
     "checks": "Checks",
     "mcp": "MCP",
     "kubernetes": "Kubernetes",
+    "power": "Power",
     "redis": "Redis",
     "mailpit": "Mailpit",
 }
