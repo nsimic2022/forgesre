@@ -3489,6 +3489,14 @@ def inventory_api(
     return data
 
 
+@router.get("/inventory/tree")
+def inventory_tree_api(db: Session = Depends(get_db), user: User = Depends(require("read_assets"))) -> dict:
+    """Inventory › Tree: site → row → rack → asset, children under their parent, worst state per node."""
+    from app.inventory_view import inventory_tree
+
+    return inventory_tree(db)
+
+
 @router.get("/inventory.csv")
 def inventory_csv_api(
     q: str = "", site: str = "", rack: str = "", type: str = "", environment: str = "", customer: str = "", view: str = "",

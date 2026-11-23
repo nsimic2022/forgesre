@@ -257,3 +257,68 @@ def inventory_csv(db: Session, **filters: Any) -> str:
                 "parent": parents.get(a.parent_id, "") if a.parent_id else ""}
         writer.writerow([base.get(c, extras.get(c, "")) or "" for c in COLUMNS])
     return "\ufeff" + out.getvalue()  # BOM: Excel opens UTF-8 with the right letters
+
+
+STATE_RANK = {"down": 3, "alarm": 2, "unknown": 1, "up": 0}
+
+
+def inventory_tree(db: Session) -> dict[str, Any]:
+    """Inventory as a tree for the location view: site → row → rack → asset, children under their parent.
+
+    An asset with a parent goes under that parent (wherever the parent stands), so a VM shows
+    under its hypervisor and a blade under its chassis. Missing location parts become "No site",
+    "No row" or "No rack". Each node carries counts and its worst state (down > alarm > unknown > up),
+    so a red rack is visible before it is opened.
+    """
+    assets = db.query(Asset).order_by(Asset.hostname).all()
+    open_counts = _open_counts(db)
+    by_id = {a.id: a for a in assets}
+    leaves: dict[int, dict[str, Any]] = {}
+    for a in assets:
+        leaves[a.id] = {"kind": "asset", "id": a.asset_id, "name": a.hostname or a.asset_id, "type": a.type or "",
+                        "ip": a.ip or "", "state": asset_state(a, open_counts.get(a.id, 0)),
+                        "open": open_counts.get(a.id, 0), "children": []}
+    roots: list[Asset] = []
+    for a in assets:
+        parent = by_id.get(a.parent_id) if a.parent_id else None
+        if parent is not None and parent.id != a.id:
+            leaves[parent.id]["children"].append(leaves[a.id])
+        else:
+            roots.append(a)
+
+    def group(name: str, kind: str) -> dict[str, Any]:
+        return {"kind": kind, "name": name, "children": [], "_index": {}}
+
+    top = group("All", "root")
+    for a in roots:
+        extras = normalize_extras(a.extras)
+        node = top
+        # a missing row or rack is skipped, not shown as an empty level; a missing site is "No site"
+        for kind, label in (("site", extras.get("site") or "No site"), ("row", extras.get("row") or ""), ("rack", extras.get("rack") or "")):
+            if not label:
+                continue
+            key = (kind, label)
+            if key not in node["_index"]:
+                child = group(label, kind)
+                node["_index"][key] = child
+                node["children"].append(child)
+            node = node["_index"][key]
+        node["children"].append(leaves[a.id])
+
+    def finish(node: dict[str, Any]) -> tuple[int, int, str]:
+        """Fill counts and worst state bottom-up; drop the private index."""
+        node.pop("_index", None)
+        total, opened, worst = 0, 0, "up"
+        if node["kind"] == "asset":
+            total, opened, worst = 1, node["open"], node["state"]
+        for child in node["children"]:
+            t, o, w = finish(child)
+            total, opened = total + t, opened + o
+            worst = w if STATE_RANK[w] > STATE_RANK[worst] else worst
+        if node["kind"] != "asset":
+            node["children"].sort(key=lambda c: (c["kind"] == "asset", c["name"].lower()))
+        node["assets"], node["open_total"], node["worst"] = total, opened, worst
+        return total, opened, worst
+
+    finish(top)
+    return top

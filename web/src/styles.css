@@ -251,3 +251,13 @@ details.explain[open] > summary { margin-bottom: 6px; }
 .pager .btn { min-width: 34px; justify-content: center; }
 .bulk-bar { gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: 10px; background: var(--s2); border: 1px solid var(--border); }
 tr.picked td { background: var(--s2); }
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; min-width: 0; }
+.tree-row:hover, .tree-row.on { background: var(--s2); }
+.tree-twist { width: 18px; flex: none; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 12px; padding: 0; }
+.tree-name { background: none; border: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; padding: 2px 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seg { display: inline-flex; }
+.seg .btn { border-radius: 0; }
+.seg .btn:first-child { border-radius: 8px 0 0 8px; }
+.seg .btn:last-child { border-radius: 0 8px 8px 0; margin-left: -1px; }
+.seg .btn.on { background: var(--accent-bg); color: var(--text); border-color: var(--accent); }
