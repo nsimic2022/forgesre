@@ -2,6 +2,7 @@ import { ChangesCard } from "../components/ChangesCard";
 import { AskForgeAi } from "../components/AskForgeAi";
 import { ForgeAiCard } from "../components/ForgeAiCard";
 import { IncidentLinks } from "../components/IncidentLinks";
+import { FollowUpActions, MajorIncidentCard, SlaChips } from "../components/IncidentProcess";
 import { IncidentMetrics, IncidentStory, SimilarBefore, SyslogCard, WhoToCall } from "../components/IncidentPanels";
 import { PostmortemPanel } from "../components/PostmortemPanel";
 import { useCallback, useEffect, useState } from "react";
@@ -94,7 +95,9 @@ export function IncidentDetailPage() {
         {data.ack_at ? ` · acknowledged by ${data.ack_by} at ${clock(data.ack_at)}` : open ? " · not acknowledged" : ""}
         {data.resolved_at ? ` · resolved by ${data.resolved_by || "system"} at ${clock(data.resolved_at)}` : ""}
         {` · escalation ${tierLabel(data.level)}`}
+        {data.sla ? <span style={{ marginLeft: 10 }}><SlaChips sla={data.sla} /></span> : null}
       </div>
+      {data.major ? <MajorIncidentCard number={data.number} major={data.major} canWork={data.can.work} onChanged={load} /> : null}
       <div className="cols">
         <div style={{ flex: "999 1 620px", display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
           <Card
@@ -182,6 +185,7 @@ export function IncidentDetailPage() {
           <SimilarBefore rows={data.similar ?? []} />
           <IncidentLinks number={data.number} links={data.links} canWork={data.can.work} canQuiet={Boolean(data.can.quiet)} hasAsset={Boolean(data.asset)} onChanged={load} />
           <ReviewCard number={data.number} review={data.review} canEdit={data.can.work} hasAi={Boolean(data.forgeai.text)} onSaved={load} />
+          <FollowUpActions number={data.number} actions={data.actions ?? []} canWork={data.can.work} onChanged={load} />
           {data.asset ? (
             <Card title="Asset">
               <Link to={`/inventory?q=${encodeURIComponent(data.asset.hostname)}`} style={{ fontWeight: 700, fontSize: 15 }}>{data.asset.hostname}</Link>

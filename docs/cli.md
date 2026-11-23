@@ -107,6 +107,9 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `kubernetes` | Kubernetes / OpenShift clusters: token set, nodes, workloads, open incidents; `kubernetes sync` reads them now |
 | `slo` | SLOs: availability against target, error budget left, 24 h burn rate |
 | `alert-quality [DAYS]` | Noisiest alerts: incidents, % acknowledged, % that cleared alone, flapping, a suggestion |
+| `handover [write "notes" \| take]` | Shift handover: the latest one, write one, or confirm it as the next shift |
+| `actions` | Open follow-up actions from incident reviews, overdue first |
+| `sla [DAYS]` | SLA: acknowledged and resolved in time, per severity |
 | `forgeai` | ForgeAI: model status, last questions; `forgeai INC-…` shows the exact prompts and answers; `forgeai tuning [skill]` puts answers next to the confirmed causes; `forgeai docs` lists uploaded vendor documents |
 | `checks` | Certificate expiry, ForgeSRE backup age and heartbeats, failing first; `checks run` runs now, `checks ping NAME [HOURS]` records a heartbeat |
 | `settings` | Settings from the shell: list, get, set, test, set-secret ([settings.md](settings.md)) |

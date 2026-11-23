@@ -71,10 +71,14 @@ export interface NocIncident {
   forgeai: ForgeAiState;
   flap_count?: number;
   caused_by?: string;
+  sla?: ({ kind: "response" | "resolve" } & SlaClock) | null;
+  major?: boolean;
 }
 
 export interface Noc {
   generated_at: string;
+  major?: MajorBrief[];
+  handover?: Handover | null;
   counts: {
     open: number;
     critical: number;
@@ -232,8 +236,18 @@ export interface IncidentView {
   similar?: { number: string; status: string; started_at: string | null; minutes: number | null; root_cause: string; resolved_by: string }[];
   review: Review;
   links?: { caused_by: IncidentBrief | null; consequences: IncidentBrief[] };
+  major?: MajorView;
+  sla?: SlaState | null;
+  actions?: FollowUp[];
   can: { work: boolean; investigate: boolean; cloud: boolean; quiet?: boolean };
 }
+
+export type MajorView = { on: boolean; commander: string; bridge_url: string; update_minutes: number; last_update_at: string | null; next_due: string | null; overdue: boolean; message: string };
+export type SlaClock = { state: "none" | "running" | "met" | "breached"; due?: string; target_min?: number; minutes_left?: number };
+export type SlaState = { response: SlaClock; resolve: SlaClock };
+export type FollowUp = { id: number; text: string; owner: string; due: string | null; done: boolean; done_at: string | null; created_by: string; overdue: boolean; incident?: string; incident_title?: string };
+export type Handover = { id: number; created_by: string; created_at: string | null; notes: string; open_incidents: { number: string; title: string; severity: string; acked: boolean }[]; taken_by: string; taken_at: string | null };
+export type MajorBrief = { number: string; title: string; commander: string; bridge_url: string; next_due: string | null; overdue: boolean };
 
 export type IncidentBrief = { number: string; title: string; status: string; severity: string };
 

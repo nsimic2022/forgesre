@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     JSON,
     Boolean,
     LargeBinary,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -254,6 +255,12 @@ class Incident(Base):
     caused_by_id: Mapped[int | None] = mapped_column(ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True, index=True)
     # Times this alert fired within the flapping window when it opened (app.alarm_noise); 0 = not flapping.
     flap_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Major incident (app.incident_process): a commander, a bridge call and status updates on a timer.
+    major: Mapped[bool] = mapped_column(Boolean, default=False)
+    commander: Mapped[str] = mapped_column(String(255), default="")
+    bridge_url: Mapped[str] = mapped_column(String(500), default="")
+    update_minutes: Mapped[int] = mapped_column(Integer, default=30)
+    last_update_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     asset: Mapped[Asset | None] = relationship(back_populates="incidents")
     playrule: Mapped[Playrule | None] = relationship()
@@ -368,6 +375,36 @@ class ForgeAiChatMessage(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     call_id: Mapped[int | None] = mapped_column(ForeignKey("forgeai_calls.id", ondelete="SET NULL"), nullable=True)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class FollowUpAction(Base):
+    """A follow-up action from an incident review: who does what by when (app.incident_process)."""
+
+    __tablename__ = "follow_up_actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    incident_id: Mapped[int] = mapped_column(ForeignKey("incidents.id", ondelete="CASCADE"), index=True)
+    text: Mapped[str] = mapped_column(Text, default="")
+    owner: Mapped[str] = mapped_column(String(255), default="")
+    due: Mapped[date | None] = mapped_column(Date, nullable=True)
+    done: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ShiftHandover(Base):
+    """One shift handing over to the next: notes, the incidents still open, and who took over."""
+
+    __tablename__ = "shift_handovers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_by: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    open_incidents: Mapped[list] = mapped_column(JSONType, default=list)
+    taken_by: Mapped[str] = mapped_column(String(255), default="")
+    taken_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class DocFile(Base):

@@ -84,6 +84,12 @@ alerts:
     threshold: 3
     window_minutes: 60
 
+# SLA targets in minutes: response = acknowledged, resolve = resolved. Shown on incidents and reports.
+sla:
+  enabled: true
+  response: {critical: 15, high: 30, warning: 120}
+  resolve: {critical: 240, high: 480, warning: 1440}
+
 notifications:
   email:
     enabled: false

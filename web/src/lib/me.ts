@@ -16,3 +16,15 @@ export function useRoleRank(): number {
   }, []);
   return rank;
 }
+
+/** The signed-in person's email ("" until known). */
+export function useMyEmail(): string {
+  const [email, setEmail] = useState("");
+  useEffect(() => {
+    cached ??= getJson<Me>("/api/v1/me").catch(() => null);
+    let alive = true;
+    void cached.then((me) => alive && setEmail(me?.email ?? ""));
+    return () => void (alive = false);
+  }, []);
+  return email;
+}

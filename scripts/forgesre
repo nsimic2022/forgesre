@@ -95,6 +95,9 @@ Commands:
   checks             Certificates, backup age, heartbeats
   slo                SLOs: availability, error budget, burn rate
   alert-quality      Noisiest alerts: acknowledged vs cleared alone, flapping, advice
+  handover           Shift handover: show, write "notes", take (next shift confirms)
+  actions            Open follow-up actions from incident reviews, overdue first
+  sla                SLA: acknowledged / resolved in time per severity
   forgeai            ForgeAI model status, last questions; with INC-… the exact prompts
   kubernetes         Kubernetes / OpenShift clusters
   incidents          Short colored board (red/yellow/green); INC-… for one row
@@ -577,6 +580,33 @@ slo — service level objectives: availability against target, error budget left
 burn rate over the last 24 h (1.0x = spending the budget evenly over the window).
 
   ./forgesre slo
+EOF
+      ;;
+    handover)
+      cat <<'EOF'
+handover — the shift handover, as on the NOC page.
+
+  ./forgesre handover                    the latest handover and whether it was taken over
+  ./forgesre handover write "notes…"     hand over: notes plus the incidents still open
+  ./forgesre handover take               the next shift confirms it read the latest one
+EOF
+      ;;
+    actions)
+      cat <<'EOF'
+actions — follow-up actions from incident reviews that are not done yet, overdue first.
+
+  ./forgesre actions
+Add and tick them off on the incident page (Follow-up actions).
+EOF
+      ;;
+    sla)
+      cat <<'EOF'
+sla — response (acknowledged in time) and resolve (resolved in time) per severity.
+
+  ./forgesre sla        last 30 days
+  ./forgesre sla 7
+Targets: Settings › SLA (sla.response.*, sla.resolve.*). SLA shows on incidents and reports;
+it does not change escalation.
 EOF
       ;;
     alert-quality)
@@ -1161,6 +1191,10 @@ case "$cmd" in
   alert-quality)
     need_env
     run_cli_ops alert-quality "$@"
+    ;;
+  handover|actions|sla)
+    need_env
+    run_cli_ops "$cmd" "$@"
     ;;
   forgeai)
     need_env

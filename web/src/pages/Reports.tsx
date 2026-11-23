@@ -3,6 +3,7 @@ import { OutboxCard } from "../components/ActivityPanels";
 import { ReportSchedules } from "../components/ReportSchedules";
 import { SloCard } from "../components/SloCard";
 import { AlertQuality } from "../components/AlertQuality";
+import { OpenActionsCard, SlaCard } from "../components/IncidentProcess";
 import { Card } from "../components/ui";
 import { DailyBars } from "../components/DailyBars";
 import { getJson, type PeriodStats, type Reports } from "../lib/api";
@@ -104,6 +105,8 @@ export function ReportsPage() {
           </div>
         </div>
       ) : null}
+      {data ? <SlaCard days={days} /> : null}
+      {data ? <OpenActionsCard /> : null}
       {data ? <AlertQuality days={days} /> : null}
       {/* full width: the outbox has five columns and long subjects */}
       {data ? <OutboxCard /> : null}
