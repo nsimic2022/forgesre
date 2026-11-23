@@ -84,6 +84,9 @@ _ASSET_TYPE_SHORT = {
     "QNAP/NAS": "nas",
     "Printer": "prn",
     "Hypervisor": "hv",
+    "UPS": "ups",
+    "PDU": "pdu",
+    "Environment sensor": "env",
     "Other": "other",
 }
 
@@ -262,6 +265,39 @@ def sd_snmp_host_targets(db: Session) -> list[dict]:
                     "monitoring_profile": asset.monitoring_profile or "network-switch",
                     "source": asset.source or "manual",
                     "snmp_module": HOST_MODULE,
+                    "snmp_auth": effective_auth(asset, rendered),
+                    "snmp_port": str(port),
+                },
+            }
+        )
+    return targets
+
+
+def sd_snmp_power_targets(db: Session) -> list[dict]:
+    """Power SNMP job: UPS-MIB / ENTITY-SENSOR ``power`` module for UPS, PDU and sensor assets."""
+    from app.power import POWER_MODULE, power_metrics_on
+
+    if not settings.snmp_enabled:
+        return []
+    targets: list[dict] = []
+    seen: set[str] = set()
+    rendered = rendered_auth_names()
+    for asset in db.query(Asset).order_by(Asset.asset_id).all():
+        if not is_snmp_asset(asset) or not power_metrics_on(asset):
+            continue
+        port = snmp_port_for(asset)
+        target = snmp_target(asset.ip, port)
+        if not target or target in seen:
+            continue
+        seen.add(target)
+        targets.append(
+            {
+                "targets": [target],
+                "labels": {
+                    "asset": asset.asset_id,
+                    "monitoring_profile": asset.monitoring_profile or "power",
+                    "source": asset.source or "manual",
+                    "snmp_module": POWER_MODULE,
                     "snmp_auth": effective_auth(asset, rendered),
                     "snmp_port": str(port),
                 },

@@ -107,6 +107,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `kubernetes` | Kubernetes / OpenShift clusters: token set, nodes, workloads, open incidents; `kubernetes sync` reads them now |
 | `slo` | SLOs: availability against target, error budget left, 24 h burn rate |
 | `alert-quality [DAYS]` | Noisiest alerts: incidents, % acknowledged, % that cleared alone, flapping, a suggestion |
+| `power` | UPS, PDU and environment sensors: on battery, runtime left, load, temperature |
 | `handover`, `handover write "notes"`, `handover take` | Shift handover: the latest one, write one, or confirm it as the next shift |
 | `actions` | Open follow-up actions from incident reviews, overdue first |
 | `sla [DAYS]` | SLA: acknowledged and resolved in time, per severity |

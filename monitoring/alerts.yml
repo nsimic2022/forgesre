@@ -77,6 +77,53 @@ groups:
           summary: "SNMP process missing on {{ $labels.asset }}"
           description: "snmpd proc table {{ $labels.prNames }} error flag is set on {{ $labels.asset }}."
 
+  - name: forgesre-power
+    rules:
+      - alert: UpsOnBattery
+        expr: upsOutputSource{job="forgesre-snmp-power"} == 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "UPS on battery on {{ $labels.asset }}"
+          description: "Utility power is lost and the UPS runs on battery (upsOutputSource=5). Check the feed and the runtime left."
+
+      - alert: UpsBatteryLow
+        expr: upsBatteryStatus{job="forgesre-snmp-power"} >= 3 or upsEstimatedMinutesRemaining{job="forgesre-snmp-power"} < 10
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "UPS battery low on {{ $labels.asset }}"
+          description: "Battery is low or depleted, or under 10 minutes of runtime is left. Shut down non-critical load."
+
+      - alert: UpsLoadHigh
+        expr: max by (asset) (upsOutputPercentLoad{job="forgesre-snmp-power"}) > 80
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "UPS load high on {{ $labels.asset }}"
+          description: "Output load is {{ $value }}% of rated capacity; runtime and redundancy shrink above 80%."
+
+      - alert: PowerTemperatureHigh
+        expr: ((entPhySensorValue{job="forgesre-snmp-power"} / (10 ^ entPhySensorPrecision{job="forgesre-snmp-power"})) and (entPhySensorType{job="forgesre-snmp-power"} == 8)) > 32
+        for: 10m
+        labels:
+          severity: high
+        annotations:
+          summary: "Temperature high on {{ $labels.asset }}"
+          description: "Sensor {{ $labels.entPhysicalName }} reads {{ $value }} °C (over 32 °C for 10 minutes). Check cooling and airflow."
+
+      - alert: PowerSnmpUnreachable
+        expr: up{job="forgesre-snmp-power"} == 0
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "Power device not answering SNMP on {{ $labels.asset }}"
+          description: "snmp_exporter could not read UPS-MIB / ENTITY-SENSOR-MIB from {{ $labels.instance }}; power and temperature are blind."
+
   - name: forgesre-node
     rules:
       - alert: NodeExporterDown

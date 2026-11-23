@@ -119,8 +119,9 @@ def test_identify_and_recommend_with_mock(monkeypatch):
     assert by["ifNumber"]["profile"] == "switch" and by["ifNumber"]["profile_match"] is True
     assert by["ifOperStatus"]["in_prometheus"] is True
     assert by["ifOperStatus"]["recommend"] is False
-    assert by["upsOutputSource"]["recommend"] is True
-    assert by["upsOutputSource"]["applyable"] is True
+    # UPS-MIB is bundled in the power module now (type UPS or extras snmp_power=on), not an extra OID.
+    assert by["upsOutputSource"]["in_prometheus"] is True
+    assert by["upsOutputSource"]["recommend"] is False
     assert "ifInDiscards" in by and "ifHighSpeed" in by and "upsBatteryStatus" in by
     assert cardinality_hint("48", 1).startswith("ifNumber=48")
 
@@ -137,7 +138,7 @@ def test_committed_snmp_yml_keeps_two_modules_and_onboard_markers():
     assert tpl.replace("__SNMP_COMMUNITY__", "public") == yml
     assert ONBOARD_BEGIN in yml and ONBOARD_END in yml and ONBOARD_BEGIN in tpl
     parsed = yaml.safe_load(yml.replace("__SNMP_COMMUNITY__", "public"))
-    assert set(parsed["modules"]) == {"if_mib", "host"}
+    assert set(parsed["modules"]) == {"if_mib", "host", "power"}
     assert ONBOARD_MODULE not in parsed["modules"]
 
 
@@ -155,7 +156,7 @@ def test_splice_apply_restore_rollback(tmp_path):
     assert ONBOARD_MODULE in yaml.safe_load(target.read_text())["modules"]
     restored = restore_onboard_module(path=target)
     assert restored["ok"] is True
-    assert set(yaml.safe_load(target.read_text())["modules"]) == {"if_mib", "host"}
+    assert set(yaml.safe_load(target.read_text())["modules"]) == {"if_mib", "host", "power"}
 
 
 def test_apply_refuses_without_if_mib(tmp_path):
@@ -254,7 +255,7 @@ def test_prometheus_onboard_job_bundled():
         assert "scrape_interval: 60s" in text
     assert ONBOARD_JOB == "forgesre-snmp-onboard"
     committed = yaml.safe_load((ROOT / "monitoring" / "snmp.yml").read_text())
-    assert set(committed["modules"]) == {"if_mib", "host"}
+    assert set(committed["modules"]) == {"if_mib", "host", "power"}
 
 
 def test_write_generator_yml_numeric_oids(tmp_path):

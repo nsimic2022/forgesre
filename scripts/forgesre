@@ -95,6 +95,7 @@ Commands:
   checks             Certificates, backup age, heartbeats
   slo                SLOs: availability, error budget, burn rate
   alert-quality      Noisiest alerts: acknowledged vs cleared alone, flapping, advice
+  power              UPS, PDU and temperature: on battery, runtime, load, sensors
   handover           Shift handover: show, write "notes", take (next shift confirms)
   actions            Open follow-up actions from incident reviews, overdue first
   sla                SLA: acknowledged / resolved in time per severity
@@ -607,6 +608,19 @@ sla — response (acknowledged in time) and resolve (resolved in time) per sever
   ./forgesre sla 7
 Targets: Settings › SLA (sla.response.*, sla.resolve.*). SLA shows on incidents and reports;
 it does not change escalation.
+EOF
+      ;;
+    power)
+      cat <<'EOF'
+power — UPS, PDU and environment sensors (SNMP UPS-MIB and ENTITY-SENSOR-MIB).
+
+  ./forgesre power
+
+One row per UPS: state, output source (normal, battery, bypass), battery status, charge,
+minutes left, load, input voltage, alarms. Then temperature, humidity, voltage and current
+sensors. Assets of type UPS, PDU or Environment sensor are polled by Prometheus job
+forgesre-snmp-power; set extras snmp_power=on to poll any other device the same way.
+Same data as NOC › Power and environment. Alert rules: monitoring/alerts.yml forgesre-power.
 EOF
       ;;
     alert-quality)
@@ -1191,6 +1205,10 @@ case "$cmd" in
   alert-quality)
     need_env
     run_cli_ops alert-quality "$@"
+    ;;
+  power)
+    need_env
+    run_cli_ops power "$@"
     ;;
   handover|actions|sla)
     need_env
