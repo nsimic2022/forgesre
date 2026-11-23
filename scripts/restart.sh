@@ -16,7 +16,7 @@ if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker c
 
 # ORDER = restart sequence; REQUIRED = failures that abort; SKIP = never restarted.
 # Postgres first (Core and NetBox depend on it), Core last so it reconnects to fresh deps.
-ORDER=(postgres netbox-redis librenms-db librenms-redis prometheus alertmanager snmp-exporter blackbox-exporter loki alloy grafana llm netbox librenms librenms-dispatcher mailserver roundcube worker core)
+ORDER=(postgres netbox-redis librenms-db librenms-redis prometheus alertmanager snmp-exporter blackbox-exporter loki alloy grafana llm netbox librenms librenms-dispatcher mailserver roundcube worker core proxy)
 REQUIRED=" postgres core "
 # One-shot init container (restart: "no"); bouncing it would only re-run the init.
 SKIP=" netbox-db-init "
@@ -30,6 +30,7 @@ label() {
     alertmanager) echo "Alertmanager" ;;
     snmp-exporter) echo "snmp_exporter" ;;
     blackbox-exporter) echo "blackbox_exporter" ;;
+    proxy) echo "HTTPS proxy (Caddy)" ;;
     loki) echo "Loki" ;;
     alloy) echo "Alloy" ;;
     grafana) echo "Grafana" ;;

@@ -96,6 +96,7 @@ Commands:
   slo                SLOs: availability, error budget, burn rate
   alert-quality      Noisiest alerts: acknowledged vs cleared alone, flapping, advice
   power              UPS, PDU and temperature: on battery, runtime, load, sensors
+  https              HTTPS in front of the UI: status, on, only, off, cert
   lifecycle          Support / warranty, end of life and licences expiring or expired
   racks              Rack elevation: devices by rack and U position, overlaps
   synthetic          Synthetic checks (HTTP, TCP, DNS, ping): last result per check
@@ -674,6 +675,23 @@ racks — rack elevation: which device sits on which U, per site / row / rack.
 Set on the asset: Location › Rack, Rack position (lowest U) and Height (U). Rack height is
 inventory.rack_units (42). Devices with a rack but no position, and two devices on the same
 U, are listed under the rack. Same data as Inventory › Racks.
+EOF
+      ;;
+    https)
+      cat <<'EOF'
+https — HTTPS for the UI and API (Caddy, compose profile https).
+
+  ./forgesre https              status: on/off, port, certificate and expiry
+  ./forgesre https on           HTTPS on FORGESRE_HTTPS_PORT (443); plain HTTP on
+                                FORGESRE_HTTP_PORT stays for agents and webhooks
+  ./forgesre https only         every user through HTTPS; Core listens on 127.0.0.1,
+                                the session cookie is Secure
+  ./forgesre https off          back to plain HTTP only
+  ./forgesre https cert [NAME…] new self-signed certificate (default: host name and IPs)
+
+Your own certificate: copy forgesre.crt (with the chain) and forgesre.key to
+$FORGESRE_DATA/tls, then ./forgesre https on. Doctor warns 30 days before expiry.
+New installs turn HTTPS on by default (install.sh --https no to skip).
 EOF
       ;;
     power)
@@ -1276,6 +1294,10 @@ case "$cmd" in
   power)
     need_env
     run_cli_ops power "$@"
+    ;;
+  https)
+    need_env
+    exec "$ROOT/scripts/https.sh" "$@"
     ;;
   lifecycle|racks|synthetic|network|known-errors)
     need_env

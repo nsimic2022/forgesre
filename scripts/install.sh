@@ -21,6 +21,8 @@ ENABLE_NETBOX="yes"
 NETBOX_URL="${FORGESRE_NETBOX_URL:-http://127.0.0.1:8001}"
 NETBOX_TOKEN="${NETBOX_API_TOKEN:-}"
 NETBOX_MODE="bundled"
+# HTTPS front (Caddy, self-signed certificate until you add your own): on for new installs.
+ENABLE_HTTPS="${FORGESRE_INSTALL_HTTPS:-yes}"
 
 usage() {
   cat <<'EOF'
@@ -37,6 +39,8 @@ Options:
   --enable-discovery yes|no
   --discovery-cidrs CIDR[,CIDR]  Ranges LibreNMS may discover (ForgeSRE never scans itself)
   --netbox-url URL      External NetBox; bundled still starts unless you stop it
+  --https yes|no        HTTPS on port 443 with a self-signed certificate (default yes); later:
+                        ./forgesre https on|only|off|cert
 EOF
 }
 
@@ -52,6 +56,7 @@ while [[ $# -gt 0 ]]; do
     --enable-discovery) ENABLE_DISCOVERY="$2"; shift 2 ;;
     --discovery-cidrs) DISCOVERY_CIDRS="$2"; shift 2 ;;
     --netbox-url) NETBOX_URL="$2"; ENABLE_NETBOX="yes"; NETBOX_MODE="external"; shift 2 ;;
+    --https) ENABLE_HTTPS="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
@@ -505,11 +510,22 @@ if [[ -n "${DISCOVERY_CIDRS}" ]]; then
   "$ROOT/forgesre" discovery nets ${DISCOVERY_CIDRS//,/ } \
     || echo "LibreNMS not ready yet: run ./forgesre discovery nets ${DISCOVERY_CIDRS//,/ } later."
 fi
+HTTPS_NOTE=""
+if [[ "$ENABLE_HTTPS" == "yes" ]]; then
+  if command -v ss >/dev/null 2>&1 && ss -lnt 2>/dev/null | awk '{print $4}' | grep -qE ':443$'; then
+    HTTPS_NOTE="Port 443 is in use, HTTPS not started. Later: FORGESRE_HTTPS_PORT=8443 in .env, then ./forgesre https on"
+  elif "$ROOT/scripts/https.sh" on; then
+    HTTPS_NOTE="https://$(hostname -f 2>/dev/null || hostname)/  (self-signed: ./forgesre https cert, or your own certificate)"
+  else
+    HTTPS_NOTE="HTTPS did not start: ./forgesre https status ; ./forgesre logs proxy"
+  fi
+fi
 "$ROOT/scripts/doctor.sh" || true
 post_install_journal || true
 echo
 echo "Installation finished."
 echo "UI:              http://127.0.0.1:${HTTP_PORT}"
+[[ -n "$HTTPS_NOTE" ]] && echo "HTTPS:           ${HTTPS_NOTE}"
 echo "Grafana:         http://127.0.0.1:3000"
 echo "NetBox:          http://127.0.0.1:8001  (admin / see installation-report.md)"
 echo "Admin:           admin@forgesre.local"

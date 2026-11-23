@@ -236,6 +236,12 @@ if [[ -n "${old_cidrs// /}" ]]; then
     echo "Could not hand them to LibreNMS yet: ./forgesre discovery nets ${old_cidrs}"
   fi
 fi
+if grep -Eq '^COMPOSE_PROFILES=.*\bhttps\b' "$ROOT/.env" 2>/dev/null; then
+  # the proxy has no build; a changed Caddyfile only needs a restart
+  "${DC[@]}" up -d proxy && "${DC[@]}" restart proxy >/dev/null 2>&1 || echo "HTTPS proxy did not start: ./forgesre https status ; ./forgesre logs proxy"
+else
+  echo "HTTPS is off. Turn it on with: ./forgesre https on   (self-signed, or put your certificate in data/tls)"
+fi
 "$ROOT/scripts/doctor.sh" || echo "Doctor still reports warnings (see above)."
 echo "Update finished."
 echo "SNMP:     ./forgesre snmp"

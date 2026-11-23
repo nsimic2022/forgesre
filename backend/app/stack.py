@@ -36,6 +36,7 @@ COMPONENT_LABELS = {
     "power": "Power and environment",
     "blackbox": "Synthetic checks (blackbox)",
     "oxidized": "Oxidized config changes",
+    "https": "HTTPS (proxy and certificate)",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -64,6 +65,7 @@ COMPONENT_SHORT = {
     "power": "Power",
     "blackbox": "Blackbox",
     "oxidized": "Oxidized",
+    "https": "HTTPS",
     "redis": "Redis",
     "mailpit": "Mailpit",
 }
