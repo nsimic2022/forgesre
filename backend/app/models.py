@@ -735,6 +735,22 @@ class CheckResult(Base):
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class SyntheticCheck(Base):
+    """Black-box probe of a service from the appliance (HTTP, TCP, DNS, ping) via blackbox_exporter."""
+
+    __tablename__ = "synthetic_checks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    kind: Mapped[str] = mapped_column(String(16), default="http")
+    target: Mapped[str] = mapped_column(String(500), default="")
+    asset_ref: Mapped[str] = mapped_column(String(255), default="")
+    severity: Mapped[str] = mapped_column(String(16), default="critical")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Heartbeat(Base):
     """Dead-man switch: a backup or cron job pings after each success; silence past ``every_hours`` alarms."""
 

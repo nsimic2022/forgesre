@@ -36,6 +36,7 @@ Postgres; people get incidents, notifications and ForgeAI on the right.
 | `prometheus` | 9090 (local) | always | Metrics and alert rules |
 | `alertmanager` | 9093 (local) | always | Sends alarms to Core through a webhook |
 | `snmp-exporter` | 9116 (local) | always | SNMP metrics of network devices for Prometheus |
+| `blackbox-exporter` | 9115 (local) | always | Synthetic checks: HTTP, TCP, DNS and ping probes (Settings › Checks) |
 | `loki` | 3100 (local) | always | Logs (syslog) as evidence for RCA |
 | `alloy` | 514 syslog, 12345 (local) | always | Receives syslog and ships it to Loki |
 | `grafana` | 3000 (`GRAFANA_PORT`) | always | Graphs, linked from System Health |

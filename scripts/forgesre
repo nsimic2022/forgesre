@@ -98,6 +98,7 @@ Commands:
   power              UPS, PDU and temperature: on battery, runtime, load, sensors
   lifecycle          Support / warranty, end of life and licences expiring or expired
   racks              Rack elevation: devices by rack and U position, overlaps
+  synthetic          Synthetic checks (HTTP, TCP, DNS, ping): last result per check
   handover           Shift handover: show, write "notes", take (next shift confirms)
   actions            Open follow-up actions from incident reviews, overdue first
   sla                SLA: acknowledged / resolved in time per severity
@@ -622,6 +623,19 @@ Dates are set per asset (Edit › Support: Support until, End of life, Licence e
 Support warns the asset's own lead days ahead; end of life and licences warn
 checks.lifecycle_warn_days (30) ahead. The 15-minute checks job fires AssetLifecycleExpiring
 per asset and date (an expired licence is high, the rest warning).
+EOF
+      ;;
+    synthetic)
+      cat <<'EOF'
+synthetic — black-box checks the appliance runs like a user (blackbox_exporter :9115).
+
+  ./forgesre synthetic
+
+One row per check: kind (http, tcp, dns, icmp), last result (ok / FAIL / ? before the first
+probe), probe time and target. Add, change or remove checks in Settings › Checks › Synthetic
+checks (Engineer). Prometheus job forgesre-synthetic probes every 60 s; SyntheticCheckFailed
+fires after 3 minutes (critical checks), SyntheticCheckDegraded after 10 (warning checks).
+If every row is "?": docker compose up -d blackbox-exporter, then ./forgesre doctor.
 EOF
       ;;
     racks)
@@ -1235,7 +1249,7 @@ case "$cmd" in
     need_env
     run_cli_ops power "$@"
     ;;
-  lifecycle|racks)
+  lifecycle|racks|synthetic)
     need_env
     run_cli_ops "$cmd" "$@"
     ;;

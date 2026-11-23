@@ -7,6 +7,7 @@ import { IntegrationsPanel } from "../components/IntegrationsPanel";
 import { MessagePreviews } from "../components/MessagePreviews";
 import { BackupPanel, UsersPanel } from "../components/AdminPanels";
 import { ChecksPanel } from "../components/ChecksPanel";
+import { SyntheticChecks } from "../components/SyntheticChecks";
 import { DemoPanel } from "../components/DemoPanel";
 import { useEffect, useState } from "react";
 import { Card, Chip } from "../components/ui";
@@ -104,7 +105,7 @@ export function SettingsPage() {
                 <span className="small faint">Every change is written to config/forgesre.yml, applied at once and kept in the audit log. Same as <code className="mono">./forgesre settings set KEY VALUE</code>.</span>
               </Card>
             )}
-            {group === "checks" ? <ChecksPanel /> : null}
+            {group === "checks" ? <><ChecksPanel /><SyntheticChecks /></> : null}
           </div>
         </div>
       ) : null}

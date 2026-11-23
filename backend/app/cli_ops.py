@@ -1092,16 +1092,33 @@ def format_racks(data: dict) -> str:
 
 
 def cmd_lifecycle(port: str, command: str) -> None:
-    """./forgesre lifecycle | racks"""
+    """./forgesre lifecycle | racks | synthetic"""
     jar, _me = ensure_jar(port)
     try:
         if command == "racks":
             sys.stdout.write(format_racks(get_json(port, jar, "/api/v1/racks")))
+        elif command == "synthetic":
+            sys.stdout.write(format_synthetic(get_json(port, jar, "/api/v1/synthetic")))
         else:
             sys.stdout.write(format_lifecycle(get_json(port, jar, "/api/v1/lifecycle")))
     finally:
         if jar != SESSION_PATH and jar.exists():
             jar.unlink(missing_ok=True)
+
+
+def format_synthetic(data: dict) -> str:
+    """Synthetic checks: name, kind, target, last probe result and duration."""
+    rows = data.get("checks") or []
+    if not rows:
+        return "No synthetic check. Add one in Settings › Checks › Synthetic checks.\n"
+    out = [f"{'CHECK':<24} {'KIND':<5} {'RESULT':<7} {'TIME':>7}  TARGET"]
+    for r in rows:
+        result = "off" if not r.get("enabled") else "?" if r.get("up") is None else "ok" if r["up"] >= 1 else "FAIL"
+        secs = "-" if r.get("seconds") is None else f"{r['seconds']:.2f}s"
+        out.append(f"{r['name'][:24]:<24} {r['kind']:<5} {result:<7} {secs:>7}  {r['target']}")
+    if data.get("error"):
+        out.append(f"Prometheus did not answer: {data['error']}")
+    return "\n".join(out) + "\n"
 
 
 def format_handover(rows: list[dict]) -> str:
@@ -1228,7 +1245,7 @@ def main(argv: list[str] | None = None) -> None:
         cmd_alert_quality(port, rest)
     elif command == "power":
         cmd_power(port)
-    elif command in {"lifecycle", "racks"}:
+    elif command in {"lifecycle", "racks", "synthetic"}:
         cmd_lifecycle(port, command)
     elif command in {"handover", "actions", "sla"}:
         cmd_process(port, command, rest)

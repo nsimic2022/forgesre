@@ -29,7 +29,7 @@ export function PowerPanel() {
     <Card title="Power and environment">
       {data.error ? <div className="banner error" role="alert">Prometheus: {data.error}</div> : null}
       {ups.length ? (
-        <table className="table" aria-label="UPS">
+        <table className="data" aria-label="UPS">
           <thead><tr><th>UPS</th><th>State</th><th>Source</th><th>Battery</th><th>Charge</th><th>Runtime</th><th>Load</th><th>Input</th></tr></thead>
           <tbody>
             {ups.map((r) => (

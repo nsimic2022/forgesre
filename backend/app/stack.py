@@ -34,6 +34,7 @@ COMPONENT_LABELS = {
     "mcp": "MCP",
     "kubernetes": "Kubernetes",
     "power": "Power and environment",
+    "blackbox": "Synthetic checks (blackbox)",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -60,6 +61,7 @@ COMPONENT_SHORT = {
     "mcp": "MCP",
     "kubernetes": "Kubernetes",
     "power": "Power",
+    "blackbox": "Blackbox",
     "redis": "Redis",
     "mailpit": "Mailpit",
 }

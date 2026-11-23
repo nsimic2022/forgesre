@@ -99,6 +99,25 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: 127.0.0.1:9116
+  - job_name: forgesre-synthetic
+    scrape_interval: 60s
+    scrape_timeout: 15s
+    metrics_path: /probe
+    http_sd_configs:
+      - url: http://127.0.0.1:__CORE_PORT__/api/v1/sd/synthetic
+        refresh_interval: 30s
+        authorization:
+          type: Bearer
+          credentials: __WEBHOOK_TOKEN__
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [module]
+        target_label: __param_module
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 127.0.0.1:9115
   - job_name: forgesre-snmp-onboard
     scrape_interval: 60s
     scrape_timeout: 50s

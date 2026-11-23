@@ -124,6 +124,26 @@ groups:
           summary: "Power device not answering SNMP on {{ $labels.asset }}"
           description: "snmp_exporter could not read UPS-MIB / ENTITY-SENSOR-MIB from {{ $labels.instance }}; power and temperature are blind."
 
+  - name: forgesre-synthetic
+    rules:
+      - alert: SyntheticCheckFailed
+        expr: probe_success{job="forgesre-synthetic", check_severity="critical"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Synthetic check {{ $labels.check }} failing"
+          description: "The {{ $labels.kind }} probe of {{ $labels.instance }} has failed for 3 minutes. Users likely see the same."
+
+      - alert: SyntheticCheckDegraded
+        expr: probe_success{job="forgesre-synthetic", check_severity="warning"} == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Synthetic check {{ $labels.check }} failing"
+          description: "The {{ $labels.kind }} probe of {{ $labels.instance }} has failed for 10 minutes."
+
   - name: forgesre-node
     rules:
       - alert: NodeExporterDown
