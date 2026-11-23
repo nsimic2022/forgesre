@@ -47,6 +47,7 @@ from app.inventory import (
     sd_targets,
     sd_snmp_host_targets,
     sd_snmp_power_targets,
+    sd_snmp_routing_targets,
     sd_snmp_onboard_targets,
     sd_snmp_targets,
     seed_demo_candidate,
@@ -831,6 +832,14 @@ def synthetic_delete(check_id: int, db: Session = Depends(get_db), user: User = 
     db.delete(row)
     db.commit()
     return {"deleted": check_id}
+
+
+@router.get("/network")
+def network_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict:
+    """Busiest interfaces, BGP peers and OSPF neighbours (SNMP via Prometheus)."""
+    from app.network_view import overview
+
+    return overview(db)
 
 
 @router.get("/handover")
@@ -1798,6 +1807,13 @@ def snmp_power_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]
     if not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid sd token")
     return sd_snmp_power_targets(db)
+
+
+@router.get("/sd/snmp-routing")
+def snmp_routing_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
+    if not _webhook_token_ok(request):
+        raise HTTPException(status_code=401, detail="invalid sd token")
+    return sd_snmp_routing_targets(db)
 
 
 @router.get("/sd/synthetic")
@@ -2997,6 +3013,33 @@ def _blackbox_check() -> dict[str, Any]:
     return {"status": "ok", "why": f"{count} synthetic check(s)"}
 
 
+def _oxidized_check() -> dict[str, Any]:
+    """Oxidized config changes: off, or the result of the last sync job."""
+    from app.db import SessionLocal
+    from app.models import Job
+    from app.oxidized import JOB_KIND, ready
+
+    why = ready()
+    if why:
+        return {"status": "disabled", "why": why}
+    try:
+        db = SessionLocal()
+        try:
+            last = db.query(Job).filter(Job.kind == JOB_KIND).order_by(Job.id.desc()).first()
+        finally:
+            db.close()
+    except Exception as exc:
+        return {"status": "error", "why": str(exc)[:200]}
+    if last is None or last.status in {"pending", "running"}:
+        return {"status": "starting", "why": "first sync not finished yet"}
+    if last.status == "error":
+        return {"status": "error", "why": (last.error or "sync failed")[:200], "test": "./forgesre settings test oxidized"}
+    result = (last.payload or {}).get("result") or {}
+    failed = int(result.get("failed_backups") or 0)
+    note = f"{result.get('nodes', 0)} nodes" + (f", {failed} failed backups in Oxidized" if failed else "")
+    return {"status": "warn" if failed else "ok", "why": note}
+
+
 def _doctor_payload_fresh() -> dict[str, Any]:
     components = {
         # Machine key "core" = compose service. Display: Core (container).
@@ -3024,6 +3067,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "kubernetes": _k8s_check(),
         "power": _power_check(),
         "blackbox": _blackbox_check(),
+        "oxidized": _oxidized_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)

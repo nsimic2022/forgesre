@@ -765,6 +765,20 @@ class Heartbeat(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ConfigNode(Base):
+    """Last seen Oxidized state of one device, to spot a new config version between reads."""
+
+    __tablename__ = "config_nodes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    full_name: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), default="")
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    mtime: Mapped[str] = mapped_column(String(64), default="")
+    last_status: Mapped[str] = mapped_column(String(32), default="")
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ChangeEvent(Base):
     """Something that changed outside ForgeSRE: a deploy, a config push, a GLPI change ticket.
 

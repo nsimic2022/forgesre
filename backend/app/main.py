@@ -182,6 +182,7 @@ def _escalation_loop(stop: threading.Event) -> None:
 
             tickets_resolved(db)
             _queue_ticket_sync(db)
+            _queue_oxidized_sync(db)
             _queue_health_checks(db)
             _queue_k8s_sync(db)
             _queue_snmp_apply(db)
@@ -223,6 +224,24 @@ def _queue_k8s_sync(db: Session) -> None:
 
     _k8s_last = time.monotonic()
     enqueue(db, "k8s_sync", "clusters", object_type="kubernetes")
+    db.commit()
+
+
+_OXIDIZED_EVERY = 10 * 60
+_oxidized_last = 0.0
+
+
+def _queue_oxidized_sync(db: Session) -> None:
+    """Leader only: every 10 minutes, read Oxidized for new config versions."""
+    global _oxidized_last
+    from app.oxidized import JOB_KIND, ready
+
+    if ready() or time.monotonic() - _oxidized_last < _OXIDIZED_EVERY:
+        return
+    from app.jobs import enqueue
+
+    _oxidized_last = time.monotonic()
+    enqueue(db, JOB_KIND, "oxidized", object_type="changes")
     db.commit()
 
 

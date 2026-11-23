@@ -229,6 +229,10 @@ REGISTRY: tuple[SettingDef, ...] = (
        help="One JSON POST per incident event (opened, escalated, resolved) for another ticket system."),
     _y("tickets.webhook.url", "integrations", "Ticket webhook URL", "url"),
     _s("TICKET_WEBHOOK_TOKEN", "integrations", "Ticket webhook Bearer token"),
+    _y("changes.oxidized.enabled", "integrations", "Oxidized config changes", "bool", test="oxidized",
+       help="Every 10 min read Oxidized /nodes.json; a changed config becomes a change before incident."),
+    _y("changes.oxidized.url", "integrations", "Oxidized URL", "url", help="e.g. http://oxidized.dc.local:8888"),
+    _s("OXIDIZED_TOKEN", "integrations", "Oxidized Bearer token (optional, for a reverse proxy)"),
     # AI
     _y("ai.enabled", "ai", "ForgeAI enabled", "bool", effective=lambda: settings.ai_enabled, test="llm"),
     _y("ai.llm.mode", "ai", "Where the model runs", "enum", choices=("disabled", "bundled", "external"), help="bundled = local llama.cpp; external = an OpenAI-compatible URL."),
@@ -435,6 +439,7 @@ def test_connection(component: str) -> dict[str, Any]:
         "teams": lambda: _chat_test("teams"),
         "discord": lambda: _chat_test("discord"),
         "smtp": lambda: __import__("app.email_service", fromlist=["check"]).check(),
+        "oxidized": lambda: __import__("app.oxidized", fromlist=["check"]).check(),
     }
     check = checks.get(component)
     if check is None:

@@ -273,17 +273,15 @@ def sd_snmp_host_targets(db: Session) -> list[dict]:
     return targets
 
 
-def sd_snmp_power_targets(db: Session) -> list[dict]:
-    """Power SNMP job: UPS-MIB / ENTITY-SENSOR ``power`` module for UPS, PDU and sensor assets."""
-    from app.power import POWER_MODULE, power_metrics_on
-
+def _sd_module_targets(db: Session, module: str, wanted, profile: str) -> list[dict]:
+    """One extra SNMP job: the given snmp_exporter module for SNMP assets ``wanted`` accepts."""
     if not settings.snmp_enabled:
         return []
     targets: list[dict] = []
     seen: set[str] = set()
     rendered = rendered_auth_names()
     for asset in db.query(Asset).order_by(Asset.asset_id).all():
-        if not is_snmp_asset(asset) or not power_metrics_on(asset):
+        if not is_snmp_asset(asset) or not wanted(asset):
             continue
         port = snmp_port_for(asset)
         target = snmp_target(asset.ip, port)
@@ -295,15 +293,29 @@ def sd_snmp_power_targets(db: Session) -> list[dict]:
                 "targets": [target],
                 "labels": {
                     "asset": asset.asset_id,
-                    "monitoring_profile": asset.monitoring_profile or "power",
+                    "monitoring_profile": asset.monitoring_profile or profile,
                     "source": asset.source or "manual",
-                    "snmp_module": POWER_MODULE,
+                    "snmp_module": module,
                     "snmp_auth": effective_auth(asset, rendered),
                     "snmp_port": str(port),
                 },
             }
         )
     return targets
+
+
+def sd_snmp_power_targets(db: Session) -> list[dict]:
+    """Power SNMP job: UPS-MIB / ENTITY-SENSOR ``power`` module for UPS, PDU and sensor assets."""
+    from app.power import POWER_MODULE, power_metrics_on
+
+    return _sd_module_targets(db, POWER_MODULE, power_metrics_on, "power")
+
+
+def sd_snmp_routing_targets(db: Session) -> list[dict]:
+    """Routing SNMP job: BGP peers and OSPF neighbours (``routing`` module) for routers and firewalls."""
+    from app.network_view import ROUTING_MODULE, routing_metrics_on
+
+    return _sd_module_targets(db, ROUTING_MODULE, routing_metrics_on, "network-switch")
 
 
 def sd_snmp_onboard_targets(db: Session) -> list[dict]:

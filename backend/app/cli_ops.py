@@ -719,7 +719,7 @@ SETTABLE_SECRETS = (
     "ALERTMANAGER_WEBHOOK_TOKEN", "GLPI_APP_TOKEN", "GLPI_USER_TOKEN", "ZABBIX_API_TOKEN",
     "LIBRENMS_API_TOKEN", "NETBOX_API_TOKEN", "SMTP_USERNAME", "SMTP_PASSWORD",
     "SLACK_WEBHOOK_URL", "TEAMS_WEBHOOK_URL", "DISCORD_WEBHOOK_URL", "CHANGES_WEBHOOK_TOKEN", "MCP_TOKEN",
-    "LDAP_BIND_PASSWORD", "OIDC_CLIENT_SECRET", "CLOUD_LLM_API_KEY", "SMS_GATEWAY_TOKEN", "TICKET_WEBHOOK_TOKEN",
+    "LDAP_BIND_PASSWORD", "OIDC_CLIENT_SECRET", "CLOUD_LLM_API_KEY", "SMS_GATEWAY_TOKEN", "TICKET_WEBHOOK_TOKEN", "OXIDIZED_TOKEN",
     "ZABBIX_WEBHOOK_TOKEN",
 )
 
@@ -1092,11 +1092,13 @@ def format_racks(data: dict) -> str:
 
 
 def cmd_lifecycle(port: str, command: str) -> None:
-    """./forgesre lifecycle | racks | synthetic"""
+    """./forgesre lifecycle | racks | synthetic | network"""
     jar, _me = ensure_jar(port)
     try:
         if command == "racks":
             sys.stdout.write(format_racks(get_json(port, jar, "/api/v1/racks")))
+        elif command == "network":
+            sys.stdout.write(format_network(get_json(port, jar, "/api/v1/network")))
         elif command == "synthetic":
             sys.stdout.write(format_synthetic(get_json(port, jar, "/api/v1/synthetic")))
         else:
@@ -1119,6 +1121,35 @@ def format_synthetic(data: dict) -> str:
     if data.get("error"):
         out.append(f"Prometheus did not answer: {data['error']}")
     return "\n".join(out) + "\n"
+
+
+def _bits(bps: float) -> str:
+    for unit, size in (("Gb/s", 1e9), ("Mb/s", 1e6), ("kb/s", 1e3)):
+        if bps >= size:
+            return f"{bps / size:.1f} {unit}"
+    return f"{bps:.0f} b/s"
+
+
+def format_network(data: dict) -> str:
+    """BGP peers and OSPF neighbours (problems first), then the busiest interfaces."""
+    if data.get("error"):
+        return f"Prometheus did not answer: {data['error']}\n"
+    out: list[str] = []
+    bgp, ospf = data.get("bgp") or [], data.get("ospf") or []
+    if bgp:
+        out.append(f"{'BGP ON':<20} {'PEER':<16} {'AS':>7}  STATE")
+        for r in bgp:
+            state = r["state"] + ("" if r["enabled"] else " (admin off)")
+            out.append(f"{r['asset'][:20]:<20} {r['peer']:<16} {r['remote_as']:>7}  {state}")
+    if ospf:
+        out.append(f"{'OSPF ON':<20} {'NEIGHBOUR':<16} STATE")
+        out.extend(f"{r['asset'][:20]:<20} {r['neighbour']:<16} {r['state']}" for r in ospf)
+    for key, title in (("top_in", "IN"), ("top_out", "OUT")):
+        rows = data.get(key) or []
+        if rows:
+            out.append(f"{'BUSIEST ' + title:<20} {'INTERFACE':<24} TRAFFIC")
+            out.extend(f"{r['asset'][:20]:<20} {r['interface'][:24]:<24} {_bits(r['bps'])}" for r in rows)
+    return ("\n".join(out) or "No SNMP interface, BGP or OSPF data yet.") + "\n"
 
 
 def format_handover(rows: list[dict]) -> str:
@@ -1245,7 +1276,7 @@ def main(argv: list[str] | None = None) -> None:
         cmd_alert_quality(port, rest)
     elif command == "power":
         cmd_power(port)
-    elif command in {"lifecycle", "racks", "synthetic"}:
+    elif command in {"lifecycle", "racks", "synthetic", "network"}:
         cmd_lifecycle(port, command)
     elif command in {"handover", "actions", "sla"}:
         cmd_process(port, command, rest)

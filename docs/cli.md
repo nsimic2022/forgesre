@@ -111,6 +111,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `lifecycle` | Support / warranty, end of life and licence dates expiring or expired, soonest first |
 | `racks` | Rack elevation: devices per rack and U position, devices without a position, overlaps |
 | `synthetic` | Synthetic checks (HTTP, TCP, DNS, ping): last result and probe time per check |
+| `network` | BGP peers and OSPF neighbours (problems first), busiest interfaces in and out |
 | `handover`, `handover write "notes"`, `handover take` | Shift handover: the latest one, write one, or confirm it as the next shift |
 | `actions` | Open follow-up actions from incident reviews, overdue first |
 | `sla [DAYS]` | SLA: acknowledged and resolved in time, per severity |
