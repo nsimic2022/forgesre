@@ -11,7 +11,6 @@ export const NAV = [
   { to: "/inventory", label: "Inventory" },
   { to: "/automation", label: "Automation" },
   { to: "/investigations", label: "Investigations" },
-  { to: "/forgeai", label: "ForgeAI" },
   { to: "/reports", label: "Reports" },
   { to: "/settings", label: "Settings" },
 ];
