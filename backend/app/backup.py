@@ -1217,6 +1217,44 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
 
+def _offbox_cli(args: list[str]) -> int:
+    """./forgesre backup offbox [status|test|push [N]]"""
+    import sys
+
+    from app import offbox
+
+    sub = args[0] if args else "status"
+    cfg = offbox.config()
+    if sub == "test":
+        got = offbox.test()
+        print(("OK: " if got["ok"] else "FAILED: ") + got["detail"])
+        return 0 if got["ok"] else 1
+    if sub == "push":
+        rows = list_archives()
+        if not rows:
+            print("No local backup to copy. Run ./forgesre backup first.")
+            return 1
+        pick = args[1] if len(args) > 1 else "1"
+        path = resolve_cli_archive(pick, rows=rows)
+        archive = archive_file(path)
+        name = archive.parent.name if archive.parent.name.startswith("backup_") else path.name
+        got = offbox.push(archive, name, layout_from_env().backup_dir)
+        print(("OK: " if got["ok"] else "FAILED: ") + got["detail"])
+        return 0 if got["ok"] else 1
+    why = offbox.problem(cfg)
+    if why == "off":
+        print("Off-box copy: off. Set FORGESRE_OFFBOX=dir or s3 in .env (docs/backup.md).")
+        return 0
+    target = cfg["path"] if cfg["kind"] == "dir" else f"{cfg['url']}/{cfg['bucket']}/{cfg['prefix']}"
+    print(f"Off-box copy: {cfg['kind']} → {target}, keep {cfg['keep']}" + (", without secrets.env and .env" if cfg["strip"] else ""))
+    if why:
+        print(f"Not ready: {why}")
+    last = offbox.status(layout_from_env().backup_dir)
+    print(f"Last copy: {last['at']} {'ok' if last.get('ok') else 'FAILED'} — {last.get('detail', '')}" if last else "Last copy: none yet")
+    sys.stdout.flush()
+    return 0 if not why else 1
+
+
 def _main(argv: list[str] | None = None) -> int:
     import sys
 
@@ -1236,6 +1274,8 @@ def _main(argv: list[str] | None = None) -> int:
         for index, row in enumerate(rows, 1):
             print(f"{index}. {row['label']}")
         return 0
+    if cmd == "backup" and args[:1] == ["offbox"]:
+        return _offbox_cli(args[1:])
     if cmd == "backup":
         include_secrets = "--no-secrets" not in args
         include_models = "--include-models" in args
@@ -1264,6 +1304,14 @@ def _main(argv: list[str] | None = None) -> int:
                     file=sys.stderr,
                 )
             return 1
+        if "--no-offbox" not in args:
+            from app import offbox
+
+            sent = offbox.push(result.path, result.name, layout_from_env().backup_dir)
+            if not sent.get("skipped"):
+                print(("Off-box: " if sent["ok"] else "Off-box copy FAILED (the local backup is fine): ") + sent["detail"],
+                      file=sys.stdout if sent["ok"] else sys.stderr)
+                # the local backup is fine; doctor shows the failed copy until the next one works
         return 0
     if cmd in {"restore", "import"}:
         yes = "--yes" in args

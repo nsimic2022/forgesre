@@ -224,6 +224,28 @@ Archives are `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (`$FORGESRE_
 
 Download is session-authenticated. There is no unauthenticated URL. Do not commit `data/backups/`.
 
+#### Off-box copy (NFS or S3)
+
+A backup that only lives on the appliance is lost with the appliance. Turn on an off-box copy in
+`.env`. After every `./forgesre backup` (and the one `./forgesre update` makes) the archive is copied
+there, and only the newest `FORGESRE_OFFBOX_KEEP` (14) copies are kept on the target.
+
+| `.env` | Meaning |
+|---|---|
+| `FORGESRE_OFFBOX=dir` | copy to a mounted directory: `FORGESRE_OFFBOX_PATH=/mnt/nfs/forgesre` (mount the NFS / SMB share on the host first, e.g. in `/etc/fstab`) |
+| `FORGESRE_OFFBOX=s3` | S3-compatible storage (MinIO, Ceph, AWS): `FORGESRE_OFFBOX_S3_URL=https://s3.dc.local:9000`, `FORGESRE_OFFBOX_S3_BUCKET`, optional `_PREFIX` (forgesre) and `_REGION` (us-east-1); keys with `./forgesre settings set-secret BACKUP_S3_ACCESS_KEY` and `BACKUP_S3_SECRET_KEY` |
+| `FORGESRE_OFFBOX_STRIP=yes` | leave `secrets.env` and `.env` out of the off-box copy (restore then needs them from elsewhere) |
+
+The archive holds the database and every password unless stripped: use storage only your team can
+read, with encryption at rest. Uploads use S3 Signature V4 with path-style URLs over the host's
+proxy settings; nothing goes anywhere unless you set `FORGESRE_OFFBOX`.
+
+`./forgesre backup offbox` shows the target and the last copy, `./forgesre backup offbox test` writes,
+reads and deletes a test file, `./forgesre backup offbox push [N]` copies an existing backup (1 = newest).
+`./forgesre backup --no-offbox` skips the copy once. Doctor row *Off-box backup copy* is red when the last
+copy failed and yellow when it is older than `checks.backup_max_age_hours`. A failed copy never fails
+the local backup.
+
 Restore does **not** run silently. CLI without `--yes` prints the plan and exits 1. The UI Restore button requires a checkbox and typing `RESTORE`. Preferred path after a crash or when migrating VMs:
 
 ```bash

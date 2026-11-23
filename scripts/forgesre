@@ -98,6 +98,7 @@ Commands:
   power              UPS, PDU and temperature: on battery, runtime, load, sensors
   https              HTTPS in front of the UI: status, on, only, off, cert
   optional           Optional parts (NetBox, LibreNMS, …): list, enable, disable
+  gpu                Run the local model on an NVIDIA GPU: status, on, off
   lifecycle          Support / warranty, end of life and licences expiring or expired
   racks              Rack elevation: devices by rack and U position, overlaps
   synthetic          Synthetic checks (HTTP, TCP, DNS, ping): last result per check
@@ -678,6 +679,18 @@ inventory.rack_units (42). Devices with a rack but no position, and two devices 
 U, are listed under the rack. Same data as Inventory › Racks.
 EOF
       ;;
+    gpu)
+      cat <<'EOF'
+gpu — the bundled llama.cpp on an NVIDIA GPU (service llm-gpu, profile ai-gpu).
+
+  ./forgesre gpu              GPU seen by the host and Docker, CPU or GPU build running
+  ./forgesre gpu on [LAYERS]  CUDA build, LAYERS offloaded (default 99 = all)
+  ./forgesre gpu off          back to the CPU build
+
+Needs the NVIDIA driver and the NVIDIA Container Toolkit. Same model, context and port 8088;
+Core is not changed. A 4B model on a GPU answers in seconds instead of a minute.
+EOF
+      ;;
     optional)
       cat <<'EOF'
 optional — the optional parts of the stack (Compose profiles).
@@ -828,6 +841,10 @@ backup — one folder per run under $FORGESRE_DATA/backups (default ./data/backu
   ./forgesre backup
   ./forgesre backup --no-secrets
   ./forgesre backup --include-models
+  ./forgesre backup --no-offbox        this once, no off-box copy
+  ./forgesre backup offbox             off-box target and the last copy
+  ./forgesre backup offbox test        write, read and delete a test file there
+  ./forgesre backup offbox push [N]    copy an existing backup (1 = newest)
   ./backup.sh --no-secrets
 
 Writes data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz (mode 600)
@@ -847,6 +864,9 @@ exists; ./forgesre update also runs backup as a safety net.
 
 Not included: Docker images, Prometheus/Loki/Grafana volumes, nested backups.
 LLM GGUF files are skipped unless --include-models (they are often multi-GB).
+
+Off-box copy (FORGESRE_OFFBOX=dir|s3 in .env): after each backup the archive is copied to an NFS
+directory or S3 bucket, newest FORGESRE_OFFBOX_KEEP (14) kept. docs/operator-handbook.md.
 
 The tar is mode 600; the run folder is mode 700. Administration can
 create/download the same archives (admin session only). Never commit
@@ -1316,6 +1336,10 @@ case "$cmd" in
   optional)
     need_env
     exec "$ROOT/scripts/optional.sh" "$@"
+    ;;
+  gpu)
+    need_env
+    exec "$ROOT/scripts/gpu.sh" "$@"
     ;;
   lifecycle|racks|synthetic|network|known-errors)
     need_env

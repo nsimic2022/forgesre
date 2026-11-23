@@ -144,7 +144,9 @@ download_model() {
 
 # Turn on Compose profile "ai", pick llama.cpp threads, and set ai.llm.mode: bundled in YAML.
 enable_config() {
-  if [[ -f "$ROOT/.env" ]]; then
+  if [[ -f "$ROOT/.env" ]] && grep -Eq '^COMPOSE_PROFILES=.*\bai-gpu\b' "$ROOT/.env"; then
+    true  # GPU build already chosen (./forgesre gpu on): keep ai-gpu, do not add the CPU profile
+  elif [[ -f "$ROOT/.env" ]]; then
     if grep -q '^COMPOSE_PROFILES=' "$ROOT/.env"; then
       # current = existing profile list; next = rebuilt list with "ai" first, no duplicates.
       current="$(grep -E '^COMPOSE_PROFILES=' "$ROOT/.env" | tail -n1 | cut -d= -f2-)"
@@ -229,8 +231,13 @@ start_llm() {
   # shellcheck disable=SC1091
   [[ -f "$ROOT/.env" ]] && source "$ROOT/.env"
   set +a
-  echo "Starting llama.cpp (profile ai) and reloading Core..."
-  "${dc[@]}" --profile ai up -d llm embed
+  if grep -Eq '^COMPOSE_PROFILES=.*\bai-gpu\b' "$ROOT/.env" 2>/dev/null; then
+    echo "Starting llama.cpp on the GPU (profile ai-gpu) and reloading Core..."
+    "${dc[@]}" --profile ai-gpu up -d llm-gpu embed
+  else
+    echo "Starting llama.cpp (profile ai) and reloading Core..."
+    "${dc[@]}" --profile ai up -d llm embed
+  fi
   "${dc[@]}" up -d --force-recreate core
 }
 

@@ -492,10 +492,38 @@ services:
       retries: 5
     restart: unless-stopped
 
+  llm-gpu:
+    # NVIDIA GPU build of the same server (profile ai-gpu instead of ai: ./forgesre gpu on).
+    # Needs the NVIDIA driver and the NVIDIA Container Toolkit on the host. Same port 8088.
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda-b11718
+    profiles: ["ai-gpu"]
+    network_mode: host
+    entrypoint: ["/bin/sh", "/forgesre/llm-run.sh"]
+    environment:
+      LLM_CTX: "${FORGESRE_LLM_CTX:-8192}"
+      LLM_THREADS: "${FORGESRE_LLM_THREADS:-8}"
+      LLM_GPU_LAYERS: "${FORGESRE_LLM_GPU_LAYERS:-99}"
+    volumes:
+      - ${FORGESRE_DATA:-./data}/models:/models:ro
+      - ./scripts/llm-run.sh:/forgesre/llm-run.sh:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8088/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
   embed:
     # Local embeddings for ForgeAI document search (nomic-embed-text, ~150 MB) on 127.0.0.1:8089.
     image: ghcr.io/ggml-org/llama.cpp:server-b11718
-    profiles: ["ai"]
+    profiles: ["ai", "ai-gpu"]
     network_mode: host
     entrypoint: ["/bin/sh", "/forgesre/embed-run.sh"]
     environment:

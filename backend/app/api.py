@@ -3236,6 +3236,32 @@ def _oxidized_check() -> dict[str, Any]:
     return {"status": "warn" if failed else "ok", "why": note}
 
 
+def _offbox_check() -> dict[str, Any]:
+    """Off-box backup copy: disabled when FORGESRE_OFFBOX is empty, else the last push result."""
+    import os
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    from app import offbox
+
+    cfg = offbox.config()
+    if not cfg["kind"]:
+        return {"status": "disabled", "why": "off (FORGESRE_OFFBOX=dir or s3)"}
+    last = offbox.status(Path(os.environ.get("FORGESRE_BACKUP_DIR") or "/backups"))
+    if not last:
+        return {"status": "warn", "why": f"{cfg['kind']} configured, no copy yet", "test": "./forgesre backup offbox test"}
+    if not last.get("ok"):
+        return {"status": "error", "why": str(last.get("detail") or "last copy failed")[:200], "test": "./forgesre backup offbox test"}
+    try:
+        age_h = (datetime.now(timezone.utc) - datetime.fromisoformat(str(last["at"]))).total_seconds() / 3600
+    except (KeyError, ValueError):
+        age_h = 0.0
+    limit = float(((settings.yaml or {}).get("checks") or {}).get("backup_max_age_hours") or 26)
+    if age_h > limit:
+        return {"status": "warn", "why": f"last off-box copy {age_h:.0f} h ago (limit {limit:.0f} h)"}
+    return {"status": "ok", "why": f"{last.get('detail', '')[:160]}, {age_h:.0f} h ago"}
+
+
 def _https_check() -> dict[str, Any]:
     """HTTPS proxy: disabled when off (.env FORGESRE_HTTPS), else the certificate it serves and its expiry."""
     import os
@@ -3286,6 +3312,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "blackbox": _blackbox_check(),
         "oxidized": _oxidized_check(),
         "https": _https_check(),
+        "offbox": _offbox_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)

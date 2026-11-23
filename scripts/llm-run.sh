@@ -6,6 +6,8 @@
 MODELS="${LLM_MODELS_DIR:-/models}"
 CTX="${LLM_CTX:-8192}"
 THREADS="${LLM_THREADS:-8}"
+# llm-gpu service (./forgesre gpu on): layers to offload to the GPU; 0 = CPU only
+GPU_LAYERS="${LLM_GPU_LAYERS:-0}"
 SERVER=/app/llama-server
 [ -x "$SERVER" ] || SERVER="$(command -v llama-server)"
 
@@ -33,7 +35,11 @@ while true; do
     continue
   fi
   echo "forgesre: starting llama-server with $model"
-  "$SERVER" -m "$MODELS/$model" --host 127.0.0.1 --port 8088 -c "$CTX" -t "$THREADS" &
+  if [ "$GPU_LAYERS" -gt 0 ] 2>/dev/null; then
+    "$SERVER" -m "$MODELS/$model" --host 127.0.0.1 --port 8088 -c "$CTX" -t "$THREADS" -ngl "$GPU_LAYERS" &
+  else
+    "$SERVER" -m "$MODELS/$model" --host 127.0.0.1 --port 8088 -c "$CTX" -t "$THREADS" &
+  fi
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do
     sleep 5

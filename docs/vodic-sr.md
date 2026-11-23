@@ -301,6 +301,13 @@ Cloud bira samo Engineer ili Admin, posebno za svaku poruku (Local/Cloud u chatu
 
 **MCP server:** `mcp.enabled: true` otvara `/mcp` za AI alate (Claude, Cursor) sa `MCP_TOKEN`. Svi alati samo čitaju (pregled NOC-a, incidenti, asseti, dežurstvo, SLO, metrike i logovi incidenta, priručnici), ali rezultati odlaze modelu tog klijenta.
 
+### NVIDIA GPU (opciono)
+
+Instaliraj NVIDIA drajver i NVIDIA Container Toolkit, pa pokreni `./forgesre gpu on`. Komanda zamenjuje
+CPU servis `llm` servisom `llm-gpu`: CUDA verzija, svi slojevi na GPU-u. Model, port 8088 i podešavanja
+ostaju isti. `./forgesre gpu off` vraća CPU verziju. `FORGESRE_LLM_GPU_LAYERS` (`.env`) određuje
+koliko slojeva ide na GPU kad GPU nema dovoljno memorije.
+
 ## 9. Podešavanje modela: kontekst, timeout, thinking, skillovi
 
 Na CPU-u brzinu određuju dve stvari: koliko teksta model mora da pročita (prompt) i koliko piše (odgovor). Zato ForgeSRE šalje kratak, sređen kontekst umesto sirovih metrika i logova.
