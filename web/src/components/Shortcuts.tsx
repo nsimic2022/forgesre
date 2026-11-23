@@ -62,6 +62,7 @@ export function Shortcuts() {
         </div>
         <table className="data">
           <tbody>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>K</kbd></td><td>Go to a page, incident or asset</td></tr>
             <tr><td><kbd>/</kbd></td><td>Search on this page</td></tr>
             <tr><td><kbd>?</kbd></td><td>Show or hide this list</td></tr>
             {[["n", "NOC overview"], ["i", "Incidents"], ["o", "On-call"], ["v", "Inventory"], ["a", "Automation"], ["t", "Investigations"], ["r", "Reports"], ["s", "Settings"], ["w", "Wall screen (TV mode)"]].map(([k, label]) => (

@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import type { Me } from "../lib/api";
+import { CommandPalette } from "./CommandPalette";
+import { CriticalNotifier } from "./CriticalNotifier";
 import { Shortcuts } from "./Shortcuts";
 import { Chip } from "./ui";
 
@@ -24,11 +26,15 @@ const ROLE_LABEL: Record<string, string> = { viewer: "Viewer", analyst: "Analyst
 
 const NAV_KEY = "forgesre.navClosed";
 
+const narrow = () => typeof window !== "undefined" && window.innerWidth < 760;
+
+/** Saved choice; with none, the menu starts folded on a phone so the page comes first. */
 function savedClosed(): boolean {
   try {
-    return localStorage.getItem(NAV_KEY) === "1";
+    const saved = localStorage.getItem(NAV_KEY);
+    return saved === null ? narrow() : saved === "1";
   } catch {
-    return false;
+    return narrow();
   }
 }
 
@@ -60,6 +66,8 @@ export function Shell({ me, forgeai, children }: { me: Me | null; forgeai: strin
     <div className={`shell${closed ? " nav-closed" : ""}`}>
       <a className="skip-link" href="#main">Skip to content</a>
       <Shortcuts />
+      <CommandPalette />
+      <CriticalNotifier />
       {closed ? <MenuButton closed className="nav-open" onClick={toggle} /> : null}
       <nav className="nav" id="main-nav" aria-label="Main" hidden={closed}>
         <div className="nav-brand">
@@ -69,7 +77,7 @@ export function Shell({ me, forgeai, children }: { me: Me | null; forgeai: strin
         </div>
         <div className="nav-links">
           {NAV.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
+            <NavLink key={item.to} to={item.to} end={item.end} onClick={() => narrow() && setClosed(true)} className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
               {item.label}
             </NavLink>
           ))}

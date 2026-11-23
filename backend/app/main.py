@@ -287,6 +287,9 @@ def _queue_snmp_apply(db: Session) -> None:
 def _mount_web_app(app: FastAPI) -> None:
     """Serve the new React UI under /app when it has been built; every unknown /app/* path
     returns index.html so client-side routes survive a reload. Data comes from /api/v1."""
+    import mimetypes
+
+    mimetypes.add_type("application/manifest+json", ".webmanifest")  # PWA manifest (not in every mime table)
     dist = web_dist_dir()
     index = dist / "index.html"
     if not index.is_file():

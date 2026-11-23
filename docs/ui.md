@@ -130,6 +130,23 @@ page what is already loaded. Code: `web/src/components/Pager.tsx`.
 - **Skip to content** is the first stop for the Tab key; the browser tab is named after the page
   ("Inventory · ForgeSRE", "INC-0412 · ForgeSRE"). Code: `web/src/components/Shortcuts.tsx`.
 
+## Command palette, alerts in the browser, phone
+
+- <kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>Cmd</kbd>+<kbd>K</kbd> on a Mac) opens **Go to**: type part of a
+  page name, an incident number or title, or a host, asset id or IP; arrows move, Enter opens.
+  Search is `GET /api/v1/search?q=` (2+ characters, 8 incidents and 8 assets). Code:
+  `web/src/components/CommandPalette.tsx`.
+- **Settings › Appearance › Alerts in this browser**: *Play a sound* (two short tones made in the
+  browser) and *Desktop notification* (the browser asks for permission). Every 30 s the page asks
+  `GET /api/v1/notify/critical?after=<id>` for new open CRITICAL incidents; ones suppressed under a
+  parent do not ring, and the first poll only learns the newest id. Saved per browser, off by
+  default; the tab must be open (no push server, nothing leaves the DC).
+- **Phone (on-call)**: open `https://<appliance>/app/` on the phone and choose *Install app* / *Add
+  to Home Screen*. It opens on **On-call**, full screen, with shortcuts to Incidents and NOC. The
+  service worker (`web/public/sw.js`) only shows an offline page when the appliance cannot be
+  reached; it never caches API data. Installing needs HTTPS (or `localhost`); paging stays SMS, mail
+  and chat.
+
 ## Running an incident: major incidents, SLA, handover, follow-up actions
 
 - **Major incident** (incident page, Analyst and up): *Declare major incident* with a commander,

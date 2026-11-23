@@ -842,6 +842,39 @@ def network_api(db: Session = Depends(get_db), user: User = Depends(require("rea
     return overview(db)
 
 
+@router.get("/search")
+def quick_search(q: str = "", db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """Command palette (Ctrl+K): up to 8 incidents and 8 assets whose number, title, host or IP match."""
+    text = q.strip()[:100]
+    if len(text) < 2:
+        return {"incidents": [], "assets": []}
+    like = f"%{text}%"
+    incidents = (db.query(Incident).filter(or_(Incident.number.ilike(like), Incident.title.ilike(like)))
+                 .order_by(Incident.id.desc()).limit(8).all())
+    assets = (db.query(Asset).filter(or_(Asset.asset_id.ilike(like), Asset.hostname.ilike(like), Asset.ip.ilike(like)))
+              .order_by(Asset.hostname).limit(8).all()) if can(user, "read_assets") else []
+    return {
+        "incidents": [{"number": i.number, "title": i.title, "severity": i.severity, "status": i.status} for i in incidents],
+        "assets": [{"asset_id": a.asset_id, "hostname": a.hostname, "ip": a.ip, "type": a.type} for a in assets],
+    }
+
+
+@router.get("/notify/critical")
+def new_critical(after: int = -1, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """Browser sound / desktop notification: open CRITICAL incidents newer than ``after`` (incident id).
+
+    ``latest`` is the newest incident id (0 when there is none); the first call (no ``after``)
+    only returns it, so a browser that just opened does not ring for everything already burning.
+    """
+    latest = db.query(func.max(Incident.id)).scalar() or 0
+    if after < 0:
+        return {"latest": latest, "items": []}
+    rows = (db.query(Incident).filter(Incident.id > after, Incident.severity == "CRITICAL", Incident.status.in_(("OPEN", "INVESTIGATING", "ESCALATED")),
+                                      Incident.caused_by_id.is_(None))
+            .order_by(Incident.id).limit(5).all())
+    return {"latest": latest, "items": [{"number": r.number, "title": r.title, "host": r.asset.hostname if r.asset else ""} for r in rows]}
+
+
 @router.get("/handover")
 def handover_list(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
     """The latest shift handovers, newest first."""

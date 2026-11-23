@@ -1,5 +1,5 @@
 import { AuditPanel, JournalPanel } from "../components/ActivityPanels";
-import { AppearancePanel } from "../components/AppearancePanel";
+import { AlertPrefs, AppearancePanel } from "../components/AppearancePanel";
 import { ForgeAiDocs } from "../components/ForgeAiDocs";
 import { ForgeAiModels } from "../components/ForgeAiModels";
 import { ForgeAiStatus } from "../components/ForgeAiStatus";
@@ -41,7 +41,8 @@ function Services() {
 
 export function SettingsPage() {
   const [data, setData] = useState<SettingsData | null>(null);
-  const [group, setGroup] = useState("general");
+  // ?group=checks (command palette, links in docs) opens that group
+  const [group, setGroup] = useState(() => new URLSearchParams(window.location.search).get("group") || "general");
   const [error, setError] = useState("");
   const [forbidden, setForbidden] = useState(false);
   useEffect(() => {
@@ -65,7 +66,7 @@ export function SettingsPage() {
       {forbidden ? (
         <>
           <Card><span>Settings are for Admins. You can still pick your theme and see the health of every service below.</span></Card>
-          <AppearancePanel />
+          <><AppearancePanel /><AlertPrefs /></>
           <Services />
         </>
       ) : null}
@@ -88,7 +89,7 @@ export function SettingsPage() {
             ) : group === "integrations" ? (
               <IntegrationsPanel rows={data.settings} onSaved={replace} />
             ) : group === "appearance" ? (
-              <AppearancePanel />
+              <><AppearancePanel /><AlertPrefs /></>
             ) : group === "messages" ? (
               <MessagePreviews />
             ) : group === "services" ? (

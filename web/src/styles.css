@@ -275,6 +275,11 @@ kbd { font-family: var(--mono); font-size: 12px; border: 1px solid var(--border)
 .nav-hint { padding: 0 6px; }
 .shortcuts-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
 .shortcuts { width: min(460px, 100%); max-height: 90vh; overflow: auto; }
+.palette { width: min(620px, 100%); max-height: 80vh; align-self: flex-start; margin-top: 10vh; gap: 8px; }
+.palette .search { width: 100%; font-size: 16px; }
+.palette-list { list-style: none; margin: 0; padding: 0; overflow: auto; max-height: 55vh; }
+.palette-list li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; border-radius: 6px; cursor: pointer; }
+.palette-list li.on { background: var(--s3); }
 .pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
 input.search[type="search"] { min-width: min(300px, 100%); }
 .one-line { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
