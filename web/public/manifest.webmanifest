@@ -1,0 +1,20 @@
+{
+  "name": "ForgeSRE",
+  "short_name": "ForgeSRE",
+  "description": "NOC monitoring for the data centre: incidents, on-call and inventory.",
+  "start_url": "/app/incidents/on-call",
+  "scope": "/app/",
+  "display": "standalone",
+  "background_color": "#0b1320",
+  "theme_color": "#0f1b2d",
+  "icons": [
+    { "src": "/app/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/app/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/app/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "On-call", "url": "/app/incidents/on-call" },
+    { "name": "Incidents", "url": "/app/incidents" },
+    { "name": "NOC overview", "url": "/app/" }
+  ]
+}

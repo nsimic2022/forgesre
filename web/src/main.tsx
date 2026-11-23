@@ -18,3 +18,8 @@ createRoot(document.getElementById("root")!).render(
     </BrowserRouter>
   </StrictMode>,
 );
+
+// Installable on a phone (on-call) and a clear offline page; the worker never caches API data.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => void navigator.serviceWorker.register("/app/sw.js", { scope: "/app/" }).catch(() => undefined));
+}
