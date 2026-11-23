@@ -249,3 +249,5 @@ details.explain > summary { cursor: pointer; color: var(--muted); font-size: 13p
 details.explain[open] > summary { margin-bottom: 6px; }
 .pager { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 6px; }
 .pager .btn { min-width: 34px; justify-content: center; }
+.bulk-bar { gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: 10px; background: var(--s2); border: 1px solid var(--border); }
+tr.picked td { background: var(--s2); }

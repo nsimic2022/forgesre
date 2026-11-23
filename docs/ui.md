@@ -96,6 +96,16 @@ keep failing after the parent is back.
 API: `GET /api/v1/topology`, `POST /api/v1/topology/sync`, `POST /api/v1/topology/parent`
 `{asset_id, parent_asset_id}` (empty clears). Writes need Engineer.
 
+## Working many incidents
+
+- Incidents and NOC: tick rows (or the header box for the page) and press **Acknowledge selected**
+  or **Resolve selected** (`POST /api/v1/incidents/bulk`, Analyst and up, one audit row each).
+- Incident page, **Related and quiet**: **Caused by INC-…** marks this incident as a consequence of
+  another when the dependency map did not catch it (loops are refused; the other incident lists
+  it under Consequences), and **Quiet this host for 1–24 h** with a reason opens a maintenance
+  window from now (Engineer and up). Column `incidents.caused_by_id`, added by the migration.
+- Inventory: the asset card shows the host metrics of the last hour.
+
 ## Long lists
 
 Every table and list shows 10 rows at first, with a pager under it: "1–10 of 57", page numbers,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { IncidentTable } from "../components/IncidentTable";
+import { useRoleRank } from "../lib/me";
 import { Pager, usePageSize } from "../components/Pager";
 import { Card } from "../components/ui";
 import { getJson, type IncidentPage } from "../lib/api";
@@ -38,6 +39,8 @@ export function IncidentsPage() {
   const [PAGE, setPageSize] = usePageSize("incidents");
   const [data, setData] = useState<IncidentPage | null>(null);
   const [error, setError] = useState("");
+  const [reload, setReload] = useState(0);
+  const canWork = useRoleRank() >= 1;
 
   useEffect(() => {
     const params = new URLSearchParams({ tab, severity, q: query, date_from: from, date_to: to, limit: String(PAGE), offset: String(offset) });
@@ -47,7 +50,7 @@ export function IncidentsPage() {
         .catch((err: Error) => setError(err.message));
     }, query ? 250 : 0); // debounce typing
     return () => window.clearTimeout(timer);
-  }, [tab, severity, query, from, to, offset, PAGE]);
+  }, [tab, severity, query, from, to, offset, PAGE, reload]);
   const csv = `/api/v1/incidents-page.csv?${new URLSearchParams({ tab, severity, q: query, date_from: from, date_to: to })}`;
 
   const pick = (next: () => void) => {
@@ -87,7 +90,7 @@ export function IncidentsPage() {
           {from || to ? <button className="btn" type="button" onClick={() => pick(() => (setFrom(""), setTo("")))}>Any day</button> : null}
           <a className="btn" href={csv} download>Export CSV</a>
         </div>
-        <IncidentTable rows={data?.rows ?? []} loaded={Boolean(data)} />
+        <IncidentTable rows={data?.rows ?? []} loaded={Boolean(data)} canWork={canWork} onChanged={() => setReload((n) => n + 1)} />
         {data ? <Pager total={data.total} offset={offset} size={PAGE} onOffset={setOffset} onSize={setPageSize} label="incidents" /> : null}
       </Card>
     </>

@@ -6,6 +6,7 @@ import { getJson, type Noc as NocData } from "../lib/api";
 import { clock, minutesLabel, severityLabel } from "../lib/format";
 import { IncidentTable } from "../components/IncidentTable";
 import { usePaged } from "../components/Pager";
+import { useRoleRank } from "../lib/me";
 
 const REFRESH_MS = 10_000;
 type TabKey = "active" | "acknowledged" | "resolved_today";
@@ -27,9 +28,11 @@ export function useNocPoll() {
         .catch((err: Error) => alive && setError(err.message));
     load();
     const timer = window.setInterval(load, REFRESH_MS);
+    window.addEventListener("forgesre:noc-refresh", load);
     return () => {
       alive = false;
       window.clearInterval(timer);
+      window.removeEventListener("forgesre:noc-refresh", load);
     };
   }, []);
   return { data, error };
@@ -56,6 +59,7 @@ export function NocPage() {
 
   const c = data?.counts;
   const nocPage = usePaged(rows, "noc", "incidents");
+  const canWork = useRoleRank() >= 1;
   return (
     <>
       <header className="page-head">
@@ -102,7 +106,7 @@ export function NocPage() {
           ))}
           <input className="search" type="search" aria-label="Filter incidents" placeholder="Filter by host, IP, incident…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
-        <IncidentTable rows={nocPage.page} loaded={Boolean(data)} />
+        <IncidentTable rows={nocPage.page} loaded={Boolean(data)} canWork={canWork} onChanged={() => window.dispatchEvent(new Event("forgesre:noc-refresh"))} />
         {nocPage.pager}
       </Card>
       {data ? (

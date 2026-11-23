@@ -250,6 +250,8 @@ class Incident(Base):
     ai_rating: Mapped[str] = mapped_column(String(16), default="")
     reviewed_by: Mapped[str] = mapped_column(String(255), default="")
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # "This is a consequence of INC-…": set by a person when the dependency map did not catch it.
+    caused_by_id: Mapped[int | None] = mapped_column(ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True, index=True)
 
     asset: Mapped[Asset | None] = relationship(back_populates="incidents")
     playrule: Mapped[Playrule | None] = relationship()
