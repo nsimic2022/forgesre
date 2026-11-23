@@ -109,6 +109,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `alert-quality [DAYS]` | Noisiest alerts: incidents, % acknowledged, % that cleared alone, flapping, a suggestion |
 | `power` | UPS, PDU and environment sensors: on battery, runtime left, load, temperature |
 | `optional [ACTION] [NAME]` | Optional parts (Compose profiles): list; ACTION enable or disable, NAME netbox or librenms |
+| `gpu [ACTION]` | Local model on an NVIDIA GPU: status; ACTION on (optional layers) or off |
 | `https [ACTION]` | HTTPS in front of the UI (Caddy): status; ACTION on, only, off or cert (new self-signed certificate) |
 | `lifecycle` | Support / warranty, end of life and licence dates expiring or expired, soonest first |
 | `racks` | Rack elevation: devices per rack and U position, devices without a position, overlaps |
@@ -123,7 +124,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `settings` | Settings from the shell: list, get, set, test, set-secret ([settings.md](settings.md)) |
 | `journal [module]` | Internal console reports (JSON) |
 | `demo` / `demo-rca` / `demo-reset` | Demo HighCPU path / filesystem RCA demo / lower the demo gauges |
-| `backup` | One folder per run under `data/backups` (`--no-secrets`, `--include-models`) |
+| `backup` | One folder per run under `data/backups` (`--no-secrets`, `--include-models`, `--no-offbox`); `backup offbox [test, push N]` for the NFS / S3 copy |
 | `restore` / `import` | Numbered backup picker; applies only with `--yes` after stopping Core |
 | `remove backup` | Delete one backup folder (`--yes` or typed yes) |
 | `fetch-llm` | Download the GGUF into `data/models/model.gguf` and start llama.cpp |

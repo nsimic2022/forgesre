@@ -33,9 +33,10 @@ profiles_list() {
   return 0
 }
 
-# True when profile $1 is in COMPOSE_PROFILES.
+# True when profile $1 is in COMPOSE_PROFILES. No grep -q: it stops reading early, the writer
+# gets SIGPIPE and, under pipefail, a profile that is on would look off.
 profile_on() {
-  profiles_list | grep -qx "$1"
+  profiles_list | grep -x -- "$1" >/dev/null
 }
 
 # Add profile $1 once (order kept).

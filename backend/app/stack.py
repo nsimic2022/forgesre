@@ -37,6 +37,7 @@ COMPONENT_LABELS = {
     "blackbox": "Synthetic checks (blackbox)",
     "oxidized": "Oxidized config changes",
     "https": "HTTPS (proxy and certificate)",
+    "offbox": "Off-box backup copy",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -66,6 +67,7 @@ COMPONENT_SHORT = {
     "blackbox": "Blackbox",
     "oxidized": "Oxidized",
     "https": "HTTPS",
+    "offbox": "Off-box backup",
     "redis": "Redis",
     "mailpit": "Mailpit",
 }

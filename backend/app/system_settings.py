@@ -92,6 +92,8 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("checks.tls_warn_days", "checks", "Certificate warning (days)", "int"),
     _y("checks.tls_critical_days", "checks", "Certificate critical (days)", "int"),
     _y("checks.backup_max_age_hours", "checks", "ForgeSRE backup max age (hours)", "int"),
+    _s("BACKUP_S3_ACCESS_KEY", "checks", "Off-box backup S3 access key"),
+    _s("BACKUP_S3_SECRET_KEY", "checks", "Off-box backup S3 secret key"),
     _y("checks.lifecycle_warn_days", "checks", "End of life / licence warning (days)", "int", minimum=1, maximum=365,
        help="AssetLifecycleExpiring fires this many days before an asset's end of life or licence date. Support uses the asset's own lead days."),
     _y("inventory.rack_units", "general", "Rack height (U)", "int", minimum=10, maximum=60,

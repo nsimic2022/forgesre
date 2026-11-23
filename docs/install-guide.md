@@ -344,6 +344,13 @@ Azure, `ai.cloud.url` is the full deployment URL.
 Every tool only reads (NOC overview, incidents, assets, on-call, SLOs, the incident's metrics and
 logs, manuals), but the results go to that client's model.
 
+### NVIDIA GPU (optional)
+
+Install the NVIDIA driver and the NVIDIA Container Toolkit, then run `./forgesre gpu on`. It replaces the
+CPU `llm` service with `llm-gpu`: the CUDA build, all layers on the GPU. The model, port 8088 and the
+settings stay the same. `./forgesre gpu off` goes back to the CPU build. `FORGESRE_LLM_GPU_LAYERS`
+(`.env`) sets how many layers go to the GPU when it has too little memory.
+
 ## 9. Model tuning: context, timeout, thinking, skills
 
 On a CPU two things set the speed: how much text the model must read (the prompt) and how much it

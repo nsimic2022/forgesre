@@ -689,6 +689,7 @@ _COMPOSE_IMAGE_PINS = {
     "snmp-exporter": "prom/snmp-exporter:v0.26.0",
     "blackbox-exporter": "prom/blackbox-exporter:v0.25.0",
     "proxy": "caddy:2.8.4-alpine",
+    "llm-gpu": "ghcr.io/ggml-org/llama.cpp:server-cuda-b11718",
     "loki": "grafana/loki:3.4.2",
     "alloy": "grafana/alloy:v1.7.5",
     "grafana": "grafana/grafana:11.4.0",

@@ -135,6 +135,13 @@ A **4 GB** lab VM should not run either GGUF. Leave `ai.enabled: false` and use 
 
 Context window is **8192** tokens (`-c`), set by `FORGESRE_LLM_CTX` in `.env` (then `./forgesre update`). Core waits **`ai.llm.timeout_seconds`** (default **90**, lab 4B) for one completion. Slow 14B CPU rewrites may need a higher value in `config/forgesre.yml`. A huge prompt plus CPU 4B can still need **300s** until the rewrite context is small — that is prefill cost, not a reason to change the GGUF. Live `config/forgesre.yml` is gitignored; this repo does not raise the example default back to 600.
 
+**Optional NVIDIA GPU.** With the NVIDIA driver and the NVIDIA Container Toolkit on the host,
+`./forgesre gpu on` swaps the CPU service `llm` (profile `ai`) for `llm-gpu` (profile `ai-gpu`, image
+`llama.cpp:server-cuda-…`, all layers on the GPU, `FORGESRE_LLM_GPU_LAYERS` to offload fewer). Same model,
+context and port 8088, so Core and the settings do not change; `./forgesre gpu off` goes back. On a
+GPU the 4B model answers in seconds and the 14B one becomes practical. `./forgesre gpu` shows what the
+host and Docker see. `fetch-llm` keeps `ai-gpu` when it is set.
+
 ---
 
 ## 3. Choose a path
