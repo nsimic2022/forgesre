@@ -94,6 +94,7 @@ Commands:
   jobs               Background RCA job queue
   checks             Certificates, backup age, heartbeats
   slo                SLOs: availability, error budget, burn rate
+  alert-quality      Noisiest alerts: acknowledged vs cleared alone, flapping, advice
   forgeai            ForgeAI model status, last questions; with INC-… the exact prompts
   kubernetes         Kubernetes / OpenShift clusters
   incidents          Short colored board (red/yellow/green); INC-… for one row
@@ -576,6 +577,18 @@ slo — service level objectives: availability against target, error budget left
 burn rate over the last 24 h (1.0x = spending the budget evenly over the window).
 
   ./forgesre slo
+EOF
+      ;;
+    alert-quality)
+      cat <<'EOF'
+alert-quality — which alerts page people for nothing, noisiest first.
+
+  ./forgesre alert-quality        last 30 days
+  ./forgesre alert-quality 7      last 7 days
+
+Per alert name: incidents, % acknowledged by a person, % that cleared by themselves within
+10 minutes, flapping incidents and a suggestion (noise filter, longer for:, higher threshold,
+keep). Same table as Reports › Alert quality. Storm and flapping settings: Settings › Alarms.
 EOF
       ;;
     forgeai)
@@ -1144,6 +1157,10 @@ case "$cmd" in
   slo)
     need_env
     run_cli_ops slo "$@"
+    ;;
+  alert-quality)
+    need_env
+    run_cli_ops alert-quality "$@"
     ;;
   forgeai)
     need_env

@@ -216,21 +216,34 @@ def set_asset_parent(db: Session, asset: Asset, parent_asset_id: str) -> None:
     asset.parent_id = parent.id
 
 
+PARENT_DEPTH = 6
+
+
 def parent_down_incident(db: Session, asset: Asset | None) -> Incident | None:
-    """Active down/unreachable incident on the parent, if this asset has one parent."""
+    """Active down/unreachable incident on the nearest parent up the chain (parent, its parent…,
+    at most PARENT_DEPTH levels), so a host behind a rack switch behind a dead core switch is
+    suppressed too. None when no ancestor is down."""
     if asset is None or not getattr(asset, "parent_id", None):
         return None
     from app.services import ACTIVE_INCIDENT_STATUSES
 
-    rows = (
-        db.query(Incident)
-        .filter(Incident.asset_id == asset.parent_id, Incident.status.in_(ACTIVE_INCIDENT_STATUSES))
-        .order_by(Incident.id.desc())
-        .all()
-    )
-    for row in rows:
-        if is_down_style(incident_alertname(row)):
-            return row
+    seen: set[int] = set()
+    parent_id = asset.parent_id
+    for _ in range(PARENT_DEPTH):
+        if not parent_id or parent_id in seen:
+            return None
+        seen.add(parent_id)
+        rows = (
+            db.query(Incident)
+            .filter(Incident.asset_id == parent_id, Incident.status.in_(ACTIVE_INCIDENT_STATUSES))
+            .order_by(Incident.id.desc())
+            .all()
+        )
+        for row in rows:
+            if is_down_style(incident_alertname(row)):
+                return row
+        parent = db.get(Asset, parent_id)
+        parent_id = getattr(parent, "parent_id", None) if parent is not None else None
     return None
 
 

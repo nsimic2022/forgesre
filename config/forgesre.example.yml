@@ -71,6 +71,19 @@ ai:
     window_minutes: 30
     max_log_lines: 20
 
+alerts:
+  # Alarm storm: this many new incidents within the window open one "Alarm storm" incident that
+  # pages once; the rest link to it and do not page one by one.
+  storm:
+    enabled: true
+    threshold: 20
+    window_minutes: 5
+  # Flapping: an alert that opens this many incidents within the window stays visible but stops paging.
+  flapping:
+    enabled: true
+    threshold: 3
+    window_minutes: 60
+
 notifications:
   email:
     enabled: false

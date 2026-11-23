@@ -52,3 +52,11 @@ notifications:
     from: forgesre@example.local
     tls: true
 
+
+# Tests open many incidents within seconds on one database: storm and flapping detection would
+# link them all. Their own tests turn them on (tests/test_alarm_noise.py).
+alerts:
+  storm:
+    enabled: false
+  flapping:
+    enabled: false

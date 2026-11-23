@@ -725,6 +725,7 @@ INCIDENT_SOURCES = {
     "zabbix": "Zabbix",
     "librenms": "LibreNMS",
     "snmp": "SNMP",
+    "forgesre": "ForgeSRE",
 }
 _RESOLVED_BY = {
     "prometheus": "Alertmanager",
@@ -1268,6 +1269,28 @@ def overlapping_maintenance(db: Session, asset_ref: str, at: datetime) -> list[d
     ]
 
 
+def _storm_or_flap(db: Session, incident: Incident) -> bool:
+    """A new incident that belongs to an alarm storm or keeps re-firing stays OPEN but does not
+    page on its own (app.alarm_noise). A storm that starts now pages once, as its own incident."""
+    from app.alarm_noise import config, flap_count, join_storm, storm_for
+
+    storm, started = storm_for(db, incident)
+    if storm is not None:
+        join_storm(db, incident, storm)
+        db.flush()
+        if started:
+            notify_first_step(db, storm)
+        return True
+    count = flap_count(db, incident)
+    if count:
+        incident.flap_count = count
+        append_timeline(incident, "flapping", "FLAPPING",
+                        f"Fired {count} times in {config('flapping')['window_minutes']} min; no new page")
+        db.flush()
+        return True
+    return False
+
+
 def _quiet_mail(db: Session, incident: Incident, asset: Asset | None, alertname: str, *, opened: bool) -> bool:
     """Skip the mail ladder for a new quiet incident. Return True when mail must not start.
 
@@ -1304,9 +1327,15 @@ def _quiet_mail(db: Session, incident: Incident, asset: Asset | None, alertname:
         noise = matching_filter(db, alertname, asset, sample, utcnow(), incident.started_at)
         if noise is not None:
             reason = ("SUPPRESSED", describe(noise), None)
+    if reason is None and opened:
+        quiet = _storm_or_flap(db, incident)
+        if quiet:
+            return True
     if reason is not None and (opened or status in QUIET_INCIDENT_STATUSES):
         code, detail, parent_inc = reason
         incident.status = code
+        if parent_inc is not None and incident.caused_by_id is None:
+            incident.caused_by_id = parent_inc.id  # shown as "caused by" on the incident page
         if noise is not None:
             node = f"noise-{noise.id}"
             if opened:

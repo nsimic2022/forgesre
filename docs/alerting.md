@@ -79,6 +79,27 @@ filter no longer applies and the alarm is still firing, the incident opens and e
 starts. Removing or disabling a filter does the same. "Try an alarm" on the Automation page
 shows which filter would catch an alarm. An always-on quiet filter must be confirmed.
 
+## Alarm storms, flapping and parents
+
+Three things keep one root cause from paging people many times. All three keep the incidents
+visible; they only stop their own mail ladder.
+
+- **Parent down** (app.dc_noc): a down-style alert on a host whose parent, grandparent… (up to 6
+  levels of `parent`) has an open down incident becomes **SUPPRESSED** and is linked to it
+  ("caused by"). It pages again on its own once the parent is fixed and it still fires.
+- **Alarm storm** (app.alarm_noise, Settings › Alarms): `alerts.storm.threshold` new incidents
+  (default 20) within `alerts.storm.window_minutes` (5) open one CRITICAL **Alarm storm**
+  incident that pages once. The incidents of that window and every new one while the storm is
+  open link to it and do not page. Resolve the storm incident when the shared cause is found.
+- **Flapping**: an alert that opened `alerts.flapping.threshold` incidents (3) within
+  `alerts.flapping.window_minutes` (60) keeps opening incidents, shown with **flapping ×N**, but
+  stops paging.
+
+**Alert quality** (Reports, `GET /api/v1/reports/alert-quality?days=30`,
+`./forgesre alert-quality 30`): per alert name, how many incidents, how many a person
+acknowledged, how many cleared by themselves within 10 minutes, flapping and a suggestion (add a
+noise filter, a longer `for:`, a higher threshold, or keep).
+
 ## Runbook format
 
 Playbooks (and runbooks linked from an asset) use one shape, so operators and ForgeAI read

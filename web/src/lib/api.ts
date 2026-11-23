@@ -69,6 +69,8 @@ export interface NocIncident {
   messages: number;
   forgerca: string;
   forgeai: ForgeAiState;
+  flap_count?: number;
+  caused_by?: string;
 }
 
 export interface Noc {

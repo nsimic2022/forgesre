@@ -252,6 +252,8 @@ class Incident(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # "This is a consequence of INC-…": set by a person when the dependency map did not catch it.
     caused_by_id: Mapped[int | None] = mapped_column(ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True, index=True)
+    # Times this alert fired within the flapping window when it opened (app.alarm_noise); 0 = not flapping.
+    flap_count: Mapped[int] = mapped_column(Integer, default=0)
 
     asset: Mapped[Asset | None] = relationship(back_populates="incidents")
     playrule: Mapped[Playrule | None] = relationship()
