@@ -76,6 +76,12 @@ export function IncidentDetailPage() {
         <div className="row">
           <button className="btn" type="button" onClick={() => setPostmortem(!postmortem)} aria-expanded={postmortem}>Postmortem</button>
           {data.can.work ? <button className="btn" type="button" onClick={() => setMail(!mail)} aria-expanded={mail}>Send report</button> : null}
+          {data.ticket ? (
+            <a className="btn" href={data.ticket.url} target="_blank" rel="noopener noreferrer">Ticket {data.ticket.ref.replace("glpi:", "#")}{data.ticket.status ? ` · ${data.ticket.status}` : ""}</a>
+          ) : data.can.work && data.can_ticket ? (
+            <button className="btn" type="button" disabled={Boolean(busy)}
+              onClick={() => void postJson(`/api/v1/incidents/${encodeURIComponent(data.number)}/ticket`, {}).then(() => setTimeout(() => void load(), 4000)).catch((e: Error) => setError(e.message))}>Open ticket</button>
+          ) : null}
         {data.can.work && open ? (
           <>
             {!data.ack_at ? (

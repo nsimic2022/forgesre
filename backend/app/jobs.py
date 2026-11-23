@@ -454,6 +454,22 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 if scheduled is None:
                     raise RuntimeError(f"report {row.object_id} not found")
                 _send_report_job(db, _report_job(scheduled), str((row.payload or {}).get("actor") or "system"))
+            elif row.kind == "sms_send":
+                from app.sms import deliver as sms_deliver
+
+                # One SMS through the gateway, 10 s timeout; the result is on the Notification row.
+                sms_deliver(db, int(row.object_id))
+            elif row.kind in {"ticket_create", "ticket_sync", "ticket_webhook"}:
+                from app import tickets
+
+                # GLPI ticket / status sync / outbound webhook; every call has a 10 s timeout.
+                if row.kind == "ticket_sync":
+                    result = tickets.sync_glpi_tickets(db)
+                elif row.kind == "ticket_webhook":
+                    result = {"ok": tickets.deliver_webhook(db, int(row.object_id))}
+                else:
+                    result = tickets.run_job(db, row.payload or {}, str((row.payload or {}).get("actor") or "system"))
+                row.payload = {**(row.payload or {}), "result": result}
             elif row.kind == "chat_post":
                 from app.chat import deliver
 

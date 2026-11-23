@@ -1857,6 +1857,10 @@ def ensure_notification(
     from app.chat import queue_step
 
     queue_step(db, incident, step_key, stored_target, after_minutes)
+    from app import sms, tickets
+
+    sms.queue_step(db, incident, step_key, after_minutes)
+    tickets.queue_step(db, incident, step_key, after_minutes)
     return row
 
 

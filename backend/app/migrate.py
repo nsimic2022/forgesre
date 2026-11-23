@@ -242,7 +242,8 @@ def migrate(engine: Engine) -> None:
             statements.append("ALTER TABLE incidents ADD COLUMN flap_count INTEGER DEFAULT 0")
         for column, ddl in (("major", "BOOLEAN DEFAULT FALSE"), ("commander", "VARCHAR(255) DEFAULT ''"),
                             ("bridge_url", "VARCHAR(500) DEFAULT ''"), ("update_minutes", "INTEGER DEFAULT 30"),
-                            ("last_update_at", "TIMESTAMPTZ")):
+                            ("last_update_at", "TIMESTAMPTZ"), ("ticket_ref", "VARCHAR(64) DEFAULT ''"),
+                            ("ticket_url", "VARCHAR(500) DEFAULT ''"), ("ticket_status", "VARCHAR(32) DEFAULT ''")):
             if column not in existing:
                 statements.append(f"ALTER TABLE incidents ADD COLUMN {column} {ddl}")
     if "forgeai_calls" in tables:

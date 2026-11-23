@@ -212,7 +212,7 @@ Sve integracije su samo za čitanje, osim slanja obaveštenja: ForgeSRE ništa n
 | SNMP (snmp_exporter) | Metrike mreže | `SNMP_COMMUNITY` ili v3 po assetu; modul u Settings › Network | Inventory › asset › SNMP |
 | LibreNMS (ugrađen) | Otkrivanje uređaja i linkova | Mreže: `./forgesre discovery nets 10.20.30.0/24`; token pravi install | Settings › Discovery, Integrations |
 | NetBox (ugrađen ili spoljni) | Inventar → ForgeSRE | `inventory.netbox.url`, `NETBOX_API_TOKEN` | Settings › Integrations |
-| Zabbix | Hostovi i alarmi → ForgeSRE | `ZABBIX_URL`, `ZABBIX_API_TOKEN` (read-only korisnik); za alarme media type Webhook na `…/api/v1/webhooks/zabbix` sa `ZABBIX_WEBHOOK_TOKEN` | set-secret + Zabbix UI ([zabbix.md](zabbix.md)) |
+| Zabbix | Hostovi i alarmi → ForgeSRE | `inventory.zabbix.url` + `ZABBIX_API_TOKEN` (read-only korisnik); za alarme media type Webhook na `…/api/v1/webhooks/zabbix` sa `ZABBIX_WEBHOOK_TOKEN` | set-secret + Zabbix UI ([zabbix.md](zabbix.md)) |
 | GLPI | Inventar → ForgeSRE | `GLPI_URL`, `GLPI_APP_TOKEN`, `GLPI_USER_TOKEN` | set-secret ([glpi.md](glpi.md)) |
 | Kubernetes / OpenShift / k3s | Stanje klastera → ForgeSRE | `kubernetes.clusters` (ime, URL, CA) + `K8S_TOKEN_<IME>` read-only service accounta | config + set-secret ([kubernetes.md](kubernetes.md)) |
 | Mail (SMTP) | ForgeSRE → ljudi | `notifications.email.host/port/from/tls` + `SMTP_USERNAME`, `SMTP_PASSWORD`; Gmail: `smtp.gmail.com`, 587, cela adresa i lozinka za aplikacije; `./forgesre settings test smtp` se prijavi i pošalje probni mail na From adresu | Settings › Notifications |
