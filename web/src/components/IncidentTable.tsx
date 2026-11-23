@@ -1,14 +1,16 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import type { NocIncident } from "../lib/api";
+import { postJson, type NocIncident } from "../lib/api";
 import { FORGEAI_LABEL, clock, duration, severityLabel, severityTone, shortNumber, tierLabel } from "../lib/format";
 import { Chip, Dot } from "./ui";
 
 // Incident table shared by the NOC overview and the Incidents page (design: two-line cells).
-function IncidentRow({ row }: { row: NocIncident }) {
+function IncidentRow({ row, picked, onPick }: { row: NocIncident; picked?: boolean; onPick?: (on: boolean) => void }) {
   const tone = severityTone(row.severity);
   const ai = FORGEAI_LABEL[row.forgeai] ?? FORGEAI_LABEL.none;
   return (
-    <tr>
+    <tr className={picked ? "picked" : undefined}>
+      {onPick ? <td><input type="checkbox" checked={Boolean(picked)} onChange={(e) => onPick(e.target.checked)} aria-label={`Select ${shortNumber(row.number)}`} /></td> : null}
       <td>
         <span className="row" style={{ gap: 8 }}>
           <Dot tone={tone} />
@@ -56,12 +58,46 @@ function IncidentRow({ row }: { row: NocIncident }) {
   );
 }
 
-export function IncidentTable({ rows, loaded }: { rows: NocIncident[]; loaded: boolean }) {
+/**
+ * Incident table. With ``canWork``, rows get checkboxes and a bar to acknowledge or resolve the
+ * selected ones at once (POST /api/v1/incidents/bulk), e.g. twenty alarms from one cause.
+ */
+export function IncidentTable({ rows, loaded, canWork = false, onChanged }: { rows: NocIncident[]; loaded: boolean; canWork?: boolean; onChanged?: () => void }) {
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const visible = new Set(rows.map((r) => r.number));
+  const chosen = [...picked].filter((n) => visible.has(n));
+  const pick = (number: string, on: boolean) => setPicked((s) => {
+    const next = new Set(s);
+    if (on) next.add(number); else next.delete(number);
+    return next;
+  });
+  const all = rows.length > 0 && rows.every((r) => picked.has(r.number));
+  const act = (action: "ack" | "resolve") => {
+    setBusy(true);
+    setError("");
+    postJson("/api/v1/incidents/bulk", { numbers: chosen, action })
+      .then(() => (setPicked(new Set()), onChanged?.()))
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setBusy(false));
+  };
   return (
+    <>
+      {canWork && chosen.length ? (
+        <div className="row bulk-bar" role="region" aria-label="Selected incidents">
+          <strong>{chosen.length} selected</strong>
+          <button className="btn primary" type="button" disabled={busy} onClick={() => act("ack")}>Acknowledge selected</button>
+          <button className="btn" type="button" disabled={busy} onClick={() => act("resolve")}>Resolve selected</button>
+          <button className="btn" type="button" onClick={() => setPicked(new Set())}>Clear</button>
+          {error ? <span className="small" role="alert" style={{ color: "var(--crit)" }}>{error}</span> : null}
+        </div>
+      ) : null}
     <div className="table-wrap">
       <table className="data" style={{ minWidth: 1180 }}>
         <thead>
           <tr>
+            {canWork ? <th style={{ width: 34 }}><input type="checkbox" aria-label="Select all on this page" checked={all} onChange={(e) => setPicked(e.target.checked ? new Set(rows.map((r) => r.number)) : new Set())} /></th> : null}
             <th style={{ width: 100 }}>Severity</th>
             <th style={{ width: 90 }}>Started</th>
             <th style={{ width: 150 }}>Host</th>
@@ -76,11 +112,12 @@ export function IncidentTable({ rows, loaded }: { rows: NocIncident[]; loaded: b
         </thead>
         <tbody>
           {rows.map((row) => (
-            <IncidentRow key={row.number} row={row} />
+            <IncidentRow key={row.number} row={row} picked={picked.has(row.number)} onPick={canWork ? (on) => pick(row.number, on) : undefined} />
           ))}
         </tbody>
       </table>
       {loaded && rows.length === 0 ? <div className="empty">Nothing here.</div> : null}
     </div>
+    </>
   );
 }

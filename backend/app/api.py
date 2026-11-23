@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import hmac
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import logging
 import os
 import threading
@@ -667,6 +668,98 @@ def set_status(
     audit(db, "incident.status", actor=user.email, object_type="incident", object_id=number, data=data)
     db.commit()
     return _incident(item, include_evidence=True)
+
+
+class BulkStatusBody(BaseModel):
+    numbers: list[str] = Field(default_factory=list, max_length=200)
+    action: str = "ack"
+
+
+@router.post("/incidents/bulk")
+def incidents_bulk(body: BulkStatusBody, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """Acknowledge or resolve many incidents at once (one audit row each), e.g. 20 alarms from one cause.
+
+    Unknown numbers are skipped and listed. The permission is the same as for one status change.
+    """
+    from app.services import refresh_asset_status
+
+    action = body.action.lower()
+    if action not in {"ack", "resolve"}:
+        raise HTTPException(status_code=400, detail="action is ack or resolve")
+    done, missing = [], []
+    for number in dict.fromkeys(n.strip() for n in body.numbers if n.strip()):
+        item = db.query(Incident).filter_by(number=number).first()
+        if item is None:
+            missing.append(number)
+            continue
+        if action == "ack":
+            acknowledge(item, user.email)
+        elif (item.status or "").upper() not in {"RESOLVED", "CLOSED"}:
+            item.status = "RESOLVED"
+            apply_status_fields(item, "RESOLVED", user.email)
+        db.flush()
+        refresh_asset_status(db, item.asset)
+        audit(db, "incident.status", actor=user.email, object_type="incident", object_id=number, data={"status": (item.status or "").upper(), "bulk": True})
+        done.append(number)
+    db.commit()
+    return {"done": done, "missing": missing}
+
+
+class LinkBody(BaseModel):
+    caused_by: str = ""
+
+
+@router.post("/incidents/{number}/caused-by")
+def incident_caused_by(number: str, body: LinkBody, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """Mark this incident as a consequence of another one (empty ``caused_by`` removes the link)."""
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    target = None
+    if body.caused_by.strip():
+        target = db.query(Incident).filter_by(number=body.caused_by.strip()).first()
+        if target is None:
+            raise HTTPException(status_code=404, detail="no incident with that number")
+        if target.id == item.id:
+            raise HTTPException(status_code=400, detail="an incident cannot cause itself")
+        seen, cur = {item.id}, target  # no loops: A caused by B caused by A
+        while cur is not None and cur.caused_by_id:
+            if cur.caused_by_id in seen:
+                raise HTTPException(status_code=400, detail="that would make a loop of causes")
+            seen.add(cur.id)
+            cur = db.get(Incident, cur.caused_by_id)
+    item.caused_by_id = target.id if target else None
+    audit(db, "incident.caused_by", actor=user.email, object_type="incident", object_id=number, data={"caused_by": target.number if target else ""})
+    db.commit()
+    return {"number": number, "caused_by": target.number if target else ""}
+
+
+class QuietBody(BaseModel):
+    hours: float = Field(default=2, gt=0, le=72)
+    reason: str = Field(default="", max_length=200)
+
+
+@router.post("/incidents/{number}/quiet-host")
+def incident_quiet_host(number: str, body: QuietBody, db: Session = Depends(get_db), user: User = Depends(require("write_assets"))) -> dict:
+    """Put the incident's asset in maintenance from now for ``hours`` (alarms muted, with an end), from the incident page."""
+    from app.maintenance_edit import set_window
+
+    item = db.query(Incident).filter_by(number=number).first()
+    if item is None or item.asset is None:
+        raise HTTPException(status_code=404, detail="incident or its asset not found")
+    from app.settings import settings as cfg
+
+    zone = ZoneInfo(cfg.timezone or "UTC")
+    start = utcnow().astimezone(zone)
+    end = start + timedelta(hours=body.hours)
+    fmt = "%Y-%m-%dT%H:%M"
+    try:
+        set_window(db, [item.asset.asset_id], start.strftime(fmt), end.strftime(fmt), user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "incident.quiet_host", actor=user.email, object_type="incident", object_id=number,
+          data={"asset": item.asset.asset_id, "hours": body.hours, "reason": body.reason}, commit=True)
+    return {"asset": item.asset.asset_id, "until": end.isoformat()}
 
 
 class ForgeAiAsk(BaseModel):

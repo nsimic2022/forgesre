@@ -229,8 +229,11 @@ export interface IncidentView {
   who_to_call?: { role: string; name: string; phone: string; email: string; note?: string }[];
   similar?: { number: string; status: string; started_at: string | null; minutes: number | null; root_cause: string; resolved_by: string }[];
   review: Review;
-  can: { work: boolean; investigate: boolean; cloud: boolean };
+  links?: { caused_by: IncidentBrief | null; consequences: IncidentBrief[] };
+  can: { work: boolean; investigate: boolean; cloud: boolean; quiet?: boolean };
 }
+
+export type IncidentBrief = { number: string; title: string; status: string; severity: string };
 
 export type Rating = "" | "correct" | "partly" | "wrong";
 

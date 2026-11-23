@@ -248,6 +248,7 @@ def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]
         "events": events(incident, notifications, notes, audits),
         "who_to_call": who_to_call(db, incident),
         "similar": similar_before(db, incident),
+        "links": incident_links(db, incident),
         "review": {
             "root_cause": incident.root_cause or "",
             "rca_rating": incident.rca_rating or "",
@@ -259,8 +260,19 @@ def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]
             "work": can(user, "write_incidents"),
             "investigate": can(user, "investigate"),
             "cloud": can(user, "ai_cloud"),
+            "quiet": can(user, "write_assets"),
         },
     }
+
+
+def incident_links(db: Session, incident: Incident) -> dict[str, Any]:
+    """What a person said this incident was caused by, and the incidents they marked as its consequences."""
+    def brief(row: Incident) -> dict[str, str]:
+        return {"number": row.number, "title": row.title or "", "status": (row.status or "").upper(), "severity": (row.severity or "").upper()}
+
+    cause = db.get(Incident, incident.caused_by_id) if incident.caused_by_id else None
+    effects = db.query(Incident).filter(Incident.caused_by_id == incident.id).order_by(Incident.started_at.desc()).limit(50).all()
+    return {"caused_by": brief(cause) if cause else None, "consequences": [brief(r) for r in effects]}
 
 
 def who_to_call(db: Session, incident: Incident) -> list[dict[str, str]]:

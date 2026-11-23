@@ -234,6 +234,10 @@ def migrate(engine: Engine) -> None:
             statements.append("ALTER TABLE discovery_candidates ADD COLUMN node_exporter BOOLEAN DEFAULT FALSE")
         if "windows_exporter" not in existing:
             statements.append("ALTER TABLE discovery_candidates ADD COLUMN windows_exporter BOOLEAN DEFAULT FALSE")
+    if "incidents" in tables:
+        existing = {col["name"] for col in inspector.get_columns("incidents")}
+        if "caused_by_id" not in existing:
+            statements.append("ALTER TABLE incidents ADD COLUMN caused_by_id INTEGER REFERENCES incidents(id) ON DELETE SET NULL")
     if "users" in tables:
         existing = {col["name"] for col in inspector.get_columns("users")}
         if "journal_error_ack_id" not in existing:

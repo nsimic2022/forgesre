@@ -32,16 +32,16 @@ function Spark({ tile, window }: { tile: Tile; window?: Panel["window"] }) {
   );
 }
 
-/** Host metrics from one hour before the incident to now (or to the resolve time). */
-export function IncidentMetrics({ assetId, number }: { assetId: string; number: string }) {
+/** Host metrics: with an incident, from one hour before it to now (or to the resolve time); without one, the last hour. */
+export function IncidentMetrics({ assetId, number = "" }: { assetId: string; number?: string }) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
-    getJson<Panel>(`/api/v1/assets/${encodeURIComponent(assetId)}/metrics?incident=${encodeURIComponent(number)}`).then(setPanel).catch((e: Error) => setError(e.message));
+    getJson<Panel>(`/api/v1/assets/${encodeURIComponent(assetId)}/metrics${number ? `?incident=${encodeURIComponent(number)}` : ""}`).then(setPanel).catch((e: Error) => setError(e.message));
   }, [assetId, number]);
   const tiles = (panel?.tiles ?? []).filter((t) => t.series?.length);
   return (
-    <Card title="Host metrics" actions={panel?.window?.label ? <span className="small faint">{panel.window.label} · line = start</span> : null}>
+    <Card title="Host metrics" actions={panel?.window?.label ? <span className="small faint">{panel.window.label}{number ? " · line = start" : ""}</span> : <span className="small faint">{number ? "" : "last hour"}</span>}>
       {error ? <span className="small" style={{ color: "var(--crit)" }}>{error}</span> : null}
       {!panel && !error ? <span className="muted">Reading Prometheus…</span> : null}
       {panel && !tiles.length ? <span className="muted">{panel.error || panel.collecting_line || "No metrics for this asset."}</span> : null}

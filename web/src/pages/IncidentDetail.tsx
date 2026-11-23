@@ -1,6 +1,7 @@
 import { ChangesCard } from "../components/ChangesCard";
 import { AskForgeAi } from "../components/AskForgeAi";
 import { ForgeAiCard } from "../components/ForgeAiCard";
+import { IncidentLinks } from "../components/IncidentLinks";
 import { IncidentMetrics, IncidentStory, SimilarBefore, SyslogCard, WhoToCall } from "../components/IncidentPanels";
 import { PostmortemPanel } from "../components/PostmortemPanel";
 import { useCallback, useEffect, useState } from "react";
@@ -179,6 +180,7 @@ export function IncidentDetailPage() {
           <WhoToCall people={data.who_to_call ?? []} />
           <ChangesCard changes={data.changes ?? []} />
           <SimilarBefore rows={data.similar ?? []} />
+          <IncidentLinks number={data.number} links={data.links} canWork={data.can.work} canQuiet={Boolean(data.can.quiet)} hasAsset={Boolean(data.asset)} onChanged={load} />
           <ReviewCard number={data.number} review={data.review} canEdit={data.can.work} hasAi={Boolean(data.forgeai.text)} onSaved={load} />
           {data.asset ? (
             <Card title="Asset">
