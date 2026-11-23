@@ -36,8 +36,8 @@ Alarmi i logovi ulaze levo, Core ih spaja sa inventarom i čuva u Postgres-u, a 
 | `loki` | 3100 (lokalno) | uvek | Logovi (syslog) kao dokazi za RCA |
 | `alloy` | 514 syslog, 12345 (lokalno) | uvek | Prima syslog i šalje ga u Loki |
 | `grafana` | 3000 (`GRAFANA_PORT`) | uvek | Grafikoni, link iz System Health |
-| `netbox` + `netbox-redis` + `netbox-db-init` | 8001 (`NETBOX_PORT`) | uvek | Izvor inventara (čita se, ne menja se) |
-| `librenms` + `librenms-db` + `librenms-redis` + `librenms-dispatcher` | 8000 | uvek | Otkrivanje uređaja (SNMP identify, portovi, linkovi) |
+| `netbox` + `netbox-redis` + `netbox-db-init` | 8001 (`NETBOX_PORT`) | profil `netbox` (podrazumevano uključen) | Izvor inventara (čita se, ne menja se) |
+| `librenms` + `librenms-db` + `librenms-redis` + `librenms-dispatcher` | 8000 | profil `librenms` (podrazumevano uključen) | Otkrivanje uređaja (SNMP identify, portovi, linkovi) |
 | `llm` | 8088 (lokalno) | `ai` | llama.cpp sa lokalnim modelom (ForgeAI) |
 | `embed` | 8089 (lokalno) | `ai` | Mali model za embeddings (pretraga uploadovanih priručnika) |
 | `worker` | — | `worker` | Opciono: petlje u pozadini u posebnom procesu |
@@ -130,6 +130,17 @@ instalacije ostaju na HTTP-u dok ne pokreneš `./forgesre https on`.
 - Podesi `system.public_url` na `https://` adresu, da linkovi u mailu i chatu idu preko nje.
 - `./forgesre doctor` pokazuje kad sertifikat ističe i upozorava 30 dana ranije.
 - Port 443 zauzet: u `.env` stavi `FORGESRE_HTTPS_PORT=8443` i pokreni `./forgesre https on`.
+
+### Opcioni delovi: NetBox i LibreNMS
+
+Ugrađeni NetBox i LibreNMS su Compose profili (`netbox`, `librenms`). Nova instalacija uključuje
+oba, osim ako zadaš `install.sh --netbox no` ili `--librenms no`. Sa `--netbox-url` (spoljni NetBox)
+ugrađeni ostaje isključen. Postojeća instalacija zadržava oba: prvi `./forgesre update` jednom
+dodaje profile.
+
+`./forgesre optional` izlistava delove. `./forgesre optional disable librenms` zaustavlja LibreNMS,
+čuva `data/librenms` i gasi integraciju u Settings. `./forgesre optional enable librenms` ga vraća i
+ponovo uključuje integraciju.
 
 ## 4. `.env`: sve promenljive
 

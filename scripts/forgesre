@@ -97,6 +97,7 @@ Commands:
   alert-quality      Noisiest alerts: acknowledged vs cleared alone, flapping, advice
   power              UPS, PDU and temperature: on battery, runtime, load, sensors
   https              HTTPS in front of the UI: status, on, only, off, cert
+  optional           Optional parts (NetBox, LibreNMS, …): list, enable, disable
   lifecycle          Support / warranty, end of life and licences expiring or expired
   racks              Rack elevation: devices by rack and U position, overlaps
   synthetic          Synthetic checks (HTTP, TCP, DNS, ping): last result per check
@@ -675,6 +676,19 @@ racks — rack elevation: which device sits on which U, per site / row / rack.
 Set on the asset: Location › Rack, Rack position (lowest U) and Height (U). Rack height is
 inventory.rack_units (42). Devices with a rack but no position, and two devices on the same
 U, are listed under the rack. Same data as Inventory › Racks.
+EOF
+      ;;
+    optional)
+      cat <<'EOF'
+optional — the optional parts of the stack (Compose profiles).
+
+  ./forgesre optional                   list: netbox, librenms, https, ai, mailbox, worker
+  ./forgesre optional enable netbox     start bundled NetBox, turn the integration on
+  ./forgesre optional disable librenms  stop LibreNMS, keep data/librenms, integration off
+
+NetBox and LibreNMS are on for new installs unless install.sh --netbox no / --librenms no.
+An appliance from before keeps both (update adds the profiles once). HTTPS, AI and the mailbox
+have their own commands: ./forgesre https, ./forgesre fetch-llm, ./forgesre mailbox.
 EOF
       ;;
     https)
@@ -1298,6 +1312,10 @@ case "$cmd" in
   https)
     need_env
     exec "$ROOT/scripts/https.sh" "$@"
+    ;;
+  optional)
+    need_env
+    exec "$ROOT/scripts/optional.sh" "$@"
     ;;
   lifecycle|racks|synthetic|network|known-errors)
     need_env
