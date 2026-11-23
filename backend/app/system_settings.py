@@ -168,6 +168,7 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("inventory.zabbix.auto_sync", "integrations", "Zabbix host import every 6 h", "bool"),
     _y("inventory.zabbix.timeout_seconds", "integrations", "Zabbix timeout (s)", "int", minimum=2, maximum=5),
     _s("ZABBIX_API_TOKEN", "integrations", "Zabbix API token"),
+    _s("ZABBIX_WEBHOOK_TOKEN", "integrations", "Zabbix webhook token (alarms from Zabbix)"),
     _y("inventory.librenms.enabled", "integrations", "LibreNMS enabled", "bool", effective=lambda: settings.librenms_enabled, test="librenms"),
     _y("inventory.librenms.url", "integrations", "LibreNMS URL", "url", effective=lambda: settings.librenms_url),
     _y("inventory.librenms.timeout_seconds", "integrations", "LibreNMS timeout (s)", "int", minimum=2, maximum=15),

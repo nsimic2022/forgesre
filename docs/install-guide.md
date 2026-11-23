@@ -240,7 +240,7 @@ GLPI, NetBox or clusters. Each has a Test button on its Settings card and a row 
 | SNMP (snmp_exporter) | Network metrics | `SNMP_COMMUNITY` or v3 per asset; module in Settings › Network | Inventory › asset › SNMP |
 | LibreNMS (bundled) | Device and link discovery | Networks: `./forgesre discovery nets 10.20.30.0/24`; install creates the token | Settings › Discovery, Integrations |
 | NetBox (bundled or external) | Inventory → ForgeSRE | `inventory.netbox.url`, `NETBOX_API_TOKEN` | Settings › Integrations |
-| Zabbix | Hosts and alarms → ForgeSRE | `ZABBIX_URL`, `ZABBIX_API_TOKEN` (read-only user); for alarms a Webhook media type to `…/api/v1/webhooks/zabbix` with `ZABBIX_WEBHOOK_TOKEN` | set-secret + Zabbix UI ([zabbix.md](zabbix.md)) |
+| Zabbix | Hosts and alarms → ForgeSRE | `inventory.zabbix.url` + `ZABBIX_API_TOKEN` (read-only user); for alarms a Webhook media type to `…/api/v1/webhooks/zabbix` with `ZABBIX_WEBHOOK_TOKEN` | set-secret + Zabbix UI ([zabbix.md](zabbix.md)) |
 | GLPI | Inventory → ForgeSRE | `GLPI_URL`, `GLPI_APP_TOKEN`, `GLPI_USER_TOKEN` | set-secret ([glpi.md](glpi.md)) |
 | Kubernetes / OpenShift / k3s | Cluster state → ForgeSRE | `kubernetes.clusters` (name, URL, CA) + `K8S_TOKEN_<NAME>` of a read-only service account | config + set-secret ([kubernetes.md](kubernetes.md)) |
 | Mail (SMTP) | ForgeSRE → people | `notifications.email.host/port/from/tls` + `SMTP_USERNAME`, `SMTP_PASSWORD`; Gmail: `smtp.gmail.com`, 587, the full address and an app password; `./forgesre settings test smtp` signs in and mails the From address | Settings › Notifications |
