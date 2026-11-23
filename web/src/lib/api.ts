@@ -169,6 +169,7 @@ export interface IncidentPage {
   offset: number;
   limit: number;
   rows: NocIncident[];
+  teams?: string[];
 }
 
 export interface Fact {
@@ -241,6 +242,9 @@ export interface IncidentView {
   actions?: FollowUp[];
   ticket?: { ref: string; url: string; status: string } | null;
   can_ticket?: boolean;
+  known_errors?: KnownError[];
+  alertname?: string;
+  can_known_error?: boolean;
   can: { work: boolean; investigate: boolean; cloud: boolean; quiet?: boolean };
 }
 
@@ -515,4 +519,18 @@ export interface Doctor {
   overall: string;
   components: Record<string, { status: string; label?: string; why?: string; detail?: string }>;
   failed: string[];
+}
+
+export interface KnownError {
+  id: number;
+  title: string;
+  alertname: string;
+  pattern: string;
+  symptoms: string;
+  workaround: string;
+  fix: string;
+  link: string;
+  status: string;
+  created_by: string;
+  updated_at: string | null;
 }

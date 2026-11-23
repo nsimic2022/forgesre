@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { KnownErrorsCard } from "../components/KnownErrors";
 import { usePaged } from "../components/Pager";
 import { MaintenanceForm, PlaybookForm, PolicyForm, RemoveButton, RuleForm, ruleBody, ruleDraft } from "../components/AutomationEditors";
 import { ForgeAiDocs } from "../components/ForgeAiDocs";
@@ -8,13 +9,14 @@ import { Card, Chip } from "../components/ui";
 import { getJson, postJson, putJson, type Automation, type PolicyStep, type Simulation } from "../lib/api";
 import { clock, tierLabel } from "../lib/format";
 
-type Tab = "filters" | "rules" | "escalation" | "playbooks" | "maintenance" | "forgeai";
+type Tab = "filters" | "rules" | "escalation" | "playbooks" | "maintenance" | "known" | "forgeai";
 const TABS: { key: Tab; label: string }[] = [
   { key: "filters", label: "Noise filters" },
   { key: "rules", label: "Routing rules" },
   { key: "escalation", label: "Escalation" },
   { key: "playbooks", label: "Playbooks" },
   { key: "maintenance", label: "Maintenance windows" },
+  { key: "known", label: "Known errors" },
   { key: "forgeai", label: "ForgeAI skills" },
 ];
 // Classic pages that still do the editing.
@@ -147,6 +149,7 @@ export function AutomationPage() {
         ))}
       </div>
       {tab === "forgeai" ? <><ForgeAiSkills /><ForgeAiDocs /></> : null}
+      {tab === "known" ? <KnownErrorsCard /> : null}
       {data && tab === "filters" ? <NoiseFilters filters={data.filters} canEdit={data.can_edit} onChanged={load} /> : null}
       {data && tab === "rules" ? (
         <>

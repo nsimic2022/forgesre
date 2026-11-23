@@ -98,6 +98,11 @@ def initial_evidence(db: Session, incident: Incident) -> Evidence:
         ev.add("playbook", f"Playbook {pb['name']}: " + "; ".join(pb["steps"]))
     for s in similar_confirmed(db, incident, limit=3):
         ev.add("similar", f"{s['incident']} {s['title']} on {s['host'] or '?'} ({s['why']}): confirmed cause: {s['confirmed_cause']}")
+    from app.known_errors import known_errors_for
+
+    for k in known_errors_for(db, incident)[:2]:
+        ev.add("known_error", f"Known error ({k['status']}) '{k['title']}': " + "; ".join(
+            f"{label}: {k[key]}" for label, key in (("shows as", "symptoms"), ("workaround", "workaround"), ("fix", "fix")) if k[key]))
     return ev
 
 

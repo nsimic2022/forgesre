@@ -875,6 +875,109 @@ def new_critical(after: int = -1, db: Session = Depends(get_db), user: User = De
     return {"latest": latest, "items": [{"number": r.number, "title": r.title, "host": r.asset.hostname if r.asset else ""} for r in rows]}
 
 
+class ViewBody(BaseModel):
+    page: str = "incidents"
+    name: str
+    filters: dict[str, Any] = {}
+    team: str = ""
+
+
+@router.get("/views")
+def views_list(page: str = "incidents", db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """Saved views: yours and the ones shared with a team."""
+    from app.known_errors import list_views
+
+    return {"views": list_views(db, user, page), "can_share": can(user, "write_play"), "can_save": can(user, "write_incidents")}
+
+
+@router.post("/views")
+def views_create(body: ViewBody, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """Save the current filters (Analyst+); sharing with a team needs Engineer."""
+    from app.known_errors import save_view, view_dict
+
+    try:
+        row = save_view(db, user, body.page, body.name, body.filters, body.team)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return view_dict(row, user)
+
+
+@router.delete("/views/{view_id}")
+def views_delete(view_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    from app.known_errors import delete_view
+
+    try:
+        delete_view(db, user, view_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return {"deleted": view_id}
+
+
+class KnownErrorBody(BaseModel):
+    title: str
+    alertname: str = ""
+    pattern: str = ""
+    symptoms: str = ""
+    workaround: str = ""
+    fix: str = ""
+    link: str = ""
+    status: str = "open"
+
+
+@router.get("/known-errors")
+def known_errors_list(q: str = "", db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """Known-errors knowledge base, optionally filtered by text."""
+    from app.known_errors import search_known_errors
+
+    return {"items": search_known_errors(db, q), "can_edit": can(user, "write_play")}
+
+
+@router.post("/known-errors")
+def known_errors_create(body: KnownErrorBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Add a known error (Engineer+)."""
+    from app.known_errors import ke_dict, save_known_error
+
+    try:
+        row = save_known_error(db, body.model_dump(), user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "known_error.create", actor=user.email, object_type="known_error", object_id=str(row.id), data={"title": row.title})
+    db.commit()
+    return ke_dict(row)
+
+
+@router.put("/known-errors/{ke_id}")
+def known_errors_update(ke_id: int, body: KnownErrorBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    from app.known_errors import ke_dict, save_known_error
+
+    try:
+        row = save_known_error(db, body.model_dump(), user.email, ke_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "known_error.update", actor=user.email, object_type="known_error", object_id=str(row.id), data={"title": row.title})
+    db.commit()
+    return ke_dict(row)
+
+
+@router.delete("/known-errors/{ke_id}")
+def known_errors_delete(ke_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    from app.models import KnownError
+
+    row = db.get(KnownError, ke_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="known error not found")
+    audit(db, "known_error.delete", actor=user.email, object_type="known_error", object_id=str(ke_id), data={"title": row.title})
+    db.delete(row)
+    db.commit()
+    return {"deleted": ke_id}
+
+
 @router.get("/handover")
 def handover_list(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
     """The latest shift handovers, newest first."""
@@ -3794,6 +3897,7 @@ def incidents_page_api(
     offset: int = 0,
     date_from: str = "",
     date_to: str = "",
+    team: str = "",
     db: Session = Depends(get_db),
     user: User = Depends(require("read_incidents")),
 ) -> dict[str, Any]:
@@ -3801,7 +3905,7 @@ def incidents_page_api(
     from app.incident_view import incidents_page
 
     try:
-        return incidents_page(db, tab=tab, severity=severity, q=q, limit=limit, offset=offset, date_from=date_from, date_to=date_to)
+        return incidents_page(db, tab=tab, severity=severity, q=q, limit=limit, offset=offset, date_from=date_from, date_to=date_to, team=team)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="dates are YYYY-MM-DD") from exc
 
@@ -3854,14 +3958,14 @@ def incident_mail_job(number: str, job_id: int, db: Session = Depends(get_db), u
 
 @router.get("/incidents-page.csv")
 def incidents_page_csv(
-    tab: str = "all", severity: str = "", q: str = "", date_from: str = "", date_to: str = "",
+    tab: str = "all", severity: str = "", q: str = "", date_from: str = "", date_to: str = "", team: str = "",
     db: Session = Depends(get_db), user: User = Depends(require("read_incidents")),
 ) -> Response:
     """The incident list with the same filters as CSV (UTF-8 with BOM)."""
     from app.incident_view import incidents_csv
 
     try:
-        body = incidents_csv(db, tab=tab, severity=severity, q=q, date_from=date_from, date_to=date_to)
+        body = incidents_csv(db, tab=tab, severity=severity, q=q, date_from=date_from, date_to=date_to, team=team)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="dates are YYYY-MM-DD") from exc
     return Response(body, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="forgesre-incidents.csv"'})

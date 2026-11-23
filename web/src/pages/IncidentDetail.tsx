@@ -1,4 +1,5 @@
 import { ChangesCard } from "../components/ChangesCard";
+import { IncidentKnownErrors } from "../components/KnownErrors";
 import { AskForgeAi } from "../components/AskForgeAi";
 import { ForgeAiCard } from "../components/ForgeAiCard";
 import { IncidentLinks } from "../components/IncidentLinks";
@@ -187,6 +188,8 @@ export function IncidentDetailPage() {
         </div>
         <div style={{ flex: "1 1 340px", display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
           <WhoToCall people={data.who_to_call ?? []} />
+          <IncidentKnownErrors items={data.known_errors ?? []} canEdit={Boolean(data.can_known_error)} title={data.title}
+            alertname={data.alertname ?? ""} cause={data.review?.root_cause ?? ""} onChanged={load} />
           <ChangesCard changes={data.changes ?? []} />
           <SimilarBefore rows={data.similar ?? []} />
           <IncidentLinks number={data.number} links={data.links} canWork={data.can.work} canQuiet={Boolean(data.can.quiet)} hasAsset={Boolean(data.asset)} onChanged={load} />

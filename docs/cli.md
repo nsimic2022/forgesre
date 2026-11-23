@@ -112,6 +112,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `racks` | Rack elevation: devices per rack and U position, devices without a position, overlaps |
 | `synthetic` | Synthetic checks (HTTP, TCP, DNS, ping): last result and probe time per check |
 | `network` | BGP peers and OSPF neighbours (problems first), busiest interfaces in and out |
+| `known-errors [TEXT]` | Known-errors knowledge base: status, what matches, first line of the workaround |
 | `handover`, `handover write "notes"`, `handover take` | Shift handover: the latest one, write one, or confirm it as the next shift |
 | `actions` | Open follow-up actions from incident reviews, overdue first |
 | `sla [DAYS]` | SLA: acknowledged and resolved in time, per severity |

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.audit import audit
@@ -47,9 +47,12 @@ def _local_day(day: str, *, end: bool = False):
     return (start + timedelta(days=1) if end else start).astimezone(timezone.utc)
 
 
-def filtered_incidents(db: Session, severity: str = "", q: str = "", date_from: str = "", date_to: str = ""):
-    """Incident query with the list filters: severity, text (number, title, host, IP) and a day range."""
+def filtered_incidents(db: Session, severity: str = "", q: str = "", date_from: str = "", date_to: str = "", team: str = ""):
+    """Incident query with the list filters: severity, text (number, title, host, IP), a day range
+    and a team (the asset's owner)."""
     base = db.query(Incident).outerjoin(Asset, Incident.asset_id == Asset.id)
+    if team.strip():
+        base = base.filter(func.lower(Asset.owner) == team.strip().lower())
     if date_from:
         base = base.filter(Incident.started_at >= _local_day(date_from))
     if date_to:
@@ -67,13 +70,14 @@ def filtered_incidents(db: Session, severity: str = "", q: str = "", date_from: 
 
 def incidents_page(
     db: Session, tab: str = "active", severity: str = "", q: str = "", limit: int = 50, offset: int = 0,
-    date_from: str = "", date_to: str = "",
+    date_from: str = "", date_to: str = "", team: str = "",
 ) -> dict[str, Any]:
-    """One page of the incident list plus the count of every tab (with the same filters)."""
+    """One page of the incident list plus the count of every tab (with the same filters) and the
+    teams (asset owners) to filter by."""
     tab = tab if tab in TABS else "active"
     limit = max(1, min(int(limit), 200))
     offset = max(0, int(offset))
-    base = filtered_incidents(db, severity, q, date_from, date_to)
+    base = filtered_incidents(db, severity, q, date_from, date_to, team)
     counts = {name: _tab_filter(base, name).count() for name in TABS}
     rows = (
         _tab_filter(base, tab)
@@ -93,7 +97,13 @@ def incidents_page(
         "offset": offset,
         "limit": limit,
         "rows": [_row(r, sent, jobs, mode, db) for r in rows],
+        "teams": teams(db),
     }
+
+
+def teams(db: Session) -> list[str]:
+    """Distinct asset owners, the "teams" of the incident list filter and saved views."""
+    return sorted({(o or "").strip() for (o,) in db.query(Asset.owner).distinct().all() if (o or "").strip()}, key=str.lower)
 
 
 def incidents_csv(db: Session, tab: str = "all", **filters: str) -> str:
@@ -177,6 +187,7 @@ def _playbook_steps(incident: Incident) -> list[str]:
 def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]:
     from app.changes import changes_before
     from app.incident_process import action_as_dict, major_view, sla_state
+    from app.known_errors import known_errors_for
     from app.models import FollowUpAction
     from app.tickets import glpi_ready, ticket_view
 
@@ -256,6 +267,9 @@ def incident_view(db: Session, incident: Incident, user: User) -> dict[str, Any]
         "ticket": ticket_view(incident),
         "can_ticket": not glpi_ready(),
         "sla": sla_state(incident),
+        "known_errors": known_errors_for(db, incident),
+        "alertname": __import__("app.services", fromlist=["incident_alertname"]).incident_alertname(incident),
+        "can_known_error": can(user, "write_play"),
         "actions": [action_as_dict(a) for a in db.query(FollowUpAction).filter_by(incident_id=incident.id).order_by(FollowUpAction.id).all()],
         "review": {
             "root_cause": incident.root_cause or "",
