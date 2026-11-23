@@ -3236,6 +3236,27 @@ def _oxidized_check() -> dict[str, Any]:
     return {"status": "warn" if failed else "ok", "why": note}
 
 
+def _https_check() -> dict[str, Any]:
+    """HTTPS proxy: disabled when off (.env FORGESRE_HTTPS), else the certificate it serves and its expiry."""
+    import os
+
+    if str(os.environ.get("FORGESRE_HTTPS") or "").lower() not in {"on", "1", "true", "yes"}:
+        return {"status": "disabled", "why": "HTTPS is off (./forgesre https on)"}
+    port = int(os.environ.get("FORGESRE_HTTPS_PORT") or 443)
+    from app.health_checks import cert_days_left
+
+    try:
+        days = int(cert_days_left("127.0.0.1", port))
+        detail = f"https://127.0.0.1:{port}"
+    except Exception as exc:
+        return {"status": "error", "why": f"127.0.0.1:{port}: {str(exc)[:160]}", "fix": "./forgesre https status ; ./forgesre logs proxy"}
+    if days < 0:
+        return {"status": "error", "why": f"certificate expired ({detail})", "fix": "./forgesre https cert, or put a new forgesre.crt in data/tls"}
+    if days < 30:
+        return {"status": "warn", "why": f"certificate expires in {days} days ({detail})", "fix": "./forgesre https cert"}
+    return {"status": "ok", "why": f"port {port}, certificate valid {days} more days ({detail})"}
+
+
 def _doctor_payload_fresh() -> dict[str, Any]:
     components = {
         # Machine key "core" = compose service. Display: Core (container).
@@ -3264,6 +3285,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "power": _power_check(),
         "blackbox": _blackbox_check(),
         "oxidized": _oxidized_check(),
+        "https": _https_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)

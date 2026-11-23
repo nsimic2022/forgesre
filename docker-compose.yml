@@ -63,7 +63,9 @@ services:
       # read-write: Settings › ForgeAI models downloads, imports and picks the active model
       - ${FORGESRE_DATA:-./data}/models:/host-models
     # FORGESRE_WEB_WORKERS > 1: several web processes; sessions, throttles, jobs and loop beats are in Postgres.
-    command: uvicorn app.main:app --host 0.0.0.0 --port ${FORGESRE_HTTP_PORT:-8080} --workers ${FORGESRE_WEB_WORKERS:-1}
+    # FORGESRE_BIND=127.0.0.1 (./forgesre https only): plain HTTP only on this host, users go through the proxy.
+    # --proxy-headers: behind the HTTPS proxy Core sees https:// and the user's IP (X-Forwarded-*).
+    command: uvicorn app.main:app --host ${FORGESRE_BIND:-0.0.0.0} --port ${FORGESRE_HTTP_PORT:-8080} --workers ${FORGESRE_WEB_WORKERS:-1} --proxy-headers --forwarded-allow-ips 127.0.0.1
     depends_on:
       postgres:
         condition: service_healthy
@@ -124,6 +126,32 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    restart: unless-stopped
+
+  proxy:
+    # HTTPS front for the UI and API (profile https: ./forgesre https on). TLS with the certificate in
+    # ${FORGESRE_DATA}/tls; plain HTTP on FORGESRE_HTTP_PORT stays for agents and webhooks unless "https only".
+    image: caddy:2.8.4-alpine
+    profiles: [https]
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      FORGESRE_HTTP_PORT: ${FORGESRE_HTTP_PORT:-8080}
+      FORGESRE_HTTPS_PORT: ${FORGESRE_HTTPS_PORT:-443}
+    volumes:
+      - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${FORGESRE_DATA:-./data}/tls:/certs:ro
+      - ${FORGESRE_DATA:-./data}/caddy:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --no-check-certificate -O /dev/null https://127.0.0.1:$${FORGESRE_HTTPS_PORT:-443}/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      core:
+        condition: service_healthy
     restart: unless-stopped
 
   blackbox-exporter:

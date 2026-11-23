@@ -37,6 +37,7 @@ Postgres; people get incidents, notifications and ForgeAI on the right.
 | `alertmanager` | 9093 (local) | always | Sends alarms to Core through a webhook |
 | `snmp-exporter` | 9116 (local) | always | SNMP metrics of network devices for Prometheus |
 | `blackbox-exporter` | 9115 (local) | always | Synthetic checks: HTTP, TCP, DNS and ping probes (Settings › Checks) |
+| `proxy` | 443 | profile `https` (new installs: on) | Caddy: HTTPS in front of the UI and API, certificate in `data/tls` |
 | `loki` | 3100 (local) | always | Logs (syslog) as evidence for RCA |
 | `alloy` | 514 syslog, 12345 (local) | always | Receives syslog and ships it to Loki |
 | `grafana` | 3000 (`GRAFANA_PORT`) | always | Graphs, linked from System Health |
@@ -130,6 +131,22 @@ Update makes a backup first, keeps the passwords and does not download the model
 new database columns by itself when it starts.
 
 **Local model later** (no new install): `./forgesre fetch-llm` (section 8).
+
+### HTTPS
+
+New installs start the `proxy` service (Caddy, profile `https`) on port 443 with a self-signed
+certificate for the host name and its IP addresses (`install.sh --https no` skips it). Existing
+installs keep plain HTTP until you run `./forgesre https on`.
+
+- **Your own certificate:** copy `forgesre.crt` (server certificate followed by the chain) and
+  `forgesre.key` to `data/tls/`, then `./forgesre https on`.
+- **`./forgesre https only`:** Core listens on 127.0.0.1 only and the session cookie is Secure; agents
+  and webhooks on other hosts must then use `https://`.
+- **`./forgesre https on`:** plain HTTP on `FORGESRE_HTTP_PORT` (8080) also stays open, for agents,
+  Alertmanager and webhooks.
+- Set `system.public_url` to the `https://` address, so links in mail and chat use it.
+- `./forgesre doctor` shows the certificate expiry and warns 30 days before it.
+- Port 443 taken: set `FORGESRE_HTTPS_PORT=8443` in `.env` and run `./forgesre https on`.
 
 ## 4. `.env`: every variable
 

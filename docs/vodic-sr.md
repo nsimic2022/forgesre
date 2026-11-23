@@ -32,6 +32,7 @@ Alarmi i logovi ulaze levo, Core ih spaja sa inventarom i čuva u Postgres-u, a 
 | `alertmanager` | 9093 (lokalno) | uvek | Šalje alarme Core-u preko webhook-a |
 | `snmp-exporter` | 9116 (lokalno) | uvek | SNMP metrike mrežnih uređaja za Prometheus |
 | `blackbox-exporter` | 9115 (lokalno) | uvek | Sintetičke provere: HTTP, TCP, DNS i ping (Settings › Checks) |
+| `proxy` | 443 | profil `https` (nove instalacije: uključen) | Caddy: HTTPS ispred UI-ja i API-ja, sertifikat u `data/tls` |
 | `loki` | 3100 (lokalno) | uvek | Logovi (syslog) kao dokazi za RCA |
 | `alloy` | 514 syslog, 12345 (lokalno) | uvek | Prima syslog i šalje ga u Loki |
 | `grafana` | 3000 (`GRAFANA_PORT`) | uvek | Grafikoni, link iz System Health |
@@ -113,6 +114,22 @@ git checkout main && git pull
 Update sam pravi backup pre promena, ne dira lozinke i ne preuzima model ponovo. Nove kolone u bazi dodaje Core sam pri pokretanju.
 
 **Lokalni model kasnije** (bez ponovne instalacije): `./forgesre fetch-llm` (poglavlje 8).
+
+### HTTPS
+
+Nova instalacija pokreće servis `proxy` (Caddy, profil `https`) na portu 443, sa self-signed
+sertifikatom za ime servera i njegove IP adrese (`install.sh --https no` ga preskače). Postojeće
+instalacije ostaju na HTTP-u dok ne pokreneš `./forgesre https on`.
+
+- **Svoj sertifikat:** kopiraj `forgesre.crt` (sertifikat servera, pa lanac) i `forgesre.key` u
+  `data/tls/`, pa `./forgesre https on`.
+- **`./forgesre https only`:** Core sluša samo na 127.0.0.1, a session cookie je Secure; agenti i
+  webhookovi sa drugih mašina tada moraju na `https://`.
+- **`./forgesre https on`:** običan HTTP na `FORGESRE_HTTP_PORT` (8080) ostaje otvoren, za agente,
+  Alertmanager i webhookove.
+- Podesi `system.public_url` na `https://` adresu, da linkovi u mailu i chatu idu preko nje.
+- `./forgesre doctor` pokazuje kad sertifikat ističe i upozorava 30 dana ranije.
+- Port 443 zauzet: u `.env` stavi `FORGESRE_HTTPS_PORT=8443` i pokreni `./forgesre https on`.
 
 ## 4. `.env`: sve promenljive
 

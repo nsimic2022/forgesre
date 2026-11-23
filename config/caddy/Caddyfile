@@ -1,0 +1,26 @@
+# ForgeSRE HTTPS front (compose profile "https", ./forgesre https on).
+# Caddy terminates TLS with the certificate in ${FORGESRE_DATA}/tls (self-signed by
+# scripts/https.sh, or your own forgesre.crt / forgesre.key) and passes everything to Core.
+{
+	admin off
+	auto_https off
+	servers {
+		protocols h1 h2
+	}
+}
+
+:{$FORGESRE_HTTPS_PORT:443} {
+	tls /certs/forgesre.crt /certs/forgesre.key
+	encode gzip
+	reverse_proxy 127.0.0.1:{$FORGESRE_HTTP_PORT:8080} {
+		# long ForgeAI answers and CSV exports
+		transport http {
+			read_timeout 300s
+		}
+	}
+	log {
+		output stdout
+		format console
+		level WARN
+	}
+}
