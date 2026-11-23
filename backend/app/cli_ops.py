@@ -920,8 +920,28 @@ def format_tuning(r: dict[str, Any]) -> str:
     return "\n".join(out) + "\n\n"
 
 
+def format_golden(data: dict) -> str:
+    """Golden set: the cases, then the last runs (score, model, skill, language) and the newest per case."""
+    cases, runs = data.get("cases") or [], data.get("runs") or []
+    if not cases:
+        return ("Golden set is empty. Add resolved incidents with a confirmed cause in Automation › ForgeAI skills "
+                "› Golden set (Engineer).\n")
+    out = [f"{len(cases)} incidents in the golden set" + (" — a run is in progress" if data.get("running") else "")]
+    for c in cases:
+        out.append(f"  {c['incident'].split('_')[0]:<16} {c['title'][:50]:<50} expects: {', '.join(c['expect'][:4])}")
+    if not runs:
+        out.append("Never run. Start one with Run golden set in the UI.")
+        return "\n".join(out) + "\n"
+    out.append(f"{'RUN':<5} {'SCORE':<7} {'MODEL':<28} {'SKILL':<20} LANG  FINISHED")
+    for r in runs:
+        out.append(f"#{r['id']:<4} {r['passed']}/{r['total']:<5} {str(r['model'])[:28]:<28} {str(r['skill'])[:20]:<20} {r['language']:<5} {r.get('finished_at') or 'running'}")
+    for res in runs[0].get("results") or []:
+        out.append(f"  {'PASS' if res['passed'] else 'FAIL'} {res['incident']:<16} {res['why'][:40]:<40} {res['ms']} ms")
+    return "\n".join(out) + "\n"
+
+
 def cmd_forgeai(port: str, rest: list[str]) -> None:
-    """./forgesre forgeai [INC-… | tuning [skill] | docs | test]"""
+    """./forgesre forgeai [INC-… | tuning [skill] | docs | test | golden]"""
     import time
 
     jar, _me = ensure_jar(port)
@@ -935,6 +955,9 @@ def cmd_forgeai(port: str, rest: list[str]) -> None:
                 time.sleep(2)
                 pulse = get_json(port, jar, "/api/v1/forgeai/pulse")
             sys.stdout.write(format_pulse(pulse))
+            return
+        if rest[:1] == ["golden"]:
+            sys.stdout.write(format_golden(get_json(port, jar, "/api/v1/forgeai/golden")))
             return
         if rest[:1] == ["docs"]:
             data = get_json(port, jar, "/api/v1/forgeai/docs")

@@ -64,6 +64,31 @@ CHAT_RULES = (
 
 THINK_BUDGET = 1024  # extra tokens when ai.llm.thinking is on
 
+# ai.forgeai.language: the language of the text ForgeAI writes (JSON keys and values the checks
+# compare stay as they are). English is the default; models answer best in it.
+LANGUAGES = {"en": "English", "sr": "Serbian"}
+LANGUAGE_RULES = {
+    "sr": ("- Write every text value in Serbian, Latin script, ekavian (proveri, not provjeri). Keep JSON keys, "
+           "the fixed words low/medium/high and agree/partly/disagree, host names, metric names, evidence ids "
+           "and quoted log lines exactly as they are.\n"),
+}
+
+
+def language() -> str:
+    """Answer language from settings (ai.forgeai.language): en or sr."""
+    from app.settings import settings
+
+    value = str((((settings.yaml or {}).get("ai") or {}).get("forgeai") or {}).get("language") or "en").strip().lower()
+    return value if value in LANGUAGES else "en"
+
+
+def with_language(system: str) -> str:
+    """The system prompt with the answer-language rule added (nothing changes for English)."""
+    rule = LANGUAGE_RULES.get(language())
+    if not rule:
+        return system
+    return system.replace("- Plain English,", "- Plain words,") + rule
+
 TASKS: dict[str, dict[str, Any]] = {
     "incident": {
         "label": "Cause and first checks",
@@ -113,6 +138,13 @@ TASKS: dict[str, dict[str, Any]] = {
         "fields": {"verdict": 12, "why": 600},
         "lists": {"problems": (4, 240)},
         "max_tokens": 500,
+    },
+    "storm": {
+        "label": "Alarm storm summary",
+        "shape": '{"summary": "2-4 sentences", "common_cause": "one sentence, or unknown", "first_checks": ["check 1", "check 2", "check 3"]}',
+        "fields": {"summary": 900, "common_cause": 300},
+        "lists": {"first_checks": (3, 200)},
+        "max_tokens": 450,
     },
     "shift": {
         "label": "Shift summary",
@@ -178,6 +210,11 @@ BUILTIN: list[tuple[str, str, str, list[str], list[str], int, dict[str, bool], s
     ("chat-generic", "Chat", "chat", [], [], 1000, {},
      "Talk with a NOC operator. When the chat is about an incident, answer from its facts first and say "
      "what the facts do not show. Keep answers short; offer the next useful check instead of a lecture."),
+    ("storm-generic", "Alarm storm", "storm", [], [], 1000, {},
+     "Many alarms opened at once and are linked to this storm. From the incidents and the counts by "
+     "site, rack, type and parent device, say what they have in common and the most likely shared "
+     "cause (power, an uplink or core switch, storage, a hypervisor, a change). Name the device or "
+     "place only if the counts show it. First checks: the shared thing first, then how to confirm it."),
     ("shift-generic", "Shift handover", "shift", [], [], 1000, {},
      "Summarise the last hours for the next shift: what happened, what is still open and who has it, "
      "and what to keep an eye on. Most important first. Do not repeat every incident."),
@@ -304,6 +341,55 @@ def _shift_context(db: Session, hours: int = 12) -> dict[str, Any]:
          "acknowledged_by": i.ack_by or "", "confirmed_cause": i.root_cause or ""} for i in rows]}
 
 
+def _storm_context(db: Session, storm: Incident) -> dict[str, Any]:
+    """The incidents linked to a storm plus counts by site, rack, type and parent device."""
+    from collections import Counter
+
+    from app.asset_extras import normalize_extras
+
+    rows = (db.query(Incident).options(joinedload(Incident.asset)).filter(Incident.caused_by_id == storm.id)
+            .order_by(Incident.started_at).limit(200).all())
+    counts: dict[str, Counter] = {k: Counter() for k in ("site", "rack", "type", "parent", "alert")}
+    shown = []
+    for row in rows:
+        asset = row.asset
+        extras = normalize_extras(asset.extras) if asset else {}
+        parent = asset.parent.hostname if asset is not None and asset.parent is not None else ""
+        for key, value in (("site", extras.get("site")), ("rack", extras.get("rack")), ("type", asset.type if asset else ""),
+                           ("parent", parent), ("alert", (row.fingerprint or "").split(":", 1)[0])):
+            if value:
+                counts[key][value] += 1
+        if len(shown) < 25:
+            shown.append({"title": row.title, "host": asset.hostname if asset else "", "type": asset.type if asset else "",
+                          "site": extras.get("site", ""), "rack": extras.get("rack", ""), "parent": parent, "started": _when(row.started_at)})
+    return {
+        "storm": {"number": storm.number.split("_")[0], "started": _when(storm.started_at), "linked_incidents": len(rows)},
+        "most_common": {k: [{"value": v, "incidents": n} for v, n in c.most_common(4)] for k, c in counts.items() if c},
+        "incidents": shown,
+    }
+
+
+def queue_storm_summary(db: Session, storm: Incident, *, opened: bool = False) -> None:
+    """Ask ForgeAI to summarise a storm: when it opens and again every 25 linked incidents.
+
+    Runs inside alert intake, so it only adds the job row (no commit; intake commits). Only with
+    the local model on; a pending summary for the same storm is not added twice.
+    """
+    from app.models import Job
+    from app.settings import settings
+
+    if not settings.ai_enabled:
+        return
+    linked = db.query(Incident).filter(Incident.caused_by_id == storm.id).count()
+    if not opened and (linked == 0 or linked % 25):
+        return
+    object_id = f"{storm.number}#storm"
+    if db.query(Job).filter(Job.kind == "forgeai", Job.object_id == object_id, Job.status.in_(["pending", "running"])).first():
+        return
+    db.add(Job(kind="forgeai", status="pending", object_type="incident", object_id=object_id,
+               payload={"task": "storm", "actor": "system"}))
+
+
 def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Incident | None, *, hours: int = 12,
                   question: str = "", history: list[dict[str, str]] | None = None) -> tuple[str, str]:
     """(system, user) exactly as sent: fixed rules + task shape + skill instructions, and the context JSON.
@@ -320,17 +406,19 @@ def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Inciden
         include["postmortem"] = True
     if task == "shift":
         context = _shift_context(db, hours)
+    elif task == "storm" and incident is not None:
+        context = _storm_context(db, incident)
     elif incident is None:
         context = {}
     else:
         context = _incident_context(db, incident, include)
     rules = CHAT_RULES if task == "chat" and incident is None else BASE_RULES
-    system = rules.format(shape=spec["shape"]) + "\nInstructions for this kind of work:\n" + (skill.instructions or "").strip()
+    system = with_language(rules.format(shape=spec["shape"])) + "\nInstructions for this kind of work:\n" + (skill.instructions or "").strip()
     if task in {"ask", "chat"}:
         context = {"operator_question": " ".join(question.split())[:QUESTION_MAX], **context}
     if task == "chat" and history:
         context["earlier_in_this_chat"] = [{"who": h.get("role", ""), "text": " ".join(str(h.get("text", "")).split())[:600]} for h in history]
-    if task != "shift" and (incident is not None or task == "chat") and include.get("docs", True):
+    if task not in {"shift", "storm"} and (incident is not None or task == "chat") and include.get("docs", True):
         from app.doc_search import for_prompt
 
         asset_type = incident.asset.type if incident is not None and incident.asset is not None else ""
@@ -473,6 +561,12 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
     db.flush()
     if call.status == "used" and task == "incident" and incident is not None:
         store_incident_answer(db, incident, call, skill, actor)
+    if call.status == "used" and task == "storm" and incident is not None:
+        from app.services import append_timeline
+
+        # unique node id: append_timeline replaces an entry with the same id
+        append_timeline(incident, f"forgeai-storm-{call.id}", "FORGEAI",
+                        f"ForgeAI storm summary: {call.answer.get('summary', '')} Likely shared cause: {call.answer.get('common_cause', 'unknown')}")
     db.commit()
     report(db, "forgeai", task, "ok" if call.status in {"used", "trial"} else "error",
            summary=f"{(incident.number.split('_')[0] + ' ') if incident is not None else ''}{task} with {skill.slug}: {call.status}"
@@ -505,7 +599,7 @@ def critique(db: Session, call: ForgeAiCall, *, actor: str) -> ForgeAiCall:
     if call.task != "incident" or not call.answer or call.status not in {"used", "trial"}:
         raise ValueError("only a checked 'cause and first checks' answer can get a second opinion")
     spec = TASKS["critic"]
-    system = CRITIC_SYSTEM.replace("{shape}", spec["shape"])
+    system = with_language(CRITIC_SYSTEM.replace("{shape}", spec["shape"]) + "\n")
     reviewed = {k: call.answer.get(k) for k in ("cause", "first_checks", "for_shift_lead")}
     user = (call.user_prompt or "")[:CONTEXT_MAX] + "\n" + json.dumps({"answer_under_review": reviewed}, ensure_ascii=False)
     row = ForgeAiCall(incident_id=call.incident_id, task="critic", skill_slug=call.skill_slug, skill_version=call.skill_version,

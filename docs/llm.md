@@ -37,7 +37,7 @@ an operator can ask again with another one. Every prompt is built as:
    ForgeRCA facts and hypotheses, playbook, earlier incidents on the asset with a confirmed cause,
    changes before, syslog when the skill asks for it.
 
-**Investigation with tools (ForgeAI 2).** **Investigate with tools** on the incident card (Analyst+) queues task `investigate` (job `forgeai`, LLM lane). One model, not a chat of agents: it starts from numbered evidence (`E1`, `E2`, …: the alarm, ForgeRCA facts, changes before, the playbook, up to three similar incidents with a confirmed cause) and may call at most 6 read-only tools within 240 s: `metric` (the asset's own PromQL from ForgeRCA, around the alarm), `logs` (Loki, 15 lines), `interfaces` (LibreNMS ports down while enabled), `similar` and `asset` (parent and whether it has an open incident). Each tool result becomes new evidence. The answer is `{cause, confidence low|medium|high, evidence [ids], next_steps}`; code rejects it when it cites an id that does not exist, cites nothing, or breaks the usual rules (IP or number not in the evidence, shell command). The card shows the cause with the cited evidence; the whole exchange is one ForgeAI call (`./forgesre forgeai INC-…`). Skill: *Deeper investigation* (task `investigate`), tunable and replayable like the others. Code: `backend/app/forgeai_investigator.py`.
+**Investigation with tools (ForgeAI 2).** **Investigate with tools** on the incident card (Analyst+) queues task `investigate` (job `forgeai`, LLM lane). One model, not a chat of agents: it starts from numbered evidence (`E1`, `E2`, …: the alarm, ForgeRCA facts, changes before, the playbook, up to three similar incidents with a confirmed cause) and may call at most 6 read-only tools within 240 s: `metric` (the asset's own PromQL from ForgeRCA, around the alarm), `logs` (Loki, 15 lines), `interfaces` (LibreNMS ports down while enabled), `similar`, `asset` (parent and whether it has an open incident), `docs` (vendor manuals), `recent` (other incidents on this asset in 30 days), `known_errors` (the known-errors knowledge base), `neighbours` (devices in the same rack or site with an open incident), `network` (BGP/OSPF sessions of this device that are not up) and `power` (UPS on battery or low, hot sensors). Matching known errors are also in the starting evidence. Each tool result becomes new evidence. All tools only read. The answer is `{cause, confidence low|medium|high, evidence [ids], next_steps}`; code rejects it when it cites an id that does not exist, cites nothing, or breaks the usual rules (IP or number not in the evidence, shell command). The card shows the cause with the cited evidence; the whole exchange is one ForgeAI call (`./forgesre forgeai INC-…`). Skill: *Deeper investigation* (task `investigate`), tunable and replayable like the others. Code: `backend/app/forgeai_investigator.py`.
 
 **Knowledge.** `backend/app/knowledge.py` searches our own resolved incidents with an analyst-confirmed cause (same alert, same asset or type, shared words) and the playbooks. It stays in the database; semantic search (pgvector) and vendor documents are on the roadmap behind the same functions.
 
@@ -65,6 +65,26 @@ thinking models such as Qwen3 to answer straight away (`chat_template_kwargs.ena
 refuse the field get a plain request), which is much faster on CPU. On, the model reasons first with 1024 extra
 tokens; the chat shows the reasoning folded (*Show what it is thinking* while it works, *How ForgeAI got there*
 after), and Investigations keeps it in the raw answer between `<think>` tags. Raise Model timeout with it.
+
+**Answer language.** `ai.forgeai.language` (Settings › RCA / AI › *ForgeAI answer language*): `en` (default)
+or `sr` (Serbian, Latin script, ekavian). It adds one rule to every system prompt (incident, investigation,
+chat, storm, critic); JSON keys, fixed words such as `low|medium|high`, host and metric names stay as they are,
+so the checks work the same. Small local models answer best in English; run the golden set in both languages
+before switching.
+
+**Alarm storm summary.** When an alarm storm opens (Settings › Alarms), and again every 25 linked incidents,
+ForgeSRE queues task `storm` (job `forgeai`, LLM lane, only with the local model on). The context is the linked
+incidents plus counts by site, rack, asset type, parent device and alertname; the answer `{summary,
+common_cause, first_checks}` goes on the storm's timeline (*ForgeAI storm summary*) and in its ForgeAI calls.
+Skill: *Alarm storm* (task `storm`).
+
+**Golden set.** Automation › ForgeAI skills › **Golden set** (Engineer edits, everyone sees): resolved incidents
+whose confirmed cause is right, at most 30. *Run golden set* (job `forgeai_golden`, LLM lane) asks "cause and
+first checks" again for each one as a trial (nothing changes on the incident) and passes it when the answer
+survives the checks and names an expected word (given per case, or the longer words of the confirmed cause).
+Every run keeps model, skill, language, score and per-case result, so a new model, a skill edit or
+`ai.forgeai.language: sr` can be compared before you switch. `./forgesre forgeai golden`; API
+`/api/v1/forgeai/golden` (`POST` add, `DELETE /{id}`, `POST /run`).
 
 **Ratings.** Every answer gets 1–5 stars (click the same star again to clear). Skill statistics, Settings and
 `./forgesre forgeai` show the average; 4–5 stars also count as thumbs up and 1–2 as thumbs down for older reports.

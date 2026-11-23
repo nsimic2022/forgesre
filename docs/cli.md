@@ -116,7 +116,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `handover`, `handover write "notes"`, `handover take` | Shift handover: the latest one, write one, or confirm it as the next shift |
 | `actions` | Open follow-up actions from incident reviews, overdue first |
 | `sla [DAYS]` | SLA: acknowledged and resolved in time, per severity |
-| `forgeai` | ForgeAI: model status, last questions; `forgeai INC-…` shows the exact prompts and answers; `forgeai tuning [skill]` puts answers next to the confirmed causes; `forgeai docs` lists uploaded vendor documents |
+| `forgeai` | ForgeAI: model status, last questions; `forgeai INC-…` shows the exact prompts and answers; `forgeai tuning [skill]` puts answers next to the confirmed causes; `forgeai docs` lists uploaded vendor documents; `forgeai golden` shows the golden test set and its scores |
 | `checks` | Certificate expiry, ForgeSRE backup age and heartbeats, failing first; `checks run` runs now, `checks ping NAME [HOURS]` records a heartbeat |
 | `settings` | Settings from the shell: list, get, set, test, set-secret ([settings.md](settings.md)) |
 | `journal [module]` | Internal console reports (JSON) |

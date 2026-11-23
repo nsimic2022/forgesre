@@ -46,6 +46,11 @@ PROTOCOL = (
     "  similar {} - our resolved incidents most like this one, with the confirmed cause\n"
     "  asset {} - the asset, its parent and whether the parent has an open incident\n"
     '  docs {"query": "words"} - excerpts of uploaded vendor manuals and runbooks\n'
+    "  recent {} - other incidents on this asset in the last 30 days, with the confirmed cause\n"
+    '  known_errors {"query": "words"} - our known-errors knowledge base (workaround, fix)\n'
+    "  neighbours {} - other devices in the same rack or site and which have an open incident\n"
+    "  network {} - BGP peers and OSPF neighbours of this device that are not up (SNMP)\n"
+    "  power {} - UPS on battery or low, and hot sensors in the data centre (SNMP)\n"
 )
 
 
@@ -177,6 +182,75 @@ def run_tool(db: Session, incident: Incident, name: str, args: dict[str, Any]) -
             query = str(args.get("query") or incident.title or "")[:200]
             hits = for_prompt(db, query, k=3)
             return "docs", " | ".join(f"{h['doc']} p.{h['page']}: {h['text'][:300]}" for h in hits) or "no vendor document matches"
+        if name == "recent":
+            if asset is None:
+                return "recent", "the incident has no asset"
+            from datetime import timedelta
+
+            from app.models import utcnow
+
+            since = utcnow() - timedelta(days=30)
+            rows = (db.query(Incident).filter(Incident.asset_id == asset.id, Incident.id != incident.id, Incident.started_at >= since)
+                    .order_by(Incident.started_at.desc()).limit(8).all())
+            return "recent", "; ".join(
+                f"{r.number.split('_')[0]} {r.title} ({r.status}{', cause: ' + r.root_cause if r.root_cause else ''})" for r in rows
+            ) or "no other incident on this asset in 30 days"
+        if name == "known_errors":
+            from app.known_errors import known_errors_for, search_known_errors
+
+            query = str(args.get("query") or "").strip()[:80]
+            rows = search_known_errors(db, query, limit=3) if query else known_errors_for(db, incident)[:3]
+            return "known_error", " | ".join(
+                f"{k['title']} ({k['status']}): {k['workaround'] or k['fix'] or k['symptoms']}"[:300] for k in rows
+            ) or "no known error matches"
+        if name == "neighbours":
+            from app.asset_extras import normalize_extras
+            from app.models import Asset
+            from app.services import ACTIVE_INCIDENT_STATUSES
+
+            if asset is None:
+                return "neighbours", "the incident has no asset"
+            here = normalize_extras(asset.extras)
+            if not here.get("rack") and not here.get("site"):
+                return "neighbours", "no rack or site recorded for this asset"
+            same = []
+            for other in db.query(Asset).filter(Asset.id != asset.id).all():
+                there = normalize_extras(other.extras)
+                if here.get("rack") and there.get("rack") == here.get("rack") and there.get("site", "") == here.get("site", ""):
+                    same.append(other)
+                elif not here.get("rack") and here.get("site") and there.get("site") == here.get("site"):
+                    same.append(other)
+            burning = {i.asset_id for i in db.query(Incident).filter(Incident.status.in_(ACTIVE_INCIDENT_STATUSES),
+                                                                     Incident.asset_id.in_([o.id for o in same] or [-1])).all()}
+            where = f"rack {here['rack']}" if here.get("rack") else f"site {here['site']}"
+            hot = [o.hostname for o in same if o.id in burning]
+            return "neighbours", (f"{len(same)} other devices in {where}; with an open incident: {', '.join(hot[:10]) or 'none'}")
+        if name == "network":
+            from app.network_view import overview as network_overview
+
+            if asset is None:
+                return "network", "the incident has no asset"
+            data = network_overview(db)
+            if data["error"]:
+                return "network", f"network not available: {data['error']}"
+            mine_bgp = [b for b in data["bgp"] if b["asset"] == asset.asset_id]
+            mine_ospf = [o for o in data["ospf"] if o["asset"] == asset.asset_id]
+            if not mine_bgp and not mine_ospf:
+                return "network", "no BGP or OSPF data for this device"
+            bad = [f"BGP {b['peer']} AS{b['remote_as']} {b['state']}" for b in mine_bgp if not b["ok"]]
+            bad += [f"OSPF {o['neighbour']} {o['state']}" for o in mine_ospf if not o["ok"]]
+            return "network", f"{len(mine_bgp)} BGP peers, {len(mine_ospf)} OSPF neighbours; not up: {', '.join(bad) or 'none'}"
+        if name == "power":
+            from app.power import overview as power_overview
+
+            data = power_overview(db)
+            if data["error"]:
+                return "power", f"power not available: {data['error']}"
+            bad = [f"UPS {u['asset']} {u['source']}, battery {u['battery']}, {u['minutes_left']} min left" for u in data["ups"] if u["state"] != "ok"]
+            bad += [f"{s['asset']} {s['name']} {s['value']} {s['unit']}" for s in data["sensors"] if s["state"] != "ok"]
+            if not data["ups"] and not data["sensors"]:
+                return "power", "no UPS or environment sensor reports data"
+            return "power", f"{len(data['ups'])} UPS, {len(data['sensors'])} sensors; problems: {'; '.join(bad[:6]) or 'none'}"
     except Exception as exc:  # a broken source is evidence too, not a crash
         return name, f"{name} not available: {str(exc)[:160]}"
     return "tool", f"unknown tool {name!r}"
@@ -226,7 +300,7 @@ def investigate(db: Session, incident: Incident, *, actor: str = "system", skill
     if skill is None:
         raise LookupError("no ForgeAI skill for investigations")
     text = instructions if instructions is not None else skill.instructions
-    system = forgeai.BASE_RULES.format(shape=forgeai.TASKS[TASK]["shape"]) + "\n" + PROTOCOL + "\nInstructions for this kind of work:\n" + (text or "").strip()
+    system = forgeai.with_language(forgeai.BASE_RULES.format(shape=forgeai.TASKS[TASK]["shape"])) + "\n" + PROTOCOL + "\nInstructions for this kind of work:\n" + (text or "").strip()
     ev = initial_evidence(db, incident)
     call = ForgeAiCall(incident_id=incident.id, task=TASK, skill_slug=skill.slug, skill_version=skill.version or 0,
                        system_prompt=system, actor=actor, endpoint=(settings.llm_url or "") if settings.ai_enabled else "")

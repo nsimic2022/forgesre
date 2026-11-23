@@ -779,6 +779,35 @@ class ConfigNode(Base):
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class GoldenCase(Base):
+    """One incident in the ForgeAI golden test set: its confirmed cause is the expected answer."""
+
+    __tablename__ = "forgeai_golden_cases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    incident_id: Mapped[int] = mapped_column(ForeignKey("incidents.id", ondelete="CASCADE"), unique=True)
+    expect: Mapped[str] = mapped_column(String(300), default="")
+    added_by: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class GoldenRun(Base):
+    """One run of the golden set against the current model and a skill: score and per-case result."""
+
+    __tablename__ = "forgeai_golden_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    actor: Mapped[str] = mapped_column(String(255), default="")
+    model: Mapped[str] = mapped_column(String(255), default="")
+    skill: Mapped[str] = mapped_column(String(100), default="")
+    language: Mapped[str] = mapped_column(String(8), default="en")
+    passed: Mapped[int] = mapped_column(Integer, default=0)
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    results: Mapped[list] = mapped_column(JSONType, default=list)
+
+
 class SavedView(Base):
     """A named set of list filters. ``team`` empty: only its owner sees it; otherwise shared with
     everyone under that team's name."""
