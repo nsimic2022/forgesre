@@ -7,9 +7,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
-import { applyTheme, savedTheme } from "./lib/theme";
+import { savedTheme, showTheme } from "./lib/theme";
 
-applyTheme(savedTheme());
+showTheme(savedTheme()); // paint only: a browser that never chose keeps "no choice" (the TV uses Navy then)
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
