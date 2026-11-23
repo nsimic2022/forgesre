@@ -4,6 +4,7 @@ import { IncidentTable } from "../components/IncidentTable";
 import { useRoleRank } from "../lib/me";
 import { Pager, usePageSize } from "../components/Pager";
 import { Card } from "../components/ui";
+import { SavedViews, type ViewFilters } from "../components/SavedViews";
 import { getJson, type IncidentPage } from "../lib/api";
 import { severityLabel } from "../lib/format";
 
@@ -35,6 +36,7 @@ export function IncidentsPage() {
   const [query, setQuery] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [team, setTeam] = useState("");
   const [offset, setOffset] = useState(0);
   const [PAGE, setPageSize] = usePageSize("incidents");
   const [data, setData] = useState<IncidentPage | null>(null);
@@ -43,15 +45,25 @@ export function IncidentsPage() {
   const canWork = useRoleRank() >= 1;
 
   useEffect(() => {
-    const params = new URLSearchParams({ tab, severity, q: query, date_from: from, date_to: to, limit: String(PAGE), offset: String(offset) });
+    const params = new URLSearchParams({ tab, severity, q: query, date_from: from, date_to: to, team, limit: String(PAGE), offset: String(offset) });
     const timer = window.setTimeout(() => {
       getJson<IncidentPage>(`/api/v1/incidents-page?${params}`)
         .then((next) => (setData(next), setError("")))
         .catch((err: Error) => setError(err.message));
     }, query ? 250 : 0); // debounce typing
     return () => window.clearTimeout(timer);
-  }, [tab, severity, query, from, to, offset, PAGE, reload]);
-  const csv = `/api/v1/incidents-page.csv?${new URLSearchParams({ tab, severity, q: query, date_from: from, date_to: to })}`;
+  }, [tab, severity, query, from, to, team, offset, PAGE, reload]);
+  const csv = `/api/v1/incidents-page.csv?${new URLSearchParams({ tab, severity, q: query, date_from: from, date_to: to, team })}`;
+  const current: ViewFilters = { tab, severity, q: query, team, date_from: from, date_to: to };
+  const apply = (f: ViewFilters) => pick(() => {
+    setTab((["active", "acknowledged", "resolved", "all"].includes(f.tab) ? f.tab : "active") as Tab);
+    setSeverity(f.severity || "");
+    setQuery(f.q || "");
+    setTeam(f.team || "");
+    setFrom(f.date_from || "");
+    setTo(f.date_to || "");
+  });
+  const teams = Array.isArray(data?.teams) ? data!.teams : [];
 
   const pick = (next: () => void) => {
     next();
@@ -83,7 +95,14 @@ export function IncidentsPage() {
             </button>
           ))}
           <input className="search" type="search" aria-label="Search incidents" placeholder="Number, title, host, IP…" value={query} onChange={(e) => pick(() => setQuery(e.target.value))} />
+          {teams.length ? (
+            <select className="search" aria-label="Team" value={team} onChange={(e) => pick(() => setTeam(e.target.value))} style={{ width: 180 }}>
+              <option value="">All teams</option>
+              {teams.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          ) : null}
         </div>
+        <SavedViews page="incidents" current={current} teams={teams} onApply={apply} />
         <div className="row small">
           <label className="row" style={{ gap: 6 }}>From <input className="search" type="date" aria-label="From day" value={from} onChange={(e) => pick(() => setFrom(e.target.value))} /></label>
           <label className="row" style={{ gap: 6 }}>To <input className="search" type="date" aria-label="To day" value={to} onChange={(e) => pick(() => setTo(e.target.value))} /></label>

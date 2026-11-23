@@ -147,6 +147,24 @@ page what is already loaded. Code: `web/src/components/Pager.tsx`.
   reached; it never caches API data. Installing needs HTTPS (or `localhost`); paging stays SMS, mail
   and chat.
 
+## Teams and saved views
+
+- **Team** on Incidents filters by the asset's *owner* (Inventory › owner); the list of teams is
+  every owner in inventory. The CSV export uses the same filter.
+- **Views**: *Save view* stores the current tab, severity, search, team and days under a name
+  (Analyst+). *Only me* keeps it personal; an Engineer can share it with a team, and then everyone
+  sees it as "team · name". The owner or an Engineer deletes it. API `GET/POST /api/v1/views`,
+  `DELETE /api/v1/views/{id}`.
+
+## Known errors
+
+Automation › **Known errors** is the knowledge base of recurring problems: title, how it shows,
+workaround, permanent fix, link, open/fixed. An entry matches an incident by **alertname** and/or a
+text the incident **title** contains (both when both are set). Matching entries show on the
+incident page, and ForgeAI gets them as evidence (`known_error`). Engineers add them there or with
+*Save as known error* on an incident (prefilled with the title, alertname and confirmed cause).
+API `/api/v1/known-errors`; `./forgesre known-errors [TEXT]`.
+
 ## Running an incident: major incidents, SLA, handover, follow-up actions
 
 - **Major incident** (incident page, Analyst and up): *Declare major incident* with a commander,

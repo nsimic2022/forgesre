@@ -100,6 +100,7 @@ Commands:
   racks              Rack elevation: devices by rack and U position, overlaps
   synthetic          Synthetic checks (HTTP, TCP, DNS, ping): last result per check
   network            BGP peers, OSPF neighbours and the busiest interfaces
+  known-errors       Known-errors knowledge base (optionally filtered by text)
   handover           Shift handover: show, write "notes", take (next shift confirms)
   actions            Open follow-up actions from incident reviews, overdue first
   sla                SLA: acknowledged / resolved in time per severity
@@ -624,6 +625,18 @@ Dates are set per asset (Edit › Support: Support until, End of life, Licence e
 Support warns the asset's own lead days ahead; end of life and licences warn
 checks.lifecycle_warn_days (30) ahead. The 15-minute checks job fires AssetLifecycleExpiring
 per asset and date (an expired licence is high, the rest warning).
+EOF
+      ;;
+    known-errors)
+      cat <<'EOF'
+known-errors — the known-errors knowledge base: recurring problems and what to do.
+
+  ./forgesre known-errors            all entries
+  ./forgesre known-errors raid       entries that mention "raid"
+
+Each entry matches incidents by alertname and/or a text in the incident title and shows on
+the incident page with its workaround and fix; ForgeAI reads them too. Engineers add and
+edit them in Automation › Known errors or with "Save as known error" on an incident.
 EOF
       ;;
     network)
@@ -1263,7 +1276,7 @@ case "$cmd" in
     need_env
     run_cli_ops power "$@"
     ;;
-  lifecycle|racks|synthetic|network)
+  lifecycle|racks|synthetic|network|known-errors)
     need_env
     run_cli_ops "$cmd" "$@"
     ;;

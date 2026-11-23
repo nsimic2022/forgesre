@@ -1091,12 +1091,16 @@ def format_racks(data: dict) -> str:
     return "\n".join(out) + "\n"
 
 
-def cmd_lifecycle(port: str, command: str) -> None:
-    """./forgesre lifecycle | racks | synthetic | network"""
+def cmd_lifecycle(port: str, command: str, rest: list[str] | None = None) -> None:
+    """./forgesre lifecycle | racks | synthetic | network | known-errors [TEXT]"""
+    rest = rest or []
     jar, _me = ensure_jar(port)
     try:
         if command == "racks":
             sys.stdout.write(format_racks(get_json(port, jar, "/api/v1/racks")))
+        elif command == "known-errors":
+            text = " ".join(rest)
+            sys.stdout.write(format_known_errors(get_json(port, jar, f"/api/v1/known-errors?q={quote(text)}")))
         elif command == "network":
             sys.stdout.write(format_network(get_json(port, jar, "/api/v1/network")))
         elif command == "synthetic":
@@ -1150,6 +1154,21 @@ def format_network(data: dict) -> str:
             out.append(f"{'BUSIEST ' + title:<20} {'INTERFACE':<24} TRAFFIC")
             out.extend(f"{r['asset'][:20]:<20} {r['interface'][:24]:<24} {_bits(r['bps'])}" for r in rows)
     return ("\n".join(out) or "No SNMP interface, BGP or OSPF data yet.") + "\n"
+
+
+def format_known_errors(data: dict) -> str:
+    """Known errors: status, title, what matches, then the workaround (first line)."""
+    items = data.get("items") or []
+    if not items:
+        return "No known error. Add them in Automation › Known errors or from an incident page.\n"
+    out = []
+    for k in items:
+        match = " + ".join(x for x in (k.get("alertname"), f"title has '{k['pattern']}'" if k.get("pattern") else "") if x)
+        out.append(f"[{k['status']}] #{k['id']} {k['title']}  ({match})")
+        first = (k.get("workaround") or k.get("fix") or "").strip().splitlines()
+        if first:
+            out.append(f"    {first[0][:110]}")
+    return "\n".join(out) + "\n"
 
 
 def format_handover(rows: list[dict]) -> str:
@@ -1276,8 +1295,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_alert_quality(port, rest)
     elif command == "power":
         cmd_power(port)
-    elif command in {"lifecycle", "racks", "synthetic", "network"}:
-        cmd_lifecycle(port, command)
+    elif command in {"lifecycle", "racks", "synthetic", "network", "known-errors"}:
+        cmd_lifecycle(port, command, rest)
     elif command in {"handover", "actions", "sla"}:
         cmd_process(port, command, rest)
     elif command == "forgeai":

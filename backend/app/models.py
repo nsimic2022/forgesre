@@ -779,6 +779,43 @@ class ConfigNode(Base):
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class SavedView(Base):
+    """A named set of list filters. ``team`` empty: only its owner sees it; otherwise shared with
+    everyone under that team's name."""
+
+    __tablename__ = "saved_views"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    page: Mapped[str] = mapped_column(String(32), default="incidents", index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    filters: Mapped[dict] = mapped_column(JSONType, default=dict)
+    owner: Mapped[str] = mapped_column(String(255), index=True)
+    team: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class KnownError(Base):
+    """Known-errors knowledge base: a recurring problem, how to recognise it and what to do.
+
+    Matched to an incident by ``alertname`` (exact, case-insensitive) and/or ``pattern`` (text in
+    the incident title); a row with both needs both. Shown on the incident page and to ForgeAI.
+    """
+
+    __tablename__ = "known_errors"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    alertname: Mapped[str] = mapped_column(String(200), default="", index=True)
+    pattern: Mapped[str] = mapped_column(String(200), default="")
+    symptoms: Mapped[str] = mapped_column(Text, default="")
+    workaround: Mapped[str] = mapped_column(Text, default="")
+    fix: Mapped[str] = mapped_column(Text, default="")
+    link: Mapped[str] = mapped_column(String(500), default="")
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    created_by: Mapped[str] = mapped_column(String(255), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class ChangeEvent(Base):
     """Something that changed outside ForgeSRE: a deploy, a config push, a GLPI change ticket.
 
