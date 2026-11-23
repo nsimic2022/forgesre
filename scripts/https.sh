@@ -2,6 +2,7 @@
 # HTTPS for the ForgeSRE UI and API: Caddy (compose profile "https") in front of Core.
 # Commands: status | on | only | off | cert [HOSTNAME …]
 set -euo pipefail
+trap 'echo "https.sh: failed at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
@@ -56,7 +57,8 @@ make_cert() {
   openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 825 \
     -keyout "${TLS}/forgesre.key" -out "${TLS}/forgesre.crt" \
     -subj "/CN=${cn}/O=ForgeSRE" -addext "subjectAltName=${san}" \
-    -addext "extendedKeyUsage=serverAuth" >/dev/null 2>&1
+    -addext "extendedKeyUsage=serverAuth" >/dev/null 2>"${TLS}/.openssl.log" || { cat "${TLS}/.openssl.log" >&2; return 1; }
+  rm -f "${TLS}/.openssl.log"
   chmod 600 "${TLS}/forgesre.key"
   chmod 644 "${TLS}/forgesre.crt"
   echo "Self-signed certificate for ${san} in ${TLS} (valid 825 days)."
@@ -76,7 +78,7 @@ shift || true
 case "${cmd}" in
   status)
     if profile_on https; then echo "HTTPS: on, port ${PORT}"; else echo "HTTPS: off"; fi
-    [[ "$(env_get FORGESRE_BIND)" == "127.0.0.1" ]] && echo "Mode: only (Core listens on 127.0.0.1)"
+    if [[ "$(env_get FORGESRE_BIND)" == "127.0.0.1" ]]; then echo "Mode: only (Core listens on 127.0.0.1)"; fi
     cert_info
     ;;
   on|only)
@@ -95,7 +97,7 @@ case "${cmd}" in
     "${DC[@]}" up -d core
     "${DC[@]}" up -d proxy
     echo "HTTPS on: https://$(hostname -f 2>/dev/null || hostname):${PORT}/"
-    [[ "${cmd}" == "only" ]] && echo "Plain HTTP now answers only on this host (127.0.0.1:$(env_get FORGESRE_HTTP_PORT))."
+    if [[ "${cmd}" == "only" ]]; then echo "Plain HTTP now answers only on this host (127.0.0.1:$(env_get FORGESRE_HTTP_PORT))."; fi
     echo "Set system.public_url to the https:// address so links in mail and chat use it:"
     echo "  ./forgesre settings set system.public_url https://$(hostname -f 2>/dev/null || hostname)$([[ "${PORT}" == 443 ]] || echo ":${PORT}")"
     ;;
