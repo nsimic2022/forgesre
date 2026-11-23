@@ -31,6 +31,7 @@ Alarmi i logovi ulaze levo, Core ih spaja sa inventarom i čuva u Postgres-u, a 
 | `prometheus` | 9090 (lokalno) | uvek | Metrike i pravila alarma |
 | `alertmanager` | 9093 (lokalno) | uvek | Šalje alarme Core-u preko webhook-a |
 | `snmp-exporter` | 9116 (lokalno) | uvek | SNMP metrike mrežnih uređaja za Prometheus |
+| `blackbox-exporter` | 9115 (lokalno) | uvek | Sintetičke provere: HTTP, TCP, DNS i ping (Settings › Checks) |
 | `loki` | 3100 (lokalno) | uvek | Logovi (syslog) kao dokazi za RCA |
 | `alloy` | 514 syslog, 12345 (lokalno) | uvek | Prima syslog i šalje ga u Loki |
 | `grafana` | 3000 (`GRAFANA_PORT`) | uvek | Grafikoni, link iz System Health |

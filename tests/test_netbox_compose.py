@@ -687,6 +687,7 @@ _COMPOSE_IMAGE_PINS = {
     "prometheus": "prom/prometheus:v2.54.1",
     "alertmanager": "prom/alertmanager:v0.27.0",
     "snmp-exporter": "prom/snmp-exporter:v0.26.0",
+    "blackbox-exporter": "prom/blackbox-exporter:v0.25.0",
     "loki": "grafana/loki:3.4.2",
     "alloy": "grafana/alloy:v1.7.5",
     "grafana": "grafana/grafana:11.4.0",

@@ -101,6 +101,24 @@ visible; they only stop their own mail ladder.
 acknowledged, how many cleared by themselves within 10 minutes, flapping and a suggestion (add a
 noise filter, a longer `for:`, a higher threshold, or keep).
 
+## Synthetic checks
+
+Settings › Checks › *Synthetic checks* (Engineer) probes services from the appliance the way a
+user would: **HTTP(S)** (2xx after redirects; certificate not verified), **TCP** port open,
+**DNS** server answers (a query for `localhost`, so nothing leaves the DC) and **ping**.
+blackbox_exporter (`blackbox-exporter`, 127.0.0.1:9115, `monitoring/blackbox.yml`) runs the
+probes; Prometheus job `forgesre-synthetic` reads the checks through HTTP SD every 30 s and
+probes each target every 60 s. Rules in group `forgesre-synthetic`:
+
+| Alert | Fires when | Severity |
+|---|---|---|
+| `SyntheticCheckFailed` | a check marked critical fails for 3 min | critical |
+| `SyntheticCheckDegraded` | a check marked warning fails for 10 min | warning |
+
+Give the check an **asset** so the incident lands on that asset (otherwise the check name is
+the asset label). `./forgesre synthetic` shows the last result per check; doctor row *Synthetic
+checks (blackbox)*.
+
 ## Power and environment
 
 UPS, PDU and environment sensors are polled over SNMP by Prometheus job `forgesre-snmp-power`

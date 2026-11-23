@@ -86,7 +86,7 @@ export function LifecycleCard() {
   return (
     <Card title="Warranty, end of life and licences" actions={<span className="small faint">{data.tracked} dates tracked</span>}>
       {rows.length === 0 ? <span className="muted">Nothing expires in the next {data.warn_days} days.</span> : (
-        <table className="table">
+        <table className="data">
           <thead><tr><th>Asset</th><th>What</th><th>Date</th><th>When</th></tr></thead>
           <tbody>
             {rows.map((r) => (

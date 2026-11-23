@@ -123,7 +123,7 @@ else
     printf '%s\n' "$cur" > "$STAMP"
   fi
 fi
-if ! "${DC[@]}" up -d snmp-exporter netbox-redis netbox librenms-db librenms-redis librenms librenms-dispatcher; then
+if ! "${DC[@]}" up -d snmp-exporter blackbox-exporter netbox-redis netbox librenms-db librenms-redis librenms librenms-dispatcher; then
   echo "LibreNMS/NetBox extras failed to start. MariaDB logs (librenms-db / librenms-db-1):"
   "${DC[@]}" logs --tail=80 librenms-db || true
   echo "LibreNMS logs:"

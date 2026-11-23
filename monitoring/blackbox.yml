@@ -1,0 +1,33 @@
+# blackbox_exporter modules for ForgeSRE synthetic checks (Settings › Checks › Synthetic checks).
+# Prometheus job forgesre-synthetic picks the module per check kind.
+modules:
+  http_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      follow_redirects: true
+      # internal services often use an internal CA or a self-signed certificate;
+      # certificate expiry is watched separately by checks.tls_targets
+      tls_config:
+        insecure_skip_verify: true
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      preferred_ip_protocol: ip4
+  # "Does this DNS server answer?" A query for localhost needs no recursion, so nothing leaves the DC.
+  dns_answer:
+    prober: dns
+    timeout: 5s
+    dns:
+      preferred_ip_protocol: ip4
+      transport_protocol: udp
+      query_name: localhost
+      query_type: A
+      valid_rcodes: [NOERROR, NXDOMAIN, REFUSED]
+  icmp:
+    prober: icmp
+    timeout: 5s
+    icmp:
+      preferred_ip_protocol: ip4

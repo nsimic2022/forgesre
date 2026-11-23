@@ -774,6 +774,65 @@ def lifecycle_api(db: Session = Depends(get_db), user: User = Depends(require("r
     return overview(db)
 
 
+class SyntheticBody(BaseModel):
+    name: str
+    kind: str = "http"
+    target: str
+    asset: str = ""
+    severity: str = "critical"
+    enabled: bool = True
+
+
+@router.get("/synthetic")
+def synthetic_list(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict:
+    """Synthetic checks with their last probe result from Prometheus."""
+    from app.synthetic import overview
+
+    return {**overview(db), "can_edit": can(user, "write_play")}
+
+
+@router.post("/synthetic")
+def synthetic_create(body: SyntheticBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Add a check (Engineer+); Prometheus picks it up through HTTP SD within 30 s."""
+    from app.synthetic import as_dict, save
+
+    try:
+        row = save(db, body.model_dump(), user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "synthetic.create", actor=user.email, object_type="synthetic", object_id=row.name, data={"kind": row.kind, "target": row.target})
+    db.commit()
+    return as_dict(row)
+
+
+@router.put("/synthetic/{check_id}")
+def synthetic_update(check_id: int, body: SyntheticBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    from app.synthetic import as_dict, save
+
+    try:
+        row = save(db, body.model_dump(), user.email, check_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "synthetic.update", actor=user.email, object_type="synthetic", object_id=row.name, data={"kind": row.kind, "target": row.target})
+    db.commit()
+    return as_dict(row)
+
+
+@router.delete("/synthetic/{check_id}")
+def synthetic_delete(check_id: int, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    from app.models import SyntheticCheck
+
+    row = db.get(SyntheticCheck, check_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="check not found")
+    audit(db, "synthetic.delete", actor=user.email, object_type="synthetic", object_id=row.name, data={"target": row.target})
+    db.delete(row)
+    db.commit()
+    return {"deleted": check_id}
+
+
 @router.get("/handover")
 def handover_list(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
     """The latest shift handovers, newest first."""
@@ -1739,6 +1798,15 @@ def snmp_power_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]
     if not _webhook_token_ok(request):
         raise HTTPException(status_code=401, detail="invalid sd token")
     return sd_snmp_power_targets(db)
+
+
+@router.get("/sd/synthetic")
+def synthetic_sd(request: Request, db: Session = Depends(get_db)) -> list[dict]:
+    if not _webhook_token_ok(request):
+        raise HTTPException(status_code=401, detail="invalid sd token")
+    from app.synthetic import sd_targets
+
+    return sd_targets(db)
 
 
 @router.get("/sd/snmp-onboard")
@@ -2907,6 +2975,28 @@ def _power_check() -> dict[str, Any]:
     return {"status": "ok", "why": f"{len(assets)} power asset(s), job forgesre-snmp-power"}
 
 
+def _blackbox_check() -> dict[str, Any]:
+    """blackbox_exporter: disabled with no synthetic check, else :9115 must answer."""
+    from app.db import SessionLocal
+    from app.models import SyntheticCheck
+
+    try:
+        db = SessionLocal()
+        try:
+            count = db.query(SyntheticCheck).filter(SyntheticCheck.enabled.is_(True)).count()
+        finally:
+            db.close()
+    except Exception as exc:
+        return {"status": "error", "why": str(exc)[:200]}
+    if not count:
+        return {"status": "disabled", "why": "no synthetic check (Settings › Checks)"}
+    result = _http("http://127.0.0.1:9115/-/healthy", "GET")
+    if result.get("status") != "ok":
+        result["fix"] = "docker compose up -d blackbox-exporter"
+        return result
+    return {"status": "ok", "why": f"{count} synthetic check(s)"}
+
+
 def _doctor_payload_fresh() -> dict[str, Any]:
     components = {
         # Machine key "core" = compose service. Display: Core (container).
@@ -2933,6 +3023,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "mcp": _mcp_check(),
         "kubernetes": _k8s_check(),
         "power": _power_check(),
+        "blackbox": _blackbox_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)

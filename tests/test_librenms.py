@@ -266,7 +266,7 @@ def test_update_and_scripts_bundle_librenms():
     update = (ROOT / "scripts" / "update.sh").read_text(encoding="utf-8")
     assert "ensure-librenms-secrets" in update
     assert "librenms-upsert-token" in update
-    assert "up -d snmp-exporter netbox-redis netbox librenms-db librenms-redis librenms librenms-dispatcher" in update
+    assert "up -d snmp-exporter blackbox-exporter netbox-redis netbox librenms-db librenms-redis librenms librenms-dispatcher" in update
     assert "librenms-db-1" in update
     assert "mariadb:11.4.13" in update
     assert "logs --tail=80 librenms" in update

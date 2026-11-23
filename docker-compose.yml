@@ -126,6 +126,25 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  blackbox-exporter:
+    # Synthetic checks (HTTP, TCP, DNS, ping). Host network publishes 127.0.0.1:9115; NET_RAW for ping.
+    image: prom/blackbox-exporter:v0.25.0
+    user: "0"
+    network_mode: host
+    cap_add: [NET_RAW]
+    command:
+      - --config.file=/etc/blackbox_exporter/blackbox.yml
+      - --web.listen-address=127.0.0.1:9115
+    volumes:
+      - ./monitoring/blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9115/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
   loki:
     image: grafana/loki:3.4.2
     user: "0"
