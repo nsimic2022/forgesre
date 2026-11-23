@@ -52,7 +52,7 @@ The *default-warning* policy cannot be removed; rules from a deleted policy fall
 
 ![Messages and templates](../images/ui-settings-messages.png)
 
-**Settings › Messages and templates** shows, for any incident, exactly what goes out: the
+**Settings › Messages** shows, for any incident, exactly what goes out: the
 alert mail (subject, the one-click **Acknowledge** button, the asset's owner, contact and
 phone), the Slack, Teams and Discord card for *opened*, *escalated* and *resolved*, and the
 longer incident report an operator can mail from the incident page. Nothing is sent from

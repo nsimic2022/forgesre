@@ -836,7 +836,7 @@ If the incident has no asset, the alert `asset` / `instance` label did not match
 | Bounce containers only (no pull / install / secrets change) | `./forgesre restart` |
 | Re-render Prometheus / Alertmanager / snmp.yml only | `./forgesre render-monitoring` |
 | Saved a Custom community / SNMPv3 asset | `./forgesre snmp-auths` |
-| Stack lights (same as Settings › Services and health) | `./forgesre doctor` |
+| Stack lights (same as Settings › Health) | `./forgesre doctor` |
 | Appliance report → `data/reports/` | `./forgesre test` |
 | Live inventory path (exporter → Prom → AM → Core) | `./forgesre verify` / `./forgesre ping` |
 | SNMP targets JSON | `./forgesre snmp` |

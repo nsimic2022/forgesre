@@ -79,7 +79,7 @@ export function MessagePreviews() {
       <Card title="What gets sent when an alarm fires">
         <ol className="small" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
           <li>The alarm opens an incident. At once, <strong>Tier 1</strong> of its escalation policy gets the <strong>alert mail</strong> below, with a one-click <em>Acknowledge</em> button that needs no sign-in.</li>
-          <li>Chat channels that are on (Notification channels) get a short card when the incident opens, at each escalation step and when it resolves. Only the incident line goes out: no logs, no evidence, no ForgeAI text.</li>
+          <li>Chat channels that are on (Settings › Notifications) get a short card when the incident opens, at each escalation step and when it resolves. Only the incident line goes out: no logs, no evidence, no ForgeAI text.</li>
           <li>Nobody acknowledged in time? The next tier gets the same mail after the minutes set in its escalation policy (for example Tier 2 after 15 min, Tier 3 after 30). Acknowledging stops it.</li>
           <li>The <strong>incident report</strong> is the longer mail an operator sends from the incident page, for example to a customer or a manager.</li>
         </ol>

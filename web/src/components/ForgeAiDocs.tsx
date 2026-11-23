@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { getJson } from "../lib/api";
 import { clock } from "../lib/format";
+import { usePaged } from "./Pager";
 import { Card, Chip } from "./ui";
 
 type Doc = { id: number; name: string; title: string; size: number; pages: number; chunks: number; status: string; error: string; model: string; uploaded_by: string; at: string | null };
@@ -46,6 +47,7 @@ export function ForgeAiDocs() {
     getJson<{ hits: Hit[] }>(`/api/v1/forgeai/docs/search?q=${encodeURIComponent(query)}`).then((r) => setHits(r.hits)).catch((err: Error) => setError(err.message));
   };
 
+  const pgDocs = usePaged(data?.docs ?? [], "docs", "documents");
   return (
     <Card title="ForgeAI · documents" actions={data ? <Chip tone={data.embedder ? "ok" : "off"}>{data.embedder ? "Search on" : "Search off"}</Chip> : null}>
       <span className="small muted">
@@ -63,11 +65,11 @@ export function ForgeAiDocs() {
         </div>
       ) : <span className="small faint">Engineers and Admins upload documents.</span>}
       {error ? <span className="small" role="alert" style={{ color: "var(--crit)" }}>{error}</span> : null}
-      {data && data.docs.length ? (
+      {data && data.docs.length ? (<>
         <div className="table-wrap"><table className="data" style={{ minWidth: 640 }}>
           <thead><tr><th>Document</th><th style={{ width: 100 }}>State</th><th style={{ width: 120 }}>Size</th><th style={{ width: 150 }}>Added</th><th style={{ width: 90 }}></th></tr></thead>
           <tbody>
-            {data.docs.map((d) => (
+            {pgDocs.page.map((d) => (
               <tr key={d.id}>
                 <td><div className="cell-stack"><span>{d.title}</span><span className="small faint">{d.name}{d.error ? ` · ${d.error}` : ""}</span></div></td>
                 <td><Chip tone={TONE[d.status] ?? "off"}>{d.status}</Chip></td>
@@ -78,6 +80,7 @@ export function ForgeAiDocs() {
             ))}
           </tbody>
         </table></div>
+        {pgDocs.pager}</>
       ) : data ? <span className="muted">No documents yet.</span> : null}
       {data && data.docs.some((d) => d.status === "ready") ? (
         <form className="cell-stack" style={{ gap: 6, borderTop: "1px solid var(--border)", paddingTop: 8 }} onSubmit={search}>

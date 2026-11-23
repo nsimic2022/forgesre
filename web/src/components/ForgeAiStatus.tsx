@@ -10,7 +10,7 @@ type Status = {
   last: Call[];
 };
 
-/** Settings › ForgeRCA / ForgeAI: is the model there and answering, how the last week went, a test run. */
+/** Settings › RCA / AI: is the model there and answering, how the last week went, a test run. */
 export function ForgeAiStatus() {
   const [s, setS] = useState<Status | null>(null);
   const [trial, setTrial] = useState<Call | null>(null);

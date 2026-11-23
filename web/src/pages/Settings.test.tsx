@@ -4,7 +4,7 @@ import type { SettingsData } from "../lib/api";
 import { SettingsPage } from "./Settings";
 
 const data: SettingsData = {
-  groups: { general: "General", ai: "ForgeRCA / ForgeAI" },
+  groups: { general: "General", ai: "RCA / AI" },
   settings: [
     { key: "system.log_level", group: "general", label: "Log level", kind: "enum", store: "yaml", editable: true, help: "", test: "", choices: ["debug", "info"], value: "info", effective: null },
     { key: "ai.llm.timeout_seconds", group: "ai", label: "Model timeout (s)", kind: "int", store: "yaml", editable: true, help: "", test: "llm", value: 120, effective: 120 },
@@ -40,7 +40,7 @@ describe("Settings", () => {
 
   it("edits a value, shows secret status and runs a connection test", async () => {
     render(<SettingsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "ForgeRCA / ForgeAI" }));
+    fireEvent.click(await screen.findByRole("button", { name: "RCA / AI" }));
     fireEvent.change(screen.getByLabelText(/Model timeout/), { target: { value: "300" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
     await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.url === "/api/v1/settings/ai.llm.timeout_seconds" && c.body === JSON.stringify({ value: "300" }))).toBe(true));

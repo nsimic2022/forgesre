@@ -247,3 +247,5 @@ input.search[type="search"] { min-width: min(300px, 100%); }
 .one-line { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 details.explain > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 details.explain[open] > summary { margin-bottom: 6px; }
+.pager { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 6px; }
+.pager .btn { min-width: 34px; justify-content: center; }

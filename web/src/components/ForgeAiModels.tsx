@@ -14,7 +14,7 @@ async function send(url: string, method: string): Promise<unknown> {
   return body;
 }
 
-/** Settings › ForgeRCA / ForgeAI: the models on this appliance, the catalog, a Hugging Face link, file import. */
+/** Settings › RCA / AI: the models on this appliance, the catalog, a Hugging Face link, file import. */
 export function ForgeAiModels() {
   const [data, setData] = useState<Data | null>(null);
   const [url, setUrl] = useState("");

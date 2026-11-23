@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { usePaged } from "../components/Pager";
 import { Link } from "react-router-dom";
 import { Card, Chip } from "../components/ui";
 import { getJson, postJson, type TopoNode, type Topology } from "../lib/api";
@@ -73,6 +74,7 @@ export function DependencyMapPage() {
       .catch((e: Error) => setError(e.message));
   const sync = () => postJson("/api/v1/topology/sync", {}).then(() => setNotice("Reading links from LibreNMS in the background. Reload in a minute.")).catch((e: Error) => setError(e.message));
   const edit = !!data?.can_edit;
+  const pg_suggestions = usePaged((data?.suggestions ?? []), "suggestions");
   return (
     <>
       <header className="page-head">
@@ -95,7 +97,7 @@ export function DependencyMapPage() {
             <table className="data">
               <thead><tr><th>Asset</th><th>Proposed parent</th><th>Seen as</th><th>Now</th>{edit ? <th style={{ width: 110 }} /> : null}</tr></thead>
               <tbody>
-                {data.suggestions.map((s) => (
+                {pg_suggestions.page.map((s) => (
                   <tr key={s.asset_id}>
                     <td style={{ fontWeight: 600 }}>{s.hostname}</td>
                     <td>{s.parent_hostname}</td>
@@ -107,6 +109,7 @@ export function DependencyMapPage() {
               </tbody>
             </table>
           </div>
+          {pg_suggestions.pager}
           <span className="small faint">Only links where one end is a network device are proposed. Switch-to-switch links are not guessed: set those by hand.</span>
         </Card>
       ) : null}

@@ -1,6 +1,6 @@
 # Sign-in: LDAP / Active Directory and single sign-on (OIDC)
 
-Local accounts (Settings › Users and roles) always work, the installer's Admin included. On top of
+Local accounts (Settings › Users) always work, the installer's Admin included. On top of
 them, people can sign in with the company directory or the company's single sign-on. The
 directory decides the role on every sign-in, from group membership; ForgeSRE keeps no copy of
 their password.

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { usePaged } from "./Pager";
 import { getJson, postJson } from "../lib/api";
 import { clock } from "../lib/format";
 import { Card, Chip } from "./ui";
@@ -57,7 +58,7 @@ function UserForm({ row, roles, onDone }: { row: UserRow | null; roles: Role[]; 
   );
 }
 
-/** Settings › Users and roles (Admin). Server checks every write; last Admin and yourself cannot be removed. */
+/** Settings › Users (Admin). Server checks every write; last Admin and yourself cannot be removed. */
 export function UsersPanel() {
   const [data, setData] = useState<UsersData | null>(null);
   const [edit, setEdit] = useState<{ row: UserRow | null } | null>(null);
@@ -68,6 +69,7 @@ export function UsersPanel() {
     load();
   }, []);
   const remove = (id: number) => postJson(`/api/v1/users/${id}/delete`, {}).then(() => (setAsking(null), load())).catch((e: Error) => setError(e.message));
+  const pg_users = usePaged((data?.users ?? []), "users");
   return (
     <>
       {edit && data ? <UserForm key={edit.row?.id ?? "new"} row={edit.row} roles={data.roles} onDone={(saved) => (setEdit(null), saved && load())} /> : null}
@@ -77,7 +79,7 @@ export function UsersPanel() {
           <table className="data" style={{ minWidth: 820 }}>
             <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th style={{ width: 110 }}>Role</th><th style={{ width: 260 }}>Change</th></tr></thead>
             <tbody>
-              {(data?.users ?? []).map((u) => (
+              {pg_users.page.map((u) => (
                 <tr key={u.id}>
                   <td style={{ fontWeight: 600 }}>{[u.name, u.surname].filter(Boolean).join(" ")}{u.me ? <span className="small faint"> (you)</span> : null}</td>
                   <td className="small">{u.email}</td>
@@ -101,6 +103,7 @@ export function UsersPanel() {
             </tbody>
           </table>
         </div>
+        {pg_users.pager}
       </Card>
     </>
   );
@@ -160,6 +163,7 @@ export function BackupPanel() {
     form.append("archive", file);
     getJson<{ imported: string }>("/api/v1/backups/import", { method: "POST", body: form }).then((r) => (setNotice(`Imported ${r.imported}.`), load())).catch((e: Error) => setError(e.message));
   };
+  const pg_backups = usePaged((data?.archives ?? []), "backups");
   const remove = (name: string) => getJson(`/api/v1/backups/${encodeURIComponent(name)}`, { method: "DELETE" }).then(() => (setAsking(""), load())).catch((e: Error) => setError(e.message));
   return (
     <Card title="Backup, import, export">
@@ -182,7 +186,7 @@ export function BackupPanel() {
         <table className="data">
           <thead><tr><th>Backup</th><th style={{ width: 170 }}>Made</th><th style={{ width: 340 }}>Change</th></tr></thead>
           <tbody>
-            {(data?.archives ?? []).map((a) => (
+            {pg_backups.page.map((a) => (
               <tr key={a.name}>
                 <td className="mono small">{a.label}</td>
                 <td className="small muted">{clock(a.mtime)}</td>
@@ -207,6 +211,7 @@ export function BackupPanel() {
             ))}
           </tbody>
         </table>
+        {pg_backups.pager}
         {data && data.archives.length === 0 ? <div className="empty">No backups yet.</div> : null}
       </div>
       <span className="small faint">Same as <code className="mono">./forgesre backup</code> and <code className="mono">./forgesre restore</code> on the host.</span>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { usePaged } from "./Pager";
 import { getJson, postJson } from "../lib/api";
 import { Card, Chip } from "./ui";
 
@@ -47,6 +48,8 @@ export function ForgeAiTuning({ slug, instructions, changed, canEdit }: { slug: 
       if (alive.current) setBusy("");
     }
   };
+  const pg_tuning = usePaged((report?.examples ?? []), "tuning");
+  const pg_replay = usePaged((replay?.rows ?? []), "replay");
   if (!report) return error ? <Card title="Tuning"><span className="small" role="alert" style={{ color: "var(--crit)" }}>{error}</span></Card> : null;
   return (
     <Card title="Tuning" actions={<span className="small faint">last {report.days} days · v{report.version}</span>}>
@@ -61,12 +64,12 @@ export function ForgeAiTuning({ slug, instructions, changed, canEdit }: { slug: 
           <span className="small faint">A rule in the instructions often fixes these, e.g. “use only numbers that are in the facts”.</span>
         </div>
       ) : null}
-      {report.examples.length ? (
+      {report.examples.length ? (<>
         <div className="table-wrap">
           <table className="data">
             <thead><tr><th style={{ width: 90 }}>Incident</th><th>ForgeAI said</th><th>Analyst confirmed</th><th style={{ width: 90 }}>Rating</th></tr></thead>
             <tbody>
-              {report.examples.map((e) => (
+              {pg_tuning.page.map((e) => (
                 <tr key={e.call_id}>
                   <td className="mono small">{e.incident}</td>
                   <td className="small">{e.said}</td>
@@ -77,6 +80,7 @@ export function ForgeAiTuning({ slug, instructions, changed, canEdit }: { slug: 
             </tbody>
           </table>
         </div>
+        {pg_tuning.pager}</>
       ) : <span className="small faint">No used answers in this period yet.</span>}
       {(report.task === "incident" || report.task === "investigate") && canEdit ? (
         <div className="row">
@@ -99,7 +103,7 @@ export function ForgeAiTuning({ slug, instructions, changed, canEdit }: { slug: 
             <table className="data">
               <thead><tr><th style={{ width: 90 }}>Incident</th><th>Confirmed</th><th>Before</th><th>Now</th></tr></thead>
               <tbody>
-                {replay.rows.map((r) => (
+                {pg_replay.page.map((r) => (
                   <tr key={r.incident}>
                     <td className="mono small">{r.incident}</td>
                     <td className="small muted">{r.confirmed}</td>
@@ -110,6 +114,7 @@ export function ForgeAiTuning({ slug, instructions, changed, canEdit }: { slug: 
               </tbody>
             </table>
           </div>
+          {pg_replay.pager}
         </div>
       ) : null}
     </Card>

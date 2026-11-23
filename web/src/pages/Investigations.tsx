@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Pager, usePageSize } from "../components/Pager";
 import { Link } from "react-router-dom";
 import { AskForgeAi } from "../components/AskForgeAi";
 import type { Skill } from "../components/ForgeAiSkills";
@@ -7,7 +8,6 @@ import { Bar, Card, Chip } from "../components/ui";
 import { getJson, type Accuracy, type InvestigationsPage as Page } from "../lib/api";
 import { clock, shortNumber } from "../lib/format";
 
-const PAGE = 50;
 
 function AccuracyRow({ label, a }: { label: string; a: Accuracy }) {
   return (
@@ -28,6 +28,7 @@ export function InvestigationsPage() {
   const [onlyAi, setOnlyAi] = useState(false);
   const [onlyReviewed, setOnlyReviewed] = useState(false);
   const [offset, setOffset] = useState(0);
+  const [PAGE, setPageSize] = usePageSize("investigations");
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
   const [picked, setPicked] = useState("");
@@ -39,7 +40,7 @@ export function InvestigationsPage() {
       getJson<Page>(`/api/v1/investigations-page?${params}`).then((d) => (setData(d), setError(""))).catch((e: Error) => setError(e.message));
     }, query ? 250 : 0);
     return () => window.clearTimeout(timer);
-  }, [days, query, onlyAi, onlyReviewed, offset]);
+  }, [days, query, onlyAi, onlyReviewed, offset, PAGE]);
 
   const reset = (fn: () => void) => (fn(), setOffset(0));
   return (
@@ -100,15 +101,7 @@ export function InvestigationsPage() {
               </table>
               {data && data.rows.length === 0 ? <div className="empty">No resolved incidents match.</div> : null}
             </div>
-            {data && data.total > PAGE ? (
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <span className="small faint">{offset + 1}–{Math.min(offset + PAGE, data.total)} of {data.total}</span>
-                <div className="row">
-                  <button className="btn" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>Previous</button>
-                  <button className="btn" disabled={offset + PAGE >= data.total} onClick={() => setOffset(offset + PAGE)}>Next</button>
-                </div>
-              </div>
-            ) : null}
+            {data ? <Pager total={data.total} offset={offset} size={PAGE} onOffset={setOffset} onSize={setPageSize} label="investigations" /> : null}
             <span className="small faint">Analysts confirm the cause and rate each analysis on the incident page.</span>
           </Card>
         </div>

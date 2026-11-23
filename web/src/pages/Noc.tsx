@@ -5,6 +5,7 @@ import { Bar, Card, Stat } from "../components/ui";
 import { getJson, type Noc as NocData } from "../lib/api";
 import { clock, minutesLabel, severityLabel } from "../lib/format";
 import { IncidentTable } from "../components/IncidentTable";
+import { usePaged } from "../components/Pager";
 
 const REFRESH_MS = 10_000;
 type TabKey = "active" | "acknowledged" | "resolved_today";
@@ -54,6 +55,7 @@ export function NocPage() {
   }, [data, tab, query, severity]);
 
   const c = data?.counts;
+  const nocPage = usePaged(rows, "noc", "incidents");
   return (
     <>
       <header className="page-head">
@@ -100,7 +102,8 @@ export function NocPage() {
           ))}
           <input className="search" type="search" aria-label="Filter incidents" placeholder="Filter by host, IP, incident…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
-        <IncidentTable rows={rows} loaded={Boolean(data)} />
+        <IncidentTable rows={nocPage.page} loaded={Boolean(data)} />
+        {nocPage.pager}
       </Card>
       {data ? (
         <div className="cols">

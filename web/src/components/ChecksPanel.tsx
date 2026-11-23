@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePaged } from "./Pager";
 import { getJson, postJson } from "../lib/api";
 import { clock } from "../lib/format";
 import { Card, Chip } from "./ui";
@@ -17,16 +18,17 @@ export function ChecksPanel() {
     load();
   }, []);
   const rows = [...(data?.results ?? [])].sort((a, b) => Number(a.status === "ok") - Number(b.status === "ok"));
+  const pg_checks = usePaged(rows, "checks");
   return (
     <Card title="Latest results" actions={data?.can_edit ? <button className="btn" type="button" onClick={() => postJson("/api/v1/checks/run", {}).then(() => setNotice("Running now; reload in a few seconds."))}>Run now</button> : null}>
       {notice ? <div className="banner" role="status" style={{ background: "var(--ok-bg)" }}>{notice}</div> : null}
       {error ? <div className="banner error" role="alert">{error}</div> : null}
-      {rows.length === 0 ? <span className="muted">No check has run yet.</span> : (
+      {rows.length === 0 ? <span className="muted">No check has run yet.</span> : (<>
         <div className="table-wrap">
           <table className="data">
             <thead><tr><th style={{ width: 110 }}>Status</th><th style={{ width: 100 }}>Check</th><th>Target</th><th>Detail</th><th style={{ width: 120 }}>Checked</th></tr></thead>
             <tbody>
-              {rows.map((r) => (
+              {pg_checks.page.map((r) => (
                 <tr key={`${r.kind}-${r.target}`}>
                   <td><Chip tone={TONE[r.status] ?? "off"}>{r.status}</Chip></td>
                   <td className="small">{r.kind}</td>
@@ -38,6 +40,7 @@ export function ChecksPanel() {
             </tbody>
           </table>
         </div>
+        {pg_checks.pager}</>
       )}
       <span className="small faint">
         Heartbeat from a backup or cron job, after each success:{" "}

@@ -90,7 +90,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `version` | `FORGESRE_VERSION` from `.env` |
 | `secrets-check` | Refuse-to-start defaults: `SECRET_KEY` / webhook token |
 | `install` | Guided first-time install — **new VM only** |
-| `doctor` | Short health lights (same as Settings › Services and health) |
+| `doctor` | Short health lights (same as Settings › Health) |
 | `test` | Full appliance report → `data/reports/` |
 | `verify [asset]` | Live chain: exporter → prometheus → alertmanager → core |
 | `ping [asset]` / `probe` | ICMP + exporter `/metrics` from this host |

@@ -231,7 +231,7 @@ def investigate(db: Session, incident: Incident, *, actor: str = "system", skill
     started = time.monotonic()
     names = metric_names(incident)
     if provider.get_name() == "none":
-        call.status, call.reason = "error", "ForgeAI is off (Settings › ForgeRCA / ForgeAI)"
+        call.status, call.reason = "error", "ForgeAI is off (Settings › RCA / AI)"
     else:
         call.model = provider.get_model() or ""
         final: dict[str, Any] | None = None

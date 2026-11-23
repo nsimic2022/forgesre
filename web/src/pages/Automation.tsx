@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { usePaged } from "../components/Pager";
 import { MaintenanceForm, PlaybookForm, PolicyForm, RemoveButton, RuleForm, ruleBody, ruleDraft } from "../components/AutomationEditors";
 import { ForgeAiDocs } from "../components/ForgeAiDocs";
 import { ForgeAiSkills } from "../components/ForgeAiSkills";
@@ -114,6 +115,9 @@ export function AutomationPage() {
         ["Escalate and notify", "Policies, on-call, channels", `${p.notifications_today} messages sent`],
       ]
     : [];
+  const pg_rules = usePaged((data?.rules ?? []), "rules");
+  const pgBooks = usePaged(data?.playbooks ?? [], "playbooks", "playbooks");
+  const pgMaint = usePaged(data?.maintenance ?? [], "maintenance", "windows");
   return (
     <>
       <header className="page-head">
@@ -154,7 +158,7 @@ export function AutomationPage() {
                 <tr><th style={{ width: 160 }}>Rule</th><th>When the alarm is</th><th style={{ width: 90 }}>Severity</th><th style={{ width: 150 }}>Playbook</th><th style={{ width: 160 }}>Escalation</th><th style={{ width: 90 }}>Hits 30 d</th><th style={{ width: 70 }}>On</th>{data.can_edit ? <th style={{ width: 230 }}>Change</th> : null}</tr>
               </thead>
               <tbody>
-                {data.rules.map((r) => (
+                {pg_rules.page.map((r) => (
                   <tr key={r.id}>
                     <td><div className="cell-stack"><span style={{ fontWeight: 600 }}>{r.name}</span><span className="small muted">{r.description}</span></div></td>
                     <td className="mono">{condition(r.condition)}</td>
@@ -177,6 +181,7 @@ export function AutomationPage() {
               </tbody>
             </table>
           </div>
+          {pg_rules.pager}
         </Card>
         </>
       ) : null}
@@ -208,7 +213,7 @@ export function AutomationPage() {
         {bookEdit ? <PlaybookForm key={`${bookEdit.book?.id ?? "new"}-${bookEdit.copy}`} book={bookEdit.book} copy={bookEdit.copy} onDone={closeBook} /> : null}
         {data.can_edit ? <div className="row"><button className="btn primary" type="button" onClick={() => setBookEdit({ book: null, copy: false })}>New playbook</button></div> : null}
         <div className="cols">
-          {data.playbooks.map((book) => (
+          {pgBooks.page.map((book) => (
             <Card key={book.id} title={book.name} actions={
               <>
                 <span className="small faint">{book.rules} rules</span>
@@ -226,6 +231,7 @@ export function AutomationPage() {
             </Card>
           ))}
         </div>
+        {pgBooks.pager}
         </>
       ) : null}
       {data && tab === "maintenance" ? (
@@ -233,7 +239,7 @@ export function AutomationPage() {
         {maintNew ? <MaintenanceForm onDone={(saved) => (setMaintNew(false), saved && load())} /> : null}
         <Card title="Maintenance windows" actions={<><span className="small faint">Alarms on these assets are muted while a window is open</span>{data.can_edit_maintenance ? <button className="btn primary" type="button" onClick={() => setMaintNew(true)}>New window</button> : null}</>}>
           {data.maintenance.length === 0 ? <span className="muted">No current or upcoming windows.</span> : null}
-          {data.maintenance.map((w, i) => (
+          {pgMaint.page.map((w, i) => (
             <div key={i} className="row" style={{ justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: 8 }}>
               <div className="cell-stack"><span style={{ fontWeight: 600 }}>{w.asset}</span><span className="small muted">{w.summary}</span></div>
               <span className="row small">
@@ -248,6 +254,7 @@ export function AutomationPage() {
               </span>
             </div>
           ))}
+          {pgMaint.pager}
         </Card>
         </>
       ) : null}
