@@ -69,9 +69,10 @@ def test_https_on_only_off(clone: Path):
     assert env["FORGESRE_BIND"] == "127.0.0.1" and env["FORGESRE_COOKIE_SECURE"] == "true" and env["COMPOSE_PROFILES"] == "ai,https"
     status = _run(clone, "status")
     assert "HTTPS: on, port 443" in status and "Mode: only" in status and "subject" in status
-    _run(clone, "cert", "noc.dc.local", "10.1.2.3")
+    long_name = "runnervm0hi8g." + "x" * 60 + ".internal.cloudapp.net"
+    _run(clone, "cert", long_name, "noc.dc.local", "10.1.2.3")
     san = subprocess.run(["openssl", "x509", "-in", str(crt), "-noout", "-ext", "subjectAltName"], capture_output=True, text=True).stdout
-    assert "DNS:noc.dc.local" in san and "IP Address:10.1.2.3" in san
+    assert "DNS:noc.dc.local" in san and "IP Address:10.1.2.3" in san and f"DNS:{long_name}" in san
     _run(clone, "off")
     env = _env(clone)
     assert env["COMPOSE_PROFILES"] == "ai" and env["FORGESRE_HTTPS"] == "off" and "FORGESRE_BIND" not in env and "FORGESRE_COOKIE_SECURE" not in env

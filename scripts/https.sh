@@ -49,6 +49,8 @@ make_cert() {
     names+=(127.0.0.1)
   fi
   cn="${names[0]}"
+  # X.509 limits the CN to 64 characters (long cloud FQDNs); browsers only read the SAN anyway
+  [[ ${#cn} -le 64 ]] || cn="ForgeSRE"
   for n in "${names[@]}"; do
     [[ -z "${n}" || ",${san}," == *",DNS:${n},"* || ",${san}," == *",IP:${n},"* ]] && continue
     if [[ "${n}" =~ ^[0-9.]+$ ]]; then san+="${san:+,}IP:${n}"; else san+="${san:+,}DNS:${n}"; fi
