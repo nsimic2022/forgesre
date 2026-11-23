@@ -215,7 +215,7 @@ Sve integracije su samo za čitanje, osim slanja obaveštenja: ForgeSRE ništa n
 | Zabbix | Hostovi i alarmi → ForgeSRE | `ZABBIX_URL`, `ZABBIX_API_TOKEN` (read-only korisnik); za alarme media type Webhook na `…/api/v1/webhooks/zabbix` sa `ZABBIX_WEBHOOK_TOKEN` | set-secret + Zabbix UI ([zabbix.md](zabbix.md)) |
 | GLPI | Inventar → ForgeSRE | `GLPI_URL`, `GLPI_APP_TOKEN`, `GLPI_USER_TOKEN` | set-secret ([glpi.md](glpi.md)) |
 | Kubernetes / OpenShift / k3s | Stanje klastera → ForgeSRE | `kubernetes.clusters` (ime, URL, CA) + `K8S_TOKEN_<IME>` read-only service accounta | config + set-secret ([kubernetes.md](kubernetes.md)) |
-| Mail (SMTP) | ForgeSRE → ljudi | `notifications.email.host/port/from/tls` + `SMTP_USERNAME`, `SMTP_PASSWORD` | Settings › Notifications |
+| Mail (SMTP) | ForgeSRE → ljudi | `notifications.email.host/port/from/tls` + `SMTP_USERNAME`, `SMTP_PASSWORD`; Gmail: `smtp.gmail.com`, 587, cela adresa i lozinka za aplikacije; `./forgesre settings test smtp` se prijavi i pošalje probni mail na From adresu | Settings › Notifications |
 | Slack, Teams, Discord | ForgeSRE → kanal | `*_WEBHOOK_URL` + uključiti kanal i minimalnu ozbiljnost | set-secret + Notifications |
 | CI/CD i izmene | Izmene → ForgeSRE | `POST /api/v1/changes` sa `CHANGES_WEBHOOK_TOKEN`; ForgeAI vidi izmene pre incidenta | Pipeline |
 | LDAP / Active Directory, OIDC (Entra ID…) | Prijava | `auth.ldap.*` + `LDAP_BIND_PASSWORD`, ili `auth.oidc.*` + `OIDC_CLIENT_SECRET`; grupe → uloge | Settings › Sign-in ([sign-in.md](sign-in.md)) |

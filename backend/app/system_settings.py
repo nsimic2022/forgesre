@@ -164,7 +164,8 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("discovery.mode", "discovery", "New LibreNMS devices", "enum", choices=("manual", "semi-automatic", "automatic"), effective=lambda: settings.discovery_mode,
        help="semi-automatic: read every 6 h, list in Add devices · automatic: add to the inventory · manual: only on Read now."),
     # Notifications
-    _y("notifications.email.enabled", "notifications", "Email enabled", "bool", effective=lambda: settings.email_enabled),
+    _y("notifications.email.enabled", "notifications", "Email enabled", "bool", effective=lambda: settings.email_enabled, test="smtp",
+       help="Test signs in to the SMTP server and mails one test message to the From address."),
     _y("notifications.email.host", "notifications", "SMTP server", effective=lambda: settings.smtp_host),
     _y("notifications.email.port", "notifications", "SMTP port", "int", minimum=1, maximum=65535, effective=lambda: settings.smtp_port),
     _y("notifications.email.from", "notifications", "From address", effective=lambda: settings.smtp_from),
@@ -390,6 +391,7 @@ def test_connection(component: str) -> dict[str, Any]:
         "slack": lambda: _chat_test("slack"),
         "teams": lambda: _chat_test("teams"),
         "discord": lambda: _chat_test("discord"),
+        "smtp": lambda: __import__("app.email_service", fromlist=["check"]).check(),
     }
     check = checks.get(component)
     if check is None:
