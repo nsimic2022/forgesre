@@ -1,6 +1,6 @@
 # ForgeSRE 2.0 — vodič za instalaciju, integracije i ForgeAI
 
-Stanje: 23. 11. 2026. Isti dokument, sa komentarima, postoji i kao Claude doc.
+Stanje: 23. 11. 2026. Podrazumevana verzija je na engleskom: [install-guide.md](install-guide.md).
 
 ForgeSRE je NOC monitoring platforma za praćenje infrastrukture u datacentrima. Ovaj vodič opisuje kako se instalira, šta se upisuje u `.env`, `secrets/secrets.env` i `config/forgesre.yml`, kako se povezuju spoljni sistemi i kako se podešava ForgeAI (lokalni i cloud jezički model).
 
