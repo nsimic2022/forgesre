@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { AssetEditor, type EditorMode } from "../components/AssetEditor";
 import { IncidentMetrics } from "../components/IncidentPanels";
 import { CapacityCard } from "../components/CapacityCard";
+import { InventoryTree } from "../components/InventoryTree";
 import { ImportCsv } from "../components/ImportCsv";
 import { SourcesPanel } from "../components/SourcesPanel";
 import { Pager, usePageSize } from "../components/Pager";
@@ -144,6 +145,7 @@ export function InventoryPage() {
   const [sources, setSources] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const [askDelete, setAskDelete] = useState(false);
+  const [view, setView] = useState<"list" | "tree">(() => (new URLSearchParams(window.location.search).get("view") === "tree" ? "tree" : "list"));
 
   const openEditor = (mode: EditorMode, card: AssetCard | null) => {
     setNotice("");
@@ -196,6 +198,10 @@ export function InventoryPage() {
           <button className="btn" type="button" onClick={() => setSources(!sources)} aria-expanded={sources}>Sources</button>
           {data?.can_edit ? <button className="btn" type="button" onClick={() => openEditor("new", null)}>New asset by hand</button> : null}
           {data?.can_edit ? <button className="btn" type="button" onClick={() => (setNotice(""), setImporting(true))}>Import CSV</button> : null}
+          <span className="seg" role="group" aria-label="View">
+            <button type="button" className={`btn${view === "list" ? " on" : ""}`} aria-pressed={view === "list"} onClick={() => setView("list")}>List</button>
+            <button type="button" className={`btn${view === "tree" ? " on" : ""}`} aria-pressed={view === "tree"} onClick={() => setView("tree")}>Tree</button>
+          </span>
           <a className="btn" href={`/api/v1/inventory.csv?${new URLSearchParams({ ...filters, q: query })}`}>Export CSV</a>
           {data?.can_edit ? <Link className="btn primary" to="/inventory/add">Add devices</Link> : null}
         </div>
@@ -217,6 +223,12 @@ export function InventoryPage() {
       <div className="cols">
         {data ? <Library data={data.library} filters={filters} set={set} /> : null}
         <div style={{ flex: "999 1 560px", minWidth: 0 }}>
+          {view === "tree" ? (
+            <div className="cell-stack" style={{ gap: 12 }}>
+              <input className="search" type="search" aria-label="Search assets" placeholder="Hostname, IP, type…" value={query} onChange={(e) => setQuery(e.target.value)} />
+              <InventoryTree query={query} selected={selected} onPick={setSelected} reload={reload} />
+            </div>
+          ) : (
           <Card>
             <div className="row">
               <input className="search" type="search" aria-label="Search assets" placeholder="Hostname, IP, owner, rack, customer…" value={query} onChange={(e) => (setQuery(e.target.value), setOffset(0))} />
@@ -286,6 +298,7 @@ export function InventoryPage() {
             </div>
             {data ? <Pager total={data.total} offset={offset} size={PAGE} onOffset={setOffset} onSize={setPageSize} label="assets" /> : null}
           </Card>
+          )}
         </div>
         {selected ? (
           <div style={{ flex: "1 1 340px", minWidth: 0 }}>

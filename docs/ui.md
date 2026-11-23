@@ -105,6 +105,14 @@ API: `GET /api/v1/topology`, `POST /api/v1/topology/sync`, `POST /api/v1/topolog
   it under Consequences), and **Quiet this host for 1–24 h** with a reason opens a maintenance
   window from now (Engineer and up). Column `incidents.caused_by_id`, added by the migration.
 - Inventory: the asset card shows the host metrics of the last hour.
+## Inventory tree
+
+**List | Tree** on Inventory. Tree groups assets by site → row → rack (a missing site is "No
+site"; a missing row or rack is skipped), and puts children under their parent: VMs under their
+hypervisor, blades under their chassis, wherever the parent stands. Every node shows its worst
+state (red = something down inside) and how many open incidents it holds; searching opens the
+path to each hit; clicking an asset opens its card. `/app/inventory?view=tree` opens it directly.
+Data: `GET /api/v1/inventory/tree`.
 
 ## Long lists
 
