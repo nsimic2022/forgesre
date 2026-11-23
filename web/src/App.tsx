@@ -6,6 +6,7 @@ import { NocContext, NocPage, useNocPoll } from "./pages/Noc";
 import { AddDevicesPage } from "./pages/AddDevices";
 import { AutomationPage } from "./pages/Automation";
 import { DependencyMapPage } from "./pages/DependencyMap";
+import { ForgeAiPage } from "./pages/ForgeAi";
 import { IncidentDetailPage } from "./pages/IncidentDetail";
 import { IncidentsPage } from "./pages/Incidents";
 import { InventoryPage } from "./pages/Inventory";
@@ -36,6 +37,7 @@ export function App() {
         <Route path="/inventory/add" element={<AddDevicesPage />} />
         <Route path="/automation" element={<AutomationPage />} />
         <Route path="/investigations" element={<InvestigationsPage />} />
+        <Route path="/forgeai" element={<ForgeAiPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<NotFound />} />

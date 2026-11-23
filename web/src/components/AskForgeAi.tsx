@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { getJson, postJson, type Me } from "../lib/api";
+import { getJson, postJson } from "../lib/api";
 import { clock } from "../lib/format";
-import { CallLog, Rate, type Call } from "./ForgeAiCard";
+import { useRoleRank } from "../lib/me";
+import { CallLog, type Call } from "./ForgeAiCard";
+import { IncidentChat } from "./ForgeAiChat";
 import { Card, Chip } from "./ui";
 
-type SkillRow = { slug: string; name: string; task: string; enabled: boolean };
 type Cloud = { enabled: boolean; ready: boolean; why: string; provider: string; model: string; host: string; can_use: boolean };
-const ROLE_RANK: Record<string, number> = { viewer: 0, analyst: 1, engineer: 2, admin: 3 };
 
 /** The answer of one call as readable text, whatever the task. */
 export function AnswerView({ call }: { call: Call }) {
@@ -36,17 +36,6 @@ export function AnswerView({ call }: { call: Call }) {
   );
 }
 
-/** The operator's question from the stored prompt (the prompt may be cut, so no full JSON parse). */
-function questionOf(c: Call): string {
-  const m = /"operator_question":\s*"((?:[^"\\]|\\.)*)"/.exec(c.user_prompt || "");
-  if (!m) return "your question";
-  try {
-    return JSON.parse(`"${m[1]}"`) as string;
-  } catch {
-    return m[1];
-  }
-}
-
 async function waitForCall(job: number): Promise<number | null> {
   for (let i = 0; i < 160; i++) {
     const s = await getJson<{ status: string; error: string; call_id: number | null }>(`/api/v1/forgeai/jobs/${job}`);
@@ -58,57 +47,29 @@ async function waitForCall(job: number): Promise<number | null> {
 }
 
 /**
- * Ask ForgeAI about one incident: what the automatic run asked and got, the same question with
- * another skill side by side, and the operator's own question. Answers here are trials: they never
- * replace the incident's answer unless an Engineer presses "Use this answer".
+ * Ask ForgeAI about one incident: what the automatic run asked and got (with a cloud second opinion
+ * for Engineers), and your own chat about this incident, where you ask questions or re-run another
+ * skill. Chat answers are trials: they never replace the incident's answer unless an Engineer
+ * presses "Use as the incident's answer".
  */
 export function AskForgeAi({ number }: { number: string }) {
-  const [me, setMe] = useState<Me | null>(null);
-  const [skills, setSkills] = useState<SkillRow[]>([]);
+  const rank = useRoleRank();
   const [calls, setCalls] = useState<Call[] | null>(null);
-  const [skill, setSkill] = useState("");
-  const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [compareId, setCompareId] = useState<number | null>(null);
-  const [askedId, setAskedId] = useState<number | null>(null);
   const [cloud, setCloud] = useState<Cloud | null>(null);
-  const [useCloud, setUseCloud] = useState(false);
 
   const load = () =>
     getJson<{ calls: Call[] }>(`/api/v1/incidents/${encodeURIComponent(number)}/forgeai`).then((d) => setCalls(d.calls)).catch((e: Error) => (setCalls([]), setError(e.message)));
-  useEffect(() => void getJson<Me>("/api/v1/me").then(setMe).catch(() => setMe(null)), []);
   useEffect(() => void getJson<{ cloud?: Cloud }>("/api/v1/forgeai/status").then((s) => setCloud(s.cloud ?? null)).catch(() => setCloud(null)), []);
-  useEffect(() => void getJson<{ skills: SkillRow[] }>("/api/v1/forgeai/skills").then((d) => setSkills(d.skills.filter((s) => s.enabled && (s.task === "incident" || s.task === "ask")))).catch(() => setSkills([])), []);
   useEffect(() => {
     setCalls(null);
-    setCompareId(null);
-    setAskedId(null);
     setError("");
     void load();
   }, [number]);
 
-  const rank = ROLE_RANK[me?.role ?? "viewer"] ?? 0;
-  const canAsk = rank >= 1;
-  const canUse = rank >= 2;
   const automatic = (calls ?? []).find((c) => c.task === "incident" && c.status !== "trial") ?? null;
-  const compared = (calls ?? []).find((c) => c.id === compareId) ?? null;
-  const asked = (calls ?? []).find((c) => c.id === askedId) ?? null;
-  const history = (calls ?? []).filter((c) => c.task !== "critic" && (c.status === "trial" || c.task === "ask" || c.reason.startsWith("chosen by")));
-
-  const send = async (body: { skill: string; question: string; cloud?: boolean }, label: string, done: (id: number | null) => void) => {
-    setBusy(label);
-    setError("");
-    try {
-      const { job } = await postJson<{ job: number }>(`/api/v1/incidents/${encodeURIComponent(number)}/forgeai/ask`, { ...body, cloud: useCloud });
-      done(await waitForCall(job));
-      await load();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy("");
-    }
-  };
+  const cloudOk = Boolean(cloud?.enabled && cloud.ready && cloud.can_use);
   const critics = (id: number) => (calls ?? []).filter((c) => c.task === "critic" && (c.answer as { reviews_call?: number })?.reviews_call === id);
   const secondOpinion = async (id: number) => {
     setBusy(`critic-${id}`);
@@ -123,121 +84,40 @@ export function AskForgeAi({ number }: { number: string }) {
       setBusy("");
     }
   };
-  const Opinion = ({ call }: { call: Call }) => (
-    <>
-      {critics(call.id).map((c) => (
-        <div key={c.id} className="cell-stack" style={{ gap: 4, borderLeft: "3px solid var(--warn)", paddingLeft: 10 }}>
-          <span className="small faint">Second opinion · {c.model} (cloud) · {clock(c.at)}</span>
-          <AnswerView call={c} />
-        </div>
-      ))}
-      {cloudOk && call.status !== "rejected" && call.status !== "error" && !critics(call.id).length ? (
-        <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => void secondOpinion(call.id)}
-          title={`Sends this answer and its facts to ${cloud?.host ?? "the cloud provider"}`}>
-          {busy === `critic-${call.id}` ? "Asking the cloud model…" : `Second opinion (${cloud?.provider ?? "cloud"})`}
-        </button>
-      ) : null}
-    </>
-  );
-  const use = (id: number) =>
-    postJson(`/api/v1/forgeai/calls/${id}/use`, {}).then(load).catch((e: Error) => setError(e.message));
-
-  const incidentSkills = skills.filter((s) => s.task === "incident");
-  const cloudOk = Boolean(cloud?.enabled && cloud.ready && cloud.can_use);
   return (
-    <div className="cell-stack" style={{ gap: 16 }}>
-      {cloudOk ? (
-        <label className="row banner" style={{ gap: 10, alignItems: "flex-start", background: useCloud ? "var(--warn-bg)" : "var(--s2)", border: "1px solid var(--border)" }}>
-          <input type="checkbox" checked={useCloud} onChange={(e) => setUseCloud(e.target.checked)} aria-label="Use the cloud model" />
-          <span className="cell-stack" style={{ gap: 2 }}>
-            <strong>Use the cloud model: {cloud!.provider} · {cloud!.model}</strong>
-            <span className="small muted">
-              {useCloud
-                ? `The next question sends this incident's facts (secrets removed; exactly the prompt in the log) to ${cloud!.host}. It costs money and is audited.`
-                : "Off: questions go to the local model and nothing leaves this server."}
-            </span>
-          </span>
-        </label>
-      ) : null}
-      <div className="cols">
-        <div style={{ flex: "1 1 420px", minWidth: 0 }}>
-          <Card title="1 · What ForgeAI was asked on its own">
-            {calls === null ? <span className="muted">Loading…</span> : automatic ? (
-              <>
-                <span className="small faint">
-                  <Chip tone={automatic.status === "used" ? "ok" : automatic.status === "rejected" ? "warn" : "crit"}>{automatic.status}</Chip>{" "}
-                  skill {automatic.skill} · {automatic.model || "no model"} · {(automatic.duration_ms / 1000).toFixed(1)} s · {clock(automatic.at)}
-                </span>
-                <AnswerView call={automatic} />
-                <Opinion call={automatic} />
-                <CallLog calls={[automatic]} />
-              </>
-            ) : <span className="muted">ForgeAI did not answer this incident on its own (it was off, or the incident is older).</span>}
-          </Card>
-        </div>
-        <div style={{ flex: "1 1 420px", minWidth: 0 }}>
-          <Card title="2 · Ask again with another skill">
-            {canAsk ? (
-              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                <select className="search" aria-label="Skill to compare" value={skill} onChange={(e) => setSkill(e.target.value)} style={{ minWidth: 0 }}>
-                  <option value="">Pick a skill…</option>
-                  {incidentSkills.map((s) => <option key={s.slug} value={s.slug}>{s.name}</option>)}
-                </select>
-                <button className="btn primary" type="button" disabled={!skill || Boolean(busy)} onClick={() => void send({ skill, question: "" }, "compare", setCompareId)}>
-                  {busy === "compare" ? "Asking…" : "Ask with this skill"}
-                </button>
-              </div>
-            ) : <span className="small faint">Analysts and up can ask.</span>}
-            {compared ? (
-              <div className="cell-stack" style={{ gap: 6, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
-                <span className="small faint">Skill {compared.skill} · {(compared.duration_ms / 1000).toFixed(1)} s · {clock(compared.at)}</span>
-                <AnswerView call={compared} />
-                <Opinion call={compared} />
-                <div className="row" style={{ justifyContent: "space-between" }}>
-                  {canUse && compared.status === "trial" ? (
-                    <button className="btn" type="button" onClick={() => void use(compared.id)}>Use this answer</button>
-                  ) : <span className="small faint">{compared.status === "used" ? "Now the incident's answer." : "A trial: the incident keeps its answer."}</span>}
-                  {canAsk ? <Rate callId={compared.id} initial={compared.rating} /> : null}
+    <div className="cols">
+      <div style={{ flex: "1 1 380px", minWidth: 0 }}>
+        <Card title="What ForgeAI found on its own">
+          {calls === null ? <span className="muted">Loading…</span> : automatic ? (
+            <>
+              <span className="small faint">
+                <Chip tone={automatic.status === "used" ? "ok" : automatic.status === "rejected" ? "warn" : "crit"}>{automatic.status}</Chip>{" "}
+                skill {automatic.skill} · {automatic.model || "no model"} · {(automatic.duration_ms / 1000).toFixed(1)} s · {clock(automatic.at)}
+              </span>
+              <AnswerView call={automatic} />
+              {critics(automatic.id).map((c) => (
+                <div key={c.id} className="cell-stack" style={{ gap: 4, borderLeft: "3px solid var(--warn)", paddingLeft: 10 }}>
+                  <span className="small faint">Second opinion · {c.model} (cloud) · {clock(c.at)}</span>
+                  <AnswerView call={c} />
                 </div>
-              </div>
-            ) : <span className="small faint">The new answer shows here, next to the automatic one, so you can see which skill reads this kind of problem better.</span>}
-          </Card>
-        </div>
-      </div>
-      <Card title="3 · Your question">
-        {canAsk ? (
-          <>
-            <textarea className="search" aria-label="Your question" rows={3} maxLength={500} style={{ width: "100%", minWidth: 0, resize: "vertical" }}
-              placeholder="For example: could the backup that started at 02:00 have caused this?" value={question} onChange={(e) => setQuestion(e.target.value)} />
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <span className="small faint">ForgeAI gets the same facts as the automatic run, plus your question. {question.length}/500</span>
-              <button className="btn primary" type="button" disabled={!question.trim() || Boolean(busy)} onClick={() => void send({ skill: "", question }, "ask", setAskedId)}>
-                {busy === "ask" ? "Asking…" : "Ask ForgeAI"}
-              </button>
-            </div>
-          </>
-        ) : <span className="small faint">Analysts and up can ask.</span>}
-        {asked ? (
-          <div className="cell-stack" style={{ gap: 6, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
-            <AnswerView call={asked} />
-            {canAsk ? <div className="row" style={{ justifyContent: "flex-end" }}><Rate callId={asked.id} initial={asked.rating} /></div> : null}
-          </div>
-        ) : null}
-        {busy ? <span className="small faint">The local model takes 30–90 seconds. You can leave; the answer is kept below.</span> : null}
-        {error ? <span className="small" role="alert" style={{ color: "var(--crit)" }}>{error}</span> : null}
-      </Card>
-      {history.length ? (
-        <Card title={`Earlier questions · ${history.length}`}>
-          {history.map((c) => (
-            <details key={c.id} style={{ borderTop: "1px solid var(--border)", paddingTop: 6 }}>
-              <summary className="small" style={{ cursor: "pointer" }}>
-                {c.task === "ask" ? `“${questionOf(c)}”` : `Skill ${c.skill}`} · {c.actor} · {clock(c.at)}
-              </summary>
-              <div style={{ paddingTop: 6 }}><AnswerView call={c} /></div>
-            </details>
-          ))}
+              ))}
+              {cloudOk && automatic.status !== "rejected" && automatic.status !== "error" && !critics(automatic.id).length ? (
+                <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => void secondOpinion(automatic.id)}
+                  title={`Sends this answer and its facts to ${cloud?.host ?? "the cloud provider"}`}>
+                  {busy ? "Asking the cloud model…" : `Second opinion (${cloud?.provider ?? "cloud"})`}
+                </button>
+              ) : null}
+              <CallLog calls={[automatic]} />
+            </>
+          ) : <span className="muted">ForgeAI did not answer this incident on its own (it was off, or the incident is older).</span>}
+          {error ? <span className="small" role="alert" style={{ color: "var(--crit)" }}>{error}</span> : null}
         </Card>
-      ) : null}
+      </div>
+      <div style={{ flex: "2 1 480px", minWidth: 0 }}>
+        <Card title="Chat about this incident">
+          {rank >= 1 ? <IncidentChat number={number} /> : rank < 0 ? <span className="muted">Loading…</span> : <span className="small faint">Analysts and up can chat with ForgeAI.</span>}
+        </Card>
+      </div>
     </div>
   );
 }

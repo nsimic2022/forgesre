@@ -28,7 +28,7 @@ from typing import Any, Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_PAGES = ["/app/", "/app/tv", "/app/incidents", "/app/incidents/on-call", "/app/incidents/{number}", "/app/inventory",
-             "/app/inventory/map", "/app/inventory/add", "/app/automation", "/app/investigations", "/app/reports", "/app/settings"]
+             "/app/inventory/map", "/app/inventory/add", "/app/automation", "/app/investigations", "/app/forgeai", "/app/reports", "/app/settings"]
 OLD_URLS = ["/", "/classic", "/incidents", "/assets", "/discovery", "/playrules", "/playbooks", "/escalation", "/ops",
             "/journal", "/health-ui", "/admin", "/investigations", "/forgeai", "/history"]
 # GETs that download, stream, change state or leave the UI.

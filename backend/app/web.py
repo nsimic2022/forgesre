@@ -202,7 +202,7 @@ REDIRECTS = {
     "/incidents": "/app/incidents", "/history": "/app/incidents",
     "/assets": "/app/inventory", "/assets/verify": "/app/inventory", "/discovery": "/app/inventory/add",
     "/playrules": "/app/automation", "/playbooks": "/app/automation", "/escalation": "/app/automation",
-    "/investigations": "/app/investigations", "/forgeai": "/app/investigations",
+    "/investigations": "/app/investigations", "/forgeai": "/app/forgeai",
     "/ops": "/app/reports", "/journal": "/app/settings", "/health-ui": "/app/settings", "/admin": "/app/settings",
 }
 

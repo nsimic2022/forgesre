@@ -335,6 +335,35 @@ class ForgeAiSkill(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ForgeAiChat(Base):
+    """One conversation with ForgeAI, private to the person who started it; optionally about one incident."""
+
+    __tablename__ = "forgeai_chats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner: Mapped[str] = mapped_column(String(255), index=True)
+    title: Mapped[str] = mapped_column(String(255), default="New chat")
+    incident_id: Mapped[int | None] = mapped_column(ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class ForgeAiChatMessage(Base):
+    """A turn in a ForgeAI chat. Assistant turns point at the logged ForgeAiCall that produced them."""
+
+    __tablename__ = "forgeai_chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(ForeignKey("forgeai_chats.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(16))  # user | assistant
+    text: Mapped[str] = mapped_column(Text, default="")
+    skill: Mapped[str] = mapped_column(String(64), default="")
+    cloud: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(16), default="done")  # pending | done | error
+    call_id: Mapped[int | None] = mapped_column(ForeignKey("forgeai_calls.id", ondelete="SET NULL"), nullable=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class DocFile(Base):
     """A vendor manual or runbook uploaded for ForgeAI (RAG). The upload waits in ``raw`` until the
     ``doc_index`` job has cut it into chunks; then ``raw`` is cleared and only the text is kept."""
