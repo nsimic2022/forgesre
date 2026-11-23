@@ -866,6 +866,110 @@ def forgeai_ask_trial(number: str, body: ForgeAiQuestion, db: Session = Depends(
     return {"queued": True, "job": getattr(job, "id", None), "task": task}
 
 
+class ForgeAiChatNew(BaseModel):
+    title: str = Field(default="", max_length=255)
+    incident: str = ""
+    reuse: bool = False
+
+
+class ForgeAiChatSay(BaseModel):
+    text: str = Field(default="", max_length=2000)
+    skill: str = ""
+    cloud: bool = False
+
+
+def _own_chat(db: Session, chat_id: int, user: User):
+    from app.forgeai_chat import get_chat
+
+    chat = get_chat(db, chat_id, user.email)
+    if chat is None:
+        raise HTTPException(status_code=404, detail="chat not found")
+    return chat
+
+
+@router.get("/forgeai/chats")
+def forgeai_chats(db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """Your ForgeAI chats, newest first (Analyst and up; nobody sees anyone else's chats)."""
+    from app.forgeai_chat import list_chats, pending_count, skills_for
+    from app.settings import settings
+
+    return {"chats": list_chats(db, user.email), "pending": pending_count(db, user.email),
+            "skills": skills_for(db, incident=False), "local_on": bool(settings.ai_enabled and settings.llm_url),
+            "can_cloud": can(user, "ai_cloud")}
+
+
+@router.post("/forgeai/chats")
+def forgeai_chat_new(body: ForgeAiChatNew, db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """Start a chat, optionally about one incident; ``reuse`` returns your latest chat about it."""
+    from app.forgeai_chat import chat_detail, open_chat
+
+    incident = None
+    if body.incident:
+        incident = db.query(Incident).filter_by(number=body.incident).first()
+        if incident is None:
+            raise HTTPException(status_code=404, detail="incident not found")
+    return chat_detail(db, open_chat(db, user.email, title=body.title, incident=incident, reuse=body.reuse))
+
+
+@router.get("/forgeai/chats/{chat_id}")
+def forgeai_chat_get(chat_id: int, db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    from app.forgeai_chat import chat_detail, skills_for
+
+    chat = _own_chat(db, chat_id, user)
+    return {**chat_detail(db, chat), "skills": skills_for(db, incident=bool(chat.incident_id))}
+
+
+@router.post("/forgeai/chats/{chat_id}/messages")
+def forgeai_chat_say(chat_id: int, body: ForgeAiChatSay, db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """Send a message; the answer comes from a background job (poll the chat).
+
+    The cloud model is for Engineers and up and only when it is set up; at most PENDING_MAX answers
+    per person wait at once so one operator cannot fill the LLM lane.
+    """
+    from app.forgeai_chat import PENDING_MAX, ask, message_as_dict, pending_count
+    from app.models import ForgeAiSkill
+    from app.settings import settings
+
+    chat = _own_chat(db, chat_id, user)
+    if body.cloud:
+        from app.cloud_llm import not_ready
+
+        if not can(user, "ai_cloud"):
+            raise HTTPException(status_code=403, detail="only Engineers and Admins may send a question to the cloud model")
+        why = not_ready()
+        if why:
+            raise HTTPException(status_code=409, detail=f"cloud model not available: {why}")
+    elif not (settings.ai_enabled and settings.llm_url):
+        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › RCA / AI")
+    skill = None
+    if body.skill:
+        skill = db.query(ForgeAiSkill).filter_by(slug=body.skill, enabled=True).first()
+        if skill is None:
+            raise HTTPException(status_code=404, detail="skill not found")
+    if pending_count(db, user.email) >= PENDING_MAX:
+        raise HTTPException(status_code=429, detail="three of your answers are still coming; wait for one")
+    try:
+        question, answer = ask(db, chat, body.text, skill=skill, cloud=body.cloud, actor=user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "forgeai.cloud" if body.cloud else "forgeai.chat", actor=user.email, object_type="forgeai_chat", object_id=str(chat.id),
+          data={"skill": body.skill, "text": body.text[:200],
+                **({"provider": settings.cloud_provider, "model": settings.cloud_model} if body.cloud else {})}, commit=True)
+    return {"question": message_as_dict(question), "answer": message_as_dict(answer), "title": chat.title}
+
+
+@router.delete("/forgeai/chats/{chat_id}")
+def forgeai_chat_delete(chat_id: int, db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """Delete one of your chats (the logged model calls stay in Investigations)."""
+    from app.models import ForgeAiChatMessage
+
+    chat = _own_chat(db, chat_id, user)
+    db.query(ForgeAiChatMessage).filter_by(chat_id=chat.id).delete()
+    db.delete(chat)
+    db.commit()
+    return {"deleted": chat_id}
+
+
 @router.post("/forgeai/calls/{call_id}/critique")
 def forgeai_critique_call(call_id: int, db: Session = Depends(get_db), user: User = Depends(require("ai_cloud"))) -> dict:
     """Engineer: ask the paid cloud model for a second opinion on one answer (background job, audited)."""

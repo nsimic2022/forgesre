@@ -131,7 +131,7 @@ export function InvestigationsPage() {
         <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
           <div className="cell-stack">
             <h2 style={{ margin: 0 }}>Ask ForgeAI</h2>
-            <span className="small muted">See what it was asked, ask again with another skill, or ask your own question. Skills and model settings stay in Automation and Settings.</span>
+            <span className="small muted">See what it found on its own and chat about the incident (type / for skills). General questions: the ForgeAI page.</span>
           </div>
           <form className="row" onSubmit={(e) => (e.preventDefault(), setPicked(typed.trim()))}>
             <input className="search" aria-label="Incident number" placeholder="INC-… (any incident)" value={typed} onChange={(e) => setTyped(e.target.value)} style={{ width: 240, minWidth: 0 }} />

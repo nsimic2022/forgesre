@@ -48,6 +48,20 @@ BASE_RULES = (
     "- Answer with JSON only, exactly this shape: {shape}\n"
 )
 
+# Chat without an incident: general NOC and IT questions. The model may use what it knows, but it
+# still only reads and never hands out commands that change a system.
+CHAT_RULES = (
+    "You are ForgeAI, the assistant inside ForgeSRE, a NOC appliance. You only read; you never act.\n"
+    "Rules you must follow:\n"
+    "- Answer the operator_question; earlier_in_this_chat is the conversation so far.\n"
+    "- You may use general knowledge about networks, servers, databases and monitoring. Say when you "
+    "are not sure, and never invent facts about this site's hosts, addresses or incidents.\n"
+    "- Never give commands that restart, delete or change something; read-only checks are fine.\n"
+    "- Plain English, short paragraphs or a short list, for a NOC operator.\n"
+    "- vendor_docs (D1, D2…) are excerpts of manuals; use them when they fit and cite them like [D1].\n"
+    "- Answer with JSON only, exactly this shape: {shape}\n"
+)
+
 TASKS: dict[str, dict[str, Any]] = {
     "incident": {
         "label": "Cause and first checks",
@@ -83,6 +97,13 @@ TASKS: dict[str, dict[str, Any]] = {
         "fields": {"answer": 1500},
         "lists": {"not_in_facts": (4, 200)},
         "max_tokens": 500,
+    },
+    "chat": {
+        "label": "Chat",
+        "shape": '{"answer": "your reply; use \\n for new lines"}',
+        "fields": {"answer": 3000},
+        "lists": {},
+        "max_tokens": 800,
     },
     "critic": {
         "label": "Second opinion",
@@ -152,6 +173,9 @@ BUILTIN: list[tuple[str, str, str, list[str], list[str], int, dict[str, bool], s
      "An operator asks one question about this incident; it is in operator_question. Answer only that "
      "question from the facts, in plain words. If the facts cannot answer it, say so and list what is "
      "missing in not_in_facts. Do not repeat the whole incident."),
+    ("chat-generic", "Chat", "chat", [], [], 1000, {},
+     "Talk with a NOC operator. When the chat is about an incident, answer from its facts first and say "
+     "what the facts do not show. Keep answers short; offer the next useful check instead of a lecture."),
     ("shift-generic", "Shift handover", "shift", [], [], 1000, {},
      "Summarise the last hours for the next shift: what happened, what is still open and who has it, "
      "and what to keep an eye on. Most important first. Do not repeat every incident."),
@@ -279,10 +303,12 @@ def _shift_context(db: Session, hours: int = 12) -> dict[str, Any]:
 
 
 def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Incident | None, *, hours: int = 12,
-                  question: str = "") -> tuple[str, str]:
+                  question: str = "", history: list[dict[str, str]] | None = None) -> tuple[str, str]:
     """(system, user) exactly as sent: fixed rules + task shape + skill instructions, and the context JSON.
 
-    ``question`` (task ask) goes first in the context as operator_question and is never trimmed away.
+    ``question`` (tasks ask and chat) goes first in the context as operator_question and is never trimmed
+    away. ``history`` (chat) is the last turns of the conversation; a chat without an incident gets
+    CHAT_RULES, which allow general knowledge.
     """
     from rca.sanitize import sanitize
 
@@ -290,21 +316,29 @@ def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Inciden
     include = {**INCLUDE_DEFAULT, **(skill.include or {})}
     if task == "postmortem":
         include["postmortem"] = True
-    context = _shift_context(db, hours) if task == "shift" else _incident_context(db, incident, include)
-    system = BASE_RULES.format(shape=spec["shape"]) + "\nInstructions for this kind of work:\n" + (skill.instructions or "").strip()
-    if task == "ask":
+    if task == "shift":
+        context = _shift_context(db, hours)
+    elif incident is None:
+        context = {}
+    else:
+        context = _incident_context(db, incident, include)
+    rules = CHAT_RULES if task == "chat" and incident is None else BASE_RULES
+    system = rules.format(shape=spec["shape"]) + "\nInstructions for this kind of work:\n" + (skill.instructions or "").strip()
+    if task in {"ask", "chat"}:
         context = {"operator_question": " ".join(question.split())[:QUESTION_MAX], **context}
-    if task != "shift" and incident is not None and include.get("docs", True):
+    if task == "chat" and history:
+        context["earlier_in_this_chat"] = [{"who": h.get("role", ""), "text": " ".join(str(h.get("text", "")).split())[:600]} for h in history]
+    if task != "shift" and (incident is not None or task == "chat") and include.get("docs", True):
         from app.doc_search import for_prompt
 
-        asset_type = incident.asset.type if incident.asset is not None else ""
-        docs = for_prompt(db, " ".join(filter(None, [question, incident.title, asset_type])))
+        asset_type = incident.asset.type if incident is not None and incident.asset is not None else ""
+        docs = for_prompt(db, " ".join(filter(None, [question, incident.title if incident is not None else "", asset_type])))
         if docs:
             context["vendor_docs"] = docs
     context = json.loads(_short(json.dumps(sanitize(context), ensure_ascii=False, default=str)))
     user = json.dumps(context, ensure_ascii=False, default=str)
     # Too long: drop the least useful parts first, so the JSON stays whole instead of being cut.
-    for key in ("syslog", "timeline", "vendor_docs", "changes_before", "earlier_on_this_asset", "playbook", "notes"):
+    for key in ("syslog", "timeline", "vendor_docs", "changes_before", "earlier_on_this_asset", "playbook", "notes", "earlier_in_this_chat"):
         if len(user) <= CONTEXT_MAX:
             break
         context.pop(key, None)
@@ -320,8 +354,12 @@ IP = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 SHELL = re.compile(r"(^|[\s`'\"])(sudo|rm\s+-|systemctl\s|service\s+\S+\s+(restart|stop)|kill\s|reboot|shutdown|mkfs|dd\s+if=|docker\s|kubectl\s+delete)", re.I)
 
 
-def check_answer(task: str, parsed: dict[str, Any] | None, context: str) -> tuple[dict[str, Any], str]:
-    """(clean answer, reason) — reason is empty when the answer may be shown."""
+def check_answer(task: str, parsed: dict[str, Any] | None, context: str, *, strict: bool = True) -> tuple[dict[str, Any], str]:
+    """(clean answer, reason) — reason is empty when the answer may be shown.
+
+    ``strict=False`` (a general chat with no incident) skips the IP and invented-number checks, since
+    there are no facts to hold numbers against; the shell-command check always runs.
+    """
     from rca.llm import invented_numbers
 
     if not isinstance(parsed, dict):
@@ -329,7 +367,9 @@ def check_answer(task: str, parsed: dict[str, Any] | None, context: str) -> tupl
     spec = TASKS[task]
     answer: dict[str, Any] = {}
     for key, limit in spec["fields"].items():
-        value = " ".join(str(parsed.get(key) or "").split())
+        raw = str(parsed.get(key) or "")
+        # chat answers keep their line breaks (lists, paragraphs); other fields are one line
+        value = "\n".join(" ".join(line.split()) for line in raw.strip().splitlines()).strip() if task == "chat" else " ".join(raw.split())
         if not value:
             return {}, f"the answer has no {key}"
         answer[key] = value[:limit]
@@ -338,9 +378,9 @@ def check_answer(task: str, parsed: dict[str, Any] | None, context: str) -> tupl
         items = [items] if isinstance(items, str) else items
         answer[key] = [" ".join(str(i).split())[:limit] for i in items if str(i).strip()][:count]
     text = " ".join([*(v for v in answer.values() if isinstance(v, str)), *(i for v in answer.values() if isinstance(v, list) for i in v)])
-    if set(IP.findall(text)) - set(IP.findall(context)):
+    if strict and set(IP.findall(text)) - set(IP.findall(context)):
         return {}, "the answer names an IP address that is not in the facts"
-    if invented_numbers(text, context):
+    if strict and invented_numbers(text, context):
         return {}, "the answer has a number that is not in the facts"
     if SHELL.search(text):
         return {}, "the answer contains a shell command"
@@ -357,7 +397,7 @@ def _provider():
 
 def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug: str = "", actor: str = "system",
         trial: bool = False, instructions: str | None = None, hours: int = 12, question: str = "",
-        cloud: bool = False) -> ForgeAiCall:
+        cloud: bool = False, history: list[dict[str, str]] | None = None) -> ForgeAiCall:
     """Ask the model once and record the exchange. ``trial`` (skill test) never becomes the incident's answer;
     ``instructions`` tries unsaved skill text; ``hours`` is the shift summary window. An incident answer that passes the checks is stored as a
     ``forgerca-llm`` Investigation so the incident page and reports show it."""
@@ -370,6 +410,10 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
         if incident is None or not question.strip():
             raise ValueError("a question needs an incident and some text")
         trial = True  # an operator's question is never the incident's answer by itself
+    if task == "chat":
+        if not question.strip():
+            raise ValueError("a chat message needs some text")
+        trial = True
     if task == "investigate":
         # several steps with read-only tools; see forgeai_investigator
         from app.forgeai_investigator import investigate
@@ -383,7 +427,7 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
     if instructions is not None:
         # unsaved text from the skill editor: a transient copy, never added to the session
         skill = ForgeAiSkill(slug=skill.slug, name=skill.name, task=skill.task, include=skill.include, version=skill.version, instructions=instructions)
-    system, user = build_prompts(db, task, skill, incident, hours=hours, question=question)
+    system, user = build_prompts(db, task, skill, incident, hours=hours, question=question, history=history)
     call = ForgeAiCall(incident_id=incident.id if incident is not None else None, task=task, skill_slug=skill.slug,
                        skill_version=skill.version or 0, system_prompt=system, user_prompt=user, actor=actor,
                        endpoint=(settings.llm_url or "") if settings.ai_enabled else "")
@@ -407,7 +451,7 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
         if parsed is None:
             call.status, call.reason = "error", str(getattr(provider, "last_error", "") or "no answer")
         else:
-            answer, why = check_answer(task, parsed, user)
+            answer, why = check_answer(task, parsed, user, strict=not (task == "chat" and incident is None))
             call.answer = answer or parsed
             call.status, call.reason = ("rejected", why) if why else ("trial" if trial else "used", "")
     db.add(call)

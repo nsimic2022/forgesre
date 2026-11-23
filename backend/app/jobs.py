@@ -113,6 +113,10 @@ def recover_interrupted_jobs(db: Session) -> dict[str, int]:
             row.finished_at = utcnow()
             row.error = f"{INTERRUPTED_NOTE}; not retried (attempt {int(row.attempts or 0)})"
             failed += 1
+            if row.kind == "forgeai_chat":
+                from app.forgeai_chat import fail_answer
+
+                fail_answer(db, row, INTERRUPTED_NOTE)
     if rows:
         db.commit()
         log.warning("jobs: %d requeued, %d marked error after restart", requeued, failed)
@@ -135,7 +139,7 @@ def _json_safe(value: Any) -> Any:
 
 def job_is_llm(row: Job) -> bool:
     """True when this investigate job will wait on llama.cpp."""
-    if row.kind in (FORGEAI_DIGEST_KIND, "forgeai", "llm_download", "forgeai_replay"):
+    if row.kind in (FORGEAI_DIGEST_KIND, "forgeai", "llm_download", "forgeai_replay", "forgeai_chat"):
         return True
     if row.kind != "investigate":
         return False
@@ -333,6 +337,11 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload.pop("instructions", None)
                 payload["result"] = {"call_id": call.id, "status": call.status}
                 row.payload = payload
+            elif row.kind == "forgeai_chat":
+                from app.forgeai_chat import run_answer
+
+                # One chat answer (app.forgeai_chat); the model call has its own timeout.
+                row.payload = {**(row.payload or {}), "result": run_answer(db, row)}
             elif row.kind == "doc_index":
                 from app.doc_search import index_doc
 
@@ -440,6 +449,10 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
             row.finished_at = utcnow()
             row.error = str(exc)[:2000]
             db.commit()
+            if row.kind == "forgeai_chat":
+                from app.forgeai_chat import fail_answer
+
+                fail_answer(db, row, str(exc))  # the chat shows the error instead of waiting
             module = "discovery" if row.kind == DISCOVERY_SCAN_KIND else "rca"
             action = "scan" if row.kind == DISCOVERY_SCAN_KIND else "job"
             report(
