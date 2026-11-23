@@ -1,23 +1,22 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import { Shell } from "./Shell";
 
-afterEach(cleanup);
+describe("Main menu", () => {
+  afterEach(() => (cleanup(), localStorage.removeItem("forgesre.navClosed")));
 
-describe("Shell", () => {
-  it("shows the appliance version from /me, and nothing when it is unknown", () => {
-    const { rerender } = render(
-      <MemoryRouter>
-        <Shell me={{ email: "a@x", role: "admin", name: "Ana", version: "2.0.0" }} forgeai="off">x</Shell>
-      </MemoryRouter>,
-    );
-    expect(screen.getByText("2.0")).toBeTruthy();
-    rerender(
-      <MemoryRouter>
-        <Shell me={{ email: "a@x", role: "admin", name: "Ana" }} forgeai="off">x</Shell>
-      </MemoryRouter>,
-    );
-    expect(screen.queryByText(/^\d+\.\d+$/)).toBeNull();
+  it("folds away with the three-line button and comes back, remembered per browser", () => {
+    const view = () => render(<MemoryRouter><Shell me={null} forgeai="off"><p>page</p></Shell></MemoryRouter>);
+    view();
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Hide the menu" }));
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+    expect(localStorage.getItem("forgesre.navClosed")).toBe("1");
+    cleanup();
+    view();
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show the menu" }));
+    expect(screen.getByRole("link", { name: "Incidents" })).toBeTruthy();
   });
 });

@@ -132,27 +132,29 @@ page what is already loaded. Code: `web/src/components/Pager.tsx`.
 
 ## TV mode (wall screen)
 
-`/app/tv` (button **Wall screen (TV mode)** on the NOC page) is built for a screen on the wall, in
-the style of a weather report: navy panels, large type, refresh every 30 seconds.
+`/app/tv` (button **Wall screen (TV mode)** on the NOC page) is built for a screen on the wall: one
+16:9 page with no tabs and no scrolling, sized from the screen so it reads the same on a monitor and
+a 65" 4K TV, refreshed every 30 seconds.
 
-- Top: open, not acknowledged, hosts down and who is on call, then the tabs **Overview**,
-  **Burning now**, **12-hour clock** and **Hosts**. **Rotate** (or `/app/tv?rotate=1`) walks the
-  tabs every 30 seconds for a wall; on a monitor you pick one.
-- Overview, day cards: the last 7 days like a forecast strip. The "weather icon" is the worst
-  incident of the day (sun = quiet, cloud = warning, storm = high or critical), the big number
-  is incidents that day and the small one criticals.
-- Overview, **Last 24 hours**: incidents open per hour as a shaded curve, every two hours an icon
-  and the new incidents, maintenance windows as blue bands, and at the bottom the share of new
-  incidents acknowledged within 15 minutes (hatched = none in that slot).
-- Overview, tiles: time to acknowledge (24 h, target 15 min), time to resolve (7 days), the
-  error budget of the worst SLO, the shift as a sun arc (start, end, time left), the last
-  backup, the noisiest assets, ForgeAI, hosts answering and new devices from LibreNMS. Each tile
-  has a status word with a trend badge and one sentence; click it for the detail.
-- Burning now: up to nine open incidents, critical first. 12-hour clock: the incident clock
-  (each hour where it is on a real clock, stacked by severity) and incidents per day for 14 days.
-  Hosts: up and total per asset type.
-- Quiet incidents (maintenance, noise filters) are not counted. If updates stop for 90 seconds,
-  a red **No updates** banner appears, so an old picture never passes for a calm night.
+- Top: the time (the appliance's time zone), open, not acknowledged, critical, hosts down, who is
+  on call with the phone, and **Live** (red **No updates** when the page has not refreshed for 90 s).
+- Left, two thirds: **Burning now**, eight rows: critical first, unacknowledged before
+  acknowledged, oldest first; severity, title, host, number, tier, how long it has been open and
+  who acknowledged it (red *not acked*). More than eight shows "+N more not shown". A critical
+  that appears while the page is open glows for a minute. Nothing open: a calm **All quiet** with
+  the time since the last incident was resolved.
+- Right: the last 7 days as small "weather" cells (sun = quiet, cloud = warning, storm = high or
+  critical; big number = incidents, small = criticals), the 12-hour incident clock, and the host
+  groups (green when all answer, red with up/total when not).
+- Bottom: **Last 24 hours** as a slim curve (incidents open per hour, red dots for hours with a
+  critical, maintenance shaded, the share acknowledged within 15 minutes in the heading), then one
+  row of small tiles: time to acknowledge, time to resolve, error budget, shift, last backup,
+  noisiest assets, ForgeAI, hosts answering, new devices. Each shows one value and one coloured
+  word; the sentence and detail are the tooltip.
+- Colours follow the theme. A browser that never chose one shows the TV in **Navy**;
+  `/app/tv?theme=contrast` (or `signal`, `light`, `midnight`) picks another for that screen only.
+- Portrait or small windows (narrower than 4:3 or 900 px) get a scrolling one-column version.
+- Quiet incidents (maintenance, noise filters) are not counted.
 
 A Viewer account is enough: sign the wall computer in with one that cannot change anything.
 Data: `GET /api/v1/tv` (the NOC overview plus `clock`, and `days`, `hours`, `tiles` from
@@ -182,7 +184,9 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
 ## Layout
 
 - `src/components/Shell.tsx`: sidebar menu in the order of the designs; the version next to
-  the name is `FORGESRE_VERSION` from `.env`, served by `GET /api/v1/me`.
+  the name is `FORGESRE_VERSION` from `.env`, served by `GET /api/v1/me`. The menu scrolls on its
+  own when the window is short; **☰** (top left) folds it away so the page uses the full width,
+  remembered per browser.
 - `src/components/ui.tsx`: Chip, Card, Stat, Bar, Dot.
 - `src/styles.css`: design tokens (colours, radius, fonts) and base styles.
 - `src/pages/*`: one file per page; unknown addresses show `NotFound`.

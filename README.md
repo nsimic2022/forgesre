@@ -116,7 +116,7 @@ editing. Old addresses from the classic UI (removed in 2.0) redirect into `/app`
 | Page | What you do there |
 |---|---|
 | NOC (`/app`) | Active incidents, levels, what was sent, ForgeAI state |
-| TV mode (`/app/tv`) | Wall screen in a weather-report style: 7 day cards, the last 24 hours as a curve, clickable tiles (MTTA, MTTR, error budget, shift, backup, noisy assets…), what is burning, the 12-hour clock |
+| TV mode (`/app/tv`) | One-screen wall display, no scrolling: what is burning, the week as weather cells, the 12-hour clock, host groups, a slim 24-hour curve and small tiles (MTTA, MTTR, error budget, shift, backup…); Navy theme by default |
 | Incidents | Active, open and resolved incidents with filters; one page per incident with checklist, timeline and investigation |
 | Inventory | Assets library grouped by site, rack, type and owner; views for down, alarming and unowned |
 | Automation | Noise filters, playrules, playbooks, escalation, maintenance, alarm simulator |

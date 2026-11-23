@@ -90,8 +90,10 @@ Admin). The mail and chat outbox is on Reports (`GET /api/v1/outbox`, Analyst an
 
 ## Appearance
 
-Five themes: Signal (dark, default), Light, Midnight, High contrast and Follow the computer.
-The choice is kept in the browser (`localStorage`), so a wall screen and a desk can differ.
+Six themes: Signal (dark, default), Light, Midnight, Navy (the wall-screen colours: deep blue
+panels, yellow and soft blue accents), High contrast and Follow the computer. The choice is kept in
+the browser (`localStorage`), so a wall screen and a desk can differ; the TV page uses Navy in a
+browser that never chose a theme.
 Users who are not Admins find the theme picker on the Settings page too.
 
 ## Messages and templates

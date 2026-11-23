@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { dialAngle } from "../components/IncidentClock";
 import type { TvData } from "../lib/api";
@@ -34,28 +34,46 @@ describe("TV mode", () => {
     expect(dialAngle(3, 30)).toBeCloseTo((3.5 / 12) * Math.PI * 2);
   });
 
-  it("shows day cards, the 24-hour curve and tiles, and opens a tile's detail", async () => {
+  it("puts everything on one screen: burning list, week, clock, 24-hour strip and tiles", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(tv), { status: 200, headers: { "Content-Type": "application/json" } })));
     render(<TvPage />);
-    expect(await screen.findByLabelText("Today: 6 incidents, 1 critical")).toBeTruthy();
+    expect(await screen.findByText("Host down")).toBeTruthy();
+    expect(screen.getByText("not acked")).toBeTruthy();
+    expect(screen.getByText("esx-prod-03 · INC-0412 · Tier 2")).toBeTruthy();
+    expect(screen.getByLabelText("Today: 6 incidents, 1 critical")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "18 incidents in the last 12 hours, now 18:04" })).toBeTruthy();
     expect(screen.getByRole("img", { name: /Incidents open per hour, last 24 hours: 2 new/ })).toBeTruthy();
-    expect(screen.getByText("50%")).toBeTruthy();
-    const tile = screen.getByRole("button", { name: "Time to acknowledge: 4 min, On target" });
-    fireEvent.click(tile);
-    expect(screen.getByText("Target: 15 min")).toBeTruthy();
-    expect(screen.getByText("On call: Ana P. · +381 60 1")).toBeTruthy();
+    expect(screen.getByText(/50% acked within 15 min/)).toBeTruthy();
+    expect(screen.getByLabelText("Time to acknowledge: 4 min, On target")).toBeTruthy();
     expect(screen.getByText("3 h 10 min left")).toBeTruthy();
+    expect(screen.getByText("1 critical", { selector: ".tvw-pill" })).toBeTruthy();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByText("Rotate")).toBeNull();
   });
 
-  it("keeps the burning list and the 12-hour clock on their own tabs", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(tv), { status: 200, headers: { "Content-Type": "application/json" } })));
+  it("is calm when nothing is open and says how many rows did not fit", async () => {
+    const many = Array.from({ length: 11 }, (_, i) => ({ ...tv.incidents.active[0], number: `INC-${1000 + i}`, title: `Alarm ${i}` }));
+    const quiet = { ...tv, incidents: { active: [], acknowledged: [], resolved_today: [] } };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(quiet), { status: 200, headers: { "Content-Type": "application/json" } })));
     render(<TvPage />);
-    fireEvent.click(await screen.findByRole("tab", { name: "Burning now" }));
-    expect(await screen.findByText("Host down")).toBeTruthy();
-    expect(screen.getByText("· not acked")).toBeTruthy();
-    expect(screen.getByText("esx-prod-03 · INC-0412 · Tier 2")).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: "12-hour clock" }));
-    expect(await screen.findByRole("img", { name: "18 incidents in the last 12 hours, now 18:04" })).toBeTruthy();
-    expect(screen.getByRole("img", { name: "Incidents per day over 2 days: 7 in total, highest 6 in one day" })).toBeTruthy();
+    expect(await screen.findByText("All quiet")).toBeTruthy();
+    cleanup();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ...tv, incidents: { active: many, acknowledged: [], resolved_today: [] } }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    render(<TvPage />);
+    expect(await screen.findByText("+3 more not shown ·")).toBeTruthy();
+    expect(screen.getAllByText(/^Alarm \d+$/)).toHaveLength(8);
+  });
+
+  it("uses Navy unless this browser chose a theme or the address names one", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(tv), { status: 200, headers: { "Content-Type": "application/json" } })));
+    localStorage.removeItem("forgesre.theme");
+    const { unmount } = render(<TvPage />);
+    expect(document.documentElement.dataset.theme).toBe("navy");
+    unmount();
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+    window.history.pushState({}, "", "/app/tv?theme=contrast");
+    render(<TvPage />);
+    expect(document.documentElement.dataset.theme).toBe("contrast");
+    window.history.pushState({}, "", "/");
   });
 });
