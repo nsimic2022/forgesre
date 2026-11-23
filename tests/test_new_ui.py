@@ -125,7 +125,7 @@ def test_incident_view_checklist_and_queued_investigation():
     analyst = _signed_in("analyst")
     view = analyst.get(f"/api/v1/incidents/{number}/view").json()
     assert view["playbook"] == {"name": "T-Book", "steps": ["Ping it", "Call owner"], "done": []}
-    assert view["can"] == {"work": True, "investigate": True, "cloud": False}
+    assert view["can"] == {"work": True, "investigate": True, "cloud": False, "quiet": False}
     assert analyst.post(f"/api/v1/incidents/{number}/checklist", json={"step": 1, "done": True}).json() == {"done": [1]}
     assert analyst.post(f"/api/v1/incidents/{number}/checklist", json={"step": 9, "done": True}).status_code == 400
     assert analyst.get(f"/api/v1/incidents/{number}/view").json()["playbook"]["done"] == [1]
