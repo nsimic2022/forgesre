@@ -28,11 +28,11 @@ from app.stack import doctor_soft_status, enrich_components, rewrite_host
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_compose_netbox_is_default_service():
+def test_compose_netbox_is_optional_profile():
     data = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     for name in ("netbox", "netbox-redis", "netbox-db-init"):
         svc = data["services"][name]
-        assert "profiles" not in svc, name
+        assert svc["profiles"] == ["netbox"], name
         assert svc.get("network_mode") == "host"
     netbox = data["services"]["netbox"]
     assert netbox["image"] == "docker.io/netboxcommunity/netbox:v4.6.9-5.0.2"
@@ -102,7 +102,7 @@ def test_compose_netbox_is_default_service():
     assert "GF_AUTH_ANONYMOUS_ENABLED" in compose
     assert "GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer" in compose
     assert "forgesre-overview.json" in compose
-    assert "profiles:" not in compose[compose.index("  netbox:"):compose.index("  llm:")]
+    assert "profiles: [netbox]" in compose[compose.index("  netbox:"):compose.index("  llm:")]
     extra = (ROOT / "config" / "netbox" / "forgesre.py").read_text(encoding="utf-8")
     assert "API_TOKEN_PEPPERS" in extra
     assert "API_TOKEN_PEPPER_1" in extra

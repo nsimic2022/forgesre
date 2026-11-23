@@ -21,6 +21,9 @@ ENABLE_NETBOX="yes"
 NETBOX_URL="${FORGESRE_NETBOX_URL:-http://127.0.0.1:8001}"
 NETBOX_TOKEN="${NETBOX_API_TOKEN:-}"
 NETBOX_MODE="bundled"
+# Bundled NetBox and LibreNMS are optional Compose profiles; on unless --netbox no / --librenms no.
+BUNDLED_NETBOX="${FORGESRE_INSTALL_NETBOX:-yes}"
+BUNDLED_LIBRENMS="${FORGESRE_INSTALL_LIBRENMS:-yes}"
 # HTTPS front (Caddy, self-signed certificate until you add your own): on for new installs.
 ENABLE_HTTPS="${FORGESRE_INSTALL_HTTPS:-yes}"
 
@@ -39,6 +42,8 @@ Options:
   --enable-discovery yes|no
   --discovery-cidrs CIDR[,CIDR]  Ranges LibreNMS may discover (ForgeSRE never scans itself)
   --netbox-url URL      External NetBox; bundled still starts unless you stop it
+  --netbox yes|no       Bundled NetBox (default yes; no with --netbox-url or when you do not need it)
+  --librenms yes|no     Bundled LibreNMS for discovery (default yes)
   --https yes|no        HTTPS on port 443 with a self-signed certificate (default yes); later:
                         ./forgesre https on|only|off|cert
 EOF
@@ -55,7 +60,9 @@ while [[ $# -gt 0 ]]; do
     --enable-ai) ENABLE_AI="$2"; shift 2 ;;
     --enable-discovery) ENABLE_DISCOVERY="$2"; shift 2 ;;
     --discovery-cidrs) DISCOVERY_CIDRS="$2"; shift 2 ;;
-    --netbox-url) NETBOX_URL="$2"; ENABLE_NETBOX="yes"; NETBOX_MODE="external"; shift 2 ;;
+    --netbox-url) NETBOX_URL="$2"; ENABLE_NETBOX="yes"; NETBOX_MODE="external"; BUNDLED_NETBOX="no"; shift 2 ;;
+    --netbox) BUNDLED_NETBOX="$2"; shift 2 ;;
+    --librenms) BUNDLED_LIBRENMS="$2"; shift 2 ;;
     --https) ENABLE_HTTPS="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
@@ -307,7 +314,13 @@ write_files() {
   if [[ "${NETBOX_MODE}" != "external" ]]; then
     NETBOX_MODE="bundled"
     NETBOX_URL="${NETBOX_URL:-http://127.0.0.1:8001}"
+    [[ "$BUNDLED_NETBOX" == "yes" ]] || netbox_enabled="false"
   fi
+  local librenms_enabled="true"
+  [[ "$BUNDLED_LIBRENMS" == "yes" ]] || librenms_enabled="false"
+  # optional bundled parts are Compose profiles; ai (above) stays first when set
+  [[ "$BUNDLED_NETBOX" == "yes" ]] && compose_profiles="${compose_profiles:+${compose_profiles},}netbox"
+  [[ "$BUNDLED_LIBRENMS" == "yes" ]] && compose_profiles="${compose_profiles:+${compose_profiles},}librenms"
 
   if [[ -f "$ROOT/.env.example" ]]; then
     cp "$ROOT/.env.example" "$ROOT/.env"
@@ -322,6 +335,7 @@ write_files() {
   set_kv "$ROOT/.env" GRAFANA_PORT "3000"
   set_kv "$ROOT/.env" FORGESRE_PROFILE "${PROFILE}"
   set_kv "$ROOT/.env" COMPOSE_PROFILES "${compose_profiles}"
+  set_kv "$ROOT/.env" FORGESRE_OPTIONAL_PROFILES "1"
   set_kv "$ROOT/.env" FORGESRE_LLM_THREADS "${llm_threads}"
   set_kv "$ROOT/.env" POSTGRES_PASSWORD "$pg_pass"
   set_kv "$ROOT/.env" GRAFANA_ADMIN_PASSWORD "$gf_pass"
@@ -361,7 +375,7 @@ inventory:
     mode: ${NETBOX_MODE}
     url: "${NETBOX_URL}"
   librenms:
-    enabled: true
+    enabled: ${librenms_enabled}
     url: "http://127.0.0.1:8000"
 discovery:
   enabled: ${discovery_enabled}
@@ -527,7 +541,9 @@ echo "Installation finished."
 echo "UI:              http://127.0.0.1:${HTTP_PORT}"
 [[ -n "$HTTPS_NOTE" ]] && echo "HTTPS:           ${HTTPS_NOTE}"
 echo "Grafana:         http://127.0.0.1:3000"
-echo "NetBox:          http://127.0.0.1:8001  (admin / see installation-report.md)"
+[[ "$BUNDLED_NETBOX" == "yes" ]] && echo "NetBox:          http://127.0.0.1:8001  (admin / see installation-report.md)"
+[[ "$BUNDLED_LIBRENMS" == "yes" ]] && echo "LibreNMS:        http://127.0.0.1:8000"
+echo "Optional parts:  ./forgesre optional   (NetBox, LibreNMS, HTTPS, AI, mailbox)"
 echo "Admin:           admin@forgesre.local"
 echo "Password:        (see installation-report.md or secrets/secrets.env)"
 echo "Demo workflow:   ./forgesre demo"

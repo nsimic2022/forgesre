@@ -226,12 +226,12 @@ def test_librenms_hostname_survives_asset_save():
     assert merged["snmp_onboard_oids"] == "1.3.6.1.2.1.2.1.0"
 
 
-def test_compose_librenms_is_default_service():
+def test_compose_librenms_is_optional_profile():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     data = yaml.safe_load(compose)
     for name in ("librenms-db", "librenms-redis", "librenms", "librenms-dispatcher"):
         svc = data["services"][name]
-        assert "profiles" not in svc, name
+        assert svc["profiles"] == ["librenms"], name
         assert svc.get("network_mode") == "host"
     assert data["services"]["librenms"]["image"] == "librenms/librenms:26.10.2"
     assert data["services"]["librenms-dispatcher"]["image"] == "librenms/librenms:26.10.2"

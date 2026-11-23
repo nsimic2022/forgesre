@@ -108,6 +108,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `slo` | SLOs: availability against target, error budget left, 24 h burn rate |
 | `alert-quality [DAYS]` | Noisiest alerts: incidents, % acknowledged, % that cleared alone, flapping, a suggestion |
 | `power` | UPS, PDU and environment sensors: on battery, runtime left, load, temperature |
+| `optional [ACTION] [NAME]` | Optional parts (Compose profiles): list; ACTION enable or disable, NAME netbox or librenms |
 | `https [ACTION]` | HTTPS in front of the UI (Caddy): status; ACTION on, only, off or cert (new self-signed certificate) |
 | `lifecycle` | Support / warranty, end of life and licence dates expiring or expired, soonest first |
 | `racks` | Rack elevation: devices per rack and U position, devices without a position, overlaps |

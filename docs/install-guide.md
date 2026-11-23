@@ -41,8 +41,8 @@ Postgres; people get incidents, notifications and ForgeAI on the right.
 | `loki` | 3100 (local) | always | Logs (syslog) as evidence for RCA |
 | `alloy` | 514 syslog, 12345 (local) | always | Receives syslog and ships it to Loki |
 | `grafana` | 3000 (`GRAFANA_PORT`) | always | Graphs, linked from System Health |
-| `netbox` + `netbox-redis` + `netbox-db-init` | 8001 (`NETBOX_PORT`) | always | Inventory source (read, never written) |
-| `librenms` + `librenms-db` + `librenms-redis` + `librenms-dispatcher` | 8000 | always | Device discovery (SNMP identify, ports, links) |
+| `netbox` + `netbox-redis` + `netbox-db-init` | 8001 (`NETBOX_PORT`) | profile `netbox` (default on) | Inventory source (read, never written) |
+| `librenms` + `librenms-db` + `librenms-redis` + `librenms-dispatcher` | 8000 | profile `librenms` (default on) | Device discovery (SNMP identify, ports, links) |
 | `llm` | 8088 (local) | `ai` | llama.cpp with the local model (ForgeAI) |
 | `embed` | 8089 (local) | `ai` | Small embedding model (search in uploaded manuals) |
 | `worker` | — | `worker` | Optional: background loops in their own process |
@@ -147,6 +147,17 @@ installs keep plain HTTP until you run `./forgesre https on`.
 - Set `system.public_url` to the `https://` address, so links in mail and chat use it.
 - `./forgesre doctor` shows the certificate expiry and warns 30 days before it.
 - Port 443 taken: set `FORGESRE_HTTPS_PORT=8443` in `.env` and run `./forgesre https on`.
+
+### Optional parts: NetBox and LibreNMS
+
+Bundled NetBox and LibreNMS are Compose profiles (`netbox`, `librenms`). New installs turn both on
+unless you pass `install.sh --netbox no` or `--librenms no`; with `--netbox-url` (an external NetBox)
+the bundled one stays off. An appliance installed before keeps both: the first `./forgesre update`
+adds the profiles once.
+
+`./forgesre optional` lists the parts. `./forgesre optional disable librenms` stops LibreNMS, keeps
+`data/librenms` and turns the integration off in Settings. `./forgesre optional enable librenms`
+starts it again and turns the integration back on.
 
 ## 4. `.env`: every variable
 

@@ -226,6 +226,7 @@ services:
   netbox-redis:
     # Default stack (not a profile). NetBox needs Redis; ForgeSRE Core does not.
     image: redis:7-alpine
+    profiles: [netbox]  # optional: ./forgesre optional
     network_mode: host
     env_file:
       - secrets/secrets.env
@@ -248,6 +249,7 @@ services:
   netbox-db-init:
     # CREATE DATABASE netbox on the existing Postgres. Does not touch database forgesre.
     image: postgres:16-alpine
+    profiles: [netbox]  # optional: ./forgesre optional
     network_mode: host
     env_file:
       - secrets/secrets.env
@@ -268,6 +270,7 @@ services:
     # Pin is NetBox 4.6.9 + netbox-docker 5.0.2 (Granian, user netbox). The old
     # v4.4-3.2.0 tag never existed on Docker Hub (3.2.0 was v4.2 / nginx unit).
     image: docker.io/netboxcommunity/netbox:v4.6.9-5.0.2
+    profiles: [netbox]  # optional: ./forgesre optional
     network_mode: host
     user: "netbox:root"
     env_file:
@@ -334,6 +337,7 @@ services:
     # Pin 11.4.13 (Hub). Command is flags only — MariaDB 11.4 CMD is mariadbd, not mysqld
     # (`mysqld` as command made compose service librenms-db-1 exit Error after pull).
     image: mariadb:11.4.13
+    profiles: [librenms]  # optional: ./forgesre optional
     network_mode: host
     env_file:
       - secrets/secrets.env
@@ -366,6 +370,7 @@ services:
 
   librenms-redis:
     image: redis:7-alpine
+    profiles: [librenms]  # optional: ./forgesre optional
     network_mode: host
     environment:
       LIBRENMS_REDIS_PASSWORD: ${LIBRENMS_REDIS_PASSWORD}
@@ -387,6 +392,7 @@ services:
     # Discovery inventory only. snmp_exporter still scrapes Prometheus metrics.
     # Pin 26.10.2 (Hub, 25 Oct 2026). UI on 127.0.0.1:8000 (NetBox stays :8001).
     image: librenms/librenms:26.10.2
+    profiles: [librenms]  # optional: ./forgesre optional
     network_mode: host
     cap_add:
       - NET_ADMIN
@@ -432,6 +438,7 @@ services:
 
   librenms-dispatcher:
     image: librenms/librenms:26.10.2
+    profiles: [librenms]  # optional: ./forgesre optional
     network_mode: host
     cap_add:
       - NET_ADMIN

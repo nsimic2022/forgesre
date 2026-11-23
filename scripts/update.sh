@@ -13,6 +13,22 @@ fi
 # Same docker rights for the Postgres dump as compose pull/up. Probe the daemon
 # (`docker info`), not `docker compose version` (that works without docker.sock).
 if docker info >/dev/null 2>&1; then DC=(docker compose); else DC=(sudo docker compose); fi
+
+# NetBox and LibreNMS are optional Compose profiles (netbox, librenms). An appliance installed
+# before that keeps both: add them to COMPOSE_PROFILES once, before anything is pulled or started.
+ENV_FILE="$ROOT/.env"
+# shellcheck source=scripts/lib-profiles.sh
+source "$ROOT/scripts/lib-profiles.sh"
+if [[ -z "$(env_get FORGESRE_OPTIONAL_PROFILES)" ]]; then
+  profile_add netbox
+  profile_add librenms
+  env_set FORGESRE_OPTIONAL_PROFILES 1
+  echo "NetBox and LibreNMS are optional now; this appliance keeps both (./forgesre optional to change)."
+fi
+NETBOX_ON=0
+LIBRENMS_ON=0
+profile_on netbox && NETBOX_ON=1
+profile_on librenms && LIBRENMS_ON=1
 if [[ "${DC[0]}" == "sudo" ]]; then
   sudo -v || true
   export FORGESRE_COMPOSE="sudo -n docker compose"
@@ -44,12 +60,16 @@ for key in CHANGES_WEBHOOK_TOKEN MCP_TOKEN; do
 done
 
 "$ROOT/scripts/render-monitoring.sh"
-echo "Ensuring bundled NetBox secrets and data dirs..."
-"$ROOT/scripts/ensure-netbox-secrets.sh"
-echo "Ensuring bundled LibreNMS secrets and data dirs..."
-"$ROOT/scripts/ensure-librenms-secrets.sh"
+if [[ "$NETBOX_ON" -eq 1 ]]; then
+  echo "Ensuring bundled NetBox secrets and data dirs..."
+  "$ROOT/scripts/ensure-netbox-secrets.sh"
+fi
+if [[ "$LIBRENMS_ON" -eq 1 ]]; then
+  echo "Ensuring bundled LibreNMS secrets and data dirs..."
+  "$ROOT/scripts/ensure-librenms-secrets.sh"
+fi
 
-# snmp-exporter and NetBox are default services (not Compose profiles).
+# snmp-exporter and blackbox-exporter always run; NetBox and LibreNMS only with their profile.
 # OFFLINE=1 (--offline) skips docker compose pull.
 OFFLINE=0
 if [[ "${1:-}" == "--offline" ]]; then
@@ -123,28 +143,35 @@ else
     printf '%s\n' "$cur" > "$STAMP"
   fi
 fi
-if ! "${DC[@]}" up -d snmp-exporter blackbox-exporter netbox-redis netbox librenms-db librenms-redis librenms librenms-dispatcher; then
-  echo "LibreNMS/NetBox extras failed to start. MariaDB logs (librenms-db / librenms-db-1):"
-  "${DC[@]}" logs --tail=80 librenms-db || true
+# Named services start even when their profile is off, so the list follows the profiles.
+# With both on this is: up -d snmp-exporter blackbox-exporter netbox-redis netbox librenms-db librenms-redis librenms librenms-dispatcher
+extras=(snmp-exporter blackbox-exporter)
+[[ "$NETBOX_ON" -eq 1 ]] && extras+=(netbox-redis netbox)
+[[ "$LIBRENMS_ON" -eq 1 ]] && extras+=(librenms-db librenms-redis librenms librenms-dispatcher)
+if ! "${DC[@]}" up -d "${extras[@]}"; then
+  echo "SNMP / NetBox / LibreNMS extras failed to start. MariaDB logs (librenms-db / librenms-db-1):"
+  [[ "$LIBRENMS_ON" -eq 1 ]] && "${DC[@]}" logs --tail=80 librenms-db || true
   echo "LibreNMS logs:"
-  "${DC[@]}" logs --tail=80 librenms || true
+  [[ "$LIBRENMS_ON" -eq 1 ]] && "${DC[@]}" logs --tail=80 librenms || true
   echo "If pull/start of mariadb:11.4.13 failed: docker compose pull librenms-db && docker compose logs --tail=80 librenms-db"
   echo "If lnms must not run as root: PUID/PGID must be 1000 (not 0), then ./forgesre update"
 fi
-# Same stamp idea as Core: NB_STAMP = last NetBox launch hash, nb_cur = now, need_nb = changed.
-NB_STAMP="$ROOT/data/.netbox-launch.stamp"
-nb_cur="$(netbox_launch_hash)"
-need_nb=1
-if [[ -f "$NB_STAMP" ]] && [[ "$(cat "$NB_STAMP" 2>/dev/null || true)" == "$nb_cur" ]]; then
-  need_nb=0
-fi
-if [[ "$need_nb" -eq 1 ]]; then
-  echo "NetBox launch script or compose token env changed; recreating netbox so the token helper runs."
-  "${DC[@]}" up -d --no-deps --force-recreate netbox
-  "${DC[@]}" up -d --no-deps --force-recreate core
-  printf '%s\n' "$nb_cur" > "$NB_STAMP"
-else
-  "${DC[@]}" up -d --no-deps --force-recreate netbox
+if [[ "$NETBOX_ON" -eq 1 ]]; then
+  # Same stamp idea as Core: NB_STAMP = last NetBox launch hash, nb_cur = now, need_nb = changed.
+  NB_STAMP="$ROOT/data/.netbox-launch.stamp"
+  nb_cur="$(netbox_launch_hash)"
+  need_nb=1
+  if [[ -f "$NB_STAMP" ]] && [[ "$(cat "$NB_STAMP" 2>/dev/null || true)" == "$nb_cur" ]]; then
+    need_nb=0
+  fi
+  if [[ "$need_nb" -eq 1 ]]; then
+    echo "NetBox launch script or compose token env changed; recreating netbox so the token helper runs."
+    "${DC[@]}" up -d --no-deps --force-recreate netbox
+    "${DC[@]}" up -d --no-deps --force-recreate core
+    printf '%s\n' "$nb_cur" > "$NB_STAMP"
+  else
+    "${DC[@]}" up -d --no-deps --force-recreate netbox
+  fi
 fi
 echo "Waiting for health..."
 # Core and NetBox HTTP ports from .env (defaults 8080 / 8001).
@@ -174,49 +201,53 @@ if [[ "$core_ok" -ne 1 ]]; then
   echo "Core is not answering GET /api/v1/health on :${HTTP_PORT}."
   echo "Logs: docker compose logs core --tail=80"
 fi
-echo "Waiting for NetBox on :${NB_PORT} (first boot can take several minutes)..."
-nb_ok=0
-# Poll NetBox /login/ up to 45 × 4s (first boot runs migrations).
-for _i in $(seq 1 45); do
-  if curl -fsS -m 2 "http://127.0.0.1:${NB_PORT}/login/" >/dev/null 2>&1; then
-    echo "NetBox is up."
-    nb_ok=1
-    break
+if [[ "$NETBOX_ON" -eq 1 ]]; then
+  echo "Waiting for NetBox on :${NB_PORT} (first boot can take several minutes)..."
+  nb_ok=0
+  # Poll NetBox /login/ up to 45 × 4s (first boot runs migrations).
+  for _i in $(seq 1 45); do
+    if curl -fsS -m 2 "http://127.0.0.1:${NB_PORT}/login/" >/dev/null 2>&1; then
+      echo "NetBox is up."
+      nb_ok=1
+      break
+    fi
+    sleep 4
+  done
+  if [[ "$nb_ok" -ne 1 ]]; then
+    echo "NetBox is still applying migrations or starting."
+    echo "Doctor will stay yellow until http://127.0.0.1:${NB_PORT}/login/ answers."
+    echo "Logs: docker compose logs --tail=80 netbox"
   fi
-  sleep 4
-done
-if [[ "$nb_ok" -ne 1 ]]; then
-  echo "NetBox is still applying migrations or starting."
-  echo "Doctor will stay yellow until http://127.0.0.1:${NB_PORT}/login/ answers."
-  echo "Logs: docker compose logs --tail=80 netbox"
 fi
-echo "Waiting for LibreNMS on :8000 (first boot can take several minutes)..."
-ln_ok=0
-for _i in $(seq 1 45); do
-  if curl -fsS -m 2 "http://127.0.0.1:8000/login" >/dev/null 2>&1; then
-    echo "LibreNMS is up."
-    ln_ok=1
-    break
+if [[ "$LIBRENMS_ON" -eq 1 ]]; then
+  echo "Waiting for LibreNMS on :8000 (first boot can take several minutes)..."
+  ln_ok=0
+  for _i in $(seq 1 45); do
+    if curl -fsS -m 2 "http://127.0.0.1:8000/login" >/dev/null 2>&1; then
+      echo "LibreNMS is up."
+      ln_ok=1
+      break
+    fi
+    sleep 4
+  done
+  if [[ "$ln_ok" -ne 1 ]]; then
+    echo "LibreNMS is still applying migrations or starting."
+    echo "Doctor will stay yellow until http://127.0.0.1:8000/login answers."
+    echo "Logs: docker compose logs --tail=80 librenms"
   fi
-  sleep 4
-done
-if [[ "$ln_ok" -ne 1 ]]; then
-  echo "LibreNMS is still applying migrations or starting."
-  echo "Doctor will stay yellow until http://127.0.0.1:8000/login answers."
-  echo "Logs: docker compose logs --tail=80 librenms"
-fi
-wrote_lnms=0
-if lnms_out="$("$ROOT/scripts/librenms-upsert-token.sh")"; then
-  echo "$lnms_out"
-  if [[ "$lnms_out" == *"token written"* ]]; then
-    wrote_lnms=1
+  wrote_lnms=0
+  if lnms_out="$("$ROOT/scripts/librenms-upsert-token.sh")"; then
+    echo "$lnms_out"
+    if [[ "$lnms_out" == *"token written"* ]]; then
+      wrote_lnms=1
+    fi
+  else
+    echo "LibreNMS token helper failed (see above). Create LIBRENMS_API_TOKEN in the UI."
   fi
-else
-  echo "LibreNMS token helper failed (see above). Create LIBRENMS_API_TOKEN in the UI."
-fi
-if [[ "$wrote_lnms" -eq 1 ]]; then
-  echo "Recreating core so it reads the new LIBRENMS_API_TOKEN."
-  "${DC[@]}" up -d --no-deps --force-recreate core || true
+  if [[ "$wrote_lnms" -eq 1 ]]; then
+    echo "Recreating core so it reads the new LIBRENMS_API_TOKEN."
+    "${DC[@]}" up -d --no-deps --force-recreate core || true
+  fi
 fi
 # 2.0: ForgeAI document search needs the small embedding model next to the LLM (profile ai).
 if [[ "$OFFLINE" -eq 0 ]] && grep -Eq '^COMPOSE_PROFILES=.*\bai\b' "$ROOT/.env" 2>/dev/null \
@@ -245,5 +276,9 @@ fi
 "$ROOT/scripts/doctor.sh" || echo "Doctor still reports warnings (see above)."
 echo "Update finished."
 echo "SNMP:     ./forgesre snmp"
-echo "NetBox:   http://127.0.0.1:${NB_PORT}  (admin / secrets/secrets.env NETBOX_SUPERUSER_*)"
-echo "LibreNMS: http://127.0.0.1:8000  (it discovers devices: ./forgesre discovery nets CIDR, then ./forgesre discovery)"
+if [[ "$NETBOX_ON" -eq 1 ]]; then
+  echo "NetBox:   http://127.0.0.1:${NB_PORT}  (admin / secrets/secrets.env NETBOX_SUPERUSER_*)"
+fi
+if [[ "$LIBRENMS_ON" -eq 1 ]]; then
+  echo "LibreNMS: http://127.0.0.1:8000  (it discovers devices: ./forgesre discovery nets CIDR, then ./forgesre discovery)"
+fi
