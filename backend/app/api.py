@@ -676,6 +676,23 @@ def incident_major(number: str, body: MajorBody, db: Session = Depends(get_db), 
     return major_view(item)
 
 
+@router.post("/incidents/{number}/ticket")
+def incident_ticket(number: str, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
+    """Open a GLPI ticket for this incident in the background (tickets.glpi.enabled)."""
+    from app.jobs import enqueue
+    from app.tickets import CREATE_KIND, glpi_ready
+
+    item = _incident_or_404(db, number)
+    if item.ticket_ref:
+        raise HTTPException(status_code=409, detail=f"this incident already has ticket {item.ticket_ref}")
+    why = glpi_ready()
+    if why:
+        raise HTTPException(status_code=409, detail=why)
+    job = enqueue(db, CREATE_KIND, item.number, object_type="incident", payload={"incident": item.number, "actor": user.email})
+    db.commit()
+    return {"job": getattr(job, "id", None)}
+
+
 @router.post("/incidents/{number}/updates")
 def incident_status_update(number: str, body: UpdateBody, db: Session = Depends(get_db), user: User = Depends(require("write_incidents"))) -> dict:
     """Post a status update: saved as a note, restarts the update timer, goes to the chat channels."""

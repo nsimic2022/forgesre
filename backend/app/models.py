@@ -261,6 +261,10 @@ class Incident(Base):
     bridge_url: Mapped[str] = mapped_column(String(500), default="")
     update_minutes: Mapped[int] = mapped_column(Integer, default=30)
     last_update_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Ticket in another system (app.tickets): "glpi:123", its link and last known status.
+    ticket_ref: Mapped[str] = mapped_column(String(64), default="")
+    ticket_url: Mapped[str] = mapped_column(String(500), default="")
+    ticket_status: Mapped[str] = mapped_column(String(32), default="")
 
     asset: Mapped[Asset | None] = relationship(back_populates="incidents")
     playrule: Mapped[Playrule | None] = relationship()

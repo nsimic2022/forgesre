@@ -178,6 +178,10 @@ def _escalation_loop(stop: threading.Event) -> None:
             from app.chat import sweep_resolved
 
             sweep_resolved(db)
+            from app.tickets import sweep_resolved as tickets_resolved
+
+            tickets_resolved(db)
+            _queue_ticket_sync(db)
             _queue_health_checks(db)
             _queue_k8s_sync(db)
             _queue_snmp_apply(db)
@@ -219,6 +223,24 @@ def _queue_k8s_sync(db: Session) -> None:
 
     _k8s_last = time.monotonic()
     enqueue(db, "k8s_sync", "clusters", object_type="kubernetes")
+    db.commit()
+
+
+_TICKET_EVERY = 10 * 60
+_ticket_last = 0.0
+
+
+def _queue_ticket_sync(db: Session) -> None:
+    """Leader only: every 10 minutes, read the status of open incidents' GLPI tickets."""
+    global _ticket_last
+    from app.tickets import SYNC_KIND, glpi_ready
+
+    if glpi_ready() or time.monotonic() - _ticket_last < _TICKET_EVERY:
+        return
+    from app.jobs import enqueue
+
+    _ticket_last = time.monotonic()
+    enqueue(db, SYNC_KIND, "glpi", object_type="tickets")
     db.commit()
 
 

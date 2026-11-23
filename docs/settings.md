@@ -70,6 +70,34 @@ service never holds up alerts or the UI. Each message is a row in the incident's
 notifications (channel `slack`, `teams` or `discord`) with `sent` or `failed` and the reason.
 `./forgesre doctor` shows a **Chat** row: off, OK, or the last delivery error.
 
+## SMS to the person on call
+
+Off by default (`notifications.sms.enabled`). The person on call now (Incidents › On-call, the
+slot's phone) gets an SMS when an incident at or above `notifications.sms.min_severity`
+(default critical) opens, and at each escalation step. Each SMS is a Notification on the
+incident (channel `sms`) and is sent by a background job with a 10 s timeout.
+
+- **generic**: `notifications.sms.url` (the gateway's POST URL) and `notifications.sms.body`, a
+  JSON template with `{to}` and `{text}` (default `{"to": "{to}", "text": "{text}"}`); the secret
+  `SMS_GATEWAY_TOKEN` is sent as `Authorization: Bearer`. Most SMS and voice-call gateways take this.
+- **twilio**: `notifications.sms.account` (Account SID), `notifications.sms.from` (the Twilio
+  number), `SMS_GATEWAY_TOKEN` = the Auth Token.
+
+**Test** (or `./forgesre settings test sms`) sends one SMS to the person on call now.
+
+## Tickets
+
+- **GLPI tickets** (`tickets.glpi.enabled`, uses the GLPI integration's URL and tokens): *Open
+  ticket* on an incident creates one GLPI ticket in the background (urgency from the severity, a
+  link back to the incident). Its status is read every 10 minutes; when GLPI solves or closes it,
+  the incident timeline says so (the incident is not resolved by it). When the incident resolves,
+  a follow-up "Resolved in ForgeSRE" (with the confirmed cause) is added to the ticket. Only
+  Ticket and ITILFollowup are written; GLPI inventory stays read-only.
+- **Ticket webhook** (`tickets.webhook.enabled`, `tickets.webhook.url`, optional Bearer secret
+  `TICKET_WEBHOOK_TOKEN`): one JSON POST per event (`opened`, `escalated`, `resolved`) with the
+  incident's number, title, severity, status, host, IP, times, cause and link, so Jira,
+  ServiceNow, n8n or a script can keep their own tickets. Test sends an `event: test`.
+
 ## Integrations
 
 **Settings › Integrations** shows one card per source (Zabbix, GLPI, LibreNMS, NetBox,

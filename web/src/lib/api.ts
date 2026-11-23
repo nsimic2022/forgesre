@@ -239,6 +239,8 @@ export interface IncidentView {
   major?: MajorView;
   sla?: SlaState | null;
   actions?: FollowUp[];
+  ticket?: { ref: string; url: string; status: string } | null;
+  can_ticket?: boolean;
   can: { work: boolean; investigate: boolean; cloud: boolean; quiet?: boolean };
 }
 

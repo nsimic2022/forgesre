@@ -84,9 +84,10 @@ def set_major(db: Session, incident: Incident, actor: str, *, on: bool, commande
         incident.commander = commander.strip()[:255] or actor
         incident.bridge_url = bridge
         incident.update_minutes = max(5, min(240, int(update_minutes or 30)))
-        append_timeline(incident, "major", "MAJOR", f"Major incident; commander {incident.commander}")
+        # timeline node ids must be unique: a repeated id only rewrites the old entry
+        append_timeline(incident, f"major-{utcnow().timestamp():.0f}", "MAJOR", f"Major incident; commander {incident.commander}")
     else:
-        append_timeline(incident, "major", "MAJOR OFF", f"Stood down by {actor}")
+        append_timeline(incident, f"major-off-{utcnow().timestamp():.0f}", "MAJOR OFF", f"Stood down by {actor}")
     audit(db, "incident.major", actor=actor, object_type="incident", object_id=incident.number,
           data={"on": on, "commander": incident.commander, "bridge": bool(bridge)})
     db.commit()
@@ -103,7 +104,7 @@ def post_update(db: Session, incident: Incident, actor: str, text: str) -> dict[
         raise ValueError("write the update first")
     note = add_note(db, incident, actor=actor, body=f"Status update: {body}")
     incident.last_update_at = utcnow()
-    append_timeline(incident, "status-update", "UPDATE", body[:200])
+    append_timeline(incident, f"status-update-{note.id}", "UPDATE", body[:200])
     db.commit()
     try:
         _queue(db, incident, "update", f"update-{note.id}", body[:300])
