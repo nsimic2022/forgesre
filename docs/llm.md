@@ -101,9 +101,9 @@ answer word for word, model, time, outcome (used, rejected, error, trial) and th
 
 ## 2. Hardware
 
-Bundled default is **Qwen2.5-14B-Instruct Q4_K_M** (~9 GB on disk). llama.cpp runs on **CPU** (no GPU required, nested virtualization not required).
+Bundled default is **Qwen3 4B Q4_K_M** (~2.5 GB on disk; `./forgesre fetch-llm --model` lists the larger ones). llama.cpp runs on **CPU** (no GPU required, nested virtualization not required).
 
-| Resource | 14B Q4 (default `fetch-llm`) | 4B Q4 (lab wget, see §3.C) |
+| Resource | 14B Q4 (`fetch-llm --model qwen2.5-14b`) | 4B Q4 (default `fetch-llm`) |
 |---|---|---|
 | Disk for GGUF | ~9 GB | ~2.5 GB |
 | RAM with the rest of the stack | 16 GB comfortable | 8 GB is enough |
@@ -113,7 +113,7 @@ vCPU: 4 is better than 2. Threads default to `nproc - 2` (min 2). First llama.cp
 
 A **4 GB** lab VM should not run either GGUF. Leave `ai.enabled: false` and use ForgeRCA only.
 
-Context window in Compose is **8192** tokens (`-c 8192`). Core waits **`ai.llm.timeout_seconds`** (default **90**, lab 4B) for one completion. Slow 14B CPU rewrites may need a higher value in `config/forgesre.yml`. A huge prompt plus CPU 4B can still need **300s** until the rewrite context is small — that is prefill cost, not a reason to change the GGUF. Live `config/forgesre.yml` is gitignored; this repo does not raise the example default back to 600.
+Context window is **8192** tokens (`-c`), set by `FORGESRE_LLM_CTX` in `.env` (then `./forgesre update`). Core waits **`ai.llm.timeout_seconds`** (default **90**, lab 4B) for one completion. Slow 14B CPU rewrites may need a higher value in `config/forgesre.yml`. A huge prompt plus CPU 4B can still need **300s** until the rewrite context is small — that is prefill cost, not a reason to change the GGUF. Live `config/forgesre.yml` is gitignored; this repo does not raise the example default back to 600.
 
 ---
 
@@ -306,7 +306,7 @@ What the container runs:
 
 - Image `ghcr.io/ggml-org/llama.cpp:server-b11718` (pinned bNNNN — not the floating `:server` tag, which moves daily). Bump that pin in `docker-compose.yml` when llama.cpp must change; `./forgesre update` then pulls. The GGUF in `data/models/model.gguf` is separate and is not re-downloaded.
 - Host network, bind **127.0.0.1:8088** (not published to the laptop; Core on the same VM talks to it)
-- `-m /models/model.gguf -c 8192 -t $FORGESRE_LLM_THREADS`
+- `-m /models/model.gguf -c $FORGESRE_LLM_CTX -t $FORGESRE_LLM_THREADS` (defaults 8192 and 8)
 - Health: `curl -f http://127.0.0.1:8088/v1/models`
 
 `.env`:

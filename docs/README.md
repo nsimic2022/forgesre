@@ -19,6 +19,8 @@ refreshed after a UI change.
 
 ## Reference
 
+- [Vodič na srpskom: instalacija, `.env`, tajne, integracije, ForgeAI i podešavanje modela](vodic-sr.md)
+
 - [Install and config](install-config.md): Ubuntu VM, ports, `.env`, `secrets/secrets.env`, every secret
 - [Operator handbook](operator-handbook.md): the long manual, section by section
 - [CLI](cli.md): every `./forgesre` command
