@@ -49,6 +49,28 @@ an operator can ask again with another one. Every prompt is built as:
 
 **ForgeAI chat (page ForgeAI, the incident page and Investigations).** One place to talk with the model, like a desktop chat app. The **ForgeAI** page lists your chats on the left (private: nobody else sees them, Admins included) and the open one on the right. A chat is either **general** (questions about networks, servers, databases and monitoring; the model may use general knowledge, rules `CHAT_RULES`) or **about one incident** (open it from the incident page, Investigations, or type `INC-…` on the ForgeAI page; every message then carries that incident's facts, playbook, similar incidents and matching manual excerpts). Type **/** (or press **Skills**) to pick a skill: chat skills always; on an incident chat also *cause and first checks*, explain, postmortem and *investigate with tools*, each run as a **trial**. An Engineer can press **Use as the incident's answer** on a cause-and-first-checks answer (audited `forgeai.use`). The last 6 turns go with each message as `earlier_in_this_chat`. Each message is a background job `forgeai_chat` on the LLM lane, at most 3 waiting per person; a crash or restart marks the answer failed instead of leaving it waiting. Checks: an incident chat has the usual ones (no IP or number that is not in the facts, no shell command); a general chat keeps only the shell-command check. Engineers can switch one message to the **Cloud** model (same rules as below). Every answer is a logged ForgeAI call with its prompt and 👍 / 👎. Skill *Chat* (`chat-generic`, task `chat`) is tunable in Automation like the others. The incident page keeps **What ForgeAI found on its own** (with the cloud **Second opinion**) next to the chat. API (Analyst+): `GET/POST /api/v1/forgeai/chats` `{title?, incident?, reuse?}`, `GET/DELETE /api/v1/forgeai/chats/{id}`, `POST /api/v1/forgeai/chats/{id}/messages` `{text, skill?, cloud?}`. The older `POST /api/v1/incidents/{number}/forgeai/ask` still works for scripts. Code: `backend/app/forgeai_chat.py`, `web/src/components/ForgeAiChat.tsx`.
 
+**Is it working? (status line, test, live progress).** Every ForgeAI chat (the ForgeAI page, the incident page,
+Investigations) starts with one small line: **model** (the GGUF llama.cpp has loaded), **connection** (llama.cpp
+answers `/models`, 2 s timeout), **test** (the last tiny timed question: ok and seconds, or why it failed; ↻ runs a
+new one as background job `forgeai_ping`), **local** or **local + cloud**, and the **queue** (busy for how long, how
+many waiting; red when the ForgeAI worker has not reported). A waiting answer says where it is: *waiting in the queue
+(n ahead)*, *reading the question* (llama.cpp reads the prompt; on CPU this is often the longest part), *thinking*,
+*writing the answer*, *checking*, with the seconds against **Model timeout**. Answers are streamed from llama.cpp
+and the timeout covers the whole answer, so an answer that runs out of time says in which phase it was.
+Over SSH: `./forgesre forgeai` (the same line first) and `./forgesre forgeai test` (runs the test and waits).
+API: `GET /api/v1/forgeai/pulse`, `POST /api/v1/forgeai/ping` (Analyst+).
+
+**Thinking.** `ai.llm.thinking` (Settings › RCA / AI › *Let the model think first*, default off). Off, ForgeSRE asks
+thinking models such as Qwen3 to answer straight away (`chat_template_kwargs.enable_thinking=false`; servers that
+refuse the field get a plain request), which is much faster on CPU. On, the model reasons first with 1024 extra
+tokens; the chat shows the reasoning folded (*Show what it is thinking* while it works, *How ForgeAI got there*
+after), and Investigations keeps it in the raw answer between `<think>` tags. Raise Model timeout with it.
+
+**Ratings.** Every answer gets 1–5 stars (click the same star again to clear). Skill statistics, Settings and
+`./forgesre forgeai` show the average; 4–5 stars also count as thumbs up and 1–2 as thumbs down for older reports.
+API: `POST /api/v1/forgeai/calls/{id}/rate {"stars": 0-5}` (the older `{"value": -1|0|1}` still works).
+
+
 **Tuning a skill.** `GET /api/v1/forgeai/skills/{slug}/tuning` (Analyst+) returns the skill's used answers next to `Incident.root_cause` and `ai_rating` from the review card (worst first), grouped rejection and error reasons, and thumbs. `POST …/replay` `{limit ≤ 20, instructions?}` (Engineer+) queues `forgeai_replay` on the LLM lane: one `forgeai.run(trial=True)` per resolved incident with a confirmed cause (matching the skill's patterns), newest first, within 15 minutes. The result has the earlier used answer and the new one with a word-overlap hint against the confirmed cause; it never becomes an incident's answer. Code: `backend/app/forgeai_tuning.py`; CLI `./forgesre forgeai tuning [skill]`.
 
 **Editing skills: Automation › ForgeAI skills** (Engineer and up). Each skill shows how it did in

@@ -43,6 +43,23 @@ def _run_sync(awaitable: Any) -> Any:
     return box.get("value")
 
 
+def _sse_parts(line: str) -> tuple[str | None, str | None]:
+    """One SSE line → (reasoning text, answer text). ("[DONE]", None) at the end; (None, None) to skip."""
+    text = (line or "").strip()
+    if not text.startswith("data:"):
+        return None, None
+    data = text[5:].strip()
+    if data == "[DONE]":
+        return "[DONE]", None
+    try:
+        payload = json.loads(data)
+    except json.JSONDecodeError:
+        return None, None
+    choice = (payload.get("choices") or [{}])[0] if isinstance(payload, dict) else {}
+    delta = choice.get("delta") if isinstance(choice, dict) and isinstance(choice.get("delta"), dict) else {}
+    return (str(delta.get("reasoning_content") or "") or None, str(delta.get("content") or "") or None)
+
+
 def _sse_token(line: str) -> str | None:
     """One OpenAI-compatible SSE line → token text, ``[DONE]``, or None."""
     text = (line or "").strip()
@@ -95,11 +112,14 @@ class OpenAICompatibleLLM:
     last_ms = 0
 
     def __init__(self, url: str, model: str = "local", timeout: float = 180.0, *, api_key: str = "",
-                 key_header: str = "Authorization", name: str = "openai-compatible") -> None:
+                 key_header: str = "Authorization", name: str = "openai-compatible", thinking: bool = False) -> None:
         self.url = url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        # Thinking models (Qwen3): off by default, a small CPU model can spend its whole budget thinking.
+        self.thinking = thinking
         self.last_error = ""
+        self.last_thinking = ""
         self.name = name
         # Cloud providers: OpenAI-style "Authorization: Bearer", Azure OpenAI "api-key". Never logged.
         self._headers = {} if not api_key else {key_header: f"Bearer {api_key}" if key_header == "Authorization" else api_key}
@@ -147,10 +167,9 @@ class OpenAICompatibleLLM:
             async with httpx.AsyncClient(timeout=self._http_timeout(), headers=self._headers) as client:
                 model = await self._resolve_model(client)
                 last_why = ""
-                # Qwen2.5 (bundled GGUF) wants a plain OpenAI body. Extra
-                # chat_template_kwargs can 400 on llama.cpp, which we used to
-                # swallow as "LLM unreachable".
-                for extra in ({}, {"chat_template_kwargs": {"enable_thinking": False}}):
+                # Say whether the model may think first (Qwen3 thinks by default, which on CPU can use
+                # the whole token budget). Servers or templates that refuse the kwarg (400) get a plain body.
+                for extra in self._body_variants():
                     payload = {
                         "model": model,
                         "messages": [
@@ -186,6 +205,92 @@ class OpenAICompatibleLLM:
 
     def complete_json(self, system: str, user: str, max_tokens: int = 512) -> dict[str, Any] | None:
         return _run_sync(self.complete_json_async(system, user, max_tokens))
+
+    def _body_variants(self) -> tuple[dict[str, Any], ...]:
+        return ({"chat_template_kwargs": {"enable_thinking": bool(self.thinking)}}, {})
+
+    async def complete_json_stream_async(self, system: str, user: str, max_tokens: int = 512,
+                                         on_progress: Any = None) -> dict[str, Any] | None:
+        """Like complete_json, but streamed so a caller can show what is happening.
+
+        ``on_progress(phase, thinking, answer)`` is called about once a second with phase "waiting"
+        (prompt is being read, no token yet), "thinking" or "writing", and the text so far. The whole
+        call is cut at ``timeout`` seconds (not per token), and last_error then says which phase it
+        was in. ``last_thinking`` keeps the model's reasoning (reasoning_content or <think>…</think>).
+        """
+        import time
+
+        self.last_error, self.last_raw, self.last_thinking = "", "", ""
+        started = time.monotonic()
+        deadline = started + max(1.0, float(self.timeout or 180.0))
+        phase, thinking, answer = "waiting", "", ""
+        last_note = 0.0
+
+        def note(force: bool = False) -> None:
+            nonlocal last_note
+            now = time.monotonic()
+            if on_progress is not None and (force or now - last_note >= 1.0):
+                last_note = now
+                try:
+                    on_progress(phase, thinking, answer)
+                except Exception:  # progress is best effort, never breaks the answer
+                    pass
+
+        note(force=True)
+        try:
+            async with httpx.AsyncClient(timeout=self._http_timeout(connect=STREAM_CONNECT_TIMEOUT), headers=self._headers) as client:
+                model = await self._resolve_model(client)
+                for extra in self._body_variants():
+                    payload = {"model": model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                               "temperature": 0.1, "max_tokens": max_tokens, "stream": True, **extra}
+                    async with client.stream("POST", self._endpoint(), json=payload) as response:
+                        if response.status_code in {400, 404, 422}:
+                            self.last_error = f"HTTP {response.status_code}"
+                            continue
+                        response.raise_for_status()
+                        async for line in response.aiter_lines():
+                            if time.monotonic() > deadline:
+                                raise TimeoutError(f"no complete answer within {int(self.timeout)} s (the model was still {phase})")
+                            reason, text = _sse_parts(line)
+                            if reason is None and text is None:
+                                continue
+                            if reason == "[DONE]":
+                                break
+                            if reason:
+                                thinking += reason
+                                phase = "thinking"
+                            if text:
+                                answer += text
+                                # inline <think> blocks (templates without reasoning_content)
+                                phase = "thinking" if "<think>" in answer and "</think>" not in answer else "writing"
+                            note()
+                    break
+                else:
+                    self.last_ms = int((time.monotonic() - started) * 1000)
+                    self.last_error = self.last_error or "LLM unreachable"
+                    return None
+            if "<think>" in answer:
+                inner, _, rest = answer.partition("<think>")[2].partition("</think>")
+                thinking, answer = (thinking + inner).strip(), rest
+            self.model = model
+            self.last_thinking = thinking.strip()[:20000]
+            self.last_raw = answer.strip()[:20000]
+            self.last_ms = int((time.monotonic() - started) * 1000)
+            phase = "checking"
+            note(force=True)
+            parsed = extract_json(answer)
+            if not parsed:
+                self.last_error = "the model ran out of tokens while thinking" if thinking and not answer.strip() else "LLM returned text that was not JSON"
+            return parsed
+        except Exception as exc:
+            self.last_error = str(exc)[:200] or type(exc).__name__
+            self.last_thinking = thinking.strip()[:20000]
+            self.last_raw = answer.strip()[:20000]
+            self.last_ms = int((time.monotonic() - started) * 1000)
+            return None
+
+    def complete_json_stream(self, system: str, user: str, max_tokens: int = 512, on_progress: Any = None) -> dict[str, Any] | None:
+        return _run_sync(self.complete_json_stream_async(system, user, max_tokens, on_progress))
 
 
     async def stream_completion(self, system: str, user: str) -> AsyncGenerator[str, None]:
@@ -272,10 +377,10 @@ class AnthropicLLM:
             return None
 
 
-def make_provider(url: str | None, model: str = "local", timeout: float = 180.0) -> LLMProvider:
+def make_provider(url: str | None, model: str = "local", timeout: float = 180.0, thinking: bool = False) -> LLMProvider:
     if not url:
         return NullLLM()
-    return OpenAICompatibleLLM(url, model=model, timeout=timeout)
+    return OpenAICompatibleLLM(url, model=model, timeout=timeout, thinking=thinking)
 
 
 def extract_json(text: str) -> dict[str, Any] | None:

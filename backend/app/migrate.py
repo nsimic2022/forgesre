@@ -238,6 +238,18 @@ def migrate(engine: Engine) -> None:
         existing = {col["name"] for col in inspector.get_columns("incidents")}
         if "caused_by_id" not in existing:
             statements.append("ALTER TABLE incidents ADD COLUMN caused_by_id INTEGER REFERENCES incidents(id) ON DELETE SET NULL")
+    if "forgeai_calls" in tables:
+        existing = {col["name"] for col in inspector.get_columns("forgeai_calls")}
+        if "stars" not in existing:
+            statements.append("ALTER TABLE forgeai_calls ADD COLUMN stars INTEGER DEFAULT 0")
+    if "forgeai_chat_messages" in tables:
+        existing = {col["name"] for col in inspector.get_columns("forgeai_chat_messages")}
+        if "phase" not in existing:
+            statements.append("ALTER TABLE forgeai_chat_messages ADD COLUMN phase VARCHAR(16) DEFAULT ''")
+        if "thinking" not in existing:
+            statements.append("ALTER TABLE forgeai_chat_messages ADD COLUMN thinking TEXT DEFAULT ''")
+        if "started_at" not in existing:
+            statements.append("ALTER TABLE forgeai_chat_messages ADD COLUMN started_at TIMESTAMPTZ")
     if "users" in tables:
         existing = {col["name"] for col in inspector.get_columns("users")}
         if "journal_error_ack_id" not in existing:

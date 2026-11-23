@@ -866,6 +866,35 @@ def forgeai_ask_trial(number: str, body: ForgeAiQuestion, db: Session = Depends(
     return {"queued": True, "job": getattr(job, "id", None), "task": task}
 
 
+@router.get("/forgeai/pulse")
+def forgeai_pulse(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """The small status line above every ForgeAI chat: model, connection, last test, queue, cloud."""
+    from app.forgeai import pulse
+
+    out = pulse(db)
+    out["cloud"] = {**out["cloud"], "can_use": can(user, "ai_cloud")}
+    out["can_test"] = can(user, "investigate")
+    return out
+
+
+@router.post("/forgeai/ping")
+def forgeai_ping(db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """Queue one tiny timed question to the local model (LLM lane; one at a time)."""
+    from app.forgeai import PING_KIND
+    from app.jobs import enqueue
+    from app.models import Job
+    from app.settings import settings
+
+    if not (settings.ai_enabled and settings.llm_url):
+        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › RCA / AI")
+    waiting = db.query(Job).filter(Job.kind == PING_KIND, Job.status.in_(("pending", "running"))).first()
+    if waiting is not None:
+        return {"job": waiting.id, "already": True}
+    job = enqueue(db, PING_KIND, f"ping-{int(time.time())}", object_type="forgeai", payload={"actor": user.email})
+    db.commit()
+    return {"job": job.id, "already": False}
+
+
 class ForgeAiChatNew(BaseModel):
     title: str = Field(default="", max_length=255)
     incident: str = ""
@@ -1166,21 +1195,26 @@ def forgeai_call(call_id: int, db: Session = Depends(get_db), user: User = Depen
 
 
 class ForgeAiRate(BaseModel):
-    value: int = Field(ge=-1, le=1)
+    stars: int | None = Field(default=None, ge=0, le=5)
+    value: int | None = Field(default=None, ge=-1, le=1)  # older thumbs API: 1 = 5 stars, -1 = 1 star
 
 
 @router.post("/forgeai/calls/{call_id}/rate")
 def forgeai_rate(call_id: int, body: ForgeAiRate, db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
-    """Thumbs up (1), down (-1) or clear (0) on one ForgeAI answer; counted per skill."""
+    """1–5 stars (0 clears) on one ForgeAI answer; counted per skill. 4–5 also count as thumbs up,
+    1–2 as thumbs down, so older reports keep working."""
     from app.models import ForgeAiCall
 
     row = db.get(ForgeAiCall, call_id)
     if row is None:
         raise HTTPException(status_code=404, detail="not found")
-    row.rating, row.rated_by = body.value, user.email
-    audit(db, "forgeai.rate", actor=user.email, object_type="forgeai_call", object_id=str(call_id), data={"value": body.value, "skill": row.skill_slug})
+    if body.stars is None and body.value is None:
+        raise HTTPException(status_code=400, detail="give stars (0–5)")
+    stars = body.stars if body.stars is not None else {1: 5, -1: 1, 0: 0}[int(body.value or 0)]
+    row.stars, row.rating, row.rated_by = stars, (1 if stars >= 4 else -1 if 0 < stars <= 2 else 0), user.email
+    audit(db, "forgeai.rate", actor=user.email, object_type="forgeai_call", object_id=str(call_id), data={"stars": stars, "skill": row.skill_slug})
     db.commit()
-    return {"id": row.id, "rating": row.rating}
+    return {"id": row.id, "rating": row.rating, "stars": row.stars}
 
 
 @router.get("/forgeai/skills")

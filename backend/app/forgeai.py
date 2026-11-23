@@ -62,6 +62,8 @@ CHAT_RULES = (
     "- Answer with JSON only, exactly this shape: {shape}\n"
 )
 
+THINK_BUDGET = 1024  # extra tokens when ai.llm.thinking is on
+
 TASKS: dict[str, dict[str, Any]] = {
     "incident": {
         "label": "Cause and first checks",
@@ -392,15 +394,17 @@ def _provider():
 
     from app.settings import settings
 
-    return make_provider(settings.llm_url if settings.ai_enabled else None, settings.llm_model, timeout=settings.llm_timeout)
+    return make_provider(settings.llm_url if settings.ai_enabled else None, settings.llm_model, timeout=settings.llm_timeout,
+                         thinking=settings.llm_thinking)
 
 
 def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug: str = "", actor: str = "system",
         trial: bool = False, instructions: str | None = None, hours: int = 12, question: str = "",
-        cloud: bool = False, history: list[dict[str, str]] | None = None) -> ForgeAiCall:
+        cloud: bool = False, history: list[dict[str, str]] | None = None, on_progress: Any = None) -> ForgeAiCall:
     """Ask the model once and record the exchange. ``trial`` (skill test) never becomes the incident's answer;
     ``instructions`` tries unsaved skill text; ``hours`` is the shift summary window. An incident answer that passes the checks is stored as a
-    ``forgerca-llm`` Investigation so the incident page and reports show it."""
+    ``forgerca-llm`` Investigation so the incident page and reports show it. ``on_progress(phase, thinking,
+    answer)`` streams a local answer so the chat can show that the model is working."""
     from app.journal import report
     from app.settings import settings
 
@@ -444,9 +448,20 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
         call.status, call.reason = "error", "ForgeAI is off (Settings › RCA / AI)"
     else:
         started = time.monotonic()
-        parsed = provider.complete_json(system, user, TASKS[task]["max_tokens"])
+        # nothing open while the model works (can take minutes): progress writes from other sessions go through
+        db.commit()
+        # a thinking model needs room to think before the JSON answer
+        budget = TASKS[task]["max_tokens"] + (THINK_BUDGET if settings.llm_thinking and not cloud else 0)
+        if on_progress is not None and hasattr(provider, "complete_json_stream"):
+            parsed = provider.complete_json_stream(system, user, budget, on_progress)
+        else:
+            parsed = provider.complete_json(system, user, budget)
         call.duration_ms = int(getattr(provider, "last_ms", 0) or (time.monotonic() - started) * 1000)
         call.raw_response = str(getattr(provider, "last_raw", "") or "")
+        thought = str(getattr(provider, "last_thinking", "") or "")
+        if thought:
+            # kept with the raw answer so Investigations shows how the model got there
+            call.raw_response = f"<think>\n{thought}\n</think>\n{call.raw_response}"
         call.model = provider.get_model() or ""
         if parsed is None:
             call.status, call.reason = "error", str(getattr(provider, "last_error", "") or "no answer")
@@ -558,7 +573,7 @@ def call_as_dict(call: ForgeAiCall, *, prompts: bool) -> dict[str, Any]:
     """One exchange for the UI; ``prompts`` adds the exact prompts and raw answer (Analyst and up)."""
     out = {"id": call.id, "at": call.created_at.isoformat() if call.created_at else None, "task": call.task,
            "skill": call.skill_slug, "skill_version": call.skill_version, "model": call.model, "status": call.status,
-           "reason": call.reason, "duration_ms": call.duration_ms, "answer": call.answer or {}, "rating": call.rating, "actor": call.actor,
+           "reason": call.reason, "duration_ms": call.duration_ms, "answer": call.answer or {}, "rating": call.rating, "stars": call.stars or 0, "actor": call.actor,
            "cloud": (call.endpoint or "").startswith("cloud:")}
     if prompts:
         out.update(system_prompt=call.system_prompt, user_prompt=call.user_prompt, raw_response=call.raw_response)
@@ -588,10 +603,87 @@ def status(db: Session) -> dict[str, Any]:
         "calls": len(recent), "used": sum(c.status == "used" for c in recent), "rejected": sum(c.status == "rejected" for c in recent),
         "errors": sum(c.status == "error" for c in recent), "avg_ms": int(sum(done) / len(done)) if done else 0,
         "thumbs_up": sum(c.rating > 0 for c in recent), "thumbs_down": sum(c.rating < 0 for c in recent),
+        **_stars([c.stars or 0 for c in recent]),
     }
     last = db.query(ForgeAiCall).order_by(ForgeAiCall.id.desc()).limit(10).all()
     out["last"] = [call_as_dict(c, prompts=False) for c in last]
     return out
+
+
+PING_KIND = "forgeai_ping"
+
+
+def ping(db: Session) -> dict[str, Any]:
+    """Job handler: one tiny question to the local model, timed, so people can see it really answers.
+
+    Returns ok, total and first-token milliseconds, the model and the error; stored in the job payload
+    and shown by GET /forgeai/pulse. Never raises.
+    """
+    import time
+
+    from app.settings import settings
+
+    provider = _provider()
+    if provider.get_name() == "none":
+        return {"ok": False, "error": "ForgeAI is off (Settings › RCA / AI)", "ms": 0}
+    started = time.monotonic()
+    first: dict[str, int] = {}
+
+    def seen(phase: str, thinking: str, answer: str) -> None:
+        if phase != "waiting" and "ms" not in first:
+            first["ms"] = int((time.monotonic() - started) * 1000)
+
+    system, user = "Answer with JSON only.", 'Reply exactly {"ok": true}'
+    if hasattr(provider, "complete_json_stream"):
+        parsed = provider.complete_json_stream(system, user, 24 + (THINK_BUDGET if settings.llm_thinking else 0), seen)
+    else:
+        parsed = provider.complete_json(system, user, 24)
+    ms = int(getattr(provider, "last_ms", 0) or (time.monotonic() - started) * 1000)
+    ok = bool(parsed) and parsed.get("ok") is True
+    return {"ok": ok, "ms": ms, "first_ms": first.get("ms", 0), "model": provider.get_model() or "",
+            "error": "" if ok else (str(getattr(provider, "last_error", "") or "") or "unexpected answer")[:200],
+            "raw": str(getattr(provider, "last_raw", "") or "")[:200]}
+
+
+def pulse(db: Session, *, check: bool = True) -> dict[str, Any]:
+    """One small status line for the chat: local model reachable and loaded, the last test, the LLM
+    lane and its worker, the cloud model. ``check`` asks llama.cpp /models (2 s timeout)."""
+    import httpx
+
+    from app.cloud_llm import info
+    from app.jobs import llm_lane
+    from app.loop_beats import age_seconds
+    from app.models import Job
+    from app.settings import settings
+
+    on = bool(settings.ai_enabled and settings.llm_url)
+    local: dict[str, Any] = {"on": on, "model": settings.llm_model, "reachable": None, "why": ""}
+    if on and check:
+        try:
+            r = httpx.get(settings.llm_url.rstrip("/") + "/models", timeout=2.0)
+            r.raise_for_status()
+            rows = r.json().get("data") or []
+            local["reachable"] = True
+            if rows and rows[0].get("id"):
+                local["model"] = str(rows[0]["id"])
+        except Exception as exc:  # status line: never raise
+            local["reachable"], local["why"] = False, str(exc)[:160]
+    last = db.query(Job).filter(Job.kind == PING_KIND).order_by(Job.id.desc()).first()
+    test: dict[str, Any] = {"status": "none"}
+    if last is not None:
+        result = (last.payload or {}).get("result") or {}
+        if last.status in {"pending", "running"}:
+            test = {"status": last.status}
+        elif last.status == "done":
+            test = {"status": "ok" if result.get("ok") else "error", **{k: result.get(k) for k in ("ms", "first_ms", "model", "error")}}
+        else:
+            test = {"status": "error", "error": (last.error or "")[:200]}
+        test["at"] = (last.finished_at or last.created_at).isoformat() if (last.finished_at or last.created_at) else None
+    worker_age = age_seconds("llm-jobs")
+    lane = llm_lane(db)
+    lane.pop("pending_ids", None)
+    return {"local": local, "test": test, "lane": lane, "worker_age_s": int(worker_age) if worker_age is not None else None,
+            "timeout_s": int(settings.llm_timeout), "thinking": settings.llm_thinking, "cloud": info()}
 
 
 EDITABLE = ("name", "match_alerts", "match_types", "priority", "instructions", "include", "enabled")
@@ -608,12 +700,18 @@ def skill_as_dict(skill: ForgeAiSkill, stats: dict[str, Any] | None = None) -> d
     }
 
 
-def skill_stats(db: Session, days: int = 30) -> dict[str, dict[str, int]]:
-    """Per skill over ``days``: questions, used, rejected, errors, thumbs up and down, average seconds."""
+def _stars(values: list[int]) -> dict[str, Any]:
+    """Average of the 1–5 star ratings given (unrated answers left out) and how many there were."""
+    rated = [v for v in values if v > 0]
+    return {"stars_avg": round(sum(rated) / len(rated), 1) if rated else None, "stars_n": len(rated)}
+
+
+def skill_stats(db: Session, days: int = 30) -> dict[str, dict[str, Any]]:
+    """Per skill over ``days``: questions, used, rejected, errors, thumbs up and down, stars, average seconds."""
     since = utcnow() - timedelta(days=days)
-    out: dict[str, dict[str, int]] = {}
+    out: dict[str, dict[str, Any]] = {}
     for c in db.query(ForgeAiCall).filter(ForgeAiCall.created_at >= since, ForgeAiCall.status != "trial").all():
-        s = out.setdefault(c.skill_slug, {"calls": 0, "used": 0, "rejected": 0, "errors": 0, "up": 0, "down": 0, "ms": 0})
+        s = out.setdefault(c.skill_slug, {"calls": 0, "used": 0, "rejected": 0, "errors": 0, "up": 0, "down": 0, "ms": 0, "_stars": []})
         s["calls"] += 1
         s["used"] += c.status == "used"
         s["rejected"] += c.status == "rejected"
@@ -621,8 +719,10 @@ def skill_stats(db: Session, days: int = 30) -> dict[str, dict[str, int]]:
         s["up"] += c.rating > 0
         s["down"] += c.rating < 0
         s["ms"] += c.duration_ms or 0
+        s["_stars"].append(c.stars or 0)
     for s in out.values():
         s["avg_s"] = round(s.pop("ms") / max(1, s["calls"]) / 1000, 1)
+        s.update(_stars(s.pop("_stars")))
     return out
 
 
