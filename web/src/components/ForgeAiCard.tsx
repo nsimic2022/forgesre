@@ -18,7 +18,7 @@ export type ForgeAiView = {
 };
 export type Call = {
   id: number; at: string | null; task: string; skill: string; skill_version: number; model: string; status: string; reason: string;
-  duration_ms: number; answer: Record<string, unknown>; rating: number; actor: string; cloud?: boolean;
+  duration_ms: number; answer: Record<string, unknown>; rating: number; stars?: number; actor: string; cloud?: boolean;
   system_prompt?: string; user_prompt?: string; raw_response?: string;
 };
 
@@ -33,14 +33,27 @@ function pretty(text = ""): string {
   }
 }
 
-/** Thumbs up / down on one answer; counted per skill so a weak skill shows up. */
+const STAR_LABEL = ["", "Wrong or useless", "Weak", "Partly right", "Good", "Spot on"];
+
+/**
+ * 1–5 stars on one answer (click the same star again to clear); counted per skill so a weak skill
+ * shows up. 4–5 stars also count as thumbs up and 1–2 as thumbs down in older reports.
+ */
 export function Rate({ callId, initial = 0 }: { callId: number; initial?: number }) {
-  const [value, setValue] = useState(initial);
-  const set = (v: number) => postJson<{ rating: number }>(`/api/v1/forgeai/calls/${callId}/rate`, { value: value === v ? 0 : v }).then((r) => setValue(r.rating)).catch(() => undefined);
+  const [stars, setStars] = useState(initial);
+  const [hover, setHover] = useState(0);
+  const set = (v: number) =>
+    postJson<{ stars: number }>(`/api/v1/forgeai/calls/${callId}/rate`, { stars: stars === v ? 0 : v }).then((r) => setStars(r.stars ?? 0)).catch(() => undefined);
+  const shown = hover || stars;
   return (
-    <span className="row" style={{ gap: 4 }} aria-label="Was this useful?">
-      <button className="btn" type="button" aria-pressed={value === 1} aria-label="Useful" onClick={() => set(1)}>👍</button>
-      <button className="btn" type="button" aria-pressed={value === -1} aria-label="Not useful" onClick={() => set(-1)}>👎</button>
+    <span className="stars" role="group" aria-label="Rate this answer" onMouseLeave={() => setHover(0)}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} type="button" className={n <= shown ? "on" : ""} aria-pressed={n <= stars} aria-label={`${n} of 5: ${STAR_LABEL[n]}`}
+          title={STAR_LABEL[n]} onMouseEnter={() => setHover(n)} onFocus={() => setHover(n)} onBlur={() => setHover(0)} onClick={() => void set(n)}>
+          ★
+        </button>
+      ))}
+      {shown ? <span className="small faint">{STAR_LABEL[shown]}</span> : null}
     </span>
   );
 }

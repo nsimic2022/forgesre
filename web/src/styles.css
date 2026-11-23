@@ -313,3 +313,31 @@ tr.picked td { background: var(--s2); }
   .chat-threads { flex: none; }
   .chat-msg { max-width: 95%; }
 }
+
+/* ForgeAI status line (components/ForgeAiPulse.tsx) */
+.ai-pulse { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.pulse-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.pulse-item > i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint, #777); flex: none; }
+.pulse-item.ok > i { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
+.pulse-item.warn > i { background: var(--warn); animation: chat-dot 1.2s infinite; }
+.pulse-item.crit > i { background: var(--crit); }
+.pulse-btn { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0 2px; font: inherit; }
+.pulse-why { color: var(--crit); flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .pulse-item.warn > i { animation: none; } }
+
+/* ForgeAI chat: live progress and folded reasoning */
+.chat-progress { display: flex; flex-direction: column; gap: 6px; min-width: 260px; }
+.chat-bar { display: block; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.chat-bar > i { display: block; height: 100%; background: var(--accent); transition: width 1s linear; }
+.chat-bar > i.late { background: var(--warn); }
+.chat-think { margin-top: 6px; }
+.chat-think summary { cursor: pointer; }
+.chat-think pre { margin: 6px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 0.8em; opacity: 0.7;
+  font-style: italic; border-left: 2px solid var(--border); padding-left: 10px; }
+
+/* 1–5 star rating (Rate in components/ForgeAiCard.tsx) */
+.stars { display: inline-flex; align-items: center; gap: 1px; }
+.stars button { background: none; border: 0; padding: 0 1px; cursor: pointer; font-size: 1.05em; line-height: 1; color: var(--border); }
+.stars button.on { color: #f5b301; }
+.stars button:focus-visible { outline: 2px solid var(--accent); border-radius: 3px; }
+.stars .small { margin-left: 6px; }

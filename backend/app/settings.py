@@ -252,6 +252,11 @@ class Settings(BaseSettings):
         except (TypeError, ValueError):
             return 90.0
 
+    @property
+    def llm_thinking(self) -> bool:
+        """Let a thinking model (Qwen3) reason before it answers. Off: faster on CPU, no reasoning to show."""
+        return bool(((self.yaml.get("ai") or {}).get("llm") or {}).get("thinking", False))
+
     def _cloud_yaml(self) -> dict[str, Any]:
         raw = (self.yaml.get("ai") or {}).get("cloud") or {}
         return raw if isinstance(raw, dict) else {}

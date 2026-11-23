@@ -156,7 +156,7 @@ function SkillUsefulness() {
         <div key={s.slug} className="cell-stack" style={{ gap: 2, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
             <span>{s.name}</span>
-            <span className="small">👍 {s.stats.up ?? 0} · 👎 {s.stats.down ?? 0}</span>
+            <span className="small">{s.stats.stars_n ? `★ ${s.stats.stars_avg} (${s.stats.stars_n})` : "not rated"}</span>
           </div>
           <span className="small faint">{s.stats.calls} questions · {s.stats.used} used · {s.stats.rejected} rejected by the checks · {s.stats.avg_s} s</span>
         </div>

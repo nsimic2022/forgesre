@@ -5,7 +5,7 @@ import { CallLog, type Call } from "./ForgeAiCard";
 import { ForgeAiTuning } from "./ForgeAiTuning";
 import { Card, Chip } from "./ui";
 
-type Stats = { calls: number; used: number; rejected: number; errors: number; up: number; down: number; avg_s: number };
+type Stats = { calls: number; used: number; rejected: number; errors: number; up: number; down: number; avg_s: number; stars_avg: number | null; stars_n: number };
 export type Skill = {
   slug: string; name: string; task: string; task_label: string; match_alerts: string[]; match_types: string[]; priority: number;
   instructions: string; default_instructions: string; include: Record<string, boolean>; enabled: boolean; builtin: boolean;
@@ -24,7 +24,7 @@ function StatLine({ s }: { s: Partial<Stats> }) {
   if (!s.calls) return <span className="small faint">Not used in the last 30 days.</span>;
   return (
     <span className="small muted">
-      {s.calls} questions · {s.used} used · {s.rejected} rejected · {s.errors} no answer · {s.avg_s} s · 👍 {s.up} · 👎 {s.down}
+      {s.calls} questions · {s.used} used · {s.rejected} rejected · {s.errors} no answer · {s.avg_s} s · {s.stars_n ? `★ ${s.stars_avg} (${s.stars_n})` : "not rated yet"}
     </span>
   );
 }

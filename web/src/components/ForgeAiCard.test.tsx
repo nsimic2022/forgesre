@@ -18,7 +18,7 @@ describe("ForgeAiCard", () => {
     const posts: { url: string; body: string }[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === "POST") posts.push({ url, body: String(init.body) });
-      const body = url.endsWith("/rate") ? { rating: 1 } : url.endsWith("/forgeai") && init?.method === "POST" ? { job: 5 }
+      const body = url.endsWith("/rate") ? { rating: 1, stars: 4 } : url.endsWith("/forgeai") && init?.method === "POST" ? { job: 5 }
         : url === "/api/v1/forgeai/jobs/5" ? { status: "done", error: "", call_id: 9 } : { calls: [call] };
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
     }));
@@ -27,8 +27,8 @@ describe("ForgeAiCard", () => {
     expect(screen.getByText("The uplink port went down.")).toBeTruthy();
     expect(screen.getByText("Look at port errors.")).toBeTruthy();
     expect(screen.getByText("A switch port stopped passing traffic.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Useful" }));
-    await waitFor(() => expect(posts.some((p) => p.url === "/api/v1/forgeai/calls/7/rate" && p.body === '{"value":1}')).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: /^4 of 5/ }));
+    await waitFor(() => expect(posts.some((p) => p.url === "/api/v1/forgeai/calls/7/rate" && p.body === '{"stars":4}')).toBe(true));
     fireEvent.change(screen.getByLabelText("Skill"), { target: { value: "incident-generic" } });
     fireEvent.click(screen.getByRole("button", { name: "Ask again" }));
     await waitFor(() => expect(changed).toHaveBeenCalled());

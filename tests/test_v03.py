@@ -363,7 +363,7 @@ def test_demo_rca_opens_new_incident_and_runs_builtin_immediately():
     db.close()
 
 
-def test_openai_llm_retries_plain_then_thinking_kwargs(monkeypatch):
+def test_openai_llm_sends_thinking_switch_first(monkeypatch):
     import json
 
     import httpx

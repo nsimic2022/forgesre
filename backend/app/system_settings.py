@@ -172,6 +172,8 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("ai.llm.url", "ai", "Model URL", "url", effective=lambda: settings.llm_url),
     _y("ai.llm.model", "ai", "Model name", effective=lambda: settings.llm_model),
     _y("ai.llm.timeout_seconds", "ai", "Model timeout (s)", "int", minimum=10, maximum=900, effective=lambda: settings.llm_timeout),
+    _y("ai.llm.thinking", "ai", "Let the model think first", "bool", effective=lambda: settings.llm_thinking,
+       help="Qwen3 and similar can reason before answering; the chat shows the reasoning. Slower on CPU: raise the timeout too."),
     _y("ai.cloud.enabled", "ai", "Paid cloud model (optional)", "bool", effective=lambda: settings.cloud_enabled, test="cloud",
        help="Off by default. When on, an Engineer may send one incident's facts (secrets removed) to the provider below, by choice, per question."),
     _y("ai.cloud.provider", "ai", "Cloud provider", "enum", choices=("openai", "anthropic", "azure", "openai-compatible"), effective=lambda: settings.cloud_provider),

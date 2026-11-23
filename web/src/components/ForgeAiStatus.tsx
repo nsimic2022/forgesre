@@ -6,7 +6,7 @@ import { Card, Chip } from "./ui";
 
 type Status = {
   enabled: boolean; url: string; model: string; timeout_s: number; reachable: boolean | null; loaded_model: string; why: string;
-  week: { calls: number; used: number; rejected: number; errors: number; avg_ms: number; thumbs_up: number; thumbs_down: number };
+  week: { calls: number; used: number; rejected: number; errors: number; avg_ms: number; thumbs_up: number; thumbs_down: number; stars_avg?: number | null; stars_n?: number };
   last: Call[];
 };
 
@@ -54,7 +54,7 @@ export function ForgeAiStatus() {
       {w ? (
         <span className="small">
           Last 7 days: {w.calls} questions · {w.used} used · {w.rejected} rejected by the checks · {w.errors} without an answer ·
-          average {(w.avg_ms / 1000).toFixed(1)} s · 👍 {w.thumbs_up} · 👎 {w.thumbs_down}
+          average {(w.avg_ms / 1000).toFixed(1)} s · {w.stars_n ? `★ ${w.stars_avg} of 5 (${w.stars_n} ratings)` : "no star ratings yet"}
         </span>
       ) : null}
       <span className="small faint">

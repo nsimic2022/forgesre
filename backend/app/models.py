@@ -360,6 +360,10 @@ class ForgeAiChatMessage(Base):
     skill: Mapped[str] = mapped_column(String(64), default="")
     cloud: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(16), default="done")  # pending | done | error
+    # While pending: queued | waiting (model reads the prompt) | thinking | writing | checking
+    phase: Mapped[str] = mapped_column(String(16), default="")
+    thinking: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     call_id: Mapped[int | None] = mapped_column(ForeignKey("forgeai_calls.id", ondelete="SET NULL"), nullable=True)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -422,7 +426,8 @@ class ForgeAiCall(Base):
     reason: Mapped[str] = mapped_column(Text, default="")
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     actor: Mapped[str] = mapped_column(String(255), default="system")
-    rating: Mapped[int] = mapped_column(Integer, default=0)
+    rating: Mapped[int] = mapped_column(Integer, default=0)  # -1 / 0 / 1, derived from stars
+    stars: Mapped[int] = mapped_column(Integer, default=0)  # 1–5, 0 = not rated
     rated_by: Mapped[str] = mapped_column(String(255), default="")
 
 

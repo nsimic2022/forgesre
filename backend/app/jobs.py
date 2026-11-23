@@ -137,9 +137,12 @@ def _json_safe(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
 
 
+LLM_KINDS = (FORGEAI_DIGEST_KIND, "forgeai", "llm_download", "forgeai_replay", "forgeai_chat", "forgeai_ping")
+
+
 def job_is_llm(row: Job) -> bool:
     """True when this investigate job will wait on llama.cpp."""
-    if row.kind in (FORGEAI_DIGEST_KIND, "forgeai", "llm_download", "forgeai_replay", "forgeai_chat"):
+    if row.kind in LLM_KINDS:
         return True
     if row.kind != "investigate":
         return False
@@ -158,9 +161,12 @@ def next_pending_job(db: Session, lane: str | None = None) -> Job | None:
     (builtin RCA before LLM). The LLM lane has its own thread so a slow model never
     holds RCA, discovery or reports.
     """
-    pending = db.query(Job).filter_by(status="pending").order_by(Job.id).limit(32).all()
     if lane == LANE_LLM:
-        return next((row for row in pending if job_is_llm(row)), None)
+        # filtered in SQL, so a backlog of ordinary jobs can never hide a waiting chat answer
+        rows = (db.query(Job).filter(Job.status == "pending", Job.kind.in_((*LLM_KINDS, "investigate")))
+                .order_by(Job.id).limit(32).all())
+        return next((row for row in rows if job_is_llm(row)), None)
+    pending = db.query(Job).filter_by(status="pending").order_by(Job.id).limit(32).all()
     if lane == LANE_DEFAULT:
         return next((row for row in pending if not job_is_llm(row)), None)
     if not pending:
@@ -169,6 +175,26 @@ def next_pending_job(db: Session, lane: str | None = None) -> Job | None:
         if not job_is_llm(row):
             return row
     return pending[0]
+
+
+def llm_lane(db: Session) -> dict:
+    """What the ForgeAI lane is doing: waiting jobs, the one running now and for how long."""
+    rows = (db.query(Job).filter(Job.status.in_(("pending", "running")), Job.kind.in_((*LLM_KINDS, "investigate")))
+            .order_by(Job.id).limit(200).all())
+    rows = [r for r in rows if job_is_llm(r)]
+    running = next((r for r in rows if r.status == "running"), None)
+    now = utcnow()
+
+    def age(at) -> int:
+        if at is None:
+            return 0
+        if at.tzinfo is None:
+            at = at.replace(tzinfo=now.tzinfo)
+        return max(0, int((now - at).total_seconds()))
+
+    return {"pending": sum(r.status == "pending" for r in rows),
+            "pending_ids": [r.id for r in rows if r.status == "pending"],
+            "running": {"id": running.id, "kind": running.kind, "seconds": age(running.started_at)} if running else None}
 
 
 def claim_job(db: Session, row: Job) -> bool:
@@ -337,6 +363,11 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload.pop("instructions", None)
                 payload["result"] = {"call_id": call.id, "status": call.status}
                 row.payload = payload
+            elif row.kind == "forgeai_ping":
+                from app.forgeai import ping
+
+                # One tiny timed question to the local model (Settings and chat status line).
+                row.payload = {**(row.payload or {}), "result": ping(db)}
             elif row.kind == "forgeai_chat":
                 from app.forgeai_chat import run_answer
 

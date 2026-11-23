@@ -3,10 +3,68 @@ import { getJson, postJson } from "../lib/api";
 import { clock } from "../lib/format";
 import { useRoleRank } from "../lib/me";
 import { Rate } from "./ForgeAiCard";
+import { ForgeAiPulse } from "./ForgeAiPulse";
 import { Chip } from "./ui";
 
 export type ChatSkill = { slug: string; name: string; task: string; task_label: string };
-export type ChatMessage = { id: number; role: "user" | "assistant"; text: string; skill: string; cloud: boolean; status: string; call_id: number | null; at: string | null };
+export type ChatMessage = {
+  id: number; role: "user" | "assistant"; text: string; skill: string; cloud: boolean; status: string; call_id: number | null; at: string | null;
+  phase?: string; thinking?: string; started_at?: string | null;
+  queue?: { ahead: number; running: { kind: string; seconds: number } | null; timeout_s: number };
+};
+
+const PHASE: Record<string, string> = {
+  queued: "Waiting in the ForgeAI queue",
+  waiting: "The model is reading the question",
+  thinking: "Thinking",
+  writing: "Writing the answer",
+  checking: "Checking the answer",
+};
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+/** Ticks once a second while ``on``, so elapsed times move between polls. */
+function useNow(on: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!on) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [on]);
+  return now;
+}
+
+/**
+ * A pending answer: where it is (queue, reading, thinking, writing), how long it has run against the
+ * timeout, and the tail of the model's reasoning, folded, while it thinks.
+ */
+function Progress({ m, now }: { m: ChatMessage; now: number }) {
+  const phase = m.phase || "queued";
+  const since = m.started_at ? Math.max(0, (now - Date.parse(m.started_at)) / 1000) : 0;
+  const limit = m.queue?.timeout_s || 0;
+  const q = m.queue;
+  const where =
+    phase === "queued" && q
+      ? q.ahead ? `${q.ahead} ahead${q.running ? ` (the model is busy with ${q.running.kind === "forgeai_chat" ? "another chat" : q.running.kind} for ${q.running.seconds} s)` : ""}` : "next"
+      : phase !== "queued" ? `${mmss(since)}${limit ? ` of max ${mmss(limit)}` : ""}` : "";
+  return (
+    <div className="chat-progress" aria-live="polite">
+      <span className="row" style={{ gap: 8 }}>
+        <span className="chat-typing" aria-hidden="true"><i /><i /><i /></span>
+        <span>{PHASE[phase] ?? phase}</span>
+        {where ? <span className="small faint">{where}</span> : null}
+      </span>
+      {limit && phase !== "queued" ? (
+        <span className="chat-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, (since / limit) * 100)}%` }} className={since > limit * 0.8 ? "late" : ""} /></span>
+      ) : null}
+      {m.thinking ? (
+        <details className="chat-think">
+          <summary className="small faint">Show what it is thinking</summary>
+          <pre>…{m.thinking.slice(-600)}</pre>
+        </details>
+      ) : null}
+    </div>
+  );
+}
 export type ChatDetail = { id: number; title: string; incident: string | null; incident_label: string; updated_at: string | null; messages: ChatMessage[]; skills: ChatSkill[] };
 type Cloud = { enabled: boolean; ready: boolean; provider: string; model: string; host: string; can_use: boolean };
 
@@ -57,6 +115,7 @@ export function ForgeAiChat({ chatId, onChanged }: { chatId: number; onChanged?:
   useEffect(() => void getJson<{ cloud?: Cloud }>("/api/v1/forgeai/status").then((s) => setCloud(s.cloud ?? null)).catch(() => setCloud(null)), []);
   const messages = chat?.messages ?? [];
   const waiting = Boolean(messages.some((m) => m.status === "pending"));
+  const now = useNow(waiting);
   useEffect(() => {
     if (!waiting) return;
     const t = setInterval(() => void load(), POLL_MS);
@@ -120,6 +179,7 @@ export function ForgeAiChat({ chatId, onChanged }: { chatId: number; onChanged?:
   if (!chat) return <div className="chat"><span className="muted" style={{ padding: 16 }}>{error || "Loading…"}</span></div>;
   return (
     <div className="chat">
+      <ForgeAiPulse />
       <div className="chat-log" aria-live="polite">
         {messages.length ? null : (
           <div className="chat-empty">
@@ -136,7 +196,18 @@ export function ForgeAiChat({ chatId, onChanged }: { chatId: number; onChanged?:
           return (
             <div key={m.id} className={`chat-msg ${m.role}${m.status === "error" ? " failed" : ""}`}>
               <div className="chat-bubble">
-                {m.status === "pending" ? <span className="chat-typing" aria-label="ForgeAI is answering"><i /><i /><i /></span> : m.text}
+                {m.status === "pending" ? <Progress m={m} now={now} /> : m.text}
+                {m.status !== "pending" && m.thinking ? (
+                  <details className="chat-think">
+                    <summary className="small faint">How ForgeAI got there</summary>
+                    <pre>{m.thinking}</pre>
+                  </details>
+                ) : null}
+                {m.status === "error" && /within \d+ s|timed out|timeout/i.test(m.text) ? (
+                  <span className="small faint" style={{ display: "block", marginTop: 6 }}>
+                    The model did not finish in time. A small CPU model may need a longer Model timeout (Settings › RCA / AI), or thinking turned off.
+                  </span>
+                ) : null}
               </div>
               <div className="chat-meta small faint">
                 {m.role === "assistant" ? "ForgeAI" : "You"}
@@ -156,7 +227,7 @@ export function ForgeAiChat({ chatId, onChanged }: { chatId: number; onChanged?:
             </div>
           );
         })}
-        {waiting ? <span className="small faint" style={{ alignSelf: "center" }}>The local model takes 30–90 seconds. You can leave; the answer stays in this chat.</span> : null}
+        {waiting ? <span className="small faint" style={{ alignSelf: "center" }}>You can leave; the answer stays in this chat.</span> : null}
         <div ref={end} />
       </div>
       <div className="chat-compose">

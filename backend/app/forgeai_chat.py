@@ -38,9 +38,20 @@ def chat_as_dict(chat: ForgeAiChat, incident: Incident | None = None, messages: 
     return data
 
 
-def message_as_dict(m: ForgeAiChatMessage) -> dict[str, Any]:
-    return {"id": m.id, "role": m.role, "text": m.text, "skill": m.skill, "cloud": bool(m.cloud), "status": m.status,
-            "call_id": m.call_id, "at": m.at.isoformat() if m.at else None}
+THINKING_SHOWN = 6000  # characters of reasoning kept per answer
+
+
+def message_as_dict(m: ForgeAiChatMessage, lane: dict[str, Any] | None = None) -> dict[str, Any]:
+    """One turn. A pending answer also says where it is: queue position, phase, seconds since start."""
+    data = {"id": m.id, "role": m.role, "text": m.text, "skill": m.skill, "cloud": bool(m.cloud), "status": m.status,
+            "call_id": m.call_id, "at": m.at.isoformat() if m.at else None, "phase": m.phase or "",
+            "thinking": (m.thinking or "")[-THINKING_SHOWN:], "started_at": m.started_at.isoformat() if m.started_at else None}
+    if m.status == "pending" and lane is not None:
+        job_id = lane.get("job_ids", {}).get(m.id)
+        ids = lane.get("pending_ids") or []
+        data["queue"] = {"ahead": ids.index(job_id) + (1 if lane.get("running") else 0) if job_id in ids else 0,
+                         "running": lane.get("running"), "timeout_s": lane.get("timeout_s")}
+    return data
 
 
 def list_chats(db: Session, owner: str, limit: int = 100) -> list[dict[str, Any]]:
@@ -59,7 +70,19 @@ def get_chat(db: Session, chat_id: int, owner: str) -> ForgeAiChat | None:
 def chat_detail(db: Session, chat: ForgeAiChat) -> dict[str, Any]:
     incident = db.get(Incident, chat.incident_id) if chat.incident_id else None
     messages = db.query(ForgeAiChatMessage).filter_by(chat_id=chat.id).order_by(ForgeAiChatMessage.id).all()
-    return chat_as_dict(chat, incident, messages)
+    data = chat_as_dict(chat, incident)
+    lane = None
+    pending = [m.id for m in messages if m.status == "pending"]
+    if pending:
+        from app.jobs import llm_lane
+        from app.settings import settings
+
+        lane = llm_lane(db)
+        jobs = db.query(Job).filter(Job.kind == JOB_KIND, Job.object_id.in_([str(i) for i in pending])).all()
+        lane["job_ids"] = {int(j.object_id): j.id for j in jobs}
+        lane["timeout_s"] = int(settings.llm_timeout)
+    data["messages"] = [message_as_dict(m, lane) for m in messages]
+    return data
 
 
 def open_chat(db: Session, owner: str, *, title: str = "", incident: Incident | None = None, reuse: bool = False) -> ForgeAiChat:
@@ -110,7 +133,8 @@ def ask(db: Session, chat: ForgeAiChat, text: str, *, skill: ForgeAiSkill | None
     shown = text or f"/{skill.slug}"
     first = db.query(ForgeAiChatMessage).filter_by(chat_id=chat.id, role="user").count() == 0
     question = ForgeAiChatMessage(chat_id=chat.id, role="user", text=shown, skill=skill.slug if skill else "", cloud=cloud)
-    answer = ForgeAiChatMessage(chat_id=chat.id, role="assistant", text="", skill=skill.slug if skill else "", cloud=cloud, status="pending")
+    answer = ForgeAiChatMessage(chat_id=chat.id, role="assistant", text="", skill=skill.slug if skill else "", cloud=cloud,
+                                status="pending", phase="queued")
     db.add_all([question, answer])
     if first and chat.title == "New chat":
         chat.title = shown[:60]
@@ -166,27 +190,54 @@ def run_answer(db: Session, row: Job) -> dict[str, Any]:
                .order_by(ForgeAiChatMessage.id.desc()).limit(HISTORY_TURNS).all())
     history = [{"role": m.role, "text": m.text} for m in reversed(earlier)]
     actor = str(payload.get("actor") or chat.owner)
+    answer.phase, answer.started_at = "waiting", utcnow()
+    db.commit()  # the chat shows "reading the prompt" while the model has not answered yet
+    progress = _progress_writer(answer.id)
     try:
         if task == "chat":
             call = forgeai.run(db, "chat", incident, skill_slug=skill.slug if skill else "", actor=actor, question=text,
-                               cloud=bool(answer.cloud), history=history)
+                               cloud=bool(answer.cloud), history=history, on_progress=progress)
         else:
             if task == "ask" and not text:
                 raise ValueError("type a question for this skill")
             call = forgeai.run(db, task, incident, skill_slug=skill.slug, actor=actor, trial=True, question=text,
-                               cloud=bool(answer.cloud) and task != "investigate")
+                               cloud=bool(answer.cloud) and task != "investigate", on_progress=progress)
     except (ValueError, LookupError) as exc:
         answer.status, answer.text = "error", f"ForgeAI could not answer: {exc}"
     else:
+        db.refresh(answer)  # progress was written by another session
         answer.call_id = call.id
+        raw = call.raw_response or ""
+        if raw.startswith("<think>"):
+            answer.thinking = raw[len("<think>"):].partition("</think>")[0].strip()[-THINKING_SHOWN:]
         if call.status in {"trial", "used"}:
             answer.status, answer.text = "done", format_answer(task, call.answer or {}) or "(empty answer)"
         else:
             answer.status, answer.text = "error", f"ForgeAI could not answer: {call.reason or call.status}"
+    answer.phase = ""
     answer.at = utcnow()
     chat.updated_at = utcnow()
     db.commit()
     return {"status": answer.status, "call_id": answer.call_id}
+
+
+def _progress_writer(message_id: int):
+    """A callback for forgeai.run that saves phase and reasoning so far, in its own session (the
+    job's session is busy inside the model call). Best effort: a failed write is skipped."""
+    from app.db import SessionLocal
+
+    def write(phase: str, thinking: str, answer: str) -> None:
+        session = SessionLocal()
+        try:
+            session.query(ForgeAiChatMessage).filter_by(id=message_id, status="pending").update(
+                {"phase": phase[:16], "thinking": thinking[-THINKING_SHOWN:]}, synchronize_session=False)
+            session.commit()
+        except Exception:  # noqa: BLE001 — progress only
+            session.rollback()
+        finally:
+            session.close()
+
+    return write
 
 
 def fail_answer(db: Session, row: Job, why: str) -> None:
@@ -196,6 +247,6 @@ def fail_answer(db: Session, row: Job, why: str) -> None:
     except (TypeError, ValueError):
         return
     if answer is not None and answer.status == "pending":
-        answer.status, answer.text = "error", f"ForgeAI could not answer: {why[:300]}"
+        answer.status, answer.text, answer.phase = "error", f"ForgeAI could not answer: {why[:300]}", ""
         db.commit()
 

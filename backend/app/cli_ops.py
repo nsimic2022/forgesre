@@ -854,6 +854,24 @@ def format_checks(data: dict) -> str:
     return "\n".join(out) + "\n"
 
 
+def format_pulse(p: dict) -> str:
+    """The chat's status line as text: model and connection, last test, ForgeAI queue and its worker."""
+    local, test, lane = p.get("local") or {}, p.get("test") or {}, p.get("lane") or {}
+    conn = "off" if not local.get("on") else "ok" if local.get("reachable") else f"NOT answering ({local.get('why') or '?'})"
+    if test.get("status") == "ok":
+        t = f"ok, first token {(test.get('first_ms') or 0) / 1000:.1f} s, total {(test.get('ms') or 0) / 1000:.1f} s"
+    elif test.get("status") == "error":
+        t = f"FAILED: {test.get('error') or '?'}"
+    else:
+        t = {"pending": "waiting in the queue", "running": "running", "none": "never run (./forgesre forgeai test)"}.get(str(test.get("status")), "?")
+    run = lane.get("running")
+    worker = p.get("worker_age_s")
+    return (f"Model {local.get('model') or '-'} · connection {conn} · test {t}\n"
+            f"Queue: {lane.get('pending', 0)} waiting" + (f", running {run['kind']} for {run['seconds']} s" if run else "")
+            + f" · worker {'last seen ' + str(worker) + ' s ago' if worker is not None else 'NOT seen'}"
+            + f" · timeout {p.get('timeout_s')} s · thinking {'on' if p.get('thinking') else 'off'}\n")
+
+
 def format_forgeai(status: dict, calls: list[dict] | None = None) -> str:
     """ForgeAI on/off, model, last week; with an incident, each question and the exact prompts."""
     w = status.get("week") or {}
@@ -862,7 +880,8 @@ def format_forgeai(status: dict, calls: list[dict] | None = None) -> str:
     out = [
         f"ForgeAI: {'on' if status.get('enabled') else 'off'} · model {model or '-'} · {reach}",
         f"Last 7 days: {w.get('calls', 0)} questions, {w.get('used', 0)} used, {w.get('rejected', 0)} rejected, "
-        f"{w.get('errors', 0)} without answer, avg {w.get('avg_ms', 0) / 1000:.1f} s, up {w.get('thumbs_up', 0)} / down {w.get('thumbs_down', 0)}",
+        f"{w.get('errors', 0)} without answer, avg {w.get('avg_ms', 0) / 1000:.1f} s, "
+        + (f"rated {w.get('stars_avg')} of 5 stars ({w.get('stars_n')} ratings)" if w.get("stars_n") else "no star ratings yet"),
     ]
     cloud = status.get("cloud") or {}
     if cloud.get("enabled"):
@@ -897,9 +916,21 @@ def format_tuning(r: dict[str, Any]) -> str:
 
 
 def cmd_forgeai(port: str, rest: list[str]) -> None:
-    """./forgesre forgeai [INC-… | tuning [skill] | docs]"""
+    """./forgesre forgeai [INC-… | tuning [skill] | docs | test]"""
+    import time
+
     jar, _me = ensure_jar(port)
     try:
+        if rest[:1] == ["test"]:
+            started = post_json(port, jar, "/api/v1/forgeai/ping", {})
+            sys.stdout.write(f"Test queued (job {started.get('job')}); waiting for the model…\n")
+            pulse = get_json(port, jar, "/api/v1/forgeai/pulse")
+            deadline = time.monotonic() + int(pulse.get("timeout_s") or 90) + 120
+            while (pulse.get("test") or {}).get("status") in {"pending", "running"} and time.monotonic() < deadline:
+                time.sleep(2)
+                pulse = get_json(port, jar, "/api/v1/forgeai/pulse")
+            sys.stdout.write(format_pulse(pulse))
+            return
         if rest[:1] == ["docs"]:
             data = get_json(port, jar, "/api/v1/forgeai/docs")
             lines = [f"Document search: {'on' if data.get('embedder') else 'off'} · model {data.get('model')} · "
@@ -918,6 +949,8 @@ def cmd_forgeai(port: str, rest: list[str]) -> None:
             return
         status = get_json(port, jar, "/api/v1/forgeai/status")
         calls = get_json(port, jar, f"/api/v1/incidents/{rest[0]}/forgeai")["calls"] if rest else None
+        if not rest:
+            sys.stdout.write(format_pulse(get_json(port, jar, "/api/v1/forgeai/pulse")))
         sys.stdout.write(format_forgeai(status, calls))
     finally:
         if jar != SESSION_PATH and jar.exists():
