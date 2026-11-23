@@ -91,3 +91,49 @@ async def send_smtp_async(target: str, subject: str, body: str, html: str | None
 def send_smtp(target: str, subject: str, body: str, html: str | None = None) -> None:
     """Sync wrapper for pytest and ``Depends(get_db)`` callers."""
     run_sync(send_smtp_async(target, subject, body, html=html))
+
+
+def check(send: bool = True) -> dict:
+    """Settings › Notifications › Test and ``./forgesre settings test smtp``.
+
+    Signs in to the SMTP server (STARTTLS when on) and, with ``send``, mails one short test message
+    to the From address, so the whole path is proven. Never raises; the 5 s timeout applies. The
+    password is never part of the answer.
+    """
+    if not settings.email_enabled:
+        return {"status": "disabled", "why": "notifications.email.enabled is false"}
+    if not settings.smtp_host:
+        return {"status": "error", "why": "no SMTP server (notifications.email.host)", "fix": "Settings › Notifications › SMTP server"}
+
+    async def _run() -> None:
+        kwargs: dict = {"hostname": settings.smtp_host, "port": int(settings.smtp_port or 587), "timeout": SMTP_TIMEOUT,
+                        "start_tls": bool(settings.smtp_tls), "use_tls": False}
+        if settings.smtp_tls:
+            kwargs["tls_context"] = smtp_ssl_context(settings.smtp_host)
+        client = aiosmtplib.SMTP(**kwargs)
+        await client.connect()
+        try:
+            if settings.smtp_username:
+                await client.login(settings.smtp_username, settings.smtp_password)
+            if send:
+                message = build_email_message(from_addr=settings.smtp_from, to_addr=settings.smtp_from,
+                                              subject="ForgeSRE test mail", body="This is a test from ForgeSRE Settings. Mail works.")
+                await client.send_message(message)
+        finally:
+            try:
+                await client.quit()
+            except Exception:  # noqa: BLE001 — the server may already have closed the line
+                pass
+
+    where = f"{settings.smtp_host}:{settings.smtp_port}"
+    try:
+        run_sync(_run())
+    except aiosmtplib.SMTPAuthenticationError as exc:
+        hint = ("Gmail: SMTP_USERNAME = the full address, SMTP_PASSWORD = an app password "
+                "(myaccount.google.com/apppasswords), not the account password") if "gmail" in settings.smtp_host else \
+               "check SMTP_USERNAME and SMTP_PASSWORD (./forgesre settings set-secret …)"
+        return {"status": "error", "why": f"{where} refused the sign-in ({exc.code})", "fix": hint}
+    except Exception as exc:  # noqa: BLE001 — a check reports, it never raises
+        return {"status": "error", "why": f"{where}: {type(exc).__name__}: {str(exc)[:160]}",
+                "fix": "check host, port (587 STARTTLS) and that outbound SMTP is open"}
+    return {"status": "ok", "why": f"signed in to {where}" + (f" and sent a test mail to {settings.smtp_from}" if send else "")}

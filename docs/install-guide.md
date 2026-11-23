@@ -243,7 +243,7 @@ GLPI, NetBox or clusters. Each has a Test button on its Settings card and a row 
 | Zabbix | Hosts and alarms → ForgeSRE | `ZABBIX_URL`, `ZABBIX_API_TOKEN` (read-only user); for alarms a Webhook media type to `…/api/v1/webhooks/zabbix` with `ZABBIX_WEBHOOK_TOKEN` | set-secret + Zabbix UI ([zabbix.md](zabbix.md)) |
 | GLPI | Inventory → ForgeSRE | `GLPI_URL`, `GLPI_APP_TOKEN`, `GLPI_USER_TOKEN` | set-secret ([glpi.md](glpi.md)) |
 | Kubernetes / OpenShift / k3s | Cluster state → ForgeSRE | `kubernetes.clusters` (name, URL, CA) + `K8S_TOKEN_<NAME>` of a read-only service account | config + set-secret ([kubernetes.md](kubernetes.md)) |
-| Mail (SMTP) | ForgeSRE → people | `notifications.email.host/port/from/tls` + `SMTP_USERNAME`, `SMTP_PASSWORD` | Settings › Notifications |
+| Mail (SMTP) | ForgeSRE → people | `notifications.email.host/port/from/tls` + `SMTP_USERNAME`, `SMTP_PASSWORD`; Gmail: `smtp.gmail.com`, 587, the full address and an app password; `./forgesre settings test smtp` signs in and mails the From address | Settings › Notifications |
 | Slack, Teams, Discord | ForgeSRE → channel | `*_WEBHOOK_URL` + turn the channel on, minimum severity | set-secret + Notifications |
 | CI/CD and changes | Changes → ForgeSRE | `POST /api/v1/changes` with `CHANGES_WEBHOOK_TOKEN`; ForgeAI sees changes before an incident | Pipeline |
 | LDAP / Active Directory, OIDC (Entra ID…) | Sign-in | `auth.ldap.*` + `LDAP_BIND_PASSWORD`, or `auth.oidc.*` + `OIDC_CLIENT_SECRET`; groups → roles | Settings › Sign-in ([sign-in.md](sign-in.md)) |

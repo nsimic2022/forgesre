@@ -791,7 +791,11 @@ def cmd_settings(port: str, args: list[str]) -> None:
                 names = sorted({r["test"] for r in data.get("settings", []) if r.get("test")})
             bad = 0
             for name in names:
-                result = post_json(port, jar, f"/api/v1/settings/test/{name}", {})
+                try:
+                    result = post_json(port, jar, f"/api/v1/settings/test/{name}", {})
+                except subprocess.CalledProcessError:
+                    known = sorted({r["test"] for r in get_json(port, jar, "/api/v1/settings").get("settings", []) if r.get("test")})
+                    raise SystemExit(f"no test called {name!r}. Tests: {', '.join(known)}") from None
                 status = str(result.get("status", "?"))
                 why = result.get("why") or result.get("detail") or ""
                 bad += status not in {"ok", "disabled", "skipped"}
