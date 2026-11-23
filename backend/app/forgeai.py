@@ -397,7 +397,7 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
     else:
         provider = _provider()
     if provider.get_name() == "none":
-        call.status, call.reason = "error", "ForgeAI is off (Settings › ForgeRCA / ForgeAI)"
+        call.status, call.reason = "error", "ForgeAI is off (Settings › RCA / AI)"
     else:
         started = time.monotonic()
         parsed = provider.complete_json(system, user, TASKS[task]["max_tokens"])

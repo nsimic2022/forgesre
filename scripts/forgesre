@@ -224,7 +224,7 @@ EOF
       ;;
     doctor)
       cat <<'EOF'
-doctor — same checks as Settings › Services and health. Overall HEALTHY or DEGRADED.
+doctor — same checks as Settings › Health. Overall HEALTHY or DEGRADED.
 
   ./forgesre doctor
   ./doctor.sh
@@ -639,7 +639,7 @@ Default model is Qwen3-4B Q4_K_M (2.5 GB, fast on CPU). Others:
 
   ./forgesre fetch-llm --model qwen3-8b       (also llama3.1-8b, qwen2.5-7b, qwen2.5-14b)
 
-Settings › ForgeRCA / ForgeAI downloads, imports and switches models from the browser.
+Settings › RCA / AI downloads, imports and switches models from the browser.
 Any other single-file GGUF:
 
   FORGESRE_LLM_URL='https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf' ./forgesre fetch-llm

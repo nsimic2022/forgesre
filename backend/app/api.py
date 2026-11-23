@@ -685,7 +685,7 @@ def forgeai_ask(number: str, body: ForgeAiAsk, db: Session = Depends(get_db), us
     if body.task not in TASKS or body.task in {"shift", "ask"}:
         raise HTTPException(status_code=400, detail="task is incident, investigate, explain or postmortem")
     if not (settings.ai_enabled and settings.llm_url):
-        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
+        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › RCA / AI")
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
         raise HTTPException(status_code=404, detail="incident not found")
@@ -744,7 +744,7 @@ def forgeai_ask_trial(number: str, body: ForgeAiQuestion, db: Session = Depends(
         if why:
             raise HTTPException(status_code=409, detail=f"cloud model not available: {why}")
     elif not (settings.ai_enabled and settings.llm_url):
-        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
+        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › RCA / AI")
     item = db.query(Incident).filter_by(number=number).first()
     if item is None:
         raise HTTPException(status_code=404, detail="incident not found")
@@ -926,7 +926,7 @@ def forgeai_trial(body: ForgeAiTrial, db: Session = Depends(get_db), user: User 
     if body.task not in TASKS:
         raise HTTPException(status_code=400, detail="unknown task")
     if not (settings.ai_enabled and settings.llm_url):
-        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
+        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › RCA / AI")
     target = "shift"
     if body.task != "shift":
         q = db.query(Incident)
@@ -952,7 +952,7 @@ def forgeai_shift(db: Session = Depends(get_db), user: User = Depends(require("i
     from app.settings import settings
 
     if not (settings.ai_enabled and settings.llm_url):
-        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
+        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › RCA / AI")
     job = enqueue(db, JOB_KIND, "shift", object_type="forgeai", payload={"task": "shift", "actor": user.email})
     return {"queued": True, "job": getattr(job, "id", None)}
 
@@ -1193,7 +1193,7 @@ def forgeai_skill_replay(slug: str, body: ReplayBody, db: Session = Depends(get_
     if skill.task not in {"incident", "investigate"}:
         raise HTTPException(status_code=400, detail="replay is for skills that answer incidents")
     if not (settings.ai_enabled and settings.llm_url):
-        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI")
+        raise HTTPException(status_code=409, detail="ForgeAI is off: turn it on in Settings › RCA / AI")
     text = body.instructions.strip() if body.instructions else None
     if text is not None and len(text) < 20:
         raise HTTPException(status_code=400, detail="instructions need at least a sentence")
@@ -2913,7 +2913,7 @@ def _llm_check() -> dict[str, str]:
             "./forgesre fetch-llm. Installed: docker compose --profile ai up -d llm, then docker compose logs --tail 40 llm"
         )
     elif row.get("status") == "error":
-        row["fix"] = "The external model server does not answer: check ai.llm.url in Settings › ForgeRCA / ForgeAI"
+        row["fix"] = "The external model server does not answer: check ai.llm.url in Settings › RCA / AI"
     return row
 
 
@@ -2925,7 +2925,7 @@ def _cloud_check() -> dict[str, str]:
         return _ok("disabled")
     why = not_ready()
     if why:
-        return {"status": "warn", "why": why, "fix": "Settings › ForgeRCA / ForgeAI, or ./forgesre settings set-secret CLOUD_LLM_API_KEY"}
+        return {"status": "warn", "why": why, "fix": "Settings › RCA / AI, or ./forgesre settings set-secret CLOUD_LLM_API_KEY"}
     return {"status": "ok", "why": f"{settings.cloud_provider} {settings.cloud_model} configured; Settings › Test sends one tiny request"}
 
 

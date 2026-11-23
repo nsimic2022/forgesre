@@ -62,7 +62,7 @@ function Editor({ skill, canEdit, onSaved }: { skill: Skill; canEdit: boolean; o
         await new Promise((r) => setTimeout(r, 2500));
       }
     } catch (e) {
-      setError(e instanceof ApiError && e.status === 409 ? "ForgeAI is off: turn it on in Settings › ForgeRCA / ForgeAI." : (e as Error).message);
+      setError(e instanceof ApiError && e.status === 409 ? "ForgeAI is off: turn it on in Settings › RCA / AI." : (e as Error).message);
     } finally {
       setBusy("");
     }

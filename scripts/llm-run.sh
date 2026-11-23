@@ -28,7 +28,7 @@ if [ "${LLM_PICK_ONLY:-}" = "1" ]; then pick; exit 0; fi
 while true; do
   model="$(pick)"
   if [ -z "$model" ]; then
-    echo "forgesre: no model in $MODELS yet; add one in Settings › ForgeRCA / ForgeAI or run ./forgesre fetch-llm"
+    echo "forgesre: no model in $MODELS yet; add one in Settings › RCA / AI or run ./forgesre fetch-llm"
     sleep 15
     continue
   fi

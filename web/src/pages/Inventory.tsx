@@ -5,11 +5,11 @@ import { AssetEditor, type EditorMode } from "../components/AssetEditor";
 import { CapacityCard } from "../components/CapacityCard";
 import { ImportCsv } from "../components/ImportCsv";
 import { SourcesPanel } from "../components/SourcesPanel";
+import { Pager, usePageSize } from "../components/Pager";
 import { Card, Chip, Dot } from "../components/ui";
 import { getJson, postJson, type AssetCard, type AssetFormOptions, type InventoryPage, type InventoryRow } from "../lib/api";
 import { clock, severityTone, type Tone } from "../lib/format";
 
-const PAGE = 50;
 type Filters = { site: string; rack: string; type: string; environment: string; customer: string; view: string };
 const EMPTY: Filters = { site: "", rack: "", type: "", environment: "", customer: "", view: "" };
 const STATE: Record<InventoryRow["state"], { label: string; tone: Tone }> = {
@@ -130,6 +130,7 @@ export function InventoryPage() {
   const [filters, setFilters] = useState<Filters>(EMPTY);
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
   const [offset, setOffset] = useState(0);
+  const [PAGE, setPageSize] = usePageSize("inventory");
   const [data, setData] = useState<InventoryPage | null>(null);
   const [selected, setSelected] = useState("");
   const [error, setError] = useState("");
@@ -168,7 +169,7 @@ export function InventoryPage() {
         .catch((e: Error) => setError(e.message));
     }, query ? 250 : 0);
     return () => window.clearTimeout(timer);
-  }, [filters, query, offset, reload]);
+  }, [filters, query, offset, PAGE, reload]);
 
   const set = (next: Filters) => (setFilters(next), setOffset(0));
   const removePicked = () =>
@@ -281,15 +282,7 @@ export function InventoryPage() {
               </table>
               {data && data.rows.length === 0 ? <div className="empty">No assets match.</div> : null}
             </div>
-            {data && data.total > PAGE ? (
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <span className="small faint">{offset + 1}–{Math.min(offset + PAGE, data.total)} of {data.total}</span>
-                <div className="row">
-                  <button className="btn" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>Previous</button>
-                  <button className="btn" disabled={offset + PAGE >= data.total} onClick={() => setOffset(offset + PAGE)}>Next</button>
-                </div>
-              </div>
-            ) : null}
+            {data ? <Pager total={data.total} offset={offset} size={PAGE} onOffset={setOffset} onSize={setPageSize} label="assets" /> : null}
           </Card>
         </div>
         {selected ? (

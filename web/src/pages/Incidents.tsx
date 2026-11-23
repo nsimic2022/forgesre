@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { IncidentTable } from "../components/IncidentTable";
+import { Pager, usePageSize } from "../components/Pager";
 import { Card } from "../components/ui";
 import { getJson, type IncidentPage } from "../lib/api";
 import { severityLabel } from "../lib/format";
@@ -12,7 +13,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "resolved", label: "Resolved" },
   { key: "all", label: "All" },
 ];
-const PAGE = 50;
 
 /** Sub-navigation shared by the Incidents pages (design: Incidents | On-call). */
 export function IncidentsNav() {
@@ -35,6 +35,7 @@ export function IncidentsPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [offset, setOffset] = useState(0);
+  const [PAGE, setPageSize] = usePageSize("incidents");
   const [data, setData] = useState<IncidentPage | null>(null);
   const [error, setError] = useState("");
 
@@ -46,7 +47,7 @@ export function IncidentsPage() {
         .catch((err: Error) => setError(err.message));
     }, query ? 250 : 0); // debounce typing
     return () => window.clearTimeout(timer);
-  }, [tab, severity, query, from, to, offset]);
+  }, [tab, severity, query, from, to, offset, PAGE]);
   const csv = `/api/v1/incidents-page.csv?${new URLSearchParams({ tab, severity, q: query, date_from: from, date_to: to })}`;
 
   const pick = (next: () => void) => {
@@ -87,17 +88,7 @@ export function IncidentsPage() {
           <a className="btn" href={csv} download>Export CSV</a>
         </div>
         <IncidentTable rows={data?.rows ?? []} loaded={Boolean(data)} />
-        {data && data.total > PAGE ? (
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <span className="small faint">
-              {offset + 1}–{Math.min(offset + PAGE, data.total)} of {data.total}
-            </span>
-            <div className="row">
-              <button className="btn" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>Previous</button>
-              <button className="btn" disabled={offset + PAGE >= data.total} onClick={() => setOffset(offset + PAGE)}>Next</button>
-            </div>
-          </div>
-        ) : null}
+        {data ? <Pager total={data.total} offset={offset} size={PAGE} onOffset={setOffset} onSize={setPageSize} label="incidents" /> : null}
       </Card>
     </>
   );

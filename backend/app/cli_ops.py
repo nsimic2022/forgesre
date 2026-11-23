@@ -908,7 +908,7 @@ def cmd_forgeai(port: str, rest: list[str]) -> None:
                 lines.append(f"  #{d['id']:<4} {d['status']:<9} {d['pages']:>4} pages {d['chunks']:>5} chunks  {d['title']}"
                              + (f"  ({d['error']})" if d.get("error") else ""))
             if not data.get("docs"):
-                lines.append("  No documents. Upload in Settings › ForgeRCA / ForgeAI › Documents (Engineer).")
+                lines.append("  No documents. Upload in Settings › RCA / AI › Documents (Engineer).")
             sys.stdout.write("\n".join(lines) + "\n")
             return
         if rest[:1] == ["tuning"]:

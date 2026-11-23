@@ -494,7 +494,7 @@ Platform backup files: `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (o
 
 ForgeRCA (Python) always runs. The local model only **rewrites prose**. Skip this on a 4 GB VM. Full implementation guide (hardware, jobs, debug CLI, external `/v1`): [`llm.md`](llm.md).
 
-Not stored in git. Default is **Qwen3 4B Q4_K_M** (2.5 GB). Settings › ForgeRCA / ForgeAI has a catalog (Qwen3 4B/8B, Llama 3.1 8B, Qwen2.5 7B/14B), Hugging Face links, file import and the switch between installed models; `./forgesre fetch-llm --model ID` does the same from the shell. Ollama is not the product default. Mailbox stays opt-in (`./forgesre mailbox`); `COMPOSE_PROFILES=ai` does not turn mail on.
+Not stored in git. Default is **Qwen3 4B Q4_K_M** (2.5 GB). Settings › RCA / AI has a catalog (Qwen3 4B/8B, Llama 3.1 8B, Qwen2.5 7B/14B), Hugging Face links, file import and the switch between installed models; `./forgesre fetch-llm --model ID` does the same from the shell. Ollama is not the product default. Mailbox stays opt-in (`./forgesre mailbox`); `COMPOSE_PROFILES=ai` does not turn mail on.
 
 ### Where the file lands
 

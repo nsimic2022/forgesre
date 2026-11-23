@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { usePaged } from "../components/Pager";
 import { Link } from "react-router-dom";
 import { MonitoringCheck } from "../components/MonitoringCheck";
 import { SnmpFields, snmpPayload, type Snmp } from "../components/SnmpFields";
@@ -197,6 +198,7 @@ function FromLibreNMS() {
   const fresh = rows.filter((r) => r.status === "new");
   const last = status?.last;
   const res = last?.result;
+  const pg_found = usePaged(rows, "found");
   return (
     <>
       <Card title="From LibreNMS">
@@ -226,11 +228,11 @@ function FromLibreNMS() {
       ) : null}
       <Card title={`Found · ${fresh.length} new`}>
         {rows.length === 0 ? <span className="muted">Nothing found yet. Read LibreNMS above.</span> : null}
-        {rows.length ? (
+        {rows.length ? (<>
           <div className="table-wrap"><table className="data" style={{ minWidth: 760 }}>
             <thead><tr><th>Address</th><th>Name</th><th>From</th><th>Looks like</th><th>Answers on</th><th>Seen</th><th style={{ width: 170 }}></th></tr></thead>
             <tbody>
-              {rows.map((r) => (
+              {pg_found.page.map((r) => (
                 <tr key={r.id}>
                   <td className="mono">{r.ip}</td>
                   <td>{r.hostname || <span className="faint">—</span>}</td>
@@ -250,6 +252,7 @@ function FromLibreNMS() {
               ))}
             </tbody>
           </table></div>
+          {pg_found.pager}</>
         ) : null}
       </Card>
     </>

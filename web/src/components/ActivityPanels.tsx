@@ -1,24 +1,14 @@
 import { useEffect, useState } from "react";
+import { usePaged } from "./Pager";
 import { Link } from "react-router-dom";
 import { ApiError, getJson } from "../lib/api";
 import { clock } from "../lib/format";
+import { Pager as PagerBar, usePageSize } from "./Pager";
 import { Card, Chip } from "./ui";
 
-const PAGE = 15;
 type Outbox = { total: number; rows: { id: number; at: string | null; channel: string; target: string; subject: string; status: string; error: string; step: string; incident: string }[] };
 type Journal = { modules: { module: string; count: number }[]; entries: { id: number; at: string | null; module: string; action: string; status: string; summary: string; detail: string }[] };
 type Audit = { total: number; rows: { id: number; at: string | null; actor: string; action: string; object: string; ip: string; data: Record<string, unknown> }[] };
-
-function Pager({ total, offset, setOffset }: { total: number; offset: number; setOffset: (n: number) => void }) {
-  if (total <= PAGE) return null;
-  return (
-    <div className="row small">
-      <button className="btn" type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>Previous</button>
-      <span className="faint">{offset + 1}–{Math.min(total, offset + PAGE)} of {total}</span>
-      <button className="btn" type="button" disabled={offset + PAGE >= total} onClick={() => setOffset(offset + PAGE)}>Next</button>
-    </div>
-  );
-}
 
 const sentTone = (s: string) => (s === "sent" ? "ok" : s === "queued" || s === "generated" ? "off" : "crit");
 
@@ -27,13 +17,14 @@ export function OutboxCard() {
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
+  const [PAGE, setPageSize] = usePageSize("outbox");
   const [data, setData] = useState<Outbox | null>(null);
   const [error, setError] = useState("");
   const [hidden, setHidden] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams({ status, q, limit: String(PAGE), offset: String(offset) });
     getJson<Outbox>(`/api/v1/outbox?${params}`).then(setData).catch((e: Error) => (e instanceof ApiError && e.status === 403 ? setHidden(true) : setError(e.message)));
-  }, [status, q, offset]);
+  }, [status, q, offset, PAGE]);
   if (hidden) return null;
   return (
     <Card title="Mail and chat outbox" actions={<span className="small faint">{data ? `${data.total} messages` : ""}</span>}>
@@ -60,7 +51,7 @@ export function OutboxCard() {
         </tbody>
       </table></div>
       {data && !(data.rows ?? []).length ? <span className="muted">Nothing here.</span> : null}
-      <Pager total={data?.total ?? 0} offset={offset} setOffset={setOffset} />
+      <PagerBar total={data?.total ?? 0} offset={offset} size={PAGE} onOffset={setOffset} onSize={setPageSize} />
       <span className="small faint">“generated” means SMTP is off, so the mail was written but not sent. Same list: <code className="mono">./forgesre journal notification</code>.</span>
     </Card>
   );
@@ -76,6 +67,7 @@ export function JournalPanel() {
     const params = new URLSearchParams({ limit: "200", ...(module ? { module } : {}), ...(status ? { status } : {}) });
     getJson<Journal>(`/api/v1/journal?${params}`).then(setData).catch((e: Error) => setError(e.message));
   }, [module, status]);
+  const pg_journal = usePaged((data?.entries ?? []), "journal");
   return (
     <Card title="Journal">
       <span className="small faint">The platform&apos;s own report: every sync, job, delivery and check with its result. The first place to look when an integration misbehaves. Same as <code className="mono">./forgesre journal</code>.</span>
@@ -90,7 +82,7 @@ export function JournalPanel() {
       <div className="table-wrap"><table className="data" style={{ minWidth: 640 }}>
         <thead><tr><th style={{ width: 90 }}>When</th><th style={{ width: 150 }}>Module</th><th>What happened</th><th style={{ width: 80 }}>Result</th></tr></thead>
         <tbody>
-          {(data?.entries ?? []).map((e) => (
+          {pg_journal.page.map((e) => (
             <tr key={e.id}>
               <td className="small muted">{clock(e.at)}</td>
               <td className="small mono" style={{ overflowWrap: "anywhere" }}>{e.module}.{e.action}</td>
@@ -100,6 +92,7 @@ export function JournalPanel() {
           ))}
         </tbody>
       </table></div>
+      {pg_journal.pager}
     </Card>
   );
 }
@@ -108,11 +101,12 @@ export function JournalPanel() {
 export function AuditPanel() {
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
+  const [PAGE, setPageSize] = usePageSize("audit");
   const [data, setData] = useState<Audit | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
     getJson<Audit>(`/api/v1/audit?${new URLSearchParams({ q, limit: String(PAGE), offset: String(offset) })}`).then(setData).catch((e: Error) => setError(e.message));
-  }, [q, offset]);
+  }, [q, offset, PAGE]);
   return (
     <Card title="Audit log" actions={<span className="small faint">{data ? `${data.total} changes` : ""}</span>}>
       <span className="small faint">Every change to rules, playbooks, escalation, noise filters, settings, users, assets and incidents, with who made it.</span>
@@ -131,7 +125,7 @@ export function AuditPanel() {
           ))}
         </tbody>
       </table></div>
-      <Pager total={data?.total ?? 0} offset={offset} setOffset={setOffset} />
+      <PagerBar total={data?.total ?? 0} offset={offset} size={PAGE} onOffset={setOffset} onSize={setPageSize} />
     </Card>
   );
 }

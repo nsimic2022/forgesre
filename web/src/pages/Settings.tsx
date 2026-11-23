@@ -51,7 +51,7 @@ export function SettingsPage() {
   const replace = (next: SettingRow) => setData((d) => (d ? { ...d, settings: d.settings.map((r) => (r.key === next.key ? next : r)) } : d));
   const rows = data?.settings.filter((r) => r.group === group) ?? [];
   const tests = Array.from(new Set(rows.map((r) => r.test).filter(Boolean)));
-  const sections = data ? [...Object.entries(data.groups), ["messages", "Messages and templates"], ["appearance", "Appearance"], ["services", "Services and health"], ["journal", "Journal"], ["audit", "Audit log"], ["users", "Users and roles"], ["backup", "Backup, import, export"], ["demo", "Demo"]] : [];
+  const sections = data ? [...Object.entries(data.groups), ["messages", "Messages"], ["appearance", "Appearance"], ["services", "Health"], ["journal", "Journal"], ["audit", "Audit"], ["users", "Users"], ["backup", "Backup"], ["demo", "Demo"]] : [];
   return (
     <>
       <header className="page-head">

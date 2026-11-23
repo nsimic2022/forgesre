@@ -96,7 +96,7 @@ Users who are not Admins find the theme picker on the Settings page too.
 
 ## Messages and templates
 
-**Settings › Messages and templates** renders, for any incident (the newest by default, a
+**Settings › Messages** renders, for any incident (the newest by default, a
 sample on an empty appliance), the alert mail, the chat card for each event and channel (with
 the exact JSON that is posted) and the incident report. It uses the same builders as a real
 send and sends nothing. `GET /api/v1/message-previews[?incident=INC-…]` (any signed-in user).

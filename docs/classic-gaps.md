@@ -18,8 +18,8 @@ What each classic page had, and where it went:
 | Playrules, Playbooks, Escalation `/playrules`, `/playbooks`, `/escalation` | Automation (rules, playbooks, policies, noise filters, try an alarm), On call | export of rules / playbooks / on-call (TXT / CSV) | port one "Export" (JSON) for rules, playbooks and policies, useful for review and backup |
 | Ops `/ops` | Reports (scheduled reports, outbox), Send report on incidents | **free-form mail** to anyone with the address book, outbox bulk delete / export | port free-form mail only if it is still used; outbox export → CSV on Reports |
 | Journal `/journal` | Settings › Journal | bulk delete, export | drop bulk delete; keep export via `./forgesre journal` |
-| Health `/health-ui` | Settings › Services and health, `./forgesre doctor` | — | drop |
-| Admin `/admin` | Settings › Users and roles, Backup, Demo, Audit log | **restore a backup** (confirmed step), audit export, the CLI command list | port restore with a typed confirmation; the CLI list moves to docs/cli.md only |
+| Health `/health-ui` | Settings › Health, `./forgesre doctor` | — | drop |
+| Admin `/admin` | Settings › Users, Backup, Demo, Audit log | **restore a backup** (confirmed step), audit export, the CLI command list | port restore with a typed confirmation; the CLI list moves to docs/cli.md only |
 
 ## What was done
 

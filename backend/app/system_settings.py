@@ -59,12 +59,12 @@ def _e(key, group, label, effective=None, **kw) -> SettingDef:
 GROUPS = {
     "general": "General",
     "checks": "Checks",
-    "network": "Network and services",
+    "network": "Network",
     "integrations": "Integrations",
     "discovery": "Discovery",
-    "notifications": "Notification channels",
-    "ai": "ForgeRCA / ForgeAI",
-    "auth": "Sign-in (LDAP / AD, OIDC)",
+    "notifications": "Notifications",
+    "ai": "RCA / AI",
+    "auth": "Sign-in",
 }
 
 REGISTRY: tuple[SettingDef, ...] = (

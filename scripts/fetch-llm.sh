@@ -11,7 +11,7 @@ cd "$ROOT"
 DOWNLOAD_ONLY=0
 APPLY=1
 OFFLINE=0
-# MODEL_ID = one of the catalog models below (same list as Settings › ForgeRCA / ForgeAI).
+# MODEL_ID = one of the catalog models below (same list as Settings › RCA / AI).
 MODEL_ID="qwen3-4b"
 MODEL_SET=0
 # Parse command-line flags one at a time.
@@ -26,7 +26,7 @@ while [[ $# -gt 0 ]]; do
       cat <<'EOF'
 Usage: ./forgesre fetch-llm [--model ID] [--download-only] [--offline]
 
-Models (the same list as Settings › ForgeRCA / ForgeAI, where you can also switch):
+Models (the same list as Settings › RCA / AI, where you can also switch):
   qwen3-4b      Qwen3 4B Q4_K_M, 2.5 GB, 6 GB RAM, 30-90 s per answer (default)
   qwen3-8b      Qwen3 8B Q4_K_M, 5 GB, 10 GB RAM
   llama3.1-8b   Llama 3.1 8B Instruct Q4_K_M, 4.9 GB, 10 GB RAM

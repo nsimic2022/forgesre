@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { usePaged } from "./Pager";
 import { getJson, postJson, putJson, type NoiseFilter } from "../lib/api";
 import { clock } from "../lib/format";
 import { Card, Chip } from "./ui";
@@ -128,6 +129,7 @@ export function NoiseFilters({ filters, canEdit, onChanged }: { filters: NoiseFi
       getJson(`/api/v1/noise-filters/${f.id}`, { method: "DELETE" }).then(onChanged);
     }
   };
+  const pg_noise = usePaged(filters, "noise");
   return (
     <>
       <Card title="Noise filters" actions={canEdit ? <button className="btn primary" onClick={() => setEditing({ id: null, draft: EMPTY })}>New filter</button> : null}>
@@ -138,7 +140,7 @@ export function NoiseFilters({ filters, canEdit, onChanged }: { filters: NoiseFi
               <tr><th style={{ width: 180 }}>Name</th><th style={{ width: 160 }}>Alerts</th><th style={{ width: 150 }}>Applies to</th><th style={{ width: 170 }}>When</th><th style={{ width: 90 }}>Below</th><th style={{ width: 120 }}>Owner</th><th style={{ width: 70 }}>Hits</th><th style={{ width: 60 }}>On</th>{canEdit ? <th style={{ width: 140 }} /> : null}</tr>
             </thead>
             <tbody>
-              {filters.map((f) => (
+              {pg_noise.page.map((f) => (
                 <tr key={f.id}>
                   <td><div className="cell-stack"><span style={{ fontWeight: 600 }}>{f.name}</span>{f.note ? <span className="small muted">{f.note}</span> : null}</div></td>
                   <td className="mono small" style={{ wordBreak: "break-word", maxWidth: 200 }}>{f.alertnames.length ? f.alertnames.join(", ") : "any"}</td>
@@ -155,6 +157,7 @@ export function NoiseFilters({ filters, canEdit, onChanged }: { filters: NoiseFi
               ))}
             </tbody>
           </table>
+          {pg_noise.pager}
           {filters.length === 0 ? <div className="empty">No noise filters yet. Parent-down suppression and maintenance windows already work without one.</div> : null}
         </div>
       </Card>
