@@ -47,13 +47,10 @@ async function waitForCall(job: number): Promise<number | null> {
 }
 
 /**
- * Ask ForgeAI about one incident: what the automatic run asked and got (with a cloud second opinion
- * for Engineers), and your own chat about this incident, where you ask questions or re-run another
- * skill. Chat answers are trials: they never replace the incident's answer unless an Engineer
- * presses "Use as the incident's answer".
+ * What the automatic ForgeAI run asked and got for one incident, with a cloud second opinion for
+ * Engineers. Shown next to an incident chat on Investigations › Ask ForgeAI.
  */
-export function AskForgeAi({ number }: { number: string }) {
-  const rank = useRoleRank();
+export function ForgeAiFound({ number }: { number: string }) {
   const [calls, setCalls] = useState<Call[] | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -85,8 +82,6 @@ export function AskForgeAi({ number }: { number: string }) {
     }
   };
   return (
-    <div className="cols">
-      <div style={{ flex: "1 1 380px", minWidth: 0 }}>
         <Card title="What ForgeAI found on its own">
           {calls === null ? <span className="muted">Loading…</span> : automatic ? (
             <>
@@ -112,7 +107,15 @@ export function AskForgeAi({ number }: { number: string }) {
           ) : <span className="muted">ForgeAI did not answer this incident on its own (it was off, or the incident is older).</span>}
           {error ? <span className="small" role="alert" style={{ color: "var(--crit)" }}>{error}</span> : null}
         </Card>
-      </div>
+  );
+}
+
+/** Incident page › Ask ForgeAI: what it found on its own next to your chat about this incident. */
+export function AskForgeAi({ number }: { number: string }) {
+  const rank = useRoleRank();
+  return (
+    <div className="cols">
+      <div style={{ flex: "1 1 380px", minWidth: 0 }}><ForgeAiFound number={number} /></div>
       <div style={{ flex: "2 1 480px", minWidth: 0 }}>
         <Card title="Chat about this incident">
           {rank >= 1 ? <IncidentChat number={number} /> : rank < 0 ? <span className="muted">Loading…</span> : <span className="small faint">Analysts and up can chat with ForgeAI.</span>}

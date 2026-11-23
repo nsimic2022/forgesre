@@ -1,14 +1,14 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AskForgeAi } from "./AskForgeAi";
+import { ForgeAiFound } from "./AskForgeAi";
 
 const auto = { id: 1, at: null, task: "incident", skill: "linux-disk", skill_version: 1, model: "qwen", status: "used", reason: "", duration_ms: 41000, rating: 0, actor: "system",
   answer: { cause: "Archive logs filled /u02", first_checks: ["Check archive purge"], for_shift_lead: "Disk full on db-01" }, system_prompt: "rules", user_prompt: "{}", raw_response: "{}" };
 
-describe("Ask ForgeAI", () => {
+describe("What ForgeAI found on its own", () => {
   afterEach(() => (cleanup(), vi.unstubAllGlobals()));
 
-  it("shows the automatic answer and opens your chat about the incident", async () => {
+  it("shows the automatic answer", async () => {
     const posts: { url: string; body: unknown }[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === "POST") posts.push({ url, body: JSON.parse(String(init.body)) });
@@ -20,10 +20,9 @@ describe("Ask ForgeAI", () => {
         : {};
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
     }));
-    render(<AskForgeAi number="INC-0001" />);
+    render(<ForgeAiFound number="INC-0001" />);
     expect(await screen.findByText("Archive logs filled /u02")).toBeTruthy();
-    expect(await screen.findByText("Ask about INC-0001 Disk full")).toBeTruthy();
-    expect(posts[0]).toEqual({ url: "/api/v1/forgeai/chats", body: { incident: "INC-0001", reuse: true } });
+    expect(posts).toEqual([]);
   });
 
   it("asks the cloud model for a second opinion and shows its verdict", async () => {
@@ -41,7 +40,7 @@ describe("Ask ForgeAI", () => {
         : { calls };
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
     }));
-    render(<AskForgeAi number="INC-0003" />);
+    render(<ForgeAiFound number="INC-0003" />);
     fireEvent.click(await screen.findByRole("button", { name: "Second opinion (openai)" }));
     expect(await screen.findByText("The second check is vague.")).toBeTruthy();
     expect(posts).toContain("/api/v1/forgeai/calls/1/critique");

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pager, usePageSize } from "../components/Pager";
-import { Link } from "react-router-dom";
-import { AskForgeAi } from "../components/AskForgeAi";
+import { Link, useLocation } from "react-router-dom";
+import { ForgeAiWorkspace } from "../components/ForgeAiWorkspace";
 import type { Skill } from "../components/ForgeAiSkills";
 import { RATING_LABEL, RATING_TONE } from "../components/ReviewCard";
 import { Bar, Card, Chip } from "../components/ui";
@@ -31,8 +31,8 @@ export function InvestigationsPage() {
   const [PAGE, setPageSize] = usePageSize("investigations");
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
-  const [picked, setPicked] = useState("");
-  const [typed, setTyped] = useState("");
+  // Ask on a row: which incident, and a counter so pressing Ask again reopens the same chat
+  const [picked, setPicked] = useState({ number: "", key: 0 });
 
   useEffect(() => {
     const params = new URLSearchParams({ days: String(days), q: query, only_ai: String(onlyAi), only_reviewed: String(onlyReviewed), limit: String(PAGE), offset: String(offset) });
@@ -41,6 +41,12 @@ export function InvestigationsPage() {
     }, query ? 250 : 0);
     return () => window.clearTimeout(timer);
   }, [days, query, onlyAi, onlyReviewed, offset, PAGE]);
+
+  const { hash } = useLocation();
+  // old /forgeai links land here with #ask-forgeai: scroll to the chat once the page is drawn
+  useEffect(() => {
+    if (hash === "#ask-forgeai") window.setTimeout(() => document.getElementById("ask-forgeai")?.scrollIntoView?.(), 100);
+  }, [hash]);
 
   const reset = (fn: () => void) => (fn(), setOffset(0));
   return (
@@ -92,8 +98,8 @@ export function InvestigationsPage() {
                       <td><Chip tone={RATING_TONE[r.rca_rating]}>{RATING_LABEL[r.rca_rating]}</Chip></td>
                       <td>{r.forgeai ? <Chip tone={RATING_TONE[r.ai_rating]}>{RATING_LABEL[r.ai_rating]}</Chip> : <span className="faint">—</span>}</td>
                       <td>
-                        <button className="btn" type="button" aria-pressed={picked === r.number} title="Ask ForgeAI about this incident below"
-                          onClick={() => (setPicked(r.number), setTyped(r.number), window.setTimeout(() => document.getElementById("ask-forgeai")?.scrollIntoView({ behavior: "smooth" }), 50))}>Ask</button>
+                        <button className="btn" type="button" aria-pressed={picked.number === r.number} title="Ask ForgeAI about this incident below"
+                          onClick={() => (setPicked((p) => ({ number: r.number, key: p.key + 1 })), window.setTimeout(() => document.getElementById("ask-forgeai")?.scrollIntoView({ behavior: "smooth" }), 50))}>Ask</button>
                       </td>
                     </tr>
                   ))}
@@ -128,17 +134,11 @@ export function InvestigationsPage() {
         </div>
       </div>
       <section id="ask-forgeai" className="cell-stack" style={{ gap: 12, marginTop: 20 }}>
-        <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
-          <div className="cell-stack">
-            <h2 style={{ margin: 0 }}>Ask ForgeAI</h2>
-            <span className="small muted">See what it found on its own and chat about the incident (type / for skills). General questions: the ForgeAI page.</span>
-          </div>
-          <form className="row" onSubmit={(e) => (e.preventDefault(), setPicked(typed.trim()))}>
-            <input className="search" aria-label="Incident number" placeholder="INC-… (any incident)" value={typed} onChange={(e) => setTyped(e.target.value)} style={{ width: 240, minWidth: 0 }} />
-            <button className="btn" type="submit" disabled={!typed.trim()}>Open</button>
-          </form>
+        <div className="cell-stack">
+          <h2 style={{ margin: 0 }}>Ask ForgeAI</h2>
+          <span className="small muted">Ask anything, or talk about one incident (Ask on a row, or type INC-…). Type / for skills. Your chats are private to you.</span>
         </div>
-        {picked ? <AskForgeAi number={picked} /> : <Card><span className="muted">Press <strong>Ask</strong> on a row above, or type an incident number (open ones too).</span></Card>}
+        <ForgeAiWorkspace about={picked.number} aboutKey={picked.key} />
       </section>
     </>
   );

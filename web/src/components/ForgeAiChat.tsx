@@ -295,7 +295,7 @@ export function IncidentChat({ number }: { number: string }) {
   return id === null ? <span className="muted">Loading…</span> : (
     <div className="cell-stack" style={{ gap: 6 }}>
       <ForgeAiChat chatId={id} />
-      <a className="small" href={`/app/forgeai?chat=${id}`}>Open in ForgeAI chat</a>
+      <a className="small" href={`/app/investigations?chat=${id}#ask-forgeai`}>Open in Investigations › Ask ForgeAI</a>
     </div>
   );
 }
