@@ -82,7 +82,7 @@ git pull origin main
 ./forgesre restart       # just bounce the running containers
 ```
 
-Full Ubuntu / vCenter manual: [docs/install-config.md](docs/install-config.md).
+Full Ubuntu / vCenter manual: [docs/install-config.md](docs/install-config.md). Everything on one page (containers, `.env`, secrets, integrations, ForgeAI): [docs/install-guide.md](docs/install-guide.md) ([Serbian](docs/vodic-sr.md)).
 
 ### Optional local LLM
 
