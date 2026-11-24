@@ -808,6 +808,33 @@ class GoldenRun(Base):
     results: Mapped[list] = mapped_column(JSONType, default=list)
 
 
+class PushKey(Base):
+    """VAPID key pair for web push, made on first use. The private key never leaves Core."""
+
+    __tablename__ = "push_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    private_pem: Mapped[str] = mapped_column(Text)
+    public_b64: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PushSubscription(Base):
+    """One browser or phone app that asked for push (pushManager.subscribe)."""
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    endpoint: Mapped[str] = mapped_column(String(1000), unique=True)
+    p256dh: Mapped[str] = mapped_column(String(200))
+    auth: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    fails: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(String(120), default="")
+
+
 class SavedView(Base):
     """A named set of list filters. ``team`` empty: only its owner sees it; otherwise shared with
     everyone under that team's name."""

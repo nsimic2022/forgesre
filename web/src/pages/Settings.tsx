@@ -1,5 +1,5 @@
 import { AuditPanel, JournalPanel } from "../components/ActivityPanels";
-import { AlertPrefs, AppearancePanel } from "../components/AppearancePanel";
+import { AlertPrefs, AppearancePanel, PushPrefs } from "../components/AppearancePanel";
 import { ForgeAiDocs } from "../components/ForgeAiDocs";
 import { ForgeAiModels } from "../components/ForgeAiModels";
 import { ForgeAiStatus } from "../components/ForgeAiStatus";
@@ -43,6 +43,12 @@ export function SettingsPage() {
   const [data, setData] = useState<SettingsData | null>(null);
   // ?group=checks (command palette, links in docs) opens that group
   const [group, setGroup] = useState(() => new URLSearchParams(window.location.search).get("group") || "general");
+  // Ctrl+K → a Settings group while this page is already open: the palette sends the group
+  useEffect(() => {
+    const pick = (e: Event) => setGroup(String((e as CustomEvent<string>).detail || "general"));
+    window.addEventListener("forgesre-settings-group", pick);
+    return () => window.removeEventListener("forgesre-settings-group", pick);
+  }, []);
   const [error, setError] = useState("");
   const [forbidden, setForbidden] = useState(false);
   useEffect(() => {
@@ -66,7 +72,7 @@ export function SettingsPage() {
       {forbidden ? (
         <>
           <Card><span>Settings are for Admins. You can still pick your theme and see the health of every service below.</span></Card>
-          <><AppearancePanel /><AlertPrefs /></>
+          <><AppearancePanel /><AlertPrefs /><PushPrefs /></>
           <Services />
         </>
       ) : null}
@@ -89,7 +95,7 @@ export function SettingsPage() {
             ) : group === "integrations" ? (
               <IntegrationsPanel rows={data.settings} onSaved={replace} />
             ) : group === "appearance" ? (
-              <><AppearancePanel /><AlertPrefs /></>
+              <><AppearancePanel /><AlertPrefs /><PushPrefs /></>
             ) : group === "messages" ? (
               <MessagePreviews />
             ) : group === "services" ? (

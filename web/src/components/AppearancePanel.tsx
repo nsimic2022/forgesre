@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { beep, notifyPrefs, saveNotifyPrefs, type NotifyPrefs } from "../lib/notify";
+import { useEffect, useState } from "react";
+import { getJson, postJson } from "../lib/api";
+import { beep, currentPush, notifyPrefs, saveNotifyPrefs, subscribePush, type NotifyPrefs } from "../lib/notify";
 import { THEMES, applyTheme, savedTheme } from "../lib/theme";
 import { Card } from "./ui";
 
@@ -27,6 +28,60 @@ export function AlertPrefs() {
       <label className="row small" style={{ gap: 8 }}>
         <input type="checkbox" checked={prefs.desktop} onChange={(e) => void update({ ...prefs, desktop: e.target.checked })} /> Desktop notification
       </label>
+      {note ? <span className="small" role="status">{note}</span> : null}
+    </Card>
+  );
+}
+
+type PushInfo = { enabled: boolean; public_key: string; devices: number };
+
+/**
+ * Settings › Appearance › Push to this device: new CRITICAL incidents also when ForgeSRE is
+ * closed (phone app or browser). Shown only when an Admin turned on notifications.push.enabled.
+ */
+export function PushPrefs() {
+  const [info, setInfo] = useState<PushInfo | null>(null);
+  const [on, setOn] = useState(false);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    getJson<PushInfo>("/api/v1/push").then(setInfo).catch(() => setInfo(null));
+    currentPush().then((s) => setOn(Boolean(s))).catch(() => setOn(false));
+  }, []);
+  if (!info?.enabled) return null;
+  const supported = "serviceWorker" in navigator && "PushManager" in window;
+  const toggle = async (want: boolean) => {
+    setBusy(true);
+    setNote("");
+    try {
+      if (want) {
+        const answer = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+        if (answer !== "granted") throw new Error("The browser blocked notifications; allow them for this site and try again.");
+        const sub = await subscribePush(info.public_key);
+        await postJson("/api/v1/push/subscribe", { endpoint: sub.endpoint, keys: sub.keys });
+      } else {
+        const sub = await currentPush();
+        if (sub) {
+          await postJson("/api/v1/push/unsubscribe", { endpoint: sub.endpoint, keys: {} });
+          await sub.unsubscribe();
+        }
+      }
+      setOn(want);
+    } catch (e) {
+      setNote((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card title="Push to this device">
+      <span className="small faint">A new CRITICAL incident pops up on this phone or computer even when ForgeSRE is closed. On an iPhone, install the app first (Share › Add to Home Screen), then turn this on inside it. Messages pass encrypted through the browser maker's push service.</span>
+      {supported ? (
+        <label className="row small" style={{ gap: 8 }}>
+          <input type="checkbox" checked={on} disabled={busy} onChange={(e) => void toggle(e.target.checked)} /> Push to this device
+        </label>
+      ) : <span className="small">This browser has no push support (on an iPhone: open the installed app).</span>}
+      {on ? <button className="btn" type="button" onClick={() => void postJson("/api/v1/push/test", {}).then(() => setNote("Test sent; it arrives within a minute.")).catch((e: Error) => setNote(e.message))}>Send a test</button> : null}
       {note ? <span className="small" role="status">{note}</span> : null}
     </Card>
   );

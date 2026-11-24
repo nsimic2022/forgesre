@@ -268,7 +268,7 @@ UI is written to the same file and applies at once.
 | Network | `logging.loki.enabled`, `grafana.enabled`, `monitoring.snmp.*` | SNMP module `if_mib` |
 | Integrations | `inventory.netbox.*`, `inventory.zabbix.*`, `inventory.glpi.*`, `inventory.librenms.*`, `inventory.new_from_sources`, `mcp.enabled` | `new_from_sources: review` = new devices go to Discovery first |
 | Discovery | `discovery.enabled`, `discovery.mode` | `semi-automatic` = a list to approve |
-| Notifications | `notifications.email.*`, `notifications.chat.slack\|teams\|discord.*`, `notifications.sms.*` | `min_severity: high` |
+| Notifications | `notifications.email.*`, `notifications.chat.slack\|teams\|discord.*`, `notifications.sms.*`, `notifications.push.enabled` | `min_severity: high`; push off |
 | Alarms | `alerts.storm.*` (threshold, window), `alerts.flapping.*` | 20 incidents in 5 min = one storm |
 | SLA | `sla.enabled`, `sla.response.<severity>`, `sla.resolve.<severity>` (minutes) | critical: respond 15, resolve 240 |
 | Tickets and changes | `tickets.glpi.enabled`, `tickets.webhook.*`, `changes.oxidized.*` | *Open ticket* on an incident creates a GLPI ticket |
@@ -301,6 +301,7 @@ GLPI, NetBox, Oxidized or clusters. Each has a Test button on its Settings card 
 | Slack, Teams, Discord | ForgeSRE → channel | `*_WEBHOOK_URL` + turn the channel on, minimum severity | set-secret + Notifications |
 | CI/CD and changes | Changes → ForgeSRE | `POST /api/v1/changes` with `CHANGES_WEBHOOK_TOKEN`; ForgeAI sees changes before an incident | Pipeline |
 | LDAP / Active Directory, OIDC (Entra ID…) | Sign-in | `auth.ldap.*` + `LDAP_BIND_PASSWORD`, or `auth.oidc.*` + `OIDC_CLIENT_SECRET`; groups → roles | Settings › Sign-in ([sign-in.md](sign-in.md)) |
+| Web push | ForgeSRE → phones and browsers (via the browser's push service) | `notifications.push.enabled`; each person ticks *Push to this device*; needs HTTPS and outbound HTTPS | Settings › Notifications |
 | SMS / phone gateway | ForgeSRE → on-call phone | `notifications.sms.*` (generic URL or Twilio) + `SMS_GATEWAY_TOKEN`; an escalation step pages by SMS | Settings › Notifications |
 | GLPI tickets | ForgeSRE → GLPI | `tickets.glpi.enabled` (same GLPI tokens; the user needs ticket rights); a resolved incident adds a follow-up | Settings › Integrations, *Open ticket* on an incident |
 | Ticket webhook | ForgeSRE → ServiceNow, Jira, n8n | `tickets.webhook.url` + `TICKET_WEBHOOK_TOKEN`; JSON on open and resolve | Settings › Integrations |

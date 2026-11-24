@@ -146,6 +146,9 @@ page what is already loaded. Code: `web/src/components/Pager.tsx`.
   service worker (`web/public/sw.js`) only shows an offline page when the appliance cannot be
   reached; it never caches API data. Installing needs HTTPS (or `localhost`); paging stays SMS, mail
   and chat.
+- **Push to this device** (Settings › Appearance) appears when an Admin turns on
+  `notifications.push.enabled`; it subscribes this browser or installed app to web push for new
+  CRITICAL incidents, even with the tab closed. See [settings.md](settings.md#web-push-to-phones-and-browsers).
 
 ## Teams and saved views
 

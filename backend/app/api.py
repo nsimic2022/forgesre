@@ -1038,6 +1038,58 @@ def golden_run(body: GoldenRunBody, db: Session = Depends(get_db), user: User = 
     return {"job": job.id if job else None}
 
 
+class PushSubscribeBody(BaseModel):
+    endpoint: str
+    keys: dict[str, str]
+
+
+@router.get("/push")
+def push_info(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """Web push: on or off, the VAPID public key and how many devices this user subscribed."""
+    from app.models import PushSubscription
+    from app.web_push import enabled, public_key
+
+    if not enabled():
+        return {"enabled": False, "public_key": "", "devices": 0}
+    devices = db.query(PushSubscription).filter_by(email=user.email).count()
+    return {"enabled": True, "public_key": public_key(db), "devices": devices}
+
+
+@router.post("/push/subscribe")
+def push_subscribe(body: PushSubscribeBody, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """Store this browser's push subscription for the signed-in user."""
+    from app.web_push import enabled, save_subscription
+
+    if not enabled():
+        raise HTTPException(status_code=400, detail="web push is off (notifications.push.enabled)")
+    try:
+        row = save_subscription(db, user.email, body.endpoint, body.keys.get("p256dh", ""), body.keys.get("auth", ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"id": row.id}
+
+
+@router.post("/push/unsubscribe")
+def push_unsubscribe(body: PushSubscribeBody, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    from app.models import PushSubscription
+
+    deleted = db.query(PushSubscription).filter_by(endpoint=body.endpoint, email=user.email).delete()
+    db.commit()
+    return {"deleted": deleted}
+
+
+@router.post("/push/test")
+def push_test(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
+    """Queue a test push to every device of the signed-in user."""
+    from app.jobs import enqueue
+    from app.web_push import JOB_KIND, enabled
+
+    if not enabled():
+        raise HTTPException(status_code=400, detail="web push is off (notifications.push.enabled)")
+    job = enqueue(db, JOB_KIND, f"test:{user.email}", object_type="user", payload={"test_email": user.email})
+    return {"job": job.id if job else None}
+
+
 @router.get("/handover")
 def handover_list(db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
     """The latest shift handovers, newest first."""

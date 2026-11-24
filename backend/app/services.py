@@ -1054,6 +1054,9 @@ def ingest_alertmanager(db: Session, payload: dict[str, Any], *, source: str = "
             object_id=incident.number,
         )
         enqueue(db, "investigate", incident.number, payload={"actor": "system", "use_llm": False})
+        from app.web_push import queue_new_critical
+
+        queue_new_critical(db, incident)
     return created
 
 

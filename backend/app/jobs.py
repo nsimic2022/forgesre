@@ -476,6 +476,11 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 else:
                     result = tickets.run_job(db, row.payload or {}, str((row.payload or {}).get("actor") or "system"))
                 row.payload = {**(row.payload or {}), "result": result}
+            elif row.kind == "push_send":
+                from app.web_push import run_job as push_run
+
+                # encrypted web push to each subscription, 10 s timeout per push service call
+                row.payload = {**(row.payload or {}), "result": push_run(db, row.payload or {})}
             elif row.kind == "oxidized_sync":
                 from app.oxidized import run_job as oxidized_run
 
