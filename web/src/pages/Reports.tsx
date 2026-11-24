@@ -6,7 +6,7 @@ import { AlertQuality } from "../components/AlertQuality";
 import { OpenActionsCard, SlaCard } from "../components/IncidentProcess";
 import { LifecycleCard } from "../components/Racks";
 import { Card } from "../components/ui";
-import { DailyBars } from "../components/DailyBars";
+import { DailyBars, type Day } from "../components/DailyBars";
 import { getJson, type PeriodStats, type Reports } from "../lib/api";
 import { clock, minutesLabel } from "../lib/format";
 
@@ -83,9 +83,7 @@ export function ReportsPage() {
       {data ? (
         <div className="cols">
           <div style={{ flex: "999 1 640px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
-            <Card title="Incidents per day">
-              <DailyBars daily={data.daily} />
-            </Card>
+            <IncidentTrend />
             <Card title="By asset type">
               <Table head={["Type", "Incidents", "Critical", "MTTA", "MTTR"]} rows={data.by_type.map((t) => [t.group, t.incidents, t.critical, minutesLabel(t.mtta_min), minutesLabel(t.mttr_min)])} />
             </Card>
@@ -113,5 +111,39 @@ export function ReportsPage() {
       {/* full width: the outbox has five columns and long subjects */}
       {data ? <OutboxCard /> : null}
     </>
+  );
+}
+
+const RANGES = [
+  { id: "today", label: "Today", title: "Incidents per hour, today" },
+  { id: "7d", label: "7 days", title: "Incidents per day, last 7 days" },
+  { id: "4w", label: "4 weeks", title: "Incidents per week, last 4 weeks" },
+  { id: "30d", label: "30 days", title: "Incidents per day, last 30 days" },
+] as const;
+type Trend = { range: string; unit: string; buckets: Day[]; total: number };
+
+/** Incidents over time with a switcher: today by hour, 7 or 30 days by day, 4 weeks by week. */
+export function IncidentTrend() {
+  const [range, setRange] = useState<(typeof RANGES)[number]["id"]>("30d");
+  const [trend, setTrend] = useState<Trend | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    setError("");
+    getJson<Trend>(`/api/v1/reports/incident-trend?range=${range}`).then((d) => alive && setTrend(d)).catch((e: Error) => alive && setError(e.message));
+    return () => { alive = false; };
+  }, [range]);
+  const meta = RANGES.find((r) => r.id === range)!;
+  return (
+    <Card title={meta.title} actions={
+      <div className="row" role="group" aria-label="Chart range" style={{ gap: 4 }}>
+        {RANGES.map((r) => <button key={r.id} type="button" className="btn" aria-pressed={range === r.id} onClick={() => setRange(r.id)}>{r.label}</button>)}
+      </div>
+    }>
+      {error ? <div className="banner error" role="alert">{error}</div> : null}
+      {trend && trend.range === range
+        ? <><DailyBars daily={trend.buckets} axis unit={trend.unit} /><span className="small faint">{trend.total} incidents</span></>
+        : <span className="muted">Loading…</span>}
+    </Card>
   );
 }

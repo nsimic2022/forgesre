@@ -88,7 +88,7 @@ incident (channel `sms`) and is sent by a background job with a 10 s timeout.
 ## Web push to phones and browsers
 
 Off by default (`notifications.push.enabled`). When an Admin turns it on, each person can tick
-**Settings › Appearance › Push to this device** on a phone or browser; a new open CRITICAL
+**Push to this device** on a phone or browser (Settings › Web push; an Admin can also turn the server switch on there); a new open CRITICAL
 incident (not one suppressed under a parent) then shows as a notification even when the tab is
 closed. Tapping it opens the incident.
 

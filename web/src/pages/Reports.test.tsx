@@ -50,6 +50,23 @@ describe("Reports", () => {
     expect(screen.getAllByText("NOC summary").length).toBeGreaterThan(0);
   });
 
+  it("switches the incident chart between today, 7 days, 4 weeks and 30 days", async () => {
+    const trend = (range: string) => ({ range, unit: range === "today" ? "hour" : range === "4w" ? "week" : "day", total: 3,
+      buckets: [{ day: range === "4w" ? "28.10–03.11" : "2026-11-18", critical: 1, high: 1, other: 1 }] });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      urls.push(url);
+      const m = /range=(\w+)/.exec(url);
+      return new Response(JSON.stringify(m ? trend(m[1]) : data), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    render(<ReportsPage />);
+    expect(await screen.findByText("Incidents per day, last 30 days")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "4 weeks" }));
+    expect(await screen.findByText("Incidents per week, last 4 weeks")).toBeTruthy();
+    expect(await screen.findByRole("img", { name: /Incidents per week over 1 weeks/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+    await waitFor(() => expect(urls).toContain("/api/v1/reports/incident-trend?range=today"));
+  });
+
   it("changes the period", async () => {
     render(<ReportsPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Last 7 days" }));

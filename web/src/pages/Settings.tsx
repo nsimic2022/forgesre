@@ -1,5 +1,5 @@
 import { AuditPanel, JournalPanel } from "../components/ActivityPanels";
-import { AlertPrefs, AppearancePanel, PushPrefs } from "../components/AppearancePanel";
+import { AlertPrefs, AppearancePanel, PushPrefs, SeverityColorPrefs } from "../components/AppearancePanel";
 import { ForgeAiDocs } from "../components/ForgeAiDocs";
 import { ForgeAiModels } from "../components/ForgeAiModels";
 import { ForgeAiStatus } from "../components/ForgeAiStatus";
@@ -59,7 +59,7 @@ export function SettingsPage() {
   const replace = (next: SettingRow) => setData((d) => (d ? { ...d, settings: d.settings.map((r) => (r.key === next.key ? next : r)) } : d));
   const rows = data?.settings.filter((r) => r.group === group) ?? [];
   const tests = Array.from(new Set(rows.map((r) => r.test).filter(Boolean)));
-  const sections = data ? [...Object.entries(data.groups), ["messages", "Messages"], ["appearance", "Appearance"], ["services", "Health"], ["journal", "Journal"], ["audit", "Audit"], ["users", "Users"], ["backup", "Backup"], ["demo", "Demo"]] : [];
+  const sections = data ? [...Object.entries(data.groups), ["messages", "Messages"], ["push", "Web push"], ["appearance", "Appearance"], ["services", "Health"], ["journal", "Journal"], ["audit", "Audit"], ["users", "Users"], ["backup", "Backup"], ["demo", "Demo"]] : [];
   return (
     <>
       <header className="page-head">
@@ -72,7 +72,7 @@ export function SettingsPage() {
       {forbidden ? (
         <>
           <Card><span>Settings are for Admins. You can still pick your theme and see the health of every service below.</span></Card>
-          <><AppearancePanel /><AlertPrefs /><PushPrefs /></>
+          <><AppearancePanel /><SeverityColorPrefs /><AlertPrefs /><PushPrefs /></>
           <Services />
         </>
       ) : null}
@@ -95,7 +95,9 @@ export function SettingsPage() {
             ) : group === "integrations" ? (
               <IntegrationsPanel rows={data.settings} onSaved={replace} />
             ) : group === "appearance" ? (
-              <><AppearancePanel /><AlertPrefs /><PushPrefs /></>
+              <><AppearancePanel /><SeverityColorPrefs /><AlertPrefs /><PushPrefs admin /></>
+            ) : group === "push" ? (
+              <PushPrefs admin />
             ) : group === "messages" ? (
               <MessagePreviews />
             ) : group === "services" ? (

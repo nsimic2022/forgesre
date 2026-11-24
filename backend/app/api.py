@@ -5190,6 +5190,17 @@ def reports_page_api(days: int = 30, db: Session = Depends(get_db), user: User =
     return data
 
 
+@router.get("/reports/incident-trend")
+def reports_trend_api(range: str = "30d", db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict[str, Any]:
+    """Reports chart switcher: incidents per hour today, per day (7 or 30 days) or per week (4 weeks)."""
+    from app.reports_view import incident_trend
+
+    try:
+        return incident_trend(db, range)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/reports/alert-quality")
 def alert_quality(days: int = 30, db: Session = Depends(get_db), user: User = Depends(require("read_incidents"))) -> dict:
     """Per alert name: incidents, % acknowledged, % that cleared by themselves, flapping, advice."""

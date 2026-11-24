@@ -1,3 +1,4 @@
+import { paintSevCells } from "./lib/sevcells";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
@@ -9,7 +10,8 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { savedTheme, showTheme } from "./lib/theme";
 
-showTheme(savedTheme()); // paint only: a browser that never chose keeps "no choice" (the TV uses Navy then)
+showTheme(savedTheme());
+paintSevCells(); // paint only: a browser that never chose keeps "no choice" (the TV uses Navy then)
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

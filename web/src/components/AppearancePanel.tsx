@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { getJson, postJson } from "../lib/api";
+import { getJson, postJson, putJson } from "../lib/api";
 import { beep, currentPush, notifyPrefs, saveNotifyPrefs, subscribePush, type NotifyPrefs } from "../lib/notify";
+import { saveSevCells, sevCellsOn } from "../lib/sevcells";
 import { THEMES, applyTheme, savedTheme } from "../lib/theme";
 import { Card } from "./ui";
 
@@ -36,19 +37,45 @@ export function AlertPrefs() {
 type PushInfo = { enabled: boolean; public_key: string; devices: number };
 
 /**
- * Settings › Appearance › Push to this device: new CRITICAL incidents also when ForgeSRE is
- * closed (phone app or browser). Shown only when an Admin turned on notifications.push.enabled.
+ * Push to this device (Settings › Web push, and Settings › Appearance): new CRITICAL incidents
+ * also when ForgeSRE is closed (phone app or browser). While notifications.push.enabled is off the
+ * card says so; an Admin (``admin``) can turn it on right here.
  */
-export function PushPrefs() {
+export function PushPrefs({ admin = false }: { admin?: boolean }) {
   const [info, setInfo] = useState<PushInfo | null>(null);
   const [on, setOn] = useState(false);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const load = () => getJson<PushInfo>("/api/v1/push").then(setInfo).catch(() => setInfo(null));
   useEffect(() => {
-    getJson<PushInfo>("/api/v1/push").then(setInfo).catch(() => setInfo(null));
+    void load();
     currentPush().then((s) => setOn(Boolean(s))).catch(() => setOn(false));
   }, []);
-  if (!info?.enabled) return null;
+  if (!info) return null;
+  const server = async (want: boolean) => {
+    setBusy(true);
+    try {
+      await putJson(`/api/v1/settings/notifications.push.enabled`, { value: want });
+      await load();
+      setNote(want ? "Web push is on for this server. Now tick Push to this device on each phone or browser." : "Web push is off for this server.");
+    } catch (e) {
+      setNote((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!info.enabled) {
+    return (
+      <Card title="Push to this device">
+        <span className="small">Web push is <strong>off</strong> on this server.</span>
+        <span className="small faint">When it is on, a new CRITICAL incident pops up on phones and browsers even when ForgeSRE is closed. Messages pass encrypted through the browser maker's push service (Google, Apple or Mozilla), so the server needs outbound HTTPS.</span>
+        {admin
+          ? <button className="btn primary" type="button" disabled={busy} onClick={() => void server(true)}>Turn on web push for this server</button>
+          : <span className="small faint">Ask an Admin to turn it on (Settings › Web push, or <code className="mono">./forgesre settings set notifications.push.enabled true</code>).</span>}
+        {note ? <span className="small" role="status">{note}</span> : null}
+      </Card>
+    );
+  }
   const supported = "serviceWorker" in navigator && "PushManager" in window;
   const toggle = async (want: boolean) => {
     setBusy(true);
@@ -82,6 +109,8 @@ export function PushPrefs() {
         </label>
       ) : <span className="small">This browser has no push support (on an iPhone: open the installed app).</span>}
       {on ? <button className="btn" type="button" onClick={() => void postJson("/api/v1/push/test", {}).then(() => setNote("Test sent; it arrives within a minute.")).catch((e: Error) => setNote(e.message))}>Send a test</button> : null}
+      <span className="small faint">{info.devices} device{info.devices === 1 ? "" : "s"} signed up for you.</span>
+      {admin ? <button className="btn" type="button" disabled={busy} onClick={() => void server(false)}>Turn off web push for this server</button> : null}
       {note ? <span className="small" role="status">{note}</span> : null}
     </Card>
   );
@@ -106,6 +135,19 @@ export function AppearancePanel() {
           </button>
         ))}
       </div>
+    </Card>
+  );
+}
+
+/** Settings › Appearance: severity colour on the incident name cell, for this browser. */
+export function SeverityColorPrefs() {
+  const [on, setOn] = useState(sevCellsOn);
+  return (
+    <Card title="Severity colours in tables">
+      <span className="small faint">The incident name (Problem) in Incidents, NOC, Investigations and the wall screen is tinted in its severity's colour: red critical, orange high, yellow warning. Saved in this browser only.</span>
+      <label className="row small" style={{ gap: 8 }}>
+        <input type="checkbox" checked={on} onChange={(e) => (saveSevCells(e.target.checked), setOn(e.target.checked))} /> Colour the incident name by severity
+      </label>
     </Card>
   );
 }

@@ -1,3 +1,4 @@
+import { sevClass } from "../lib/sevcells";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { postJson, type NocIncident } from "../lib/api";
@@ -29,7 +30,7 @@ function IncidentRow({ row, picked, onPick }: { row: NocIncident; picked?: boole
           <span className="small muted">{row.asset?.type ?? ""}</span>
         </div>
       </td>
-      <td>
+      <td className={sevClass(row.severity)}>
         <div className="cell-stack">
           <Link to={`/incidents/${encodeURIComponent(row.number)}`} style={{ color: "var(--text)", fontWeight: 600 }}>
             {row.title} <span className="mono faint" title={row.number}>{shortNumber(row.number)}</span>
