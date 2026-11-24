@@ -924,7 +924,7 @@ def format_golden(data: dict) -> str:
     """Golden set: the cases, then the last runs (score, model, skill, language) and the newest per case."""
     cases, runs = data.get("cases") or [], data.get("runs") or []
     if not cases:
-        return ("Golden set is empty. Add resolved incidents with a confirmed cause in Automation › ForgeAI skills "
+        return ("Golden set is empty. Add resolved incidents with a confirmed cause in Settings › ForgeAI skills "
                 "› Golden set (Engineer).\n")
     out = [f"{len(cases)} incidents in the golden set" + (" — a run is in progress" if data.get("running") else "")]
     for c in cases:
@@ -967,7 +967,7 @@ def cmd_forgeai(port: str, rest: list[str]) -> None:
                 lines.append(f"  #{d['id']:<4} {d['status']:<9} {d['pages']:>4} pages {d['chunks']:>5} chunks  {d['title']}"
                              + (f"  ({d['error']})" if d.get("error") else ""))
             if not data.get("docs"):
-                lines.append("  No documents. Upload in Settings › RCA / AI › Documents (Engineer).")
+                lines.append("  No documents. Upload in Settings › ForgeAI RAG (Engineer).")
             sys.stdout.write("\n".join(lines) + "\n")
             return
         if rest[:1] == ["tuning"]:

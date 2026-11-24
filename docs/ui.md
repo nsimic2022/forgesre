@@ -152,7 +152,8 @@ page what is already loaded. Code: `web/src/components/Pager.tsx`.
   CRITICAL incidents, even with the tab closed, and shows how many of your devices are signed up.
 - **Severity colours in tables** (Settings › Appearance, per browser, on by default): the incident
   name (Problem) in Incidents, NOC, Investigations and the wall screen is tinted red (critical),
-  orange (high) or yellow (warning), and its text takes that colour. Code: `web/src/lib/sevcells.ts`. See [settings.md](settings.md#web-push-to-phones-and-browsers).
+  orange (high) or yellow (warning) in Zabbix's severity palette (Disaster #e45959, Average #ffa059,
+  Warning #ffc859), and its text takes that colour. Code: `web/src/lib/sevcells.ts`. See [settings.md](settings.md#web-push-to-phones-and-browsers).
 
 ## Teams and saved views
 
@@ -185,8 +186,12 @@ API `/api/v1/known-errors`; `./forgesre known-errors [TEXT]`.
   critical 15/240, high 30/480, warning 120/1440): chips on the incident page (response due /
   met / breached, then resolve), a *breached* chip in incident lists, and the SLA card on
   Reports. SLA does not change escalation. `GET /api/v1/sla?days=30`, `./forgesre sla`.
-- **Shift handover** (NOC page): *Write handover* saves notes and the incidents still open;
-  the next person presses *I take over* (not the writer). `GET/POST /api/v1/handover`,
+- **Shift** (Incidents › On-call, top card): three parts side by side. *On call now* (who,
+  window, phone); *Handover*: *Write handover* saves notes and the incidents still open, the next
+  person presses *I take over* (not the writer); *ForgeAI draft* (when ForgeAI is on): *Draft with
+  ForgeAI* summarises the last 12 hours and *Use as handover notes* copies it into the handover
+  form to check and send. The NOC shows only one line: who is on call, whether the handover was
+  taken over, and a link here. `GET/POST /api/v1/handover`,
   `POST /api/v1/handover/{id}/take`, `./forgesre handover`.
 - **Follow-up actions** (incident page, and *Open follow-up actions* on Reports): what must
   change, owner, due date, ticked off when done; they fill the incident review draft's table.

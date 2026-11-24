@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HandoverCard } from "./Handover";
+import { HandoverPart } from "./Handover";
 import { FollowUpActions, MajorIncidentCard, SlaChips } from "./IncidentProcess";
 
 function stub() {
@@ -54,9 +54,9 @@ describe("Incident process", () => {
   it("offers I take over only to someone else", async () => {
     const posts = stub();
     const h = { id: 9, created_by: "ana@dc.local", created_at: null, notes: "Watch the backup", open_incidents: [], taken_by: "", taken_at: null };
-    const { rerender } = render(<HandoverCard handover={h} canWork me="ana@dc.local" onChanged={() => undefined} />);
+    const { rerender } = render(<HandoverPart handover={h} canWork me="ana@dc.local" onChanged={() => undefined} />);
     expect(screen.queryByRole("button", { name: "I take over" })).toBeNull();
-    rerender(<HandoverCard handover={h} canWork me="marko@dc.local" onChanged={() => undefined} />);
+    rerender(<HandoverPart handover={h} canWork me="marko@dc.local" onChanged={() => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: "I take over" }));
     await waitFor(() => expect(posts[0].url).toBe("/api/v1/handover/9/take"));
   });

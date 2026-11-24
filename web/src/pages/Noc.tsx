@@ -1,13 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { ShiftSummary } from "../components/ShiftSummary";
-import { Bar, Card, Stat } from "../components/ui";
+import { Card, Stat } from "../components/ui";
 import { getJson, type Noc as NocData } from "../lib/api";
 import { clock, minutesLabel, severityLabel } from "../lib/format";
 import { IncidentTable } from "../components/IncidentTable";
 import { usePaged } from "../components/Pager";
-import { useMyEmail, useRoleRank } from "../lib/me";
-import { HandoverCard, MajorBanner } from "../components/Handover";
+import { useRoleRank } from "../lib/me";
+import { MajorBanner, ShiftLine } from "../components/Handover";
 import { PowerPanel } from "../components/PowerPanel";
 import { NetworkPanel } from "../components/NetworkPanel";
 
@@ -63,8 +61,6 @@ export function NocPage() {
   const c = data?.counts;
   const nocPage = usePaged(rows, "noc", "incidents");
   const canWork = useRoleRank() >= 1;
-  const me = useMyEmail();
-  const refresh = () => window.dispatchEvent(new Event("forgesre:noc-refresh"));
   return (
     <>
       <header className="page-head">
@@ -96,6 +92,7 @@ export function NocPage() {
           <Stat label="MTTR 7 days" value={minutesLabel(c.mttr_7d_min)} />
         </div>
       ) : null}
+      {data ? <ShiftLine oncall={data.oncall} handover={data.handover} /> : null}
       <Card>
         <div className="tabs" role="tablist" aria-label="Incident lists">
           {TABS.map((t) => (
@@ -115,36 +112,8 @@ export function NocPage() {
         <IncidentTable rows={nocPage.page} loaded={Boolean(data)} canWork={canWork} onChanged={() => window.dispatchEvent(new Event("forgesre:noc-refresh"))} />
         {nocPage.pager}
       </Card>
-      <HandoverCard handover={data?.handover} canWork={canWork} me={me} onChanged={refresh} />
       <PowerPanel />
       <NetworkPanel />
-      {data ? (
-        <div className="cols">
-          <Card title="Health by group">
-            {data.health.length === 0 ? <span className="muted">No assets yet.</span> : null}
-            {data.health.map((g) => (
-              <div key={g.group} className="cell-stack" style={{ gap: 6 }}>
-                <div className="row" style={{ justifyContent: "space-between" }}>
-                  <span>{g.group}</span>
-                  <span className="small muted">{g.up} / {g.total} up</span>
-                </div>
-                <Bar percent={g.total ? (g.up / g.total) * 100 : 100} tone={g.up === g.total ? "ok" : "warn"} />
-              </div>
-            ))}
-          </Card>
-          <Card title="On call now" actions={<Link className="small" to="/incidents/on-call">Schedule</Link>}>
-            {data.oncall ? (
-              <div className="cell-stack">
-                <span style={{ fontWeight: 600 }}>{data.oncall.name}</span>
-                <span className="small muted">{[data.oncall.phone, data.oncall.email].filter(Boolean).join(" · ")}</span>
-              </div>
-            ) : (
-              <span className="muted">Nobody on the roster for this hour.</span>
-            )}
-          </Card>
-        </div>
-      ) : null}
-      {data && data.ai.forgeai !== "off" ? <ShiftSummary /> : null}
     </>
   );
 }

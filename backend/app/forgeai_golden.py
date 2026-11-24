@@ -1,6 +1,6 @@
 """ForgeAI golden test set: resolved incidents with a known cause, replayed against the model.
 
-An Engineer marks incidents whose confirmed cause is right (Automation › ForgeAI skills ›
+An Engineer marks incidents whose confirmed cause is right (Settings › ForgeAI skills ›
 Golden set, or ``POST /api/v1/forgeai/golden``). A run (job ``forgeai_golden``, LLM lane) asks
 the "cause and first checks" task for each one as a trial, so nothing reaches the incident, and
 scores a case as passed when the answer survives the safety checks and names one of the expected

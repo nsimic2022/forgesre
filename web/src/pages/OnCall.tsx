@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Card, Chip } from "../components/ui";
 import { getJson, postJson, putJson, type OncallSlot, type OncallWeek } from "../lib/api";
 import { IncidentsNav } from "./Incidents";
+import { ShiftPanel } from "../components/Handover";
+import { useMyEmail, useRoleRank } from "../lib/me";
 
 const HOURS = [0, 6, 12, 18, 24];
 const TRACK = 420; // px for 24 h
@@ -128,6 +130,8 @@ function Week({ week, onPick }: { week: OncallWeek; onPick: (s: OncallSlot) => v
 
 /** On-call tab: who is on call now, the week grid and roster editing (Engineer+). */
 export function OnCallPage() {
+  const canWork = useRoleRank() >= 1;
+  const me = useMyEmail();
   const [week, setWeek] = useState<OncallWeek | null>(null);
   const [error, setError] = useState("");
   const [picked, setPicked] = useState<OncallSlot | null>(null);
@@ -155,16 +159,7 @@ export function OnCallPage() {
       </header>
       <IncidentsNav />
       {error ? <div className="banner error" role="alert">{error}</div> : null}
-      <Card title="On call now">
-        {week?.now ? (
-          <div className="cell-stack">
-            <span style={{ fontWeight: 600 }}>{week.now.person}</span>
-            <span className="small muted">{[week.now.window, week.now.phone, week.now.email].filter(Boolean).join(" · ")}</span>
-          </div>
-        ) : (
-          <span className="muted">{week ? "Nobody on the roster for this minute. Escalation to “oncall” falls back to the asset owner." : "Loading…"}</span>
-        )}
-      </Card>
+      <ShiftPanel now={week?.now} canWork={canWork} me={me} />
       {form && week ? <SlotForm key={`${form.slot?.id ?? "new"}-${form.copy}`} week={week} slot={form.slot} copy={form.copy} onDone={done} /> : null}
       {picked && !form ? (
         <Card title={`${picked.window} · ${picked.person}`} actions={<Chip tone={picked.enabled ? "ok" : "off"}>{picked.enabled ? "On" : "Off"}</Chip>}>
