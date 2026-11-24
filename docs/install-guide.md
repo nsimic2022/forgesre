@@ -1,6 +1,6 @@
 # ForgeSRE 2.0 — install, integration and ForgeAI guide
 
-As of 23 November 2026. Serbian version: [vodic-sr.md](vodic-sr.md).
+As of 24 November 2026. Serbian version: [vodic-sr.md](vodic-sr.md).
 
 ForgeSRE is a NOC monitoring platform for watching data-center infrastructure. This guide covers
 the install, what goes into `.env`, `secrets/secrets.env` and `config/forgesre.yml`, how to connect
@@ -115,6 +115,8 @@ The installer copies `.env.example` to `.env` and `secrets/secrets.example.env` 
 | `--data-dir PATH` | Where data goes (`FORGESRE_DATA`) |
 | `--discovery-cidrs` | Networks LibreNMS may discover |
 | `--netbox-url URL` | External NetBox instead of the bundled one |
+| `--netbox yes\|no`, `--librenms yes\|no` | Bundled NetBox / LibreNMS (default yes; later `./forgesre optional`) |
+| `--https yes\|no` | HTTPS on port 443 with a self-signed certificate (default yes; later `./forgesre https`) |
 | `--offline` | Do not pull images (lab without internet) |
 
 Sign in at `http://<VM-IP>:8080` with `FORGESRE_ADMIN_EMAIL` and `FORGESRE_ADMIN_PASSWORD` from

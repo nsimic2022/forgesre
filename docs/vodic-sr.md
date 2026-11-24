@@ -100,6 +100,8 @@ Instaler kopira `.env.example` u `.env` i `secrets/secrets.example.env` u `secre
 | `--data-dir PATH` | Gde idu podaci (`FORGESRE_DATA`) |
 | `--discovery-cidrs` | Mreže koje LibreNMS sme da otkriva |
 | `--netbox-url URL` | Eksterni NetBox umesto ugrađenog |
+| `--netbox yes\|no`, `--librenms yes\|no` | Ugrađeni NetBox / LibreNMS (podrazumevano yes; kasnije `./forgesre optional`) |
+| `--https yes\|no` | HTTPS na portu 443 sa self-signed sertifikatom (podrazumevano yes; kasnije `./forgesre https`) |
 | `--offline` | Ne preuzima image-e (lab bez interneta) |
 
 Prijava: `http://<IP-VM>:8080`, korisnik i lozinka iz `FORGESRE_ADMIN_EMAIL` i `FORGESRE_ADMIN_PASSWORD` u `secrets/secrets.env`. Lozinku odmah promeni u UI-ju (Settings › Users).
