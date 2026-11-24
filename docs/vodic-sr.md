@@ -384,7 +384,7 @@ ForgeAI nema pristup bazi, podešavanjima ni fajlovima. Model nikad ne postavlja
 
 Odgovori se proveravaju pre prikaza: odgovor o incidentu sa IP adresom ili brojem kog nema u činjenicama se odbija, kao i svaki odgovor sa komandom koja menja sistem (`rm`, `reboot`, `systemctl`…). Svaki poziv je zapisan sa tačnim promptom i odgovorom (Investigations i `./forgesre forgeai INC-…`).
 
-**Da li treba dati više?** Moja preporuka je ne. Mali lokalni model sa direktnim pristupom bazi bi češće grešio, sporije bi radio i mogao bi da "vidi" ono što operater ne sme. Bolji put je dodavanje novih alata samo za čitanje (npr. otvoreni incidenti u istoj lokaciji, stanje backup-a), svaki sa svojim limitom i zapisom, kao što su sada metrike i logovi. Podešavanja platforme ostaju van domena modela.
+**Da li treba dati više?** Moja preporuka je ne. Mali lokalni model sa direktnim pristupom bazi bi češće grešio, sporije bi radio i mogao bi da "vidi" ono što operater ne sme. Bolji put su alati samo za čitanje, svaki sa svojim limitom i zapisom; od verzije 2.1 istraga ima i `recent` (incidenti na istom uređaju za 30 dana), `known_errors`, `neighbours` (uređaji u istom reku ili lokaciji sa otvorenim incidentom), `network` (BGP/OSPF) i `power` (UPS i senzori). Podešavanja platforme ostaju van domena modela.
 
 Cloud model dobija isti kontekst kao lokalni, samo kad ga Engineer izabere. MCP klijent dobija rezultate alata bez mailova, telefona i tajni.
 
@@ -419,7 +419,7 @@ Cloud model dobija isti kontekst kao lokalni, samo kad ga Engineer izabere. MCP 
 | Integracija crvena u Settings | Pogrešan URL ili token | Dugme Test, pa `./forgesre settings set-secret …` |
 | Nema alarma iz spoljnog Alertmanager-a | Pogrešan token ili port 8080 zatvoren | `./forgesre journal`, curl sa Bearer tokenom |
 
-Redovno: backup ide automatski uz update, a `checks.backup_max_age_hours` diže alarm kad je backup prestar. Lozinke iz `secrets/secrets.env` čuvaj van VM-a (password manager), jer bez njih restore na novoj mašini nije moguć.
+Redovno: backup ide automatski uz update, a `checks.backup_max_age_hours` diže alarm kad je backup prestar. Uz `FORGESRE_OFFBOX=dir` ili `s3` u `.env` svaki backup se kopira i van servera (NFS ili S3; `./forgesre backup offbox test`). Lozinke iz `secrets/secrets.env` čuvaj van VM-a (password manager), jer bez njih restore na novoj mašini nije moguć.
 
 ## 12. NOC funkcije na jednom mestu
 
