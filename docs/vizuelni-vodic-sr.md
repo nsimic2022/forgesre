@@ -1,0 +1,206 @@
+# Vizuelni vodič
+
+Svaka stranica ForgeSRE-a sa obojenim brojevima; ispod slike piše šta je koji broj.
+Slike pravi `scripts/visual_guide.py`; engleska verzija: [visual-guide.md](visual-guide.md).
+
+- [NOC pregled](#noc)
+- [Zidni ekran (TV mod)](#tv)
+- [Incidenti](#incidents)
+- [Stranica incidenta](#incident)
+- [Dežurstva](#oncall)
+- [Inventar](#inventory)
+- [Automatizacija](#automation)
+- [Istrage](#investigations)
+- [Izveštaji](#reports)
+- [Podešavanja](#settings)
+- [Podešavanja › Izgled](#settings-appearance)
+- [Podešavanja › Web push](#settings-push)
+
+<a id="noc"></a>
+
+## NOC pregled
+
+Početna strana: šta gori sada, ko je dežuran i da li hostovi odgovaraju. Sama se osvežava.
+
+![NOC overview](guide/noc.png)
+
+1. Glavni meni: prelaz između stranica; tačka pokazuje gde si. Ctrl+K pretražuje stranice, incidente i hostove.
+2. Brojke za danas: otvoreni incidenti, nepotvrđeni, hostovi koji ne rade, vreme do potvrde i do rešenja.
+3. Otvara zidni ekran za TV u NOC sobi.
+4. Tabovi: nepotvrđeni, potvrđeni, rešeni danas. Broj pokazuje koliko ih ima.
+5. Filter po ozbiljnosti, ili ukucaj host, IP ili broj incidenta.
+6. Ime incidenta, obojeno po ozbiljnosti (crveno kritično, narandžasto visoko, žuto upozorenje). Klik otvara incident.
+7. Acknow.: Not acknow znači da ga niko još nije preuzeo; potvrdi ga da eskalacija stane. Ko ga je potvrdio piše na stranici incidenta.
+8. Čekiraj redove da potvrdiš, dodeliš ili rešiš više odjednom.
+9. Primopredaja smene: napiši šta sledeća smena treba da zna.
+10. Hostovi po grupama: zeleno kad svi odgovaraju.
+11. Ko je dežuran sada; Schedule otvara raspored.
+12. Stanje ForgeRCA (pravila, uvek uključen) i ForgeAI (lokalni model).
+13. Ko je prijavljen, uloga i odjava (Sign out).
+
+<a id="tv"></a>
+
+## Zidni ekran (TV mod)
+
+Jedan ekran za TV na zidu. Prijavi ga Viewer nalogom. Osvežava se na 30 s.
+
+![Wall screen (TV mode)](guide/tv.png)
+
+1. Vreme, otvoreni, nepotvrđeni, kritični, hostovi koji ne rade, ko je dežuran i Live (crveno No updates kad ekran prestane da se osvežava).
+2. Burning now: prvo kritični, nepotvrđeni pre potvrđenih. Više od osam se lista po stranama na 15 s.
+3. Ime incidenta u boji ozbiljnosti.
+4. Ko ga je potvrdio, ili crveno not acked.
+5. Poslednjih 7 dana kao vremenska prognoza. Klik na dan prikazuje njegov sat: ‹ AM levo, PM › desno.
+6. Poslednjih 12 sati na satu: svaki sat složen po ozbiljnosti; kazaljka je sada.
+7. Grupe hostova: zeleno svi rade, crveno sa radi/ukupno.
+8. Poslednja 24 sata: linija su otvoreni incidenti, stubići su novi po ozbiljnosti sa brojem ispod.
+9. Male pločice: vreme potvrde i rešenja, backup, najbučniji uređaj, ForgeAI, hostovi, novi uređaji; Shift skroz desno.
+10. Povratak u običan prikaz.
+
+<a id="incidents"></a>
+
+## Incidenti
+
+Svi incidenti, najnoviji prvi, sa filterima, sačuvanim prikazima i CSV izvozom.
+
+![Incidents](guide/incidents.png)
+
+1. Incidenti i On-call (raspored dežurstava).
+2. Po stanju: nepotvrđeni, potvrđeni, rešeni, svi.
+3. Filteri: ozbiljnost, pretraga i tim.
+4. Sačuvaj trenutne filtere kao prikaz za kasnije.
+5. Izaberi datume i izvezi listu u CSV.
+6. Kolone: ozbiljnost, početak, host, problem, izvor, potvrda, nivo eskalacije, poslate poruke, ForgeRCA i ForgeAI.
+7. Ime incidenta u boji ozbiljnosti; oznake pokazuju probijen SLA, flapping ili major.
+8. Nivo: dokle je stigla eskalacija.
+
+<a id="incident"></a>
+
+## Stranica incidenta
+
+Sve o jednom incidentu: šta se desilo, šta misli ForgeRCA, ko je šta uradio.
+
+![Incident page](guide/incident.png)
+
+1. Ozbiljnost i ime; ispod izvor i kada je otvoren.
+2. Akcije: postmortem, slanje izveštaja, Acknowledge (potvrdi), Escalate (eskaliraj), Resolve (reši).
+3. Proglasi veliki incident: komandant i redovna obaveštenja.
+4. ForgeRCA: prikupljene činjenice, hipoteze sa težinama, šta dalje.
+5. ForgeAI: mišljenje lokalnog modela (kad je uključen).
+6. Hronologija: alarm, obaveštenja, potvrde i beleške, sa vremenom.
+7. Dokazi prikupljeni pri otvaranju: alarm, metrike, istorija.
+8. Koga zvati za ovaj uređaj.
+9. Posle popravke: upiši pravi uzrok i oceni ForgeRCA.
+10. Naknadne akcije sa vlasnikom i rokom.
+11. Beleške za tim.
+
+<a id="oncall"></a>
+
+## Dežurstva
+
+Ko odgovara, svaki dan u nedelji, po vremenu servera.
+
+![On-call](guide/oncall.png)
+
+1. Ko je dežuran ovog minuta.
+2. Preuzmi ostatak dana na sebe.
+3. Dodaj termin: ko, koji dani, od i do.
+4. Nedelja: klik na termin da ga izmeniš.
+
+<a id="inventory"></a>
+
+## Inventar
+
+Jedan zapis po uređaju, sa stanjem, lokacijom i vlasnikom.
+
+![Inventory](guide/inventory.png)
+
+1. Dodaj uređaje: skeniraj opseg ili ih upiši.
+2. Mapa zavisnosti, rekovi, izvori, novi uređaj, uvoz CSV, lista ili stablo, izvoz.
+3. Grupe: po lokaciji, tipu, okruženju, i gotovi prikazi kao Down now.
+4. Pretraga po imenu, IP-u, vlasniku, reku ili korisniku.
+5. Stanje: Alarm (otvoren incident), Down, Up ili Not probed.
+6. Ime: klik otvara uređaj.
+7. Strane i broj redova po strani.
+
+<a id="automation"></a>
+
+## Automatizacija
+
+Šta se dešava između alarma i nečijeg telefona, u četiri koraka.
+
+![Automation](guide/automation.png)
+
+1. Tok: prikupljanje, filtriranje šuma, rutiranje, eskalacija i obaveštenja, sa današnjim brojkama.
+2. Tabovi: filteri šuma, pravila rutiranja, eskalacija, playbook-ovi, održavanje, poznate greške, ForgeAI veštine.
+3. Novi filter šuma: koga ne budimo i kada.
+4. Probaj alarm: vidi šta bi se desilo, bez pravljenja ičega.
+5. Izvezi sva pravila kao JSON.
+
+<a id="investigations"></a>
+
+## Istrage
+
+Rešeni incidenti sa potvrđenim uzrokom, koliko su ForgeRCA i ForgeAI bili tačni, i Ask ForgeAI.
+
+![Investigations](guide/investigations.png)
+
+1. Pretraga po hostu, alarmu ili uzroku; period; samo sa ForgeAI ili samo sa potvrđenim uzrokom.
+2. Problem u boji ozbiljnosti.
+3. Potvrđeni uzrok, ili not reviewed.
+4. Koliko često su ForgeRCA i ForgeAI bili u pravu.
+5. Uzroci koji se ponavljaju, i na kojim hostovima.
+6. Ask ForgeAI: razgovor o bilo čemu ili o jednom incidentu (lokalni model).
+
+<a id="reports"></a>
+
+## Izveštaji
+
+Brojke za period u odnosu na prethodni, grafikoni i zakazani izveštaji.
+
+![Reports](guide/reports.png)
+
+1. Period (7, 30, 90 dana) i CSV izvoz.
+2. Incidenti, kritični, MTTA, MTTR i potvrđeni uzroci, sa promenom u odnosu na prethodni period.
+3. SLO-ovi i budžet grešaka.
+4. Promena grafikona: Today (po satu), 7 days, 4 weeks (po nedelji), 30 days.
+5. Stubići složeni po ozbiljnosti: crveno kritično, narandžasto visoko, plavo ostalo.
+6. Zakazani izveštaji mejlom; Preview prikazuje izveštaj pre slanja.
+7. Podela po tipu uređaja.
+8. Uređaji sa najviše incidenata.
+
+<a id="settings"></a>
+
+## Podešavanja
+
+Admin ovde menja podešavanja; ostali biraju temu i vide stanje.
+
+![Settings](guide/settings.png)
+
+1. Sekcije: opšte, provere, alarmi, integracije, obaveštenja, AI, web push, izgled, zdravlje, korisnici, backup…
+2. Podešavanja izabrane sekcije. Save upisuje config/forgesre.yml i audit log.
+3. Sačuvaj jednu vrednost.
+
+<a id="settings-appearance"></a>
+
+## Podešavanja › Izgled
+
+Za ovaj browser: tema, boje ozbiljnosti, upozorenja i push.
+
+![Settings › Appearance](guide/settings-appearance.png)
+
+1. Tema boja za ovaj browser.
+2. Boji ime incidenta po ozbiljnosti (uključi ili isključi).
+3. Zvuk i obaveštenje na desktopu za novi kritični dok je strana otvorena.
+4. Web push na ovaj telefon ili browser, i kad je ForgeSRE zatvoren.
+
+<a id="settings-push"></a>
+
+## Podešavanja › Web push
+
+Uključi web push na serveru, pa prijavi svaki telefon ili browser.
+
+![Settings › Web push](guide/settings-push.png)
+
+1. Sekcija Web push.
+2. Isključen: Admin ga uključuje jednim dugmetom. Uključen: čekiraj Push to this device i Send a test.

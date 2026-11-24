@@ -38,7 +38,7 @@ PAGES = [
     ("inventory-add", "/app/inventory/add", None),
     ("settings", "/app/settings", None),
     ("settings-integrations", "/app/settings", "role=button[name='Integrations']"),
-    ("settings-messages", "/app/settings", "role=button[name='Messages and templates']"),
+    ("settings-messages", "/app/settings", "role=button[name='Messages']"),
     ("settings-appearance", "/app/settings", "role=button[name='Appearance']"),
 ]
 
