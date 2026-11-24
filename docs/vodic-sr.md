@@ -39,7 +39,8 @@ Alarmi i logovi ulaze levo, Core ih spaja sa inventarom i čuva u Postgres-u, a 
 | `netbox` + `netbox-redis` + `netbox-db-init` | 8001 (`NETBOX_PORT`) | profil `netbox` (podrazumevano uključen) | Izvor inventara (čita se, ne menja se) |
 | `librenms` + `librenms-db` + `librenms-redis` + `librenms-dispatcher` | 8000 | profil `librenms` (podrazumevano uključen) | Otkrivanje uređaja (SNMP identify, portovi, linkovi) |
 | `llm` | 8088 (lokalno) | `ai` | llama.cpp sa lokalnim modelom (ForgeAI) |
-| `embed` | 8089 (lokalno) | `ai` | Mali model za embeddings (pretraga uploadovanih priručnika) |
+| `llm-gpu` | 8088 (lokalno) | `ai-gpu` (umesto `ai`) | Isto, CUDA verzija na NVIDIA GPU-u (`./forgesre gpu on`) |
+| `embed` | 8089 (lokalno) | `ai` ili `ai-gpu` | Mali model za embeddings (pretraga uploadovanih priručnika) |
 | `worker` | — | `worker` | Opciono: petlje u pozadini u posebnom procesu |
 | `mailserver`, `roundcube`, `mailbox` | 25, 587, 993, 8081 | `mailbox` | Opciono: sopstveni mail server |
 
@@ -154,10 +155,15 @@ ponovo uključuje integraciju.
 | `FORGESRE_TIMEZONE` | Europe/Belgrade | Vremenska zona (jača od `system.timezone` u YAML-u) |
 | `FORGESRE_PROFILE` | standard | Samo oznaka instalacije (`standard` ili `full-ai`) |
 | `FORGESRE_HTTP_PORT` | 8080 | Port UI-ja i API-ja |
-| `COMPOSE_PROFILES` | prazno | Dodatni servisi: `ai`, `mailbox`, `worker`, odvojeni zarezom (npr. `ai,worker`) |
+| `COMPOSE_PROFILES` | netbox,librenms | Opcioni servisi, odvojeni zarezom: `netbox`, `librenms`, `https`, `ai` ili `ai-gpu`, `mailbox`, `worker` (postavljaju ih `./forgesre optional`, `https`, `gpu`) |
+| `FORGESRE_OPTIONAL_PROFILES` | 1 | Oznaka da su NetBox i LibreNMS na ovom serveru postali profili; ne briši je |
+| `FORGESRE_HTTPS`, `FORGESRE_HTTPS_PORT` | off, 443 | HTTPS proxy uključen/isključen i njegov port (`./forgesre https`) |
+| `FORGESRE_BIND`, `FORGESRE_COOKIE_SECURE` | 0.0.0.0, nije postavljeno | Postavlja `./forgesre https only`: Core na 127.0.0.1, Secure cookie |
 | `FORGESRE_LLM_THREADS` | 8 | CPU niti za llama.cpp; `fetch-llm` stavlja broj jezgara minus 2 |
 | `FORGESRE_LLM_CTX` | 8192 | Veličina konteksta lokalnog modela u tokenima (poglavlje 9) |
 | `FORGESRE_EMBED_THREADS` | 2 | CPU niti za embeddings model |
+| `FORGESRE_LLM_GPU_LAYERS` | 99 | Koliko slojeva ide na GPU uz `./forgesre gpu on` |
+| `FORGESRE_OFFBOX`, `FORGESRE_OFFBOX_PATH`, `FORGESRE_OFFBOX_S3_URL`, `_S3_BUCKET`, `_S3_PREFIX`, `_S3_REGION`, `_KEEP`, `_STRIP` | isključeno | Kopija svakog backupa van servera, na NFS ili S3 ([operator-handbook.md](operator-handbook.md)) |
 | `FORGESRE_WEB_WORKERS` | 1 | Broj web procesa Core-a (više korisnika odjednom) |
 | `FORGESRE_CORE_ROLE` | all | `web` kad petlje u pozadini radi poseban `worker` servis |
 | `POSTGRES_PASSWORD` | iz secrets | Kopija za Compose; prava vrednost je u `secrets/secrets.env` |
@@ -196,10 +202,18 @@ UI za tajne pokazuje samo da li su podešene, nikad vrednost. Vrednosti su obič
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Slanje mailova | ti |
 | `SLACK_WEBHOOK_URL`, `TEAMS_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL` | Chat obaveštenja | ti |
 | `ZABBIX_URL`, `ZABBIX_API_TOKEN`, `ZABBIX_WEBHOOK_TOKEN` | Zabbix uvoz hostova i alarmi iz Zabbix-a | ti |
-| `GLPI_URL`, `GLPI_APP_TOKEN`, `GLPI_USER_TOKEN` | GLPI uvoz inventara | ti |
+| `GLPI_URL`, `GLPI_APP_TOKEN`, `GLPI_USER_TOKEN` | GLPI uvoz inventara i, kad uključiš, tiketi iz incidenata | ti |
+| `SMS_GATEWAY_TOKEN` | SMS / telefonski gateway (opšti HTTP ili Twilio) | ti |
+| `TICKET_WEBHOOK_TOKEN` | Bearer za ticket webhook (ServiceNow, Jira, n8n…) | ti |
+| `OXIDIZED_TOKEN` | Oxidized iza reverse proxy-ja (opciono) | ti |
+| `BACKUP_S3_ACCESS_KEY`, `BACKUP_S3_SECRET_KEY` | Backup van servera na S3 | ti |
 | `K8S_TOKEN_<IME>` | Token za svaki Kubernetes klaster | ti |
 | `LDAP_BIND_PASSWORD`, `OIDC_CLIENT_SECRET` | Prijava preko AD/LDAP ili SSO | ti |
 | `CLOUD_LLM_API_KEY` | Plaćeni cloud model (opciono) | ti |
+
+`ZABBIX_URL` i `GLPI_URL` su adrese, ne tajne: menjaš ih u `secrets/secrets.env` ili komandom
+`./forgesre settings set inventory.zabbix.url …` / `inventory.glpi.url …`; `set-secret` je samo za
+tokene i lozinke.
 
 Promena `FORGESRE_ADMIN_PASSWORD` posle prvog pokretanja ne menja lozinku u bazi; lozinka se menja u Settings › Users. `./forgesre secrets-check` proverava da nijedna tajna nije ostala prazna ili lab vrednost.
 
@@ -216,13 +230,16 @@ Promena `FORGESRE_ADMIN_PASSWORD` posle prvog pokretanja ne menja lozinku u bazi
 
 | Grupa u Settings | Ključevi | Primer |
 | --- | --- | --- |
-| General | `system.timezone`, `system.log_level`, `system.public_url`, `system.cookie_secure` | `cookie_secure: true` kad je ispred HTTPS |
+| General | `system.timezone`, `system.log_level`, `system.public_url`, `system.cookie_secure`, `inventory.rack_units` | `cookie_secure: true` kad je ispred HTTPS |
 | Sign-in | `auth.ldap.*`, `auth.oidc.*` | Grupe iz AD-a mapirane na Viewer/Analyst/Engineer/Admin |
 | Network | `logging.loki.enabled`, `grafana.enabled`, `monitoring.snmp.*` | SNMP modul `if_mib` |
 | Integrations | `inventory.netbox.*`, `inventory.zabbix.*`, `inventory.glpi.*`, `inventory.librenms.*`, `inventory.new_from_sources` | `new_from_sources: review` = novi uređaji prvo idu u Discovery |
 | Discovery | `discovery.enabled`, `discovery.mode` | `semi-automatic` = lista za odobrenje |
-| Notifications | `notifications.email.*`, `notifications.chat.slack\|teams\|discord.*` | `min_severity: high` |
-| RCA / AI | `ai.*` (poglavlja 8 i 9) | `ai.enabled: true` |
+| Notifications | `notifications.email.*`, `notifications.chat.slack\|teams\|discord.*`, `notifications.sms.*` | `min_severity: high` |
+| Alarms | `alerts.storm.*` (prag, prozor), `alerts.flapping.*` | 20 incidenata za 5 min = jedna oluja |
+| SLA | `sla.enabled`, `sla.response.<ozbiljnost>`, `sla.resolve.<ozbiljnost>` (minuti) | critical: odgovor 15, rešenje 240 |
+| Tiketi i izmene | `tickets.glpi.enabled`, `tickets.webhook.*`, `changes.oxidized.*` | *Open ticket* na incidentu pravi GLPI tiket |
+| RCA / AI | `ai.*` (poglavlja 8 i 9), `ai.forgeai.language` (`en` / `sr`) | `ai.enabled: true` |
 | Checks | `checks.tls_targets`, `checks.tls_warn_days`, `checks.backup_max_age_hours`, `checks.lifecycle_warn_days` | `web01:443` |
 | MCP | `mcp.enabled` | U grupi Integrations; isključeno dok ga ne uključiš |
 | Kubernetes | `kubernetes.clusters` (samo u fajlu) | ime, URL, `ca_pem` |
@@ -231,7 +248,7 @@ Settings › Appearance bira temu (Signal, Light, Midnight, Navy, High contrast,
 
 ## 7. Integracije
 
-Sve integracije su samo za čitanje, osim slanja obaveštenja: ForgeSRE ništa ne menja u Zabbix-u, GLPI-ju, NetBox-u ili klasterima. Svaka ima dugme Test na svojoj kartici u Settings i red u `./forgesre doctor`; pala integracija se vidi kao greška, ali ne zaustavlja prijem alarma.
+Sve integracije su samo za čitanje, uz tri izuzetka koja sam uključuješ: obaveštenja (mail, chat, SMS), tiketi (GLPI ili webhook) i kopija backupa van servera. ForgeSRE ništa drugo ne menja u Zabbix-u, GLPI-ju, NetBox-u, Oxidized-u ili klasterima. Svaka ima dugme Test na svojoj kartici u Settings i red u `./forgesre doctor`; pala integracija se vidi kao greška, ali ne zaustavlja prijem alarma.
 
 | Sistem | Smer | Šta upisati | Gde |
 | --- | --- | --- | --- |
@@ -248,6 +265,12 @@ Sve integracije su samo za čitanje, osim slanja obaveštenja: ForgeSRE ništa n
 | Slack, Teams, Discord | ForgeSRE → kanal | `*_WEBHOOK_URL` + uključiti kanal i minimalnu ozbiljnost | set-secret + Notifications |
 | CI/CD i izmene | Izmene → ForgeSRE | `POST /api/v1/changes` sa `CHANGES_WEBHOOK_TOKEN`; ForgeAI vidi izmene pre incidenta | Pipeline |
 | LDAP / Active Directory, OIDC (Entra ID…) | Prijava | `auth.ldap.*` + `LDAP_BIND_PASSWORD`, ili `auth.oidc.*` + `OIDC_CLIENT_SECRET`; grupe → uloge | Settings › Sign-in ([sign-in.md](sign-in.md)) |
+| SMS / telefonski gateway | ForgeSRE → telefon dežurnog | `notifications.sms.*` (opšti URL ili Twilio) + `SMS_GATEWAY_TOKEN`; korak eskalacije šalje SMS | Settings › Notifications |
+| GLPI tiketi | ForgeSRE → GLPI | `tickets.glpi.enabled` (isti GLPI tokeni; korisnik mora da sme da pravi tikete); rešen incident dodaje followup | Settings › Integrations, *Open ticket* na incidentu |
+| Ticket webhook | ForgeSRE → ServiceNow, Jira, n8n | `tickets.webhook.url` + `TICKET_WEBHOOK_TOKEN`; JSON pri otvaranju i rešavanju | Settings › Integrations |
+| Oxidized | Izmene konfiguracije → ForgeSRE | `changes.oxidized.url` (+ `OXIDIZED_TOKEN`); nova verzija konfiguracije postaje izmena pre incidenta | Settings › Integrations |
+| UPS, PDU, senzori, BGP/OSPF | SNMP → Prometheus | Tip asseta UPS / PDU / Environment sensor, ili Router / Firewall za rutiranje; isti SNMP podaci | Inventory |
+| Sintetičke provere | Provere sa servera | URL, port, DNS server ili host za ping | Settings › Checks |
 | MCP klijent (Claude, Cursor…) | ForgeSRE → AI alat | `mcp.enabled: true` + `MCP_TOKEN`; podaci tada napuštaju server ([mcp.md](mcp.md)) | Settings › Integrations |
 
 Redosled koji se pokazao najlakšim: inventar (NetBox/GLPI/Zabbix ili ručno), pa syslog i SNMP, pa obaveštenja, pa spoljni Alertmanager-i, pa prijava preko AD-a. Posle svakog koraka: dugme Test i `./forgesre doctor`.
@@ -395,3 +418,27 @@ Cloud model dobija isti kontekst kao lokalni, samo kad ga Engineer izabere. MCP 
 | Nema alarma iz spoljnog Alertmanager-a | Pogrešan token ili port 8080 zatvoren | `./forgesre journal`, curl sa Bearer tokenom |
 
 Redovno: backup ide automatski uz update, a `checks.backup_max_age_hours` diže alarm kad je backup prestar. Lozinke iz `secrets/secrets.env` čuvaj van VM-a (password manager), jer bez njih restore na novoj mašini nije moguć.
+
+## 12. NOC funkcije na jednom mestu
+
+Gde je koja funkcija i kako je proveriš preko SSH-a.
+
+| Funkcija | U UI-ju | CLI | Više |
+| --- | --- | --- | --- |
+| Potiskivanje ispod roditelja, alarmna oluja, flapping | Oznake u listi incidenata, incident oluje | `./forgesre alert-quality` | [alerting.md](alerting.md) |
+| Izveštaj o kvalitetu alarma | Reports › Alert quality | `./forgesre alert-quality [DANA]` | [alerting.md](alerting.md) |
+| Major incident, obaveštenja za stakeholdere | Incident › Major incident | — | [ui.md](ui.md) |
+| SLA tajmeri | Oznake u listi incidenata, Reports › SLA | `./forgesre sla` | [settings.md](settings.md) |
+| Primopredaja smene, akcije posle incidenta | NOC › Handover, Incident › Follow-up actions | `./forgesre handover`, `./forgesre actions` | [ui.md](ui.md) |
+| SMS, GLPI tiketi, ticket webhook | Settings › Notifications / Integrations | `./forgesre settings test sms` (i `ticket-glpi`, `ticket-webhook`) | [settings.md](settings.md) |
+| Napajanje i okruženje (UPS, PDU, senzori) | NOC › Power and environment | `./forgesre power` | [alerting.md](alerting.md) |
+| Rekovi, garancija / EoL / licence | Inventory › Racks, Reports | `./forgesre racks`, `./forgesre lifecycle` | [operator-handbook.md](operator-handbook.md) |
+| Izmene konfiguracije (Oxidized), BGP / OSPF, najopterećeniji interfejsi | Incident › Changes before, NOC › Network | `./forgesre network` | [settings.md](settings.md) |
+| Sintetičke provere | Settings › Checks | `./forgesre synthetic` | [alerting.md](alerting.md) |
+| Komandna paleta, upozorenja u pregledaču, aplikacija na telefonu | Ctrl+K, Settings › Appearance, *Install app* | — | [ui.md](ui.md) |
+| Filter po timu, sačuvani prikazi, poznate greške | Incidents, Automation › Known errors | `./forgesre known-errors` | [ui.md](ui.md) |
+| ForgeAI na srpskom, golden set, sažetak oluje | Settings › RCA / AI, Automation › ForgeAI skills | `./forgesre forgeai golden` | [llm.md](llm.md) |
+| HTTPS, opcioni delovi, GPU, backup van servera | — | `./forgesre https`, `optional`, `gpu`, `backup offbox` | poglavlja 3 i 8 |
+
+Posle `./forgesre update` pokreni `./forgesre doctor`: svaka funkcija koja priča sa drugim sistemom
+tamo ima svoj red.

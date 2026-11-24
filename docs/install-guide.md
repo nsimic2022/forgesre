@@ -44,7 +44,8 @@ Postgres; people get incidents, notifications and ForgeAI on the right.
 | `netbox` + `netbox-redis` + `netbox-db-init` | 8001 (`NETBOX_PORT`) | profile `netbox` (default on) | Inventory source (read, never written) |
 | `librenms` + `librenms-db` + `librenms-redis` + `librenms-dispatcher` | 8000 | profile `librenms` (default on) | Device discovery (SNMP identify, ports, links) |
 | `llm` | 8088 (local) | `ai` | llama.cpp with the local model (ForgeAI) |
-| `embed` | 8089 (local) | `ai` | Small embedding model (search in uploaded manuals) |
+| `llm-gpu` | 8088 (local) | `ai-gpu` (instead of `ai`) | Same, CUDA build on an NVIDIA GPU (`./forgesre gpu on`) |
+| `embed` | 8089 (local) | `ai` or `ai-gpu` | Small embedding model (search in uploaded manuals) |
 | `worker` | — | `worker` | Optional: background loops in their own process |
 | `mailserver`, `roundcube`, `mailbox` | 25, 587, 993, 8081 | `mailbox` | Optional: own mail server |
 
@@ -173,10 +174,15 @@ so the services pick it up.
 | `FORGESRE_TIMEZONE` | Europe/Belgrade | Time zone (wins over `system.timezone` in the YAML) |
 | `FORGESRE_PROFILE` | standard | Install label only (`standard` or `full-ai`) |
 | `FORGESRE_HTTP_PORT` | 8080 | UI and API port |
-| `COMPOSE_PROFILES` | empty | Extra services: `ai`, `mailbox`, `worker`, comma separated (e.g. `ai,worker`) |
+| `COMPOSE_PROFILES` | netbox,librenms | Optional services, comma separated: `netbox`, `librenms`, `https`, `ai` or `ai-gpu`, `mailbox`, `worker` (`./forgesre optional`, `https`, `gpu` set them) |
+| `FORGESRE_OPTIONAL_PROFILES` | 1 | Set once NetBox / LibreNMS became profiles on this appliance; do not remove |
+| `FORGESRE_HTTPS`, `FORGESRE_HTTPS_PORT` | off, 443 | HTTPS proxy on/off and its port (`./forgesre https`) |
+| `FORGESRE_BIND`, `FORGESRE_COOKIE_SECURE` | 0.0.0.0, unset | Set by `./forgesre https only`: Core on 127.0.0.1, Secure cookie |
 | `FORGESRE_LLM_THREADS` | 8 | CPU threads for llama.cpp; `fetch-llm` sets cores minus 2 |
 | `FORGESRE_LLM_CTX` | 8192 | Context window of the local model in tokens (section 9) |
 | `FORGESRE_EMBED_THREADS` | 2 | CPU threads for the embedding model |
+| `FORGESRE_LLM_GPU_LAYERS` | 99 | Layers on the GPU with `./forgesre gpu on` |
+| `FORGESRE_OFFBOX`, `FORGESRE_OFFBOX_PATH`, `FORGESRE_OFFBOX_S3_URL`, `_S3_BUCKET`, `_S3_PREFIX`, `_S3_REGION`, `_KEEP`, `_STRIP` | off | Off-box copy of every backup to an NFS directory or S3 ([operator-handbook.md](operator-handbook.md)) |
 | `FORGESRE_WEB_WORKERS` | 1 | Core web processes (many users at once) |
 | `FORGESRE_CORE_ROLE` | all | `web` when a separate `worker` service runs the background loops |
 | `POSTGRES_PASSWORD` | from secrets | Copy for Compose; the real value is in `secrets/secrets.env` |
@@ -218,10 +224,18 @@ containers; ForgeSRE user passwords are stored as bcrypt in the database.
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Sending mail | you |
 | `SLACK_WEBHOOK_URL`, `TEAMS_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL` | Chat notifications | you |
 | `ZABBIX_URL`, `ZABBIX_API_TOKEN`, `ZABBIX_WEBHOOK_TOKEN` | Zabbix host import and Zabbix alarms | you |
-| `GLPI_URL`, `GLPI_APP_TOKEN`, `GLPI_USER_TOKEN` | GLPI inventory import | you |
+| `GLPI_URL`, `GLPI_APP_TOKEN`, `GLPI_USER_TOKEN` | GLPI inventory import and, when turned on, tickets from incidents | you |
+| `SMS_GATEWAY_TOKEN` | SMS / phone paging gateway (generic HTTP or Twilio) | you |
+| `TICKET_WEBHOOK_TOKEN` | Bearer for the ticket webhook (ServiceNow, Jira, n8n…) | you |
+| `OXIDIZED_TOKEN` | Oxidized behind a reverse proxy (optional) | you |
+| `BACKUP_S3_ACCESS_KEY`, `BACKUP_S3_SECRET_KEY` | Off-box backup to S3 | you |
 | `K8S_TOKEN_<NAME>` | Token for each Kubernetes cluster | you |
 | `LDAP_BIND_PASSWORD`, `OIDC_CLIENT_SECRET` | Sign-in with AD/LDAP or SSO | you |
 | `CLOUD_LLM_API_KEY` | Paid cloud model (optional) | you |
+
+`ZABBIX_URL` and `GLPI_URL` are addresses, not secrets: edit them in `secrets/secrets.env` or set
+`./forgesre settings set inventory.zabbix.url …` / `inventory.glpi.url …`; `set-secret` is only for
+tokens and passwords.
 
 Changing `FORGESRE_ADMIN_PASSWORD` after the first start does not change the password in the
 database; change it in Settings › Users. `./forgesre secrets-check` finds secrets that are empty
@@ -242,13 +256,16 @@ UI is written to the same file and applies at once.
 
 | Settings group | Keys | Example |
 | --- | --- | --- |
-| General | `system.timezone`, `system.log_level`, `system.public_url`, `system.cookie_secure` | `cookie_secure: true` behind HTTPS |
+| General | `system.timezone`, `system.log_level`, `system.public_url`, `system.cookie_secure`, `inventory.rack_units` | `cookie_secure: true` behind HTTPS |
 | Sign-in | `auth.ldap.*`, `auth.oidc.*` | AD groups mapped to Viewer/Analyst/Engineer/Admin |
 | Network | `logging.loki.enabled`, `grafana.enabled`, `monitoring.snmp.*` | SNMP module `if_mib` |
 | Integrations | `inventory.netbox.*`, `inventory.zabbix.*`, `inventory.glpi.*`, `inventory.librenms.*`, `inventory.new_from_sources`, `mcp.enabled` | `new_from_sources: review` = new devices go to Discovery first |
 | Discovery | `discovery.enabled`, `discovery.mode` | `semi-automatic` = a list to approve |
-| Notifications | `notifications.email.*`, `notifications.chat.slack\|teams\|discord.*` | `min_severity: high` |
-| RCA / AI | `ai.*` (sections 8 and 9) | `ai.enabled: true` |
+| Notifications | `notifications.email.*`, `notifications.chat.slack\|teams\|discord.*`, `notifications.sms.*` | `min_severity: high` |
+| Alarms | `alerts.storm.*` (threshold, window), `alerts.flapping.*` | 20 incidents in 5 min = one storm |
+| SLA | `sla.enabled`, `sla.response.<severity>`, `sla.resolve.<severity>` (minutes) | critical: respond 15, resolve 240 |
+| Tickets and changes | `tickets.glpi.enabled`, `tickets.webhook.*`, `changes.oxidized.*` | *Open ticket* on an incident creates a GLPI ticket |
+| RCA / AI | `ai.*` (sections 8 and 9), `ai.forgeai.language` (`en` / `sr`) | `ai.enabled: true` |
 | Checks | `checks.tls_targets`, `checks.tls_warn_days`, `checks.backup_max_age_hours`, `checks.lifecycle_warn_days` | `web01:443` |
 | Kubernetes | `kubernetes.clusters` (file only) | name, URL, `ca_pem` |
 
@@ -257,8 +274,9 @@ computer) for that browser only.
 
 ## 7. Integrations
 
-Every integration only reads, except sending notifications: ForgeSRE changes nothing in Zabbix,
-GLPI, NetBox or clusters. Each has a Test button on its Settings card and a row in
+Every integration only reads, with three exceptions you turn on yourself: notifications (mail, chat,
+SMS), tickets (GLPI or a webhook) and the off-box backup copy. ForgeSRE changes nothing else in Zabbix,
+GLPI, NetBox, Oxidized or clusters. Each has a Test button on its Settings card and a row in
 `./forgesre doctor`; a failing integration shows as an error but never stops alarm intake.
 
 | System | Direction | What to set | Where |
@@ -276,6 +294,12 @@ GLPI, NetBox or clusters. Each has a Test button on its Settings card and a row 
 | Slack, Teams, Discord | ForgeSRE → channel | `*_WEBHOOK_URL` + turn the channel on, minimum severity | set-secret + Notifications |
 | CI/CD and changes | Changes → ForgeSRE | `POST /api/v1/changes` with `CHANGES_WEBHOOK_TOKEN`; ForgeAI sees changes before an incident | Pipeline |
 | LDAP / Active Directory, OIDC (Entra ID…) | Sign-in | `auth.ldap.*` + `LDAP_BIND_PASSWORD`, or `auth.oidc.*` + `OIDC_CLIENT_SECRET`; groups → roles | Settings › Sign-in ([sign-in.md](sign-in.md)) |
+| SMS / phone gateway | ForgeSRE → on-call phone | `notifications.sms.*` (generic URL or Twilio) + `SMS_GATEWAY_TOKEN`; an escalation step pages by SMS | Settings › Notifications |
+| GLPI tickets | ForgeSRE → GLPI | `tickets.glpi.enabled` (same GLPI tokens; the user needs ticket rights); a resolved incident adds a follow-up | Settings › Integrations, *Open ticket* on an incident |
+| Ticket webhook | ForgeSRE → ServiceNow, Jira, n8n | `tickets.webhook.url` + `TICKET_WEBHOOK_TOKEN`; JSON on open and resolve | Settings › Integrations |
+| Oxidized | Config changes → ForgeSRE | `changes.oxidized.url` (+ `OXIDIZED_TOKEN`); a new config version becomes a change before incident | Settings › Integrations |
+| UPS, PDU, sensors, BGP/OSPF | SNMP → Prometheus | Asset type UPS / PDU / Environment sensor, or Router / Firewall for routing; same SNMP credentials | Inventory |
+| Synthetic checks | Probes from the appliance | URL, port, DNS server or host to ping | Settings › Checks |
 | MCP client (Claude, Cursor…) | ForgeSRE → AI tool | `mcp.enabled: true` + `MCP_TOKEN`; data then leaves the server ([mcp.md](mcp.md)) | Settings › Integrations |
 
 The order that works best: inventory (NetBox/GLPI/Zabbix or by hand), then syslog and SNMP, then
@@ -465,3 +489,27 @@ service, integration, queue and backup, and says how to fix each problem.
 Routine: update makes a backup each time, and `checks.backup_max_age_hours` raises an alarm when
 the backup is too old. Keep the passwords from `secrets/secrets.env` outside the VM (a password
 manager): without them a restore on a new machine is not possible.
+
+## 12. NOC features at a glance
+
+Where each feature lives and how to check it over SSH.
+
+| Feature | In the UI | CLI | More |
+| --- | --- | --- | --- |
+| Parent suppression, alarm storm, flapping | Incident list chips, storm incident | `./forgesre alert-quality` | [alerting.md](alerting.md) |
+| Alert quality report | Reports › Alert quality | `./forgesre alert-quality [DAYS]` | [alerting.md](alerting.md) |
+| Major incident, stakeholder updates | Incident › Major incident | — | [ui.md](ui.md) |
+| SLA timers | Incident list chips, Reports › SLA | `./forgesre sla` | [settings.md](settings.md) |
+| Shift handover, follow-up actions | NOC › Handover, Incident › Follow-up actions | `./forgesre handover`, `./forgesre actions` | [ui.md](ui.md) |
+| SMS paging, GLPI tickets, ticket webhook | Settings › Notifications / Integrations | `./forgesre settings test sms` (also `ticket-glpi`, `ticket-webhook`) | [settings.md](settings.md) |
+| Power and environment (UPS, PDU, sensors) | NOC › Power and environment | `./forgesre power` | [alerting.md](alerting.md) |
+| Racks, warranty / EoL / licences | Inventory › Racks, Reports | `./forgesre racks`, `./forgesre lifecycle` | [operator-handbook.md](operator-handbook.md) |
+| Config changes (Oxidized), BGP / OSPF, busiest interfaces | Incident › Changes before, NOC › Network | `./forgesre network` | [settings.md](settings.md) |
+| Synthetic checks | Settings › Checks | `./forgesre synthetic` | [alerting.md](alerting.md) |
+| Command palette, browser alerts, phone app | Ctrl+K, Settings › Appearance, *Install app* | — | [ui.md](ui.md) |
+| Team filter, saved views, known errors | Incidents, Automation › Known errors | `./forgesre known-errors` | [ui.md](ui.md) |
+| ForgeAI in Serbian, golden set, storm summary | Settings › RCA / AI, Automation › ForgeAI skills | `./forgesre forgeai golden` | [llm.md](llm.md) |
+| HTTPS, optional parts, GPU, off-box backup | — | `./forgesre https`, `optional`, `gpu`, `backup offbox` | sections 3 and 8 |
+
+After `./forgesre update` run `./forgesre doctor`: every feature that talks to another system has
+its own row there.

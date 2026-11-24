@@ -42,7 +42,9 @@ Never done this? Follow the numbered [end-to-end operator checklist](#10-end-to-
 
 **Does not:**
 
-- Write anything back to GLPI (no create / update / delete / ticket / reservation). ForgeSRE never writes back.
+- Write anything back to GLPI during the inventory import: the import never writes back. The one
+  exception is opt-in: with `tickets.glpi.enabled`, **Open ticket** on an incident creates a GLPI
+  ticket and a follow-up is added when it resolves (see [Tickets from incidents](#tickets-from-incidents)).
 - Open incidents from GLPI tickets or problems. Incidents stay Prometheus → Alertmanager (and optional Zabbix webhook).
 - Guess a scrape port. New assets are type **Auto** with an empty scrape address.
 - Overwrite owner, contact, email, phone, notes, or already-filled extras on an asset that already exists.
@@ -218,3 +220,14 @@ git pull origin main && ./forgesre update
 ```
 
 Hard-refresh Discovery so `app.css` is not served from cache. Secrets are not regenerated.
+
+## Tickets from incidents
+
+Optional and off by default. `./forgesre settings set tickets.glpi.enabled true` (Settings ›
+Integrations › *GLPI tickets from incidents*) adds **Open ticket** to the incident page (Analyst and
+up): it creates a GLPI ticket with the incident's title, host, severity and a link back. When the
+incident resolves, ForgeSRE adds a follow-up with the cause; every 10 minutes it
+reads the ticket status back. It uses the same `GLPI_URL`, `GLPI_APP_TOKEN` and `GLPI_USER_TOKEN`,
+so the GLPI user then needs more than read rights: create tickets and add follow-ups (profile
+**Technician**, or your own profile with Assistance › Ticket create / update and Followups add).
+Test: `./forgesre settings test ticket-glpi`.
