@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getJson } from "../lib/api";
 import { Card } from "./ui";
 
-/** Postmortem draft for one incident: preview, copy, download .md. Gaps are marked [to fill]. */
+/** Incident review (postmortem) draft for one incident: preview, copy, download .md. Gaps are marked [to fill]. */
 export function PostmortemPanel({ number, onClose }: { number: string; onClose: () => void }) {
   const [text, setText] = useState("");
   const [error, setError] = useState("");
@@ -13,7 +13,7 @@ export function PostmortemPanel({ number, onClose }: { number: string; onClose: 
   const copy = () => navigator.clipboard?.writeText(text).then(() => setCopied(true)).catch(() => setError("Copy is blocked here; use Download."));
   const gaps = (text.match(/\[to fill\]/g) ?? []).length;
   return (
-    <Card title="Postmortem draft" actions={
+    <Card title="Incident review draft" actions={
       <>
         <span className="small faint">{gaps ? `${gaps} gaps to fill in the review` : ""}</span>
         <button className="btn" type="button" onClick={copy} disabled={!text}>{copied ? "Copied" : "Copy Markdown"}</button>

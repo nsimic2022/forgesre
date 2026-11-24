@@ -83,7 +83,7 @@ Sve o jednom incidentu: šta se desilo, šta misli ForgeRCA, ko je šta uradio.
 ![Incident page](guide/incident.png)
 
 1. Ozbiljnost i ime; ispod izvor i kada je otvoren.
-2. Akcije: postmortem, slanje izveštaja, Acknowledge (potvrdi), Escalate (eskaliraj), Resolve (reši).
+2. Akcije: incident review, slanje izveštaja, Acknowledge (potvrdi), Escalate (eskaliraj), Resolve (reši).
 3. Proglasi veliki incident: komandant i redovna obaveštenja.
 4. ForgeRCA: prikupljene činjenice, hipoteze sa težinama, šta dalje.
 5. ForgeAI: mišljenje lokalnog modela (kad je uključen).

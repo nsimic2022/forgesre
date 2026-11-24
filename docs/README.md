@@ -8,7 +8,7 @@ pages below go deeper when you need every setting or every command.
 | | Chapter | Read it when you |
 |---|---|---|
 | 1 | [Getting started](guide/01-getting-started.md) | install ForgeSRE, sign in for the first time, try the demo |
-| 2 | [A day on the NOC](guide/02-daily-work.md) | watch the NOC, take an incident from alarm to postmortem, run the wall screen |
+| 2 | [A day on the NOC](guide/02-daily-work.md) | watch the NOC, take an incident from alarm to incident review, run the wall screen |
 | 3 | [Assets and dependencies](guide/03-assets.md) | add servers and devices, build the dependency map, plan maintenance |
 | 4 | [Alarms, noise and escalation](guide/04-alerts-and-noise.md) | decide what becomes an incident, who gets called and when |
 | 5 | [Reports and SLOs](guide/05-reports-and-slo.md) | report to management, track availability and error budgets |
@@ -31,7 +31,7 @@ refreshed after a UI change.
 - [Discovery: devices come from LibreNMS](discovery.md)
 - [How the classic UI was retired](classic-gaps.md)
 - [Alerting](alerting.md): alert rules, playrules, noise filters, appliance checks, runbook format
-- [New UI](ui.md): pages, API endpoints, TV mode, dependency map, postmortem
+- [New UI](ui.md): pages, API endpoints, TV mode, dependency map, incident review
 - [Architecture](architecture.md): containers, the alarm path, background jobs
 - [Local LLM (ForgeAI)](llm.md)
 - [Kubernetes, OpenShift, k3s](kubernetes.md)

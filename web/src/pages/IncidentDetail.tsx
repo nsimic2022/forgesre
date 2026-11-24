@@ -75,7 +75,7 @@ export function IncidentDetailPage() {
           </span>
         </div>
         <div className="row">
-          <button className="btn" type="button" onClick={() => setPostmortem(!postmortem)} aria-expanded={postmortem}>Postmortem</button>
+          <button className="btn" type="button" onClick={() => setPostmortem(!postmortem)} aria-expanded={postmortem}>Incident review</button>
           {data.can.work ? <button className="btn" type="button" onClick={() => setMail(!mail)} aria-expanded={mail}>Send report</button> : null}
           {data.ticket ? (
             <a className="btn" href={data.ticket.url} target="_blank" rel="noopener noreferrer">Ticket {data.ticket.ref.replace("glpi:", "#")}{data.ticket.status ? ` · ${data.ticket.status}` : ""}</a>

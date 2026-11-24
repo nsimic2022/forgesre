@@ -57,16 +57,16 @@ incidents of the chosen severities (critical by default).
 Nothing is stored per day: changing an SLO recomputes it from incident history.
 `GET /api/v1/slos`, `POST/PUT/DELETE /api/v1/slos[/{id}]`, and `./forgesre slo`.
 
-## Postmortem draft
+## Incident review draft
 
-**Postmortem** on the incident page builds a Markdown draft for the review meeting from the
+**Incident review** (formerly *Postmortem*) on the incident page builds a Markdown draft for the review meeting from the
 facts ForgeSRE has: summary table (times to acknowledge and resolve, highest level, rule and
 playbook), impact (assets behind it in the dependency map), the review's root cause (or
 ForgeRCA's suggestion, marked as not confirmed), what changed before, a timeline of alarm,
 escalation steps, notifications, notes, ack and resolve, ForgeRCA's facts, the playbook
 checklist, and follow-up actions. Nothing is invented: every gap is `[to fill]`, counted in
 the panel. **Copy Markdown** or **Download .md**
-(`GET /api/v1/incidents/{number}/postmortem?download=1`), then paste it into your wiki.
+(`GET /api/v1/incidents/{number}/postmortem?download=1`, saved as `incident-review-<number>.md`; the API path keeps its old name), then paste it into your wiki.
 
 ## Send report
 
@@ -189,7 +189,7 @@ API `/api/v1/known-errors`; `./forgesre known-errors [TEXT]`.
   the next person presses *I take over* (not the writer). `GET/POST /api/v1/handover`,
   `POST /api/v1/handover/{id}/take`, `./forgesre handover`.
 - **Follow-up actions** (incident page, and *Open follow-up actions* on Reports): what must
-  change, owner, due date, ticked off when done; they fill the postmortem draft's table.
+  change, owner, due date, ticked off when done; they fill the incident review draft's table.
   `POST /api/v1/incidents/{n}/actions`, `PATCH /api/v1/actions/{id}`, `GET /api/v1/actions`,
   `./forgesre actions`.
 

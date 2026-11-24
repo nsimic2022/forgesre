@@ -23,7 +23,7 @@ export type Call = {
 };
 
 const STATUS_TONE: Record<string, "ok" | "crit" | "warn" | "off"> = { used: "ok", rejected: "warn", error: "crit", trial: "off" };
-const TASK: Record<string, string> = { incident: "Cause and first checks", investigate: "Investigation with tools", explain: "Explain for Tier 1", postmortem: "Postmortem summary", ask: "Your question", shift: "Shift summary" };
+const TASK: Record<string, string> = { incident: "Cause and first checks", investigate: "Investigation with tools", explain: "Explain for Tier 1", postmortem: "Incident review summary", ask: "Your question", shift: "Shift summary" };
 
 function pretty(text = ""): string {
   try {
@@ -85,7 +85,7 @@ export function CallLog({ calls }: { calls: Call[] }) {
   );
 }
 
-/** ForgeAI on the incident page: the checked answer, explain / postmortem, ask again with another skill, the call log. */
+/** ForgeAI on the incident page: the checked answer, explain / incident review, ask again with another skill, the call log. */
 export function ForgeAiCard({ number, view, canAsk, onChanged }: { number: string; view: ForgeAiView; canAsk: boolean; onChanged: () => void }) {
   const [skill, setSkill] = useState("");
   const [busy, setBusy] = useState("");
@@ -157,7 +157,7 @@ export function ForgeAiCard({ number, view, canAsk, onChanged }: { number: strin
       ) : null}
       {view.extras?.postmortem ? (
         <div className="cell-stack" style={{ gap: 4, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
-          <span className="small faint">Postmortem summary (goes into the Postmortem draft)</span>
+          <span className="small faint">Incident review summary (goes into the incident review draft)</span>
           <span>{view.extras.postmortem.answer.paragraph}</span>
         </div>
       ) : null}
@@ -191,7 +191,7 @@ export function ForgeAiCard({ number, view, canAsk, onChanged }: { number: strin
           <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => ask("incident", "Asking…")}>{busy === "Asking…" ? busy : a ? "Ask again" : "Ask ForgeAI"}</button>
           <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => ask("investigate", "Investigating…")} title="Several steps with read-only tools: metrics, logs, interfaces, similar incidents (1–4 min)">{busy === "Investigating…" ? busy : "Investigate with tools"}</button>
           <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => ask("explain", "Explaining…")}>{busy === "Explaining…" ? busy : "Explain for Tier 1"}</button>
-          <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => ask("postmortem", "Writing…")}>{busy === "Writing…" ? busy : "Postmortem summary"}</button>
+          <button className="btn" type="button" disabled={Boolean(busy)} onClick={() => ask("postmortem", "Writing…")}>{busy === "Writing…" ? busy : "Incident review summary"}</button>
         </div>
       ) : null}
       {busy ? <span className="small faint">The local model takes 30–90 seconds. You can leave this page; the answer stays on the incident.</span> : null}
