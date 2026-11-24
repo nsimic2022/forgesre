@@ -75,14 +75,14 @@ def incidents_per_day(db: Session, days: int = 14, now: datetime | None = None) 
     return _daily(_period(db, start, now + timedelta(seconds=1)), start, now)
 
 
-TREND_RANGES = ("today", "7d", "4w", "30d")
+TREND_RANGES = ("today", "7d", "4w", "30d", "90d")
 
 
 def incident_trend(db: Session, range_: str = "30d", now: datetime | None = None) -> dict[str, Any]:
     """Incidents started per bucket by severity for the Reports chart switcher.
 
-    ``today`` = 24 hours of today, ``7d`` / ``30d`` = days, ``4w`` = four 7-day weeks ending
-    today. Buckets use the appliance time zone; each has ``day`` (its label), critical, high, other.
+    ``today`` = 24 hours of today, ``7d`` / ``30d`` = days, ``4w`` = four 7-day weeks and
+    ``90d`` = thirteen 7-day weeks ending today. Buckets use the appliance time zone; each has ``day`` (its label), critical, high, other.
     """
     from zoneinfo import ZoneInfo
 
@@ -98,9 +98,10 @@ def incident_trend(db: Session, range_: str = "30d", now: datetime | None = None
     midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
     if range_ == "today":
         starts, step, unit = [midnight + timedelta(hours=h) for h in range(24)], timedelta(hours=1), "hour"
-    elif range_ == "4w":
-        first = midnight - timedelta(days=27)
-        starts, step, unit = [first + timedelta(days=7 * w) for w in range(4)], timedelta(days=7), "week"
+    elif range_ in ("4w", "90d"):
+        weeks = 4 if range_ == "4w" else 13
+        first = midnight - timedelta(days=7 * weeks - 1)
+        starts, step, unit = [first + timedelta(days=7 * w) for w in range(weeks)], timedelta(days=7), "week"
     else:
         n = 7 if range_ == "7d" else 30
         starts, step, unit = [midnight - timedelta(days=n - 1 - d) for d in range(n)], timedelta(days=1), "day"
@@ -116,14 +117,31 @@ def incident_trend(db: Session, range_: str = "30d", now: datetime | None = None
             "total": sum(b["critical"] + b["high"] + b["other"] for b in buckets)}
 
 
+def _period_start(days: int, now: datetime) -> datetime:
+    """Start of the report period. ``days`` 0 = today since local midnight (appliance time zone)."""
+    if days == 0:
+        from zoneinfo import ZoneInfo
+
+        from app.settings import settings
+
+        try:
+            zone = ZoneInfo(settings.timezone or "UTC")
+        except Exception:
+            zone = ZoneInfo("UTC")
+        return now.astimezone(zone).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+    return (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 def reports_overview(db: Session, days: int = 30, now: datetime | None = None) -> dict[str, Any]:
-    """KPIs for the last ``days`` against the ``days`` before, incidents per day by severity,
-    by asset type, noisiest assets, most frequent alerts, host-down time, scheduled reports."""
-    days = max(1, min(int(days), 365))
+    """KPIs for the last ``days`` against the same span before, incidents per day by severity,
+    by asset type, noisiest assets, most frequent alerts, host-down time, scheduled reports.
+    ``days`` 0 means today (since local midnight), compared with yesterday."""
+    days = max(0, min(int(days), 365))
     now = _aware(now) or utcnow()
-    start = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = _period_start(days, now)
     rows = _period(db, start, now)
-    previous = _period(db, start - timedelta(days=days), start)
+    span = timedelta(days=1) if days == 0 else timedelta(days=days)
+    previous = _period(db, start - span, start)
 
     daily = _daily(rows, start, now)
 
@@ -173,9 +191,9 @@ def reports_overview(db: Session, days: int = 30, now: datetime | None = None) -
 
 def incidents_csv(db: Session, days: int = 30, now: datetime | None = None) -> str:
     """Every incident of the period as CSV, for spreadsheets and audits."""
-    days = max(1, min(int(days), 365))
+    days = max(0, min(int(days), 365))
     now = _aware(now) or utcnow()
-    rows = _period(db, (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0), now)
+    rows = _period(db, _period_start(days, now), now)
     out = io.StringIO()
     writer = csv.writer(out)
     writer.writerow(["number", "severity", "status", "title", "asset", "asset_type", "source", "started_at", "ack_at", "ack_by", "resolved_at", "resolved_by", "root_cause"])

@@ -434,3 +434,14 @@ tr.picked td { background: var(--s2); }
 .rag-hit mark { background: color-mix(in srgb, var(--warn) 35%, transparent); color: inherit; border-radius: 2px; }
 .rag-score { height: 4px; background: var(--s2); border-radius: 2px; overflow: hidden; }
 .rag-score i { display: block; height: 100%; background: var(--accent); }
+
+/* Reports: sections under one period picker */
+.report-nav { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13.5px; padding: 2px 0 6px; }
+.report-nav a { color: var(--muted); }
+.report-nav a:hover { color: var(--text); }
+.report-section { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 16px; }
+.report-section + .report-section { border-top: 1px solid var(--border); padding-top: 22px; margin-top: 6px; }
+.report-section-head { display: flex; flex-direction: column; gap: 2px; }
+.report-section-head h2 { margin: 0; font-size: 1.15rem; }
+.explain-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.explain-pair > div { display: flex; flex-direction: column; gap: 4px; background: var(--s1); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }

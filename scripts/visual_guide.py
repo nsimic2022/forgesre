@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-WIDTH, HEIGHT, MAX_HEIGHT = 1440, 900, 2400
+WIDTH, HEIGHT, MAX_HEIGHT = 1440, 900, 4400
 COLORS = ["#ff1744"]  # one red for every mark, so only the number tells the order
 
 
@@ -169,18 +169,23 @@ PAGES: list[Page] = [
              Step("h2:has-text('Ask ForgeAI') >> xpath=..", "Ask ForgeAI: chat about anything or one incident (local model).", "Ask ForgeAI: razgovor o bilo čemu ili o jednom incidentu (lokalni model)."),
          ]),
     Page("reports", "/app/reports", "Reports", "Izveštaji",
-         "Numbers for a period against the period before, charts and scheduled reports.", "Brojke za period u odnosu na prethodni, grafikoni i zakazani izveštaji.", [
-             Step("button:has-text('Last 30 days') >> xpath=..", "Period (7, 30, 90 days) and CSV export.", "Period (7, 30, 90 dana) i CSV izvoz."),
+         "One period for the whole page, then five sections: summary, sources, service levels, follow-up, sending reports.",
+         "Jedan period za celu stranu, pa pet sekcija: pregled, izvori, nivoi usluge, praćenje, slanje izveštaja.", [
+             Step("[aria-label='Report period']", "Period for everything on the page: Today, 7, 30 or 90 days; Export CSV exports the same period.",
+                  "Period za sve na strani: Today, 7, 30 ili 90 dana; Export CSV izvozi isti period."),
+             Step(".report-nav", "Jump to a section.", "Skok na sekciju."),
              Step(".strip", "Incidents, criticals, MTTA, MTTR and confirmed causes, with the change against the period before.",
                   "Incidenti, kritični, MTTA, MTTR i potvrđeni uzroci, sa promenom u odnosu na prethodni period."),
-             Step(card("SLOs"), "SLOs and error budget.", "SLO-ovi i budžet grešaka."),
-             Step("[aria-label='Chart range']", "Switch the chart: Today (per hour), 7 days, 4 weeks (per week), 30 days.",
-                  "Promena grafikona: Today (po satu), 7 days, 4 weeks (po nedelji), 30 days."),
-             Step("section.card:has([aria-label='Chart range']) [role=img]", "Bars stacked by severity: red critical, orange high, blue other.",
-                  "Stubići složeni po ozbiljnosti: crveno kritično, narandžasto visoko, plavo ostalo."),
-             Step(card("Scheduled reports"), "Scheduled reports by mail; Preview shows one before it goes out.", "Zakazani izveštaji mejlom; Preview prikazuje izveštaj pre slanja."),
-             Step(card("By asset type"), "Breakdown by asset type.", "Podela po tipu uređaja."),
-             Step(card("Noisiest assets"), "Assets with the most incidents.", "Uređaji sa najviše incidenata."),
+             Step("#r-summary [role=img]", "The chart for the same period: per hour today, per day for 7 or 30 days, per week for 90 days.",
+                  "Grafikon za isti period: po satu za danas, po danu za 7 ili 30 dana, po nedelji za 90 dana."),
+             Step("#r-sources .report-section-head", "Where incidents come from: asset types, noisiest assets, frequent alerts, alert quality, host-down time.",
+                  "Odakle dolaze incidenti: tipovi uređaja, najbučniji uređaji, česti alarmi, kvalitet alarma, vreme pada hostova."),
+             Step(".explain-pair", "SLA (how fast the team reacts) and SLO (how available a service is), explained, with their cards below.",
+                  "SLA (koliko brzo tim reaguje) i SLO (koliko je usluga dostupna), objašnjeni, sa karticama ispod."),
+             Step("#r-follow .report-section-head", "Follow-up actions still open, and hardware or licences running out.",
+                  "Otvorene naknadne akcije, i hardver ili licence kojima ističe rok."),
+             Step("#r-delivery .report-section-head", "Scheduled reports by mail and the outbox of every message sent.",
+                  "Zakazani izveštaji mejlom i lista svih poslatih poruka."),
          ]),
     Page("settings", "/app/settings", "Settings", "Podešavanja",
          "Admins change settings here; others pick a theme and see health.", "Admin ovde menja podešavanja; ostali biraju temu i vide stanje.", [

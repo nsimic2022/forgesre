@@ -155,18 +155,18 @@ Resolved incidents with their confirmed cause, how well ForgeRCA and ForgeAI did
 
 ## Reports
 
-Numbers for a period against the period before, charts and scheduled reports.
+One period for the whole page, then five sections: summary, sources, service levels, follow-up, sending reports.
 
 ![Reports](guide/reports.png)
 
-1. Period (7, 30, 90 days) and CSV export.
-2. Incidents, criticals, MTTA, MTTR and confirmed causes, with the change against the period before.
-3. SLOs and error budget.
-4. Switch the chart: Today (per hour), 7 days, 4 weeks (per week), 30 days.
-5. Bars stacked by severity: red critical, orange high, blue other.
-6. Scheduled reports by mail; Preview shows one before it goes out.
-7. Breakdown by asset type.
-8. Assets with the most incidents.
+1. Period for everything on the page: Today, 7, 30 or 90 days; Export CSV exports the same period.
+2. Jump to a section.
+3. Incidents, criticals, MTTA, MTTR and confirmed causes, with the change against the period before.
+4. The chart for the same period: per hour today, per day for 7 or 30 days, per week for 90 days.
+5. Where incidents come from: asset types, noisiest assets, frequent alerts, alert quality, host-down time.
+6. SLA (how fast the team reacts) and SLO (how available a service is), explained, with their cards below.
+7. Follow-up actions still open, and hardware or licences running out.
+8. Scheduled reports by mail and the outbox of every message sent.
 
 <a id="settings"></a>
 
