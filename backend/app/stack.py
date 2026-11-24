@@ -16,6 +16,8 @@ SOFT_STATUSES = frozenset({"ok", "disabled", "paused", "warn", "warning", "start
 # Machine keys stay compose service ids (dashboard Open links, failed[], JSON).
 # "core" is the stack row; it probes /api/v1/health (same URL as doctor.sh Core API).
 # Grafana is graphs only — never group it with Prometheus as a "Prometheus Stack".
+# Doctor rows (UI and ./forgesre doctor): at most LABEL_WIDTH characters so the marks line up.
+LABEL_WIDTH = 20
 COMPONENT_LABELS = {
     "core": "Core (container)",
     "prometheus": "Prometheus",
@@ -26,18 +28,18 @@ COMPONENT_LABELS = {
     "zabbix": "Zabbix",
     "glpi": "GLPI",
     "librenms": "LibreNMS",
-    "embed": "Document search (embeddings)",
-    "cloud": "Cloud model (optional)",
+    "embed": "Document search",
+    "cloud": "Cloud model",
     "worker": "Background loops",
     "chat": "Chat",
     "checks": "Checks",
     "mcp": "MCP",
     "kubernetes": "Kubernetes",
-    "power": "Power and environment",
-    "blackbox": "Synthetic checks (blackbox)",
-    "oxidized": "Oxidized config changes",
-    "https": "HTTPS (proxy and certificate)",
-    "offbox": "Off-box backup copy",
+    "power": "Power / environment",
+    "blackbox": "Synthetic checks",
+    "oxidized": "Oxidized changes",
+    "https": "HTTPS",
+    "offbox": "Off-box backup",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.

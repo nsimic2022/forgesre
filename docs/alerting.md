@@ -132,7 +132,7 @@ probes each target every 60 s. Rules in group `forgesre-synthetic`:
 
 Give the check an **asset** so the incident lands on that asset (otherwise the check name is
 the asset label). `./forgesre synthetic` shows the last result per check; doctor row *Synthetic
-checks (blackbox)*.
+checks*.
 
 ## Power and environment
 

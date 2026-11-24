@@ -242,7 +242,7 @@ proxy settings; nothing goes anywhere unless you set `FORGESRE_OFFBOX`.
 
 `./forgesre backup offbox` shows the target and the last copy, `./forgesre backup offbox test` writes,
 reads and deletes a test file, `./forgesre backup offbox push [N]` copies an existing backup (1 = newest).
-`./forgesre backup --no-offbox` skips the copy once. Doctor row *Off-box backup copy* is red when the last
+`./forgesre backup --no-offbox` skips the copy once. Doctor row *Off-box backup* is red when the last
 copy failed and yellow when it is older than `checks.backup_max_age_hours`. A failed copy never fails
 the local backup.
 

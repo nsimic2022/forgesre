@@ -106,7 +106,7 @@ job `oxidized_sync` reads `/nodes.json` (5 s timeout). When a device's config ve
 (`mtime`), a change *Config changed on <device>* (kind `config`, source `oxidized`, link to the
 version list in Oxidized) is stored on the asset with the same name or IP, and shows under
 *Changes before* on every incident that starts in the next 24 h. The first read only records
-where each device is. Test: `./forgesre settings test oxidized`; doctor row *Oxidized config
+where each device is. Test: `./forgesre settings test oxidized`; doctor row *Oxidized
 changes* also counts failed backups inside Oxidized.
 
 ## Integrations

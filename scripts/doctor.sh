@@ -14,9 +14,9 @@ fi
 echo "ForgeSRE Health"
 echo
 
-# One aligned output row: ok = green check, bad = red cross plus the reason.
-ok() { printf "  %-20s ✓\n" "$1"; }
-bad() { printf "  %-20s ✗  %s\n" "$1" "$2"; }
+# One aligned output row: ok = check, bad = cross plus the reason. Same width as the rows below.
+ok() { printf "  %-20s  ✓\n" "$1"; }
+bad() { printf "  %-20s  ✗  %s\n" "$1" "$2"; }
 
 # Unauthenticated liveness. /api/v1/system/doctor needs a webhook token and must
 # not be used to decide whether Core is up.
@@ -68,19 +68,31 @@ from pathlib import Path
 data = json.loads(Path("/tmp/forgesre-doctor.json").read_text())
 # Statuses that print a check mark; anything else prints a cross with why / test / fix.
 ok_status = {"ok", "disabled", "paused", "warn", "warning", "starting"}
-# One row per doctor component (Core API, Prometheus, snmp, NetBox, …).
-for name, item in data.get("components", {}).items():
+# One row per doctor component (Core API, Prometheus, snmp, NetBox, …), marks in one column:
+# ✓ ok · – off (not set up) · ! warning, with the reason · ✗ problem, with why / test / fix.
+rows = data.get("components", {})
+width = max([20] + [len(str(i.get("label") or n)) for n, i in rows.items()])
+for name, item in rows.items():
     status = item.get("status")
-    label = item.get("label") or name
-    mark = "✓" if status in ok_status else "✗"
+    label = str(item.get("label") or name)
     extra = ""
-    if status not in ok_status:
+    if status == "disabled":
+        mark = "–"
+        extra = "  off"
+    elif status in {"warn", "warning", "starting"}:
+        mark = "!"
+        extra = f"  {item.get('why', status)}"
+    elif status in ok_status:
+        mark = "✓"
+    else:
+        mark = "✗"
+    if mark == "✗":
         extra = f"  {item.get('why','')}"
         if item.get("test"):
             extra += f"\n    Test: {item['test']}"
         if item.get("fix"):
             extra += f"\n    Fix:  {item['fix']}"
-    print(f"  {label:<20} {mark}{extra}")
+    print(f"  {label:<{width}}  {mark}{extra}")
 print()
 print(f"Overall:\n  {data.get('overall')}")
 raise SystemExit(0 if data.get("overall") == "HEALTHY" else 1)
