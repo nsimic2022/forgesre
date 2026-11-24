@@ -273,6 +273,9 @@ if grep -Eq '^COMPOSE_PROFILES=.*\bhttps\b' "$ROOT/.env" 2>/dev/null; then
 else
   echo "HTTPS is off. Turn it on with: ./forgesre https on   (self-signed, or put your certificate in data/tls)"
 fi
+if [[ ! -f /etc/systemd/system/forgesre-backup.timer ]]; then
+  echo "No nightly backup yet. Turn it on with: ./forgesre backup schedule on   (02:30, verify, keep 14)"
+fi
 "$ROOT/scripts/doctor.sh" || echo "Doctor still reports warnings (see above)."
 echo "Update finished."
 echo "SNMP:     ./forgesre snmp"

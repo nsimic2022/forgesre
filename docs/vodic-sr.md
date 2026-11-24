@@ -50,6 +50,8 @@ Sve što treba da preživi restart je u `FORGESRE_DATA` (podrazumevano `./data`)
 
 Za platformu bez lokalnog modela dovoljno je 4 vCPU i 8 GB RAM-a; sa lokalnim modelom računaj na 8 vCPU i 16 GB. GPU ne treba, model radi na CPU-u.
 
+**Naši VM-ovi (16 vCPU, 32 GB RAM):** koristi Qwen3 8B (`./forgesre fetch-llm --model qwen3-8b`) uz `FORGESRE_LLM_THREADS=14`. Odgovara za oko 1–2 minuta, daje primetno bolje uzroke od 4B i ostavlja 20 GB platformi. Model 14B takođe staje, ali odgovor traje nekoliko minuta; njega samo uz GPU. Pre i posle promene modela pokreni golden set.
+
 | Resurs | Bez ForgeAI | Sa Qwen3 4B | Sa 8B modelom | Sa 14B modelom |
 | --- | --- | --- | --- | --- |
 | vCPU | 4 (min. 2) | 8 | 8–12 | 12+ |

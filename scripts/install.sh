@@ -24,6 +24,8 @@ NETBOX_MODE="bundled"
 # Bundled NetBox and LibreNMS are optional Compose profiles; on unless --netbox no / --librenms no.
 BUNDLED_NETBOX="${FORGESRE_INSTALL_NETBOX:-yes}"
 BUNDLED_LIBRENMS="${FORGESRE_INSTALL_LIBRENMS:-yes}"
+# Nightly backup timer (systemd): on for new installs, --backup-schedule no to skip.
+BACKUP_SCHEDULE="${FORGESRE_INSTALL_BACKUP_SCHEDULE:-02:30}"
 # HTTPS front (Caddy, self-signed certificate until you add your own): on for new installs.
 ENABLE_HTTPS="${FORGESRE_INSTALL_HTTPS:-yes}"
 
@@ -44,6 +46,7 @@ Options:
   --netbox-url URL      External NetBox; bundled still starts unless you stop it
   --netbox yes|no       Bundled NetBox (default yes; no with --netbox-url or when you do not need it)
   --librenms yes|no     Bundled LibreNMS for discovery (default yes)
+  --backup-schedule HH:MM|no  Nightly backup time (default 02:30); later ./forgesre backup schedule
   --https yes|no        HTTPS on port 443 with a self-signed certificate (default yes); later:
                         ./forgesre https on|only|off|cert
 EOF
@@ -64,6 +67,7 @@ while [[ $# -gt 0 ]]; do
     --netbox) BUNDLED_NETBOX="$2"; shift 2 ;;
     --librenms) BUNDLED_LIBRENMS="$2"; shift 2 ;;
     --https) ENABLE_HTTPS="$2"; shift 2 ;;
+    --backup-schedule) BACKUP_SCHEDULE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
@@ -534,12 +538,21 @@ if [[ "$ENABLE_HTTPS" == "yes" ]]; then
     HTTPS_NOTE="HTTPS did not start: ./forgesre https status ; ./forgesre logs proxy"
   fi
 fi
+BACKUP_NOTE="off (./forgesre backup schedule on)"
+if [[ "$BACKUP_SCHEDULE" != "no" ]] && command -v systemctl >/dev/null 2>&1; then
+  if "$ROOT/scripts/backup-schedule.sh" on "$BACKUP_SCHEDULE" >/dev/null; then
+    BACKUP_NOTE="nightly at ${BACKUP_SCHEDULE} (./forgesre backup schedule)"
+  else
+    BACKUP_NOTE="timer not created: ./forgesre backup schedule on"
+  fi
+fi
 "$ROOT/scripts/doctor.sh" || true
 post_install_journal || true
 echo
 echo "Installation finished."
 echo "UI:              http://127.0.0.1:${HTTP_PORT}"
 [[ -n "$HTTPS_NOTE" ]] && echo "HTTPS:           ${HTTPS_NOTE}"
+echo "Backup:          ${BACKUP_NOTE}"
 echo "Grafana:         http://127.0.0.1:3000"
 [[ "$BUNDLED_NETBOX" == "yes" ]] && echo "NetBox:          http://127.0.0.1:8001  (admin / see installation-report.md)"
 [[ "$BUNDLED_LIBRENMS" == "yes" ]] && echo "LibreNMS:        http://127.0.0.1:8000"

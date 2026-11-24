@@ -124,7 +124,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `settings` | Settings from the shell: list, get, set, test, set-secret ([settings.md](settings.md)) |
 | `journal [module]` | Internal console reports (JSON) |
 | `demo` / `demo-rca` / `demo-reset` | Demo HighCPU path / filesystem RCA demo / lower the demo gauges |
-| `backup` | One folder per run under `data/backups` (`--no-secrets`, `--include-models`, `--no-offbox`); `backup offbox [test, push N]` for the NFS / S3 copy |
+| `backup` | One folder per run under `data/backups` (`--no-secrets`, `--include-models`, `--no-offbox`); `backup offbox [test, push N]` for the NFS / S3 copy; `backup verify [N]` checks an archive; `backup schedule on [HH:MM]` makes it nightly |
 | `restore` / `import` | Numbered backup picker; applies only with `--yes` after stopping Core |
 | `remove backup` | Delete one backup folder (`--yes` or typed yes) |
 | `fetch-llm` | Download the GGUF into `data/models/model.gguf` and start llama.cpp |

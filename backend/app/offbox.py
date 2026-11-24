@@ -36,7 +36,7 @@ from typing import Any
 
 TIMEOUT = 120.0
 STATUS_FILE = ".offbox-status.json"
-_STRIP_NAMES = {"secrets.env", ".env"}
+_STRIP_NAMES = {"secrets.env", "dotenv", ".env"}  # .env is stored as "dotenv" in the archive
 
 
 def config(env: dict[str, str] | None = None) -> dict[str, Any]:

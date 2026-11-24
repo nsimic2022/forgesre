@@ -848,6 +848,10 @@ backup — one folder per run under $FORGESRE_DATA/backups (default ./data/backu
   ./forgesre backup offbox             off-box target and the last copy
   ./forgesre backup offbox test        write, read and delete a test file there
   ./forgesre backup offbox push [N]    copy an existing backup (1 = newest)
+  ./forgesre backup verify [N]         read the whole archive and check the database dump (1 = newest)
+  ./forgesre backup schedule on [HH:MM]  nightly backup as a systemd timer (default 02:30):
+                                       backup, off-box copy, verify, keep FORGESRE_BACKUP_KEEP (14)
+  ./forgesre backup schedule [status|off|run]
   ./backup.sh --no-secrets
 
 Writes data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz (mode 600)
@@ -1249,7 +1253,13 @@ case "$cmd" in
   install) exec "$ROOT/scripts/install.sh" "$@" ;;
   doctor) exec "$ROOT/scripts/doctor.sh" "$@" ;;
   test) exec "$ROOT/scripts/test.sh" "$@" ;;
-  backup) exec "$ROOT/scripts/backup.sh" "$@" ;;
+  backup)
+    if [[ "${1:-}" == "schedule" ]]; then
+      shift
+      exec "$ROOT/scripts/backup-schedule.sh" "$@"
+    fi
+    exec "$ROOT/scripts/backup.sh" "$@"
+    ;;
   restore|import)
     need_env
     exec "$ROOT/scripts/restore.sh" "$@"

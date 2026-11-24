@@ -224,6 +224,35 @@ Archives are `data/backups/backup_YYYYMMDDTHHMMSSZ/forgesre.tar.gz` (`$FORGESRE_
 
 Download is session-authenticated. There is no unauthenticated URL. Do not commit `data/backups/`.
 
+#### Nightly backup and backup check
+
+`./forgesre backup schedule on [HH:MM]` creates a systemd timer, `forgesre-backup.timer`, which
+runs nightly at 02:30 by default. New installs create it unless `install.sh --backup-schedule no`.
+Each night it:
+
+1. makes a backup;
+2. copies it off the box when `FORGESRE_OFFBOX` is set;
+3. checks it (`backup verify`);
+4. keeps only the newest `FORGESRE_BACKUP_KEEP` (14) runs in `data/backups`. A backup that fails
+   the check never pushes out the older good ones.
+
+Other commands:
+
+- `./forgesre backup schedule` shows the next and last run.
+- `./forgesre backup schedule run` runs it now.
+- `./forgesre backup schedule off` removes the timer.
+- Logs: `journalctl -u forgesre-backup`.
+
+`./forgesre backup verify [N]` checks an archive (1 = newest) without touching the platform:
+
+- it reads the whole archive, so a damaged file fails;
+- it parses the database dump and checks that the `users`, `incidents` and `assets` tables are
+  there and that `users` is not empty;
+- it reports whether config, `.env` and secrets are inside.
+
+Doctor row *Backup check* shows the last result. Once a quarter, also try a real restore on a test
+VM: `./forgesre restore` shows its plan first and runs only with `--yes`.
+
 #### Off-box copy (NFS or S3)
 
 A backup that only lives on the appliance is lost with the appliance. Turn on an off-box copy in
