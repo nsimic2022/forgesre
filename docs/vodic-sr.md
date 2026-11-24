@@ -364,7 +364,7 @@ Na CPU-u brzinu određuju dve stvari: koliko teksta model mora da pročita (prom
 
 **Skillovi** (Automation › ForgeAI skills, Engineer): uputstvo modelu za određenu vrstu posla. Svaki ima:
 
-- zadatak (uzrok i prve provere, objašnjenje, postmortem, istraga sa alatima, chat, smena);
+- zadatak (uzrok i prve provere, objašnjenje, sažetak za incident review, istraga sa alatima, chat, smena);
 - kada se bira: imena alarma (npr. `Disk*`), tipovi asseta i prioritet;
 - šta dobija u kontekstu: činjenice ForgeRCA, playbook, slične incidente, izmene, syslog, priručnike;
 - verzije sa istorijom, probu na pravom incidentu pre čuvanja i statistiku (prihvaćeni, odbijeni, zvezdice).

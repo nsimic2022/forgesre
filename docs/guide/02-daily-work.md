@@ -38,7 +38,7 @@ Click a row to open it.
    **ForgeAI** (when it is on) then asks the local model once, with the skill that fits the
    alarm, for the likely cause, the first three checks and a line for the shift lead. Answers
    that contain a number, IP or command not in the facts are thrown away. **Explain for Tier 1**
-   and **Postmortem summary** ask for more; **What was ForgeAI asked?** shows the exact prompt
+   and **Incident review summary** ask for more; **What was ForgeAI asked?** shows the exact prompt
    and the model's answer word for word. 👍 / 👎 tells the team which skills work.
    **Investigate with tools** goes further (1–4 minutes): ForgeAI may look at a metric, the
    host's logs, the device's interfaces and similar incidents, then gives the cause with a
@@ -49,7 +49,7 @@ Click a row to open it.
    **Syslog around the start** from the device's own log.
 4. **Follow the playbook**, if the alarm has one: tick the steps as you go so the next
    person sees where you are.
-5. **Write notes** as you work. They end up in the timeline and the postmortem.
+5. **Write notes** as you work. They end up in the timeline and the incident review.
 6. **Resolve** when it is fixed, then fill *Confirm the cause*: what really caused it, and
    whether ForgeRCA was right. These reviews make the similar-incident search better.
 
@@ -68,9 +68,9 @@ All incidents, open and closed, with search, severity and a **From / To** day ra
 per page; use it to find "didn't this happen last month too?". **Export CSV** downloads the
 list with the same filters (UTF-8, opens in Excel with the right letters).
 
-## Postmortem
+## Incident review
 
-For anything worth a review meeting, press **Postmortem** on the incident. ForgeSRE writes
+For anything worth a review meeting, press **Incident review** on the incident. ForgeSRE writes
 a Markdown draft from what it knows: timeline, impact (what sits behind the asset), what
 changed, notes, the confirmed cause, the playbook. It invents nothing: every gap is marked
 `[to fill]`. Copy it or download the `.md` and paste it into your wiki.

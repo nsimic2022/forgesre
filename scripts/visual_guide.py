@@ -115,8 +115,8 @@ PAGES: list[Page] = [
          "Everything about one incident: what happened, what ForgeRCA thinks, who did what.",
          "Sve o jednom incidentu: šta se desilo, šta misli ForgeRCA, ko je šta uradio.", [
              Step("main h1", "Severity and name; source and when it opened under it.", "Ozbiljnost i ime; ispod izvor i kada je otvoren."),
-             Step("button:has-text('Acknowledge') >> xpath=..", "Actions: postmortem, send report, Acknowledge, Escalate, Resolve.",
-                  "Akcije: postmortem, slanje izveštaja, Acknowledge (potvrdi), Escalate (eskaliraj), Resolve (reši)."),
+             Step("button:has-text('Acknowledge') >> xpath=..", "Actions: incident review, send report, Acknowledge, Escalate, Resolve.",
+                  "Akcije: incident review, slanje izveštaja, Acknowledge (potvrdi), Escalate (eskaliraj), Resolve (reši)."),
              Step("text=Declare major incident", "Declare a major incident: a commander and regular updates.", "Proglasi veliki incident: komandant i redovna obaveštenja."),
              Step(card("ForgeRCA"), "ForgeRCA: facts collected, hypotheses with weights, what to do next.", "ForgeRCA: prikupljene činjenice, hipoteze sa težinama, šta dalje."),
              Step(card("ForgeAI"), "ForgeAI: the local model's opinion (when it is on).", "ForgeAI: mišljenje lokalnog modela (kad je uključen)."),

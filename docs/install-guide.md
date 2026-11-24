@@ -425,7 +425,7 @@ thinks a lot: turn thinking off. When the answer does not arrive in time, raise 
 **Skills** (Automation › ForgeAI skills, Engineer): instructions to the model for one kind of
 work. Each has:
 
-- a task (cause and first checks, explanation, postmortem, investigation with tools, chat, shift);
+- a task (cause and first checks, explanation, incident review summary, investigation with tools, chat, shift);
 - when it is picked: alert names (e.g. `Disk*`), asset types and a priority;
 - what goes into its context: ForgeRCA facts, playbook, similar incidents, changes, syslog, manuals;
 - versions with history, a trial on a real incident before saving, and statistics (used,

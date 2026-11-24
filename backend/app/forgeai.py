@@ -112,7 +112,7 @@ TASKS: dict[str, dict[str, Any]] = {
         "max_tokens": 500,
     },
     "postmortem": {
-        "label": "Postmortem summary",
+        "label": "Incident review summary",
         "shape": '{"paragraph": "one paragraph, 4-7 sentences"}',
         "fields": {"paragraph": 1400},
         "lists": {},
@@ -199,8 +199,8 @@ BUILTIN: list[tuple[str, str, str, list[str], list[str], int, dict[str, bool], s
     ("explain-generic", "Explain for Tier 1", "explain", [], [], 1000, {"similar": False, "changes": False},
      "Explain to a new Tier 1 operator what this alarm means on this kind of asset, without jargon. Say "
      "why it matters for users and how urgent it is from the severity. Do not guess the cause."),
-    ("postmortem-generic", "Postmortem summary", "postmortem", [], [], 1000, {"syslog": False},
-     "Write the summary paragraph of a blameless postmortem: what happened, when, impact, how it was "
+    ("postmortem-generic", "Incident review summary", "postmortem", [], [], 1000, {"syslog": False},
+     "Write the summary paragraph of a blameless incident review: what happened, when, impact, how it was "
      "found and fixed, and the confirmed cause if there is one. Use the notes and the timeline. Mark "
      "anything not in the facts as unknown."),
     ("ask-generic", "Operator question", "ask", [], [], 1000, {},

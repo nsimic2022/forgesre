@@ -98,7 +98,7 @@ switch gives one incident instead of forty.
 - The tree shows the biggest branches first, red where an alarm is open, and how many
   assets hang behind each one. **Change parent** refuses loops.
 
-The incident page and the postmortem use this map to show impact.
+The incident page and the incident review use this map to show impact.
 
 ## Maintenance windows
 

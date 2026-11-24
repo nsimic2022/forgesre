@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 import yaml
-from fastapi.testclient import TestClient
-
 from app.changes import changes_before
 from app.cli_ops import format_network
 from app.db import Base, SessionLocal, engine
@@ -18,6 +17,7 @@ from app.models import Asset, ChangeEvent, ConfigNode, Incident, utcnow
 from app.network_view import overview, routing_metrics_on
 from app.oxidized import sync
 from app.seed import seed
+from fastapi.testclient import TestClient
 from test_incident_tools import _client
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -101,12 +101,14 @@ def test_oxidized_first_read_is_baseline_then_changes_are_recorded(monkeypatch):
     db = _db()
     db.add(Asset(asset_id="nc-core", hostname="nc-core", ip=_ip(), type="Router"))
     db.commit()
-    nodes = [{"name": "nc-core", "full_name": "nc-dc1/nc-core", "ip": "10.9.9.1", "model": "ios", "mtime": "2026-11-23 08:00:00 UTC", "last": {"status": "success"}},
-             {"name": "nc-unknown", "full_name": "nc-dc1/nc-unknown", "ip": "10.9.9.2", "mtime": "2026-11-23 08:00:00 UTC", "last": {"status": "no_connection"}}]
+    # mtimes relative to now: the incident below looks back 24 hours for changes
+    at = lambda hours_ago: (utcnow() - timedelta(hours=hours_ago)).strftime("%Y-%m-%d %H:%M:%S UTC")  # noqa: E731
+    nodes = [{"name": "nc-core", "full_name": "nc-dc1/nc-core", "ip": "10.9.9.1", "model": "ios", "mtime": at(3), "last": {"status": "success"}},
+             {"name": "nc-unknown", "full_name": "nc-dc1/nc-unknown", "ip": "10.9.9.2", "mtime": at(3), "last": {"status": "no_connection"}}]
     first = sync(db, nodes)
     assert first == {"nodes": 2, "changed": 0, "failed_backups": 1}
-    nodes[0]["mtime"] = "2026-11-23 10:15:00 UTC"
-    nodes[1]["mtime"] = "2026-11-23 10:20:00 UTC"
+    nodes[0]["mtime"] = at(1)
+    nodes[1]["mtime"] = at(0.5)
     second = sync(db, nodes)
     assert second["changed"] == 2
     rows = {r.title: r for r in db.query(ChangeEvent).filter(ChangeEvent.source == "oxidized").all()}

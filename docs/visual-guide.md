@@ -83,7 +83,7 @@ Everything about one incident: what happened, what ForgeRCA thinks, who did what
 ![Incident page](guide/incident.png)
 
 1. Severity and name; source and when it opened under it.
-2. Actions: postmortem, send report, Acknowledge, Escalate, Resolve.
+2. Actions: incident review, send report, Acknowledge, Escalate, Resolve.
 3. Declare a major incident: a commander and regular updates.
 4. ForgeRCA: facts collected, hypotheses with weights, what to do next.
 5. ForgeAI: the local model's opinion (when it is on).
