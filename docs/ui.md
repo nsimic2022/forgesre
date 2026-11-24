@@ -192,23 +192,31 @@ API `/api/v1/known-errors`; `./forgesre known-errors [TEXT]`.
 ## TV mode (wall screen)
 
 `/app/tv` (button **Wall screen (TV mode)** on the NOC page) is built for a screen on the wall: one
-16:9 page with no tabs and no scrolling, sized from the screen so it reads the same on a monitor and
+16:9 page with no tabs, sized from the screen so it reads the same on a monitor and
 a 65" 4K TV, refreshed every 30 seconds.
 
 - Top: the time (the appliance's time zone), open, not acknowledged, critical, hosts down, who is
   on call with the phone, and **Live** (red **No updates** when the page has not refreshed for 90 s).
 - Left, two thirds: **Burning now**, eight rows: critical first, unacknowledged before
   acknowledged, oldest first; severity, title, host, number, tier, how long it has been open and
-  who acknowledged it (red *not acked*). More than eight shows "+N more not shown". A critical
+  who acknowledged it (red *not acked*). More than eight are split into pages that turn every 15 s
+  (dots and ‹ › below pick one; a pick holds the page for 15 s); on a small screen the list scrolls. A critical
   that appears while the page is open glows for a minute. Nothing open: a calm **All quiet** with
   the time since the last incident was resolved.
 - Right: the last 7 days as small "weather" cells (sun = quiet, cloud = warning, storm = high or
   critical; big number = incidents, small = criticals), the 12-hour incident clock, and the host
   groups (green when all answer, red with up/total when not).
-- Bottom: **Last 24 hours** as a slim curve (incidents open per hour, red dots for hours with a
-  critical, maintenance shaded, the share acknowledged within 15 minutes in the heading), then one
-  row of small tiles: time to acknowledge, time to resolve, error budget, shift, last backup,
-  noisiest assets, ForgeAI, hosts answering, new devices. Each shows one value and one coloured
+- **Day clock**: click a day cell to see that day on the clock, half a day at a time: *‹ AM*
+  (00–12) on the left, *PM ›* (12–24) on the right. Each hour is stacked by severity with its count
+  inside, and the totals per severity sit under the dial. It opens on the busier half; ✕, the same
+  day again, or 3 minutes go back to the live 12-hour clock. `GET /api/v1/tv/day?date=YYYY-MM-DD`
+  (the last 31 days).
+- Bottom: **Last 24 hours**: the curve of incidents open per hour, and a bar per hour of new
+  incidents stacked by severity (critical, high, other) with the count under it; the peak is marked,
+  the current hour is a dashed line, maintenance is shaded, and the heading has a legend and the
+  share acknowledged within 15 minutes. Then one row of small tiles: time to acknowledge, time to
+  resolve, error budget, last backup, noisiest assets, ForgeAI, hosts answering, new devices, and
+  **Shift** at the far right. Each shows one value and one coloured
   word; the sentence and detail are the tooltip.
 - Colours follow the theme. A browser that never chose one shows the TV in **Navy**;
   `/app/tv?theme=contrast` (or `signal`, `light`, `midnight`) picks another for that screen only.

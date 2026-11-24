@@ -178,7 +178,7 @@ td .mono, .stat .mono { font-variant-numeric: tabular-nums; }
 .tv { min-height: 100vh; padding: 28px 36px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px; font-size: 18px; }
 /* TV wall screen (pages/Tv.tsx): one 16:9 screen, no scrolling. Sizes come from the viewport so a
    monitor and a 65" 4K TV look the same; colours come from the theme (Navy unless ?theme= or a chosen one). */
-.tvw { height: 100vh; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) 14vh 12vh; gap: 1.4vh;
+.tvw { height: 100vh; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) 17vh 12vh; gap: 1.4vh;
   padding: 1.8vh 1.6vw; font-size: clamp(13px, 0.95vw, 44px); background: var(--bg); color: var(--text); min-height: 0; }
 .tvw .banner { margin: 0; }
 .tvw-stale { font-size: 1.2em; }
@@ -213,7 +213,21 @@ td .mono, .stat .mono { font-variant-numeric: tabular-nums; }
 .tvw-row-age { font-size: 1.3em; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tvw-row-ack { color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tvw-row-ack.not { color: var(--crit); font-weight: 700; }
-.tvw-more { color: var(--warn); font-weight: 600; }
+.tvw-rows { overflow-y: auto; }
+.tvw-pager { display: flex; align-items: center; justify-content: center; gap: 0.6vw; padding-top: 0.8vh; }
+.tvw-pager button { font: inherit; color: var(--muted); background: var(--s2); border: 1px solid var(--border); border-radius: 8px; padding: 0.1em 0.7em; cursor: pointer; }
+.tvw-pager .tvw-dot { width: 0.8em; height: 0.8em; padding: 0; border-radius: 50%; }
+.tvw-pager .tvw-dot.on { background: var(--accent); border-color: var(--accent); }
+.tvw-dayclock-head { display: flex; align-items: center; gap: 0.8vw; }
+.tvw-half { font: inherit; color: var(--muted); background: var(--s2); border: 1px solid var(--border); border-radius: 999px; padding: 0.2em 0.9em; cursor: pointer; }
+.tvw-half.on { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700; }
+.tvw-half.close { padding: 0.2em 0.6em; }
+.tvw-daytotal { border: 1px solid; border-radius: 999px; padding: 0.1em 0.8em; font-size: 0.9em; }
+.tvw-strip-legend { display: inline-flex; gap: 0.9vw; align-items: center; font-weight: 400; font-size: 0.9em; overflow: hidden; }
+.tvw-strip-legend i { display: inline-block; width: 0.7em; height: 0.7em; border-radius: 2px; margin-right: 0.3em; }
+.tvw-strip-counts { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); font-size: 0.8em; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; color: var(--warn); }
+.tvw-strip-counts .crit { color: var(--crit); }
+.tvw-strip-counts .high { color: var(--high); }
 .tvw-mini.long .tvw-mini-value { font-size: 1.35em; line-height: 1.5; }
 .tvw-quiet { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1vh; text-align: center; }
 .tvw-quiet-word { font-size: 4em; font-weight: 700; color: var(--ok); }
@@ -221,6 +235,10 @@ td .mono, .stat .mono { font-variant-numeric: tabular-nums; }
 .tvw-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.4vw; }
 .tvw-wday { background: var(--s1); border: 1px solid var(--border); border-radius: 12px; padding: 0.6vh 0.2vw; display: flex; flex-direction: column; align-items: center; gap: 0.2vh; min-width: 0; }
 .tvw-wday.today { background: var(--s2); border-color: var(--accent); }
+.tvw-wday { font: inherit; color: inherit; cursor: pointer; }
+.tvw-wday:hover { border-color: var(--accent); }
+.tvw-wday.picked { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.tvw-wday.picked .tvw-wlabel, .tvw-wday.picked .tvw-wcrit { color: inherit !important; }
 .tvw-wday svg { width: 2.4em; height: 2.4em; }
 .tvw-wlabel { color: var(--muted); font-size: 0.8em; }
 .tvw-wcount { font-size: 1.4em; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -234,7 +252,7 @@ td .mono, .stat .mono { font-variant-numeric: tabular-nums; }
 .tvw-host { background: var(--ok-bg); color: var(--ok); border-radius: 8px; padding: 0.35em 0.7em; font-size: 0.95em; }
 .tvw-host.down { background: var(--crit-bg); color: var(--crit); font-weight: 700; }
 .tvw-strip { background: var(--s1); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); padding: 0.8vh 1vw;
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 0.4vh; min-height: 0; }
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 0.3vh; min-height: 0; }
 .tvw-strip-head { display: flex; justify-content: space-between; gap: 1vw; font-weight: 600; white-space: nowrap; overflow: hidden; }
 .tvw-strip-head .faint { font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
 .tvw-strip svg { width: 100%; height: 100%; display: block; min-height: 0; }
