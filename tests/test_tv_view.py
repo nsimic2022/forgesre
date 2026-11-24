@@ -29,7 +29,8 @@ def test_days_hours_and_tiles_from_incidents():
     db.add(asset)
     db.flush()
     for i in range(4):
-        start = now - timedelta(hours=2, minutes=i)
+        # mid-hour, so the four never straddle an hour boundary
+        start = now.replace(minute=30, second=0, microsecond=0) - timedelta(hours=2, minutes=i)
         db.add(Incident(number=f"INC-TV{tag}{i}", title="Disk", severity="CRITICAL" if i == 0 else "HIGH", status="RESOLVED" if i else "OPEN",
                         fingerprint=f"tv:{tag}:{i}", asset_id=asset.id, started_at=start, ack_at=start + timedelta(minutes=5),
                         resolved_at=start + timedelta(minutes=30) if i else None))
