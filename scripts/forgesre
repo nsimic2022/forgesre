@@ -126,6 +126,7 @@ Commands:
   restart            Restart running stack containers only (no git pull, install, or secrets)
   bundle             One file with code and every image, for an appliance without internet
   mailbox            Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)
+  librenms-token     Create the LibreNMS API token for discovery (when update could not)
   tls                How to put optional HTTPS (Caddy) in front of Core
   completion         Print a `source …completion.bash` line for ~/.bashrc
 
@@ -1072,6 +1073,18 @@ An optional service that fails to restart is a WARN and the rest continue.
 New code after git pull, changed images, or edited compose: ./forgesre update
 EOF
       ;;
+    librenms-token)
+      cat <<'EOF'
+librenms-token — create LIBRENMS_API_TOKEN for the bundled LibreNMS (discovery reads it).
+
+  ./forgesre librenms-token
+
+Waits for the LibreNMS UI, adds the user forgesre (as the librenms user in the container), mints
+a token, writes it to secrets/secrets.env and recreates core. Never replaces a token already set.
+When it cannot, it prints why; then create one in LibreNMS → API Access and set it with
+./forgesre settings set-secret LIBRENMS_API_TOKEN.
+EOF
+      ;;
     mailbox)
       cat <<'EOF'
 mailbox — optional on-box mail server + Roundcube (off by default).
@@ -1273,6 +1286,15 @@ case "$cmd" in
   mailbox)
     need_env
     exec "$ROOT/scripts/mailbox.sh" "$@"
+    ;;
+  librenms-token)
+    need_env
+    out="$("$ROOT/scripts/librenms-upsert-token.sh")"
+    echo "$out"
+    if [[ "$out" == *"token written"* ]]; then
+      echo "Recreating core so it reads the new LIBRENMS_API_TOKEN."
+      if docker info >/dev/null 2>&1; then docker compose up -d --no-deps --force-recreate core; else sudo docker compose up -d --no-deps --force-recreate core; fi
+    fi
     ;;
   fetch-llm)
     exec "$ROOT/scripts/fetch-llm.sh" "$@"

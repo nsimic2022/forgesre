@@ -61,7 +61,13 @@ if [[ -z "$pass" ]]; then
   ensure_nonempty "$ROOT/secrets/secrets.env" LIBRENMS_ADMIN_PASSWORD "$pass"
 fi
 
-"${DC[@]}" exec -T librenms lnms user:add forgesre --password="$pass" --role=admin --email=forgesre@localhost >/dev/null 2>&1 || true
+# lnms and the app refuse to run as root inside the image: run as the librenms user.
+add_out="$("${DC[@]}" exec -T --user librenms librenms lnms user:add forgesre --password="$pass" --role=admin --email=forgesre@localhost 2>&1)" || {
+  case "$add_out" in
+    *exists*|*taken*) ;;  # the user is there from an earlier run
+    *) echo "LibreNMS user forgesre not added: $(printf '%s' "$add_out" | tail -2 | tr '\n' ' ')" ;;
+  esac
+}
 
 php_code='require "/opt/librenms/vendor/autoload.php";
 $app = require "/opt/librenms/bootstrap/app.php";
@@ -77,10 +83,9 @@ $token = bin2hex(random_bytes(16));
 $row = new \App\Models\ApiToken();
 $uid = $user->user_id ?? $user->id;
 $row->user_id = $uid;
+// LibreNMS compares the X-Auth-Token header with token_hash as stored: keep the token itself there.
 if (\Illuminate\Support\Facades\Schema::hasColumn("api_tokens", "token_hash")) {
-  $row->token_hash = hash("sha256", $token);
-} elseif (\Illuminate\Support\Facades\Schema::hasColumn("api_tokens", "hash")) {
-  $row->hash = hash("sha256", $token);
+  $row->token_hash = $token;
 } else {
   fwrite(STDERR, "no-hash-column\n");
   exit(3);
@@ -94,16 +99,21 @@ echo $token;
 '
 
 new=""
-if new="$("${DC[@]}" exec -T librenms php -r "$php_code" 2>/dev/null)"; then
+errf="$(mktemp)"
+if new="$("${DC[@]}" exec -T --user librenms librenms php -r "$php_code" 2>"$errf")"; then
   :
 else
   new=""
 fi
 new="$(printf '%s' "$new" | tr -d '\r\n[:space:]')"
 if [[ ${#new} -lt 16 ]]; then
-  echo "Could not mint LibreNMS API token. Create one in LibreNMS → API Access and set LIBRENMS_API_TOKEN."
+  echo "Could not mint LibreNMS API token: $(tail -3 "$errf" | tr '\n' ' ')"
+  echo "Create one in LibreNMS → API Access, then: ./forgesre settings set-secret LIBRENMS_API_TOKEN"
+  echo "Or retry: ./forgesre librenms-token"
+  rm -f "$errf"
   exit 0
 fi
+rm -f "$errf"
 
 ensure_nonempty "$ROOT/secrets/secrets.env" LIBRENMS_API_TOKEN "$new"
 echo "LibreNMS API token written."

@@ -324,7 +324,7 @@ are masked before they leave the server, and every log view is in the audit log
 Core does not get the Docker socket (that would be root on the host). The `docker-ro` service
 (docker-socket-proxy, `tecnativa/docker-socket-proxy:v0.4.1`) holds it read-only and lets through
 only GET requests on containers, on `127.0.0.1:2377` (`FORGESRE_DOCKER_RO_PORT`). The doctor row
-**Containers** warns when a container of the project is not running or unhealthy. API (Admin):
+**Containers** warns when a container of the project is not running or unhealthy; a one-shot job that finished with exit code 0 (`netbox-db-init`) shows as *finished*, not as a problem. API (Admin):
 `GET /api/v1/system/containers`, `GET /api/v1/system/containers/{service}/logs?tail=200`. On the
 server the same is `./forgesre status` and `./forgesre logs SERVICE`.
 

@@ -48,6 +48,7 @@ def _row(c: dict[str, Any]) -> dict[str, Any]:
         "state": c.get("State", ""),
         "status": status,
         "health": health,
+        "done": c.get("State") == "exited" and status.startswith("Exited (0)"),
         "created": c.get("Created"),
     }
 
@@ -108,6 +109,13 @@ def logs(service: str, tail: int = 200, client: httpx.Client | None = None) -> d
     return {"service": c["service"], "name": c["name"], "state": c["state"], "status": c["status"], "tail": tail, "lines": lines}
 
 
+def running_or_done(row: dict[str, Any]) -> bool:
+    """Running and not unhealthy, or a one-shot job that finished (netbox-db-init: exited with code 0)."""
+    if row["state"] == "running":
+        return row["health"] != "unhealthy"
+    return row["state"] == "exited" and row["status"].startswith("Exited (0)")
+
+
 def doctor_row(client: httpx.Client | None = None) -> dict[str, Any]:
     """Doctor row: every container of the project running (and healthy where it has a health check)."""
     try:
@@ -115,10 +123,11 @@ def doctor_row(client: httpx.Client | None = None) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - any failure is a doctor warning, never a crash
         return {"status": "warn", "why": f"containers view (docker-ro) does not answer: {exc.__class__.__name__}",
                 "test": "curl -fsS http://127.0.0.1:2377/_ping", "fix": "docker compose up -d docker-ro"}
-    bad = [x["service"] for x in rows if x["state"] != "running" or x["health"] == "unhealthy"]
+    bad = [x["service"] for x in rows if not running_or_done(x)]
     if not rows:
         return {"status": "warn", "why": "no containers of this project found", "fix": "docker compose ps"}
     if bad:
         return {"status": "warn", "why": f"{len(bad)} of {len(rows)} not running or unhealthy: {', '.join(bad[:6])}",
                 "test": "./forgesre status", "fix": f"./forgesre logs {bad[0]}"}
-    return {"status": "ok", "detail": f"{len(rows)} running"}
+    done = sum(1 for x in rows if x["state"] == "exited")
+    return {"status": "ok", "detail": f"{len(rows) - done} running" + (f", {done} one-shot finished" if done else "")}
