@@ -1,3 +1,4 @@
+import { sevClass } from "../lib/sevcells";
 import { useEffect, useState } from "react";
 import { Pager, usePageSize } from "../components/Pager";
 import { Link, useLocation } from "react-router-dom";
@@ -91,7 +92,7 @@ export function InvestigationsPage() {
                       <td><Link className="mono" to={`/incidents/${encodeURIComponent(r.number)}`} title={r.number}>{shortNumber(r.number)}</Link></td>
                       <td className="small muted">{clock(r.started_at)}</td>
                       <td style={{ fontWeight: 600 }}>{r.host || "—"}</td>
-                      <td>{r.title}</td>
+                      <td className={sevClass(r.severity)}>{r.title}</td>
                       <td className="small muted">{r.minutes === null ? "—" : r.minutes < 60 ? `${r.minutes} min` : `${Math.floor(r.minutes / 60)} h ${r.minutes % 60} min`}</td>
                       <td>{r.root_cause || <span className="faint">not reviewed</span>}</td>
                       <td className="small muted">{r.forgerca || "—"}</td>

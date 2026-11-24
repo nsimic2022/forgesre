@@ -405,3 +405,14 @@ tr.picked td { background: var(--s2); }
 .major-banner { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; background: var(--crit-bg); border: 1px solid var(--crit-border, var(--crit));
   color: var(--text); border-radius: var(--radius); padding: 10px 14px; }
 .major-banner strong { color: var(--crit); }
+
+/* Severity colour on the incident name cell (Settings › Appearance; lib/sevcells.ts). */
+[data-sevcells="on"] .sev-cell.sev-critical { --sev: var(--crit); }
+[data-sevcells="on"] .sev-cell.sev-high { --sev: var(--high); }
+[data-sevcells="on"] .sev-cell.sev-warning { --sev: var(--warn); }
+[data-sevcells="on"] .sev-cell:is(.sev-critical, .sev-high, .sev-warning) {
+  background: color-mix(in srgb, var(--sev) 20%, transparent); color: var(--sev); font-weight: 600;
+  box-shadow: inset 4px 0 0 var(--sev); }
+[data-sevcells="on"] .sev-cell:is(.sev-critical, .sev-high, .sev-warning) a { color: var(--sev) !important; }
+[data-sevcells="on"] .tvw-row-title.sev-cell:is(.sev-critical, .sev-high, .sev-warning) { align-self: flex-start; max-width: 100%;
+  padding: 0 0.5em; border-radius: 6px; box-shadow: none; }

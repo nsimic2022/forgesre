@@ -75,6 +75,47 @@ def incidents_per_day(db: Session, days: int = 14, now: datetime | None = None) 
     return _daily(_period(db, start, now + timedelta(seconds=1)), start, now)
 
 
+TREND_RANGES = ("today", "7d", "4w", "30d")
+
+
+def incident_trend(db: Session, range_: str = "30d", now: datetime | None = None) -> dict[str, Any]:
+    """Incidents started per bucket by severity for the Reports chart switcher.
+
+    ``today`` = 24 hours of today, ``7d`` / ``30d`` = days, ``4w`` = four 7-day weeks ending
+    today. Buckets use the appliance time zone; each has ``day`` (its label), critical, high, other.
+    """
+    from zoneinfo import ZoneInfo
+
+    from app.settings import settings
+
+    if range_ not in TREND_RANGES:
+        raise ValueError(f"range must be one of {', '.join(TREND_RANGES)}")
+    try:
+        zone = ZoneInfo(settings.timezone or "UTC")
+    except Exception:
+        zone = ZoneInfo("UTC")
+    local = (_aware(now) or utcnow()).astimezone(zone)
+    midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    if range_ == "today":
+        starts, step, unit = [midnight + timedelta(hours=h) for h in range(24)], timedelta(hours=1), "hour"
+    elif range_ == "4w":
+        first = midnight - timedelta(days=27)
+        starts, step, unit = [first + timedelta(days=7 * w) for w in range(4)], timedelta(days=7), "week"
+    else:
+        n = 7 if range_ == "7d" else 30
+        starts, step, unit = [midnight - timedelta(days=n - 1 - d) for d in range(n)], timedelta(days=1), "day"
+    rows = _period(db, starts[0].astimezone(timezone.utc), (starts[-1] + step).astimezone(timezone.utc))
+    buckets = []
+    for s in starts:
+        e = s + step
+        sev = Counter((i.severity or "WARNING").upper() for i in rows if s <= _aware(i.started_at).astimezone(zone) < e)
+        label = f"{s:%H}:00" if unit == "hour" else f"{s:%d.%m}–{(e - timedelta(days=1)):%d.%m}" if unit == "week" else s.date().isoformat()
+        buckets.append({"day": label, "start": s.isoformat(), "critical": sev.get("CRITICAL", 0), "high": sev.get("HIGH", 0),
+                        "other": sum(sev.values()) - sev.get("CRITICAL", 0) - sev.get("HIGH", 0)})
+    return {"range": range_, "unit": unit, "timezone": str(zone), "buckets": buckets,
+            "total": sum(b["critical"] + b["high"] + b["other"] for b in buckets)}
+
+
 def reports_overview(db: Session, days: int = 30, now: datetime | None = None) -> dict[str, Any]:
     """KPIs for the last ``days`` against the ``days`` before, incidents per day by severity,
     by asset type, noisiest assets, most frequent alerts, host-down time, scheduled reports."""

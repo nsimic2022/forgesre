@@ -146,9 +146,13 @@ page what is already loaded. Code: `web/src/components/Pager.tsx`.
   service worker (`web/public/sw.js`) only shows an offline page when the appliance cannot be
   reached; it never caches API data. Installing needs HTTPS (or `localhost`); paging stays SMS, mail
   and chat.
-- **Push to this device** (Settings › Appearance) appears when an Admin turns on
-  `notifications.push.enabled`; it subscribes this browser or installed app to web push for new
-  CRITICAL incidents, even with the tab closed. See [settings.md](settings.md#web-push-to-phones-and-browsers).
+- **Settings › Web push** (also at the bottom of Settings › Appearance): while
+  `notifications.push.enabled` is off the card says so, and an Admin can turn it on with one button.
+  When it is on, *Push to this device* subscribes this browser or installed app to web push for new
+  CRITICAL incidents, even with the tab closed, and shows how many of your devices are signed up.
+- **Severity colours in tables** (Settings › Appearance, per browser, on by default): the incident
+  name (Problem) in Incidents, NOC, Investigations and the wall screen is tinted red (critical),
+  orange (high) or yellow (warning), and its text takes that colour. Code: `web/src/lib/sevcells.ts`. See [settings.md](settings.md#web-push-to-phones-and-browsers).
 
 ## Teams and saved views
 
@@ -269,7 +273,7 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
 | Inventory: library (site › rack, type, environment, customer, views), table, asset card with 30-day capacity (disk days to full, interface receive), add / edit / clone / delete, Import CSV (check first, then add in a background job; existing assets are skipped) | done |
 | Automation: pipeline, noise filters (create, edit, remove), routing rules, escalation, playbooks, maintenance windows, "Try an alarm" | done, including creating, editing, turning off and removing rules and playbooks, escalation policies (Tier 1–3 and Manager) and maintenance windows (several assets at once, End now) |
 | Investigations: resolved incidents with confirmed cause and ratings, accuracy, recurring causes; review card on the incident page | done |
-| Reports: period KPIs vs previous, incidents per day, by asset type, noisiest assets, frequent alerts, host-down time, scheduled reports (create, edit, on/off, remove; presets, custom interval, cron, once), CSV | done |
+| Reports: period KPIs vs previous, incidents chart with *Today* (per hour), *7 days*, *4 weeks* (per week) and *30 days*, by asset type, noisiest assets, frequent alerts, host-down time, scheduled reports (create, edit, on/off, remove; presets, custom interval, cron, once), CSV | done |
 | Settings: groups from the registry with inline editing, secret status, connection tests, services and health | done, including Users and roles (create, edit, role, password, remove; yourself and the last Admin are protected) and Backup (background backup, download, upload, remove, restore with the warning ticked and RESTORE typed) and Demo (lab scenarios as the `demo_run` job, Lower demo gauges) |
 
 ## API used by the new pages
@@ -282,7 +286,7 @@ in `web/src/styles.css`; components use the tokens, never raw colours, and motio
 | Automation | `GET /api/v1/automation`, `GET /api/v1/noise-filters` | `POST/PUT/DELETE /api/v1/noise-filters[/{id}]`, `POST/PUT/DELETE /api/v1/automation/rules[/{id}]` `{name, alertname, metric, operator, value, severity, playbook_id, escalation_policy_id, enabled}`, `POST/PUT/DELETE /api/v1/automation/playbooks[/{id}]` `{name, description, steps: [title]}` `POST/PUT/DELETE /api/v1/automation/policies[/{id}]` `{name, levels: [{level, on, minutes, target}]}` (removing a policy moves its rules to default-warning, which cannot be removed) `POST /api/v1/maintenance` `{assets, starts_at, ends_at}` and `DELETE /api/v1/maintenance/{asset_id}` (write_assets) (all Engineer+; removing a rule or playbook keeps incidents and clears the link), `POST /api/v1/automation/simulate` `{alertname, asset, value, at}` (read-only test) |
 | Investigations | `GET /api/v1/investigations-page?days=&q=&only_ai=&only_reviewed=` · Ask ForgeAI: `GET /api/v1/incidents/{number}/forgeai`, `GET /api/v1/forgeai/skills` | `POST /api/v1/incidents/{number}/review` `{root_cause, rca_rating, ai_rating}` (correct / partly / wrong) · `POST /api/v1/incidents/{number}/forgeai/ask` `{skill?, question?}` (Analyst+, a trial) · `POST /api/v1/forgeai/calls/{id}/use` (Engineer+) |
 | ForgeAI | `GET /api/v1/forgeai/chats` · `GET /api/v1/forgeai/chats/{id}` (your own chats only) | `POST /api/v1/forgeai/chats` `{title?, incident?, reuse?}` · `POST /api/v1/forgeai/chats/{id}/messages` `{text, skill?, cloud?}` (Analyst+; cloud Engineer+) · `DELETE /api/v1/forgeai/chats/{id}` · status line `GET /api/v1/forgeai/pulse`, test `POST /api/v1/forgeai/ping` |
-| Reports | `GET /api/v1/reports-page?days=` · `GET /api/v1/reports/incidents.csv?days=` | `POST /api/v1/scheduled-reports` `{name, recipients, schedule, every_n, every_unit, weekdays, cron, asset_ids}`, `PUT …/{id}`, `POST …/{id}/toggle`, `DELETE …/{id}` (Analyst+) |
+| Reports | `GET /api/v1/reports-page?days=` · `GET /api/v1/reports/incident-trend?range=today, 7d, 4w or 30d` · `GET /api/v1/reports/incidents.csv?days=` | `POST /api/v1/scheduled-reports` `{name, recipients, schedule, every_n, every_unit, weekdays, cron, asset_ids}`, `PUT …/{id}`, `POST …/{id}/toggle`, `DELETE …/{id}` (Analyst+) |
 | Settings | `GET /api/v1/settings` (Admin) · `GET /api/v1/system/doctor` · `GET /api/v1/users-page` · `GET /api/v1/backups` | `PUT /api/v1/settings/{key}` `{value}` · `POST /api/v1/settings/test/{component}` · `POST /api/v1/users`, `POST /api/v1/users/{id}`, `POST …/{id}/delete` · `POST /api/v1/backups` (queues a `backup_create` job), `POST /api/v1/backups/import`, `DELETE /api/v1/backups/{name}` · `GET /api/v1/demo/scenarios`, `POST /api/v1/demo/run` `{scenario}`, `GET /api/v1/demo/jobs/{id}`, `POST /api/v1/demo-reset` (all Admin) |
 | On-call | `GET /api/v1/oncall-week` | `POST /api/v1/oncall-slots` `{weekday, start, end, name, surname, email, phone, phone2}`, `PUT …/{id}`, `POST …/{id}/toggle`, `DELETE …/{id}`, `POST /api/v1/oncall-slots/take` (Engineer+) |
 | Incident detail | `GET /api/v1/incidents/{number}/view` | `POST …/status` (acknowledge = `INVESTIGATING`, `ESCALATED`, `RESOLVED`), `POST …/notes`, `POST …/checklist` `{step, done}`, `POST …/investigate` (queues ForgeRCA, then ForgeAI), `GET …/mail` (subject, generated report, address suggestions, earlier sends) and `POST …/mail` `{to, subject, body}` (Analyst+, up to 10 addresses; queues `incident_mail`; poll `GET …/mail/{job}`) |

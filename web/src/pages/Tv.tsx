@@ -3,6 +3,7 @@ import { DayClock, IncidentClock } from "../components/IncidentClock";
 import { HourlyStrip, MiniTile, WeekStrip } from "../components/TvWeather";
 import { getJson, type NocIncident, type TvData, type TvDayDetail } from "../lib/api";
 import { shortNumber, tierLabel } from "../lib/format";
+import { sevClass } from "../lib/sevcells";
 import { chosenTheme, showTheme } from "../lib/theme";
 
 const REFRESH_MS = 30_000;
@@ -70,7 +71,7 @@ function Burning({ list, now, fresh, lastResolved }: { list: NocIncident[]; now:
           <li key={i.number} className={`tvw-row${fresh.has(i.number) ? " fresh" : ""}`} style={{ borderLeftColor: SEV_COLOR[i.severity] ?? "var(--faint)" }}>
             <span className="tvw-row-sev" style={{ color: SEV_COLOR[i.severity] ?? "var(--muted)" }}>{i.severity}</span>
             <span className="tvw-row-main">
-              <span className="tvw-row-title">{i.title}</span>
+              <span className={`tvw-row-title ${sevClass(i.severity)}`}>{i.title}</span>
               <span className="tvw-row-meta">{[i.asset?.hostname, shortNumber(i.number), tierLabel(i.level)].filter(Boolean).join(" · ")}</span>
             </span>
             <span className="tvw-row-age">{age(i.started_at, now)}</span>
