@@ -41,6 +41,7 @@ Postgres; people get incidents, notifications and ForgeAI on the right.
 | `loki` | 3100 (local) | always | Logs (syslog) as evidence for RCA |
 | `alloy` | 514 syslog, 12345 (local) | always | Receives syslog and ships it to Loki |
 | `grafana` | 3000 (`GRAFANA_PORT`) | always | Graphs, linked from System Health |
+| `docker-ro` | 2377 (local, `FORGESRE_DOCKER_RO_PORT`) | always | Read-only window on Docker (GET on containers only, no POST) for Settings › Containers and the doctor row *Containers*; Core never gets the Docker socket |
 | `netbox` + `netbox-redis` + `netbox-db-init` | 8001 (`NETBOX_PORT`) | profile `netbox` (default on) | Inventory source (read, never written) |
 | `librenms` + `librenms-db` + `librenms-redis` + `librenms-dispatcher` | 8000 | profile `librenms` (default on) | Device discovery (SNMP identify, ports, links) |
 | `llm` | 8088 (local) | `ai` | llama.cpp with the local model (ForgeAI) |

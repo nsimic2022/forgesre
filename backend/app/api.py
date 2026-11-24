@@ -3392,6 +3392,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "https": _https_check(),
         "offbox": _offbox_check(),
         "backup_verify": _backup_verify_check(),
+        "containers": _containers_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)
@@ -3432,6 +3433,13 @@ def grafana_health_url() -> str:
         except ValueError:
             port = "3000"
     return f"http://127.0.0.1:{port}/api/health"
+
+
+def _containers_check() -> dict[str, Any]:
+    """Every container of the project running; a warning (never a failure) when one is not."""
+    from app.containers import doctor_row
+
+    return doctor_row()
 
 
 def _grafana_check() -> dict[str, str]:
@@ -4082,6 +4090,36 @@ def tv_day_api(date: str, db: Session = Depends(get_db), user: User = Depends(re
     if day > today or (today - day).days > DAY_LOOKBACK:
         raise HTTPException(status_code=400, detail=f"date must be within the last {DAY_LOOKBACK} days")
     return incident_day(db, day)
+
+
+@router.get("/system/containers")
+def containers_api(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: the appliance's containers with state and health (read through docker-ro, 5 s timeout)."""
+    import httpx
+
+    from app.containers import list_containers
+
+    try:
+        return {"containers": list_containers(), "error": ""}
+    except httpx.HTTPError as exc:
+        return {"containers": [], "error": f"docker-ro does not answer ({exc.__class__.__name__}); start it: docker compose up -d docker-ro"}
+
+
+@router.get("/system/containers/{service}/logs")
+def container_logs_api(service: str, tail: int = 200, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: the last lines of one container's log, passwords and tokens masked. Audited."""
+    import httpx
+
+    from app.containers import logs
+
+    try:
+        out = logs(service, tail)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"docker-ro does not answer ({exc.__class__.__name__})") from exc
+    audit(db, "system.logs.view", actor=user.email, object_type="container", object_id=service, data={"tail": out["tail"]}, commit=True)
+    return out
 
 
 @router.get("/noc")

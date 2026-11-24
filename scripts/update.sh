@@ -278,6 +278,7 @@ if [[ ! -f /etc/systemd/system/forgesre-backup.timer ]]; then
 fi
 "$ROOT/scripts/doctor.sh" || echo "Doctor still reports warnings (see above)."
 echo "Update finished."
+echo "Containers: Settings › Containers (state and logs, read only via docker-ro on 127.0.0.1:${FORGESRE_DOCKER_RO_PORT:-2377}); same as ./forgesre status / logs"
 echo "SNMP:     ./forgesre snmp"
 if [[ "$NETBOX_ON" -eq 1 ]]; then
   echo "NetBox:   http://127.0.0.1:${NB_PORT}  (admin / secrets/secrets.env NETBOX_SUPERUSER_*)"

@@ -312,6 +312,28 @@ python scripts/screenshots.py --base http://127.0.0.1:8080 --email admin@forgesr
 python scripts/screenshots.py --only noc,incident     # just a few pages
 ```
 
+## Containers and logs (Settings › Containers)
+
+Admins see every container of the appliance (Core, Postgres, Prometheus, Alertmanager, Loki,
+Alloy, Grafana, NetBox, LibreNMS, the model…) with its state and health, and *Logs* shows the last
+100 to 1 000 lines of one of them, with a text filter and *Errors only*. Read only: nothing can be
+started or stopped here. Values after `password=`, `token:`, `Authorization: Bearer` and similar
+are masked before they leave the server, and every log view is in the audit log
+(`system.logs.view`).
+
+Core does not get the Docker socket (that would be root on the host). The `docker-ro` service
+(docker-socket-proxy, `tecnativa/docker-socket-proxy:v0.4.1`) holds it read-only and lets through
+only GET requests on containers, on `127.0.0.1:2377` (`FORGESRE_DOCKER_RO_PORT`). The doctor row
+**Containers** warns when a container of the project is not running or unhealthy. API (Admin):
+`GET /api/v1/system/containers`, `GET /api/v1/system/containers/{service}/logs?tail=200`. On the
+server the same is `./forgesre status` and `./forgesre logs SERVICE`.
+
+Other places to look: Settings › Health (one row per service and integration, as
+`./forgesre doctor`), Settings › Journal (what ForgeSRE did and what failed), Settings › Audit
+(who changed what), Reports › Outbox (every message sent), and the integrations' own web pages:
+Grafana `:3000`, NetBox `:8001`, LibreNMS `:8000`; Prometheus `:9090`, Alertmanager `:9093` and
+Loki `:3100` listen on the server only (`ssh -L 9090:127.0.0.1:9090 user@server`).
+
 ## Visual guide
 
 [visual-guide.md](visual-guide.md) ([Serbian](vizuelni-vodic-sr.md)) shows each page with numbered

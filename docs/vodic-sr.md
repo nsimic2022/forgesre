@@ -36,6 +36,7 @@ Alarmi i logovi ulaze levo, Core ih spaja sa inventarom i čuva u Postgres-u, a 
 | `loki` | 3100 (lokalno) | uvek | Logovi (syslog) kao dokazi za RCA |
 | `alloy` | 514 syslog, 12345 (lokalno) | uvek | Prima syslog i šalje ga u Loki |
 | `grafana` | 3000 (`GRAFANA_PORT`) | uvek | Grafikoni, link iz System Health |
+| `docker-ro` | 2377 (lokalno, `FORGESRE_DOCKER_RO_PORT`) | uvek | Prozor na Docker samo za čitanje (samo GET na kontejnere, bez POST) za Settings › Containers i red *Containers* u doctor-u; Core nikad ne dobija Docker socket |
 | `netbox` + `netbox-redis` + `netbox-db-init` | 8001 (`NETBOX_PORT`) | profil `netbox` (podrazumevano uključen) | Izvor inventara (čita se, ne menja se) |
 | `librenms` + `librenms-db` + `librenms-redis` + `librenms-dispatcher` | 8000 | profil `librenms` (podrazumevano uključen) | Otkrivanje uređaja (SNMP identify, portovi, linkovi) |
 | `llm` | 8088 (lokalno) | `ai` | llama.cpp sa lokalnim modelom (ForgeAI) |
