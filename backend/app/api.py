@@ -3701,15 +3701,29 @@ def _glpi_check() -> dict[str, str]:
         log.debug("glpi health journal skipped", exc_info=True)
     if status.get("ok") and status.get("light") == "green":
         return {"status": "ok", "why": str(status.get("why") or "GLPI API answered."), "test": test}
-    return {
-        "status": "warn",
-        "why": f"{status.get('label') or 'Unreachable'}: {status.get('why') or ''}".strip(" :"),
-        "test": test,
-        "fix": (
-            "Check GLPI_URL / GLPI_APP_TOKEN / GLPI_USER_TOKEN and that the API user can read "
-            "Computer and NetworkEquipment. Optional source — incidents, mail and the UI keep working."
-        ),
-    }
+    why = f"{status.get('label') or 'Unreachable'}: {status.get('why') or ''}".strip(" :")
+    fix = ("Check GLPI_URL / GLPI_APP_TOKEN / GLPI_USER_TOKEN and that the API user can read "
+           "Computer and NetworkEquipment. Optional source — incidents, mail and the UI keep working.")
+    if _dns_failed(why):
+        # the usual first-install mistake: a GLPI host name this server cannot look up
+        host = _url_host(settings.glpi_url)
+        why = f"this server cannot resolve the GLPI host name {host!r} in GLPI_URL"
+        test = f"getent hosts {host}"
+        fix = ("Put the GLPI IP address in the URL (./forgesre settings set inventory.glpi.url http://IP/apirest.php), or add the name to "
+               "your DNS or /etc/hosts and run ./forgesre restart. Optional source — incidents keep working.")
+    return {"status": "warn", "why": why, "test": test, "fix": fix}
+
+
+def _dns_failed(text: str) -> bool:
+    """True for the resolver errors Python and httpx print for an unknown host name."""
+    low = text.lower()
+    return any(s in low for s in ("name or service not known", "nodename nor servname", "temporary failure in name resolution", "errno -2", "errno -3", "getaddrinfo failed"))
+
+
+def _url_host(url: str) -> str:
+    from urllib.parse import urlparse
+
+    return urlparse(url or "").hostname or url or "?"
 
 
 def _librenms_check() -> dict[str, str]:

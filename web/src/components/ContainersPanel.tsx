@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { getJson } from "../lib/api";
 import { Card, Chip } from "./ui";
 
-type Container = { id: string; name: string; service: string; image: string; state: string; status: string; health: string };
+type Container = { id: string; name: string; service: string; image: string; state: string; status: string; health: string; done?: boolean };
 type Logs = { service: string; name: string; state: string; status: string; tail: number; lines: string[] };
 
 const ERR = /\b(error|err|fail(ed|ure)?|fatal|panic|exception|traceback|refused|timeout|denied)\b/i;
-const tone = (c: Container) => (c.state !== "running" || c.health === "unhealthy" ? "crit" : c.health === "starting" ? "warn" : "ok");
+// a one-shot job that finished (netbox-db-init, exit code 0) is fine, not "down"
+const tone = (c: Container) => (c.done ? "off" : c.state !== "running" || c.health === "unhealthy" ? "crit" : c.health === "starting" ? "warn" : "ok");
 
 /**
  * Settings › Containers (Admin): every container of the appliance with its state and health, and the
@@ -45,7 +46,7 @@ export function ContainersPanel() {
               {rows.map((c) => (
                 <tr key={c.id} aria-selected={picked === c.service}>
                   <td style={{ fontWeight: 600 }}>{c.service}</td>
-                  <td><Chip tone={tone(c)}>{c.health && c.state === "running" ? c.health : c.state}</Chip></td>
+                  <td><Chip tone={tone(c)}>{c.done ? "finished" : c.health && c.state === "running" ? c.health : c.state}</Chip></td>
                   <td className="small muted">{c.status}</td>
                   <td className="small mono faint">{c.image}</td>
                   <td><button className="btn" type="button" onClick={() => readLogs(c.service)}>Logs</button></td>
