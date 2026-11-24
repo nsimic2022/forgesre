@@ -169,6 +169,7 @@ input.search, textarea.search, select.search { background: var(--s2); border: 1p
   min-height: 34px; padding: 0 12px; font: inherit; font-size: 13.5px; min-width: 240px; }
 .banner { border-radius: 10px; padding: 10px 14px; font-size: 13.5px; }
 .banner.error { background: var(--crit-bg); color: var(--text); border: 1px solid var(--crit-border); }
+.banner.warn { background: var(--warn-bg); color: var(--text); border: 1px solid var(--warn); }
 td .mono, .stat .mono { font-variant-numeric: tabular-nums; }
 
 /* Visually hidden, still read by screen readers. */
@@ -407,12 +408,29 @@ tr.picked td { background: var(--s2); }
 .major-banner strong { color: var(--crit); }
 
 /* Severity colour on the incident name cell (Settings › Appearance; lib/sevcells.ts). */
-[data-sevcells="on"] .sev-cell.sev-critical { --sev: var(--crit); }
-[data-sevcells="on"] .sev-cell.sev-high { --sev: var(--high); }
-[data-sevcells="on"] .sev-cell.sev-warning { --sev: var(--warn); }
+/* Zabbix's severity palette: Disaster, Average and Warning. */
+:root { --sev-zbx-critical: #e45959; --sev-zbx-high: #ffa059; --sev-zbx-warning: #ffc859; }
+[data-sevcells="on"] .sev-cell.sev-critical { --sev: var(--sev-zbx-critical); }
+[data-sevcells="on"] .sev-cell.sev-high { --sev: var(--sev-zbx-high); }
+[data-sevcells="on"] .sev-cell.sev-warning { --sev: var(--sev-zbx-warning); }
+/* light backgrounds: the same hues, darker for the text so it stays readable */
+[data-theme="light"] .sev-cell { --sev-ink: color-mix(in srgb, var(--sev) 62%, #000); }
 [data-sevcells="on"] .sev-cell:is(.sev-critical, .sev-high, .sev-warning) {
-  background: color-mix(in srgb, var(--sev) 20%, transparent); color: var(--sev); font-weight: 600;
+  background: color-mix(in srgb, var(--sev) 22%, transparent); color: var(--sev-ink, var(--sev)); font-weight: 600;
   box-shadow: inset 4px 0 0 var(--sev); }
-[data-sevcells="on"] .sev-cell:is(.sev-critical, .sev-high, .sev-warning) a { color: var(--sev) !important; }
+[data-sevcells="on"] .sev-cell:is(.sev-critical, .sev-high, .sev-warning) a { color: var(--sev-ink, var(--sev)) !important; }
 [data-sevcells="on"] .tvw-row-title.sev-cell:is(.sev-critical, .sev-high, .sev-warning) { align-self: flex-start; max-width: 100%;
   padding: 0 0.5em; border-radius: 6px; box-shadow: none; }
+
+/* Shift card (Incidents › On-call) and the one-line shift summary on the NOC. */
+.shift-grid { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(280px, 1.6fr) minmax(280px, 1.6fr); gap: 16px; align-items: start; }
+.shift-grid > .shift-part + .shift-part { border-left: 1px solid var(--border); padding-left: 16px; }
+@media (max-width: 1100px) { .shift-grid { grid-template-columns: 1fr; } .shift-grid > .shift-part + .shift-part { border-left: 0; padding-left: 0; border-top: 1px solid var(--border); padding-top: 12px; } }
+.shift-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--s1); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 16px; }
+/* Settings › ForgeAI RAG */
+.rag-drop { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 18px; border: 2px dashed var(--border); border-radius: calc(var(--radius) + 2px); background: var(--s1); }
+.rag-drop.over { border-color: var(--accent); background: var(--s2); }
+.rag-hit { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--s1); border-radius: 0 8px 8px 0; }
+.rag-hit mark { background: color-mix(in srgb, var(--warn) 35%, transparent); color: inherit; border-radius: 2px; }
+.rag-score { height: 4px; background: var(--s2); border-radius: 2px; overflow: hidden; }
+.rag-score i { display: block; height: 100%; background: var(--accent); }

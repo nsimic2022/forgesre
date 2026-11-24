@@ -596,7 +596,7 @@ EOF
       ;;
     handover)
       cat <<'EOF'
-handover — the shift handover, as on the NOC page.
+handover — the shift handover, as in Incidents › On-call › Shift.
 
   ./forgesre handover                    the latest handover and whether it was taken over
   ./forgesre handover write "notes…"     hand over: notes plus the incidents still open
@@ -763,7 +763,7 @@ forgeai — the local language model and what ForgeSRE asked it.
                                   confirmed causes, ratings, why answers were rejected
   ./forgesre forgeai tuning linux-disk   one skill
 
-Skills (the editable instructions) are in Automation › ForgeAI skills.
+Skills (the editable instructions) are in Settings › ForgeAI skills.
 EOF
       ;;
     checks)

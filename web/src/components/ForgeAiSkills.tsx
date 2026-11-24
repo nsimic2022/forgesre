@@ -141,7 +141,7 @@ function Editor({ skill, canEdit, onSaved }: { skill: Skill; canEdit: boolean; o
   );
 }
 
-/** Automation › ForgeAI skills: what ForgeAI is told for each kind of incident and task, with results. */
+/** Settings › ForgeAI skills: what ForgeAI is told for each kind of incident and task, with results. */
 export function ForgeAiSkills() {
   const [data, setData] = useState<Data | null>(null);
   const [slug, setSlug] = useState("");

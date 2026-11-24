@@ -422,7 +422,7 @@ answer under 60 s is good for 4B. A late first token means the CPU struggles to 
 more threads or a smaller model. A fast first token but a slow total means the model writes or
 thinks a lot: turn thinking off. When the answer does not arrive in time, raise the timeout.
 
-**Skills** (Automation › ForgeAI skills, Engineer): instructions to the model for one kind of
+**Skills** (Settings › ForgeAI skills, Engineer): instructions to the model for one kind of
 work. Each has:
 
 - a task (cause and first checks, explanation, incident review summary, investigation with tools, chat, shift);
@@ -510,7 +510,7 @@ Where each feature lives and how to check it over SSH.
 | Alert quality report | Reports › Alert quality | `./forgesre alert-quality [DAYS]` | [alerting.md](alerting.md) |
 | Major incident, stakeholder updates | Incident › Major incident | — | [ui.md](ui.md) |
 | SLA timers | Incident list chips, Reports › SLA | `./forgesre sla` | [settings.md](settings.md) |
-| Shift handover, follow-up actions | NOC › Handover, Incident › Follow-up actions | `./forgesre handover`, `./forgesre actions` | [ui.md](ui.md) |
+| Shift handover, follow-up actions | Incidents › On-call › Shift, Incident › Follow-up actions | `./forgesre handover`, `./forgesre actions` | [ui.md](ui.md) |
 | SMS paging, GLPI tickets, ticket webhook | Settings › Notifications / Integrations | `./forgesre settings test sms` (also `ticket-glpi`, `ticket-webhook`) | [settings.md](settings.md) |
 | Power and environment (UPS, PDU, sensors) | NOC › Power and environment | `./forgesre power` | [alerting.md](alerting.md) |
 | Racks, warranty / EoL / licences | Inventory › Racks, Reports | `./forgesre racks`, `./forgesre lifecycle` | [operator-handbook.md](operator-handbook.md) |
@@ -518,7 +518,7 @@ Where each feature lives and how to check it over SSH.
 | Synthetic checks | Settings › Checks | `./forgesre synthetic` | [alerting.md](alerting.md) |
 | Command palette, browser alerts, phone app | Ctrl+K, Settings › Appearance, *Install app* | — | [ui.md](ui.md) |
 | Team filter, saved views, known errors | Incidents, Automation › Known errors | `./forgesre known-errors` | [ui.md](ui.md) |
-| ForgeAI in Serbian, golden set, storm summary | Settings › RCA / AI, Automation › ForgeAI skills | `./forgesre forgeai golden` | [llm.md](llm.md) |
+| ForgeAI in Serbian, golden set, storm summary | Settings › RCA / AI, Settings › ForgeAI skills | `./forgesre forgeai golden` | [llm.md](llm.md) |
 | HTTPS, optional parts, GPU, off-box backup | — | `./forgesre https`, `optional`, `gpu`, `backup offbox` | sections 3 and 8 |
 
 After `./forgesre update` run `./forgesre doctor`: every feature that talks to another system has

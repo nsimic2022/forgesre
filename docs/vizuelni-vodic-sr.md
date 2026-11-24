@@ -14,6 +14,7 @@ Slike pravi `scripts/visual_guide.py`; engleska verzija: [visual-guide.md](visua
 - [Izveštaji](#reports)
 - [Podešavanja](#settings)
 - [Podešavanja › Izgled](#settings-appearance)
+- [Podešavanja › ForgeAI RAG](#settings-rag)
 - [Podešavanja › Web push](#settings-push)
 
 <a id="noc"></a>
@@ -32,11 +33,9 @@ Početna strana: šta gori sada, ko je dežuran i da li hostovi odgovaraju. Sama
 6. Ime incidenta, obojeno po ozbiljnosti (crveno kritično, narandžasto visoko, žuto upozorenje). Klik otvara incident.
 7. Acknow.: Not acknow znači da ga niko još nije preuzeo; potvrdi ga da eskalacija stane. Ko ga je potvrdio piše na stranici incidenta.
 8. Čekiraj redove da potvrdiš, dodeliš ili rešiš više odjednom.
-9. Primopredaja smene: napiši šta sledeća smena treba da zna.
-10. Hostovi po grupama: zeleno kad svi odgovaraju.
-11. Ko je dežuran sada; Schedule otvara raspored.
-12. Stanje ForgeRCA (pravila, uvek uključen) i ForgeAI (lokalni model).
-13. Ko je prijavljen, uloga i odjava (Sign out).
+9. Smena: ko je dežuran sada i da li je primopredaja preuzeta; link otvara karticu Shift.
+10. Stanje ForgeRCA (pravila, uvek uključen) i ForgeAI (lokalni model).
+11. Ko je prijavljen, uloga i odjava (Sign out).
 
 <a id="tv"></a>
 
@@ -102,7 +101,7 @@ Ko odgovara, svaki dan u nedelji, po vremenu servera.
 
 ![On-call](guide/oncall.png)
 
-1. Ko je dežuran ovog minuta.
+1. Smena: ko je dežuran, primopredaja (napiši, preuzmi) i ForgeAI nacrt koji može da je popuni.
 2. Preuzmi ostatak dana na sebe.
 3. Dodaj termin: ko, koji dani, od i do.
 4. Nedelja: klik na termin da ga izmeniš.
@@ -132,7 +131,7 @@ Jedan zapis po uređaju, sa stanjem, lokacijom i vlasnikom.
 ![Automation](guide/automation.png)
 
 1. Tok: prikupljanje, filtriranje šuma, rutiranje, eskalacija i obaveštenja, sa današnjim brojkama.
-2. Tabovi: filteri šuma, pravila rutiranja, eskalacija, playbook-ovi, održavanje, poznate greške, ForgeAI veštine.
+2. Tabovi: filteri šuma, pravila rutiranja, eskalacija, playbook-ovi, prozori održavanja, poznate greške.
 3. Novi filter šuma: koga ne budimo i kada.
 4. Probaj alarm: vidi šta bi se desilo, bez pravljenja ičega.
 5. Izvezi sva pravila kao JSON.
@@ -177,7 +176,7 @@ Admin ovde menja podešavanja; ostali biraju temu i vide stanje.
 
 ![Settings](guide/settings.png)
 
-1. Sekcije: opšte, provere, alarmi, integracije, obaveštenja, AI, web push, izgled, zdravlje, korisnici, backup…
+1. Sekcije: opšte, provere, alarmi, integracije, obaveštenja, RCA / AI, ForgeAI skills, ForgeAI RAG, web push, izgled, zdravlje, korisnici, backup…
 2. Podešavanja izabrane sekcije. Save upisuje config/forgesre.yml i audit log.
 3. Sačuvaj jednu vrednost.
 
@@ -193,6 +192,18 @@ Za ovaj browser: tema, boje ozbiljnosti, upozorenja i push.
 2. Boji ime incidenta po ozbiljnosti (uključi ili isključi).
 3. Zvuk i obaveštenje na desktopu za novi kritični dok je strana otvorena.
 4. Web push na ovaj telefon ili browser, i kad je ForgeSRE zatvoren.
+
+<a id="settings-rag"></a>
+
+## Podešavanja › ForgeAI RAG
+
+Priručnici i runbook-ovi koje ForgeAI sme da citira, i koliko se koriste.
+
+![Settings › ForgeAI RAG](guide/settings-rag.png)
+
+1. Dokumenti, delovi i strane, koliko je ForgeAI pitanja dobilo izvode i koliko je odgovora citiralo (7 dana).
+2. Prevuci fajlove ovde (može više odjednom) ili ih izaberi; naslov važi za jedan fajl.
+3. Search on: lokalni embedding model radi. Off: poruka kaže kako da se pokrene.
 
 <a id="settings-push"></a>
 

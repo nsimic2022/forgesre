@@ -71,7 +71,7 @@ service never delays an alarm. Only the incident line leaves the server.
 ## ForgeAI skills
 
 When ForgeAI is on, it is asked once per incident for the likely cause and the first checks.
-**Automation › ForgeAI skills** decides what it is told for each kind of alarm: a skill for disks,
+**Settings › ForgeAI skills** decides what it is told for each kind of alarm: a skill for disks,
 one for network links, one for databases and so on, each with plain-language instructions you can
 change, try on a real incident before saving, and roll back. The safety rules (use only the facts,
 no commands, no invented numbers) are added by ForgeSRE and cannot be edited away. Investigations

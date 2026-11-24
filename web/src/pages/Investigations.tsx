@@ -151,7 +151,7 @@ function SkillUsefulness() {
   useEffect(() => void getJson<{ skills: Skill[] }>("/api/v1/forgeai/skills").then((d) => setSkills(d.skills.filter((s) => s.stats?.calls))).catch(() => setSkills([])), []);
   if (!skills) return null;
   return (
-    <Card title="ForgeAI skills · 30 days" actions={<Link className="small" to="/automation">Edit skills</Link>}>
+    <Card title="ForgeAI skills · 30 days" actions={<Link className="small" to="/settings?group=skills">Edit skills</Link>}>
       {skills.length === 0 ? <span className="muted">ForgeAI has not answered anything in the last 30 days.</span> : null}
       {skills.map((s) => (
         <div key={s.slug} className="cell-stack" style={{ gap: 2, borderTop: "1px solid var(--border)", paddingTop: 8 }}>

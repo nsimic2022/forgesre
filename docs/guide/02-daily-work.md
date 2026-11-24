@@ -17,7 +17,9 @@ shows how far escalation has gone (Tier 1 is the NOC, Tier 2 the shift lead, Tie
 engineer, then the manager); **Messages**
 shows how many notifications were sent.
 
-At the bottom: health per asset group and who is on call now.
+Above the list, one line says who is on call now and whether the last shift handover was taken
+over; *Shift and schedule →* opens Incidents › On-call. Hosts that do not answer are counted in
+*Hosts down* at the top (Inventory › *Down now* lists them).
 
 ## Taking an incident
 
@@ -86,13 +88,16 @@ is also in the Outbox on the Reports page.
 
 ![On call](../images/ui-oncall.png)
 
-Open it with **Schedule** on the NOC page's *On call now* card. It shows who is on call now
+Open it with **Shift and schedule →** in the shift line on the NOC page. It shows who is on call now
 and next; an Engineer adds, edits or copies windows here. Escalation calls this person first.
 
 ## Shift handover
 
-**Write the handover** on the NOC page (ForgeAI on) summarises the last 12 hours for the next
-shift: what happened, what is still open, what to keep an eye on.
+The **Shift** card at the top of Incidents › On-call holds the change of shift in one place: who is
+on call now, the handover (*Write handover*, and the next person's *I take over*) and, with
+ForgeAI on, *Draft with ForgeAI*: a summary of the last 12 hours (what happened, what is still
+open, what to keep an eye on) that *Use as handover notes* copies into the handover to check and
+send. The NOC page shows one line with who is on call and whether the handover was taken over.
 
 ## The wall screen
 

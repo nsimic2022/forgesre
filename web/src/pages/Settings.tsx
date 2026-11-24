@@ -1,6 +1,9 @@
 import { AuditPanel, JournalPanel } from "../components/ActivityPanels";
 import { AlertPrefs, AppearancePanel, PushPrefs, SeverityColorPrefs } from "../components/AppearancePanel";
 import { ForgeAiDocs } from "../components/ForgeAiDocs";
+import { ForgeAiSkills } from "../components/ForgeAiSkills";
+import { GoldenSet } from "../components/GoldenSet";
+import { useRoleRank } from "../lib/me";
 import { ForgeAiModels } from "../components/ForgeAiModels";
 import { ForgeAiStatus } from "../components/ForgeAiStatus";
 import { IntegrationsPanel } from "../components/IntegrationsPanel";
@@ -40,6 +43,7 @@ function Services() {
 }
 
 export function SettingsPage() {
+  const rank = useRoleRank();
   const [data, setData] = useState<SettingsData | null>(null);
   // ?group=checks (command palette, links in docs) opens that group
   const [group, setGroup] = useState(() => new URLSearchParams(window.location.search).get("group") || "general");
@@ -59,7 +63,8 @@ export function SettingsPage() {
   const replace = (next: SettingRow) => setData((d) => (d ? { ...d, settings: d.settings.map((r) => (r.key === next.key ? next : r)) } : d));
   const rows = data?.settings.filter((r) => r.group === group) ?? [];
   const tests = Array.from(new Set(rows.map((r) => r.test).filter(Boolean)));
-  const sections = data ? [...Object.entries(data.groups), ["messages", "Messages"], ["push", "Web push"], ["appearance", "Appearance"], ["services", "Health"], ["journal", "Journal"], ["audit", "Audit"], ["users", "Users"], ["backup", "Backup"], ["demo", "Demo"]] : [];
+  // ForgeAI skills and RAG sit right under RCA / AI
+  const sections = data ? [...Object.entries(data.groups).flatMap(([k, v]) => (k === "ai" ? [[k, v], ["skills", "ForgeAI skills"], ["rag", "ForgeAI RAG"]] : [[k, v]])), ["messages", "Messages"], ["push", "Web push"], ["appearance", "Appearance"], ["services", "Health"], ["journal", "Journal"], ["audit", "Audit"], ["users", "Users"], ["backup", "Backup"], ["demo", "Demo"]] : [];
   return (
     <>
       <header className="page-head">
@@ -71,7 +76,8 @@ export function SettingsPage() {
       {error ? <div className="banner error" role="alert">{error}</div> : null}
       {forbidden ? (
         <>
-          <Card><span>Settings are for Admins. You can still pick your theme and see the health of every service below.</span></Card>
+          <Card><span>Settings are for Admins. You can still pick your theme and see the health of every service below{rank >= 2 ? "; as an Engineer you also edit ForgeAI skills and documents here" : ""}.</span></Card>
+          {rank >= 2 ? <><ForgeAiSkills /><GoldenSet /><ForgeAiDocs /></> : null}
           <><AppearancePanel /><SeverityColorPrefs /><AlertPrefs /><PushPrefs /></>
           <Services />
         </>
@@ -87,7 +93,7 @@ export function SettingsPage() {
           </nav>
           <div style={{ flex: "999 1 480px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
             {/* ForgeAI: status and models first, the raw settings below them */}
-            {group === "ai" ? <><ForgeAiStatus /><ForgeAiModels /><ForgeAiDocs /></> : null}
+            {group === "ai" ? <><ForgeAiStatus /><ForgeAiModels /></> : null}
             {group === "journal" ? (
               <JournalPanel />
             ) : group === "audit" ? (
@@ -96,6 +102,10 @@ export function SettingsPage() {
               <IntegrationsPanel rows={data.settings} onSaved={replace} />
             ) : group === "appearance" ? (
               <><AppearancePanel /><SeverityColorPrefs /><AlertPrefs /><PushPrefs admin /></>
+            ) : group === "skills" ? (
+              <><ForgeAiSkills /><GoldenSet /></>
+            ) : group === "rag" ? (
+              <ForgeAiDocs />
             ) : group === "push" ? (
               <PushPrefs admin />
             ) : group === "messages" ? (

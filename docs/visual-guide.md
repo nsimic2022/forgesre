@@ -14,6 +14,7 @@ The pictures come from `scripts/visual_guide.py`; Serbian: [vizuelni-vodic-sr.md
 - [Reports](#reports)
 - [Settings](#settings)
 - [Settings › Appearance](#settings-appearance)
+- [Settings › ForgeAI RAG](#settings-rag)
 - [Settings › Web push](#settings-push)
 
 <a id="noc"></a>
@@ -32,11 +33,9 @@ The start page: what is burning now, who is on call and whether the hosts answer
 6. The incident name, coloured by severity (red critical, orange high, yellow warning). Click it to open the incident.
 7. Acknow.: Not acknow means nobody has taken it yet; acknowledge it so escalation stops. Who acknowledged it is on the incident page.
 8. Tick rows to acknowledge, assign or resolve several at once.
-9. Shift handover: write what the next shift must know.
-10. Hosts by group: green when all answer.
-11. Who is on call right now; Schedule opens the roster.
-12. ForgeRCA (rules, always on) and ForgeAI (the local model) status.
-13. Who is signed in, the role, and Sign out.
+9. Shift: who is on call now and whether the handover was taken over; the link opens the Shift card.
+10. ForgeRCA (rules, always on) and ForgeAI (the local model) status.
+11. Who is signed in, the role, and Sign out.
 
 <a id="tv"></a>
 
@@ -102,7 +101,7 @@ Who answers, every day of the week, in the appliance's time zone.
 
 ![On-call](guide/oncall.png)
 
-1. Who is on call this minute.
+1. Shift: on call now, the handover (write, take over) and the ForgeAI draft that can fill it.
 2. Take the rest of today yourself.
 3. Add a window: who, which days, from and to.
 4. The week: click a window to change it.
@@ -132,7 +131,7 @@ What happens between an alarm and someone's phone, in four steps.
 ![Automation](guide/automation.png)
 
 1. The pipeline: collect, filter noise, route, escalate and notify, with today's numbers.
-2. Tabs: noise filters, routing rules, escalation, playbooks, maintenance, known errors, ForgeAI skills.
+2. Tabs: noise filters, routing rules, escalation, playbooks, maintenance windows, known errors.
 3. New noise filter: who is not woken up, and when.
 4. Try an alarm: see what would happen, without creating anything.
 5. Export all rules as JSON.
@@ -177,7 +176,7 @@ Admins change settings here; others pick a theme and see health.
 
 ![Settings](guide/settings.png)
 
-1. Sections: general, checks, alarms, integrations, notifications, AI, web push, appearance, health, users, backup…
+1. Sections: general, checks, alarms, integrations, notifications, RCA / AI, ForgeAI skills, ForgeAI RAG, web push, appearance, health, users, backup…
 2. The settings of the chosen section. Save writes config/forgesre.yml and the audit log.
 3. Save one value.
 
@@ -193,6 +192,18 @@ Per browser: theme, severity colours, alerts and push.
 2. Colour the incident name by severity (on or off).
 3. Sound and desktop notification for a new critical while the page is open.
 4. Web push to this phone or browser, even when ForgeSRE is closed.
+
+<a id="settings-rag"></a>
+
+## Settings › ForgeAI RAG
+
+The manuals and runbooks ForgeAI may quote, and how much they are used.
+
+![Settings › ForgeAI RAG](guide/settings-rag.png)
+
+1. Documents, pieces and pages, how many ForgeAI questions got excerpts and how many answers cited them (7 days).
+2. Drop files here (several at once) or pick them; a title names a single file.
+3. Search on: the local embedding model answers. Off: the banner says how to start it.
 
 <a id="settings-push"></a>
 

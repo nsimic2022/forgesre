@@ -1535,9 +1535,18 @@ def forgeai_docs(db: Session = Depends(get_db), user: User = Depends(require("in
     from app.doc_search import doc_as_dict, vector_ready
     from app.models import DocFile
 
+    from datetime import timedelta
+
+    from app.models import ForgeAiCall
+
     rows = db.query(DocFile).order_by(DocFile.id.desc()).all()
+    # how much the documents are used: questions that got excerpts, answers that cite one ([D1]…), last 7 days
+    week = db.query(ForgeAiCall).filter(ForgeAiCall.created_at >= utcnow() - timedelta(days=7))
+    given = week.filter(ForgeAiCall.user_prompt.like('%"vendor_docs"%')).count()
+    cited = week.filter(ForgeAiCall.user_prompt.like('%"vendor_docs"%'), ForgeAiCall.raw_response.like("%[D%")).count()
     return {"docs": [doc_as_dict(d) for d in rows], "embedder": embeddings.available(), "embed_url": settings.embed_url or "",
-            "model": embeddings.model_name(), "pgvector": vector_ready(db), "can_edit": can(user, "write_play")}
+            "model": embeddings.model_name(), "pgvector": vector_ready(db), "can_edit": can(user, "write_play"),
+            "usage": {"days": 7, "given": given, "cited": cited}}
 
 
 @router.post("/forgeai/docs")

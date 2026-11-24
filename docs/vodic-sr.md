@@ -314,7 +314,7 @@ ForgeAI radi podrazumevano samo lokalno: model je na istoj VM i ništa ne napuš
 ./forgesre settings set ai.enabled true
 ```
 
-**Pretraga dokumenata (RAG):** Engineer uploaduje PDF ili tekst priručnika u Settings › RCA / AI › Documents; `embed` ih pretvori u vektore u Postgres-u (pgvector). ForgeAI uz svako pitanje dobije nekoliko najsličnijih odlomaka i citira ih kao [D1]. Ključevi: `ai.embed.enabled`, `ai.embed.url` (podrazumevano `http://127.0.0.1:8089/v1`). Provera: `./forgesre forgeai docs`.
+**Pretraga dokumenata (RAG):** Engineer uploaduje PDF ili tekst priručnika u Settings › ForgeAI RAG; `embed` ih pretvori u vektore u Postgres-u (pgvector). ForgeAI uz svako pitanje dobije nekoliko najsličnijih odlomaka i citira ih kao [D1]. Ključevi: `ai.embed.enabled`, `ai.embed.url` (podrazumevano `http://127.0.0.1:8089/v1`). Provera: `./forgesre forgeai docs`.
 
 **Plaćeni cloud model (opciono, isključen):**
 
@@ -362,7 +362,7 @@ Na CPU-u brzinu određuju dve stvari: koliko teksta model mora da pročita (prom
 
 **Praktično podešavanje:** pokreni `./forgesre forgeai test`. Prvi token posle 10–30 s i ceo odgovor ispod 60 s je dobro za 4B. Ako je prvi token kasan, procesoru je teško da pročita prompt: više niti ili manji model. Ako je prvi token brz, a ukupno sporo, model mnogo piše ili razmišlja: isključi razmišljanje. Ako odgovor ne stigne na vreme, podigni timeout.
 
-**Skillovi** (Automation › ForgeAI skills, Engineer): uputstvo modelu za određenu vrstu posla. Svaki ima:
+**Skillovi** (Settings › ForgeAI skills, Engineer): uputstvo modelu za određenu vrstu posla. Svaki ima:
 
 - zadatak (uzrok i prve provere, objašnjenje, sažetak za incident review, istraga sa alatima, chat, smena);
 - kada se bira: imena alarma (npr. `Disk*`), tipovi asseta i prioritet;
@@ -434,7 +434,7 @@ Gde je koja funkcija i kako je proveriš preko SSH-a.
 | Izveštaj o kvalitetu alarma | Reports › Alert quality | `./forgesre alert-quality [DANA]` | [alerting.md](alerting.md) |
 | Major incident, obaveštenja za stakeholdere | Incident › Major incident | — | [ui.md](ui.md) |
 | SLA tajmeri | Oznake u listi incidenata, Reports › SLA | `./forgesre sla` | [settings.md](settings.md) |
-| Primopredaja smene, akcije posle incidenta | NOC › Handover, Incident › Follow-up actions | `./forgesre handover`, `./forgesre actions` | [ui.md](ui.md) |
+| Primopredaja smene, akcije posle incidenta | Incidents › On-call › Shift, Incident › Follow-up actions | `./forgesre handover`, `./forgesre actions` | [ui.md](ui.md) |
 | SMS, GLPI tiketi, ticket webhook | Settings › Notifications / Integrations | `./forgesre settings test sms` (i `ticket-glpi`, `ticket-webhook`) | [settings.md](settings.md) |
 | Napajanje i okruženje (UPS, PDU, senzori) | NOC › Power and environment | `./forgesre power` | [alerting.md](alerting.md) |
 | Rekovi, garancija / EoL / licence | Inventory › Racks, Reports | `./forgesre racks`, `./forgesre lifecycle` | [operator-handbook.md](operator-handbook.md) |
@@ -442,7 +442,7 @@ Gde je koja funkcija i kako je proveriš preko SSH-a.
 | Sintetičke provere | Settings › Checks | `./forgesre synthetic` | [alerting.md](alerting.md) |
 | Komandna paleta, upozorenja u pregledaču, aplikacija na telefonu | Ctrl+K, Settings › Appearance, *Install app* | — | [ui.md](ui.md) |
 | Filter po timu, sačuvani prikazi, poznate greške | Incidents, Automation › Known errors | `./forgesre known-errors` | [ui.md](ui.md) |
-| ForgeAI na srpskom, golden set, sažetak oluje | Settings › RCA / AI, Automation › ForgeAI skills | `./forgesre forgeai golden` | [llm.md](llm.md) |
+| ForgeAI na srpskom, golden set, sažetak oluje | Settings › RCA / AI, Settings › ForgeAI skills | `./forgesre forgeai golden` | [llm.md](llm.md) |
 | HTTPS, opcioni delovi, GPU, backup van servera | — | `./forgesre https`, `optional`, `gpu`, `backup offbox` | poglavlja 3 i 8 |
 
 Posle `./forgesre update` pokreni `./forgesre doctor`: svaka funkcija koja priča sa drugim sistemom

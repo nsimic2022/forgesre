@@ -1,16 +1,13 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { KnownErrorsCard } from "../components/KnownErrors";
-import { GoldenSet } from "../components/GoldenSet";
 import { usePaged } from "../components/Pager";
 import { MaintenanceForm, PlaybookForm, PolicyForm, RemoveButton, RuleForm, ruleBody, ruleDraft } from "../components/AutomationEditors";
-import { ForgeAiDocs } from "../components/ForgeAiDocs";
-import { ForgeAiSkills } from "../components/ForgeAiSkills";
 import { NoiseFilters } from "../components/NoiseFilters";
 import { Card, Chip } from "../components/ui";
 import { getJson, postJson, putJson, type Automation, type PolicyStep, type Simulation } from "../lib/api";
 import { clock, tierLabel } from "../lib/format";
 
-type Tab = "filters" | "rules" | "escalation" | "playbooks" | "maintenance" | "known" | "forgeai";
+type Tab = "filters" | "rules" | "escalation" | "playbooks" | "maintenance" | "known";
 const TABS: { key: Tab; label: string }[] = [
   { key: "filters", label: "Noise filters" },
   { key: "rules", label: "Routing rules" },
@@ -18,7 +15,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "playbooks", label: "Playbooks" },
   { key: "maintenance", label: "Maintenance windows" },
   { key: "known", label: "Known errors" },
-  { key: "forgeai", label: "ForgeAI skills" },
 ];
 // Classic pages that still do the editing.
 type Rule = Automation["rules"][number];
@@ -149,7 +145,6 @@ export function AutomationPage() {
           </button>
         ))}
       </div>
-      {tab === "forgeai" ? <><ForgeAiSkills /><GoldenSet /><ForgeAiDocs /></> : null}
       {tab === "known" ? <KnownErrorsCard /> : null}
       {data && tab === "filters" ? <NoiseFilters filters={data.filters} canEdit={data.can_edit} onChanged={load} /> : null}
       {data && tab === "rules" ? (

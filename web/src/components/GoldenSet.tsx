@@ -9,7 +9,7 @@ type Run = { id: number; started_at: string | null; finished_at: string | null; 
 type Golden = { cases: Case[]; runs: Run[]; running: boolean; can_edit: boolean };
 
 /**
- * Automation › ForgeAI skills › Golden set: resolved incidents whose confirmed cause is right,
+ * Settings › ForgeAI skills › Golden set: resolved incidents whose confirmed cause is right,
  * replayed against the model to compare models, skills and the answer language over time.
  */
 export function GoldenSet() {
