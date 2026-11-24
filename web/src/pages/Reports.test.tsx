@@ -50,9 +50,9 @@ describe("Reports", () => {
     expect(screen.getAllByText("NOC summary").length).toBeGreaterThan(0);
   });
 
-  it("switches the incident chart between today, 7 days, 4 weeks and 30 days", async () => {
-    const trend = (range: string) => ({ range, unit: range === "today" ? "hour" : range === "4w" ? "week" : "day", total: 3,
-      buckets: [{ day: range === "4w" ? "28.10–03.11" : "2026-11-18", critical: 1, high: 1, other: 1 }] });
+  it("one period picker drives the numbers, the chart and the CSV", async () => {
+    const trend = (range: string) => ({ range, unit: range === "today" ? "hour" : range === "90d" ? "week" : "day", total: 3,
+      buckets: [{ day: range === "90d" ? "28.10–03.11" : "2026-11-18", critical: 1, high: 1, other: 1 }] });
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       urls.push(url);
       const m = /range=(\w+)/.exec(url);
@@ -60,11 +60,17 @@ describe("Reports", () => {
     }));
     render(<ReportsPage />);
     expect(await screen.findByText("Incidents per day, last 30 days")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "4 weeks" }));
-    expect(await screen.findByText("Incidents per week, last 4 weeks")).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "Chart range" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Last 90 days" }));
+    expect(await screen.findByText("Incidents per week, last 90 days")).toBeTruthy();
     expect(await screen.findByRole("img", { name: /Incidents per week over 1 weeks/ })).toBeTruthy();
+    await waitFor(() => expect(urls).toContain("/api/v1/reports-page?days=90"));
     fireEvent.click(screen.getByRole("button", { name: "Today" }));
     await waitFor(() => expect(urls).toContain("/api/v1/reports/incident-trend?range=today"));
+    expect(urls).toContain("/api/v1/reports-page?days=0");
+    expect(screen.getByRole("link", { name: "Export CSV" }).getAttribute("href")).toBe("/api/v1/reports/incidents.csv?days=0");
+    expect(screen.getByRole("navigation", { name: "Report sections" })).toBeTruthy();
+    expect(screen.getByText("SLA · how fast we react")).toBeTruthy();
   });
 
   it("changes the period", async () => {

@@ -155,18 +155,18 @@ Rešeni incidenti sa potvrđenim uzrokom, koliko su ForgeRCA i ForgeAI bili tač
 
 ## Izveštaji
 
-Brojke za period u odnosu na prethodni, grafikoni i zakazani izveštaji.
+Jedan period za celu stranu, pa pet sekcija: pregled, izvori, nivoi usluge, praćenje, slanje izveštaja.
 
 ![Reports](guide/reports.png)
 
-1. Period (7, 30, 90 dana) i CSV izvoz.
-2. Incidenti, kritični, MTTA, MTTR i potvrđeni uzroci, sa promenom u odnosu na prethodni period.
-3. SLO-ovi i budžet grešaka.
-4. Promena grafikona: Today (po satu), 7 days, 4 weeks (po nedelji), 30 days.
-5. Stubići složeni po ozbiljnosti: crveno kritično, narandžasto visoko, plavo ostalo.
-6. Zakazani izveštaji mejlom; Preview prikazuje izveštaj pre slanja.
-7. Podela po tipu uređaja.
-8. Uređaji sa najviše incidenata.
+1. Period za sve na strani: Today, 7, 30 ili 90 dana; Export CSV izvozi isti period.
+2. Skok na sekciju.
+3. Incidenti, kritični, MTTA, MTTR i potvrđeni uzroci, sa promenom u odnosu na prethodni period.
+4. Grafikon za isti period: po satu za danas, po danu za 7 ili 30 dana, po nedelji za 90 dana.
+5. Odakle dolaze incidenti: tipovi uređaja, najbučniji uređaji, česti alarmi, kvalitet alarma, vreme pada hostova.
+6. SLA (koliko brzo tim reaguje) i SLO (koliko je usluga dostupna), objašnjeni, sa karticama ispod.
+7. Otvorene naknadne akcije, i hardver ili licence kojima ističe rok.
+8. Zakazani izveštaji mejlom i lista svih poslatih poruka.
 
 <a id="settings"></a>
 

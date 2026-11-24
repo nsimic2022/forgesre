@@ -42,3 +42,27 @@ def test_trend_buckets_and_api():
             db.delete(i)
         db.commit()
         db.close()
+
+
+def test_today_period_and_ninety_day_weeks():
+    from app.reports_view import incidents_csv, reports_overview
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    now = utcnow()
+    before = reports_overview(db, 0, now)["current"]["incidents"]
+    made = Incident(number=f"INC-TD-{uuid4().hex[:6]}", title="today", severity="CRITICAL", status="RESOLVED",
+                    fingerprint=f"td:{uuid4().hex}", started_at=now - timedelta(seconds=5))
+    db.add(made)
+    db.commit()
+    try:
+        today = reports_overview(db, 0, now + timedelta(seconds=1))
+        assert today["days"] == 0 and today["current"]["incidents"] == before + 1
+        assert made.number in incidents_csv(db, 0, now + timedelta(seconds=1))
+        ninety = incident_trend(db, "90d", now)
+        assert ninety["unit"] == "week" and len(ninety["buckets"]) == 13
+    finally:
+        db.delete(made)
+        db.commit()
+        db.close()
