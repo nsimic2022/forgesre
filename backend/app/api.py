@@ -3236,6 +3236,23 @@ def _oxidized_check() -> dict[str, Any]:
     return {"status": "warn" if failed else "ok", "why": note}
 
 
+def _backup_verify_check() -> dict[str, Any]:
+    """Last ./forgesre backup verify (also run by the nightly timer): disabled until the first one."""
+    import json as _json
+    import os
+    from pathlib import Path
+
+    path = Path(os.environ.get("FORGESRE_BACKUP_DIR") or "/backups") / ".verify-status.json"
+    try:
+        last = _json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"status": "disabled", "why": "never run (./forgesre backup verify, or backup schedule on)"}
+    if not last.get("ok"):
+        return {"status": "error", "why": "; ".join(last.get("problems") or ["failed"])[:200], "test": "./forgesre backup verify"}
+    name = Path(str(last.get("archive") or "")).parent.name
+    return {"status": "ok", "why": f"{name} readable, {last.get('tables', 0)} tables ({str(last.get('at', ''))[:16]})"}
+
+
 def _offbox_check() -> dict[str, Any]:
     """Off-box backup copy: disabled when FORGESRE_OFFBOX is empty, else the last push result."""
     import os
@@ -3313,6 +3330,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "oxidized": _oxidized_check(),
         "https": _https_check(),
         "offbox": _offbox_check(),
+        "backup_verify": _backup_verify_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)

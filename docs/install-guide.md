@@ -60,6 +60,11 @@ changed from Settings in the UI).
 Without the local model, 4 vCPU and 8 GB RAM are enough; with it, plan for 8 vCPU and 16 GB. No
 GPU is needed: the model runs on the CPU.
 
+**Our appliance VMs (16 vCPU, 32 GB RAM):** use Qwen3 8B (`./forgesre fetch-llm --model qwen3-8b`)
+with `FORGESRE_LLM_THREADS=14`. It answers in about 1–2 minutes and gives clearly better causes than
+4B, and leaves 20 GB for the platform. The 14B model also fits, but an answer takes several minutes;
+use it only with a GPU. Run the golden set before and after switching models.
+
 | Resource | No ForgeAI | Qwen3 4B | 8B model | 14B model |
 | --- | --- | --- | --- | --- |
 | vCPU | 4 (min. 2) | 8 | 8–12 | 12+ |

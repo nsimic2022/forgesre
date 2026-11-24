@@ -21,7 +21,7 @@ def _archive(tmp: Path, name: str = "backup_20261123T100000Z") -> Path:
     run.mkdir(parents=True)
     path = run / "forgesre.tar.gz"
     with tarfile.open(path, "w:gz") as tar:
-        for member, body in (("db.json", b"{}"), ("secrets.env", b"X=1"), (".env", b"Y=2"), ("config/forgesre.yml", b"a: 1")):
+        for member, body in (("db.json", b"{}"), ("secrets.env", b"X=1"), ("dotenv", b"Y=2"), ("config/forgesre.yml", b"a: 1")):
             info = tarfile.TarInfo(f"forgesre-x/{member}")
             info.size = len(body)
             tar.addfile(info, io.BytesIO(body))
@@ -51,7 +51,7 @@ def test_push_to_directory_prunes_and_strips(tmp_path: Path):
     assert "without secrets.env" in stripped["detail"]
     with tarfile.open(target / "backup_20261123T100000Z" / "forgesre.tar.gz") as tar:
         names = tar.getnames()
-    assert "forgesre-x/db.json" in names and "forgesre-x/secrets.env" not in names and "forgesre-x/.env" not in names
+    assert "forgesre-x/db.json" in names and "forgesre-x/secrets.env" not in names and "forgesre-x/dotenv" not in names
     assert "forgesre-x/OFFBOX-STRIPPED.txt" in names and "forgesre-x/config/forgesre.yml" in names
     assert offbox.test(env)["ok"] is True
 

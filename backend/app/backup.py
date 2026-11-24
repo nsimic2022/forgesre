@@ -1276,6 +1276,18 @@ def _main(argv: list[str] | None = None) -> int:
         return 0
     if cmd == "backup" and args[:1] == ["offbox"]:
         return _offbox_cli(args[1:])
+    if cmd == "backup" and args[:1] == ["verify"]:
+        from app import backup_ops
+
+        rows = list_archives()
+        if not rows:
+            print("No backup to verify. Run ./forgesre backup first.")
+            return 1
+        archive = archive_file(resolve_cli_archive(args[1] if len(args) > 1 else "1", rows=rows))
+        checked = backup_ops.verify(archive)
+        backup_ops.record(layout_from_env().backup_dir, checked)
+        sys.stdout.write(backup_ops.format_verify(checked))
+        return 0 if checked["ok"] else 1
     if cmd == "backup":
         include_secrets = "--no-secrets" not in args
         include_models = "--include-models" in args
@@ -1312,6 +1324,20 @@ def _main(argv: list[str] | None = None) -> int:
                 print(("Off-box: " if sent["ok"] else "Off-box copy FAILED (the local backup is fine): ") + sent["detail"],
                       file=sys.stdout if sent["ok"] else sys.stderr)
                 # the local backup is fine; doctor shows the failed copy until the next one works
+        if "--scheduled" in args:
+            # the nightly timer: check what was just written, then keep only the newest runs
+            from app import backup_ops
+
+            lay = layout_from_env()
+            checked = backup_ops.verify(result.path)
+            backup_ops.record(lay.backup_dir, checked)
+            sys.stdout.write(backup_ops.format_verify(checked))
+            if not checked["ok"]:
+                # a broken new backup never pushes out the older good ones
+                return 1
+            removed = backup_ops.prune(lay.backup_dir, backup_ops.keep_count())
+            if removed:
+                print(f"Removed {len(removed)} old backup(s), keeping {backup_ops.keep_count()}: {', '.join(removed)}")
         return 0
     if cmd in {"restore", "import"}:
         yes = "--yes" in args

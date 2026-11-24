@@ -40,6 +40,7 @@ COMPONENT_LABELS = {
     "oxidized": "Oxidized changes",
     "https": "HTTPS",
     "offbox": "Off-box backup",
+    "backup_verify": "Backup check",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -70,6 +71,7 @@ COMPONENT_SHORT = {
     "oxidized": "Oxidized",
     "https": "HTTPS",
     "offbox": "Off-box backup",
+    "backup_verify": "Backup check",
     "redis": "Redis",
     "mailpit": "Mailpit",
 }
