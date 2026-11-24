@@ -239,7 +239,7 @@ Promena `FORGESRE_ADMIN_PASSWORD` posle prvog pokretanja ne menja lozinku u bazi
 | Network | `logging.loki.enabled`, `grafana.enabled`, `monitoring.snmp.*` | SNMP modul `if_mib` |
 | Integrations | `inventory.netbox.*`, `inventory.zabbix.*`, `inventory.glpi.*`, `inventory.librenms.*`, `inventory.new_from_sources` | `new_from_sources: review` = novi uređaji prvo idu u Discovery |
 | Discovery | `discovery.enabled`, `discovery.mode` | `semi-automatic` = lista za odobrenje |
-| Notifications | `notifications.email.*`, `notifications.chat.slack\|teams\|discord.*`, `notifications.sms.*` | `min_severity: high` |
+| Notifications | `notifications.email.*`, `notifications.chat.slack\|teams\|discord.*`, `notifications.sms.*`, `notifications.push.enabled` | `min_severity: high`; push isključen |
 | Alarms | `alerts.storm.*` (prag, prozor), `alerts.flapping.*` | 20 incidenata za 5 min = jedna oluja |
 | SLA | `sla.enabled`, `sla.response.<ozbiljnost>`, `sla.resolve.<ozbiljnost>` (minuti) | critical: odgovor 15, rešenje 240 |
 | Tiketi i izmene | `tickets.glpi.enabled`, `tickets.webhook.*`, `changes.oxidized.*` | *Open ticket* na incidentu pravi GLPI tiket |
@@ -269,6 +269,7 @@ Sve integracije su samo za čitanje, uz tri izuzetka koja sam uključuješ: obav
 | Slack, Teams, Discord | ForgeSRE → kanal | `*_WEBHOOK_URL` + uključiti kanal i minimalnu ozbiljnost | set-secret + Notifications |
 | CI/CD i izmene | Izmene → ForgeSRE | `POST /api/v1/changes` sa `CHANGES_WEBHOOK_TOKEN`; ForgeAI vidi izmene pre incidenta | Pipeline |
 | LDAP / Active Directory, OIDC (Entra ID…) | Prijava | `auth.ldap.*` + `LDAP_BIND_PASSWORD`, ili `auth.oidc.*` + `OIDC_CLIENT_SECRET`; grupe → uloge | Settings › Sign-in ([sign-in.md](sign-in.md)) |
+| Web push | ForgeSRE → telefoni i browseri (preko push servisa browsera) | `notifications.push.enabled`; svako čekira *Push to this device*; treba HTTPS i izlazni HTTPS | Settings › Notifications |
 | SMS / telefonski gateway | ForgeSRE → telefon dežurnog | `notifications.sms.*` (opšti URL ili Twilio) + `SMS_GATEWAY_TOKEN`; korak eskalacije šalje SMS | Settings › Notifications |
 | GLPI tiketi | ForgeSRE → GLPI | `tickets.glpi.enabled` (isti GLPI tokeni; korisnik mora da sme da pravi tikete); rešen incident dodaje followup | Settings › Integrations, *Open ticket* na incidentu |
 | Ticket webhook | ForgeSRE → ServiceNow, Jira, n8n | `tickets.webhook.url` + `TICKET_WEBHOOK_TOKEN`; JSON pri otvaranju i rešavanju | Settings › Integrations |

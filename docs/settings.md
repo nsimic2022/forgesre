@@ -85,6 +85,23 @@ incident (channel `sms`) and is sent by a background job with a 10 s timeout.
 
 **Test** (or `./forgesre settings test sms`) sends one SMS to the person on call now.
 
+## Web push to phones and browsers
+
+Off by default (`notifications.push.enabled`). When an Admin turns it on, each person can tick
+**Settings › Appearance › Push to this device** on a phone or browser; a new open CRITICAL
+incident (not one suppressed under a parent) then shows as a notification even when the tab is
+closed. Tapping it opens the incident.
+
+- The message goes through the browser maker's push service (Google for Chrome/Android, Apple for
+  Safari/iPhone, Mozilla for Firefox), so the appliance needs outbound HTTPS to it. Only the
+  incident number, severity, title and host are sent, encrypted end to end (RFC 8291); the push
+  service cannot read them.
+- The signing key (VAPID) is made on first use and kept in the database; no secret to set.
+- iPhone: install the app first (Safari › Share › *Add to Home Screen*, iOS 16.4+), then tick
+  the box inside the installed app.
+- Sending is a background job (`push_send`, 10 s timeout per device); a device the push service
+  says is gone is removed. *Send a test* on the card pushes to your own devices.
+
 ## Tickets
 
 - **GLPI tickets** (`tickets.glpi.enabled`, uses the GLPI integration's URL and tokens): *Open

@@ -79,6 +79,9 @@ export function CommandPalette() {
     if (!hit) return;
     setOpen(false);
     navigate(hit.to);
+    // Settings already open: it does not remount, so tell it which group to show
+    const group = hit.to.startsWith("/settings?") ? new URLSearchParams(hit.to.split("?")[1]).get("group") : null;
+    if (group) window.dispatchEvent(new CustomEvent("forgesre-settings-group", { detail: group }));
   };
   return (
     <div className="shortcuts-backdrop" role="presentation" onClick={() => setOpen(false)}>

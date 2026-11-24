@@ -41,3 +41,23 @@ export function beep(): void {
     /* audio blocked until the user clicks once; nothing else to do */
   }
 }
+
+const b64ToBytes = (b64: string) => {
+  const raw = atob(b64.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (b64.length % 4)) % 4));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+};
+
+/** This browser's push subscription, or null (no service worker / push support / not subscribed). */
+export async function currentPush(): Promise<PushSubscription | null> {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  const reg = await navigator.serviceWorker.getRegistration("/app/");
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+
+/** Subscribe this browser with the appliance's VAPID key; returns the subscription JSON to store. */
+export async function subscribePush(publicKey: string): Promise<PushSubscriptionJSON> {
+  const reg = (await navigator.serviceWorker.getRegistration("/app/")) ?? (await navigator.serviceWorker.register("/app/sw.js", { scope: "/app/" }));
+  await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(publicKey) });
+  return sub.toJSON();
+}
