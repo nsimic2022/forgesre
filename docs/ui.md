@@ -309,8 +309,8 @@ python scripts/screenshots.py --only noc,incident     # just a few pages
 
 ## Visual guide
 
-[visual-guide.md](visual-guide.md) ([Serbian](vizuelni-vodic-sr.md)) shows each page with coloured,
-numbered markers and one line per number. `scripts/visual_guide.py` makes the pictures
+[visual-guide.md](visual-guide.md) ([Serbian](vizuelni-vodic-sr.md)) shows each page with numbered
+red circles and one line per number. `scripts/visual_guide.py` makes the pictures
 (`docs/guide/*.png`) and both pages from the `PAGES` list in the script; run it against a demo
 install after a UI change (`--check` lists selectors that no longer match):
 

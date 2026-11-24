@@ -1,6 +1,6 @@
 # Visual guide
 
-Each ForgeSRE page with coloured numbers; under the picture, what each number is.
+Each ForgeSRE page with numbered red circles; under the picture, what each number is.
 The pictures come from `scripts/visual_guide.py`; Serbian: [vizuelni-vodic-sr.md](vizuelni-vodic-sr.md).
 
 - [NOC overview](#noc)

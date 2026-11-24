@@ -1,6 +1,6 @@
 # Vizuelni vodič
 
-Svaka stranica ForgeSRE-a sa obojenim brojevima; ispod slike piše šta je koji broj.
+Svaka stranica ForgeSRE-a sa crvenim brojevima; ispod slike piše šta je koji broj.
 Slike pravi `scripts/visual_guide.py`; engleska verzija: [visual-guide.md](visual-guide.md).
 
 - [NOC pregled](#noc)

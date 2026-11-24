@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build the visual guide: screenshots of each page with numbered, coloured markers.
 
-Opens every page of the UI in a headless browser, draws a coloured frame and a numbered
-circle around each element described in PAGES, saves docs/guide/<page>.png and writes
+Opens every page of the UI in a headless browser, puts a numbered red circle on the
+corner of each element described in PAGES, saves docs/guide/<page>.png and writes
 docs/visual-guide.md (English) and docs/vizuelni-vodic-sr.md (Serbian) with one line per
 number. Run it against a demo or lab install after a UI change, then commit the result:
 
@@ -213,21 +213,17 @@ OVERLAY_JS = """
   const placed = [];
   for (const b of boxes) {
     // move a circle that would cover an earlier one to the right
-    let bx = Math.max(2, b.x - 20), by = Math.max(2, b.y - 20);
+    // small targets (a checkbox, one word): the circle sits just left of them, not on top
+    const small = b.w < 120 && b.h < 40;
+    let bx = small ? Math.max(2, b.x - 38) : Math.max(2, b.x - 14), by = small ? b.y + b.h / 2 - 16 : Math.max(2, b.y - 14);
     while (placed.some(([px, py]) => Math.abs(px - bx) < 36 && Math.abs(py - by) < 36)) bx += 38;
     placed.push([bx, by]);
-    const frame = document.createElement('div');
-    frame.className = 'vg-mark';
-    Object.assign(frame.style, { position: 'absolute', left: (b.x - 5) + 'px', top: (b.y - 5) + 'px', width: (b.w + 10) + 'px',
-      height: (b.h + 10) + 'px', border: `3px solid ${b.color}`, borderRadius: '10px', zIndex: 99998, pointerEvents: 'none',
-      boxShadow: `0 0 0 2px rgba(0,0,0,.45), 0 0 18px ${b.color}66` });
     const dot = document.createElement('div');
     dot.className = 'vg-mark';
     dot.textContent = String(b.n);
     Object.assign(dot.style, { position: 'absolute', left: bx + 'px', top: by + 'px', width: '32px',
       height: '32px', borderRadius: '50%', background: b.color, color: '#fff', font: '700 17px/32px Inter, sans-serif', textAlign: 'center',
       zIndex: 99999, pointerEvents: 'none', border: '2px solid #fff', boxShadow: '0 2px 6px rgba(0,0,0,.6)', textShadow: '0 1px 2px rgba(0,0,0,.6)' });
-    document.body.appendChild(frame);
     document.body.appendChild(dot);
   }
 }
@@ -237,9 +233,9 @@ OVERLAY_JS = """
 def _markdown(pages: list[tuple[Page, list[tuple[int, Step]]]], lang: str) -> str:
     """One section per page: the picture, then one line per number in the marker's colour."""
     sr = lang == "sr"
-    head = ("# Vizuelni vodič\n\nSvaka stranica ForgeSRE-a sa obojenim brojevima; ispod slike piše šta je koji broj.\n"
+    head = ("# Vizuelni vodič\n\nSvaka stranica ForgeSRE-a sa crvenim brojevima; ispod slike piše šta je koji broj.\n"
             "Slike pravi `scripts/visual_guide.py`; engleska verzija: [visual-guide.md](visual-guide.md).\n") if sr else (
-            "# Visual guide\n\nEach ForgeSRE page with coloured numbers; under the picture, what each number is.\n"
+            "# Visual guide\n\nEach ForgeSRE page with numbered red circles; under the picture, what each number is.\n"
             "The pictures come from `scripts/visual_guide.py`; Serbian: [vizuelni-vodic-sr.md](vizuelni-vodic-sr.md).\n")
     out = [head]
     out.append("\n".join(f"- [{p.title_sr if sr else p.title_en}](#{p.key})" for p, _ in pages) + "\n")
