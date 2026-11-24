@@ -24,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WIDTH, HEIGHT, MAX_HEIGHT = 1440, 900, 2400
-COLORS = ["#ff5252", "#ffb300", "#00c853", "#2979ff", "#d500f9", "#00b8d4", "#ff6d00", "#c6ff00", "#f50057", "#64dd17", "#651fff", "#ffd600"]
+COLORS = ["#ff1744"]  # one red for every mark, so only the number tells the order
 
 
 def card(title: str) -> str:
@@ -67,8 +67,8 @@ PAGES: list[Page] = [
                   "Filter po ozbiljnosti, ili ukucaj host, IP ili broj incidenta."),
              Step("tbody tr >> nth=0 >> td.sev-cell", "The incident name, coloured by severity (red critical, orange high, yellow warning). Click it to open the incident.",
                   "Ime incidenta, obojeno po ozbiljnosti (crveno kritično, narandžasto visoko, žuto upozorenje). Klik otvara incident."),
-             Step("tbody tr >> nth=0 >> text=Not acked", "Nobody has taken it yet. Acknowledge it so escalation stops.",
-                  "Niko ga još nije preuzeo. Potvrdi ga (Acknowledge) da eskalacija stane."),
+             Step("tbody tr >> nth=0 >> text=Not acknow", "Acknow.: Not acknow means nobody has taken it yet; acknowledge it so escalation stops. Who acknowledged it is on the incident page.",
+                  "Acknow.: Not acknow znači da ga niko još nije preuzeo; potvrdi ga da eskalacija stane. Ko ga je potvrdio piše na stranici incidenta."),
              Step("tbody tr >> nth=0 >> input[type=checkbox]", "Tick rows to acknowledge, assign or resolve several at once.",
                   "Čekiraj redove da potvrdiš, dodeliš ili rešiš više odjednom."),
              Step(card("Shift handover"), "Shift handover: write what the next shift must know.", "Primopredaja smene: napiši šta sledeća smena treba da zna."),
@@ -105,7 +105,7 @@ PAGES: list[Page] = [
              Step("button:has-text('All severities') >> xpath=..", "Severity, search and team filters.", "Filteri: ozbiljnost, pretraga i tim."),
              Step("text=Save view", "Save the current filters as a view to open again later.", "Sačuvaj trenutne filtere kao prikaz za kasnije."),
              Step("text=Export CSV", "Pick dates and export the list as CSV.", "Izaberi datume i izvezi listu u CSV."),
-             Step("thead", "Columns: severity, start, host, problem, source, ack, tier, messages sent, ForgeRCA and ForgeAI.",
+             Step("thead", "Columns: severity, start, host, problem, source, Acknow. (acknowledged), tier, messages sent, ForgeRCA and ForgeAI.",
                   "Kolone: ozbiljnost, početak, host, problem, izvor, potvrda, nivo eskalacije, poslate poruke, ForgeRCA i ForgeAI."),
              Step("tbody tr >> nth=0 >> td.sev-cell", "The incident name in its severity colour; badges show SLA breached, flapping or major.",
                   "Ime incidenta u boji ozbiljnosti; oznake pokazuju probijen SLA, flapping ili major."),

@@ -45,14 +45,12 @@ function IncidentRow({ row, picked, onPick }: { row: NocIncident; picked?: boole
       <td className="small muted">{row.source || "—"}</td>
       <td>
         {row.ack_at ? (
-          <div className="cell-stack">
-            <span className="small" style={{ color: "var(--ok)", fontWeight: 600 }}>Acked</span>
-            <span className="small muted">{row.ack_by}</span>
-          </div>
+          // who and when are on the incident page and in the tooltip; the cell stays short so Tier fits
+          <span className="small" style={{ color: "var(--ok)", fontWeight: 600 }} title={`Acknowledged by ${row.ack_by || "someone"}`}>Acknow</span>
         ) : row.resolved_at ? (
           <span className="small muted">—</span>
         ) : (
-          <span className="small" style={{ color: `var(--${tone === "crit" ? "crit" : "high"})`, fontWeight: 600 }}>Not acked</span>
+          <span className="small" style={{ color: `var(--${tone === "crit" ? "crit" : "high"})`, fontWeight: 600, whiteSpace: "nowrap" }}>Not acknow</span>
         )}
       </td>
       <td><Chip tone="off">{tierLabel(row.level)}</Chip></td>
@@ -108,7 +106,7 @@ export function IncidentTable({ rows, loaded, canWork = false, onChanged }: { ro
             <th style={{ width: 150 }}>Host</th>
             <th>Problem</th>
             <th style={{ width: 90 }}>Source</th>
-            <th style={{ width: 96 }}>Ack</th>
+            <th style={{ width: 96 }} title="Acknowledged">Acknow.</th>
             <th style={{ width: 80 }}>Tier</th>
             <th style={{ width: 80 }}>Messages</th>
             <th style={{ width: 170 }}>ForgeRCA</th>

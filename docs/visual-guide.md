@@ -30,7 +30,7 @@ The start page: what is burning now, who is on call and whether the hosts answer
 4. Tabs: not acknowledged, acknowledged, resolved today. The number is how many.
 5. Filter by severity, or type a host, IP or incident number.
 6. The incident name, coloured by severity (red critical, orange high, yellow warning). Click it to open the incident.
-7. Nobody has taken it yet. Acknowledge it so escalation stops.
+7. Acknow.: Not acknow means nobody has taken it yet; acknowledge it so escalation stops. Who acknowledged it is on the incident page.
 8. Tick rows to acknowledge, assign or resolve several at once.
 9. Shift handover: write what the next shift must know.
 10. Hosts by group: green when all answer.
@@ -70,7 +70,7 @@ Every incident, newest first, with filters, saved views and CSV export.
 3. Severity, search and team filters.
 4. Save the current filters as a view to open again later.
 5. Pick dates and export the list as CSV.
-6. Columns: severity, start, host, problem, source, ack, tier, messages sent, ForgeRCA and ForgeAI.
+6. Columns: severity, start, host, problem, source, Acknow. (acknowledged), tier, messages sent, ForgeRCA and ForgeAI.
 7. The incident name in its severity colour; badges show SLA breached, flapping or major.
 8. Tier: how far escalation has gone.
 

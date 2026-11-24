@@ -30,7 +30,7 @@ Početna strana: šta gori sada, ko je dežuran i da li hostovi odgovaraju. Sama
 4. Tabovi: nepotvrđeni, potvrđeni, rešeni danas. Broj pokazuje koliko ih ima.
 5. Filter po ozbiljnosti, ili ukucaj host, IP ili broj incidenta.
 6. Ime incidenta, obojeno po ozbiljnosti (crveno kritično, narandžasto visoko, žuto upozorenje). Klik otvara incident.
-7. Niko ga još nije preuzeo. Potvrdi ga (Acknowledge) da eskalacija stane.
+7. Acknow.: Not acknow znači da ga niko još nije preuzeo; potvrdi ga da eskalacija stane. Ko ga je potvrdio piše na stranici incidenta.
 8. Čekiraj redove da potvrdiš, dodeliš ili rešiš više odjednom.
 9. Primopredaja smene: napiši šta sledeća smena treba da zna.
 10. Hostovi po grupama: zeleno kad svi odgovaraju.
