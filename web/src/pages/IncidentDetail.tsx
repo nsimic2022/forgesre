@@ -97,7 +97,8 @@ export function IncidentDetailPage() {
       {postmortem ? <PostmortemPanel number={data.number} onClose={() => setPostmortem(false)} /> : null}
       {mail ? <SendReport number={data.number} onClose={() => setMail(false)} /> : null}
       {error ? <div className="banner error" role="alert">{error}</div> : null}
-      <div className="banner" style={{ background: open ? "var(--high-bg)" : "var(--ok-bg)", border: "1px solid var(--border)" }}>
+      {/* plain card colour like the rest of the page; the state is in the words and the SLA chips */}
+      <div className="banner" style={{ background: "var(--s1)", border: "1px solid var(--border)" }}>
         <strong>{data.status}</strong>
         {data.ack_at ? ` · acknowledged by ${data.ack_by} at ${clock(data.ack_at)}` : open ? " · not acknowledged" : ""}
         {data.resolved_at ? ` · resolved by ${data.resolved_by || "system"} at ${clock(data.resolved_at)}` : ""}
