@@ -242,6 +242,9 @@ doctor — same checks as Settings › Health. Overall HEALTHY or DEGRADED.
   ./forgesre doctor
   ./doctor.sh
 
+One row per part, marks in one column: ✓ ok · – off (not set up) · ! warning, with the
+reason · ✗ problem, with Test and Fix lines.
+
 Core API is curl /api/v1/health (no auth). That probe decides if Core is up.
 /api/v1/system/doctor needs the webhook token only after health answers.
 Core (container) is the compose service stack row (always-ok dummy, not a
