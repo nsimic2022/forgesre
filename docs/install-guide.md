@@ -449,9 +449,10 @@ is not in the facts is rejected, and so is any answer with a command that change
 `./forgesre forgeai INC-…`).
 
 **Should it get more?** No. A small local model with direct database access would be wrong more
-often, slower, and could see what the operator may not. The better road is more read-only tools
-(open incidents in the same location, backup state), each with its own limit and log, like the
-metrics and logs today. Platform settings stay out of the model's reach.
+often, slower, and could see what the operator may not. The better road is read-only tools, each
+with its own limit and log; since 2.1 an investigation also has `recent` (incidents on the same asset in
+30 days), `known_errors`, `neighbours` (devices in the same rack or site with an open incident), `network`
+(BGP/OSPF) and `power` (UPS and sensors). Platform settings stay out of the model's reach.
 
 The cloud model gets the same context as the local one, and only when an Engineer picks it. An
 MCP client gets tool results without mail addresses, phones or secrets.
@@ -489,7 +490,8 @@ service, integration, queue and backup, and says how to fix each problem.
 | No alarms from another Alertmanager | Wrong token or port 8080 closed | `./forgesre journal`, curl with the Bearer token |
 
 Routine: update makes a backup each time, and `checks.backup_max_age_hours` raises an alarm when
-the backup is too old. Keep the passwords from `secrets/secrets.env` outside the VM (a password
+the backup is too old. With `FORGESRE_OFFBOX=dir` or `s3` in `.env` every backup is also copied off the
+box (NFS or S3; `./forgesre backup offbox test`). Keep the passwords from `secrets/secrets.env` outside the VM (a password
 manager): without them a restore on a new machine is not possible.
 
 ## 12. NOC features at a glance

@@ -419,7 +419,7 @@ Cloud model dobija isti kontekst kao lokalni, samo kad ga Engineer izabere. MCP 
 | Integracija crvena u Settings | Pogrešan URL ili token | Dugme Test, pa `./forgesre settings set-secret …` |
 | Nema alarma iz spoljnog Alertmanager-a | Pogrešan token ili port 8080 zatvoren | `./forgesre journal`, curl sa Bearer tokenom |
 
-Redovno: backup ide automatski uz update, a `checks.backup_max_age_hours` diže alarm kad je backup prestar. Uz `FORGESRE_OFFBOX=dir` ili `s3` u `.env` svaki backup se kopira i van servera (NFS ili S3; `./forgesre backup offbox test`). Lozinke iz `secrets/secrets.env` čuvaj van VM-a (password manager), jer bez njih restore na novoj mašini nije moguć.
+Redovno: backup ide automatski uz update, a `checks.backup_max_age_hours` diže alarm kad je backup prestar. Uz `FORGESRE_OFFBOX=dir` ili `s3` u `.env` svaki backup se kopira i van servera (NFS ili S3; `./forgesre backup offbox test`). Uz `FORGESRE_OFFBOX=dir` ili `s3` u `.env` svaki backup se kopira i van servera (NFS ili S3; `./forgesre backup offbox test`). Lozinke iz `secrets/secrets.env` čuvaj van VM-a (password manager), jer bez njih restore na novoj mašini nije moguć.
 
 ## 12. NOC funkcije na jednom mestu
 
