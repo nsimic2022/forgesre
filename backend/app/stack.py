@@ -41,6 +41,7 @@ COMPONENT_LABELS = {
     "https": "HTTPS",
     "offbox": "Off-box backup",
     "backup_verify": "Backup check",
+    "containers": "Containers",
 }
 
 # Dashboard ForgeSRE card cubes: must fit a ~4rem cube.
@@ -72,6 +73,7 @@ COMPONENT_SHORT = {
     "https": "HTTPS",
     "offbox": "Off-box backup",
     "backup_verify": "Backup check",
+    "containers": "Containers",
     "redis": "Redis",
     "mailpit": "Mailpit",
 }

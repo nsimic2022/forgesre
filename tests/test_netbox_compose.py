@@ -684,6 +684,7 @@ def test_docs_say_bundled_netbox_default_on():
 
 # Hub-verified 27 Aug 2026. Dead tag v4.4-3.2.0 is not in this list.
 _COMPOSE_IMAGE_PINS = {
+    "docker-ro": "tecnativa/docker-socket-proxy:v0.4.1",
     "prometheus": "prom/prometheus:v2.54.1",
     "alertmanager": "prom/alertmanager:v0.27.0",
     "snmp-exporter": "prom/snmp-exporter:v0.26.0",

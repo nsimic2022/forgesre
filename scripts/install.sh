@@ -337,6 +337,7 @@ write_files() {
   set_kv "$ROOT/.env" FORGESRE_TIMEZONE "${TIMEZONE}"
   set_kv "$ROOT/.env" FORGESRE_HTTP_PORT "${HTTP_PORT}"
   set_kv "$ROOT/.env" GRAFANA_PORT "3000"
+  set_kv "$ROOT/.env" FORGESRE_DOCKER_RO_PORT "2377"
   set_kv "$ROOT/.env" FORGESRE_PROFILE "${PROFILE}"
   set_kv "$ROOT/.env" COMPOSE_PROFILES "${compose_profiles}"
   set_kv "$ROOT/.env" FORGESRE_OPTIONAL_PROFILES "1"

@@ -49,6 +49,8 @@ services:
       FORGESRE_FILES_WRITABLE: "0"
       # all = web + background loops; web = requests only (run the worker profile for the loops)
       FORGESRE_ROLE: ${FORGESRE_CORE_ROLE:-all}
+      # Settings › Containers reads state and logs through docker-ro (read only), never the socket itself
+      FORGESRE_DOCKER_URL: http://127.0.0.1:${FORGESRE_DOCKER_RO_PORT:-2377}
     volumes: &core_volumes
       # rw: Discovery Confirm & scan persists discovery.cidrs. :ro was EROFS → HTTP 500.
       - ./config/forgesre.yml:/config/forgesre.yml
@@ -200,6 +202,22 @@ services:
       - ${FORGESRE_DATA:-./data}/alloy:/var/lib/alloy/data
     depends_on:
       - loki
+    restart: unless-stopped
+
+  # Read-only window on Docker for Settings › Containers and the doctor row: GET on containers only
+  # (list, inspect, logs), no POST, no other API. Published on 127.0.0.1 only, for Core.
+  docker-ro:
+    image: tecnativa/docker-socket-proxy:v0.4.1
+    environment:
+      CONTAINERS: 1
+      POST: 0
+      PING: 1
+      VERSION: 1
+      LOG_LEVEL: warning
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:${FORGESRE_DOCKER_RO_PORT:-2377}:2375"
     restart: unless-stopped
 
   grafana:

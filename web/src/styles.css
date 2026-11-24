@@ -445,3 +445,7 @@ tr.picked td { background: var(--s2); }
 .report-section-head h2 { margin: 0; font-size: 1.15rem; }
 .explain-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 .explain-pair > div { display: flex; flex-direction: column; gap: 4px; background: var(--s1); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+/* Settings › Containers */
+.log-view { max-height: 60vh; overflow: auto; margin: 0; padding: 10px 12px; background: var(--s1); border: 1px solid var(--border); border-radius: var(--radius);
+  font: 12px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
+.log-view .log-err { color: var(--crit); }

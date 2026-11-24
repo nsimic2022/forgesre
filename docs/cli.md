@@ -84,8 +84,8 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `restart` | Restart containers that already exist (Postgres first, Core last). No git pull, install, render, or `.env` / `secrets/` writes. |
 | `render-monitoring` | Rewrite `data/generated/{prometheus,alertmanager,snmp,alerts}.yml` plus `config.alloy` and `loki.yml`; reload snmp_exporter and Prometheus; recreate Alloy/Loki when those files changed. |
 | `snmp-auths` | Write per-asset SNMP auths (Custom community / v3) into `snmp.yml`; reload snmp_exporter. |
-| `status` | `docker compose ps` |
-| `logs [service]` | Container logs (last 100 lines). TAB completes service names. |
+| `status` | `docker compose ps` (the same list as Settings › Containers) |
+| `logs [service]` | Container logs (last 100 lines). TAB completes service names. Settings › Containers › *Logs* shows the same tail in the browser, with passwords and tokens masked. |
 | `config` | Print `config/forgesre.yml` |
 | `version` | `FORGESRE_VERSION` from `.env` |
 | `secrets-check` | Refuse-to-start defaults: `SECRET_KEY` / webhook token |
