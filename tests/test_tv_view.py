@@ -58,3 +58,44 @@ def test_tv_api_carries_the_new_layout():
     client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"})
     body = client.get("/api/v1/tv").json()
     assert {"days", "hours", "tiles", "counts", "clock"} <= set(body)
+
+
+def test_day_clock_splits_one_day_into_am_and_pm():
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    from app.noc import incident_day
+
+    db = _db()
+    zone = ZoneInfo("Europe/Belgrade")
+    day = (utcnow() - timedelta(days=3)).astimezone(zone).date()
+    at = lambda h, m=0: datetime(day.year, day.month, day.day, h, m, tzinfo=zone).astimezone(timezone.utc)  # noqa: E731
+    base = incident_day(db, day, "Europe/Belgrade")
+    made = [
+        Incident(number=f"INC-DAY-{uuid4().hex[:6]}", title="day-clock", severity=sev, status=status,
+                 fingerprint=f"day:{uuid4().hex}", started_at=when)
+        for sev, status, when in [("CRITICAL", "RESOLVED", at(14, 5)), ("CRITICAL", "RESOLVED", at(14, 40)),
+                                  ("WARNING", "RESOLVED", at(14, 50)), ("HIGH", "RESOLVED", at(9)),
+                                  ("CRITICAL", "SUPPRESSED", at(14)), ("WARNING", "RESOLVED", at(23, 59) + timedelta(minutes=2))]
+    ]
+    db.add_all(made)
+    db.commit()
+    try:
+        out = incident_day(db, day, "Europe/Belgrade")
+        assert [h["hour"] for h in out["am"]] == list(range(12)) and [h["hour"] for h in out["pm"]] == list(range(12, 24))
+        # 14:00 local: two criticals and a warning; the suppressed one and the next-day one are left out
+        delta = lambda half, i, k: out[half][i][k] - base[half][i][k]  # noqa: E731
+        assert (delta("pm", 2, "critical"), delta("pm", 2, "warning")) == (2, 1)
+        assert delta("am", 9, "high") == 1
+        assert delta("pm", 11, "warning") == 0 and out["total"] - base["total"] == 4
+        client = TestClient(create_app())
+        client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"})
+        assert client.get(f"/api/v1/tv/day?date={day.isoformat()}").status_code == 200
+        assert client.get("/api/v1/tv/day?date=yesterday").status_code == 400
+        assert client.get(f"/api/v1/tv/day?date={(day + timedelta(days=10)).isoformat()}").status_code == 400
+        assert client.get(f"/api/v1/tv/day?date={(day - timedelta(days=60)).isoformat()}").status_code == 400
+    finally:
+        for i in made:
+            db.delete(i)
+        db.commit()
+        db.close()

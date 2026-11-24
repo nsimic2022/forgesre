@@ -148,6 +148,8 @@ export interface IncidentClockData {
   total: number;
 }
 
+export type DayHour = { hour: number; critical: number; high: number; warning: number };
+export type TvDayDetail = { date: string; label: string; timezone: string; am: DayHour[]; pm: DayHour[]; total: number; critical: number; high: number; warning: number };
 export type TvDay = { date: string; label: string; day: number; incidents: number; critical: number; high: number; worst: string; mttr_min: number | null };
 export type TvHour = { at: string; hour: number; open: number; new: number; critical: number; high: number; acked_fast_pct: number | null };
 export type TvTile = {

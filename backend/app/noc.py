@@ -7,7 +7,7 @@ one for notifications, one for jobs, one for assets. No evidence, no timelines.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func
@@ -244,4 +244,44 @@ def incident_clock(db: Session, now: datetime | None = None, hours: int = 12, tz
         "timezone": str(zone),
         "hours": buckets,
         "total": sum(b["critical"] + b["high"] + b["warning"] for b in buckets),
+    }
+
+
+DAY_LOOKBACK = 31
+
+
+def incident_day(db: Session, day: date, tz: str | None = None) -> dict[str, Any]:
+    """Incidents opened per local hour on one past day, split into AM (00-11) and PM (12-23).
+
+    Backs the day clock on the wall screen (click a day in the week strip). Same rules as
+    incident_clock: quiet incidents are left out, severities are critical / high / warning.
+    """
+    from zoneinfo import ZoneInfo
+
+    zone = ZoneInfo(tz or settings.timezone or "UTC")
+    start = datetime(day.year, day.month, day.day, tzinfo=zone)
+    end = start + timedelta(days=1)
+    buckets = [{"hour": h, "critical": 0, "high": 0, "warning": 0} for h in range(24)]
+    rows = (
+        db.query(Incident.started_at, Incident.severity)
+        .filter(Incident.started_at >= start.astimezone(timezone.utc) - timedelta(hours=1),
+                Incident.started_at < end.astimezone(timezone.utc) + timedelta(hours=1),
+                Incident.status.notin_(QUIET_STATUSES))
+        .all()
+    )
+    for started_at, severity in rows:
+        local = _aware(started_at).astimezone(zone)
+        if local.date() != day:
+            continue
+        key = {"CRITICAL": "critical", "HIGH": "high"}.get(str(severity or "").upper(), "warning")
+        buckets[local.hour][key] += 1
+    totals = {k: sum(b[k] for b in buckets) for k in ("critical", "high", "warning")}
+    return {
+        "date": day.isoformat(),
+        "label": start.strftime("%a %d %b"),
+        "timezone": str(zone),
+        "am": buckets[:12],
+        "pm": buckets[12:],
+        "total": sum(totals.values()),
+        **totals,
     }

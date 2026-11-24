@@ -1,8 +1,8 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { dialAngle } from "../components/IncidentClock";
 import type { TvData } from "../lib/api";
-import { TvPage } from "./Tv";
+import { TvPage, tileOrder } from "./Tv";
 
 const hours = Array.from({ length: 12 }, (_, i) => ({ start: `2026-11-19T${String(7 + i).padStart(2, "0")}:00:00+01:00`, hour: 7 + i, critical: i === 11 ? 1 : 0, high: i % 3 === 0 ? 2 : 0, warning: 1 }));
 const tv: TvData = {
@@ -40,10 +40,10 @@ describe("TV mode", () => {
     expect(await screen.findByText("Host down")).toBeTruthy();
     expect(screen.getByText("not acked")).toBeTruthy();
     expect(screen.getByText("esx-prod-03 · INC-0412 · Tier 2")).toBeTruthy();
-    expect(screen.getByLabelText("Today: 6 incidents, 1 critical")).toBeTruthy();
+    expect(screen.getByLabelText("Today: 6 incidents, 1 critical. Show this day's clock")).toBeTruthy();
     expect(screen.getByRole("img", { name: "18 incidents in the last 12 hours, now 18:04" })).toBeTruthy();
     expect(screen.getByRole("img", { name: /Incidents open per hour, last 24 hours: 2 new/ })).toBeTruthy();
-    expect(screen.getByText(/50% acked within 15 min/)).toBeTruthy();
+    expect(screen.getByText(/50% acked ≤15 min/)).toBeTruthy();
     expect(screen.getByLabelText("Time to acknowledge: 4 min, On target")).toBeTruthy();
     expect(screen.getByText("3 h 10 min left")).toBeTruthy();
     expect(screen.getByText("1 critical", { selector: ".tvw-pill" })).toBeTruthy();
@@ -51,7 +51,7 @@ describe("TV mode", () => {
     expect(screen.queryByText("Rotate")).toBeNull();
   });
 
-  it("is calm when nothing is open and says how many rows did not fit", async () => {
+  it("is calm when nothing is open and pages the rows that do not fit", async () => {
     const many = Array.from({ length: 11 }, (_, i) => ({ ...tv.incidents.active[0], number: `INC-${1000 + i}`, title: `Alarm ${i}` }));
     const quiet = { ...tv, incidents: { active: [], acknowledged: [], resolved_today: [] } };
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(quiet), { status: 200, headers: { "Content-Type": "application/json" } })));
@@ -60,8 +60,32 @@ describe("TV mode", () => {
     cleanup();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ...tv, incidents: { active: many, acknowledged: [], resolved_today: [] } }), { status: 200, headers: { "Content-Type": "application/json" } })));
     render(<TvPage />);
-    expect(await screen.findByText("+3 more not shown ·")).toBeTruthy();
+    expect(await screen.findByText("1 / 2")).toBeTruthy();
     expect(screen.getAllByText(/^Alarm \d+$/)).toHaveLength(8);
+    fireEvent.click(screen.getByLabelText("Next page"));
+    expect(screen.getByText("2 / 2")).toBeTruthy();
+    expect(screen.getAllByText(/^Alarm \d+$/)).toHaveLength(3);
+  });
+
+  it("opens a past day's clock, AM on the left and PM on the right", async () => {
+    const half = (counts: number[]) => counts.map((n, i) => ({ hour: i, critical: n > 3 ? 2 : 0, high: 0, warning: n > 3 ? n - 2 : n }));
+    const day = { date: "2026-11-14", label: "Fri 14 Nov", timezone: "Europe/Belgrade", am: half(Array(12).fill(0)),
+      pm: half([0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0]).map((h) => ({ ...h, hour: h.hour + 12 })), total: 9, critical: 2, high: 0, warning: 7 };
+    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(String(url).includes("/tv/day") ? day : tv), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TvPage />);
+    fireEvent.click(await screen.findByLabelText(/^Mon: 1 incidents/));
+    // the busier half comes first
+    expect(await screen.findByRole("img", { name: "Fri 14 Nov PM · 12–24: 9 incidents, 2 critical, 0 high, 7 warning" })).toBeTruthy();
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain("/api/v1/tv/day?date=2026-11-14");
+    fireEvent.click(screen.getByText("‹ AM"));
+    expect(screen.getByRole("img", { name: /Fri 14 Nov AM · 00–12: 0 incidents/ })).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Back to the last 12 hours"));
+    expect(screen.getByRole("img", { name: "18 incidents in the last 12 hours, now 18:04" })).toBeTruthy();
+  });
+
+  it("keeps the shift tile at the far right", () => {
+    expect(tileOrder(tv.tiles!).map((t) => t.key)).toEqual(["mtta", "noisy", "shift"]);
   });
 
   it("uses Navy unless this browser chose a theme or the address names one", async () => {

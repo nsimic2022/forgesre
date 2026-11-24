@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { IncidentClockData } from "../lib/api";
+import type { DayHour, IncidentClockData, TvDayDetail } from "../lib/api";
 
 const SIZE = 560;
 const C = SIZE / 2;
@@ -100,6 +100,80 @@ export function IncidentClock({ clock, open, critical }: { clock: IncidentClockD
         <caption>Incidents per hour, last 12 hours</caption>
         <thead><tr><th>Hour</th><th>Critical</th><th>High</th><th>Warning</th></tr></thead>
         <tbody>{clock.hours.map((h) => <tr key={h.start}><td>{hh(h.hour)}:00</td><td>{h.critical}</td><td>{h.high}</td><td>{h.warning}</td></tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+
+const sum = (h: DayHour) => h.critical + h.high + h.warning;
+
+/**
+ * One past day on the wall-clock dial, half a day at a time: ‹ AM on the left, PM › on the right.
+ * Each hour is stacked by severity with its count written inside; the centre names the half and
+ * its totals per severity. Starts on the busier half so a stormy afternoon shows first.
+ */
+export function DayClock({ day, onClose }: { day: TvDayDetail; onClose: () => void }) {
+  const busyPm = day.pm.reduce((s, h) => s + sum(h), 0) > day.am.reduce((s, h) => s + sum(h), 0);
+  const [half, setHalf] = useState<"am" | "pm">(busyPm ? "pm" : "am");
+  const hours = day[half];
+  const peak = Math.max(4, ...day.am.map(sum), ...day.pm.map(sum));
+  const unit = (R_OUT - R_IN) / peak;
+  const step = TAU / 12;
+  const n = (k: "critical" | "high" | "warning") => hours.reduce((s, h) => s + h[k], 0);
+  const total = n("critical") + n("high") + n("warning");
+  const name = half === "am" ? "AM · 00–12" : "PM · 12–24";
+  const summary = `${day.label} ${name}: ${total} incidents, ${n("critical")} critical, ${n("high")} high, ${n("warning")} warning`;
+  return (
+    <div className="cell-stack tvw-dayclock" style={{ alignItems: "center", gap: 8 }}>
+      <div className="tvw-dayclock-head">
+        <button type="button" className={`tvw-half${half === "am" ? " on" : ""}`} onClick={() => setHalf("am")} aria-pressed={half === "am"}>‹ AM</button>
+        <strong>{day.label}</strong>
+        <button type="button" className={`tvw-half${half === "pm" ? " on" : ""}`} onClick={() => setHalf("pm")} aria-pressed={half === "pm"}>PM ›</button>
+        <button type="button" className="tvw-half close" onClick={onClose} aria-label="Back to the last 12 hours">✕</button>
+      </div>
+      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width="100%" style={{ maxWidth: 640 }} role="img" aria-label={summary}>
+        <title>{summary}</title>
+        <circle cx={C} cy={C} r={RIM} fill="none" stroke="var(--border)" strokeWidth={2} />
+        {hours.map((h) => {
+          const a0 = dialAngle(h.hour) + 0.012;
+          const a1 = dialAngle(h.hour) + step - 0.012;
+          let r = R_IN;
+          const count = sum(h);
+          const [lx, ly] = pt((a0 + a1) / 2, Math.min(R_OUT - 18, R_IN + count * unit + 20));
+          return (
+            <g key={h.hour}>
+              <path d={wedge(a0, a1, R_IN, R_OUT)} fill="var(--s2)" opacity={0.55} />
+              {LAYERS.map((layer) => {
+                const v = h[layer.key];
+                if (!v) return null;
+                const d = wedge(a0, a1, r + 1, r + v * unit - 1);
+                r += v * unit;
+                return <path key={layer.key} d={d} fill={layer.color}><title>{`${hh(h.hour)}:00 ${v} ${layer.label.toLowerCase()}`}</title></path>;
+              })}
+              {count ? <text x={lx} y={ly + 7} textAnchor="middle" fontSize={20} fontWeight={700} fill="var(--text)">{count}</text> : null}
+            </g>
+          );
+        })}
+        {Array.from({ length: 12 }, (_, i) => {
+          const [x, y] = pt(dialAngle(i), RIM + 22);
+          const label = half === "am" ? (i === 0 ? 12 : i) : i + 12;
+          return <text key={i} x={x} y={y + 6} textAnchor="middle" fontSize={17} fill="var(--faint)" fontFamily="var(--mono)">{label}</text>;
+        })}
+        <text x={C} y={C - 22} textAnchor="middle" fontSize={22} fill="var(--muted)">{half.toUpperCase()}</text>
+        <text x={C} y={C + 20} textAnchor="middle" fontSize={50} fontWeight={700} fill="var(--text)">{total}</text>
+        <text x={C} y={C + 48} textAnchor="middle" fontSize={16} fill="var(--muted)">{total ? "incidents" : "quiet"}</text>
+      </svg>
+      <div className="row tvw-daytotals" style={{ gap: 14, justifyContent: "center" }}>
+        {LAYERS.map((layer) => (
+          <span key={layer.key} className="tvw-daytotal" style={{ borderColor: layer.color, color: n(layer.key) ? layer.color : "var(--faint)" }}>
+            {layer.label} <strong>{n(layer.key)}</strong>
+          </span>
+        ))}
+      </div>
+      <table className="vh">
+        <caption>{`Incidents per hour, ${day.label} ${name}`}</caption>
+        <thead><tr><th>Hour</th><th>Critical</th><th>High</th><th>Warning</th></tr></thead>
+        <tbody>{hours.map((h) => <tr key={h.hour}><td>{hh(h.hour)}:00</td><td>{h.critical}</td><td>{h.high}</td><td>{h.warning}</td></tr>)}</tbody>
       </table>
     </div>
   );

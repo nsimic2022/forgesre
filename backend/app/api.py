@@ -4054,6 +4054,27 @@ def tv_api(db: Session = Depends(get_db), user: User = Depends(require("read_das
     return data
 
 
+@router.get("/tv/day")
+def tv_day_api(date: str, db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict[str, Any]:
+    """Day clock for the wall screen: incidents per hour of one day (last 31 days), AM and PM."""
+    from datetime import date as Date
+    from zoneinfo import ZoneInfo
+
+    from app.noc import DAY_LOOKBACK, incident_day
+
+    try:
+        day = Date.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    try:
+        today = utcnow().astimezone(ZoneInfo(settings.timezone or "UTC")).date()
+    except Exception:
+        today = utcnow().date()
+    if day > today or (today - day).days > DAY_LOOKBACK:
+        raise HTTPException(status_code=400, detail=f"date must be within the last {DAY_LOOKBACK} days")
+    return incident_day(db, day)
+
+
 @router.get("/noc")
 def noc_api(db: Session = Depends(get_db), user: User = Depends(require("read_dashboard"))) -> dict[str, Any]:
     """NOC overview for the new UI: counts, incidents by tab, health by group, on-call, AI mode."""
