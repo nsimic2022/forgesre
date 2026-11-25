@@ -38,7 +38,7 @@ in the line under the model status (*Answers: Strict · Balanced · Open*) and d
 A chat without an incident always answers from general knowledge. In every mode ForgeAI only
 reads, never gives commands that change a system and never invents this site's hosts, addresses,
 numbers or log lines. API: `POST /api/v1/forgeai/chats/{id}/mode` `{mode}` (empty = the default).
-Code: `forgeai.chat_rules`.
+A model that answers a chat in plain text instead of the JSON wrapper still gets its reply shown (`forgeai.plain_answer`); in a chat about an incident an IP address not in the facts is always refused, and only *strict* also refuses numbers that are not in the facts. Code: `forgeai.chat_rules`.
 
 **Automatic analysis, one at a time.** Every new incident gets ForgeRCA within seconds and then a
 ForgeAI pass (cause and first checks) with nobody pressing anything. The model takes one request

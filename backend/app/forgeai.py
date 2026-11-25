@@ -76,7 +76,7 @@ INCIDENT_CHAT_BALANCED = (
     "- Never give commands that restart, delete or change something; read-only checks are fine.\n"
     "- Plain English, short paragraphs or a short list, for a NOC operator.\n"
     "- vendor_docs (D1, D2…) are excerpts of manuals; use them when they fit and cite them like [D1].\n"
-    "- Answer with JSON only, exactly this shape: {shape}\n"
+    "- Answer with JSON only, exactly this shape: {shape}; even a one-line reply goes inside it.\n"
 )
 INCIDENT_CHAT_OPEN = (
     "You are ForgeAI, the assistant inside ForgeSRE, a NOC appliance. You only read; you never act.\n"
@@ -87,7 +87,7 @@ INCIDENT_CHAT_OPEN = (
     "- Never invent numbers, host names, IP addresses or log lines of this site.\n"
     "- Never give commands that restart, delete or change something; read-only checks are fine.\n"
     "- vendor_docs (D1, D2…) are excerpts of manuals; use them when they fit and cite them like [D1].\n"
-    "- Answer with JSON only, exactly this shape: {shape}\n"
+    "- Answer with JSON only, exactly this shape: {shape}; even a one-line reply goes inside it.\n"
 )
 CHAT_MODES = ("strict", "balanced", "open")
 
@@ -104,6 +104,17 @@ def chat_rules(incident: Incident | None, mode: str = "") -> str:
 
     mode = mode if mode in CHAT_MODES else settings.forgeai_chat_mode
     return {"strict": BASE_RULES, "open": INCIDENT_CHAT_OPEN}.get(mode, INCIDENT_CHAT_BALANCED)
+
+
+def plain_answer(raw: str) -> str:
+    """The reply text from a model answer that is not valid JSON: thinking and code fences removed;
+    a half-written {"answer": "…"} gives its text. Empty when there is nothing to show."""
+    text = re.sub(r"(?s)<think>.*?(</think>|$)", "", raw or "").strip()
+    text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text).strip()
+    m = re.match(r'(?s)^\{\s*"answer"\s*:\s*"(.*?)("\s*\}?\s*)?$', text)
+    if m:
+        text = m.group(1).replace("\\n", "\n").replace('\\"', '"')
+    return text[:3000].strip()
 
 
 THINK_BUDGET = 1024  # default extra tokens when ai.llm.thinking is on (ai.llm.think_tokens)
@@ -500,7 +511,8 @@ IP = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 SHELL = re.compile(r"(^|[\s`'\"])(sudo|rm\s+-|systemctl\s|service\s+\S+\s+(restart|stop)|kill\s|reboot|shutdown|mkfs|dd\s+if=|docker\s|kubectl\s+delete)", re.I)
 
 
-def check_answer(task: str, parsed: dict[str, Any] | None, context: str, *, strict: bool = True) -> tuple[dict[str, Any], str]:
+def check_answer(task: str, parsed: dict[str, Any] | None, context: str, *, strict: bool = True,
+                 numbers: bool | None = None) -> tuple[dict[str, Any], str]:
     """(clean answer, reason) — reason is empty when the answer may be shown.
 
     ``strict=False`` (a general chat with no incident) skips the IP and invented-number checks, since
@@ -526,7 +538,8 @@ def check_answer(task: str, parsed: dict[str, Any] | None, context: str, *, stri
     text = " ".join([*(v for v in answer.values() if isinstance(v, str)), *(i for v in answer.values() if isinstance(v, list) for i in v)])
     if strict and set(IP.findall(text)) - set(IP.findall(context)):
         return {}, "the answer names an IP address that is not in the facts"
-    if strict and invented_numbers(text, context):
+    # numbers: None = like strict; a balanced or open chat about an incident may use general-knowledge numbers
+    if (strict if numbers is None else numbers) and invented_numbers(text, context):
         return {}, "the answer has a number that is not in the facts"
     if SHELL.search(text):
         return {}, "the answer contains a shell command"
@@ -607,10 +620,17 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
             # kept with the raw answer so Investigations shows how the model got there
             call.raw_response = f"<think>\n{thought}\n</think>\n{call.raw_response}"
         call.model = provider.get_model() or ""
+        if parsed is None and task == "chat":
+            # a chat reply is free text anyway: a model that forgot the JSON wrapper still answered
+            text = plain_answer(str(getattr(provider, "last_raw", "") or ""))
+            parsed = {"answer": text} if text else None
         if parsed is None:
             call.status, call.reason = "error", str(getattr(provider, "last_error", "") or "no answer")
         else:
-            answer, why = check_answer(task, parsed, user, strict=not (task == "chat" and incident is None))
+            # chat about an incident: invented IP addresses are always refused; numbers only in strict mode
+            strict = not (task == "chat" and incident is None)
+            numbers = strict and (task != "chat" or chat_rules(incident, mode) is BASE_RULES)
+            answer, why = check_answer(task, parsed, user, strict=strict, numbers=numbers)
             call.answer = answer or parsed
             call.status, call.reason = ("rejected", why) if why else ("trial" if trial else "used", "")
     db.add(call)
