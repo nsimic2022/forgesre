@@ -51,6 +51,8 @@ services:
       FORGESRE_ROLE: ${FORGESRE_CORE_ROLE:-all}
       # Settings › Containers reads state and logs through docker-ro (read only), never the socket itself
       FORGESRE_DOCKER_URL: http://127.0.0.1:${FORGESRE_DOCKER_RO_PORT:-2377}
+      # Settings › Server writes .env change requests here; the host apply helper applies them
+      FORGESRE_APPLY_DIR: /apply
     volumes: &core_volumes
       # rw: Discovery Confirm & scan persists discovery.cidrs. :ro was EROFS → HTTP 500.
       - ./config/forgesre.yml:/config/forgesre.yml
@@ -58,6 +60,7 @@ services:
       - ${FORGESRE_DATA:-./data}/backups:/backups
       - ./.env:/host-dotenv:ro
       - ./secrets/secrets.env:/host-secrets.env:ro
+      - ${FORGESRE_DATA:-./data}/apply:/apply
       - ./monitoring:/host-monitoring:ro
       # rw: Discovery SNMP Apply splices forgesre_onboard into generated snmp.yml (same file
       # snmp_exporter reads). :ro made Apply/MIB upload fail with EROFS on the live VM.

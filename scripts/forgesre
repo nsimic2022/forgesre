@@ -127,6 +127,7 @@ Commands:
   bundle             One file with code and every image, for an appliance without internet
   mailbox            Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)
   librenms-token     Create the LibreNMS API token for discovery (when update could not)
+  apply-helper       Let Settings › Server change .env and restart containers (status|on|off|run)
   tls                How to put optional HTTPS (Caddy) in front of Core
   completion         Print a `source …completion.bash` line for ~/.bashrc
 
@@ -1073,6 +1074,20 @@ An optional service that fails to restart is a WARN and the rest continue.
 New code after git pull, changed images, or edited compose: ./forgesre update
 EOF
       ;;
+    apply-helper)
+      cat <<'EOF'
+apply-helper — the host helper behind Settings › Server (systemd path unit forgesre-apply).
+
+  ./forgesre apply-helper status
+  ./forgesre apply-helper on      install it (new installs: on by default)
+  ./forgesre apply-helper off
+  ./forgesre apply-helper run     apply waiting requests now
+
+Core never edits .env or runs Docker. It writes a request to data/apply/requests/; the helper
+checks every key and value against scripts/env-keys.tsv, writes .env and restarts only the
+containers that use the changed values, and writes the result for the UI.
+EOF
+      ;;
     librenms-token)
       cat <<'EOF'
 librenms-token — create LIBRENMS_API_TOKEN for the bundled LibreNMS (discovery reads it).
@@ -1286,6 +1301,9 @@ case "$cmd" in
   mailbox)
     need_env
     exec "$ROOT/scripts/mailbox.sh" "$@"
+    ;;
+  apply-helper)
+    exec "$ROOT/scripts/apply-env.sh" "$@"
     ;;
   librenms-token)
     need_env

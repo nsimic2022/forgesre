@@ -9,7 +9,7 @@ UI: Settings page (new UI, Phase 2). Shell: `./forgesre settings`. API: `/api/v1
 |---|---|---|---|
 | Live settings | `config/forgesre.yml` | UI, API, `./forgesre settings set` | Validated, written, reloaded at once |
 | Secrets (tokens, passwords) | `secrets/secrets.env` | `./forgesre settings set-secret KEY` on the host | Core restarts to read them |
-| Addresses and ports | `.env`, `docker-compose.yml` | `./install.sh`, or edit `.env` | Restart the stack |
+| Container values (ports, threads, model context, backup folders) | `.env` | Settings › Server (with the apply helper), `./install.sh`, or edit `.env` | The apply helper restarts only the containers that use the value; by hand: `./forgesre update` |
 
 Core mounts `secrets/secrets.env` read-only, so the UI and API never show or write secret
 values: they only say whether each one is set. Every change goes to the audit log with the
@@ -17,6 +17,39 @@ old and new value (never a secret).
 
 Writing the YAML rewrites the file without its comments; `config/forgesre.example.yml` keeps
 the commented reference.
+
+## Settings › Server (.env) and the apply helper
+
+Settings › Server shows every value in `.env`, grouped by part of the appliance (General, Web and
+HTTPS, ForgeAI model, Prometheus / Loki / Grafana, NetBox, LibreNMS, Mail server, Backup,
+Containers), with what it is for, its allowed range and which containers restart when it
+changes. Passwords and keys in `.env` show only *set* / *not set*. Below them, every key of
+`secrets/secrets.env` with *set* / *not set* and the command to replace it on the server
+(`./forgesre settings set-secret KEY`); secrets are never typed or shown in the browser.
+
+Core cannot edit `.env` or run Docker. **Apply** writes a request file to `data/apply/requests/`;
+the **apply helper** on the host (`scripts/apply-env.sh`, systemd path unit `forgesre-apply`, on
+for new installs, `./forgesre apply-helper on` for an existing one) checks every key and value
+against `scripts/env-keys.tsv` (generated from `backend/app/env_catalog.py`), writes `.env` and
+runs `docker compose up -d --no-deps` for the containers that use the changed values, only those
+of the active profiles. The card follows the request and shows the result; the audit log has
+`server.env.request` with old and new values. A request the helper refuses (a key not on the
+list, a value out of range, odd characters) changes nothing.
+
+Editable from the UI: time zone, web workers, docker-ro port, model CPU threads, model context,
+GPU layers, document-search threads, Grafana and Roundcube ports, backup keep counts and the
+off-box copy (folder or S3 endpoint, bucket, prefix, region). Not from the UI, because they move
+the UI or need a migration: the web and HTTPS ports, NetBox port and URL, data folder, profiles
+(`./forgesre optional`, `https`, `gpu`, `mailbox`).
+
+ForgeAI answer lengths are Core settings, not `.env`: **Settings › RCA / AI › Answer length**
+(`ai.llm.answer_percent`, 50–300 %, default 100) multiplies every task's built-in limit (cause
+400 tokens, explain 350, chat 800, others 450–500), and **Thinking room** (`ai.llm.think_tokens`,
+default 1024) is the extra a thinking model may use. Both apply at once. The table of current
+lengths is under ForgeAI model in Settings › Server.
+
+`./forgesre update` adds the newer optional keys to an existing `.env` and `secrets.env` once,
+as comments, so both files list every option.
 
 ## Groups
 

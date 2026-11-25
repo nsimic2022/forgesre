@@ -312,6 +312,14 @@ python scripts/screenshots.py --base http://127.0.0.1:8080 --email admin@forgesr
 python scripts/screenshots.py --only noc,incident     # just a few pages
 ```
 
+## Server settings (Settings › Server)
+
+Every `.env` value by part of the appliance, editable where it is safe, and every secret as
+*set* / *not set*; **Apply** goes through the host apply helper, which writes `.env` and restarts
+only the containers that use the changed values. See [settings.md](settings.md#settings--server-env-and-the-apply-helper).
+API (Admin): `GET /api/v1/server/env`, `POST /api/v1/server/env {changes}`,
+`GET /api/v1/server/env/requests/{id}`.
+
 ## Containers and logs (Settings › Containers)
 
 Admins see every container of the appliance (Core, Postgres, Prometheus, Alertmanager, Loki,

@@ -273,6 +273,32 @@ if grep -Eq '^COMPOSE_PROFILES=.*\bhttps\b' "$ROOT/.env" 2>/dev/null; then
 else
   echo "HTTPS is off. Turn it on with: ./forgesre https on   (self-signed, or put your certificate in data/tls)"
 fi
+# Optional keys newer than this appliance: added once as comments, so .env and secrets.env list
+# every option (values stay as they are; uncomment to use, or use Settings › Server).
+if [[ -f "$ROOT/.env" ]] && ! grep -q 'FORGESRE_EMBED_THREADS' "$ROOT/.env"; then
+  cat >> "$ROOT/.env" <<'ENVEOF'
+
+# --- Optional (added by update; uncomment to use, or change in Settings › Server) ---
+# FORGESRE_LLM_GPU_LAYERS=99       # GPU build only: model layers on the GPU, 99 = all
+# FORGESRE_EMBED_THREADS=2         # CPU threads of the document-search model (ForgeAI RAG)
+# FORGESRE_WEB_WORKERS=1           # Core web processes; >1 needs the worker profile
+# FORGESRE_BACKUP_KEEP=14          # backups kept on the server
+# FORGESRE_DOCKER_RO_PORT=2377     # read-only Docker window for Settings › Containers (127.0.0.1)
+ENVEOF
+  echo "Added the optional settings to .env as comments (Settings › Server shows them)."
+fi
+if [[ -f "$ROOT/secrets/secrets.env" ]] && ! grep -q 'CLOUD_LLM_API_KEY' "$ROOT/secrets/secrets.env"; then
+  cat >> "$ROOT/secrets/secrets.env" <<'ENVEOF'
+
+# --- Optional (added by update; set with ./forgesre settings set-secret KEY) ---
+# LDAP_BIND_PASSWORD=
+# OIDC_CLIENT_SECRET=
+# CLOUD_LLM_API_KEY=
+ENVEOF
+fi
+if [[ ! -f /etc/systemd/system/forgesre-apply.path ]]; then
+  echo "Settings › Server can change .env and restart containers once the apply helper is on: ./forgesre apply-helper on"
+fi
 if [[ ! -f /etc/systemd/system/forgesre-backup.timer ]]; then
   echo "No nightly backup yet. Turn it on with: ./forgesre backup schedule on   (02:30, verify, keep 14)"
 fi

@@ -74,6 +74,7 @@ COMPONENT_SHORT = {
     "offbox": "Off-box backup",
     "backup_verify": "Backup check",
     "containers": "Containers",
+    "apply_helper": "Apply helper",
     "redis": "Redis",
     "mailpit": "Mailpit",
 }

@@ -26,6 +26,8 @@ BUNDLED_NETBOX="${FORGESRE_INSTALL_NETBOX:-yes}"
 BUNDLED_LIBRENMS="${FORGESRE_INSTALL_LIBRENMS:-yes}"
 # Nightly backup timer (systemd): on for new installs, --backup-schedule no to skip.
 BACKUP_SCHEDULE="${FORGESRE_INSTALL_BACKUP_SCHEDULE:-02:30}"
+# Apply helper (systemd path unit): Settings › Server may change .env and restart containers.
+APPLY_HELPER="${FORGESRE_INSTALL_APPLY_HELPER:-yes}"
 # HTTPS front (Caddy, self-signed certificate until you add your own): on for new installs.
 ENABLE_HTTPS="${FORGESRE_INSTALL_HTTPS:-yes}"
 
@@ -47,6 +49,7 @@ Options:
   --netbox yes|no       Bundled NetBox (default yes; no with --netbox-url or when you do not need it)
   --librenms yes|no     Bundled LibreNMS for discovery (default yes)
   --backup-schedule HH:MM|no  Nightly backup time (default 02:30); later ./forgesre backup schedule
+  --apply-helper yes|no       Let Settings › Server change .env and restart containers (default yes)
   --https yes|no        HTTPS on port 443 with a self-signed certificate (default yes); later:
                         ./forgesre https on|only|off|cert
 EOF
@@ -68,6 +71,7 @@ while [[ $# -gt 0 ]]; do
     --librenms) BUNDLED_LIBRENMS="$2"; shift 2 ;;
     --https) ENABLE_HTTPS="$2"; shift 2 ;;
     --backup-schedule) BACKUP_SCHEDULE="$2"; shift 2 ;;
+    --apply-helper) APPLY_HELPER="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
@@ -233,7 +237,7 @@ set_kv() {
 }
 
 write_files() {
-  mkdir -p "$DATA_DIR"/{postgres,prometheus,alertmanager,loki,grafana,logs,alloy,models,backups,generated,netbox/media,netbox/reports,netbox/scripts,netbox/redis,librenms/mysql,librenms/redis,librenms/data} secrets config
+  mkdir -p "$DATA_DIR"/{postgres,prometheus,alertmanager,loki,grafana,logs,alloy,models,backups,generated,apply/requests,apply/results,netbox/media,netbox/reports,netbox/scripts,netbox/redis,librenms/mysql,librenms/redis,librenms/data} secrets config
   touch "$DATA_DIR/logs/forgesre.log"
   chmod 700 secrets || true
   chmod 750 "$DATA_DIR" 2>/dev/null || true
@@ -547,6 +551,14 @@ if [[ "$BACKUP_SCHEDULE" != "no" ]] && command -v systemctl >/dev/null 2>&1; the
     BACKUP_NOTE="timer not created: ./forgesre backup schedule on"
   fi
 fi
+APPLY_NOTE="off (./forgesre apply-helper on)"
+if [[ "$APPLY_HELPER" != "no" ]] && command -v systemctl >/dev/null 2>&1; then
+  if "$ROOT/scripts/apply-env.sh" on >/dev/null; then
+    APPLY_NOTE="on: Settings › Server changes .env and restarts containers"
+  else
+    APPLY_NOTE="not installed: ./forgesre apply-helper on"
+  fi
+fi
 "$ROOT/scripts/doctor.sh" || true
 post_install_journal || true
 echo
@@ -554,6 +566,7 @@ echo "Installation finished."
 echo "UI:              http://127.0.0.1:${HTTP_PORT}"
 [[ -n "$HTTPS_NOTE" ]] && echo "HTTPS:           ${HTTPS_NOTE}"
 echo "Backup:          ${BACKUP_NOTE}"
+echo "Apply helper:    ${APPLY_NOTE}"
 echo "Grafana:         http://127.0.0.1:3000"
 [[ "$BUNDLED_NETBOX" == "yes" ]] && echo "NetBox:          http://127.0.0.1:8001  (admin / see installation-report.md)"
 [[ "$BUNDLED_LIBRENMS" == "yes" ]] && echo "LibreNMS:        http://127.0.0.1:8000"

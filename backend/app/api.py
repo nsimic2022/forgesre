@@ -3393,6 +3393,7 @@ def _doctor_payload_fresh() -> dict[str, Any]:
         "offbox": _offbox_check(),
         "backup_verify": _backup_verify_check(),
         "containers": _containers_check(),
+        "apply_helper": _apply_helper_check(),
     }
     for name, item in components.items():
         item["label"] = component_label(name)
@@ -3433,6 +3434,19 @@ def grafana_health_url() -> str:
         except ValueError:
             port = "3000"
     return f"http://127.0.0.1:{port}/api/health"
+
+
+def _apply_helper_check() -> dict[str, Any]:
+    """Host apply helper: off is fine (Settings › Server then only shows values); stuck requests warn."""
+    from app.env_catalog import helper_state
+
+    s = helper_state()
+    if not s["installed"]:
+        return {"status": "disabled", "why": "off: Settings › Server shows .env values but cannot change them", "fix": "./forgesre apply-helper on"}
+    if s["stuck"]:
+        return {"status": "warn", "why": f"{len(s['stuck'])} change request(s) waiting over 90 s: the systemd path unit is not running",
+                "test": "systemctl status forgesre-apply.path", "fix": "./forgesre apply-helper on, or ./forgesre apply-helper run"}
+    return {"status": "ok", "detail": "on"}
 
 
 def _containers_check() -> dict[str, Any]:
@@ -4104,6 +4118,56 @@ def tv_day_api(date: str, db: Session = Depends(get_db), user: User = Depends(re
     if day > today or (today - day).days > DAY_LOOKBACK:
         raise HTTPException(status_code=400, detail=f"date must be within the last {DAY_LOOKBACK} days")
     return incident_day(db, day)
+
+
+class EnvChangeBody(BaseModel):
+    changes: dict[str, str]
+
+
+@router.get("/server/env")
+def server_env_api(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: every .env value by part of the appliance (passwords only as set / not set), the
+    secrets.env keys as set / not set, and whether the host apply helper is installed."""
+    from app.env_catalog import describe_env
+    from app.system_settings import list_settings
+
+    out = describe_env()
+    from app.cli_ops import SETTABLE_SECRETS
+
+    out["secrets"] = [{"key": r["key"], "group": r["group"], "label": r["label"], "set": r.get("set", False),
+                       "cli": r["key"] in SETTABLE_SECRETS} for r in list_settings() if r["store"] == "secret"]
+    from app.forgeai import answer_lengths
+
+    out["answer_lengths"] = answer_lengths()
+    return out
+
+
+@router.post("/server/env")
+def server_env_change_api(body: EnvChangeBody, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: ask the host apply helper to write these .env values and restart the containers that use them. Audited."""
+    from app.env_catalog import helper_state, read_dotenv, request_change
+
+    if not helper_state()["installed"]:
+        raise HTTPException(status_code=409, detail="The apply helper is not installed: on the server run ./forgesre apply-helper on")
+    try:
+        before = read_dotenv()
+        out = request_change(body.changes, user.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "server.env.request", actor=user.email, object_type="env", object_id=out["id"],
+          data={"changes": {k: {"old": before.get(k, ""), "new": v} for k, v in out["changes"].items()}, "restarts": out["restarts"]}, commit=True)
+    return out
+
+
+@router.get("/server/env/requests/{rid}")
+def server_env_result_api(rid: str, user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: pending, or the helper's result for one request."""
+    from app.env_catalog import read_result
+
+    try:
+        return read_result(rid)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/system/containers")

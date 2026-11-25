@@ -188,6 +188,9 @@ so the services pick it up.
 | `FORGESRE_BIND`, `FORGESRE_COOKIE_SECURE` | 0.0.0.0, unset | Set by `./forgesre https only`: Core on 127.0.0.1, Secure cookie |
 | `FORGESRE_LLM_THREADS` | 8 | CPU threads for llama.cpp; `fetch-llm` sets cores minus 2 |
 | `FORGESRE_LLM_CTX` | 8192 | Context window of the local model in tokens (section 9) |
+| `FORGESRE_LLM_GPU_LAYERS` | 99 | GPU build only: model layers on the GPU |
+| `FORGESRE_EMBED_THREADS` | 2 | CPU threads of the document-search model |
+| `FORGESRE_WEB_WORKERS` | 1 | Core web processes (more need the worker profile) |
 | `FORGESRE_EMBED_THREADS` | 2 | CPU threads for the embedding model |
 | `FORGESRE_LLM_GPU_LAYERS` | 99 | Layers on the GPU with `./forgesre gpu on` |
 | `FORGESRE_OFFBOX`, `FORGESRE_OFFBOX_PATH`, `FORGESRE_OFFBOX_S3_URL`, `_S3_BUCKET`, `_S3_PREFIX`, `_S3_REGION`, `_KEEP`, `_STRIP` | off | Off-box copy of every backup to an NFS directory or S3 ([operator-handbook.md](operator-handbook.md)) |

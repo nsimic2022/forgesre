@@ -11,6 +11,7 @@ import { MessagePreviews } from "../components/MessagePreviews";
 import { BackupPanel, UsersPanel } from "../components/AdminPanels";
 import { ChecksPanel } from "../components/ChecksPanel";
 import { ContainersPanel } from "../components/ContainersPanel";
+import { ServerEnvPanel } from "../components/ServerEnvPanel";
 import { SyntheticChecks } from "../components/SyntheticChecks";
 import { DemoPanel } from "../components/DemoPanel";
 import { useEffect, useState } from "react";
@@ -65,7 +66,7 @@ export function SettingsPage() {
   const rows = data?.settings.filter((r) => r.group === group) ?? [];
   const tests = Array.from(new Set(rows.map((r) => r.test).filter(Boolean)));
   // ForgeAI skills and RAG sit right under RCA / AI
-  const sections = data ? [...Object.entries(data.groups).flatMap(([k, v]) => (k === "ai" ? [[k, v], ["skills", "ForgeAI skills"], ["rag", "ForgeAI RAG"]] : [[k, v]])), ["messages", "Messages"], ["push", "Web push"], ["appearance", "Appearance"], ["services", "Health"], ["containers", "Containers"], ["journal", "Journal"], ["audit", "Audit"], ["users", "Users"], ["backup", "Backup"], ["demo", "Demo"]] : [];
+  const sections = data ? [...Object.entries(data.groups).flatMap(([k, v]) => (k === "ai" ? [[k, v], ["skills", "ForgeAI skills"], ["rag", "ForgeAI RAG"]] : [[k, v]])), ["messages", "Messages"], ["push", "Web push"], ["appearance", "Appearance"], ["server", "Server (.env)"], ["services", "Health"], ["containers", "Containers"], ["journal", "Journal"], ["audit", "Audit"], ["users", "Users"], ["backup", "Backup"], ["demo", "Demo"]] : [];
   return (
     <>
       <header className="page-head">
@@ -115,6 +116,8 @@ export function SettingsPage() {
               <Services />
             ) : group === "containers" ? (
               <ContainersPanel />
+            ) : group === "server" ? (
+              <ServerEnvPanel />
             ) : group === "users" ? (
               <UsersPanel />
             ) : group === "backup" ? (
