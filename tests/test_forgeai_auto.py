@@ -80,3 +80,25 @@ def test_queue_order_failed_state_and_no_duplicate_work(monkeypatch):
             db.delete(r)
         db.commit()
         db.close()
+
+
+def test_forgerca_column_ignores_forgeai_answers():
+    from app.models import Investigation
+    from app.noc import _row
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    inc = _inc(db, f"Col {uuid4().hex[:6]}", 1)
+    db.add_all([Investigation(incident_id=inc.id, provider="builtin-analyst", likely_cause="Rules: port down"),
+                Investigation(incident_id=inc.id, provider="forgeai-llm", likely_cause="Model: port down")])
+    db.commit()
+    db.refresh(inc)
+    try:
+        row = _row(inc, {}, {}, "local", db)
+        assert row["forgerca"] == "Rules: port down" and row["forgeai"] == "ready-local"
+    finally:
+        for i in list(inc.investigations):
+            db.delete(i)
+        db.delete(inc)
+        db.commit()
+        db.close()

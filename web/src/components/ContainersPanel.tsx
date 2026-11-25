@@ -35,7 +35,7 @@ export function ContainersPanel() {
   const down = (rows ?? []).filter((c) => tone(c) === "crit").length;
   return (
     <>
-      <Card title="Containers" actions={<>{rows ? <Chip tone={down ? "crit" : "ok"}>{down ? `${down} not running` : `${rows.length} running`}</Chip> : null}<button className="btn" type="button" onClick={() => void load()}>Refresh</button></>}>
+      <Card title="Containers" actions={<>{rows ? <Chip tone={down ? "crit" : "ok"}>{down ? `${down} not running` : `${rows.filter((c) => !c.done).length} running`}</Chip> : null}<button className="btn" type="button" onClick={() => void load()}>Refresh</button></>}>
         <span className="small muted">Every program of the appliance runs in its own container. Read only: nothing can be started or stopped from here
           (<code className="mono">./forgesre restart</code> on the server does that). Same as <code className="mono">./forgesre status</code>.</span>
         {error ? <div className="banner error" role="alert">{error}</div> : null}

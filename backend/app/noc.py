@@ -114,7 +114,8 @@ def _row(incident: Incident, sent: dict[int, int], llm_jobs: dict[str, str], mod
          failed: set[str] | None = None, queue: dict[str, int] | None = None) -> dict[str, Any]:
     asset = incident.asset
     leader = forgeai_leader(db, incident) if mode != "off" else None
-    latest = incident.investigations[-1] if incident.investigations else None
+    # the ForgeRCA column shows the rules engine, never a ForgeAI (LLM) answer
+    latest = next((i for i in reversed(incident.investigations or []) if not (i.provider or "").endswith("-llm")), None)
     alert = incident.alert_payload or {}
     annotations = alert.get("annotations") if isinstance(alert, dict) else {}
     return {

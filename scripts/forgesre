@@ -128,6 +128,7 @@ Commands:
   mailbox            Optional Postfix/Dovecot + Roundcube (off; Core SMTP unchanged)
   librenms-token     Create the LibreNMS API token for discovery (when update could not)
   apply-helper       Let Settings › Server change .env and restart containers (status|on|off|run)
+  env [group]        Every .env value by part, as Settings › Server (passwords as set / not set)
   tls                How to put optional HTTPS (Caddy) in front of Core
   completion         Print a `source …completion.bash` line for ~/.bashrc
 
@@ -1074,6 +1075,16 @@ An optional service that fails to restart is a WARN and the rest continue.
 New code after git pull, changed images, or edited compose: ./forgesre update
 EOF
       ;;
+    env)
+      cat <<'EOF'
+env — every .env value by part of the appliance, the same as Settings › Server.
+
+  ./forgesre env            all groups
+  ./forgesre env ai         one group: general, web, ai, monitoring, netbox, librenms, mailbox, backup, containers
+
+Passwords and keys show only "set" / "not set". * marks values Settings › Server can change.
+EOF
+      ;;
     apply-helper)
       cat <<'EOF'
 apply-helper — the host helper behind Settings › Server (systemd path unit forgesre-apply).
@@ -1304,6 +1315,10 @@ case "$cmd" in
     ;;
   apply-helper)
     exec "$ROOT/scripts/apply-env.sh" "$@"
+    ;;
+  env)
+    need_env
+    FORGESRE_DOTENV="$ROOT/.env" PYTHONPATH="$ROOT/backend:$ROOT/agents" python3 -m app.env_catalog --text "$@"
     ;;
   librenms-token)
     need_env

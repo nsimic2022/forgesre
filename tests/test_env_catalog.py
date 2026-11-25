@@ -136,3 +136,30 @@ def test_doctor_row(tmp_path, monkeypatch):
     old.write_text("FORGESRE_LLM_THREADS=8\n", encoding="utf-8")
     os.utime(old, (1, 1))
     assert api._apply_helper_check()["status"] == "warn"
+
+
+def test_env_cli_text_matches_the_ui_view(tmp_path):
+    (tmp_path / ".env").write_text("FORGESRE_LLM_THREADS=8\nPOSTGRES_PASSWORD=hunter2\nMINE=1\n", encoding="utf-8")
+    env = {**os.environ, "FORGESRE_DOTENV": str(tmp_path / ".env"), "FORGESRE_APPLY_DIR": str(tmp_path / "apply"),
+           "PYTHONPATH": f"{ROOT / 'backend'}:{ROOT / 'agents'}"}
+    out = subprocess.run(["python3", "-m", "app.env_catalog", "--text"], env=env, capture_output=True, text=True, timeout=30).stdout
+    assert "ForgeAI model" in out and "* FORGESRE_LLM_THREADS" in out and "restarts llm, llm-gpu" in out
+    assert "POSTGRES_PASSWORD" in out and "hunter2" not in out and "Other keys in .env: MINE" in out
+    one = subprocess.run(["python3", "-m", "app.env_catalog", "--text", "ai"], env=env, capture_output=True, text=True, timeout=30).stdout
+    assert "ForgeAI model" in one and "NetBox" not in one
+    cli = (ROOT / "scripts" / "forgesre").read_text(encoding="utf-8")
+    assert "  env)" in cli and "app.env_catalog --text" in cli
+
+
+def test_model_details_api(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGESRE_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("FORGESRE_DOTENV", str(tmp_path / ".env"))
+    (tmp_path / ".env").write_text("FORGESRE_LLM_CTX=16384\nCOMPOSE_PROFILES=ai\n", encoding="utf-8")
+    (tmp_path / "Qwen3-8B-Q4_K_M.gguf").write_bytes(b"GGUF" + b"\0" * 60)
+    (tmp_path / "active").write_text("Qwen3-8B-Q4_K_M.gguf\n")
+    (tmp_path / "embed").mkdir()
+    (tmp_path / "embed" / "nomic-embed-text-v1.5.Q8_0.gguf").write_bytes(b"GGUF" + b"\0" * 60)
+    data = _client("analyst").get("/api/v1/forgeai/runtime").json()
+    assert data["chat"]["label"] == "Qwen3 8B (Q4_K_M)" and data["chat"]["context"] == "16384" and data["chat"]["threads"] == "8"
+    assert data["chat"]["gpu"] is False and data["embed"]["files"][0]["name"].startswith("nomic-embed")
+    assert data["embed"]["threads"] == "2" and any(a["task"] == "chat" for a in data["answer_lengths"])

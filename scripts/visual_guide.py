@@ -69,6 +69,8 @@ PAGES: list[Page] = [
                   "Ime incidenta, obojeno po ozbiljnosti (crveno kritično, narandžasto visoko, žuto upozorenje). Klik otvara incident."),
              Step("tbody tr >> nth=0 >> text=Not acknow", "Acknow.: Not acknow means nobody has taken it yet; acknowledge it so escalation stops. Who acknowledged it is on the incident page.",
                   "Acknow.: Not acknow znači da ga niko još nije preuzeo; potvrdi ga da eskalacija stane. Ko ga je potvrdio piše na stranici incidenta."),
+             Step("tbody tr >> nth=0 >> .ai-cell", "ForgeAI: green Analysed, yellow Waiting or Analysing, red Failed or Not analysed, blue Grouped. Click opens its analysis under the row.",
+                  "ForgeAI: zeleno Analysed, žuto Waiting ili Analysing, crveno Failed ili Not analysed, plavo Grouped. Klik otvara analizu ispod reda."),
              Step("tbody tr >> nth=0 >> input[type=checkbox]", "Tick rows to acknowledge, assign or resolve several at once.",
                   "Čekiraj redove da potvrdiš, dodeliš ili rešiš više odjednom."),
              Step(".shift-line", "Shift: who is on call now and whether the handover was taken over; the link opens the Shift card.",
@@ -76,6 +78,15 @@ PAGES: list[Page] = [
              Step(".nav-box", "ForgeRCA (rules, always on) and ForgeAI (the local model) status.", "Stanje ForgeRCA (pravila, uvek uključen) i ForgeAI (lokalni model)."),
              Step(".nav-user", "Who is signed in, the role, and Sign out.", "Ko je prijavljen, uloga i odjava (Sign out)."),
          ]),
+    Page("noc-forgeai", "/app/", "NOC › ForgeAI analysis row", "NOC › red sa ForgeAI analizom",
+         "ForgeAI analyses every new incident by itself, one at a time (critical first); a click on its cell opens the answer under the incident.",
+         "ForgeAI sam analizira svaki novi incident, jedan po jedan (prvo kritični); klik na njegovu ćeliju otvara odgovor ispod incidenta.", [
+             Step("button.ai-cell.open", "Click: open or close the analysis of this incident.", "Klik: otvori ili zatvori analizu ovog incidenta."),
+             Step(".ai-brief", "Likely cause, first checks, summary, model and time; while ForgeAI works, ForgeRCA's cause. Advisory: check it against the facts.",
+                  "Verovatan uzrok, prve provere, sažetak, model i vreme; dok ForgeAI radi, uzrok iz ForgeRCA. Savet: proveri ga prema činjenicama."),
+             Step(".ai-brief .btn >> nth=0", "Open the incident; for a failed, missing or grouped one, Analyse now / Try again / Analyse this one on its own.",
+                  "Otvori incident; za neuspelu, nepostojeću ili grupisanu analizu: Analyse now / Try again / Analyse this one on its own."),
+         ], click="button.ai-cell:has(strong:text-is('Analysed'))", full=False),
     Page("tv", "/app/tv", "Wall screen (TV mode)", "Zidni ekran (TV mod)",
          "One screen for the TV on the wall. Sign it in with a Viewer account. Refreshes every 30 s.",
          "Jedan ekran za TV na zidu. Prijavi ga Viewer nalogom. Osvežava se na 30 s.", [
@@ -167,6 +178,10 @@ PAGES: list[Page] = [
              Step(card("Accuracy"), "How often ForgeRCA and ForgeAI were right.", "Koliko često su ForgeRCA i ForgeAI bili u pravu."),
              Step(card("Recurring causes"), "Causes that keep coming back, and on which hosts.", "Uzroci koji se ponavljaju, i na kojim hostovima."),
              Step("h2:has-text('Ask ForgeAI') >> xpath=..", "Ask ForgeAI: chat about anything or one incident (local model).", "Ask ForgeAI: razgovor o bilo čemu ili o jednom incidentu (lokalni model)."),
+             Step("[aria-label='Which model answers']", "Model: which downloaded or imported model answers; an Engineer switches it here for everyone.",
+                  "Model: koji skinuti ili uvezeni model odgovara; Engineer ga ovde menja za sve."),
+             Step("[aria-label='How strictly ForgeAI answers'], .chat-mode >> nth=1", "Answers: Strict, Balanced or Open for a chat about an incident; without an incident, general knowledge.",
+                  "Answers: Strict, Balanced ili Open za chat o incidentu; bez incidenta, opšte znanje."),
          ]),
     Page("reports", "/app/reports", "Reports", "Izveštaji",
          "One period for the whole page, then five sections: summary, sources, service levels, follow-up, sending reports.",
@@ -203,6 +218,30 @@ PAGES: list[Page] = [
                   "Zvuk i obaveštenje na desktopu za novi kritični dok je strana otvorena."),
              Step(card("Push to this device"), "Web push to this phone or browser, even when ForgeSRE is closed.", "Web push na ovaj telefon ili browser, i kad je ForgeSRE zatvoren."),
          ]),
+    Page("settings-ai", "/app/settings?group=ai", "Settings › RCA / AI", "Podešavanja › RCA / AI",
+         "ForgeAI on or off, which model runs and how, and the model list.", "ForgeAI uključen ili isključen, koji model radi i kako, i lista modela.", [
+             Step(card("Model details"), "Model details: the model file, context, threads, GPU, thinking, answer length, and the document-search model.",
+                  "Detalji modela: fajl modela, kontekst, niti, GPU, razmišljanje, dužina odgovora, i model za pretragu dokumenata."),
+             Step("text=Download from Hugging Face", "Model list: Qwen3, Llama, Qwen2.5 and OpsLLM, smaller to stronger; Download, then Use.",
+                  "Lista modela: Qwen3, Llama, Qwen2.5 i OpsLLM, od manjeg ka jačem; Download, pa Use."),
+         ], full=False),
+    Page("settings-server", "/app/settings?group=server", "Settings › Server (.env)", "Podešavanja › Server (.env)",
+         "Every .env value by part of the appliance; safe ones change here and the apply helper restarts only what uses them.",
+         "Svaka .env vrednost po delu sistema; bezbedne se menjaju ovde, a apply helper restartuje samo ono što ih koristi.", [
+             Step(card("Server settings"), "Apply helper on or off; when off, values are shown only (./forgesre apply-helper on).",
+                  "Apply helper uključen ili isključen; kad je isključen, vrednosti se samo prikazuju (./forgesre apply-helper on)."),
+             Step(card("ForgeAI model"), "One part of the appliance: each value with its range and which containers restart.",
+                  "Jedan deo sistema: svaka vrednost sa opsegom i kontejnerima koji se restartuju."),
+             Step(card("Secrets"), "Secrets only as set / not set, with the command to replace one on the server.",
+                  "Tajne samo kao set / not set, sa komandom za zamenu na serveru."),
+         ]),
+    Page("settings-containers", "/app/settings?group=containers", "Settings › Containers", "Podešavanja › Containers",
+         "Every container with its state, and the last lines of its log. Read only.", "Svaki kontejner sa stanjem, i poslednje linije njegovog loga. Samo za čitanje.", [
+             Step(card("Containers"), "State and health of each container; a finished one-shot job shows as finished.",
+                  "Stanje i zdravlje svakog kontejnera; završen jednokratni posao je označen kao finished."),
+             Step("main tbody tr >> nth=0 >> button:has-text('Logs')", "Logs: the last 100–1000 lines, filter, Errors only; passwords and tokens masked.",
+                  "Logs: poslednjih 100–1000 linija, filter, Errors only; lozinke i tokeni maskirani."),
+         ], full=False),
     Page("settings-rag", "/app/settings?group=rag", "Settings › ForgeAI RAG", "Podešavanja › ForgeAI RAG",
          "The manuals and runbooks ForgeAI may quote, and how much they are used.", "Priručnici i runbook-ovi koje ForgeAI sme da citira, i koliko se koriste.", [
              Step("[aria-label='Document numbers']", "Documents, pieces and pages, how many ForgeAI questions got excerpts and how many answers cited them (7 days).",
@@ -297,6 +336,14 @@ def main() -> int:
             page.goto(args.base + spec.path.format(incident=incident))
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(1200)
+            if spec.click and page.locator(spec.click).count():
+                # open something first (an analysis row, a chat) so its parts can be marked
+                page.locator(spec.click).first.click()
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1500)
+                # a click in a wide table scrolls it sideways: bring it back so the marks line up
+                page.evaluate("document.querySelectorAll('.table-wrap').forEach((w) => { w.scrollLeft = 0; })")
+                page.wait_for_timeout(200)
             height = min(MAX_HEIGHT, page.evaluate("document.documentElement.scrollHeight")) if spec.full else HEIGHT
             page.set_viewport_size({"width": WIDTH, "height": max(HEIGHT, height)})
             page.wait_for_timeout(400)

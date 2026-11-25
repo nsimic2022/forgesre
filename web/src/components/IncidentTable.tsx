@@ -6,7 +6,7 @@ import { FORGEAI_LABEL, clock, duration, severityLabel, severityTone, shortNumbe
 import { Chip, Dot } from "./ui";
 
 // Incident table shared by the NOC overview and the Incidents page (design: two-line cells).
-type Brief = { forgeai: { text: string; cause: string; action: string; model: string; at: string | null }; rca: { cause: string; actions: string[] } | null };
+type Brief = { forgeai: { text: string; cause: string; action: string; model: string; at: string | null }; forgerca: { cause: string; actions: string[] } | null };
 
 /**
  * ForgeAI's opinion under an incident row, opened from the ForgeAI cell. A grouped incident shows
@@ -18,7 +18,7 @@ function ForgeAiBrief({ row, cols, canWork, onChanged }: { row: NocIncident; col
   const [error, setError] = useState("");
   const [asked, setAsked] = useState(false);
   useEffect(() => {
-    getJson<Brief>(`/api/v1/incidents/${encodeURIComponent(target)}`).then(setBrief).catch((e: Error) => setError(e.message));
+    getJson<Brief>(`/api/v1/incidents/${encodeURIComponent(target)}/view`).then(setBrief).catch((e: Error) => setError(e.message));
   }, [target, row.forgeai]);
   const analyse = () => postJson(`/api/v1/incidents/${encodeURIComponent(row.number)}/forgeai`, { task: "incident", skill: "" })
     .then(() => (setAsked(true), onChanged?.())).catch((e: Error) => setError(e.message));
@@ -44,7 +44,7 @@ function ForgeAiBrief({ row, cols, canWork, onChanged }: { row: NocIncident; col
                 row.forgeai === "queued" ? `Waiting for the model: ${row.forgeai_queue ? `number ${row.forgeai_queue} in the queue (critical first)` : "in the queue"}.` :
                 row.forgeai === "failed" ? "The last ForgeAI pass failed (model not answering or timed out)." :
                 "No ForgeAI analysis yet."}
-              {brief.rca?.cause ? <> ForgeRCA meanwhile: <strong>{brief.rca.cause}</strong></> : null}
+              {brief.forgerca?.cause ? <> ForgeRCA meanwhile: <strong>{brief.forgerca.cause}</strong></> : null}
             </span>
           ) : null}
           <div className="row" style={{ gap: 8 }}>

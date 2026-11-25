@@ -1850,6 +1850,15 @@ class ModelSwitch(BaseModel):
     name: str
 
 
+@router.get("/forgeai/runtime")
+def forgeai_runtime_api(user: User = Depends(require("investigate"))) -> dict:
+    """Settings › RCA / AI › Model details: model files, context, threads, GPU, answer lengths, embedding model."""
+    from app.forgeai import answer_lengths
+    from app.llm_models import runtime
+
+    return {**runtime(), "answer_lengths": answer_lengths()}
+
+
 @router.get("/forgeai/models")
 def forgeai_models_api(db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
     """The model picker in the ForgeAI chat: models on this appliance, which runs, who may switch."""
