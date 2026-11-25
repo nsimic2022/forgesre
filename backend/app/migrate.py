@@ -345,6 +345,11 @@ def migrate(engine: Engine) -> None:
         for name, sql in mapping.items():
             if name not in existing:
                 statements.append(sql)
+    if "forgeai_chats" in tables:
+        existing = {col["name"] for col in inspector.get_columns("forgeai_chats")}
+        if "mode" not in existing:
+            # strict / balanced / open per chat (2026-11); without it every chat request is a 500
+            statements.append("ALTER TABLE forgeai_chats ADD COLUMN mode VARCHAR(16) DEFAULT ''")
     with engine.begin() as conn:
         if "jobs" not in tables:
             conn.execute(
@@ -540,7 +545,46 @@ def migrate(engine: Engine) -> None:
             )
         )
         _ensure_active_fingerprint_unique(conn)
+    _add_missing_model_columns(engine)
     # pgvector for document search (own transaction; optional — the search falls back to Python)
     from app.doc_search import ensure_vector
 
     ensure_vector(engine)
+
+
+def _add_missing_model_columns(engine: Engine) -> list[str]:
+    """Safety net: add every model column an existing table still lacks.
+
+    The hand-written steps above cover columns that need special SQL; this catches a new plain
+    column that has none (an update must never leave the UI with 500s on a missing column).
+    Adds the type and a scalar default only, no constraints. Returns the statements it ran.
+    """
+    import logging
+
+    from app.db import Base
+    import app.models  # noqa: F401 - registers every table on Base.metadata
+
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    done: list[str] = []
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in tables:
+                continue
+            have = {col["name"] for col in inspector.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in have or col.primary_key:
+                    continue
+                sql = f"ALTER TABLE {table.name} ADD COLUMN {col.name} {col.type.compile(dialect=engine.dialect)}"
+                default = col.default.arg if col.default is not None and getattr(col.default, "is_scalar", False) else None
+                if isinstance(default, bool):
+                    sql += " DEFAULT " + ("TRUE" if default else "FALSE")
+                elif isinstance(default, (int, float)):
+                    sql += f" DEFAULT {default}"
+                elif isinstance(default, str):
+                    sql += " DEFAULT '" + default.replace("'", "''") + "'"
+                conn.execute(text(sql))
+                done.append(sql)
+    if done:
+        logging.getLogger("forgesre.migrate").info("added missing columns: %s", "; ".join(done))
+    return done
