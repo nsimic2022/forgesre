@@ -4,6 +4,7 @@ Svaka stranica ForgeSRE-a sa crvenim brojevima; ispod slike piše šta je koji b
 Slike pravi `scripts/visual_guide.py`; engleska verzija: [visual-guide.md](visual-guide.md).
 
 - [NOC pregled](#noc)
+- [NOC › red sa ForgeAI analizom](#noc-forgeai)
 - [Zidni ekran (TV mod)](#tv)
 - [Incidenti](#incidents)
 - [Stranica incidenta](#incident)
@@ -14,6 +15,9 @@ Slike pravi `scripts/visual_guide.py`; engleska verzija: [visual-guide.md](visua
 - [Izveštaji](#reports)
 - [Podešavanja](#settings)
 - [Podešavanja › Izgled](#settings-appearance)
+- [Podešavanja › RCA / AI](#settings-ai)
+- [Podešavanja › Server (.env)](#settings-server)
+- [Podešavanja › Containers](#settings-containers)
 - [Podešavanja › ForgeAI RAG](#settings-rag)
 - [Podešavanja › Web push](#settings-push)
 
@@ -32,10 +36,23 @@ Početna strana: šta gori sada, ko je dežuran i da li hostovi odgovaraju. Sama
 5. Filter po ozbiljnosti, ili ukucaj host, IP ili broj incidenta.
 6. Ime incidenta, obojeno po ozbiljnosti (crveno kritično, narandžasto visoko, žuto upozorenje). Klik otvara incident.
 7. Acknow.: Not acknow znači da ga niko još nije preuzeo; potvrdi ga da eskalacija stane. Ko ga je potvrdio piše na stranici incidenta.
-8. Čekiraj redove da potvrdiš, dodeliš ili rešiš više odjednom.
-9. Smena: ko je dežuran sada i da li je primopredaja preuzeta; link otvara karticu Shift.
-10. Stanje ForgeRCA (pravila, uvek uključen) i ForgeAI (lokalni model).
-11. Ko je prijavljen, uloga i odjava (Sign out).
+8. ForgeAI: zeleno Analysed, žuto Waiting ili Analysing, crveno Failed ili Not analysed, plavo Grouped. Klik otvara analizu ispod reda.
+9. Čekiraj redove da potvrdiš, dodeliš ili rešiš više odjednom.
+10. Smena: ko je dežuran sada i da li je primopredaja preuzeta; link otvara karticu Shift.
+11. Stanje ForgeRCA (pravila, uvek uključen) i ForgeAI (lokalni model).
+12. Ko je prijavljen, uloga i odjava (Sign out).
+
+<a id="noc-forgeai"></a>
+
+## NOC › red sa ForgeAI analizom
+
+ForgeAI sam analizira svaki novi incident, jedan po jedan (prvo kritični); klik na njegovu ćeliju otvara odgovor ispod incidenta.
+
+![NOC › ForgeAI analysis row](guide/noc-forgeai.png)
+
+1. Klik: otvori ili zatvori analizu ovog incidenta.
+2. Verovatan uzrok, prve provere, sažetak, model i vreme; dok ForgeAI radi, uzrok iz ForgeRCA. Savet: proveri ga prema činjenicama.
+3. Otvori incident; za neuspelu, nepostojeću ili grupisanu analizu: Analyse now / Try again / Analyse this one on its own.
 
 <a id="tv"></a>
 
@@ -150,6 +167,8 @@ Rešeni incidenti sa potvrđenim uzrokom, koliko su ForgeRCA i ForgeAI bili tač
 4. Koliko često su ForgeRCA i ForgeAI bili u pravu.
 5. Uzroci koji se ponavljaju, i na kojim hostovima.
 6. Ask ForgeAI: razgovor o bilo čemu ili o jednom incidentu (lokalni model).
+7. Model: koji skinuti ili uvezeni model odgovara; Engineer ga ovde menja za sve.
+8. Answers: Strict, Balanced ili Open za chat o incidentu; bez incidenta, opšte znanje.
 
 <a id="reports"></a>
 
@@ -192,6 +211,40 @@ Za ovaj browser: tema, boje ozbiljnosti, upozorenja i push.
 2. Boji ime incidenta po ozbiljnosti (uključi ili isključi).
 3. Zvuk i obaveštenje na desktopu za novi kritični dok je strana otvorena.
 4. Web push na ovaj telefon ili browser, i kad je ForgeSRE zatvoren.
+
+<a id="settings-ai"></a>
+
+## Podešavanja › RCA / AI
+
+ForgeAI uključen ili isključen, koji model radi i kako, i lista modela.
+
+![Settings › RCA / AI](guide/settings-ai.png)
+
+1. Detalji modela: fajl modela, kontekst, niti, GPU, razmišljanje, dužina odgovora, i model za pretragu dokumenata.
+2. Lista modela: Qwen3, Llama, Qwen2.5 i OpsLLM, od manjeg ka jačem; Download, pa Use.
+
+<a id="settings-server"></a>
+
+## Podešavanja › Server (.env)
+
+Svaka .env vrednost po delu sistema; bezbedne se menjaju ovde, a apply helper restartuje samo ono što ih koristi.
+
+![Settings › Server (.env)](guide/settings-server.png)
+
+1. Apply helper uključen ili isključen; kad je isključen, vrednosti se samo prikazuju (./forgesre apply-helper on).
+2. Jedan deo sistema: svaka vrednost sa opsegom i kontejnerima koji se restartuju.
+3. Tajne samo kao set / not set, sa komandom za zamenu na serveru.
+
+<a id="settings-containers"></a>
+
+## Podešavanja › Containers
+
+Svaki kontejner sa stanjem, i poslednje linije njegovog loga. Samo za čitanje.
+
+![Settings › Containers](guide/settings-containers.png)
+
+1. Stanje i zdravlje svakog kontejnera; završen jednokratni posao je označen kao finished.
+2. Logs: poslednjih 100–1000 linija, filter, Errors only; lozinke i tokeni maskirani.
 
 <a id="settings-rag"></a>
 

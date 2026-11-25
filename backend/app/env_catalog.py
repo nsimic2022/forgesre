@@ -270,8 +270,38 @@ def tsv() -> str:
     return "\n".join(lines) + "\n"
 
 
+def text_report(group: str = "") -> str:
+    """./forgesre env: the same view as Settings › Server, for SSH. Passwords only as set / not set."""
+    data = describe_env()
+    lines: list[str] = []
+    for key, title in data["groups"].items():
+        if group and group not in (key, title.lower()):
+            continue
+        rows = [r for r in data["rows"] if r["group"] == key]
+        if not rows:
+            continue
+        lines.append(f"{title}")
+        for r in rows:
+            if r["kind"] == "secret":
+                value = "set" if r.get("set") else "not set"
+            else:
+                value = r["value"] or (f"(default {r['default']})" if r.get("default") else "—")
+            flag = "*" if r["editable"] else " "
+            extra = f"  restarts {', '.join(r['restart'])}" if r["restart"] else ""
+            lines.append(f"  {flag} {r['key']:<28} {value:<26}{extra}")
+        lines.append("")
+    helper = data["helper"]
+    lines.append("* = can be changed in Settings › Server" + ("" if helper["installed"] else " once the apply helper is on (./forgesre apply-helper on)"))
+    if data["unlisted"]:
+        lines.append("Other keys in .env: " + ", ".join(data["unlisted"]))
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     if "--tsv" in sys.argv:
         sys.stdout.write(tsv())
+    elif "--text" in sys.argv:
+        rest = [a for a in sys.argv[1:] if a != "--text"]
+        print(text_report(rest[0].lower() if rest else ""))
     else:
         print(json.dumps(describe_env(), indent=2))

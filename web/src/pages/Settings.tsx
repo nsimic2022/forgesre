@@ -11,6 +11,7 @@ import { MessagePreviews } from "../components/MessagePreviews";
 import { BackupPanel, UsersPanel } from "../components/AdminPanels";
 import { ChecksPanel } from "../components/ChecksPanel";
 import { ContainersPanel } from "../components/ContainersPanel";
+import { ModelDetails } from "../components/ModelDetails";
 import { ServerEnvPanel } from "../components/ServerEnvPanel";
 import { SyntheticChecks } from "../components/SyntheticChecks";
 import { DemoPanel } from "../components/DemoPanel";
@@ -95,7 +96,7 @@ export function SettingsPage() {
           </nav>
           <div style={{ flex: "999 1 480px", minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
             {/* ForgeAI: status and models first, the raw settings below them */}
-            {group === "ai" ? <><ForgeAiStatus /><ForgeAiModels /></> : null}
+            {group === "ai" ? <><ForgeAiStatus /><ModelDetails /><ForgeAiModels /></> : null}
             {group === "journal" ? (
               <JournalPanel />
             ) : group === "audit" ? (

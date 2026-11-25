@@ -129,6 +129,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `remove backup` | Delete one backup folder (`--yes` or typed yes) |
 | `fetch-llm` | Download the GGUF into `data/models/model.gguf` and start llama.cpp |
 | `mailbox` | Optional Postfix/Dovecot + Roundcube (Core SMTP unchanged unless `--bind-core`) |
+| `env [group]` | Every `.env` value by part (general, web, ai, monitoring, netbox, librenms, mailbox, backup, containers), as Settings › Server; passwords only as set / not set; `*` = changeable in the UI |
 | `apply-helper` | `status`, `on`, `off`, `run`: the host helper that lets Settings › Server change `.env` and restart the containers that use it (systemd path unit `forgesre-apply`) |
 | `librenms-token` | Create `LIBRENMS_API_TOKEN` for the bundled LibreNMS when update could not (prints why when it fails), then recreate core |
 | `tls` | How to put optional HTTPS (Caddy) in front of Core |

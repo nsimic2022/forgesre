@@ -254,6 +254,32 @@ def label(name: str) -> str:
     return entry["name"] if entry else re.sub(r"(-0+1-of-\d+)?\.gguf$", "", name)
 
 
+def runtime() -> dict[str, Any]:
+    """What runs where, for Settings › RCA / AI › Model details: the chat model file and how it is
+    started (.env), the answer settings, and the document-search model. Reads files only."""
+    from app.env_catalog import BY_KEY, read_dotenv
+    from app.settings import settings
+
+    env = read_dotenv()
+    val = lambda key: env.get(key) or BY_KEY[key].default  # noqa: E731
+    d = models_dir()
+    active = active_name(d) if d.is_dir() else ""
+    main = next((m for m in installed(d) if m["name"] == active), None) if d.is_dir() else None
+    embed_dir = d / "embed"
+    embed_files = sorted(embed_dir.glob("*.gguf")) if embed_dir.is_dir() else []
+    return {
+        "chat": {"file": active, "label": label(active) if active else "", "size_gb": main["size_gb"] if main else 0,
+                 "context": val("FORGESRE_LLM_CTX"), "threads": val("FORGESRE_LLM_THREADS"), "gpu_layers": val("FORGESRE_LLM_GPU_LAYERS"),
+                 "gpu": "ai-gpu" in env.get("COMPOSE_PROFILES", ""), "url": settings.llm_url or "", "mode": settings.llm_mode,
+                 "thinking": settings.llm_thinking, "answer_percent": settings.llm_answer_percent, "think_tokens": settings.llm_think_tokens,
+                 "timeout_s": int(settings.llm_timeout)},
+        "embed": {"files": [{"name": p.name, "size_mb": round(p.stat().st_size / 1e6)} for p in embed_files],
+                  "model": settings.embed_model, "url": settings.embed_url or "",
+                  "threads": val("FORGESRE_EMBED_THREADS")},
+        "dir": str(d),
+    }
+
+
 def switchable(directory: Path | None = None) -> list[dict[str, Any]]:
     """Downloaded and imported models that are complete and can be run, for the chat's model picker."""
     return [{"name": m["name"], "label": label(m["name"]), "size_gb": m["size_gb"], "active": m["active"],

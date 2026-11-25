@@ -336,6 +336,8 @@ only GET requests on containers, on `127.0.0.1:2377` (`FORGESRE_DOCKER_RO_PORT`)
 `GET /api/v1/system/containers`, `GET /api/v1/system/containers/{service}/logs?tail=200`. On the
 server the same is `./forgesre status` and `./forgesre logs SERVICE`.
 
+Model details (Settings › RCA / AI): which file the ForgeAI model and the document-search model run from, context, threads, GPU, thinking, answer length (`GET /api/v1/forgeai/runtime`). `./forgesre env [group]` prints the same `.env` view as Settings › Server.
+
 Other places to look: Settings › Health (one row per service and integration, as
 `./forgesre doctor`), Settings › Journal (what ForgeSRE did and what failed), Settings › Audit
 (who changed what), Reports › Outbox (every message sent), and the integrations' own web pages:

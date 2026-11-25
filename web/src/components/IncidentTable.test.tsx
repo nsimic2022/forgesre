@@ -18,7 +18,7 @@ describe("ForgeAI column", () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       calls.push(`${init?.method ?? "GET"} ${url}`);
       const body = url.endsWith("/forgeai") ? { queued: true }
-        : { forgeai: { text: "Backups filled /var.", cause: "The nightly backup filled /var", action: "Check df -h on /var", model: "qwen3-8b", at: "2026-11-25T08:02:00Z" }, rca: { cause: "Disk filling", actions: [] } };
+        : { forgeai: { text: "Backups filled /var.", cause: "The nightly backup filled /var", action: "Check df -h on /var", model: "qwen3-8b", at: "2026-11-25T08:02:00Z" }, forgerca: { cause: "Disk filling", actions: [] } };
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
     }));
     render(<MemoryRouter><IncidentTable loaded canWork rows={[row("INC-1", "ready-local"), row("INC-2", "queued", { forgeai_queue: 2 }), row("INC-3", "failed"),
@@ -35,7 +35,7 @@ describe("ForgeAI column", () => {
     expect(screen.queryByText("The nightly backup filled /var")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /ForgeAI Grouped for INC-4/ }));
     expect(await screen.findByText(/its analysis covers this one/)).toBeTruthy();
-    expect(calls).toContain("GET /api/v1/incidents/INC-1");
+    expect(calls).toContain("GET /api/v1/incidents/INC-1/view");
     fireEvent.click(screen.getByRole("button", { name: "Analyse this one on its own" }));
     expect(await screen.findByText("Queued.")).toBeTruthy();
     expect(calls).toContain("POST /api/v1/incidents/INC-4/forgeai");

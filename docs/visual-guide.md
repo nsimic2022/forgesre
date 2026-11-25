@@ -4,6 +4,7 @@ Each ForgeSRE page with numbered red circles; under the picture, what each numbe
 The pictures come from `scripts/visual_guide.py`; Serbian: [vizuelni-vodic-sr.md](vizuelni-vodic-sr.md).
 
 - [NOC overview](#noc)
+- [NOC › ForgeAI analysis row](#noc-forgeai)
 - [Wall screen (TV mode)](#tv)
 - [Incidents](#incidents)
 - [Incident page](#incident)
@@ -14,6 +15,9 @@ The pictures come from `scripts/visual_guide.py`; Serbian: [vizuelni-vodic-sr.md
 - [Reports](#reports)
 - [Settings](#settings)
 - [Settings › Appearance](#settings-appearance)
+- [Settings › RCA / AI](#settings-ai)
+- [Settings › Server (.env)](#settings-server)
+- [Settings › Containers](#settings-containers)
 - [Settings › ForgeAI RAG](#settings-rag)
 - [Settings › Web push](#settings-push)
 
@@ -32,10 +36,23 @@ The start page: what is burning now, who is on call and whether the hosts answer
 5. Filter by severity, or type a host, IP or incident number.
 6. The incident name, coloured by severity (red critical, orange high, yellow warning). Click it to open the incident.
 7. Acknow.: Not acknow means nobody has taken it yet; acknowledge it so escalation stops. Who acknowledged it is on the incident page.
-8. Tick rows to acknowledge, assign or resolve several at once.
-9. Shift: who is on call now and whether the handover was taken over; the link opens the Shift card.
-10. ForgeRCA (rules, always on) and ForgeAI (the local model) status.
-11. Who is signed in, the role, and Sign out.
+8. ForgeAI: green Analysed, yellow Waiting or Analysing, red Failed or Not analysed, blue Grouped. Click opens its analysis under the row.
+9. Tick rows to acknowledge, assign or resolve several at once.
+10. Shift: who is on call now and whether the handover was taken over; the link opens the Shift card.
+11. ForgeRCA (rules, always on) and ForgeAI (the local model) status.
+12. Who is signed in, the role, and Sign out.
+
+<a id="noc-forgeai"></a>
+
+## NOC › ForgeAI analysis row
+
+ForgeAI analyses every new incident by itself, one at a time (critical first); a click on its cell opens the answer under the incident.
+
+![NOC › ForgeAI analysis row](guide/noc-forgeai.png)
+
+1. Click: open or close the analysis of this incident.
+2. Likely cause, first checks, summary, model and time; while ForgeAI works, ForgeRCA's cause. Advisory: check it against the facts.
+3. Open the incident; for a failed, missing or grouped one, Analyse now / Try again / Analyse this one on its own.
 
 <a id="tv"></a>
 
@@ -150,6 +167,8 @@ Resolved incidents with their confirmed cause, how well ForgeRCA and ForgeAI did
 4. How often ForgeRCA and ForgeAI were right.
 5. Causes that keep coming back, and on which hosts.
 6. Ask ForgeAI: chat about anything or one incident (local model).
+7. Model: which downloaded or imported model answers; an Engineer switches it here for everyone.
+8. Answers: Strict, Balanced or Open for a chat about an incident; without an incident, general knowledge.
 
 <a id="reports"></a>
 
@@ -192,6 +211,40 @@ Per browser: theme, severity colours, alerts and push.
 2. Colour the incident name by severity (on or off).
 3. Sound and desktop notification for a new critical while the page is open.
 4. Web push to this phone or browser, even when ForgeSRE is closed.
+
+<a id="settings-ai"></a>
+
+## Settings › RCA / AI
+
+ForgeAI on or off, which model runs and how, and the model list.
+
+![Settings › RCA / AI](guide/settings-ai.png)
+
+1. Model details: the model file, context, threads, GPU, thinking, answer length, and the document-search model.
+2. Model list: Qwen3, Llama, Qwen2.5 and OpsLLM, smaller to stronger; Download, then Use.
+
+<a id="settings-server"></a>
+
+## Settings › Server (.env)
+
+Every .env value by part of the appliance; safe ones change here and the apply helper restarts only what uses them.
+
+![Settings › Server (.env)](guide/settings-server.png)
+
+1. Apply helper on or off; when off, values are shown only (./forgesre apply-helper on).
+2. One part of the appliance: each value with its range and which containers restart.
+3. Secrets only as set / not set, with the command to replace one on the server.
+
+<a id="settings-containers"></a>
+
+## Settings › Containers
+
+Every container with its state, and the last lines of its log. Read only.
+
+![Settings › Containers](guide/settings-containers.png)
+
+1. State and health of each container; a finished one-shot job shows as finished.
+2. Logs: the last 100–1000 lines, filter, Errors only; passwords and tokens masked.
 
 <a id="settings-rag"></a>
 
