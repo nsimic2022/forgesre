@@ -11,13 +11,17 @@ skills and the answer language over time.
 from __future__ import annotations
 
 import re
-from typing import Any
+import time
+import uuid
+from typing import Any, Callable
 
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import GoldenCase, GoldenRun, Incident, utcnow
 
 JOB_KIND = "forgeai_golden"
+COMPARE_KIND = "forgeai_compare"
+LOAD_WAIT_S = 300
 MAX_CASES = 30
 _STOP = {"the", "and", "was", "were", "with", "from", "that", "this", "after", "before", "because", "into", "when",
          "which", "then", "than", "have", "had", "has", "not", "for", "on", "of", "to", "in", "a", "an", "is"}
@@ -52,7 +56,11 @@ def overview(db: Session) -> dict[str, Any]:
     cases = db.query(GoldenCase).order_by(GoldenCase.id).all()
     incidents = {i.id: i for i in db.query(Incident).filter(Incident.id.in_([c.incident_id for c in cases] or [-1])).all()}
     runs = db.query(GoldenRun).order_by(GoldenRun.id.desc()).limit(10).all()
+    pairs: dict[str, list[GoldenRun]] = {}
+    for r in db.query(GoldenRun).filter(GoldenRun.compare != "").order_by(GoldenRun.id.desc()).limit(10).all():
+        pairs.setdefault(r.compare, []).append(r)
     return {
+        "comparisons": [{"id": cid, "runs": [run_dict(r) for r in sorted(rows, key=lambda r: r.id)]} for cid, rows in list(pairs.items())[:5]],
         "cases": [{"id": c.id, "incident": incidents[c.incident_id].number, "title": incidents[c.incident_id].title,
                    "cause": incidents[c.incident_id].root_cause or "", "expect": expected_words(c, incidents[c.incident_id])}
                   for c in cases if c.incident_id in incidents],
@@ -64,7 +72,9 @@ def run_dict(row: GoldenRun) -> dict[str, Any]:
     return {"id": row.id, "started_at": row.started_at.isoformat() if row.started_at else None,
             "finished_at": row.finished_at.isoformat() if row.finished_at else None, "actor": row.actor, "model": row.model,
             "skill": row.skill or "best match", "language": row.language, "passed": row.passed, "total": row.total,
-            "results": row.results or []}
+            "results": row.results or [], "compare": row.compare or "", "model_file": row.model_file or "",
+            "rejected": sum(1 for r in row.results or [] if r.get("status") not in ("trial", "used")),
+            "avg_ms": int(sum(r.get("ms") or 0 for r in row.results or []) / max(1, len(row.results or [])))}
 
 
 def score(call_status: str, answer: dict[str, Any], words: list[str]) -> tuple[bool, str]:
@@ -91,7 +101,7 @@ def run(db: Session, *, skill: str = "", actor: str = "system") -> GoldenRun:
         call = forgeai.run(db, "incident", incident, skill_slug=skill, actor=f"golden:{actor}", trial=True)
         ok, why = score(call.status, call.answer or {}, expected_words(case, incident))
         row.model = row.model or call.model
-        results.append({"incident": incident.number.split("_")[0], "passed": ok, "why": why if call.status in {"trial", "used"} else (call.reason or call.status),
+        results.append({"incident": incident.number.split("_")[0], "passed": ok, "status": call.status, "why": why if call.status in {"trial", "used"} else (call.reason or call.status),
                         "cause": str((call.answer or {}).get("cause") or "")[:300], "ms": call.duration_ms, "call_id": call.id,
                         "skill": call.skill_slug})
     row.results = results
@@ -100,3 +110,60 @@ def run(db: Session, *, skill: str = "", actor: str = "system") -> GoldenRun:
     row.finished_at = utcnow()
     db.commit()
     return row
+
+
+def wait_for_model(name: str, timeout_s: int = LOAD_WAIT_S) -> bool:
+    """Wait until llama.cpp serves the model file ``name`` (its /models lists it). Polls every 5 s."""
+    import httpx
+
+    from app.settings import settings
+
+    base = (settings.llm_url or "").rstrip("/")
+    stem = name.rsplit(".gguf", 1)[0].lower()
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            r = httpx.get(f"{base}/models", timeout=5.0)
+            ids = [str(m.get("id") or "") for m in (r.json().get("data") or [])] if r.status_code == 200 else []
+            if any(stem in i.lower() or name.lower() in i.lower() for i in ids):
+                return True
+        except Exception:  # noqa: BLE001 - reloading: connection refused until the new model is up
+            pass
+        time.sleep(5)
+    return False
+
+
+def compare(db: Session, a: str, b: str, *, skill: str = "", actor: str = "system",
+            wait: Callable[[str], bool] = wait_for_model) -> str:
+    """Run the golden set on model file ``a``, then on ``b``, and put the first model back.
+
+    Both runs share a compare id. The models are switched with llm_models.activate (llama.cpp
+    reloads); thinking and the time limit as they were before are restored at the end. Runs in
+    the LLM lane, so nothing else asks the model meanwhile. Returns the compare id.
+    """
+    from app.llm_models import activate, active_name, label, models_dir
+    from app.settings import settings
+    from app.system_settings import set_setting
+
+    cid = uuid.uuid4().hex[:8]
+    first = active_name(models_dir())
+    thinking, timeout = settings.llm_thinking, int(settings.llm_timeout)
+    try:
+        for name in (a, b):
+            activate(db, name, actor)
+            if not wait(name):
+                row = GoldenRun(actor=actor, skill=skill, compare=cid, model_file=name, model=label(name), finished_at=utcnow(),
+                                results=[{"incident": "-", "passed": False, "status": "error", "why": "the model did not load in time", "ms": 0}])
+                db.add(row)
+                db.commit()
+                continue
+            row = run(db, skill=skill, actor=actor)
+            row.compare, row.model_file, row.model = cid, name, label(name)
+            db.commit()
+    finally:
+        if first:
+            activate(db, first, actor)
+            set_setting(db, "ai.llm.thinking", thinking, actor)
+            set_setting(db, "ai.llm.timeout_seconds", timeout, actor)
+            wait(first)
+    return cid

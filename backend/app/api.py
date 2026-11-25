@@ -936,6 +936,17 @@ def known_errors_list(q: str = "", db: Session = Depends(get_db), user: User = D
     return {"items": search_known_errors(db, q), "can_edit": can(user, "write_play")}
 
 
+@router.post("/known-errors/starter-pack")
+def known_errors_pack(db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Engineer: add the data-centre starter pack (RAID, PSU, temperature, UPS, links, storage, NTP,
+    certificates); entries whose title already exists are skipped."""
+    from app.known_errors_pack import add_pack
+
+    out = add_pack(db, user.email)
+    audit(db, "known_error.pack", actor=user.email, object_type="known_error", object_id="starter-pack", data={"added": len(out["added"])}, commit=True)
+    return out
+
+
 @router.post("/known-errors")
 def known_errors_create(body: KnownErrorBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
     """Add a known error (Engineer+)."""
@@ -989,8 +1000,11 @@ def golden_list(db: Session = Depends(get_db), user: User = Depends(require("rea
     from app.forgeai_golden import JOB_KIND, overview
     from app.models import Job
 
+    from app.forgeai_golden import COMPARE_KIND
+
     pending = db.query(Job).filter(Job.kind == JOB_KIND, Job.status.in_(["pending", "running"])).count()
-    return {**overview(db), "running": bool(pending), "can_edit": can(user, "write_play")}
+    comparing = db.query(Job).filter(Job.kind == COMPARE_KIND, Job.status.in_(["pending", "running"])).count()
+    return {**overview(db), "running": bool(pending or comparing), "comparing": bool(comparing), "can_edit": can(user, "write_play")}
 
 
 @router.post("/forgeai/golden")
@@ -1017,6 +1031,34 @@ def golden_delete(case_id: int, db: Session = Depends(get_db), user: User = Depe
     db.delete(row)
     db.commit()
     return {"deleted": case_id}
+
+
+class GoldenCompareBody(BaseModel):
+    a: str
+    b: str
+    skill: str = ""
+
+
+@router.post("/forgeai/golden/compare")
+def golden_compare(body: GoldenCompareBody, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Engineer: run the golden set on two local models one after the other and keep both runs side by
+    side; the model that ran before is put back. Background job on the LLM lane."""
+    from app.forgeai_golden import COMPARE_KIND
+    from app.jobs import enqueue
+    from app.llm_models import models_dir, switchable
+    from app.models import GoldenCase
+
+    if body.a == body.b:
+        raise HTTPException(status_code=400, detail="pick two different models")
+    names = {m["name"] for m in switchable(models_dir())} if models_dir().is_dir() else set()
+    if body.a not in names or body.b not in names:
+        raise HTTPException(status_code=404, detail="both models must be downloaded or imported on this appliance")
+    if not db.query(GoldenCase).count():
+        raise HTTPException(status_code=400, detail="the golden set is empty")
+    job = enqueue(db, COMPARE_KIND, "golden", object_type="forgeai", payload={"a": body.a, "b": body.b, "skill": body.skill.strip(), "actor": user.email})
+    audit(db, "forgeai.golden.compare", actor=user.email, object_type="forgeai", object_id="golden", data={"a": body.a, "b": body.b})
+    db.commit()
+    return {"job": job.id if job else None}
 
 
 class GoldenRunBody(BaseModel):

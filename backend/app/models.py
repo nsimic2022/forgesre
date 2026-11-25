@@ -808,6 +808,9 @@ class GoldenRun(Base):
     passed: Mapped[int] = mapped_column(Integer, default=0)
     total: Mapped[int] = mapped_column(Integer, default=0)
     results: Mapped[list] = mapped_column(JSONType, default=list)
+    # Compare two models: both runs of one comparison share this id; model_file is the .gguf that ran
+    compare: Mapped[str] = mapped_column(String(32), default="", index=True)
+    model_file: Mapped[str] = mapped_column(String(255), default="")
 
 
 class PushKey(Base):

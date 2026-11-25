@@ -30,7 +30,7 @@ export function KnownErrorForm({ initial, onDone, onCancel }: { initial: Partial
       <label className="cell-stack small faint">Title<input className="search" value={d.title} onChange={(e) => set("title", e.target.value)} placeholder="RAID controller cache battery learn cycle" required /></label>
       <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
         <label className="cell-stack small faint" style={{ flex: "1 1 200px" }}>Alertname<input className="search" value={d.alertname} onChange={(e) => set("alertname", e.target.value)} placeholder="NodeDiskWriteLatencyHigh" /></label>
-        <label className="cell-stack small faint" style={{ flex: "1 1 200px" }}>…and/or the title contains<input className="search" value={d.pattern} onChange={(e) => set("pattern", e.target.value)} placeholder="write latency" /></label>
+        <label className="cell-stack small faint" style={{ flex: "1 1 200px" }}>…and/or the title contains (a|b = either)<input className="search" value={d.pattern} onChange={(e) => set("pattern", e.target.value)} placeholder="write latency" /></label>
         <label className="cell-stack small faint">Status
           <select className="search" value={d.status} onChange={(e) => set("status", e.target.value)}><option value="open">open</option><option value="fixed">fixed</option></select>
         </label>
@@ -79,6 +79,10 @@ export function KnownErrorsCard() {
   const [data, setData] = useState<{ items: KnownError[]; can_edit: boolean } | null>(null);
   const [q, setQ] = useState("");
   const [edit, setEdit] = useState<Partial<KnownError> | null>(null);
+  const [packNote, setPackNote] = useState("");
+  const addPack = () => postJson<{ added: string[]; skipped: string[] }>("/api/v1/known-errors/starter-pack", {})
+    .then((r) => (setPackNote(r.added.length ? `Added ${r.added.length}: ${r.added.join(", ")}` : "All starter entries are already here."), load()))
+    .catch((e: Error) => setPackNote(e.message));
   const load = () => getJson<{ items: KnownError[]; can_edit: boolean }>(`/api/v1/known-errors?q=${encodeURIComponent(q)}`).then(setData).catch(() => setData(null));
   useEffect(() => {
     const t = window.setTimeout(load, q ? 250 : 0);
@@ -92,9 +96,11 @@ export function KnownErrorsCard() {
   return (
     <Card title="Known errors" actions={<>
       <input className="search" type="search" aria-label="Search known errors" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
+      {data?.can_edit ? <button className="btn" type="button" onClick={() => void addPack()} title="RAID, disks, PSU, temperature, fans, UPS on battery, links, datastores, filesystems, NTP, certificates">Add the data-centre starter pack</button> : null}
       {data?.can_edit ? <button className="btn primary" type="button" onClick={() => setEdit({})}>New known error</button> : null}
     </>}>
-      <span className="small faint">Recurring problems and what to do. An entry shows on every incident whose alertname and/or title matches, and ForgeAI reads it.</span>
+      <span className="small faint">Recurring problems and what to do. An entry shows on every incident whose alertname and/or title matches (the title text may list alternatives with |, e.g. power supply|psu), and ForgeAI reads it.</span>
+      {packNote ? <span className="small" role="status">{packNote}</span> : null}
       {edit ? <KnownErrorForm initial={edit} onDone={() => (setEdit(null), load())} onCancel={() => setEdit(null)} /> : null}
       {items.length === 0 ? <span className="muted">{q ? "Nothing matches." : "No known error yet."}</span> : null}
       {items.map((k) => (
