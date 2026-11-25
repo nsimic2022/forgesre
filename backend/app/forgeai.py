@@ -62,6 +62,50 @@ CHAT_RULES = (
     "- Answer with JSON only, exactly this shape: {shape}\n"
 )
 
+# Chat about an incident, by how freely the model may answer (ai.forgeai.chat_mode, or per chat).
+# The safety rules (only read, no commands that change a system, no invented site facts) never move.
+INCIDENT_CHAT_BALANCED = (
+    "You are ForgeAI, the assistant inside ForgeSRE, a NOC appliance. You only read; you never act.\n"
+    "Rules you must follow:\n"
+    "- Answer the operator_question; earlier_in_this_chat is the conversation so far.\n"
+    "- For questions about this incident, its hosts, metrics and logs, use only the facts in the user "
+    "message; if something is not there, say it is unknown.\n"
+    "- Other questions (general IT, networking, how something works, simple arithmetic, anything not "
+    "about this incident) answer from general knowledge, briefly, and say it is general knowledge.\n"
+    "- Never invent numbers, host names, IP addresses or log lines of this site.\n"
+    "- Never give commands that restart, delete or change something; read-only checks are fine.\n"
+    "- Plain English, short paragraphs or a short list, for a NOC operator.\n"
+    "- vendor_docs (D1, D2…) are excerpts of manuals; use them when they fit and cite them like [D1].\n"
+    "- Answer with JSON only, exactly this shape: {shape}\n"
+)
+INCIDENT_CHAT_OPEN = (
+    "You are ForgeAI, the assistant inside ForgeSRE, a NOC appliance. You only read; you never act.\n"
+    "Rules you must follow:\n"
+    "- Answer the operator_question freely, using the incident facts in the user message and your general "
+    "knowledge; earlier_in_this_chat is the conversation so far.\n"
+    "- Mark what comes from the facts and what is your general knowledge or a guess.\n"
+    "- Never invent numbers, host names, IP addresses or log lines of this site.\n"
+    "- Never give commands that restart, delete or change something; read-only checks are fine.\n"
+    "- vendor_docs (D1, D2…) are excerpts of manuals; use them when they fit and cite them like [D1].\n"
+    "- Answer with JSON only, exactly this shape: {shape}\n"
+)
+CHAT_MODES = ("strict", "balanced", "open")
+
+
+def chat_rules(incident: Incident | None, mode: str = "") -> str:
+    """System rules for a chat turn: without an incident the general CHAT_RULES; with one, by mode.
+
+    strict = facts of the incident only (BASE_RULES), balanced = incident facts for incident questions
+    and general knowledge for the rest, open = both freely, marked. Empty mode = ai.forgeai.chat_mode.
+    """
+    if incident is None:
+        return CHAT_RULES
+    from app.settings import settings
+
+    mode = mode if mode in CHAT_MODES else settings.forgeai_chat_mode
+    return {"strict": BASE_RULES, "open": INCIDENT_CHAT_OPEN}.get(mode, INCIDENT_CHAT_BALANCED)
+
+
 THINK_BUDGET = 1024  # default extra tokens when ai.llm.thinking is on (ai.llm.think_tokens)
 
 # ai.forgeai.language: the language of the text ForgeAI writes (JSON keys and values the checks
@@ -403,7 +447,7 @@ def queue_storm_summary(db: Session, storm: Incident, *, opened: bool = False) -
 
 
 def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Incident | None, *, hours: int = 12,
-                  question: str = "", history: list[dict[str, str]] | None = None) -> tuple[str, str]:
+                  question: str = "", history: list[dict[str, str]] | None = None, mode: str = "") -> tuple[str, str]:
     """(system, user) exactly as sent: fixed rules + task shape + skill instructions, and the context JSON.
 
     ``question`` (tasks ask and chat) goes first in the context as operator_question and is never trimmed
@@ -424,7 +468,7 @@ def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Inciden
         context = {}
     else:
         context = _incident_context(db, incident, include)
-    rules = CHAT_RULES if task == "chat" and incident is None else BASE_RULES
+    rules = chat_rules(incident, mode) if task == "chat" else BASE_RULES
     system = with_language(rules.format(shape=spec["shape"])) + "\nInstructions for this kind of work:\n" + (skill.instructions or "").strip()
     if task in {"ask", "chat"}:
         context = {"operator_question": " ".join(question.split())[:QUESTION_MAX], **context}
@@ -500,7 +544,7 @@ def _provider():
 
 def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug: str = "", actor: str = "system",
         trial: bool = False, instructions: str | None = None, hours: int = 12, question: str = "",
-        cloud: bool = False, history: list[dict[str, str]] | None = None, on_progress: Any = None) -> ForgeAiCall:
+        cloud: bool = False, history: list[dict[str, str]] | None = None, on_progress: Any = None, mode: str = "") -> ForgeAiCall:
     """Ask the model once and record the exchange. ``trial`` (skill test) never becomes the incident's answer;
     ``instructions`` tries unsaved skill text; ``hours`` is the shift summary window. An incident answer that passes the checks is stored as a
     ``forgerca-llm`` Investigation so the incident page and reports show it. ``on_progress(phase, thinking,
@@ -531,7 +575,7 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
     if instructions is not None:
         # unsaved text from the skill editor: a transient copy, never added to the session
         skill = ForgeAiSkill(slug=skill.slug, name=skill.name, task=skill.task, include=skill.include, version=skill.version, instructions=instructions)
-    system, user = build_prompts(db, task, skill, incident, hours=hours, question=question, history=history)
+    system, user = build_prompts(db, task, skill, incident, hours=hours, question=question, history=history, mode=mode)
     call = ForgeAiCall(incident_id=incident.id if incident is not None else None, task=task, skill_slug=skill.slug,
                        skill_version=skill.version or 0, system_prompt=system, user_prompt=user, actor=actor,
                        endpoint=(settings.llm_url or "") if settings.ai_enabled else "")

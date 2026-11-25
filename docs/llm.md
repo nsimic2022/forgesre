@@ -24,6 +24,22 @@ Two names in the UI:
 | Incident review summary | button on the incident | one paragraph; goes into the incident review draft as "In short" |
 | Shift handover draft | *Draft with ForgeAI* in the Shift card (Incidents › On-call); *Use as handover notes* copies it into the handover | the last 12 hours, what is still open, what to watch |
 
+**How strictly the chat answers.** The automatic incident answers always use only the incident's
+facts (they are checked against them). A chat about an incident has three modes, shown and changed
+in the line under the model status (*Answers: Strict · Balanced · Open*) and defaulting to
+`ai.forgeai.chat_mode` (Settings › RCA / AI, default **balanced**):
+
+| Mode | Questions about the incident | Other questions ("what is 5 + 2", how BGP works) |
+|---|---|---|
+| strict | only its facts; the rest is "unknown" | "unknown" |
+| balanced | only its facts | general knowledge, said so |
+| open | facts and general knowledge, marked which is which | general knowledge |
+
+A chat without an incident always answers from general knowledge. In every mode ForgeAI only
+reads, never gives commands that change a system and never invents this site's hosts, addresses,
+numbers or log lines. API: `POST /api/v1/forgeai/chats/{id}/mode` `{mode}` (empty = the default).
+Code: `forgeai.chat_rules`.
+
 **Automatic analysis, one at a time.** Every new incident gets ForgeRCA within seconds and then a
 ForgeAI pass (cause and first checks) with nobody pressing anything. The model takes one request
 at a time on its own lane, in this order: chat answers (someone is waiting), then critical

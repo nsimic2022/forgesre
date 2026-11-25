@@ -65,7 +65,36 @@ function Progress({ m, now }: { m: ChatMessage; now: number }) {
     </div>
   );
 }
-export type ChatDetail = { id: number; title: string; incident: string | null; incident_label: string; updated_at: string | null; messages: ChatMessage[]; skills: ChatSkill[] };
+export type ChatMode = "strict" | "balanced" | "open";
+export type ChatDetail = { id: number; title: string; incident: string | null; incident_label: string; updated_at: string | null; messages: ChatMessage[]; skills: ChatSkill[];
+  mode?: "" | ChatMode; mode_effective?: "general" | ChatMode };
+
+const MODES: { id: ChatMode; label: string; hint: string }[] = [
+  { id: "strict", label: "Strict", hint: "Only this incident's facts; anything else is 'unknown'" },
+  { id: "balanced", label: "Balanced", hint: "Incident questions from its facts; other questions (general IT, arithmetic…) from general knowledge, marked" },
+  { id: "open", label: "Open", hint: "Facts and general knowledge freely, marked which is which" },
+];
+
+/**
+ * How strictly ForgeAI answers in a chat about an incident, beside the model status line. The
+ * safety rules (read only, no changing commands, no invented site facts) are the same in all three.
+ */
+export function ChatModePicker({ chat, onChanged }: { chat: ChatDetail; onChanged: (c: ChatDetail) => void }) {
+  const [error, setError] = useState("");
+  if (!chat.incident) return <div className="chat-mode small"><span className="faint">Answers:</span> <strong>general knowledge</strong> <span className="faint">(no incident in this chat)</span></div>;
+  const now = (chat.mode_effective as ChatMode) || "balanced";
+  const pick = (mode: ChatMode) => postJson<ChatDetail>(`/api/v1/forgeai/chats/${chat.id}/mode`, { mode }).then(onChanged).catch((e: Error) => setError(e.message));
+  return (
+    <div className="chat-mode small" role="group" aria-label="How strictly ForgeAI answers">
+      <span className="faint">Answers:</span>
+      {MODES.map((m) => (
+        <button key={m.id} type="button" className={`chat-mode-btn${now === m.id ? " on" : ""}`} aria-pressed={now === m.id} title={m.hint} onClick={() => void pick(m.id)}>{m.label}</button>
+      ))}
+      <span className="faint">{MODES.find((m) => m.id === now)?.hint}{chat.mode ? "" : " · the default"}</span>
+      {error ? <span role="alert" style={{ color: "var(--crit)" }}>{error}</span> : null}
+    </div>
+  );
+}
 type Cloud = { enabled: boolean; ready: boolean; provider: string; model: string; host: string; can_use: boolean };
 
 const POLL_MS = 2500;
@@ -180,6 +209,7 @@ export function ForgeAiChat({ chatId, onChanged }: { chatId: number; onChanged?:
   return (
     <div className="chat">
       <ForgeAiPulse />
+      <ChatModePicker chat={chat} onChanged={(c) => setChat((old) => (old ? { ...old, mode: c.mode, mode_effective: c.mode_effective } : old))} />
       <div className="chat-log" aria-live="polite">
         {messages.length ? null : (
           <div className="chat-empty">

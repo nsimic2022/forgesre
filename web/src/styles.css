@@ -457,3 +457,8 @@ tr.ai-open > td { border-bottom-color: transparent; }
 .ai-brief-row > td { padding-top: 0; }
 .ai-brief { display: flex; flex-direction: column; gap: 10px; margin: 0 0 6px; padding: 12px 16px; background: var(--s1); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 0 0 var(--radius) var(--radius); }
 .ai-brief p { margin: 2px 0 0; }
+
+/* ForgeAI chat: how strictly it answers */
+.chat-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--border); }
+.chat-mode-btn { font: inherit; color: var(--muted); background: var(--s2); border: 1px solid var(--border); border-radius: 999px; padding: 1px 10px; cursor: pointer; }
+.chat-mode-btn.on { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 600; }

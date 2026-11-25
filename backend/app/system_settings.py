@@ -246,6 +246,10 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("ai.llm.timeout_seconds", "ai", "Model timeout (s)", "int", minimum=10, maximum=900, effective=lambda: settings.llm_timeout),
     _y("ai.forgeai.language", "ai", "ForgeAI answer language", "enum", choices=("en", "sr"),
        help="en = English (default, small models answer best in it); sr = Serbian, Latin script. Prompts and checks stay the same."),
+    _y("ai.forgeai.chat_mode", "ai", "Chat about an incident: how strict", "enum", choices=("strict", "balanced", "open"),
+       effective=lambda: settings.forgeai_chat_mode,
+       help="strict = only the incident's facts; balanced = facts for incident questions, general knowledge for the rest (default); "
+            "open = both freely, marked. Each chat can change it. Never lets ForgeAI act or invent site facts."),
     _y("ai.llm.answer_percent", "ai", "Answer length (% of built-in)", "int", minimum=50, maximum=300, effective=lambda: settings.llm_answer_percent,
        help="Every ForgeAI answer limit times this: 100 = built-in (cause 400 tokens, chat 800…), 150 = half again as long. Applies at once."),
     _y("ai.llm.think_tokens", "ai", "Thinking room (tokens)", "int", minimum=256, maximum=8192, effective=lambda: settings.llm_think_tokens,

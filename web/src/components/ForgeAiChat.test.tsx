@@ -72,3 +72,27 @@ describe("ForgeAI chat", () => {
     await waitFor(() => expect(posts[0]?.body.cloud).toBe(true));
   });
 });
+
+describe("chat mode", () => {
+  it("shows how strictly ForgeAI answers and changes it for this chat", async () => {
+    const { ChatModePicker } = await import("./ForgeAiChat");
+    const { render, screen, fireEvent, cleanup } = await import("@testing-library/react");
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method} ${url} ${init?.body}`);
+      return new Response(JSON.stringify({ id: 3, mode: "open", mode_effective: "open" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    const changed = vi.fn();
+    const chat = { id: 3, title: "t", incident: "INC-1", incident_label: "INC-1 disk", updated_at: null, messages: [], skills: [], mode: "" as const, mode_effective: "balanced" as const };
+    render(<ChatModePicker chat={chat} onChanged={changed} />);
+    expect(screen.getByRole("button", { name: "Balanced" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText(/general knowledge, marked · the default/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    await vi.waitFor(() => expect(changed).toHaveBeenCalled());
+    expect(calls[0]).toBe('POST /api/v1/forgeai/chats/3/mode {"mode":"open"}');
+    cleanup();
+    render(<ChatModePicker chat={{ ...chat, incident: null, mode_effective: "general" }} onChanged={changed} />);
+    expect(screen.getByText("general knowledge")).toBeTruthy();
+    vi.unstubAllGlobals();
+  });
+});
