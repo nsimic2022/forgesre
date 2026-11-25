@@ -48,3 +48,49 @@ def test_chat_mode_api_and_prompt():
         db.delete(inc)
         db.commit()
         db.close()
+
+
+class _PlainLLM:
+    """A model that ignores the JSON wrapper, as small models do with open questions."""
+
+    last_error, last_ms = "", 500
+
+    def __init__(self, raw: str):
+        self.last_raw = raw
+
+    def get_name(self):
+        return "openai-compatible"
+
+    def get_model(self):
+        return "opsllm-7b"
+
+    def complete_json(self, system, user, max_tokens=512):
+        self.last_error = "LLM returned text that was not JSON"
+        return None
+
+
+def test_chat_answer_without_json_is_still_shown(monkeypatch):
+    from app.seed import seed
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    seed(db)
+    monkeypatch.setattr("app.settings.Settings.ai_enabled", True)
+    monkeypatch.setattr("app.settings.Settings.llm_url", "http://llm:8080")
+    inc = Incident(number=f"INC-PT-{uuid4().hex[:6]}", title="Linux load high", severity="HIGH", status="OPEN", fingerprint=f"pt:{uuid4().hex}", started_at=utcnow())
+    db.add(inc)
+    db.commit()
+    try:
+        monkeypatch.setattr(forgeai, "_provider", lambda: _PlainLLM("<think>ok</think>\nCheck top and iostat; a backup job often causes 12 load on 8 cores."))
+        call = forgeai.run(db, "chat", inc, actor="t", question="why is load high?", mode="open")
+        assert call.status in ("used", "trial") and call.answer["answer"].startswith("Check top and iostat")
+        monkeypatch.setattr(forgeai, "_provider", lambda: _PlainLLM("<think>only thinking, no answer"))
+        call = forgeai.run(db, "chat", inc, actor="t", question="why?", mode="open")
+        assert call.status == "error" and "not JSON" in call.reason
+        # an incident task keeps the JSON rule
+        monkeypatch.setattr(forgeai, "_provider", lambda: _PlainLLM("The disk is full."))
+        assert forgeai.run(db, "explain", inc, actor="t").status == "error"
+    finally:
+        db.delete(inc)
+        db.commit()
+        db.close()
