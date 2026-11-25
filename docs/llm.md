@@ -24,6 +24,16 @@ Two names in the UI:
 | Incident review summary | button on the incident | one paragraph; goes into the incident review draft as "In short" |
 | Shift handover draft | *Draft with ForgeAI* in the Shift card (Incidents › On-call); *Use as handover notes* copies it into the handover | the last 12 hours, what is still open, what to watch |
 
+**OpsLLM and switching models from the chat.** Settings › RCA / AI › *Models* lists OpsLLM 7B (an
+operations-tuned model on a Qwen2 base, community GGUF by mradermacher) in four sizes from smaller
+to stronger: i1-Q4_K_S 4.5 GB, i1-Q4_K_M 4.7 GB (recommended), i1-Q5_K_M 5.4 GB, i1-Q6_K 6.3 GB.
+Using one turns *Let the model think first* off, since it is not a thinking model. In the ForgeAI
+chat, the line *Model:* above the mode lists every downloaded and imported model on the appliance;
+an Engineer can switch there (for everyone; llama.cpp reloads in 10–60 s; audited as
+`forgeai.model.activate`), others see which model answers. The same rules, checks and skills apply
+to every model. Compare models on the golden set (Settings › ForgeAI skills) before you keep one.
+API: `GET /api/v1/forgeai/models`, `POST /api/v1/forgeai/models/switch {name}`.
+
 **How strictly the chat answers.** The automatic incident answers always use only the incident's
 facts (they are checked against them). A chat about an incident has three modes, shown and changed
 in the line under the model status (*Answers: Strict · Balanced · Open*) and defaulting to

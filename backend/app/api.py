@@ -1846,6 +1846,35 @@ def llm_models_cancel(job_id: int, db: Session = Depends(get_db), user: User = D
     return {"cancelled": True}
 
 
+class ModelSwitch(BaseModel):
+    name: str
+
+
+@router.get("/forgeai/models")
+def forgeai_models_api(db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """The model picker in the ForgeAI chat: models on this appliance, which runs, who may switch."""
+    from app.llm_models import active_name, models_dir, switchable
+
+    d = models_dir()
+    return {"active": active_name(d) if d.is_dir() else "", "models": switchable(d) if d.is_dir() else [],
+            "can_switch": can(user, "write_play"), "mode": settings.llm_mode}
+
+
+@router.post("/forgeai/models/switch")
+def forgeai_models_switch(body: ModelSwitch, db: Session = Depends(get_db), user: User = Depends(require("write_play"))) -> dict:
+    """Engineer: run another downloaded model for everyone; llama.cpp reloads in 10–60 s. Audited."""
+    from app.llm_models import activate
+
+    try:
+        result = activate(db, body.name, user.email)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(db, "forgeai.model.activate", actor=user.email, object_type="model", object_id=body.name, data={"from": "chat"}, commit=True)
+    return result
+
+
 @router.post("/llm/models/{name}/activate")
 def llm_models_activate(name: str, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict:
     """Run this model; llama.cpp restarts with it within a few seconds."""

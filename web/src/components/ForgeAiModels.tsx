@@ -3,7 +3,7 @@ import { ApiError, getJson, postJson } from "../lib/api";
 import { Card, Chip } from "./ui";
 
 type Installed = { name: string; size_gb: number; parts: number; complete: boolean; valid: boolean; active: boolean; catalog: string };
-type CatalogItem = { id: string; name: string; size_gb: number; ram_gb: number; timeout_s: number; note: string; files: string[] };
+type CatalogItem = { id: string; name: string; size_gb: number; ram_gb: number; timeout_s: number; note: string; files: string[]; family?: string; thinking?: boolean };
 type Download = { id: number; status: string; error: string; label?: string; done_bytes?: number; total_bytes?: number; file?: string; cancel?: boolean };
 type Data = { dir: string; writable: boolean; disk_free_gb: number; ram_gb: number; active: string; installed: Installed[]; catalog: CatalogItem[]; downloads: Download[] };
 
@@ -97,16 +97,20 @@ export function ForgeAiModels() {
       })}
 
       <strong className="small">Download from Hugging Face</strong>
-      {(data?.catalog ?? []).map((c) => {
+      {(data?.catalog ?? []).map((c, i, all) => {
         const tight = data && data.ram_gb > 0 && c.ram_gb > data.ram_gb;
+        const head = c.family && c.family !== all[i - 1]?.family;
         return (
-          <div key={c.id} className="row" style={{ justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+          <div key={c.id} className="cell-stack" style={{ gap: 4 }}>
+          {head ? <span className="small" style={{ marginTop: 8 }}><strong>{c.family}</strong> <span className="faint">· sizes from smaller to stronger; operations-tuned, not a thinking model (thinking is turned off when you use it)</span></span> : null}
+          <div className="row" style={{ justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: 8 }}>
             <div className="cell-stack" style={{ gap: 2 }}>
               <span>{c.name}</span>
               <span className="small faint">{c.size_gb} GB · needs about {c.ram_gb} GB RAM · timeout {c.timeout_s} s · {c.note}</span>
               {tight ? <span className="small" style={{ color: "var(--warn)" }}>More RAM than this VM has.</span> : null}
             </div>
             {installedIds.has(c.id) ? <Chip tone="off">Installed</Chip> : <button className="btn" type="button" disabled={Boolean(running)} onClick={() => download({ catalog_id: c.id })}>Download</button>}
+          </div>
           </div>
         );
       })}

@@ -139,3 +139,37 @@ def test_llm_run_sh_picks_active_then_model_gguf_then_first_part(tmp_path):
     assert pick() == "b-00001-of-00002.gguf"
     (tmp_path / "active").write_text("gone.gguf\n")
     assert pick() == "model.gguf"
+
+
+def test_opsllm_in_the_catalogue_from_smaller_to_stronger():
+    ops = [c for c in llm_models.CATALOG if c.get("family") == "OpsLLM 7B"]
+    assert [c["id"] for c in ops] == ["opsllm-7b-q4ks", "opsllm-7b-q4km", "opsllm-7b-q5km", "opsllm-7b-q6k"]
+    assert [c["size_gb"] for c in ops] == sorted(c["size_gb"] for c in ops)
+    for c in ops:
+        assert c["thinking"] is False and llm_models.check_url(c["files"][0]) == c["files"]
+        assert c["files"][0].startswith("https://huggingface.co/mradermacher/OpsLLM-7B-i1-GGUF/resolve/main/OpsLLM-7B.i1-")
+
+
+def test_chat_model_switch_lists_downloaded_and_imported_and_needs_an_engineer(models, monkeypatch):
+    from app import system_settings
+
+    calls = []
+    monkeypatch.setattr(system_settings, "set_setting", lambda db, key, raw, actor: calls.append((key, raw)))
+    (models / "Qwen3-8B-Q4_K_M.gguf").write_bytes(GGUF)
+    (models / "OpsLLM-7B.i1-Q4_K_M.gguf").write_bytes(GGUF)
+    (models / "my-own-model.gguf").write_bytes(GGUF)
+    (models / "broken.gguf").write_bytes(b"nope")
+    (models / "active").write_text("Qwen3-8B-Q4_K_M.gguf\n")
+    analyst = _client("analyst")
+    view = analyst.get("/api/v1/forgeai/models").json()
+    labels = {m["name"]: (m["label"], m["source"]) for m in view["models"]}
+    assert labels == {"Qwen3-8B-Q4_K_M.gguf": ("Qwen3 8B (Q4_K_M)", "catalog"), "OpsLLM-7B.i1-Q4_K_M.gguf": ("OpsLLM 7B (i1-Q4_K_M)", "catalog"),
+                      "my-own-model.gguf": ("my-own-model", "imported")}
+    assert view["active"] == "Qwen3-8B-Q4_K_M.gguf" and view["can_switch"] is False
+    assert analyst.post("/api/v1/forgeai/models/switch", json={"name": "my-own-model.gguf"}).status_code == 403
+    engineer = _client("engineer")
+    assert engineer.post("/api/v1/forgeai/models/switch", json={"name": "OpsLLM-7B.i1-Q4_K_M.gguf"}).json()["active"] == "OpsLLM-7B.i1-Q4_K_M.gguf"
+    assert (models / "active").read_text().strip() == "OpsLLM-7B.i1-Q4_K_M.gguf"
+    assert ("ai.llm.thinking", False) in calls and ("ai.llm.timeout_seconds", 180) in calls
+    assert engineer.post("/api/v1/forgeai/models/switch", json={"name": "broken.gguf"}).status_code == 400
+    assert engineer.post("/api/v1/forgeai/models/switch", json={"name": "../etc.gguf"}).status_code == 404
