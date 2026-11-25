@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { IncidentKnownErrors } from "./KnownErrors";
+import { IncidentKnownErrors, KnownErrorsCard } from "./KnownErrors";
 import { SavedViews } from "./SavedViews";
 
 function stub(body: (url: string, init?: RequestInit) => unknown, posts: unknown[] = []) {
@@ -42,5 +42,12 @@ describe("Known errors and saved views", () => {
     fireEvent.change(screen.getByLabelText("Share with"), { target: { value: "network" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await vi.waitFor(() => expect(posts[0]).toEqual({ page: "incidents", name: "Mine", team: "network", filters: { tab: "active", severity: "" } }));
+  });
+
+  it("adds the data-centre starter pack", async () => {
+    stub((url) => (url.includes("starter-pack") ? { added: ["RAID array degraded", "UPS on battery"], skipped: [] } : { items: [], can_edit: true }));
+    render(<KnownErrorsCard />);
+    fireEvent.click(await screen.findByRole("button", { name: "Add the data-centre starter pack" }));
+    expect((await screen.findByRole("status")).textContent).toBe("Added 2: RAID array degraded, UPS on battery");
   });
 });

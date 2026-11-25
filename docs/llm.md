@@ -125,6 +125,16 @@ Every run keeps model, skill, language, score and per-case result, so a new mode
 `ai.forgeai.language: sr` can be compared before you switch. `./forgesre forgeai golden`; API
 `/api/v1/forgeai/golden` (`POST` add, `DELETE /{id}`, `POST /run`).
 
+**Compare two models.** Under the golden set (Engineer): pick model A and model B from the local
+models and press *Compare* (job `forgeai_compare`, LLM lane). It switches to A, waits until
+llama.cpp has loaded it (at most 5 minutes), runs the golden set, does the same for B and then
+puts back the model, thinking and timeout that were active before, also when a run fails. A model
+that does not load in time is recorded as a failed run. The table shows per model passed,
+rejected by the checks and the average time, and per incident pass/fail side by side. While it runs
+ForgeAI answers nothing else (incidents wait in the queue), so start it at a quiet time. The last
+comparison is also in `./forgesre forgeai golden`; API `POST /api/v1/forgeai/golden/compare`
+`{a, b}` with the file names from `GET /api/v1/forgeai/models`.
+
 **Ratings.** Every answer gets 1–5 stars (click the same star again to clear). Skill statistics, Settings and
 `./forgesre forgeai` show the average; 4–5 stars also count as thumbs up and 1–2 as thumbs down for older reports.
 API: `POST /api/v1/forgeai/calls/{id}/rate {"stars": 0-5}` (the older `{"value": -1|0|1}` still works).

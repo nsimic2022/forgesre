@@ -51,7 +51,7 @@ Sve što treba da preživi restart je u `FORGESRE_DATA` (podrazumevano `./data`)
 
 Za platformu bez lokalnog modela dovoljno je 4 vCPU i 8 GB RAM-a; sa lokalnim modelom računaj na 8 vCPU i 16 GB. GPU ne treba, model radi na CPU-u.
 
-**Naši VM-ovi (16 vCPU, 32 GB RAM):** koristi Qwen3 8B (`./forgesre fetch-llm --model qwen3-8b`) uz `FORGESRE_LLM_THREADS=14`. Odgovara za oko 1–2 minuta, daje primetno bolje uzroke od 4B i ostavlja 20 GB platformi. Model 14B takođe staje, ali odgovor traje nekoliko minuta; njega samo uz GPU. Pre i posle promene modela pokreni golden set.
+**Naši VM-ovi (16 vCPU, 32 GB RAM):** koristi Qwen3 8B (`./forgesre fetch-llm --model qwen3-8b`) uz `FORGESRE_LLM_THREADS=14`. Odgovara za oko 1–2 minuta, daje primetno bolje uzroke od 4B i ostavlja 20 GB platformi. Model 14B takođe staje, ali odgovor traje nekoliko minuta; njega samo uz GPU. Pre i posle promene modela pokreni golden set. Dva modela (npr. Qwen3 8B i OpsLLM 7B) uporedi dugmetom *Compare* ispod golden seta: pušta isti set na oba i prikazuje rezultate jedan pored drugog, pa vraća model koji je bio aktivan.
 
 | Resurs | Bez ForgeAI | Sa Qwen3 4B | Sa 8B modelom | Sa 14B modelom |
 | --- | --- | --- | --- | --- |
@@ -445,7 +445,7 @@ Gde je koja funkcija i kako je proveriš preko SSH-a.
 | Izmene konfiguracije (Oxidized), BGP / OSPF, najopterećeniji interfejsi | Incident › Changes before, NOC › Network | `./forgesre network` | [settings.md](settings.md) |
 | Sintetičke provere | Settings › Checks | `./forgesre synthetic` | [alerting.md](alerting.md) |
 | Komandna paleta, upozorenja u pregledaču, aplikacija na telefonu | Ctrl+K, Settings › Appearance, *Install app* | — | [ui.md](ui.md) |
-| Filter po timu, sačuvani prikazi, poznate greške | Incidents, Automation › Known errors | `./forgesre known-errors` | [ui.md](ui.md) |
+| Filter po timu, sačuvani prikazi, poznate greške (i početni paket za data centar) | Incidents, Automation › Known errors | `./forgesre known-errors` | [ui.md](ui.md) |
 | ForgeAI na srpskom, golden set, sažetak oluje | Settings › RCA / AI, Settings › ForgeAI skills | `./forgesre forgeai golden` | [llm.md](llm.md) |
 | HTTPS, opcioni delovi, GPU, backup van servera | — | `./forgesre https`, `optional`, `gpu`, `backup offbox` | poglavlja 3 i 8 |
 

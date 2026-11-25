@@ -160,3 +160,78 @@ def test_golden_api_roles(db):
     db.query(Job).filter_by(id=started["job"]).delete()
     db.commit()
     assert eng.delete(f"/api/v1/forgeai/golden/{case['id']}").status_code == 200
+
+
+def test_compare_two_models_runs_both_and_puts_the_first_back(db, monkeypatch, tmp_path):
+    from app import llm_models
+    from app.forgeai_golden import compare, overview
+
+    monkeypatch.setenv("FORGESRE_MODELS_DIR", str(tmp_path))
+    for name in ("Qwen3-8B-Q4_K_M.gguf", "OpsLLM-7B.i1-Q4_K_M.gguf"):
+        (tmp_path / name).write_bytes(b"GGUF" + b"\0" * 60)
+    (tmp_path / "active").write_text("Qwen3-8B-Q4_K_M.gguf\n")
+    monkeypatch.setattr("app.settings.Settings.llm_url", "http://llm:8088/v1")
+    inc = _inc(db, "fm raid degraded", cause="fm controller cache battery failed")
+    add_case(db, inc.number, "battery", "t")
+    answers = {"Qwen3-8B-Q4_K_M.gguf": {"cause": "The cache battery failed.", "first_checks": ["Check the controller log"], "for_shift_lead": "x"},
+               "OpsLLM-7B.i1-Q4_K_M.gguf": {"cause": "A disk failed.", "first_checks": ["Check the disks"], "for_shift_lead": "x"}}
+    monkeypatch.setattr(forgeai, "_provider", lambda: Fake(answers[llm_models.active_name(tmp_path)]))
+    waited = []
+    settings_set = []
+    monkeypatch.setattr("app.system_settings.set_setting", lambda db, key, raw, actor: settings_set.append((key, raw)))
+    cid = compare(db, "OpsLLM-7B.i1-Q4_K_M.gguf", "Qwen3-8B-Q4_K_M.gguf", actor="eng", wait=lambda name: waited.append(name) or True)
+    runs = db.query(GoldenRun).filter_by(compare=cid).order_by(GoldenRun.id).all()
+    assert [r.model_file for r in runs] == ["OpsLLM-7B.i1-Q4_K_M.gguf", "Qwen3-8B-Q4_K_M.gguf"]
+    assert [r.passed for r in runs] == [0, 1] and runs[0].model == "OpsLLM 7B (i1-Q4_K_M)"
+    assert llm_models.active_name(tmp_path) == "Qwen3-8B-Q4_K_M.gguf" and waited[-1] == "Qwen3-8B-Q4_K_M.gguf"
+    assert ("ai.llm.thinking", False) in settings_set  # OpsLLM turned it off, then the old value came back last
+    pair = overview(db)["comparisons"][0]
+    assert pair["id"] == cid and [r["rejected"] for r in pair["runs"]] == [0, 0] and pair["runs"][0]["avg_ms"] >= 0
+    text = format_golden(overview(db) | {"cases": [{"incident": inc.number, "title": "x", "expect": []}]})
+    assert "Last model comparison:" in text and "OpsLLM 7B (i1-Q4_K_M)" in text and "rejected 0" in text
+    # a model that does not load is recorded as such, and the first model still comes back
+    cid2 = compare(db, "OpsLLM-7B.i1-Q4_K_M.gguf", "Qwen3-8B-Q4_K_M.gguf", actor="eng", wait=lambda name: name != "OpsLLM-7B.i1-Q4_K_M.gguf")
+    first = db.query(GoldenRun).filter_by(compare=cid2).order_by(GoldenRun.id).first()
+    assert first.results[0]["why"] == "the model did not load in time"
+    assert llm_models.active_name(tmp_path) == "Qwen3-8B-Q4_K_M.gguf"
+
+
+def test_compare_api(db, monkeypatch, tmp_path):
+    monkeypatch.setenv("FORGESRE_MODELS_DIR", str(tmp_path))
+    for name in ("a.gguf", "b.gguf"):
+        (tmp_path / name).write_bytes(b"GGUF" + b"\0" * 60)
+    eng = _client("engineer")
+    assert _client("analyst").post("/api/v1/forgeai/golden/compare", json={"a": "a.gguf", "b": "b.gguf"}).status_code == 403
+    assert eng.post("/api/v1/forgeai/golden/compare", json={"a": "a.gguf", "b": "a.gguf"}).status_code == 400
+    assert eng.post("/api/v1/forgeai/golden/compare", json={"a": "a.gguf", "b": "zzz.gguf"}).status_code == 404
+    assert eng.post("/api/v1/forgeai/golden/compare", json={"a": "a.gguf", "b": "b.gguf"}).status_code == 400  # empty golden set
+    inc = _inc(db, "fm cmp", cause="fm psu failed")
+    add_case(db, inc.number, "", "t")
+    job = eng.post("/api/v1/forgeai/golden/compare", json={"a": "a.gguf", "b": "b.gguf"}).json()["job"]
+    assert db.get(Job, job).kind == "forgeai_compare"
+    assert _client("viewer").get("/api/v1/forgeai/golden").json()["comparing"] is True
+    db.query(Job).filter_by(id=job).delete()
+    db.commit()
+
+
+def test_known_error_starter_pack(db):
+    from app.known_errors import known_errors_for
+    from app.known_errors_pack import PACK
+
+    eng = _client("engineer")
+    assert _client("analyst").post("/api/v1/known-errors/starter-pack").status_code == 403
+    first = eng.post("/api/v1/known-errors/starter-pack").json()
+    try:
+        assert len(first["added"]) + len(first["skipped"]) == len(PACK)
+        assert eng.post("/api/v1/known-errors/starter-pack").json()["added"] == []
+        cases = {"RAID array degraded": "Virtual disk 0 degraded on fm-esx", "Power supply failed or lost input": "fm-sw01: PSU 2 failed",
+                 "UPS on battery": "UPSOnBattery fm-ups-a", "Network link down or flapping": "Gi1/0/14 flapping on fm-sw",
+                 "Datastore or volume almost full": "Datastore fm-ds01 is 95% full", "Clock drift (NTP)": "NTP offset too high on fm-dc",
+                 "Certificate expiring or expired": "SSL certificate expires in 5 days", "Temperature too high": "Inlet temperature high fm-r12"}
+        for title, alarm in cases.items():
+            hits = [k["title"] for k in known_errors_for(db, _inc(db, alarm, status="OPEN"))]
+            assert title in hits, (title, alarm, hits)
+        assert not known_errors_for(db, _inc(db, "fm cpu load high", status="OPEN"))
+    finally:
+        db.query(KnownError).filter(KnownError.title.in_([p["title"] for p in PACK])).delete(synchronize_session=False)
+        db.commit()

@@ -168,10 +168,17 @@ page what is already loaded. Code: `web/src/components/Pager.tsx`.
 
 Automation › **Known errors** is the knowledge base of recurring problems: title, how it shows,
 workaround, permanent fix, link, open/fixed. An entry matches an incident by **alertname** and/or a
-text the incident **title** contains (both when both are set). Matching entries show on the
-incident page, and ForgeAI gets them as evidence (`known_error`). Engineers add them there or with
-*Save as known error* on an incident (prefilled with the title, alertname and confirmed cause).
-API `/api/v1/known-errors`; `./forgesre known-errors [TEXT]`.
+text the incident **title** contains (both when both are set; `raid|vdisk` means either word).
+Matching entries show on the incident page, and ForgeAI gets them as evidence (`known_error`).
+Engineers add them there or with *Save as known error* on an incident (prefilled with the title,
+alertname and confirmed cause).
+
+*Add the data-centre starter pack* (Engineer) adds 11 entries matched on the title: RAID degraded,
+failing disk (SMART), power supply, temperature, fan, UPS on battery, link down or flapping,
+datastore or volume full, filesystem full, clock drift (NTP), certificate expiring. Each has
+read-only first checks as the workaround and the usual fix; edit them to your hardware and
+runbooks. Pressing it again skips titles that already exist, so your edits stay.
+API `/api/v1/known-errors` (`POST /starter-pack`); `./forgesre known-errors [TEXT]`.
 
 ## Running an incident: major incidents, SLA, handover, follow-up actions
 

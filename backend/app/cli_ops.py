@@ -937,6 +937,12 @@ def format_golden(data: dict) -> str:
         out.append(f"#{r['id']:<4} {r['passed']}/{r['total']:<5} {str(r['model'])[:28]:<28} {str(r['skill'])[:20]:<20} {r['language']:<5} {r.get('finished_at') or 'running'}")
     for res in runs[0].get("results") or []:
         out.append(f"  {'PASS' if res['passed'] else 'FAIL'} {res['incident']:<16} {res['why'][:40]:<40} {res['ms']} ms")
+    for cmp in (data.get("comparisons") or [])[:1]:
+        pair = cmp.get("runs") or []
+        if len(pair) == 2:
+            out.append("Last model comparison:")
+            for r in pair:
+                out.append(f"  {str(r['model'])[:32]:<32} {r['passed']}/{r['total']:<5} rejected {r.get('rejected', 0)}  avg {r.get('avg_ms', 0) / 1000:.1f} s")
     return "\n".join(out) + "\n"
 
 

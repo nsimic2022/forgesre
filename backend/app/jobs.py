@@ -137,7 +137,7 @@ def _json_safe(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
 
 
-LLM_KINDS = (FORGEAI_DIGEST_KIND, "forgeai", "llm_download", "forgeai_replay", "forgeai_chat", "forgeai_ping", "forgeai_golden")
+LLM_KINDS = (FORGEAI_DIGEST_KIND, "forgeai", "llm_download", "forgeai_replay", "forgeai_chat", "forgeai_ping", "forgeai_golden", "forgeai_compare")
 
 
 def job_is_llm(row: Job) -> bool:
@@ -383,6 +383,13 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 # every golden case once, as trial calls; each has the model's own timeout
                 done = golden_run(db, skill=str((row.payload or {}).get("skill") or ""), actor=str((row.payload or {}).get("actor") or "system"))
                 row.payload = {**(row.payload or {}), "result": {"run_id": done.id, "passed": done.passed, "total": done.total}}
+            elif row.kind == "forgeai_compare":
+                from app.forgeai_golden import compare
+
+                # golden set on model A, then B, then the first model back; holds the LLM lane meanwhile
+                p = row.payload or {}
+                cid = compare(db, str(p.get("a") or ""), str(p.get("b") or ""), skill=str(p.get("skill") or ""), actor=str(p.get("actor") or "system"))
+                row.payload = {**p, "result": {"compare": cid}}
             elif row.kind == "forgeai_ping":
                 from app.forgeai import ping
 

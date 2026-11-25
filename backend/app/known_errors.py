@@ -94,9 +94,13 @@ def save_known_error(db: Session, data: dict[str, Any], actor: str, ke_id: int |
 
 
 def matches(row: KnownError, alertname: str, title: str) -> bool:
-    """Alertname equal (case-insensitive) and/or pattern contained in the title; both when both are set."""
+    """Alertname equal (case-insensitive) and/or pattern contained in the title; both when both are set.
+
+    The pattern may list alternatives split by ``|`` ("power supply|psu"); any one is enough.
+    """
     ok_name = not row.alertname or row.alertname.lower() == (alertname or "").lower()
-    ok_text = not row.pattern or row.pattern.lower() in (title or "").lower()
+    low = (title or "").lower()
+    ok_text = not row.pattern or any(p.strip() and p.strip() in low for p in row.pattern.lower().split("|"))
     return bool(row.alertname or row.pattern) and ok_name and ok_text
 
 
