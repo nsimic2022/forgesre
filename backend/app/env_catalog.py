@@ -1,0 +1,277 @@
+"""Catalogue of every value in .env and secrets/secrets.env, for Settings › Server.
+
+Each .env key says what it is for, which part of the appliance it belongs to, whether it may be
+changed from the UI, what values are allowed and which containers must restart to use it.
+Changes are not made by Core: Core writes a request file and the host apply helper
+(scripts/apply-env.sh, a systemd path unit) checks it against scripts/env-keys.tsv, edits .env
+and restarts only those containers. ``python -m app.env_catalog --tsv`` writes that TSV; a test
+keeps it identical to this catalogue.
+
+Secrets are listed with ``set`` true/false only, never their value.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+@dataclass(frozen=True)
+class EnvKey:
+    key: str
+    group: str
+    label: str
+    kind: str = "text"  # int, port, enum, bool, path, text, url, secret
+    default: str = ""
+    minimum: int | None = None
+    maximum: int | None = None
+    choices: tuple[str, ...] = ()
+    restart: tuple[str, ...] = ()
+    editable: bool = False
+    help: str = ""
+
+
+GROUPS = {
+    "general": "General",
+    "web": "Web and HTTPS",
+    "ai": "ForgeAI model",
+    "monitoring": "Prometheus, Loki, Grafana",
+    "netbox": "NetBox",
+    "librenms": "LibreNMS",
+    "mailbox": "Mail server (optional)",
+    "backup": "Backup",
+    "containers": "Containers",
+}
+
+ENV: tuple[EnvKey, ...] = (
+    EnvKey("FORGESRE_TIMEZONE", "general", "Time zone", "text", "Europe/Belgrade", restart=("core", "librenms", "librenms-dispatcher"), editable=True,
+           help="IANA name, e.g. Europe/Belgrade. Reports, on-call windows and the wall screen use it."),
+    EnvKey("FORGESRE_DOMAIN", "general", "Domain name", "text", "forgesre.local", help="Used by the installer for links and certificates."),
+    EnvKey("FORGESRE_DATA", "general", "Data folder", "path", "./data", help="Where databases, models, backups and logs live. Moving it is a maintenance job."),
+    EnvKey("FORGESRE_PROFILE", "general", "Install profile", "text", "standard", help="Chosen at install."),
+    EnvKey("FORGESRE_VERSION", "general", "Version", "text", "2.0.0", help="Written by update."),
+    EnvKey("COMPOSE_PROFILES", "containers", "Optional parts", "text", "netbox,librenms",
+           help="netbox, librenms, https, ai or ai-gpu, mailbox, worker. Change with ./forgesre optional, https, gpu, mailbox."),
+    EnvKey("FORGESRE_OPTIONAL_PROFILES", "containers", "Optional parts migrated", "text", "1", help="Set by update once; leave it."),
+    EnvKey("FORGESRE_WEB_WORKERS", "web", "Web workers", "int", "1", 1, 8, restart=("core",), editable=True,
+           help="Core web processes. More than 1 needs the worker profile for the background loops."),
+    EnvKey("FORGESRE_CORE_ROLE", "web", "Core role", "enum", "all", choices=("all", "web"), help="web only with the worker profile on; set with ./forgesre optional."),
+    EnvKey("FORGESRE_HTTP_PORT", "web", "Web port", "port", "8080", help="Changing it moves the UI; do it on the server: edit .env, then ./forgesre update."),
+    EnvKey("FORGESRE_HTTPS", "web", "HTTPS", "text", "off", help="./forgesre https on | off"),
+    EnvKey("FORGESRE_HTTPS_PORT", "web", "HTTPS port", "port", "443", help="./forgesre https on asks for it."),
+    EnvKey("FORGESRE_BIND", "web", "Bind address", "text", "", help="127.0.0.1 only with HTTPS only."),
+    EnvKey("FORGESRE_DOCKER_RO_PORT", "containers", "docker-ro port (local)", "port", "2377", 1024, 65535, restart=("docker-ro", "core"), editable=True,
+           help="Read-only Docker window for Settings › Containers, on 127.0.0.1 only."),
+    EnvKey("FORGESRE_LLM_THREADS", "ai", "Model CPU threads", "int", "8", 1, 128, restart=("llm", "llm-gpu"), editable=True,
+           help="CPU threads for the local model. About the number of cores minus 2; fewer leaves CPU for the rest."),
+    EnvKey("FORGESRE_LLM_CTX", "ai", "Model context (tokens)", "int", "8192", 2048, 65536, restart=("llm", "llm-gpu"), editable=True,
+           help="Prompt and answer together. 8192 fits every catalogue model; more costs RAM, not speed."),
+    EnvKey("FORGESRE_LLM_GPU_LAYERS", "ai", "Model layers on the GPU", "int", "99", 0, 999, restart=("llm-gpu",), editable=True,
+           help="Only with ./forgesre gpu on. 99 = all; lower when the GPU memory is too small."),
+    EnvKey("FORGESRE_EMBED_THREADS", "ai", "Document search CPU threads", "int", "2", 1, 16, restart=("embed",), editable=True,
+           help="Threads for the embedding model (ForgeAI RAG). 2 is plenty."),
+    EnvKey("GRAFANA_PORT", "monitoring", "Grafana port", "port", "3000", 1024, 65535, restart=("grafana",), editable=True),
+    EnvKey("PROMETHEUS_CONFIG", "monitoring", "Prometheus config file", "path", "./data/generated/prometheus.yml", help="Generated by ./forgesre render-monitoring."),
+    EnvKey("PROMETHEUS_ALERTS", "monitoring", "Prometheus alert rules", "path", "./data/generated/alerts.yml"),
+    EnvKey("ALERTMANAGER_CONFIG", "monitoring", "Alertmanager config file", "path", "./data/generated/alertmanager.yml"),
+    EnvKey("SNMP_EXPORTER_CONFIG", "monitoring", "SNMP exporter config file", "path", "./data/generated/snmp.yml"),
+    EnvKey("ALLOY_CONFIG", "monitoring", "Alloy config file", "path", "./data/generated/config.alloy"),
+    EnvKey("LOKI_CONFIG", "monitoring", "Loki config file", "path", "./data/generated/loki.yml"),
+    EnvKey("NETBOX_PORT", "netbox", "NetBox port", "port", "8001", help="NETBOX_URL must match; change both on the server, then ./forgesre update."),
+    EnvKey("NETBOX_URL", "netbox", "NetBox URL (for Core)", "url", "http://127.0.0.1:8001"),
+    EnvKey("NETBOX_SUPERUSER_NAME", "netbox", "NetBox admin user", "text", "admin"),
+    EnvKey("NETBOX_SUPERUSER_EMAIL", "netbox", "NetBox admin e-mail", "text", "admin@forgesre.local"),
+    EnvKey("LIBRENMS_URL", "librenms", "LibreNMS URL (for Core)", "url", "http://127.0.0.1:8000"),
+    EnvKey("MAIL_DOMAIN", "mailbox", "Mail domain", "text", "", help="Set by ./forgesre mailbox."),
+    EnvKey("ROUNDCUBE_PORT", "mailbox", "Roundcube port", "port", "8081", 1024, 65535, restart=("roundcube",), editable=True),
+    EnvKey("FORGESRE_BACKUP_KEEP", "backup", "Backups kept on the server", "int", "14", 1, 365, editable=True,
+           help="The nightly backup keeps the newest N archives."),
+    EnvKey("FORGESRE_OFFBOX", "backup", "Off-box copy", "enum", "", choices=("", "dir", "s3"), editable=True,
+           help="dir = a mounted NFS / SMB folder, s3 = an S3 bucket (keys in secrets.env), empty = off."),
+    EnvKey("FORGESRE_OFFBOX_PATH", "backup", "Off-box folder (dir)", "path", "", editable=True, help="Absolute path of the mounted share, e.g. /mnt/nfs/forgesre."),
+    EnvKey("FORGESRE_OFFBOX_KEEP", "backup", "Off-box copies kept", "int", "14", 1, 365, editable=True),
+    EnvKey("FORGESRE_OFFBOX_S3_URL", "backup", "S3 endpoint", "url", "", editable=True, help="e.g. https://s3.dc.local:9000 (keys: BACKUP_S3_* in secrets.env)."),
+    EnvKey("FORGESRE_OFFBOX_S3_BUCKET", "backup", "S3 bucket", "text", "", editable=True),
+    EnvKey("FORGESRE_OFFBOX_S3_PREFIX", "backup", "S3 prefix", "text", "forgesre", editable=True),
+    EnvKey("FORGESRE_OFFBOX_S3_REGION", "backup", "S3 region", "text", "us-east-1", editable=True),
+    EnvKey("FORGESRE_OFFBOX_STRIP", "backup", "Leave secrets out of the off-box copy", "enum", "no", choices=("no", "yes"), editable=True),
+)
+
+# Passwords and keys in .env: shown as set / not set only, changed only on the server.
+ENV_SECRETS: tuple[EnvKey, ...] = tuple(
+    EnvKey(k, g, label, "secret") for k, g, label in (
+        ("POSTGRES_PASSWORD", "general", "Postgres password"),
+        ("GRAFANA_ADMIN_PASSWORD", "monitoring", "Grafana admin password"),
+        ("NETBOX_SUPERUSER_PASSWORD", "netbox", "NetBox admin password"),
+        ("NETBOX_DB_PASSWORD", "netbox", "NetBox database password"),
+        ("NETBOX_REDIS_PASSWORD", "netbox", "NetBox Redis password"),
+        ("NETBOX_SECRET_KEY", "netbox", "NetBox secret key"),
+        ("NETBOX_API_TOKEN", "netbox", "NetBox API token"),
+        ("NETBOX_API_TOKEN_PEPPER", "netbox", "NetBox token pepper"),
+        ("LIBRENMS_DB_PASSWORD", "librenms", "LibreNMS database password"),
+        ("LIBRENMS_DB_ROOT_PASSWORD", "librenms", "LibreNMS database root password"),
+        ("LIBRENMS_REDIS_PASSWORD", "librenms", "LibreNMS Redis password"),
+        ("LIBRENMS_APP_KEY", "librenms", "LibreNMS app key"),
+        ("ROUNDCUBEMAIL_DES_KEY", "mailbox", "Roundcube key"),
+    )
+)
+
+BY_KEY = {k.key: k for k in ENV + ENV_SECRETS}
+_SAFE_TEXT = re.compile(r"^[A-Za-z0-9._:/@+,-]*$")
+
+
+def dotenv_path() -> Path:
+    return Path(os.environ.get("FORGESRE_DOTENV") or Path(__file__).resolve().parents[2] / ".env")
+
+
+def apply_dir() -> Path:
+    return Path(os.environ.get("FORGESRE_APPLY_DIR") or Path(__file__).resolve().parents[2] / "data" / "apply")
+
+
+def read_dotenv(path: Path | None = None) -> dict[str, str]:
+    """KEY -> value for every assignment in .env (last one wins); comments ignored."""
+    path = path or dotenv_path()
+    out: dict[str, str] = {}
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        out[name.strip()] = value.split(" #", 1)[0].strip().strip("'").strip('"')
+    return out
+
+
+def validate(key: str, raw: Any) -> str:
+    """The value as it will be written to .env; ValueError when the key or value is not allowed.
+
+    The host helper repeats these checks from scripts/env-keys.tsv before it writes anything.
+    """
+    item = BY_KEY.get(key)
+    if item is None or not item.editable:
+        raise ValueError(f"{key} cannot be changed from the UI")
+    value = str(raw).strip()
+    if "\n" in value or not _SAFE_TEXT.match(value):
+        raise ValueError("only letters, digits and . _ : / @ + , - are allowed")
+    if item.kind in ("int", "port"):
+        if not value.isdigit():
+            raise ValueError("expected a whole number")
+        n = int(value)
+        lo = item.minimum if item.minimum is not None else (1024 if item.kind == "port" else 0)
+        hi = item.maximum if item.maximum is not None else 65535
+        if not lo <= n <= hi:
+            raise ValueError(f"must be between {lo} and {hi}")
+        return str(n)
+    if item.kind == "enum" and value not in item.choices:
+        raise ValueError("must be one of " + ", ".join(c or "(empty)" for c in item.choices))
+    if item.kind == "path" and value and not value.startswith("/"):
+        raise ValueError("must be an absolute path")
+    if item.kind == "url" and value and not re.match(r"^https?://", value):
+        raise ValueError("must start with http:// or https://")
+    if key == "FORGESRE_TIMEZONE":
+        from zoneinfo import ZoneInfo
+
+        try:
+            ZoneInfo(value)
+        except Exception as exc:
+            raise ValueError("unknown time zone") from exc
+    return value
+
+
+def describe_env() -> dict[str, Any]:
+    """Every .env value grouped by part of the appliance, plus whether the apply helper is there."""
+    values = read_dotenv()
+    rows = []
+    for item in ENV:
+        rows.append({"key": item.key, "group": item.group, "label": item.label, "kind": item.kind, "value": values.get(item.key, ""),
+                     "in_file": item.key in values, "default": item.default, "editable": item.editable, "restart": list(item.restart),
+                     "minimum": item.minimum, "maximum": item.maximum, "choices": list(item.choices), "help": item.help})
+    for item in ENV_SECRETS:
+        rows.append({"key": item.key, "group": item.group, "label": item.label, "kind": "secret", "set": bool(values.get(item.key)),
+                     "in_file": item.key in values, "editable": False, "restart": [], "help": "Password or key: shown only as set / not set."})
+    known = set(BY_KEY)
+    extra = sorted(k for k in values if k not in known)
+    return {"groups": GROUPS, "rows": rows, "unlisted": extra, "helper": helper_state(), "requests": recent_requests()}
+
+
+# --- requests to the host helper ---------------------------------------------------------
+
+
+def helper_state() -> dict[str, Any]:
+    """Installed (marker written by ./forgesre apply-helper on) and whether requests are waiting too long."""
+    d = apply_dir()
+    installed = (d / "installed").is_file()
+    waiting = sorted((d / "requests").glob("*.req")) if (d / "requests").is_dir() else []
+    stuck = [p.stem for p in waiting if datetime.now().timestamp() - p.stat().st_mtime > 90]
+    return {"installed": installed, "waiting": len(waiting), "stuck": stuck}
+
+
+def request_change(changes: dict[str, Any], actor: str) -> dict[str, Any]:
+    """Validate and write one change request for the host helper. Returns its id and the restarts it will do."""
+    if not changes:
+        raise ValueError("nothing to change")
+    clean = {k: validate(k, v) for k, v in changes.items()}
+    d = apply_dir() / "requests"
+    d.mkdir(parents=True, exist_ok=True)
+    rid = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:6]
+    body = [f"#id={rid}", f"#actor={re.sub(r'[^A-Za-z0-9@._-]', '', actor)}"] + [f"{k}={v}" for k, v in clean.items()]
+    tmp = d / f".{rid}.tmp"
+    tmp.write_text("\n".join(body) + "\n", encoding="utf-8")
+    tmp.rename(d / f"{rid}.req")  # the path unit sees only the complete file
+    restarts = sorted({s for k in clean for s in BY_KEY[k].restart})
+    return {"id": rid, "changes": clean, "restarts": restarts}
+
+
+def read_result(rid: str) -> dict[str, Any]:
+    """pending while the request waits; then the helper's status, message and restarted services."""
+    if not re.fullmatch(r"[0-9]{14}-[0-9a-f]{6}", rid):
+        raise ValueError("bad request id")
+    d = apply_dir()
+    res = d / "results" / f"{rid}.result"
+    if not res.is_file():
+        return {"id": rid, "status": "pending" if (d / "requests" / f"{rid}.req").is_file() else "unknown"}
+    out: dict[str, Any] = {"id": rid}
+    for line in res.read_text(encoding="utf-8", errors="replace").splitlines():
+        if "=" in line:
+            k, _, v = line.partition("=")
+            out[k.strip()] = v.strip()
+    return out
+
+
+def recent_requests(limit: int = 8) -> list[dict[str, Any]]:
+    d = apply_dir() / "results"
+    if not d.is_dir():
+        return []
+    files = sorted(d.glob("*.result"), reverse=True)[:limit]
+    return [read_result(p.stem) for p in files]
+
+
+def tsv() -> str:
+    """scripts/env-keys.tsv: what the host helper accepts (editable keys only)."""
+    # "." marks an empty field: bash read collapses empty tab-separated fields
+    lines = ["# key\tkind\tmin\tmax\tchoices\trestart   (generated: python -m app.env_catalog --tsv; . = empty)"]
+    for k in ENV:
+        if not k.editable:
+            continue
+        lo = "." if k.minimum is None else str(k.minimum)
+        hi = "." if k.maximum is None else str(k.maximum)
+        choices = "|".join(c or "-" for c in k.choices) or "."
+        lines.append("\t".join([k.key, k.kind, lo, hi, choices, ",".join(k.restart) or "."]))
+    return "\n".join(lines) + "\n"
+
+
+if __name__ == "__main__":
+    if "--tsv" in sys.argv:
+        sys.stdout.write(tsv())
+    else:
+        print(json.dumps(describe_env(), indent=2))

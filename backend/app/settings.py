@@ -253,6 +253,24 @@ class Settings(BaseSettings):
             return 90.0
 
     @property
+    def llm_answer_percent(self) -> int:
+        """Answer length for every ForgeAI task, in % of the built-in max_tokens (50–300, default 100)."""
+        raw = ((self.yaml.get("ai") or {}).get("llm") or {}).get("answer_percent", 100)
+        try:
+            return max(50, min(300, int(raw)))
+        except (TypeError, ValueError):
+            return 100
+
+    @property
+    def llm_think_tokens(self) -> int:
+        """Extra tokens a thinking model may use before it answers (when ai.llm.thinking is on)."""
+        raw = ((self.yaml.get("ai") or {}).get("llm") or {}).get("think_tokens", 1024)
+        try:
+            return max(256, min(8192, int(raw)))
+        except (TypeError, ValueError):
+            return 1024
+
+    @property
     def llm_thinking(self) -> bool:
         """Let a thinking model (Qwen3) reason before it answers. Off: faster on CPU, no reasoning to show."""
         return bool(((self.yaml.get("ai") or {}).get("llm") or {}).get("thinking", False))

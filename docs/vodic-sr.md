@@ -166,6 +166,9 @@ ponovo uključuje integraciju.
 | `FORGESRE_BIND`, `FORGESRE_COOKIE_SECURE` | 0.0.0.0, nije postavljeno | Postavlja `./forgesre https only`: Core na 127.0.0.1, Secure cookie |
 | `FORGESRE_LLM_THREADS` | 8 | CPU niti za llama.cpp; `fetch-llm` stavlja broj jezgara minus 2 |
 | `FORGESRE_LLM_CTX` | 8192 | Veličina konteksta lokalnog modela u tokenima (poglavlje 9) |
+| `FORGESRE_LLM_GPU_LAYERS` | 99 | Samo uz GPU: koliko slojeva modela ide na GPU |
+| `FORGESRE_EMBED_THREADS` | 2 | CPU niti modela za pretragu dokumenata |
+| `FORGESRE_WEB_WORKERS` | 1 | Broj web procesa Core-a (više traži worker profil) |
 | `FORGESRE_EMBED_THREADS` | 2 | CPU niti za embeddings model |
 | `FORGESRE_LLM_GPU_LAYERS` | 99 | Koliko slojeva ide na GPU uz `./forgesre gpu on` |
 | `FORGESRE_OFFBOX`, `FORGESRE_OFFBOX_PATH`, `FORGESRE_OFFBOX_S3_URL`, `_S3_BUCKET`, `_S3_PREFIX`, `_S3_REGION`, `_KEEP`, `_STRIP` | isključeno | Kopija svakog backupa van servera, na NFS ili S3 ([operator-handbook.md](operator-handbook.md)) |
@@ -346,7 +349,7 @@ Na CPU-u brzinu određuju dve stvari: koliko teksta model mora da pročita (prom
 - **Prozor modela:** llama.cpp se pokreće sa `-c 8192`, dakle 8192 tokena za prompt i odgovor zajedno. Menja se promenljivom `FORGESRE_LLM_CTX` u `.env` (npr. 16384) pa `./forgesre update`. Veći prozor troši više RAM-a i ne ubrzava odgovor.
 - **Šta ForgeSRE šalje:** činjenice incidenta kao JSON od najviše 4500 znakova (oko 1200–1500 tokena). Kad ne staje, izbacuje redom: syslog, vremensku liniju, odlomke priručnika, izmene pre incidenta, ranije incidente na assetu, playbook, beleške, istoriju chata. Pitanje operatera je do 500 znakova, poruka u chatu do 2000, a chat šalje poslednjih 6 poruka (do 600 znakova svaka).
 
-**Dužina odgovora (max_tokens):** uzrok i prve provere 400, objašnjenje 350, chat 800, ostalo 500. Kad je uključeno razmišljanje, dodaje se još 1024 tokena za razmišljanje. Temperatura je 0,1 (stabilni, ponovljivi odgovori).
+**Dužina odgovora (max_tokens):** uzrok i prve provere 400, objašnjenje 350, chat 800, ostalo 450–500. Sve se množi podešavanjem Settings › RCA / AI › *Answer length* (`ai.llm.answer_percent`, 50–300 %, podrazumevano 100). Kad je uključeno razmišljanje, dodaje se *Thinking room* (`ai.llm.think_tokens`, podrazumevano 1024). Oba važe odmah, bez restarta. `.env` vrednosti (niti, kontekst, GPU slojevi) menjaju se u Settings › Server kad je uključen apply helper (`./forgesre apply-helper on`). Temperatura je 0,1 (stabilni, ponovljivi odgovori).
 
 | Podešavanje | Gde | Podrazumevano | Kada menjati |
 | --- | --- | --- | --- |

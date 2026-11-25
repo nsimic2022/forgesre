@@ -62,7 +62,7 @@ CHAT_RULES = (
     "- Answer with JSON only, exactly this shape: {shape}\n"
 )
 
-THINK_BUDGET = 1024  # extra tokens when ai.llm.thinking is on
+THINK_BUDGET = 1024  # default extra tokens when ai.llm.thinking is on (ai.llm.think_tokens)
 
 # ai.forgeai.language: the language of the text ForgeAI writes (JSON keys and values the checks
 # compare stay as they are). English is the default; models answer best in it.
@@ -220,6 +220,18 @@ BUILTIN: list[tuple[str, str, str, list[str], list[str], int, dict[str, bool], s
      "and what to keep an eye on. Most important first. Do not repeat every incident."),
 ]
 
+
+
+def answer_tokens(task: str) -> int:
+    """max_tokens for one task: the built-in length times ai.llm.answer_percent."""
+    from app.settings import settings
+
+    return max(64, TASKS[task]["max_tokens"] * settings.llm_answer_percent // 100)
+
+
+def answer_lengths() -> list[dict[str, Any]]:
+    """Every task with its built-in and current answer length, for Settings › RCA / AI."""
+    return [{"task": name, "label": spec.get("label") or name, "base": spec["max_tokens"], "now": answer_tokens(name)} for name, spec in TASKS.items()]
 
 def seed_skills(db: Session) -> None:
     """Add missing built-in skills; edited ones keep their text, defaults are refreshed."""
@@ -539,7 +551,7 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
         # nothing open while the model works (can take minutes): progress writes from other sessions go through
         db.commit()
         # a thinking model needs room to think before the JSON answer
-        budget = TASKS[task]["max_tokens"] + (THINK_BUDGET if settings.llm_thinking and not cloud else 0)
+        budget = answer_tokens(task) + (settings.llm_think_tokens if settings.llm_thinking and not cloud else 0)
         if on_progress is not None and hasattr(provider, "complete_json_stream"):
             parsed = provider.complete_json_stream(system, user, budget, on_progress)
         else:
@@ -606,7 +618,7 @@ def critique(db: Session, call: ForgeAiCall, *, actor: str) -> ForgeAiCall:
                       system_prompt=system, user_prompt=user, actor=actor, endpoint=f"cloud:{settings.cloud_provider} {settings.cloud_url}")
     model = cloud_provider()
     started = time.monotonic()
-    parsed = model.complete_json(system, user, spec["max_tokens"])
+    parsed = model.complete_json(system, user, answer_tokens("critic"))
     row.duration_ms = int(getattr(model, "last_ms", 0) or (time.monotonic() - started) * 1000)
     row.raw_response = str(getattr(model, "last_raw", "") or "")
     row.model = model.get_model() or ""
