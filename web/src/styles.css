@@ -449,3 +449,11 @@ tr.picked td { background: var(--s2); }
 .log-view { max-height: 60vh; overflow: auto; margin: 0; padding: 10px 12px; background: var(--s1); border: 1px solid var(--border); border-radius: var(--radius);
   font: 12px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
 .log-view .log-err { color: var(--crit); }
+
+/* ForgeAI cell and the analysis row it opens under an incident */
+.ai-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; background: none; border: 1px solid transparent; border-radius: 8px; padding: 4px 6px; color: inherit; cursor: pointer; font: inherit; text-align: left; }
+.ai-cell:hover, .ai-cell.open { border-color: var(--border); background: var(--s2); }
+tr.ai-open > td { border-bottom-color: transparent; }
+.ai-brief-row > td { padding-top: 0; }
+.ai-brief { display: flex; flex-direction: column; gap: 10px; margin: 0 0 6px; padding: 12px 16px; background: var(--s1); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 0 0 var(--radius) var(--radius); }
+.ai-brief p { margin: 2px 0 0; }

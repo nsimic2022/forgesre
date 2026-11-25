@@ -41,17 +41,67 @@ def forgeai_mode() -> str:
     return "external" if mode == "external" else "local"
 
 
-def _forgeai_state(incident: Incident, llm_jobs: dict[str, str], mode: str) -> str:
-    """What the ForgeAI column shows: off, queued, running, ready-local, ready-external or none."""
+SIMILAR_MINUTES = 15
+
+
+def forgeai_leader(db: Session, incident: Incident, _depth: int = 0) -> Incident | None:
+    """The incident whose ForgeAI analysis covers this one, or None when it gets its own.
+
+    A child of a correlated parent (caused_by) uses the parent's; an incident with the same title
+    (alert) that started up to SIMILAR_MINUTES after an earlier open one uses the earlier one, so a
+    burst of the same alarm is analysed once instead of filling the model's queue.
+    """
+    if incident.caused_by_id and _depth == 0:
+        parent = db.get(Incident, incident.caused_by_id)
+        if parent is not None:
+            return parent
+    if not incident.started_at or not incident.title:
+        return None
+    start = _aware(incident.started_at)
+    earlier = (db.query(Incident)
+               .filter(Incident.title == incident.title, Incident.id != incident.id, Incident.caused_by_id.is_(None),
+                       Incident.status.in_(ACTIVE), Incident.started_at <= incident.started_at,
+                       Incident.started_at >= start - timedelta(minutes=SIMILAR_MINUTES))
+               .order_by(Incident.started_at, Incident.id).first())
+    if earlier is not None and (_aware(earlier.started_at), earlier.id) < (start, incident.id):
+        # a long burst chains: follow to the first one, which holds the analysis
+        root = forgeai_leader(db, earlier, _depth + 1) if _depth < 5 else None
+        return root or earlier
+    return None
+
+
+def _llm_failed(db: Session) -> set[str]:
+    """Incidents whose newest ForgeAI pass (investigate with use_llm) ended in an error, last 2 days."""
+    since = utcnow() - timedelta(days=2)
+    newest: dict[str, Job] = {}
+    for row in db.query(Job).filter(Job.kind == "investigate", Job.created_at >= since).order_by(Job.id).all():
+        if (row.payload or {}).get("use_llm") is True:
+            newest[row.object_id] = row
+    return {n for n, row in newest.items() if row.status == "error"}
+
+
+def _llm_queue(db: Session) -> dict[str, int]:
+    """Incident number -> place in the ForgeAI queue (1 = next), in the order the lane takes them."""
+    from app.jobs import llm_order
+
+    rows = db.query(Job).filter(Job.kind == "investigate", Job.status == "pending").order_by(Job.id).limit(200).all()
+    rows = llm_order([r for r in rows if (r.payload or {}).get("use_llm") is True])
+    return {r.object_id: i + 1 for i, r in enumerate(rows)}
+
+
+def _forgeai_state(incident: Incident, llm_jobs: dict[str, str], mode: str, failed: set[str] | None = None, grouped: bool = False) -> str:
+    """What the ForgeAI column shows: off, queued, running, ready-local, ready-external, failed, grouped or none."""
     if mode == "off":
         return "off"
     job = llm_jobs.get(incident.number)
     if job in ("pending", "running"):
         return "queued" if job == "pending" else "running"
+    if failed and incident.number in failed:
+        return "failed"
     for inv in reversed(incident.investigations or []):
         if (inv.provider or "").endswith("-llm"):
             return f"ready-{mode}"
-    return "none"
+    return "grouped" if grouped else "none"
 
 
 def _level(cubes: list[dict[str, Any]]) -> str:
@@ -60,8 +110,10 @@ def _level(cubes: list[dict[str, Any]]) -> str:
     return f"L{max(fired)}" if fired else "L1"
 
 
-def _row(incident: Incident, sent: dict[int, int], llm_jobs: dict[str, str], mode: str, db: Session) -> dict[str, Any]:
+def _row(incident: Incident, sent: dict[int, int], llm_jobs: dict[str, str], mode: str, db: Session,
+         failed: set[str] | None = None, queue: dict[str, int] | None = None) -> dict[str, Any]:
     asset = incident.asset
+    leader = forgeai_leader(db, incident) if mode != "off" else None
     latest = incident.investigations[-1] if incident.investigations else None
     alert = incident.alert_payload or {}
     annotations = alert.get("annotations") if isinstance(alert, dict) else {}
@@ -80,7 +132,10 @@ def _row(incident: Incident, sent: dict[int, int], llm_jobs: dict[str, str], mod
         "level": _level(incident_ladder_cubes(incident, db)),
         "messages": sent.get(incident.id, 0),
         "forgerca": (latest.likely_cause or latest.summary or "") if latest else "",
-        "forgeai": _forgeai_state(incident, llm_jobs, mode),
+        "forgeai": _forgeai_state(incident, llm_jobs, mode, failed, grouped=leader is not None),
+        "forgeai_ref": leader.number.split("_")[0] if leader is not None else "",
+        "forgeai_ref_number": leader.number if leader is not None else "",
+        "forgeai_queue": (queue or {}).get(incident.number, 0),
         "flap_count": int(incident.flap_count or 0),
         "sla": _sla_short(incident),
         "major": bool(incident.major),
@@ -155,7 +210,8 @@ def noc_overview(db: Session, now: datetime | None = None) -> dict[str, Any]:
     sent = _sent_counts(db, [i.id for i in active + resolved_today])
     llm_jobs = _llm_jobs(db)
     mode = forgeai_mode()
-    rows_active = [_row(i, sent, llm_jobs, mode, db) for i in active]
+    failed, queue = _llm_failed(db), _llm_queue(db)
+    rows_active = [_row(i, sent, llm_jobs, mode, db, failed, queue) for i in active]
     not_acked = [r for r in rows_active if not r["ack_at"]]
     acked = [r for r in rows_active if r["ack_at"]]
 

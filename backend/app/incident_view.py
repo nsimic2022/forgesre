@@ -16,7 +16,7 @@ from app.audit import audit
 from app.history import audit_as_dict, audit_for, note_as_dict, notes_for, notification_as_dict, notifications_for
 from app.ladder_cubes import incident_ladder_cubes
 from app.models import Asset, Incident, User
-from app.noc import ACTIVE, RESOLVED, _level, _llm_jobs, _row, _sent_counts, forgeai_mode
+from app.noc import ACTIVE, RESOLVED, _level, _llm_failed, _llm_jobs, _llm_queue, _row, _sent_counts, forgeai_mode
 from app.security import can
 
 TABS = ("active", "acknowledged", "resolved", "all")
@@ -90,13 +90,14 @@ def incidents_page(
     sent = _sent_counts(db, [r.id for r in rows])
     jobs = _llm_jobs(db)
     mode = forgeai_mode()
+    failed, queue = _llm_failed(db), _llm_queue(db)
     return {
         "tab": tab,
         "counts": counts,
         "total": counts[tab],
         "offset": offset,
         "limit": limit,
-        "rows": [_row(r, sent, jobs, mode, db) for r in rows],
+        "rows": [_row(r, sent, jobs, mode, db, failed, queue) for r in rows],
         "teams": teams(db),
     }
 

@@ -44,7 +44,7 @@ describe("NOC overview", () => {
     expect(screen.getByText("esx-prod-03 problem")).toBeTruthy();
     expect(screen.getByText("nas-bkp-01 problem")).toBeTruthy();
     expect(screen.queryByText("db-ora-02 problem")).toBeNull();
-    expect(screen.getAllByText("Ready · local").length).toBe(2);
+    expect(screen.getAllByText("Analysed").length).toBe(2);
     expect(screen.getByText("Marko J.")).toBeTruthy();
   });
 

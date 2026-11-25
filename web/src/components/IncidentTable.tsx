@@ -1,16 +1,71 @@
 import { sevClass } from "../lib/sevcells";
-import { useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { postJson, type NocIncident } from "../lib/api";
+import { getJson, postJson, type NocIncident } from "../lib/api";
 import { FORGEAI_LABEL, clock, duration, severityLabel, severityTone, shortNumber, tierLabel } from "../lib/format";
 import { Chip, Dot } from "./ui";
 
 // Incident table shared by the NOC overview and the Incidents page (design: two-line cells).
-function IncidentRow({ row, picked, onPick }: { row: NocIncident; picked?: boolean; onPick?: (on: boolean) => void }) {
+type Brief = { forgeai: { text: string; cause: string; action: string; model: string; at: string | null }; rca: { cause: string; actions: string[] } | null };
+
+/**
+ * ForgeAI's opinion under an incident row, opened from the ForgeAI cell. A grouped incident shows
+ * the analysis of the one it belongs to, with a button to analyse this one on its own.
+ */
+function ForgeAiBrief({ row, cols, canWork, onChanged }: { row: NocIncident; cols: number; canWork: boolean; onChanged?: () => void }) {
+  const target = row.forgeai === "grouped" && row.forgeai_ref_number ? row.forgeai_ref_number : row.number;
+  const [brief, setBrief] = useState<Brief | null>(null);
+  const [error, setError] = useState("");
+  const [asked, setAsked] = useState(false);
+  useEffect(() => {
+    getJson<Brief>(`/api/v1/incidents/${encodeURIComponent(target)}`).then(setBrief).catch((e: Error) => setError(e.message));
+  }, [target, row.forgeai]);
+  const analyse = () => postJson(`/api/v1/incidents/${encodeURIComponent(row.number)}/forgeai`, { task: "incident", skill: "" })
+    .then(() => (setAsked(true), onChanged?.())).catch((e: Error) => setError(e.message));
+  const ai = brief?.forgeai;
+  const done = Boolean(ai && (ai.cause || ai.text));
+  return (
+    <tr className="ai-brief-row">
+      <td colSpan={cols}>
+        <div className="ai-brief" role="region" aria-label={`ForgeAI on ${shortNumber(row.number)}`}>
+          {row.forgeai === "grouped" ? <span className="small muted">Grouped with <Link to={`/incidents/${encodeURIComponent(target)}`}>{row.forgeai_ref}</Link> (same alarm or caused by it): its analysis covers this one.</span> : null}
+          {error ? <span className="small" role="alert" style={{ color: "var(--crit)" }}>{error}</span> : null}
+          {!brief && !error ? <span className="muted small">Loading…</span> : null}
+          {done ? (
+            <>
+              {ai!.cause ? <div><strong>Likely cause</strong><p>{ai!.cause}</p></div> : null}
+              {ai!.action ? <div><strong>First checks</strong><p style={{ whiteSpace: "pre-wrap" }}>{ai!.action}</p></div> : null}
+              {ai!.text && ai!.text !== ai!.cause ? <div><strong>Summary</strong><p>{ai!.text}</p></div> : null}
+              <span className="small faint">{ai!.model}{ai!.at ? ` · ${clock(ai!.at)}` : ""} · advisory, check it against the facts</span>
+            </>
+          ) : brief ? (
+            <span className="small muted">
+              {row.forgeai === "running" ? "ForgeAI is reading the metrics, logs and history of this incident now." :
+                row.forgeai === "queued" ? `Waiting for the model: ${row.forgeai_queue ? `number ${row.forgeai_queue} in the queue (critical first)` : "in the queue"}.` :
+                row.forgeai === "failed" ? "The last ForgeAI pass failed (model not answering or timed out)." :
+                "No ForgeAI analysis yet."}
+              {brief.rca?.cause ? <> ForgeRCA meanwhile: <strong>{brief.rca.cause}</strong></> : null}
+            </span>
+          ) : null}
+          <div className="row" style={{ gap: 8 }}>
+            <Link className="btn" to={`/incidents/${encodeURIComponent(row.number)}`}>Open incident</Link>
+            {canWork && ["none", "failed", "grouped"].includes(row.forgeai) && !asked ? (
+              <button className="btn" type="button" onClick={() => void analyse()}>{row.forgeai === "grouped" ? "Analyse this one on its own" : row.forgeai === "failed" ? "Try again" : "Analyse now"}</button>
+            ) : null}
+            {asked ? <span className="small muted" role="status">Queued.</span> : null}
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function IncidentRow({ row, picked, onPick, open, onToggle }: { row: NocIncident; picked?: boolean; onPick?: (on: boolean) => void; open: boolean; onToggle: () => void }) {
   const tone = severityTone(row.severity);
   const ai = FORGEAI_LABEL[row.forgeai] ?? FORGEAI_LABEL.none;
+  const hint = row.forgeai === "grouped" ? `with ${row.forgeai_ref}` : row.forgeai === "queued" && row.forgeai_queue ? `#${row.forgeai_queue} in queue` : ai.hint;
   return (
-    <tr className={picked ? "picked" : undefined}>
+    <tr className={`${picked ? "picked" : ""}${open ? " ai-open" : ""}`.trim() || undefined}>
       {onPick ? <td><input type="checkbox" checked={Boolean(picked)} onChange={(e) => onPick(e.target.checked)} aria-label={`Select ${shortNumber(row.number)}`} /></td> : null}
       <td>
         <span className="row" style={{ gap: 8 }}>
@@ -56,7 +111,15 @@ function IncidentRow({ row, picked, onPick }: { row: NocIncident; picked?: boole
       <td><Chip tone="off">{tierLabel(row.level)}</Chip></td>
       <td className="small muted">{row.messages} sent</td>
       <td className="small muted">{row.forgerca || "—"}</td>
-      <td><Chip tone={ai.tone}>{ai.text}</Chip></td>
+      <td>
+        {row.forgeai === "off" ? <Chip tone="off">Off</Chip> : (
+          <button type="button" className={`ai-cell${open ? " open" : ""}`} aria-expanded={open} onClick={onToggle}
+            aria-label={`ForgeAI ${ai.text} for ${shortNumber(row.number)}: ${open ? "hide" : "show"} the analysis`}>
+            <span className="row" style={{ gap: 6 }}><Dot tone={ai.tone} /><strong className="small">{ai.text}</strong><span aria-hidden="true">{open ? "▴" : "▾"}</span></span>
+            {hint ? <span className="small faint">{hint}</span> : null}
+          </button>
+        )}
+      </td>
     </tr>
   );
 }
@@ -67,6 +130,13 @@ function IncidentRow({ row, picked, onPick }: { row: NocIncident; picked?: boole
  */
 export function IncidentTable({ rows, loaded, canWork = false, onChanged }: { rows: NocIncident[]; loaded: boolean; canWork?: boolean; onChanged?: () => void }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [openAi, setOpenAi] = useState<Set<string>>(new Set());
+  const toggleAi = (number: string) => setOpenAi((s) => {
+    const next = new Set(s);
+    if (next.has(number)) next.delete(number); else next.add(number);
+    return next;
+  });
+  const cols = canWork ? 11 : 10;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const visible = new Set(rows.map((r) => r.number));
@@ -110,12 +180,16 @@ export function IncidentTable({ rows, loaded, canWork = false, onChanged }: { ro
             <th style={{ width: 80 }}>Tier</th>
             <th style={{ width: 80 }}>Messages</th>
             <th style={{ width: 170 }}>ForgeRCA</th>
-            <th style={{ width: 128 }}>ForgeAI</th>
+            <th style={{ width: 140 }}>ForgeAI</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <IncidentRow key={row.number} row={row} picked={picked.has(row.number)} onPick={canWork ? (on) => pick(row.number, on) : undefined} />
+            <Fragment key={row.number}>
+              <IncidentRow row={row} picked={picked.has(row.number)} onPick={canWork ? (on) => pick(row.number, on) : undefined}
+                open={openAi.has(row.number)} onToggle={() => toggleAi(row.number)} />
+              {openAi.has(row.number) ? <ForgeAiBrief row={row} cols={cols} canWork={canWork} onChanged={onChanged} /> : null}
+            </Fragment>
           ))}
         </tbody>
       </table>

@@ -24,6 +24,19 @@ Two names in the UI:
 | Incident review summary | button on the incident | one paragraph; goes into the incident review draft as "In short" |
 | Shift handover draft | *Draft with ForgeAI* in the Shift card (Incidents › On-call); *Use as handover notes* copies it into the handover | the last 12 hours, what is still open, what to watch |
 
+**Automatic analysis, one at a time.** Every new incident gets ForgeRCA within seconds and then a
+ForgeAI pass (cause and first checks) with nobody pressing anything. The model takes one request
+at a time on its own lane, in this order: chat answers (someone is waiting), then critical
+incidents, then high, then the rest, oldest first. A burst is analysed once: an incident caused by
+a correlated parent, or the same alarm (title) again within 15 minutes of an open one, is
+**grouped** with the first and shows its analysis; *Analyse this one on its own* forces a separate
+pass. In the NOC and Incidents tables the **ForgeAI** column shows green *Analysed*, yellow
+*Waiting* (with the place in the queue) or *Analysing…*, red *Failed* or *Not analysed*, blue
+*Grouped* (with which incident). A click opens the analysis in a row under the incident (likely
+cause, first checks, summary, model and time, or ForgeRCA's cause while ForgeAI is still working);
+another click closes it, and any number of rows can be open. Code: `noc.forgeai_leader`,
+`jobs.llm_order`, `services.queue_llm_rewrite`.
+
 **Skills** are the editable part: when a skill applies (alert name patterns, asset types) and its
 instructions, written like a note to a colleague. ForgeSRE ships twelve (any incident, Linux disk,
 CPU/memory, host down, network link, Windows service, database, Kubernetes, appliance checks,

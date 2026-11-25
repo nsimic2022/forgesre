@@ -150,6 +150,20 @@ def job_is_llm(row: Job) -> bool:
     return payload.get("use_llm", True) is not False
 
 
+def llm_order(rows: list[Job]) -> list[Job]:
+    """The order the ForgeAI lane works in: chat answers (someone waits), then critical incidents,
+    then high, then the rest, oldest first within each."""
+    rank = {"CRITICAL": 1, "HIGH": 2}
+
+    def key(row: Job) -> tuple[int, int]:
+        if row.kind == "forgeai_chat":
+            return (0, row.id)
+        if row.kind == "investigate":
+            return (rank.get(str((row.payload or {}).get("severity") or "").upper(), 3), row.id)
+        return (3, row.id)
+    return sorted(rows, key=key)
+
+
 LANE_DEFAULT = "default"
 LANE_LLM = "llm"
 
@@ -164,8 +178,8 @@ def next_pending_job(db: Session, lane: str | None = None) -> Job | None:
     if lane == LANE_LLM:
         # filtered in SQL, so a backlog of ordinary jobs can never hide a waiting chat answer
         rows = (db.query(Job).filter(Job.status == "pending", Job.kind.in_((*LLM_KINDS, "investigate")))
-                .order_by(Job.id).limit(32).all())
-        return next((row for row in rows if job_is_llm(row)), None)
+                .order_by(Job.id).limit(64).all())
+        return next(iter(llm_order([row for row in rows if job_is_llm(row)])), None)
     pending = db.query(Job).filter_by(status="pending").order_by(Job.id).limit(32).all()
     if lane == LANE_DEFAULT:
         return next((row for row in pending if not job_is_llm(row)), None)

@@ -1270,7 +1270,8 @@ def forgeai_ask(number: str, body: ForgeAiAsk, db: Session = Depends(get_db), us
     if item is None:
         raise HTTPException(status_code=404, detail="incident not found")
     if body.task == "incident":
-        job = enqueue(db, "investigate", item.number, payload={"use_llm": True, "skill": body.skill, "actor": user.email})
+        job = enqueue(db, "investigate", item.number, payload={"use_llm": True, "skill": body.skill, "actor": user.email,
+                                                               "severity": (item.severity or "").upper()})
     else:
         # one pending job per incident and task: an explain request does not swallow an investigation
         job = enqueue(db, JOB_KIND, f"{item.number}#{body.task}", object_type="incident",

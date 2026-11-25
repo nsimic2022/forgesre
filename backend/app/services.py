@@ -1732,6 +1732,12 @@ def queue_llm_rewrite(db: Session, incident: Incident, actor: str = "system") ->
 
     if not settings.ai_enabled or not settings.llm_url:
         return
+    from app.noc import forgeai_leader
+
+    # one analysis per burst: a child of a correlated parent, or the same alarm again within
+    # 15 minutes, shows the first one's answer (NOC: "grouped"); "Analyse this one" forces it
+    if actor == "system" and forgeai_leader(db, incident) is not None:
+        return
     latest = (
         db.query(Investigation)
         .filter_by(incident_id=incident.id)
@@ -1755,7 +1761,7 @@ def queue_llm_rewrite(db: Session, incident: Incident, actor: str = "system") ->
         db,
         "investigate",
         incident.number,
-        payload={"actor": actor, "force": True, "use_llm": True},
+        payload={"actor": actor, "force": True, "use_llm": True, "severity": (incident.severity or "").upper()},
     )
 
 
