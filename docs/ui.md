@@ -213,7 +213,7 @@ a 65" 4K TV, refreshed every 30 seconds.
   that appears while the page is open glows for a minute. Nothing open: a calm **All quiet** with
   the time since the last incident was resolved.
 - Right: the last 7 days as small "weather" cells (sun = quiet, cloud = warning, storm = high or
-  critical; big number = incidents, small = criticals), the 12-hour incident clock, and the host
+  critical; big number = incidents, small = criticals), the 12-hour incident clock (a wall clock with hour and minute hands; each hour stacked by severity with its count inside), and the host
   groups (green when all answer, red with up/total when not).
 - **Day clock**: click a day cell to see that day on the clock, half a day at a time: *‹ AM*
   (00–12) on the left, *PM ›* (12–24) on the right. Each hour is stacked by severity with its count

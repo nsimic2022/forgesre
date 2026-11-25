@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DayHour, IncidentClockData, TvDayDetail } from "../lib/api";
 
 const SIZE = 560;
@@ -35,13 +35,67 @@ function arc(a0: number, a1: number, r: number) {
 
 const hh = (n: number) => String(n).padStart(2, "0");
 
+/** Hour and minute hands from the centre, with a dark edge so they read over the coloured hours. */
+function Hands({ hour, minute }: { hour: number; minute: number }) {
+  const hA = dialAngle(hour, minute);
+  const mA = (minute / 60) * TAU;
+  const hand = (a: number, len: number, w: number, color: string) => {
+    const [x1, y1] = pt(a + Math.PI, 22);
+    const [x2, y2] = pt(a, len);
+    return (
+      <g>
+        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--bg)" strokeWidth={w + 5} strokeLinecap="round" />
+        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={w} strokeLinecap="round" />
+      </g>
+    );
+  };
+  return (
+    <g aria-hidden="true" className="clock-hands">
+      {hand(hA, R_IN + 58, 11, "var(--text)")}
+      {hand(mA, R_OUT + 6, 6, "var(--text)")}
+      <circle cx={C} cy={C} r={13} fill="var(--accent)" stroke="var(--bg)" strokeWidth={4} />
+      <circle cx={pt(mA, RIM)[0]} cy={pt(mA, RIM)[1]} r={7} fill="var(--accent)" stroke="var(--bg)" strokeWidth={3} />
+    </g>
+  );
+}
+
+/** Minute ticks on the rim (every 5 longer), like a wall clock. */
+function Ticks() {
+  return (
+    <g aria-hidden="true">
+      {Array.from({ length: 60 }, (_, m) => {
+        const a = (m / 60) * TAU;
+        const [x1, y1] = pt(a, RIM - (m % 5 ? 5 : 11));
+        const [x2, y2] = pt(a, RIM + 1);
+        return <line key={m} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--faint)" strokeWidth={m % 5 ? 1.5 : 3} />;
+      })}
+    </g>
+  );
+}
+
+/** The appliance time from the last refresh, moved on by the browser clock so the hands keep going. */
+function useLiveTime(hour: number, minute: number): [number, number] {
+  const since = useRef(Date.now());
+  const [, tick] = useState(0);
+  useEffect(() => {
+    since.current = Date.now();
+  }, [hour, minute]);
+  useEffect(() => {
+    const t = window.setInterval(() => tick((n) => n + 1), 10_000);
+    return () => window.clearInterval(t);
+  }, []);
+  const total = hour * 60 + minute + Math.floor((Date.now() - since.current) / 60_000);
+  return [Math.floor(total / 60) % 24, total % 60];
+}
+
 /**
- * The last 12 hours on a wall-clock dial: each hour sits where it is on a real clock, stacked by
- * severity (critical inside). The hand and the rim marker show the time now; the empty slice right
- * after the hand separates the newest hour from the oldest.
+ * The last 12 hours on a wall clock: each hour sits where it is on a real dial, stacked by severity
+ * (critical inside) with the number of incidents written in it. Hour and minute hands show the time
+ * now; the empty slice right after the hour hand separates the newest hour from the oldest.
  */
 export function IncidentClock({ clock, open, critical }: { clock: IncidentClockData; open: number; critical: number }) {
   const [hover, setHover] = useState<number | null>(null);
+  const [nowH, nowM] = useLiveTime(clock.hour, clock.minute);
   const hand = dialAngle(clock.hour, clock.minute);
   const peak = Math.max(4, ...clock.hours.map((h) => h.critical + h.high + h.warning));
   const unit = (R_OUT - R_IN) / peak;
@@ -60,6 +114,8 @@ export function IncidentClock({ clock, open, critical }: { clock: IncidentClockD
           const a0 = dialAngle(h.hour) + 0.012;
           const a1 = i === last ? Math.max(a0 + 0.02, hand - 0.012) : dialAngle(h.hour) + step - 0.012;
           let r = R_IN;
+          const count = h.critical + h.high + h.warning;
+          const [lx, ly] = pt((a0 + a1) / 2, Math.min(R_OUT - 16, R_IN + count * unit + 18));
           return (
             <g key={h.start} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
               <path d={wedge(a0, a1, R_IN, R_OUT)} fill="var(--s2)" opacity={hover === i ? 1 : 0.55} />
@@ -70,6 +126,7 @@ export function IncidentClock({ clock, open, critical }: { clock: IncidentClockD
                 r += n * unit;
                 return <path key={layer.key} d={d} fill={layer.color} />;
               })}
+              {count ? <text x={lx} y={ly + 7} textAnchor="middle" fontSize={20} fontWeight={700} fill="var(--text)" stroke="var(--bg)" strokeWidth={3} paintOrder="stroke">{count}</text> : null}
             </g>
           );
         })}
@@ -77,12 +134,12 @@ export function IncidentClock({ clock, open, critical }: { clock: IncidentClockD
           const [x, y] = pt(dialAngle(n), RIM + 22);
           return <text key={n} x={x} y={y + 6} textAnchor="middle" fontSize={17} fill="var(--faint)" fontFamily="var(--mono)">{n === 0 ? 12 : n}</text>;
         })}
-        {/* Hand and rim marker for the time now. */}
-        <line x1={pt(hand, R_IN - 8)[0]} y1={pt(hand, R_IN - 8)[1]} x2={pt(hand, RIM)[0]} y2={pt(hand, RIM)[1]} stroke="var(--text)" strokeWidth={3} strokeLinecap="round" />
-        <circle cx={pt(hand, RIM)[0]} cy={pt(hand, RIM)[1]} r={9} fill="var(--accent)" stroke="var(--bg)" strokeWidth={3} />
-        <text x={C} y={C - 6} textAnchor="middle" fontSize={54} fontWeight={700} fill="var(--text)">{open}</text>
-        <text x={C} y={C + 24} textAnchor="middle" fontSize={17} fill="var(--muted)">open now</text>
-        <text x={C} y={C + 50} textAnchor="middle" fontSize={16} fill={critical ? "var(--crit)" : "var(--faint)"}>{critical} critical</text>
+        <Ticks />
+        {/* open now and critical sit above and below the hub, under the hands */}
+        <text x={C} y={C - 50} textAnchor="middle" fontSize={34} fontWeight={700} fill="var(--text)" opacity={0.9}>{open}</text>
+        <text x={C} y={C - 28} textAnchor="middle" fontSize={13} fill="var(--muted)">open now</text>
+        <text x={C} y={C + 48} textAnchor="middle" fontSize={15} fill={critical ? "var(--crit)" : "var(--faint)"}>{critical} critical</text>
+        <Hands hour={nowH} minute={nowM} />
       </svg>
       <div className="row" style={{ gap: 18, justifyContent: "center" }}>
         {LAYERS.map((layer) => (
@@ -91,7 +148,7 @@ export function IncidentClock({ clock, open, critical }: { clock: IncidentClockD
             {layer.label}
           </span>
         ))}
-        <span className="small faint mono">now {hh(clock.hour)}:{hh(clock.minute)} · {clock.total} in 12 h</span>
+        <span className="small faint mono">now {hh(nowH)}:{hh(nowM)} · {clock.total} in 12 h</span>
       </div>
       <div className="small" style={{ minHeight: 20 }} aria-live="polite">
         {shown ? `${hh(shown.hour)}:00–${hh((shown.hour + 1) % 24)}:00 · ${shown.critical} critical · ${shown.high} high · ${shown.warning} warning` : ""}

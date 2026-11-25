@@ -50,7 +50,7 @@ Jedan ekran za TV na zidu. Prijavi ga Viewer nalogom. Osvežava se na 30 s.
 3. Ime incidenta u boji ozbiljnosti.
 4. Ko ga je potvrdio, ili crveno not acked.
 5. Poslednjih 7 dana kao vremenska prognoza. Klik na dan prikazuje njegov sat: ‹ AM levo, PM › desno.
-6. Poslednjih 12 sati na satu: svaki sat složen po ozbiljnosti; kazaljka je sada.
+6. Poslednjih 12 sati na satu sa velikom i malom kazaljkom: svaki sat složen po ozbiljnosti, sa brojem incidenata unutra.
 7. Grupe hostova: zeleno svi rade, crveno sa radi/ukupno.
 8. Poslednja 24 sata: linija su otvoreni incidenti, stubići su novi po ozbiljnosti sa brojem ispod.
 9. Male pločice: vreme potvrde i rešenja, backup, najbučniji uređaj, ForgeAI, hostovi, novi uređaji; Shift skroz desno.

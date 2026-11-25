@@ -50,7 +50,7 @@ One screen for the TV on the wall. Sign it in with a Viewer account. Refreshes e
 3. Incident name in its severity colour.
 4. Who acknowledged it, or red not acked.
 5. The last 7 days like a weather forecast. Click a day to see its clock: ‹ AM left, PM › right.
-6. The last 12 hours on a clock: each hour stacked by severity; the hand is now.
+6. The last 12 hours on a wall clock with hour and minute hands: each hour stacked by severity, its count written inside.
 7. Host groups: green all up, red with up/total.
 8. Last 24 hours: the line is open incidents, the bars are new ones by severity with the count under them.
 9. Small tiles: acknowledge and resolve times, backup, noisiest asset, ForgeAI, hosts, new devices; Shift at the far right.
