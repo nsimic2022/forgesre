@@ -262,6 +262,12 @@ class Settings(BaseSettings):
             return 100
 
     @property
+    def forgeai_chat_mode(self) -> str:
+        """How freely ForgeAI may answer in a chat about an incident: strict, balanced (default) or open."""
+        mode = str(((self.yaml.get("ai") or {}).get("forgeai") or {}).get("chat_mode") or "balanced").lower()
+        return mode if mode in ("strict", "balanced", "open") else "balanced"
+
+    @property
     def llm_think_tokens(self) -> int:
         """Extra tokens a thinking model may use before it answers (when ai.llm.thinking is on)."""
         raw = ((self.yaml.get("ai") or {}).get("llm") or {}).get("think_tokens", 1024)

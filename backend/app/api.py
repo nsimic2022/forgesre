@@ -1475,6 +1475,21 @@ def forgeai_chat_say(chat_id: int, body: ForgeAiChatSay, db: Session = Depends(g
     return {"question": message_as_dict(question), "answer": message_as_dict(answer), "title": chat.title}
 
 
+class ForgeAiChatMode(BaseModel):
+    mode: str = Field(pattern="^(|strict|balanced|open)$")
+
+
+@router.post("/forgeai/chats/{chat_id}/mode")
+def forgeai_chat_mode(chat_id: int, body: ForgeAiChatMode, db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
+    """How strictly ForgeAI answers in this chat about an incident: strict, balanced, open, or "" = the default."""
+    from app.forgeai_chat import chat_detail
+
+    chat = _own_chat(db, chat_id, user)
+    chat.mode = body.mode
+    db.commit()
+    return chat_detail(db, chat)
+
+
 @router.delete("/forgeai/chats/{chat_id}")
 def forgeai_chat_delete(chat_id: int, db: Session = Depends(get_db), user: User = Depends(require("investigate"))) -> dict:
     """Delete one of your chats (the logged model calls stay in Investigations)."""

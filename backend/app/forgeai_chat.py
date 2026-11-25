@@ -26,9 +26,19 @@ def _number(incident: Incident | None) -> str:
     return incident.number.split("_")[0] if incident is not None else ""
 
 
+def _effective_mode(chat: ForgeAiChat, incident: Incident | None) -> str:
+    """general (no incident), or the strict / balanced / open mode this chat answers in."""
+    from app.settings import settings
+
+    if incident is None and not chat.incident_id:
+        return "general"
+    return chat.mode if chat.mode in ("strict", "balanced", "open") else settings.forgeai_chat_mode
+
+
 def chat_as_dict(chat: ForgeAiChat, incident: Incident | None = None, messages: list[ForgeAiChatMessage] | None = None) -> dict[str, Any]:
     data: dict[str, Any] = {
         "id": chat.id, "title": chat.title, "incident": incident.number if incident is not None else None,
+        "mode": chat.mode or "", "mode_effective": _effective_mode(chat, incident),
         "incident_label": f"{_number(incident)} {incident.title}" if incident is not None else "",
         "created_at": chat.created_at.isoformat() if chat.created_at else None,
         "updated_at": chat.updated_at.isoformat() if chat.updated_at else None,
@@ -196,7 +206,7 @@ def run_answer(db: Session, row: Job) -> dict[str, Any]:
     try:
         if task == "chat":
             call = forgeai.run(db, "chat", incident, skill_slug=skill.slug if skill else "", actor=actor, question=text,
-                               cloud=bool(answer.cloud), history=history, on_progress=progress)
+                               cloud=bool(answer.cloud), history=history, on_progress=progress, mode=chat.mode or "")
         else:
             if task == "ask" and not text:
                 raise ValueError("type a question for this skill")
