@@ -75,6 +75,41 @@ const MODES: { id: ChatMode; label: string; hint: string }[] = [
   { id: "open", label: "Open", hint: "Facts and general knowledge freely, marked which is which" },
 ];
 
+type SwitchModel = { name: string; label: string; size_gb: number; active: boolean; source: "catalog" | "imported" };
+
+/**
+ * Which local model answers, beside the chat's mode: every downloaded or imported model on this
+ * appliance. Switching is for Engineers and changes the model for everyone (llama.cpp reloads in
+ * 10–60 s); the same rules and checks apply to every model.
+ */
+export function ChatModelPicker() {
+  const [data, setData] = useState<{ active: string; models: SwitchModel[]; can_switch: boolean; mode: string } | null>(null);
+  const [note, setNote] = useState("");
+  const load = () => getJson<typeof data>("/api/v1/forgeai/models").then(setData).catch(() => setData(null));
+  useEffect(() => void load(), []);
+  if (!data || !Array.isArray(data.models) || !data.models.length || data.mode === "external") return null;
+  const active = data.models.find((m) => m.active);
+  const pick = (name: string) => {
+    if (!name || name === data.active) return;
+    if (!window.confirm("Switch the ForgeAI model for everyone? It reloads in 10–60 s; answers in progress may fail.")) return;
+    setNote("Loading the model…");
+    postJson("/api/v1/forgeai/models/switch", { name })
+      .then(() => (setNote("Switched. The model is loading (10–60 s); the status line turns green when it answers."), load()))
+      .catch((e: Error) => setNote(e.message));
+  };
+  return (
+    <div className="chat-mode small" role="group" aria-label="Which model answers">
+      <span className="faint">Model:</span>
+      {data.can_switch ? (
+        <select aria-label="ForgeAI model" value={data.active} onChange={(e) => pick(e.target.value)}>
+          {data.models.map((m) => <option key={m.name} value={m.name}>{m.label} · {m.size_gb} GB{m.source === "imported" ? " · imported" : ""}</option>)}
+        </select>
+      ) : <strong>{active?.label ?? data.active}</strong>}
+      {note ? <span role="status">{note}</span> : <span className="faint">{data.models.length} on this appliance{data.can_switch ? " · switching changes it for everyone" : ""}</span>}
+    </div>
+  );
+}
+
 /**
  * How strictly ForgeAI answers in a chat about an incident, beside the model status line. The
  * safety rules (read only, no changing commands, no invented site facts) are the same in all three.
@@ -209,6 +244,7 @@ export function ForgeAiChat({ chatId, onChanged }: { chatId: number; onChanged?:
   return (
     <div className="chat">
       <ForgeAiPulse />
+      <ChatModelPicker />
       <ChatModePicker chat={chat} onChanged={(c) => setChat((old) => (old ? { ...old, mode: c.mode, mode_effective: c.mode_effective } : old))} />
       <div className="chat-log" aria-live="polite">
         {messages.length ? null : (

@@ -96,3 +96,28 @@ describe("chat mode", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("chat model picker", () => {
+  it("lists downloaded and imported models and switches for an Engineer", async () => {
+    const { ChatModelPicker } = await import("./ForgeAiChat");
+    const { render, screen, fireEvent, cleanup } = await import("@testing-library/react");
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? "GET"} ${url} ${init?.body ?? ""}`);
+      const body = url.endsWith("/switch") ? { active: "OpsLLM-7B.i1-Q4_K_M.gguf", timeout_s: 180 } : { active: "Qwen3-8B-Q4_K_M.gguf", can_switch: true, mode: "local", models: [
+        { name: "Qwen3-8B-Q4_K_M.gguf", label: "Qwen3 8B (Q4_K_M)", size_gb: 5, active: true, source: "catalog" },
+        { name: "OpsLLM-7B.i1-Q4_K_M.gguf", label: "OpsLLM 7B (i1-Q4_K_M)", size_gb: 4.7, active: false, source: "catalog" },
+        { name: "mine.gguf", label: "mine", size_gb: 3, active: false, source: "imported" }] };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    vi.stubGlobal("confirm", () => true);
+    render(<ChatModelPicker />);
+    const select = (await screen.findByLabelText("ForgeAI model")) as HTMLSelectElement;
+    expect([...select.options].map((o) => o.textContent)).toEqual(["Qwen3 8B (Q4_K_M) · 5 GB", "OpsLLM 7B (i1-Q4_K_M) · 4.7 GB", "mine · 3 GB · imported"]);
+    fireEvent.change(select, { target: { value: "OpsLLM-7B.i1-Q4_K_M.gguf" } });
+    expect(await screen.findByText(/Switched. The model is loading/)).toBeTruthy();
+    expect(calls).toContain('POST /api/v1/forgeai/models/switch {"name":"OpsLLM-7B.i1-Q4_K_M.gguf"}');
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+});

@@ -45,6 +45,16 @@ CATALOG: list[dict[str, Any]] = [
     {"id": "qwen2.5-14b", "name": "Qwen2.5 14B Instruct (Q4_K_M)", "size_gb": 9.0, "ram_gb": 16, "timeout_s": 600,
      "note": "Best answers, slow on CPU (several minutes). Three files.",
      "files": [f"{HF}/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m-0000{i}-of-00003.gguf" for i in (1, 2, 3)]},
+    # OpsLLM (Qwen2 base) is tuned for software operations: QA and root cause analysis. Smaller to
+    # larger: more bits, slightly better answers, more RAM. Not a thinking model, so thinking goes off.
+    {"id": "opsllm-7b-q4ks", "family": "OpsLLM 7B", "name": "OpsLLM 7B (i1-Q4_K_S)", "size_gb": 4.5, "ram_gb": 8, "timeout_s": 180, "thinking": False,
+     "note": "Operations model, smallest of the useful sizes.", "files": [f"{HF}/mradermacher/OpsLLM-7B-i1-GGUF/resolve/main/OpsLLM-7B.i1-Q4_K_S.gguf"]},
+    {"id": "opsllm-7b-q4km", "family": "OpsLLM 7B", "name": "OpsLLM 7B (i1-Q4_K_M)", "size_gb": 4.7, "ram_gb": 9, "timeout_s": 180, "thinking": False,
+     "note": "Operations model, the recommended size.", "files": [f"{HF}/mradermacher/OpsLLM-7B-i1-GGUF/resolve/main/OpsLLM-7B.i1-Q4_K_M.gguf"]},
+    {"id": "opsllm-7b-q5km", "family": "OpsLLM 7B", "name": "OpsLLM 7B (i1-Q5_K_M)", "size_gb": 5.4, "ram_gb": 10, "timeout_s": 200, "thinking": False,
+     "note": "Operations model, a little better, a little slower.", "files": [f"{HF}/mradermacher/OpsLLM-7B-i1-GGUF/resolve/main/OpsLLM-7B.i1-Q5_K_M.gguf"]},
+    {"id": "opsllm-7b-q6k", "family": "OpsLLM 7B", "name": "OpsLLM 7B (i1-Q6_K)", "size_gb": 6.3, "ram_gb": 11, "timeout_s": 240, "thinking": False,
+     "note": "Operations model, close to full quality.", "files": [f"{HF}/mradermacher/OpsLLM-7B-i1-GGUF/resolve/main/OpsLLM-7B.i1-Q6_K.gguf"]},
 ]
 
 
@@ -232,7 +242,22 @@ def activate(db: Session, name: str, actor: str) -> dict[str, Any]:
     timeout = entry["timeout_s"] if entry else None
     if timeout:
         set_setting(db, "ai.llm.timeout_seconds", timeout, actor)
+    # a model that cannot think (OpsLLM, Qwen2.5) would only waste the thinking budget
+    if entry and entry.get("thinking") is False:
+        set_setting(db, "ai.llm.thinking", False, actor)
     return {"active": name, "timeout_s": timeout}
+
+
+def label(name: str) -> str:
+    """Catalogue name for a downloaded file, else the file name without .gguf (an imported model)."""
+    entry = next((c for c in CATALOG if Path(urlparse(c["files"][0]).path).name == name), None)
+    return entry["name"] if entry else re.sub(r"(-0+1-of-\d+)?\.gguf$", "", name)
+
+
+def switchable(directory: Path | None = None) -> list[dict[str, Any]]:
+    """Downloaded and imported models that are complete and can be run, for the chat's model picker."""
+    return [{"name": m["name"], "label": label(m["name"]), "size_gb": m["size_gb"], "active": m["active"],
+             "source": "catalog" if m["catalog"] else "imported"} for m in installed(directory) if m["valid"]]
 
 
 def remove(name: str) -> list[str]:
