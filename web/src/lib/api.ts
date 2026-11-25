@@ -51,7 +51,7 @@ export interface Me {
 }
 
 export type Severity = "CRITICAL" | "HIGH" | "WARNING" | string;
-export type ForgeAiState = "off" | "none" | "queued" | "running" | "ready-local" | "ready-external";
+export type ForgeAiState = "off" | "none" | "queued" | "running" | "ready-local" | "ready-external" | "failed" | "grouped";
 
 export interface NocIncident {
   number: string;
@@ -69,6 +69,11 @@ export interface NocIncident {
   messages: number;
   forgerca: string;
   forgeai: ForgeAiState;
+  /** grouped: the incident whose analysis covers this one (short and full number) */
+  forgeai_ref?: string;
+  forgeai_ref_number?: string;
+  /** queued: place in the ForgeAI queue, 1 = next */
+  forgeai_queue?: number;
   flap_count?: number;
   caused_by?: string;
   sla?: ({ kind: "response" | "resolve" } & SlaClock) | null;

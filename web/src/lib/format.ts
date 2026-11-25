@@ -40,13 +40,16 @@ export function minutesLabel(value: number | null): string {
   return value < 60 ? `${Math.round(value)} min` : duration(new Date(Date.now() - value * 60000).toISOString());
 }
 
-export const FORGEAI_LABEL: Record<string, { text: string; tone: Tone }> = {
-  "ready-local": { text: "Ready · local", tone: "ok" },
-  "ready-external": { text: "Ready · external", tone: "info" },
-  running: { text: "Running", tone: "warn" },
-  queued: { text: "Queued", tone: "off" },
-  off: { text: "Off", tone: "off" },
-  none: { text: "—", tone: "off" },
+/** ForgeAI column: green done, yellow working or waiting its turn, red failed or not analysed. */
+export const FORGEAI_LABEL: Record<string, { text: string; tone: Tone; hint: string }> = {
+  "ready-local": { text: "Analysed", tone: "ok", hint: "local model" },
+  "ready-external": { text: "Analysed", tone: "ok", hint: "external model" },
+  running: { text: "Analysing…", tone: "warn", hint: "now" },
+  queued: { text: "Waiting", tone: "warn", hint: "in the queue" },
+  failed: { text: "Failed", tone: "crit", hint: "open to retry" },
+  grouped: { text: "Grouped", tone: "info", hint: "" },
+  off: { text: "Off", tone: "off", hint: "ForgeAI off" },
+  none: { text: "Not analysed", tone: "crit", hint: "open to start" },
 };
 
 /** "INC-0012_14.10.2026_22:15" → "INC-0012": tables already show the date in a column of their own. */
