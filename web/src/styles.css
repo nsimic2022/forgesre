@@ -451,6 +451,7 @@ tr.picked td { background: var(--s2); }
 .log-view .log-err { color: var(--crit); }
 
 /* ForgeAI cell and the analysis row it opens under an incident */
+.ai-cell > .row { flex-wrap: nowrap; white-space: nowrap; }
 .ai-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; background: none; border: 1px solid transparent; border-radius: 8px; padding: 4px 6px; color: inherit; cursor: pointer; font: inherit; text-align: left; }
 .ai-cell:hover, .ai-cell.open { border-color: var(--border); background: var(--s2); }
 tr.ai-open > td { border-bottom-color: transparent; }

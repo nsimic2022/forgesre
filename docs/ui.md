@@ -127,7 +127,7 @@ Data: `GET /api/v1/inventory/tree`.
 ## Long lists
 
 Every table and list shows 10 rows at first, with a pager under it: "1–10 of 57", page numbers,
-and **Per page** 10, 20 or 50 (remembered per list in this browser). Lists the server pages
+and **Per page** 10, 20 or 50 (remembered per list in this browser). The pager shows from the first row, also when everything fits on one page, so every table looks the same. Lists the server pages
 (incidents, inventory, investigations, outbox, audit) ask it for one page at a time; the others
 page what is already loaded. Code: `web/src/components/Pager.tsx`.
 
