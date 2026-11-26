@@ -102,7 +102,8 @@ def test_panel_tiles_carry_raw_series_for_charts():
     network = asset_metric_panel(
         {"asset_id": "sw-graph-01", "type": "Network Switch"}, query_fn=query, range_fn=ranged
     )
-    assert [tile["key"] for tile in network["tiles"]] == ["network"]
+    # a switch also gets interface errors and ports down (if_mib), after the network tile
+    assert [tile["key"] for tile in network["tiles"]] == ["network", "if_errors", "ports_down"]
     assert "cpu_percent" not in {tile["key"] for tile in network["tiles"]}
     assert 'job="forgesre-snmp"' in network["tiles"][0]["query"]
 

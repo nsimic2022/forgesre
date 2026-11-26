@@ -110,6 +110,11 @@ API: `GET /api/v1/topology`, `POST /api/v1/topology/sync`, `POST /api/v1/topolog
   under it, the alarm zone in red, a gap where no samples came, incident marks, min / avg / max, and
   several lines with a legend (disk volumes, RX / TX). Collecting shows an up / down strip with
   availability. Moving the mouse over one tile shows the same moment on all of them.
+  Inventory: choose 1 h, 6 h, 24 h or 7 d. Drag across any chart to zoom all tiles into that
+  stretch (*Reset zoom* undoes it). Click a tile's name to open it large with axes, the
+  warning and alarm lines and *Open in Grafana* (the same PromQL in Grafana Explore, when
+  `grafana.enabled`). UPS and SNMP network devices get their own tiles (see alerting.md).
+  API: `GET /api/v1/assets/{id}/metrics?hours=1|6|24|168`.
 ## Inventory tree
 
 **List | Tree** on Inventory. Tree groups assets by site → row → rack (a missing site is "No

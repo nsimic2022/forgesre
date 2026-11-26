@@ -19,6 +19,10 @@ modules:
       - 1.3.6.1.2.1.2.2.1.2
       - 1.3.6.1.2.1.2.2.1.7
       - 1.3.6.1.2.1.2.2.1.8
+      - 1.3.6.1.2.1.2.2.1.13
+      - 1.3.6.1.2.1.2.2.1.14
+      - 1.3.6.1.2.1.2.2.1.19
+      - 1.3.6.1.2.1.2.2.1.20
       - 1.3.6.1.2.1.31.1.1.1.1
       - 1.3.6.1.2.1.31.1.1.1.6
       - 1.3.6.1.2.1.31.1.1.1.10
@@ -106,6 +110,86 @@ modules:
         oid: 1.3.6.1.2.1.31.1.1.1.10
         type: counter
         help: The total number of octets transmitted out of the interface, including framing characters - 1.3.6.1.2.1.31.1.1.1.10
+        indexes:
+          - labelname: ifIndex
+            type: gauge
+        lookups:
+          - labels: [ifIndex]
+            labelname: ifAlias
+            oid: 1.3.6.1.2.1.31.1.1.1.18
+            type: DisplayString
+          - labels: [ifIndex]
+            labelname: ifDescr
+            oid: 1.3.6.1.2.1.2.2.1.2
+            type: DisplayString
+          - labels: [ifIndex]
+            labelname: ifName
+            oid: 1.3.6.1.2.1.31.1.1.1.1
+            type: DisplayString
+      - name: ifInDiscards
+        oid: 1.3.6.1.2.1.2.2.1.13
+        type: counter
+        help: The number of inbound packets discarded even though no errors were detected - 1.3.6.1.2.1.2.2.1.13
+        indexes:
+          - labelname: ifIndex
+            type: gauge
+        lookups:
+          - labels: [ifIndex]
+            labelname: ifAlias
+            oid: 1.3.6.1.2.1.31.1.1.1.18
+            type: DisplayString
+          - labels: [ifIndex]
+            labelname: ifDescr
+            oid: 1.3.6.1.2.1.2.2.1.2
+            type: DisplayString
+          - labels: [ifIndex]
+            labelname: ifName
+            oid: 1.3.6.1.2.1.31.1.1.1.1
+            type: DisplayString
+      - name: ifInErrors
+        oid: 1.3.6.1.2.1.2.2.1.14
+        type: counter
+        help: The number of inbound packets that contained errors - 1.3.6.1.2.1.2.2.1.14
+        indexes:
+          - labelname: ifIndex
+            type: gauge
+        lookups:
+          - labels: [ifIndex]
+            labelname: ifAlias
+            oid: 1.3.6.1.2.1.31.1.1.1.18
+            type: DisplayString
+          - labels: [ifIndex]
+            labelname: ifDescr
+            oid: 1.3.6.1.2.1.2.2.1.2
+            type: DisplayString
+          - labels: [ifIndex]
+            labelname: ifName
+            oid: 1.3.6.1.2.1.31.1.1.1.1
+            type: DisplayString
+      - name: ifOutDiscards
+        oid: 1.3.6.1.2.1.2.2.1.19
+        type: counter
+        help: The number of outbound packets discarded even though no errors were detected - 1.3.6.1.2.1.2.2.1.19
+        indexes:
+          - labelname: ifIndex
+            type: gauge
+        lookups:
+          - labels: [ifIndex]
+            labelname: ifAlias
+            oid: 1.3.6.1.2.1.31.1.1.1.18
+            type: DisplayString
+          - labels: [ifIndex]
+            labelname: ifDescr
+            oid: 1.3.6.1.2.1.2.2.1.2
+            type: DisplayString
+          - labels: [ifIndex]
+            labelname: ifName
+            oid: 1.3.6.1.2.1.31.1.1.1.1
+            type: DisplayString
+      - name: ifOutErrors
+        oid: 1.3.6.1.2.1.2.2.1.20
+        type: counter
+        help: The number of outbound packets that could not be transmitted because of errors - 1.3.6.1.2.1.2.2.1.20
         indexes:
           - labelname: ifIndex
             type: gauge

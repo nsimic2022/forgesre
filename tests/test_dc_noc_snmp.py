@@ -1,4 +1,4 @@
-"""SNMP stays the working if_mib module. Display uses those series; no new MIB was added."""
+"""SNMP stays the working if_mib module (plus error and discard counters from the same IF-MIB table)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,8 @@ def test_snmp_yml_still_loads_if_mib_only():
     module = parsed["modules"]["if_mib"]
     assert "lookups" not in module
     names = {metric["name"] for metric in module["metrics"]}
-    assert names == {"sysUpTime", "ifAdminStatus", "ifOperStatus", "ifHCInOctets", "ifHCOutOctets"}
+    assert names == {"sysUpTime", "ifAdminStatus", "ifOperStatus", "ifHCInOctets", "ifHCOutOctets",
+                     "ifInErrors", "ifOutErrors", "ifInDiscards", "ifOutDiscards"}
     oper = next(metric for metric in module["metrics"] if metric["name"] == "ifOperStatus")
     labels = {item["labelname"] for item in oper["lookups"]}
     assert labels == {"ifAlias", "ifDescr", "ifName"}

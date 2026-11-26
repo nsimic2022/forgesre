@@ -426,6 +426,53 @@ def cmd_capacity(port: str, args: list[str]) -> None:
             jar.unlink(missing_ok=True)
 
 
+METRIC_PERIODS = {"1h": 1, "6h": 6, "24h": 24, "7d": 168}
+
+
+def format_metrics(asset_id: str, data: dict[str, Any], period: str) -> str:
+    """Host metric tiles as text, like the card: value now, min / avg / max over the period, alarm lines."""
+    lines = [f"{asset_id} — host metrics, last {period}"]
+    if data.get("error"):
+        lines.append(f"Prometheus: {data['error']}")
+    tiles = [t for t in data.get("tiles") or [] if isinstance(t, dict)]
+    if not tiles:
+        lines.append(data.get("collecting_line") or "No metrics for this asset.")
+        return "\n".join(lines) + "\n"
+    lines.append(f"  {'METRIC':<22} {'NOW':<14} {'MIN':>8} {'AVG':>8} {'MAX':>8}  ALARM")
+    for t in tiles:
+        values = [float(v) for v in t.get("series") or [] if isinstance(v, (int, float))]
+        stats = [f"{f(values):>8.1f}" for f in (min, lambda v: sum(v) / len(v), max)] if values else [f"{'—':>8}"] * 3
+        crit = t.get("crit") if t.get("crit") is not None else t.get("threshold")
+        alarm = (f"warning {t['warn']} · " if t.get("warn") is not None else "") + (f"{crit}" if crit is not None else "")
+        mark = "!" if t.get("tone") in {"crit", "high"} else " "
+        lines.append(f"{mark} {str(t.get('name') or t.get('key'))[:22]:<22} {str(t.get('display') or '—')[:14]:<14} {' '.join(stats)}  {alarm}")
+    return "\n".join(lines) + "\n"
+
+
+def cmd_metrics(port: str, args: list[str]) -> None:
+    """./forgesre metrics ASSET [1h|6h|24h|7d]: the host metric card in text (default 24h)."""
+    usage = "usage: ./forgesre metrics number-or-id-or-hostname-or-ip [1h|6h|24h|7d]"
+    if any(a in {"-h", "--help"} for a in args) or not 1 <= len(args) <= 2:
+        raise SystemExit(usage)
+    period = args[1] if len(args) == 2 else "24h"
+    if period not in METRIC_PERIODS:
+        raise SystemExit(usage)
+    jar, _me = ensure_jar(port)
+    try:
+        rows = get_json(port, jar, "/api/v1/assets")
+        hits = [r for r in rows if isinstance(r, dict) and asset_selector_hit(r, args[0])] if isinstance(rows, list) else []
+        if not hits:
+            raise SystemExit(f"no asset matching {args[0]!r}. Try ./forgesre assets")
+        asset_id = str(hits[0].get("asset_id"))
+        data = get_json(port, jar, f"/api/v1/assets/{quote(asset_id)}/metrics?hours={METRIC_PERIODS[period]}")
+        sys.stdout.write(format_metrics(asset_id, data, period))
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as exc:
+        raise SystemExit(f"could not read metrics: {exc}") from exc
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def format_sources(data: dict[str, Any]) -> str:
     """Feeders with last sync and open conflicts, then the conflicts themselves."""
     lines = [f"New devices from sources: {data.get('new_devices', 'add')} (inventory.new_from_sources)", ""]
@@ -1306,6 +1353,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_discovery(port, rest)
     elif command == "capacity":
         cmd_capacity(port, rest)
+    elif command == "metrics":
+        cmd_metrics(port, rest)
     elif command in {"asset-refs", "asset_refs"}:
         cmd_asset_refs(port)
     elif command in {"ping", "probe"}:

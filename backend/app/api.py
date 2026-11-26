@@ -472,18 +472,24 @@ def verify_support_api(
     }
 
 
+# Periods the host metric card offers: 1 h, 6 h, 24 h, 7 days.
+METRIC_HOURS = (1, 6, 24, 168)
+
+
 @router.get("/assets/{asset_id}/metrics")
 def asset_metrics_api(
     asset_id: str,
     db: Session = Depends(get_db),
     user: User = Depends(require("read_assets")),
     incident: str = "",
+    hours: int = 0,
 ) -> dict[str, Any]:
-    """Class-based glance tiles (CPU/mem/disk/up). Viewers can read.
+    """Class-based glance tiles (CPU/mem/disk/up, UPS, interface errors). Viewers can read.
 
-    No ``incident`` → last hour (asset page). With the incident number for this
-    asset, the range starts one hour before ``started_at`` and runs through now,
-    or through the resolve time.
+    No ``incident`` → the last ``hours`` (1, 6, 24 or 168; default 24). With the incident
+    number for this asset, the range starts one hour before ``started_at`` and runs through
+    now, or through the resolve time. ``grafana`` is the public Grafana URL for "Open in
+    Grafana" links, empty when Grafana links are off.
     """
     del user
     item = db.query(Asset).filter_by(asset_id=asset_id).first()
@@ -502,7 +508,14 @@ def asset_metrics_api(
                 "range_end": window["end"],
                 "marker": window["marker"],
             }
-    return metric_panel_with_zabbix(item, safe_asset_metric_panel(item, **bounds))
+    if not bounds and hours:
+        if hours not in METRIC_HOURS:
+            raise HTTPException(status_code=400, detail=f"hours must be one of {', '.join(map(str, METRIC_HOURS))}")
+        end = time.time()
+        bounds = {"range_start": end - hours * 3600, "range_end": end}
+    panel = metric_panel_with_zabbix(item, safe_asset_metric_panel(item, **bounds))
+    panel["grafana"] = settings.grafana_public_url.rstrip("/") if settings.grafana_enabled else ""
+    return panel
 
 
 @router.get("/assets/{asset_id}/capacity")

@@ -99,6 +99,7 @@ Same list as `./forgesre help`, TAB completion (`scripts/forgesre-completion.bas
 | `sources` | GLPI / Zabbix / NetBox / LibreNMS: on or off, last sync, linked assets, open conflicts (decided in Inventory › Sources) |
 | `discovery` | Devices come from LibreNMS: `status`, `read` (now, in the background), `nets CIDR…` (ranges LibreNMS discovers), `scan` (LibreNMS snmp-scan, then read). ForgeSRE never scans networks itself |
 | `capacity ASSET` | About 30 days of disk use and interface receive, `~N days to full` (`!` at 30 days or less); `--refresh` reads again (cached 15 min) |
+| `metrics ASSET [PERIOD]` | The host metric card as text (PERIOD 1h, 6h, 24h or 7d; default 24h): value now, min / avg / max over the period, warning and alarm lines (`!` over the line); UPS and SNMP network rows too |
 | `snmp` | snmp_exporter health + SNMP HTTP SD targets |
 | `sd` | Prometheus HTTP SD (Linux / Windows) and SNMP HTTP SD |
 | `incidents [INC-…]` | Short colored board, or one incident |

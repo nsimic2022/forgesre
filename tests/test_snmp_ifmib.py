@@ -26,6 +26,10 @@ IF_COLUMNS = {
     "ifHCInOctets": "1.3.6.1.2.1.31.1.1.1.6",
     "ifHCOutOctets": "1.3.6.1.2.1.31.1.1.1.10",
     "ifAlias": "1.3.6.1.2.1.31.1.1.1.18",
+    "ifInDiscards": "1.3.6.1.2.1.2.2.1.13",
+    "ifInErrors": "1.3.6.1.2.1.2.2.1.14",
+    "ifOutDiscards": "1.3.6.1.2.1.2.2.1.19",
+    "ifOutErrors": "1.3.6.1.2.1.2.2.1.20",
 }
 
 
@@ -53,10 +57,11 @@ def test_if_mib_slice_walks_planned_columns_with_per_metric_lookups(name):
     assert set(module["walk"]) == set(IF_COLUMNS.values())
     assert module["get"] == ["1.3.6.1.2.1.1.3.0"]
     metrics = {m["name"]: m for m in module["metrics"]}
-    assert set(metrics) == {"sysUpTime", "ifAdminStatus", "ifOperStatus", "ifHCInOctets", "ifHCOutOctets"}
+    assert set(metrics) == {"sysUpTime", "ifAdminStatus", "ifOperStatus", "ifHCInOctets", "ifHCOutOctets",
+                            "ifInErrors", "ifOutErrors", "ifInDiscards", "ifOutDiscards"}
     assert metrics["sysUpTime"]["oid"] == "1.3.6.1.2.1.1.3" and "indexes" not in metrics["sysUpTime"]
     walked = set(module["walk"])
-    for name_ in ("ifAdminStatus", "ifOperStatus", "ifHCInOctets", "ifHCOutOctets"):
+    for name_ in ("ifAdminStatus", "ifOperStatus", "ifHCInOctets", "ifHCOutOctets", "ifInErrors", "ifOutErrors", "ifInDiscards", "ifOutDiscards"):
         metric = metrics[name_]
         assert metric["oid"] == IF_COLUMNS[name_]
         assert metric["indexes"] == [{"labelname": "ifIndex", "type": "gauge"}]

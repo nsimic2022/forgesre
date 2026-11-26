@@ -82,6 +82,7 @@ Commands:
   assets             List inventory with # (alias: inventory)
   inventory          Same as assets
   capacity           30-day disk / interface history of one asset, days to full
+  metrics            host metric card of one asset in text (1h, 6h, 24h, 7d)
   sources            GLPI / Zabbix / NetBox / LibreNMS: last sync, linked assets, conflicts
   discovery          LibreNMS discovery: status, read now, nets CIDR..., scan
   snmp               snmp_exporter health + SNMP HTTP SD targets
@@ -576,6 +577,16 @@ on or off, last sync, how many assets each is linked to, and the open conflicts
 decides in Inventory > Sources).
 
   ./forgesre sources
+EOF
+      ;;
+    metrics)
+      cat <<'EOF'
+metrics — the asset's host metric card as text: value now, min / avg / max over the
+period and the alarm lines; ! marks a metric over its line. UPS and SNMP network
+devices also show their own rows (mains, charge, runtime; interface errors, ports down).
+
+  ./forgesre metrics db-01
+  ./forgesre metrics 12 7d             1h, 6h, 24h (default) or 7d
 EOF
       ;;
     capacity)
@@ -1427,6 +1438,10 @@ case "$cmd" in
   capacity)
     need_env
     run_cli_ops capacity "$@"
+    ;;
+  metrics)
+    need_env
+    run_cli_ops metrics "$@"
     ;;
   sources)
     need_env

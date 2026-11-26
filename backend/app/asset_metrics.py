@@ -65,6 +65,14 @@ _TILE_META = {
     "load": {"name": "LOAD", "kind": "load"},
     "swap_percent": {"name": "SWAP", "kind": "percent"},
     "proc": {"name": "PROC", "kind": "proc"},
+    "ups_mains": {"name": "On mains", "kind": "up"},
+    "ups_charge": {"name": "Battery charge", "kind": "percent"},
+    "ups_load": {"name": "UPS load", "kind": "percent"},
+    "ups_minutes": {"name": "Runtime left", "kind": "number"},
+    "ups_input_v": {"name": "Input voltage", "kind": "number"},
+    "ups_temp": {"name": "Battery temperature", "kind": "number"},
+    "if_errors": {"name": "Interface errors", "kind": "number"},
+    "ports_down": {"name": "Ports down", "kind": "number"},
 }
 
 # Assets list glance: Collecting, CPU, RAM, HDD, NET left → right. Missing tiles stay —.
@@ -171,6 +179,28 @@ def _alerts_yml_thresholds(base: Path | None = None) -> dict[str, dict[str, floa
             value = float(found[-1])
             current = out.setdefault(klass, {}).get(tile)
             out[klass][tile] = value if current is None else min(current, value)
+    return out
+
+
+def alert_levels(base: Path | None = None) -> dict[str, dict[str, dict[str, float]]]:
+    """Warning and critical lines per class and tile, from the severity of each rule in alerts.yml.
+
+    Only a tile with both a warning and a higher critical rule gets two lines; the tile's
+    ``threshold`` (the lowest line, the one that fires first) does not change.
+    """
+    out: dict[str, dict[str, dict[str, float]]] = {}
+    for alertname, rules in load_alert_rules(base).items():
+        tile, klass = _ALERT_TILE.get(alertname), _ALERT_CLASS.get(alertname)
+        if not tile or not klass:
+            continue
+        for rule in rules:
+            level = str(rule.get("severity") or "").lower()
+            found = re.findall(r">=?\s*(\d+(?:\.\d+)?)", rule.get("expr") or "")
+            if level not in {"warning", "critical"} or not found:
+                continue
+            value = float(found[-1])
+            slot = out.setdefault(klass, {}).setdefault(tile, {})
+            slot[level] = value if level not in slot else min(slot[level], value)
     return out
 
 
@@ -379,6 +409,8 @@ def _tile(
     name: str | None = None,
     kind: str | None = None,
     source: str = "",
+    warn: float | None = None,
+    crit: float | None = None,
 ) -> dict[str, Any]:
     meta = _TILE_META[key]
     kind = str(kind or meta["kind"])
@@ -408,6 +440,8 @@ def _tile(
         tile["unit"] = unit
     if lines is not None:
         tile["lines"] = lines
+    if warn is not None and crit is not None and warn < crit:
+        tile["warn"], tile["crit"] = warn, crit
     return tile
 
 
@@ -702,6 +736,74 @@ def _load_network(
     }
 
 
+_POWER_JOB = 'job="forgesre-snmp-power"'
+# key, PromQL template ({sel} = job and asset), unit, alarm line (from the PowerTemperatureHigh / UpsLoadHigh rules).
+_UPS_TILES = (
+    ("ups_mains", "upsOutputSource{{{sel}}} != bool 5", "", None),
+    ("ups_charge", "upsEstimatedChargeRemaining{{{sel}}}", "%", None),
+    ("ups_load", "max(upsOutputPercentLoad{{{sel}}})", "%", 80.0),
+    ("ups_minutes", "upsEstimatedMinutesRemaining{{{sel}}}", "min", None),
+    ("ups_input_v", "min(upsInputVoltage{{{sel}}})", "V", None),
+    ("ups_temp", "upsBatteryTemperature{{{sel}}}", "°C", 32.0),
+)
+_IF_ERRORS = 'sum(rate({{__name__=~"if(In|Out)(Errors|Discards)",{sel}}}[5m]))'
+_PORTS_DOWN = "count(ifOperStatus{{{sel}}} == 2 and on(ifIndex) ifAdminStatus{{{sel}}} == 1) or vector(0)"
+
+
+def _number_tile(key: str, expr: str, unit: str, threshold: float | None, fetch: QueryFn, spark_fetch: Any) -> dict[str, Any] | None:
+    """One extra tile from an instant value plus the chart window; None when Prometheus has neither."""
+    result = fetch(expr)
+    value = None if result.get("error") else _finite(result.get("value"))
+    values: list[float] = []
+    stamps: list[float] = []
+    if spark_fetch is not None:
+        ranged = spark_fetch(expr)
+        if not ranged.get("error"):
+            values, stamps = _aligned_series(ranged)
+    if value is None and values:
+        value = values[-1]
+    if value is None:
+        return None
+    kind = str(_TILE_META[key]["kind"])
+    if kind == "up":
+        display = "yes" if value >= 1 else "on battery"
+    elif kind == "percent":
+        display = f"{value:.0f}%"
+    else:
+        display = f"{value:.1f} {unit}".strip() if abs(value) < 10 and value != int(value) else f"{value:.0f} {unit}".strip()
+    tile = _tile(key, value, threshold=threshold, series=values, times=stamps, query=expr, unit=unit if kind == "number" else "", display=display)
+    if key == "ups_minutes" and value < 10:
+        tile["tone"] = "crit"
+    elif key == "ups_charge" and value < 50:
+        tile["tone"] = "crit" if value < 20 else "warn"
+    elif key in {"if_errors", "ports_down"} and value > 0:
+        tile["tone"] = "high"
+    return tile
+
+
+def extra_tiles(info: dict[str, Any], winning: str, snmp: bool, fetch: QueryFn, spark_fetch: Any) -> list[dict[str, Any]]:
+    """Tiles by device type: UPS (mains, charge, load, runtime, voltage, temperature) from the
+    SNMP power job, and interface errors and ports down for SNMP network devices. Every query
+    goes through the same Prometheus client and timeout as the other tiles."""
+    from app.power import power_metrics_on
+
+    tiles: list[dict[str, Any]] = []
+    asset_id = str(info.get("asset_id") or "")
+    if asset_id and power_metrics_on(info):
+        sel = f'{_POWER_JOB},asset="{asset_id}"'
+        for key, template, unit, threshold in _UPS_TILES:
+            tile = _number_tile(key, template.format(sel=sel), unit, threshold, fetch, spark_fetch)
+            if tile:
+                tiles.append(tile)
+    if snmp and winning:
+        sel = f'job="forgesre-snmp",{winning}'
+        for key, template, unit in (("if_errors", _IF_ERRORS, "/s"), ("ports_down", _PORTS_DOWN, "")):
+            tile = _number_tile(key, template.format(sel=sel), unit, None, fetch, spark_fetch)
+            if tile:
+                tiles.append(tile)
+    return tiles
+
+
 def asset_metric_panel(
     asset: Any,
     *,
@@ -875,6 +977,7 @@ def asset_metric_panel(
             sparks["disk_percent"] = _spark_points(series["disk_percent"])
 
     tiles = []
+    levels = alert_levels().get("demo" if klass == "demo" else klass, {})
     for key in keys:
         extra: dict[str, Any] = {}
         threshold = tile_threshold(alarms, key, bundled.get(key)) if key not in {"up", "network"} else None
@@ -889,6 +992,10 @@ def asset_metric_panel(
             extra["name"] = ram_name
         if key == "disk_percent" and disk_lines:
             extra["lines"] = disk_lines
+        level = levels.get(key) or {}
+        custom = info.get("alarms") if isinstance(info.get("alarms"), dict) else {}
+        if key not in custom and "warning" in level and "critical" in level:
+            extra["warn"], extra["crit"] = level["warning"], level["critical"]
         tiles.append(
             _tile(
                 key,
@@ -903,6 +1010,8 @@ def asset_metric_panel(
                 **extra,
             )
         )
+    if not prom_down:
+        tiles.extend(extra_tiles(info, winning, snmp, fetch, spark_fetch))
     from app.services import graph_window_label
 
     return {
