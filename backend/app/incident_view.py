@@ -82,7 +82,7 @@ def incidents_page(
     rows = (
         _tab_filter(base, tab)
         .options(joinedload(Incident.asset), selectinload(Incident.investigations))
-        .order_by(Incident.started_at.desc())
+        .order_by(Incident.started_at.desc(), Incident.id.desc())
         .offset(offset)
         .limit(limit)
         .all()
@@ -102,6 +102,35 @@ def incidents_page(
     }
 
 
+def incident_neighbours(db: Session, number: str, tab: str = "all", **filters: str) -> dict[str, Any] | None:
+    """Previous (newer) and next (older) incident in the list order with these filters, and this
+    incident's place in it, for the arrows on the incident page. None when the number does not exist.
+
+    An incident that is no longer in the list (acknowledged since, say) still gets the incidents
+    around its start time; ``position`` is then None.
+    """
+    from sqlalchemy import and_
+
+    me = db.query(Incident).filter_by(number=number).first()
+    if me is None:
+        return None
+    tab = tab if tab in TABS else "all"
+    base = _tab_filter(filtered_incidents(db, **filters), tab)
+    newer = or_(Incident.started_at > me.started_at, and_(Incident.started_at == me.started_at, Incident.id > me.id))
+    older = or_(Incident.started_at < me.started_at, and_(Incident.started_at == me.started_at, Incident.id < me.id))
+    prev = base.filter(newer).order_by(Incident.started_at.asc(), Incident.id.asc()).first()
+    nxt = base.filter(older).order_by(Incident.started_at.desc(), Incident.id.desc()).first()
+    inside = base.filter(Incident.id == me.id).count() > 0
+    return {
+        "number": me.number,
+        "tab": tab,
+        "position": base.filter(newer).count() + 1 if inside else None,
+        "total": base.count(),
+        "prev": {"number": prev.number, "title": prev.title} if prev else None,
+        "next": {"number": nxt.number, "title": nxt.title} if nxt else None,
+    }
+
+
 def teams(db: Session) -> list[str]:
     """Distinct asset owners, the "teams" of the incident list filter and saved views."""
     return sorted({(o or "").strip() for (o,) in db.query(Asset.owner).distinct().all() if (o or "").strip()}, key=str.lower)
@@ -112,7 +141,7 @@ def incidents_csv(db: Session, tab: str = "all", **filters: str) -> str:
     import csv
     import io
 
-    rows = _tab_filter(filtered_incidents(db, **filters), tab if tab in TABS else "all").options(joinedload(Incident.asset)).order_by(Incident.started_at.desc()).limit(10000).all()
+    rows = _tab_filter(filtered_incidents(db, **filters), tab if tab in TABS else "all").options(joinedload(Incident.asset)).order_by(Incident.started_at.desc(), Incident.id.desc()).limit(10000).all()
     out = io.StringIO()
     writer = csv.writer(out)
     writer.writerow(["number", "severity", "status", "title", "asset", "ip", "source", "started_at", "ack_at", "ack_by", "resolved_at", "resolved_by", "root_cause"])

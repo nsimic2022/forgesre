@@ -65,6 +65,7 @@ export function Shortcuts() {
             <tr><td><kbd>Ctrl</kbd> + <kbd>K</kbd></td><td>Go to a page, incident or asset</td></tr>
             <tr><td><kbd>/</kbd></td><td>Search on this page</td></tr>
             <tr><td><kbd>?</kbd></td><td>Show or hide this list</td></tr>
+            <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>On an incident: previous / next incident of the list</td></tr>
             {[["n", "NOC overview"], ["i", "Incidents"], ["o", "On-call"], ["v", "Inventory"], ["a", "Automation"], ["t", "Investigations"], ["r", "Reports"], ["s", "Settings"], ["w", "Wall screen (TV mode)"]].map(([k, label]) => (
               <tr key={k}><td><kbd>g</kbd> then <kbd>{k}</kbd></td><td>{label}</td></tr>
             ))}

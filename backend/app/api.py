@@ -4344,6 +4344,23 @@ def incidents_page_api(
         raise HTTPException(status_code=400, detail="dates are YYYY-MM-DD") from exc
 
 
+@router.get("/incidents/{number}/neighbours")
+def incident_neighbours_api(
+    number: str, tab: str = "all", severity: str = "", q: str = "", date_from: str = "", date_to: str = "", team: str = "",
+    db: Session = Depends(get_db), user: User = Depends(require("read_incidents")),
+) -> dict[str, Any]:
+    """Previous / next incident and the position in the incident list with the same filters (the arrows on the incident page)."""
+    from app.incident_view import incident_neighbours
+
+    try:
+        out = incident_neighbours(db, number, tab=tab, severity=severity, q=q, date_from=date_from, date_to=date_to, team=team)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="dates are YYYY-MM-DD") from exc
+    if out is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    return out
+
+
 class IncidentMailBody(BaseModel):
     to: str | list[str]
     subject: str = ""

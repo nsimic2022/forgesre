@@ -524,3 +524,32 @@ def test_me_reports_appliance_version_for_the_menu(monkeypatch):
     client = TestClient(create_app())
     client.post("/login", data={"email": "admin@forgesre.local", "password": "testpass"})
     assert client.get("/api/v1/me").json()["version"] == "2.0.0"
+
+
+def test_incident_neighbours_follow_the_list_order_and_filters():
+    db = _db()
+    token = f"nbr{uuid4().hex[:6]}"
+    rows = []
+    for minutes, sev, ack in ((5, "CRITICAL", None), (10, "HIGH", utcnow()), (15, "CRITICAL", None), (20, "WARNING", None)):
+        row = Incident(number=f"INC-N{uuid4().hex[:6]}", title=f"{token} disk", severity=sev, status="OPEN",
+                       fingerprint=f"nbr:{uuid4().hex}", started_at=utcnow() - timedelta(minutes=minutes), ack_at=ack)
+        db.add(row)
+        rows.append(row)
+    db.commit()
+    newest, acked, middle, oldest = [r.number for r in rows]
+    db.close()
+    client = _signed_in("viewer")
+    # all tab, newest first: newest, acked, middle, oldest
+    mid = client.get(f"/api/v1/incidents/{acked}/neighbours", params={"tab": "all", "q": token}).json()
+    assert (mid["prev"]["number"], mid["next"]["number"], mid["position"], mid["total"]) == (newest, middle, 2, 4)
+    first = client.get(f"/api/v1/incidents/{newest}/neighbours", params={"tab": "all", "q": token}).json()
+    assert first["prev"] is None and first["position"] == 1
+    last = client.get(f"/api/v1/incidents/{oldest}/neighbours", params={"tab": "all", "q": token}).json()
+    assert last["next"] is None and last["position"] == 4
+    # Not acknowledged + critical only skips the acknowledged and the warning
+    crit = client.get(f"/api/v1/incidents/{newest}/neighbours", params={"tab": "active", "severity": "CRITICAL", "q": token}).json()
+    assert crit["next"]["number"] == middle and crit["total"] == 2
+    # an incident outside the list still gets its neighbours, without a position
+    outside = client.get(f"/api/v1/incidents/{acked}/neighbours", params={"tab": "active", "q": token}).json()
+    assert outside["position"] is None and outside["prev"]["number"] == newest and outside["next"]["number"] == middle
+    assert client.get("/api/v1/incidents/INC-NOPE/neighbours").status_code == 404
