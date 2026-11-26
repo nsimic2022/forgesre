@@ -5,28 +5,51 @@ import { clock } from "../lib/format";
 import { Card, Chip } from "./ui";
 import { MetricTile, type MetricMark, type MetricTileData, type MetricWindow } from "./MetricTile";
 
-type Panel = { collecting: boolean; collecting_line: string; error: string; tiles: MetricTileData[]; window?: MetricWindow };
+type Panel = { collecting: boolean; collecting_line: string; error: string; tiles: MetricTileData[]; window?: MetricWindow; grafana?: string };
 export type Person = { role: string; name: string; phone: string; email: string; note?: string };
 export type Similar = { number: string; status: string; started_at: string | null; minutes: number | null; root_cause: string; resolved_by: string };
 export type Event = { at: string; kind: string; who: string; text: string };
 
-/** Host metrics: with an incident, from one hour before it to now (or to the resolve time); without one, the last hours.
- *  Tiles share one cursor, so a spike can be lined up across CPU, memory, disk and network. */
+const PERIODS = [[1, "1 h"], [6, "6 h"], [24, "24 h"], [168, "7 d"]] as const;
+
+/** Host metrics: with an incident, from one hour before it to now (or to the resolve time); without one,
+ *  the chosen period (1 h to 7 days). Tiles share one cursor and one zoom (drag across any chart), and a
+ *  tile's name opens it large with axes and an "Open in Grafana" link. */
 export function IncidentMetrics({ assetId, number = "", tileWidth = 240, marks = [] }: { assetId: string; number?: string; tileWidth?: number; marks?: MetricMark[] }) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [error, setError] = useState("");
   const [hover, setHover] = useState<number | null>(null);
+  const [hours, setHours] = useState(24);
+  const [zoom, setZoom] = useState<{ start: number; end: number } | null>(null);
+  const [open, setOpen] = useState("");
   useEffect(() => {
-    getJson<Panel>(`/api/v1/assets/${encodeURIComponent(assetId)}/metrics${number ? `?incident=${encodeURIComponent(number)}` : ""}`).then(setPanel).catch((e: Error) => setError(e.message));
-  }, [assetId, number]);
+    setZoom(null);
+    const q = number ? `incident=${encodeURIComponent(number)}` : `hours=${hours}`;
+    getJson<Panel>(`/api/v1/assets/${encodeURIComponent(assetId)}/metrics?${q}`).then((p) => (setPanel(p), setError(""))).catch((e: Error) => setError(e.message));
+  }, [assetId, number, hours]);
   const tiles = (panel?.tiles ?? []).filter((t) => t.series?.length);
+  const window = panel?.window && zoom ? { ...panel.window, ...zoom, label: "zoomed" } : panel?.window;
   return (
-    <Card title="Host metrics" actions={panel?.window?.label ? <span className="small faint">{panel.window.label}{number ? " · line = start" : ""}</span> : <span className="small faint">{number ? "" : "last hour"}</span>}>
+    <Card title="Host metrics" actions={
+      <>
+        {zoom ? <button className="btn" type="button" onClick={() => setZoom(null)}>Reset zoom</button> : null}
+        {number ? (panel?.window?.label ? <span className="small faint">{panel.window.label} · line = start</span> : null) : (
+          <span className="seg" role="group" aria-label="Period">
+            {PERIODS.map(([h, label]) => (
+              <button key={h} type="button" className={`btn${hours === h ? " on" : ""}`} aria-pressed={hours === h} onClick={() => setHours(h)}>{label}</button>
+            ))}
+          </span>
+        )}
+      </>
+    }>
       {error ? <span className="small" style={{ color: "var(--crit)" }}>{error}</span> : null}
       {!panel && !error ? <span className="muted">Reading Prometheus…</span> : null}
       {panel && !tiles.length ? <span className="muted">{panel.error || panel.collecting_line || "No metrics for this asset."}</span> : null}
       <div className="metric-grid" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileWidth}px, 1fr))` }}>
-        {tiles.map((t) => <MetricTile key={t.key} tile={t} window={panel?.window} hover={hover} onHover={setHover} marks={marks} />)}
+        {tiles.map((t) => (
+          <MetricTile key={t.key} tile={t} window={window} hover={hover} onHover={setHover} marks={marks} grafana={panel?.grafana ?? ""}
+            expanded={open === t.key} onToggle={() => setOpen(open === t.key ? "" : t.key)} onZoom={(start, end) => setZoom({ start, end })} />
+        ))}
       </div>
     </Card>
   );

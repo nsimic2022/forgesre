@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type React from "react";
 
 /*
@@ -10,14 +11,14 @@ import type React from "react";
 export type MetricLine = { name: string; className?: string; series: number[]; times?: number[] };
 export type MetricTileData = {
   key: string; name: string; display: string; tone: string; threshold: number | null; series: number[]; times: number[];
-  unit?: string; kind?: string; value?: number | null; lines?: MetricLine[]; warn?: number | null; query?: string;
+  unit?: string; kind?: string; value?: number | null; lines?: MetricLine[]; warn?: number | null; crit?: number | null; query?: string;
 };
 export type MetricWindow = { start: number; end: number; marker: number | null; label: string };
 export type MetricMark = { at: number; tone: string; label: string };
 
 export const TONE: Record<string, string> = { ok: "var(--ok)", warn: "var(--warn)", crit: "var(--crit)", high: "var(--high)", off: "var(--faint)" };
 const SECOND = ["var(--accent)", "var(--muted)", "var(--high)", "var(--faint)"];
-const W = 240, H = 84;
+const SMALL = { W: 240, H: 84 }, LARGE = { W: 900, H: 220 };
 
 type Pt = [number, number];
 
@@ -67,6 +68,7 @@ function unitOf(tile: MetricTileData): string {
 
 function fmt(tile: MetricTileData, v: number): string {
   if (tile.kind === "load") return v.toFixed(2);
+  if (tile.kind === "number") return Math.abs(v) >= 10 || Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1);
   if (tile.kind === "percent") return v.toFixed(Math.abs(v) < 10 ? 1 : 0);
   return Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1);
 }
@@ -83,18 +85,30 @@ function bigValue(display: string): [string, string] {
   return m ? [m[1], m[2]] : [display || "—", ""];
 }
 
+/** Grafana Explore with the same PromQL and time range (datasource uid "prometheus" from provisioning). */
+export function grafanaLink(base: string, expr: string, start: number, end: number): string {
+  const panes = { a: { datasource: "prometheus", queries: [{ refId: "A", expr, datasource: { type: "prometheus", uid: "prometheus" } }],
+    range: { from: String(Math.round(start * 1000)), to: String(Math.round(end * 1000)) } } };
+  return `${base}/explore?schemaVersion=1&orgId=1&panes=${encodeURIComponent(JSON.stringify(panes))}`;
+}
+
 function nearest(pts: Pt[], t: number): Pt | null {
   let best: Pt | null = null;
   for (const p of pts) if (!best || Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p;
   return best;
 }
 
-export function MetricTile({ tile, window, hover, onHover, marks = [] }: {
+export function MetricTile({ tile, window, hover, onHover, marks = [], expanded = false, onToggle, onZoom, grafana = "" }: {
   tile: MetricTileData; window?: MetricWindow; hover: number | null; onHover: (t: number | null) => void; marks?: MetricMark[];
+  expanded?: boolean; onToggle?: () => void; onZoom?: (start: number, end: number) => void; grafana?: string;
 }) {
+  const { W, H } = expanded ? LARGE : SMALL;
+  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
+  // Only the samples inside the window (a zoom narrows it), so lines never spill out of the tile.
+  const inside = (pts: Pt[]) => (window ? pts.filter(([t]) => t >= window.start && t <= window.end) : pts);
   const lines: { name: string; pts: Pt[] }[] = tile.lines && tile.lines.length > 1
-    ? tile.lines.map((l) => ({ name: l.name, pts: points(l.series, l.times ?? tile.times) }))
-    : [{ name: tile.name, pts: points(tile.series, tile.times) }];
+    ? tile.lines.map((l) => ({ name: l.name, pts: inside(points(l.series, l.times ?? tile.times)) }))
+    : [{ name: tile.name, pts: inside(points(tile.series, tile.times)) }];
   const main = lines[0]?.pts ?? [];
   const unit = unitOf(tile);
   const [num, numUnit] = bigValue(tile.display);
@@ -102,9 +116,12 @@ export function MetricTile({ tile, window, hover, onHover, marks = [] }: {
   const t1 = window?.end ?? main[main.length - 1]?.[0] ?? 1;
   const isUp = tile.kind === "up";
   // Amber when the value is getting close to the alarm line, red when over it.
-  const last = main.length ? main[main.length - 1][1] : null;
-  const near = tile.threshold != null && last != null && tile.tone === "ok" && last >= (tile.warn ?? tile.threshold * 0.85);
-  const tone = near ? "warn" : tile.tone;
+  // Colour follows the value now (the big number), also when a zoom shows an older stretch.
+  const last = tile.value ?? (main.length ? main[main.length - 1][1] : null);
+  const critLine = tile.crit ?? tile.threshold;
+  const warnLine = tile.warn ?? null;
+  const near = critLine != null && last != null && tile.tone !== "crit" && (warnLine != null ? last >= warnLine && last < critLine : tile.tone === "ok" && last >= critLine * 0.85);
+  const tone = warnLine != null && critLine != null && last != null ? (last >= critLine ? "crit" : near ? "warn" : "ok") : near ? "warn" : tile.tone;
   const color = TONE[tone] ?? "var(--accent)";
 
   if (main.length < 2) {
@@ -118,7 +135,7 @@ export function MetricTile({ tile, window, hover, onHover, marks = [] }: {
   }
 
   const all = lines.flatMap((l) => l.pts.map((p) => p[1]));
-  let lo = Math.min(...all, tile.threshold ?? Infinity), hi = Math.max(...all, tile.threshold ?? -Infinity);
+  let lo = Math.min(...all, critLine ?? Infinity), hi = Math.max(...all, critLine ?? -Infinity);
   if (isUp) [lo, hi] = [0, 1];
   const pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.1 || 1;
   if (!isUp) {
@@ -137,18 +154,33 @@ export function MetricTile({ tile, window, hover, onHover, marks = [] }: {
   const cursor = hover != null && hover >= t0 && hover <= t1 ? hover : null;
   const at = cursor != null ? nearest(main, cursor) : null;
   const span = t1 - t0;
-  const move = (e: React.MouseEvent<SVGSVGElement>) => {
+  const zoomed = window?.label === "zoomed";
+  const timeAt = (e: React.MouseEvent<SVGSVGElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
-    onHover(t0 + ((e.clientX - r.left) / Math.max(1, r.width)) * span);
+    return t0 + Math.min(1, Math.max(0, (e.clientX - r.left) / Math.max(1, r.width))) * span;
   };
-  const deltaColor = tile.threshold != null ? (delta > 0 ? "var(--high)" : "var(--ok)") : "var(--faint)";
-  const th = tile.threshold;
-  const warn = tile.warn ?? null;
+  const move = (e: React.MouseEvent<SVGSVGElement>) => {
+    const t = timeAt(e);
+    onHover(t);
+    if (drag) setDrag({ ...drag, to: t });
+  };
+  // Drag across the chart to zoom every tile into that stretch (like Grafana); a plain click does nothing.
+  const up = () => {
+    if (drag && onZoom && Math.abs(drag.to - drag.from) > span * 0.02) onZoom(Math.min(drag.from, drag.to), Math.max(drag.from, drag.to));
+    setDrag(null);
+  };
+  const deltaColor = critLine != null ? (delta > 0 ? "var(--high)" : "var(--ok)") : "var(--faint)";
+  const th = critLine;
+  const warn = warnLine;
 
   return (
-    <div className="metric-tile">
+    <div className={`metric-tile${expanded ? " wide" : ""}`}>
       <div className="metric-head">
-        <span>{tile.name}</span>
+        {onToggle ? (
+          <button type="button" className="metric-name" onClick={onToggle} aria-expanded={expanded} title={expanded ? "Make small again" : "Open large, with axes and zoom"}>
+            {tile.name} <span aria-hidden="true">{expanded ? "⤡" : "⤢"}</span>
+          </button>
+        ) : <span>{tile.name}</span>}
         {!isUp && Math.abs(delta) > 1e-9 ? (
           <span style={{ color: deltaColor }} title={`Change over the window, ${since(span).slice(1)}`}>
             {delta > 0 ? "▲" : "▼"} {fmt(tile, Math.abs(delta))}{unit === "%" ? " %" : unit ? ` ${unit}` : ""}
@@ -161,8 +193,9 @@ export function MetricTile({ tile, window, hover, onHover, marks = [] }: {
           {lines.map((l, i) => <span key={l.name}><i style={{ background: i ? SECOND[(i - 1) % SECOND.length] : color }} />{l.name}</span>)}
         </div>
       ) : null}
-      <svg viewBox={`0 -4 ${W} ${H + 8}`} width="100%" role="img" aria-label={`${tile.name} over the window, now ${tile.display}`}
-        onMouseMove={move} onMouseLeave={() => onHover(null)} style={{ display: "block", overflow: "visible", cursor: "crosshair" }}>
+      <svg viewBox={`0 -4 ${W} ${H + (expanded ? 24 : 8)}`} width="100%" role="img" aria-label={`${tile.name} over the window, now ${tile.display}`}
+        onMouseMove={move} onMouseLeave={() => (onHover(null), setDrag(null))} onMouseDown={(e) => { const t = timeAt(e); setDrag({ from: t, to: t }); }} onMouseUp={up}
+        style={{ display: "block", overflow: "visible", cursor: "crosshair", userSelect: "none" }}>
         {isUp ? (
           runs(parts).map((r, i) => (
             <rect key={i} x={x(r.from)} y={H * 0.3} width={Math.max(1, x(r.to) - x(r.from))} height={H * 0.4} rx={2}
@@ -194,6 +227,16 @@ export function MetricTile({ tile, window, hover, onHover, marks = [] }: {
             <path d={`M${x(m.at) - 4},-4 L${x(m.at) + 4},-4 L${x(m.at)},2 Z`} style={{ fill: TONE[m.tone] ?? "var(--faint)" }}><title>{m.label}</title></path>
           </g>
         ))}
+        {drag && drag.to !== drag.from ? <rect x={x(Math.min(drag.from, drag.to))} y={-4} width={Math.abs(x(drag.to) - x(drag.from))} height={H + 4} style={{ fill: "var(--accent)", opacity: 0.15 }} /> : null}
+        {expanded && !isUp ? [hi, (hi + lo) / 2, lo].map((v, i) => (
+          <text key={`y${i}`} x={4} y={y(v) + (i === 0 ? 12 : i === 2 ? -4 : 4)} style={{ fill: "var(--faint)", fontSize: 11 }}>{fmt(tile, v)}{unit === "%" ? "%" : ""}</text>
+        )) : null}
+        {expanded ? [0.25, 0.5, 0.75].map((f) => (
+          <g key={`t${f}`}>
+            <line x1={W * f} x2={W * f} y1={0} y2={H} style={{ stroke: "var(--border)" }} />
+            <text x={W * f} y={H + 14} textAnchor="middle" style={{ fill: "var(--faint)", fontSize: 11 }}>{clockOf(t0 + span * f)}</text>
+          </g>
+        )) : null}
         {cursor != null ? <line x1={x(cursor)} x2={x(cursor)} y1={-4} y2={H} strokeWidth={1} style={{ stroke: "var(--muted)" }} /> : null}
         {at && cursor != null && !isUp ? <circle cx={x(at[0])} cy={y(at[1])} r={3} style={{ fill: "var(--bg, #000)", stroke: color, strokeWidth: 1.5 }} /> : null}
       </svg>
@@ -203,12 +246,19 @@ export function MetricTile({ tile, window, hover, onHover, marks = [] }: {
         </div>
       ) : (
         <div className="metric-foot">
-          <span>{since(span)}</span>
-          <span>{t1 < Date.now() / 1000 - 120 ? clockOf(t1) : "now"}</span>
+          <span>{zoomed ? clockOf(t0) : since(span)}</span>
+          <span>{zoomed || t1 < Date.now() / 1000 - 120 ? clockOf(t1) : "now"}</span>
         </div>
       )}
+      {expanded ? (
+        <div className="metric-foot" style={{ justifyContent: "flex-start", gap: 14 }}>
+          {th != null ? <span>{warn != null ? `warning ${fmt(tile, warn)} · ` : ""}alarm {fmt(tile, th)}{unit ? ` ${unit}` : ""}</span> : null}
+          <span>Drag across the chart to zoom.</span>
+          {grafana && tile.query ? <a href={grafanaLink(grafana, tile.query, t0, t1)} target="_blank" rel="noreferrer">Open in Grafana</a> : null}
+        </div>
+      ) : null}
       <div className="metric-foot">
-        {isUp ? <span>available {(avg * 100).toFixed(avg >= 0.999 ? 0 : 1)}%</span> : (
+        {isUp ? <span>{tile.key === "ups_mains" ? "on mains" : "available"} {(avg * 100).toFixed(avg >= 0.999 ? 0 : 1)}%</span> : (
           <>
             <span>min {short(tile, min)}</span>
             <span>avg {short(tile, avg)}</span>

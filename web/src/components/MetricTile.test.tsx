@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MetricTile, segments, since, type MetricTileData } from "./MetricTile";
+import { IncidentMetrics } from "./IncidentPanels";
+import { grafanaLink, MetricTile, segments, since, type MetricTileData } from "./MetricTile";
 
 const times = Array.from({ length: 11 }, (_, i) => 1000 + i * 60);
 const win = { start: 1000, end: 1600, marker: 1300, label: "x" };
@@ -47,5 +48,37 @@ describe("MetricTile", () => {
     render(<MetricTile tile={net} window={win} hover={null} onHover={() => undefined} />);
     expect(screen.getByText("RX")).toBeTruthy();
     expect(screen.getByText("TX")).toBeTruthy();
+  });
+
+  it("opens large with warning and alarm lines, a Grafana link, and zooms by dragging", () => {
+    const onZoom = vi.fn();
+    const tile = { ...cpu, warn: 70, crit: 90, query: "cpu_q" };
+    render(<MetricTile tile={tile} window={win} hover={null} onHover={() => undefined} expanded onToggle={() => undefined} onZoom={onZoom} grafana="http://g:3000" />);
+    expect(screen.getByText(/warning 70 · alarm 90 %/)).toBeTruthy();
+    const link = screen.getByRole("link", { name: "Open in Grafana" }) as HTMLAnchorElement;
+    expect(link.href).toBe(grafanaLink("http://g:3000", "cpu_q", 1000, 1600));
+    expect(decodeURIComponent(link.href)).toContain('"expr":"cpu_q"');
+    const svg = screen.getByRole("img");
+    svg.getBoundingClientRect = () => ({ left: 0, width: 600, top: 0, height: 200, right: 600, bottom: 200, x: 0, y: 0, toJSON: () => ({}) });
+    fireEvent.mouseDown(svg, { clientX: 100 });
+    fireEvent.mouseMove(svg, { clientX: 400 });
+    fireEvent.mouseUp(svg);
+    expect(onZoom).toHaveBeenCalledWith(1100, 1400);
+  });
+
+  it("asks for the chosen period and toggles a tile large", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      urls.push(url);
+      return new Response(JSON.stringify({ collecting: true, collecting_line: "", error: "", grafana: "", tiles: [cpu], window: win }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    render(<IncidentMetrics assetId="db-01" />);
+    expect(await screen.findByText("88")).toBeTruthy();
+    expect(urls[0]).toContain("hours=24");
+    fireEvent.click(screen.getByRole("button", { name: "7 d" }));
+    await vi.waitFor(() => expect(urls.some((u) => u.includes("hours=168"))).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: /CPU/ }));
+    expect(screen.getByRole("button", { name: /CPU/ }).getAttribute("aria-expanded")).toBe("true");
+    vi.unstubAllGlobals();
   });
 });
