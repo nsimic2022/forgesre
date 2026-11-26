@@ -83,7 +83,7 @@ describe("Incident detail", () => {
     expect(screen.getByText("INC-0301")).toBeTruthy();
     expect(screen.getByText("email to noc@dc.local · sent")).toBeTruthy();
     expect(screen.getByText("Check the SFP.")).toBeTruthy();
-    expect(await screen.findByRole("img", { name: "CPU over the incident, now 93%" })).toBeTruthy();
+    expect(await screen.findByRole("img", { name: "CPU over the window, now 93%" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Show syslog" }));
     expect(await screen.findByText(/Gi1\/0\/14, changed state to down/)).toBeTruthy();
     expect(calls.some((c) => c.url === "/api/v1/assets/esx-prod-03/metrics?incident=INC-0412")).toBe(true);

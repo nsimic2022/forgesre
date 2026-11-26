@@ -3,39 +3,19 @@ import { Link } from "react-router-dom";
 import { getJson } from "../lib/api";
 import { clock } from "../lib/format";
 import { Card, Chip } from "./ui";
+import { MetricTile, type MetricMark, type MetricTileData, type MetricWindow } from "./MetricTile";
 
-type Tile = { key: string; name: string; display: string; tone: string; threshold: number | null; series: number[]; times: number[]; unit?: string };
-type Panel = { collecting: boolean; collecting_line: string; error: string; tiles: Tile[]; window?: { start: number; end: number; marker: number | null; label: string } };
+type Panel = { collecting: boolean; collecting_line: string; error: string; tiles: MetricTileData[]; window?: MetricWindow };
 export type Person = { role: string; name: string; phone: string; email: string; note?: string };
 export type Similar = { number: string; status: string; started_at: string | null; minutes: number | null; root_cause: string; resolved_by: string };
 export type Event = { at: string; kind: string; who: string; text: string };
 
-const TONE: Record<string, string> = { ok: "var(--ok)", warn: "var(--warn)", crit: "var(--crit)", high: "var(--high)" };
-
-/** One metric as a line over the incident window, with a vertical line where the incident started. */
-function Spark({ tile, window }: { tile: Tile; window?: Panel["window"] }) {
-  const W = 260, H = 56;
-  const pts = tile.series.map((v, i) => [tile.times[i], v] as const).filter(([t, v]) => Number.isFinite(t) && Number.isFinite(v));
-  if (pts.length < 2) return <span className="small faint">No samples in this window.</span>;
-  const t0 = window?.start ?? pts[0][0], t1 = window?.end ?? pts[pts.length - 1][0];
-  const lo = Math.min(...pts.map((p) => p[1]), tile.threshold ?? Infinity), hi = Math.max(...pts.map((p) => p[1]), tile.threshold ?? -Infinity);
-  const x = (t: number) => ((t - t0) / Math.max(1, t1 - t0)) * W;
-  const y = (v: number) => H - 4 - ((v - lo) / Math.max(1e-9, hi - lo)) * (H - 8);
-  const path = pts.map(([t, v], i) => `${i ? "L" : "M"}${x(t).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const color = TONE[tile.tone] ?? "var(--accent)";
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={`${tile.name} over the incident, now ${tile.display}`}>
-      {tile.threshold !== null && tile.threshold !== undefined && hi > lo ? <line x1={0} x2={W} y1={y(tile.threshold)} y2={y(tile.threshold)} stroke="var(--crit)" strokeDasharray="3 3" strokeWidth={1} opacity={0.6} /> : null}
-      {window?.marker ? <line x1={x(window.marker)} x2={x(window.marker)} y1={0} y2={H} stroke="var(--faint)" strokeWidth={1} /> : null}
-      <path d={path} fill="none" stroke={color} strokeWidth={1.8} />
-    </svg>
-  );
-}
-
-/** Host metrics: with an incident, from one hour before it to now (or to the resolve time); without one, the last hour. */
-export function IncidentMetrics({ assetId, number = "", tileWidth = 240 }: { assetId: string; number?: string; tileWidth?: number }) {
+/** Host metrics: with an incident, from one hour before it to now (or to the resolve time); without one, the last hours.
+ *  Tiles share one cursor, so a spike can be lined up across CPU, memory, disk and network. */
+export function IncidentMetrics({ assetId, number = "", tileWidth = 240, marks = [] }: { assetId: string; number?: string; tileWidth?: number; marks?: MetricMark[] }) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [error, setError] = useState("");
+  const [hover, setHover] = useState<number | null>(null);
   useEffect(() => {
     getJson<Panel>(`/api/v1/assets/${encodeURIComponent(assetId)}/metrics${number ? `?incident=${encodeURIComponent(number)}` : ""}`).then(setPanel).catch((e: Error) => setError(e.message));
   }, [assetId, number]);
@@ -45,13 +25,8 @@ export function IncidentMetrics({ assetId, number = "", tileWidth = 240 }: { ass
       {error ? <span className="small" style={{ color: "var(--crit)" }}>{error}</span> : null}
       {!panel && !error ? <span className="muted">Reading Prometheus…</span> : null}
       {panel && !tiles.length ? <span className="muted">{panel.error || panel.collecting_line || "No metrics for this asset."}</span> : null}
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${tileWidth}px, 1fr))`, gap: 14 }}>
-        {tiles.map((t) => (
-          <div key={t.key} className="cell-stack" style={{ gap: 4 }}>
-            <div className="row" style={{ justifyContent: "space-between" }}><span className="small faint">{t.name}</span><strong style={{ color: TONE[t.tone] ?? "var(--text)" }}>{t.display}</strong></div>
-            <Spark tile={t} window={panel?.window} />
-          </div>
-        ))}
+      <div className="metric-grid" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileWidth}px, 1fr))` }}>
+        {tiles.map((t) => <MetricTile key={t.key} tile={t} window={panel?.window} hover={hover} onHover={setHover} marks={marks} />)}
       </div>
     </Card>
   );
