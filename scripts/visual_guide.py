@@ -158,6 +158,16 @@ PAGES: list[Page] = [
              Step("tbody tr >> nth=0 >> td >> nth=2", "Hostname: click it to open the asset.", "Ime: klik otvara uređaj."),
              Step(".pager, nav[aria-label*='page' i] >> nth=0", "Pages and rows per page.", "Strane i broj redova po strani."),
          ], full=False),
+    Page("inventory-asset", "/app/inventory", "Inventory › asset card", "Inventar › kartica uređaja",
+         "A click on a hostname opens its card under the table, as wide as the table.",
+         "Klik na ime uređaja otvara njegovu karticu ispod tabele, široku kao tabela.", [
+             Step("section.card:has(section[aria-label='Location and owner']) > .card-head", "Header: state, Edit, Clone and Close.", "Zaglavlje: stanje, Edit, Clone i Close."),
+             Step("section[aria-label='Location and owner']", "Location and owner, with the contact.", "Lokacija i vlasnik, sa kontaktom."),
+             Step("section[aria-label='Monitoring sources']", "What watches it: Prometheus, SNMP, Zabbix, GLPI.", "Šta ga prati: Prometheus, SNMP, Zabbix, GLPI."),
+             Step("section[aria-label='Recent incidents']", "Recent incidents; Show all for the rest.", "Skorašnji incidenti; Show all za ostale."),
+             Step(card("Host metrics") + " >> nth=-1", "Host metrics of the last hour, six small charts to a row.", "Metrike hosta za poslednji sat, šest malih grafikona u redu."),
+             Step("section[aria-label='Capacity']", "Capacity over 30 days and days until the disk is full.", "Kapacitet za 30 dana i broj dana do punog diska."),
+         ], click="tbody tr >> nth=0 >> td >> nth=2 >> button"),
     Page("automation", "/app/automation", "Automation", "Automatizacija",
          "What happens between an alarm and someone's phone, in four steps.", "Šta se dešava između alarma i nečijeg telefona, u četiri koraka.", [
              Step("text=1 · Collect >> xpath=../..", "The pipeline: collect, filter noise, route, escalate and notify, with today's numbers.",

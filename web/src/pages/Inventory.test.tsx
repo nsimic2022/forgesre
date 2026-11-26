@@ -59,6 +59,12 @@ describe("Inventory", () => {
     expect(screen.getByText("HostDown")).toBeTruthy();
     expect(screen.getByText("sw-acc-07")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Edit" })).toBeTruthy();
+    // the card opens under the table, after it in the page, with its blocks side by side
+    const table = screen.getByRole("table");
+    const blocks = screen.getByRole("region", { name: "Monitoring sources" });
+    expect(table.compareDocumentPosition(blocks) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Location and owner" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Recent incidents" })).toBeTruthy();
   });
 
   it("adds an asset with location extras", async () => {

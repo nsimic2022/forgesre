@@ -33,7 +33,7 @@ function Spark({ tile, window }: { tile: Tile; window?: Panel["window"] }) {
 }
 
 /** Host metrics: with an incident, from one hour before it to now (or to the resolve time); without one, the last hour. */
-export function IncidentMetrics({ assetId, number = "" }: { assetId: string; number?: string }) {
+export function IncidentMetrics({ assetId, number = "", tileWidth = 240 }: { assetId: string; number?: string; tileWidth?: number }) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -45,7 +45,7 @@ export function IncidentMetrics({ assetId, number = "" }: { assetId: string; num
       {error ? <span className="small" style={{ color: "var(--crit)" }}>{error}</span> : null}
       {!panel && !error ? <span className="muted">Reading Prometheus…</span> : null}
       {panel && !tiles.length ? <span className="muted">{panel.error || panel.collecting_line || "No metrics for this asset."}</span> : null}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${tileWidth}px, 1fr))`, gap: 14 }}>
         {tiles.map((t) => (
           <div key={t.key} className="cell-stack" style={{ gap: 4 }}>
             <div className="row" style={{ justifyContent: "space-between" }}><span className="small faint">{t.name}</span><strong style={{ color: TONE[t.tone] ?? "var(--text)" }}>{t.display}</strong></div>

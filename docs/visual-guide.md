@@ -10,6 +10,7 @@ The pictures come from `scripts/visual_guide.py`; Serbian: [vizuelni-vodic-sr.md
 - [Incident page](#incident)
 - [On-call](#oncall)
 - [Inventory](#inventory)
+- [Inventory › asset card](#inventory-asset)
 - [Automation](#automation)
 - [Investigations](#investigations)
 - [Reports](#reports)
@@ -138,6 +139,21 @@ One record per asset, with state, location and owner.
 5. State: Alarm (open incident), Down, Up or Not probed.
 6. Hostname: click it to open the asset.
 7. Pages and rows per page.
+
+<a id="inventory-asset"></a>
+
+## Inventory › asset card
+
+A click on a hostname opens its card under the table, as wide as the table.
+
+![Inventory › asset card](guide/inventory-asset.png)
+
+1. Header: state, Edit, Clone and Close.
+2. Location and owner, with the contact.
+3. What watches it: Prometheus, SNMP, Zabbix, GLPI.
+4. Recent incidents; Show all for the rest.
+5. Host metrics of the last hour, six small charts to a row.
+6. Capacity over 30 days and days until the disk is full.
 
 <a id="automation"></a>
 

@@ -10,6 +10,7 @@ Slike pravi `scripts/visual_guide.py`; engleska verzija: [visual-guide.md](visua
 - [Stranica incidenta](#incident)
 - [Dežurstva](#oncall)
 - [Inventar](#inventory)
+- [Inventar › kartica uređaja](#inventory-asset)
 - [Automatizacija](#automation)
 - [Istrage](#investigations)
 - [Izveštaji](#reports)
@@ -138,6 +139,21 @@ Jedan zapis po uređaju, sa stanjem, lokacijom i vlasnikom.
 5. Stanje: Alarm (otvoren incident), Down, Up ili Not probed.
 6. Ime: klik otvara uređaj.
 7. Strane i broj redova po strani.
+
+<a id="inventory-asset"></a>
+
+## Inventar › kartica uređaja
+
+Klik na ime uređaja otvara njegovu karticu ispod tabele, široku kao tabela.
+
+![Inventory › asset card](guide/inventory-asset.png)
+
+1. Zaglavlje: stanje, Edit, Clone i Close.
+2. Lokacija i vlasnik, sa kontaktom.
+3. Šta ga prati: Prometheus, SNMP, Zabbix, GLPI.
+4. Skorašnji incidenti; Show all za ostale.
+5. Metrike hosta za poslednji sat, šest malih grafikona u redu.
+6. Kapacitet za 30 dana i broj dana do punog diska.
 
 <a id="automation"></a>
 
