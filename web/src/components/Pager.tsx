@@ -45,7 +45,7 @@ function pages(current: number, count: number): (number | null)[] {
 export function Pager({ total, offset, size, onOffset, onSize, label = "rows" }: {
   total: number; offset: number; size: number; onOffset: (n: number) => void; onSize: (n: number) => void; label?: string;
 }) {
-  if (total <= PAGE_SIZES[0]) return null;
+  if (total <= 0) return null; // shown from the first row, so every table looks and works the same
   const count = Math.max(1, Math.ceil(total / size));
   const current = Math.min(count - 1, Math.floor(offset / size));
   return (
