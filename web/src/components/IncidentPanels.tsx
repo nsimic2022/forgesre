@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { getJson } from "../lib/api";
 import { clock } from "../lib/format";
 import { Card, Chip } from "./ui";
+import { usePaged } from "./Pager";
 import { MetricTile, type MetricMark, type MetricTileData, type MetricWindow } from "./MetricTile";
 
 type Panel = { collecting: boolean; collecting_line: string; error: string; tiles: MetricTileData[]; window?: MetricWindow; grafana?: string };
@@ -93,12 +94,14 @@ export function SimilarBefore({ rows }: { rows: Similar[] }) {
 
 const KIND_TONE: Record<string, "crit" | "ok" | "info" | "off" | "warn"> = { alarm: "crit", ack: "info", resolve: "ok", notify: "off", note: "warn", work: "info", system: "off" };
 
-/** Who did what, in order: the alarm, every mail and chat message, ack, notes, playbook steps, resolve. */
+/** Who did what, in order: the alarm, every mail and chat message, ack, notes, playbook steps, resolve.
+ *  Paged like every table (10 per page by default), so a long incident does not push the page down. */
 export function IncidentStory({ events }: { events: Event[] }) {
+  const { page, pager } = usePaged(events, "incident-story", "events");
   return (
-    <Card title="Who did what">
+    <Card title="Who did what" actions={<span className="small faint">{events.length} events</span>}>
       <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
-        {events.map((e, i) => (
+        {page.map((e, i) => (
           <li key={i} style={{ display: "grid", gridTemplateColumns: "64px 76px minmax(0, 1fr)", gap: 10, padding: "6px 0", borderTop: i ? "1px solid var(--border)" : undefined, alignItems: "baseline" }}>
             <span className="mono small faint">{clock(e.at)}</span>
             <Chip tone={KIND_TONE[e.kind] ?? "off"}>{e.kind}</Chip>
@@ -106,6 +109,7 @@ export function IncidentStory({ events }: { events: Event[] }) {
           </li>
         ))}
       </ol>
+      {pager}
     </Card>
   );
 }

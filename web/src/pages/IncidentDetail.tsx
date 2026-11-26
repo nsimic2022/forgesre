@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ReviewCard } from "../components/ReviewCard";
 import { SendReport } from "../components/SendReport";
+import { usePaged } from "../components/Pager";
 import { Bar, Card, Chip } from "../components/ui";
 import { getJson, postJson, type IncidentView } from "../lib/api";
 import { clock, duration, severityLabel, severityTone, tierLabel, shortNumber } from "../lib/format";
@@ -18,6 +19,27 @@ const ACTIVE = ["OPEN", "INVESTIGATING", "ESCALATED", "ACK", "ACKNOWLEDGED"];
 
 /** Incident detail: facts and hypotheses from ForgeRCA, the ForgeAI opinion, playbook
  *  checklist, asset card, notifications and timeline. Refreshes every 15 s. */
+/** Evidence the collectors and ForgeAI gathered, paged like every table. */
+function EvidenceCard({ evidence }: { evidence: IncidentView["evidence"] }) {
+  const { page, pager } = usePaged(evidence, "incident-evidence", "evidence");
+  return (
+    <Card title="Evidence" actions={<span className="small faint">{evidence.length} items</span>}>
+      <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+        {page.map((ev, i) => (
+          <li key={ev.id || `${ev.title}-${i}`} style={{ padding: "8px 0", borderTop: "1px solid var(--border)" }}>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <span>{ev.title}</span>
+              <Chip tone="off">{ev.source}</Chip>
+            </div>
+            {ev.query ? <code className="mono faint">{ev.query}</code> : null}
+          </li>
+        ))}
+      </ul>
+      {pager}
+    </Card>
+  );
+}
+
 export function IncidentDetailPage() {
   const { number = "" } = useParams();
   const [data, setData] = useState<IncidentView | null>(null);
@@ -171,21 +193,7 @@ export function IncidentDetailPage() {
           {data.asset ? <IncidentMetrics assetId={data.asset.asset_id} number={data.number} /> : null}
           {data.events?.length ? <IncidentStory events={data.events} /> : null}
           {data.asset && data.can.investigate ? <SyslogCard number={data.number} /> : null}
-          {data.evidence.length ? (
-            <Card title="Evidence">
-              <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-                {data.evidence.map((ev) => (
-                  <li key={ev.id || ev.title} style={{ padding: "8px 0", borderTop: "1px solid var(--border)" }}>
-                    <div className="row" style={{ justifyContent: "space-between" }}>
-                      <span>{ev.title}</span>
-                      <Chip tone="off">{ev.source}</Chip>
-                    </div>
-                    {ev.query ? <code className="mono faint">{ev.query}</code> : null}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          ) : null}
+          {data.evidence.length ? <EvidenceCard evidence={data.evidence} /> : null}
         </div>
         <div style={{ flex: "1 1 340px", display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
           <WhoToCall people={data.who_to_call ?? []} />

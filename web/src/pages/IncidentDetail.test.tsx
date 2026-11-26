@@ -47,6 +47,20 @@ describe("Incident detail", () => {
       </MemoryRouter>,
     );
 
+  it("pages the evidence like every table", async () => {
+    view.evidence = Array.from({ length: 14 }, (_, i) => ({ id: `e${i}`, source: "prometheus", title: `Fact ${i + 1}`, query: "" }));
+    try {
+      renderPage();
+      expect(await screen.findByText("Fact 10")).toBeTruthy();
+      expect(screen.queryByText("Fact 11")).toBeNull();
+      expect(screen.getByText("1–10 of 14")).toBeTruthy();
+      fireEvent.click(screen.getByRole("navigation", { name: "Pages of evidence" }).querySelector("button[aria-label='Next page']") as HTMLButtonElement);
+      expect(screen.getByText("Fact 14")).toBeTruthy();
+    } finally {
+      view.evidence = [];
+    }
+  });
+
   it("shows ForgeRCA, ForgeAI, the asset and the playbook", async () => {
     renderPage();
     expect(await screen.findByText("esx-prod-03 unreachable")).toBeTruthy();
