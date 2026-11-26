@@ -105,6 +105,11 @@ API: `GET /api/v1/topology`, `POST /api/v1/topology/sync`, `POST /api/v1/topolog
   it under Consequences), and **Quiet this host for 1–24 h** with a reason opens a maintenance
   window from now (Engineer and up). Column `incidents.caused_by_id`, added by the migration.
 - Inventory: groups on the left, the asset table (with pages) in the middle. Clicking a hostname opens the asset card under the table, as wide as it: location, support, monitoring sources and recent incidents side by side, then the host metrics of the last hour in narrow tiles (six to a row on a wide screen), capacity and the monitoring check.
+- Host metric tiles (inventory and incident page): the current value large and coloured (green, amber
+  when within 15 % of the alarm line, red over it), the change over the window, the line with the area
+  under it, the alarm zone in red, a gap where no samples came, incident marks, min / avg / max, and
+  several lines with a legend (disk volumes, RX / TX). Collecting shows an up / down strip with
+  availability. Moving the mouse over one tile shows the same moment on all of them.
 ## Inventory tree
 
 **List | Tree** on Inventory. Tree groups assets by site → row → rack (a missing site is "No

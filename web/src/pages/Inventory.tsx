@@ -145,7 +145,8 @@ function AssetPanel({ assetId, onClose, onEdit }: { assetId: string; onClose: ()
           ) : null}
         </Block>
       </div>
-      <IncidentMetrics key={`m-${card.asset_id}`} assetId={card.asset_id} tileWidth={150} />
+      <IncidentMetrics key={`m-${card.asset_id}`} assetId={card.asset_id} tileWidth={140}
+        marks={card.incidents.filter((i) => i.started_at).map((i) => ({ at: Date.parse(i.started_at as string) / 1000, tone: severityTone(i.severity), label: `${i.title} · ${clock(i.started_at)}` }))} />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12, alignItems: "start" }}>
         <section className="cell-stack" style={{ gap: 8, minWidth: 0 }} aria-label="Capacity"><CapacityCard assetId={card.asset_id} /></section>
         {card.can_edit ? <section className="cell-stack" style={{ gap: 8, minWidth: 0 }}><MonitoringCheck key={card.asset_id} assetId={card.asset_id} /></section> : null}
