@@ -104,7 +104,7 @@ API: `GET /api/v1/topology`, `POST /api/v1/topology/sync`, `POST /api/v1/topolog
   another when the dependency map did not catch it (loops are refused; the other incident lists
   it under Consequences), and **Quiet this host for 1–24 h** with a reason opens a maintenance
   window from now (Engineer and up). Column `incidents.caused_by_id`, added by the migration.
-- Inventory: the asset card shows the host metrics of the last hour.
+- Inventory: groups on the left, the asset table (with pages) in the middle. Clicking a hostname opens the asset card under the table, as wide as it: location, support, monitoring sources and recent incidents side by side, then the host metrics of the last hour in narrow tiles (six to a row on a wide screen), capacity and the monitoring check.
 ## Inventory tree
 
 **List | Tree** on Inventory. Tree groups assets by site → row → rack (a missing site is "No

@@ -1,5 +1,6 @@
 import { MonitoringCheck } from "../components/MonitoringCheck";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type React from "react";
 import { Link } from "react-router-dom";
 import { AssetEditor, type EditorMode } from "../components/AssetEditor";
 import { IncidentMetrics } from "../components/IncidentPanels";
@@ -40,7 +41,7 @@ function Library({ data, filters, set }: { data: InventoryPage["library"]; filte
   const only = (patch: Partial<Filters>) => set({ ...EMPTY, ...patch });
   const heading = (text: string) => <h3 className="small faint" style={{ margin: "6px 0 2px", textTransform: "uppercase", letterSpacing: ".05em" }}>{text}</h3>;
   return (
-    <aside className="card" aria-label="Asset library" style={{ flex: "1 1 220px", maxWidth: 280, gap: 4 }}>
+    <aside className="card" aria-label="Asset library" style={{ flex: "1 1 220px", maxWidth: 250, gap: 4 }}>
       <LibraryLink active={!Object.values(filters).some(Boolean)} label="All assets" count={data.sites.reduce((n, s) => n + s.count, 0)} onClick={() => set(EMPTY)} />
       {heading("By location")}
       {data.sites.map((site) => (
@@ -63,9 +64,27 @@ function Library({ data, filters, set }: { data: InventoryPage["library"]; filte
   );
 }
 
+const SECTION: React.CSSProperties = { margin: 0, textTransform: "uppercase", letterSpacing: ".05em" };
+
+/** One block of the asset card: a small heading and its content, laid out side by side with the others. */
+function Block({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="cell-stack" style={{ gap: 8, minWidth: 0, padding: 12, border: "1px solid var(--border)", borderRadius: 10 }} aria-label={title}>
+      <h3 className="small faint" style={SECTION}>{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * The selected asset, under the asset table and as wide as it: a header with state and actions,
+ * four blocks side by side (location, support, monitoring, incidents), then metrics in narrow
+ * tiles (six to a row on a wide screen) and capacity. Layout only; the data is the same as before.
+ */
 function AssetPanel({ assetId, onClose, onEdit }: { assetId: string; onClose: () => void; onEdit: (mode: EditorMode, card: AssetCard) => void }) {
   const [card, setCard] = useState<AssetCard | null>(null);
   const [error, setError] = useState("");
+  const [allIncidents, setAllIncidents] = useState(false);
   useEffect(() => {
     setCard(null);
     getJson<AssetCard>(`/api/v1/inventory/${encodeURIComponent(assetId)}`).then(setCard).catch((e: Error) => setError(e.message));
@@ -73,58 +92,64 @@ function AssetPanel({ assetId, onClose, onEdit }: { assetId: string; onClose: ()
   if (error) return <Card><div className="banner error" role="alert">{error}</div></Card>;
   if (!card) return <Card><span className="muted">Loading…</span></Card>;
   const st = STATE[card.state];
-  const dl = (rows: [string, string][]) => (
-    <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "120px minmax(0,1fr)", gap: "6px 12px", fontSize: 13 }}>
-      {rows.filter(([, v]) => v).map(([k, v]) => (
-        <div key={k} style={{ display: "contents" }}>
-          <dt className="faint">{k}</dt>
-          <dd style={{ margin: 0, minWidth: 0, overflowWrap: "anywhere" }}>{v}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+  const dl = (rows: [string, string][]) => {
+    const shown = rows.filter(([, v]) => v);
+    if (!shown.length) return <span className="small faint">Nothing recorded.</span>;
+    return (
+      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "max-content minmax(0,1fr)", gap: "6px 12px", fontSize: 13 }}>
+        {shown.map(([k, v]) => (
+          <div key={k} style={{ display: "contents" }}>
+            <dt className="faint">{k}</dt>
+            <dd style={{ margin: 0, minWidth: 0, overflowWrap: "anywhere" }}>{v}</dd>
+          </div>
+        ))}
+      </dl>
+    );
+  };
+  const support = card.details.filter((d) => !["site", "row", "rack", "customer"].includes(d.key)).map((d) => [d.label, d.value] as [string, string]);
   return (
     <Card
       title={card.hostname}
       actions={
         <>
           <Chip tone={st.tone}>{st.label}</Chip>
+          {card.can_edit ? <button className="btn primary" type="button" onClick={() => onEdit("edit", card)}>Edit</button> : null}
+          {card.can_edit ? <button className="btn" type="button" onClick={() => onEdit("clone", card)}>Clone</button> : null}
           <button className="btn" onClick={onClose} aria-label="Close asset card">Close</button>
         </>
       }
     >
       <span className="small muted">{[card.type, card.ip, card.environment].filter(Boolean).join(" · ")}</span>
-      <h3 className="small faint" style={{ margin: 0, textTransform: "uppercase", letterSpacing: ".05em" }}>Location and owner</h3>
-      {dl([["Site", card.site], ["Row / rack", [card.row, card.rack].filter(Boolean).join(" / ")], ["Customer", card.customer], ["Owner", card.owner], ["Contact", [card.contact_name, card.owner_phone, card.owner_email].filter(Boolean).join(" · ")], ["Uplink / parent", card.parent]])}
-      {card.details.length ? (
-        <>
-          <h3 className="small faint" style={{ margin: 0, textTransform: "uppercase", letterSpacing: ".05em" }}>Support and runbook</h3>
-          {dl(card.details.filter((d) => !["site", "row", "rack", "customer"].includes(d.key)).map((d) => [d.label, d.value] as [string, string]))}
-        </>
-      ) : null}
-      <h3 className="small faint" style={{ margin: 0, textTransform: "uppercase", letterSpacing: ".05em" }}>Monitoring sources</h3>
-      <div className="row">{card.sources.length ? card.sources.map((s) => <Chip key={s} tone="ok">{s}</Chip>) : <span className="muted">None: nothing watches this asset.</span>}</div>
-      {dl([["Scrape", card.scrape_address], ["Profile", card.monitoring_profile], ["SNMP", card.snmp ? `${card.snmp.snmp_version}${card.snmp.snmp_version === "v3" ? ` · user ${card.snmp.snmp_v3_user}` : card.snmp.snmp_community_mode === "custom" ? " · own community" : " · default community"}${card.snmp.pending ? " · being written to snmp_exporter" : ""}` : ""], ["GLPI", card.glpi_id && `#${card.glpi_id}`], ["Zabbix", card.zabbix_hostid]])}
-      <IncidentMetrics key={`m-${card.asset_id}`} assetId={card.asset_id} />
-      <CapacityCard assetId={card.asset_id} />
-      <h3 className="small faint" style={{ margin: 0, textTransform: "uppercase", letterSpacing: ".05em" }}>Recent incidents</h3>
-      {card.incidents.length === 0 ? <span className="muted">None.</span> : null}
-      {card.incidents.map((i) => (
-        <Link key={i.number} to={`/incidents/${encodeURIComponent(i.number)}`} className="row" style={{ justifyContent: "space-between", color: "var(--text)" }}>
-          <span className="row" style={{ gap: 8 }}><Dot tone={severityTone(i.severity)} />{i.title}</span>
-          <span className="small faint">{clock(i.started_at)} · {i.status}</span>
-        </Link>
-      ))}
-      {card.notes ? <p className="small muted" style={{ margin: 0 }}>{card.notes}</p> : null}
-      <div className="row">
-        {card.can_edit ? (
-          <>
-            <button className="btn primary" type="button" onClick={() => onEdit("edit", card)}>Edit</button>
-            <button className="btn" type="button" onClick={() => onEdit("clone", card)}>Clone</button>
-          </>
-        ) : null}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12, alignItems: "start" }}>
+        <Block title="Location and owner">
+          {dl([["Site", card.site], ["Row / rack", [card.row, card.rack].filter(Boolean).join(" / ")], ["Customer", card.customer], ["Owner", card.owner], ["Contact", [card.contact_name, card.owner_phone, card.owner_email].filter(Boolean).join(" · ")], ["Uplink / parent", card.parent]])}
+          {card.notes ? <p className="small muted" style={{ margin: 0 }}>{card.notes}</p> : null}
+        </Block>
+        {support.length ? <Block title="Support and runbook">{dl(support)}</Block> : null}
+        <Block title="Monitoring sources">
+          <div className="row" style={{ gap: 6 }}>{card.sources.length ? card.sources.map((s) => <Chip key={s} tone="ok">{s}</Chip>) : <span className="muted">None: nothing watches this asset.</span>}</div>
+          {dl([["Scrape", card.scrape_address], ["Profile", card.monitoring_profile], ["SNMP", card.snmp ? `${card.snmp.snmp_version}${card.snmp.snmp_version === "v3" ? ` · user ${card.snmp.snmp_v3_user}` : card.snmp.snmp_community_mode === "custom" ? " · own community" : " · default community"}${card.snmp.pending ? " · being written to snmp_exporter" : ""}` : ""], ["GLPI", card.glpi_id && `#${card.glpi_id}`], ["Zabbix", card.zabbix_hostid]])}
+        </Block>
+        <Block title="Recent incidents">
+          {card.incidents.length === 0 ? <span className="muted">None.</span> : null}
+          {(allIncidents ? card.incidents : card.incidents.slice(0, 4)).map((i) => (
+            <Link key={i.number} to={`/incidents/${encodeURIComponent(i.number)}`} className="cell-stack" style={{ gap: 0, color: "var(--text)" }}>
+              <span className="row" style={{ gap: 8 }}><Dot tone={severityTone(i.severity)} />{i.title}</span>
+              <span className="small faint" style={{ paddingLeft: 16 }}>{clock(i.started_at)} · {i.status}</span>
+            </Link>
+          ))}
+          {card.incidents.length > 4 ? (
+            <button className="btn" type="button" style={{ alignSelf: "flex-start" }} onClick={() => setAllIncidents(!allIncidents)}>
+              {allIncidents ? "Show fewer" : `Show all ${card.incidents.length}`}
+            </button>
+          ) : null}
+        </Block>
       </div>
-      {card.can_edit ? <MonitoringCheck key={card.asset_id} assetId={card.asset_id} /> : null}
+      <IncidentMetrics key={`m-${card.asset_id}`} assetId={card.asset_id} tileWidth={150} />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12, alignItems: "start" }}>
+        <section className="cell-stack" style={{ gap: 8, minWidth: 0 }} aria-label="Capacity"><CapacityCard assetId={card.asset_id} /></section>
+        {card.can_edit ? <section className="cell-stack" style={{ gap: 8, minWidth: 0 }}><MonitoringCheck key={card.asset_id} assetId={card.asset_id} /></section> : null}
+      </div>
     </Card>
   );
 }
@@ -174,6 +199,12 @@ export function InventoryPage() {
     }, query ? 250 : 0);
     return () => window.clearTimeout(timer);
   }, [filters, query, offset, PAGE, reload]);
+
+  const panelRef = useRef<HTMLDivElement>(null);
+  // The asset card opens under the table: bring it into view when an asset is picked.
+  useEffect(() => {
+    if (selected) panelRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [selected]);
 
   const set = (next: Filters) => (setFilters(next), setOffset(0));
   const removePicked = () =>
@@ -251,7 +282,7 @@ export function InventoryPage() {
               </div>
             ) : null}
             <div className="table-wrap">
-              <table className="data" style={{ minWidth: 980 }}>
+              <table className="data" style={{ minWidth: 880 }}>
                 <thead>
                   <tr>
                     {data?.can_edit ? (
@@ -300,12 +331,12 @@ export function InventoryPage() {
             {data ? <Pager total={data.total} offset={offset} size={PAGE} onOffset={setOffset} onSize={setPageSize} label="assets" /> : null}
           </Card>
           )}
+          {selected ? (
+            <div ref={panelRef} style={{ marginTop: 20, scrollMarginTop: 16 }}>
+              <AssetPanel key={`${selected}-${reload}`} assetId={selected} onClose={() => setSelected("")} onEdit={openEditor} />
+            </div>
+          ) : null}
         </div>
-        {selected ? (
-          <div style={{ flex: "1 1 340px", minWidth: 0 }}>
-            <AssetPanel key={`${selected}-${reload}`} assetId={selected} onClose={() => setSelected("")} onEdit={openEditor} />
-          </div>
-        ) : null}
       </div>
     </>
   );
