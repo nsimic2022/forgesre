@@ -398,6 +398,12 @@ the API keep levels 1–4 (L1–L4); `tierLabel()` in `web/src/lib/format.ts` ma
 
 ## Incident page, more
 
+- **Previous / Back to incidents / Next** at the top: the arrows step through the incident list
+  you came from (same tab, filters, newest first; also the ← and → keys), and *Back to incidents*
+  returns to that tab and page. The middle shows the place, e.g. "3 of 5 · Not acknowledged". The
+  list is remembered per browser tab; API `GET /api/v1/incidents/{number}/neighbours` with the list
+  filters.
+
 `GET /api/v1/incidents/{number}/view` also returns `who_to_call` (on call now, asset contact,
 backup contact, vendor support), `similar` (earlier incidents with the same title on the same
 asset, with the confirmed cause and minutes to resolve) and `events` (alarm, timeline, mails and

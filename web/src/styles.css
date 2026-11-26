@@ -480,3 +480,7 @@ tr.ai-open > td { border-bottom-color: transparent; }
 .metric-tile.wide .metric-value { font-size: 30px; }
 .metric-name { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; overflow: hidden; text-overflow: ellipsis; }
 .metric-name:hover { color: var(--text); }
+/* Previous / back / next bar at the top of an incident (IncidentListNav). */
+.incident-nav { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 0 0 12px; flex-wrap: wrap; }
+.incident-nav .btn:disabled { opacity: 0.45; }
+.incident-nav-back { min-width: 240px; justify-content: center; }

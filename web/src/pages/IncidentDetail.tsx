@@ -11,6 +11,7 @@ import { Link, useParams } from "react-router-dom";
 import { ReviewCard } from "../components/ReviewCard";
 import { SendReport } from "../components/SendReport";
 import { usePaged } from "../components/Pager";
+import { IncidentListNav } from "../components/IncidentListNav";
 import { Bar, Card, Chip } from "../components/ui";
 import { getJson, postJson, type IncidentView } from "../lib/api";
 import { clock, duration, severityLabel, severityTone, tierLabel, shortNumber } from "../lib/format";
@@ -83,6 +84,7 @@ export function IncidentDetailPage() {
   const rca = data.forgerca;
   return (
     <>
+      <IncidentListNav number={data.number} />
       <header className="page-head">
         <div className="cell-stack" style={{ gap: 6 }}>
           <span className="small faint">

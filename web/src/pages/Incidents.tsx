@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { IncidentTable } from "../components/IncidentTable";
 import { useRoleRank } from "../lib/me";
 import { Pager, usePageSize } from "../components/Pager";
+import { loadIncidentList, saveIncidentList } from "../lib/incidentList";
 import { Card } from "../components/ui";
 import { SavedViews, type ViewFilters } from "../components/SavedViews";
 import { getJson, type IncidentPage } from "../lib/api";
@@ -31,18 +32,24 @@ export function IncidentsNav() {
 }
 
 export function IncidentsPage() {
-  const [tab, setTab] = useState<Tab>("active");
-  const [severity, setSeverity] = useState("");
-  const [query, setQuery] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [team, setTeam] = useState("");
-  const [offset, setOffset] = useState(0);
+  // Start from the list last looked at in this tab (Back to incidents returns there).
+  const [saved] = useState(loadIncidentList);
+  const [tab, setTab] = useState<Tab>((["active", "acknowledged", "resolved", "all"].includes(saved.tab) ? saved.tab : "active") as Tab);
+  const [severity, setSeverity] = useState(saved.severity);
+  const [query, setQuery] = useState(saved.q);
+  const [from, setFrom] = useState(saved.date_from);
+  const [to, setTo] = useState(saved.date_to);
+  const [team, setTeam] = useState(saved.team);
+  const [offset, setOffset] = useState(saved.offset);
   const [PAGE, setPageSize] = usePageSize("incidents");
   const [data, setData] = useState<IncidentPage | null>(null);
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
   const canWork = useRoleRank() >= 1;
+
+  useEffect(() => {
+    saveIncidentList({ tab, severity, q: query, date_from: from, date_to: to, team, offset });
+  }, [tab, severity, query, from, to, team, offset]);
 
   useEffect(() => {
     const params = new URLSearchParams({ tab, severity, q: query, date_from: from, date_to: to, team, limit: String(PAGE), offset: String(offset) });
