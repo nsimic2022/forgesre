@@ -81,13 +81,13 @@ def get(name: str) -> Flow:
 
 
 # Order on the integration map: alarm intake first, then the systems ForgeSRE reads or writes.
-FLOW_ORDER = ("prometheus", "zabbix", "snmp", "syslog", "notifications")
+FLOW_ORDER = ("prometheus", "zabbix", "snmp", "syslog", "glpi", "notifications")
 TARGET_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 
 
 def _load() -> None:
     # Each module calls register() at import.
-    from app import flow_notifications, flow_prometheus, flow_snmp, flow_syslog, zabbix_flow  # noqa: F401
+    from app import flow_glpi, flow_notifications, flow_prometheus, flow_snmp, flow_syslog, zabbix_flow  # noqa: F401
 
 
 def job_key(name: str, target: str | None = None) -> str:

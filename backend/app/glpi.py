@@ -174,6 +174,7 @@ async def _get_async(
     if not force and backoff_remaining() > 0:
         raise GlpiUnavailable(str(_state["down_why"] or "GLPI unreachable"))
     target = urljoin(root.rstrip("/") + "/", leaf)
+    started = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             response = await client.get(
@@ -184,24 +185,41 @@ async def _get_async(
     except httpx.TimeoutException as exc:
         why = f"GLPI timeout after {timeout:.0f}s"
         _mark_down(why)
+        _record(head, target, started, "error", 0, why)
         raise GlpiUnavailable(why) from exc
     except httpx.HTTPError as exc:
         why = f"GLPI unreachable: {_short(exc)}"
         _mark_down(why)
+        _record(head, target, started, "error", 0, why)
         raise GlpiUnavailable(why) from exc
     if response.status_code >= 500:
         why = f"GLPI HTTP {response.status_code}"
         _mark_down(why)
+        _record(head, target, started, "error", response.status_code, why)
         raise GlpiUnavailable(why)
     if response.status_code >= 400:
-        raise GlpiError(f"GLPI HTTP {response.status_code}: {_body_error(response)}")
+        why = f"GLPI HTTP {response.status_code}: {_body_error(response)}"
+        _record(head, target, started, "refused", response.status_code, why)
+        raise GlpiError(why)
     _mark_up()
+    _record(head, target, started, "ok", response.status_code,
+            f"{head} {(params or {}).get('range', '')}".strip() + (f" · {response.headers.get('Content-Range')}" if response.headers.get("Content-Range") else ""))
     if not response.content:
         return []
     try:
         return response.json()
     except ValueError as exc:
         raise GlpiError("GLPI returned non-JSON") from exc
+
+
+def _record(head: str, target: str, started: float, status: str, http_status: int, summary: str) -> None:
+    """One line in the exchange log (Flow page). Only the endpoint name and host: no tokens or bodies."""
+    from urllib.parse import urlsplit
+
+    from app.exchanges import record
+
+    record("glpi", "out", head, endpoint=head, peer=urlsplit(target).hostname or "", status=status, http_status=http_status,
+           ms=int((time.monotonic() - started) * 1000), summary=summary)
 
 
 def _get(
