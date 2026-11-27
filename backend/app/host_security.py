@@ -181,6 +181,30 @@ def listeners(ss_text: str) -> list[tuple[str, str, int]]:
     return out
 
 
+# ForgeSRE programs by process name (as ss shows it, at most 15 characters), for ports that are not
+# in the fixed list: their sockets belong to the platform even when the port number is unusual.
+FORGESRE_PROCS = {
+    "snmp_exporter": "SNMP polling (snmp_exporter)", "alloy": "Alloy (syslog, logs)", "prometheus": "Prometheus",
+    "alertmanager": "Alertmanager", "grafana": "Grafana", "grafana-server": "Grafana", "loki": "Loki",
+    "blackbox_export": "blackbox_exporter (ping, HTTP checks)", "granian": "NetBox", "llama-server": "local LLM",
+    "caddy": "HTTPS proxy", "uvicorn": "ForgeSRE Core",
+}
+
+
+def listener_procs(ss_text: str) -> dict[tuple[str, int], str]:
+    """Process name per (protocol, port) from `ss -Hlntup` (root sees every process)."""
+    out: dict[tuple[str, int], str] = {}
+    for line in ss_text.splitlines():
+        cols = line.split()
+        match = re.search(r'users:\(\("([^"]+)"', line)
+        if len(cols) < 5 or not match:
+            continue
+        port = cols[4].rpartition(":")[2]
+        if port.isdigit():
+            out.setdefault((cols[0], int(port)), match.group(1))
+    return out
+
+
 def _loopback(addr: str) -> bool:
     return addr.startswith("127.") or addr in {"::1", "localhost"}
 
@@ -209,7 +233,7 @@ def expected_public(env: dict[str, str]) -> dict[int, str]:
 
 
 def port_checks(rows: list[tuple[str, str, int]] | None, env: dict[str, str], ephemeral_from: int = 32768,
-                allowed: set[tuple[int, str]] | None = None) -> list[dict[str, str]]:
+                allowed: set[tuple[int, str]] | None = None, procs: dict[tuple[str, int], str] | None = None) -> list[dict[str, str]]:
     """Compare what listens on the network with what ForgeSRE needs: local-only services open to
     the network are bad; unknown open ports are warnings; random high UDP ports (client sockets)
     are ignored. ``allowed`` (from ufw) lowers a finding when the firewall blocks that port."""
@@ -224,6 +248,12 @@ def port_checks(rows: list[tuple[str, str, int]] | None, env: dict[str, str], ep
         if _loopback(addr) or (addr.startswith("127.0.0.53") or addr == "127.0.0.54"):
             continue
         open_ = through(port, proto)
+        name = (procs or {}).get((proto, port), "")
+        if port not in LOCAL_ONLY and port not in public and name in FORGESRE_PROCS:
+            # A ForgeSRE program on a port outside the list (e.g. snmp_exporter's UDP socket on 161):
+            # replies to its own requests come back without a firewall rule.
+            (known if open_ else known_blocked).add(f"{port}/{proto} {FORGESRE_PROCS[name]}")
+            continue
         if port in LOCAL_ONLY:
             (exposed if open_ else exposed_blocked).append(f"{port}/{proto} {LOCAL_ONLY[port]}")
         elif port in public:
@@ -231,7 +261,7 @@ def port_checks(rows: list[tuple[str, str, int]] | None, env: dict[str, str], ep
         elif port in SYSTEM_PORTS or (proto == "udp" and port >= ephemeral_from):
             continue
         else:
-            (unknown if open_ else unknown_blocked).append(f"{port}/{proto} on {addr or '*'}")
+            (unknown if open_ else unknown_blocked).append(f"{port}/{proto} on {addr or '*'}" + (f" ({name})" if name else ""))
     out = []
     fix_bind = "Bind them to 127.0.0.1 again (docker-compose.yml was changed?) and block them in the firewall."
     if exposed:
@@ -359,7 +389,7 @@ def collect(root: Path) -> dict[str, Any]:
         sshd = {"_missing": "yes"}  # no SSH server installed: nothing to log in to
     except OSError:
         sshd = None
-    code, ss_text = _run(["ss", "-Hlntu"])
+    code, ss_text = _run(["ss", "-Hlntup"])  # -p: process names, complete only as root
     try:
         low = int(Path("/proc/sys/net/ipv4/ip_local_port_range").read_text().split()[0])
     except (OSError, ValueError, IndexError):
@@ -369,7 +399,8 @@ def collect(root: Path) -> dict[str, Any]:
     checks = [
         *ssh_checks(sshd),
         firewall_check(ufw, _run(["nft", "list", "chains"]), _run(["firewall-cmd", "--state"])),
-        *port_checks(listeners(ss_text) if code == 0 else None, env, low, ufw_allowed(ufw[1]) if ufw[0] == 0 else None),
+        *port_checks(listeners(ss_text) if code == 0 else None, env, low, ufw_allowed(ufw[1]) if ufw[0] == 0 else None,
+                     listener_procs(ss_text) if code == 0 else None),
         *mode_checks(root, data),
         *update_checks(Path("/var/run/reboot-required"), _run(["/usr/lib/update-notifier/apt-check"], timeout=30),
                        auto.read_text(encoding="utf-8", errors="replace") if auto.exists() else ("" if shutil.which("apt-get") else None)),
