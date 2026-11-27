@@ -161,34 +161,45 @@ def _llm_jobs_loop(stop: threading.Event) -> None:
             db.close()
 
 
-def _escalation_loop(stop: threading.Event) -> None:
+def escalation_tick(db: Session) -> list[str]:
+    """One round of the 30 s loop. Each step runs on its own: a failing step is rolled back and
+    written to the journal, and the steps after it still run. Returns the names of failed steps."""
+    from app.chat import sweep_resolved
+    from app.noise_filters import promote_filtered
     from app.services import process_escalations
+    from app.tickets import sweep_resolved as tickets_resolved
 
+    steps = (
+        # Open quiet incidents whose noise filter stopped applying, then escalate.
+        ("noise filters", promote_filtered), ("escalation", process_escalations),
+        ("chat resolved", sweep_resolved), ("tickets resolved", tickets_resolved),
+        ("ticket sync", _queue_ticket_sync), ("oxidized sync", _queue_oxidized_sync),
+        ("health checks", _queue_health_checks), ("k8s sync", _queue_k8s_sync), ("snmp apply", _queue_snmp_apply),
+    )
+    failed = []
+    for name, step in steps:
+        try:
+            step(db)
+        except Exception as exc:
+            failed.append(name)
+            log.exception("escalation loop: %s failed", name)
+            db.rollback()  # an aborted Postgres transaction would make every later step fail too
+            try:
+                report(db, "escalation", "loop", "error", summary=f"Escalation loop: {name} failed", detail=str(exc)[:2000])
+            except Exception:
+                db.rollback()
+                log.exception("escalation loop: could not write the journal")
+    return failed
+
+
+def _escalation_loop(stop: threading.Event) -> None:
     while not stop.wait(30):
         if not leader.ensure():
             continue
         beat("escalation")
         db = SessionLocal()
         try:
-            from app.noise_filters import promote_filtered
-
-            # Open quiet incidents whose noise filter stopped applying, then escalate.
-            promote_filtered(db)
-            process_escalations(db)
-            from app.chat import sweep_resolved
-
-            sweep_resolved(db)
-            from app.tickets import sweep_resolved as tickets_resolved
-
-            tickets_resolved(db)
-            _queue_ticket_sync(db)
-            _queue_oxidized_sync(db)
-            _queue_health_checks(db)
-            _queue_k8s_sync(db)
-            _queue_snmp_apply(db)
-        except Exception as exc:
-            log.exception("escalation loop failed")
-            report(db, "escalation", "loop", "error", summary="Escalation loop failed", detail=str(exc))
+            escalation_tick(db)
         finally:
             db.close()
 

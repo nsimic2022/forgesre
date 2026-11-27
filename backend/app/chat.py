@@ -187,15 +187,14 @@ def queue_step(db: Session, incident: Incident, step_key: str, target: str, afte
 
 
 def sweep_resolved(db: Session, window_minutes: int = 60) -> int:
-    """Queue a 'resolved' message for recently resolved incidents that had a chat message."""
+    """Queue a 'resolved' message for recently resolved incidents that had a chat message.
+
+    The incidents are picked by id (IN subquery), not with SELECT DISTINCT over the incident row:
+    Postgres cannot compare its JSON columns, and that query failed every 30 s.
+    """
     since = utcnow() - timedelta(minutes=window_minutes)
-    rows = (
-        db.query(Incident)
-        .join(Notification, Notification.incident_id == Incident.id)
-        .filter(Incident.resolved_at >= since, Notification.step_key.like("chat:%"))
-        .distinct()
-        .all()
-    )
+    chatted = db.query(Notification.incident_id).filter(Notification.step_key.like("chat:%"))
+    rows = db.query(Incident).filter(Incident.resolved_at >= since, Incident.id.in_(chatted)).all()
     return sum(_queue(db, row, "resolved", "resolved") for row in rows)
 
 
