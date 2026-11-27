@@ -103,6 +103,10 @@ service never holds up alerts or the UI. Each message is a row in the incident's
 notifications (channel `slack`, `teams` or `discord`) with `sent` or `failed` and the reason.
 `./forgesre doctor` shows a **Chat** row: off, OK, or the last delivery error.
 
+To see where a message gets lost (e-mail, chat, web push, SMS), open **Flow and log** on the
+Settings › Notifications card, or run `./forgesre flow notifications` (see
+[ui.md › Integration flows](ui.md#integration-flows-settings--integrations--integration--flow-and-log)).
+
 ## SMS to the person on call
 
 Off by default (`notifications.sms.enabled`). The person on call now (Incidents › On-call, the

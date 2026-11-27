@@ -60,6 +60,16 @@ def _prune(db: Session, integration: str) -> None:
         db.commit()
 
 
+def mask_address(value: str) -> str:
+    """a.person@example.com → a…@example.com; phone numbers keep the last 3 digits."""
+    text = (value or "").strip()
+    if "@" in text:
+        local, _, domain = text.partition("@")
+        return f"{local[:1]}…@{domain}"
+    digits = [c for c in text if c.isdigit()]
+    return f"…{''.join(digits[-3:])}" if digits else text[:3] + "…"
+
+
 def as_dict(row: Any) -> dict[str, Any]:
     return {
         "id": row.id, "at": row.at.isoformat() if row.at else None, "direction": row.direction, "kind": row.kind,

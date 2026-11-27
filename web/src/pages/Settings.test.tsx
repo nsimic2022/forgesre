@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsData } from "../lib/api";
+import { MemoryRouter } from "react-router-dom";
 import { SettingsPage } from "./Settings";
 
 const data: SettingsData = {
@@ -57,5 +58,16 @@ describe("Settings", () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => (url === "/api/v1/settings" ? respond({ detail: "forbidden" }, 403) : respond({ overall: "HEALTHY", components: {}, failed: [] }))));
     render(<SettingsPage />);
     expect(await screen.findByText(/Settings are for Admins/)).toBeTruthy();
+  });
+
+  it("links the notifications card to its flow page", async () => {
+    const notif: SettingsData = {
+      groups: { notifications: "Notifications" },
+      settings: [{ key: "notifications.email.enabled", group: "notifications", label: "E-mail on", kind: "bool", store: "yaml", editable: true, help: "", test: "", value: true, effective: true }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (url === "/api/v1/settings" ? respond(notif) : respond({ overall: "HEALTHY", components: {}, failed: [] }))));
+    render(<MemoryRouter><SettingsPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Notifications" }));
+    expect(screen.getByRole("link", { name: "Flow and log" }).getAttribute("href")).toBe("/settings/integrations/notifications");
   });
 });

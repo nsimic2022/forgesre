@@ -164,6 +164,11 @@ def deliver(db: Session, data: dict[str, str], only_email: str = "", client: htt
         if own:
             client.close()
     db.commit()
+    from app.exchanges import record
+
+    if any(counts.values()):
+        record("notifications", "out", "web push", status="ok" if not counts["failed"] else "error",
+               summary=f"sent {counts['sent']}, failed {counts['failed']}, gone {counts['gone']}" + (f" (to {only_email.split('@')[0][:1]}…)" if only_email else ""))
     return counts
 
 

@@ -75,12 +75,12 @@ def get(name: str) -> Flow:
 
 
 # Order on the integration map: alarm intake first, then the systems ForgeSRE reads or writes.
-FLOW_ORDER = ("prometheus", "zabbix")
+FLOW_ORDER = ("prometheus", "zabbix", "notifications")
 
 
 def _load() -> None:
     # Each module calls register() at import.
-    from app import flow_prometheus, zabbix_flow  # noqa: F401
+    from app import flow_notifications, flow_prometheus, zabbix_flow  # noqa: F401
 
 
 # --- Blocks and shared network steps -----------------------------------------------------------
@@ -119,8 +119,18 @@ def timed(fn: Any, timeout: float) -> tuple[Any, float, BaseException | None]:
     return box.get("value"), took, box.get("error")
 
 
-def network_steps(url: str, *, what: str = "the service") -> tuple[list[dict[str, Any]], bool]:
-    """DNS, TCP and (for https) TLS toward ``url``. Returns the steps and whether the API can be tried."""
+def network_steps(url: str, *, what: str = "the service", tls: bool | None = None, prefix: str = "") -> tuple[list[dict[str, Any]], bool]:
+    """DNS, TCP and (for https) TLS toward ``url``. Returns the steps and whether the API can be tried.
+    ``tls=False`` skips the TLS block (SMTP checks STARTTLS when it signs in); ``prefix`` keeps block
+    ids unique when one lane has several targets."""
+    steps, ok = _network_steps(url, what=what, tls=tls)
+    if prefix:
+        for s in steps:
+            s["id"] = f"{prefix}{s['id']}"
+    return steps, ok
+
+
+def _network_steps(url: str, *, what: str, tls: bool | None) -> tuple[list[dict[str, Any]], bool]:
     parts = urlsplit(url if "://" in url else f"https://{url}")
     host, port = parts.hostname or "", parts.port or (443 if parts.scheme == "https" else 80)
     steps: list[dict[str, Any]] = []
@@ -142,6 +152,8 @@ def network_steps(url: str, *, what: str = "the service") -> tuple[list[dict[str
                           fix=f"A firewall between ForgeSRE and {what}, or it is down. From the ForgeSRE server: nc -vz {ip} {port}", ms=int(took)))
         return steps, False
     steps.append(step("tcp", "TCP", f"{ip}:{port}", "ok", f"{ip}:{port} accepts connections.", ms=int(took)))
+    if tls is False:
+        return steps, True
     if parts.scheme != "https":
         local = ip.startswith("127.") or ip == "::1"
         steps.append(step("tls", "TLS", "plain HTTP", "ok" if local else "warn",
