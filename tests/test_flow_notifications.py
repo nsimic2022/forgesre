@@ -114,4 +114,4 @@ async def _done():
 def test_flow_is_registered_and_listed():
     from app.flows import flows
 
-    assert list(flows())[:3] == ["prometheus", "zabbix", "notifications"]
+    assert list(flows())[:2] == ["prometheus", "zabbix"] and "notifications" in flows()

@@ -348,12 +348,15 @@ a webhook call. **Ask ForgeAI about this flow** reads only this flow and offers 
 
 Every set-up flow is checked every 15 minutes (`flows.watch`); a block that breaks is written to the
 journal (the Settings badge) and, with ForgeAI on (`flows.ai`), analysed by itself; the answer shows
-on the page. Flows today:
+on the page. A one-device check (SNMP, syslog: `?target=<asset>`) runs only when opened or asked for,
+and is not journaled. Flows today:
 
 | Flow | Blocks |
 |---|---|
 | Prometheus | Target list (HTTP SD from ForgeSRE) → Targets → Alert rules → Alertmanager (silences, held-back alerts) → Alertmanager sent (its webhook counters) → Network → Webhook → Incident; ForgeSRE → Prometheus API, Alertmanager API |
 | Zabbix | [zabbix.md › The Flow page](zabbix.md#130-the-flow-page) |
+| SNMP | Inventory (SNMP devices) → Auths (snmp.yml has each device's community or v3 user) → DNS/TCP to snmp_exporter → snmp_exporter → Prometheus SNMP jobs (failing devices with their last error). One device, from Inventory › asset › **SNMP flow**: Asset → Auth → SNMP GET of sysDescr from ForgeSRE (v1/v2c) → snmp_exporter walk → Prometheus target. Community strings and v3 passwords are used but never shown |
+| Syslog | Port 514 (UDP and TCP bound) → Alloy (received, parse errors, written, dropped) → Loki ready → Senders in 24 h against the inventory → ForgeSRE reads lines. One device, from Inventory › asset › **Syslog flow**: its lines in 24 h by hostname and by sender IP. Opened also from the Loki and Alloy cards |
 | Notifications | Escalation (steps with nobody to send to) → On-call → Channels on; e-mail: SMTP settings → DNS → TCP → Sign-in (no mail is sent) → Sent; chat (per channel): webhook host → DNS → TCP → TLS → Posted; web push: subscriptions; SMS. Sent rows show masked recipients (`a…@example.com`); webhook URLs and bodies are never logged. Opened also from Settings › Notifications |
 
 API (Admin): `GET /api/v1/flows` (every flow with its last result), `GET|POST

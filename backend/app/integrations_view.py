@@ -47,6 +47,10 @@ TESTABLE = {"prometheus", "alertmanager", "loki", "grafana", "snmp", "llm", "net
 
 
 
+# Stack parts whose path is shown on another integration's Flow page.
+FLOW_FOR = {"alertmanager": "prometheus", "alloy": "syslog", "loki": "syslog"}
+
+
 def _flow_names() -> set[str]:
     """Integrations that have a Flow page (app.flows registry)."""
     from app.flows import flows
@@ -96,7 +100,7 @@ def integrations(db: Session, host_header: str) -> dict[str, Any]:
             "links": _links(row), "local_only": bool(row.get("local_only")), "local_hint": row.get("local_hint") or "",
             "settings": keys, "test": spec["id"] if spec["id"] in TESTABLE else "",
             "sync": spec.get("sync") or "", "last_sync": _last(db, spec.get("journal")),
-            "flow": f"/settings/integrations/{spec['id']}" if spec["id"] in _flow_names() else "",
+            "flow": f"/settings/integrations/{FLOW_FOR.get(spec['id'], spec['id'])}" if FLOW_FOR.get(spec["id"], spec["id"]) in _flow_names() else "",
         }
 
     return {
