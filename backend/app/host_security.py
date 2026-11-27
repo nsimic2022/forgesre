@@ -142,6 +142,27 @@ def firewall_check(ufw_out: tuple[int, str], nft_out: tuple[int, str], firewalld
     return check("firewall", "Firewall", "warn", "No firewall found: every listening port is reachable from the network.", fix)
 
 
+def ufw_allowed(text: str) -> set[tuple[int, str]] | None:
+    """Ports ufw lets in, as (port, proto) with proto "" for both; None when ufw is not active.
+    Rules limited to a source ("from 10.0.0.0/24") count as allowed: the port is reachable from there."""
+    if not re.search(r"^Status:\s*active", text, re.MULTILINE):
+        return None
+    out: set[tuple[int, str]] = set()
+    for line in text.splitlines():
+        if "ALLOW" not in line or "ALLOW OUT" in line:
+            continue
+        first = line.split()[0] if line.split() else ""
+        if first == "OpenSSH":
+            out.add((22, "tcp"))
+            continue
+        m = re.match(r"^(\d+)(?::(\d+))?(?:/(tcp|udp))?$", first)
+        if m:
+            low, high = int(m.group(1)), int(m.group(2) or m.group(1))
+            for port in range(low, min(high, low + 1000) + 1):
+                out.add((port, m.group(3) or ""))
+    return out
+
+
 # --- Listening ports ---------------------------------------------------------------------------
 
 def listeners(ss_text: str) -> list[tuple[str, str, int]]:
@@ -187,42 +208,61 @@ def expected_public(env: dict[str, str]) -> dict[int, str]:
     return ports
 
 
-def port_checks(rows: list[tuple[str, str, int]] | None, env: dict[str, str], ephemeral_from: int = 32768) -> list[dict[str, str]]:
+def port_checks(rows: list[tuple[str, str, int]] | None, env: dict[str, str], ephemeral_from: int = 32768,
+                allowed: set[tuple[int, str]] | None = None) -> list[dict[str, str]]:
     """Compare what listens on the network with what ForgeSRE needs: local-only services open to
     the network are bad; unknown open ports are warnings; random high UDP ports (client sockets)
-    are ignored."""
+    are ignored. ``allowed`` (from ufw) lowers a finding when the firewall blocks that port."""
+
+    def through(port: int, proto: str) -> bool:
+        return allowed is None or (port, proto) in allowed or (port, "") in allowed
     if rows is None:
         return [check("ports", "Open ports", "unknown", "Could not list listening ports (ss is missing).", "Install iproute2.")]
     public = expected_public(env)
-    exposed, unknown, known = [], [], set()
+    exposed, exposed_blocked, unknown, unknown_blocked, known, known_blocked = [], [], [], [], set(), set()
     for proto, addr, port in rows:
         if _loopback(addr) or (addr.startswith("127.0.0.53") or addr == "127.0.0.54"):
             continue
+        open_ = through(port, proto)
         if port in LOCAL_ONLY:
-            exposed.append(f"{port}/{proto} {LOCAL_ONLY[port]}")
+            (exposed if open_ else exposed_blocked).append(f"{port}/{proto} {LOCAL_ONLY[port]}")
         elif port in public:
-            known.add(f"{port}/{proto} {public[port]}")
+            (known if open_ else known_blocked).add(f"{port}/{proto} {public[port]}")
         elif port in SYSTEM_PORTS or (proto == "udp" and port >= ephemeral_from):
             continue
         else:
-            unknown.append(f"{port}/{proto} on {addr or '*'}")
+            (unknown if open_ else unknown_blocked).append(f"{port}/{proto} on {addr or '*'}")
     out = []
+    fix_bind = "Bind them to 127.0.0.1 again (docker-compose.yml was changed?) and block them in the firewall."
     if exposed:
         out.append(check("ports_local", "Local-only services", "bad",
-                         "Open to the network but meant for this host only: " + "; ".join(sorted(set(exposed))) + ".",
-                         "Bind them to 127.0.0.1 again (docker-compose.yml was changed?) and block them in the firewall."))
+                         "Open to the network but meant for this host only: " + "; ".join(sorted(set(exposed))) + ".", fix_bind))
+    elif exposed_blocked:
+        out.append(check("ports_local", "Local-only services", "warn",
+                         "Listening on all addresses although meant for this host only; the firewall blocks them now: "
+                         + "; ".join(sorted(set(exposed_blocked))) + ".", fix_bind))
     else:
         out.append(check("ports_local", "Local-only services", "ok", "Databases, Prometheus, Loki, LLM and docker-ro listen on 127.0.0.1 only."))
+    fix_other = ("Find the program: sudo ss -lntup | grep ':PORT '. Stop it, or make it listen on 127.0.0.1. "
+                 "If it is needed from the network, list it in .env FORGESRE_SECURITY_ALLOW_PORTS=…")
     if unknown:
         out.append(check("ports_other", "Other open ports", "warn",
-                         "Listening on the network, not used by ForgeSRE: " + "; ".join(sorted(set(unknown))) + ".",
-                         "Stop the service or block the port in the firewall. If it is needed, list it in "
-                         ".env FORGESRE_SECURITY_ALLOW_PORTS=…"))
-    out.append(check("ports_public", "ForgeSRE ports", "info",
-                     ("Open to the network: " + "; ".join(sorted(known)) + ".") if known else "No ForgeSRE port is open to the network.",
-                     "Allow these only from the management network (firewall rule with 'from')."))
+                         "Reachable from the network, not used by ForgeSRE: " + "; ".join(sorted(set(unknown))) + ".", fix_other))
+    if unknown_blocked:
+        out.append(check("ports_blocked", "Other ports, blocked", "info",
+                         "Listening, not used by ForgeSRE, but the firewall blocks them: " + "; ".join(sorted(set(unknown_blocked))) + ".",
+                         fix_other))
+    if allowed is None:
+        text = ("Open to the network: " + "; ".join(sorted(known)) + ".") if known else "No ForgeSRE port is open to the network."
+    else:
+        text = (("Reachable through the firewall: " + "; ".join(sorted(known)) + ". ") if known else "No ForgeSRE port is let in by the firewall. ")
+        if known_blocked:
+            text += "Blocked by the firewall (usable on this machine only): " + "; ".join(sorted(known_blocked)) + "."
+    out.append(check("ports_public", "ForgeSRE ports", "info", text.strip(),
+                     "Allow the ones people and devices need, only from their networks: docs/install-config.md › Hardening the server."))
     https = str(env.get("FORGESRE_HTTPS") or "off").lower()
-    plain = expected_public(env).get(int(env.get("FORGESRE_HTTP_PORT") or 8080))
+    http_port = int(env.get("FORGESRE_HTTP_PORT") or 8080)
+    plain = expected_public(env).get(http_port) and through(http_port, "tcp")
     if https in {"on", "1", "true", "yes"} and plain:
         out.append(check("https_bypass", "Plain HTTP next to HTTPS", "warn",
                          f"HTTPS is on, but the UI also answers plain HTTP on :{env.get('FORGESRE_HTTP_PORT') or 8080}, so passwords can travel unencrypted.",
@@ -325,10 +365,11 @@ def collect(root: Path) -> dict[str, Any]:
     except (OSError, ValueError, IndexError):
         low = 32768
     auto = Path("/etc/apt/apt.conf.d/20auto-upgrades")
+    ufw = _run(["ufw", "status"])
     checks = [
         *ssh_checks(sshd),
-        firewall_check(_run(["ufw", "status"]), _run(["nft", "list", "chains"]), _run(["firewall-cmd", "--state"])),
-        *port_checks(listeners(ss_text) if code == 0 else None, env, low),
+        firewall_check(ufw, _run(["nft", "list", "chains"]), _run(["firewall-cmd", "--state"])),
+        *port_checks(listeners(ss_text) if code == 0 else None, env, low, ufw_allowed(ufw[1]) if ufw[0] == 0 else None),
         *mode_checks(root, data),
         *update_checks(Path("/var/run/reboot-required"), _run(["/usr/lib/update-notifier/apt-check"], timeout=30),
                        auto.read_text(encoding="utf-8", errors="replace") if auto.exists() else ("" if shutil.which("apt-get") else None)),

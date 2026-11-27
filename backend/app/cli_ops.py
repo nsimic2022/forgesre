@@ -441,14 +441,15 @@ def format_security(title: str, checks: list[dict[str, Any]]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def security_summary_line(checks: list[dict[str, Any]]) -> str:
-    """One doctor row: ✓ when nothing to do, else how many problems and warnings."""
+def security_summary_line(checks: list[dict[str, Any]], scope: str = "") -> str:
+    """One doctor row: ✓ when nothing to do, else how many problems and warnings (``scope``: "on the host")."""
     bad = sum(1 for c in checks if c.get("status") == "bad")
     warn = sum(1 for c in checks if c.get("status") == "warn")
     if not bad and not warn:
         return "✓"
     parts = ([f"{bad} problem(s)"] if bad else []) + ([f"{warn} warning(s)"] if warn else [])
-    return f"{'✗' if bad else '!'}  {', '.join(parts)}: ./forgesre security"
+    where = f" {scope}" if scope else ""
+    return f"{'✗' if bad else '!'}  {', '.join(parts)}{where}: ./forgesre security"
 
 
 def cmd_security(port: str, args: list[str]) -> None:
@@ -480,7 +481,7 @@ def cmd_security(port: str, args: list[str]) -> None:
                 jar.unlink(missing_ok=True)
     every = list(host["checks"]) + platform
     if "--summary" in flags:
-        sys.stdout.write(security_summary_line(every) + "\n")
+        sys.stdout.write(security_summary_line(every, "on the host") + "\n")
         return
     if "--json" in flags:
         sys.stdout.write(json.dumps({"host": host, "platform": platform}, indent=1) + "\n")
