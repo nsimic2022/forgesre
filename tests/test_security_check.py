@@ -154,3 +154,18 @@ def test_ufw_rules_lower_findings_for_blocked_ports():
 def test_alertmanager_cluster_port_is_closed_by_default():
     compose = (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text(encoding="utf-8")
     assert "--cluster.listen-address=${ALERTMANAGER_CLUSTER_LISTEN:-}" in compose
+
+
+def test_process_names_recognise_forgesre_sockets():
+    ss = "\n".join([
+        'udp UNCONN 0 0 0.0.0.0:161 0.0.0.0:* users:(("snmp_exporter",pid=812,fd=9))',
+        'udp UNCONN 0 0 0.0.0.0:514 0.0.0.0:* users:(("alloy",pid=901,fd=12))',
+        'tcp LISTEN 0 4096 0.0.0.0:6000 0.0.0.0:* users:(("nc",pid=77,fd=3))',
+    ])
+    procs = hs.listener_procs(ss)
+    assert procs == {("udp", 161): "snmp_exporter", ("udp", 514): "alloy", ("tcp", 6000): "nc"}
+    out = _by(hs.port_checks(hs.listeners(ss), {}, allowed={(514, "udp")}, procs=procs))
+    pub = out["ports_public"]["detail"]
+    assert "514/udp device syslog (Alloy)" in pub.split("Blocked")[0]
+    assert "161/udp SNMP polling (snmp_exporter)" in pub.split("Blocked")[1]
+    assert "161" not in out["ports_blocked"]["detail"] and "6000/tcp on 0.0.0.0 (nc)" in out["ports_blocked"]["detail"]

@@ -346,7 +346,9 @@ accounts with no sign-in for 90 days, and whether anything sends data out (cloud
 it): SSH, firewall, ports open to the network, secret file modes, updates, restart, fail2ban. A
 report older than a week is marked. With ufw active, ports the firewall blocks are reported as *blocked*
 (a note, not a warning), and *ForgeSRE ports* says which are reachable through the firewall and
-which work on this machine only. Every finding has the fix to do by hand; the steps are in
+which work on this machine only. Run as root, the check also reads which program holds each port, so
+ForgeSRE's own sockets (for example snmp_exporter on 161/udp, Alloy on 514) count as ForgeSRE
+ports, and an unknown port shows its program name. Every finding has the fix to do by hand; the steps are in
 [install-config.md › Hardening the server](install-config.md#6a-hardening-the-server). Ports you
 need open besides ForgeSRE's own go in `.env` `FORGESRE_SECURITY_ALLOW_PORTS`. API (Admin):
 `GET /api/v1/system/security`.
