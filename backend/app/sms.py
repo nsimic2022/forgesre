@@ -79,7 +79,20 @@ def message(incident: Incident, event: str) -> str:
 
 
 def send(to: str, text: str) -> tuple[bool, str]:
-    """One SMS now. Returns (ok, detail); never raises and never logs the token."""
+    """One SMS now. Returns (ok, detail); never raises and never logs the token. Logged for the
+    Notifications flow page with the number masked."""
+    import time
+
+    from app.exchanges import mask_address, record
+
+    started = time.monotonic()
+    ok, detail = _send(to, text)
+    record("notifications", "out", "sms", peer=config().get("provider", ""), status="ok" if ok else "error",
+           ms=int((time.monotonic() - started) * 1000), summary=f"to {mask_address(to)}: {detail}")
+    return ok, detail
+
+
+def _send(to: str, text: str) -> tuple[bool, str]:
     cfg = config()
     why = not_ready(cfg)
     if why:

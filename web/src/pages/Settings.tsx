@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { AuditPanel, JournalPanel } from "../components/ActivityPanels";
 import { AlertPrefs, AppearancePanel, PushPrefs, SeverityColorPrefs } from "../components/AppearancePanel";
 import { ForgeAiDocs } from "../components/ForgeAiDocs";
@@ -129,7 +130,10 @@ export function SettingsPage() {
             ) : group === "demo" ? (
               <DemoPanel />
             ) : (
-              <Card title={data.groups[group]} actions={tests.map((t) => <TestButton key={t} component={t} />)}>
+              <Card title={data.groups[group]} actions={<>
+                {group === "notifications" ? <Link className="btn" to="/settings/integrations/notifications">Flow and log</Link> : null}
+                {tests.map((t) => <TestButton key={t} component={t} />)}
+              </>}>
                 {rows.map((row) => (row.editable ? <SettingField key={row.key} row={row} onSaved={replace} /> : <ReadOnlyRow key={row.key} row={row} />))}
                 <span className="small faint">Every change is written to config/forgesre.yml, applied at once and kept in the audit log. Same as <code className="mono">./forgesre settings set KEY VALUE</code>.</span>
               </Card>

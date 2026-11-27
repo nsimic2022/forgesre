@@ -354,6 +354,7 @@ on the page. Flows today:
 |---|---|
 | Prometheus | Target list (HTTP SD from ForgeSRE) → Targets → Alert rules → Alertmanager (silences, held-back alerts) → Alertmanager sent (its webhook counters) → Network → Webhook → Incident; ForgeSRE → Prometheus API, Alertmanager API |
 | Zabbix | [zabbix.md › The Flow page](zabbix.md#130-the-flow-page) |
+| Notifications | Escalation (steps with nobody to send to) → On-call → Channels on; e-mail: SMTP settings → DNS → TCP → Sign-in (no mail is sent) → Sent; chat (per channel): webhook host → DNS → TCP → TLS → Posted; web push: subscriptions; SMS. Sent rows show masked recipients (`a…@example.com`); webhook URLs and bodies are never logged. Opened also from Settings › Notifications |
 
 API (Admin): `GET /api/v1/flows` (every flow with its last result), `GET|POST
 /api/v1/integrations/{name}/flow`, `GET /api/v1/integrations/{name}/exchanges`,

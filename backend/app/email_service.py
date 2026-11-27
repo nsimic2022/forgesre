@@ -89,8 +89,21 @@ async def send_smtp_async(target: str, subject: str, body: str, html: str | None
 
 
 def send_smtp(target: str, subject: str, body: str, html: str | None = None) -> None:
-    """Sync wrapper for pytest and ``Depends(get_db)`` callers."""
-    run_sync(send_smtp_async(target, subject, body, html=html))
+    """Sync wrapper for pytest and ``Depends(get_db)`` callers. Each send is logged for the
+    Notifications flow page (server, masked recipient, result, time; never the body)."""
+    import time
+
+    from app.exchanges import mask_address, record
+
+    started = time.monotonic()
+    try:
+        run_sync(send_smtp_async(target, subject, body, html=html))
+    except Exception as exc:
+        record("notifications", "out", "email", peer=f"{settings.smtp_host}:{settings.smtp_port}", status="error",
+               ms=int((time.monotonic() - started) * 1000), summary=f"to {mask_address(target)}: {type(exc).__name__}: {str(exc)[:200]}")
+        raise
+    record("notifications", "out", "email", peer=f"{settings.smtp_host}:{settings.smtp_port}", status="ok",
+           ms=int((time.monotonic() - started) * 1000), summary=f"to {mask_address(target)}: {subject[:120]}")
 
 
 def check(send: bool = True) -> dict:

@@ -140,7 +140,21 @@ def _event_of(text: str) -> str:
 
 
 def post(channel: str, text: str, timeout: float = TIMEOUT, incident: Incident | None = None) -> tuple[bool, str]:
-    """POST one message. Never raises: returns (ok, detail). The URL is never logged (it is a secret)."""
+    """POST one message. Never raises: returns (ok, detail). The URL is never logged (it is a secret);
+    the Notifications flow page gets the host, result and time only."""
+    import time
+    from urllib.parse import urlsplit
+
+    from app.exchanges import record
+
+    started = time.monotonic()
+    ok, detail = _post(channel, text, timeout, incident)
+    record("notifications", "out", f"chat.{channel}", peer=urlsplit(webhook_url(channel)).hostname or "", status="ok" if ok else "error",
+           ms=int((time.monotonic() - started) * 1000), summary=f"{LABELS[channel]}: {detail}" + (f" · {incident.number.split('_')[0]}" if incident else ""))
+    return ok, detail
+
+
+def _post(channel: str, text: str, timeout: float, incident: Incident | None) -> tuple[bool, str]:
     url = webhook_url(channel)
     if not url:
         return False, f"{CHANNELS[channel]} is not set"
