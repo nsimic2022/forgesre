@@ -170,3 +170,40 @@ def test_settings_cli_and_doctor_know_the_chat_secrets():
     from app.stack import component_label
 
     assert component_label("chat").startswith("Chat")
+
+
+def test_resolved_sweep_does_not_select_distinct_incident_rows(chat_on):
+    """Postgres cannot DISTINCT over the incident's JSON columns; that query failed every 30 s."""
+    from sqlalchemy import event
+
+    seen: list[str] = []
+    listen = lambda conn, cursor, statement, *a: seen.append(statement)  # noqa: E731
+    event.listen(engine, "before_cursor_execute", listen)
+    db = SessionLocal()
+    try:
+        chat.sweep_resolved(db)
+    finally:
+        event.remove(engine, "before_cursor_execute", listen)
+        db.close()
+    assert seen and not any("DISTINCT" in s.upper() and "incidents.timeline" in s for s in seen)
+
+
+def test_escalation_tick_keeps_going_after_a_failing_step(monkeypatch):
+    """One broken step is rolled back and journaled; the later steps still run."""
+    import app.chat
+    import app.main as main
+    from app.models import JournalEntry
+
+    ran: list[str] = []
+    monkeypatch.setattr(app.chat, "sweep_resolved", lambda db: (_ for _ in ()).throw(RuntimeError("boom")))
+    for name in ("_queue_ticket_sync", "_queue_oxidized_sync", "_queue_health_checks", "_queue_k8s_sync", "_queue_snmp_apply"):
+        monkeypatch.setattr(main, name, lambda db, n=name: ran.append(n))
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        assert main.escalation_tick(db) == ["chat resolved"]
+        assert ran == ["_queue_ticket_sync", "_queue_oxidized_sync", "_queue_health_checks", "_queue_k8s_sync", "_queue_snmp_apply"]
+        row = db.query(JournalEntry).filter(JournalEntry.summary == "Escalation loop: chat resolved failed").first()
+        assert row is not None and "boom" in (row.detail or "")
+    finally:
+        db.close()

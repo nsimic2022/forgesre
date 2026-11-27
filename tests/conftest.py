@@ -11,7 +11,10 @@ ROOT = Path(__file__).resolve().parents[1]
 # Unique sqlite file so parallel agents / leftover data/test.db cannot corrupt this run.
 db_path = Path(f"/tmp/forgesre-pytest-{os.getpid()}.db")
 os.environ["FORGESRE_CONFIG"] = str(ROOT / "tests" / "forgesre.test.yml")
-os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
+# FORGESRE_TEST_DATABASE_URL=postgresql+psycopg2://… runs single test files on a real (empty) Postgres,
+# which catches SQL that SQLite accepts and Postgres refuses (e.g. DISTINCT over JSON columns). The
+# whole suite does not finish on Postgres yet: some tests leave transactions open and migrations wait.
+os.environ["DATABASE_URL"] = os.environ.get("FORGESRE_TEST_DATABASE_URL") or f"sqlite:///{db_path}"
 os.environ["FORGESRE_DEV"] = "1"
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["FORGESRE_ADMIN_EMAIL"] = "admin@forgesre.local"
