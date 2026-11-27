@@ -344,7 +344,9 @@ each time you open it: HTTPS (and Secure cookies), the webhook token, how many A
 accounts with no sign-in for 90 days, and whether anything sends data out (cloud LLM, MCP).
 **Server** is the last report of `sudo ./forgesre security` on the host (doctor and update refresh
 it): SSH, firewall, ports open to the network, secret file modes, updates, restart, fail2ban. A
-report older than a week is marked. Every finding has the fix to do by hand; the steps are in
+report older than a week is marked. With ufw active, ports the firewall blocks are reported as *blocked*
+(a note, not a warning), and *ForgeSRE ports* says which are reachable through the firewall and
+which work on this machine only. Every finding has the fix to do by hand; the steps are in
 [install-config.md › Hardening the server](install-config.md#6a-hardening-the-server). Ports you
 need open besides ForgeSRE's own go in `.env` `FORGESRE_SECURITY_ALLOW_PORTS`. API (Admin):
 `GET /api/v1/system/security`.

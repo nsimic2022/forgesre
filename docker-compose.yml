@@ -108,6 +108,11 @@ services:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
       - --web.listen-address=127.0.0.1:9093
+      # Cluster gossip (TCP+UDP 9094) is off by default: an empty address disables it, so nothing
+      # opens on the network. Two appliances (docs/high-availability.md) set
+      # ALERTMANAGER_CLUSTER_LISTEN=0.0.0.0:9094 and ALERTMANAGER_CLUSTER_PEER=<other VM>:9094.
+      - --cluster.listen-address=${ALERTMANAGER_CLUSTER_LISTEN:-}
+      - --cluster.peer=${ALERTMANAGER_CLUSTER_PEER:-}
     volumes:
       - ${ALERTMANAGER_CONFIG:-./monitoring/alertmanager.yml}:/etc/alertmanager/alertmanager.yml:ro
       - ${FORGESRE_DATA:-./data}/alertmanager:/alertmanager

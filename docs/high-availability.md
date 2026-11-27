@@ -30,7 +30,10 @@ of a VM, run two appliances in **active / standby** on one shared, replicated Po
    (Settings › General), Zabbix and LibreNMS webhooks and mail links at it.
 4. **Alertmanager**: each appliance's Alertmanager sends to its own Core, so an alarm arrives while
    either is up; ForgeSRE deduplicates by fingerprint into one incident. To silence once for both,
-   run Alertmanager in cluster mode (`--cluster.peer=<other VM>:9094`).
+   run Alertmanager in cluster mode: in `.env` on each appliance set
+   `ALERTMANAGER_CLUSTER_LISTEN=0.0.0.0:9094` and `ALERTMANAGER_CLUSTER_PEER=<other VM>:9094`,
+   allow TCP and UDP 9094 between the two VMs only, then `./forgesre update`. Without these the
+   cluster is off and 9094 stays closed (it was open on all addresses before V2.0.x).
 5. **Backups**: back up the shared Postgres with its own tooling; `./forgesre backup` still saves
    config, secrets and generated files of each appliance.
 

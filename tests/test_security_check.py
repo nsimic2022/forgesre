@@ -116,6 +116,7 @@ def test_cli_text():
     assert "! SSH password login" in text and "Fix: Put" in text and "✓ Firewall" in text
     assert security_summary_line(rows) == "!  1 warning(s): ./forgesre security"
     assert security_summary_line(rows[1:]) == "✓"
+    assert security_summary_line(rows, "on the host") == "!  1 warning(s) on the host: ./forgesre security"
 
 
 def test_collect_runs_without_root_and_changes_nothing(tmp_path):
@@ -123,3 +124,33 @@ def test_collect_runs_without_root_and_changes_nothing(tmp_path):
     report = hs.collect(root)
     assert {c["key"] for c in report["checks"]} >= {"files", "fail2ban"}
     assert all(c["status"] in {"ok", "warn", "bad", "info", "unknown"} for c in report["checks"])
+
+
+def test_ufw_rules_lower_findings_for_blocked_ports():
+    ufw = ("Status: active\n\nTo                         Action      From\n--                         ------      ----\n"
+           "22                         ALLOW       Anywhere\n514/udp                    ALLOW       10.20.0.0/16\n"
+           "8080/tcp                   ALLOW       10.0.0.0/24\n6000:6002/tcp              ALLOW       Anywhere\n"
+           "53                         ALLOW OUT   Anywhere\n22 (v6)                    ALLOW       Anywhere (v6)\n")
+    allowed = hs.ufw_allowed(ufw)
+    assert {(22, ""), (514, "udp"), (8080, "tcp"), (6001, "tcp")} <= allowed and (53, "") not in allowed
+    assert hs.ufw_allowed("Status: inactive\n") is None
+    rows = hs.listeners("\n".join([
+        "tcp LISTEN 0 4096 0.0.0.0:8080 0.0.0.0:*", "tcp LISTEN 0 4096 0.0.0.0:3000 0.0.0.0:*",
+        "udp UNCONN 0 0 0.0.0.0:514 0.0.0.0:*", "tcp LISTEN 0 4096 0.0.0.0:514 0.0.0.0:*",
+        "udp UNCONN 0 0 0.0.0.0:161 0.0.0.0:*", "tcp LISTEN 0 4096 *:9094 *:*", "tcp LISTEN 0 4096 0.0.0.0:5432 0.0.0.0:*",
+    ]))
+    out = _by(hs.port_checks(rows, {"FORGESRE_HTTPS": "on"}, allowed=allowed))
+    assert out["ports_local"]["status"] == "warn" and "the firewall blocks them now" in out["ports_local"]["detail"]
+    assert "ports_other" not in out and out["ports_blocked"]["status"] == "info"
+    assert "161/udp" in out["ports_blocked"]["detail"] and "9094/tcp" in out["ports_blocked"]["detail"]
+    pub = out["ports_public"]["detail"]
+    assert "Reachable through the firewall: 514/udp" in pub and "8080/tcp ForgeSRE UI" in pub.split("Blocked")[0]
+    assert "Blocked by the firewall (usable on this machine only): 3000/tcp Grafana; 514/tcp" in pub
+    assert out["https_bypass"]["status"] == "warn"  # 8080 is let in next to HTTPS
+    closed = _by(hs.port_checks(rows, {"FORGESRE_HTTPS": "on"}, allowed={(22, "")}))
+    assert "https_bypass" not in closed
+
+
+def test_alertmanager_cluster_port_is_closed_by_default():
+    compose = (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "--cluster.listen-address=${ALERTMANAGER_CLUSTER_LISTEN:-}" in compose
