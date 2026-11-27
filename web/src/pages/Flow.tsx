@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { TopicChat } from "../components/ForgeAiChat";
 import { Pager, usePageSize } from "../components/Pager";
 import { Card, Chip } from "../components/ui";
@@ -13,7 +13,7 @@ export type FlowStep = {
 type Lane = { id: string; title: string; steps: FlowStep[] };
 type Ai = { status: string; at: string | null; question: string; answer: string; model?: string; call_id?: number | null };
 type Flow = { name: string; label: string; about: string; configured: boolean; status: string; job?: number; error?: string;
-  result: { checked_at: string; lanes: Lane[] } | null; watch?: boolean; ai?: Ai | null };
+  result: { checked_at: string; lanes: Lane[] } | null; watch?: boolean; ai?: Ai | null; target?: string; target_label?: string };
 type Exchange = { id: number; at: string; direction: string; kind: string; endpoint: string; peer: string; status: string; http_status: number; ms: number; summary: string };
 type Exchanges = { total: number; rows: Exchange[]; last_id: number };
 
@@ -130,19 +130,23 @@ function WaitForTest({ name, port }: { name: string; port: string }) {
  */
 export function FlowPage() {
   const { name = "zabbix" } = useParams();
+  const [search] = useSearchParams();
+  const target = search.get("target") ?? "";
+  // one device (SNMP, syslog): ?target=<asset id> checks only that object
+  const q = target ? `?target=${encodeURIComponent(target)}` : "";
   const [flow, setFlow] = useState<Flow | null>(null);
   const [error, setError] = useState("");
   const [picked, setPicked] = useState("");
   const asked = useRef("");
-  const load = useCallback(() => getJson<Flow>(`/api/v1/integrations/${name}/flow`).then(setFlow).catch((e: Error) => setError(e.message)), [name]);
-  const run = () => postJson(`/api/v1/integrations/${name}/flow`, {}).then(load).catch((e: Error) => setError(e.message));
+  const load = useCallback(() => getJson<Flow>(`/api/v1/integrations/${name}/flow` + q).then(setFlow).catch((e: Error) => setError(e.message)), [name, q]);
+  const run = () => postJson(`/api/v1/integrations/${name}/flow` + q, {}).then(load).catch((e: Error) => setError(e.message));
   useEffect(() => void load(), [load]);
   const running = flow?.status === "pending" || flow?.status === "running";
   useEffect(() => {
     if (!flow) return;
     const old = !flow.result || Date.now() - Date.parse(flow.result.checked_at) > STALE_MS;
-    if (old && !running && asked.current !== name) {
-      asked.current = name; // check once on open when the last result is missing or old
+    if (old && !running && asked.current !== name + q) {
+      asked.current = name + q; // check once on open when the last result is missing or old
       void run();
     }
     if (running) {
@@ -159,8 +163,9 @@ export function FlowPage() {
     <>
       <header className="page-head">
         <div className="cell-stack" style={{ gap: 6 }}>
-          <span className="small faint"><Link to="/settings?group=integrations">Settings › Integrations</Link> / {flow?.label ?? name}</span>
-          <h1>{flow?.label ?? name} flow</h1>
+          <span className="small faint"><Link to="/settings?group=integrations">Settings › Integrations</Link> / {target
+            ? <><Link to={`/settings/integrations/${name}`}>{flow?.label ?? name}</Link> / {flow?.target_label ?? target}</> : flow?.label ?? name}</span>
+          <h1>{flow?.label ?? name} flow{target ? ` · ${flow?.target_label ?? target}` : ""}</h1>
           <span className="muted">
             {flow?.about ?? ""} Read-only.
             {flow?.result ? ` Checked ${clock(flow.result.checked_at)}.` : ""}

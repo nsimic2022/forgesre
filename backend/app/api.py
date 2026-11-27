@@ -4339,23 +4339,24 @@ def flows_api(db: Session = Depends(get_db), user: User = Depends(require("admin
 
 
 @router.get("/integrations/{name}/flow")
-def flow_api(name: str, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
-    """Admin: the last check of one flow (each block in both directions), or its job status while it runs."""
+def flow_api(name: str, target: str = "", db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: the last check of one flow (each block in both directions), or its job status while it runs.
+    ``target`` (an asset id for SNMP and syslog) shows the check of one object instead."""
     from app.flows import last_flow
 
     try:
-        return last_flow(db, name)
+        return last_flow(db, name, target or None)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/integrations/{name}/flow")
-def flow_run(name: str, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
-    """Admin: queue a new check of one flow (network and read-only API calls run in the background)."""
+def flow_run(name: str, target: str = "", db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: queue a new check of one flow, or of one object in it (network and read-only calls run in the background)."""
     from app.flows import queue_check
 
     try:
-        job = queue_check(db, name, actor=user.email)
+        job = queue_check(db, name, target=target or None, actor=user.email)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     db.commit()

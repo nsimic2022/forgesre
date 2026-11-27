@@ -462,12 +462,12 @@ FLOW_TEST_PATH = {"zabbix": "/api/v1/webhooks/zabbix", "prometheus": "/api/v1/we
 
 
 def cmd_flow(port: str, args: list[str]) -> None:
-    """./forgesre flow [NAME [check|trace [N]|test]]: an integration's flow step by step, its call log,
-    or wait for a test call. Without NAME: every flow with its broken blocks. Read-only; the check
-    runs as a background job in Core."""
+    """./forgesre flow [NAME[@ASSET] [check|trace [N]|test]]: an integration's flow step by step, its call
+    log, or wait for a test call. ``snmp@sw-01`` checks one device. Without NAME: every flow with its
+    broken blocks. Read-only; the check runs as a background job in Core."""
     import time as _time
 
-    usage = "usage: ./forgesre flow [NAME [check | trace [N] | test]]   (./forgesre zabbix = ./forgesre flow zabbix)"
+    usage = "usage: ./forgesre flow [NAME[@ASSET] [check | trace [N] | test]]   (./forgesre zabbix = ./forgesre flow zabbix; snmp@sw-01 = one device)"
     if args and args[0] in {"-h", "--help"}:
         raise SystemExit(usage)
     jar, _me = ensure_jar(port)
@@ -484,19 +484,22 @@ def cmd_flow(port: str, args: list[str]) -> None:
             sys.stdout.write("Details: ./forgesre flow NAME\n")
             return
         name, sub = args[0], (args[1] if len(args) > 1 else "check")
-        if sub not in {"check", "flow", "trace", "test"}:
+        name, _, target = name.partition("@")
+        if sub not in {"check", "flow", "trace", "test"} or (target and sub not in {"check", "flow"}):
             raise SystemExit(usage)
+        q = f"?target={quote(target)}" if target else ""
         if sub in {"check", "flow"}:
-            started = post_json(port, jar, f"/api/v1/integrations/{name}/flow", {}).get("job")
+            started = post_json(port, jar, f"/api/v1/integrations/{name}/flow{q}", {}).get("job")
             data: dict[str, Any] = {}
             for _ in range(40):  # the job does a few network calls with short timeouts
                 _time.sleep(1.5)
-                data = get_json(port, jar, f"/api/v1/integrations/{name}/flow")
+                data = get_json(port, jar, f"/api/v1/integrations/{name}/flow{q}")
                 if data.get("job") == started and data.get("status") in {"done", "failed", "error"}:
                     break
             if not data.get("result"):
                 raise SystemExit(f"the flow check did not finish ({data.get('status')}): ./forgesre jobs")
-            sys.stdout.write(format_flow({**data["result"], "label": data.get("label", name)}))
+            label = data.get("label", name) + (f" · {data.get('target_label') or target}" if target else "")
+            sys.stdout.write(format_flow({**data["result"], "label": label}))
         elif sub == "trace":
             count = int(args[2]) if len(args) > 2 and args[2].isdigit() else 30
             data = get_json(port, jar, f"/api/v1/integrations/{name}/exchanges?limit={min(count, 200)}")

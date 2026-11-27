@@ -6,12 +6,16 @@ Each flow (Zabbix, Prometheus → Alertmanager, notifications, GLPI, …) regist
 15 minutes, writes a block that breaks to the journal (the Settings badge) and, with ForgeAI on,
 queues an analysis (``flow_ai``, LLM lane). Everything here is read-only.
 
+A flow may also check one object (an asset for SNMP): ``target_check(db, target)``; its job's
+object_id is ``name@target``. Per-object checks are run on request only: not watched, not journaled.
+
 ``flow_context`` is what ForgeAI reads in a Flow chat (topic ``flow:<name>``).
 """
 
 from __future__ import annotations
 
 import os
+import re
 import socket
 import ssl
 import threading
@@ -46,6 +50,8 @@ class Flow:
     services: tuple[str, ...] = ("core",)
     about: str = ""
     extra_context: Callable[[Session], dict[str, Any]] | None = field(default=None)
+    target_check: Callable[[Session, str], dict[str, Any]] | None = field(default=None)
+    target_label: Callable[[Session, str], str] | None = field(default=None)
 
 
 _REGISTRY: dict[str, Flow] = {}
@@ -75,12 +81,28 @@ def get(name: str) -> Flow:
 
 
 # Order on the integration map: alarm intake first, then the systems ForgeSRE reads or writes.
-FLOW_ORDER = ("prometheus", "zabbix", "notifications")
+FLOW_ORDER = ("prometheus", "zabbix", "snmp", "syslog", "notifications")
+TARGET_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 
 
 def _load() -> None:
     # Each module calls register() at import.
-    from app import flow_notifications, flow_prometheus, zabbix_flow  # noqa: F401
+    from app import flow_notifications, flow_prometheus, flow_snmp, flow_syslog, zabbix_flow  # noqa: F401
+
+
+def job_key(name: str, target: str | None = None) -> str:
+    """The job object_id of a check: the flow name, or ``name@target`` for one object."""
+    flow = get(name)
+    if not target:
+        return name
+    if flow.target_check is None or not TARGET_RE.match(target):
+        raise LookupError(f"flow {name!r} cannot check {target!r}")
+    return f"{name}@{target}"
+
+
+def split_key(key: str) -> tuple[str, str | None]:
+    name, _, target = key.partition("@")
+    return name, target or None
 
 
 # --- Blocks and shared network steps -----------------------------------------------------------
@@ -242,9 +264,16 @@ def received_steps(db: Session, integration: str, *, sender: str, endpoint: str,
 
 # --- Running and keeping results ---------------------------------------------------------------
 
-def run_check(db: Session, name: str) -> dict[str, Any]:
-    """Job handler: run one flow's check and stamp it."""
-    result = get(name).check(db)
+def run_check(db: Session, key: str) -> dict[str, Any]:
+    """Job handler: run one flow's check (``name`` or ``name@target``) and stamp it."""
+    name, target = split_key(key)
+    flow = get(name)
+    if target:
+        if flow.target_check is None:
+            raise LookupError(f"flow {name!r} has no per-object check")
+        result = flow.target_check(db, target)
+    else:
+        result = flow.check(db)
     result["checked_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return result
 
@@ -280,26 +309,32 @@ def last_ai(db: Session, name: str) -> dict[str, Any] | None:
     return out
 
 
-def last_flow(db: Session, name: str) -> dict[str, Any]:
-    """The newest check of this flow: its job status and the newest finished result."""
+def last_flow(db: Session, name: str, target: str | None = None) -> dict[str, Any]:
+    """The newest check of this flow (or of one object in it): its job status and the newest finished result."""
     from app.models import Job
 
     flow = get(name)
-    base = {"name": name, "label": flow.label, "about": flow.about, "watch": watch_on(), "configured": flow.configured()}
-    row = _jobs(db, CHECK_KIND, name).order_by(Job.id.desc()).first()
+    key = job_key(name, target)
+    base: dict[str, Any] = {"name": name, "label": flow.label, "about": flow.about, "watch": watch_on() and not target,
+                            "configured": flow.configured(), "targets": flow.target_check is not None}
+    if target:
+        base["target"] = target
+        base["target_label"] = flow.target_label(db, target) if flow.target_label else target
+    row = _jobs(db, CHECK_KIND, key).order_by(Job.id.desc()).first()
+    ai = None if target else last_ai(db, name)
     if row is None:
-        return {**base, "status": "none", "result": None, "ai": None}
-    done = row if row.status == "done" else _jobs(db, CHECK_KIND, name).filter(Job.status == "done").order_by(Job.id.desc()).first()
+        return {**base, "status": "none", "result": None, "ai": ai}
+    done = row if row.status == "done" else _jobs(db, CHECK_KIND, key).filter(Job.status == "done").order_by(Job.id.desc()).first()
     return {**base, "status": row.status, "job": row.id, "error": row.error or "",
             "result": (done.payload or {}).get("result") if done else None,
-            "queued_at": row.created_at.isoformat() if row.created_at else None, "ai": last_ai(db, name)}
+            "queued_at": row.created_at.isoformat() if row.created_at else None, "ai": ai}
 
 
-def queue_check(db: Session, name: str, *, auto: bool = False, actor: str = "") -> Any:
+def queue_check(db: Session, name: str, *, target: str | None = None, auto: bool = False, actor: str = "") -> Any:
     from app.jobs import enqueue
 
-    get(name)
-    return enqueue(db, CHECK_KIND, name, object_type="flow", payload={"auto": auto, "actor": actor})
+    key = job_key(name, target)
+    return enqueue(db, CHECK_KIND, key, object_type="flow", payload={"auto": auto, "actor": actor})
 
 
 def previous_result(db: Session, name: str, before_job: int | None = None) -> dict[str, Any] | None:
@@ -322,6 +357,8 @@ def notice_changes(db: Session, name: str, before: dict[str, Any] | None, after:
     from app.jobs import enqueue
     from app.journal import report
 
+    if "@" in name:  # a per-object check, run on request: the page shows it, nothing is journaled
+        return []
     flow = get(name)
     old, new = _broken(before), _broken(after)
     broke = [new[k] for k in new if k not in old]

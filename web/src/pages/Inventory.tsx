@@ -12,6 +12,7 @@ import { Pager, usePageSize } from "../components/Pager";
 import { Card, Chip, Dot } from "../components/ui";
 import { getJson, postJson, type AssetCard, type AssetFormOptions, type InventoryPage, type InventoryRow } from "../lib/api";
 import { clock, severityTone, type Tone } from "../lib/format";
+import { useRoleRank } from "../lib/me";
 
 type Filters = { site: string; rack: string; type: string; environment: string; customer: string; view: string };
 const EMPTY: Filters = { site: "", rack: "", type: "", environment: "", customer: "", view: "" };
@@ -85,6 +86,7 @@ function AssetPanel({ assetId, onClose, onEdit }: { assetId: string; onClose: ()
   const [card, setCard] = useState<AssetCard | null>(null);
   const [error, setError] = useState("");
   const [allIncidents, setAllIncidents] = useState(false);
+  const admin = useRoleRank() >= 3;
   useEffect(() => {
     setCard(null);
     getJson<AssetCard>(`/api/v1/inventory/${encodeURIComponent(assetId)}`).then(setCard).catch((e: Error) => setError(e.message));
@@ -115,6 +117,8 @@ function AssetPanel({ assetId, onClose, onEdit }: { assetId: string; onClose: ()
           <Chip tone={st.tone}>{st.label}</Chip>
           {card.can_edit ? <button className="btn primary" type="button" onClick={() => onEdit("edit", card)}>Edit</button> : null}
           {card.can_edit ? <button className="btn" type="button" onClick={() => onEdit("clone", card)}>Clone</button> : null}
+          {admin && card.snmp ? <Link className="btn" to={`/settings/integrations/snmp?target=${encodeURIComponent(card.asset_id)}`}>SNMP flow</Link> : null}
+          {admin && card.ip ? <Link className="btn" to={`/settings/integrations/syslog?target=${encodeURIComponent(card.asset_id)}`}>Syslog flow</Link> : null}
           <button className="btn" onClick={onClose} aria-label="Close asset card">Close</button>
         </>
       }

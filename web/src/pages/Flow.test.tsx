@@ -71,4 +71,17 @@ describe("Flow page", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
     await vi.waitFor(() => expect(urls.some((u) => u.startsWith("POST") && u.includes("/zabbix/flow"))).toBe(true));
   });
+
+  it("checks one device when the asset page opens it with ?target=", async () => {
+    const one = { ...flow, name: "snmp", label: "SNMP", target: "sw-01", target_label: "sw-01 (10.0.0.5)", watch: false, ai: null };
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      urls.push(`${init?.method ?? "GET"} ${url}`);
+      const body = url.includes("/integrations/snmp/flow") ? one : url.includes("/exchanges") ? { total: 0, last_id: 0, rows: [] } : {};
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    render(<MemoryRouter initialEntries={["/settings/integrations/snmp?target=sw-01"]}><Routes><Route path="/settings/integrations/:name" element={<FlowPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "SNMP flow · sw-01 (10.0.0.5)" })).toBeTruthy();
+    expect(urls).toContain("GET /api/v1/integrations/snmp/flow?target=sw-01");
+    expect(screen.getByRole("link", { name: "SNMP" }).getAttribute("href")).toBe("/settings/integrations/snmp");
+  });
 });
