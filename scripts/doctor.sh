@@ -62,8 +62,14 @@ if ! curl -fsS -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:${PORT}/api
   exit 1
 fi
 
+# Read-only host security summary (SSH, firewall, ports, file modes, updates); also refreshes
+# the report Settings › Security shows. Never fails doctor: it is one more row.
+SECURITY_LINE="$(PYTHONPATH="$ROOT/backend:$ROOT/agents" timeout 60 python3 -m app.cli_ops "$PORT" security --summary 2>/dev/null | tail -n 1 || true)"
+export SECURITY_LINE
+
 python3 - <<'PY'
 import json
+import os
 from pathlib import Path
 data = json.loads(Path("/tmp/forgesre-doctor.json").read_text())
 # Statuses that print a check mark; anything else prints a cross with why / test / fix.
@@ -93,6 +99,8 @@ for name, item in rows.items():
         if item.get("fix"):
             extra += f"\n    Fix:  {item['fix']}"
     print(f"  {label:<{width}}  {mark}{extra}")
+if os.environ.get("SECURITY_LINE"):
+    print(f"  {'Security':<{width}}  {os.environ['SECURITY_LINE']}")
 print()
 print(f"Overall:\n  {data.get('overall')}")
 raise SystemExit(0 if data.get("overall") == "HEALTHY" else 1)

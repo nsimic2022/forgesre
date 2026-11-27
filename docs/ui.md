@@ -337,6 +337,18 @@ only the containers that use the changed values. See [settings.md](settings.md#s
 API (Admin): `GET /api/v1/server/env`, `POST /api/v1/server/env {changes}`,
 `GET /api/v1/server/env/requests/{id}`.
 
+## Security (Settings › Security)
+
+Admin, read-only: nothing here changes a setting or the server. **Platform** is checked by Core
+each time you open it: HTTPS (and Secure cookies), the webhook token, how many Admin accounts,
+accounts with no sign-in for 90 days, and whether anything sends data out (cloud LLM, MCP).
+**Server** is the last report of `sudo ./forgesre security` on the host (doctor and update refresh
+it): SSH, firewall, ports open to the network, secret file modes, updates, restart, fail2ban. A
+report older than a week is marked. Every finding has the fix to do by hand; the steps are in
+[install-config.md › Hardening the server](install-config.md#6a-hardening-the-server). Ports you
+need open besides ForgeSRE's own go in `.env` `FORGESRE_SECURITY_ALLOW_PORTS`. API (Admin):
+`GET /api/v1/system/security`.
+
 ## Containers and logs (Settings › Containers)
 
 Admins see every container of the appliance (Core, Postgres, Prometheus, Alertmanager, Loki,

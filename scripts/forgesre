@@ -83,6 +83,7 @@ Commands:
   inventory          Same as assets
   capacity           30-day disk / interface history of one asset, days to full
   metrics            host metric card of one asset in text (1h, 6h, 24h, 7d)
+  security           read-only security check of this server and the platform
   sources            GLPI / Zabbix / NetBox / LibreNMS: last sync, linked assets, conflicts
   discovery          LibreNMS discovery: status, read now, nets CIDR..., scan
   snmp               snmp_exporter health + SNMP HTTP SD targets
@@ -577,6 +578,26 @@ on or off, last sync, how many assets each is linked to, and the open conflicts
 decides in Inventory > Sources).
 
   ./forgesre sources
+EOF
+      ;;
+    security)
+      cat <<'EOF'
+security — read-only check of this server and of ForgeSRE. Changes nothing; every
+finding says what to do by hand. Run with sudo to include SSH and firewall settings.
+
+  Host:      SSH password and root login, firewall on, ports open to the network
+             (local-only services exposed, ports ForgeSRE does not use), secrets and
+             backup file modes, security updates, pending restart, fail2ban.
+  Platform:  HTTPS, webhook token, Admin accounts, accounts unused for 90 days,
+             data that leaves the server (cloud LLM, MCP).
+
+  sudo ./forgesre security
+  ./forgesre security --json          the same as JSON
+  ./forgesre security --host-only     without signing in to Core
+
+The host part is also saved for Settings › Security and shown as one row in doctor.
+Extra ports you need open: .env FORGESRE_SECURITY_ALLOW_PORTS=8443,10050
+Guide: docs/install-config.md › Hardening the server.
 EOF
       ;;
     metrics)
@@ -1442,6 +1463,10 @@ case "$cmd" in
   metrics)
     need_env
     run_cli_ops metrics "$@"
+    ;;
+  security)
+    need_env
+    run_cli_ops security "$@"
     ;;
   sources)
     need_env

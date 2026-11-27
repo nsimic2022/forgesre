@@ -67,6 +67,8 @@ ENV: tuple[EnvKey, ...] = (
     EnvKey("FORGESRE_HTTPS", "web", "HTTPS", "text", "off", help="./forgesre https on | off"),
     EnvKey("FORGESRE_HTTPS_PORT", "web", "HTTPS port", "port", "443", help="./forgesre https on asks for it."),
     EnvKey("FORGESRE_BIND", "web", "Bind address", "text", "", help="127.0.0.1 only with HTTPS only."),
+    EnvKey("FORGESRE_SECURITY_ALLOW_PORTS", "web", "Extra open ports (security check)", "text", "", editable=True,
+           help="Comma list of ports that may be open besides ForgeSRE's own, e.g. 10050,8443; ./forgesre security then does not warn about them."),
     EnvKey("FORGESRE_DOCKER_RO_PORT", "containers", "docker-ro port (local)", "port", "2377", 1024, 65535, restart=("docker-ro", "core"), editable=True,
            help="Read-only Docker window for Settings › Containers, on 127.0.0.1 only."),
     EnvKey("FORGESRE_LLM_THREADS", "ai", "Model CPU threads", "int", "8", 1, 128, restart=("llm", "llm-gpu"), editable=True,

@@ -426,6 +426,74 @@ def cmd_capacity(port: str, args: list[str]) -> None:
             jar.unlink(missing_ok=True)
 
 
+SECURITY_MARK = {"ok": "✓", "warn": "!", "bad": "✗", "info": "·", "unknown": "?"}
+
+
+def format_security(title: str, checks: list[dict[str, Any]]) -> str:
+    """Security findings as aligned rows; warn and bad rows carry the fix."""
+    lines = [title]
+    width = max([22] + [len(str(c.get("label") or "")) for c in checks])
+    for c in checks:
+        status = str(c.get("status") or "unknown")
+        lines.append(f"  {SECURITY_MARK.get(status, '?')} {str(c.get('label') or ''):<{width}}  {c.get('detail') or ''}")
+        if c.get("fix") and status in {"warn", "bad", "unknown"}:
+            lines.append(f"      Fix: {c['fix']}")
+    return "\n".join(lines) + "\n"
+
+
+def security_summary_line(checks: list[dict[str, Any]]) -> str:
+    """One doctor row: ✓ when nothing to do, else how many problems and warnings."""
+    bad = sum(1 for c in checks if c.get("status") == "bad")
+    warn = sum(1 for c in checks if c.get("status") == "warn")
+    if not bad and not warn:
+        return "✓"
+    parts = ([f"{bad} problem(s)"] if bad else []) + ([f"{warn} warning(s)"] if warn else [])
+    return f"{'✗' if bad else '!'}  {', '.join(parts)}: ./forgesre security"
+
+
+def cmd_security(port: str, args: list[str]) -> None:
+    """./forgesre security [--json] [--host-only] [--summary] [--quiet]: read-only security check.
+
+    Host part runs here (SSH, firewall, ports, file modes, updates) and is saved for Settings ›
+    Security; the platform part comes from Core. Exit 1 when a check is "bad" (not with --summary
+    or --quiet, which doctor and update use)."""
+    from app.host_security import collect, write_report
+
+    flags = set(args)
+    unknown = flags - {"--json", "--host-only", "--summary", "--quiet", "-h", "--help"}
+    if unknown or flags & {"-h", "--help"}:
+        raise SystemExit("usage: ./forgesre security [--json] [--host-only] [--summary] [--quiet]")
+    root = Path(__file__).resolve().parents[2]
+    host = collect(root)
+    write_report(root, host)
+    if "--quiet" in flags:
+        return
+    platform: list[dict[str, Any]] = []
+    if "--host-only" not in flags and "--summary" not in flags:
+        jar, _me = ensure_jar(port)
+        try:
+            platform = list(get_json(port, jar, "/api/v1/system/security").get("platform") or [])
+        except (subprocess.CalledProcessError, json.JSONDecodeError, OSError, AttributeError) as exc:
+            platform = [{"key": "core", "label": "Platform checks", "status": "unknown", "detail": f"Core did not answer ({exc.__class__.__name__}).", "fix": "./forgesre doctor"}]
+        finally:
+            if jar != SESSION_PATH and jar.exists():
+                jar.unlink(missing_ok=True)
+    every = list(host["checks"]) + platform
+    if "--summary" in flags:
+        sys.stdout.write(security_summary_line(every) + "\n")
+        return
+    if "--json" in flags:
+        sys.stdout.write(json.dumps({"host": host, "platform": platform}, indent=1) + "\n")
+    else:
+        who = "root" if host.get("as_root") else "a normal user (sudo ./forgesre security also reads the SSH and firewall settings that need root)"
+        sys.stdout.write(format_security(f"Host — checked as {who}", host["checks"]))
+        if platform:
+            sys.stdout.write("\n" + format_security("Platform", platform))
+        sys.stdout.write("\nNothing was changed. " + security_summary_line(every).replace(": ./forgesre security", "").replace("✓", "Nothing to do.") + "\n")
+    if any(c.get("status") == "bad" for c in every):
+        raise SystemExit(1)
+
+
 METRIC_PERIODS = {"1h": 1, "6h": 6, "24h": 24, "7d": 168}
 
 
@@ -1355,6 +1423,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_capacity(port, rest)
     elif command == "metrics":
         cmd_metrics(port, rest)
+    elif command == "security":
+        cmd_security(port, rest)
     elif command in {"asset-refs", "asset_refs"}:
         cmd_asset_refs(port)
     elif command in {"ping", "probe"}:

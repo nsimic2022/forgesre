@@ -1,6 +1,7 @@
 # key	kind	min	max	choices	restart   (generated: python -m app.env_catalog --tsv; . = empty)
 FORGESRE_TIMEZONE	text	.	.	.	core,librenms,librenms-dispatcher
 FORGESRE_WEB_WORKERS	int	1	8	.	core
+FORGESRE_SECURITY_ALLOW_PORTS	text	.	.	.	.
 FORGESRE_DOCKER_RO_PORT	port	1024	65535	.	docker-ro,core
 FORGESRE_LLM_THREADS	int	1	128	.	llm,llm-gpu
 FORGESRE_LLM_CTX	int	2048	65536	.	llm,llm-gpu
