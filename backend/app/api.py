@@ -2800,15 +2800,27 @@ async def librenms_webhook(request: Request, background_tasks: BackgroundTasks) 
 
     Flat keys (rule_name, hostname, msg, device) are normalized to the
     Alertmanager-shaped schema. Same Bearer as Alertmanager. Flap confirm
-    and ingest run after the 202.
+    and ingest run after the 202. Every call is logged for the LibreNMS Flow page (never the token).
     """
+    import time as _time
+
+    from app.exchanges import record
     from app.librenms import parse_webhook as parse_librenms
 
+    started = _time.monotonic()
+    peer = request.client.host if request.client else ""
+
+    def log_in(status: str, code: int, summary: str) -> None:
+        record("librenms", "in", "webhook", endpoint=request.url.path, peer=peer, status=status, http_status=code,
+               ms=int((_time.monotonic() - started) * 1000), summary=summary)
+
     if not _webhook_token_ok(request):
+        log_in("refused", 401, "Wrong or missing token")
         raise HTTPException(status_code=401, detail="invalid webhook token")
     try:
         body = await request.json()
     except ValueError as exc:
+        log_in("error", 422, "Body is not JSON")
         raise HTTPException(status_code=422, detail="body is not JSON") from exc
     events = body if isinstance(body, list) else [body]
     alerts = []
@@ -2816,8 +2828,11 @@ async def librenms_webhook(request: Request, background_tasks: BackgroundTasks) 
         for item in events[:50]:
             alerts.append(parse_librenms(item))
     except ValueError as exc:
+        log_in("error", 422, str(exc)[:200])
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     queued = len(alerts)
+    names = sorted({str((a.get("labels") or {}).get("alertname", "")) for a in alerts} - {""})
+    log_in("ok", 202, f"{queued} alert(s): {', '.join(names[:4])}")
     background_tasks.add_task(_background_verify_and_route, {"alerts": alerts}, "librenms")
     return {
         "accepted": True,

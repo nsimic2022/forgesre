@@ -242,12 +242,23 @@ class Guard:
             return await JSONResponse({"error": "MCP is off (mcp.enabled and MCP_TOKEN)"}, status_code=404)(scope, receive, send)
         given = headers.get("authorization", "").removeprefix("Bearer ").strip()
         if not hmac.compare_digest(given.encode(), expected.encode()):
+            _log(scope, headers, "refused", 401, "Wrong or missing MCP_TOKEN")
             return await JSONResponse({"error": "bearer MCP_TOKEN required"}, status_code=401)(scope, receive, send)
         origin = headers.get("origin", "")
         public = str(((settings.yaml or {}).get("system") or {}).get("public_url") or "")
         if origin and urlparse(origin).netloc != urlparse(public).netloc:
+            _log(scope, headers, "refused", 403, f"Browser origin {urlparse(origin).netloc} is not allowed")
             return await JSONResponse({"error": "origin not allowed"}, status_code=403)(scope, receive, send)
+        _log(scope, headers, "ok", 200, f"{scope.get('method', '')} from {headers.get('user-agent', '')[:60] or 'an MCP client'}")
         return await self.inner(scope, receive, send)
+
+
+def _log(scope: Scope, headers: dict[str, str], status: str, code: int, summary: str) -> None:
+    """One line in the MCP Flow page's call log: who called and the result, never the token or body."""
+    from app.exchanges import record
+
+    client = scope.get("client") or ("", 0)
+    record("mcp", "in", "mcp", endpoint="/mcp", peer=str(client[0]), status=status, http_status=code, summary=summary)
 
 
 def asgi_app(server: MCPServer) -> ASGIApp:

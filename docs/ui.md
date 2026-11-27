@@ -346,6 +346,10 @@ down, rules that fail, active silences), its own call log, and the container log
 (Core lines that mention it, warnings and errors of its own containers). *Wait for a test* waits for
 a webhook call. **Ask ForgeAI about this flow** reads only this flow and offers only flow skills.
 
+**Integration map** (Settings › Integrations › *Integration map*, `/app/settings/flows`) shows every
+flow as a row of dots, broken ones first, with the broken block's reason; a card opens that flow.
+*Check all set-up flows* queues a check of each one. Same list over SSH: `./forgesre flow`.
+
 Every set-up flow is checked every 15 minutes (`flows.watch`); a block that breaks is written to the
 journal (the Settings badge) and, with ForgeAI on (`flows.ai`), analysed by itself; the answer shows
 on the page. A one-device check (SNMP, syslog: `?target=<asset>`) runs only when opened or asked for,
@@ -358,6 +362,12 @@ and is not journaled. Flows today:
 | SNMP | Inventory (SNMP devices) → Auths (snmp.yml has each device's community or v3 user) → DNS/TCP to snmp_exporter → snmp_exporter → Prometheus SNMP jobs (failing devices with their last error). One device, from Inventory › asset › **SNMP flow**: Asset → Auth → SNMP GET of sysDescr from ForgeSRE (v1/v2c) → snmp_exporter walk → Prometheus target. Community strings and v3 passwords are used but never shown |
 | Syslog | Port 514 (UDP and TCP bound) → Alloy (received, parse errors, written, dropped) → Loki ready → Senders in 24 h against the inventory → ForgeSRE reads lines. One device, from Inventory › asset › **Syslog flow**: its lines in 24 h by hostname and by sender IP. Opened also from the Loki and Alloy cards |
 | GLPI | ForgeSRE → GLPI: Settings (URL and tokens set) → DNS → TCP → TLS → Sign-in (initSession, with the fix for each GLPI error code) → Profile (Read on Computer and NetworkEquipment) → Assets readable; inside ForgeSRE: backoff, last sync, linked assets; Incident → GLPI ticket (when `tickets.glpi` is on): the create right and the last ticket calls. The check only reads |
+| LibreNMS | In: LibreNMS alert transport → Network → Webhook → Incident (every call logged). Out: Settings → DNS → TCP (→ TLS) → Web UI → API (token, device list) → Last sync |
+| NetBox | Settings → DNS → TCP (→ TLS) → API (one device read; a 403 names the token's permissions) → Last sync → Linked assets |
+| Kubernetes | One lane per cluster: Settings (token set) → DNS → TCP → TLS (insecure is a warning) → API version → Nodes → Pods; then the last sync |
+| Oxidized | Settings → DNS → TCP (→ TLS) → Nodes (devices whose last backup failed) → what ForgeSRE follows |
+| ForgeAI model | Local: ForgeAI on → DNS → TCP → Model (which model llama.cpp has loaded) → Answers in 24 h (used, rejected by the checks, failed). Cloud: its settings only; the check never calls a cloud model. Opened also from the *ForgeAI model* card |
+| MCP server | Settings (mcp.enabled, MCP_TOKEN) → Address → Calls (who called, refused or accepted; logged by the MCP guard, never the token) → Data (tool results leave the server to the client's model) |
 | Notifications | Escalation (steps with nobody to send to) → On-call → Channels on; e-mail: SMTP settings → DNS → TCP → Sign-in (no mail is sent) → Sent; chat (per channel): webhook host → DNS → TCP → TLS → Posted; web push: subscriptions; SMS. Sent rows show masked recipients (`a…@example.com`); webhook URLs and bodies are never logged. Opened also from Settings › Notifications |
 
 API (Admin): `GET /api/v1/flows` (every flow with its last result), `GET|POST

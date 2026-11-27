@@ -167,12 +167,22 @@ async def _request(
         raise LibreNmsUnavailable(f"LibreNMS backoff {_state.get('down_why') or ''} ({int(remaining)}s)".strip())
     url = api_root(settings.librenms_url) + path
 
+    started = time.monotonic()
+
+    def log_out(status: str, code: int, summary: str) -> None:
+        # the Flow page's call log: method, path and status only (no token, no body)
+        from app.exchanges import record
+
+        record("librenms", "out", f"{method} {path.split('?', 1)[0]}", endpoint=path.split("?", 1)[0][:120],
+               peer=httpx.URL(url).host, status=status, http_status=code, ms=int((time.monotonic() - started) * 1000), summary=summary)
+
     async def _do(owned: httpx.AsyncClient) -> httpx.Response:
         try:
             return await owned.request(method, url, headers=_headers(), json=json_body)
         except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPError) as exc:
             why = _short(exc)
             _mark_down(why)
+            log_out("error", 0, why)
             raise LibreNmsUnavailable(why) from exc
 
     if client is None:
@@ -180,6 +190,8 @@ async def _request(
             response = await _do(owned)
     else:
         response = await _do(client)
+    log_out("ok" if response.status_code < 400 else ("error" if response.status_code >= 500 else "refused"), response.status_code,
+            f"{method} {path.split('?', 1)[0]} → HTTP {response.status_code}")
     if response.status_code >= 500:
         why = f"HTTP {response.status_code}"
         _mark_down(why)
