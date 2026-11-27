@@ -337,6 +337,15 @@ only the containers that use the changed values. See [settings.md](settings.md#s
 API (Admin): `GET /api/v1/server/env`, `POST /api/v1/server/env {changes}`,
 `GET /api/v1/server/env/requests/{id}`.
 
+## Zabbix flow (Settings › Integrations › Zabbix › Flow and log)
+
+Admin. The connection with Zabbix as rows of blocks; each link is coloured by its test, a click
+opens the block's detail, fix, own call log and the Core log lines about Zabbix underneath, and
+ForgeAI at the bottom reads only this flow. Checked every 15 minutes; a break goes to the journal and
+ForgeAI analyses it. Details: [zabbix.md › The Flow page](zabbix.md#130-the-flow-page). API (Admin):
+`GET|POST /api/v1/integrations/zabbix/flow`, `GET /api/v1/integrations/zabbix/exchanges`,
+`GET /api/v1/integrations/zabbix/logs`.
+
 ## Security (Settings › Security)
 
 Admin, read-only: nothing here changes a setting or the server. **Platform** is checked by Core

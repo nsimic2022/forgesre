@@ -429,6 +429,80 @@ def cmd_capacity(port: str, args: list[str]) -> None:
 SECURITY_MARK = {"ok": "✓", "warn": "!", "bad": "✗", "info": "·", "unknown": "?"}
 
 
+def format_flow(result: dict[str, Any]) -> str:
+    """The Zabbix flow as text: one lane per direction, one row per block, the fix under bad ones."""
+    lines = [f"Zabbix flow — checked {str(result.get('checked_at') or '')[:19].replace('T', ' ')} UTC"]
+    for lane in result.get("lanes") or []:
+        lines.append("")
+        lines.append(str(lane.get("title") or lane.get("id")))
+        steps = lane.get("steps") or []
+        width = max([14] + [len(str(s.get("label") or "")) for s in steps])
+        for s in steps:
+            ms = f" ({s['ms']} ms)" if s.get("ms") is not None else ""
+            lines.append(f"  {SECURITY_MARK.get(str(s.get('status')), '?')} {str(s.get('label') or ''):<{width}}  {s.get('detail') or ''}{ms}")
+            for row in (s.get("rows") or [])[:3]:
+                lines.append(f"      {str(row.get('at') or '')[:16].replace('T', ' ')}  {row.get('status')}  {row.get('error') or ''}".rstrip())
+            if s.get("fix") and s.get("status") in {"bad", "warn", "unknown"}:
+                lines.append(f"      Fix: {s['fix']}")
+    return "\n".join(lines) + "\n"
+
+
+def format_exchanges(rows: list[dict[str, Any]]) -> str:
+    """Exchange log rows, oldest first, like a tail."""
+    out = []
+    for r in reversed(rows):
+        arrow = "←" if r.get("direction") == "in" else "→"
+        code = f" {r['http_status']}" if r.get("http_status") else ""
+        out.append(f"{str(r.get('at') or '')[:19].replace('T', ' ')}  {arrow} {str(r.get('kind') or ''):<16} {str(r.get('status') or ''):<8}{code:<5} "
+                   f"{str(r.get('ms') or 0):>5} ms  {r.get('peer') or ''}  {r.get('summary') or ''}".rstrip())
+    return ("\n".join(out) + "\n") if out else "No exchanges yet.\n"
+
+
+def cmd_zabbix(port: str, args: list[str]) -> None:
+    """./forgesre zabbix [flow|trace [N]|test]: the Zabbix flow step by step, the exchange log, or wait
+    for a test call from Zabbix. Read-only; the flow check runs as a background job in Core."""
+    import time as _time
+
+    usage = "usage: ./forgesre zabbix [flow | trace [N] | test]"
+    sub = args[0] if args else "flow"
+    if sub in {"-h", "--help"} or sub not in {"flow", "trace", "test"}:
+        raise SystemExit(usage)
+    jar, _me = ensure_jar(port)
+    try:
+        if sub == "flow":
+            started = post_json(port, jar, "/api/v1/integrations/zabbix/flow", {}).get("job")
+            data: dict[str, Any] = {}
+            for _ in range(40):  # the job does a few network calls with short timeouts
+                _time.sleep(1.5)
+                data = get_json(port, jar, "/api/v1/integrations/zabbix/flow")
+                if data.get("job") == started and data.get("status") in {"done", "failed", "error"}:
+                    break
+            if not data.get("result"):
+                raise SystemExit(f"the flow check did not finish ({data.get('status')}): ./forgesre jobs")
+            sys.stdout.write(format_flow(data["result"]))
+        elif sub == "trace":
+            count = int(args[1]) if len(args) > 1 and args[1].isdigit() else 30
+            data = get_json(port, jar, f"/api/v1/integrations/zabbix/exchanges?limit={min(count, 200)}")
+            sys.stdout.write(format_exchanges(data.get("rows") or []))
+        else:
+            after = int(get_json(port, jar, "/api/v1/integrations/zabbix/exchanges?limit=1").get("last_id") or 0)
+            sys.stdout.write(f"Waiting up to 5 minutes for a call from Zabbix. On the Zabbix server run:\n"
+                             f"  curl -sS -X POST http://<FORGE-IP>:{port}/api/v1/webhooks/zabbix\n"
+                             "or press Test on the ForgeSRE media type in Zabbix (Alerts › Media types).\n")
+            for _ in range(100):
+                _time.sleep(3)
+                rows = get_json(port, jar, f"/api/v1/integrations/zabbix/exchanges?direction=in&after={after}&limit=10").get("rows") or []
+                if rows:
+                    sys.stdout.write("Received:\n" + format_exchanges(rows))
+                    return
+            raise SystemExit("Nothing arrived in 5 minutes: the Zabbix server cannot reach this port (firewall, forge_url).")
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as exc:
+        raise SystemExit(f"could not reach Core: {exc}") from exc
+    finally:
+        if jar != SESSION_PATH and jar.exists():
+            jar.unlink(missing_ok=True)
+
+
 def format_security(title: str, checks: list[dict[str, Any]]) -> str:
     """Security findings as aligned rows; warn and bad rows carry the fix."""
     lines = [title]
@@ -1426,6 +1500,8 @@ def main(argv: list[str] | None = None) -> None:
         cmd_metrics(port, rest)
     elif command == "security":
         cmd_security(port, rest)
+    elif command == "zabbix":
+        cmd_zabbix(port, rest)
     elif command in {"asset-refs", "asset_refs"}:
         cmd_asset_refs(port)
     elif command in {"ping", "probe"}:

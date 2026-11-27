@@ -176,6 +176,8 @@ REGISTRY: tuple[SettingDef, ...] = (
     _y("inventory.zabbix.url", "integrations", "Zabbix URL", "url", effective=lambda: settings.zabbix_url),
     _y("inventory.zabbix.auto_sync", "integrations", "Zabbix host import every 6 h", "bool"),
     _y("inventory.zabbix.timeout_seconds", "integrations", "Zabbix timeout (s)", "int", minimum=2, maximum=5),
+    _y("inventory.zabbix.flow_watch", "integrations", "Watch the Zabbix flow every 15 min", "bool", effective=lambda: settings.zabbix_flow_watch),
+    _y("inventory.zabbix.flow_ai", "integrations", "ForgeAI analyses a broken Zabbix flow", "bool", effective=lambda: settings.zabbix_flow_ai),
     _s("ZABBIX_API_TOKEN", "integrations", "Zabbix API token"),
     _s("ZABBIX_WEBHOOK_TOKEN", "integrations", "Zabbix webhook token (alarms from Zabbix)"),
     _y("inventory.librenms.enabled", "integrations", "LibreNMS enabled", "bool", effective=lambda: settings.librenms_enabled, test="librenms"),

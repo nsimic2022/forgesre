@@ -67,7 +67,7 @@ function Progress({ m, now }: { m: ChatMessage; now: number }) {
 }
 export type ChatMode = "strict" | "balanced" | "open";
 export type ChatDetail = { id: number; title: string; incident: string | null; incident_label: string; updated_at: string | null; messages: ChatMessage[]; skills: ChatSkill[];
-  mode?: "" | ChatMode; mode_effective?: "general" | ChatMode };
+  mode?: "" | ChatMode; mode_effective?: "general" | ChatMode; topic?: string; topic_label?: string };
 
 const MODES: { id: ChatMode; label: string; hint: string }[] = [
   { id: "strict", label: "Strict", hint: "Only this incident's facts; anything else is 'unknown'" },
@@ -116,6 +116,7 @@ export function ChatModelPicker() {
  */
 export function ChatModePicker({ chat, onChanged }: { chat: ChatDetail; onChanged: (c: ChatDetail) => void }) {
   const [error, setError] = useState("");
+  if (chat.topic) return <div className="chat-mode small"><span className="faint">Answers:</span> <strong>this flow only</strong> <span className="faint">(the last check and the recent calls)</span></div>;
   if (!chat.incident) return <div className="chat-mode small"><span className="faint">Answers:</span> <strong>general knowledge</strong> <span className="faint">(no incident in this chat)</span></div>;
   const now = (chat.mode_effective as ChatMode) || "balanced";
   const pick = (mode: ChatMode) => postJson<ChatDetail>(`/api/v1/forgeai/chats/${chat.id}/mode`, { mode }).then(onChanged).catch((e: Error) => setError(e.message));
@@ -203,7 +204,7 @@ export function ForgeAiChat({ chatId, onChanged }: { chatId: number; onChanged?:
     box.current?.focus();
   };
   const send = async () => {
-    if (sending || (!text.trim() && !(skill && skill.task !== "chat"))) return;
+    if (sending || (!text.trim() && !(skill && skill.task !== "chat") && !chat?.topic)) return;
     setSending(true);
     setError("");
     try {
@@ -249,9 +250,11 @@ export function ForgeAiChat({ chatId, onChanged }: { chatId: number; onChanged?:
       <div className="chat-log" aria-live="polite">
         {messages.length ? null : (
           <div className="chat-empty">
-            <strong>{chat.incident ? `Ask about ${chat.incident_label}` : "Ask ForgeAI anything"}</strong>
+            <strong>{chat.topic ? `Ask about the ${chat.topic_label}` : chat.incident ? `Ask about ${chat.incident_label}` : "Ask ForgeAI anything"}</strong>
             <span className="small muted">
-              {chat.incident
+              {chat.topic
+                ? "ForgeAI reads the last flow check and the recent calls with every message, and only those. Send an empty message for the built-in “where does it break”, or type / for flow skills."
+                : chat.incident
                 ? "ForgeAI reads this incident's facts, playbook and similar incidents with every message. Type / for skills."
                 : "General questions about networks, servers, databases and monitoring. Type / to pick a skill, or start a chat from an incident to talk about its facts."}
             </span>
@@ -322,7 +325,7 @@ export function ForgeAiChat({ chatId, onChanged }: { chatId: number; onChanged?:
           </div>
         ) : null}
         <textarea ref={box} className="chat-input" aria-label="Message to ForgeAI" rows={2} maxLength={TEXT_MAX} value={text}
-          placeholder={chat.incident ? "Ask about this incident, or type / for skills" : "Ask ForgeAI…  (type / for skills, Shift+Enter for a new line)"}
+          placeholder={chat.topic ? "Ask about this flow, e.g. why does Zabbix not reach ForgeSRE?  (type / for flow skills)" : chat.incident ? "Ask about this incident, or type / for skills" : "Ask ForgeAI…  (type / for skills, Shift+Enter for a new line)"}
           onChange={(e) => (setText(e.target.value), setCursor(0))} onKeyDown={onKey} disabled={rank >= 0 && rank < 1} />
         <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
           <div className="row" style={{ gap: 6 }}>
@@ -338,7 +341,7 @@ export function ForgeAiChat({ chatId, onChanged }: { chatId: number; onChanged?:
               {useCloud ? `This message goes to ${cloud!.provider} · ${cloud!.model}; it costs money and is audited.` : "Local model: nothing leaves this server."}
             </span>
           </div>
-          <button className="btn primary" type="button" onClick={() => void send()} disabled={sending || (!text.trim() && !(skill && skill.task !== "chat"))}>
+          <button className="btn primary" type="button" onClick={() => void send()} disabled={sending || (!text.trim() && !(skill && skill.task !== "chat") && !chat?.topic)}>
             {sending ? "Sending…" : "Send"}
           </button>
         </div>
@@ -347,6 +350,17 @@ export function ForgeAiChat({ chatId, onChanged }: { chatId: number; onChanged?:
       </div>
     </div>
   );
+}
+
+/** Opens (or reuses) the signed-in person's chat about one page topic (e.g. "flow:zabbix") and shows it. */
+export function TopicChat({ topic }: { topic: string }) {
+  const [id, setId] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    postJson<{ id: number }>("/api/v1/forgeai/chats", { topic, reuse: true }).then((c) => setId(c.id)).catch((e: Error) => setError(e.message));
+  }, [topic]);
+  if (error) return <span className="small muted">{error}</span>;
+  return id === null ? <span className="muted">Loading…</span> : <ForgeAiChat chatId={id} />;
 }
 
 /** Opens (or reuses) the signed-in person's chat about one incident and shows it. */

@@ -1442,6 +1442,7 @@ class ForgeAiChatNew(BaseModel):
     title: str = Field(default="", max_length=255)
     incident: str = ""
     reuse: bool = False
+    topic: str = Field(default="", pattern="^(|flow:zabbix)$")
 
 
 class ForgeAiChatSay(BaseModel):
@@ -1480,7 +1481,7 @@ def forgeai_chat_new(body: ForgeAiChatNew, db: Session = Depends(get_db), user: 
         incident = db.query(Incident).filter_by(number=body.incident).first()
         if incident is None:
             raise HTTPException(status_code=404, detail="incident not found")
-    return chat_detail(db, open_chat(db, user.email, title=body.title, incident=incident, reuse=body.reuse))
+    return chat_detail(db, open_chat(db, user.email, title=body.title, incident=incident, reuse=body.reuse, topic=body.topic))
 
 
 @router.get("/forgeai/chats/{chat_id}")
@@ -1488,7 +1489,7 @@ def forgeai_chat_get(chat_id: int, db: Session = Depends(get_db), user: User = D
     from app.forgeai_chat import chat_detail, skills_for
 
     chat = _own_chat(db, chat_id, user)
-    return {**chat_detail(db, chat), "skills": skills_for(db, incident=bool(chat.incident_id))}
+    return {**chat_detail(db, chat), "skills": skills_for(db, incident=bool(chat.incident_id), topic=chat.topic or "")}
 
 
 @router.post("/forgeai/chats/{chat_id}/messages")
@@ -2712,19 +2713,38 @@ async def alertmanager_webhook(request: Request, background_tasks: BackgroundTas
 
 @router.post("/webhooks/zabbix")
 async def zabbix_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Zabbix media type (Webhook) → incidents with source=zabbix. Own Bearer: ZABBIX_WEBHOOK_TOKEN."""
+    """Zabbix media type (Webhook) → incidents with source=zabbix. Own Bearer: ZABBIX_WEBHOOK_TOKEN.
+
+    Every call, also a refused one, is logged for the Flow page (who called, result, time; never
+    the token). A body whose fields are all unexpanded macros is Zabbix's media type Test button.
+    """
+    import time as _time
+
+    from app.exchanges import record
     from app.zabbix import parse_webhook
+
+    started = _time.monotonic()
+    peer = request.client.host if request.client else ""
+
+    def log_in(status: str, code: int, summary: str, **detail: Any) -> None:
+        # One small insert in its own session; never the token or the body.
+        record("zabbix", "in", "webhook", endpoint="/api/v1/webhooks/zabbix", peer=peer, status=status, http_status=code,
+               ms=int((_time.monotonic() - started) * 1000), summary=summary,
+               detail={k: v for k, v in detail.items() if v not in (None, "", [], {})})
 
     expected = settings.zabbix_webhook_token
     if not expected:
+        log_in("refused", 503, "Webhook is off: ZABBIX_WEBHOOK_TOKEN is empty on ForgeSRE")
         raise HTTPException(status_code=503, detail="Zabbix webhook is off: set ZABBIX_WEBHOOK_TOKEN in secrets/secrets.env")
     auth = request.headers.get("authorization") or ""
     token = auth[7:].strip() if auth.lower().startswith("bearer ") else auth.strip()
     if not hmac.compare_digest(token.encode(), expected.encode()):
+        log_in("refused", 401, "Wrong or missing token" if token else "No token: network path is open, the media type sends no Authorization")
         raise HTTPException(status_code=401, detail="invalid zabbix webhook token")
     try:
         body = await request.json()
     except ValueError as exc:
+        log_in("error", 422, "Body is not JSON")
         raise HTTPException(status_code=422, detail="body is not JSON") from exc
     events = body if isinstance(body, list) else [body]
     alerts = []
@@ -2732,8 +2752,16 @@ async def zabbix_webhook(request: Request, db: Session = Depends(get_db)) -> dic
         for item in events[:50]:
             alerts.append(parse_webhook(item))
     except ValueError as exc:
+        values = [str(v) for e in events[:50] if isinstance(e, dict) for k, v in e.items() if k not in {"forge_url", "forge_token"}]
+        is_test = bool(values) and all(v.startswith("{") and v.endswith("}") for v in values if v.strip())
+        if is_test:
+            log_in("test", 422, "Zabbix media type Test (macros not expanded): URL and token are right")
+        else:
+            log_in("error", 422, str(exc), fields=sorted({str(k) for e in events[:50] if isinstance(e, dict) for k in e if k != "forge_token"})[:30])
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     numbers = await run_in_threadpool(_ingest_numbers, db, {"alerts": alerts}, "zabbix")
+    log_in("ok", 200, f"{len(alerts)} event(s): " + ", ".join(f"{a['labels'].get('alertname', '')} on {a['labels'].get('asset', '')} ({a['status']})" for a in alerts[:3]),
+           incidents=list(numbers or [])[:10], hosts=[a["labels"].get("asset", "") for a in alerts[:10]])
     return {
         "accepted": True,
         "source": "zabbix",
@@ -4277,6 +4305,51 @@ def server_env_result_api(rid: str, user: User = Depends(require("admin"))) -> d
         return read_result(rid)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/integrations/zabbix/flow")
+def zabbix_flow_api(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: the last Zabbix flow check (each block in both directions), or its job status while it runs."""
+    from app.zabbix_flow import last_flow
+
+    return last_flow(db)
+
+
+@router.post("/integrations/zabbix/flow")
+def zabbix_flow_run(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: queue a new flow check (network and read-only API calls run in the background)."""
+    from app.jobs import enqueue
+    from app.zabbix_flow import FLOW_KIND
+
+    job = enqueue(db, FLOW_KIND, "zabbix", object_type="integration", payload={"actor": user.email})
+    db.commit()
+    return {"job": job.id if job else None}
+
+
+@router.get("/integrations/zabbix/logs")
+def zabbix_core_logs_api(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: the last Core log lines that mention Zabbix (docker-ro, masked). Audited like other log views."""
+    from app.zabbix_flow import core_log_lines
+
+    out = core_log_lines(80)
+    audit(db, "system.logs.view", actor=user.email, object_type="container", object_id="core", data={"filter": "zabbix"}, commit=True)
+    return out
+
+
+@router.get("/integrations/{name}/exchanges")
+def integration_exchanges_api(
+    name: str, direction: str = "", kinds: str = "", status: str = "", after: int = 0, limit: int = 50, offset: int = 0,
+    db: Session = Depends(get_db), user: User = Depends(require("admin")),
+) -> dict[str, Any]:
+    """Admin: calls between ForgeSRE and an outside system, newest first (no tokens or bodies are kept)."""
+    from app.exchanges import last_id, list_exchanges
+
+    if direction not in {"", "in", "out"}:
+        raise HTTPException(status_code=400, detail="direction is in or out")
+    out = list_exchanges(db, name, direction=direction, kinds=[k for k in kinds.split(",") if k], status=status,
+                         after_id=max(0, after), limit=limit, offset=offset)
+    out["last_id"] = last_id(db, name)
+    return out
 
 
 @router.get("/system/security")

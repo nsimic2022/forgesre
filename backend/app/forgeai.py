@@ -50,6 +50,24 @@ BASE_RULES = (
 
 # Chat without an incident: general NOC and IT questions. The model may use what it knows, but it
 # still only reads and never hands out commands that change a system.
+# Chat on an integration's Flow page (Settings › Integrations › Zabbix › Flow): only this path.
+FLOW_RULES = (
+    "You are ForgeAI, the assistant inside ForgeSRE, a NOC appliance. You only read; you never act.\n"
+    "This chat is about the connection between ForgeSRE and {integration} (integration in the context).\n"
+    "Rules you must follow:\n"
+    "- flow_blocks is the last check of every step in both directions (status ok, warn, bad, unknown); "
+    "recent_exchanges are the last calls between the two systems, newest first; zabbix_send_attempts are "
+    "what Zabbix itself tried to send.\n"
+    "- Find where the path breaks and why, from these facts. Name the block. Say plainly when the facts "
+    "do not show it, and what to look at to find out.\n"
+    "- You may use general knowledge about Zabbix, webhooks, HTTP, TLS, DNS and firewalls. Never invent "
+    "addresses, versions or results that are not in the facts.\n"
+    "- Steps to fix are read-only checks or settings a person changes; never commands that delete or restart "
+    "something on their own. Never ask for or repeat a token or password.\n"
+    "- Answer the operator_question; earlier_in_this_chat is the conversation so far. Short, for a NOC operator.\n"
+    "- Answer with JSON only, exactly this shape: {shape}\n"
+)
+
 CHAT_RULES = (
     "You are ForgeAI, the assistant inside ForgeSRE, a NOC appliance. You only read; you never act.\n"
     "Rules you must follow:\n"
@@ -187,6 +205,13 @@ TASKS: dict[str, dict[str, Any]] = {
         "lists": {},
         "max_tokens": 800,
     },
+    "flow": {
+        "label": "Integration flow",
+        "shape": '{"answer": "your reply; use \\n for new lines"}',
+        "fields": {"answer": 3000},
+        "lists": {},
+        "max_tokens": 800,
+    },
     "critic": {
         "label": "Second opinion",
         "shape": '{"verdict": "agree|partly|disagree", "why": "1-3 sentences", "problems": ["claim not supported by the facts"], "better_cause": "only if you disagree"}',
@@ -214,6 +239,11 @@ INCLUDE_DEFAULT = {"facts": True, "playbook": True, "similar": True, "changes": 
 
 # Built-in skills: slug, name, task, alert patterns, asset types, priority, include overrides, instructions.
 BUILTIN: list[tuple[str, str, str, list[str], list[str], int, dict[str, bool], str]] = [
+    ("flow-where-it-breaks", "Where the flow breaks", "flow", [], [], 1000, {"docs": False},
+     "Go through the blocks in the order a message travels. The first block that is bad or unknown is "
+     "usually the place; explain what it means in one or two sentences, then give the fix from its fix "
+     "field in your own words and how to confirm it worked (which block should turn green). If Zabbix's "
+     "send attempts show an error, quote the error and translate it."),
     ("incident-generic", "Any incident", "incident", [], [], 1000, {},
      "Read the facts and the hypotheses. Pick the most likely cause the facts support and say how sure "
      "you are in plain words. First checks go from quickest and safest to slower ones. If an earlier "
@@ -458,7 +488,7 @@ def queue_storm_summary(db: Session, storm: Incident, *, opened: bool = False) -
 
 
 def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Incident | None, *, hours: int = 12,
-                  question: str = "", history: list[dict[str, str]] | None = None, mode: str = "") -> tuple[str, str]:
+                  question: str = "", history: list[dict[str, str]] | None = None, mode: str = "", flow: str = "") -> tuple[str, str]:
     """(system, user) exactly as sent: fixed rules + task shape + skill instructions, and the context JSON.
 
     ``question`` (tasks ask and chat) goes first in the context as operator_question and is never trimmed
@@ -471,7 +501,11 @@ def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Inciden
     include = {**INCLUDE_DEFAULT, **(skill.include or {})}
     if task == "postmortem":
         include["postmortem"] = True
-    if task == "shift":
+    if task == "flow":
+        from app.zabbix_flow import flow_context
+
+        context = flow_context(db, flow or "zabbix")
+    elif task == "shift":
         context = _shift_context(db, hours)
     elif task == "storm" and incident is not None:
         context = _storm_context(db, incident)
@@ -479,11 +513,14 @@ def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Inciden
         context = {}
     else:
         context = _incident_context(db, incident, include)
-    rules = chat_rules(incident, mode) if task == "chat" else BASE_RULES
+    if task == "flow":
+        rules = FLOW_RULES.replace("{integration}", (flow or "zabbix").capitalize())
+    else:
+        rules = chat_rules(incident, mode) if task == "chat" else BASE_RULES
     system = with_language(rules.format(shape=spec["shape"])) + "\nInstructions for this kind of work:\n" + (skill.instructions or "").strip()
-    if task in {"ask", "chat"}:
+    if task in {"ask", "chat", "flow"}:
         context = {"operator_question": " ".join(question.split())[:QUESTION_MAX], **context}
-    if task == "chat" and history:
+    if task in {"chat", "flow"} and history:
         context["earlier_in_this_chat"] = [{"who": h.get("role", ""), "text": " ".join(str(h.get("text", "")).split())[:600]} for h in history]
     if task not in {"shift", "storm"} and (incident is not None or task == "chat") and include.get("docs", True):
         from app.doc_search import for_prompt
@@ -557,7 +594,8 @@ def _provider():
 
 def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug: str = "", actor: str = "system",
         trial: bool = False, instructions: str | None = None, hours: int = 12, question: str = "",
-        cloud: bool = False, history: list[dict[str, str]] | None = None, on_progress: Any = None, mode: str = "") -> ForgeAiCall:
+        cloud: bool = False, history: list[dict[str, str]] | None = None, on_progress: Any = None, mode: str = "",
+        flow: str = "") -> ForgeAiCall:
     """Ask the model once and record the exchange. ``trial`` (skill test) never becomes the incident's answer;
     ``instructions`` tries unsaved skill text; ``hours`` is the shift summary window. An incident answer that passes the checks is stored as a
     ``forgerca-llm`` Investigation so the incident page and reports show it. ``on_progress(phase, thinking,
@@ -575,6 +613,9 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
         if not question.strip():
             raise ValueError("a chat message needs some text")
         trial = True
+    if task == "flow":
+        question = question.strip() or "Where does the flow break, and what should I do?"
+        trial = True
     if task == "investigate":
         # several steps with read-only tools; see forgeai_investigator
         from app.forgeai_investigator import investigate
@@ -588,7 +629,7 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
     if instructions is not None:
         # unsaved text from the skill editor: a transient copy, never added to the session
         skill = ForgeAiSkill(slug=skill.slug, name=skill.name, task=skill.task, include=skill.include, version=skill.version, instructions=instructions)
-    system, user = build_prompts(db, task, skill, incident, hours=hours, question=question, history=history, mode=mode)
+    system, user = build_prompts(db, task, skill, incident, hours=hours, question=question, history=history, mode=mode, flow=flow)
     call = ForgeAiCall(incident_id=incident.id if incident is not None else None, task=task, skill_slug=skill.slug,
                        skill_version=skill.version or 0, system_prompt=system, user_prompt=user, actor=actor,
                        endpoint=(settings.llm_url or "") if settings.ai_enabled else "")
@@ -620,7 +661,7 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
             # kept with the raw answer so Investigations shows how the model got there
             call.raw_response = f"<think>\n{thought}\n</think>\n{call.raw_response}"
         call.model = provider.get_model() or ""
-        if parsed is None and task == "chat":
+        if parsed is None and task in {"chat", "flow"}:
             # a chat reply is free text anyway: a model that forgot the JSON wrapper still answered
             text = plain_answer(str(getattr(provider, "last_raw", "") or ""))
             parsed = {"answer": text} if text else None
@@ -629,7 +670,8 @@ def run(db: Session, task: str, incident: Incident | None = None, *, skill_slug:
         else:
             # chat about an incident: invented IP addresses are always refused; numbers only in strict mode
             strict = not (task == "chat" and incident is None)
-            numbers = strict and (task != "chat" or chat_rules(incident, mode) is BASE_RULES)
+            # flow: ports, times and counts are everywhere in the facts; invented IPs are still refused
+            numbers = strict and task != "flow" and (task != "chat" or chat_rules(incident, mode) is BASE_RULES)
             answer, why = check_answer(task, parsed, user, strict=strict, numbers=numbers)
             call.answer = answer or parsed
             call.status, call.reason = ("rejected", why) if why else ("trial" if trial else "used", "")
