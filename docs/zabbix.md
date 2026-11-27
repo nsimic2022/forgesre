@@ -611,9 +611,10 @@ or your own with task *Integration flow* in Settings › ForgeAI skills). An emp
 built-in question.
 
 The check runs as a background job (each step has a timeout) when you open the page, on *Check
-again*, and every 15 minutes (`inventory.zabbix.flow_watch`). A block that breaks writes an error to
-the journal (the Settings badge) and, with ForgeAI on and `inventory.zabbix.flow_ai`, ForgeAI
-analyses it by itself; the answer shows on the page. When it works again the journal says so.
+again*, and every 15 minutes (`flows.watch`). A block that breaks writes an error to the journal
+(the Settings badge) and, with ForgeAI on and `flows.ai`, ForgeAI analyses it by itself; the answer
+shows on the page. When it works again the journal says so. Other integrations have the same page:
+[ui.md › Integration flows](ui.md#integration-flows-settings--integrations--integration--flow-and-log).
 
 Reading Zabbix's side needs `mediatype.get`, `action.get` and `alert.get` for `forgesre-ro`
 (read-only). With the built-in *User role* these may be hidden: the block then says *Not checked*

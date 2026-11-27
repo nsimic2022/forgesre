@@ -502,9 +502,10 @@ def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Inciden
     if task == "postmortem":
         include["postmortem"] = True
     if task == "flow":
-        from app.zabbix_flow import flow_context
+        from app.flows import flow_context, get
 
         context = flow_context(db, flow or "zabbix")
+        flow_label = get(flow or "zabbix").label
     elif task == "shift":
         context = _shift_context(db, hours)
     elif task == "storm" and incident is not None:
@@ -514,7 +515,7 @@ def build_prompts(db: Session, task: str, skill: ForgeAiSkill, incident: Inciden
     else:
         context = _incident_context(db, incident, include)
     if task == "flow":
-        rules = FLOW_RULES.replace("{integration}", (flow or "zabbix").capitalize())
+        rules = FLOW_RULES.replace("{integration}", flow_label)
     else:
         rules = chat_rules(incident, mode) if task == "chat" else BASE_RULES
     system = with_language(rules.format(shape=spec["shape"])) + "\nInstructions for this kind of work:\n" + (skill.instructions or "").strip()

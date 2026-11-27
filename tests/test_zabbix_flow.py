@@ -28,7 +28,7 @@ def zbx(monkeypatch):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     db.query(IntegrationExchange).delete()
-    db.query(Job).filter(Job.kind.in_(["zabbix_flow", "zabbix_flow_ai"])).delete(synchronize_session=False)
+    db.query(Job).filter(Job.kind.in_(["flow_check", "flow_ai"])).delete(synchronize_session=False)
     db.commit()
 
     def use(**kw):
@@ -50,14 +50,14 @@ def zbx(monkeypatch):
 
 
 def test_flow_check_reads_both_sides_and_logs_every_call(zbx):
-    from app.zabbix_flow import check_flow
+    from app.zabbix_flow import check as check_flow
 
     db, use = zbx
     calls = use()
     result = check_flow(db)
     out, inn = _steps(result, "out"), _steps(result, "in")
     assert [out[k]["status"] for k in ("config", "dns", "tcp", "api", "token", "rights", "problems")] == ["ok"] * 7
-    assert out["tls"]["status"] == "warn" and "plain HTTP" in out["tls"]["detail"]
+    assert out["tls"]["status"] == "ok" and "this host only" in out["tls"]["detail"]  # plain HTTP to 127.0.0.1
     assert "Zabbix 7.0" in out["api"]["detail"] and "214 host(s) in 2 group(s)" in out["rights"]["detail"]
     assert inn["media"]["status"] == "ok" and inn["action"]["status"] == "ok"
     assert inn["sent"]["status"] == "bad" and "Couldn't connect to server" in inn["sent"]["detail"]
@@ -70,7 +70,7 @@ def test_flow_check_reads_both_sides_and_logs_every_call(zbx):
 
 
 def test_hidden_zabbix_side_says_what_to_allow(zbx):
-    from app.zabbix_flow import check_flow
+    from app.zabbix_flow import check as check_flow
 
     db, use = zbx
     use(refuse={"mediatype.get"})
@@ -79,7 +79,7 @@ def test_hidden_zabbix_side_says_what_to_allow(zbx):
 
 
 def test_unreachable_zabbix_stops_at_tcp(zbx, monkeypatch):
-    from app.zabbix_flow import check_flow
+    from app.zabbix_flow import check as check_flow
 
     db, _ = zbx
     monkeypatch.setattr(type(settings), "zabbix_url", property(lambda self: "http://127.0.0.1:9/zabbix"))
@@ -110,35 +110,37 @@ def test_webhook_calls_are_logged_with_their_result(zbx):
 
 
 def test_new_break_is_journaled_once_and_analysed(zbx, monkeypatch):
-    from app.zabbix_flow import AI_KIND, check_flow, notice_changes
+    from app.flows import AI_KIND, notice_changes
+    from app.zabbix_flow import check as check_flow
 
     db, use = zbx
     use()
     monkeypatch.setattr(type(settings), "ai_enabled", property(lambda self: True))
     monkeypatch.setattr(type(settings), "llm_url", property(lambda self: "http://llm:8088/v1"))
     first = check_flow(db)
-    assert notice_changes(db, None, first) == ["Zabbix sent"]
+    assert notice_changes(db, "zabbix", None, first) == ["Zabbix sent"]
     entry = db.query(JournalEntry).filter(JournalEntry.summary.like("Zabbix flow broke at Zabbix sent%")).first()
     assert entry is not None and entry.status == "error" and "Flow and log" in entry.detail
     job = db.query(Job).filter_by(kind=AI_KIND).one()
     assert "Zabbix sent" in job.payload["question"]
-    assert notice_changes(db, first, first) == []  # still broken: no second notice
+    assert notice_changes(db, "zabbix", first, first) == []  # still broken: no second notice
     assert db.query(Job).filter_by(kind=AI_KIND).count() == 1
     use(failed_send=False)
     healed = check_flow(db)
-    notice_changes(db, first, healed)
+    notice_changes(db, "zabbix", first, healed)
     assert db.query(JournalEntry).filter(JournalEntry.summary == "Zabbix flow works again at Zabbix sent").count() == 1
 
 
 def test_watch_runs_every_15_minutes_from_the_escalation_loop(zbx):
     import app.main as main
-    from app.zabbix_flow import watch_due
+    from app.flows import watch_due
 
     db, use = zbx
     use()
-    assert watch_due(db)
-    main._queue_zabbix_flow(db)
-    assert db.query(Job).filter_by(kind="zabbix_flow").count() == 1 and not watch_due(db)
+    assert watch_due(db, "zabbix")
+    main._queue_flows(db)
+    assert db.query(Job).filter_by(kind="flow_check", object_id="zabbix").count() == 1 and not watch_due(db, "zabbix")
+    assert db.query(Job).filter_by(kind="flow_check", object_id="prometheus").count() == 1  # the alarm path is always watched
 
 
 def test_flow_api_and_ai_analysis(zbx, monkeypatch):
@@ -152,7 +154,7 @@ def test_flow_api_and_ai_analysis(zbx, monkeypatch):
     assert admin.post("/api/v1/integrations/zabbix/flow").json()["job"]
     monkeypatch.setattr(type(settings), "ai_enabled", property(lambda self: True))
     monkeypatch.setattr(type(settings), "llm_url", property(lambda self: "http://llm:8088/v1"))
-    monkeypatch.setattr("app.zabbix_flow.core_log_lines", lambda limit=60: {"lines": ["core | zabbix webhook 401 from 10.0.0.9"], "error": ""})
+    monkeypatch.setattr("app.flows.container_log_lines", lambda name, limit=60: {"lines": ["core | zabbix webhook 401 from 10.0.0.9"], "error": ""})
     fake = Fake({"answer": "Zabbix sent is broken: the Zabbix server cannot reach port 8080."})
     monkeypatch.setattr(forgeai, "_provider", lambda: fake)
     # other tests may have left jobs in the queue: run until ours are done
@@ -160,7 +162,7 @@ def test_flow_api_and_ai_analysis(zbx, monkeypatch):
         run_pending_jobs(db, limit=8)
         run_pending_jobs(db, limit=4, lane="llm")
         db.expire_all()
-        if db.query(Job).filter(Job.kind.in_(["zabbix_flow", "zabbix_flow_ai"]), Job.status.in_(["pending", "running"])).count() == 0:
+        if db.query(Job).filter(Job.kind.in_(["flow_check", "flow_ai"]), Job.object_id == "zabbix", Job.status.in_(["pending", "running"])).count() == 0:
             break
     data = admin.get("/api/v1/integrations/zabbix/flow").json()
     assert data["status"] == "done" and data["result"]["lanes"] and data["watch"] is True
@@ -176,12 +178,13 @@ def test_flow_chat_reads_only_the_flow_and_offers_flow_skills(zbx, monkeypatch):
     use()
     monkeypatch.setattr(type(settings), "ai_enabled", property(lambda self: True))
     monkeypatch.setattr(type(settings), "llm_url", property(lambda self: "http://llm:8088/v1"))
-    monkeypatch.setattr("app.zabbix_flow.core_log_lines", lambda limit=60: {"lines": ["zabbix line"], "error": ""})
+    monkeypatch.setattr("app.flows.container_log_lines", lambda name, limit=60: {"lines": ["zabbix line"], "error": ""})
     client = _client("analyst")
     chat = client.post("/api/v1/forgeai/chats", json={"topic": "flow:zabbix", "reuse": True}).json()
     assert chat["topic"] == "flow:zabbix" and chat["topic_label"] == "Zabbix flow"
     assert client.post("/api/v1/forgeai/chats", json={"topic": "flow:zabbix", "reuse": True}).json()["id"] == chat["id"]
     assert client.post("/api/v1/forgeai/chats", json={"topic": "flow:other"}).status_code == 422
+    assert client.post("/api/v1/forgeai/chats", json={"topic": "flow:Bad!"}).status_code == 422
     skills = client.get(f"/api/v1/forgeai/chats/{chat['id']}").json()["skills"]
     assert skills and {s["task"] for s in skills} == {"flow"}
     said = client.post(f"/api/v1/forgeai/chats/{chat['id']}/messages", json={"text": ""}).json()  # empty = built-in question
@@ -197,7 +200,7 @@ def test_flow_chat_reads_only_the_flow_and_offers_flow_skills(zbx, monkeypatch):
 
     call = db.get(ForgeAiCall, msg.call_id)
     context = json.loads(call.user_prompt)
-    assert context["integration"] == "zabbix" and context["core_log_lines"] == ["zabbix line"] and "incident" not in context
+    assert context["integration"] == "Zabbix" and context["log_lines"] == ["zabbix line"] and "incident" not in context
     assert call.task == "flow" and call.skill_slug == "flow-where-it-breaks"
     db.query(ForgeAiChatMessage).filter_by(chat_id=chat["id"]).delete()
     db.query(ForgeAiChat).filter_by(id=chat["id"]).delete()

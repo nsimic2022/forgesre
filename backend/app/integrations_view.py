@@ -17,8 +17,7 @@ from app.models import JournalEntry
 # Outside systems ForgeSRE reads from. ``prefix`` picks the settings rows, ``sync`` the job target.
 SOURCES: list[dict[str, Any]] = [
     {"id": "zabbix", "label": "Zabbix", "role": "Reads hosts into the inventory and Zabbix problems as alarms. Read-only.",
-     "prefix": "inventory.zabbix.", "secrets": ["ZABBIX_API_TOKEN"], "sync": "zabbix", "journal": ("zabbix", "sync"),
-     "flow": "/settings/integrations/zabbix"},
+     "prefix": "inventory.zabbix.", "secrets": ["ZABBIX_API_TOKEN"], "sync": "zabbix", "journal": ("zabbix", "sync")},
     {"id": "glpi", "label": "GLPI", "role": "Reads computers and network equipment into the inventory. Read-only.",
      "prefix": "inventory.glpi.", "secrets": ["GLPI_APP_TOKEN", "GLPI_USER_TOKEN"], "sync": "glpi", "journal": ("glpi", "sync")},
     {"id": "librenms", "label": "LibreNMS", "role": "Identifies SNMP devices (vendor, model, ports) and gives LLDP/CDP links for the dependency map.",
@@ -46,6 +45,13 @@ SYNC_KINDS = {"zabbix", "glpi", "netbox", "librenms"}
 # Components system_settings.test_connection can check now.
 TESTABLE = {"prometheus", "alertmanager", "loki", "grafana", "snmp", "llm", "netbox", "zabbix", "glpi", "librenms"}
 
+
+
+def _flow_names() -> set[str]:
+    """Integrations that have a Flow page (app.flows registry)."""
+    from app.flows import flows
+
+    return set(flows())
 
 def _last(db: Session, journal: tuple[str, str] | None) -> dict[str, Any] | None:
     if not journal:
@@ -90,7 +96,7 @@ def integrations(db: Session, host_header: str) -> dict[str, Any]:
             "links": _links(row), "local_only": bool(row.get("local_only")), "local_hint": row.get("local_hint") or "",
             "settings": keys, "test": spec["id"] if spec["id"] in TESTABLE else "",
             "sync": spec.get("sync") or "", "last_sync": _last(db, spec.get("journal")),
-            "flow": spec.get("flow") or "",
+            "flow": f"/settings/integrations/{spec['id']}" if spec["id"] in _flow_names() else "",
         }
 
     return {

@@ -431,7 +431,7 @@ SECURITY_MARK = {"ok": "✓", "warn": "!", "bad": "✗", "info": "·", "unknown"
 
 def format_flow(result: dict[str, Any]) -> str:
     """The Zabbix flow as text: one lane per direction, one row per block, the fix under bad ones."""
-    lines = [f"Zabbix flow — checked {str(result.get('checked_at') or '')[:19].replace('T', ' ')} UTC"]
+    lines = [f"{result.get('label') or 'Zabbix'} flow — checked {str(result.get('checked_at') or '')[:19].replace('T', ' ')} UTC"]
     for lane in result.get("lanes") or []:
         lines.append("")
         lines.append(str(lane.get("title") or lane.get("id")))
@@ -458,44 +458,63 @@ def format_exchanges(rows: list[dict[str, Any]]) -> str:
     return ("\n".join(out) + "\n") if out else "No exchanges yet.\n"
 
 
-def cmd_zabbix(port: str, args: list[str]) -> None:
-    """./forgesre zabbix [flow|trace [N]|test]: the Zabbix flow step by step, the exchange log, or wait
-    for a test call from Zabbix. Read-only; the flow check runs as a background job in Core."""
+FLOW_TEST_PATH = {"zabbix": "/api/v1/webhooks/zabbix", "prometheus": "/api/v1/webhooks/alertmanager"}
+
+
+def cmd_flow(port: str, args: list[str]) -> None:
+    """./forgesre flow [NAME [check|trace [N]|test]]: an integration's flow step by step, its call log,
+    or wait for a test call. Without NAME: every flow with its broken blocks. Read-only; the check
+    runs as a background job in Core."""
     import time as _time
 
-    usage = "usage: ./forgesre zabbix [flow | trace [N] | test]"
-    sub = args[0] if args else "flow"
-    if sub in {"-h", "--help"} or sub not in {"flow", "trace", "test"}:
+    usage = "usage: ./forgesre flow [NAME [check | trace [N] | test]]   (./forgesre zabbix = ./forgesre flow zabbix)"
+    if args and args[0] in {"-h", "--help"}:
         raise SystemExit(usage)
     jar, _me = ensure_jar(port)
     try:
-        if sub == "flow":
-            started = post_json(port, jar, "/api/v1/integrations/zabbix/flow", {}).get("job")
+        if not args:
+            rows = get_json(port, jar, "/api/v1/flows")
+            for f in rows if isinstance(rows, list) else []:
+                result = f.get("result") or {}
+                bad = [s["label"] for lane in result.get("lanes", []) for s in lane["steps"] if s.get("status") == "bad"]
+                warn = [s["label"] for lane in result.get("lanes", []) for s in lane["steps"] if s.get("status") == "warn"]
+                mark = "✗" if bad else ("!" if warn else ("✓" if result else "?"))
+                where = f"broken: {', '.join(bad)}" if bad else (f"warning: {', '.join(warn)}" if warn else ("works" if result else "not checked yet"))
+                sys.stdout.write(f"  {mark} {f['name']:<12} {where}\n")
+            sys.stdout.write("Details: ./forgesre flow NAME\n")
+            return
+        name, sub = args[0], (args[1] if len(args) > 1 else "check")
+        if sub not in {"check", "flow", "trace", "test"}:
+            raise SystemExit(usage)
+        if sub in {"check", "flow"}:
+            started = post_json(port, jar, f"/api/v1/integrations/{name}/flow", {}).get("job")
             data: dict[str, Any] = {}
             for _ in range(40):  # the job does a few network calls with short timeouts
                 _time.sleep(1.5)
-                data = get_json(port, jar, "/api/v1/integrations/zabbix/flow")
+                data = get_json(port, jar, f"/api/v1/integrations/{name}/flow")
                 if data.get("job") == started and data.get("status") in {"done", "failed", "error"}:
                     break
             if not data.get("result"):
                 raise SystemExit(f"the flow check did not finish ({data.get('status')}): ./forgesre jobs")
-            sys.stdout.write(format_flow(data["result"]))
+            sys.stdout.write(format_flow({**data["result"], "label": data.get("label", name)}))
         elif sub == "trace":
-            count = int(args[1]) if len(args) > 1 and args[1].isdigit() else 30
-            data = get_json(port, jar, f"/api/v1/integrations/zabbix/exchanges?limit={min(count, 200)}")
+            count = int(args[2]) if len(args) > 2 and args[2].isdigit() else 30
+            data = get_json(port, jar, f"/api/v1/integrations/{name}/exchanges?limit={min(count, 200)}")
             sys.stdout.write(format_exchanges(data.get("rows") or []))
         else:
-            after = int(get_json(port, jar, "/api/v1/integrations/zabbix/exchanges?limit=1").get("last_id") or 0)
-            sys.stdout.write(f"Waiting up to 5 minutes for a call from Zabbix. On the Zabbix server run:\n"
-                             f"  curl -sS -X POST http://<FORGE-IP>:{port}/api/v1/webhooks/zabbix\n"
-                             "or press Test on the ForgeSRE media type in Zabbix (Alerts › Media types).\n")
+            path = FLOW_TEST_PATH.get(name)
+            if not path:
+                raise SystemExit(f"{name} does not call ForgeSRE; use ./forgesre flow {name}")
+            after = int(get_json(port, jar, f"/api/v1/integrations/{name}/exchanges?limit=1").get("last_id") or 0)
+            sys.stdout.write(f"Waiting up to 5 minutes for a call. From the sending server run:\n"
+                             f"  curl -sS -X POST http://<FORGE-IP>:{port}{path}\n")
             for _ in range(100):
                 _time.sleep(3)
-                rows = get_json(port, jar, f"/api/v1/integrations/zabbix/exchanges?direction=in&after={after}&limit=10").get("rows") or []
+                rows = get_json(port, jar, f"/api/v1/integrations/{name}/exchanges?direction=in&after={after}&limit=10").get("rows") or []
                 if rows:
                     sys.stdout.write("Received:\n" + format_exchanges(rows))
                     return
-            raise SystemExit("Nothing arrived in 5 minutes: the Zabbix server cannot reach this port (firewall, forge_url).")
+            raise SystemExit("Nothing arrived in 5 minutes: the sender cannot reach this port (firewall, URL).")
     except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as exc:
         raise SystemExit(f"could not reach Core: {exc}") from exc
     finally:
@@ -1501,7 +1520,9 @@ def main(argv: list[str] | None = None) -> None:
     elif command == "security":
         cmd_security(port, rest)
     elif command == "zabbix":
-        cmd_zabbix(port, rest)
+        cmd_flow(port, ["zabbix", *(["check"] if not rest else (["check"] if rest[0] == "flow" else rest))])
+    elif command == "flow":
+        cmd_flow(port, rest)
     elif command in {"asset-refs", "asset_refs"}:
         cmd_asset_refs(port)
     elif command in {"ping", "probe"}:

@@ -121,6 +121,12 @@ The asset's host metric card shows them as *Interface errors* (errors and discar
 5 min rate) next to *Ports down* (enabled but not up). UPS assets get *On mains*, *Battery charge*,
 *UPS load*, *Runtime left*, *Input voltage* and *Battery temperature* from the `power` module.
 
+**The alarm path, block by block.** Settings › Integrations › Prometheus › *Flow and log* (and
+`./forgesre flow prometheus`) checks every hop of an alert: Prometheus reading its targets from
+ForgeSRE, targets up, rules that fail to evaluate, Alertmanager's silences and held-back alerts,
+Alertmanager's own count of failed webhook sends, and what ForgeSRE received. Every Alertmanager
+webhook call, also a refused one, is logged there (alert names and result; never the token).
+
 **Two lines on a chart.** When a metric has both a `severity: warning` and a higher
 `severity: critical` rule (for example `NodeCPUHigh > 80` warning and `> 95` critical), its tile
 shows a warning zone and an alarm line. With one rule there is one line, as before; an asset's own

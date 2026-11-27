@@ -84,7 +84,8 @@ Commands:
   capacity           30-day disk / interface history of one asset, days to full
   metrics            host metric card of one asset in text (1h, 6h, 24h, 7d)
   security           read-only security check of this server and the platform
-  zabbix             Zabbix flow step by step, exchange log (trace), wait for a test
+  flow               integration flows step by step (zabbix, prometheus, …), call log, test
+  zabbix             = flow zabbix
   sources            GLPI / Zabbix / NetBox / LibreNMS: last sync, linked assets, conflicts
   discovery          LibreNMS discovery: status, read now, nets CIDR..., scan
   snmp               snmp_exporter health + SNMP HTTP SD targets
@@ -579,6 +580,17 @@ on or off, last sync, how many assets each is linked to, and the open conflicts
 decides in Inventory > Sources).
 
   ./forgesre sources
+EOF
+      ;;
+    flow)
+      cat <<'EOF'
+flow — how ForgeSRE and each integration talk, block by block, read-only (same as Settings ›
+Integrations › <integration> › Flow and log).
+
+  ./forgesre flow                    every flow: works, warning or which block is broken
+  ./forgesre flow prometheus         every step with its fix (zabbix, prometheus, …)
+  ./forgesre flow zabbix trace 50    the last calls between the two (no tokens are kept)
+  ./forgesre flow zabbix test        wait up to 5 minutes for a call from the sender
 EOF
       ;;
     zabbix)
@@ -1484,6 +1496,10 @@ case "$cmd" in
   zabbix)
     need_env
     run_cli_ops zabbix "$@"
+    ;;
+  flow)
+    need_env
+    run_cli_ops flow "$@"
     ;;
   sources)
     need_env

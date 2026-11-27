@@ -337,14 +337,27 @@ only the containers that use the changed values. See [settings.md](settings.md#s
 API (Admin): `GET /api/v1/server/env`, `POST /api/v1/server/env {changes}`,
 `GET /api/v1/server/env/requests/{id}`.
 
-## Zabbix flow (Settings › Integrations › Zabbix › Flow and log)
+## Integration flows (Settings › Integrations › <integration> › Flow and log)
 
-Admin. The connection with Zabbix as rows of blocks; each link is coloured by its test, a click
-opens the block's detail, fix, own call log and the Core log lines about Zabbix underneath, and
-ForgeAI at the bottom reads only this flow. Checked every 15 minutes; a break goes to the journal and
-ForgeAI analyses it. Details: [zabbix.md › The Flow page](zabbix.md#130-the-flow-page). API (Admin):
-`GET|POST /api/v1/integrations/zabbix/flow`, `GET /api/v1/integrations/zabbix/exchanges`,
-`GET /api/v1/integrations/zabbix/logs`.
+Admin. How ForgeSRE and one integration talk, as rows of blocks; each link is coloured by its own
+test (green works, yellow warning, red broken, grey dashed not checked or off). A click opens the
+block underneath: detail, what to do, extra rows (e.g. what Zabbix tried to send, targets that are
+down, rules that fail, active silences), its own call log, and the container log lines of this flow
+(Core lines that mention it, warnings and errors of its own containers). *Wait for a test* waits for
+a webhook call. **Ask ForgeAI about this flow** reads only this flow and offers only flow skills.
+
+Every set-up flow is checked every 15 minutes (`flows.watch`); a block that breaks is written to the
+journal (the Settings badge) and, with ForgeAI on (`flows.ai`), analysed by itself; the answer shows
+on the page. Flows today:
+
+| Flow | Blocks |
+|---|---|
+| Prometheus | Target list (HTTP SD from ForgeSRE) → Targets → Alert rules → Alertmanager (silences, held-back alerts) → Alertmanager sent (its webhook counters) → Network → Webhook → Incident; ForgeSRE → Prometheus API, Alertmanager API |
+| Zabbix | [zabbix.md › The Flow page](zabbix.md#130-the-flow-page) |
+
+API (Admin): `GET /api/v1/flows` (every flow with its last result), `GET|POST
+/api/v1/integrations/{name}/flow`, `GET /api/v1/integrations/{name}/exchanges`,
+`GET /api/v1/integrations/{name}/logs`. CLI: `./forgesre flow [NAME [check|trace [N]|test]]`.
 
 ## Security (Settings › Security)
 

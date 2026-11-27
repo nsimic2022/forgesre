@@ -472,14 +472,16 @@ class Settings(BaseSettings):
         return self._secret("ZABBIX_API_TOKEN")
 
     @property
-    def zabbix_flow_watch(self) -> bool:
-        """Check the Zabbix flow every 15 minutes and journal a block that breaks (inventory.zabbix.flow_watch)."""
-        return bool(self._zabbix_yaml().get("flow_watch", True))
+    def flows_watch(self) -> bool:
+        """Check every set-up integration flow every 15 minutes and journal a block that breaks (flows.watch)."""
+        raw = self.yaml.get("flows") or {}
+        return bool(raw.get("watch", True)) if isinstance(raw, dict) else True
 
     @property
-    def zabbix_flow_ai(self) -> bool:
-        """With ForgeAI on, analyse a new break of the Zabbix flow by itself (inventory.zabbix.flow_ai)."""
-        return bool(self._zabbix_yaml().get("flow_ai", True))
+    def flows_ai(self) -> bool:
+        """With ForgeAI on, analyse a new break of a flow by itself (flows.ai)."""
+        raw = self.yaml.get("flows") or {}
+        return bool(raw.get("ai", True)) if isinstance(raw, dict) else True
 
     @property
     def zabbix_webhook_token(self) -> str:

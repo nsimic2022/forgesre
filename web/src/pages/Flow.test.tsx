@@ -1,10 +1,11 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ZabbixFlowPage } from "./ZabbixFlow";
+import { FlowPage } from "./Flow";
 
 const now = new Date().toISOString();
 const flow = {
+  name: "zabbix", label: "Zabbix", about: "How alarms come in from Zabbix.", configured: true,
   status: "done", job: 3, watch: true,
   ai: { status: "done", at: now, question: "These blocks just broke: Zabbix sent", answer: "Open port 8080 for the Zabbix server.", model: "qwen3" },
   result: { checked_at: now, lanes: [
@@ -21,7 +22,7 @@ const flow = {
   ] },
 };
 
-describe("Zabbix flow page", () => {
+describe("Flow page", () => {
   let urls: string[];
   beforeEach(() => {
     urls = [];
@@ -39,7 +40,7 @@ describe("Zabbix flow page", () => {
   });
   afterEach(() => (cleanup(), vi.unstubAllGlobals()));
 
-  const renderPage = () => render(<MemoryRouter><ZabbixFlowPage /></MemoryRouter>);
+  const renderPage = () => render(<MemoryRouter initialEntries={["/settings/integrations/zabbix"]}><Routes><Route path="/settings/integrations/:name" element={<FlowPage />} /></Routes></MemoryRouter>);
 
   it("shows both lanes, opens the first broken block with its fix, log and Zabbix's attempts", async () => {
     renderPage();
@@ -47,7 +48,7 @@ describe("Zabbix flow page", () => {
     const broken = screen.getByRole("button", { name: "Zabbix sent: Broken" });
     expect(broken.getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByText("sudo ufw allow from <ZABBIX-SERVER-IP> to any port 8080 proto tcp")).toBeTruthy();
-    expect(screen.getByRole("table", { name: "What Zabbix tried to send" }).textContent).toContain("Couldn't connect to server");
+    expect(screen.getByRole("table", { name: "Details of this step" }).textContent).toContain("Couldn't connect to server");
     expect((await screen.findByRole("table", { name: "Exchange log" })).textContent).toContain("1 event(s): High CPU");
     expect(urls.some((u) => u.includes("exchanges?direction=in&kinds=webhook"))).toBe(true);
     expect(screen.getByText("Open port 8080 for the Zabbix server.")).toBeTruthy();
@@ -59,9 +60,9 @@ describe("Zabbix flow page", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Network: Not checked" }));
     expect(screen.getByText("Nothing has arrived from Zabbix yet.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Show" }));
-    expect((await screen.findByLabelText("Core log lines about Zabbix")).textContent).toContain("zabbix webhook");
+    expect((await screen.findByLabelText("Log lines about Zabbix")).textContent).toContain("zabbix webhook");
     fireEvent.click(screen.getByRole("button", { name: "Wait for a test" }));
-    expect(await screen.findByText("Waiting for a call from Zabbix…")).toBeTruthy();
+    expect(await screen.findByText("Waiting for a call…")).toBeTruthy();
     expect(await screen.findByText(/Wrong or missing token/, {}, { timeout: 5000 })).toBeTruthy();
   });
 
