@@ -358,7 +358,7 @@ class ForgeAiChat(Base):
     title: Mapped[str] = mapped_column(String(255), default="New chat")
     # strict | balanced | open; empty = ai.forgeai.chat_mode (see forgeai.chat_rules)
     mode: Mapped[str] = mapped_column(String(16), default="")
-    # a chat tied to a page instead of an incident, e.g. "flow:zabbix" (forgeai_chat.TOPICS)
+    # a chat tied to a page instead of an incident, e.g. "flow:zabbix" (app.flows registry)
     topic: Mapped[str] = mapped_column(String(32), default="", index=True)
     incident_id: Mapped[int | None] = mapped_column(ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

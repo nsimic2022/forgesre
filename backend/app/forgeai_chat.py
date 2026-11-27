@@ -22,7 +22,14 @@ TEXT_MAX = 2000
 INCIDENT_TASKS = {"incident", "explain", "postmortem", "investigate", "ask"}
 # Chats tied to a page instead of an incident: the Flow page of an integration. Their answers read
 # only that flow (forgeai task "flow") and offer only flow skills.
-TOPICS = {"flow:zabbix": "Zabbix flow"}
+def topic_label(topic: str) -> str:
+    """'flow:zabbix' → 'Zabbix flow'."""
+    if not topic.startswith("flow:"):
+        return ""
+    from app.flows import flows
+
+    flow = flows().get(topic.split(":", 1)[1])
+    return f"{flow.label} flow" if flow else ""
 
 
 def _number(incident: Incident | None) -> str:
@@ -42,7 +49,7 @@ def chat_as_dict(chat: ForgeAiChat, incident: Incident | None = None, messages: 
     data: dict[str, Any] = {
         "id": chat.id, "title": chat.title, "incident": incident.number if incident is not None else None,
         "mode": chat.mode or "", "mode_effective": _effective_mode(chat, incident),
-        "topic": chat.topic or "", "topic_label": TOPICS.get(chat.topic or "", ""),
+        "topic": chat.topic or "", "topic_label": topic_label(chat.topic or ""),
         "incident_label": f"{_number(incident)} {incident.title}" if incident is not None else "",
         "created_at": chat.created_at.isoformat() if chat.created_at else None,
         "updated_at": chat.updated_at.isoformat() if chat.updated_at else None,
@@ -108,7 +115,7 @@ def open_chat(db: Session, owner: str, *, title: str = "", incident: Incident | 
                  if reuse else None)
         if found is not None:
             return found
-        chat = ForgeAiChat(owner=owner, title=(" ".join(title.split()) or TOPICS.get(topic, topic))[:255], topic=topic)
+        chat = ForgeAiChat(owner=owner, title=(" ".join(title.split()) or topic_label(topic) or topic)[:255], topic=topic)
         db.add(chat)
         db.commit()
         return chat

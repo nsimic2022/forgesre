@@ -137,7 +137,7 @@ def _json_safe(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
 
 
-LLM_KINDS = (FORGEAI_DIGEST_KIND, "forgeai", "llm_download", "forgeai_replay", "forgeai_chat", "forgeai_ping", "forgeai_golden", "forgeai_compare", "zabbix_flow_ai")
+LLM_KINDS = (FORGEAI_DIGEST_KIND, "forgeai", "llm_download", "forgeai_replay", "forgeai_chat", "forgeai_ping", "forgeai_golden", "forgeai_compare", "flow_ai")
 
 
 def job_is_llm(row: Job) -> bool:
@@ -303,24 +303,22 @@ def run_pending_jobs(db: Session, limit: int = 8, lane: str | None = None) -> in
                 payload = dict(row.payload or {})
                 payload["result"] = sync_all(db)
                 row.payload = payload
-            elif row.kind == "zabbix_flow":
-                from app.zabbix_flow import check_flow
+            elif row.kind == "flow_check":
+                from app.flows import notice_changes, previous_result, run_check
 
-                # DNS / TCP / TLS (3 s each) and read-only Zabbix API calls (zabbix timeout each).
-                from app.zabbix_flow import notice_changes, previous_result
-
+                # Network steps (3 s each) and read-only API calls with each integration's timeout.
                 payload = dict(row.payload or {})
-                before = previous_result(db, before_job=row.id)
-                payload["result"] = check_flow(db)
+                before = previous_result(db, row.object_id, before_job=row.id)
+                payload["result"] = run_check(db, row.object_id)
                 # a block that broke since the last check goes to the journal (UI badge) and to ForgeAI
-                payload["broke"] = notice_changes(db, before, payload["result"])
+                payload["broke"] = notice_changes(db, row.object_id, before, payload["result"])
                 row.payload = payload
-            elif row.kind == "zabbix_flow_ai":
-                from app.zabbix_flow import run_ai
+            elif row.kind == "flow_ai":
+                from app.flows import run_ai
 
                 # One ForgeAI analysis of a new break; the model call has its own timeout.
                 payload = dict(row.payload or {})
-                payload["result"] = run_ai(db, str(payload.get("question") or ""))
+                payload["result"] = run_ai(db, row.object_id, str(payload.get("question") or ""))
                 row.payload = payload
             elif row.kind == "health_checks":
                 from app.health_checks import run_checks

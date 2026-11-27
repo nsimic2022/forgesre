@@ -8,6 +8,11 @@ system:
   log_level: info
   cookie_secure: false # true when Core is served over HTTPS (or set FORGESRE_COOKIE_SECURE=1)
 
+# Integration flows (Settings › Integrations › <integration> › Flow and log).
+flows:
+  watch: true # check every set-up flow every 15 min; a block that breaks goes to the journal
+  ai: true # with ForgeAI on, it analyses a new break by itself (local model)
+
 inventory:
   provider: local # local inventory is SoT; NetBox is read-sync
   new_from_sources: add # add = new GLPI / Zabbix / NetBox devices go straight into inventory; review = listed in Discovery first
@@ -22,8 +27,6 @@ inventory:
     # url: "https://zabbix.example.local/zabbix"
     auto_sync: false # true = host import with the 6 h discovery loop; false = only Discovery → Sync hosts
     timeout_seconds: 4 # per API call, clamped 2–5; a dead Zabbix backs off 2 min instead of retrying
-    flow_watch: true # check the Zabbix flow every 15 min; a block that breaks goes to the journal (Settings › Integrations › Zabbix › Flow and log)
-    flow_ai: true # with ForgeAI on, it analyses a new break by itself (local model)
   glpi:
     # Read-only. On when GLPI_URL + GLPI_APP_TOKEN + GLPI_USER_TOKEN are in secrets/secrets.env (url here overrides GLPI_URL).
     # enabled: false        # force off even with secrets set

@@ -1442,7 +1442,7 @@ class ForgeAiChatNew(BaseModel):
     title: str = Field(default="", max_length=255)
     incident: str = ""
     reuse: bool = False
-    topic: str = Field(default="", pattern="^(|flow:zabbix)$")
+    topic: str = Field(default="", pattern="^(|flow:[a-z_]{2,32})$")
 
 
 class ForgeAiChatSay(BaseModel):
@@ -1481,6 +1481,11 @@ def forgeai_chat_new(body: ForgeAiChatNew, db: Session = Depends(get_db), user: 
         incident = db.query(Incident).filter_by(number=body.incident).first()
         if incident is None:
             raise HTTPException(status_code=404, detail="incident not found")
+    if body.topic:
+        from app.flows import flows
+
+        if body.topic.split(":", 1)[1] not in flows():
+            raise HTTPException(status_code=422, detail="no such flow")
     return chat_detail(db, open_chat(db, user.email, title=body.title, incident=incident, reuse=body.reuse, topic=body.topic))
 
 
@@ -2696,17 +2701,35 @@ async def alertmanager_webhook(request: Request, background_tasks: BackgroundTas
     """Alertmanager group → 202, then ingest_alertmanager in the background.
 
     The whole payload stays one job so group-aware resolve still works. Bearer is
-    ALERTMANAGER_WEBHOOK_TOKEN (same constant-time check as HTTP SD).
+    ALERTMANAGER_WEBHOOK_TOKEN (same constant-time check as HTTP SD). Every call, also a refused
+    one, is logged for the Prometheus Flow page (who, result, alert names; never the token).
     """
+    import time as _time
+
+    from app.exchanges import record
+
+    started = _time.monotonic()
+    peer = request.client.host if request.client else ""
+
+    def log_in(status: str, code: int, summary: str, **detail: Any) -> None:
+        record("prometheus", "in", "webhook", endpoint="/api/v1/webhooks/alertmanager", peer=peer, status=status, http_status=code,
+               ms=int((_time.monotonic() - started) * 1000), summary=summary, detail={k: v for k, v in detail.items() if v})
+
     if not _webhook_token_ok(request):
+        log_in("refused", 401, "Wrong or missing token")
         raise HTTPException(status_code=401, detail="invalid webhook token")
     try:
         payload = await request.json()
     except ValueError as exc:
+        log_in("error", 422, "Body is not JSON")
         raise HTTPException(status_code=422, detail="body is not JSON") from exc
     if not isinstance(payload, dict):
+        log_in("error", 422, "Body is not a JSON object")
         raise HTTPException(status_code=422, detail="Alertmanager body must be a JSON object")
     queued = _queued_alert_count(payload)
+    names = sorted({str((a.get("labels") or {}).get("alertname", "")) for a in payload.get("alerts") or [] if isinstance(a, dict)} - {""})
+    log_in("ok", 202, f"{queued} alert(s), {payload.get('status', '')}: {', '.join(names[:4])}{' …' if len(names) > 4 else ''}",
+           receiver=str(payload.get("receiver") or ""), alertnames=names[:10])
     background_tasks.add_task(_background_verify_and_route, payload, "prometheus")
     return {"accepted": True, "source": "prometheus", "queued": queued}
 
@@ -4307,32 +4330,48 @@ def server_env_result_api(rid: str, user: User = Depends(require("admin"))) -> d
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.get("/integrations/zabbix/flow")
-def zabbix_flow_api(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
-    """Admin: the last Zabbix flow check (each block in both directions), or its job status while it runs."""
-    from app.zabbix_flow import last_flow
+@router.get("/flows")
+def flows_api(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> list[dict[str, Any]]:
+    """Admin: every integration flow with its last result (the integration map)."""
+    from app.flows import flows, last_flow
 
-    return last_flow(db)
+    return [last_flow(db, name) for name in flows()]
 
 
-@router.post("/integrations/zabbix/flow")
-def zabbix_flow_run(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
-    """Admin: queue a new flow check (network and read-only API calls run in the background)."""
-    from app.jobs import enqueue
-    from app.zabbix_flow import FLOW_KIND
+@router.get("/integrations/{name}/flow")
+def flow_api(name: str, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: the last check of one flow (each block in both directions), or its job status while it runs."""
+    from app.flows import last_flow
 
-    job = enqueue(db, FLOW_KIND, "zabbix", object_type="integration", payload={"actor": user.email})
+    try:
+        return last_flow(db, name)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/integrations/{name}/flow")
+def flow_run(name: str, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: queue a new check of one flow (network and read-only API calls run in the background)."""
+    from app.flows import queue_check
+
+    try:
+        job = queue_check(db, name, actor=user.email)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     db.commit()
     return {"job": job.id if job else None}
 
 
-@router.get("/integrations/zabbix/logs")
-def zabbix_core_logs_api(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
-    """Admin: the last Core log lines that mention Zabbix (docker-ro, masked). Audited like other log views."""
-    from app.zabbix_flow import core_log_lines
+@router.get("/integrations/{name}/logs")
+def flow_logs_api(name: str, db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: the container log lines that belong to one flow (docker-ro, masked). Audited like other log views."""
+    from app.flows import container_log_lines
 
-    out = core_log_lines(80)
-    audit(db, "system.logs.view", actor=user.email, object_type="container", object_id="core", data={"filter": "zabbix"}, commit=True)
+    try:
+        out = container_log_lines(name, 80)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    audit(db, "system.logs.view", actor=user.email, object_type="flow", object_id=name, data={"flow": name}, commit=True)
     return out
 
 
