@@ -15,6 +15,7 @@ ServiceNow, n8n or a script can create and update their own tickets. 10 s timeou
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -53,6 +54,16 @@ def _link(incident: Incident) -> str:
     return f"{str(base).rstrip('/')}/app/incidents/{incident.number}" if base else ""
 
 
+def _record(kind: str, path: str, url: str, started: float, status: str, http_status: int, summary: str) -> None:
+    """Ticket calls in the GLPI exchange log (Flow page): method, path and status, never the body."""
+    from urllib.parse import urlsplit
+
+    from app.exchanges import record
+
+    record("glpi", "out", kind, endpoint=path[:120], peer=urlsplit(url).hostname or "", status=status, http_status=http_status,
+           ms=int((time.monotonic() - started) * 1000), summary=summary)
+
+
 def _glpi_call(method: str, path: str, body: dict[str, Any] | None = None) -> Any:
     """One GLPI call inside its own session (init, call, kill); raises on failure."""
     from app.glpi import _auth_headers, api_root, init_session, kill_session
@@ -60,10 +71,18 @@ def _glpi_call(method: str, path: str, body: dict[str, Any] | None = None) -> An
     url, app, user = settings.glpi_url, settings.glpi_app_token, settings.glpi_user_token
     timeout = settings.glpi_timeout
     session = init_session(url, app, user, timeout=timeout, force=True)
+    started = time.monotonic()
+    kind = f"{method} {path.split('/', 1)[0]}"
     try:
-        response = httpx.request(method, api_root(url) + path, json=body, headers=_auth_headers(app, user, session), timeout=TIMEOUT)
+        try:
+            response = httpx.request(method, api_root(url).rstrip("/") + "/" + path, json=body, headers=_auth_headers(app, user, session), timeout=TIMEOUT)
+        except httpx.HTTPError as exc:
+            _record(kind, path, url, started, "error", 0, f"{exc.__class__.__name__}")
+            raise
         if response.status_code >= 400:
+            _record(kind, path, url, started, "refused", response.status_code, f"{method} {path}: HTTP {response.status_code}")
             raise RuntimeError(f"GLPI {method} {path}: HTTP {response.status_code}")
+        _record(kind, path, url, started, "ok", response.status_code, f"{method} {path}")
         return response.json() if response.content else None
     finally:
         kill_session(url, app, session, timeout=timeout)

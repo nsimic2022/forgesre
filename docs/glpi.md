@@ -196,6 +196,10 @@ Then `./forgesre update`. The Discovery **Sync hosts** button still works.
 | Asset has no IP | GLPI did not expose `IPAddress` for that item. Type the IP on Assets. ForgeSRE does not invent one. |
 | Health stays yellow after a fix | Status is cached up to 2 minutes. **Run doctor** or wait, then refresh Discovery. |
 
+To see where it breaks, open Settings › Integrations › GLPI › **Flow and log** (or
+`./forgesre flow glpi`): every block from DNS to the API user's rights, the last sync, the ticket
+calls, and a log of each GLPI call (endpoint and status only, no tokens).
+
 ForgeSRE **never** writes to GLPI. If a name is wrong, fix it in GLPI and Sync again only fills empty ForgeSRE fields.
 
 ---
