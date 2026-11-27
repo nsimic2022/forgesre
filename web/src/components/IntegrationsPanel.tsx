@@ -66,7 +66,7 @@ export function IntegrationsPanel({ rows, onSaved }: { rows: SettingRow[]; onSav
   return (
     <>
       {error ? <div className="banner error" role="alert">{error}</div> : null}
-      <Card title="Sources ForgeSRE reads from">
+      <Card title="Sources ForgeSRE reads from" actions={<Link className="btn" to="/settings/flows">Integration map</Link>}>
         <span className="small faint">
           Every integration only reads. A sync runs in the background and its result shows here and in the journal; a failing
           integration never stops alarms coming in. Tokens are set on the server with <code className="mono">./forgesre settings set-secret NAME</code> and never shown.
