@@ -1,3 +1,4 @@
+import { ZabbixFlowPage } from "./pages/ZabbixFlow";
 import { useEffect, useState } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { Shell } from "./components/Shell";
@@ -42,6 +43,7 @@ export function App() {
         <Route path="/forgeai" element={<ForgeAiPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings/integrations/zabbix" element={<ZabbixFlowPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </ShellWithAi>

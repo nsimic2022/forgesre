@@ -472,6 +472,16 @@ class Settings(BaseSettings):
         return self._secret("ZABBIX_API_TOKEN")
 
     @property
+    def zabbix_flow_watch(self) -> bool:
+        """Check the Zabbix flow every 15 minutes and journal a block that breaks (inventory.zabbix.flow_watch)."""
+        return bool(self._zabbix_yaml().get("flow_watch", True))
+
+    @property
+    def zabbix_flow_ai(self) -> bool:
+        """With ForgeAI on, analyse a new break of the Zabbix flow by itself (inventory.zabbix.flow_ai)."""
+        return bool(self._zabbix_yaml().get("flow_ai", True))
+
+    @property
     def zabbix_webhook_token(self) -> str:
         """Bearer for POST /api/v1/webhooks/zabbix. Separate from ALERTMANAGER_WEBHOOK_TOKEN."""
         return self._secret("ZABBIX_WEBHOOK_TOKEN")

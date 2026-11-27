@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SettingRow } from "../lib/api";
 import { IntegrationsPanel, type IntegrationCard } from "./IntegrationsPanel";
@@ -49,5 +50,13 @@ describe("IntegrationsPanel", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Test connection" }));
     await waitFor(() => expect(screen.getAllByText("error")).toHaveLength(2));
     expect(screen.getAllByText("HTTP 401")).toHaveLength(1);
+  });
+
+  it("links the Zabbix card to its Flow page", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ sources: [{ ...zabbix, flow: "/settings/integrations/zabbix" }], stack: [] }),
+      { status: 200, headers: { "Content-Type": "application/json" } })));
+    render(<MemoryRouter><IntegrationsPanel rows={rows} onSaved={() => undefined} /></MemoryRouter>);
+    const link = await screen.findByRole("link", { name: "Flow and log" });
+    expect(link.getAttribute("href")).toBe("/settings/integrations/zabbix");
   });
 });

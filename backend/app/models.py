@@ -358,6 +358,8 @@ class ForgeAiChat(Base):
     title: Mapped[str] = mapped_column(String(255), default="New chat")
     # strict | balanced | open; empty = ai.forgeai.chat_mode (see forgeai.chat_rules)
     mode: Mapped[str] = mapped_column(String(16), default="")
+    # a chat tied to a page instead of an incident, e.g. "flow:zabbix" (forgeai_chat.TOPICS)
+    topic: Mapped[str] = mapped_column(String(32), default="", index=True)
     incident_id: Mapped[int | None] = mapped_column(ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
@@ -561,6 +563,27 @@ class AuditLog(Base):
     object_id: Mapped[str] = mapped_column(String(64), default="")
     ip: Mapped[str] = mapped_column(String(64), default="")
     data: Mapped[dict] = mapped_column(JSONType, default=dict)
+
+
+class IntegrationExchange(Base):
+    """One call between ForgeSRE and an outside system (Zabbix API call out, webhook in), for the
+    Flow page and ./forgesre zabbix trace. Never holds a token or a full body; pruned to the last
+    1000 per integration."""
+
+    __tablename__ = "integration_exchanges"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    integration: Mapped[str] = mapped_column(String(32), index=True)
+    direction: Mapped[str] = mapped_column(String(8), default="out")  # out = ForgeSRE calls it, in = it calls ForgeSRE
+    kind: Mapped[str] = mapped_column(String(64), default="")  # JSON-RPC method, "webhook"
+    endpoint: Mapped[str] = mapped_column(String(255), default="")
+    peer: Mapped[str] = mapped_column(String(128), default="")
+    status: Mapped[str] = mapped_column(String(16), default="ok")  # ok, error, refused, test
+    http_status: Mapped[int] = mapped_column(Integer, default=0)
+    ms: Mapped[int] = mapped_column(Integer, default=0)
+    summary: Mapped[str] = mapped_column(String(500), default="")
+    detail: Mapped[dict] = mapped_column(JSONType, default=dict)
 
 
 class JournalEntry(Base):

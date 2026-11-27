@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { getJson, postJson, type SettingRow } from "../lib/api";
 import { clock } from "../lib/format";
 import { ReadOnlyRow, SettingField, TestButton, tone } from "./SettingControls";
@@ -8,6 +9,7 @@ export type IntegrationCard = {
   id: string; label: string; role: string; kind: "source" | "stack";
   status: string; why: string; links: { label: string; url: string }[]; local_only: boolean; local_hint: string;
   settings: string[]; test: string; sync: string; last_sync: { at: string | null; status: string; summary: string } | null;
+  flow?: string;
 };
 type Data = { sources: IntegrationCard[]; stack: IntegrationCard[] };
 
@@ -35,6 +37,7 @@ function OneCard({ card, rows, onSaved }: { card: IntegrationCard; rows: Setting
         {card.links.map((l) => (
           <a key={l.url} className="btn" href={l.url} target="_blank" rel="noopener noreferrer">Open {l.label}</a>
         ))}
+        {card.flow ? <Link className="btn" to={card.flow}>Flow and log</Link> : null}
         {card.test ? <TestButton component={card.test} label="Test connection" known={card.why} /> : null}
         {card.sync ? (
           <button className="btn" type="button" disabled={sync === "queued"} onClick={runSync}>{sync === "queued" ? "Sync queued" : "Sync now"}</button>

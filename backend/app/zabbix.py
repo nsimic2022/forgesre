@@ -37,6 +37,13 @@ READ_METHODS = frozenset(
         "problem.get",
         "item.get",
         "trend.get",
+        # Read by the Flow page (Settings › Integrations › Zabbix › Flow) to show Zabbix's side of
+        # the webhook path: host groups the token sees, the trigger action, the media type and what
+        # Zabbix tried to send. All read-only; a role without them just shows "not visible".
+        "hostgroup.get",
+        "action.get",
+        "mediatype.get",
+        "alert.get",
     }
 )
 BACKOFF_SECONDS = 120.0
@@ -70,6 +77,36 @@ _state: dict[str, Any] = {
     "trends": {},
 }
 _rpc_id = 0
+# Records each API call for the Flow page; None = app.exchanges.record (imported on first use, so
+# this module stays free of SQLAlchemy at import). Gets keyword fields only, never the token or body.
+_recorder: Any = None
+
+
+def set_recorder(fn: Any) -> None:
+    """Install (or remove with None) the function that logs each API call."""
+    global _recorder
+    _recorder = fn
+
+
+def _summarise(result: Any) -> str:
+    if isinstance(result, list):
+        return f"{len(result)} row(s)"
+    if isinstance(result, (str, int, float)):
+        return str(result)[:120]
+    return "answered" if result is not None else "empty answer"
+
+
+def _record(method: str, url: str, started: float, status: str, summary: str) -> None:
+    try:
+        from urllib.parse import urlsplit
+
+        recorder = _recorder
+        if recorder is None:
+            from app.exchanges import record as recorder
+        recorder("zabbix", "out", method, endpoint=api_endpoint(url), peer=urlsplit(api_endpoint(url)).netloc,
+                  status=status, ms=int((time.monotonic() - started) * 1000), summary=summary)
+    except Exception:  # noqa: BLE001 — logging a call must never break it
+        log.debug("zabbix recorder failed", exc_info=True)
 
 
 def reset_state() -> None:
@@ -158,10 +195,19 @@ async def _post_async(url: str, body: dict[str, Any], headers: dict[str, str], t
 
 
 def _post(url: str, body: dict[str, Any], headers: dict[str, str], timeout: float) -> Any:
-    """Sync wrapper for Discovery / doctor / pytest. A live loop uses a worker thread."""
+    """Sync wrapper for Discovery / doctor / pytest. A live loop uses a worker thread.
+    Every call is logged for the Flow page (method, time, result; no token)."""
     from app.metrics import run_sync
 
-    return run_sync(_post_async(url, body, headers, timeout))
+    started = time.monotonic()
+    method = str(body.get("method") or "")
+    try:
+        result = run_sync(_post_async(url, body, headers, timeout))
+    except ZabbixError as exc:
+        _record(method, url, started, "error", str(exc))
+        raise
+    _record(method, url, started, "ok", _summarise(result))
+    return result
 
 
 def server_version(url: str, timeout: float, *, force: bool = False) -> tuple[int, int]:

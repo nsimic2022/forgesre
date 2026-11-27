@@ -341,7 +341,9 @@ def test_client_refuses_any_write(zbx, method):
 
 
 def test_read_methods_are_get_only():
-    assert READ_METHODS == {"apiinfo.version", "host.get", "problem.get", "item.get", "trend.get"}
+    assert READ_METHODS == {"apiinfo.version", "host.get", "problem.get", "item.get", "trend.get",
+                            "hostgroup.get", "mediatype.get", "action.get", "alert.get"}  # the last four: Flow page
+    assert all(m.endswith(".get") or m == "apiinfo.version" for m in READ_METHODS)
     for rel in ("zabbix.py", "zabbix_sync.py"):
         source = (ROOT / "backend" / "app" / rel).read_text(encoding="utf-8")
         assert not re.search(r"""["'][a-z]+\.(create|update|delete|acknowledge|massupdate)["']""", source), rel

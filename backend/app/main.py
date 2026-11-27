@@ -175,6 +175,7 @@ def escalation_tick(db: Session) -> list[str]:
         ("chat resolved", sweep_resolved), ("tickets resolved", tickets_resolved),
         ("ticket sync", _queue_ticket_sync), ("oxidized sync", _queue_oxidized_sync),
         ("health checks", _queue_health_checks), ("k8s sync", _queue_k8s_sync), ("snmp apply", _queue_snmp_apply),
+        ("zabbix flow", _queue_zabbix_flow),
     )
     failed = []
     for name, step in steps:
@@ -218,6 +219,17 @@ def _queue_health_checks(db: Session) -> None:
     _health_last = time.monotonic()
     enqueue(db, "health_checks", "appliance", object_type="checks")
     db.commit()
+
+
+def _queue_zabbix_flow(db: Session) -> None:
+    """Leader only: check the Zabbix flow every 15 minutes (inventory.zabbix.flow_watch); a block that
+    breaks is journaled and, with ForgeAI on, analysed (app.zabbix_flow.notice_changes)."""
+    from app.jobs import enqueue
+    from app.zabbix_flow import FLOW_KIND, watch_due
+
+    if watch_due(db):
+        enqueue(db, FLOW_KIND, "zabbix", object_type="integration", payload={"auto": True})
+        db.commit()
 
 
 _K8S_EVERY = 5 * 60

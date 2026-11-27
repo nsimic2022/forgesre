@@ -30,7 +30,7 @@ Never done this? Follow the numbered [end-to-end checklist](#18-end-to-end-opera
 10. [ForgeSRE: playrules for Zabbix triggers](#10-forgesre-playrules-for-zabbix-triggers)
 11. [Where Zabbix data shows up in ForgeSRE](#11-where-zabbix-data-shows-up-in-forgesre)
 12. [Optional: automatic host import](#12-optional-automatic-host-import)
-13. [Troubleshooting](#13-troubleshooting)
+13. [Troubleshooting](#13-troubleshooting) — start with the [Flow page](#130-the-flow-page)
 14. [Reference: payload and mapping](#14-reference-payload-and-mapping)
 15. [Alarms vs Zabbix incidents](#15-alarms-vs-zabbix-incidents)
 16. [Acknowledge, resolve, close — no write-back](#16-acknowledge-resolve-close--no-write-back)
@@ -55,7 +55,7 @@ Never done this? Follow the numbered [end-to-end checklist](#18-end-to-end-opera
 
 **How Core talks to Zabbix:**
 
-- JSON-RPC methods: `apiinfo.version`, `host.get`, `problem.get`, `item.get`, `trend.get`. ForgeSRE **never writes back** (`*.create`, `*.update`, `*.delete`, `event.acknowledge` are refused before a request is built).
+- JSON-RPC methods: `apiinfo.version`, `host.get`, `problem.get`, `item.get`, `trend.get`; for the Flow page also `hostgroup.get`, `mediatype.get`, `action.get`, `alert.get`. ForgeSRE **never writes back** (`*.create`, `*.update`, `*.delete`, `event.acknowledge` are refused before a request is built).
 - Acknowledge / Resolve / Close stay in ForgeSRE. The Zabbix problem stays until Zabbix itself recovers it. Hosts, groups, templates, items, triggers, users, media types, and actions are created in Zabbix by hand (sections 3, 7, 8).
 - Health links to `ZABBIX_URL`. Tokens live in `secrets/secrets.env` ([section 4](#4-forgesre-secrets-and-update)). There is no Admin UI field for those secrets. `/admin` is users, backup, and CLI cheat sheet.
 - Incidents open from the **webhook**. The 3-minute `problem.get` poll resolves an incident whose recovery webhook was lost.
@@ -182,7 +182,7 @@ The host groups chosen here are the only thing that decides **which hosts are im
 4. **Media** tab: leave empty for now (section 8 adds it after the media type exists).
 5. Click **Add**.
 
-*(Optional, stricter.)* **Users → User roles → User role → Clone** (call it `ForgeSRE API read`), then on the clone: **API methods → Allow list**, add `host.get`, `problem.get`, `item.get`, `trend.get`. `apiinfo.version` needs no permission. **Add**, then set this role on `forgesre-ro` instead of *User role*. Do not edit the built-in *User role* — other users share it.
+*(Optional, stricter.)* **Users → User roles → User role → Clone** (call it `ForgeSRE API read`), then on the clone: **API methods → Allow list**, add `host.get`, `problem.get`, `item.get`, `trend.get`, and for the Flow page `hostgroup.get`, `mediatype.get`, `action.get`, `alert.get`. `apiinfo.version` needs no permission. **Add**, then set this role on `forgesre-ro` instead of *User role*. Do not edit the built-in *User role* — other users share it.
 
 ### 3.3 API token
 
@@ -589,6 +589,39 @@ Then `./forgesre update`. The Discovery card then says `auto every 6 h`.
 
 ## 13. Troubleshooting
 
+### 13.0 The Flow page
+
+**Settings › Integrations › Zabbix › Flow and log** (Admin) shows the connection as two rows of
+blocks; every link between two blocks is coloured by its own test (green works, yellow warning, red
+broken, grey dashed not checked or off):
+
+- **Zabbix → ForgeSRE (alarms):** *Media type* → *Trigger action* → *Zabbix sent* (what Zabbix itself
+  tried to send and the error it got, read with `alert.get`) → *Network* (the last call that reached
+  ForgeSRE and from which address) → *Webhook* (accepted, wrong token, missing fields, or the media
+  type *Test* button) → *Incident*.
+- **ForgeSRE → Zabbix (API):** *Settings* → *DNS* → *TCP* → *TLS* (trust and expiry) → *API* (version)
+  → *Token* → *Rights* (host groups and hosts it sees) → *Problems*.
+
+Click a block: underneath open its detail, what to do, its own log of calls (newest first, paged; no
+token or body is ever stored), Zabbix's send attempts, and the Core container log lines that mention
+Zabbix. *Wait for a test* shows the curl command for the Zabbix server and turns green when the call
+arrives. At the bottom, **Ask ForgeAI about this flow** reads only this page (the last check, the
+recent calls and those log lines); it offers only *flow* skills (the built-in *Where the flow breaks*,
+or your own with task *Integration flow* in Settings › ForgeAI skills). An empty message asks the
+built-in question.
+
+The check runs as a background job (each step has a timeout) when you open the page, on *Check
+again*, and every 15 minutes (`inventory.zabbix.flow_watch`). A block that breaks writes an error to
+the journal (the Settings badge) and, with ForgeAI on and `inventory.zabbix.flow_ai`, ForgeAI
+analyses it by itself; the answer shows on the page. When it works again the journal says so.
+
+Reading Zabbix's side needs `mediatype.get`, `action.get` and `alert.get` for `forgesre-ro`
+(read-only). With the built-in *User role* these may be hidden: the block then says *Not checked*
+and what to allow (section 3.2, the optional API allow list: add these three).
+
+Over SSH: `./forgesre zabbix` (every step with its fix), `./forgesre zabbix trace 50`,
+`./forgesre zabbix test` (waits 5 minutes for a call from the Zabbix server).
+
 ### Health cube Zabbix is yellow
 
 Read the text under the cube (and **Last error** on the Discovery card):
@@ -749,9 +782,12 @@ Escalation mail still goes to the asset **Owner email**. Mute of Alarms never ap
 
 ## 17. CLI commands that matter
 
-There is **no** `./forgesre zabbix`. Use the real wrapper commands from [cli.md](cli.md):
+`./forgesre zabbix` shows the flow step by step ([13.0](#130-the-flow-page)); with the other wrapper commands from [cli.md](cli.md):
 
 ```bash
+./forgesre zabbix              # every step in both directions, each problem with its fix
+./forgesre zabbix trace 50     # the last calls between ForgeSRE and Zabbix
+./forgesre zabbix test         # wait for a call from the Zabbix server
 ./forgesre doctor              # Health lights, including component zabbix (yellow = optional source)
 ./forgesre status              # docker compose ps — confirm core is up
 ./forgesre journal zabbix      # Console lines: sync / health / poll

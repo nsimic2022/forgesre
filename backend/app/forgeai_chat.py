@@ -20,6 +20,9 @@ PENDING_MAX = 3
 TEXT_MAX = 2000
 # Skills a person may pick in the composer. Incident-only tasks need a chat about an incident.
 INCIDENT_TASKS = {"incident", "explain", "postmortem", "investigate", "ask"}
+# Chats tied to a page instead of an incident: the Flow page of an integration. Their answers read
+# only that flow (forgeai task "flow") and offer only flow skills.
+TOPICS = {"flow:zabbix": "Zabbix flow"}
 
 
 def _number(incident: Incident | None) -> str:
@@ -39,6 +42,7 @@ def chat_as_dict(chat: ForgeAiChat, incident: Incident | None = None, messages: 
     data: dict[str, Any] = {
         "id": chat.id, "title": chat.title, "incident": incident.number if incident is not None else None,
         "mode": chat.mode or "", "mode_effective": _effective_mode(chat, incident),
+        "topic": chat.topic or "", "topic_label": TOPICS.get(chat.topic or "", ""),
         "incident_label": f"{_number(incident)} {incident.title}" if incident is not None else "",
         "created_at": chat.created_at.isoformat() if chat.created_at else None,
         "updated_at": chat.updated_at.isoformat() if chat.updated_at else None,
@@ -95,9 +99,19 @@ def chat_detail(db: Session, chat: ForgeAiChat) -> dict[str, Any]:
     return data
 
 
-def open_chat(db: Session, owner: str, *, title: str = "", incident: Incident | None = None, reuse: bool = False) -> ForgeAiChat:
-    """Start a chat. ``reuse`` returns the owner's latest chat about the same incident instead, so the
-    incident page always shows one running conversation."""
+def open_chat(db: Session, owner: str, *, title: str = "", incident: Incident | None = None, reuse: bool = False,
+              topic: str = "") -> ForgeAiChat:
+    """Start a chat. ``reuse`` returns the owner's latest chat about the same incident (or topic) instead,
+    so the incident page and the Flow page always show one running conversation."""
+    if topic:
+        found = (db.query(ForgeAiChat).filter_by(owner=owner, topic=topic).order_by(ForgeAiChat.updated_at.desc()).first()
+                 if reuse else None)
+        if found is not None:
+            return found
+        chat = ForgeAiChat(owner=owner, title=(" ".join(title.split()) or TOPICS.get(topic, topic))[:255], topic=topic)
+        db.add(chat)
+        db.commit()
+        return chat
     if reuse and incident is not None:
         found = (db.query(ForgeAiChat).filter_by(owner=owner, incident_id=incident.id)
                  .order_by(ForgeAiChat.updated_at.desc()).first())
@@ -111,13 +125,14 @@ def open_chat(db: Session, owner: str, *, title: str = "", incident: Incident | 
     return chat
 
 
-def skills_for(db: Session, incident: bool) -> list[dict[str, Any]]:
-    """Skills the composer offers: chat skills always, incident skills only in a chat about an incident."""
+def skills_for(db: Session, incident: bool, topic: str = "") -> list[dict[str, Any]]:
+    """Skills the composer offers: chat skills always, incident skills only in a chat about an incident;
+    in a Flow chat only flow skills."""
     from app.forgeai import TASKS, seed_skills
 
     seed_skills(db)
     rows = db.query(ForgeAiSkill).filter_by(enabled=True).order_by(ForgeAiSkill.task, ForgeAiSkill.priority, ForgeAiSkill.name).all()
-    allowed = {"chat"} | (INCIDENT_TASKS - {"ask"} if incident else set())
+    allowed = {"flow"} if topic else {"chat"} | (INCIDENT_TASKS - {"ask"} if incident else set())
     return [{"slug": s.slug, "name": s.name, "task": s.task, "task_label": TASKS.get(s.task, {}).get("label", s.task)}
             for s in rows if s.task in allowed]
 
@@ -136,11 +151,15 @@ def ask(db: Session, chat: ForgeAiChat, text: str, *, skill: ForgeAiSkill | None
     from app.jobs import enqueue
 
     text = text.strip()[:TEXT_MAX]
-    if not text and (skill is None or skill.task == "chat"):
+    if not text and (skill is None or skill.task == "chat") and not chat.topic:
         raise ValueError("type a message")
     if skill is not None and skill.task in INCIDENT_TASKS and not chat.incident_id:
         raise ValueError("this skill needs a chat about an incident")
-    shown = text or f"/{skill.slug}"
+    if chat.topic and skill is not None and skill.task != "flow":
+        raise ValueError("only flow skills fit this chat")
+    if not chat.topic and skill is not None and skill.task == "flow":
+        raise ValueError("flow skills work in the chat on an integration's Flow page")
+    shown = text or (f"/{skill.slug}" if skill is not None else "Where does the flow break?")
     first = db.query(ForgeAiChatMessage).filter_by(chat_id=chat.id, role="user").count() == 0
     question = ForgeAiChatMessage(chat_id=chat.id, role="user", text=shown, skill=skill.slug if skill else "", cloud=cloud)
     answer = ForgeAiChatMessage(chat_id=chat.id, role="assistant", text="", skill=skill.slug if skill else "", cloud=cloud,
@@ -158,7 +177,7 @@ def ask(db: Session, chat: ForgeAiChat, text: str, *, skill: ForgeAiSkill | None
 
 def format_answer(task: str, answer: dict[str, Any]) -> str:
     """Turn a structured answer (cause, first_checks, …) into readable chat text."""
-    if task == "chat":
+    if task in {"chat", "flow"}:
         return str(answer.get("answer") or "")
     names = {"cause": "Cause", "first_checks": "First checks", "for_shift_lead": "For the shift lead",
              "explanation": "", "why_it_matters": "Why it matters", "paragraph": "", "answer": "",
@@ -193,7 +212,7 @@ def run_answer(db: Session, row: Job) -> dict[str, Any]:
     incident = (db.query(Incident).options(joinedload(Incident.asset)).filter_by(id=chat.incident_id).first()
                 if chat.incident_id else None)
     skill = db.query(ForgeAiSkill).filter_by(slug=answer.skill).first() if answer.skill else None
-    task = skill.task if skill is not None else "chat"
+    task = "flow" if chat.topic else (skill.task if skill is not None else "chat")
     text = str(payload.get("question") or "")
     earlier = (db.query(ForgeAiChatMessage).filter(ForgeAiChatMessage.chat_id == chat.id, ForgeAiChatMessage.id < question.id,
                                                     ForgeAiChatMessage.status == "done")
@@ -204,7 +223,10 @@ def run_answer(db: Session, row: Job) -> dict[str, Any]:
     db.commit()  # the chat shows "reading the prompt" while the model has not answered yet
     progress = _progress_writer(answer.id)
     try:
-        if task == "chat":
+        if task == "flow":
+            call = forgeai.run(db, "flow", None, skill_slug=skill.slug if skill else "", actor=actor, question=text,
+                               cloud=bool(answer.cloud), history=history, on_progress=progress, flow=chat.topic.split(":", 1)[1])
+        elif task == "chat":
             call = forgeai.run(db, "chat", incident, skill_slug=skill.slug if skill else "", actor=actor, question=text,
                                cloud=bool(answer.cloud), history=history, on_progress=progress, mode=chat.mode or "")
         else:
