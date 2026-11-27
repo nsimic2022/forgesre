@@ -403,6 +403,7 @@ Cloud model dobija isti kontekst kao lokalni, samo kad ga Engineer izabere. MCP 
 | --- | --- |
 | `./forgesre doctor` | Zdravlje celog steka, sa uputstvom za popravku |
 | `./forgesre test` | Brzi test: login, API, prijem alarma |
+| `sudo ./forgesre security` | Provera bezbednosti servera i platforme, samo čita: SSH, firewall, otvoreni portovi, prava na tajnama, ažuriranja, HTTPS, nalozi. Ista slika je u Settings › Security, a koraci za popravku u install-config.md › Hardening the server |
 | `./forgesre status` | Kontejneri i petlje u pozadini |
 | `./forgesre forgeai` | Model, veza, poslednji test, red, statistika i ocene |
 | `./forgesre forgeai test` | Jedno malo pitanje modelu: prvi token i ukupno vreme |

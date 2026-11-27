@@ -12,6 +12,7 @@ Repository: https://github.com/nsimic2022/forgesre (`main`).
 | [4. Host preparation](#4-host-preparation) | apt, Docker, clone |
 | [5. First install](#5-first-install) | `./install.sh` (new VM only) |
 | [6. Open the UI](#6-open-the-ui) | URLs and firewall |
+| [6a. Hardening the server](#6a-hardening-the-server) | SSH keys, firewall, updates, what not to change |
 | [7. Verify the appliance](#7-verify-the-appliance) | `./forgesre doctor` vs `test` vs `verify` |
 | [8. Configuration files](#8-configuration-files) | `.env`, YAML, secrets |
 | [9. `config/forgesre.yml`](#9-configforgesreyml) | Features |
@@ -201,6 +202,78 @@ First-hour path:
 ```
 
 Then in the UI: Dashboard **Run demo** (top right) → pick Linux HighCPU → incident on `forge-demo-01` (DEMO pill) → Who to call. `./forgesre demo-reset` lowers the demo gauges when you are done.
+
+---
+
+## 6a. Hardening the server
+
+Do these steps by hand, one at a time, on a working appliance. Before you start, run
+`sudo ./forgesre security`; run it again at the end. The check only reads: it changes nothing
+and says for every finding what to do. Keep a second SSH session open until a new login works.
+
+**1. SSH with keys only.** From your laptop: `ssh-copy-id user@VM-IP`, then log in with the key.
+On the server:
+
+```bash
+sudo tee /etc/ssh/sshd_config.d/10-forgesre.conf >/dev/null <<'EOF'
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+EOF
+sudo sshd -t && sudo systemctl reload ssh
+```
+
+The name starts with `10-` on purpose: sshd keeps the first value it reads, and Ubuntu's
+`50-cloud-init.conf` often turns passwords back on. Test a new login before you close the old one.
+
+**2. Firewall (ufw), only from the management network.** Replace `10.0.0.0/24` with your
+management network and the device network for syslog. Allow SSH first, then enable:
+
+```bash
+sudo ufw allow from 10.0.0.0/24 to any port 22 proto tcp
+sudo ufw allow from 10.0.0.0/24 to any port 8080 proto tcp   # UI and webhooks (443 and 80 with HTTPS)
+sudo ufw allow from 10.0.0.0/24 to any port 3000 proto tcp   # Grafana
+sudo ufw allow from 10.0.0.0/24 to any port 8001 proto tcp   # NetBox
+sudo ufw allow from 10.0.0.0/24 to any port 8000 proto tcp   # LibreNMS, when on
+sudo ufw allow from 10.20.0.0/16 to any port 514             # device syslog, TCP and UDP
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw enable
+```
+
+Keep outgoing traffic allowed: ForgeSRE polls devices (ping, SNMP, APIs) and sends mail and chat.
+Prometheus, Alertmanager, Loki, Postgres, the LLM and docker-ro already listen on 127.0.0.1 only;
+`./forgesre security` reports it if one of them is ever open to the network. The optional mailbox
+(25, 993, Roundcube 8081) is published by Docker, which writes its own rules ahead of ufw: limit
+it on the outer firewall, or keep the mailbox off.
+
+**3. fail2ban** blocks addresses that keep guessing SSH: `sudo apt-get install fail2ban` (the
+default `sshd` jail is enough).
+
+**4. Security updates.** `sudo apt-get install unattended-upgrades` and
+`sudo dpkg-reconfigure -plow unattended-upgrades`. It installs Ubuntu security fixes only; Docker
+and ForgeSRE are updated by you (`./forgesre update`). After a kernel fix the check shows
+*Restart needed*: `sudo reboot` at a quiet time; ForgeSRE comes back by itself.
+
+**5. File permissions.** `chmod 700 secrets data/backups` and
+`chmod 600 secrets/secrets.env installation-report.md` (install sets these; the check reports drift).
+
+**6. Optional: auditd** records who read or changed the secrets:
+`sudo apt-get install auditd` and
+`sudo auditctl -w "$PWD/secrets" -p rwa -k forgesre-secrets` (persist it in `/etc/audit/rules.d/forgesre.rules`).
+
+**Do not do these on a ForgeSRE server.** They are common in generic hardening guides and
+scripts, but break the appliance or bring nothing:
+
+| Change | Why not |
+|---|---|
+| `net.ipv4.ip_forward = 0` | Docker needs forwarding for its networks (docker-ro, mailbox) |
+| A global `umask 027` | Files written by `./forgesre update` can become unreadable for Prometheus, Grafana and Loki |
+| `userns-remap` in Docker's `daemon.json` | Containers may no longer read their bind-mounted files and data |
+| `ufw default deny outgoing` | Polling, mail, chat and LLM downloads stop |
+| AIDE or rkhunter over `/var/lib/docker` | Image layers change at every update: slow scans and false alarms |
+| Disabling `snmpd` | Only if no one monitors this server over SNMP (LibreNMS can) |
+| Running a hardening script with "apply all" | Review each change; use the check above and these steps instead |
 
 ---
 

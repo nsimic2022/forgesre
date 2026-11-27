@@ -4279,6 +4279,14 @@ def server_env_result_api(rid: str, user: User = Depends(require("admin"))) -> d
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/system/security")
+def security_api(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
+    """Admin: read-only security overview (platform checks and the last host report from ./forgesre security)."""
+    from app.security_report import security_overview
+
+    return security_overview(db)
+
+
 @router.get("/system/containers")
 def containers_api(db: Session = Depends(get_db), user: User = Depends(require("admin"))) -> dict[str, Any]:
     """Admin: the appliance's containers with state and health (read through docker-ro, 5 s timeout)."""
