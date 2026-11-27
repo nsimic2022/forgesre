@@ -48,7 +48,7 @@ TESTABLE = {"prometheus", "alertmanager", "loki", "grafana", "snmp", "llm", "net
 
 
 # Stack parts whose path is shown on another integration's Flow page.
-FLOW_FOR = {"alertmanager": "prometheus", "alloy": "syslog", "loki": "syslog"}
+FLOW_FOR = {"alertmanager": "prometheus", "alloy": "syslog", "loki": "syslog", "llm": "forgeai"}
 
 
 def _flow_names() -> set[str]:

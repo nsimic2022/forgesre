@@ -458,7 +458,8 @@ def format_exchanges(rows: list[dict[str, Any]]) -> str:
     return ("\n".join(out) + "\n") if out else "No exchanges yet.\n"
 
 
-FLOW_TEST_PATH = {"zabbix": "/api/v1/webhooks/zabbix", "prometheus": "/api/v1/webhooks/alertmanager"}
+FLOW_TEST_PATH = {"zabbix": "/api/v1/webhooks/zabbix", "prometheus": "/api/v1/webhooks/alertmanager",
+                  "librenms": "/api/v1/webhooks/librenms", "mcp": "/mcp/"}
 
 
 def cmd_flow(port: str, args: list[str]) -> None:

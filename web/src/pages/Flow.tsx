@@ -10,16 +10,16 @@ export type FlowStep = {
   id: string; label: string; sub: string; status: "ok" | "warn" | "bad" | "unknown" | "off"; detail: string; fix: string; ms?: number;
   log?: { direction?: string; kinds?: string[] }; rows?: { at: string; status: string; error: string; retries?: number; subject?: string }[];
 };
-type Lane = { id: string; title: string; steps: FlowStep[] };
+export type Lane = { id: string; title: string; steps: FlowStep[] };
 type Ai = { status: string; at: string | null; question: string; answer: string; model?: string; call_id?: number | null };
 type Flow = { name: string; label: string; about: string; configured: boolean; status: string; job?: number; error?: string;
   result: { checked_at: string; lanes: Lane[] } | null; watch?: boolean; ai?: Ai | null; target?: string; target_label?: string };
 type Exchange = { id: number; at: string; direction: string; kind: string; endpoint: string; peer: string; status: string; http_status: number; ms: number; summary: string };
 type Exchanges = { total: number; rows: Exchange[]; last_id: number };
 
-const TONE: Record<string, "ok" | "warn" | "crit" | "off"> = { ok: "ok", warn: "warn", bad: "crit", unknown: "off", off: "off" };
-const WORD: Record<string, string> = { ok: "Works", warn: "Warning", bad: "Broken", unknown: "Not checked", off: "Off" };
-const COLOR: Record<string, string> = { ok: "var(--ok)", warn: "var(--warn)", bad: "var(--crit)", unknown: "var(--faint)", off: "var(--faint)" };
+export const TONE: Record<string, "ok" | "warn" | "crit" | "off"> = { ok: "ok", warn: "warn", bad: "crit", unknown: "off", off: "off" };
+export const WORD: Record<string, string> = { ok: "Works", warn: "Warning", bad: "Broken", unknown: "Not checked", off: "Off" };
+export const COLOR: Record<string, string> = { ok: "var(--ok)", warn: "var(--warn)", bad: "var(--crit)", unknown: "var(--faint)", off: "var(--faint)" };
 const STALE_MS = 5 * 60 * 1000;
 
 /** The link between two blocks, coloured by the test of the hop into the next block. */
@@ -96,6 +96,8 @@ function FlowLog({ name, label }: { name: string; label: string }) {
 const TEST: Record<string, { path: string; sender: string; button: string }> = {
   zabbix: { path: "/api/v1/webhooks/zabbix", sender: "the Zabbix server", button: "or press Test on the ForgeSRE media type (Alerts › Media types)" },
   prometheus: { path: "/api/v1/webhooks/alertmanager", sender: "this server (where Alertmanager runs)", button: "or wait for the next alarm" },
+  librenms: { path: "/api/v1/webhooks/librenms", sender: "the LibreNMS server", button: "or press Test on the ForgeSRE alert transport (Alerts › Alert transports)" },
+  mcp: { path: "/mcp/", sender: "the AI client's machine", button: "or ask the AI client something about ForgeSRE" },
 };
 
 function WaitForTest({ name, port }: { name: string; port: string }) {

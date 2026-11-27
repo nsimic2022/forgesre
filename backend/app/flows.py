@@ -81,13 +81,14 @@ def get(name: str) -> Flow:
 
 
 # Order on the integration map: alarm intake first, then the systems ForgeSRE reads or writes.
-FLOW_ORDER = ("prometheus", "zabbix", "snmp", "syslog", "glpi", "notifications")
+FLOW_ORDER = ("prometheus", "zabbix", "librenms", "snmp", "syslog", "kubernetes", "glpi", "netbox", "oxidized", "notifications", "forgeai", "mcp")
 TARGET_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 
 
 def _load() -> None:
     # Each module calls register() at import.
-    from app import flow_glpi, flow_notifications, flow_prometheus, flow_snmp, flow_syslog, zabbix_flow  # noqa: F401
+    from app import (flow_forgeai, flow_glpi, flow_kubernetes, flow_librenms, flow_mcp, flow_netbox,  # noqa: F401
+                     flow_notifications, flow_oxidized, flow_prometheus, flow_snmp, flow_syslog, zabbix_flow)
 
 
 def job_key(name: str, target: str | None = None) -> str:
@@ -260,6 +261,41 @@ def received_steps(db: Session, integration: str, *, sender: str, endpoint: str,
                           f"Last: {incident.title} on {asset}, {incident.status.lower()}.",
                           fix="" if incident.asset is not None else "Add the host to the inventory (Discovery › Sync hosts), so alarms match an asset."))
     return steps
+
+
+def journal_step(db: Session, sid: str, label: str, module: str, action: str, *, never: str, fix: str = "") -> dict[str, Any]:
+    """The newest journal line of ``module``/``action`` (a sync, a health note) as one block."""
+    from app.models import JournalEntry
+
+    last = (db.query(JournalEntry).filter(JournalEntry.module == module, JournalEntry.action == action)
+            .order_by(JournalEntry.id.desc()).first())
+    if last is None:
+        return step(sid, label, "never", "unknown", never, fix=fix)
+    tone = {"ok": "ok", "warn": "warn", "error": "bad"}.get(last.status, "warn")
+    at = last.created_at.isoformat(timespec="minutes") if last.created_at else ""
+    return step(sid, label, at[11:16] or "—", tone, f"{last.summary} ({at.replace('T', ' ')} UTC).",
+                fix="" if tone == "ok" else ((last.detail or "")[:300] or fix))
+
+
+def http_step(sid: str, label: str, url: str, *, headers: dict[str, str] | None = None, timeout: float = 3.0,
+              ok_text: str = "Answers.", fix: str = "", verify: Any = True) -> tuple[dict[str, Any], Any]:
+    """GET ``url`` as one block: (step, the JSON or text answer or None). Headers are never shown."""
+    import httpx
+
+    started = time.monotonic()
+    try:
+        r = httpx.get(url, headers=headers, timeout=timeout, verify=verify, follow_redirects=True)
+    except httpx.HTTPError as exc:
+        return step(sid, label, urlsplit(url).path or "/", "bad", f"No answer: {exc.__class__.__name__}.",
+                    ms=int((time.monotonic() - started) * 1000), fix=fix), None
+    ms = int((time.monotonic() - started) * 1000)
+    if r.status_code >= 400:
+        return step(sid, label, urlsplit(url).path or "/", "bad", f"HTTP {r.status_code}.", ms=ms, fix=fix), None
+    try:
+        body: Any = r.json()
+    except ValueError:
+        body = r.text
+    return step(sid, label, urlsplit(url).path or "/", "ok", ok_text, ms=ms), body
 
 
 # --- Running and keeping results ---------------------------------------------------------------

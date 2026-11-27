@@ -1,4 +1,5 @@
 import { FlowPage } from "./pages/Flow";
+import { IntegrationMapPage } from "./pages/IntegrationMap";
 import { useEffect, useState } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { Shell } from "./components/Shell";
@@ -43,6 +44,7 @@ export function App() {
         <Route path="/forgeai" element={<ForgeAiPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings/flows" element={<IntegrationMapPage />} />
         <Route path="/settings/integrations/:name" element={<FlowPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

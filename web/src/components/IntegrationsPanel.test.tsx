@@ -26,7 +26,7 @@ describe("IntegrationsPanel", () => {
       const body = url === "/api/v1/integrations" ? { sources: [zabbix], stack: [prom] } : { queued: true };
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
     }));
-    render(<IntegrationsPanel rows={rows} onSaved={() => undefined} />);
+    render(<MemoryRouter><IntegrationsPanel rows={rows} onSaved={() => undefined} /></MemoryRouter>);
     const link = await screen.findByRole("link", { name: "Open GUI" });
     expect(link.getAttribute("href")).toBe("https://zabbix.dc.local");
     expect(link.getAttribute("rel")).toContain("noopener");
@@ -46,7 +46,7 @@ describe("IntegrationsPanel", () => {
       const body = url === "/api/v1/integrations" ? { sources: [zabbix], stack: [] } : { status: "error", why: "HTTP 401" };
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
     }));
-    render(<IntegrationsPanel rows={rows} onSaved={() => undefined} />);
+    render(<MemoryRouter><IntegrationsPanel rows={rows} onSaved={() => undefined} /></MemoryRouter>);
     fireEvent.click(await screen.findByRole("button", { name: "Test connection" }));
     await waitFor(() => expect(screen.getAllByText("error")).toHaveLength(2));
     expect(screen.getAllByText("HTTP 401")).toHaveLength(1);
@@ -58,5 +58,6 @@ describe("IntegrationsPanel", () => {
     render(<MemoryRouter><IntegrationsPanel rows={rows} onSaved={() => undefined} /></MemoryRouter>);
     const link = await screen.findByRole("link", { name: "Flow and log" });
     expect(link.getAttribute("href")).toBe("/settings/integrations/zabbix");
+    expect(screen.getByRole("link", { name: "Integration map" }).getAttribute("href")).toBe("/settings/flows");
   });
 });
